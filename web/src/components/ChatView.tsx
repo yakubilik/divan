@@ -15,7 +15,9 @@ function Header({ chat, groupName, count, accounts, onEdit, onMenu }: {
 }) {
   // Which subscription a turn is billed to is not something to go hunting for
   // in Settings, and a chat with no account_id runs on the computer's own
-  // login — so that one is named too, rather than left blank.
+  // login — so that one is named too, rather than left blank. Shown even when
+  // there is only one account: the question "which one am I on" is worth
+  // answering before it is worth choosing.
   const mine = accounts.filter((a) => a.provider === chat.provider);
   const account = chat.account_id
     ? mine.find((a) => a.id === chat.account_id)
@@ -57,7 +59,7 @@ function Header({ chat, groupName, count, accounts, onEdit, onMenu }: {
             <Icon path={P.bolt} size={12} color={C.mute} /> {chat.effort}
           </Chip>
         )}
-        {mine.length > 1 && (
+        {mine.length > 0 && (
           <Chip onClick={() => onEdit('account')} title="Account" shrink>
             <Icon path={P.agent} size={12} color={C.mute} />
             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>

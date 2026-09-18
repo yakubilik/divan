@@ -201,8 +201,9 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
 
         {/* Which subscription the turn is billed to. The daemon keeps account
             labels unique, so the label is the choice and the id stays out of
-            sight. Hidden when there is nothing to choose between. */}
-        {signedIn.length > 1 && (
+            sight. A single account is still shown, because it answers which
+            one the chat will run on. */}
+        {signedIn.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <Label>Account</Label>
             <Segment
