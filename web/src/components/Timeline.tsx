@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { C, R } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
@@ -24,7 +24,47 @@ function Divider({ ts }: { ts: number }) {
 
 /** What the phone sent up: photos, a voice note, a document. The daemon has
  *  already shrunk images and transcribed audio, so this only has to show them. */
+/** A picture in a bubble is a thumbnail, cropped to a square-ish tile — which
+ *  is fine until it is the thing you were sent. The phone has had a full-screen
+ *  viewer on tap all along; this is the panel's. Escape or a click anywhere
+ *  closes it, and the link out is there for the times a look is not enough. */
+function Lightbox({ src, name, onClose }: { src: string; name?: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(6,6,5,0.88)', zIndex: 60,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32,
+      }}
+    >
+      <img
+        src={src} alt={name ?? ''}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: R.media }}
+      />
+      <a
+        href={src} target="_blank" rel="noreferrer"
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          position: 'fixed', right: 20, bottom: 20, display: 'flex', alignItems: 'center', gap: 8,
+          height: 34, padding: '0 12px', borderRadius: R.btn, textDecoration: 'none',
+          background: C.surface, border: `1px solid ${C.borderStrong}`, color: C.text2, fontSize: 12,
+        }}
+      >
+        <Icon path={P.external} size={13} color={C.mute} /> open the file
+      </a>
+    </div>
+  );
+}
+
 function Attachments({ list, hostKey }: { list: any[]; hostKey: string }) {
+  const [viewing, setViewing] = useState<any | null>(null);
   if (!list?.length) return null;
   const media = list.filter((a) => a?.kind === 'image' || a?.kind === 'video');
   const rest = list.filter((a) => a?.kind !== 'image' && a?.kind !== 'video');
@@ -48,12 +88,17 @@ function Attachments({ list, hostKey }: { list: any[]; hostKey: string }) {
               border: `1px solid ${C.border}`,
             }}>
               {a.kind === 'image'
-                ? <img src={src(a)} alt={a.name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img
+                    src={src(a)} alt={a.name ?? ''} title={a.name ?? 'Open'}
+                    onClick={() => setViewing(a)}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
+                  />
                 : <video src={src(a)} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
             </div>
           ))}
         </div>
       )}
+      {viewing && <Lightbox src={src(viewing)} name={viewing.name} onClose={() => setViewing(null)} />}
       {rest.map((a, i) => (
         a.kind === 'audio' ? (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240 }}>
