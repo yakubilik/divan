@@ -81,7 +81,11 @@ class Config:
     # Follow origin/main by itself. Safe to leave on even where the code is
     # written: a checkout with uncommitted work is never touched (see updater).
     auto_update: bool = True
-    update_interval_s: int = 900
+    # Six hours. A coding agent's own computer is not a fleet that has to
+    # converge in minutes, and a quarter-hourly `git fetch` on a laptop is noise
+    # against how often main actually moves. Lower it if you are pushing to a
+    # machine you are watching.
+    update_interval_s: int = 21600
     devices: dict[str, Device] = field(default_factory=dict)
     accounts: dict[str, dict] = field(default_factory=dict)   # id -> stored fields
 

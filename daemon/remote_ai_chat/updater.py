@@ -35,6 +35,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -45,6 +46,11 @@ log = logging.getLogger("rac.updater")
 # How long a git call may take before it is assumed wedged. A fetch over a
 # sleepy tailnet is slow; it is not, however, minutes slow.
 GIT_TIMEOUT_S = 90
+
+# When the only thing in the way is a turn that is running, the next look does
+# not need to wait out the whole interval — six hours later that turn is long
+# finished and the update would have sat there for no reason.
+BUSY_RETRY_S = 300
 
 
 def repo_root() -> Path | None:
@@ -58,6 +64,20 @@ def repo_root() -> Path | None:
         if (parent / ".git").exists():
             return parent
     return None
+
+
+async def _run(cmd: list[str], cwd: Path, timeout: int) -> tuple[bool, str]:
+    """Run a command, capture everything, never wait forever."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, cwd=str(cwd),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except Exception as exc:
+        return False, str(exc)[:300]
+    text = (out or b"").decode("utf-8", "replace").strip()
+    return (proc.returncode == 0), text[-300:]
 
 
 async def _git(root: Path, *args: str, timeout: int = GIT_TIMEOUT_S) -> tuple[int, str]:
@@ -237,6 +257,19 @@ class Updater:
                     await self._rollback(before)
                     return {"ok": False, "error": f"new code failed to import: {detail}"}
 
+                # The panel is the one part of this repository that git does not
+                # deliver: webui/ is build output. Without this a self-updating
+                # daemon serves last month's panel against this morning's
+                # daemon, and nobody can tell by looking. A failed build is not
+                # a failed update, though — the daemon is already good, and the
+                # panel that is on disk still works.
+                if await self._changed(before, after.get("sha"), "web"):
+                    ok, detail = await self._rebuild_panel()
+                    if ok:
+                        log.info("panel rebuilt")
+                    else:
+                        log.warning("panel rebuild failed, serving the old one: %s", detail)
+
                 self.state["local"] = after
                 self.state["behind"] = 0
                 await self.announce({"event": "update.applied", "revision": after})
@@ -247,12 +280,38 @@ class Updater:
             finally:
                 self.state["busy"] = False
 
-    async def _deps_changed(self, before: str | None, after: str | None) -> bool:
+    async def _changed(self, before: str | None, after: str | None, path: str) -> bool:
         if not before or not after or before == after:
             return False
-        rc, out = await _git(self.root, "diff", "--name-only", before, after,
-                             "--", "daemon/pyproject.toml")
+        rc, out = await _git(self.root, "diff", "--name-only", before, after, "--", path)
         return rc == 0 and bool(out.strip())
+
+    async def _deps_changed(self, before: str | None, after: str | None) -> bool:
+        return await self._changed(before, after, "daemon/pyproject.toml")
+
+    async def _rebuild_panel(self) -> tuple[bool, str]:
+        """`npm run build` without going through node_modules/.bin.
+
+        A managed Windows machine can have AppLocker on, and the shims npm
+        writes into .bin are exactly what it blocks — so vite is started as what
+        it is, a script, with the node that is already on PATH. npm itself is
+        only needed the first time, to put node_modules there at all.
+        """
+        web = self.root / "web"
+        if not (web / "package.json").exists():
+            return True, "nothing to build"
+        node = shutil.which("node")
+        if not node:
+            return False, "node is not on PATH"
+        vite = web / "node_modules" / "vite" / "bin" / "vite.js"
+        if not vite.exists():
+            npm = shutil.which("npm")
+            if not npm:
+                return False, "npm is not on PATH"
+            ok, detail = await _run([npm, "install", "--no-audit", "--no-fund"], web, 900)
+            if not ok:
+                return False, f"npm install: {detail}"
+        return await _run([node, str(vite), "build"], web, 900)
 
     async def _install_deps(self) -> tuple[bool, str]:
         """Re-install into the venv this daemon is running from."""
@@ -306,12 +365,13 @@ class Updater:
         # Read where we are straight away, so the phone can show a commit
         # rather than a blank the moment it connects.
         self.state["local"] = await revision(self.root)
-        interval = max(120, int(getattr(self.cfg, "update_interval_s", 900)))
+        interval = max(120, int(getattr(self.cfg, "update_interval_s", 21600)))
         # Not the fetch, though: a daemon that just restarted may well be a daemon
         # this loop restarted, and a crash loop should not be able to turn into
         # a pull loop.
         await asyncio.sleep(60)
         while True:
+            nap = interval
             try:
                 await self.check()
                 behind = self.state.get("behind", 0)
@@ -322,6 +382,8 @@ class Updater:
                         if blocked:
                             log.info("update available (%d behind) but held: %s",
                                      behind, ", ".join(blocked))
+                            if blocked == ["a turn is running"]:
+                                nap = min(interval, BUSY_RETRY_S)
                         else:
                             log.info("update available (%d behind) — applying", behind)
                             res = await self.apply()
@@ -331,4 +393,4 @@ class Updater:
                 raise
             except Exception as exc:
                 log.warning("updater: %s", exc)
-            await asyncio.sleep(interval)
+            await asyncio.sleep(nap)
