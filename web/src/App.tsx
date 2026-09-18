@@ -16,7 +16,7 @@ import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent } from './lib/fleet';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
 import { deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
-import type { Chat } from './lib/protocol';
+import type { Attachment, Chat } from './lib/protocol';
 
 interface Selection { hostKey: string; chatId: string }
 
@@ -29,6 +29,11 @@ export function App() {
   const [palette, setPalette] = useState(false);
   const [field, setField] = useState<Field | null>(null);
   const [sending, setSending] = useState(false);
+  const [staged, setStaged] = useState<Attachment[]>([]);
+
+  // An upload belongs to the chat it was made against, so leaving the chat
+  // drops what has not been sent rather than carrying it into the next one.
+  useEffect(() => { setStaged([]); }, [sel?.hostKey, sel?.chatId]);
   const [liveTokens, setLiveTokens] = useState<number | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -132,19 +137,29 @@ export function App() {
   const doSend = async (text: string) => {
     if (!sel) return;
     setSending(true);
-    try { await send(sel.hostKey, sel.chatId, text); }
+    try {
+      // A voice note carries its own words: with nothing typed, its transcript
+      // is the message, exactly as it was before attachments waited in the box.
+      const caption = text || staged.map((a) => a.transcript).filter(Boolean).join('\n');
+      await send(sel.hostKey, sel.chatId, caption, staged);
+      setStaged([]);
+    }
     catch (e) { console.error(e); }
     finally { setSending(false); }
   };
 
+  /** Uploading is the slow half, so it happens the moment a file is pasted,
+   *  dropped or picked — but the message waits in the composer. A screenshot is
+   *  usually the setup for a sentence, and sending the instant it lands would
+   *  fire the turn without the question. A voice note is the exception, and
+   *  doSend handles it: with nothing typed, its transcript is the message. */
   const doAttach = async (files: FileList) => {
     if (!sel) return;
     setSending(true);
     try {
-      const out = [];
+      const out: Attachment[] = [];
       for (const f of Array.from(files)) out.push(await upload(sel.hostKey, sel.chatId, f));
-      const caption = out.map((a) => a.transcript).filter(Boolean).join('\n');
-      await send(sel.hostKey, sel.chatId, caption, out);
+      setStaged((s) => [...s, ...out]);
     } catch (e) { console.error(e); }
     finally { setSending(false); }
   };
@@ -210,11 +225,14 @@ export function App() {
           <>
             <ChatView
               chat={chat} hostKey={sel?.hostKey ?? null} log={log} sending={sending}
+              accounts={slot?.accounts ?? []}
               groupName={chat?.group_id
                 ? (slot?.groups.find((g) => g.id === chat.group_id)?.name ?? null)
                 : null}
               onSend={doSend}
               onAttach={doAttach}
+              staged={staged}
+              onUnstage={(path) => setStaged((s) => s.filter((a) => a.path !== path))}
               onInterrupt={() => sel && interrupt(sel.hostKey, sel.chatId).catch(() => {})}
               onRespond={(rid, d) => sel && respond(sel.hostKey, sel.chatId, rid, d).catch(() => {})}
               onEdit={setField}
@@ -286,7 +304,10 @@ export function App() {
           field={field} chat={chat}
           catalog={fleet.hosts[sel.hostKey]?.catalog ?? null}
           projects={fleet.hosts[sel.hostKey]?.projects ?? []}
-          onPick={(value) => updateChat(sel.hostKey, sel.chatId, { [field]: value }).catch(() => {})}
+          accounts={fleet.hosts[sel.hostKey]?.accounts ?? []}
+          onPick={(value) => updateChat(sel.hostKey, sel.chatId, {
+            [field]: field === 'account' ? (value || null) : value,
+          }).catch(() => {})}
           onClose={() => setField(null)}
         />
       )}

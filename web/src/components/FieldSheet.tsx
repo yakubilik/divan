@@ -3,12 +3,13 @@ import { C, R } from '../lib/theme';
 import { Icon, P, mono, Label } from '../ui/kit';
 import { Modal, ModalHead } from './Modal';
 import { tilde } from '../lib/format';
-import type { Catalog, Chat, Project } from '../lib/protocol';
+import type { Catalog, Chat, CliAccount, Project } from '../lib/protocol';
 
-export type Field = 'model' | 'effort' | 'perm_mode' | 'cwd';
+export type Field = 'model' | 'effort' | 'perm_mode' | 'cwd' | 'account';
 
 const TITLE: Record<Field, string> = {
   model: 'Model', effort: 'Effort', perm_mode: 'Permission mode', cwd: 'Project folder',
+  account: 'Account',
 };
 
 function Option({ label, hint, right, on, onPick }: {
@@ -46,11 +47,12 @@ function Option({ label, hint, right, on, onPick }: {
   );
 }
 
-export function FieldSheet({ field, chat, catalog, projects, onPick, onClose }: {
+export function FieldSheet({ field, chat, catalog, projects, accounts, onPick, onClose }: {
   field: Field;
   chat: Chat;
   catalog: Catalog | null;
   projects: Project[];
+  accounts: CliAccount[];
   onPick: (value: string) => void;
   onClose: () => void;
 }) {
@@ -71,13 +73,22 @@ export function FieldSheet({ field, chat, catalog, projects, onPick, onClose }: 
         right: undefined,
       }));
     }
+    if (field === 'account') {
+      // Only an account that is actually signed in can run a turn, and the
+      // computer's own login is always on offer. '' means exactly that: leave
+      // it to the computer, which is what a chat with no account_id does.
+      return accounts
+        .filter((a) => a.provider === chat.provider && (a.logged_in || a.is_default))
+        .map((a) => ({ value: a.is_default ? '' : a.id, label: a.label, hint: a.detail || undefined, right: a.id }));
+    }
     const q = query.trim().toLocaleLowerCase('tr');
     return projects
       .filter((p) => !q || p.name.toLocaleLowerCase('tr').includes(q) || p.path.toLocaleLowerCase('tr').includes(q))
       .map((p) => ({ value: p.path, label: p.name, hint: undefined, right: tilde(p.path) }));
-  }, [field, pc, projects, query]);
+  }, [field, pc, projects, accounts, chat.provider, query]);
 
   const current = field === 'cwd' ? chat.cwd
+    : field === 'account' ? (chat.account_id ?? '')
     : field === 'model' ? chat.model
     : field === 'effort' ? (chat.effort ?? '')
     : chat.perm_mode;

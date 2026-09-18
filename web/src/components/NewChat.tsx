@@ -18,6 +18,7 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
   const catalog = slot?.catalog ?? null;
 
   const [provider, setProvider] = useState<Provider>('claude');
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [effort, setEffort] = useState<string | null>(null);
   const [perm, setPerm] = useState<string | null>(null);
@@ -30,6 +31,10 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
   const [error, setError] = useState<string | null>(null);
 
   const pc = catalog?.[provider] ?? null;
+  const signedIn = (slot?.accounts ?? []).filter((a) => a.provider === provider && (a.logged_in || a.is_default));
+  const current = accountId
+    ? signedIn.find((a) => a.id === accountId)
+    : signedIn.find((a) => a.is_default);
 
   // Every provider brings its own models, efforts and permission words, so the
   // choices below reset when the provider does rather than carrying over
@@ -41,6 +46,7 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
     setModel((m) => (m && pc?.models.some((x) => x.id === m) ? m : pc?.models[0]?.id ?? null));
     setEffort((e) => (e && pc?.efforts?.includes(e) ? e : fallbackEffort));
     setPerm((p) => (p && pc?.perm_modes.includes(p) ? p : pc?.perm_modes[0] ?? null));
+    setAccountId(null);
   }, [provider, catalog]);
 
   const projects = slot?.projects ?? [];
@@ -66,6 +72,7 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
     try {
       const chat = await createChat(hostKey, {
         provider, model, effort, perm_mode: perm ?? undefined,
+        account_id: accountId,
         cwd: cwd ?? undefined,
         max_turns: maxTurns ? Number(maxTurns) : null,
         max_budget_usd: budget ? Number(budget) : null,
@@ -191,6 +198,23 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
             />
           </div>
         </div>
+
+        {/* Which subscription the turn is billed to. The daemon keeps account
+            labels unique, so the label is the choice and the id stays out of
+            sight. Hidden when there is nothing to choose between. */}
+        {signedIn.length > 1 && (
+          <div style={{ marginBottom: 12 }}>
+            <Label>Account</Label>
+            <Segment
+              value={current?.label ?? null}
+              options={signedIn.map((a) => a.label)}
+              onChange={(label) => {
+                const a = signedIn.find((x) => x.label === label);
+                setAccountId(a && !a.is_default ? a.id : null);
+              }}
+            />
+          </div>
+        )}
 
         {perm === 'bypass' && (
           <div style={{

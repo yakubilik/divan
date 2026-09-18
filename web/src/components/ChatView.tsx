@@ -4,14 +4,22 @@ import { Chip, Dot, Icon, P, Pulse, Spinner, mono, Empty } from '../ui/kit';
 import { Timeline } from './Timeline';
 import { ChatMenu } from './ChatMenu';
 import { duration, shortPath, toolSummary } from '../lib/format';
-import type { Chat, Group } from '../lib/protocol';
+import type { Attachment, Chat, CliAccount, Group } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
 
-function Header({ chat, groupName, count, onEdit, onMenu }: {
+function Header({ chat, groupName, count, accounts, onEdit, onMenu }: {
   chat: Chat; groupName: string | null; count: number;
-  onEdit: (f: 'model' | 'effort' | 'perm_mode' | 'cwd') => void;
+  accounts: CliAccount[];
+  onEdit: (f: 'model' | 'effort' | 'perm_mode' | 'cwd' | 'account') => void;
   onMenu: () => void;
 }) {
+  // Which subscription a turn is billed to is not something to go hunting for
+  // in Settings, and a chat with no account_id runs on the computer's own
+  // login — so that one is named too, rather than left blank.
+  const mine = accounts.filter((a) => a.provider === chat.provider);
+  const account = chat.account_id
+    ? mine.find((a) => a.id === chat.account_id)
+    : mine.find((a) => a.is_default);
   const sub = [groupName, chat.cwd.split(/[/\\]/).pop(), `${count} messages`].filter(Boolean).join(' · ');
   const running = chat.status === 'running';
   const awaiting = chat.status === 'awaiting_approval';
@@ -47,6 +55,14 @@ function Header({ chat, groupName, count, onEdit, onMenu }: {
         {chat.effort && (
           <Chip onClick={() => onEdit('effort')}>
             <Icon path={P.bolt} size={12} color={C.mute} /> {chat.effort}
+          </Chip>
+        )}
+        {mine.length > 1 && (
+          <Chip onClick={() => onEdit('account')} title="Account" shrink>
+            <Icon path={P.agent} size={12} color={C.mute} />
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {account?.label ?? chat.account_id ?? 'default'}
+            </span>
           </Chip>
         )}
         <Chip onClick={() => onEdit('perm_mode')} tone={chat.perm_mode === 'bypass' ? 'warn' : 'plain'}>
@@ -124,13 +140,16 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
   );
 }
 
-function Composer({ chat, busy, sending, onSend, onInterrupt, onAttach }: {
+function Composer({ chat, busy, sending, onSend, onInterrupt, onAttach, staged, onUnstage }: {
   chat: Chat; busy: boolean; sending: boolean;
   onSend: (text: string) => void;
   onInterrupt: () => void;
   onAttach: (files: FileList) => void;
+  staged: Attachment[];
+  onUnstage: (path: string) => void;
 }) {
   const [text, setText] = useState('');
+  const [dragging, setDragging] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const file = useRef<HTMLInputElement>(null);
 
@@ -143,20 +162,52 @@ function Composer({ chat, busy, sending, onSend, onInterrupt, onAttach }: {
     el.style.height = `${Math.max(36, Math.min(200, el.scrollHeight))}px`;
   }, [text]);
 
+  // A picture with nothing typed under it is still a message: send on either.
+  const canSend = !!text.trim() || staged.length > 0;
   const submit = () => {
-    const t = text.trim();
-    if (!t) return;
-    onSend(t);
+    if (!canSend) return;
+    onSend(text.trim());
     setText('');
   };
 
   const folder = chat.cwd.split(/[/\\]/).pop();
+
+  /** A screenshot pasted into the box and a file dragged onto it both arrive as
+   *  the same FileList the picker hands over, so both go straight to onAttach.
+   *  Only files are taken over: pasted text keeps the browser's own behaviour. */
+  const takeFiles = (files: FileList | null | undefined) => {
+    if (!files?.length) return false;
+    onAttach(files);
+    return true;
+  };
+
   return (
     <div style={{ padding: '8px 20px 16px', flexShrink: 0 }}>
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', gap: 8, padding: 6,
-        borderRadius: R.composer, background: C.surface, border: `1px solid ${C.border}`,
-      }}>
+      <div
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return;
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { setDragging(false); if (takeFiles(e.dataTransfer.files)) e.preventDefault(); }}
+        style={{
+          display: 'flex', flexDirection: 'column', gap: 6, padding: 6,
+          borderRadius: R.composer, background: C.surface,
+          border: `1px solid ${dragging ? C.accent : C.border}`,
+        }}>
+        {staged.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '2px 2px 0' }}>
+            {staged.map((a) => (
+              <Chip key={a.path} onClick={() => onUnstage(a.path)} title="Remove">
+                <Icon path={a.kind === 'image' ? P.image : P.paperclip} size={12} color={C.mute} />
+                <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</span>
+                <span style={{ color: C.faint }}>×</span>
+              </Chip>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
         <input
           ref={file} type="file" multiple name="attachments" style={{ display: 'none' }}
           onChange={(e) => { if (e.target.files?.length) onAttach(e.target.files); e.target.value = ''; }}
@@ -174,6 +225,7 @@ function Composer({ chat, busy, sending, onSend, onInterrupt, onAttach }: {
         <textarea
           ref={ref} name="composer" value={text} rows={1}
           onChange={(e) => setText(e.target.value)}
+          onPaste={(e) => { if (takeFiles(e.clipboardData.files)) e.preventDefault(); }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
           }}
@@ -187,20 +239,21 @@ function Composer({ chat, busy, sending, onSend, onInterrupt, onAttach }: {
         />
         <button
           type="button" onClick={busy ? onInterrupt : submit}
-          disabled={!busy && !text.trim()}
+          disabled={!busy && !canSend}
           title={busy ? 'Stop' : 'Send'}
           style={{
             width: 36, height: 36, borderRadius: 18, flexShrink: 0,
-            cursor: busy || text.trim() ? 'pointer' : 'default',
-            background: busy ? C.danger : text.trim() ? C.accent : C.surface2,
+            cursor: busy || canSend ? 'pointer' : 'default',
+            background: busy ? C.danger : canSend ? C.accent : C.surface2,
             border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: !busy && !text.trim() ? 0.5 : 1,
+            opacity: !busy && !canSend ? 0.5 : 1,
           }}
         >
           {sending ? <Spinner size={14} color="#FFFFFF" />
             : busy ? <Icon path={P.stop} size={14} color="#FFFFFF" fill />
             : <Icon path={P.send} size={16} color="#FFFFFF" width={2.4} />}
         </button>
+        </div>
       </div>
       <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 6, display: 'flex', gap: 16 }}>
         <span>⏎ {busy ? 'queue' : 'send'}</span>
@@ -211,7 +264,7 @@ function Composer({ chat, busy, sending, onSend, onInterrupt, onAttach }: {
   );
 }
 
-export function ChatView({ chat, hostKey, log, groupName, groups, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onAttach, sending }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accounts, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onAttach, staged, onUnstage, sending }: {
   chat: Chat | null;
   hostKey: string | null;
   log: ChatLog;
@@ -221,10 +274,13 @@ export function ChatView({ chat, hostKey, log, groupName, groups, onSend, onInte
   onSend: (text: string) => void;
   onInterrupt: () => void;
   onRespond: (requestId: string, d: 'allow' | 'allow_session' | 'deny') => void;
-  onEdit: (f: 'model' | 'effort' | 'perm_mode' | 'cwd') => void;
+  onEdit: (f: 'model' | 'effort' | 'perm_mode' | 'cwd' | 'account') => void;
+  accounts: CliAccount[];
   onUpdate: (patch: Record<string, any>) => void;
   onDelete: () => void;
   onAttach: (files: FileList) => void;
+  staged: Attachment[];
+  onUnstage: (path: string) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -252,7 +308,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, onSend, onInte
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
       <div style={{ position: 'relative', flexShrink: 0 }}>
-        <Header chat={chat} groupName={groupName} count={msgCount} onEdit={onEdit} onMenu={() => setMenu(true)} />
+        <Header chat={chat} groupName={groupName} count={msgCount} accounts={accounts} onEdit={onEdit} onMenu={() => setMenu(true)} />
         {menu && (
           <ChatMenu
             chat={chat} groups={groups}
@@ -281,6 +337,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, onSend, onInte
       <Composer
         chat={chat} busy={busy} sending={sending}
         onSend={onSend} onInterrupt={onInterrupt} onAttach={onAttach}
+        staged={staged} onUnstage={onUnstage}
       />
     </div>
   );

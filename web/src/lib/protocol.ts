@@ -166,3 +166,15 @@ export interface LoginDone {
   error: string | null;
   retryable: boolean;
 }
+
+/** What `/upload` hands back, and what rides along on `chat.send`. It is also
+ *  what sits in the composer between the paste and the message going out. */
+export interface Attachment {
+  path: string;
+  name: string;
+  size?: number;
+  kind?: 'image' | 'video' | 'audio' | 'file';
+  url?: string;
+  transcript?: string;
+  duration?: number;
+}

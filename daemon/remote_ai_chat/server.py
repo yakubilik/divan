@@ -145,6 +145,17 @@ class Server:
         panel = Path(__file__).parent / "webui"
         if not (panel / "index.html").exists():
             return
+        # …as long as nothing else ends up in there. `vite build` copies the
+        # whole of web/public/, which is where the dev server's own pairing
+        # used to sit, and a build made on a developer's machine would hand
+        # that token to anyone who asked for it. Shut before the mount, so an
+        # already-built webui on disk cannot leak one either.
+        from fastapi import HTTPException
+
+        def no_dev_host() -> None:
+            raise HTTPException(status_code=404)
+
+        self.app.get("/dev-host.json")(no_dev_host)
         from fastapi.staticfiles import StaticFiles
         self.app.mount("/", StaticFiles(directory=str(panel), html=True), name="panel")
 

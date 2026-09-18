@@ -201,4 +201,6 @@ export const P = {
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   agent: 'M12 4a4 4 0 0 1 4 4v1h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h1V8a4 4 0 0 1 4-4zM9 14v.1M15 14v.1',
   clock: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2',
+  image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M9 9v.1',
+  paperclip: 'M18 8v8a5 5 0 0 1-10 0V7a3 3 0 0 1 6 0v9a1 1 0 0 1-2 0V8',
 } as const;

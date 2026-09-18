@@ -139,9 +139,21 @@ export const useFleet = create<FleetState>((set, get) => ({
     set({ hosts, order, ready: true, focus: order[0] ?? null });
     for (const cfg of all) attach(cfg, set, get);
 
+    // A pairing link opened in a tab that already has the panel running changes
+    // nothing but the fragment, and no browser reloads for that. Without this
+    // the link looks like it did nothing and the second computer never lands.
+    window.addEventListener('hashchange', () => {
+      const cfg = hostFromHash();
+      if (!cfg) return;
+      get().addHost(cfg);
+      get().setFocus(hostKey(cfg));
+    });
+
     // Dev server only: `npm run dev` runs on its own origin with no pairing in
-    // the URL, so a gitignored public/dev-host.json stands in for one. Vite
-    // strips this whole block from a production build.
+    // the URL, so a gitignored web/dev-host.json stands in for one, handed over
+    // by a plugin that only runs under `vite`. Vite strips this block from a
+    // production build, and the file itself is outside public/ so no build can
+    // carry the token into the daemon's webui/.
     if (import.meta.env.DEV && !all.length) {
       fetch('/dev-host.json')
         .then((r) => (r.ok ? r.json() : null))
@@ -283,6 +295,9 @@ function attach(cfg: HostConfig, set: Setter, get: () => FleetState) {
           ...slot, info: r.host ?? slot.info, catalog: r.catalog ?? slot.catalog,
         })))
         .then(() => get().refresh(key))
+        // Without this the panel knows account ids but not what they are
+        // called, and the plan-usage cards read `claude-759b47` at the user.
+        .then(() => get().refreshAccounts(key))
         .catch(() => {});
     }
   });
