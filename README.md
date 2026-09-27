@@ -45,7 +45,7 @@ What that gets you, in practice:
 
 | | |
 |---|---|
-| <img src="docs/screenshots/chats.png" width="230"> | **Chats, grouped by project.** One row per conversation, titled with the folder it runs in. Group them by hand or let the folder do it, swipe a row aside to archive or delete it, search titles and messages. |
+| <img src="docs/screenshots/chats.png" width="230"> | **Chats, grouped by project.** One row per conversation, titled with the project it runs in. Group them by hand or let the folder do it, swipe a row aside to archive or delete it, search titles and messages. |
 | <img src="docs/screenshots/chat.png" width="230"> | **A turn, streaming.** Text arrives token by token; a run of tool calls folds into one line until you ask for it. The footer is what the turn actually cost. |
 | <img src="docs/screenshots/approval.png" width="230"> | **The approval.** In `ask` mode every shell command stops here. A dangerous one stops here even in `bypass`. |
 | <img src="docs/screenshots/new-chat.png" width="230"> | **Starting one.** Pick the tool, the model, how hard it should think, how much rope it gets, and which folder it opens in. |
