@@ -48,6 +48,9 @@ you actually use.
 ## Before you open a PR
 
 ```bash
+python scripts/audit.py                        # nothing private, nothing not-English
+python scripts/test_audit.py                   # and the scanner still finds what it claims to
+
 cd daemon
 python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model turns
 .venv312/bin/python scripts/test_preamble.py   # session context and register
@@ -55,6 +58,8 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_stream.py
 .venv312/bin/python scripts/test_attachments.py
 .venv312/bin/python scripts/test_pool.py
+.venv312/bin/python scripts/test_replay.py
+.venv312/bin/python scripts/test_fanout.py
 .venv312/bin/python scripts/test_agents.py
 
 cd app && npx tsc --noEmit
@@ -67,7 +72,8 @@ touched the session or the provider adapters.
 Everything above except `smoke.py` and `e2e.py` also runs on CI
 (`.github/workflows/ci.yml`) against the two ends of the supported Python range,
 because the middle is what everybody develops on and the ends are where it
-breaks.
+breaks. `scripts/audit.py` runs there as well, on the tracked files only — the
+history is a report for a person, not a build step (see `docs/audit/`).
 
 If you changed the panel, commit the rebuilt `daemon/remote_ai_chat/webui/`?
 **No** — it is gitignored. The daemon builds it, or the installer does.
@@ -100,12 +106,16 @@ on a release and `v0.2.0+7` seven commits past one, so a machine following
 
 ## House rules
 
-**Language.** Code, comments, commit messages and documentation are English.
-The app is bilingual at runtime (English + Turkish) through `app/src/i18n.ts`;
-the daemon speaks only English and tags every user-visible error with a stable
-`code` in `daemon/remote_ai_chat/errors.py`, which the clients translate. A new
-code means a new entry in `ERR_KEYS` and in both language tables. The desktop
-panel is English only.
+**Language.** Everything is English — code, comments, commit messages,
+documentation and every string either client shows. `python scripts/audit.py`
+fails on anything else, so this is checked rather than asked for. The one place
+another language is allowed is `daemon/remote_ai_chat/call.py`, where it is data
+a language detector cannot work without; that exception is listed in the script.
+
+The app and the panel each keep their strings in one table (`app/src/i18n.ts`,
+`web/src/lib/i18n.ts`) rather than inline. The daemon tags every user-visible
+error with a stable `code` in `daemon/remote_ai_chat/errors.py`; a new code
+means a new entry in `ERR_KEYS` in both clients.
 
 **Comments explain why.** The codebase leans on comments that say what a piece
 of code is defending against, not what the next line does. Match that. A

@@ -119,7 +119,7 @@ desktop panel (React/Vite)   ─┘                      │
 | | |
 |---|---|
 | `daemon/` | The Python daemon: WebSocket server, session manager, permission policy, provider adapters for Claude Code and Codex, push, transcription, self-update. |
-| `app/` | The iOS app (Expo Router, zustand). Bilingual — English by default, Turkish in Settings. |
+| `app/` | The iOS app (Expo Router, zustand). English, with every string it shows in one table (`app/src/i18n.ts`). |
 | `web/` | The desktop panel (React + Vite). Built into `daemon/remote_ai_chat/webui/` and served by the daemon itself. |
 | `design/` | The artboards the interface was drawn from, as standalone HTML. |
 | `docs/PROTOCOL.md` | Every request and every event on the wire. Read this before changing either client. |
@@ -244,12 +244,20 @@ delete. This one spends a few real turns.
 
 ## Language
 
-The app defaults to English; Turkish is a switch in Settings
-(`app/src/i18n.ts`). The daemon speaks only English and tags every error the
-phone can see with a stable `code` (`daemon/remote_ai_chat/errors.py`); the app
-translates it (`app/src/ws.ts`). Adding a code means adding it to `ERR_KEYS` and
-to both tables. Push notifications follow the device's language. The desktop
-panel is English only.
+Everything is English: the app, the panel, the daemon, the commit log. The app
+keeps every string it shows in one table (`app/src/i18n.ts`) rather than inline,
+which is what makes that checkable — and what a second language would start
+from, if there is ever a reason for one.
+
+The daemon tags every error the phone can see with a stable `code`
+(`daemon/remote_ai_chat/errors.py`) and sends English text next to it; the
+client turns the code into its own wording (`app/src/ws.ts`) and falls back to
+that text for a code it does not know. Adding a code means adding it to
+`ERR_KEYS` in both clients.
+
+One exception, and it is data rather than copy: a voice call is answered in the
+language it was made in, so `daemon/remote_ai_chat/call.py` carries the words a
+language detector needs. It is the only file in the project that does.
 
 ## Media
 
