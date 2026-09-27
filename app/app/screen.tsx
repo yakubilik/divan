@@ -113,6 +113,15 @@ export default function Screen() {
 
   const base = host ? `http://${host.host}:${host.port}` : null;
 
+  // Which slot is on screen, in a ref as well as in state. `nextFrame` is
+  // called from a timer set before the state has settled, and reading `front`
+  // off that render loaded the next picture into the slot already showing —
+  // which then fired `onLoadEnd` for the front slot, where nothing asks for
+  // another frame. Two pictures in and the view froze while input kept working,
+  // which is exactly what it looked like from the phone.
+  const frontRef = useRef(0);
+  const lastAt = useRef(0);
+
   const nextFrame = useCallback(() => {
     if (!alive.current || !base || !host) return;
     tick.current += 1;
@@ -124,18 +133,37 @@ export default function Screen() {
     const want = (b ? PixelRatio.getPixelSizeForLayoutSize(b.width) : 1280) * Math.min(xfRef.current.s, 2);
     const w = Math.max(640, Math.min(3840, Math.round(want)));
     const uri = `${base}/screen.jpg?token=${encodeURIComponent(host.token)}&w=${w}&q=72&t=${tick.current}`;
-    setSlots((s) => (front === 0 ? [s[0], uri] : [uri, s[1]]));
-  }, [base, host, front]);
+    const back = frontRef.current === 0 ? 1 : 0;
+    setSlots((s) => (back === 1 ? [s[0], uri] : [uri, s[1]]));
+  }, [base, host]);
 
   // Each frame asks for the next one once it has arrived, so the phone never
   // queues requests it cannot draw — a slow link simply runs at fewer frames a
   // second instead of falling further behind with every one.
   const onFrame = useCallback(() => {
     if (!alive.current) return;
-    setFront((f) => (f === 0 ? 1 : 0));
+    frontRef.current = frontRef.current === 0 ? 1 : 0;
+    setFront(frontRef.current);
     setError(null);
+    lastAt.current = Date.now();
     setTimeout(() => nextFrame(), 60);
   }, [nextFrame]);
+
+  // A chain is only as good as its weakest link, and this one is a picture
+  // loading. A frame that never arrives and never errors — a dropped request on
+  // a sleeping radio — ends the stream silently. Ask again if nothing has been
+  // drawn for a while; the cost of one extra request is nothing next to a view
+  // that has quietly stopped.
+  useEffect(() => {
+    if (!caps?.view) return;
+    const t = setInterval(() => {
+      if (lastAt.current && Date.now() - lastAt.current > 4000) {
+        lastAt.current = Date.now();
+        nextFrame();
+      }
+    }, 2000);
+    return () => clearInterval(t);
+  }, [caps?.view, nextFrame]);
 
   useEffect(() => {
     alive.current = true;
@@ -155,7 +183,7 @@ export default function Screen() {
     if (conn !== 'online') return;
     let gone = false;
     client.call<any>('screen.info', {})
-      .then((r) => { if (!gone) { setCaps(r); if (r.view) nextFrame(); } })
+      .then((r) => { if (!gone) { setCaps(r); if (r.view) { lastAt.current = Date.now(); nextFrame(); } } })
       .catch((e) => !gone && setError(e?.message ?? 'Could not ask the computer about its screen'));
     return () => { gone = true; };
   }, [conn]);
