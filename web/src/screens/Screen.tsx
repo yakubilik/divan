@@ -12,7 +12,11 @@ import { useFleet } from '../lib/fleet';
  * already accounts for the zoom transform: a click is where the browser says it
  * is, whatever CSS did to the picture on the way. */
 
-interface Caps { view: boolean; control: boolean; enabled: boolean; os?: string; reason?: string | null }
+interface Display { id: string; label: string; w: number; h: number; primary: boolean }
+interface Caps {
+  view: boolean; control: boolean; enabled: boolean;
+  os?: string; reason?: string | null; displays?: Display[];
+}
 
 /** The keys worth naming, in the daemon's own vocabulary. Anything else
  *  printable is sent as text, which is what a keyboard produces anyway. */
@@ -43,6 +47,13 @@ export function Screen() {
   const [front, setFront] = useState(0);
   const [live, setLive] = useState(false);
   const [fs, setFs] = useState(false);
+  // Which screen of that computer. Empty is "whichever it calls primary",
+  // which is every single-monitor machine and the first answer on the rest.
+  const [display, setDisplay] = useState('');
+  // Read by the frame loop and by every click, both of which run from handlers
+  // older than the render that changed it.
+  const displayRef = useRef('');
+  displayRef.current = display;
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -74,7 +85,8 @@ export function Screen() {
     // when zoomed in. Anything less and a 3440-wide desktop arrives as mush.
     const wide = Math.round((box.w || 1280) * (window.devicePixelRatio || 1) * Math.min(zoom, 2));
     const w = Math.max(640, Math.min(3840, wide));
-    const uri = `${base}/screen.jpg?token=${encodeURIComponent(slot.cfg.token)}&w=${w}&q=72&t=${tick.current}`;
+    const uri = `${base}/screen.jpg?token=${encodeURIComponent(slot.cfg.token)}&w=${w}&q=72`
+      + `&display=${encodeURIComponent(displayRef.current)}&t=${tick.current}`;
     const backSlot = frontRef.current === 0 ? 1 : 0;
     setSlots((s) => (backSlot === 1 ? [s[0], uri] : [uri, s[1]]));
   }, [base, slot, box.w, zoom]);
@@ -116,7 +128,7 @@ export function Screen() {
     if (!key) return;
     let gone = false;
     stop();
-    setCaps(null); setError(null);
+    setCaps(null); setError(null); setDisplay('');
     call<Caps>(key, 'screen.info', {})
       .then((r) => { if (!gone) setCaps(r); })
       .catch((e: any) => !gone && setError(e?.message ?? 'This computer did not answer about its screen'));
@@ -145,6 +157,19 @@ export function Screen() {
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
+  const pickDisplay = useCallback((id: string) => {
+    displayRef.current = id;
+    setDisplay(id);
+    setSlots([null, null]);
+    frontRef.current = 0;
+    setFront(0);
+    setZoom(1);
+    // The loop is driven by frames arriving, so throwing the two in flight away
+    // breaks the chain: it has to be started again by hand rather than left to
+    // the watchdog, which would show a black rectangle for four seconds first.
+    if (liveRef.current) { lastAt.current = Date.now(); nextFrame(); }
+  }, [nextFrame]);
+
   const toggleFs = useCallback(() => {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void rootRef.current?.requestFullscreen?.();
@@ -162,7 +187,8 @@ export function Screen() {
   // ── input ─────────────────────────────────────────────────────────────
   const send = useCallback((...actions: any[]) => {
     if (!key) return;
-    call(key, 'screen.input', { actions }).catch((e: any) => setError(e?.message ?? 'That did not go through'));
+    call(key, 'screen.input', { actions, display: displayRef.current }).catch(
+      (e: any) => setError(e?.message ?? 'That did not go through'));
   }, [key, call]);
 
   /** Where a browser event landed on the picture, 0..1. The rect already has
@@ -301,6 +327,17 @@ export function Screen() {
             <option key={k} value={k}>{hosts[k].info?.name?.replace('.local', '') || hosts[k].cfg.name}</option>
           ))}
         </select>
+        {(caps?.displays?.length ?? 0) > 1 && (
+          <select
+            value={display || caps!.displays!.find((d) => d.primary)?.id || caps!.displays![0].id}
+            onChange={(e) => pickDisplay(e.target.value)}
+            title="Which screen of that computer"
+            style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}`, borderRadius: R.btn,
+                     padding: '5px 8px', fontSize: 13, outline: 'none' }}
+          >
+            {caps!.displays!.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+          </select>
+        )}
         {zoom > 1.01 && <Chip onClick={() => setZoom(1)} title="Back to actual size">{zoom.toFixed(1)}×</Chip>}
         <div style={{ flex: 1 }} />
         {caps?.view && (

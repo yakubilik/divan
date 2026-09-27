@@ -90,7 +90,11 @@ export default function Screen() {
   const conn = useStore((s) => s.conn);
   const hostInfo = useStore((s) => s.hostInfo);
 
-  const [caps, setCaps] = useState<{ view: boolean; control: boolean; enabled: boolean; os?: string; reason?: string | null } | null>(null);
+  const [caps, setCaps] = useState<{
+    view: boolean; control: boolean; enabled: boolean;
+    os?: string; reason?: string | null;
+    displays?: { id: string; label: string; w: number; h: number; primary: boolean }[];
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [box, setBox] = useState<LayoutRectangle | null>(null);
   const [aspect, setAspect] = useState(16 / 9);
@@ -102,6 +106,12 @@ export default function Screen() {
   const [xf, setXf] = useState<ViewXf>({ s: 1, tx: 0, ty: 0 });
   const xfRef = useRef(xf);
   xfRef.current = xf;
+
+  // A computer can have more than one screen, and the dialog you came for is
+  // on the other one. Empty means whichever it calls primary.
+  const [display, setDisplay] = useState('');
+  const displayRef = useRef('');
+  displayRef.current = display;
 
   // Two frames alternating. One <Image> swapping its uri goes blank between
   // pictures, which at five a second is a strobe; loading into the hidden one
@@ -132,7 +142,8 @@ export default function Screen() {
     const b = boxRef.current;
     const want = (b ? PixelRatio.getPixelSizeForLayoutSize(b.width) : 1280) * Math.min(xfRef.current.s, 2);
     const w = Math.max(640, Math.min(3840, Math.round(want)));
-    const uri = `${base}/screen.jpg?token=${encodeURIComponent(host.token)}&w=${w}&q=72&t=${tick.current}`;
+    const uri = `${base}/screen.jpg?token=${encodeURIComponent(host.token)}&w=${w}&q=72`
+      + `&display=${encodeURIComponent(displayRef.current)}&t=${tick.current}`;
     const back = frontRef.current === 0 ? 1 : 0;
     setSlots((s) => (back === 1 ? [s[0], uri] : [uri, s[1]]));
   }, [base, host]);
@@ -189,7 +200,7 @@ export default function Screen() {
   }, [conn]);
 
   const send = useCallback((...actions: any[]) => {
-    client.call('screen.input', { actions }).catch((e: any) => {
+    client.call('screen.input', { actions, display: displayRef.current }).catch((e: any) => {
       setError(e?.message ?? 'That did not go through');
     });
   }, []);
@@ -221,6 +232,22 @@ export default function Screen() {
   fitRef.current = fit(box, aspect);
   const boxRef = useRef<LayoutRectangle | null>(null);
   boxRef.current = box;
+  const canvas = useRef<View | null>(null);
+  // Where the canvas sits in the window, so a touch can be measured against it.
+  const origin = useRef({ x: 0, y: 0 });
+
+  /** A touch in the canvas's own coordinates, before the zoom.
+   *
+   *  `locationX` is measured against whichever view the touch happened to land
+   *  on, and inside a scaled parent that view reports it already divided by the
+   *  scale. Undoing the zoom a second time is then an error that grows with it:
+   *  at 1x nothing moved, at 3x the click landed somewhere else entirely — and
+   *  two fingers on two different views could not even agree where they were.
+   *  `pageX` is measured against the window and is the same number for both. */
+  const local = useCallback((t: { pageX: number; pageY: number }) => ({
+    x: t.pageX - origin.current.x,
+    y: t.pageY - origin.current.y,
+  }), []);
 
   const norm = useCallback((px: number, py: number) => {
     const f = fitRef.current;
@@ -251,9 +278,10 @@ export default function Screen() {
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (e) => {
       const t = e.nativeEvent;
+      const at = local(t);
       gesture.two = (t.touches?.length ?? 1) > 1;
-      gesture.startX = t.locationX;
-      gesture.startY = t.locationY;
+      gesture.startX = at.x;
+      gesture.startY = at.y;
       gesture.startAt = Date.now();
       gesture.moved = false;
       gesture.dragging = false;
@@ -281,9 +309,10 @@ export default function Screen() {
       // to watch. Only the wheel below needs permission.
       if (touches.length > 1) {
         const [t0, t1] = touches;
-        const dist = Math.hypot(t0.locationX - t1.locationX, t0.locationY - t1.locationY);
-        const midX = (t0.locationX + t1.locationX) / 2;
-        const midY = (t0.locationY + t1.locationY) / 2;
+        const a = local(t0), b2 = local(t1);
+        const dist = Math.hypot(a.x - b2.x, a.y - b2.y);
+        const midX = (a.x + b2.x) / 2;
+        const midY = (a.y + b2.y) / 2;
         const box = boxRef.current;
 
         if (!gesture.two) {
@@ -360,7 +389,8 @@ export default function Screen() {
       if (!controllableRef.current) return;
       if (!gesture.moved) return;
       if (gesture.longTimer) { clearTimeout(gesture.longTimer); gesture.longTimer = null; }
-      const p = norm(e.nativeEvent.locationX, e.nativeEvent.locationY);
+      const here = local(e.nativeEvent);
+      const p = norm(here.x, here.y);
       if (!p) return;
       if (!gesture.dragging) {
         const from = norm(gesture.startX, gesture.startY);
@@ -374,8 +404,8 @@ export default function Screen() {
       if (gesture.longTimer) { clearTimeout(gesture.longTimer); gesture.longTimer = null; }
       if (gesture.two) { gesture.two = false; gesture.mode = null; return; }
       if (!controllableRef.current) return;
-      const p = norm(e.nativeEvent.locationX, e.nativeEvent.locationY)
-        ?? norm(gesture.startX, gesture.startY);
+      const up = local(e.nativeEvent);
+      const p = norm(up.x, up.y) ?? norm(gesture.startX, gesture.startY);
       if (!p) return;
       if (gesture.dragging) {
         send({ kind: 'up', button: 'left', x: p.x, y: p.y });
@@ -400,8 +430,14 @@ export default function Screen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <View
+        ref={canvas}
         style={{ flex: 1, overflow: 'hidden' }}
-        onLayout={(e) => setBox(e.nativeEvent.layout)}
+        onLayout={(e) => {
+          setBox(e.nativeEvent.layout);
+          // Measured rather than taken from the layout: the layout is relative
+          // to the parent, and what a touch reports is relative to the window.
+          canvas.current?.measureInWindow?.((x, y) => { origin.current = { x, y }; });
+        }}
         {...pan.panHandlers}
       >
         {/* The zoom lives on this wrapper, not on the touch target: the gesture
@@ -453,6 +489,32 @@ export default function Screen() {
 
       <View style={{ position: 'absolute', top: insets.top + 8, right: insets.right + 10,
                      flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {(caps?.displays?.length ?? 0) > 1 && (() => {
+          const list = caps!.displays!;
+          const at = Math.max(0, list.findIndex((d: any) => d.id === (display || list.find((x: any) => x.primary)?.id || list[0].id)));
+          return (
+            <Pressable
+              hitSlop={10}
+              onPress={() => {
+                const next = list[(at + 1) % list.length];
+                setDisplay(next.id);
+                displayRef.current = next.id;
+                setSlots([null, null]);
+                frontRef.current = 0;
+                setFront(0);
+                setXf({ s: 1, tx: 0, ty: 0 });
+                Haptics.selectionAsync().catch(() => {});
+                nextFrame();
+              }}
+              style={{ paddingHorizontal: 10, height: 30, borderRadius: 15, alignItems: 'center',
+                       justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#fff' }}>
+                {`screen ${at + 1}/${list.length}`}
+              </Text>
+            </Pressable>
+          );
+        })()}
         {xf.s > 1.01 && (
           <Pressable onPress={() => setXf({ s: 1, tx: 0, ty: 0 })} hitSlop={10}
             style={{ paddingHorizontal: 10, height: 30, borderRadius: 15, alignItems: 'center',

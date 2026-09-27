@@ -872,14 +872,16 @@ class Server:
 
     # ── the screen ─────────────────────────────────────────────────────────
     async def screen_jpg(self, authorization: str = Header(default=""), token: str = Query(default=""),
-                         w: int = Query(default=screenmod.MAX_W), q: int = Query(default=screenmod.QUALITY)):
+                         w: int = Query(default=screenmod.MAX_W), q: int = Query(default=screenmod.QUALITY),
+                         display: str = Query(default="")):
         """One frame. The token rides as a query parameter for the same reason
         it does on /files: an <img> tag cannot carry a header."""
         tok = authorization[7:].strip() if authorization.lower().startswith("bearer ") else token
         if not tok or self.cfg.find_device_by_token(tok) is None:
             raise HTTPException(status_code=401, detail="unauthorized")
         try:
-            data, meta = await screenmod.grab(max(320, min(3840, w)), max(20, min(90, q)))
+            data, meta = await screenmod.grab(max(320, min(3840, w)), max(20, min(90, q)),
+                                              display or None)
         except screenmod.ScreenError as exc:
             raise HTTPException(status_code=503, detail=str(exc))
         return Response(content=data, media_type="image/jpeg", headers={
@@ -889,6 +891,7 @@ class Server:
             "Cache-Control": "no-store, max-age=0",
             "X-Screen-Width": str(meta["screen_w"]),
             "X-Screen-Height": str(meta["screen_h"]),
+            "X-Screen-Display": str(meta.get("display") or ""),
         })
 
     async def h_screen_info(self, dev: Device, d: dict) -> dict:
@@ -921,7 +924,8 @@ class Server:
         and nothing else — a check that capture works, mostly."""
         try:
             return await screenmod.grab_b64(int(d.get("width") or screenmod.MAX_W),
-                                            int(d.get("quality") or screenmod.QUALITY))
+                                            int(d.get("quality") or screenmod.QUALITY),
+                                            d.get("display") or None)
         except screenmod.ScreenError as exc:
             raise Err("screen_failed", str(exc))
 
@@ -931,8 +935,9 @@ class Server:
         if not self.cfg.remote_control:
             raise Err("control_disabled", "remote control is turned off on this computer")
         try:
+            display = d.get("display") or None
             for action in (d.get("actions") or [d]):
-                await screenmod.act(action)
+                await screenmod.act(action, action.get("display") or display)
         except screenmod.ScreenError as exc:
             raise Err("screen_failed", str(exc))
         return {"ok": True}

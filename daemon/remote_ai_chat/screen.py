@@ -5,10 +5,14 @@ agent can do for you: a dialog that wants a real click, a browser sign-in, an
 installer that asks a question no tool has an answer for. Until now the only way
 through was to walk to the machine. This is the other way.
 
-It is not AnyDesk and is not trying to be. There is no audio, no clipboard sync,
-no file transfer and no second monitor. It is a few frames a second and a
-pointer — enough to press Allow and get out, and deliberately not enough to
-tempt anyone into working this way.
+It is not AnyDesk and is not trying to be. There is no audio, no clipboard sync
+and no file transfer. It is a few frames a second and a pointer — enough to
+press Allow and get out, and deliberately not enough to tempt anyone into
+working this way.
+
+More than one monitor is the exception to that, because a machine with two
+screens keeps the dialog you came for on the other one. Displays are listed,
+and a frame and a click both name the one they mean.
 
 Why it is written here instead of installed: every VNC server on Windows wants
 an administrator to install it, and this daemon runs on machines where nobody
@@ -61,11 +65,47 @@ class ScreenError(RuntimeError):
 
 # ── capture ──────────────────────────────────────────────────────────────────
 
-_last_grab: tuple[float, bytes, dict] | None = None
+_last_grab: tuple[float, tuple, bytes, dict] | None = None
 _grab_lock = asyncio.Lock()
 
 
-def _grab_mac() -> "Image.Image":                               # noqa: F821
+def displays() -> list[dict]:
+    """Every screen on this machine, primary first.
+
+    The list is what a client offers as a picker, so it carries a label and a
+    size and nothing a browser cannot be told. An empty list is a machine that
+    could not be asked — one screen, whichever the platform hands over.
+    """
+    try:
+        out = [{k: v for k, v in d.items() if k in ("id", "label", "w", "h", "primary")}
+               for d in _displays_raw()]
+    except Exception as exc:                                    # pragma: no cover
+        log.warning("the displays could not be listed: %s", exc)
+        return []
+    return out
+
+
+def _pick(display: str | None) -> dict | None:
+    """The display a request meant, or None for "whatever is default".
+
+    A named display that has since been unplugged falls back rather than
+    failing: the frame is the thing being asked for, and the primary screen is
+    a better answer than an error.
+    """
+    try:
+        found = _displays_raw()
+    except Exception:                                           # pragma: no cover
+        return None
+    if len(found) < 2:
+        return None
+    if display:
+        for d in found:
+            if d["id"] == str(display):
+                return d
+    return next((d for d in found if d.get("primary")), found[0])
+
+
+def _grab_mac(d: dict | None = None) -> "Image.Image":          # noqa: F821
     """A Mac frame, with the pointer in it.
 
     Pillow shells out to `screencapture` too, but without -C — so every frame
@@ -79,7 +119,12 @@ def _grab_mac() -> "Image.Image":                               # noqa: F821
     fd, path = tempfile.mkstemp(".jpg")
     os.close(fd)
     try:
-        rc = subprocess.call(["screencapture", "-x", "-C", "-t", "jpg", path])
+        cmd = ["screencapture", "-x", "-C", "-t", "jpg"]
+        # -D names a display by its place in the active list, which is the same
+        # order the list below is built in.
+        if d is not None:
+            cmd += ["-D", str(d.get("index", 1))]
+        rc = subprocess.call(cmd + [path])
         if rc != 0:
             raise ScreenError(f"screencapture refused to take a picture (exit {rc})")
         img = Image.open(path)
@@ -94,13 +139,43 @@ def _grab_mac() -> "Image.Image":                               # noqa: F821
             pass
 
 
-def _grab_sync(max_w: int, quality: int) -> tuple[bytes, dict]:
+def _grab_win(d: dict | None):                                  # pragma: no cover
+    """A Windows frame, of one monitor or of the primary one.
+
+    Pillow's default is the primary monitor alone, which on a two-screen desk
+    is the one nothing important is ever on. `all_screens` grabs the whole
+    virtual desktop instead and the crop below takes the monitor out of it —
+    measured against the picture rather than against the numbers, because a
+    display scaled to 150% reports coordinates that are not pixels, and the
+    ratio between the two is the only honest way to convert.
+    """
+    from PIL import ImageGrab
+    if d is None:
+        return ImageGrab.grab()
+    img = ImageGrab.grab(all_screens=True)
+    vx, vy, vw, vh = _virtual_rect()
+    if not vw or not vh:
+        return img
+    sx, sy = img.width / vw, img.height / vh
+    box = (round((d["x"] - vx) * sx), round((d["y"] - vy) * sy),
+           round((d["x"] - vx + d["w"]) * sx), round((d["y"] - vy + d["h"]) * sy))
+    box = (max(0, box[0]), max(0, box[1]), min(img.width, box[2]), min(img.height, box[3]))
+    return img.crop(box) if box[2] > box[0] and box[3] > box[1] else img
+
+
+def _grab_sync(max_w: int, quality: int, display: str | None = None) -> tuple[bytes, dict]:
     try:
         from PIL import ImageGrab
     except Exception as exc:                                    # pragma: no cover
         raise ScreenError(f"Pillow is not available: {exc}") from exc
+    d = _pick(display)
     try:
-        img = _grab_mac() if sys.platform == "darwin" else ImageGrab.grab()
+        if sys.platform == "darwin":
+            img = _grab_mac(d)
+        elif sys.platform == "win32":
+            img = _grab_win(d)
+        else:
+            img = ImageGrab.grab()
     except ScreenError:
         raise
     except Exception as exc:
@@ -121,31 +196,36 @@ def _grab_sync(max_w: int, quality: int) -> tuple[bytes, dict]:
     # was taken from. A click arrives normalised, so only the second pair is
     # ever used to place it — but the first is what the client lays out with.
     meta = {"width": img.size[0], "height": img.size[1],
-            "screen_w": full_w, "screen_h": full_h, "ts": time.time()}
+            "screen_w": full_w, "screen_h": full_h, "ts": time.time(),
+            "display": (d or {}).get("id")}
     return buf.getvalue(), meta
 
 
-async def grab(max_w: int = MAX_W, quality: int = QUALITY) -> tuple[bytes, dict]:
+async def grab(max_w: int = MAX_W, quality: int = QUALITY,
+               display: str | None = None) -> tuple[bytes, dict]:
     """One frame, as JPEG bytes plus what it is a picture of.
 
     Two clients asking at once get the same frame rather than two captures:
     the screen does not change between them, and grabbing is the part that
-    costs something.
+    costs something. What they asked for is part of the key — two phones on two
+    monitors would otherwise be handed each other's screen.
     """
     global _last_grab
+    key = (str(display or ""), int(max_w), int(quality))
     async with _grab_lock:
         now = time.time()
-        if _last_grab and now - _last_grab[0] < MIN_INTERVAL_S:
-            _, data, meta = _last_grab
+        if _last_grab and _last_grab[1] == key and now - _last_grab[0] < MIN_INTERVAL_S:
+            _, _, data, meta = _last_grab
             return data, meta
-        data, meta = await asyncio.to_thread(_grab_sync, max_w, quality)
-        _last_grab = (now, data, meta)
+        data, meta = await asyncio.to_thread(_grab_sync, max_w, quality, display)
+        _last_grab = (now, key, data, meta)
         return data, meta
 
 
-async def grab_b64(max_w: int = MAX_W, quality: int = QUALITY) -> dict:
+async def grab_b64(max_w: int = MAX_W, quality: int = QUALITY,
+                   display: str | None = None) -> dict:
     """A frame shaped for the websocket, where bytes cannot travel as bytes."""
-    data, meta = await grab(max_w, quality)
+    data, meta = await grab(max_w, quality, display)
     return {**meta, "jpeg_b64": base64.b64encode(data).decode("ascii"), "bytes": len(data)}
 
 
@@ -177,6 +257,7 @@ def available() -> dict:
         "view": can_see,
         "control": can_touch,
         "os": platform.system(),
+        "displays": displays() if can_see else [],
         # Whichever half is missing is the half worth explaining, and capture
         # comes first: a screen nobody can see cannot be driven either.
         "reason": why or refusal,
@@ -194,7 +275,7 @@ if sys.platform == "win32":
     # abstraction over the forty below.
     INPUT_MOUSE, INPUT_KEYBOARD = 0, 1
     MOUSEEVENTF = {
-        "move": 0x0001, "absolute": 0x8000,
+        "move": 0x0001, "absolute": 0x8000, "virtualdesk": 0x4000,
         "ldown": 0x0002, "lup": 0x0004,
         "rdown": 0x0008, "rup": 0x0010,
         "mdown": 0x0020, "mup": 0x0040,
@@ -219,6 +300,56 @@ if sys.platform == "win32":
     class _INPUT(ctypes.Structure):
         _fields_ = [("type", wintypes.DWORD), ("u", _INPUTUNION)]
 
+    # SM_*VIRTUALSCREEN: where the desktop made of every monitor begins and how
+    # big it is. Absolute mouse coordinates are measured across it.
+    _SM = {"vx": 76, "vy": 77, "vw": 78, "vh": 79}
+    _MONITORINFOF_PRIMARY = 1
+
+    class _MONITORINFOEXW(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                    ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD),
+                    ("szDevice", ctypes.c_wchar * 32)]
+
+    _MONITORENUMPROC = ctypes.WINFUNCTYPE(
+        ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.POINTER(wintypes.RECT), ctypes.c_void_p)
+    _user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+
+    def _virtual_rect() -> tuple[int, int, int, int]:
+        g = _user32.GetSystemMetrics
+        return g(_SM["vx"]), g(_SM["vy"]), g(_SM["vw"]), g(_SM["vh"])
+
+    def _displays_raw() -> list[dict]:
+        """Every monitor Windows will admit to, primary first.
+
+        Read on every call rather than cached: a laptop that has just been
+        docked has a screen it did not have a second ago, and the list is two
+        system calls.
+        """
+        found: list[dict] = []
+
+        def each(hmon, hdc, rect, data):
+            info = _MONITORINFOEXW()
+            info.cbSize = ctypes.sizeof(_MONITORINFOEXW)
+            if _user32.GetMonitorInfoW(hmon, ctypes.byref(info)):
+                r = info.rcMonitor
+                found.append({
+                    "x": r.left, "y": r.top,
+                    "w": r.right - r.left, "h": r.bottom - r.top,
+                    "primary": bool(info.dwFlags & _MONITORINFOF_PRIMARY),
+                    "device": info.szDevice,
+                })
+            return 1
+
+        _user32.EnumDisplayMonitors(None, None, _MONITORENUMPROC(each), None)
+        found.sort(key=lambda d: (not d["primary"], d["x"], d["y"]))
+        for i, d in enumerate(found):
+            d["id"] = str(i)
+            d["index"] = i + 1
+            d["label"] = (f"Display {i + 1}" + (" (main)" if d["primary"] else "")
+                          + f" · {d['w']}×{d['h']}")
+        return found
+
     def _send(*events: _INPUT) -> None:
         n = len(events)
         arr = (_INPUT * n)(*events)
@@ -239,13 +370,22 @@ if sys.platform == "win32":
         return _INPUT(type=INPUT_KEYBOARD,
                       u=_INPUTUNION(ki=_KEYBDINPUT(0, ord(ch), flags, 0, None)))
 
-    def _move_to(nx: float, ny: float) -> _INPUT:
-        # Absolute mouse coordinates are 0..65535 across the *virtual* desktop,
-        # not across one monitor. Normalised input maps onto it directly, which
-        # is also why the client never needs to know the resolution.
-        x = max(0, min(65535, round(nx * 65535)))
-        y = max(0, min(65535, round(ny * 65535)))
-        return _mouse(MOUSEEVENTF["move"] | MOUSEEVENTF["absolute"], x, y)
+    def _move_to(nx: float, ny: float, d: dict | None = None) -> _INPUT:
+        # Absolute coordinates are 0..65535 across the primary monitor, and
+        # across the whole virtual desktop only with VIRTUALDESK set. With one
+        # screen the first is the same thing and cheaper to be sure of; with
+        # two, the click has to be placed on the desktop by hand or every
+        # second monitor lands back on the first.
+        if d is None:
+            x = max(0, min(65535, round(nx * 65535)))
+            y = max(0, min(65535, round(ny * 65535)))
+            return _mouse(MOUSEEVENTF["move"] | MOUSEEVENTF["absolute"], x, y)
+        vx, vy, vw, vh = _virtual_rect()
+        px = d["x"] + max(0.0, min(1.0, nx)) * max(0, d["w"] - 1)
+        py = d["y"] + max(0.0, min(1.0, ny)) * max(0, d["h"] - 1)
+        x = max(0, min(65535, round((px - vx) * 65535 / max(1, vw - 1))))
+        y = max(0, min(65535, round((py - vy) * 65535 / max(1, vh - 1))))
+        return _mouse(MOUSEEVENTF["move"] | MOUSEEVENTF["absolute"] | MOUSEEVENTF["virtualdesk"], x, y)
 
     # The keys worth naming. Anything not here is sent as text, which is what
     # a phone keyboard produces anyway.
@@ -262,15 +402,15 @@ if sys.platform == "win32":
 
     BUTTONS = {"left": ("ldown", "lup"), "right": ("rdown", "rup"), "middle": ("mdown", "mup")}
 
-    def _do(action: dict) -> None:
+    def _do(action: dict, d: dict | None = None) -> None:
         kind = action.get("kind")
 
         if kind == "move":
-            _send(_move_to(float(action["x"]), float(action["y"])))
+            _send(_move_to(float(action["x"]), float(action["y"]), d))
 
         elif kind in ("down", "up", "click", "double"):
             down, up = BUTTONS.get(action.get("button", "left"), BUTTONS["left"])
-            events = [_move_to(float(action["x"]), float(action["y"]))] if "x" in action else []
+            events = [_move_to(float(action["x"]), float(action["y"]), d)] if "x" in action else []
             if kind == "down":
                 events.append(_mouse(MOUSEEVENTF[down]))
             elif kind == "up":
@@ -282,7 +422,7 @@ if sys.platform == "win32":
             _send(*events)
 
         elif kind == "scroll":
-            events = [_move_to(float(action["x"]), float(action["y"]))] if "x" in action else []
+            events = [_move_to(float(action["x"]), float(action["y"]), d)] if "x" in action else []
             dy = int(action.get("dy") or 0)
             dx = int(action.get("dx") or 0)
             if dy:
@@ -347,6 +487,9 @@ elif sys.platform == "darwin":
         _AS.CGMainDisplayID.restype = ctypes.c_uint32
         _AS.CGDisplayBounds.restype = _CGRect
         _AS.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+        _AS.CGGetActiveDisplayList.restype = ctypes.c_int32
+        _AS.CGGetActiveDisplayList.argtypes = [
+            ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32)]
         _AS.CGEventCreate.restype = ctypes.c_void_p
         _AS.CGEventCreate.argtypes = [ctypes.c_void_p]
         _AS.CGEventGetLocation.restype = _CGPoint
@@ -405,6 +548,36 @@ elif sys.platform == "darwin":
     # becomes a drag. One screen, one pointer, so one set for the process.
     _pressed: set[str] = set()
 
+    def _displays_raw() -> list[dict]:
+        """Every attached screen, in the order Quartz hands them over.
+
+        That order is also `screencapture -D`'s, which is what makes the
+        picture and the pointer agree about which screen is the second one.
+        Sizes are points, not pixels — the same units the pointer is placed in.
+        """
+        if _AS is None:                                           # pragma: no cover
+            return []
+        ids = (ctypes.c_uint32 * 8)()
+        count = ctypes.c_uint32(0)
+        if _AS.CGGetActiveDisplayList(8, ids, ctypes.byref(count)) != 0:
+            return []
+        main = _AS.CGMainDisplayID()
+        found: list[dict] = []
+        for i in range(count.value):
+            b = _AS.CGDisplayBounds(ids[i])
+            found.append({
+                "cgid": int(ids[i]), "index": i + 1,
+                "x": int(b.origin.x), "y": int(b.origin.y),
+                "w": int(b.size.width), "h": int(b.size.height),
+                "primary": int(ids[i]) == int(main),
+            })
+        found.sort(key=lambda d: (not d["primary"], d["x"], d["y"]))
+        for i, d in enumerate(found):
+            d["id"] = str(i)
+            d["label"] = (f"Display {i + 1}" + (" (main)" if d["primary"] else "")
+                          + f" · {d['w']}×{d['h']}")
+        return found
+
     def _control_state() -> tuple[bool, str | None]:
         """macOS asks twice: once to see the screen, once to touch it.
 
@@ -429,8 +602,8 @@ elif sys.platform == "darwin":
         finally:
             _CF.CFRelease(ev)
 
-    def _point(nx: float, ny: float) -> _CGPoint:
-        """Normalised 0..1 onto the main display, in points.
+    def _point(nx: float, ny: float, d: dict | None = None) -> _CGPoint:
+        """Normalised 0..1 onto a display, in points.
 
         Read fresh every time instead of cached: the bounds change when the
         resolution does, and this is one C call. Points, not pixels — Quartz
@@ -438,7 +611,7 @@ elif sys.platform == "darwin":
         captured at 2880 wide is still driven at 1440, and no client has to
         know which of those numbers is real.
         """
-        b = _AS.CGDisplayBounds(_AS.CGMainDisplayID())
+        b = _AS.CGDisplayBounds(d["cgid"] if d else _AS.CGMainDisplayID())
         x = b.origin.x + max(0.0, min(1.0, nx)) * max(0.0, b.size.width - 1)
         y = b.origin.y + max(0.0, min(1.0, ny)) * max(0.0, b.size.height - 1)
         return _CGPoint(x, y)
@@ -452,9 +625,9 @@ elif sys.platform == "darwin":
             if ev:
                 _CF.CFRelease(ev)
 
-    def _at(action: dict) -> _CGPoint:
+    def _at(action: dict, d: dict | None = None) -> _CGPoint:
         if "x" in action and "y" in action:
-            return _point(float(action["x"]), float(action["y"]))
+            return _point(float(action["x"]), float(action["y"]), d)
         return _cursor()
 
     def _mouse(etype: int, at: _CGPoint, button: int, clicks: int = 0) -> int | None:
@@ -482,7 +655,7 @@ elif sys.platform == "darwin":
                 _AS.CGEventKeyboardSetUnicodeString(ev, len(buf), buf)
                 _post(ev)
 
-    def _do(action: dict) -> None:
+    def _do(action: dict, d: dict | None = None) -> None:
         if _AS is None:                                           # pragma: no cover
             raise ScreenError("Quartz could not be loaded on this Mac")
         kind = action.get("kind")
@@ -495,20 +668,20 @@ elif sys.platform == "darwin":
             held = next((b for b in ("left", "right", "middle") if b in _pressed), None)
             if held:
                 b, _, _, drag = _BTN[held]
-                _post(_mouse(drag, _at(action), b))
+                _post(_mouse(drag, _at(action, d), b))
             else:
-                _post(_mouse(_EV["move"], _at(action), 0))
+                _post(_mouse(_EV["move"], _at(action, d), 0))
 
         elif kind == "down":
             _pressed.add(name)
-            _post(_mouse(down_ev, _at(action), button, clicks=1))
+            _post(_mouse(down_ev, _at(action, d), button, clicks=1))
 
         elif kind == "up":
             _pressed.discard(name)
-            _post(_mouse(up_ev, _at(action), button, clicks=1))
+            _post(_mouse(up_ev, _at(action, d), button, clicks=1))
 
         elif kind in ("click", "double"):
-            at = _at(action)
+            at = _at(action, d)
             _post(_mouse(down_ev, at, button, clicks=1))
             _post(_mouse(up_ev, at, button, clicks=1))
             if kind == "double":
@@ -525,7 +698,7 @@ elif sys.platform == "darwin":
             if not (lines_y or lines_x):
                 return
             if "x" in action:
-                _post(_mouse(_EV["move"], _at(action), 0))
+                _post(_mouse(_EV["move"], _at(action, d), 0))
             ev = _AS.CGEventCreate(None)
             if not ev:
                 raise ScreenError("the scroll event could not be created")
@@ -567,13 +740,22 @@ elif sys.platform == "darwin":
             raise ScreenError(f"unknown action: {kind}")
 
 else:                                                            # pragma: no cover
+    def _displays_raw() -> list[dict]:
+        return []
+
     def _control_state() -> tuple[bool, str | None]:
         return False, "clicking is only implemented on Windows and macOS so far"
 
-    def _do(action: dict) -> None:
+    def _do(action: dict, d: dict | None = None) -> None:
         raise ScreenError("clicking is only implemented on Windows and macOS so far")
 
 
-async def act(action: dict) -> None:
-    """Perform one pointer or keyboard action. Blocking, so it goes to a thread."""
-    await asyncio.to_thread(_do, action)
+async def act(action: dict, display: str | None = None) -> None:
+    """Perform one pointer or keyboard action. Blocking, so it goes to a thread.
+
+    Coordinates are 0..1 across the display the client is looking at, which is
+    why the display travels with them: the same 0.5, 0.5 is the middle of one
+    monitor or the middle of another, and a click on the wrong one is worse
+    than no click at all.
+    """
+    await asyncio.to_thread(_do, action, _pick(display))
