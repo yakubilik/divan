@@ -7,8 +7,9 @@ import { useColors } from '../theme';
 import { Dot, Icon, Text } from './ui';
 
 /** The top of both home screens: which computer this is and how it is doing,
- *  and the screen's own actions on the right. */
-export function HomeTop({ tab, onCompose, onComposeLong }: { tab: 'chats' | 'agents'; onCompose?: () => void; onComposeLong?: () => void }) {
+ *  and the screen's own actions on the right. Starting a chat is not one of
+ *  them — that button belongs beside the Chats title, where the list is. */
+export function HomeTop({ tab }: { tab: 'chats' | 'agents' }) {
   const router = useRouter();
   const go = useNavGuard();
   const T = useT();
@@ -37,7 +38,6 @@ export function HomeTop({ tab, onCompose, onComposeLong }: { tab: 'chats' | 'age
       <View style={{ flexDirection: 'row', gap: 4, marginLeft: 8 }}>
         {tab === 'chats' && <Btn icon="call" />}
         <Btn icon="settings" label={T('settings')} onPress={() => go(() => router.push('/settings'))} />
-        {tab === 'chats' && <Btn icon="edit_square" label={T('newChat')} onPress={onCompose} onLongPress={onComposeLong} />}
       </View>
     </View>
   );

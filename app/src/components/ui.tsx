@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Easing, Image, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon } from './icon';
 import { Text } from './text';
 import { em, providerMark, useColors } from '../theme';
@@ -189,8 +189,8 @@ export function Tabs({ value, onChange, labels }: { value: 0 | 1; onChange: (v: 
         return (
           <Pressable key={l} onPress={() => !on && onChange(i as 0 | 1)}
             style={[{ flex: 1, alignItems: 'center', padding: 7, borderRadius: 999 },
-              on && { backgroundColor: c.card, boxShadow: c.shadow.seg }]}>
-            <Text style={{ fontSize: 13, fontWeight: on ? '600' : '500', color: on ? c.ink : c.muted }}>{l}</Text>
+              on && { backgroundColor: c.ink, boxShadow: c.shadow.seg }]}>
+            <Text style={{ fontSize: 13, fontWeight: on ? '600' : '500', color: on ? c.onInk : c.muted }}>{l}</Text>
           </Pressable>
         );
       })}
@@ -218,23 +218,35 @@ export function Radio({ on }: { on: boolean }) {
 
 // ── marks ───────────────────────────────────────────────────────────────────
 
-/** The two-letter mark a chat, an account or a tool is drawn with. Claude is
- *  filled and Codex is outlined; an archived chat and a signed-out account are
- *  drawn quieter. */
+/** The tools' own app icons, shipped with the app so a chat row says at a
+ *  glance which one it talks to. (Their trademarks; used to identify them.) */
+const PROVIDER_ICONS: Record<string, any> = {
+  claude: require('../../assets/provider-claude.png'),
+  codex: require('../../assets/provider-codex.png'),
+};
+
+/** The mark a chat, an account or a tool is drawn with: the tool's own icon,
+ *  quieter on an archived chat. An account with nobody signed in has no icon
+ *  to draw, so it keeps the dashed square and the two-letter mark. */
 export function ProviderBadge({ provider, size = 26, variant }: {
   provider: string; size?: number; variant?: 'filled' | 'outline' | 'dashed';
 }) {
   const c = useColors();
-  const v = variant ?? (provider === 'codex' ? 'outline' : 'filled');
+  const v = variant ?? 'filled';
+  const icon = PROVIDER_ICONS[provider];
+  if (v === 'dashed' || !icon) {
+    return (
+      <View style={[{ width: size, height: size, borderRadius: size * 0.3, alignItems: 'center', justifyContent: 'center' },
+        v === 'dashed' ? { borderWidth: 1.5, borderColor: c.lineStrong, borderStyle: 'dashed' } : { backgroundColor: c.ink }]}>
+        <Text mono style={{ fontSize: size * 0.42, fontWeight: '600', color: v === 'dashed' ? c.faint : c.onInk }}>
+          {providerMark(provider)}
+        </Text>
+      </View>
+    );
+  }
   return (
-    <View style={[{ width: size, height: size, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-      v === 'filled' && { backgroundColor: c.ink },
-      v === 'outline' && { borderWidth: 1.5, borderColor: c.ink },
-      v === 'dashed' && { borderWidth: 1.5, borderColor: c.lineStrong, borderStyle: 'dashed' }]}>
-      <Text mono style={{ fontSize: 11, fontWeight: '600', color: v === 'filled' ? c.onInk : v === 'dashed' ? c.faint : c.ink }}>
-        {providerMark(provider)}
-      </Text>
-    </View>
+    <Image source={icon} resizeMode="cover"
+      style={{ width: size, height: size, borderRadius: size * 0.3, opacity: v === 'outline' ? 0.45 : 1 }} />
   );
 }
 

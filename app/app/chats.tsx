@@ -240,7 +240,17 @@ export default function Chats() {
   const listHeader = (withControls: boolean) => (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 18, paddingHorizontal: 16, paddingBottom: 10 }}>
-        <Text style={{ fontSize: 30, fontWeight: '600', letterSpacing: em(30, -0.025) }}>{T('chats')}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <Text style={{ fontSize: 30, fontWeight: '600', letterSpacing: em(30, -0.025) }}>{T('chats')}</Text>
+          {/* Tap: a chat on the defaults. Long-press: the picker. */}
+          {withControls && (
+            <Pressable accessibilityLabel={T('newChat')} hitSlop={6}
+              onPress={() => void quickNew()} onLongPress={() => go(() => router.push('/new-chat'))}
+              style={({ pressed }) => [{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
+              <Icon name="edit_square" size={22} />
+            </Pressable>
+          )}
+        </View>
         {withControls && (
           <View style={{ flexDirection: 'row', gap: 6 }}>
             <Pill innerRef={viewPill} icon={chatView === 'grouped' ? 'view_agenda' : 'reorder'} on={viewMenu}
@@ -327,7 +337,7 @@ export default function Chats() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
-      <HomeTop tab="chats" onCompose={() => void quickNew()} onComposeLong={() => go(() => router.push('/new-chat'))} />
+      <HomeTop tab="chats" />
       <Tabs value={0} labels={[T('chatsTab'), T('agentsTab')]} onChange={() => go(() => router.replace('/agents'))} />
       <Animated.View style={{ flex: 1, opacity: switching ? 1 : fade }}>{body}</Animated.View>
     </View>
