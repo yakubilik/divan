@@ -10,7 +10,7 @@ import { client } from '../src/ws';
 import { em, FONTS, useColors } from '../src/theme';
 import { Button, Icon, Text } from '../src/components/ui';
 import { DialogHost, MenuHost } from '../src/components/overlay';
-import { getOpenChat, registerForPush } from '../src/push';
+import { getOpenChat, protectChat, registerForPush } from '../src/push';
 
 /** Presented over the page by the app's own sheet (see components/sheet). */
 const SHEET = { presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } } as const;
@@ -48,7 +48,10 @@ export default function RootLayout() {
       // A notification is a jump somewhere else, not a step deeper into wherever
       // the user happened to be. Pushing left the previous chat underneath, so
       // Back walked into *that* chat instead of leaving. Land on the tapped chat
-      // with the list behind it.
+      // with the list behind it. The pop unmounts the chat screens above the
+      // list, and an unused one deletes itself on the way out — including,
+      // once, the very chat being opened. Name it first so it is spared.
+      protectChat(cid);
       try { if (router.canDismiss()) router.dismissTo('/chats'); } catch {}
       router.push(`/chat/${cid}`);
     });

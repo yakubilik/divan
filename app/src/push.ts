@@ -16,6 +16,35 @@ let openChat: string | null = null;
 export function setOpenChat(id: string | null) { openChat = id; }
 export function getOpenChat(): string | null { return openChat; }
 
+/** The chat a notification tap is on its way into. The tap pops the stack back
+ *  to the list before pushing, and every chat screen it unmounts runs its own
+ *  "this one was never used, drop it" cleanup — which happily deleted the very
+ *  chat the tap was opening, leaving a screen waiting for a transcript the
+ *  computer no longer has. A chat named here is never disposed of. */
+let protectedChat: string | null = null;
+let protectTimer: ReturnType<typeof setTimeout> | null = null;
+export function protectChat(id: string) {
+  protectedChat = id;
+  if (protectTimer) clearTimeout(protectTimer);
+  // Long enough to outlive the pop and the push it is guarding, short enough
+  // that the chat goes back to being ordinary once we are standing in it.
+  protectTimer = setTimeout(() => { protectedChat = null; protectTimer = null; }, 5000);
+}
+export function isProtectedChat(id: string): boolean { return protectedChat === id; }
+
+/** Take a chat's banners back out of Notification Center. A notification
+ *  outlives the chat it announced, and tapping a stale one opened a chat the
+ *  computer no longer has. Best effort: a banner we cannot withdraw is not
+ *  worth an error. */
+export async function dismissChatNotifications(chatId: string): Promise<void> {
+  try {
+    const shown = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(shown
+      .filter((n) => (n.request.content.data as any)?.chat_id === chatId)
+      .map((n) => Notifications.dismissNotificationAsync(n.request.identifier)));
+  } catch {}
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async (n) => {
     const chatId = (n.request.content.data as any)?.chat_id;

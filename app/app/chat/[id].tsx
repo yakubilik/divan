@@ -11,10 +11,10 @@ import { buildTimeline, fileUrl, useStore, useT, type Attachment, type TimelineI
 import type { CliAccount } from '../../src/protocol';
 import { useNavGuard } from '../../src/nav';
 import { useFileDrop, type DroppedFile } from '../../modules/drop-target';
-import { getOpenChat, setChatOnScreen, setOpenChat } from '../../src/push';
+import { getOpenChat, isProtectedChat, setChatOnScreen, setOpenChat } from '../../src/push';
 import { LimitsRing } from '../../src/components/limits';
 import { em, useColors } from '../../src/theme';
-import { Icon, Spinner, Text, TextInput } from '../../src/components/ui';
+import { Icon, SmallButton, Spinner, Text, TextInput } from '../../src/components/ui';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Sheet, useSheet } from '../../src/components/sheet';
 import { GalleryProvider } from '../../src/components/media';
@@ -138,7 +138,36 @@ export default function ChatScreen() {
     levels.current = [...levels.current.slice(-27), v];
   }, [rec.durationMillis, recording]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (conn === 'online') void openChat(id!).catch((e) => console.warn('openChat failed', e?.message)); }, [id, conn, openChat]);
+  // A transcript that fails to arrive used to leave the screen on its loading
+  // skeleton for good: nothing retried, nothing said so, and `chat` stayed
+  // undefined — which took the model sheet down with it. The error is kept, and
+  // a chat the computer no longer has sends us back to the list rather than to
+  // a screen that can never fill.
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [tryCount, setTryCount] = useState(0);
+  useEffect(() => {
+    if (conn !== 'online') return;
+    let alive = true;
+    void openChat(id!).then(
+      () => { if (alive) setOpenError(null); },
+      (e: any) => {
+        if (!alive) return;
+        console.warn('openChat failed', e?.message);
+        // Nothing to come back for: the list is where this belongs.
+        if (e?.code === 'no_chat') { if (router.canGoBack()) router.back(); else router.replace('/chats'); return; }
+        setOpenError(e?.message || T('error'));
+      });
+    return () => { alive = false; };
+  }, [id, conn, openChat, tryCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Coming back to the screen is the natural moment to try again — the phone
+  // has usually just woken up or reconnected. The error is read through a ref
+  // so that regaining focus is the only thing that triggers a retry; keying it
+  // on the message itself would retry on every error whose wording changed.
+  const errorRef = useRef<string | null>(null);
+  errorRef.current = openError;
+  useFocusEffect(useCallback(() => {
+    if (errorRef.current) setTryCount((n) => n + 1);
+  }, []));
   // The header names the plan being spent, which only the account list knows.
   // Asking for it costs a shell-out per tool, so ask once per session.
   useEffect(() => {
@@ -163,12 +192,22 @@ export default function ChatScreen() {
   // A chat the user opened and left without saying anything should not linger in
   // the list; only drop it when we know it is genuinely empty.
   const loaded = useStore((s) => !!s.loadedChats[id!]);
-  const disposable = useRef(false);
-  disposable.current = loaded && !busy && (events?.length ?? 0) === 0
-    && (chat?.total_cost_usd ?? 0) === 0
-    && (chat?.title === 'New chat' || chat?.title === 'Yeni sohbet');
+  // A message that has left the composer counts even before its event comes
+  // back: the answer is on its way, and the chat is no longer unused.
+  const spokenTo = useRef(false);
+  // Read the store at the moment of leaving rather than a value captured while
+  // rendering. An unmount the user did not ask for — the stack being popped by
+  // a notification tap — arrives after the last render, and a stale "this is
+  // empty" from before the first message deleted chats out from under it.
   useEffect(() => () => {
-    if (disposable.current) void useStore.getState().deleteChat(id!).catch(() => {});
+    if (spokenTo.current || isProtectedChat(id!)) return;
+    const st = useStore.getState();
+    const ch = st.chats[id!];
+    const empty = !!st.loadedChats[id!] && !st.busy[id!] && !st.live[id!]
+      && (st.events[id!]?.length ?? 0) === 0
+      && (ch?.total_cost_usd ?? 0) === 0
+      && (ch?.title === 'New chat' || ch?.title === 'Yeni sohbet');
+    if (empty) void st.deleteChat(id!).catch(() => {});
   }, [id]);
 
   const items = useMemo(() => buildTimeline(events || []), [events]);
@@ -224,6 +263,7 @@ export default function ChatScreen() {
     if (!t && pending.length === 0) return;
     const atts = pending;
     clearComposer(); setPending([]);
+    spokenTo.current = true;
     await sendNow(t, atts);
   }
 
@@ -302,6 +342,7 @@ export default function ChatScreen() {
     try {
       const up = await uploadAttachment(id!, uri, `voice-${Date.now()}.m4a`);
       const att: Attachment = { ...up, kind: 'audio', duration: seconds };
+      spokenTo.current = true;
       await sendNow(text.trim(), [...pending, att]);
       clearComposer(); setPending([]);
     } catch (e: any) { alert(T('uploadFailed'), e.message); }
@@ -459,9 +500,18 @@ export default function ChatScreen() {
           initialNumToRender={20}
           windowSize={9}
           ListEmptyComponent={
-            // A transcript that has not arrived is not an empty transcript.
+            // A transcript that has not arrived is not an empty transcript —
+            // and one that is not coming is not a slow one. Say which.
             !loaded ? (
-              <View style={{ transform: [{ scaleY: -1 }], paddingTop: 4 }}><TranscriptSkeleton /></View>
+              openError ? (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 12, transform: [{ scaleY: -1 }] }}>
+                  <Icon name="cloud_off" size={26} color={c.faint} />
+                  <Text style={{ fontSize: 14, color: c.muted, textAlign: 'center' }}>{openError}</Text>
+                  <SmallButton title={T('tryAgain')} onPress={() => setTryCount((n) => n + 1)} />
+                </View>
+              ) : (
+                <View style={{ transform: [{ scaleY: -1 }], paddingTop: 4 }}><TranscriptSkeleton /></View>
+              )
             ) : (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 8, transform: [{ scaleY: -1 }] }}>
                 <Text style={{ fontSize: 22, fontWeight: '600', letterSpacing: em(22, -0.01), textAlign: 'center' }}>{chat?.title}</Text>

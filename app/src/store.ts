@@ -4,6 +4,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useCallback } from 'react';
 import { client, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
+import { dismissChatNotifications } from './push';
 import type { Agent, Catalog, Chat, CliAccount, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, ToolStatus } from './protocol';
 
 const HOSTS_KEY = 'rac.hosts';
@@ -190,6 +191,20 @@ function scheduleSettle(chatId: string) {
 
 /** chat id -> the chat.get already in the air for it. */
 const inFlightOpen = new Map<string, Promise<void>>();
+
+/** Take a chat out of every per-chat table at once. Forgetting it in `chats`
+ *  alone left its transcript, its live text and its "loaded" flag behind, so a
+ *  chat that came back under the same id started half-remembered. */
+function forgetChat(get: () => State, set: (p: Partial<State>) => void, id: string) {
+  void dismissChatNotifications(id);
+  const drop = <T,>(m: Record<string, T>) => { const n = { ...m }; delete n[id]; return n; };
+  const st = get();
+  set({
+    chats: drop(st.chats), events: drop(st.events), live: drop(st.live),
+    progress: drop(st.progress), thinking: drop(st.thinking), busy: drop(st.busy),
+    loadedChats: drop(st.loadedChats),
+  });
+}
 
 /** Tokens arrive from the tool one or two characters at a time - sixty-odd
  *  events a second on a fast model. Writing each one to the store re-rendered
@@ -632,7 +647,17 @@ export const useStore = create<State>((set, get) => {
         });
       })();
       inFlightOpen.set(id, run);
-      try { await run; } finally { inFlightOpen.delete(id); }
+      try {
+        await run;
+      } catch (e: any) {
+        // The computer does not have this chat any more — deleted here, or on
+        // another device, or by this app itself on the way out. Nothing will
+        // ever answer for it, so drop it instead of leaving a row in the list
+        // and a screen waiting for a transcript. The caller still gets the
+        // error; it is the one that knows whether to go back.
+        if (e?.code === 'no_chat') forgetChat(get, set, id);
+        throw e;
+      } finally { inFlightOpen.delete(id); }
     },
 
     createChat: async (d) => {
@@ -648,8 +673,7 @@ export const useStore = create<State>((set, get) => {
 
     deleteChat: async (id) => {
       await client.call('chat.delete', { chat_id: id });
-      const chats = { ...get().chats }; delete chats[id];
-      set({ chats });
+      forgetChat(get, set, id);
     },
 
     send: async (id, text, attachments) => {
