@@ -9,6 +9,16 @@ npm run dev      # http://localhost:5177 (pairs through public/dev-host.json)
 npm run build    # -> daemon/remote_ai_chat/webui/
 ```
 
+`public/dev-host.json` holds a real pairing token and is for `npm run dev` only.
+A build strips it back out (`vite.config.ts`), because the daemon serves the
+bundle as plain static files with no token of its own — shipping it would hand
+the computer's credentials to anyone who can reach the port.
+
+The same step writes `build.json` into the bundle: the commit it was built from.
+The bundle is not in git and the daemon is, so without that note nothing can
+tell whether the panel in the browser still matches the code behind it. The
+Admin screen shows the answer, and the daemon's updater rebuilds when it is no.
+
 On the computer, `remote-ai-chat web` hands the panel its own device token and
 opens the browser. The panel shows up in `devices` and `revoke <id>` cuts it off
 like it cuts off a phone.

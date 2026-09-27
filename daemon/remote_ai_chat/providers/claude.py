@@ -79,12 +79,23 @@ class ClaudeProvider(Provider):
     @staticmethod
     def catalog() -> dict:
         return {
+            # Each model carries its own effort list, because they differ: Haiku
+            # takes no effort setting at all and errors when sent one, so an
+            # inherited five-way control was offering a choice that could only
+            # break the turn. The hint is what a person needs to choose between
+            # them — how much it holds and what it costs — rather than an
+            # adjective.
             "models": [
-                {"id": "fable", "label": "Fable 5.1", "hint": "most capable"},
-                {"id": "opus", "label": "Opus 5", "hint": "deep work"},
-                {"id": "sonnet", "label": "Sonnet 5", "hint": "balanced"},
-                {"id": "haiku", "label": "Haiku 4.5", "hint": "fast · cheap"},
+                {"id": "fable", "label": "Fable 5.1", "model_id": "claude-fable-5-1",
+                 "hint": "most capable · 1M context · $10/$50 per 1M", "efforts": EFFORTS},
+                {"id": "opus", "label": "Opus 5", "model_id": "claude-opus-5",
+                 "hint": "deep work · 1M context · $5/$25 per 1M", "efforts": EFFORTS},
+                {"id": "sonnet", "label": "Sonnet 5", "model_id": "claude-sonnet-5",
+                 "hint": "balanced · 1M context · $2/$10 per 1M", "efforts": EFFORTS},
+                {"id": "haiku", "label": "Haiku 4.5", "model_id": "claude-haiku-4-5",
+                 "hint": "fast · 200K context · $1/$5 per 1M · no effort setting", "efforts": []},
             ],
+            # Kept for a phone older than this daemon, which reads only this one.
             "efforts": EFFORTS,
             "perm_modes": list(PERM_MODES.keys()),
         }
@@ -155,7 +166,13 @@ class ClaudeProvider(Provider):
         raw = i.raw or {}
         unified = raw.get("unifiedWindows")
         windows: list[dict] = []
-        if isinstance(unified, dict):
+        # Whether the list below is the whole plan or only the headline. It
+        # matters downstream: a complete report is the tool's current answer,
+        # so a window missing from it is a window that no longer exists and
+        # must not be kept. The fallback is one window out of an unknown
+        # number, and deciding anything from what it omits would be a guess.
+        complete = isinstance(unified, dict)
+        if complete:
             for name, w in unified.items():
                 if not isinstance(w, dict):
                     continue
@@ -183,6 +200,7 @@ class ClaudeProvider(Provider):
             "overage_disabled_reason": i.overage_disabled_reason,
             "is_using_overage": bool(raw.get("isUsingOverage")),
             "windows": windows,
+            "windows_complete": complete and bool(windows),
         }
 
     # ── lifecycle ──────────────────────────────────────────────────────────
@@ -405,6 +423,24 @@ class ClaudeProvider(Provider):
             return TurnResult(self._session_id, None, None, None, None, True, f"query failed: {exc}")
 
         return await self._drain(started)
+
+    async def steer(self, prompt: str, attachments: list[dict] | None = None) -> bool:
+        # Only into a turn this provider is draining: with none in flight the
+        # CLI would open a turn nobody is reading, and the message belongs in
+        # the session's queue instead. The CLI delivers it right after the
+        # tool call in progress returns, inside the same turn — one
+        # ResultMessage still ends it (measured: sent at 6.5 s into a chain of
+        # sleeps, answered at 9.1 s, num_turns=2, one result).
+        if not self._turn_active or self._client is None or self._interrupted:
+            return False
+        if attachments:
+            prompt = f"{prompt}\n\n{describe_attachments(attachments)}"
+        try:
+            await self._client.query(prompt)
+        except Exception as exc:
+            log.warning("steer failed, queueing instead: %s", exc)
+            return False
+        return True
 
     async def run_continuation(self) -> TurnResult:
         """Drain a turn the model began on its own. Nothing is asked of it."""

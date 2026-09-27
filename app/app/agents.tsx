@@ -45,11 +45,20 @@ export default function Agents() {
   async function open(a: Agent) {
     setOpening(a.id);
     try {
-      // The same account the list was read from. An agent lives in one
-      // account's folder, so a chat created against a different one cannot
-      // find it — which is what made tapping an installed agent fail.
+      // Agents are a Claude idea, so the Claude half of the defaults is what
+      // this chat opens with. Sent explicitly: everything left out here is
+      // filled in by the daemon from the top of its catalog, which is how
+      // tapping an agent used to open on Fable in ask mode no matter what the
+      // defaults said. An agent's own `model` is a label, not a setting — it
+      // overrides nothing at run time.
+      const d = defaults.byProvider?.claude;
+      const mine = defaults.provider === 'claude';
       const chat = await createChat({
         provider: 'claude', title: a.label, agent_id: a.id,
+        model: d?.model || (mine ? defaults.model : undefined),
+        effort: d?.effort ?? (mine ? defaults.effort : undefined),
+        // Shared by both tools, so the general default is a fair fallback.
+        perm_mode: d?.perm_mode || defaults.perm_mode,
         account_id: account ?? undefined,
         cwd: defaults.cwd ?? projects[0]?.path ?? null,
       } as any);

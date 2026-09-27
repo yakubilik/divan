@@ -10,12 +10,14 @@ import shutil
 import subprocess
 import sys
 import time
+from urllib.parse import unquote
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
 from . import __version__
+from .supervisor import supervisor
 from .updater import Updater
 from .config import Config, DB_PATH, UPLOAD_DIR, Device
 from .db import DB
@@ -23,12 +25,14 @@ from . import accounts as acct
 from . import pool as poolmod
 from .errors import Err
 from . import agents, tools
+from .call import Concierge, headline as call_headline, snapshot as call_snapshot
 from .push import send_push
 from .transcribe import transcribe, available as transcribe_available
-from .attachments import KINDS, normalize_image
+from .attachments import KINDS, normalize_image, sniff
 from .security import PathPolicy
 from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager
 from .providers.codex import live_models as codex_live_models
+from . import screen as screenmod
 
 log = logging.getLogger("rac.server")
 
@@ -36,7 +40,10 @@ log = logging.getLogger("rac.server")
 # .pptx, a .zip or a .docx the agent could read perfectly well is just "file".
 # The media kinds live in attachments.py, next to the other direction.
 
-PUSH_TEXT = {"approval": "Approval pending", "done": "Task finished"}
+PUSH_TEXT = {
+    "en": {"approval": "Approval pending", "done": "Task finished"},
+    "tr": {"approval": "Onay bekliyor", "done": "İş tamamlandı"},
+}
 
 # How far a client may fall behind before it is cut loose, and how long one
 # write may take before the socket counts as gone.
@@ -138,24 +145,47 @@ class Server:
         # Every computer follows origin/main on its own. Set when an update has
         # been staged and the supervisor should take it from here.
         self.restart_requested = asyncio.Event()
+        # Set while the daemon is waiting for its turns to finish so it can
+        # stop without killing them. New turns are refused for as long as it
+        # is: a restart that keeps accepting work never arrives.
+        self.draining: dict | None = None
+        self._drain: asyncio.Task | None = None
+        # A restart is the one event this daemon cannot watch itself have: the
+        # process that would report it is the process that ended. So it is
+        # counted on the way back in, and the count outlives every one of them.
+        self.started = time.time()
+        self.restarts = int(self.db.meta_get("restarts", 0) or 0) + 1
+        self.db.meta_set("restarts", self.restarts)
+        self.db.meta_set("started_at", self.started)
         self.updater = Updater(
             cfg,
-            is_idle=lambda: self.sessions.active_count() == 0,
+            # Queued messages count: they would be dropped by the restart an
+            # update ends with, and the phone was already told they landed.
+            is_idle=lambda: self.sessions.pending_count() == 0,
             announce=self._announce_update,
-            request_restart=self.restart_requested.set,
+            request_restart=lambda: self.begin_restart("update"),
+            record=lambda entry: self.db.meta_set("last_update", entry),
+            last_update=self.db.meta_get("last_update"),
         )
         self._load_accounts()
         self.failed_auth: dict[str, list[float]] = {}
-        self.started = time.time()
         self.app = FastAPI(title="remote-ai-chat")
         self.app.websocket("/ws")(self.ws_endpoint)
         self.app.get("/health")(lambda: {"ok": True, "version": __version__})
         self.app.post("/upload")(self.upload)
         self.app.get("/files")(self.files)
+        # Frames go over HTTP rather than the socket: a phone draws one with
+        # <Image> and a browser with <img>, and neither wants base64 in a
+        # websocket frame five times a second.
+        self.app.get("/screen.jpg")(self.screen_jpg)
         self._mount_panel()
         self._versions: dict | None = None
         self._codex_models: list[dict] | None = None
         self._codex_models_task: asyncio.Task | None = None
+        # The voice concierge. Built here but not connected — the CLI only
+        # starts when somebody actually asks it something.
+        self.concierge = Concierge(self.call_snapshot, self._concierge_account,
+                                   self._concierge_actions())
 
     def _mount_panel(self) -> None:
         """Serve the desktop panel, when it has been built.
@@ -169,9 +199,39 @@ class Server:
         if not (panel / "index.html").exists():
             return
         from fastapi.staticfiles import StaticFiles
-        self.app.mount("/", StaticFiles(directory=str(panel), html=True), name="panel")
 
-    # ── tools (installing the CLIs) ────────────────────────────────────────
+        class Panel(StaticFiles):
+            """The same files, with the caching said out loud.
+
+            Starlette sends an ETag and a Last-Modified and no `Cache-Control`,
+            and a browser given that is entitled to guess how long the page
+            stays fresh — it guesses from the file's age, so the longer a panel
+            goes unchanged the longer a new one takes to appear. That is how an
+            updated daemon comes to serve a rebuilt panel to a browser quietly
+            running last week's, with a hard reload as the only cure and nothing
+            on screen to suggest it.
+
+            `index.html` is the only file that has to be re-read to find the
+            rest, so it is the only one that must never be cached. Everything
+            under /assets/ is content-hashed by vite — a new build is a new
+            filename — so those can be kept forever, which is what makes the
+            uncached page cheap.
+            """
+
+            def file_response(self, full_path, stat_result, scope, status_code=200):
+                r = super().file_response(full_path, stat_result, scope, status_code)
+                name = Path(str(full_path)).name
+                if "/assets/" in str(full_path).replace("\\", "/"):
+                    r.headers["cache-control"] = "public, max-age=31536000, immutable"
+                elif name in ("index.html", "build.json"):
+                    r.headers["cache-control"] = "no-store, must-revalidate"
+                else:
+                    r.headers["cache-control"] = "no-cache"
+                return r
+
+        self.app.mount("/", Panel(directory=str(panel), html=True), name="panel")
+
+    # ── tools (CLI kurulumu) ───────────────────────────────────────────────
     async def h_tool_status(self, dev: Device, d: dict) -> dict:
         tools.forget()
         return {"tools": [{"provider": p, "version": tools.version(p),
@@ -289,11 +349,16 @@ class Server:
         chat = self.db.get_chat(event.get("chat_id") or "") or {}
         key = chat.get("account_id") or acct.DEFAULT_ID + "-" + (chat.get("provider") or "claude")
         rows = d.get("windows")
+        # Whether this is the plan's whole answer or only the window the tool
+        # singled out. Only the provider knows, so only the provider says: a
+        # one-window list is indistinguishable from a complete list of one.
+        complete = bool(d.get("windows_complete"))
         if not isinstance(rows, list) or not rows:
             # A provider that reports a single window, or a report from before
             # the daemon learned to read them all.
             rows = [{k: d.get(k) for k in ("window", "status", "utilization", "resets_at")}] \
                 if d.get("window") else []
+            complete = False
         now = time.time()
         # Overage is a property of the account, not of any one window, so every
         # row carries it and the app can read it off whichever row it shows.
@@ -307,8 +372,17 @@ class Server:
         self._learn_steps(slot, kept)
         for r in kept:
             slot[str(r["window"])] = r
+        if complete:
+            # Everything the plan has, as of now. A window that is not in it is
+            # a window the tool has stopped having — an overage allowance that
+            # was spent, a plan that changed — and keeping the last number
+            # anybody saw for it means showing a full ring for days.
+            fresh = {str(r["window"]) for r in kept}
+            for gone in [w for w in slot if w not in fresh]:
+                log.info("%s no longer reports %s — dropping it", key, gone)
+                del slot[gone]
         try:
-            self.db.save_limits(key, kept, now)
+            self.db.save_limits(key, kept, now, complete=complete)
         except Exception as e:
             log.warning("could not write down the plan's limits: %s", e)
         return key
@@ -460,6 +534,161 @@ class Server:
         except Exception:
             log.exception("the pool could not move a chat off %s", account_key)
 
+    # ── stopping on purpose ────────────────────────────────────────────────
+    # Killing the process is not a restart, it is a crash somebody chose. Each
+    # chat's CLI is a child of this process, so every turn in flight dies with
+    # it and a half-written answer is simply gone. Draining is the difference:
+    # stop taking work, let what is running finish, then leave. The supervisor
+    # (launchd with KeepAlive, start.ps1 on Windows) brings the daemon back on
+    # the new code within seconds, and the clients reconnect on their own.
+
+    # Long enough for the clients to be back on their sockets, so they watch
+    # the turn start again instead of finding it already under way.
+    RESUME_DELAY_S = 3.0
+
+    async def resume_interrupted(self) -> None:
+        """Carry on with the turns the process before this one was running.
+
+        A restart used to end every turn in flight with a line telling the
+        phone to send its message again. The message is already on disk and the
+        session it was asked in can be resumed, so nobody needs telling: the
+        work starts itself.
+        """
+        plans = list(getattr(self.db, "to_resume", None) or [])
+        if not plans:
+            return
+        await asyncio.sleep(self.RESUME_DELAY_S)
+        for plan in plans:
+            cid = plan["chat_id"]
+            try:
+                sess = self.sessions.get(cid)
+            except KeyError:
+                continue                      # the chat was deleted meanwhile
+            try:
+                await sess.resume(plan["messages"])
+                log.info("picked up the interrupted turn in %s (%d message(s))",
+                         cid, len(plan["messages"]))
+            except Exception:
+                # The note the old process could not write. Better a chat that
+                # says what happened than one that silently never answers.
+                log.warning("could not pick up %s again", cid, exc_info=True)
+                self.db.close_interrupted_turn(cid)
+
+    DRAIN_TIMEOUT_S = 180
+    DRAIN_POLL_S = 1.0
+
+    def begin_restart(self, reason: str, force: bool = False,
+                      timeout: float | None = None) -> dict:
+        """Start draining, or stop now if there is nothing to wait for.
+
+        Returns straight away with what it decided — the caller is on a socket
+        this process is about to close, so there is no later in which to
+        answer.
+        """
+        if self.draining:
+            return {"ok": True, "already": True, **self.draining}
+        pending = self.sessions.pending()
+        deadline = time.time() + (timeout if timeout is not None else self.DRAIN_TIMEOUT_S)
+        self.draining = {"reason": reason, "since": time.time(), "deadline": deadline,
+                         "force": bool(force), "pending": pending}
+        self._drain = asyncio.create_task(self._drain_then_stop())
+        return {"ok": True, "draining": not force and bool(pending),
+                "pending": pending, "deadline": deadline, "reason": reason}
+
+    async def _drain_then_stop(self) -> None:
+        state = self.draining or {}
+        force, deadline = state.get("force"), state.get("deadline", 0.0)
+        # Only say "draining" when there is something to drain. An idle daemon
+        # that flashes it for a fifth of a second teaches a client to distrust
+        # the word.
+        if not force and state.get("pending"):
+            await self._announce_drain("draining")
+        last = -1
+        while not force:
+            pending = self.sessions.pending()
+            if not pending:
+                break
+            if len(pending) != last:
+                # Only when the number moves. A client watching this does not
+                # need a message a second saying the same thing.
+                self.draining = {**state, "pending": pending}
+                await self._announce_drain("draining")
+                last = len(pending)
+            if time.time() >= deadline:
+                # Giving up is the safe answer. "The restart did not happen,
+                # this chat is still working" is recoverable; killing somebody
+                # mid-turn is not, and nobody asked for that when they asked
+                # for a restart.
+                log.warning("restart abandoned: %d chat(s) still working", len(pending))
+                self.draining = {**state, "pending": pending}
+                await self._announce_drain("cancelled")
+                self.draining, self._drain = None, None
+                return
+            await asyncio.sleep(self.DRAIN_POLL_S)
+
+        try:
+            self.db.meta_set("last_restart", {
+                "at": time.time(), "reason": state.get("reason"),
+                "forced": bool(force),
+                "abandoned_chats": [p["chat_id"] for p in self.sessions.pending()],
+            })
+        except Exception:
+            log.warning("could not write down the restart", exc_info=True)
+        await self._announce_drain("stopping")
+        # A beat for that last event to reach the sockets before they close.
+        await asyncio.sleep(0.2)
+        self.restart_requested.set()
+
+    async def _announce_drain(self, state: str) -> None:
+        d = self.draining or {}
+        await self.broadcast({"seq": None, "chat_id": None, "event": "daemon.restarting",
+                              "data": {"state": state, "reason": d.get("reason"),
+                                       "pending": d.get("pending") or [],
+                                       "deadline": d.get("deadline"),
+                                       "forced": bool(d.get("force"))},
+                              "ts": time.time()})
+
+    async def h_daemon_restart(self, dev: Device, d: dict) -> dict:
+        """Stop, so the supervisor can start us again on whatever is on disk.
+
+        Refused outright where nothing would bring the process back: that is
+        not a restart, it is a shutdown nobody could undo from the phone that
+        asked for it. Doubt is not refusal — a platform this daemon cannot read
+        goes ahead, because stranding a machine that was fine is the worse of
+        the two mistakes.
+
+        `force` waives the waiting, and only that. It kills turns in flight,
+        which is why it is not the default; the chats it interrupts are told so
+        in their own timelines on the way back up.
+        """
+        sup = supervisor()
+        if sup["supervised"] is False and not d.get("force"):
+            raise Err("no_supervisor",
+                      f"nothing would start this daemon again — {sup['detail']}")
+        return {**self.begin_restart(str(d.get("reason") or "asked for"),
+                                     force=bool(d.get("force")),
+                                     timeout=d.get("timeout_s")),
+                "supervisor": sup}
+
+    async def h_daemon_status(self, dev: Device, d: dict) -> dict:
+        """What a restart would cost right now, before anyone asks for one."""
+        return {"started_at": self.started, "restarts": self.restarts,
+                "uptime_s": int(time.time() - self.started),
+                "pending": self.sessions.pending(),
+                "draining": self.draining,
+                "last_restart": self.db.meta_get("last_restart"),
+                "supervisor": supervisor()}
+
+    async def h_daemon_restart_cancel(self, dev: Device, d: dict) -> dict:
+        """Changed your mind while it was still waiting."""
+        if not self.draining or self.restart_requested.is_set():
+            raise Err("not_restarting", "this daemon is not restarting")
+        if self._drain:
+            self._drain.cancel()
+        await self._announce_drain("cancelled")
+        self.draining, self._drain = None, None
+        return {"ok": True}
+
     async def _announce_update(self, data: dict) -> None:
         await self.broadcast({"seq": None, "chat_id": None,
                               "event": data.pop("event", "update.available"),
@@ -557,13 +786,13 @@ class Server:
             if not d.push_token:
                 continue
             if kind == "approval" and d.push_approval:
-                body = PUSH_TEXT["approval"]
+                body = PUSH_TEXT.get(d.lang, PUSH_TEXT["en"])["approval"]
             elif kind == "done" and d.push_done:
                 # Sent to connected phones too. A phone that is looking at this
                 # very chat silences it itself — the computer cannot know what
                 # is on screen, and staying silent for every open app meant the
                 # notification never arrived at all.
-                body = PUSH_TEXT["done"]
+                body = PUSH_TEXT.get(d.lang, PUSH_TEXT["en"])["done"]
             else:
                 continue
             await send_push([d.push_token], title, body, {"chat_id": chat.get("id"), "kind": kind})
@@ -575,16 +804,29 @@ class Server:
         if dev is None:
             raise HTTPException(status_code=401, detail="unauthorized")
         safe_chat = "".join(c for c in (chat_id or "misc") if c.isalnum())[:32] or "misc"
-        name = Path(file.filename or "file").name
-        stem = "".join(c for c in Path(name).stem if c.isalnum() or c in "-_")[:40] or "file"
+        # The name arrives percent-encoded. Without decoding it the `%` was then
+        # dropped by the filter below and "Ekran Resmi" reached disk as
+        # "Ekran20Resmi" — the escape read as if it were text.
+        name = Path(unquote(file.filename or "file")).name
+        stem = "".join(("-" if c in " " else c) for c in Path(name).stem if c.isalnum() or c in " -_")[:40] or "file"
         ext = Path(name).suffix.lower()[:12]
-        kind = KINDS.get(ext, "file")
-        target_dir = UPLOAD_DIR / safe_chat
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / f"{int(time.time())}-{stem}{ext}"
         data = await file.read()
         if len(data) > 100 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="file too large (100MB)")
+        # What it is, decided by what is in it. A screenshot shared from another
+        # app can arrive with no extension at all, or with the tail of a dotted
+        # name ('… 21.48.33') read as one; by the name alone both became "file",
+        # and a picture the person can see turned into a grey chip.
+        found = sniff(data[:64])
+        if found:
+            kind, real_ext = found
+            if KINDS.get(ext) != kind:
+                ext = real_ext
+        else:
+            kind = KINDS.get(ext, "file")
+        target_dir = UPLOAD_DIR / safe_chat
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{int(time.time())}-{stem}{ext}"
         target.write_bytes(data)
         if kind == "image":
             target = normalize_image(target)
@@ -595,6 +837,73 @@ class Server:
             if t:
                 out["transcript"] = t["text"]
         return out
+
+    # ── the screen ─────────────────────────────────────────────────────────
+    async def screen_jpg(self, authorization: str = Header(default=""), token: str = Query(default=""),
+                         w: int = Query(default=screenmod.MAX_W), q: int = Query(default=screenmod.QUALITY)):
+        """One frame. The token rides as a query parameter for the same reason
+        it does on /files: an <img> tag cannot carry a header."""
+        tok = authorization[7:].strip() if authorization.lower().startswith("bearer ") else token
+        if not tok or self.cfg.find_device_by_token(tok) is None:
+            raise HTTPException(status_code=401, detail="unauthorized")
+        try:
+            data, meta = await screenmod.grab(max(320, min(2560, w)), max(20, min(90, q)))
+        except screenmod.ScreenError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        return Response(content=data, media_type="image/jpeg", headers={
+            # Every frame is a new picture at the same URL, so nothing may keep
+            # one. The sizes ride along for a client that wants to lay out
+            # before the image has decoded.
+            "Cache-Control": "no-store, max-age=0",
+            "X-Screen-Width": str(meta["screen_w"]),
+            "X-Screen-Height": str(meta["screen_h"]),
+        })
+
+    async def h_screen_info(self, dev: Device, d: dict) -> dict:
+        """What this machine can do, and whether it is currently allowed to."""
+        return {**screenmod.available(), "enabled": self.cfg.remote_control}
+
+    async def h_screen_enable(self, dev: Device, d: dict) -> dict:
+        """Turn control on or off.
+
+        Announced to everybody, not just the device that asked: a computer that
+        has just become drivable from a phone is something every other paired
+        device deserves to be told, and the one thing this feature must never
+        be is quiet.
+        """
+        on = bool(d.get("enabled"))
+        if on and not screenmod.available()["control"]:
+            raise Err("unsupported", "clicking is not implemented on this platform yet")
+        if on != self.cfg.remote_control:
+            self.cfg.remote_control = on
+            self.cfg.save()
+            log.warning("remote control %s by device %s (%s)",
+                        "ENABLED" if on else "disabled", dev.name, dev.id)
+            await self.broadcast({"seq": None, "chat_id": None, "event": "host.status",
+                                  "data": self.host_info(), "ts": time.time()})
+        return {"enabled": self.cfg.remote_control}
+
+    async def h_screen_frame(self, dev: Device, d: dict) -> dict:
+        """A frame over the socket. The HTTP route above is the one a client
+        should normally draw from; this is here for anything holding a socket
+        and nothing else — a check that capture works, mostly."""
+        try:
+            return await screenmod.grab_b64(int(d.get("width") or screenmod.MAX_W),
+                                            int(d.get("quality") or screenmod.QUALITY))
+        except screenmod.ScreenError as exc:
+            raise Err("screen_failed", str(exc))
+
+    async def h_screen_input(self, dev: Device, d: dict) -> dict:
+        """Move, click, scroll or type. Coordinates are 0..1 across the whole
+        desktop, so no client ever has to learn the resolution."""
+        if not self.cfg.remote_control:
+            raise Err("control_disabled", "remote control is turned off on this computer")
+        try:
+            for action in (d.get("actions") or [d]):
+                await screenmod.act(action)
+        except screenmod.ScreenError as exc:
+            raise Err("screen_failed", str(exc))
+        return {"ok": True}
 
     async def files(self, path: str = Query(...), authorization: str = Header(default=""), token: str = Query(default=""),
                     download: int = Query(default=0)) -> FileResponse:
@@ -698,12 +1007,19 @@ class Server:
     async def h_hello(self, dev: Device, d: dict) -> dict:
         if d.get("push_token"):
             dev.push_token = d["push_token"]
+        # Sent as an empty string when iOS invalidates it, which must clear the
+        # stored one: ringing a dead token is a call that never arrives.
+        if "voip_token" in d:
+            dev.voip_token = d["voip_token"] or None
         if d.get("device_name"):
             dev.name = d["device_name"]
+        if d.get("lang") in ("en", "tr"):
+            dev.lang = d["lang"]
         self.cfg.save()
         return {"host": self.host_info(), "catalog": await self.catalog_async(),
                 "device": {"id": dev.id, "name": dev.name, "push_approval": dev.push_approval,
-                           "push_done": dev.push_done, "has_push_token": bool(dev.push_token)}}
+                           "push_done": dev.push_done, "has_push_token": bool(dev.push_token),
+                           "can_be_called": bool(dev.voip_token)}}
 
     async def h_host_info(self, dev: Device, d: dict) -> dict:
         return self.host_info()
@@ -715,8 +1031,11 @@ class Server:
             dev.push_done = bool(d["push_done"])
         if "push_token" in d:
             dev.push_token = d["push_token"] or None
+        if "voip_token" in d:
+            dev.voip_token = d["voip_token"] or None
         self.cfg.save()
-        return {"push_approval": dev.push_approval, "push_done": dev.push_done, "has_push_token": bool(dev.push_token)}
+        return {"push_approval": dev.push_approval, "push_done": dev.push_done,
+                "has_push_token": bool(dev.push_token), "can_be_called": bool(dev.voip_token)}
 
     async def h_device_revoke_self(self, dev: Device, d: dict) -> dict:
         self.cfg.revoke(dev.id)
@@ -778,14 +1097,21 @@ class Server:
         if err := self.policy.cwd_error(cwd):
             raise Err(err, "that folder cannot be opened")
         cat = PROVIDERS[provider].catalog()
+        agent_id = d.get("agent_id") or None
         model = d.get("model") or cat["models"][0]["id"]
         effort = d.get("effort") or ("high" if cat["efforts"] else None)
-        perm = d.get("perm_mode") or cat["perm_modes"][0]
+        # An agent chat nobody gave a mode opens in `bypass`; any other chat
+        # opens in the first mode the tool offers, which is the one that asks.
+        # An agent is work handed over — the whole point is not being at the
+        # screen for it — and a delegated turn that stops on the first prompt
+        # has been stopped, not delegated. An explicit `perm_mode` still wins:
+        # this is the default, not an override.
+        fallback = "bypass" if agent_id and "bypass" in cat["perm_modes"] else cat["perm_modes"][0]
+        perm = d.get("perm_mode") or fallback
         if perm not in cat["perm_modes"]:
             raise Err("unknown_perm_mode", "unknown permission mode")
         account_id = d.get("account_id")
         self._account(account_id, provider)          # raises if unknown/mismatched
-        agent_id = d.get("agent_id") or None
         if agent_id and agent_id != agents.CREATOR_ID \
                 and not agents.find(agent_id, self._account(account_id, provider).home, cwd):
             raise Err("no_agent", "that agent is not on this computer")
@@ -884,6 +1210,11 @@ class Server:
         text = str(d.get("text") or "").strip()
         if not text:
             raise Err("empty_message", "empty message")
+        # Refused rather than queued: the queue is in memory and this process
+        # is leaving. Better to say no and keep the message in the composer
+        # than to accept it and lose it.
+        if self.draining:
+            raise Err("restarting", "this computer is restarting — try again in a moment")
         s = self.sessions.get(d["chat_id"])
         queued = await s.send(text, d.get("attachments"))
         return {"accepted": True, "queued": queued}
@@ -900,6 +1231,115 @@ class Server:
         if not ok:
             raise Err("no_pending_approval", "no pending approval")
         return {}
+
+    # ── the call ───────────────────────────────────────────────────────────
+    # A phone call is a different shape of question than a chat. Nobody wants a
+    # coding agent read out loud; they want to know whether the thing finished.
+    # So the concierge is answered from the daemon's own state, and never waits
+    # for a session's turn — see call.py.
+
+    def call_snapshot(self):
+        return call_snapshot(self.db, self.sessions, self.cfg.host_name)
+
+    def _concierge_actions(self) -> dict:
+        """The four things the concierge may do, as the daemon already does them.
+
+        Each one goes through the same path the phone's own buttons use, so a
+        session started by voice is a session like any other: same permission
+        mode, same approvals coming back to the phone, same place in the list.
+        Nothing here is a shortcut around the session layer."""
+
+        async def send(chat_id: str, text: str) -> bool:
+            return await self.sessions.get(chat_id).send(text.strip(), None)
+
+        async def start(project: str, instruction: str) -> str:
+            want = project.strip().casefold()
+            hits = [p for p in self.policy.list_projects()
+                    if p["name"].casefold() == want]
+            if not hits:
+                hits = [p for p in self.policy.list_projects()
+                        if want and want in p["name"].casefold()]
+            if not hits:
+                raise Err("no_project", f"there is no project called {project}")
+            cwd = hits[0]["path"]
+            chat = await self.h_chat_create(None, {"cwd": cwd, "title": instruction[:60]})
+            await self.sessions.get(chat["id"]).send(instruction.strip(), None)
+            return hits[0]["name"]
+
+        async def approve(chat_id: str, allow: bool) -> None:
+            s = self.sessions.peek(chat_id)
+            if not s or not s.pending:
+                raise Err("no_pending_approval", "nothing is waiting there")
+            request_id = next(iter(s.pending))
+            # Whether it is dangerous is already decided and already written
+            # down; read it back rather than judging it again here.
+            danger = False
+            for ev in self.db.tail_events(chat_id, ("approval.request",), limit=8):
+                if (ev["data"] or {}).get("request_id") == request_id:
+                    danger = bool((ev["data"] or {}).get("danger"))
+                    break
+            if danger and allow:
+                raise PermissionError(
+                    "that one is destructive; it has to be approved in the app")
+            s.respond(request_id, "allow" if allow else "deny")
+
+        async def stop(chat_id: str) -> None:
+            s = self.sessions.peek(chat_id)
+            if s:
+                await s.interrupt()
+
+        return {"send": send, "start": start, "approve": approve, "stop": stop}
+
+    def _concierge_account(self) -> tuple[str | None, dict[str, str]]:
+        """The concierge speaks as the computer, so it uses the computer's own
+        Claude login rather than any one chat's account.
+
+        On a machine where that login was never made — nothing in ~/.claude, and
+        every sign-in held under a named account instead — insisting on it gave a
+        call that picked up and then answered "not logged in" out loud. Any
+        signed-in Claude account is a better answer than none; which subscription
+        pays for a status question matters far less than the call working, and
+        the concierge never touches a chat's files either way."""
+        a = self._account(None, "claude")
+        # `logged_in` is only true after a refresh, and this runs once per
+        # concierge session rather than per turn, so the cost is paid while the
+        # caller is still being greeted.
+        acct.refresh(a)
+        if not a.logged_in:
+            for x in self.accounts.values():
+                if x.provider != "claude" or x is a:
+                    continue
+                acct.refresh(x)
+                if x.logged_in:
+                    log.info("concierge: no machine login, speaking as account=%s", x.id)
+                    a = x
+                    break
+        return a.home, a.env()
+
+    async def h_call_hello(self, dev: Device, d: dict) -> dict:
+        """Picking up the phone.
+
+        Answers off one SQLite read so the greeting is immediate, and starts the
+        model session in the background while the caller is being greeted. By
+        the time they have finished saying what they want, the session that
+        would have cost them five seconds is already open."""
+        asyncio.create_task(self.concierge.warm())
+        return call_headline(self.db, self.sessions)
+
+    async def h_call_ask(self, dev: Device, d: dict) -> dict:
+        text = str(d.get("text") or "").strip()
+        if not text:
+            raise Err("empty_message", "empty question")
+        if d.get("reset"):
+            await self.concierge.reset()
+        return await self.concierge.ask(text, d.get("lang"))
+
+    async def h_call_digest(self, dev: Device, d: dict) -> dict:
+        """The snapshot itself, with no model in the way. Answering a status
+        question badly is almost always the snapshot's fault, not the model's,
+        and this is how you find out which."""
+        return {"digest": self.call_snapshot()[0]}
+
 
     # ── accounts ───────────────────────────────────────────────────────────
     async def h_account_list(self, dev: Device, d: dict) -> dict:
@@ -1116,10 +1556,18 @@ class Server:
         return {
             "name": self.cfg.host_name, "os": platform.system(), "os_version": _os_version(),
             "daemon_version": __version__, "uptime_s": int(time.time() - self.started),
-            # The version above is a constant; this is what is actually running.
+            # The version above is a constant that ships with the package and
+            # says the same thing on every computer. These are what is actually
+            # running here: a commit, and a version counted from the last tag.
             "revision": self.updater.state.get("local"),
+            "release": self.updater.state.get("release"),
+            "started_at": self.started, "restarts": self.restarts,
+            "draining": bool(self.draining),
+            "last_update": self.updater.state.get("last_update"),
             "update": {k: self.updater.state.get(k) for k in
-                       ("behind", "ahead", "auto", "repo", "error", "checked_at")},
+                       ("behind", "ahead", "auto", "repo", "error", "checked_at",
+                        "web", "latest")},
+            "screen": {**screenmod.available(), "enabled": self.cfg.remote_control},
             "active_sessions": self.sessions.active_count(),
             "connected_devices": len(self.clients),
             "versions": self._versions, "roots": self.cfg.allowed_roots,

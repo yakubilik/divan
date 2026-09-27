@@ -25,7 +25,13 @@
         },
         "NSFaceIDUsageDescription": "To lock the app, and to confirm before a chat enters bypass mode.",
         "NSPhotoLibraryUsageDescription": "To attach a photo to a chat.",
-        "NSMicrophoneUsageDescription": "To record a voice message for the agent to transcribe."
+        "NSMicrophoneUsageDescription": "To record a voice message, and to hear you on a call.",
+        "NSSpeechRecognitionUsageDescription": "To turn what you say on a call into text, on this phone.",
+        "UIBackgroundModes": [
+          "voip",
+          "audio",
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -48,6 +54,7 @@
     },
     "scheme": "remoteaichat",
     "plugins": [
+      "./plugins/with-call-background-modes.js",
       "expo-router",
       [
         "expo-camera",
@@ -75,7 +82,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "To record a voice message for the agent to transcribe."
+          "microphonePermission": "To record a voice message, and to talk to the concierge."
         }
       ],
       [
@@ -83,6 +90,13 @@
         {
           "supportsBackgroundPlayback": false,
           "supportsPictureInPicture": false
+        }
+      ],
+      [
+        "@jamsch/expo-speech-recognition",
+        {
+          "microphonePermission": "To record a voice message, and to talk to the concierge.",
+          "speechRecognitionPermission": "To turn what you ask the concierge into text, on the phone."
         }
       ]
     ],

@@ -9,12 +9,14 @@ import * as Haptics from 'expo-haptics';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { useShallow } from 'zustand/react/shallow';
 import { buildTimeline, fileUrl, useStore, useT, type Attachment, type TimelineItem } from '../../src/store';
+import { GalleryScope } from '../../src/components/gallery';
 import type { CliAccount } from '../../src/protocol';
 import { useNavGuard } from '../../src/nav';
 import { useFileDrop, type DroppedFile } from '../../modules/drop-target';
 import { getOpenChat, setChatOnScreen, setOpenChat } from '../../src/push';
 import { LimitsRing } from '../../src/components/limits';
 import { colors, type, mono, providerColor } from '../../src/theme';
+import { AnchoredMenu, useAnchoredMenu } from '../../src/components/menu';
 import { Back, ChevronDown, SkeletonBubbles, Spinner } from '../../src/components/ui';
 import { ApprovalCard, AssistantText, ConnectionBanner, SwitchNote, ToolCard, ToolGroup, TurnFooter, UserBubble, WorkingRow } from '../../src/components/chat';
 
@@ -107,7 +109,6 @@ export default function ChatScreen() {
       createGroup: s.createGroup, settleLive: s.settleLive, loadAccounts: s.loadAccounts,
     })));
   const [text, setText] = useState('');
-  const [now, setNow] = useState(Date.now());
   // Elapsed is measured from the user message that opened the turn, not from
   // when this screen mounted: reopening a chat mid-turn — or coming back after
   // iOS froze the timers in the background — used to restart the clock at 0s
@@ -118,11 +119,7 @@ export default function ChatScreen() {
     const u = [...(events || [])].reverse().find((e) => e.event === 'message.user');
     return u ? u.ts * 1000 : mounted.current;
   }, [busy, events]);
-  useEffect(() => {
-    if (!busy) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [busy]);
+  const menu = useAnchoredMenu();
   const [pending, setPending] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -184,6 +181,18 @@ export default function ChatScreen() {
   }, [id]);
 
   const items = useMemo(() => buildTimeline(events || []), [events]);
+  // Every picture in the chat, oldest first: what the gallery pages through
+  // when one of them is tapped (see GalleryScope).
+  const pictures = useMemo(() => {
+    const out: Attachment[] = [];
+    for (const it of items) {
+      if (it.kind !== 'user' && it.kind !== 'assistant') continue;
+      for (const a of (it.data?.attachments as Attachment[] | undefined) ?? []) {
+        if (a.kind === 'image' || (!a.kind && /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name || a.path || ''))) out.push(a);
+      }
+    }
+    return out;
+  }, [items]);
   const typed = useTypewriter(live?.text ?? '', live ? live.segment : null);
   useEffect(() => {
     if (live?.final && typed.length >= live.text.length) settleLive(id!);
@@ -201,10 +210,12 @@ export default function ChatScreen() {
       const lastTool = [...items].reverse().find((i) => i.kind === 'tool' && !i.result);
       const phase = lastTool || progress?.open_tools ? T('wWorking') : thinking ? T('wThinking') : T('wStarting');
       const hint = lastTool ? undefined : thinking ? thinking.trim().slice(-160) : undefined;
-      out.push({ key: 'working', kind: 'working', data: { phase, hint } } as any);
+      out.push({ key: 'working', kind: 'working',
+                 data: { phase, hint, startedAt: turnStart,
+                         tokens: progress?.output_tokens, tools: progress?.open_tools } } as any);
     }
     return out.reverse();
-  }, [items, live, typed, busy, thinking, progress, T]);
+  }, [items, live, typed, busy, thinking, progress, turnStart, T]);
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 1200); }
 
@@ -313,8 +324,9 @@ export default function ChatScreen() {
         case 5: Alert.alert(T('deleteChat'), T('deleteChatBody'), [{ text: T('cancel'), style: 'cancel' }, { text: T('delete'), style: 'destructive', onPress: () => { router.back(); deleteChat(chat.id).catch(err); } }]); break;
       }
     };
-    if (Platform.OS === 'ios') ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 6, destructiveButtonIndex: 5, title: chat.title, userInterfaceStyle: 'dark' }, run);
-    else Alert.alert(chat.title, undefined, options.map((text, i) => ({ text, onPress: () => run(i), style: i === 5 ? 'destructive' : i === 6 ? 'cancel' : 'default' })));
+    // The app's own menu, hung under the button that opened it. Cancel is the
+    // backdrop, so the list is only the things that do something.
+    menu.show(options.slice(0, 6).map((label, i) => ({ label, destructive: i === 5, onPress: () => run(i) })), chat.title);
   }
   function moveToGroup() {
     if (!chat) return;
@@ -325,8 +337,14 @@ export default function ChatScreen() {
       if (i === groups.length) return updateChat(chat.id, { group_id: null } as any).catch(err);
       if (i === groups.length + 1) Alert.prompt(T('newGroupTitle'), undefined, async (n) => { if (!n?.trim()) return; try { const g = await createGroup(n.trim()); await updateChat(chat.id, { group_id: g.id } as any); } catch (e) { err(e); } });
     };
-    if (Platform.OS === 'ios') ActionSheetIOS.showActionSheetWithOptions({ options: names, cancelButtonIndex: names.length - 1, title: T('moveToGroup'), userInterfaceStyle: 'dark' }, run);
-    else Alert.alert(T('moveToGroup'), undefined, names.map((text, i) => ({ text, onPress: () => run(i) })));
+    menu.show(
+      names.slice(0, -1).map((label, i) => ({
+        label: label.replace(/^✓ /, ''),
+        checked: label.startsWith('✓ '),
+        onPress: () => void run(i),
+      })),
+      T('moveToGroup'),
+    );
   }
 
   const online = conn === 'online';
@@ -354,8 +372,8 @@ export default function ChatScreen() {
     switch (item.kind) {
       case 'working' as any:
         return <WorkingRow phase={item.data.phase} hint={item.data.hint}
-                 seconds={turnStart ? (now - turnStart) / 1000 : 0}
-                 tokens={progress?.output_tokens} tools={progress?.open_tools} />;
+                 startedAt={item.data.startedAt ?? null}
+                 tokens={item.data.tokens} tools={item.data.tools} />;
       // No long-press wrapper on either bubble: long-press is the gesture that
       // starts a text selection, and a Pressable takes it first. Copying the
       // whole message is still one tap away — iOS offers Select All beside Copy
@@ -384,6 +402,7 @@ export default function ChatScreen() {
   }, [id, respond, T, accounts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
+    <GalleryScope.Provider value={pictures}>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.bg }}>
       {/* Header: back · plan chip (what this is being billed to) · more.
           The model moved down into the composer, where it is chosen. */}
@@ -408,11 +427,12 @@ export default function ChatScreen() {
             );
           })()}
         </View>
-        <Pressable onPress={chatMenu} style={styles.iconBtn}>
+        <Pressable ref={menu.ref as any} onPress={chatMenu} style={styles.iconBtn}>
           <Svg width={22} height={22} viewBox="0 0 24 24" fill={colors.text}><Circle cx="5.5" cy="12" r="1.8" /><Circle cx="12" cy="12" r="1.8" /><Circle cx="18.5" cy="12" r="1.8" /></Svg>
         </Pressable>
       </View>
 
+      <AnchoredMenu state={menu.open} onClose={menu.close} />
       {conn !== 'online' && <ConnectionBanner text={T('wReconnecting')} />}
 
       <FlatList
@@ -559,6 +579,7 @@ export default function ChatScreen() {
         </View>
       )}
     </KeyboardAvoidingView>
+    </GalleryScope.Provider>
   );
 }
 

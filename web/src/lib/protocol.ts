@@ -35,6 +35,139 @@ export interface HostInfo {
   versions: { claude: string | null; codex: string | null };
   roots: string[];
   transcription?: boolean;
+  /** The commit this computer is actually running. `daemon_version` is a
+   *  constant nobody remembers to raise and cannot tell two computers apart;
+   *  this can. */
+  revision?: Revision | null;
+  /** …and this is the same fact said as a version. */
+  release?: Release | null;
+  /** When this daemon came up, and how many times it ever has. A restart is
+   *  the one event a daemon cannot watch itself have — the process that would
+   *  report it is the one that ended — so it is counted on the way back in. */
+  started_at?: number;
+  restarts?: number;
+  last_update?: LastUpdate | null;
+  update?: { behind: number; ahead: number; auto: boolean; repo: boolean;
+             error?: string | null; checked_at?: number | null;
+             web?: PanelBuild | null; latest?: string | null };
+}
+
+/** What a computer calls itself, derived from tags rather than declared.
+ *  `v0.2.0` sits on a release; `v0.2.0+7` is seven commits past one, which is
+ *  the normal state of a machine following main and is worth saying rather
+ *  than rounding down. Null before the first tag, and on an install with no
+ *  git to ask. */
+export interface Release {
+  version: string | null;
+  tag: string | null;
+  distance: number | null;
+  dirty: boolean;
+  commit: string | null;
+}
+
+/** The last time this computer actually moved. Read off disk: an update ends
+ *  by restarting the daemon, so the process that did it is never the one
+ *  reporting it. */
+export interface LastUpdate {
+  at: number;
+  from: string | null;
+  to?: string | null;
+  version?: string | null;
+  subject?: string | null;
+  pulled?: boolean;
+  web?: boolean;
+  error?: string | null;
+}
+
+export interface Revision {
+  repo: boolean;
+  commit?: string; sha?: string; committed_at?: string; subject?: string;
+  branch?: string; dirty?: boolean; dirty_files?: number;
+  error?: string;
+}
+
+/** The bundle the browser is being served. It is build output and is not in
+ *  git, so it can sit weeks behind the daemon serving it with nothing on
+ *  screen to say so — which is the only reason this exists. `stale` is
+ *  three-valued: null is a bundle nobody can place, not a current one. */
+export interface PanelBuild {
+  built: boolean;
+  stale: boolean | null;
+  npm: boolean;
+  sha?: string | null;
+  built_at?: number | null;
+  reason?: string | null;
+}
+
+/** Where a computer stands against origin/main, and what is stopping it from
+ *  moving onto it. */
+export interface UpdateStatus {
+  repo: boolean;
+  auto: boolean;
+  behind: number;
+  ahead: number;
+  busy: boolean;
+  error?: string | null;
+  checked_at?: number | null;
+  local?: Revision | null;
+  remote?: { commit?: string; committed_at?: string; subject?: string } | null;
+  web?: PanelBuild | null;
+  release?: Release | null;
+  /** The newest tag reachable from origin/main — one fetch answers both
+   *  "which commit" and "which version". */
+  latest?: string | null;
+  last_update?: LastUpdate | null;
+  blockers?: string[];
+}
+
+/** One chat holding work that stopping the daemon would destroy. */
+export interface PendingWork { chat_id: string; busy: boolean; queued: number }
+
+/** Who, if anyone, would start the daemon again. Three-valued on purpose:
+ *  null is a platform the daemon cannot read, which is not the same as no. */
+export interface Supervisor {
+  supervised: boolean | null;
+  how: string | null;
+  detail: string | null;
+}
+
+export interface DaemonStatus {
+  started_at: number;
+  uptime_s: number;
+  restarts: number;
+  pending: PendingWork[];
+  draining: { reason?: string; since?: number; deadline?: number; forced?: boolean } | null;
+  last_restart?: { at: number; reason?: string; forced?: boolean; abandoned_chats?: string[] } | null;
+  supervisor: Supervisor;
+}
+
+export interface Restarting {
+  state: 'draining' | 'stopping' | 'cancelled';
+  reason?: string | null;
+  pending: PendingWork[];
+  deadline?: number | null;
+  forced?: boolean;
+}
+
+export interface RestartResult {
+  ok: boolean;
+  draining?: boolean;
+  pending?: PendingWork[];
+  deadline?: number | null;
+  reason?: string | null;
+  supervisor?: Supervisor;
+  already?: boolean;
+}
+
+/** What `update.apply` answers with. The daemon and the panel are two jobs
+ *  behind one button, and either can fail alone. */
+export interface UpdateResult {
+  ok: boolean;
+  error?: string | null;
+  pulled?: boolean;
+  restarting?: boolean;
+  revision?: Revision | null;
+  web?: { rebuilt: boolean; commit?: string | null; error?: string | null };
 }
 
 export interface ProviderCatalog {

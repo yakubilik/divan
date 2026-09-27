@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStore, useT } from '../src/store';
+import { DEFAULT_PERM, useStore, useT } from '../src/store';
 import { colors, radius, type } from '../src/theme';
 import { Button, Card, Label, OptionList, Segmented, Toggle } from '../src/components/ui';
 import { FolderPicker, GroupPicker, ProviderPicker } from '../src/components/pickers';
@@ -21,7 +21,7 @@ export default function ChatSettings() {
   const [title, setTitle] = useState(chat?.title ?? '');
   const [model, setModel] = useState(chat?.model ?? '');
   const [effort, setEffort] = useState<string | null>(chat?.effort ?? null);
-  const [perm, setPerm] = useState(chat?.perm_mode ?? 'ask');
+  const [perm, setPerm] = useState(chat?.perm_mode ?? DEFAULT_PERM);
   const [cwd, setCwd] = useState<string | null>(chat?.cwd ?? null);
   const [groupId, setGroupId] = useState<string | null>(chat?.group_id ?? null);
   const [maxTurns, setMaxTurns] = useState(chat?.max_turns ? String(chat.max_turns) : '');

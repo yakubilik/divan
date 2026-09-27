@@ -1,6 +1,4 @@
-// Tiny i18n. One table, English. It exists so that every user-facing string
-// has a name and lives in one file — which is what makes adding a second
-// language a table rather than a search through the screens.
+// Tiny i18n. English is the default; Turkish is selectable in Settings.
 
 const en = {
   // common
@@ -188,6 +186,7 @@ const en = {
   pushOk: 'This device can receive notifications.',
   pushNo: "This device can't receive notifications (simulator or permission denied). A dev build on a real phone is needed.",
   host: 'HOST', system: 'System', daemon: 'Daemon', uptime: 'Uptime', activeSessions: 'Active sessions', roots: 'Roots',
+  language: 'LANGUAGE', english: 'English', turkish: 'Türkçe',
   // lock
   locked: 'Locked', unlockBtn: 'Unlock with Face ID', unlockReason: 'Unlock Remote AI Chat',
   // ws
@@ -205,6 +204,24 @@ const en = {
   errCwdOutside: 'That folder is outside the allowed roots', errNoChat: 'That chat no longer exists',
   errNoSuchFolder: 'That folder is not on this computer any more',
   errBusy: 'Too many messages waiting in this chat', errEmptyMessage: 'Empty message', errNoPendingApproval: 'That approval is no longer waiting',
+  errRestarting: 'The computer is restarting. Your message was not sent — try again in a moment.',
+  errNoSupervisor: 'Nothing would start this daemon again, so it will not stop itself',
+  errNotRestarting: 'This computer is not restarting',
+  // call (the concierge)
+  callVoice: 'voice: {v}', callVoicePick: 'READING VOICE', callVoiceNone: 'No voices installed for this language.',
+  callVoiceTry: 'This is how I will read your answers.', callDialling: 'Calling…', callHintDialling: 'Ringing your computer.',
+  callAlo: 'At your service.', callQuiet: 'All quiet here.',
+  callHeadWorking: '{n} running.', callHeadBlocked: '{n} waiting on you.',
+  callTitle: 'Concierge', callStart: 'Call', callListening: 'Listening', callThinking: 'Asking…',
+  callSpeaking: 'Speaking', callHangUp: 'End call', close: 'Close',
+  callHintIdle: 'Ask what your computer is doing. Tap to start.',
+  callHintListening: 'Just stop talking — it sends itself.',
+  callHintSpeaking: 'Talk over it to cut in.', callHintTapCut: 'Tap to cut in.',
+  callEmpty: 'The concierge tells you what the sessions on your computer are up to. It cannot start work — that is what chats are for.',
+  callNoMic: 'Microphone and speech recognition permission is needed.',
+  callMicError: 'The microphone stopped. Start the call again.',
+  callOffline: 'The computer is not reachable right now.',
+  callFailed: 'That did not go through.',
   wsNotConnected: 'not connected to the computer', wsDropped: 'connection lost', wsTimeout: 'timed out',
 };
 export type Key = keyof typeof en;
@@ -232,6 +249,7 @@ const ERR_KEYS: Record<string, Key> = {
   unknown_agent: 'errUnknownAgent', agent_not_removable: 'errAgentKeep', key_required: 'errKeyRequired', unknown_method: 'errUnknownMethod',
   cwd_outside: 'errCwdOutside', no_such_folder: 'errNoSuchFolder', no_chat: 'errNoChat', busy: 'errBusy',
   empty_message: 'errEmptyMessage', no_pending_approval: 'errNoPendingApproval',
+  restarting: 'errRestarting', no_supervisor: 'errNoSupervisor', not_restarting: 'errNotRestarting',
 };
 
 export function errText(code?: string | null, fallback?: string | null): string {

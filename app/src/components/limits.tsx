@@ -87,6 +87,12 @@ export function LimitsRing({ chatId, accountId, provider, label, sub, dot }: {
     () => (all[key] ?? []).filter((w) => typeof w.utilization === 'number')
       .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0)),
     [all, key]);
+  // Every window of one report is measured at the same instant, so a window
+  // lagging the newest reading is one the tool has stopped reporting. A daemon
+  // new enough to know that has already dropped it; against an older one the
+  // row stays, and this is what stops it from reading as current.
+  const newest = useMemo(
+    () => windows.reduce((n, w) => Math.max(n, w.at ?? 0), 0), [windows]);
   const reports = !provider || provider === 'claude';
   if (!reports && label == null) return null;
 
@@ -142,7 +148,12 @@ export function LimitsRing({ chatId, accountId, provider, label, sub, dot }: {
                     <View style={[styles.fill, { width: `${p * 100}%`, backgroundColor: tone(p) }]} />
                   </View>
                   <Text style={[type.caption, { color: colors.faint, letterSpacing: 0 }]}>
-                    {Math.round(p * 100)}%{i === 0 ? ` · ${ageLabel(w.at, T)}` : ''}
+                    {/* On the top row because that is the one the ring draws,
+                        and on any row left behind by a report that no longer
+                        mentions it — the two cases where "when" is the part
+                        that explains the number. */}
+                    {Math.round(p * 100)}%
+                    {i === 0 || newest - (w.at ?? 0) > 60 ? ` · ${ageLabel(w.at, T)}` : ''}
                   </Text>
                 </View>
               );

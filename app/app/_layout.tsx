@@ -9,6 +9,7 @@ import { client } from '../src/ws';
 import { colors, type } from '../src/theme';
 import { Lock } from '../src/components/ui';
 import { getOpenChat, registerForPush } from '../src/push';
+import { prepareForCalls, startIncomingCalls } from '../src/incoming-call';
 
 export default function RootLayout() {
   const init = useStore((s) => s.init);
@@ -24,6 +25,10 @@ export default function RootLayout() {
   useEffect(() => {
     void init();
     void registerForPush().then((t) => t && setPushToken(t));
+    // Nothing registers for VoIP pushes until something loads the module, so
+    // this belongs at the root: a phone nobody imported cannot be rung.
+    startIncomingCalls();
+    void prepareForCalls();
     const sub = AppState.addEventListener('change', (st) => {
       if (st === 'active') {
         client.poke();
@@ -66,6 +71,9 @@ export default function RootLayout() {
         {/* The computer list is a handful of rows, so the sheet hugs it: a fixed
             detent both left dead space below and clipped the last row mid-height. */}
         <Stack.Screen name="host-sheet" options={{ presentation: 'formSheet', sheetAllowedDetents: 'fitToContents', sheetGrabberVisible: true, sheetCornerRadius: 22, contentStyle: { backgroundColor: colors.surface } }} />
+        {/* A call is a mode, not a place: it comes up over whatever you were
+            reading and leaves it exactly where it was. */}
+        <Stack.Screen name="call" options={{ presentation: 'modal' }} />
         <Stack.Screen name="settings" />
         <Stack.Screen name="agents" />
         <Stack.Screen name="agent-store" />

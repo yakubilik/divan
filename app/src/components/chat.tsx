@@ -70,6 +70,21 @@ function trimEnd(content: string): string {
  *  Only the rules that actually render text are replaced; everything else stays
  *  on the library's own defaults. */
 const selectableRules = {
+  /** The library wraps every run of plain text in a `<Text>` of its own. Inside
+   *  a `selectable` paragraph those are separate native text nodes, and iOS
+   *  rounds a selection up to the whole node — so dragging out one sentence, or
+   *  one path, took the entire paragraph instead.
+   *
+   *  A run with nothing inherited is returned as a bare string, which leaves the
+   *  paragraph holding flat text that can be dragged through. Bold, italic and
+   *  links keep their own wrappers, so nothing loses its styling; a run that
+   *  *does* carry inherited style — a heading, whose block rule is a `View` and
+   *  passes its font down rather than applying it — keeps the `<Text>`, because
+   *  dropping it there would drop the heading's type with it. */
+  text: (node: any, _children: any, _parent: any, styles: any, inherited: any = {}) =>
+    (inherited && Object.keys(inherited).length
+      ? <Text key={node.key} style={[inherited, styles.text]}>{node.content}</Text>
+      : node.content),
   textgroup: (node: any, children: any, _parent: any, styles: any) => (
     <Text key={node.key} selectable style={styles.textgroup}>{children}</Text>
   ),
@@ -393,11 +408,22 @@ const styles = StyleSheet.create({
  *  a pulsing mark, elapsed time, tokens generated so far, open tool calls, phase. */
 /** One quiet line while a turn runs: a pulsing mark, then elapsed · tokens ·
  *  open tools · what it is doing. Same weight as the turn footer, no container. */
-export function WorkingRow({ phase, seconds, tokens, tools, hint }: {
-  phase: string; seconds: number; tokens?: number; tools?: number; hint?: string;
+export function WorkingRow({ phase, startedAt, tokens, tools, hint }: {
+  phase: string; startedAt: number | null; tokens?: number; tools?: number; hint?: string;
 }) {
   const T = useT();
-  const secs = Math.max(0, Math.floor(seconds));
+  // The row keeps its own clock. It used to be handed a number computed in the
+  // screen, which sat in a memoised renderItem and therefore froze at whatever
+  // it was on the first render — a turn that ran for minutes read 0s, and
+  // leaving and reopening the chat only reset it.
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (startedAt == null) return;
+    setNowMs(Date.now());
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [startedAt]);
+  const secs = startedAt == null ? 0 : Math.max(0, Math.floor((nowMs - startedAt) / 1000));
   const time = secs < 60
     ? `${secs}${T('unitSec')}`
     : `${Math.floor(secs / 60)}${T('unitMin')} ${secs % 60}${T('unitSec')}`;

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStore, useT } from '../src/store';
+import { DEFAULT_PERM, useStore, useT } from '../src/store';
 import { colors, type } from '../src/theme';
 import { Label, OptionList, Segmented } from '../src/components/ui';
 import { ProviderPicker } from '../src/components/pickers';
@@ -29,12 +29,15 @@ export default function ModelSheet() {
 
   const initial = editingDefaults
     ? { provider: defaults.provider, model: defaults.model, effort: defaults.effort as string | null, perm: defaults.perm_mode }
-    : { provider: chat?.provider ?? 'claude', model: chat?.model ?? '', effort: chat?.effort ?? null, perm: chat?.perm_mode ?? 'ask' };
+    : { provider: chat?.provider ?? 'claude', model: chat?.model ?? '', effort: chat?.effort ?? null, perm: chat?.perm_mode ?? DEFAULT_PERM };
   const [provider, setProvider] = useState<Provider>(initial.provider);
   const [model, setModel] = useState(initial.model);
   const [effort, setEffort] = useState<string | null>(initial.effort);
   const [perm, setPerm] = useState(initial.perm);
   const cat = catalog?.[provider] ?? null;
+  // A daemon older than this app sends no per-model list; fall back to the
+  // provider's so the control does not vanish against an older computer.
+  const efforts: string[] = (cat?.models?.find((m: any) => m.id === model)?.efforts) ?? cat?.efforts ?? [];
   // Only signed-in accounts can run a chat; the computer's own login is always offered.
   const accountsFor = accounts.filter((a) => a.provider === provider && (a.logged_in || a.is_default));
 
@@ -70,7 +73,13 @@ export default function ModelSheet() {
     setProvider(pv); setModel(m); setEffort(e); setPerm(pm);
     apply({ provider: pv, model: m, effort: e, perm_mode: pm });
   }
-  const onModel = (m: string) => { setModel(m); apply({ model: m }); };
+  const onModel = (m: string) => {
+    const next: string[] = (cat?.models?.find((x: any) => x.id === m)?.efforts) ?? cat?.efforts ?? [];
+    // Carrying "max" onto a model that has no effort setting is what sent an
+    // unsupported parameter and failed the turn.
+    const e = next.length === 0 ? null : (effort && next.includes(effort) ? effort : (next.includes('high') ? 'high' : next[0]));
+    setModel(m); setEffort(e); apply({ model: m, effort: e });
+  };
   const onEffort = (e: string) => { setEffort(e); apply({ effort: e }); };
   async function onPerm(p: string) {
     if (p === 'bypass' && prefs.faceIdBypass) { const ok = await authenticate(T('bypassAuth')); if (!ok) return; }
@@ -87,7 +96,10 @@ export default function ModelSheet() {
       {cat && (
         <>
           <OptionList options={cat.models} value={model} onChange={onModel} />
-          {cat.efforts.length > 0 && <View style={{ gap: 8 }}><Label>{T('effort')}</Label><Segmented options={cat.efforts} value={effort} onChange={onEffort} labels={{ medium: 'med' }} /></View>}
+          {/* The chosen model's own list, not the provider's: Haiku takes no
+              effort setting and sending one fails the turn, so the control has
+              to disappear rather than offer a choice that cannot work. */}
+          {efforts.length > 0 && <View style={{ gap: 8 }}><Label>{T('effort')}</Label><Segmented options={efforts} value={effort} onChange={onEffort} labels={{ medium: 'med' }} /></View>}
           {accountsFor.length > 1 && (
             <View style={{ gap: 8 }}>
               <Label>{T('accountFor')}</Label>

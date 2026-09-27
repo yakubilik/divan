@@ -1,23 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { C, R } from '../lib/theme';
-import { Btn, Dot, Icon, Label, P, Radio, Segment, mono } from '../ui/kit';
+import { Btn, Dot, Icon, Label, P, Radio, Segment, Spinner, mono } from '../ui/kit';
 import { Modal, ModalHead } from './Modal';
 import { ProviderMark } from './Sidebar';
 import { accountName } from './FieldSheet';
 import { tilde } from '../lib/format';
 import { useFleet } from '../lib/fleet';
 import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
-import { createChat } from '../lib/actions';
-import type { Chat, Provider } from '../lib/protocol';
+import { createChat, listAgents } from '../lib/actions';
+import type { Agent, Chat, Provider } from '../lib/protocol';
 
 const listBox: React.CSSProperties = {
   background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.card,
   overflow: 'hidden', marginBottom: 20,
 };
 
-export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
+export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: {
   hostKey: string;
   initialCwd?: string;
+  /** An agent's own card started this, so the dialog opens on that agent and on
+   *  the account its definition was read from. */
+  initialAgent?: { agent: Agent; accountId: string | null } | null;
   onDone: (chat: Chat) => void;
   onClose: () => void;
 }) {
@@ -29,13 +32,20 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
   const setDefaults = usePrefs((s) => s.setDefaults);
   const setProviderDefaults = usePrefs((s) => s.setProviderDefaults);
 
-  const [provider, setProvider] = useState<Provider>(defaults.provider);
+  // An agent is a Claude idea — only that side reads an agent's prompt, codex
+  // ignores it — so an agent brings the provider with it.
+  const [provider, setProvider] = useState<Provider>(initialAgent ? 'claude' : defaults.provider);
   const [model, setModel] = useState<string | null>(null);
   const [effort, setEffort] = useState<string | null>(null);
   const [perm, setPerm] = useState<string | null>(null);
   /** '' is the computer's own sign-in, the way `chat.create` reads "no
    *  account_id". Null is "not decided yet", before the account list arrives. */
-  const [account, setAccount] = useState<string | null>(null);
+  const [account, setAccount] = useState<string | null>(
+    initialAgent ? (initialAgent.accountId ?? '') : null);
+  /** Null is a plain chat; anything else is the `agent_id` chat.create carries. */
+  const [agentId, setAgentId] = useState<string | null>(initialAgent?.agent.id ?? null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [cwd, setCwd] = useState<string | null>(initialCwd ?? defaults.cwd ?? null);
   const [query, setQuery] = useState('');
   const [advanced, setAdvanced] = useState(false);
@@ -63,9 +73,13 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
 
   // Only sign-ins of this tool can run this chat, and only ones that are
   // actually signed in — plus the computer's own, which always counts.
+  // …plus the one an agent was read from, lapsed sign-in or not: the definition
+  // lives in that account's folder, and a chat opened on any other account is
+  // told there is no such agent.
   const accounts = useMemo(
-    () => (slot?.accounts ?? []).filter((a) => a.provider === provider && (a.logged_in || a.is_default)),
-    [slot?.accounts, provider],
+    () => (slot?.accounts ?? []).filter((a) => a.provider === provider
+      && (a.logged_in || a.is_default || (!!initialAgent && a.id === initialAgent.accountId))),
+    [slot?.accounts, provider, initialAgent?.accountId],
   );
 
   useEffect(() => {
@@ -82,6 +96,32 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
 
   /** What the chat will actually open on, before the list settles. */
   const accountId = account ?? providerDefaults(defaults, provider).account_id;
+
+  // Which agents exist is a question for that computer: an account's folder
+  // holds the ones installed under it, a project's folder holds its own — so
+  // the list is asked for again whenever either of those changes.
+  useEffect(() => {
+    if (provider !== 'claude' || slot?.status !== 'online') { setAgents([]); return; }
+    let alive = true;
+    setAgentsLoading(true);
+    listAgents(hostKey, accountId || undefined, cwd ?? undefined)
+      .then((r: any) => { if (alive) setAgents(r?.agents ?? []); })
+      .catch(() => { if (alive) setAgents([]); })
+      .finally(() => { if (alive) setAgentsLoading(false); });
+    return () => { alive = false; };
+  }, [hostKey, provider, accountId, cwd, slot?.status]);
+
+  /** Only what belongs in a chat: the built-in creator, and what was installed
+   *  through the app. A computer's own set is other tools' workers rather than
+   *  chat partners, and the Agents screen is where those are reached — but one
+   *  handed to this dialog is kept whatever it is, because its own card asked. */
+  const agentList = useMemo(() => {
+    const list = agents.filter((a) => a.installed);
+    const pick = initialAgent?.agent;
+    return pick && !list.some((a) => a.id === pick.id) ? [pick, ...list] : list;
+  }, [agents, initialAgent?.agent]);
+
+  const agent = agentList.find((a) => a.id === agentId) ?? null;
 
   const projects = slot?.projects ?? [];
   const recent = useMemo(() => {
@@ -107,12 +147,17 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
       const chat = await createChat(hostKey, {
         provider, model, effort, perm_mode: perm ?? undefined,
         account_id: accountId || undefined,
+        // An agent chat is named after the agent: "New chat" says nothing about
+        // work that was handed to somebody.
+        agent_id: agent ? agent.id : undefined,
+        ...(agent ? { title: agent.label } : {}),
         cwd: cwd ?? undefined,
         max_turns: maxTurns ? Number(maxTurns) : null,
         max_budget_usd: budget ? Number(budget) : null,
       });
       // Starting a chat is where these are chosen, so what was chosen here is
       // what the next one opens with. Settings shows and edits the same values.
+      // The agent is deliberately not among them: it belongs to this one chat.
       setDefaults(hostKey, { provider, cwd });
       setProviderDefaults(hostKey, provider, {
         model, effort, perm_mode: perm, account_id: accountId,
@@ -148,7 +193,7 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
   return (
     <Modal onClose={onClose} width={680}>
       <ModalHead
-        title="New chat"
+        title={agent ? `Chat with ${agent.label || agent.name}` : 'New chat'}
         subtitle={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Dot color={slot?.status === 'online' ? C.ok : C.faint} live={slot?.status === 'online'} size={5} />
           {(slot?.info?.name ?? slot?.cfg.name ?? '—')} will open on it
@@ -163,7 +208,10 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
             const version = slot?.info?.versions?.[p];
             return (
               <button
-                key={p} type="button" onClick={() => setProvider(p)}
+                key={p} type="button"
+                // codex never reads an agent's prompt, so leaving one selected
+                // here would promise a chat partner that does not arrive.
+                onClick={() => { setProvider(p); if (p !== 'claude') setAgentId(null); }}
                 disabled={!catalog?.[p]}
                 style={{
                   flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
@@ -201,6 +249,38 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
                   />
                 );
               })}
+            </div>
+          </>
+        )}
+
+        {provider === 'claude' && (
+          <>
+            <Label>Agent</Label>
+            <div style={{ ...listBox, maxHeight: 216, overflowY: 'auto' }}>
+              <Radio
+                label="No agent"
+                hint="a plain chat, with this computer's usual instructions"
+                on={!agentId} last={!agentList.length && !agentsLoading}
+                onPick={() => setAgentId(null)}
+              />
+              {agentList.map((a, i, arr) => (
+                <Radio
+                  key={a.id}
+                  label={`${a.glyph ? `${a.glyph}  ` : ''}${a.label || a.name}`}
+                  hint={a.description || a.name}
+                  right={a.scope === 'project' ? 'project' : undefined}
+                  on={agentId === a.id} last={i === arr.length - 1}
+                  onPick={() => setAgentId(a.id)}
+                />
+              ))}
+              {agentsLoading && !agentList.length && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 12px', fontSize: 13, color: C.mute,
+                }}>
+                  <Spinner size={13} /> Reading agents…
+                </div>
+              )}
             </div>
           </>
         )}
@@ -325,7 +405,7 @@ export function NewChat({ hostKey, initialCwd, onDone, onClose }: {
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {error ?? [
-            provider, model, effort, perm,
+            provider, agent ? agent.name : null, model, effort, perm,
             accountId ? accounts.find((a) => a.id === accountId)?.label : null,
             cwd ? tilde(cwd) : null,
           ].filter(Boolean).join(' · ')}

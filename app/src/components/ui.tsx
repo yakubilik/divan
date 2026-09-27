@@ -113,6 +113,7 @@ export const Back = ({ color = colors.accent }: { color?: string }) => <I size={
 export const Check = ({ size = 20, color = colors.accent }: { size?: number; color?: string }) => <I size={size} color={color} sw={2.6}><Path d="m5 12 5 5L20 7" /></I>;
 export const Compose = () => <I size={24} color={colors.accent} sw={1.8}><Path d="M12 20h9" /><Path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></I>;
 export const Menu = () => <I size={22} color={colors.text} sw={1.8}><Path d="M3 7h18M3 12h18M3 17h12" /></I>;
+export const Phone = ({ size = 22, color = colors.text }: { size?: number; color?: string }) => <I size={size} color={color} sw={1.8}><Path d="M6.5 3h3l1.5 4.5-2 1.5a12 12 0 0 0 6 6l1.5-2L21 14.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4 5.2 2 2 0 0 1 6 3Z" /></I>;
 export const Gear = () => <I size={22} color={colors.text} sw={1.8}><Path d="M4 7h10M4 12h16M4 17h10" /><Circle cx="18" cy="7" r="2" /><Circle cx="18" cy="17" r="2" /></I>;
 export const Lock = ({ size = 16, color = colors.accent }: { size?: number; color?: string }) => <I size={size} color={color} sw={2.2}><Rect x="4" y="11" width="16" height="10" rx="2" /><Path d="M8 11V7a4 4 0 0 1 8 0v4" /></I>;
 export const Dots = ({ size = 18, color = colors.muted }: { size?: number; color?: string }) => (

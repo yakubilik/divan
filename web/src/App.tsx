@@ -11,12 +11,13 @@ import { ApprovalModal, type Pending } from './components/ApprovalModal';
 import { Dashboard } from './screens/Dashboard';
 import { Projects } from './screens/Projects';
 import { Agents } from './screens/Agents';
+import { Admin } from './screens/Admin';
 import { Settings } from './screens/Settings';
 import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
 import { deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
-import type { Chat } from './lib/protocol';
+import type { Agent, Chat } from './lib/protocol';
 
 interface Selection { hostKey: string; chatId: string }
 
@@ -25,7 +26,8 @@ export function App() {
   const logs = useLogs();
   const [view, setView] = useState<View>('chats');
   const [sel, setSel] = useState<Selection | null>(null);
-  const [newChat, setNewChat] = useState<{ cwd?: string } | null>(null);
+  const [newChat, setNewChat] = useState<
+    { cwd?: string; agent?: { agent: Agent; accountId: string | null } } | null>(null);
   const [palette, setPalette] = useState(false);
   const [field, setField] = useState<Field | null>(null);
   const [sending, setSending] = useState(false);
@@ -196,6 +198,7 @@ export function App() {
       { id: 'dashboard', label: 'Panele git', shortcut: '⌘1', run: () => setView('dashboard') },
       { id: 'projects', label: 'Projects', shortcut: '⌘2', run: () => setView('projects') },
       { id: 'agents', label: 'Agents', shortcut: '⌘3', run: () => setView('agents') },
+      { id: 'admin', label: 'Admin', shortcut: '⌘4', run: () => setView('admin') },
       { id: 'settings', label: 'Settings', shortcut: '⌘,', run: () => setView('settings') },
     ];
     // Only means anything with more than one computer paired.
@@ -232,6 +235,7 @@ export function App() {
       else if (e.key === '1') { e.preventDefault(); setView('dashboard'); }
       else if (e.key === '2') { e.preventDefault(); setView('projects'); }
       else if (e.key === '3') { e.preventDefault(); setView('agents'); }
+      else if (e.key === '4') { e.preventDefault(); setView('admin'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -298,7 +302,10 @@ export function App() {
         {view === 'projects' && (
           <Projects onNewChatIn={(cwd) => setNewChat({ cwd })} onOpenChat={open} />
         )}
-        {view === 'agents' && <Agents />}
+        {view === 'agents' && (
+          <Agents onStartChat={(agent, accountId) => setNewChat({ agent: { agent, accountId } })} />
+        )}
+        {view === 'admin' && <Admin />}
         {view === 'settings' && <Settings />}
       </div>
 
@@ -306,6 +313,7 @@ export function App() {
         <NewChat
           hostKey={fleet.focus}
           initialCwd={newChat.cwd}
+          initialAgent={newChat.agent ?? null}
           onDone={(c) => { setNewChat(null); open(fleet.focus!, c.id); }}
           onClose={() => setNewChat(null)}
         />

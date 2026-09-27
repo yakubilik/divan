@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { Image, Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -6,6 +6,7 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
 import Svg, { Path } from 'react-native-svg';
 import { colors, type, mono } from '../theme';
 import { fileUrl, useStore, useT, type Attachment } from '../store';
+import { Gallery, GalleryScope } from './gallery';
 
 const PlayIcon = ({ size = 14, color = colors.white }: { size?: number; color?: string }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}><Path d="M7 4v16l13-8z" /></Svg>
@@ -31,9 +32,16 @@ function bars(seed: string, n = 24): number[] {
 }
 
 /** Photo grid (1-4 images). Right aligned under the person's bubble, left
- *  under the agent's. Tap opens a full-screen viewer. */
+ *  under the agent's. Tap opens the gallery — over every picture in the chat
+ *  when a chat provides them, over this grid's own otherwise. */
 export function ImageGroup({ items, align = 'right' }: { items: Attachment[]; align?: 'left' | 'right' }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const scope = useContext(GalleryScope);
+  const [open, setOpen] = useState<{ items: Attachment[]; index: number } | null>(null);
+  const show = (a: Attachment) => {
+    const i = scope.findIndex((x) => x.path === a.path);
+    if (i >= 0) setOpen({ items: scope, index: i });
+    else setOpen({ items, index: Math.max(0, items.indexOf(a)) });
+  };
   // A picture that will not load says so. Left blank it reads as a rendering
   // bug; named, it reads as a file name where a picture should be.
   const [gone, setGone] = useState<Record<string, boolean>>({});
@@ -57,7 +65,7 @@ export function ImageGroup({ items, align = 'right' }: { items: Attachment[]; al
             );
           }
           return (
-            <Pressable key={a.path} onPress={() => setOpen(uri)} style={[styles.thumb, size]}>
+            <Pressable key={a.path} onPress={() => show(a)} style={[styles.thumb, size]}>
               <Image
                 source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover"
                 onError={() => setGone((g) => ({ ...g, [a.path]: true }))}
@@ -66,11 +74,7 @@ export function ImageGroup({ items, align = 'right' }: { items: Attachment[]; al
           );
         })}
       </View>
-      <Modal visible={!!open} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
-        <Pressable onPress={() => setOpen(null)} style={styles.viewer}>
-          {open && <Image source={{ uri: open }} style={{ width: '100%', height: '80%' }} resizeMode="contain" />}
-        </Pressable>
-      </Modal>
+      {open && <Gallery items={open.items} index={open.index} onClose={() => setOpen(null)} />}
     </>
   );
 }
@@ -170,7 +174,6 @@ const styles = StyleSheet.create({
   thumb: { borderRadius: 14, overflow: 'hidden', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
   playBadge: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(15,14,12,0.7)', alignItems: 'center', justifyContent: 'center' },
   durBadge: { position: 'absolute', right: 8, bottom: 8, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(15,14,12,0.7)', color: colors.text, fontFamily: mono, fontSize: 11 },
-  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.96)', alignItems: 'center', justifyContent: 'center' },
   close: { position: 'absolute', top: 54, right: 20, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   voice: { width: 260, backgroundColor: colors.userBubble, borderRadius: 18, borderBottomRightRadius: 4, padding: 12, gap: 8 },
   playBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
