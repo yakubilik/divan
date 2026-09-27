@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, PanResponder, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 import { colors, radius, type } from '../theme';
 
@@ -124,6 +125,123 @@ export const Search = () => <I size={18} color={colors.muted}><Circle cx="11" cy
 /** Placeholder shapes for a list that has not answered yet. A list rendered
  *  empty while its request is still in flight reads as "nothing here", which is
  *  a different and wrong answer. */
+/** A row that slides aside to show what can be done to it.
+ *
+ *  Written on PanResponder rather than pulled in with a gesture library: the
+ *  app carries neither gesture-handler nor reanimated, and one swipe is not a
+ *  reason to take on both — they are native dependencies, and this screen has
+ *  to keep building for a plain Expo project.
+ *
+ *  Only one row is open at a time. A list with three rows hanging open is a
+ *  list you have to tidy before you can read it, so opening one closes the
+ *  last, the same way the platform's own lists behave. */
+let closeOpenSwipe: (() => void) | null = null;
+
+export interface SwipeAction {
+  key: string;
+  label: string;
+  color: string;
+  icon: (color: string) => React.ReactNode;
+  onPress: () => void;
+}
+
+const ACTION_W = 78;
+
+export function SwipeActions({ actions, children }: {
+  actions: SwipeAction[];
+  children: React.ReactNode;
+}) {
+  const x = useRef(new Animated.Value(0)).current;
+  const [open, setOpen] = useState(false);
+  // Where the row rests, and where this gesture picked it up. Kept in JS rather
+  // than read back off the Animated.Value: with the native driver the value
+  // only reports home to JS now and then, so a drag that asked it where it was
+  // would be working from a stale answer and stutter.
+  const shown = useRef(false);
+  const from = useRef(0);
+  const width = useRef(0);
+  width.current = ACTION_W * actions.length;
+  // Declared up here so `settle` can put it in the one-row-open registry: the
+  // two of them refer to each other, and a ref is the knot that unties.
+  const closeRef = useRef<() => void>(() => {});
+
+  const settle = useCallback((to: number) => {
+    const wasOpen = shown.current;
+    shown.current = to !== 0;
+    setOpen(to !== 0);
+    if (to !== 0) {
+      if (closeOpenSwipe && closeOpenSwipe !== closeRef.current) closeOpenSwipe();
+      closeOpenSwipe = closeRef.current;
+      if (!wasOpen) Haptics.selectionAsync().catch(() => {});
+    } else if (closeOpenSwipe === closeRef.current) {
+      closeOpenSwipe = null;
+    }
+    Animated.spring(x, { toValue: to, useNativeDriver: true, bounciness: 0, speed: 18 }).start();
+  }, [x]);
+
+  const close = useCallback(() => settle(0), [settle]);
+  closeRef.current = close;
+
+  // Unmounting with the registry still pointing here would leave a closer that
+  // can never run, and the next row to open would never clear it.
+  useEffect(() => () => { if (closeOpenSwipe === closeRef.current) closeOpenSwipe = null; }, []);
+
+  const pan = useRef(PanResponder.create({
+    // A tap has to reach the row underneath, so nothing is claimed on touch —
+    // only once a finger has actually travelled sideways.
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_e, g) => {
+      if (Math.abs(g.dx) < 8) return false;
+      // Sideways by a clear margin, or the list can never be scrolled past an
+      // open row. The list wins ties.
+      return Math.abs(g.dx) > Math.abs(g.dy) * 1.6;
+    },
+    onPanResponderGrant: () => { from.current = shown.current ? -width.current : 0; },
+    onPanResponderMove: (_e, g) => {
+      // Left as far as the actions are wide; right only as far as closed, with
+      // a little give at both ends so the row does not feel nailed down.
+      const next = from.current + g.dx;
+      x.setValue(Math.max(-width.current - 24, Math.min(12, next)));
+    },
+    onPanResponderRelease: (_e, g) => {
+      // A flick decides on its own: past a certain speed the distance covered
+      // stops being what the finger meant.
+      if (g.vx < -0.5) settle(-width.current);
+      else if (g.vx > 0.5) settle(0);
+      else settle(from.current + g.dx > -width.current / 2 ? 0 : -width.current);
+    },
+    onPanResponderTerminate: () => settle(0),
+  })).current;
+
+  return (
+    <View style={{ backgroundColor: colors.bg, overflow: 'hidden' }}>
+      <View style={[StyleSheet.absoluteFillObject, { flexDirection: 'row', justifyContent: 'flex-end' }]}>
+        {actions.map((a) => (
+          <Pressable
+            key={a.key}
+            onPress={() => { close(); a.onPress(); }}
+            style={{ width: ACTION_W, alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: a.color }}
+          >
+            {a.icon(colors.white)}
+            <Text numberOfLines={1} style={[type.caption, { color: colors.white, fontWeight: '600', letterSpacing: 0 }]}>{a.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Animated.View
+        {...pan.panHandlers}
+        style={{ backgroundColor: colors.bg, transform: [{ translateX: x }] }}
+      >
+        {children}
+        {/* While the actions are showing, a tap on the row means "put it back",
+            not "open the chat" — the same rule every list of this shape has. */}
+        {open && (
+          <Pressable onPress={close} style={StyleSheet.absoluteFillObject} />
+        )}
+      </Animated.View>
+    </View>
+  );
+}
+
 export function Skeleton({ width, height = 12, radius = 6, style }:
   { width: number | string; height?: number; radius?: number; style?: ViewStyle }) {
   const a = useRef(new Animated.Value(0.45)).current;
@@ -262,6 +380,8 @@ export const QrIcon = () => <I size={34} color={colors.muted} sw={1.6}><Rect x="
 export const Paperclip = ({ size = 14, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Path d="m21 11.5-8.5 8.5a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8" /></I>;
 export const PinIcon = ({ size = 13, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Path d="M12 17v5M9 3h6l-1 6 3 3H7l3-3z" /></I>;
 export const ArchiveIcon = ({ size = 13, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Rect x="3" y="4" width="18" height="4" rx="1" /><Path d="M5 8v12h14V8M10 12h4" /></I>;
+export const UnarchiveIcon = ({ size = 13, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Rect x="3" y="4" width="18" height="4" rx="1" /><Path d="M5 8v12h14V8M12 17v-5M9.5 14.5 12 12l2.5 2.5" /></I>;
+export const TrashIcon = ({ size = 13, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Path d="M4 7h16M10 7V4.5h4V7M6.5 7l1 12.5h9L17.5 7M10.5 10.5v6M13.5 10.5v6" /></I>;
 export const GroupedIcon = ({ size = 14, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Rect x="3" y="4" width="18" height="6" rx="1.5" /><Rect x="3" y="14" width="18" height="6" rx="1.5" /></I>;
 export const FlatIcon = ({ size = 14, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Path d="M4 7h16M4 12h16M4 17h16" /></I>;
 

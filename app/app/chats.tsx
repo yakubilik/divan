@@ -8,7 +8,7 @@ import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { LOCALE } from '../src/i18n';
 import { colors, radius, type, providerColor } from '../src/theme';
-import { ArchiveIcon, Chevron, ChevronDown, Chips, Compose, FlatIcon, Gear, GroupedIcon, PinIcon, ProviderGlyph, Search, SkeletonRows, Spinner } from '../src/components/ui';
+import { ArchiveIcon, Chevron, ChevronDown, Chips, Compose, FlatIcon, Gear, GroupedIcon, PinIcon, ProviderGlyph, Search, SkeletonRows, Spinner, SwipeActions, TrashIcon, UnarchiveIcon } from '../src/components/ui';
 import type { Chat } from '../src/protocol';
 
 /** The one section the flat view draws. It is never shown as a heading, so it
@@ -178,13 +178,32 @@ export default function Chats() {
     ]);
   }
 
+  /** The two things a swipe offers. Archiving is reversible and goes straight
+   *  through; deleting takes the chat's history off the computer with it, so it
+   *  asks first — the same question the long-press menu asks. */
+  function archiveChat(chat: Chat) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    updateChat(chat.id, { archived: chat.archived ? 0 : 1 } as any)
+      .catch((e: any) => Alert.alert(T('error'), e.message));
+  }
+
+  function confirmDelete(chat: Chat) {
+    Alert.alert(T('deleteChat'), T('deleteChatBody'), [
+      { text: T('cancel'), style: 'cancel' },
+      { text: T('delete'), style: 'destructive',
+        onPress: () => deleteChat(chat.id).catch((e: any) => Alert.alert(T('error'), e.message)) },
+    ]);
+  }
+
   // Handed to every row, so they have to keep the same identity across renders
   // or memoising the row buys nothing. The action sheets close over this
   // render's state, so reach them through a ref rather than rebuilding.
-  const actionsRef = useRef({ chatActions, groupActions });
-  actionsRef.current = { chatActions, groupActions };
+  const actionsRef = useRef({ chatActions, groupActions, archiveChat, confirmDelete });
+  actionsRef.current = { chatActions, groupActions, archiveChat, confirmDelete };
   const onRowPress = useCallback((chat: Chat) => go(() => router.push(`/chat/${chat.id}`)), [go, router]);
   const onRowLongPress = useCallback((chat: Chat) => actionsRef.current.chatActions(chat), []);
+  const onRowArchive = useCallback((chat: Chat) => actionsRef.current.archiveChat(chat), []);
+  const onRowDelete = useCallback((chat: Chat) => actionsRef.current.confirmDelete(chat), []);
 
   const online = conn === 'online';
   const switching = useStore((st) => st.switching);
@@ -268,7 +287,7 @@ export default function Chats() {
               <Text style={[type.caption, { color: colors.muted }]}>{section.count || T('groupEmpty')}</Text>
             </Pressable>
           )}
-          renderItem={({ item }) => <ChatRow chat={item} T={T} locale={locale} group={chatView === 'flat' && item.group_id ? groupNames[item.group_id] : undefined} onPress={onRowPress} onLongPress={onRowLongPress} />}
+          renderItem={({ item }) => <ChatRow chat={item} T={T} locale={locale} group={chatView === 'flat' && item.group_id ? groupNames[item.group_id] : undefined} onPress={onRowPress} onLongPress={onRowLongPress} onArchive={onRowArchive} onDelete={onRowDelete} />}
         />
       )}
       </Animated.View>
@@ -276,11 +295,19 @@ export default function Chats() {
   );
 }
 
-const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, T, locale, group }: { chat: Chat; onPress: (chat: Chat) => void; onLongPress: (chat: Chat) => void; T: ReturnType<typeof useT>; locale: string; group?: string }) {
+const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, onArchive, onDelete, T, locale, group }: { chat: Chat; onPress: (chat: Chat) => void; onLongPress: (chat: Chat) => void; onArchive: (chat: Chat) => void; onDelete: (chat: Chat) => void; T: ReturnType<typeof useT>; locale: string; group?: string }) {
   const waiting = chat.status === 'awaiting_approval';
   const running = chat.status === 'running';
   const pc = providerColor(chat.provider);
   return (
+    <SwipeActions actions={[
+      { key: 'archive', label: chat.archived ? T('unarchive') : T('archiveAction'), color: colors.surface2,
+        icon: (c) => (chat.archived ? <UnarchiveIcon size={19} color={c} /> : <ArchiveIcon size={19} color={c} />),
+        onPress: () => onArchive(chat) },
+      { key: 'delete', label: T('delete'), color: colors.danger,
+        icon: (c) => <TrashIcon size={19} color={c} />,
+        onPress: () => onDelete(chat) },
+    ]}>
     <Pressable onPress={() => onPress(chat)} onLongPress={() => onLongPress(chat)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surface }]}>
       <ProviderGlyph provider={chat.provider} />
       <View style={{ flex: 1, gap: 3, minWidth: 0 }}>
@@ -302,6 +329,7 @@ const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, T, loc
         <Chips items={[group, chat.model, chat.effort, chat.perm_mode]} accent={group ? pc : undefined} />
       </View>
     </Pressable>
+    </SwipeActions>
   );
 });
 
