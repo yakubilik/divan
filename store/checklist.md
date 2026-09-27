@@ -1,7 +1,8 @@
 # App Store submission — remote-ai-chat
 
 ## Done
-- [x] Bundle id `com.yakupkeskin.remoteaichat` registered, Push Notifications capability on
+- [x] Bundle id registered, Push Notifications capability on (the id itself
+      lives in `app/identity.local.json`, which git does not carry)
 - [x] `Remote AI Chat App Store` distribution profile created
 - [x] Build identity restored locally (`app/app.config.js` + gitignored `app/identity.local.json`)
 - [x] App icon / splash / adaptive icon / favicon replaced (source: `design/icon.svg`)
@@ -11,7 +12,7 @@
 - [x] Screenshots 6.9" (1320x2868) in `store/shots/en-US/APP_IPHONE_67/` — captured
       from the simulator against the isolated demo daemon, so no real chat is in them
 
-- [x] App record created (app id 6815430115) — the public API forbids it, so it
+- [x] App record created — the public API forbids it, so it
       went through the App Store Connect web session (`/iris/v1/apps`)
 - [x] Build 1.0.0 (3) uploaded, Valid, attached to version 1.0 and in TestFlight
       (1 predates the onboarding; 2 was archived from a tree carrying another
