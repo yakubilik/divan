@@ -1,0 +1,149 @@
+name: Release
+
+# The tag is the version. This is what makes that true rather than merely
+# claimed: a tag whose copies of the number disagree with it does not become a
+# release, and neither does one that fails to build.
+#
+#     python scripts/release.py minor
+#     git push origin main --follow-tags
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to re-run the release for
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - id: tag
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: The copies of the number agree with the tag
+        # A number nothing verifies is a number nobody raises — which is how
+        # __version__ came to say 0.1.0 on two computers weeks apart.
+        env:
+          V: ${{ steps.tag.outputs.version }}
+        run: |
+          fail=0
+          check() {
+            if ! grep -qF "$2" "$1"; then
+              echo "$1 does not say $2" >&2
+              fail=1
+            fi
+          }
+          check daemon/pyproject.toml                 "version = \"$V\""
+          check daemon/remote_ai_chat/__init__.py     "__version__ = \"$V\""
+          check web/package.json                      "\"version\": \"$V\""
+          check CHANGELOG.md                          "## v$V —"
+          if [ "$fail" != 0 ]; then
+            echo "Run scripts/release.py rather than tagging by hand." >&2
+            exit 1
+          fi
+      - name: The tag is on main
+        run: |
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "this tag is not an ancestor of origin/main — every daemon follows" >&2
+            echo "origin/main, so a release off it is a release nobody receives" >&2
+            exit 1
+          fi
+
+  build:
+    name: Build
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Daemon installs and imports
+        run: |
+          uv pip install --system -e daemon
+          python -c "import remote_ai_chat, remote_ai_chat.server as s; print(remote_ai_chat.__version__)"
+      - name: Daemon tests
+        working-directory: daemon
+        run: |
+          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments; do
+            python "scripts/$t.py"
+          done
+
+      - name: Panel builds
+        run: npm ci && npm run build
+        working-directory: web
+      - name: The panel build is clean
+        run: |
+          test ! -e daemon/remote_ai_chat/webui/dev-host.json
+          test -s daemon/remote_ai_chat/webui/build.json
+
+      - name: Wheel and sdist
+        # Not published anywhere — attached to the release so a version can be
+        # installed without a git checkout, which is the only reason the
+        # packaged __version__ constant exists at all.
+        run: uv build --out-dir dist daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  publish:
+    name: Publish the release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Notes, from the changelog entry for this tag
+        env:
+          V: ${{ needs.verify.outputs.version }}
+        # The section between this version's heading and the next one. Written
+        # by scripts/release.py from the commit subjects, so the release notes
+        # and the changelog cannot drift apart.
+        run: |
+          awk -v v="## v$V " '
+            index($0, v) == 1 { on = 1; next }
+            on && /^## v/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "No changelog section for v$V" >&2
+            exit 1
+          fi
+          cat notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.verify.outputs.version }}
+          name: v${{ needs.verify.outputs.version }}
+          body_path: notes.md
+          files: dist/*
+          fail_on_unmatched_files: true

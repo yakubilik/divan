@@ -1,0 +1,13 @@
+# What the builder should not receive. This exists because .gitignore is not the
+# right list for a build: identity.local.json is kept out of the repository on
+# purpose, but without it app.config.js falls back to the placeholder bundle id
+# and signing fails against a provisioning profile for the real one. EAS reads
+# this file in place of .gitignore, so the build gets the identity and git still
+# does not.
+node_modules/
+.expo/
+dist/
+/ios/
+/android/
+*.log
+.DS_Store

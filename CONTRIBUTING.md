@@ -55,6 +55,7 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_stream.py
 .venv312/bin/python scripts/test_attachments.py
 .venv312/bin/python scripts/test_pool.py
+.venv312/bin/python scripts/test_agents.py
 
 cd app && npx tsc --noEmit
 cd web && npm run build                        # typechecks, then builds into the daemon
@@ -63,8 +64,39 @@ cd web && npm run build                        # typechecks, then builds into th
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.
 
+Everything above except `smoke.py` and `e2e.py` also runs on CI
+(`.github/workflows/ci.yml`) against the two ends of the supported Python range,
+because the middle is what everybody develops on and the ends are where it
+breaks.
+
 If you changed the panel, commit the rebuilt `daemon/remote_ai_chat/webui/`?
 **No** — it is gitignored. The daemon builds it, or the installer does.
+
+## Releasing
+
+The tag is the version. Three files carry a copy of the number, and the only
+reason they exist is that a wheel installed without git has nothing to ask —
+so one script writes all of them and the tag, in one commit:
+
+```bash
+python scripts/release.py minor --dry-run   # say what would happen
+python scripts/release.py minor             # writes, commits, tags
+git push origin main --follow-tags          # yours to do
+```
+
+The changelog entries are the commit subjects, which is the other reason this
+file asks for subjects that say what is now true. Pushing the tag runs
+`.github/workflows/release.yml`, which refuses a tag whose copies of the number
+disagree with it, refuses one that is not an ancestor of `origin/main`, runs the
+tests, builds the panel, and publishes the release with a wheel attached.
+
+Do not tag by hand. A version nothing verifies is a version nobody raises —
+`__version__` said `0.1.0` on two computers that were weeks apart, and that is
+the whole reason any of this is here.
+
+What a daemon reports is derived, not declared: `git describe` gives `v0.2.0`
+on a release and `v0.2.0+7` seven commits past one, so a machine following
+`main` between releases says so instead of rounding down.
 
 ## House rules
 

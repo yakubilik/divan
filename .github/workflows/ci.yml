@@ -1,0 +1,81 @@
+name: CI
+
+# Three parts that have to agree with each other, checked on every push. The
+# daemon jobs run the ends of the supported Python range rather than the middle,
+# because the middle is what everybody develops on and the ends are where it
+# breaks.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  daemon:
+    name: daemon · py${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.11" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.13" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv pip install --system -e daemon
+      - name: Import
+        # The same check the updater runs before it lets a pulled commit
+        # restart a daemon: a syntax error here is one a supervisor would
+        # otherwise discover by restarting forever.
+        run: python -c "import remote_ai_chat, remote_ai_chat.server"
+      - name: Tests
+        working-directory: daemon
+        # Every script that spends no model turns and touches no network.
+        # scripts/e2e.py and scripts/smoke.py need a running daemon and a real
+        # sign-in, so they stay a human's job.
+        run: |
+          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments; do
+            echo "── $t"
+            python "scripts/$t.py"
+          done
+
+  web:
+    name: web panel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Typecheck and build
+        # `npm run build` is `tsc --noEmit && vite build`, so this is both.
+        run: npm run build
+        working-directory: web
+      - name: The build carries no pairing token
+        # public/dev-host.json is a real token and vite copies public/ into the
+        # build; the daemon then serves that build with no auth of its own.
+        # vite.config.ts strips it. This is the check that it still does.
+        run: |
+          if [ -e ../daemon/remote_ai_chat/webui/dev-host.json ]; then
+            echo "dev-host.json shipped in the panel build" >&2
+            exit 1
+          fi
+      - name: The build says which commit it came from
+        run: test -s ../daemon/remote_ai_chat/webui/build.json

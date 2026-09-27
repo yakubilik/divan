@@ -1,13 +1,34 @@
-// The public repo carries no account-scoped identifiers: bundle id, team,
-// owner and EAS project id live in an uncommitted identity.local.json.
-// See IDENTITY.local.md. Without that file this is plain app.json.
+// The public repo carries no account-scoped identifiers: bundle id, team, owner
+// and EAS project id are kept out of app.json.
+//
+// They are read from two places, in this order:
+//
+//   1. identity.local.json, uncommitted, for a build run on this machine.
+//   2. RAC_* environment variables, for a build run on EAS — where the file
+//      cannot follow, because .gitignore keeps it out of the uploaded archive
+//      and a build with the placeholder bundle id fails signing against a
+//      provisioning profile for the real one. Set them once with
+//      `eas env:create` and they live on the project, not in the repository.
+//
+// With neither, this is plain app.json and the app is unsigned but buildable.
 const fs = require('fs');
 const path = require('path');
 
-module.exports = ({ config }) => {
+function identity() {
   const local = path.join(__dirname, 'identity.local.json');
-  if (!fs.existsSync(local)) return config;
-  const id = JSON.parse(fs.readFileSync(local, 'utf8'));
+  if (fs.existsSync(local)) return JSON.parse(fs.readFileSync(local, 'utf8'));
+  const env = {
+    bundleIdentifier: process.env.RAC_BUNDLE_ID,
+    appleTeamId: process.env.RAC_APPLE_TEAM_ID,
+    owner: process.env.RAC_OWNER,
+    easProjectId: process.env.RAC_EAS_PROJECT_ID,
+  };
+  return Object.values(env).some(Boolean) ? env : null;
+}
+
+module.exports = ({ config }) => {
+  const id = identity();
+  if (!id) return config;
 
   return {
     ...config,
