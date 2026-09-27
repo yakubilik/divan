@@ -237,6 +237,7 @@ delete. This one spends a few real turns.
 .venv312/bin/python scripts/test_stream.py
 .venv312/bin/python scripts/test_attachments.py
 .venv312/bin/python scripts/test_pool.py
+.venv312/bin/python scripts/test_agents.py
 ```
 
 ---

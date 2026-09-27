@@ -1,4 +1,5 @@
-"""SQLite persistence: groups, chats, events (the timeline), plan limits."""
+"""SQLite persistence: groups, chats, events (the timeline), plan limits, and
+the handful of facts that have to outlive the process."""
 from __future__ import annotations
 
 import json
@@ -48,6 +49,12 @@ CREATE TABLE IF NOT EXISTS limits (
   at REAL NOT NULL,
   PRIMARY KEY (account_key, window)
 );
+-- Small, rare, and nothing to do with chats: when this daemon last started,
+-- how many times it has, what the last update did. Each of them describes a
+-- process that has already ended, so none of them can be kept in memory.
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY, value TEXT NOT NULL, at REAL NOT NULL
+);
 """
 
 
@@ -66,11 +73,98 @@ class DB:
         cols = {r["name"] for r in self._c.execute("PRAGMA table_info(chats)").fetchall()}
         if "session_ids" not in cols:
             self._c.execute("ALTER TABLE chats ADD COLUMN session_ids TEXT DEFAULT '{}'")
-        # Nothing can be running right after start; clear stale states from a crash/restart.
+        # Nothing can be running right after start; clear stale states from a
+        # crash/restart. Which chats they were is worth keeping for a moment —
+        # they are the ones whose turn died mid-sentence.
+        interrupted = [r["id"] for r in
+                       self._c.execute("SELECT id FROM chats WHERE status!='idle'").fetchall()]
         self._c.execute("UPDATE chats SET status='idle' WHERE status!='idle'")
         self._c.commit()
         self._lock = threading.Lock()
         self._expire_orphan_approvals()
+        # What the last process was doing when it stopped, and whether this one
+        # can carry on with it. Decided here, before anything else runs: the
+        # answer needs the attempt count on disk, and writing that down before
+        # the turn starts again is what stops a turn that kills the daemon from
+        # being retried for ever.
+        self.to_resume = self._plan_resumes(interrupted)
+
+    # A turn is picked up again once. Twice would let a turn that stops the
+    # daemon stop it on every start, and a crash loop is worse than a question
+    # left unanswered.
+    RESUME_TRIES = 1
+
+    def _plan_resumes(self, chat_ids: list[str]) -> list[dict]:
+        """For each chat whose turn died with the last process: carry on, or say so.
+
+        `text.delta` is not durable and the answer is only written down as
+        `message.assistant` once it is whole, so an interrupted turn shows up in
+        the timeline as a question with silence after it. But the question is on
+        disk, and the provider session it was asked in can be resumed — so the
+        work can simply start again, and nobody has to be told to send anything
+        twice. Only a chat this process will not pick up gets the note, and this
+        is the only place it can be written: the process that would have
+        reported it is the one that ended.
+        """
+        tries = self.meta_get("resume_tries", {}) or {}
+        plans, spent = [], dict(tries)
+        for cid in chat_ids:
+            msgs = self._unanswered_messages(cid)
+            if not msgs:
+                # Nothing on disk to run again — a turn the model opened by
+                # itself, or a chat whose question is already answered.
+                self.close_interrupted_turn(cid)
+                continue
+            seq = msgs[-1]["seq"]
+            prev = tries.get(cid) or {}
+            n = int(prev.get("tries", 0)) if prev.get("seq") == seq else 0
+            if n >= self.RESUME_TRIES:
+                self.close_interrupted_turn(cid, again=True)
+                continue
+            spent[cid] = {"seq": seq, "tries": n + 1}
+            plans.append({"chat_id": cid,
+                          "messages": [(m["text"], m["attachments"]) for m in msgs]})
+        if spent != tries:
+            self.meta_set("resume_tries", spent)
+        return plans
+
+    def _unanswered_messages(self, chat_id: str) -> list[dict]:
+        """The user's messages since the last turn that ended, oldest first.
+
+        More than one when messages were queued behind the turn in flight: each
+        was written down as it arrived, while the queue holding them was only
+        memory. The order is the order they were asked in.
+        """
+        rows = self._c.execute(
+            "SELECT seq, type, payload FROM events WHERE chat_id=? ORDER BY seq DESC LIMIT 400",
+            (chat_id,)).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            if r["type"] in ("turn.done", "turn.error"):
+                break
+            if r["type"] != "message.user":
+                continue
+            try:
+                p = json.loads(r["payload"])
+            except Exception:
+                continue
+            if not (p.get("text") or "").strip():
+                continue
+            out.append({"seq": r["seq"], "text": p["text"],
+                        "attachments": p.get("attachments") or []})
+        out.reverse()
+        return out
+
+    def close_interrupted_turn(self, chat_id: str, again: bool = False) -> None:
+        """Say in the timeline that a turn ended with the process running it."""
+        self.append_event(chat_id, "turn.error", {
+            "message": ("The daemon stopped again while this turn was being picked up, "
+                        "so it was left alone. Send again to retry."
+                        if again else
+                        "The daemon stopped while this turn was running, "
+                        "so it never finished. Send again to pick it up."),
+            "code": "daemon_stopped",
+        })
 
     def _expire_orphan_approvals(self) -> None:
         """Approval requests whose waiting coroutine died with the old process can never
@@ -251,16 +345,65 @@ class DB:
     # Keeping the last word on disk is what lets the ring show a number right
     # after a restart, instead of going blank until someone sends a message.
 
-    def save_limits(self, account_key: str, windows: list[dict], at: float) -> None:
+    def save_limits(self, account_key: str, windows: list[dict], at: float,
+                    complete: bool = False) -> None:
+        """Write down what the tool just said about one account's plan.
+
+        `complete` is the difference between adding to a picture and replacing
+        it. A complete report is every window the plan has right now, so one
+        that is missing from it has gone — an account whose overage allowance
+        was spent stops being told about that window at all, and upserting
+        forever left it pinned at the last number anybody saw. Forty hours
+        later the phone was still drawing a full ring from it.
+        """
+        names = [str(w.get("window")) for w in windows]
         with self._lock:
+            if complete and names:
+                q = ",".join("?" * len(names))
+                self._c.execute(
+                    f"DELETE FROM limits WHERE account_key=? AND window NOT IN ({q})",
+                    (account_key, *names))
             self._c.executemany(
                 "INSERT INTO limits (account_key, window, payload, at) VALUES (?,?,?,?) "
                 "ON CONFLICT(account_key, window) DO UPDATE SET payload=excluded.payload, at=excluded.at",
-                [(account_key, str(w.get("window")), json.dumps(w), at) for w in windows],
+                [(account_key, n, json.dumps(w), at) for n, w in zip(names, windows)],
+            )
+            self._c.commit()
+
+    # ── meta ───────────────────────────────────────────────────────────────
+    # JSON in, JSON out, so a caller can store a record rather than a string
+    # and a reader never has to know which of the two a key holds.
+
+    def meta_get(self, key: str, default: Any = None) -> Any:
+        r = self._c.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        if r is None:
+            return default
+        try:
+            return json.loads(r["value"])
+        except Exception:
+            return default
+
+    def meta_set(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._c.execute(
+                "INSERT INTO meta (key, value, at) VALUES (?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, at=excluded.at",
+                (key, json.dumps(value), time.time()),
             )
             self._c.commit()
 
     def load_limits(self) -> dict[str, dict[str, dict]]:
+        """Every window still on record, exactly as it was left.
+
+        Nothing is judged stale here on purpose. It is tempting: all the
+        windows of one report share an instant, so a row lagging the newest one
+        looks abandoned. But a report that carried only the headline window
+        leaves its siblings behind legitimately, and there is no way to tell
+        the two apart from the timestamps alone — which is the whole reason
+        `save_limits` is told `complete` instead of working it out. A window
+        dies where that is known, and a complete report arrives on the first
+        turn of any chat, so a row that should go does not last long.
+        """
         out: dict[str, dict[str, dict]] = {}
         for r in self._c.execute("SELECT * FROM limits").fetchall():
             try:

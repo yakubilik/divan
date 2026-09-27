@@ -93,7 +93,8 @@ class ChatSession:
         self.last_active = time.monotonic()
         # Wall clock at which the turn now running started, or None between
         # turns. `updated_at` cannot answer this — an approval moves it too —
-        # and "how long has it been at this" is what the chat list wants to say.
+        # and "how long has it been at this" is the first thing anyone asks the
+        # concierge over a call.
         self.turn_started: float | None = None
         self.lock = asyncio.Lock()
         # settings changed since the provider was built; the next turn rebuilds
@@ -390,16 +391,45 @@ class ChatSession:
         # can never land after the running turn decided the queue was empty.
         async with self.lock:
             if self.is_busy():
+                self.last_active = time.monotonic()
+                # Into the running turn, not behind it. The model picks the
+                # message up at its next step, the way a running Claude Code
+                # session takes what is typed into it — a thought added to a
+                # task should change the task, not wait for it to end.
+                # Nothing is already queued, or order would be lost: a message
+                # steered past one still waiting would arrive first.
+                if (not self.queued and self.provider is not None
+                        and await self.provider.steer(text, attachments or [])):
+                    await self.emit("message.user",
+                                    {"text": text, "attachments": attachments or []}, True)
+                    return False
                 if len(self.queued) >= MAX_QUEUED:
                     raise Err("busy", "too many queued messages")
                 self.queued.append((text, attachments or []))
-                self.last_active = time.monotonic()
                 await self.emit("message.user",
                                 {"text": text, "attachments": attachments or [], "queued": True}, True)
                 return True
             await self._prepare(text, attachments, announce=True)
             self.running = asyncio.create_task(self._run(text, attachments))
         return False
+
+    async def resume(self, msgs: list[tuple[str, list[dict]]]) -> None:
+        """Run again a turn the process before this one did not finish.
+
+        The messages are already in the timeline — each was written down as it
+        arrived — so nothing is announced here; this only starts the work that
+        went down with the old process. Whatever had been queued behind the
+        turn goes back into the queue, in the order it was asked.
+        """
+        if not msgs:
+            return
+        async with self.lock:
+            if self.is_busy():
+                return
+            (text, attachments), rest = msgs[0], list(msgs[1:])
+            self.queued.extend(rest)
+            await self._prepare(text, attachments, announce=False)
+            self.running = asyncio.create_task(self._run(text, attachments))
 
     async def _prepare(self, text: str, attachments: list[dict] | None, announce: bool) -> dict:
         """Everything a turn needs before it starts: fresh provider, user event,
@@ -617,6 +647,26 @@ class SessionManager:
 
     def active_count(self) -> int:
         return sum(1 for s in self.sessions.values() if s.is_busy())
+
+    def pending(self) -> list[dict]:
+        """Chats holding work that stopping this process would destroy.
+
+        A turn in flight, obviously — the CLI is a child of this process and
+        goes down with it, and a half-generated answer was never written to the
+        timeline. But queued messages count the same: the queue lives in memory
+        while the `message.user` that announced it is already on disk, so
+        dropping it leaves a question in the transcript that nothing will ever
+        come back to answer.
+        """
+        out = []
+        for cid, sess in self.sessions.items():
+            busy, queued = sess.is_busy(), len(sess.queued)
+            if busy or queued:
+                out.append({"chat_id": cid, "busy": busy, "queued": queued})
+        return out
+
+    def pending_count(self) -> int:
+        return len(self.pending())
 
     async def close_all(self) -> None:
         for cid in list(self.sessions):

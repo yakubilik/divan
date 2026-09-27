@@ -13,6 +13,7 @@ import { C, R } from '../lib/theme';
 import { Btn, Dot, Empty, Icon, Label, P, Segment, Spinner, mono } from '../ui/kit';
 import { Modal, ModalHead } from '../components/Modal';
 import { useFleet } from '../lib/fleet';
+import { hostDefaults, providerDefaults, usePrefs } from '../lib/prefs';
 import { agentStore, installAgent, listAgents, removeAgent } from '../lib/actions';
 import { errText } from '../lib/i18n';
 import { shortPath, tilde } from '../lib/format';
@@ -82,8 +83,8 @@ function Badge({ children, tone = 'plain' }: { children: React.ReactNode; tone?:
   );
 }
 
-function AgentCard({ agent, busy, onRemove }: {
-  agent: Agent; busy: boolean; onRemove: (() => void) | null;
+function AgentCard({ agent, busy, onChat, onRemove }: {
+  agent: Agent; busy: boolean; onChat: (() => void) | null; onRemove: (() => void) | null;
 }) {
   return (
     <div style={{
@@ -137,6 +138,7 @@ function AgentCard({ agent, busy, onRemove }: {
             >Remove</button>
           )
         )}
+        {onChat && <Btn kind="primary" onClick={onChat}>Start chat</Btn>}
       </div>
     </div>
   );
@@ -213,11 +215,11 @@ function StoreRow({ source, open, onToggle, busyId, installed, onInstall }: {
                 <div style={{ fontSize: 12, color: C.mute, marginTop: 3, lineHeight: '17px' }}>{item.about}</div>
               )}
               {!!item.skills && (
-                <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 4 }}>{item.skills} beceri</div>
+                <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 4 }}>{item.skills} skills</div>
               )}
             </div>
             {busyId === item.id ? <Spinner size={13} />
-              : on ? <Badge tone="accent">kurulu</Badge>
+              : on ? <Badge tone="accent">installed</Badge>
               : <Btn kind="primary" onClick={() => onInstall(item)}>Kur</Btn>}
           </div>
         );
@@ -226,12 +228,21 @@ function StoreRow({ source, open, onToggle, busyId, installed, onInstall }: {
   );
 }
 
-export function Agents() {
+export function Agents({ onStartChat }: {
+  /** Handing the agent up rather than creating the chat here: a chat needs a
+   *  model, a folder and a sign-in, and the New chat dialog already asks. */
+  onStartChat?: (agent: Agent, accountId: string | null) => void;
+}) {
   const { hosts, focus, refreshAccounts } = useFleet();
   const slot = focus ? hosts[focus] : null;
   const online = slot?.status === 'online';
 
   const [accountId, setAccountId] = useState<string>(OWN);
+  const allDefaults = usePrefs((p) => p.defaults);
+  const setDefaults = usePrefs((p) => p.setDefaults);
+  /** Which family cards are open. Families are collapsed by default — that is
+   *  the whole point of the tag. */
+  const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
 
@@ -295,10 +306,29 @@ export function Agents() {
 
   useEffect(() => { loadAgents(); }, [loadAgents]);
   useEffect(() => { loadStore(); }, [loadStore]);
-  useEffect(() => { setAccountId(OWN); }, [focus]);
+  // Restoring rather than resetting. `OWN` was the old default and it is the
+  // one folder that is reliably empty: agents installed through this app live
+  // under the account that installed them, and the computer's own folder only
+  // holds what somebody put there by hand. So a remembered choice wins, then
+  // the account new chats already use, and only then OWN.
+  useEffect(() => {
+    if (!focus) return;
+    const d = hostDefaults(allDefaults, focus);
+    const remembered = d.agentAccountId;
+    const forChats = providerDefaults(d, 'claude').account_id;
+    // …and a signed-in account before OWN. What this app installs goes into
+    // the folder of the account that installed it, so on a computer with real
+    // sign-ins the computer's own folder is the one place with nothing in it —
+    // which is how an installed agent comes to be missing from the one screen
+    // that exists to show it.
+    const signedIn = claudeAccounts.find((a) => a.logged_in)?.id ?? '';
+    setAccountId(remembered !== undefined
+      ? (remembered || OWN)
+      : (forChats || signedIn || OWN));
+  }, [focus, allDefaults, claudeAccounts]);
 
   // A store item's id ("hermes:*") is not an agent name, and agent.list does
-  // not say where an agent came from, so "kurulu" is only claimed on an exact
+  // not say where an agent came from, so "installed" is only claimed on an exact
   // name match. A miss just leaves the Kur button — never a false badge.
   const installedNames = useMemo(() => {
     const norm = (s: string) => s.toLocaleLowerCase('tr').replace(/[^a-z0-9]/g, '');
@@ -315,6 +345,36 @@ export function Agents() {
         || (a.description || '').toLocaleLowerCase('tr').includes(q);
     });
   }, [agents, filter, query]);
+
+  /** What the grid actually draws.
+   *
+   *  A tool that ships its own workers drops a dozen files in one folder, all
+   *  under one prefix, and the daemon tags them as a family for exactly this
+   *  reason: they are one tool's insides, not a dozen things to talk to. Left
+   *  flat they bury the two or three agents somebody actually installed under
+   *  a wall of identical tiles. So a family is one card until it is opened —
+   *  and what this app installed is never inside one, so it always shows.
+   */
+  const entries = useMemo(() => {
+    const singles: Agent[] = [];
+    const families = new Map<string, Agent[]>();
+    for (const a of shown) {
+      // A searched-for name should not stay hidden inside a folded card.
+      if (a.family && !a.installed && !query.trim()) {
+        const arr = families.get(a.family) ?? [];
+        arr.push(a);
+        families.set(a.family, arr);
+      } else {
+        singles.push(a);
+      }
+    }
+    // Installed first: they are the answer to "what did I put here".
+    singles.sort((x, y) => Number(!!y.installed) - Number(!!x.installed));
+    return [
+      ...singles.map((agent) => ({ kind: 'one' as const, agent })),
+      ...[...families].map(([name, agents]) => ({ kind: 'family' as const, name, agents })),
+    ];
+  }, [shown, query]);
 
   const storeShown = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr');
@@ -402,7 +462,11 @@ export function Agents() {
           <span style={{ fontSize: 12, color: C.mute }}>Account</span>
           <select
             value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
+            onChange={(e) => {
+              setAccountId(e.target.value);
+              // Written down, so the next visit opens where this one ended.
+              if (focus) setDefaults(focus, { agentAccountId: e.target.value === OWN ? '' : e.target.value });
+            }}
             disabled={!online}
             style={{
               height: 30, padding: '0 8px', borderRadius: R.btn, fontSize: 13,
@@ -483,18 +547,58 @@ export function Agents() {
               gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
               alignItems: 'stretch',
             }}>
-              {shown.map((a) => (
-                <AgentCard
-                  key={a.id}
-                  agent={a}
-                  busy={busyId === a.name}
-                  // The built-in agent creator has no file behind it, and an
-                  // agent this app did not write back is refused anyway
-                  // (agent_not_removable) — so no button is offered for either.
-                  onRemove={a.installed && a.scope !== 'builtin' && !!a.path
-                    ? () => setDoomed(a) : null}
-                />
-              ))}
+              {entries.map((e) => {
+                if (e.kind === 'family') {
+                  const open = !!openFamilies[e.name];
+                  return (
+                    <div key={`family:${e.name}`} style={{
+                      gridColumn: '1 / -1', display: 'grid', gap: 12,
+                      gridTemplateColumns: 'subgrid',
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenFamilies((o) => ({ ...o, [e.name]: !open }))}
+                        style={{
+                          gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10,
+                          padding: 14, textAlign: 'left', cursor: 'pointer',
+                          background: C.surface, border: `1px solid ${C.border}`,
+                          borderRadius: R.card, color: C.text,
+                        }}
+                      >
+                        <Icon path={open ? P.chevronDown : P.chevronRight} size={14} color={C.mute} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600 }}>{e.name}</div>
+                          <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>
+                            {e.agents.length} workers that arrived together — one tool's
+                            insides, not {e.agents.length} agents to talk to
+                          </div>
+                        </div>
+                      </button>
+                      {open && e.agents.map((a) => (
+                        <AgentCard key={a.id} agent={a} busy={busyId === a.name}
+                          onChat={online && onStartChat
+                            ? () => onStartChat(a, argAccount) : null}
+                          onRemove={a.installed && a.scope !== 'builtin' && !!a.path
+                            ? () => setDoomed(a) : null} />
+                      ))}
+                    </div>
+                  );
+                }
+                const a = e.agent;
+                return (
+                  <AgentCard
+                    key={a.id}
+                    agent={a}
+                    busy={busyId === a.name}
+                    onChat={online && onStartChat ? () => onStartChat(a, argAccount) : null}
+                    // The built-in agent creator has no file behind it, and an
+                    // agent this app did not write back is refused anyway
+                    // (agent_not_removable) — so no button is offered for either.
+                    onRemove={a.installed && a.scope !== 'builtin' && !!a.path
+                      ? () => setDoomed(a) : null}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -510,7 +614,7 @@ export function Agents() {
             <div style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>Store</div>
             {loadingStore
               ? <Spinner size={13} />
-              : <span style={{ ...mono, fontSize: 11, color: C.faint }}>{sources.length} koleksiyon</span>}
+              : <span style={{ ...mono, fontSize: 11, color: C.faint }}>{sources.length} collection{sources.length === 1 ? '' : 's'}</span>}
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px' }}>

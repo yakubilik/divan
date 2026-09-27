@@ -69,7 +69,10 @@ export interface UpdateStatus {
 }
 
 export interface ProviderCatalog {
-  models: { id: string; label: string; hint: string }[];
+  /** `efforts` is per model — they differ, and a model with an empty list takes
+   *  no effort setting at all. Absent from a daemon older than this app, which
+   *  is why the provider-level list below is still read. */
+  models: { id: string; label: string; hint: string; model_id?: string; efforts?: string[] }[];
   efforts: string[];
   perm_modes: string[];
 }
@@ -207,6 +210,11 @@ export interface PoolAccount {
  *  it is kept here only for apps written before the list existed. */
 export interface LimitsEvent extends LimitWindow {
   windows?: LimitWindow[];
+  /** Whether `windows` is the whole plan or only the window the tool singled
+   *  out. A one-window list cannot be told from a complete list of one, so the
+   *  daemon says which it is — and a window missing from a complete report is
+   *  a window the plan no longer has, not one to keep showing. */
+  windows_complete?: boolean;
 }
 
 export interface CliAccount {

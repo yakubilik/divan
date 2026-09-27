@@ -1,0 +1,7 @@
+{
+  "name": "call",
+  "version": "1.0.0",
+  "description": "An incoming call from the agent: CallKit, VoIP pushes, and speech in both directions (iOS).",
+  "main": "index.ts",
+  "private": true
+}

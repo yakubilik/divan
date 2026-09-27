@@ -12,6 +12,7 @@ import { Button, Icon, Text } from '../src/components/ui';
 import { DialogHost, MenuHost } from '../src/components/overlay';
 import { getOpenChat, registerForPush } from '../src/push';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { prepareForCalls, startIncomingCalls } from '../src/incoming-call';
 
 /** Presented over the page by the app's own sheet (see components/sheet). */
 const SHEET = { presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } } as const;
@@ -34,6 +35,10 @@ export default function RootLayout() {
     void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     void init();
     void registerForPush().then((t) => t && setPushToken(t));
+    // Nothing registers for VoIP pushes until something loads the module, so
+    // this belongs at the root: a phone nobody imported cannot be rung.
+    startIncomingCalls();
+    void prepareForCalls();
     const sub = AppState.addEventListener('change', (st) => {
       if (st === 'active') {
         client.poke();
@@ -77,6 +82,9 @@ export default function RootLayout() {
         <Stack.Screen name="chat-settings" options={SHEET} />
         <Stack.Screen name="model-sheet" options={SHEET} />
         <Stack.Screen name="host-sheet" options={SHEET} />
+        {/* A call is a mode, not a place: it comes up over whatever you were
+            reading and leaves it exactly where it was. */}
+        <Stack.Screen name="call" options={{ presentation: 'modal' }} />
         <Stack.Screen name="settings" />
         {/* The computer's own screen. Full bleed and no animation: it is a
             window onto something already happening, not a page. */}

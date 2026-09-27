@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStore, useT } from '../src/store';
+import { DEFAULT_PERM, useStore, useT } from '../src/store';
 import { useColors } from '../src/theme';
 import { Button, Card, Icon, Label, Segmented, Text, TextInput, Toggle } from '../src/components/ui';
 import { alert, measure, openMenu, prompt } from '../src/components/overlay';
@@ -39,7 +39,7 @@ function Body() {
   const [title, setTitle] = useState(chat?.title ?? '');
   const [model, setModel] = useState(chat?.model ?? '');
   const [effort, setEffort] = useState<string | null>(chat?.effort ?? null);
-  const [perm, setPerm] = useState(chat?.perm_mode ?? 'ask');
+  const [perm, setPerm] = useState(chat?.perm_mode ?? DEFAULT_PERM);
   const [cwd, setCwd] = useState<string | null>(chat?.cwd ?? null);
   const [groupId, setGroupId] = useState<string | null>(chat?.group_id ?? null);
   const [maxTurns, setMaxTurns] = useState(chat?.max_turns ? String(chat.max_turns) : '');

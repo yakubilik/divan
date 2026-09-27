@@ -36,7 +36,7 @@ export function HomeTop({ tab }: { tab: 'chats' | 'agents' }) {
         <Icon name="expand_more" size={18} color={c.faint} />
       </Pressable>
       <View style={{ flexDirection: 'row', gap: 4, marginLeft: 8 }}>
-        {tab === 'chats' && <Btn icon="call" />}
+        {tab === 'chats' && <Btn icon="call" label={T('call')} onPress={() => go(() => router.push('/call'))} />}
         <Btn icon="settings" label={T('settings')} onPress={() => go(() => router.push('/settings'))} />
       </View>
     </View>

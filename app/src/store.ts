@@ -10,6 +10,7 @@ const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
 const DEFAULTS_KEY = 'rac.defaults';
 const PREFS_KEY = 'rac.prefs';
+const PERM_MIGRATED_KEY = 'rac.defaults.perm.bypass';
 
 export interface LiveText { segment: number; text: string; final?: boolean }
 export interface TurnProgress { output_tokens: number; open_tools: number }
@@ -20,6 +21,10 @@ export interface StoredHost extends HostConfig { id: string }
 export type ChatView = 'grouped' | 'flat';
 export interface Prefs {
   faceIdLaunch: boolean; faceIdBypass: boolean; chatView: ChatView;
+  // Which voice reads the concierge's answers, per language. Chosen on the call
+  // screen; empty means "whatever the phone has that sounds best".
+  /** Keyed by language tag, e.g. 'tr-TR'. */
+  voiceIds?: Record<string, string>;
 }
 export interface DeviceInfo { id: string; name: string; push_approval: boolean; push_done: boolean; has_push_token: boolean }
 /** `path` is the file the message names — what a link opens, and what the text
@@ -106,6 +111,9 @@ interface State {
   refreshHost: () => Promise<void>;
   // Where the active computer stands against origin/main.
   updateStatus: UpdateStatus | null;
+  /** Set while the computer is deliberately stopping; cleared once it answers
+   *  again. `null` is the normal state, including after a cancelled restart. */
+  restarting: { state: string; pending?: unknown[]; forced?: boolean } | null;
   checkUpdate: (refresh?: boolean) => Promise<void>;
   applyUpdate: () => Promise<{ ok: boolean; error?: string }>;
   setShowArchived: (v: boolean) => void;
@@ -136,7 +144,36 @@ interface State {
   deleteGroup: (id: string) => Promise<void>;
 }
 
-const DEFAULTS: Defaults = { provider: 'claude', model: 'opus', effort: 'high', perm_mode: 'ask', cwd: null };
+// `bypass` is the default a new chat opens in: the agent runs without asking.
+// Both CLIs have a mode by that name, so it survives switching provider — the
+// `perm_modes[0]` fallbacks elsewhere only fire for modes one provider lacks.
+export const DEFAULT_PERM = 'bypass';
+const DEFAULTS: Defaults = { provider: 'claude', model: 'opus', effort: 'high', perm_mode: DEFAULT_PERM, cwd: null };
+
+/** The stored per-host defaults, raised to `bypass` once.
+ *
+ *  Changing the constant above is not enough on a phone that has been used:
+ *  `setDefaults` writes the mode back on every new chat, so an install that
+ *  has ever created one carries its own copy and would never see the new
+ *  default. Done once, behind a marker, and per provider too — the
+ *  per-provider block is what model-sheet restores from when the provider
+ *  changes, so leaving it behind would put the old mode back on the next
+ *  switch.
+ */
+async function raiseStoredPerm(byHost: DefaultsByHost): Promise<DefaultsByHost> {
+  if (await SecureStore.getItemAsync(PERM_MIGRATED_KEY).catch(() => null)) return byHost;
+  const out: DefaultsByHost = {};
+  for (const [id, d] of Object.entries(byHost)) {
+    const byProvider = Object.fromEntries(Object.entries(d.byProvider ?? {})
+      .map(([p, v]) => [p, { ...v!, perm_mode: DEFAULT_PERM }]));
+    out[id] = { ...d, perm_mode: DEFAULT_PERM, ...(d.byProvider ? { byProvider } : {}) };
+  }
+  await SecureStore.setItemAsync(PERM_MIGRATED_KEY, '1').catch(() => {});
+  if (Object.keys(out).length) {
+    await SecureStore.setItemAsync(DEFAULTS_KEY, JSON.stringify(out)).catch(() => {});
+  }
+  return out;
+}
 
 /** Defaults are about one computer — its folders, its accounts, the CLIs it has
  *  installed — so they are kept per host. Shared, the other computer's last
@@ -167,7 +204,7 @@ function onThisHost(cwd: string | null | undefined, known: string[]): boolean {
 export function agentAccountOf(d: Defaults): string | null {
   return d.agentAccountId !== undefined ? d.agentAccountId : (d.byProvider?.claude?.account_id ?? null);
 }
-const PREFS: Prefs = { faceIdLaunch: false, faceIdBypass: true, chatView: 'grouped' };
+const PREFS: Prefs = { faceIdLaunch: false, faceIdBypass: true, chatView: 'grouped', voiceIds: {} };
 
 async function loadJSON<T>(key: string, fallback: T): Promise<T> {
   try {
@@ -232,7 +269,9 @@ export const useStore = create<State>((set, get) => {
 
   unsubs.push(client.onStatus((conn) => {
     set({ conn });
-    if (conn === 'online') { void afterConnect(); return; }
+    // Answering again is the end of the restart, whatever the last event said.
+    // The daemon that announced it is not the one on the other end now.
+    if (conn === 'online') { set({ restarting: null }); void afterConnect(); return; }
     // The new computer answered with a refusal or is unreachable: keeping the
     // previous one's chats on screen would be a lie, so end the switch empty.
     if (get().switching && (conn === 'offline' || conn === 'unauthorized')) settleSwitch({ chats: {}, groups: [] });
@@ -283,6 +322,17 @@ export const useStore = create<State>((set, get) => {
     const cid = ev.chat_id;
     switch (ev.event) {
       case 'host.status': set({ hostInfo: ev.data }); return;
+      // The computer is stopping on purpose. Worth knowing, because a socket
+      // that closes for a reason is a gap and a socket that closes for no
+      // reason is a fault, and they deserve different faces. The poke is what
+      // makes it a blink: the reconnect backoff would otherwise sit out the
+      // first second of a restart that is already over.
+      case 'daemon.restarting': {
+        const st = ev.data?.state;
+        set({ restarting: st === 'cancelled' ? null : ev.data });
+        if (st === 'stopping') setTimeout(() => client.poke(), 1500);
+        return;
+      }
       // What is left of the plan, straight from the tool. Kept per account so a
       // second subscription's numbers never show up under the first.
       case 'limits': {
@@ -292,13 +342,20 @@ export const useStore = create<State>((set, get) => {
         // `windows` is the whole plan; the fields beside it describe only the
         // window the tool singled out. Take the list when it is there, and fall
         // back to the single window for a computer that has not been updated.
-        const { windows, ...headline } = (ev.data ?? {}) as LimitsEvent;
+        const { windows, windows_complete: whole, ...headline } = (ev.data ?? {}) as LimitsEvent;
+        const complete = !!whole && !!windows?.length;
         const incoming: LimitWindow[] = (windows?.length ? windows : [headline as LimitWindow])
           .filter((w) => w && w.window)
           .map((w) => ({ ...w, at }));
         if (incoming.length === 0) return;
+        // A complete report replaces; anything else adds. Merging a complete
+        // one left windows the plan had stopped having pinned at the last
+        // number the tool ever gave them — a spent overage allowance drew a
+        // full ring for as long as the app stayed open.
         const fresh = new Set(incoming.map((w) => w.window));
-        const rest = (get().limits[key] ?? []).filter((w) => !fresh.has(w.window));
+        const rest = complete
+          ? []
+          : (get().limits[key] ?? []).filter((w) => !fresh.has(w.window));
         set({ limits: { ...get().limits, [key]: [...rest, ...incoming] } });
         return;
       }
@@ -384,7 +441,7 @@ export const useStore = create<State>((set, get) => {
     return {
       chats: {}, groups: [], events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
       chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, accounts: [],
-      agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null,
+      agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
     };
   };
 
@@ -400,7 +457,7 @@ export const useStore = create<State>((set, get) => {
       // Hold on to `chats`/`groups` — they are what is on screen — and drop
       // everything else now, since no screen draws it without a live computer.
       set({ hostInfo: null, catalog: null, device: null, projects: [], accounts: [],
-            agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null,
+            agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
             chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, switching: true });
     } else {
       set({ ...perHost(), switching: false });
@@ -426,7 +483,7 @@ export const useStore = create<State>((set, get) => {
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
     chats: {}, groups: [], showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
-    agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null,
+    agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
     chatsLoaded: false, accountsLoaded: false, projectsLoaded: false,
 
     init: async () => {
@@ -447,9 +504,9 @@ export const useStore = create<State>((set, get) => {
       // Builds before per-host defaults kept one flat blob: it was whatever the
       // last computer used, so it becomes that computer's entry and no other's.
       const stored = await loadJSON<any>(DEFAULTS_KEY, {});
-      const byHost: DefaultsByHost = typeof stored?.provider === 'string'
+      const byHost: DefaultsByHost = await raiseStoredPerm(typeof stored?.provider === 'string'
         ? (active ? { [active]: stored as Defaults } : {})
-        : (stored as DefaultsByHost);
+        : (stored as DefaultsByHost));
       const prefs = await loadJSON(PREFS_KEY, PREFS);
       const host = hosts.find((h) => h.id === active) ?? null;
       set({ hosts, activeHostId: active, host, defaultsByHost: byHost,
@@ -813,14 +870,7 @@ export const useStore = create<State>((set, get) => {
 
 function guessMime(name: string) {
   const ext = name.split('.').pop()?.toLowerCase();
-  return ({
-    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic',
-    mp4: 'video/mp4', mov: 'video/quicktime', m4a: 'audio/mp4', mp3: 'audio/mpeg', wav: 'audio/wav',
-    pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json', zip: 'application/zip',
-    doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  } as Record<string, string>)[ext ?? ''] || 'application/octet-stream';
+  return ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', pdf: 'application/pdf' } as Record<string, string>)[ext ?? ''] || 'application/octet-stream';
 }
 
 export interface TimelineItem {
@@ -901,8 +951,7 @@ function groupTools(items: TimelineItem[]): TimelineItem[] {
   return out;
 }
 
-/** Every screen's handle on the string table. A hook rather than a bare import
- *  so that the day a second language exists, nothing but this file changes. */
+/** Translation hook: re-renders when the language pref changes. */
 export function useT() {
   return useCallback((key: Key, params?: Record<string, string | number>) => tt(key, params), []);
 }

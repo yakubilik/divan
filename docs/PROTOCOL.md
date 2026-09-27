@@ -44,7 +44,7 @@ other device watching it.
 | `device.revoke_self` | – | revokes this device's token |
 | `group.list` / `group.create {name}` / `group.rename {group_id,name}` / `group.delete {group_id}` | | |
 | `chat.list` | `{include_archived?}` | `{chats, groups}` |
-| `chat.create` | `{provider, model?, effort?, perm_mode?, cwd?, group_id?, title?, max_turns?, max_budget_usd?, pool_pinned?}` | chat |
+| `chat.create` | `{provider, model?, effort?, perm_mode?, cwd?, group_id?, title?, max_turns?, max_budget_usd?, pool_pinned?}` | chat. Omitted fields take the first thing the tool offers — except `perm_mode` on a chat with an `agent_id`, which defaults to `bypass`: an agent is work handed over, and a delegated turn that stops on the first prompt has been stopped rather than delegated. Sending `perm_mode` still decides it; this is only what happens when nobody does |
 | `chat.get` | `{chat_id, since_seq?, limit?}` | `{chat, events, pending_approvals, busy, more, truncated}` — `events` are shaped like the envelope's events (`{event, chat_id, seq, data, ts}`). At most `limit` (500) at a time, and **which end** depends on the ask: `since_seq: 0` is a cold open and is answered from the *tail*, with `truncated: true` when there is older history above it; a `since_seq` is a catch-up and is answered forward, with `more: true` while events remain. A client that stops on `more` leaves a hole in its own timeline — the live feed only ever appends — so it asks again from the last seq it got until `more` is false |
 | `chat.update` | `{chat_id, ...fields}` | chat (changing model/perm/cwd rebuilds the provider; the resume id survives) |
 | `chat.delete` | `{chat_id}` | – |
@@ -54,6 +54,44 @@ other device watching it.
 | `limits.get` | – | `{accounts: {<account_id>: [window, …]}}` — the last word on every plan, as the tool reported it |
 | `pool.get` | `{provider?}` | `{settings, accounts}` — see *The account pool* |
 | `pool.set` | any of `{enabled, threshold, thresholds, use_overage, overage_by_account, reserve, order, max_hops}` | `{settings, accounts}` — only the keys sent are changed |
+| `update.status` | `{refresh?}` | `{repo, auto, behind, ahead, busy, error, checked_at, local, remote, web, release, latest, last_update, blockers}` — where this computer stands against `origin/main`. `refresh` costs a `git fetch`, so clients only send it when someone is looking. `local` and `remote` are commits, not version numbers: the package version is a constant and cannot tell two computers apart. `web` is the bundle the browser is being served (below). `blockers` is why an update cannot run right now, in words a phone can show — `already up to date`, `uncommitted changes`, `unpushed commits`, `a turn is running` |
+| `daemon.status` | – | `{started_at, uptime_s, restarts, pending, draining, last_restart, supervisor}` — what a restart would cost right now. `pending` is one row per chat holding work a stop would destroy: `{chat_id, busy, queued}` |
+| `daemon.restart` | `{reason?, force?, timeout_s?}` | `{ok, draining, pending, deadline, reason, supervisor}` — stop, so the supervisor starts us again on whatever is on disk. **Drains first:** new `chat.send`s are refused with `restarting`, turns in flight are allowed to finish, and only then does the process exit. Each chat's CLI is a child of this process, so killing it kills every turn mid-sentence — that is what the draining is for. When the deadline passes the restart is **abandoned**, not forced: `daemon.restarting {state: "cancelled"}` and the daemon carries on. `force` waives the waiting and only that. Refused with `no_supervisor` where nothing would bring the process back, unless `force` — doubt is not refusal, a platform this daemon cannot read goes ahead |
+| `daemon.restart.cancel` | – | `{ok}` — changed your mind while it was still waiting |
+| `update.apply` | `{force?}` | `{ok, error, pulled, web, restarting, revision}` — fast-forward onto `origin/main` **and** rebuild the panel; either half can be the only work there is. Never anything but a fast-forward, and never on a checkout with uncommitted or unpushed work — `force` waives only *waiting* (being behind, being idle), never somebody's work. A pull ends by asking the supervisor to restart the daemon, so the answer arrives before the socket drops and there is nothing to re-read afterwards; a panel-only rebuild restarts nothing |
+
+`release` is what this computer calls itself, derived from tags rather than
+declared: `{version, tag, distance, dirty, commit}`. `version` is `v0.2.0` on a
+release and `v0.2.0+7` seven commits past one — a machine following `main`
+between releases says so instead of rounding down to the last tag. `null`
+before the repository's first tag, and on a copied install with no git.
+`latest` is the newest tag reachable from `origin/main`, so one fetch answers
+both "which commit" and "which version".
+
+`last_update` is the last time this computer actually moved:
+`{at, from, to, version, subject, pulled, web, error}`, read off disk because
+the process that did it has since been restarted. `null` on a computer that has
+never updated itself.
+
+`host.info` carries three more that describe the process rather than the code:
+`started_at` (when this daemon came up), `restarts` (how many times it ever
+has — a restart is the one event a daemon cannot watch itself have, so it is
+counted on the way back in), and `last_update`.
+
+`web`, on `update.status` and inside `host.info`'s `update`:
+
+| field | meaning |
+|---|---|
+| `built` | a panel exists in `daemon/remote_ai_chat/webui/` at all |
+| `stale` | **three-valued.** `false` — built from the commit that is checked out, or from one after which `web/` never moved. `true` — `web/` has moved since. `null` — the bundle carries no stamp and cannot be placed, which is not the same as current and is treated as work to do |
+| `sha` / `built_at` | the commit it was built from, and when |
+| `npm` | whether this computer could rebuild it. Without Node it cannot, and `update.apply` will not pretend otherwise |
+| `reason` | why it is stale or unplaceable, in one line |
+
+The panel is build output and is not in git, while the daemon is an editable
+install and therefore updates with a pull. Left alone they come apart, invisibly,
+on exactly the machine nobody sits in front of — hence the stamp, and hence one
+button for both.
 
 ## Events
 
@@ -72,11 +110,14 @@ other device watching it.
 | `approval.request` | ✓ | `{request_id, tool, input, preview, danger, reason}` |
 | `approval.resolved` | ✓ | `{request_id, decision}` |
 | `turn.done` | ✓ | `{cost_usd, usage, duration_ms, num_turns, stop_reason}` |
-| `turn.error` | ✓ | `{message}` |
-| `limits` | – | `{window, status, utilization, resets_at, overage_status, overage_resets_at, overage_disabled_reason, is_using_overage, windows: [...]}` — what is left of the plan. Only Claude sends it, only while a turn is running, and the account it describes is the one that chat is on. `windows` is every window; the fields beside it describe only the one the tool singled out |
+| `turn.error` | ✓ | `{message, code?}` — `code: "daemon_stopped"` is written on the way *back up*, for a turn that was running when the process ended. Nothing else could write it: `text.delta` is not durable and the answer only lands as `message.assistant` once it is whole, so without this line an interrupted turn is a question with silence after it and a chat that reads as idle |
+| `limits` | – | `{window, status, utilization, resets_at, overage_status, overage_resets_at, overage_disabled_reason, is_using_overage, windows: [...], windows_complete}` — what is left of the plan. Only Claude sends it, only while a turn is running, and the account it describes is the one that chat is on. `windows` is every window; the fields beside it describe only the one the tool singled out. **`windows_complete` says whether `windows` is the whole plan.** It matters because a one-window list cannot be told from a complete list of one: where it is true, a window missing from the list is a window the plan no longer has and the stored copy must be dropped — an overage allowance that was spent stops being reported at all, and a client that merges instead of replacing draws a full ring from it for days. Where it is false or absent, the report adds to what is known and says nothing about what it omits |
 | `account.switched` | ✓ | `{from, to, reason, provider}` — the pool moved this chat to another sign-in |
 | `pool.exhausted` | ✓ | `{account_id, window, until}` — the plan is spent and there was nowhere to move to |
 | `pool.updated` | – | `{settings, accounts}` — someone changed the pool from another device |
+| `update.available` | – | the whole of `update.status` — the daemon holds the fetch loop and says so when it finds this computer behind, or its panel stale |
+| `daemon.restarting` | – | `{state, reason, pending, deadline, forced}` — `state` is `draining` (waiting, and `pending` says for what; re-sent whenever that count moves), `stopping` (the sockets are about to close; reconnect rather than treating it as a dropped connection) or `cancelled` (it is not happening; sends are accepted again) |
+| `update.applied` | – | `{revision, web, release, last_update, error}` — an update landed, this one's or somebody else's. `error` is set when the daemon updated but the panel did not rebuild |
 
 Chat `status`: `idle | running | awaiting_approval`.
 

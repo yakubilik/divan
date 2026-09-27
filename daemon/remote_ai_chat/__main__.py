@@ -71,12 +71,19 @@ def cmd_serve(args: argparse.Namespace) -> None:
             # `ping` request of its own every 15s (see app/src/ws.ts), which is a
             # liveness check we can actually trust: it proves the app is on the
             # other end and this loop is still serving it.
+            # `timeout_graceful_shutdown` because every client here holds a
+            # long-lived websocket, and uvicorn's default is to wait for open
+            # connections forever. The draining already happened by the time
+            # this fires — whatever is still attached is a socket, not work, and
+            # a restart must not be hostage to one that will not close.
             uc = uvicorn.Config(srv.app, host=host, port=cfg.port, log_level="warning",
-                                ws_ping_interval=None, ws_ping_timeout=None)
+                                ws_ping_interval=None, ws_ping_timeout=None,
+                                timeout_graceful_shutdown=10)
             servers.append(uvicorn.Server(uc))
         print(f"remote-ai-chat {cfg.host_name} dinliyor: " + ", ".join(f"ws://{h}:{cfg.port}/ws" for h in binds))
         reaper = asyncio.create_task(srv.reaper())
         updater = asyncio.create_task(srv.updater.loop())
+        resumer = asyncio.create_task(srv.resume_interrupted())
 
         async def stopper() -> None:
             """Stand down once an update has been staged.
@@ -98,8 +105,10 @@ def cmd_serve(args: argparse.Namespace) -> None:
         finally:
             reaper.cancel()
             updater.cancel()
+            resumer.cancel()
             stop.cancel()
             await srv.sessions.close_all()
+            await srv.concierge.close()
 
     asyncio.run(main())
 

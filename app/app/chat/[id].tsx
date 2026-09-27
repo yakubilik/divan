@@ -172,6 +172,18 @@ export default function ChatScreen() {
   }, [id]);
 
   const items = useMemo(() => buildTimeline(events || []), [events]);
+  // Every picture in the chat, oldest first: what the gallery pages through
+  // when one of them is tapped (see GalleryProvider).
+  const pictures = useMemo(() => {
+    const out: Attachment[] = [];
+    for (const it of items) {
+      if (it.kind !== 'user' && it.kind !== 'assistant') continue;
+      for (const a of (it.data?.attachments as Attachment[] | undefined) ?? []) {
+        if (a.kind === 'image' || (!a.kind && /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name || a.path || ''))) out.push(a);
+      }
+    }
+    return out;
+  }, [items]);
   const typed = useTypewriter(live?.text ?? '', live ? live.segment : null);
   useEffect(() => {
     if (live?.final && typed.length >= live.text.length) settleLive(id!);
@@ -194,7 +206,7 @@ export default function ChatScreen() {
       if (!items.some((i) => i.kind === 'approval' && !i.decision)) out.push({ key: 'working', kind: 'working', data: { phase } } as any);
     }
     return out.reverse();
-  }, [items, live, typed, busy, thinking, progress, T]);
+  }, [items, live, typed, busy, thinking, progress, turnStart, T]);
 
   // Every picture in the chat, oldest first, for the viewer to page through.
   const images = useMemo(() => {

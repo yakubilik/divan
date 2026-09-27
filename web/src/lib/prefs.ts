@@ -19,6 +19,13 @@ export interface Defaults {
   provider: Provider;
   cwd: string | null;
   byProvider: Partial<Record<Provider, ProviderDefaults>>;
+  /** Which sign-in the Agents screen reads from. Its own setting, because an
+   *  agent lives in one account's folder and that decides which ones exist at
+   *  all — the computer's own folder is usually the emptiest of the lot.
+   *  `undefined` means never chosen; `''` is a real answer, the computer's own.
+   *  Remembered per host, like everything else here: a choice that resets
+   *  every time the screen is opened is not a choice. */
+  agentAccountId?: string;
 }
 
 const KEY = 'rac.defaults';

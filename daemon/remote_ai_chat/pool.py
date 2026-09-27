@@ -318,13 +318,15 @@ class Pool:
                     overage_spent = True
                 continue
 
+            # Measured before the window it describes rolled over: whatever it
+            # said then, the window is open again now. Checked before `worst`
+            # rather than after, because a number this function has already
+            # decided is obsolete has no business being the one it reports.
+            if resets and resets <= now:
+                continue
             if util is not None and (worst is None or util > worst):
                 worst = util
             if not full:
-                continue
-            # Measured before the window it describes rolled over: whatever it
-            # said then, the window is open again now.
-            if resets and resets <= now:
                 continue
             if isinstance(at, (int, float)) and now - at > STALE_AFTER:
                 continue

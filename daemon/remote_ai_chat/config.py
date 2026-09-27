@@ -43,9 +43,16 @@ class Device:
     token_hash: str
     created_at: float
     push_token: str | None = None
+    # A second token, for a second APNs topic. A phone that can take a banner
+    # cannot necessarily take a call: this one only exists on an iPhone, and
+    # only in a build that carries the call module.
+    voip_token: str | None = None
     last_seen: float | None = None
     push_approval: bool = True
     push_done: bool = True
+    # The phone's UI language, sent at pairing and on every reconnect. Push
+    # text is written in it; a device from before this field spoke English.
+    lang: str = "en"
 
 
 def _device(did: str, d: dict) -> "Device":
@@ -86,6 +93,16 @@ class Config:
     # written: a checkout with uncommitted work is never touched (see updater).
     auto_update: bool = True
     update_interval_s: int = 900
+    # Calling the phone. Only the pointers live here — the key itself is a file
+    # under CONFIG_DIR, which denied_paths already keeps chats out of. Empty
+    # until somebody configures it, and a daemon without it simply cannot call.
+    apns_key_path: str = str(CONFIG_DIR / "apns")
+    apns_key_id: str = ""
+    apns_team_id: str = ""
+    apns_bundle_id: str = ""
+    # A development build's device tokens only exist in Apple's sandbox, and a
+    # production push to one comes back BadDeviceToken.
+    apns_sandbox: bool = False
     devices: dict[str, Device] = field(default_factory=dict)
     accounts: dict[str, dict] = field(default_factory=dict)   # id -> stored fields
     # Several sign-ins of one tool, driven as one: see pool.Settings. Off until
@@ -123,7 +140,17 @@ class Config:
             "denied_paths": self.denied_paths,
             "idle_disconnect_s": self.idle_disconnect_s,
             "approval_timeout_s": self.approval_timeout_s,
+            # Written back, not just read: every pairing calls save(), so a
+            # setting left out here is one somebody turns off by hand and finds
+            # back on the next time they add a device.
+            "auto_update": self.auto_update,
             "remote_control": self.remote_control,
+            "update_interval_s": self.update_interval_s,
+            "apns_key_path": self.apns_key_path,
+            "apns_key_id": self.apns_key_id,
+            "apns_team_id": self.apns_team_id,
+            "apns_bundle_id": self.apns_bundle_id,
+            "apns_sandbox": self.apns_sandbox,
             "devices": {
                 d.id: {k: v for k, v in d.__dict__.items() if k != "id" and v is not None}
                 for d in self.devices.values()

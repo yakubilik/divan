@@ -78,6 +78,21 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
  *  Only the rules that actually render text are replaced; everything else stays
  *  on the library's own defaults. */
 const rules = {
+  /** The library wraps every run of plain text in a `<Text>` of its own. Inside
+   *  a `selectable` paragraph those are separate native text nodes, and iOS
+   *  rounds a selection up to the whole node — so dragging out one sentence, or
+   *  one path, took the entire paragraph instead.
+   *
+   *  A run with nothing inherited is returned as a bare string, which leaves the
+   *  paragraph holding flat text that can be dragged through. Bold, italic and
+   *  links keep their own wrappers, so nothing loses its styling; a run that
+   *  *does* carry inherited style — a heading, whose block rule is a `View` and
+   *  passes its font down rather than applying it — keeps the `<Text>`, because
+   *  dropping it there would drop the heading's type with it. */
+  text: (node: any, _children: any, _parent: any, styles: any, inherited: any = {}) =>
+    (inherited && Object.keys(inherited).length
+      ? <Text key={node.key} style={[inherited, styles.text]}>{node.content}</Text>
+      : node.content),
   textgroup: (node: any, children: any, _parent: any, styles: any) => (
     <Text key={node.key} selectable style={styles.textgroup}>{children}</Text>
   ),

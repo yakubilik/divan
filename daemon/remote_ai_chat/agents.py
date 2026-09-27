@@ -5,12 +5,16 @@ read: the body is the agent's own prompt and is none of the app's business.
 """
 from __future__ import annotations
 
+import logging
 import re
+import time
 from pathlib import Path
 
 from .accounts import ACCOUNTS_DIR, DEFAULT_ID
 from .config import CONFIG_DIR
 from .errors import Err
+
+log = logging.getLogger("rac.agents")
 
 # Where the CLI keeps them, in the order the CLI itself prefers: a project's own
 # agents win over the ones shared across every project.
@@ -175,14 +179,28 @@ _TREE_TTL = 24 * 3600.0
 MAX_AGENT_BYTES = 200_000
 
 
-def _get(url: str, timeout: int = 25, cap: int = MAX_AGENT_BYTES + 1) -> bytes:
+def _get(url: str, timeout: int = 25, cap: int = MAX_AGENT_BYTES + 1,
+         tries: int = 3) -> bytes:
+    """One file, fetched with a little patience.
+
+    A bundle is forty-odd files fetched one after another, and the caller of a
+    failed fetch has no way to ask again later. A single blip used to cost a
+    skill for good; a rate-limited minute cost thirty of them.
+    """
     import urllib.request
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "remote-ai-chat",
     })
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read(cap)
+    for attempt in range(1, tries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read(cap)
+        except Exception:
+            if attempt == tries:
+                raise
+            time.sleep(1.5 * attempt)
+    raise AssertionError("unreachable")
 
 
 CACHE_DIR = CONFIG_DIR / "agent-store"
@@ -336,11 +354,22 @@ Skills available to you: {SKILLS}
 PROMPTS: dict[str, str] = {"hermes": HERMES_AGENT}
 
 
-def bundle_file(src: dict, names: list[str]) -> str:
-    """The agent definition written for a skill pack, header and all."""
+def bundle_file(src: dict, names: list[str],
+                skills_root: Path | None = None) -> str:
+    """The agent definition written for a skill pack, header and all.
+
+    The list is what the agent can actually reach, not what this install
+    happened to fetch: the account also carries a link to every skill the
+    machine shares, and one added after the install belongs in the list too.
+    Written from the install alone, the line went stale the day it was made.
+    """
+    listed = set(names)
+    if skills_root and skills_root.is_dir():
+        listed |= {d.name for d in skills_root.iterdir()
+                   if d.is_dir() and (d / "SKILL.md").is_file()}
     body = (PROMPTS.get(src["id"], BUNDLE_AGENT)
             .replace("{NAME}", src["label"])
-            .replace("{SKILLS}", ", ".join(sorted(names))))
+            .replace("{SKILLS}", ", ".join(sorted(listed))))
     return (f"---\nname: {src['id']}\n"
             f"description: {src.get('about') or src['label']}\n"
             f"glyph: {src.get('glyph', '🪽')}\ncolor: {src.get('color', '#7C6BD8')}\n---\n\n") + body
@@ -383,6 +412,7 @@ def install_bundle(src: dict, account_home: str | None) -> dict:
     paths = [p for p in _tree(src["repo"], src.get("branch", "main"))
              if any(part in p.split("/", 1)[-1] for part in src.get("include", []))]
     names: list[str] = []
+    missing: list[str] = []
     for p in paths:
         inside = p.split("/", 1)[1]
         name = inside.split("/")[1] if inside.count("/") >= 1 else Path(inside).stem
@@ -390,8 +420,10 @@ def install_bundle(src: dict, account_home: str | None) -> dict:
         try:
             blob = _get(raw)
         except Exception:
+            missing.append(name)
             continue
         if len(blob) > MAX_AGENT_BYTES:
+            missing.append(name)
             continue
         d = skills_root / re.sub(r"[^A-Za-z0-9_-]", "-", name)[:60]
         d.mkdir(parents=True, exist_ok=True)
@@ -400,8 +432,16 @@ def install_bundle(src: dict, account_home: str | None) -> dict:
     if not names:
         raise Err("agent_fetch_failed", "could not download it")
     target = _own_agents_dir(account_home) / f"{src['id']}.md"
-    target.write_text(bundle_file(src, names), encoding="utf-8")
-    return {"path": str(target), "name": src["id"], "source": src["repo"], "skills": len(names)}
+    target.write_text(bundle_file(src, names, skills_root), encoding="utf-8")
+    if missing:
+        # Half an agent used to pass for a whole one. Nothing said which skills
+        # had gone, and the one that carries the agent's character is as likely
+        # to go as any other: Hermes arrived without hermes-persona once and
+        # simply felt like no one in particular.
+        log.warning("agent %s: %d of %d skills did not download: %s",
+                    src["id"], len(missing), len(paths), ", ".join(sorted(missing)))
+    return {"path": str(target), "name": src["id"], "source": src["repo"],
+            "skills": len(names), "missing": sorted(missing)}
 
 
 def install(store_id: str, account_home: str | None) -> dict:

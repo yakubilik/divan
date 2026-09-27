@@ -58,6 +58,51 @@ def kind_of(path: str | Path) -> str:
     return KINDS.get(Path(path).suffix.lower(), "file")
 
 
+# What the first bytes of a file say it is, when its name will not say. A
+# screenshot dragged in from another app arrives with the extension stripped or
+# mangled, and deciding by name alone filed it as "file" — so the composer
+# showed a grey chip with a broken name instead of the picture.
+_MAGIC: list[tuple[bytes, str, str]] = [
+    (b"\x89PNG\r\n\x1a\n", "image", ".png"),
+    (b"\xff\xd8\xff", "image", ".jpg"),
+    (b"GIF87a", "image", ".gif"),
+    (b"GIF89a", "image", ".gif"),
+    (b"ID3", "audio", ".mp3"),
+    (b"OggS", "audio", ".ogg"),
+    (b"caff", "audio", ".caf"),
+]
+# ISO base media: the brand at bytes 8..12 separates a HEIF picture from a
+# video from an audio-only track, all of which carry "ftyp" at byte 4.
+_FTYP = {
+    "heic": ("image", ".heic"), "heix": ("image", ".heic"), "heim": ("image", ".heic"),
+    "heis": ("image", ".heic"), "hevc": ("image", ".heic"), "hevm": ("image", ".heic"),
+    "hevs": ("image", ".heic"), "mif1": ("image", ".heic"), "msf1": ("image", ".heic"),
+    "avif": ("image", ".avif"),
+    "M4A ": ("audio", ".m4a"), "M4B ": ("audio", ".m4a"),
+    "qt  ": ("video", ".mov"), "M4V ": ("video", ".m4v"),
+}
+
+
+def sniff(data: bytes) -> tuple[str, str] | None:
+    """(kind, extension) read off the content, or None when it is not media."""
+    if len(data) < 12:
+        return None
+    for magic, kind, ext in _MAGIC:
+        if data.startswith(magic):
+            return kind, ext
+    if data[:4] == b"RIFF":
+        if data[8:12] == b"WEBP":
+            return "image", ".webp"
+        if data[8:12] == b"WAVE":
+            return "audio", ".wav"
+    if data[4:8] == b"ftyp":
+        brand = data[8:12].decode("ascii", "replace")
+        if brand in _FTYP:
+            return _FTYP[brand]
+        return "video", ".mp4"          # isom, mp42 and the rest of the family
+    return None
+
+
 def _candidates(text: str) -> list[str]:
     out: list[str] = []
     for m in _REF.finditer(text):

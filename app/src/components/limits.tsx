@@ -88,6 +88,12 @@ export function LimitsRing({ chatId, accountId, provider, label, sub, dot, onOpe
     () => (all[key] ?? []).filter((w) => typeof w.utilization === 'number')
       .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0)),
     [all, key]);
+  // Every window of one report is measured at the same instant, so a window
+  // lagging the newest reading is one the tool has stopped reporting. A daemon
+  // new enough to know that has already dropped it; against an older one the
+  // row stays, and this is what stops it from reading as current.
+  const newest = useMemo(
+    () => windows.reduce((n, w) => Math.max(n, w.at ?? 0), 0), [windows]);
   const reports = !provider || provider === 'claude';
 
   const top: LimitWindow | undefined = windows[0];
@@ -134,7 +140,7 @@ export function LimitsRing({ chatId, accountId, provider, label, sub, dot, onOpe
               {!!measured && <Text mono style={{ fontSize: 11, color: c.faint }}>{ageLabel(measured, T)}</Text>}
             </View>
             {ordered.length === 0 && <Text style={{ fontSize: 13, color: c.muted, lineHeight: 19 }}>{T('limNone')}</Text>}
-            {ordered.map((w) => {
+            {ordered.map((w, i) => {
               const p = Math.max(0, Math.min(1, w.utilization ?? 0));
               const t = tone(p, c);
               return (
@@ -146,7 +152,17 @@ export function LimitsRing({ chatId, accountId, provider, label, sub, dot, onOpe
                   <View style={{ height: 5, borderRadius: 3, backgroundColor: c.lineStrong }}>
                     <View style={{ width: `${p * 100}%`, height: '100%', borderRadius: 3, backgroundColor: t }} />
                   </View>
-                  {!!w.resets_at && <Text style={{ fontSize: 12, color: c.faint }}>{resetLabel(w.resets_at, T)}</Text>}
+                  {(!!w.resets_at || i === 0 || newest - (w.at ?? 0) > 60) && (
+                    <Text style={{ fontSize: 12, color: c.faint }}>
+                      {/* When it resets, and how old the reading is — the second
+                          on the top row, which is the one the ring draws, and on
+                          any row a newer report has stopped mentioning. Those
+                          are the two cases where "when" explains the number. */}
+                      {w.resets_at ? resetLabel(w.resets_at, T) : ''}
+                      {i === 0 || newest - (w.at ?? 0) > 60
+                        ? `${w.resets_at ? ' · ' : ''}${ageLabel(w.at, T)}` : ''}
+                    </Text>
+                  )}
                 </View>
               );
             })}

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStore, useT } from '../src/store';
+import { DEFAULT_PERM, useStore, useT } from '../src/store';
 import { useColors } from '../src/theme';
 import { Icon, Label, Segmented, Text } from '../src/components/ui';
 import { alert } from '../src/components/overlay';
@@ -44,18 +44,20 @@ function Body() {
 
   const initial = editingDefaults
     ? { provider: defaults.provider, model: defaults.model, effort: defaults.effort as string | null, perm: defaults.perm_mode }
-    : { provider: chat?.provider ?? 'claude', model: chat?.model ?? '', effort: chat?.effort ?? null, perm: chat?.perm_mode ?? 'ask' };
+    : { provider: chat?.provider ?? 'claude', model: chat?.model ?? '', effort: chat?.effort ?? null, perm: chat?.perm_mode ?? DEFAULT_PERM };
   const [provider, setProvider] = useState<Provider>(initial.provider);
   const [model, setModel] = useState(initial.model);
   const [effort, setEffort] = useState<string | null>(initial.effort);
   const [perm, setPerm] = useState(initial.perm);
   const cat = catalog?.[provider] ?? null;
   // A model can name its own efforts (Codex does); one that names none has no
-  // effort setting at all, and the control is not offered.
-  const efforts: string[] = (cat?.models.find((m: any) => m.id === model) as any)?.efforts ?? cat?.efforts ?? [];
-  // Every sign-in of this tool is listed; one that is not signed in is shown
-  // but cannot be picked — it cannot run a turn.
-  const accountsFor = accounts.filter((a) => a.provider === provider);
+  // effort setting at all, and the control is not offered. A daemon older than
+  // this app sends no per-model list, so fall back to the provider's rather
+  // than letting the control vanish against an older computer.
+  const efforts: string[] = (cat?.models?.find((m: any) => m.id === model) as any)?.efforts ?? cat?.efforts ?? [];
+  // Every sign-in of this tool is listed, but only one that is actually signed
+  // in can run a turn — and the computer's own login is always offered.
+  const accountsFor = accounts.filter((a) => a.provider === provider && (a.logged_in || a.is_default));
 
   function onAccount(accountId: string | null) {
     if (editingDefaults) {
@@ -89,7 +91,13 @@ function Body() {
     setProvider(pv); setModel(m); setEffort(e); setPerm(pm);
     apply({ provider: pv, model: m, effort: e, perm_mode: pm });
   }
-  const onModel = (m: string) => { setModel(m); apply({ model: m }); };
+  const onModel = (m: string) => {
+    const next: string[] = (cat?.models?.find((x: any) => x.id === m)?.efforts) ?? cat?.efforts ?? [];
+    // Carrying "max" onto a model that has no effort setting is what sent an
+    // unsupported parameter and failed the turn.
+    const e = next.length === 0 ? null : (effort && next.includes(effort) ? effort : (next.includes('high') ? 'high' : next[0]));
+    setModel(m); setEffort(e); apply({ model: m, effort: e });
+  };
   const onEffort = (e: string) => { setEffort(e); apply({ effort: e }); };
   async function onPerm(p: string) {
     if (p === 'bypass' && prefs.faceIdBypass) { const ok = await authenticate(T('bypassAuth')); if (!ok) return; }
@@ -112,7 +120,7 @@ function Body() {
           {efforts.length > 0 && (
             <View style={{ gap: 6 }}>
               <Label>{T('effort')}</Label>
-              <Segmented options={efforts} value={effort} onChange={onEffort} />
+              <Segmented options={efforts} value={effort} onChange={onEffort} labels={{ medium: 'med' }} />
             </View>
           )}
           {/* The default account is chosen on the Accounts screen, where the

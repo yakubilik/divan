@@ -12,7 +12,7 @@ const W = 260;
 const RAIL = 48;
 const ALL_LABEL = 'All computers';
 
-export type View = 'chats' | 'terminal' | 'dashboard' | 'projects' | 'agents' | 'settings';
+export type View = 'chats' | 'terminal' | 'dashboard' | 'projects' | 'agents' | 'admin' | 'settings';
 
 export function ProviderMark({ provider, dim }: { provider: string; dim?: boolean }) {
   const claude = provider === 'claude';
@@ -140,6 +140,7 @@ const NAV: { view: View; label: string; icon: string }[] = [
   { view: 'dashboard', label: 'Panel', icon: P.grid },
   { view: 'projects', label: 'Projects', icon: P.folder },
   { view: 'agents', label: 'Agents', icon: P.agent },
+  { view: 'admin', label: 'Admin', icon: P.download },
   { view: 'settings', label: 'Settings', icon: P.gear },
 ];
 
@@ -307,6 +308,13 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
     projects: slot?.projects.length,
   };
   const anyAwaiting = order.some((k) => hosts[k]?.chats.some((c) => c.status === 'awaiting_approval'));
+  // Straight off host.info, which every computer sends on connect: no extra
+  // round trip to light this up, and it is already true before anyone has
+  // opened the Admin screen.
+  const anyPending = order.some((k) => {
+    const u = hosts[k]?.info?.update;
+    return !!u && (u.behind > 0 || (!!u.web?.npm && u.web?.stale !== false));
+  });
 
   // Collapsed: the chat list is gone but the screens are not. Terminal mode is
   // the reason this exists — a wall of tiles wants the width — and a wall you
@@ -398,7 +406,8 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
           <NavRow
             key={item.view} item={item} active={view === item.view}
             count={counts[item.view]}
-            alert={(item.view === 'dashboard' || item.view === 'terminal') && anyAwaiting}
+            alert={((item.view === 'dashboard' || item.view === 'terminal') && anyAwaiting)
+              || (item.view === 'admin' && anyPending)}
             onClick={() => onView(item.view)}
           />
         ))}

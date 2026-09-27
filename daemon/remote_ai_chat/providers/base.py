@@ -72,6 +72,17 @@ class Provider(ABC):
         """True when the model has said something no turn has claimed yet."""
         return False
 
+    async def steer(self, prompt: str, attachments: list[dict] | None = None) -> bool:
+        """Hand the model a message while a turn is in flight.
+
+        The model reads it at its next step — after the tool it is running
+        returns — and the turn carries on with it, the way typing into a
+        running Claude Code session works. Returns False when the provider
+        cannot do that (no turn in flight, or a tool that only takes input
+        between turns); the session then queues the message instead.
+        """
+        return False
+
     @abstractmethod
     async def interrupt(self) -> None: ...
 

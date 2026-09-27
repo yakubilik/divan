@@ -93,6 +93,11 @@ export function Inspector({ chat, items, busy, liveTokens, accountLabel, account
           <>
             <Label>This session</Label>
             <Card>
+              {/* Fixed when the chat was opened — chat.create is the only place
+                  an agent is chosen — so this row reads rather than edits. */}
+              {chat.agent_id && (
+                <Row label="Agent" value={chat.agent_id.split(':').pop() || chat.agent_id} />
+              )}
               <Row
                 label="Account"
                 value={accountUsage != null
