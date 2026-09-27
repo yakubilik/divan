@@ -3,7 +3,7 @@
     "name": "Remote AI Chat",
     "slug": "remote-ai-chat",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -25,7 +25,12 @@
         },
         "NSFaceIDUsageDescription": "To lock the app, and to confirm before a chat enters bypass mode.",
         "NSPhotoLibraryUsageDescription": "To attach a photo to a chat.",
-        "NSMicrophoneUsageDescription": "To record a voice message for the agent to transcribe."
+        "NSMicrophoneUsageDescription": "To record a voice message for the agent to transcribe.",
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
       }
     },
     "android": {

@@ -12,7 +12,8 @@ import sys
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Response, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from . import __version__
@@ -27,6 +28,7 @@ from .push import send_push
 from .transcribe import transcribe, available as transcribe_available
 from .attachments import KINDS, normalize_image
 from .security import PathPolicy
+from . import screen as screenmod
 from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager
 from .providers.codex import live_models as codex_live_models
 
@@ -148,14 +150,49 @@ class Server:
         self.failed_auth: dict[str, list[float]] = {}
         self.started = time.time()
         self.app = FastAPI(title="remote-ai-chat")
+        self._allow_cross_origin()
         self.app.websocket("/ws")(self.ws_endpoint)
         self.app.get("/health")(lambda: {"ok": True, "version": __version__})
         self.app.post("/upload")(self.upload)
         self.app.get("/files")(self.files)
+        # A frame as a plain image, because a phone draws one with <Image> and
+        # a browser with <img>, and neither can be handed base64 in a websocket
+        # frame sixty times a minute without the garbage collector noticing.
+        self.app.get("/screen.jpg")(self.screen_jpg)
         self._mount_panel()
         self._versions: dict | None = None
         self._codex_models: list[dict] | None = None
         self._codex_models_task: asyncio.Task | None = None
+
+    def _allow_cross_origin(self) -> None:
+        """Let a browser talk to a daemon that did not serve the page.
+
+        The socket never needed this — WebSocket is not subject to the same
+        origin rule — so everything the panel does over `/ws` worked, and the
+        one thing it does over HTTP did not: dragging a file onto a chat sends
+        `Authorization` with the POST, which makes the browser ask permission
+        first, and nothing here answered the question. The answer is "failed to
+        fetch", with no status code and nothing in the daemon's log, because the
+        upload was never sent. That is every drop from `npm run dev`, and every
+        drop onto a chat belonging to a second paired computer — the panel is
+        served by one of them and talks to all of them.
+
+        Any origin may ask, because asking is not the same as being answered:
+        every route is guarded by a device token carried in a header, never by a
+        cookie, so a page that does not have one gets the 401 it deserves.
+        `allow_credentials` stays off for the same reason — there is no ambient
+        credential here to attach, and leaving it on would forbid the wildcard.
+        """
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
+            # A file fetched for a download carries the name to save it under.
+            expose_headers=["Content-Disposition"],
+            max_age=600,
+        )
 
     def _mount_panel(self) -> None:
         """Serve the desktop panel, when it has been built.
@@ -595,6 +632,73 @@ class Server:
             if t:
                 out["transcript"] = t["text"]
         return out
+
+    # ── the screen ─────────────────────────────────────────────────────────
+    async def screen_jpg(self, authorization: str = Header(default=""), token: str = Query(default=""),
+                         w: int = Query(default=screenmod.MAX_W), q: int = Query(default=screenmod.QUALITY)):
+        """One frame. The token rides as a query parameter for the same reason
+        it does on /files: an <img> tag cannot carry a header."""
+        tok = authorization[7:].strip() if authorization.lower().startswith("bearer ") else token
+        if not tok or self.cfg.find_device_by_token(tok) is None:
+            raise HTTPException(status_code=401, detail="unauthorized")
+        try:
+            data, meta = await screenmod.grab(max(320, min(3840, w)), max(20, min(90, q)))
+        except screenmod.ScreenError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        return Response(content=data, media_type="image/jpeg", headers={
+            # Every frame is a new picture at the same URL, so nothing may keep
+            # one. The sizes ride along for a client that wants to lay out
+            # before the image has decoded.
+            "Cache-Control": "no-store, max-age=0",
+            "X-Screen-Width": str(meta["screen_w"]),
+            "X-Screen-Height": str(meta["screen_h"]),
+        })
+
+    async def h_screen_info(self, dev: Device, d: dict) -> dict:
+        """What this machine can do, and whether it is currently allowed to."""
+        return {**screenmod.available(), "enabled": self.cfg.remote_control}
+
+    async def h_screen_enable(self, dev: Device, d: dict) -> dict:
+        """Turn control on or off.
+
+        Announced to everybody, not just the device that asked: a computer that
+        has just become drivable from a phone is something every other paired
+        device deserves to be told, and the one thing this feature must never
+        be is quiet.
+        """
+        on = bool(d.get("enabled"))
+        if on and not screenmod.available()["control"]:
+            raise Err("unsupported", "clicking is not implemented on this platform yet")
+        if on != self.cfg.remote_control:
+            self.cfg.remote_control = on
+            self.cfg.save()
+            log.warning("remote control %s by device %s (%s)",
+                        "ENABLED" if on else "disabled", dev.name, dev.id)
+            await self.broadcast({"seq": None, "chat_id": None, "event": "host.status",
+                                  "data": self.host_info(), "ts": time.time()})
+        return {"enabled": self.cfg.remote_control}
+
+    async def h_screen_frame(self, dev: Device, d: dict) -> dict:
+        """A frame over the socket. The HTTP route above is the one a client
+        should normally draw from; this is here for anything holding a socket
+        and nothing else — a check that capture works, mostly."""
+        try:
+            return await screenmod.grab_b64(int(d.get("width") or screenmod.MAX_W),
+                                            int(d.get("quality") or screenmod.QUALITY))
+        except screenmod.ScreenError as exc:
+            raise Err("screen_failed", str(exc))
+
+    async def h_screen_input(self, dev: Device, d: dict) -> dict:
+        """Move, click, scroll or type. Coordinates are 0..1 across the whole
+        desktop, so no client ever has to learn the resolution."""
+        if not self.cfg.remote_control:
+            raise Err("control_disabled", "remote control is turned off on this computer")
+        try:
+            for action in (d.get("actions") or [d]):
+                await screenmod.act(action)
+        except screenmod.ScreenError as exc:
+            raise Err("screen_failed", str(exc))
+        return {"ok": True}
 
     async def files(self, path: str = Query(...), authorization: str = Header(default=""), token: str = Query(default=""),
                     download: int = Query(default=0)) -> FileResponse:
@@ -1125,6 +1229,10 @@ class Server:
             "versions": self._versions, "roots": self.cfg.allowed_roots,
             "transcription": transcribe_available(),
             "npm": tools.npm_available(),
+            # Every device is told, every time it asks and every time it
+            # changes. A computer that can be driven from a pocket does not get
+            # to be discreet about it.
+            "screen": {**screenmod.available(), "enabled": self.cfg.remote_control},
         }
 
     async def reaper(self) -> None:

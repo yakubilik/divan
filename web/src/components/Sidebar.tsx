@@ -3,12 +3,16 @@ import { C, R } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
 import { ago, uptime } from '../lib/format';
 import { useFleet, type HostSlot } from '../lib/fleet';
+import { setChatDrag } from '../lib/dnd';
 import type { Chat, Group } from '../lib/protocol';
 
 const W = 260;
+/** Collapsed, the sidebar keeps the one thing it cannot give up: the way back
+ *  to the other screens. Anything narrower than this stops being a target. */
+const RAIL = 48;
 const ALL_LABEL = 'All computers';
 
-export type View = 'chats' | 'dashboard' | 'projects' | 'agents' | 'settings';
+export type View = 'chats' | 'terminal' | 'dashboard' | 'projects' | 'agents' | 'settings';
 
 export function ProviderMark({ provider, dim }: { provider: string; dim?: boolean }) {
   const claude = provider === 'claude';
@@ -132,6 +136,7 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
 
 const NAV: { view: View; label: string; icon: string }[] = [
   { view: 'chats', label: 'Chats', icon: 'M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v4l5-4h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z' },
+  { view: 'terminal', label: 'Terminal', icon: P.terminal },
   { view: 'dashboard', label: 'Panel', icon: P.grid },
   { view: 'projects', label: 'Projects', icon: P.folder },
   { view: 'agents', label: 'Agents', icon: P.agent },
@@ -208,12 +213,19 @@ function sections(chats: Chat[], groups: Group[], hostKey: string): Section[] {
   return out;
 }
 
-function ChatRow({ chat, selected, onPick }: { chat: Chat; selected: boolean; onPick: () => void }) {
+function ChatRow({ chat, hostKey, selected, onPick }: {
+  chat: Chat; hostKey: string; selected: boolean; onPick: () => void;
+}) {
   const awaiting = chat.status === 'awaiting_approval';
   const running = chat.status === 'running';
   return (
     <button
       type="button" onClick={onPick}
+      // Draggable everywhere, not only in terminal mode: the list does not
+      // know which screen is on the right, and a drag that finds no target
+      // simply ends where it started.
+      draggable
+      onDragStart={(e) => setChatDrag(e.dataTransfer, { hostKey, chatId: chat.id })}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56,
         padding: '8px 10px', borderRadius: R.card, cursor: 'pointer', textAlign: 'left',
@@ -255,7 +267,11 @@ function ChatRow({ chat, selected, onPick }: { chat: Chat; selected: boolean; on
   );
 }
 
-export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewChat, searchRef }: {
+// `collapsed` arrives renamed: the section headers in the list below already
+// own that word, and two different things called collapsed in one component is
+// how you end up hiding the wrong one.
+export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewChat, searchRef,
+                          collapsed: railed = false, onCollapse }: {
   view: View;
   onView: (v: View) => void;
   selected: string | null;
@@ -263,6 +279,8 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
   onSelect: (hostKey: string, chatId: string) => void;
   onNewChat: () => void;
   searchRef?: React.RefObject<HTMLInputElement>;
+  collapsed?: boolean;
+  onCollapse?: (next: boolean) => void;
 }) {
   const { hosts, order, focus, allHosts, setFocus, setAllHosts } = useFleet();
   const [query, setQuery] = useState('');
@@ -283,21 +301,96 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
     chats: fleetWide
       ? order.reduce((n, k) => n + (hosts[k]?.chats.filter((c) => !c.archived).length ?? 0), 0)
       : slot?.chats.filter((c) => !c.archived).length,
+    // Terminal mode is the wall of what is happening, so its number is what is
+    // happening — not how many chats exist, which the row above already says.
+    terminal: order.reduce((n, k) => n + (hosts[k]?.chats.filter((c) => c.status !== 'idle').length ?? 0), 0),
     projects: slot?.projects.length,
   };
   const anyAwaiting = order.some((k) => hosts[k]?.chats.some((c) => c.status === 'awaiting_approval'));
+
+  // Collapsed: the chat list is gone but the screens are not. Terminal mode is
+  // the reason this exists — a wall of tiles wants the width — and a wall you
+  // cannot get out of is a trap, so the navigation stays whatever happens.
+  if (railed) {
+    return (
+      <div style={{
+        width: RAIL, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+        padding: '8px 0', height: '100%',
+      }}>
+        <button
+          type="button" onClick={() => onCollapse?.(false)} title="Show the chat list"
+          style={{
+            width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
+            background: 'transparent', border: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Icon path={P.chevronRight} size={14} color={C.mute} />
+        </button>
+        <div style={{ width: 24, height: 1, background: C.border, margin: '4px 0' }} />
+        {NAV.map((item) => (
+          <button
+            key={item.view} type="button" onClick={() => onView(item.view)} title={item.label}
+            style={{
+              width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
+              background: view === item.view ? C.accentTint : 'transparent',
+              border: `1px solid ${view === item.view ? C.accentRing : 'transparent'}`,
+            }}
+          >
+            <Icon path={item.icon} size={16} color={view === item.view ? C.accentSoft : C.mute} />
+            {(item.view === 'dashboard' || item.view === 'terminal') && anyAwaiting && (
+              <span style={{
+                position: 'absolute', top: 3, right: 3, width: 6, height: 6,
+                borderRadius: 3, background: C.warn,
+              }} />
+            )}
+          </button>
+        ))}
+        <div style={{ flex: 1 }} />
+        <button
+          type="button" onClick={onNewChat} title="New chat"
+          style={{
+            width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
+            background: C.accent, border: `1px solid ${C.accent}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Icon path={P.plus} size={15} color="#FFFFFF" width={2.6} />
+        </button>
+        <div title={slot?.status === 'online' ? 'Online' : 'Offline'} style={{ padding: '6px 0 2px' }}>
+          <Dot color={slot?.status === 'online' ? C.ok : C.faint} live={slot?.status === 'online'} size={6} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
       width: W, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`,
       display: 'flex', flexDirection: 'column', height: '100%',
     }}>
-      <div style={{ padding: '8px 8px 0' }}>
-        <HostCard
-          hosts={hosts} order={order} focus={focus} allHosts={fleetWide}
-          onFocus={(k) => { setAllHosts(false); setFocus(k); }}
-          onAll={() => setAllHosts(true)}
-        />
+      <div style={{ padding: '8px 8px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <HostCard
+            hosts={hosts} order={order} focus={focus} allHosts={fleetWide}
+            onFocus={(k) => { setAllHosts(false); setFocus(k); }}
+            onAll={() => setAllHosts(true)}
+          />
+        </div>
+        {onCollapse && (
+          <button
+            type="button" onClick={() => onCollapse(true)} title="Hide the chat list"
+            style={{
+              width: 30, height: 30, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
+              background: 'transparent', border: `1px solid ${C.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Icon path={P.chevronLeft} size={14} color={C.mute} />
+          </button>
+        )}
       </div>
 
       <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -305,13 +398,16 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
           <NavRow
             key={item.view} item={item} active={view === item.view}
             count={counts[item.view]}
-            alert={item.view === 'dashboard' && anyAwaiting}
+            alert={(item.view === 'dashboard' || item.view === 'terminal') && anyAwaiting}
             onClick={() => onView(item.view)}
           />
         ))}
       </div>
 
-      {view === 'chats' ? (
+      {/* Terminal mode gets the list too. The wall answers "what is happening";
+          the list is still how you reach a chat that is not on the wall — and
+          it is where a tile is dragged from. */}
+      {view === 'chats' || view === 'terminal' ? (
         <>
           {/* Starting a chat belongs above the list of chats, not on the panel
               screen: this is where someone is standing when they want one. */}
@@ -382,7 +478,7 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
                   </button>
                   {!shut && s.chats.map((c) => (
                     <ChatRow
-                      key={`${s.hostKey}/${c.id}`} chat={c}
+                      key={`${s.hostKey}/${c.id}`} chat={c} hostKey={s.hostKey}
                       selected={selected === c.id && selectedHost === s.hostKey}
                       onPick={() => onSelect(s.hostKey, c.id)}
                     />

@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, PanResponder, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Icon } from './icon';
 import { Text } from './text';
 import { em, providerMark, useColors } from '../theme';
@@ -392,3 +393,119 @@ export function SkeletonCard({ rows = 5, chips = true, style }: { rows?: number;
 const s = StyleSheet.create({
   sq40: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 });
+
+// ── swipe-to-act ─────────────────────────────────────────────────────────────
+// One row at a time: opening a second closes the first, the way every list of
+// this shape behaves. Module-level because the rows know nothing about each
+// other and there is only ever one list on screen.
+let closeOpenSwipe: (() => void) | null = null;
+const ACTION_W = 78;
+
+export interface SwipeAction {
+  key: string;
+  label: string;
+  color: string;
+  icon: (color: string) => React.ReactNode;
+  onPress: () => void;
+}
+
+export function SwipeActions({ actions, children, style }: {
+  actions: SwipeAction[];
+  children: React.ReactNode;
+  /** The row's own corner radii. The tiles sit behind the row, so a square
+   *  clip would let their colour show in the corners of a rounded one. */
+  style?: StyleProp<ViewStyle>;
+}) {
+  const c = useColors();
+  const x = useRef(new Animated.Value(0)).current;
+  const [open, setOpen] = useState(false);
+  // Where the row rests, and where this gesture picked it up. Kept in JS rather
+  // than read back off the Animated.Value: with the native driver the value
+  // only reports home to JS now and then, so a drag that asked it where it was
+  // would be working from a stale answer and stutter.
+  const shown = useRef(false);
+  const from = useRef(0);
+  const width = useRef(0);
+  width.current = ACTION_W * actions.length;
+  // Declared up here so `settle` can put it in the one-row-open registry: the
+  // two of them refer to each other, and a ref is the knot that unties.
+  const closeRef = useRef<() => void>(() => {});
+
+  const settle = useCallback((to: number) => {
+    const wasOpen = shown.current;
+    shown.current = to !== 0;
+    setOpen(to !== 0);
+    if (to !== 0) {
+      if (closeOpenSwipe && closeOpenSwipe !== closeRef.current) closeOpenSwipe();
+      closeOpenSwipe = closeRef.current;
+      if (!wasOpen) Haptics.selectionAsync().catch(() => {});
+    } else if (closeOpenSwipe === closeRef.current) {
+      closeOpenSwipe = null;
+    }
+    Animated.spring(x, { toValue: to, useNativeDriver: true, bounciness: 0, speed: 18 }).start();
+  }, [x]);
+
+  const close = useCallback(() => settle(0), [settle]);
+  closeRef.current = close;
+
+  // Unmounting with the registry still pointing here would leave a closer that
+  // can never run, and the next row to open would never clear it.
+  useEffect(() => () => { if (closeOpenSwipe === closeRef.current) closeOpenSwipe = null; }, []);
+
+  const pan = useRef(PanResponder.create({
+    // A tap has to reach the row underneath, so nothing is claimed on touch —
+    // only once a finger has actually travelled sideways.
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_e, g) => {
+      if (Math.abs(g.dx) < 8) return false;
+      // Sideways by a clear margin, or the list can never be scrolled past an
+      // open row. The list wins ties.
+      return Math.abs(g.dx) > Math.abs(g.dy) * 1.6;
+    },
+    onPanResponderGrant: () => { from.current = shown.current ? -width.current : 0; },
+    onPanResponderMove: (_e, g) => {
+      // Left as far as the actions are wide; right only as far as closed, with
+      // a little give at both ends so the row does not feel nailed down.
+      const next = from.current + g.dx;
+      x.setValue(Math.max(-width.current - 24, Math.min(12, next)));
+    },
+    onPanResponderRelease: (_e, g) => {
+      // A flick decides on its own: past a certain speed the distance covered
+      // stops being what the finger meant.
+      if (g.vx < -0.5) settle(-width.current);
+      else if (g.vx > 0.5) settle(0);
+      else settle(from.current + g.dx > -width.current / 2 ? 0 : -width.current);
+    },
+    onPanResponderTerminate: () => settle(0),
+  })).current;
+
+  return (
+    <View style={[{ backgroundColor: c.bg, overflow: 'hidden' }, style]}>
+      <View style={[StyleSheet.absoluteFillObject, { flexDirection: 'row', justifyContent: 'flex-end' }]}>
+        {actions.map((a) => (
+          <Pressable
+            key={a.key}
+            onPress={() => { close(); a.onPress(); }}
+            style={{ width: ACTION_W, alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: a.color }}
+          >
+            {/* White on both action colours in both themes: these tiles bring
+                their own background, so they do not follow the page. */}
+            {a.icon('#fff')}
+            <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '600', color: '#fff' }}>{a.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Animated.View
+        {...pan.panHandlers}
+        style={{ backgroundColor: c.bg, transform: [{ translateX: x }] }}
+      >
+        {children}
+        {/* While the actions are showing, a tap on the row means "put it back",
+            not "open the chat" — the same rule every list of this shape has. */}
+        {open && (
+          <Pressable onPress={close} style={StyleSheet.absoluteFillObject} />
+        )}
+      </Animated.View>
+    </View>
+  );
+}

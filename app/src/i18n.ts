@@ -148,6 +148,7 @@ const en = {
   poolExhaustedUntil: 'Every sign-in is out of plan until {time}. This turn will stop when the limit does.',
   // settings
   settings: 'Settings', computers: 'Computers', addComputer: 'Add computer', hostHint: 'Long-press a computer to remove it.',
+  viewScreen: 'View its screen',
   removeHost: 'Remove computer', removeHostBody: 'The token for {name} is deleted from this phone and revoked on the computer.',
   defaults: 'Defaults', toolRow: 'Tool', modelRow: 'Model', permRow: 'Permission mode', 
   security: 'Security', faceIdLaunch: 'Face ID on launch', 

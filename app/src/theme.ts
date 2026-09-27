@@ -20,6 +20,9 @@ export interface Palette {
   ink: string;
   /** Text on top of `ink`. */
   onInk: string;
+  /** The reader's own messages. A raised neutral, not an inverted one: a
+   *  white slab in a dark thread reads as an error, not as "mine". */
+  bubble: string;
   text2: string;
   muted: string;
   faint: string;
@@ -67,6 +70,7 @@ const SHADOW_INK = 'rgba(28,27,22,';
 export const light: Palette = {
   scheme: 'light',
   bg: '#FBFAF8', card: '#FFFFFF', fill: '#F1F0EB', line: '#ECEAE3', lineStrong: '#DEDBD2',
+  bubble: '#EDEBE4',
   ink: '#1C1B18', onInk: '#FBFAF8', text2: '#3C3A33', muted: '#6A685F', faint: '#9C9A8F',
   segOn: '#FFFFFF', code: '#FAF9F6',
   warn: '#B5852B', warnBg: '#F7EFDB', ok: '#3F7A52', okBg: '#E7F1EA', danger: '#B14A33', dangerBg: '#F8E3DB',
@@ -86,7 +90,8 @@ export const light: Palette = {
 
 export const dark: Palette = {
   scheme: 'dark',
-  bg: '#17160F', card: '#242219', fill: '#211F17', line: '#2D2B21', lineStrong: '#3F3C30',
+  bg: '#100F0A', card: '#1E1C15', fill: '#1A1811', line: '#2D2B21', lineStrong: '#3F3C30',
+  bubble: '#2A2722',
   ink: '#F2F0E8', onInk: '#17160F', text2: '#D2CFC5', muted: '#9E9C90', faint: '#706E63',
   segOn: '#3F3C30', code: '#1C1B13',
   warn: '#D9A84A', warnBg: '#2F2915', ok: '#6FAE82', okBg: '#1F2D23', danger: '#E0735A', dangerBg: '#311E16',

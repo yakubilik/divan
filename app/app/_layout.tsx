@@ -11,6 +11,7 @@ import { em, FONTS, useColors } from '../src/theme';
 import { Button, Icon, Text } from '../src/components/ui';
 import { DialogHost, MenuHost } from '../src/components/overlay';
 import { getOpenChat, registerForPush } from '../src/push';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 /** Presented over the page by the app's own sheet (see components/sheet). */
 const SHEET = { presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } } as const;
@@ -28,6 +29,9 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(FONTS);
 
   useEffect(() => {
+    // The binary allows landscape so that the screen viewer can ask for it.
+    // Everything else is the portrait app it was drawn as, and says so once.
+    void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     void init();
     void registerForPush().then((t) => t && setPushToken(t));
     const sub = AppState.addEventListener('change', (st) => {
@@ -74,6 +78,9 @@ export default function RootLayout() {
         <Stack.Screen name="model-sheet" options={SHEET} />
         <Stack.Screen name="host-sheet" options={SHEET} />
         <Stack.Screen name="settings" />
+        {/* The computer's own screen. Full bleed and no animation: it is a
+            window onto something already happening, not a page. */}
+        <Stack.Screen name="screen" options={{ animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
         <Stack.Screen name="agents" />
         <Stack.Screen name="agent-store" />
         <Stack.Screen name="agent-install" />

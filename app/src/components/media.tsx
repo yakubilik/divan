@@ -283,14 +283,14 @@ export function VoiceBubble({ item }: { item: Attachment }) {
   const spoke = !!item.transcript;
   return (
     <View style={{ alignItems: 'flex-end', gap: 4 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.ink, borderRadius: 18, borderBottomRightRadius: 6, paddingVertical: 9, paddingHorizontal: 12 }}>
-        <Pressable onPress={toggle} hitSlop={8} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.onInk, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name={playing ? 'pause' : 'play_arrow'} size={18} weight={400} color={c.ink} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.bubble, borderRadius: 18, borderBottomRightRadius: 6, paddingVertical: 9, paddingHorizontal: 12 }}>
+        <Pressable onPress={toggle} hitSlop={8} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={playing ? 'pause' : 'play_arrow'} size={18} weight={400} color={c.onInk} />
         </Pressable>
         {spoke && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, height: 20 }}>
             {wave.map((h, i) => (
-              <View key={i} style={{ width: 2, height: h, borderRadius: 1, backgroundColor: playing && i / wave.length <= progress ? c.onInk : c.faint }} />
+              <View key={i} style={{ width: 2, height: h, borderRadius: 1, backgroundColor: playing && i / wave.length <= progress ? c.ink : c.faint }} />
             ))}
           </View>
         )}

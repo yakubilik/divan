@@ -84,6 +84,11 @@ function Body() {
           );
         })}
       </Card>
+      <Pressable onPress={() => close(() => router.push('/screen'))}
+        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 4 }, pressed && { opacity: 0.6 }]}>
+        <Icon name="visibility" size={18} />
+        <Text style={{ fontSize: 15, fontWeight: '500' }}>{T('viewScreen')}</Text>
+      </Pressable>
       <Pressable onPress={() => close(() => router.push({ pathname: '/pair', params: { add: '1' } }))}
         style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 4 }, pressed && { opacity: 0.6 }]}>
         <Icon name="add" size={18} />

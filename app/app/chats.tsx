@@ -7,7 +7,7 @@ import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { LOCALE } from '../src/i18n';
 import { em, useColors } from '../src/theme';
-import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, Tabs, Text, TextInput } from '../src/components/ui';
+import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Tabs, Text, TextInput } from '../src/components/ui';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../src/components/overlay';
 import { HomeTop } from '../src/components/home';
 import type { Chat } from '../src/protocol';
@@ -200,12 +200,29 @@ export default function Chats() {
     ];
   }
 
+  /** The two things a swipe offers — the same two the long-press menu does,
+   *  one gesture earlier. Archiving is reversible and goes straight through;
+   *  deleting takes the chat's history off the computer with it, so it asks
+   *  first, with the same question the menu asks. */
+  function archiveChat(chat: Chat) {
+    void updateChat(chat.id, { archived: chat.archived ? 0 : 1 } as any).catch(err);
+  }
+
+  function confirmDelete(chat: Chat) {
+    alert(T('deleteChat'), T('deleteChatBody'), [
+      { text: T('cancel'), style: 'cancel' },
+      { text: T('delete'), style: 'destructive', onPress: () => void deleteChat(chat.id).catch(err) },
+    ]);
+  }
+
   // Handed to every row, so they have to keep the same identity across renders
   // or memoising the row buys nothing. The menus close over this render's
   // state, so reach them through a ref rather than rebuilding.
-  const actionsRef = useRef({ chatItems, groupItems });
-  actionsRef.current = { chatItems, groupItems };
+  const actionsRef = useRef({ chatItems, groupItems, archiveChat, confirmDelete });
+  actionsRef.current = { chatItems, groupItems, archiveChat, confirmDelete };
   const onRowPress = useCallback((chat: Chat) => go(() => router.push(`/chat/${chat.id}`)), [go, router]);
+  const onRowArchive = useCallback((chat: Chat) => actionsRef.current.archiveChat(chat), []);
+  const onRowDelete = useCallback((chat: Chat) => actionsRef.current.confirmDelete(chat), []);
   const onRowLongPress = useCallback((chat: Chat, ref: React.RefObject<View | null>) => {
     void measure(ref).then((r) => openMenu({
       anchor: r, previewRect: r, width: 250,
@@ -329,7 +346,7 @@ export default function Chats() {
           <ChatRow chat={item} T={T} locale={locale} first={index === 0} last={index === section.data.length - 1} dimmed={viewMenu}
             chips={flat || item.status !== 'idle'}
             group={flat && item.group_id ? groupNames[item.group_id] : undefined}
-            onPress={onRowPress} onLongPress={onRowLongPress} />
+            onPress={onRowPress} onLongPress={onRowLongPress} onArchive={onRowArchive} onDelete={onRowDelete} />
         )}
       />
     );
@@ -404,8 +421,9 @@ function RowPreview({ chat, T, locale }: { chat: Chat; T: ReturnType<typeof useT
   );
 }
 
-const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, T, locale, group, chips, first, last, dimmed }: {
+const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, onArchive, onDelete, T, locale, group, chips, first, last, dimmed }: {
   chat: Chat; onPress: (chat: Chat) => void; onLongPress: (chat: Chat, ref: React.RefObject<View | null>) => void;
+  onArchive: (chat: Chat) => void; onDelete: (chat: Chat) => void;
   T: ReturnType<typeof useT>; locale: string; group?: string; chips: boolean; first: boolean; last: boolean; dimmed?: boolean;
 }) {
   const c = useColors();
@@ -416,6 +434,20 @@ const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, T, loc
   const tags = [group, chat.model, chat.effort, chat.perm_mode].filter(Boolean) as string[];
   return (
     <View style={{ marginHorizontal: 12, opacity: dimmed ? 0.4 : 1 }}>
+      <SwipeActions
+        style={[first && { borderTopLeftRadius: 14, borderTopRightRadius: 14 },
+                last && { borderBottomLeftRadius: 14, borderBottomRightRadius: 14 }]}
+        actions={[
+          // Grey for the reversible one and red for the one that is not, which
+          // is the only thing anybody reads off these two tiles. Both carry
+          // their own background, so the icon and label are white in both themes.
+          { key: 'archive', label: chat.archived ? T('unarchive') : T('archiveAction'), color: c.muted,
+            icon: (col) => <Icon name={archived ? 'unarchive' : 'inventory_2'} size={19} color={col} />,
+            onPress: () => onArchive(chat) },
+          { key: 'delete', label: T('delete'), color: c.danger,
+            icon: (col) => <Icon name="delete" size={19} color={col} />,
+            onPress: () => onDelete(chat) },
+        ]}>
       <Pressable ref={ref} onPress={() => onPress(chat)} onLongPress={() => onLongPress(chat, ref)}
         style={({ pressed }) => [{ flexDirection: 'row', gap: 10, paddingVertical: 12, paddingHorizontal: 14,
           backgroundColor: pressed ? c.fill : c.card, borderLeftWidth: 1, borderRightWidth: 1, borderColor: c.line },
@@ -451,6 +483,7 @@ const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, T, loc
           )}
         </View>
       </Pressable>
+      </SwipeActions>
     </View>
   );
 });

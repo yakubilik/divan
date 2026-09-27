@@ -78,6 +78,10 @@ class Config:
     ])
     idle_disconnect_s: int = 1800
     approval_timeout_s: int = 900
+    # Letting a paired device drive the mouse and keyboard. Off until somebody
+    # turns it on, and stored here rather than in memory so that "off" survives
+    # a restart — a switch this size should never come back on by accident.
+    remote_control: bool = False
     # Follow origin/main by itself. Safe to leave on even where the code is
     # written: a checkout with uncommitted work is never touched (see updater).
     auto_update: bool = True
@@ -119,6 +123,7 @@ class Config:
             "denied_paths": self.denied_paths,
             "idle_disconnect_s": self.idle_disconnect_s,
             "approval_timeout_s": self.approval_timeout_s,
+            "remote_control": self.remote_control,
             "devices": {
                 d.id: {k: v for k, v in d.__dict__.items() if k != "id" and v is not None}
                 for d in self.devices.values()

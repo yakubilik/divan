@@ -39,9 +39,9 @@ export function UserBubble({ text, attachments }: { text: string; attachments?: 
       {voices.map((v) => <VoiceBubble key={v.path} item={v} />)}
       {files.map((f) => <FileChip key={f.path} item={f} />)}
       {!!text && !textIsTranscript && (
-        <View style={{ backgroundColor: c.ink, borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
+        <View style={{ backgroundColor: c.bubble, borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
                        paddingVertical: 10, paddingHorizontal: 13 }}>
-          <Text selectable style={{ color: c.onInk, fontSize: 15, lineHeight: 21 }}>{text}</Text>
+          <Text selectable style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{text}</Text>
         </View>
       )}
     </View>
@@ -129,12 +129,12 @@ function buildStyles(custom: Record<string, any>) {
 function mdStyles(c: Palette) {
   const inter = family(400, false);
   return {
-    body: { color: c.text2, fontSize: 15, lineHeight: 22.5, fontFamily: inter },
+    body: { color: c.text2, fontSize: 17, lineHeight: 24, fontFamily: inter },
     paragraph: { marginTop: 0, marginBottom: 9, flexWrap: 'wrap', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-start', width: '100%' },
-    heading1: { color: c.ink, fontSize: 19, lineHeight: 25, fontFamily: family(600, false), marginBottom: 9 },
-    heading2: { color: c.ink, fontSize: 17, lineHeight: 22, fontFamily: family(600, false), marginBottom: 9 },
-    heading3: { color: c.ink, fontSize: 15, lineHeight: 21, fontFamily: family(600, false), marginBottom: 9 },
-    heading4: { color: c.ink, fontSize: 15, lineHeight: 21, fontFamily: family(600, false), marginBottom: 9 },
+    heading1: { color: c.ink, fontSize: 22, lineHeight: 28, fontFamily: family(600, false), marginBottom: 9 },
+    heading2: { color: c.ink, fontSize: 19, lineHeight: 25, fontFamily: family(600, false), marginBottom: 9 },
+    heading3: { color: c.ink, fontSize: 17, lineHeight: 22, fontFamily: family(600, false), marginBottom: 9 },
+    heading4: { color: c.ink, fontSize: 17, lineHeight: 22, fontFamily: family(600, false), marginBottom: 9 },
     strong: { fontFamily: family(600, false), color: c.ink },
     em: { fontStyle: 'italic' },
     link: { color: c.ink, textDecorationLine: 'underline' },
@@ -144,7 +144,7 @@ function mdStyles(c: Palette) {
     bullet_list_icon: { color: c.faint, marginLeft: 0, marginRight: 0, lineHeight: 22.5 },
     bullet_list_content: { flex: 1 },
     ordered_list_icon: { color: c.faint },
-    code_inline: { fontFamily: family(400, true), fontSize: 13, backgroundColor: c.fill, color: c.text2, borderRadius: 4, borderWidth: 0, paddingHorizontal: 4, paddingVertical: 1 },
+    code_inline: { fontFamily: family(400, true), fontSize: 14, backgroundColor: c.fill, color: c.text2, borderRadius: 4, borderWidth: 0, paddingHorizontal: 4, paddingVertical: 1 },
     blockquote: { backgroundColor: 'transparent', borderLeftWidth: 2, borderLeftColor: c.lineStrong, paddingHorizontal: 10, marginLeft: 0, marginBottom: 9 },
     hr: { backgroundColor: c.line, height: 1, marginVertical: 6 },
     table: { borderWidth: 1, borderColor: c.line, borderRadius: 10, overflow: 'hidden', backgroundColor: c.card, marginBottom: 9 },

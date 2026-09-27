@@ -387,7 +387,14 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   const msgCount = log.items.filter((i) => i.kind === 'user' || i.kind === 'assistant').length;
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
+    // `minHeight: 0` is not decoration. Between the sidebar and the inspector
+    // this sits in a row, where `flex: 1` is about width and the height comes
+    // from the viewport — so nothing here could ever overflow. Held over the
+    // wall it sits in a column instead, and a flex item defaults to refusing to
+    // shrink below its content: the timeline made this box taller than the
+    // window that holds it, and the composer went out through the bottom edge,
+    // clipped away. The chat looked read-only.
+    <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Header
           chat={chat} groupName={groupName} count={msgCount} accountLabel={accountLabel}
