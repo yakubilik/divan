@@ -44,7 +44,12 @@ function fit(box: LayoutRectangle | null, aspect: number): Fit | null {
   return { x: 0, y: (box.height - h) / 2, w: box.width, h };
 }
 
-const KEYS: { label: string; key: string; mods?: string[] }[] = [
+// The arrows and the escape key are the same everywhere; copy and paste are
+// not. The daemon takes 'ctrl' at face value and does not quietly turn it into
+// Command on a Mac — ^C in a terminal is half the reason anyone opens this
+// screen — so the client is the one that has to know which machine it is
+// driving, and it is told in screen.info.
+const keysFor = (mac: boolean): { label: string; key: string; mods?: string[] }[] => [
   { label: 'esc', key: 'escape' },
   { label: 'tab', key: 'tab' },
   { label: '⏎', key: 'enter' },
@@ -53,8 +58,8 @@ const KEYS: { label: string; key: string; mods?: string[] }[] = [
   { label: '↑', key: 'up' },
   { label: '↓', key: 'down' },
   { label: '→', key: 'right' },
-  { label: '^C', key: 'c', mods: ['ctrl'] },
-  { label: '^V', key: 'v', mods: ['ctrl'] },
+  { label: mac ? '⌘C' : '^C', key: 'c', mods: [mac ? 'cmd' : 'ctrl'] },
+  { label: mac ? '⌘V' : '^V', key: 'v', mods: [mac ? 'cmd' : 'ctrl'] },
 ];
 
 export default function Screen() {
@@ -65,7 +70,7 @@ export default function Screen() {
   const conn = useStore((s) => s.conn);
   const hostInfo = useStore((s) => s.hostInfo);
 
-  const [caps, setCaps] = useState<{ view: boolean; control: boolean; enabled: boolean; reason?: string | null } | null>(null);
+  const [caps, setCaps] = useState<{ view: boolean; control: boolean; enabled: boolean; os?: string; reason?: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [box, setBox] = useState<LayoutRectangle | null>(null);
   const [aspect, setAspect] = useState(16 / 9);
@@ -306,7 +311,7 @@ export default function Screen() {
       {typing && controllable && (
         <View style={{ paddingBottom: insets.bottom + 6, backgroundColor: colors.surface }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.keyRow}>
-            {KEYS.map((k) => (
+            {keysFor(caps?.os === 'Darwin').map((k) => (
               <Pressable
                 key={k.label}
                 onPress={() => { Haptics.selectionAsync().catch(() => {}); send({ kind: 'key', key: k.key, mods: k.mods }); }}

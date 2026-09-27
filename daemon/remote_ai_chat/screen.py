@@ -26,11 +26,23 @@ import asyncio
 import base64
 import io
 import logging
+import os
 import platform
+import subprocess
+import tempfile
+import shutil
 import sys
 import time
 
 log = logging.getLogger("rac.screen")
+
+if sys.platform == "darwin" and shutil.which("screencapture") is None:
+    # Pillow grabs a Mac screen by shelling out to `screencapture`, which lives
+    # in /usr/sbin — on PATH in a terminal and not on PATH under launchd. A
+    # daemon that starts at login would otherwise report "the screen could not
+    # be captured: [Errno 2]" forever, which is a true sentence about the wrong
+    # problem.
+    os.environ["PATH"] = (os.environ.get("PATH", "") + ":/usr/sbin").lstrip(":")
 
 # Frames are re-encoded on every grab, so the cost is paid per frame and the
 # defaults matter. 1280 is legible on a phone held in two hands; JPEG 55 is
@@ -53,13 +65,44 @@ _last_grab: tuple[float, bytes, dict] | None = None
 _grab_lock = asyncio.Lock()
 
 
+def _grab_mac() -> "Image.Image":                               # noqa: F821
+    """A Mac frame, with the pointer in it.
+
+    Pillow shells out to `screencapture` too, but without -C — so every frame
+    it returns has no cursor, and a screen you cannot see the pointer on is a
+    screen you cannot aim at. Worth the twenty lines on its own; asking for
+    JPEG instead of PNG on the way out then turns out to cut the whole grab
+    from about 0.35s to about 0.14s, which is the difference between three
+    frames a second and seven.
+    """
+    from PIL import Image
+    fd, path = tempfile.mkstemp(".jpg")
+    os.close(fd)
+    try:
+        rc = subprocess.call(["screencapture", "-x", "-C", "-t", "jpg", path])
+        if rc != 0:
+            raise ScreenError(f"screencapture refused to take a picture (exit {rc})")
+        img = Image.open(path)
+        img.load()
+        return img
+    except FileNotFoundError as exc:
+        raise ScreenError(f"screencapture is not on PATH: {exc}") from exc
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 def _grab_sync(max_w: int, quality: int) -> tuple[bytes, dict]:
     try:
         from PIL import ImageGrab
     except Exception as exc:                                    # pragma: no cover
         raise ScreenError(f"Pillow is not available: {exc}") from exc
     try:
-        img = ImageGrab.grab()
+        img = _grab_mac() if sys.platform == "darwin" else ImageGrab.grab()
+    except ScreenError:
+        raise
     except Exception as exc:
         # Headless Linux, a locked Windows session, a Mac that has not been
         # given Screen Recording permission: all land here, and all of them
@@ -107,24 +150,36 @@ async def grab_b64(max_w: int = MAX_W, quality: int = QUALITY) -> dict:
 
 
 # ── input ────────────────────────────────────────────────────────────────────
-# Windows only for now. The rest of the file works anywhere Pillow can grab a
+# Windows and macOS. The rest of the file works anywhere Pillow can grab a
 # screen, so looking is cross-platform even where touching is not — which is
 # the right way round: a read-only view is the half people actually need.
+#
+# Both platforms are reached through ctypes rather than a package, for the
+# reason at the top of the file: this daemon has to work on a machine where
+# nobody can install anything. Windows is SendInput, macOS is Quartz, and
+# neither needs a wheel of someone else's abstraction over forty lines.
 
 def available() -> dict:
-    """What this machine can actually do, so a client can say so up front."""
-    can_see = True
-    why: str | None = None
+    """What this machine can actually do, so a client can say so up front.
+
+    Looking and touching are asked separately because on most machines the
+    answers differ, and a client that knows which half it has can say
+    "view only" rather than letting somebody tap at a picture.
+    """
+    can_see, why = True, None
     try:
         from PIL import ImageGrab       # noqa: F401
     except Exception:
         can_see, why = False, "Pillow is not installed"
+
+    can_touch, refusal = _control_state()
     return {
         "view": can_see,
-        "control": sys.platform == "win32",
+        "control": can_touch,
         "os": platform.system(),
-        "reason": why or (None if sys.platform == "win32"
-                          else "clicking is only implemented on Windows so far"),
+        # Whichever half is missing is the half worth explaining, and capture
+        # comes first: a screen nobody can see cannot be driven either.
+        "reason": why or refusal,
     }
 
 
@@ -259,9 +314,264 @@ if sys.platform == "win32":
         else:
             raise ScreenError(f"unknown action: {kind}")
 
-else:                                                            # pragma: no cover
+
+    def _control_state() -> tuple[bool, str | None]:
+        return True, None
+
+
+elif sys.platform == "darwin":
+    import ctypes
+
+    # Quartz, through the umbrella framework that exports it. Loading this
+    # costs nothing on a Mac and the symbols below are the whole of what a
+    # pointer and a keyboard need.
+    try:
+        _AS = ctypes.cdll.LoadLibrary(
+            "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+        _CF = ctypes.cdll.LoadLibrary(
+            "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+    except OSError as _exc:                                      # pragma: no cover
+        _AS = _CF = None
+        log.warning("Quartz could not be loaded, so this Mac is view-only: %s", _exc)
+
+    class _CGPoint(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+    class _CGSize(ctypes.Structure):
+        _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
+
+    class _CGRect(ctypes.Structure):
+        _fields_ = [("origin", _CGPoint), ("size", _CGSize)]
+
+    if _AS is not None:
+        _AS.CGMainDisplayID.restype = ctypes.c_uint32
+        _AS.CGDisplayBounds.restype = _CGRect
+        _AS.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+        _AS.CGEventCreate.restype = ctypes.c_void_p
+        _AS.CGEventCreate.argtypes = [ctypes.c_void_p]
+        _AS.CGEventGetLocation.restype = _CGPoint
+        _AS.CGEventGetLocation.argtypes = [ctypes.c_void_p]
+        _AS.CGEventCreateMouseEvent.restype = ctypes.c_void_p
+        _AS.CGEventCreateMouseEvent.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint32, _CGPoint, ctypes.c_uint32]
+        _AS.CGEventCreateKeyboardEvent.restype = ctypes.c_void_p
+        _AS.CGEventCreateKeyboardEvent.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint16, ctypes.c_bool]
+        _AS.CGEventKeyboardSetUnicodeString.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_uint16)]
+        _AS.CGEventSetType.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        _AS.CGEventSetFlags.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
+        _AS.CGEventSetIntegerValueField.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.c_int64]
+        _AS.CGEventPost.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+        _AS.AXIsProcessTrusted.restype = ctypes.c_bool
+        _CF.CFRelease.argtypes = [ctypes.c_void_p]
+
+    # The constants, named rather than pasted at the call sites.
+    _TAP_HID = 0                        # kCGHIDEventTap: in front of everything
+    _EV = {"move": 5, "scroll": 22, "keydown": 10, "keyup": 11}
+    # Per button: the down, up and dragged event a Mac expects. A drag that
+    # posts MouseMoved instead of LeftMouseDragged does nothing at all in most
+    # apps, which is why the pressed set below exists.
+    _BTN = {"left": (0, 1, 2, 6), "right": (1, 3, 4, 7), "middle": (2, 25, 26, 27)}
+    _F_CLICK_STATE = 1                  # kCGMouseEventClickState
+    _F_SCROLL_AXIS1 = 11                # vertical, in lines
+    _F_SCROLL_AXIS2 = 12                # horizontal, in lines
+    _F_SCROLL_CONTINUOUS = 88           # 0 = wheel notches, not a trackpad
+
+    # Modifier masks. `ctrl` stays Control and does not quietly become Command:
+    # ^C in a terminal is the reason somebody reaches for their phone in the
+    # first place, and a copy they did not ask for is no substitute.
+    FLAGS = {
+        "shift": 0x00020000,
+        "ctrl": 0x00040000, "control": 0x00040000,
+        "alt": 0x00080000, "option": 0x00080000,
+        "cmd": 0x00100000, "command": 0x00100000, "win": 0x00100000,
+    }
+
+    # Virtual keycodes (kVK_*). Same names as the Windows table above, so a
+    # client never has to know which machine it is driving.
+    VK = {
+        "enter": 0x24, "return": 0x24, "tab": 0x30, "escape": 0x35, "esc": 0x35,
+        "backspace": 0x33, "delete": 0x75, "space": 0x31,
+        "up": 0x7E, "down": 0x7D, "left": 0x7B, "right": 0x7C,
+        "home": 0x73, "end": 0x77, "pageup": 0x74, "pagedown": 0x79,
+        "f1": 0x7A, "f2": 0x78, "f3": 0x63, "f4": 0x76, "f5": 0x60, "f6": 0x61,
+        "f7": 0x62, "f8": 0x64, "f9": 0x65, "f10": 0x6D, "f11": 0x67, "f12": 0x6F,
+        "a": 0x00, "c": 0x08, "v": 0x09, "x": 0x07, "z": 0x06, "s": 0x01, "w": 0x0D,
+    }
+
+    # Which buttons a client is currently holding down, so a move in between
+    # becomes a drag. One screen, one pointer, so one set for the process.
+    _pressed: set[str] = set()
+
+    def _control_state() -> tuple[bool, str | None]:
+        """macOS asks twice: once to see the screen, once to touch it.
+
+        Accessibility is checked on every call rather than cached, because the
+        answer changes the moment somebody ticks the box in System Settings and
+        nobody should have to restart a daemon to be believed.
+        """
+        if _AS is None:                                           # pragma: no cover
+            return False, "Quartz could not be loaded on this Mac"
+        if not _AS.AXIsProcessTrusted():
+            return False, ("macOS has not granted this app Accessibility permission, "
+                           "so clicks would go nowhere — System Settings › Privacy & "
+                           "Security › Accessibility")
+        return True, None
+
+    def _post(ev: int | None) -> None:
+        """Send one event and let go of it."""
+        if not ev:
+            raise ScreenError("the event could not be created")
+        try:
+            _AS.CGEventPost(_TAP_HID, ev)
+        finally:
+            _CF.CFRelease(ev)
+
+    def _point(nx: float, ny: float) -> _CGPoint:
+        """Normalised 0..1 onto the main display, in points.
+
+        Read fresh every time instead of cached: the bounds change when the
+        resolution does, and this is one C call. Points, not pixels — Quartz
+        places a pointer in the global display space, so a Retina screen
+        captured at 2880 wide is still driven at 1440, and no client has to
+        know which of those numbers is real.
+        """
+        b = _AS.CGDisplayBounds(_AS.CGMainDisplayID())
+        x = b.origin.x + max(0.0, min(1.0, nx)) * max(0.0, b.size.width - 1)
+        y = b.origin.y + max(0.0, min(1.0, ny)) * max(0.0, b.size.height - 1)
+        return _CGPoint(x, y)
+
+    def _cursor() -> _CGPoint:
+        """Where the pointer is now — for an action that arrived without one."""
+        ev = _AS.CGEventCreate(None)
+        try:
+            return _AS.CGEventGetLocation(ev)
+        finally:
+            if ev:
+                _CF.CFRelease(ev)
+
+    def _at(action: dict) -> _CGPoint:
+        if "x" in action and "y" in action:
+            return _point(float(action["x"]), float(action["y"]))
+        return _cursor()
+
+    def _mouse(etype: int, at: _CGPoint, button: int, clicks: int = 0) -> int | None:
+        ev = _AS.CGEventCreateMouseEvent(None, etype, at, button)
+        if ev and clicks:
+            # Without this a Mac sees two separate clicks where a double-click
+            # was meant, and nothing opens.
+            _AS.CGEventSetIntegerValueField(ev, _F_CLICK_STATE, clicks)
+        return ev
+
+    def _type_text(text: str) -> None:
+        """Type a string as text rather than as keys.
+
+        One event per character: a single event carrying a long string is
+        dropped by some apps without saying so, and what arrives here is a
+        phone keyboard — a word at a time at the very most.
+        """
+        for ch in text:
+            units = ch.encode("utf-16-le")
+            buf = (ctypes.c_uint16 * (len(units) // 2)).from_buffer_copy(units)
+            for down in (True, False):
+                ev = _AS.CGEventCreateKeyboardEvent(None, 0, down)
+                if not ev:
+                    raise ScreenError("the keyboard event could not be created")
+                _AS.CGEventKeyboardSetUnicodeString(ev, len(buf), buf)
+                _post(ev)
+
     def _do(action: dict) -> None:
-        raise ScreenError("clicking is only implemented on Windows so far")
+        if _AS is None:                                           # pragma: no cover
+            raise ScreenError("Quartz could not be loaded on this Mac")
+        kind = action.get("kind")
+        name = str(action.get("button", "left"))
+        button, down_ev, up_ev, drag_ev = _BTN.get(name, _BTN["left"])
+
+        if kind == "move":
+            # A move while a button is held is a drag, and has to be posted as
+            # one. Whichever button went down first wins; there is one pointer.
+            held = next((b for b in ("left", "right", "middle") if b in _pressed), None)
+            if held:
+                b, _, _, drag = _BTN[held]
+                _post(_mouse(drag, _at(action), b))
+            else:
+                _post(_mouse(_EV["move"], _at(action), 0))
+
+        elif kind == "down":
+            _pressed.add(name)
+            _post(_mouse(down_ev, _at(action), button, clicks=1))
+
+        elif kind == "up":
+            _pressed.discard(name)
+            _post(_mouse(up_ev, _at(action), button, clicks=1))
+
+        elif kind in ("click", "double"):
+            at = _at(action)
+            _post(_mouse(down_ev, at, button, clicks=1))
+            _post(_mouse(up_ev, at, button, clicks=1))
+            if kind == "double":
+                _post(_mouse(down_ev, at, button, clicks=2))
+                _post(_mouse(up_ev, at, button, clicks=2))
+
+        elif kind == "scroll":
+            # Deltas arrive in Windows wheel notches, 120 to the notch, because
+            # that is what a wheel produces and the client banks them into whole
+            # ones. A Mac counts in lines, and three is what one notch scrolls
+            # everywhere else.
+            lines_y = round(int(action.get("dy") or 0) / 120) * 3
+            lines_x = round(int(action.get("dx") or 0) / 120) * 3
+            if not (lines_y or lines_x):
+                return
+            if "x" in action:
+                _post(_mouse(_EV["move"], _at(action), 0))
+            ev = _AS.CGEventCreate(None)
+            if not ev:
+                raise ScreenError("the scroll event could not be created")
+            # Built by hand rather than with CGEventCreateScrollWheelEvent,
+            # which is variadic — and a variadic call through ctypes is a
+            # different thing on Apple silicon than it is anywhere else.
+            _AS.CGEventSetType(ev, _EV["scroll"])
+            _AS.CGEventSetIntegerValueField(ev, _F_SCROLL_CONTINUOUS, 0)
+            _AS.CGEventSetIntegerValueField(ev, _F_SCROLL_AXIS1, lines_y)
+            # Axis 2 counts the other way round from a Windows wheel: positive
+            # there scrolls the view right, positive here scrolls it left.
+            _AS.CGEventSetIntegerValueField(ev, _F_SCROLL_AXIS2, -lines_x)
+            _post(ev)
+
+        elif kind == "key":
+            key = str(action.get("key", "")).lower()
+            code = VK.get(key)
+            if code is None:
+                raise ScreenError(f"unknown key: {key}")
+            flags = 0
+            for mod in (action.get("mods") or []):
+                flags |= FLAGS.get(str(mod).lower(), 0)
+            for pressed in (True, False):
+                ev = _AS.CGEventCreateKeyboardEvent(None, code, pressed)
+                if not ev:
+                    raise ScreenError("the keyboard event could not be created")
+                if flags:
+                    # Set on the event rather than posted as separate modifier
+                    # presses: the app reads the flags off the keystroke, and
+                    # a modifier left hanging by a dropped event is worse than
+                    # a keystroke that never lands.
+                    _AS.CGEventSetFlags(ev, flags)
+                _post(ev)
+
+        elif kind == "text":
+            _type_text(str(action.get("text", ""))[:4096])
+
+        else:
+            raise ScreenError(f"unknown action: {kind}")
+
+else:                                                            # pragma: no cover
+    def _control_state() -> tuple[bool, str | None]:
+        return False, "clicking is only implemented on Windows and macOS so far"
+
+    def _do(action: dict) -> None:
+        raise ScreenError("clicking is only implemented on Windows and macOS so far")
 
 
 async def act(action: dict) -> None:

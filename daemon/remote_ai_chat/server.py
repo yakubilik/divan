@@ -642,7 +642,7 @@ class Server:
         if not tok or self.cfg.find_device_by_token(tok) is None:
             raise HTTPException(status_code=401, detail="unauthorized")
         try:
-            data, meta = await screenmod.grab(max(320, min(2560, w)), max(20, min(90, q)))
+            data, meta = await screenmod.grab(max(320, min(3840, w)), max(20, min(90, q)))
         except screenmod.ScreenError as exc:
             raise HTTPException(status_code=503, detail=str(exc))
         return Response(content=data, media_type="image/jpeg", headers={
