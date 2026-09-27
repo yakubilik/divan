@@ -250,4 +250,6 @@ export const P = {
   image: 'M4 5h16v14H4zM4 16l4-4 4 4 3-3 5 5M15 9v.1',
   download: 'M12 4v11M8 11l4 4 4-4M5 19h14',
   mic: 'M9 4h6v8H9zM5 11a7 7 0 0 0 14 0M12 18v3',
+  expand: 'M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3',
+  shrink: 'M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M8 21v-3a2 2 0 0 0-2-2H3M16 21v-3a2 2 0 0 1 2-2h3',
 } as const;

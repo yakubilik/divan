@@ -41,10 +41,16 @@ export function Screen() {
   const [busy, setBusy] = useState(false);
   const [slots, setSlots] = useState<[string | null, string | null]>([null, null]);
   const [front, setFront] = useState(0);
+  const [live, setLive] = useState(false);
+  const [fs, setFs] = useState(false);
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const picRef = useRef<HTMLDivElement | null>(null);
   const frontRef = useRef(0);
+  // Read inside timers and load handlers, where a stale `live` would keep
+  // asking for frames after the picture was turned off.
+  const liveRef = useRef(false);
   const tick = useRef(0);
   const alive = useRef(true);
   const lastAt = useRef(0);
@@ -55,11 +61,14 @@ export function Screen() {
   const base = slot ? `http://${slot.cfg.host}:${slot.cfg.port}` : null;
   const controllable = !!caps?.control && !!caps?.enabled;
 
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; liveRef.current = false; };
+  }, []);
 
   // ── frames ────────────────────────────────────────────────────────────
   const nextFrame = useCallback(() => {
-    if (!alive.current || !base || !slot) return;
+    if (!alive.current || !liveRef.current || !base || !slot) return;
     tick.current += 1;
     // What the element is actually drawn at, in device pixels, and more again
     // when zoomed in. Anything less and a 3440-wide desktop arrives as mush.
@@ -73,7 +82,7 @@ export function Screen() {
   // Each frame asks for the next once it has arrived, so a slow link runs at
   // fewer frames a second rather than falling further behind with every one.
   const onFrame = useCallback(() => {
-    if (!alive.current) return;
+    if (!alive.current || !liveRef.current) return;
     frontRef.current = frontRef.current === 0 ? 1 : 0;
     setFront(frontRef.current);
     setError(null);
@@ -81,12 +90,35 @@ export function Screen() {
     window.setTimeout(() => nextFrame(), 60);
   }, [nextFrame]);
 
+  /* Opening this view asks the computer what it can do and stops there.
+   * The picture is a JPEG several times a second for as long as it runs, and a
+   * panel left on this tab overnight would spend the night taking screenshots
+   * of an empty desk — so it starts when someone asks for it and stops when
+   * they are done, rather than following whichever tab happens to be open. */
+  const start = useCallback(() => {
+    if (liveRef.current) return;
+    liveRef.current = true;
+    setLive(true);
+    setError(null);
+    lastAt.current = Date.now();
+    nextFrame();
+  }, [nextFrame]);
+
+  const stop = useCallback(() => {
+    liveRef.current = false;
+    setLive(false);
+    setSlots([null, null]);
+    frontRef.current = 0;
+    setFront(0);
+  }, []);
+
   useEffect(() => {
     if (!key) return;
     let gone = false;
-    setCaps(null); setSlots([null, null]); setError(null);
+    stop();
+    setCaps(null); setError(null);
     call<Caps>(key, 'screen.info', {})
-      .then((r) => { if (!gone) { setCaps(r); if (r.view) { lastAt.current = Date.now(); nextFrame(); } } })
+      .then((r) => { if (!gone) setCaps(r); })
       .catch((e: any) => !gone && setError(e?.message ?? 'This computer did not answer about its screen'));
     return () => { gone = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,12 +126,29 @@ export function Screen() {
 
   // A request that neither arrives nor errors ends the stream in silence.
   useEffect(() => {
-    if (!caps?.view) return;
+    if (!live) return;
     const t = window.setInterval(() => {
-      if (lastAt.current && Date.now() - lastAt.current > 4000) { lastAt.current = Date.now(); nextFrame(); }
+      if (liveRef.current && lastAt.current && Date.now() - lastAt.current > 4000) {
+        lastAt.current = Date.now();
+        nextFrame();
+      }
     }, 2000);
     return () => window.clearInterval(t);
-  }, [caps?.view, nextFrame]);
+  }, [live, nextFrame]);
+
+  /* Full screen is the whole view, header included: the thing you reach for
+   * first once the picture fills the wall is the button that gives the mouse
+   * back. */
+  useEffect(() => {
+    const onFs = () => setFs(document.fullscreenElement === rootRef.current);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  const toggleFs = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void rootRef.current?.requestFullscreen?.();
+  }, []);
 
   useEffect(() => {
     const el = boxRef.current;
@@ -151,7 +200,7 @@ export function Screen() {
   // the keys worth sending — tab, escape, the arrows — are exactly the ones a
   // focused element never sees.
   useEffect(() => {
-    if (!controllable) return;
+    if (!controllable || !live) return;
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
@@ -167,7 +216,7 @@ export function Screen() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [controllable, send]);
+  }, [controllable, live, send]);
 
   const onMove = (e: React.MouseEvent) => {
     if (!controllable) return;
@@ -238,7 +287,8 @@ export function Screen() {
   const blocked = caps && !caps.view;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div ref={rootRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+                                height: '100%', minHeight: 0, background: C.bg }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${C.hair}` }}>
         <Icon path={P.terminal} size={15} />
         <select
@@ -253,13 +303,22 @@ export function Screen() {
         </select>
         {zoom > 1.01 && <Chip onClick={() => setZoom(1)} title="Back to actual size">{zoom.toFixed(1)}×</Chip>}
         <div style={{ flex: 1 }} />
+        {caps?.view && (
+          <Btn kind={live ? 'ghost' : 'primary'} onClick={live ? stop : start}>
+            {live ? 'Disconnect' : 'Connect'}
+          </Btn>
+        )}
         {caps && caps.control && (
           <Btn kind={caps.enabled ? 'danger' : 'primary'} onClick={enable} disabled={busy}>
             {busy ? <Spinner size={12} /> : caps.enabled ? 'Stop controlling' : 'Take control'}
           </Btn>
         )}
-        <span style={{ fontSize: 12, color: controllable ? C.warn : C.mute }}>
+        <Btn kind="ghost" onClick={toggleFs} title={fs ? 'Leave full screen' : 'Full screen'}>
+          <Icon path={fs ? P.shrink : P.expand} size={15} />
+        </Btn>
+        <span style={{ fontSize: 12, color: controllable && live ? C.warn : C.mute }}>
           {blocked ? (caps?.reason ?? 'no screen here')
+            : !live ? 'not connected'
             : controllable ? 'control is on'
             : caps?.control === false ? (caps.reason ?? 'view only')
             : caps ? 'watching' : 'asking…'}
@@ -268,7 +327,7 @@ export function Screen() {
 
       <div ref={boxRef} style={{ flex: 1, minHeight: 0, background: '#000', display: 'flex',
                                  alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
-        {fit.w > 0 && (
+        {live && fit.w > 0 && (
           <div
             ref={picRef}
             onMouseMove={onMove}
@@ -293,6 +352,7 @@ export function Screen() {
                   if (i !== front) onFrame();
                 }}
                 onError={() => {
+                  if (!liveRef.current) return;
                   setError('The screen could not be read. Is the computer locked?');
                   window.setTimeout(() => nextFrame(), 1500);
                 }}
@@ -302,15 +362,27 @@ export function Screen() {
             ))}
           </div>
         )}
-        {!slots[front] && !error && (
+        {live && !slots[front] && !error && (
           <div style={{ position: 'absolute' }}><Spinner size={18} /></div>
+        )}
+        {!live && (
+          <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', gap: 14, padding: 24, textAlign: 'center' }}>
+            <Icon path={P.monitor} size={26} />
+            <div style={{ fontSize: 13, color: C.mute, maxWidth: 340, lineHeight: 1.5 }}>
+              {blocked ? (caps?.reason ?? 'There is no screen to show on this computer.')
+                : caps ? 'Nothing is being watched. The picture starts when you ask for it, and stops when you leave.'
+                : 'Asking this computer about its screen…'}
+            </div>
+            {caps?.view && <Btn kind="primary" onClick={start}>Connect</Btn>}
+          </div>
         )}
       </div>
 
       {!!error && (
         <div style={{ padding: '8px 14px', fontSize: 12, color: C.danger, borderTop: `1px solid ${C.hair}` }}>{error}</div>
       )}
-      {controllable && (
+      {controllable && live && (
         <div style={{ padding: '7px 14px', fontSize: 12, color: C.mute, borderTop: `1px solid ${C.hair}` }}>
           Click, drag and type as if you were sitting at it. Right-click works; ⌃/⌘ shortcuts are passed
           through; hold ⌃ and scroll to zoom this view rather than the computer.
