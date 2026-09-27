@@ -37,6 +37,8 @@ const en = {
   bypassAuth: 'Authenticate for bypass mode',
   chatSettings: 'Chat settings', titleLabel: 'Title', limits: 'Limits', maxTurns: 'Max turns', maxBudget: 'Max budget',
   budgetClaudeOnly: 'Budget applies to Claude only.', sessionInfo: 'session {id} · total ${cost}',
+  idsSection: 'Identifiers', chatId: 'Chat id', sessionId: 'Session id',
+  totalCost: 'total ${cost}',
   notYet: 'not yet', couldNotSave: "Couldn't save",
   // chat
   message: 'Message', noConnection: 'No connection', 

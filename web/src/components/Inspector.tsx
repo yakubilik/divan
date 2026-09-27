@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
 import { Icon, P, mono, Label, Dot } from '../ui/kit';
 import { cost, duration, shortPath, tokens } from '../lib/format';
@@ -27,6 +28,54 @@ function Row({ label, value, onClick, dot }: {
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
       }}>{value}</span>
       {onClick && <Icon path={P.chevronDown} size={13} color={C.mute} />}
+    </button>
+  );
+}
+
+/** An id, in full, that copies itself when clicked.
+ *
+ *  In full because the reason to want one is always somewhere else — `claude
+ *  --resume <session>` in a terminal, a database row, a bug report — and an id
+ *  cut to fit a column is one you have to go and find again. */
+function IdRow({ label, value, last }: { label: string; value?: string | null; last?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
+
+  const copy = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      return;                      // an insecure origin, and nothing to be done
+    }
+    setCopied(true);
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <button
+      type="button" onClick={() => void copy()} disabled={!value}
+      title={value ? 'Click to copy' : undefined}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
+        background: 'transparent', border: 'none',
+        borderBottom: last ? 'none' : `1px solid ${C.border}`,
+        cursor: value ? 'pointer' : 'default',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 12, color: C.mute, flex: 1 }}>{label}</span>
+        <span style={{ fontSize: 11, color: copied ? C.accent : C.faint }}>
+          {value ? (copied ? 'copied' : 'copy') : 'not yet'}
+        </span>
+      </div>
+      {!!value && (
+        <div style={{ ...mono, fontSize: 11.5, color: C.text2, marginTop: 3, wordBreak: 'break-all' }}>
+          {value}
+        </div>
+      )}
     </button>
   );
 }
@@ -154,6 +203,12 @@ export function Inspector({ chat, items, busy, liveTokens, accountLabel, account
                 </div>
               </div>
             )}
+
+            <Label>Identifiers</Label>
+            <Card>
+              <IdRow label="Chat id" value={chat.id} />
+              <IdRow label="Session id" value={chat.provider_session_id} last />
+            </Card>
 
             {tools.length > 0 && (
               <>

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DEFAULT_PERM, useStore, useT } from '../src/store';
@@ -182,8 +184,17 @@ function Body() {
               </Card>
             </>
           )}
-          <Text mono style={{ fontSize: 11.5, color: c.muted, paddingTop: 18, paddingHorizontal: 4 }}>
-            {T('sessionInfo', { id: chat.provider_session_id ? chat.provider_session_id.slice(0, 8) : T('notYet'), cost: chat.total_cost_usd.toFixed(2) })}
+          {/* The two ids in full, because the reason to want one is always
+              somewhere else: `claude --resume <session>` in a terminal, a
+              database row, a bug report. Truncated to eight characters they
+              were only ever decoration. */}
+          <Label style={{ paddingTop: 10 }}>{T('idsSection')}</Label>
+          <Card>
+            <CopyRow label={T('chatId')} value={chat.id} />
+            <CopyRow label={T('sessionId')} value={chat.provider_session_id} last />
+          </Card>
+          <Text mono style={{ fontSize: 11.5, color: c.muted, paddingTop: 12, paddingHorizontal: 4 }}>
+            {T('totalCost', { cost: chat.total_cost_usd.toFixed(2) })}
           </Text>
         </View>
         <View style={{ marginTop: 'auto', paddingTop: 24, gap: 10 }}>
@@ -194,6 +205,45 @@ function Body() {
         </View>
       </ScrollView>
     </View>
+  );
+}
+
+/** An id, in full, that copies itself when tapped.
+ *
+ *  Wrapping rather than truncating: a session id you cannot read all of is a
+ *  session id you have to go and find somewhere else, which is the thing this
+ *  row exists to save. */
+function CopyRow({ label, value, last }: { label: string; value?: string | null; last?: boolean }) {
+  const c = useColors();
+  const T = useT();
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const copy = async () => {
+    if (!value) return;
+    await Clipboard.setStringAsync(value);
+    Haptics.selectionAsync().catch(() => {});
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <Pressable
+      onPress={() => void copy()} disabled={!value}
+      style={({ pressed }) => [{ gap: 4, paddingVertical: 11, paddingHorizontal: 14 },
+                               !last && { borderBottomWidth: 1, borderBottomColor: c.line },
+                               pressed && !!value && { backgroundColor: c.fill }]}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text style={{ flex: 1, fontSize: 13, color: c.muted }}>{label}</Text>
+        <Text style={{ fontSize: 12, color: copied ? c.accent : c.faint }}>
+          {value ? (copied ? T('welCopied') : T('welCopy')) : T('notYet')}
+        </Text>
+      </View>
+      {!!value && <Text mono selectable style={{ fontSize: 12.5 }}>{value}</Text>}
+    </Pressable>
   );
 }
 
