@@ -45,10 +45,11 @@ What that gets you, in practice:
 
 | | |
 |---|---|
-| <img src="docs/screenshots/chats.png" width="230"> | **Chats, grouped by project.** One row per conversation, with the model, the effort and the permission mode it is running under. Archive, pin, rename, search. |
+| <img src="docs/screenshots/chats.png" width="230"> | **Chats, grouped by project.** One row per conversation, titled with the folder it runs in. Group them by hand or let the folder do it, swipe a row aside to archive or delete it, search titles and messages. |
 | <img src="docs/screenshots/chat.png" width="230"> | **A turn, streaming.** Text arrives token by token; a run of tool calls folds into one line until you ask for it. The footer is what the turn actually cost. |
 | <img src="docs/screenshots/approval.png" width="230"> | **The approval.** In `ask` mode every shell command stops here. A dangerous one stops here even in `bypass`. |
 | <img src="docs/screenshots/new-chat.png" width="230"> | **Starting one.** Pick the tool, the model, how hard it should think, how much rope it gets, and which folder it opens in. |
+| <img src="docs/screenshots/call.png" width="230"> | **Calling it.** A voice line to a concierge that can see every chat on that computer and say what each one is doing. It answers out loud; when the computer wants you, the phone rings. |
 | <img src="docs/screenshots/settings.png" width="230"> | **Settings.** Several computers, several sign-ins per tool, and a daemon that follows `origin/main` on its own. |
 
 ### And a desktop panel
@@ -60,6 +61,51 @@ separate server.
 ![The desktop panel](docs/screenshots/panel-dashboard.png)
 
 ![A chat in the panel](docs/screenshots/panel-chat.png)
+
+And terminal mode, for the other question — not "what have I got" but "what is
+happening". Every chat drawn as the terminal window it would be, on a wall you
+hang them on yourself, read by colour from across the room. An approval is
+answered from the tile.
+
+![Terminal mode in the panel](docs/screenshots/panel-terminal.png)
+
+---
+
+## What's new
+
+Everything below landed after the first store submission. The pictures above
+are the current app; there is deliberately no picture of the remote screen,
+for the reason in
+[docs/screenshots/README.md](docs/screenshots/README.md).
+
+- **A voice call to the computer.** Tap the handset and talk to a concierge
+  that can see every chat on that machine and say what each one is doing. It
+  answers out loud, and when the computer wants you the phone rings through
+  CallKit, whether or not the app is open.
+- **The computer's screen, in your hand.** A few frames a second and a
+  pointer — enough to press Allow in a dialog no agent can answer, on macOS
+  and on Windows. Every monitor is listed, and a tap lands where your finger
+  did even zoomed in. Nothing streams until you press Connect, and clicking is
+  off until you turn `remote_control` on in `config.toml`.
+- **Terminal mode in the panel.** Every chat as a window on a wall you arrange
+  yourself — see above.
+- **A tapped notification opens the chat it is about.** The right chat, on the
+  computer it came from, held until the app is unlocked instead of opening an
+  empty one.
+- **Both of a chat's ids, in full.** The chat id and the session id sit under
+  *Identifiers* in the panel's inspector and the phone's chat settings, and a
+  tap copies one: the first for a bug report or a row in the database, the
+  second for `claude --resume <session>` in a terminal.
+- **A turn survives the daemon.** A restart picks up the turns that were in
+  flight and the messages nobody answered, in the order they were asked.
+- **A message reaches a running turn** at its next step rather than waiting
+  behind it, the way typing into a running Claude Code session does.
+- **Agents.** The agents defined on the computer are listed on the phone and
+  in the panel, and a card can start a chat with one.
+- **The app, drawn again.** Every screen matches the artboards in `design/`,
+  in light and dark, following the phone's own appearance.
+
+Release by release, with the fixes: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -196,6 +242,9 @@ tells it to. The whole design is about that sentence being safe to say.
   permission mode, and it can be answered from the lock screen.
 - **Output is scrubbed.** Anything shaped like an API key or a bot token is
   redacted before it is stored or sent.
+- **Clicking is off until you turn it on.** Watching the screen is a switch
+  you press per session; driving the mouse and keyboard is `remote_control` in
+  `config.toml`, which starts `false` and survives a restart that way.
 - **Face ID** can lock the app, and can be required before entering bypass mode.
 
 One default worth knowing about: **the daemon updates itself.** `auto_update` is
