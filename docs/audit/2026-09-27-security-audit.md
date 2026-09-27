@@ -343,8 +343,9 @@ Remedy, in the order it is worth doing:
 ### Turkish in history
 
 7,870 lines across 261 blobs and 82 distinct paths, which is what you would
-expect of a project that was bilingual for its first weeks. It is not a secret, it does not leak
-anything, and it is not worth rewriting a published history over.
+expect of a project that was bilingual for its first weeks. It is not a secret,
+it does not leak anything, and it is not worth rewriting a published history
+over.
 `scripts/audit.py --history` reports it; `scripts/audit.py` (which is what CI
 runs) does not, because the working tree is what a contributor can fix.
 
