@@ -41,9 +41,11 @@ log = logging.getLogger("rac.server")
 # .pptx, a .zip or a .docx the agent could read perfectly well is just "file".
 # The media kinds live in attachments.py, next to the other direction.
 
+# Notification bodies, keyed by the UI language a device reported at `hello`.
+# Only English is written here; a device that asks for a language this table
+# does not carry is answered in English rather than refused.
 PUSH_TEXT = {
     "en": {"approval": "Approval pending", "done": "Task finished"},
-    "tr": {"approval": "Onay bekliyor", "done": "İş tamamlandı"},
 }
 
 # How far a client may fall behind before it is cut loose, and how long one
@@ -845,8 +847,8 @@ class Server:
             raise HTTPException(status_code=401, detail="unauthorized")
         safe_chat = "".join(c for c in (chat_id or "misc") if c.isalnum())[:32] or "misc"
         # The name arrives percent-encoded. Without decoding it the `%` was then
-        # dropped by the filter below and "Ekran Resmi" reached disk as
-        # "Ekran20Resmi" — the escape read as if it were text.
+        # dropped by the filter below and "Screen Shot" reached disk as
+        # "Screen20Shot" — the escape read as if it were text.
         name = Path(unquote(file.filename or "file")).name
         stem = "".join(("-" if c in " " else c) for c in Path(name).stem if c.isalnum() or c in " -_")[:40] or "file"
         ext = Path(name).suffix.lower()[:12]

@@ -162,7 +162,7 @@ def cmd_web(args: argparse.Namespace) -> None:
     url = f"http://127.0.0.1:{cfg.port}/#" + urlencode({
         "t": token, "h": "127.0.0.1", "p": cfg.port, "n": cfg.host_name, "d": dev.id,
     })
-    print(f"Cihaz: {dev.name} ({dev.id})")
+    print(f"Device: {dev.name} ({dev.id})")
     print(url)
     if not args.no_open:
         import webbrowser
