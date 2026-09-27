@@ -255,6 +255,8 @@ const en = {
   loginFinishingTitle: 'Finishing the sign-in',
   loginStrayedTitle: "This isn't the sign-in page",
   modelTitle: 'Model',
+  modelNoChat: 'This chat is no longer on the computer, so there is nothing to set here.',
+  close: 'Close',
   moveExported: 'Exported from {host}',
   moveExporting: 'Exporting from {host}…',
   moveImported: 'Imported to {host}',

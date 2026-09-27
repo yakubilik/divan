@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DEFAULT_PERM, useStore, useT } from '../src/store';
 import { useColors } from '../src/theme';
-import { Icon, Label, Segmented, Text } from '../src/components/ui';
+import { Icon, Label, Segmented, SmallButton, Text } from '../src/components/ui';
 import { alert } from '../src/components/overlay';
 import { OptionCard, ProviderCards } from '../src/components/pickers';
 import { Sheet, useSheet } from '../src/components/sheet';
@@ -18,7 +18,27 @@ export default function ModelSheet() {
   // For a chat it stands tall, with room for the account list; for the
   // defaults it stops lower down, over the settings it came from.
   const forDefaults = defaults === '1' || !id;
+  const chat = useStore((s) => (id ? s.chats[id] : undefined));
+  // With no chat to set anything on, the tall panel came up empty: nothing to
+  // read, nothing to tap, and a scrim reduced to one hairline at the top, so
+  // the only way out was to know to drag it. Say what happened, at the size of
+  // saying it.
+  if (!forDefaults && !chat) return <Sheet onClose={() => router.back()}><Gone /></Sheet>;
   return <Sheet onClose={() => router.back()} top={forDefaults ? 128 : 8}><Body /></Sheet>;
+}
+
+function Gone() {
+  const insets = useSafeAreaInsets();
+  const T = useT();
+  const c = useColors();
+  const { close } = useSheet();
+  return (
+    <View style={{ paddingTop: 20, paddingHorizontal: 24, paddingBottom: insets.bottom + 18, alignItems: 'center', gap: 12 }}>
+      <Text style={{ fontSize: 17, fontWeight: '600' }}>{T('modelTitle')}</Text>
+      <Text style={{ fontSize: 14, color: c.muted, textAlign: 'center' }}>{T('modelNoChat')}</Text>
+      <SmallButton title={T('close')} onPress={() => close()} />
+    </View>
+  );
 }
 
 const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -104,7 +124,9 @@ function Body() {
     setPerm(p); apply({ perm_mode: p });
   }
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  if (!editingDefaults && !chat) return null;
+  // Deleted from another device while this was open: get out of the way rather
+  // than sit there editing a chat that is gone.
+  useEffect(() => { if (!editingDefaults && !chat) close(); }, [editingDefaults, chat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const accountValue = (editingDefaults ? defaults.byProvider?.[provider]?.account_id : chat?.account_id) ?? '';
   return (
