@@ -67,6 +67,9 @@ export default function RootLayout() {
             detent both left dead space below and clipped the last row mid-height. */}
         <Stack.Screen name="host-sheet" options={{ presentation: 'formSheet', sheetAllowedDetents: 'fitToContents', sheetGrabberVisible: true, sheetCornerRadius: 22, contentStyle: { backgroundColor: colors.surface } }} />
         <Stack.Screen name="settings" />
+        {/* The computer's own screen. Full bleed and no animation: it is a
+            window onto something already happening, not a page. */}
+        <Stack.Screen name="screen" options={{ animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
         <Stack.Screen name="agents" />
         <Stack.Screen name="agent-store" />
         <Stack.Screen name="agent-install" />

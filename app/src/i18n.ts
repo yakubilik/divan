@@ -179,6 +179,7 @@ const en = {
   poolExhaustedUntil: 'Every sign-in is out of plan until {time}. This turn will stop when the limit does.',
   // settings
   settings: 'Settings', computers: 'COMPUTERS', addComputer: 'Add computer', hostHint: 'Tap: switch · Long-press: remove',
+  viewScreen: 'View its screen',
   removeHost: 'Remove computer', removeHostBody: 'The token for {name} is deleted from this phone and revoked on the computer.',
   defaults: 'DEFAULTS', toolRow: 'Tool', modelRow: 'Model', effortRow: 'Effort', permRow: 'Permission mode', folderRow: 'Folder', firstProject: 'first project',
   defaultsHint: 'The last chat settings you change become the defaults. Pen: instant chat with them; long-press: pick first.',

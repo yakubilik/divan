@@ -70,6 +70,10 @@ export default function HostSheet() {
               </Pressable>
             );
           })}
+          {/* Watching the computer's own screen. Here rather than in Settings
+              because this sheet is already the answer to "which computer", and
+              that is the only question this needs answered. */}
+          <Row label={T('viewScreen')} onPress={() => { router.back(); router.push('/screen'); }} />
           <Row label={T('addComputer')} onPress={() => { router.back(); router.push({ pathname: '/pair', params: { add: '1' } }); }} last />
         </Card>
         <Text style={[type.caption, { color: colors.muted }]}>{T('hostHint')}</Text>
