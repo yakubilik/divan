@@ -98,6 +98,18 @@ ALLOW = {
         "honorific mirror and the slang filter all have to name the words",
 }
 
+# The scan cannot scan itself. These three hold the patterns, the samples the
+# patterns are tested against, and the report of what was found — every one of
+# which has to contain the shape of the thing it is about. They are exempt from
+# every rule, not just the language ones, so read them with your eyes: a real
+# secret pasted into an audit report is the one thing this script cannot catch.
+# Nothing else may be added here.
+SELF = (
+    "scripts/audit.py",
+    "scripts/test_audit.py",
+    "docs/audit/",
+)
+
 # Files whose bytes are not text. Scanned for names, not contents.
 BINARY = (".png", ".jpg", ".jpeg", ".ico", ".ttf", ".otf", ".woff", ".woff2",
           ".wav", ".mp3", ".mp4", ".zip", ".pdf", ".icns")
@@ -128,6 +140,8 @@ def skip(path: str) -> bool:
 
 def scan_text(path: str, text: str, where: str) -> list[dict]:
     out: list[dict] = []
+    if path.startswith(SELF):
+        return out
     allowed = ALLOW.get(path)
     for i, line in enumerate(text.splitlines(), 1):
         for name, (rx, kind) in COMPILED.items():

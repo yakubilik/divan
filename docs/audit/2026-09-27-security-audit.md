@@ -29,7 +29,7 @@ python scripts/audit.py --history   # every blob and commit identity in git
 | Secrets anywhere in git history | **none** |
 | Personal data in tracked files | none of the shapes the scanner looks for; 3 files carried an author-specific identifier, found by hand and fixed below |
 | Personal data in git history | 21 hits across 18 blobs, plus 2 author identities in commit metadata — **not** rewritten, see [History](#what-only-exists-in-history) |
-| Turkish in tracked files | 62 lines in 19 files; all English now except one file, allowlisted with a reason |
+| Turkish in tracked files | 62 lines in 19 files; all English now except `call.py`, where the language is the feature, and the audit's own three files, which quote what was removed |
 | Doc claims that did not match the daemon | 5, all corrected |
 | Broader cleanup needed | **Yes, but small** — see [Cleanup needed?](#cleanup-needed) |
 
@@ -60,7 +60,7 @@ and `token = "…24+"`.
 placeholders `you`, `test`, `user`, `runner`), consumer e-mail domains,
 `*.*.ts.net` tailnet hostnames, and `<something>-MacBook*.local` machine names.
 
-*Language* — the Turkish letters English does not have (`şğıİöçüŞĞÖÇÜ`) and 95
+*Language* — the Turkish letters English does not have (`şğıİöçüŞĞÖÇÜ`) and 99
 Turkish words no English sentence contains, matched with the diacritics folded
 away so that `bekliyor` is caught as well as `çalışıyor`. The word list is the
 one that would have caught every string this audit found by hand, which is the
@@ -172,7 +172,9 @@ and never translated:
 | `app/src/i18n.ts` :160 | `language`, `english`, `turkish: 'Türkçe'` | removed. All three were unreachable — nothing in `app/` referenced any of them |
 | `app/src/i18n.ts` :184, `app/app/call.tsx` :424–442 | the key `callAlo` and a local `alo` | `callGreeting` / `greeting`. The value was already English; the identifier was not, and the comments around it already said "greeting" |
 
-**The one exception.** `daemon/remote_ai_chat/call.py` keeps Turkish words, and
+**The exceptions, and there are two kinds.**
+
+*The feature.* `daemon/remote_ai_chat/call.py` keeps Turkish words, and
 has to. The concierge answers a voice call in the language it was asked in;
 `_TURKISH_LETTERS` and `_TURKISH_WORDS` (:294–297) are how it tells which,
 `fix_address` (:320) mirrors the honorific into the right language, and
@@ -182,6 +184,21 @@ removing the feature is not in this ticket's remit. The module docstring now
 says so, and `ALLOW` in `scripts/audit.py` carries the path and the reason —
 one entry, asserted to be the only one by `scripts/test_audit.py`. Everything a
 contributor *reads* in that file — comments, docstrings, log lines — is English.
+
+*The audit trail.* Three files cannot be scanned by the thing they are about:
+`scripts/audit.py` holds the patterns, `scripts/test_audit.py` holds a sample of
+every shape those patterns look for, and this file quotes what was found —
+because an audit that says "a Turkish label was fixed" without saying which one
+cannot be checked. All three are listed in `SELF` in the script, exempt from
+*every* rule rather than only the language ones, and `scripts/test_audit.py`
+asserts both that the list is exactly those three and that an ordinary file is
+not exempt. The consequence is worth saying plainly: **a real secret pasted into
+an audit report is the one thing this script cannot catch.** Those three files
+are read by eye.
+
+So a literal `grep -rInE '[şğıİöçüŞĞÖÇÜ]'` over the tracked files still returns
+hits — in `call.py`, where the language is the feature, and in the three files
+above, which are the record of the removal. Everywhere else it is silent.
 
 ### Docs that did not match the daemon
 
@@ -445,3 +462,8 @@ push-notification table row, and one legacy chat title.
 - `docs/audit/2026-09-27-security-audit.md` — this file.
 - an `audit` job in `.github/workflows/ci.yml`, and `test_agents.py` added to
   the daemon job's list.
+
+Two lists in `scripts/audit.py` are the whole of its discretion, and both are
+asserted by `scripts/test_audit.py`: `ALLOW`, one entry, the file where another
+language is a feature; and `SELF`, three entries, the files that cannot scan
+themselves. Adding to either is a decision, not a fix.

@@ -84,6 +84,18 @@ def main() -> int:
         hits = audit.scan_text("some/file.txt", sample, "test")
         check(f"{sample[:52]!r}", not hits, f"got {[h['rule'] for h in hits]}")
 
+    print("\nthe scan does not scan itself, and nothing else gets that")
+    check("three entries, and these three",
+          audit.SELF == ("scripts/audit.py", "scripts/test_audit.py", "docs/audit/"),
+          repr(audit.SELF))
+    for path in ("scripts/audit.py", "scripts/test_audit.py",
+                 "docs/audit/2026-09-27-security-audit.md"):
+        check(f"{path} is exempt",
+              not audit.scan_text(path, "AKIAIOSFODNN7EXAMPLE onay bekliyor", "test"))
+    for path in ("scripts/release.py", "docs/PROTOCOL.md", "daemon/remote_ai_chat/push.py"):
+        check(f"{path} is not",
+              bool(audit.scan_text(path, "AKIAIOSFODNN7EXAMPLE", "test")))
+
     print("\nthe language allowlist covers exactly one file")
     allowed = sorted(audit.ALLOW)
     check("call.py is the only entry", allowed == ["daemon/remote_ai_chat/call.py"], repr(allowed))
