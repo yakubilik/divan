@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -90,7 +90,7 @@
       "typedRoutes": false
     },
     "notification": {
-      "color": "#C2522D"
+      "color": "#FF5A48"
     },
     "extra": {
       "router": {}

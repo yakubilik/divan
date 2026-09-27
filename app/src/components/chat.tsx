@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import { AstRenderer, MarkdownIt, renderRules, stringToTokens, tokensToAST } from 'react-native-markdown-display';
 // @ts-ignore - exported at runtime, absent from the package's typings
 import { removeTextStyleProps, styles as mdDefaults } from 'react-native-markdown-display';
@@ -12,54 +12,62 @@ import { cleanupTokens } from 'react-native-markdown-display/src/lib/util/cleanu
 import groupTextTokens from 'react-native-markdown-display/src/lib/util/groupTextTokens';
 // @ts-ignore
 import omitListItemParagraph from 'react-native-markdown-display/src/lib/util/omitListItemParagraph';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { colors, radius, type, mono } from '../theme';
+import { em, family, useColors, type Palette } from '../theme';
 import { useStore, useT } from '../store';
-import { Check, Chevron, ChevronDown, LiveMark, Lock, Spinner } from './ui';
+import { Icon, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
 import type { Attachment } from '../store';
 
 export function UserBubble({ text, attachments }: { text: string; attachments?: Attachment[] }) {
+  const c = useColors();
   const atts = attachments ?? [];
   const images = atts.filter((a) => a.kind === 'image' || (!a.kind && /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name || a.path || '')));
   const videos = atts.filter((a) => a.kind === 'video');
   const voices = atts.filter((a) => a.kind === 'audio');
   const files = atts.filter((a) => !images.includes(a) && !videos.includes(a) && !voices.includes(a));
-  const textIsTranscript = voices.length > 0 && voices.some((v) => v.transcript && v.transcript === text);
+  // A voice note sent on its own carries its transcript, or a placeholder
+  // when there was none, as the message text; the bubble already says both.
+  const T = useT();
+  const textIsTranscript = voices.length > 0 && (text === T('voiceMessage') || voices.some((v) => v.transcript && v.transcript === text));
+  const media = images.length > 0 || videos.length > 0;
   return (
-    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+    <View style={{ alignSelf: 'flex-end', maxWidth: '80%', alignItems: 'flex-end', gap: media ? 4 : 6 }}>
       {images.length > 0 && <ImageGroup items={images} />}
-      {videos.map((v) => <VideoBubble key={v.path} item={v} />)}
+      {videos.map((v) => <VideoBubble key={v.path} item={v} stacked={images.length > 0} />)}
       {voices.map((v) => <VoiceBubble key={v.path} item={v} />)}
       {files.map((f) => <FileChip key={f.path} item={f} />)}
-      {!!text && !textIsTranscript && <View style={styles.userBubble}><Text selectable style={[type.body, { color: colors.text, lineHeight: 23 }]}>{text}</Text></View>}
+      {!!text && !textIsTranscript && (
+        <View style={{ backgroundColor: c.ink, borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
+                       paddingVertical: 10, paddingHorizontal: 13 }}>
+          <Text selectable style={{ color: c.onInk, fontSize: 15, lineHeight: 21 }}>{text}</Text>
+        </View>
+      )}
     </View>
   );
 }
 
-const mdStyles = {
-  body: { color: colors.text, fontSize: 17, lineHeight: 24 },
-  paragraph: { marginTop: 0, marginBottom: 10 },
-  heading1: { color: colors.text, fontSize: 22, fontWeight: '600', marginBottom: 8 },
-  heading2: { color: colors.text, fontSize: 19, fontWeight: '600', marginBottom: 6 },
-  heading3: { color: colors.text, fontSize: 17, fontWeight: '600', marginBottom: 4 },
-  strong: { fontWeight: '600' },
-  link: { color: colors.accent },
-  bullet_list: { marginBottom: 8 },
-  ordered_list: { marginBottom: 8 },
-  list_item: { marginBottom: 4 },
-  code_inline: { fontFamily: mono, fontSize: 14, backgroundColor: colors.surface, color: colors.text, paddingHorizontal: 4, borderRadius: 4 },
-  code_block: { fontFamily: mono, fontSize: 12, backgroundColor: colors.surface, color: colors.text, borderRadius: radius.md, padding: 12, borderWidth: 0 },
-  fence: { fontFamily: mono, fontSize: 12, backgroundColor: colors.surface, color: colors.text, borderRadius: radius.md, padding: 12, borderWidth: 0, borderColor: colors.border },
-  blockquote: { backgroundColor: colors.surface, borderLeftWidth: 0, paddingHorizontal: 12, borderRadius: radius.sm },
-  hr: { backgroundColor: colors.border2 },
-  table: { borderColor: colors.border2 },
-  tr: { borderColor: colors.border2 },
-} as const;
-
 /** The parser hands code blocks one trailing newline more than was written. */
 function trimEnd(content: string): string {
   return typeof content === 'string' && content.endsWith('\n') ? content.slice(0, -1) : content;
+}
+
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const c = useColors();
+  const [copied, setCopied] = useState(false);
+  return (
+    <View style={{ backgroundColor: c.code, borderWidth: 1, borderColor: c.line, borderRadius: 10, overflow: 'hidden', marginBottom: 9 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10,
+                     borderBottomWidth: 1, borderBottomColor: c.line }}>
+        <Text mono style={{ fontSize: 10.5, color: c.faint }}>{lang || 'text'}</Text>
+        <Pressable hitSlop={10} onPress={() => { void Clipboard.setStringAsync(code); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>
+          <Icon name={copied ? 'check' : 'content_copy'} size={14} color={copied ? c.ok : c.faint} />
+        </Pressable>
+      </View>
+      <Text selectable mono style={{ fontSize: 12, lineHeight: 12 * 1.6, paddingVertical: 8, paddingHorizontal: 10 }}>{code}</Text>
+    </View>
+  );
 }
 
 /** Markdown builds every line out of plain <Text>, and a <Text> that is not
@@ -69,19 +77,27 @@ function trimEnd(content: string): string {
  *
  *  Only the rules that actually render text are replaced; everything else stays
  *  on the library's own defaults. */
-const selectableRules = {
+const rules = {
   textgroup: (node: any, children: any, _parent: any, styles: any) => (
     <Text key={node.key} selectable style={styles.textgroup}>{children}</Text>
   ),
   code_inline: (node: any, _children: any, _parent: any, styles: any, inherited: any = {}) => (
     <Text key={node.key} selectable style={[inherited, styles.code_inline]}>{node.content}</Text>
   ),
-  code_block: (node: any, _children: any, _parent: any, styles: any, inherited: any = {}) => (
-    <Text key={node.key} selectable style={[inherited, styles.code_block]}>{trimEnd(node.content)}</Text>
-  ),
-  fence: (node: any, _children: any, _parent: any, styles: any, inherited: any = {}) => (
-    <Text key={node.key} selectable style={[inherited, styles.fence]}>{trimEnd(node.content)}</Text>
-  ),
+  code_block: (node: any) => <CodeBlock key={node.key} lang="" code={trimEnd(node.content)} />,
+  fence: (node: any) => <CodeBlock key={node.key} lang={String(node.sourceInfo || '').trim().split(/\s/)[0]} code={trimEnd(node.content)} />,
+  list_item: (node: any, children: any, parent: any, styles: any, inherited: any = {}) => {
+    // The nearest list is the one this item is in; an ordered list further
+    // out must not number the bullets nested under one of its steps.
+    const list = parent.find((p: any) => p.type === 'ordered_list' || p.type === 'bullet_list');
+    const mark = list?.type === 'ordered_list' ? `${Number(list.attributes?.start ?? 1) + node.index}.` : '•';
+    return (
+      <View key={node.key} style={styles._VIEW_SAFE_list_item}>
+        <Text style={[inherited, styles.bullet_list_icon]}>{mark}</Text>
+        <View style={styles._VIEW_SAFE_bullet_list_content}>{children}</View>
+      </View>
+    );
+  },
 };
 
 /** Markdown, rendered so that a message can grow a token at a time.
@@ -97,7 +113,7 @@ const selectableRules = {
  *  So the AST is built here and keyed by position in the tree: the paragraph
  *  that was there a token ago keeps its key, and React updates what changed
  *  instead of replacing all of it. The renderer and its stylesheet are built
- *  once, for the same reason - the component rebuilt both on every render. */
+ *  once per theme, for the same reason. */
 const MD = MarkdownIt({ typographer: true });
 
 /** The library's own style merge: defaults under ours, plus the `_VIEW_SAFE_`
@@ -110,16 +126,53 @@ function buildStyles(custom: Record<string, any>) {
   return StyleSheet.create(out);
 }
 
-const renderer: any = new (AstRenderer as any)(
-  { ...renderRules, ...selectableRules },
-  buildStyles(mdStyles as any),
-  undefined,   // onLinkPress - the library's default opener
-  null,        // maxTopLevelChildren
-  null,        // topLevelMaxExceededItem
-  ['data:image/png;base64', 'data:image/gif;base64', 'data:image/jpeg;base64', 'https://', 'http://'],
-  'https://',
-  false,
-);
+function mdStyles(c: Palette) {
+  const inter = family(400, false);
+  return {
+    body: { color: c.text2, fontSize: 15, lineHeight: 22.5, fontFamily: inter },
+    paragraph: { marginTop: 0, marginBottom: 9, flexWrap: 'wrap', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-start', width: '100%' },
+    heading1: { color: c.ink, fontSize: 19, lineHeight: 25, fontFamily: family(600, false), marginBottom: 9 },
+    heading2: { color: c.ink, fontSize: 17, lineHeight: 22, fontFamily: family(600, false), marginBottom: 9 },
+    heading3: { color: c.ink, fontSize: 15, lineHeight: 21, fontFamily: family(600, false), marginBottom: 9 },
+    heading4: { color: c.ink, fontSize: 15, lineHeight: 21, fontFamily: family(600, false), marginBottom: 9 },
+    strong: { fontFamily: family(600, false), color: c.ink },
+    em: { fontStyle: 'italic' },
+    link: { color: c.ink, textDecorationLine: 'underline' },
+    bullet_list: { marginBottom: 9, gap: 3 },
+    ordered_list: { marginBottom: 9, gap: 3 },
+    list_item: { flexDirection: 'row', justifyContent: 'flex-start', gap: 8 },
+    bullet_list_icon: { color: c.faint, marginLeft: 0, marginRight: 0, lineHeight: 22.5 },
+    bullet_list_content: { flex: 1 },
+    ordered_list_icon: { color: c.faint },
+    code_inline: { fontFamily: family(400, true), fontSize: 13, backgroundColor: c.fill, color: c.text2, borderRadius: 4, borderWidth: 0, paddingHorizontal: 4, paddingVertical: 1 },
+    blockquote: { backgroundColor: 'transparent', borderLeftWidth: 2, borderLeftColor: c.lineStrong, paddingHorizontal: 10, marginLeft: 0, marginBottom: 9 },
+    hr: { backgroundColor: c.line, height: 1, marginVertical: 6 },
+    table: { borderWidth: 1, borderColor: c.line, borderRadius: 10, overflow: 'hidden', backgroundColor: c.card, marginBottom: 9 },
+    thead: { backgroundColor: c.code },
+    tr: { borderBottomWidth: 0, borderTopWidth: 1, borderColor: c.line, flexDirection: 'row' },
+    th: { flex: 1, paddingVertical: 6, paddingHorizontal: 10, fontFamily: family(600, false), color: c.ink, fontSize: 13 },
+    td: { flex: 1, paddingVertical: 6, paddingHorizontal: 10, fontSize: 13, color: c.ink },
+  } as const;
+}
+
+const renderers = new Map<string, any>();
+function rendererFor(c: Palette) {
+  let r = renderers.get(c.scheme);
+  if (!r) {
+    r = new (AstRenderer as any)(
+      { ...renderRules, ...rules },
+      buildStyles(mdStyles(c) as any),
+      undefined,   // onLinkPress - the library's default opener
+      null,        // maxTopLevelChildren
+      null,        // topLevelMaxExceededItem
+      ['data:image/png;base64', 'data:image/gif;base64', 'data:image/jpeg;base64', 'https://', 'http://'],
+      'https://',
+      false,
+    );
+    renderers.set(c.scheme, r);
+  }
+  return r;
+}
 
 /** Where a node sits in the tree, not a counter. Two parses of almost the same
  *  text agree on almost every key, which is the whole point. */
@@ -132,7 +185,7 @@ function keyTree(nodes: any[], path: string): any[] {
   return nodes;
 }
 
-function renderMarkdown(src: string) {
+function renderMarkdown(src: string, c: Palette) {
   let tokens = stringToTokens(src, MD as any);
   tokens = (cleanupTokens as any)(tokens);
   tokens = (groupTextTokens as any)(tokens);
@@ -140,7 +193,7 @@ function renderMarkdown(src: string) {
   const ast = keyTree(tokensToAST(tokens) as any[], '');
   // `render()` keys the root with a fresh id too; pin it, or the one key that
   // matters most changes on every token.
-  return renderer.renderNode({ type: 'body', key: 'md', children: ast }, [], true);
+  return rendererFor(c).renderNode({ type: 'body', key: 'md', children: ast }, [], true);
 }
 
 /** The agent names a file by writing its path into the message as a Markdown
@@ -150,7 +203,7 @@ function renderMarkdown(src: string) {
 function stripLocalRefs(text: string, atts: Attachment[]): string {
   if (!atts.length) return text;
   const paths = new Set(atts.map((a) => a.path));
-  let out = text.replace(/!?\[([^\]\n]*)\]\(\s*(?:<([^>\n]+)>|((?:file:\/\/)?[^)\s]+))\s*\)/g, (m, label, angled, bare) => {
+  const out = text.replace(/!?\[([^\]\n]*)\]\(\s*(?:<([^>\n]+)>|((?:file:\/\/)?[^)\s]+))\s*\)/g, (m, label, angled, bare) => {
     const raw = (angled || bare || '').replace(/^file:\/\//, '');
     if (!paths.has(raw)) return m;
     return m.startsWith('!') ? '' : label;
@@ -164,7 +217,7 @@ function AssistantAttachments({ items }: { items: Attachment[] }) {
   const voices = items.filter((a) => a.kind === 'audio');
   const files = items.filter((a) => !images.includes(a) && !videos.includes(a) && !voices.includes(a));
   return (
-    <View style={{ alignItems: 'flex-start', gap: 6, marginBottom: 10 }}>
+    <View style={{ alignItems: 'flex-start', gap: 6, marginBottom: 9 }}>
       {images.length > 0 && <ImageGroup items={images} align="left" />}
       {videos.map((v) => <VideoBubble key={v.path} item={v} />)}
       {voices.map((v) => <VoiceBubble key={v.path} item={v} />)}
@@ -174,11 +227,12 @@ function AssistantAttachments({ items }: { items: Attachment[] }) {
 }
 
 export const AssistantText = React.memo(function AssistantText({ text, streaming, attachments }: { text: string; streaming?: boolean; attachments?: Attachment[] }) {
+  const c = useColors();
   const atts = attachments ?? [];
   const body = stripLocalRefs(text, atts);
   return (
-    <View style={styles.assistant}>
-      {!!body && renderMarkdown(body + (streaming ? ' ▍' : ''))}
+    <View style={{ maxWidth: '94%', marginBottom: -9 }}>
+      {!!body && renderMarkdown(body + (streaming ? ' ▍' : ''), c)}
       {atts.length > 0 && <AssistantAttachments items={atts} />}
     </View>
   );
@@ -193,82 +247,142 @@ function tildeAll(text: string): string {
   return text.replace(HOME, '~');
 }
 
+/** `~/…/webhooks/handler.ts`: a path is identified by its tail. */
+function shortPath(p: string): string {
+  const t = tildeAll(p);
+  const parts = t.split('/');
+  return parts.length > 3 ? `${parts[0]}/…/${parts.slice(-2).join('/')}` : t;
+}
+
+/** A file inside the chat's own folder, named from there. */
+function relPath(p: string, cwd?: string): string {
+  const base = (cwd ?? '').replace(/[\/]+$/, '');
+  if (base && p.startsWith(base + '/')) return p.slice(base.length + 1);
+  return shortPath(p);
+}
+
+/** A flat object the way a person writes it: one pair a line, braces hugging. */
+function compactJson(v: any): string {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return JSON.stringify(v, null, 1) ?? '';
+  const pairs = Object.entries(v).map(([k, x]) => `${JSON.stringify(k)}: ${JSON.stringify(x)}`);
+  return pairs.length ? `{ ${pairs.join(',\n  ')} }` : '{}';
+}
+
 function toolSummary(tool: string, input: any): string {
   if (!input) return '';
   if (tool === 'Bash') return tildeAll(input.command || '');
-  return tildeAll(input.file_path || input.path || input.pattern || input.url || input.query || input.description || input.prompt || '');
+  if (input.file_path || input.path) return shortPath(input.file_path || input.path);
+  return tildeAll(input.pattern || input.url || input.query || input.description || input.prompt || '');
 }
+
+const SEARCH_TOOLS = new Set(['Grep', 'Glob', 'WebSearch', 'WebFetch', 'LS', 'Read']);
 
 /** A finished run of tool calls, folded into one line until it is asked for.
  *  `Ran 5 commands` beats five cards between two sentences. */
 export function ToolGroup({ items }: { items: { key: string; data: any; result?: any }[] }) {
   const T = useT();
+  const c = useColors();
   const [open, setOpen] = useState(false);
   const failed = items.filter((i) => i.result?.is_error).length;
+  const allBash = items.every((i) => i.data.tool === 'Bash');
+  const allSearch = items.every((i) => SEARCH_TOOLS.has(i.data.tool));
+  const label = allBash ? T('ranCommands', { n: items.length }) : allSearch ? T('ranSearches', { n: items.length }) : T('ranTools', { n: items.length });
   return (
-    <View style={{ gap: 6 }}>
-      <Pressable onPress={() => setOpen((o) => !o)} style={styles.groupHead}>
-        <Check size={14} color={failed ? colors.error : colors.success} />
-        <Text style={[type.mono, { color: colors.muted, flex: 1 }]}>
-          {T('ranTools', { n: items.length })}{failed ? ` · ${T('nFailed', { n: failed })}` : ''}
+    <View style={{ gap: 12 }}>
+      <Pressable onPress={() => setOpen((o) => !o)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}>
+        <Icon name={allSearch && !allBash ? 'search' : 'terminal'} size={16} color={c.muted} />
+        <Text style={{ fontSize: 13, color: c.muted }}>
+          {label}{failed ? <Text style={{ color: c.danger }}> · {T(failed === 1 ? 'nError' : 'nErrors', { n: failed })}</Text> : null}
         </Text>
-        {open ? <ChevronDown /> : <Chevron size={14} />}
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={16} color={c.muted} />
       </Pressable>
       {open && items.map((i) => <ToolCard key={i.key} id={i.data.id} tool={i.data.tool} input={i.data.input} result={i.result} />)}
     </View>
   );
 }
 
+function DiffLines({ input, pad = 12, max = 8 }: { input: any; pad?: number; max?: number }) {
+  const c = useColors();
+  const oldS = input?.old_string != null ? String(input.old_string) : null;
+  const newS = input?.new_string != null ? String(input.new_string) : input?.content != null ? String(input.content) : null;
+  if (oldS == null && newS == null) return null;
+  const line = (t: string, sign: '−' | '+', i: number) => (
+    <Text key={sign + i} mono
+      style={{ fontSize: 11, lineHeight: 11 * 1.6, paddingHorizontal: pad,
+               backgroundColor: sign === '−' ? c.dangerBg : c.okBg, color: sign === '−' ? c.danger : c.ok }}>
+      {sign} {t}
+    </Text>
+  );
+  return (
+    <View>
+      {oldS != null && oldS.split('\n').slice(0, max).map((t, i) => line(t, '−', i))}
+      {newS != null && newS.split('\n').slice(0, max).map((t, i) => line(t, '+', i))}
+    </View>
+  );
+}
+
+const ERR_LINE = /fail|error|✕|✗|exception|traceback|denied/i;
+
 export function ToolCard({ id, tool, input, result }: { id?: string; tool: string; input: any; result?: { output: string; is_error: boolean } }) {
   const T = useT();
+  const c = useColors();
   const [open, setOpen] = useState(false);
   // What the agent this call started is doing. It used to say this in the
   // conversation itself, in its own voice, which read as the assistant
   // answering something nobody asked.
   const act = useStore((s) => (id ? s.agentActivity[id] : undefined));
   const summary = toolSummary(tool, input);
-  const isEdit = tool === 'Edit' && input?.old_string != null;
+  const isEdit = (tool === 'Edit' || tool === 'MultiEdit' || tool === 'Write') && (input?.old_string != null || input?.content != null);
   const pending = !result;
-  const counts = isEdit ? `+${String(input.new_string ?? '').split('\n').length} −${String(input.old_string ?? '').split('\n').length}` : null;
+  const added = isEdit ? String(input.new_string ?? input.content ?? '').split('\n').length : 0;
+  const removed = isEdit && input.old_string != null ? String(input.old_string).split('\n').length : 0;
+  const output = result?.output || T('empty');
   return (
-    <View style={styles.tool}>
-      <Pressable onPress={() => setOpen((o) => !o)} style={styles.toolHead}>
-        {pending ? <Spinner /> : <Check size={14} color={result.is_error ? colors.error : colors.success} />}
-        <Text style={[type.mono, { color: colors.muted }]}>{tool}</Text>
-        <Text numberOfLines={1} style={[type.mono, { color: colors.text, flex: 1 }]}>{summary}</Text>
-        {!!counts && <Text style={[type.monoSmall, { color: colors.muted }]}>{counts}</Text>}
-        {open ? <ChevronDown /> : <Chevron size={14} />}
+    <View style={{ backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 12, overflow: 'hidden' }}>
+      <Pressable onPress={() => setOpen((o) => !o)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, paddingHorizontal: 12 }}>
+        {pending ? <Spinner /> : <Icon name={result.is_error ? 'close' : 'check'} size={16} color={result.is_error ? c.danger : c.ok} />}
+        <Text style={{ fontSize: 13, fontWeight: '600' }}>{tool}</Text>
+        <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: c.muted, flex: 1 }}>{summary}</Text>
+        {isEdit && <Text mono style={{ fontSize: 11, color: c.ok }}>+{added}</Text>}
+        {isEdit && removed > 0 && <Text mono style={{ fontSize: 11, color: c.danger }}>−{removed}</Text>}
+        {!isEdit && !pending && <Icon name={open ? 'expand_less' : 'expand_more'} size={16} color={c.faint} />}
       </Pressable>
       {pending && act && (
-        <View style={styles.agentLine}>
-          <Text numberOfLines={1} style={[type.monoSmall, { color: colors.muted, flex: 1 }]}>
-            {act.tool ? `${act.tool} · ` : ''}{act.text || ''}
-          </Text>
-          {act.tools > 0 && (
-            <Text style={[type.monoSmall, { color: colors.faint }]}>{T('ranTools', { n: act.tools })}</Text>
-          )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 1, borderTopColor: c.line, paddingTop: 7, paddingBottom: 8, paddingLeft: 32, paddingRight: 12 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.ink }} />
+          <Text mono numberOfLines={1} style={{ fontSize: 11, color: c.muted, flex: 1 }}>{act.tool ? `${act.tool}  ` : ''}{act.text || ''}</Text>
+          {act.tools > 0 && <Text mono style={{ fontSize: 11, color: c.faint }}>{T('nTools', { n: act.tools })}</Text>}
         </View>
       )}
-      {open && (
-        <View style={styles.toolBody}>
-          {isEdit ? (
-            <>
-              {String(input.old_string).split('\n').slice(0, 12).map((l: string, i: number) => (
-                <Text key={'o' + i} style={[type.monoSmall, { fontSize: 12, lineHeight: 18, color: colors.muted }]}><Text style={{ color: colors.error }}>− </Text>{l}</Text>
-              ))}
-              {String(input.new_string).split('\n').slice(0, 12).map((l: string, i: number) => (
-                <Text key={'n' + i} style={[type.monoSmall, { fontSize: 12, lineHeight: 18, color: colors.text }]}><Text style={{ color: colors.success }}>+ </Text>{l}</Text>
-              ))}
-            </>
-          ) : (
-            <Text style={[type.monoSmall, { fontSize: 12, lineHeight: 18, color: colors.muted }]} numberOfLines={12}>
-              {JSON.stringify(input, null, 1).slice(0, 1500)}
+      {isEdit && (
+        <View style={{ borderTopWidth: 1, borderTopColor: c.line }}>
+          <DiffLines input={input} max={open ? 40 : 6} />
+        </View>
+      )}
+      {isEdit && open && result?.is_error && (
+        <View style={{ borderTopWidth: 1, borderTopColor: c.line, paddingVertical: 8, paddingHorizontal: 12 }}>
+          <Text mono selectable numberOfLines={12} style={{ fontSize: 11, lineHeight: 11 * 1.55, color: c.danger }}>{output.slice(0, 2000)}</Text>
+        </View>
+      )}
+      {open && !isEdit && (
+        <View style={{ borderTopWidth: 1, borderTopColor: c.line, paddingVertical: 8, paddingHorizontal: 12, gap: 6 }}>
+          <Text mono style={{ fontSize: 10, letterSpacing: em(10, 0.08), textTransform: 'uppercase', color: c.faint }}>{T('toolInput')}</Text>
+          <View style={{ backgroundColor: c.code, borderRadius: 6, paddingVertical: 6, paddingHorizontal: 8 }}>
+            <Text mono selectable numberOfLines={14} style={{ fontSize: 11, lineHeight: 11 * 1.55, color: c.text2 }}>
+              {tildeAll(compactJson(input)).slice(0, 1500)}
             </Text>
-          )}
+          </View>
           {result && (
-            <Text style={[type.monoSmall, { fontSize: 12, lineHeight: 18, color: result.is_error ? colors.error : colors.text, marginTop: 8 }]} numberOfLines={20}>
-              {result.output || T('empty')}
-            </Text>
+            <>
+              <Text mono style={{ fontSize: 10, letterSpacing: em(10, 0.08), textTransform: 'uppercase', color: c.faint }}>{T('toolOutput')}</Text>
+              <View style={{ backgroundColor: c.code, borderRadius: 6, paddingVertical: 6, paddingHorizontal: 8 }}>
+                <Text mono selectable numberOfLines={24} style={{ fontSize: 11, lineHeight: 11 * 1.55, color: c.text2 }}>
+                  {output.slice(0, 4000).split('\n').map((l, i, all) => (
+                    <Text key={i} style={result.is_error && ERR_LINE.test(l) ? { color: c.danger } : undefined}>{l}{i < all.length - 1 ? '\n' : ''}</Text>
+                  ))}
+                </Text>
+              </View>
+            </>
           )}
         </View>
       )}
@@ -276,62 +390,73 @@ export function ToolCard({ id, tool, input, result }: { id?: string; tool: strin
   );
 }
 
-function DiffLines({ input }: { input: any }) {
-  const oldS = input?.old_string != null ? String(input.old_string) : null;
-  const newS = input?.new_string != null ? String(input.new_string) : input?.content != null ? String(input.content) : null;
-  if (oldS == null && newS == null) return null;
-  const line = (t: string, sign: '−' | '+', i: number) => (
-    <Text key={sign + i} numberOfLines={1} style={[type.monoSmall, { fontSize: 12, lineHeight: 18, color: sign === '−' ? colors.muted : colors.text }]}>
-      <Text style={{ color: sign === '−' ? colors.error : colors.success }}>{sign} </Text>{t}
-    </Text>
-  );
-  return (
-    <View style={{ marginTop: 8 }}>
-      {oldS != null && oldS.split('\n').slice(0, 8).map((t, i) => line(t, '−', i))}
-      {newS != null && newS.split('\n').slice(0, 8).map((t, i) => line(t, '+', i))}
-    </View>
-  );
-}
-
-export function ApprovalCard({ tool, input, preview, danger, decision, onDecide }: {
-  tool: string; input?: any; preview: string; danger: boolean; decision: string | null;
+export function ApprovalCard({ tool, input, preview, danger, decision, onDecide, cwd }: {
+  tool: string; input?: any; preview: string; danger: boolean; decision: string | null; cwd?: string;
   onDecide: (d: 'allow' | 'allow_session' | 'deny') => void;
 }) {
   const T = useT();
+  const c = useColors();
   const resolved = !!decision;
+  const edit = tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit';
+  const path = edit ? relPath(String(input?.file_path ?? input?.path ?? preview.replace(/^\S+\s/, '') ?? ''), cwd) : '';
   const decide = (d: 'allow' | 'allow_session' | 'deny') => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     onDecide(d);
   };
-  const label = decision === 'deny' ? T('denied') : decision === 'expired' ? T('expired') : decision === 'allow_session' ? T('allowedSession') : decision ? T('allowed') : null;
+
+  if (resolved) {
+    const outcome = decision === 'deny' ? { icon: 'block', text: T('denied'), color: c.danger }
+      : decision === 'allow_session' ? { icon: 'verified', text: T('allowedSession'), color: c.ok }
+      : decision === 'expired' ? { icon: 'block', text: T('expired'), color: c.faint }
+      : { icon: 'check_circle', text: T('allowed'), color: c.ok };
+    return (
+      <View style={{ backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14, padding: 12, gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Icon name="lock" size={15} color={c.faint} />
+          {edit && <Text mono style={{ fontSize: 11, fontWeight: '600', letterSpacing: em(11, 0.08), color: c.faint }}>{tool.toUpperCase()}</Text>}
+          <View style={{ flex: 1 }} />
+          <Text mono numberOfLines={1} style={{ fontSize: 11, color: c.muted, flexShrink: 1 }}>{edit ? path : tool}</Text>
+        </View>
+        {edit ? (
+          <View style={{ borderRadius: 6, overflow: 'hidden', opacity: 0.7 }}><DiffLines input={input} pad={8} max={6} /></View>
+        ) : (
+          <Text mono numberOfLines={3} style={{ fontSize: 12, color: c.muted }}>{tildeAll(preview)}</Text>
+        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Icon name={outcome.icon} size={16} color={outcome.color} />
+          <Text style={{ fontSize: 13, fontWeight: '600', color: outcome.color }}>{outcome.text}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const tone = danger ? c.danger : c.accentText;
   return (
-    <View style={[styles.approval, resolved && { borderColor: colors.border2 }]}>
-      <View style={styles.approvalHead}>
-        <Lock color={resolved ? colors.muted : colors.accent} />
-        <Text style={[type.label, { color: resolved ? colors.muted : colors.accent }]}>{resolved ? label : danger ? T('danger') : T('pending')}</Text>
+    <View style={{ backgroundColor: c.card, borderWidth: danger ? 1.5 : 1, borderColor: danger ? c.danger : c.lineStrong, borderRadius: 14,
+                   padding: 12, gap: 10, boxShadow: c.shadow.raised }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Icon name={danger ? 'warning' : 'lock'} size={danger ? 16 : 15} color={tone} />
+        <Text mono style={{ fontSize: 11, fontWeight: '600', letterSpacing: em(11, 0.08), color: tone }}>{danger ? T('danger') : T('pending')}</Text>
         <View style={{ flex: 1 }} />
-        <Text style={[type.monoSmall, { color: colors.muted }]}>{tool}</Text>
+        <Text mono numberOfLines={1} style={{ fontSize: 11, color: c.muted, flexShrink: 1 }}>{tool}</Text>
       </View>
-      <View style={styles.approvalCmd}>
-        <Text style={[type.mono, { color: colors.text }]}>{preview}</Text>
-        {(tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit') && <DiffLines input={input} />}
+      <View style={[{ borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10 },
+        danger ? { backgroundColor: c.dangerBg } : { backgroundColor: c.code, borderWidth: 1, borderColor: c.line }]}>
+        <Text mono selectable style={{ fontSize: 12.5, lineHeight: 12.5 * 1.5, color: c.ink }}>{edit ? path : tildeAll(preview)}</Text>
+        {edit && <View style={{ marginTop: 8, marginHorizontal: -10, borderRadius: 6, overflow: 'hidden' }}><DiffLines input={input} pad={10} max={8} /></View>}
       </View>
-      {!resolved && (
-        <>
-          <View style={{ flexDirection: 'row', gap: 8, padding: 12, paddingBottom: 8 }}>
-            <Pressable onPress={() => decide('deny')} style={[styles.apBtn, { borderWidth: 1, borderColor: colors.border2 }]}>
-              <Text style={[type.sub, { color: colors.text, fontWeight: '500' }]}>{T('deny')}</Text>
-            </Pressable>
-            <Pressable onPress={() => decide('allow')} style={[styles.apBtn, { backgroundColor: colors.accent }]}>
-              <Text style={[type.sub, { color: colors.white, fontWeight: '600' }]}>{T('allow')}</Text>
-            </Pressable>
-          </View>
-          {!danger && (
-            <Pressable onPress={() => decide('allow_session')} style={{ paddingBottom: 12, alignItems: 'center' }}>
-              <Text style={[type.caption, { color: colors.muted }]}>{T('allowSession', { tool })}</Text>
-            </Pressable>
-          )}
-        </>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Pressable onPress={() => decide('deny')} style={({ pressed }) => [{ flex: 1, alignItems: 'center', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: c.lineStrong }, pressed && { backgroundColor: c.fill }]}>
+          <Text style={{ fontSize: 14, fontWeight: '600' }}>{T('deny')}</Text>
+        </Pressable>
+        <Pressable onPress={() => decide('allow')} style={({ pressed }) => [{ flex: 1, alignItems: 'center', padding: 10, borderRadius: 10, backgroundColor: c.accent }, pressed && { opacity: 0.8 }]}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#FFFFFF' }}>{T('allow')}</Text>
+        </Pressable>
+      </View>
+      {!danger && (
+        <Pressable onPress={() => decide('allow_session')} hitSlop={6} style={{ alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: c.muted, textDecorationLine: 'underline' }}>{T('allowSession', { tool })}</Text>
+        </Pressable>
       )}
     </View>
   );
@@ -339,7 +464,8 @@ export function ApprovalCard({ tool, input, preview, danger, decision, onDecide 
 
 export function TurnFooter({ cost, duration, error, usage, stopReason }: { cost?: number | null; duration?: number | null; error?: string; usage?: any; stopReason?: string | null }) {
   const T = useT();
-  if (error) return <Text style={[type.caption, { color: colors.error }]}>{T('errorPrefix')}{error}</Text>;
+  const c = useColors();
+  if (error) return <Text style={{ fontSize: 13, lineHeight: 19, color: c.danger }}>{T('errorPrefix')}{error}</Text>;
   const parts = [];
   if (stopReason === 'interrupted') parts.push(T('stopped'));
   if (cost != null) parts.push(`$${cost.toFixed(3)}`);
@@ -347,7 +473,7 @@ export function TurnFooter({ cost, duration, error, usage, stopReason }: { cost?
   if (cost == null && tok) parts.push(`${tok >= 1000 ? (tok / 1000).toFixed(1) + 'k' : tok} tok`);
   if (duration != null) parts.push(`${Math.round(duration / 1000)}s`);
   if (!parts.length) return null;
-  return <Text style={[type.monoSmall, { color: colors.faint }]}>{parts.join(' · ')}</Text>;
+  return <Text mono style={{ fontSize: 11, color: c.faint }}>{parts.join(' · ')}</Text>;
 }
 
 /** The pool moved this chat onto another sign-in, mid-answer or between turns.
@@ -357,79 +483,106 @@ export function TurnFooter({ cost, duration, error, usage, stopReason }: { cost?
  *  summary of the chat rather than the chat. When there was nowhere to move
  *  to, the same line says that instead — the turn is about to run into a real
  *  limit and the reader should not have to guess why. */
-export function SwitchNote({ to, until, label }: { to?: string | null; until?: number | null; label?: string }) {
+export function SwitchNote({ to, until, label, from, window: win }: { to?: string | null; until?: number | null; label?: string; from?: string; window?: string }) {
   const T = useT();
-  const back = until ? new Date(until * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
-  const text = to
-    ? T('poolSwitched', { account: label || to })
-    : back ? T('poolExhaustedUntil', { time: back }) : T('poolExhausted');
+  const c = useColors();
+  const back = until ? new Date(until * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : null;
   return (
-    <View style={styles.switchNote}>
-      <Text style={[type.caption, { color: colors.muted, flex: 1 }]}>{text}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.line, paddingVertical: 7 }}>
+      <Icon name="swap_horiz" size={16} color={c.muted} />
+      <Text style={{ fontSize: 12, color: c.muted, flex: 1, lineHeight: 17 }}>
+        {to ? (
+          <>
+            {T('poolMovedTo')}<Text style={{ color: c.ink, fontWeight: '600' }}>{label || to}</Text>
+            {from ? `: ${T('poolReached', { from, window: win || T('limPlan') })}` : ''}
+          </>
+        ) : back ? T('poolExhaustedUntil', { time: back }) : T('poolExhausted')}
+      </Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  switchNote: { flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 24,
-                paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.md,
-                backgroundColor: colors.surface },
-  assistant: { paddingRight: 24 },
-  userBubble: { maxWidth: 290, backgroundColor: colors.userBubble, borderRadius: 18, borderBottomRightRadius: 4, paddingHorizontal: 14, paddingVertical: 10 },
-  groupHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, paddingHorizontal: 12,
-               backgroundColor: colors.surface, borderRadius: radius.md },
-  tool: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', marginRight: 24 },
-  toolHead: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40, paddingHorizontal: 12 },
-  toolBody: { borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 },
-  agentLine: { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border, paddingHorizontal: 12, paddingVertical: 6 },
-  approval: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.accent, overflow: 'hidden', marginRight: 24 },
-  approvalHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
-  approvalCmd: { marginHorizontal: 14, padding: 10, borderRadius: radius.sm, backgroundColor: colors.bg },
-  apBtn: { flex: 1, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-});
-
-/** Live activity row — the status line while a turn runs:
- *  a pulsing mark, elapsed time, tokens generated so far, open tool calls, phase. */
-/** One quiet line while a turn runs: a pulsing mark, then elapsed · tokens ·
- *  open tools · what it is doing. Same weight as the turn footer, no container. */
-export function WorkingRow({ phase, seconds, tokens, tools, hint }: {
-  phase: string; seconds: number; tokens?: number; tools?: number; hint?: string;
+/** One quiet line while a turn runs: a dot with a halo, then elapsed · tokens ·
+ *  open tools · what it is doing. */
+export function WorkingRow({ phase, since, tokens, tools, hint }: {
+  phase: string; since: number; tokens?: number; tools?: number; hint?: string;
 }) {
   const T = useT();
+  const c = useColors();
+  // The clock ticks here, in the one row that shows it: ticking the screen
+  // would redraw every message in the chat once a second.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const seconds = (now - since) / 1000;
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const a = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    a.start();
+    return () => a.stop();
+  }, [pulse]);
   const secs = Math.max(0, Math.floor(seconds));
-  const time = secs < 60
-    ? `${secs}${T('unitSec')}`
-    : `${Math.floor(secs / 60)}${T('unitMin')} ${secs % 60}${T('unitSec')}`;
+  const time = `${Math.floor(secs / 60)}${T('unitMin')} ${String(secs % 60).padStart(2, '0')}${T('unitSec')}`;
   const parts = [time];
   if (tokens) parts.push(`${tokens >= 1000 ? (tokens / 1000).toFixed(1) + T('unitK') : tokens} ${T('unitTok')}`);
   if (tools) parts.push(`${tools} ${T('unitTool')}`);
   parts.push(phase);
-
   return (
-    <View style={{ gap: 4, paddingRight: 24 }}>
+    <View style={{ gap: 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <LiveMark size={14} />
-        <Text numberOfLines={1} style={[type.caption, { color: colors.muted, letterSpacing: 0, flexShrink: 1 }]}>
-          {parts.join(' · ')}
-        </Text>
+        <View style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center', marginHorizontal: -4 }}>
+          <Animated.View style={{ position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: c.halo,
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.35] }) }} />
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.ink }} />
+        </View>
+        <Text mono numberOfLines={1} style={{ fontSize: 12, color: c.text2, flexShrink: 1 }}>{parts.join(' · ')}</Text>
       </View>
       {!!hint && (
-        <Text numberOfLines={2} style={[type.caption, { color: colors.faint, fontStyle: 'italic', letterSpacing: 0 }]}>
-          {hint}
-        </Text>
+        <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 13 * 1.45, color: c.faint, paddingLeft: 16 }}>{hint}</Text>
       )}
     </View>
   );
 }
 
-/** Thin banner shown above the timeline while the socket is down. */
-export function ConnectionBanner({ text }: { text: string }) {
+/** What the model is thinking, while it thinks: the tail of it, three lines. */
+export function ThinkingRow({ text }: { text: string }) {
+  const c = useColors();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      height: 28, marginHorizontal: 16, marginTop: 8, borderRadius: 8, backgroundColor: 'rgba(229,178,100,0.12)' }}>
-      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.warning }} />
-      <Text style={[type.caption, { color: colors.warning, letterSpacing: 0 }]}>{text}</Text>
+    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+      <View style={{ paddingTop: 4 }}><Spinner /></View>
+      <Text numberOfLines={3} style={{ flex: 1, fontSize: 13, lineHeight: 13 * 1.45, color: c.muted, fontStyle: 'italic' }}>…{text}</Text>
     </View>
   );
 }
+
+/** Thin band under the header while the socket is down. */
+export function ConnectionBanner({ text }: { text: string }) {
+  const c = useColors();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: c.warnBg, padding: 6 }}>
+      <Spinner size={11} color={c.warn} track="rgba(181,133,43,.3)" />
+      <Text style={{ fontSize: 12, fontWeight: '500', color: c.warn }}>{text}</Text>
+    </View>
+  );
+}
+
+/** A transcript still on its way: bubbles and lines in the shape of a chat. */
+export function TranscriptSkeleton() {
+  const c = useColors();
+  const Bar = ({ w }: { w: `${number}%` }) => <View style={{ height: 11, width: w, borderRadius: 4, backgroundColor: c.line }} />;
+  return (
+    <View accessibilityLabel="loading" style={{ gap: 14, paddingBottom: 4 }}>
+      <View style={{ alignSelf: 'flex-end', width: '62%', height: 44, borderRadius: 18, borderBottomRightRadius: 6, backgroundColor: c.line }} />
+      <View style={{ gap: 7 }}><Bar w="92%" /><Bar w="80%" /><Bar w="55%" /></View>
+      <View style={{ height: 38, width: '100%', borderRadius: 12, backgroundColor: c.fill }} />
+      <View style={{ alignSelf: 'flex-end', width: '48%', height: 44, borderRadius: 18, borderBottomRightRadius: 6, backgroundColor: c.line }} />
+      <View style={{ gap: 7 }}><Bar w="88%" /><Bar w="66%" /></View>
+    </View>
+  );
+}
+

@@ -1,27 +1,33 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore, useT } from '../src/store';
-import { colors, radius, type } from '../src/theme';
-import { Back, Button, Card, Check, Label, ProviderMark, Spinner } from '../src/components/ui';
+import { em, useColors } from '../src/theme';
+import { BackBar, Button, Card, Icon, Label, Note, Radio, Spinner, Text } from '../src/components/ui';
+import { alert } from '../src/components/overlay';
 import { callOnce } from '../src/ws';
 import type { CliAccount, Provider } from '../src/protocol';
 
+const NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex' };
+
 /** One signed-in account on some other paired computer. */
 type Source = { hostId: string; hostName: string; account: CliAccount };
+type Step = 'idle' | 'export' | 'import' | 'verify';
 
 export default function MoveSignIn() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const T = useT();
-  const { provider, id } = useLocalSearchParams<{ provider: Provider; id?: string }>();
-  const prov = (provider ?? 'claude') as Provider;
-  const { hosts, activeHostId, host, createAccount, loadAccounts } = useStore();
+  const c = useColors();
+  const { provider, id } = useLocalSearchParams<{ provider?: Provider; id?: string }>();
+  const { hosts, activeHostId, host, hostInfo, createAccount, loadAccounts } = useStore();
   const [sources, setSources] = useState<Source[]>([]);
   const [scanning, setScanning] = useState(true);
   const [picked, setPicked] = useState<string | null>(null);
-  const [step, setStep] = useState<'idle' | 'moving' | 'checking'>('idle');
+  const [step, setStep] = useState<Step>('idle');
+  const verifyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const here = hostInfo?.name?.replace('.local', '') || host?.name || T('computer');
 
   const others = hosts.filter((h) => h.id !== activeHostId);
 
@@ -35,19 +41,25 @@ export default function MoveSignIn() {
         try {
           const r = await callOnce<{ accounts: CliAccount[] }>(h.host, h.port, h.token, 'account.list', {});
           for (const a of r.accounts) {
-            if (a.provider === prov && a.logged_in) found.push({ hostId: h.id, hostName: h.name, account: a });
+            if ((!provider || a.provider === provider) && a.logged_in) found.push({ hostId: h.id, hostName: h.name, account: a });
           }
         } catch {}
       }));
-      if (alive) { setSources(found); setScanning(false); }
+      if (alive) {
+        setSources(found);
+        setScanning(false);
+        if (found.length === 1) setPicked(`${found[0].hostId}:${found[0].account.id}`);
+      }
     })();
     return () => { alive = false; };
-  }, [hosts.length, activeHostId, prov]);
+  }, [hosts.length, activeHostId, provider]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (verifyTimer.current) clearTimeout(verifyTimer.current); }, []);
 
   const move = useCallback(async (src: Source) => {
     const srcHost = hosts.find((h) => h.id === src.hostId);
     if (!srcHost) return;
-    setStep('moving');
+    const prov = src.account.provider;
+    setStep('export');
     try {
       const exported = await callOnce<{ credentials: Record<string, unknown>; label: string }>(
         srcHost.host, srcHost.port, srcHost.token, 'account.export', { account_id: src.account.id });
@@ -60,10 +72,14 @@ export default function MoveSignIn() {
         targetId = created.id;
       }
 
-      setStep('checking');
+      // One request both writes the sign-in and proves it works here; the
+      // proving is the part that takes time.
+      setStep('import');
+      verifyTimer.current = setTimeout(() => setStep((s) => (s === 'import' ? 'verify' : s)), 700);
       const r = await useStore.getState().importSignIn(targetId, exported.credentials);
+      if (verifyTimer.current) clearTimeout(verifyTimer.current);
       if (!r.verified) {
-        Alert.alert(T('moveFailed'), `${r.verify_error ?? ''}\n\n${T('moveKeptSource', { host: src.hostName })}`.trim());
+        alert(T('moveFailed'), `${r.verify_error ?? ''}\n\n${T('moveKeptSource', { host: src.hostName })}`.trim());
         setStep('idle');
         await loadAccounts();
         return;
@@ -73,85 +89,94 @@ export default function MoveSignIn() {
         await callOnce(srcHost.host, srcHost.port, srcHost.token, 'account.forget', { account_id: src.account.id });
       } catch {}
       await loadAccounts();
-      Alert.alert(T('moveDone'), T('moveDoneBody', { label: host?.name ?? '', host: src.hostName }));
+      alert(T('moveDone'), T('moveDoneBody', { label: host?.name ?? '', host: src.hostName }));
       router.back();
     } catch (e: any) {
-      Alert.alert(T('moveFailed'), e?.message ?? '');
+      if (verifyTimer.current) clearTimeout(verifyTimer.current);
+      alert(T('moveFailed'), e?.message ?? '');
       setStep('idle');
     }
-  }, [hosts, id, prov, host?.name]);
+  }, [hosts, id, host?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function confirm() {
     const src = sources.find((s) => `${s.hostId}:${s.account.id}` === picked);
     if (!src) return;
-    Alert.alert(T('moveConfirm'), T('moveConfirmBody', { host: src.hostName, label: src.account.is_default ? T('useDefaultAccount') : src.account.label }), [
+    alert(T('moveConfirm'), T('moveConfirmBody', { host: src.hostName, label: src.account.is_default ? T('useDefaultAccount') : src.account.label }), [
       { text: T('cancel'), style: 'cancel' },
       { text: T('moveButton'), onPress: () => void move(src) },
     ]);
   }
 
   const busy = step !== 'idle';
+  const src = sources.find((s) => `${s.hostId}:${s.account.id}` === picked);
+  const order: Step[] = ['export', 'import', 'verify'];
+  const at = order.indexOf(step);
+  const st = (i: number): 'done' | 'now' | 'later' => (at > i ? 'done' : at === i ? 'now' : 'later');
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 24, gap: 22 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: -12 }}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}><Back /></Pressable>
-          <Text style={[type.largeTitle, { color: colors.text }]}>{T('moveSignIn')}</Text>
+    <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
+      <BackBar onPress={() => router.back()} />
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        <View style={{ paddingTop: 4, paddingHorizontal: 20, paddingBottom: 14 }}>
+          <Text style={{ fontSize: 26, fontWeight: '600', letterSpacing: em(26, -0.02), lineHeight: 30 }}>{T('moveSignIn')}</Text>
         </View>
-        <Text style={[type.caption, { color: colors.muted }]}>{T('moveIntro')}</Text>
-
-        <View style={{ gap: 8 }}>
-          <Label>{T('moveSource')}</Label>
+        <Note icon="warning" style={{ marginHorizontal: 16 }}>{T('moveWarn')}</Note>
+        <View style={{ paddingTop: 16, paddingHorizontal: 16, gap: 6 }}>
+          <Label style={{ paddingTop: 10 }}>{T('moveSource')}</Label>
           <Card>
             {scanning ? (
-              <View style={[styles.row, { gap: 10 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 14 }}>
                 <Spinner />
-                <Text style={[type.sub, { color: colors.muted }]}>{T('moveLoadingHost')}</Text>
+                <Text style={{ fontSize: 14, color: c.muted }}>{T('moveLoadingHost')}</Text>
               </View>
-            ) : others.length === 0 ? (
-              <View style={styles.row}><Text style={[type.sub, { color: colors.muted }]}>{T('moveNoHosts')}</Text></View>
-            ) : sources.length === 0 ? (
-              <View style={styles.row}><Text style={[type.sub, { color: colors.muted }]}>{T('moveNoAccounts')}</Text></View>
+            ) : others.length === 0 || sources.length === 0 ? (
+              <View style={{ paddingVertical: 14, paddingHorizontal: 14 }}>
+                <Text style={{ fontSize: 14, color: c.muted }}>{others.length === 0 ? T('moveNoHosts') : T('moveNoAccounts')}</Text>
+              </View>
             ) : sources.map((s, i) => {
               const key = `${s.hostId}:${s.account.id}`;
+              const name = s.account.is_default ? T('ownShort') : s.account.label;
               return (
                 <Pressable key={key} disabled={busy} onPress={() => setPicked(key)}
-                  style={[styles.row, i < sources.length - 1 && styles.rowBorder, picked === key && { backgroundColor: colors.pillBg }]}>
-                  <ProviderMark provider={prov} size={24} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text numberOfLines={1} style={[type.sub, { color: colors.text, fontWeight: '500' }]}>{s.hostName}</Text>
-                    <Text numberOfLines={1} style={[type.caption, { color: colors.muted, letterSpacing: 0 }]}>
-                      {(s.account.is_default ? T('useDefaultAccount') : s.account.label) + (s.account.detail ? ` · ${s.account.detail}` : '')}
+                  style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14 },
+                    i < sources.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.line }]}>
+                  <Radio on={picked === key} />
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 15 }}>
+                      {s.hostName} · {s.account.is_default ? name : <Text style={{ fontWeight: '600' }}>{name}</Text>}
+                    </Text>
+                    <Text numberOfLines={1} style={{ fontSize: 12, color: c.muted }}>
+                      {[NAMES[s.account.provider], s.account.detail].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
-                  {picked === key ? <Check size={20} /> : null}
                 </Pressable>
               );
             })}
           </Card>
         </View>
 
-        <View style={styles.warn}>
-          <Text style={[type.caption, { color: colors.pillText, letterSpacing: 0 }]}>{T('moveWarn')}</Text>
-        </View>
-
-        {busy ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-            <Spinner />
-            <Text style={[type.sub, { color: colors.muted }]}>{step === 'checking' ? T('moveChecking') : T('moveWorking')}</Text>
+        {busy && src && (
+          <View style={{ paddingTop: 16, paddingHorizontal: 20, gap: 8 }}>
+            <Line state={st(0)} text={at > 0 ? T('moveExported', { host: src.hostName }) : T('moveExporting', { host: src.hostName })} />
+            <Line state={st(1)} text={T('moveImported', { host: here })} />
+            <Line state={st(2)} text={T('moveVerifying')} />
           </View>
-        ) : (
-          <Button title={T('moveButton')} onPress={confirm} disabled={!picked} />
         )}
+
+        <View style={{ marginTop: 'auto', paddingTop: 24, paddingHorizontal: 16, paddingBottom: insets.bottom + 10 }}>
+          <Button title={busy ? T('moveWorking') : T('moveButton')} kind={busy ? 'busy' : 'primary'} onPress={confirm} disabled={!picked} />
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 62, paddingHorizontal: 14, paddingVertical: 8 },
-  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  warn: { padding: 12, borderRadius: radius.lg, backgroundColor: colors.pillBg, borderWidth: 1, borderColor: colors.pillBorder },
-});
+function Line({ state, text }: { state: 'done' | 'now' | 'later'; text: string }) {
+  const c = useColors();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      {state === 'done' ? <Icon name="check" size={18} color={c.ok} /> : state === 'now' ? <View style={{ width: 18, alignItems: 'center' }}><Spinner /></View> : <View style={{ width: 18 }} />}
+      <Text style={{ fontSize: 14, fontWeight: state === 'now' ? '600' : '400', color: state === 'later' ? c.faint : c.ink }}>{text}</Text>
+    </View>
+  );
+}

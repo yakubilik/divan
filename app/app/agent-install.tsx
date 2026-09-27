@@ -1,12 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, Rect, RadialGradient, LinearGradient, Stop } from 'react-native-svg';
 import { agentAccountOf, useStore, useT } from '../src/store';
-import { colors, radius, type } from '../src/theme';
-import { Back, Button, Check, Label, Spinner } from '../src/components/ui';
-import { AccountPicker } from '../src/components/pickers';
+import { em, useColors } from '../src/theme';
+import { BackBar, Button, Card, Icon, Label, Note, Radio, Spinner, Text } from '../src/components/ui';
+import { alert } from '../src/components/overlay';
+import { accountOptions } from '../src/components/pickers';
+import { hex6 } from '../src/components/agentcard';
 import type { StoreItem } from '../src/protocol';
 
 /** Installing a skill pack is three things happening in order, so it says which
@@ -19,6 +20,7 @@ export default function AgentInstall() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const T = useT();
+  const c = useColors();
   const { agents, storeSources, storeLoaded, loadStore, installAgent, defaults, conn,
           accounts, loadAccounts, setDefaults } = useStore();
   const [step, setStep] = useState<Step>(0);
@@ -31,9 +33,8 @@ export default function AgentInstall() {
   }, [conn, storeLoaded, loadStore, loadAccounts]));
 
   const { id } = useLocalSearchParams<{ id: string }>();
-  const item: StoreItem | undefined = useMemo(
-    () => storeSources.flatMap((s) => s.items).find((i) => i.id === id), [storeSources, id]);
-  const failed = storeSources.find((s) => s.error)?.error;
+  const source = useMemo(() => storeSources.find((s) => s.items.some((i) => i.id === id)), [storeSources, id]);
+  const item: StoreItem | undefined = source?.items.find((i) => i.id === id);
   // The store id is `<source>:<what>`; an installed agent carries the source's name.
   const have = agents.some((a) => a.name === (id ?? '').split(':')[0]);
   // A bundle brings skills, and skills are written under the account it is
@@ -48,6 +49,7 @@ export default function AgentInstall() {
   // here. Sending someone who has nine accounts off to add a tenth would
   // answer neither, so the picker is shown as soon as there is a real account.
   const hasAdded = accounts.some((a) => a.provider === 'claude' && a.logged_in && !a.is_default);
+  const opts = accountOptions(accounts, 'claude', T('useDefaultAccount'), T('notSignedIn'));
 
   async function install() {
     if (!item || needsAccount) return;
@@ -60,115 +62,82 @@ export default function AgentInstall() {
       setStep(3);
     } catch (e: any) {
       setStep(0);
-      Alert.alert(T('error'), e?.message ?? '');
+      alert(T('error'), e?.message ?? '');
     }
   }
 
-  const steps: { key: Step; title: string; body: string }[] = [
-    { key: 1, title: T('hStep1'), body: T('hStep1b', { n: String(item?.skills ?? 46) }) },
-    { key: 2, title: T('hStep2'), body: T('hStep2b', { name: item?.label ?? '' }) },
-    { key: 3, title: T('hStep3'), body: T('hStep3b') },
+  const color = hex6(item?.color);
+  const lines: { title: string; now: string }[] = [
+    { title: T('hStep1'), now: T('hStep1Now') },
+    { title: T('hStep2'), now: T('hStep2Now') },
+    { title: T('hStep3'), now: T('hStep3') },
   ];
+  const finished = have || step === 3;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top + 8 }}>
-      <View style={styles.head}>
-        <Pressable onPress={() => router.back()} style={styles.iconBtn}><Back /></Pressable>
-        <Text style={[type.title, { color: colors.text, flex: 1 }]}>{item?.label ?? T('addAgent')}</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={{ padding: 20, gap: 18, paddingBottom: insets.bottom + 32 }}>
-        <View style={styles.hero}>
-          <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 100 55" preserveAspectRatio="none">
-            <Defs>
-              <LinearGradient id="hb" x1="0" y1="0" x2="0.4" y2="1">
-                <Stop offset="0" stopColor="#4B3A8C" /><Stop offset="0.76" stopColor="#1E1733" /><Stop offset="1" stopColor="#14101F" />
-              </LinearGradient>
-              <RadialGradient id="hh" cx="0.14" cy="0.08" rx="1.1" ry="0.9">
-                <Stop offset="0" stopColor="#A98CF0" stopOpacity="0.95" /><Stop offset="0.6" stopColor="#A98CF0" stopOpacity="0" />
-              </RadialGradient>
-              <LinearGradient id="hs" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor="#000" stopOpacity="0" /><Stop offset="0.55" stopColor="#000" stopOpacity="0.66" /><Stop offset="1" stopColor="#000" stopOpacity="0.9" />
-              </LinearGradient>
-            </Defs>
-            <Rect x="0" y="0" width="100" height="55" fill="url(#hb)" />
-            <Rect x="0" y="0" width="100" height="55" fill="url(#hh)" />
-            <Rect x="0" y="24" width="100" height="31" fill="url(#hs)" />
-          </Svg>
-          <Text style={styles.mark}>{item?.glyph ?? '🪽'}</Text>
-          <View style={styles.heroTxt}>
-            <Text style={styles.heroName}>{item?.label ?? ''}</Text>
-            <Text style={styles.heroDesc}>
-              {item?.skills ? T('hermesAbout', { n: String(item.skills) }) : (item?.about ?? '')}
-            </Text>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        <View style={{ paddingTop: insets.top + 4, paddingHorizontal: 10, paddingBottom: 24, alignItems: 'center', gap: 10,
+                       experimental_backgroundImage: `linear-gradient(180deg, ${color}26 0%, ${c.bg} 100%)` } as any}>
+          <View style={{ alignSelf: 'flex-start', marginHorizontal: -10 }}><BackBar onPress={() => router.back()} style={{ paddingTop: 0 }} /></View>
+          <View style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 30, fontWeight: '600', color: '#FFFFFF' }}>{(item?.label.trim()[0] ?? '?').toUpperCase()}</Text>
           </View>
-        </View>
-
-        <View style={{ gap: 14 }}>
-          {steps.map((s) => {
-            const done = step >= s.key && step > 0 && (step > s.key || step === 3);
-            const active = step === s.key && step < 3;
-            return (
-              <View key={s.key} style={styles.step}>
-                <View style={[styles.num, done && styles.numOk]}>
-                  {done ? <Check size={12} color={colors.success} />
-                    : active ? <Spinner size={12} />
-                    : <Text style={{ fontSize: 12, color: colors.muted }}>{s.key}</Text>}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.stepTitle}>{s.title}</Text>
-                  <Text style={styles.stepBody}>{s.body}</Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        {!have && step === 0 && hasAdded && (
-          <View style={{ gap: 8 }}>
-            <Label>{T('installInto')}</Label>
-            <AccountPicker accounts={accounts} provider="claude" value={account}
-              onChange={(id) => void setDefaults({ agentAccountId: id })} />
-          </View>
-        )}
-
-        {have || step === 3 ? (
-          <Button title={T('goToAgents')} onPress={() => router.back()} />
-        ) : !hasAdded ? (
-          <Button title={T('goToAccounts')} onPress={() => router.push('/accounts')} />
-        ) : (
-          <Button title={T('installNamed', { name: item?.label ?? '' })} onPress={install}
-            disabled={!item || step > 0 || needsAccount} />
-        )}
-
-        <View style={styles.warn}>
-          <Text style={[type.caption, { color: colors.pillText, letterSpacing: 0 }]}>
-            {failed ? failed
-              : needsAccount ? (hasAdded ? T('hermesPickAccount') : T('hermesNeedsAccount'))
-              : T('hermesSource', { repo: item?.repo ?? 'AlexAI-MCP/hermes-CCC' })}
+          <Text style={{ fontSize: 24, fontWeight: '600', letterSpacing: em(24, -0.02) }}>{item?.label ?? ''}</Text>
+          <Text mono style={{ fontSize: 12, color: c.muted }}>
+            {[item?.skills ? T('nSkills', { n: String(item.skills) }) : '', source?.label].filter(Boolean).join(' · ')}
           </Text>
         </View>
 
-        <Text style={{ fontSize: 14, lineHeight: 19, letterSpacing: -0.1, color: colors.muted }}>
-          {T('orMakeYourOwn')}
-        </Text>
+        {(
+          <View style={{ paddingTop: 4, paddingHorizontal: 16, gap: 6 }}>
+            <Label style={{ paddingTop: 10 }}>{T('installInto')}</Label>
+            <Card>
+              {opts.map((o, i) => (
+                <Pressable key={o.id} disabled={step > 0 || finished} onPress={() => void setDefaults({ agentAccountId: o.id || null })}
+                  style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14 },
+                    i < opts.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.line }]}>
+                  <Radio on={(account ?? '') === o.id} />
+                  <Text style={{ fontSize: 15 }}>{o.label}</Text>
+                </Pressable>
+              ))}
+            </Card>
+            <Text style={{ fontSize: 12, color: c.faint, paddingHorizontal: 4 }}>{T('skillsWhere')}</Text>
+            {needsAccount && !finished && (
+              <Note icon="warning" style={{ marginTop: 6 }}>{hasAdded ? T('hermesPickAccount') : T('hermesNeedsAccount')}</Note>
+            )}
+          </View>
+        )}
+
+        {(step > 0 || finished) && (
+          <View style={{ paddingTop: 18, paddingHorizontal: 20, gap: 10 }}>
+            {lines.map((l, i) => {
+              const n = i + 1;
+              const done = finished || step > n;
+              const active = !finished && step === n;
+              return (
+                <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  {done ? <Icon name="check_circle" size={20} color={c.ok} />
+                    : active ? <View style={{ width: 20, alignItems: 'center' }}><Spinner size={14} /></View>
+                    : <Icon name="radio_button_unchecked" size={18} color={c.faint} />}
+                  <Text style={{ fontSize: 15, fontWeight: n === 3 && done ? '600' : '400', color: done || active ? c.ink : c.faint }}>{done ? l.title : l.now}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        <View style={{ marginTop: 'auto', paddingTop: 24, paddingHorizontal: 16, paddingBottom: insets.bottom + 10 }}>
+          {finished ? (
+            <Button title={T('goToAgents')} onPress={() => router.back()} />
+          ) : !hasAdded && needsAccount ? (
+            <Button title={T('goToAccounts')} onPress={() => router.push('/accounts')} />
+          ) : (
+            <Button title={step > 0 ? T('installing') : T('installNamed', { name: item?.label ?? '' })} kind={step > 0 ? 'busy' : 'primary'}
+              onPress={() => void install()} disabled={!item || needsAccount} />
+          )}
+        </View>
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 8, paddingRight: 20, paddingBottom: 12 },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  hero: { height: 190, borderRadius: 22, overflow: 'hidden', justifyContent: 'flex-end' },
-  mark: { position: 'absolute', right: -6, top: -22, fontSize: 118, opacity: 0.22 },
-  heroTxt: { paddingHorizontal: 16, paddingBottom: 14 },
-  heroName: { fontSize: 24, fontWeight: '700', lineHeight: 28, letterSpacing: -0.5, color: '#FFFFFF' },
-  heroDesc: { fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.74)', marginTop: 4 },
-  step: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  num: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.border2, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  numOk: { backgroundColor: 'rgba(111,169,111,0.20)' },
-  stepTitle: { fontSize: 15, lineHeight: 20, letterSpacing: -0.2, color: colors.text },
-  stepBody: { fontSize: 13, lineHeight: 17, color: colors.muted, marginTop: 2 },
-  warn: { padding: 12, borderRadius: radius.lg, backgroundColor: colors.pillBg, borderWidth: 1, borderColor: colors.pillBorder },
-});

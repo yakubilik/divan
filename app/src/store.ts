@@ -863,6 +863,16 @@ export function buildTimeline(events: RacEvent[]): TimelineItem[] {
   return groupTools(items);
 }
 
+/** What kind of work a tool call is, for folding: commands fold with
+ *  commands and searches with searches, so the folded line can say which
+ *  ("Ran 5 commands"). An edit never folds — its diff is the point of it. */
+function toolKind(tool: string): 'command' | 'search' | 'edit' | 'other' {
+  if (tool === 'Bash') return 'command';
+  if (tool === 'Edit' || tool === 'MultiEdit' || tool === 'Write' || tool === 'NotebookEdit') return 'edit';
+  if (tool === 'Grep' || tool === 'Glob' || tool === 'LS' || tool === 'Read' || tool === 'WebSearch' || tool === 'WebFetch') return 'search';
+  return 'other';
+}
+
 /** Fold a run of tool calls into one card.
  *
  *  A turn that reads six files used to cost six cards, and the sentence that
@@ -879,7 +889,11 @@ function groupTools(items: TimelineItem[]): TimelineItem[] {
     run = [];
   };
   for (const it of items) {
-    if (it.kind === 'tool' && it.result) { run.push(it); continue; }
+    if (it.kind === 'tool' && it.result && toolKind(it.data.tool) !== 'edit') {
+      if (run.length && toolKind(run[0].data.tool) !== toolKind(it.data.tool)) flush();
+      run.push(it);
+      continue;
+    }
     flush();
     out.push(it);
   }

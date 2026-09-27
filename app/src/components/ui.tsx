@@ -1,42 +1,175 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import Svg, { Path, Rect, Circle } from 'react-native-svg';
-import { colors, radius, type } from '../theme';
+import { Animated, Easing, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Icon } from './icon';
+import { Text } from './text';
+import { em, providerMark, useColors } from '../theme';
 
-export function Label({ children }: { children: React.ReactNode }) {
-  return <Text style={[type.label, { color: colors.muted }]}>{children}</Text>;
+export { Icon } from './icon';
+export { Text, TextInput } from './text';
+
+/** An icon standing in a line of text: the web font it was drawn with gives
+ *  a glyph a 1.2 em line box, and rows were laid out around that height. */
+export function IconLine({ name, size = 18, color, weight }: { name: string; size?: number; color?: string; weight?: number }) {
+  return <View style={{ height: Math.round(size * 1.2), justifyContent: 'center' }}><Icon name={name} size={size} color={color} weight={weight} /></View>;
 }
 
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  return <View style={[styles.card, style]}>{children}</View>;
-}
+/** Press feedback shared by everything tappable that is not a row. */
+const dim = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } : null);
 
-export function Row({ label, value, onPress, mono, last }: {
-  label: string; value?: string; onPress?: () => void; mono?: boolean; last?: boolean;
+// ── page furniture ──────────────────────────────────────────────────────────
+
+/** The top-left control of a pushed screen: a chevron (or a close cross) in a
+ *  40 pt square, 10 pt in from the edge. */
+export function BackBar({ onPress, icon = 'chevron_left', size = 26, right, style }: {
+  onPress: () => void; icon?: string; size?: number; right?: React.ReactNode; style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [styles.row, !last && styles.rowBorder, pressed && { opacity: 0.6 }]}>
-      <Text style={[type.sub, { color: colors.text }]}>{label}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
-        {value != null && (
-          <Text numberOfLines={1} style={[mono ? { fontFamily: type.mono.fontFamily, fontSize: 14 } : type.sub, { color: colors.muted, flexShrink: 1 }]}>{value}</Text>
-        )}
-        {onPress && <Chevron />}
-      </View>
+    <View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 2, paddingHorizontal: 10 }, style]}>
+      <Pressable accessibilityLabel={icon === 'close' ? 'Close' : 'Back'} onPress={onPress} hitSlop={6} style={({ pressed }) => [s.sq40, pressed && { opacity: 0.5 }]}>
+        <Icon name={icon} size={size} />
+      </Pressable>
+      {right}
+    </View>
+  );
+}
+
+export function LargeTitle({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={[{ paddingTop: 4, paddingHorizontal: 20, paddingBottom: 14 }, style]}>
+      <Text style={{ fontSize: 30, fontWeight: '600', letterSpacing: em(30, -0.025) }}>{children}</Text>
+    </View>
+  );
+}
+
+/** The bar a large title collapses into once it has scrolled away. */
+export function CompactBar({ title, onBack, visible = true }: { title: string; onBack: () => void; visible?: boolean }) {
+  const c = useColors();
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 8, paddingBottom: 10, minHeight: 42,
+                   borderBottomWidth: 1, borderBottomColor: visible ? c.line : 'transparent' }}>
+      <Pressable onPress={onBack} hitSlop={10} style={({ pressed }) => [{ position: 'absolute', left: 10, top: 4, width: 26, height: 32, justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
+        <Icon name="chevron_left" size={26} />
+      </Pressable>
+      {visible && <Text style={{ fontSize: 16, fontWeight: '600' }}>{title}</Text>}
+    </View>
+  );
+}
+
+/** A section heading above a card. */
+export function Label({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
+  return (
+    <View style={[{ paddingHorizontal: 4 }, style]}>
+      <Text style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: c.muted }}>{children}</Text>
+    </View>
+  );
+}
+
+/** Small mono eyebrow over a title: `CLAUDE · PERSONAL`, `STEP 1 OF 2`. */
+export function Eyebrow({ children, color }: { children: React.ReactNode; color?: string }) {
+  const c = useColors();
+  return <Text mono style={{ fontSize: 11, letterSpacing: em(11, 0.08), textTransform: 'uppercase', color: color ?? c.muted }}>{children}</Text>;
+}
+
+export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
+  return <View style={[{ backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14 }, style]}>{children}</View>;
+}
+
+/** A tappable line in a card: label on the left, the current value and a
+ *  chevron on the right. */
+export function Row({ label, value, mono, onPress, last, valueSize, children, style }: {
+  label: string; value?: string | null; mono?: boolean; onPress?: () => void; last?: boolean;
+  valueSize?: number; children?: React.ReactNode; style?: StyleProp<ViewStyle>;
+}) {
+  const c = useColors();
+  return (
+    <Pressable onPress={onPress} disabled={!onPress}
+      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, gap: 0 },
+        !last && { borderBottomWidth: 1, borderBottomColor: c.line }, pressed && { backgroundColor: c.fill }, style]}>
+      <Text style={{ flex: 1, fontSize: 15 }}>{label}</Text>
+      {children}
+      {value != null && (
+        <Text numberOfLines={1} mono={mono}
+          style={{ fontSize: valueSize ?? (mono ? 12 : 13), color: c.muted, flexShrink: 1, marginLeft: 8 }}>{value}</Text>
+      )}
+      {onPress && <IconLine name="chevron_right" size={18} color={c.faint} />}
     </Pressable>
   );
 }
 
-export function Segmented<T extends string>({ options, value, onChange, labels }: {
-  options: T[]; value: T | null; onChange: (v: T) => void; labels?: Record<string, string>;
+/** One line of a card that is only there to separate. */
+export function Rule({ style }: { style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
+  return <View style={[{ height: 1, backgroundColor: c.line }, style]} />;
+}
+
+// ── buttons ─────────────────────────────────────────────────────────────────
+
+/** The full-width button at the foot of a screen. */
+export function Button({ title, onPress, kind = 'primary', disabled, style }: {
+  title: string; onPress: () => void; kind?: 'primary' | 'outline' | 'busy'; disabled?: boolean; style?: StyleProp<ViewStyle>;
 }) {
+  const c = useColors();
+  const busy = kind === 'busy';
   return (
-    <View style={styles.seg}>
+    <Pressable onPress={onPress} disabled={disabled || busy}
+      style={({ pressed }) => [{
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14,
+        alignSelf: 'stretch',
+      },
+      kind === 'primary' && { backgroundColor: c.ink, padding: 15 },
+      kind === 'outline' && { borderWidth: 1, borderColor: c.lineStrong, paddingVertical: 14, paddingHorizontal: 18 },
+      busy && { backgroundColor: c.lineStrong, padding: 15 },
+      disabled && !busy && { opacity: 0.4 },
+      pressed && { opacity: 0.7 }, style]}>
+      <Text style={{ fontSize: 16, fontWeight: '600', color: kind === 'primary' ? c.onInk : busy ? c.muted : c.ink }}>{title}</Text>
+    </Pressable>
+  );
+}
+
+/** The small ink button inside a card or an empty state. */
+export function SmallButton({ title, onPress, disabled, padH = 16, padV = 9, tone = 'ink' }: {
+  title: string; onPress: () => void; disabled?: boolean; padH?: number; padV?: number; tone?: 'ink' | 'accent';
+}) {
+  const c = useColors();
+  const accent = tone === 'accent';
+  return (
+    <Pressable onPress={onPress} disabled={disabled}
+      style={(st) => [{ backgroundColor: accent ? c.accent : c.ink, borderRadius: accent ? 999 : 10, paddingHorizontal: padH, paddingVertical: padV },
+        disabled && { opacity: 0.4 }, dim(st)]}>
+      <Text style={{ fontSize: accent ? 13 : 14, fontWeight: '600', color: accent ? '#FFFFFF' : c.onInk }}>{title}</Text>
+    </Pressable>
+  );
+}
+
+/** A text link: underlined, centred, muted. */
+export function LinkText({ title, onPress, onLongPress, color, weight = '400', size = 14 }: {
+  title: string; onPress: () => void; onLongPress?: () => void; color?: string; weight?: '400' | '600'; size?: number;
+}) {
+  const c = useColors();
+  return (
+    <Pressable onPress={onPress} onLongPress={onLongPress} hitSlop={8} style={dim}>
+      <Text style={{ fontSize: size, color: color ?? c.muted, fontWeight: weight, textDecorationLine: 'underline' }}>{title}</Text>
+    </Pressable>
+  );
+}
+
+// ── controls ────────────────────────────────────────────────────────────────
+
+export function Segmented<T extends string>({ options, value, onChange, labels, disabled }: {
+  options: readonly T[]; value: T | null | undefined; onChange: (v: T) => void; labels?: Partial<Record<string, string>>; disabled?: boolean;
+}) {
+  const c = useColors();
+  return (
+    <View style={{ flexDirection: 'row', backgroundColor: c.fill, borderRadius: 10, padding: 3 }}>
       {options.map((o) => {
         const on = o === value;
         return (
-          <Pressable key={o} onPress={() => onChange(o)} style={[styles.segItem, on && styles.segOn]}>
-            <Text style={[type.caption, { color: on ? colors.text : colors.muted, fontWeight: on ? '600' : '400', letterSpacing: 0 }]}>
+          <Pressable key={o} disabled={disabled} onPress={() => onChange(o)}
+            style={[{ flex: 1, alignItems: 'center', paddingVertical: 7, paddingHorizontal: 4, borderRadius: 8 },
+              on && { backgroundColor: c.segOn, boxShadow: c.shadow.seg }]}>
+            <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: on ? '600' : '500', color: on ? c.ink : c.muted }}>
               {labels?.[o] ?? o}
             </Text>
           </Pressable>
@@ -46,284 +179,204 @@ export function Segmented<T extends string>({ options, value, onChange, labels }
   );
 }
 
-export function OptionList({ options, value, onChange }: {
-  options: { id: string; label: string; hint?: string }[]; value: string | null; onChange: (id: string) => void;
-}) {
+/** Chats | Agents, at the top of both home screens. */
+export function Tabs({ value, onChange, labels }: { value: 0 | 1; onChange: (v: 0 | 1) => void; labels: [string, string] }) {
+  const c = useColors();
   return (
-    <Card>
-      {options.map((o, i) => (
-        <Pressable key={o.id} onPress={() => onChange(o.id)} style={[styles.row, i < options.length - 1 && styles.rowBorder]}>
-          <View>
-            <Text style={[type.sub, { color: colors.text, fontWeight: o.id === value ? '500' : '400' }]}>{o.label}</Text>
-            {!!o.hint && <Text style={[type.monoSmall, { color: colors.muted, fontFamily: undefined }]}>{o.hint}</Text>}
-          </View>
-          {o.id === value && <Check />}
-        </Pressable>
-      ))}
-    </Card>
-  );
-}
-
-export function Button({ title, onPress, kind = 'primary', disabled }: {
-  title: string; onPress: () => void; kind?: 'primary' | 'secondary' | 'danger'; disabled?: boolean;
-}) {
-  const bg = kind === 'primary' ? colors.accent : 'transparent';
-  return (
-    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [
-      styles.btn, { backgroundColor: bg, borderWidth: kind === 'primary' ? 0 : 1, borderColor: colors.border2 },
-      (pressed || disabled) && { opacity: 0.6 },
-    ]}>
-      <Text style={[type.headline, { color: kind === 'primary' ? colors.white : kind === 'danger' ? colors.accent : colors.text, fontWeight: kind === 'primary' ? '600' : '500' }]}>{title}</Text>
-    </Pressable>
-  );
-}
-
-/** Pressable toggle (iOS-switch look) — used instead of RN Switch so it behaves
- *  the same everywhere and matches the design's 51×31 control. */
-export function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <Pressable onPress={() => onChange(!value)} disabled={disabled} hitSlop={8}
-      style={{ width: 51, height: 31, borderRadius: 16, padding: 2, backgroundColor: value ? colors.success : 'rgba(241,236,227,0.12)', alignItems: value ? 'flex-end' : 'flex-start', justifyContent: 'center', opacity: disabled ? 0.5 : 1 }}>
-      <View style={{ width: 27, height: 27, borderRadius: 14, backgroundColor: colors.white }} />
-    </Pressable>
-  );
-}
-
-export function Chips({ items, accent }: { items: (string | null | undefined)[]; accent?: string }) {
-  const list = items.filter(Boolean) as string[];
-  return (
-    <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'nowrap' }}>
-      {list.map((it, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <Text style={[type.monoSmall, { color: colors.muted }]}>·</Text>}
-          <Text numberOfLines={1} style={[type.monoSmall, { color: i === 0 && accent ? accent : colors.muted }]}>{it}</Text>
-        </React.Fragment>
-      ))}
-    </View>
-  );
-}
-
-// ── icons (stroke-based, 24 grid) ──────────────────────────────────────────
-const I = ({ children, size = 20, color = colors.text, sw = 2 }: { children: React.ReactNode; size?: number; color?: string; sw?: number }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{children}</Svg>
-);
-export const Chevron = ({ size = 16, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2.2}><Path d="m9 6 6 6-6 6" /></I>;
-export const ChevronDown = ({ size = 14, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2.2}><Path d="m6 9 6 6 6-6" /></I>;
-export const Back = ({ color = colors.accent }: { color?: string }) => <I size={22} color={color} sw={2.2}><Path d="m15 5-7 7 7 7" /></I>;
-export const Check = ({ size = 20, color = colors.accent }: { size?: number; color?: string }) => <I size={size} color={color} sw={2.6}><Path d="m5 12 5 5L20 7" /></I>;
-export const Compose = () => <I size={24} color={colors.accent} sw={1.8}><Path d="M12 20h9" /><Path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></I>;
-export const Menu = () => <I size={22} color={colors.text} sw={1.8}><Path d="M3 7h18M3 12h18M3 17h12" /></I>;
-export const Gear = () => <I size={22} color={colors.text} sw={1.8}><Path d="M4 7h10M4 12h16M4 17h10" /><Circle cx="18" cy="7" r="2" /><Circle cx="18" cy="17" r="2" /></I>;
-export const Lock = ({ size = 16, color = colors.accent }: { size?: number; color?: string }) => <I size={size} color={color} sw={2.2}><Rect x="4" y="11" width="16" height="10" rx="2" /><Path d="M8 11V7a4 4 0 0 1 8 0v4" /></I>;
-export const Dots = ({ size = 18, color = colors.muted }: { size?: number; color?: string }) => (
-  <I size={size} color={color}><Circle cx="5" cy="12" r="1.9" fill={color} stroke="none" /><Circle cx="12" cy="12" r="1.9" fill={color} stroke="none" /><Circle cx="19" cy="12" r="1.9" fill={color} stroke="none" /></I>
-);
-export const Plus = ({ color = colors.muted }: { color?: string }) => <I size={24} color={color}><Path d="M12 5v14M5 12h14" /></I>;
-export const Search = () => <I size={18} color={colors.muted}><Circle cx="11" cy="11" r="7" /><Path d="m20 20-3.5-3.5" /></I>;
-/** A spinner that actually spins — a static arc reads as a frozen app. */
-/** Placeholder shapes for a list that has not answered yet. A list rendered
- *  empty while its request is still in flight reads as "nothing here", which is
- *  a different and wrong answer. */
-export function Skeleton({ width, height = 12, radius = 6, style }:
-  { width: number | string; height?: number; radius?: number; style?: ViewStyle }) {
-  const a = useRef(new Animated.Value(0.45)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(a, { toValue: 1, duration: 780, useNativeDriver: true }),
-      Animated.timing(a, { toValue: 0.45, duration: 780, useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [a]);
-  return <Animated.View style={[{ width: width as any, height, borderRadius: radius,
-    backgroundColor: colors.skeleton, opacity: a }, style]} />;
-}
-
-/** One placeholder row: a mark and two lines, fading down the list. */
-export function SkeletonRows({ rows = 5, minHeight = 72, markSize = 26, markRadius = 8,
-                              paddingHorizontal = 20, widths }:
-  { rows?: number; minHeight?: number; markSize?: number; markRadius?: number;
-    paddingHorizontal?: number; widths?: [string, string][] }) {
-  const w: [string, string][] = widths ?? [['62%', '86%'], ['44%', '72%'], ['55%', '63%'],
-                                           ['50%', '78%'], ['40%', '58%'], ['47%', '68%']];
-  return (
-    <View accessibilityLabel="loading">
-      {Array.from({ length: rows }).map((_, i) => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight,
-                               paddingHorizontal, paddingVertical: 10, opacity: 1 - i * 0.15 }}>
-          <Skeleton width={markSize} height={markSize} radius={markRadius} />
-          <View style={{ flex: 1, gap: 9 }}>
-            <Skeleton width={w[i % w.length][0]} height={13} />
-            <Skeleton width={w[i % w.length][1]} height={11} radius={5} />
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-/** A transcript still on its way: alternating bubble shapes, fading upward. */
-export function SkeletonBubbles({ rows = 4 }: { rows?: number }) {
-  const shape: [boolean, number][] = [[true, 46], [false, 96], [true, 62], [false, 128], [true, 40], [false, 84]];
-  return (
-    <View accessibilityLabel="loading" style={{ paddingHorizontal: 16, gap: 14 }}>
-      {Array.from({ length: rows }).map((_, i) => {
-        const [mine, h] = shape[i % shape.length];
+    <View style={{ marginHorizontal: 16, flexDirection: 'row', backgroundColor: c.fill, borderRadius: 999, padding: 3 }}>
+      {labels.map((l, i) => {
+        const on = i === value;
         return (
-          <View key={i} style={{ alignItems: mine ? 'flex-end' : 'flex-start', opacity: 1 - i * 0.18 }}>
-            <Skeleton width={mine ? '62%' : '86%'} height={h} radius={16} />
-          </View>
+          <Pressable key={l} onPress={() => !on && onChange(i as 0 | 1)}
+            style={[{ flex: 1, alignItems: 'center', padding: 7, borderRadius: 999 },
+              on && { backgroundColor: c.card, boxShadow: c.shadow.seg }]}>
+            <Text style={{ fontSize: 13, fontWeight: on ? '600' : '500', color: on ? c.ink : c.muted }}>{l}</Text>
+          </Pressable>
         );
       })}
     </View>
   );
 }
 
-export function Spinner({ color = colors.accent, size = 14 }: { color?: string; size?: number }) {
+/** 46×28, ink when on. */
+export function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  const c = useColors();
+  return (
+    <Pressable onPress={() => onChange(!value)} disabled={disabled} hitSlop={8}
+      style={{ width: 46, height: 28, borderRadius: 999, backgroundColor: value ? c.ink : c.lineStrong, opacity: disabled ? 0.5 : 1 }}>
+      <View style={{ position: 'absolute', top: 2, left: value ? 20 : 2, width: 24, height: 24, borderRadius: 12,
+                     backgroundColor: c.card, boxShadow: c.shadow.knob }} />
+    </Pressable>
+  );
+}
+
+/** A radio: a thick ink ring when chosen, a hairline when not. */
+export function Radio({ on }: { on: boolean }) {
+  const c = useColors();
+  return <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: on ? 6 : 1.5, borderColor: on ? c.ink : c.lineStrong }} />;
+}
+
+// ── marks ───────────────────────────────────────────────────────────────────
+
+/** The two-letter mark a chat, an account or a tool is drawn with. Claude is
+ *  filled and Codex is outlined; an archived chat and a signed-out account are
+ *  drawn quieter. */
+export function ProviderBadge({ provider, size = 26, variant }: {
+  provider: string; size?: number; variant?: 'filled' | 'outline' | 'dashed';
+}) {
+  const c = useColors();
+  const v = variant ?? (provider === 'codex' ? 'outline' : 'filled');
+  return (
+    <View style={[{ width: size, height: size, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+      v === 'filled' && { backgroundColor: c.ink },
+      v === 'outline' && { borderWidth: 1.5, borderColor: c.ink },
+      v === 'dashed' && { borderWidth: 1.5, borderColor: c.lineStrong, borderStyle: 'dashed' }]}>
+      <Text mono style={{ fontSize: 11, fontWeight: '600', color: v === 'filled' ? c.onInk : v === 'dashed' ? c.faint : c.ink }}>
+        {providerMark(provider)}
+      </Text>
+    </View>
+  );
+}
+
+/** Machine data on a row: model, effort, mode. */
+export function Chip({ children }: { children: React.ReactNode }) {
+  const c = useColors();
+  return (
+    <View style={{ backgroundColor: c.fill, borderRadius: 999, paddingVertical: 2, paddingHorizontal: 7 }}>
+      <Text mono numberOfLines={1} style={{ fontSize: 10.5, color: c.muted }}>{children}</Text>
+    </View>
+  );
+}
+
+export function Dot({ color, size = 8, style }: { color: string; size?: number; style?: StyleProp<ViewStyle> }) {
+  return <View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }, style]} />;
+}
+
+/** A thin ring with one coloured quarter, turning. The design's spinner. */
+export function Spinner({ size = 11, width = 2, color, track }: { size?: number; width?: number; color?: string; track?: string }) {
+  const c = useColors();
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const anim = Animated.loop(Animated.timing(spin, {
-      toValue: 1, duration: 850, easing: Easing.linear, useNativeDriver: true,
-    }));
-    anim.start();
-    return () => anim.stop();
+    const a = Animated.loop(Animated.timing(spin, { toValue: 1, duration: 800, easing: Easing.linear, useNativeDriver: true }));
+    a.start();
+    return () => a.stop();
   }, [spin]);
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   return (
-    <Animated.View style={{ width: size, height: size, transform: [{ rotate }] }}>
-      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        <Circle cx={12} cy={12} r={9} stroke={colors.border2} strokeWidth={2.8} />
-        <Path d="M21 12a9 9 0 0 0-9-9" stroke={color} strokeWidth={2.8} strokeLinecap="round" />
-      </Svg>
-    </Animated.View>
+    <Animated.View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: width,
+      borderColor: track ?? c.lineStrong, borderTopColor: color ?? c.ink, transform: [{ rotate }] }} />
   );
 }
 
-
-/** Four bars breathing in sequence — the moving part of the status pill. */
-export function LiveBars({ color = colors.accent, height = 16 }: { color?: string; height?: number }) {
-  const anims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
+/** Five bars, the middle one tallest, breathing in turn: waiting on somebody
+ *  else (a browser, a sign-in). */
+export function WaitBars({ large }: { large?: boolean }) {
+  const c = useColors();
+  const spec = large
+    ? { w: 5, gap: 5, h: 28, r: 3, bars: [[10, c.lineStrong], [20, c.muted], [28, c.ink], [16, c.muted], [8, c.lineStrong]] as [number, string][] }
+    : { w: 4, gap: 4, h: 22, r: 2, bars: [[8, c.faint], [16, c.text2], [22, c.ink], [12, c.muted], [6, c.faint]] as [number, string][] };
+  const anims = useRef(spec.bars.map(() => new Animated.Value(0))).current;
   useEffect(() => {
-    const loops = anims.map((v, i) =>
-      Animated.loop(Animated.sequence([
-        Animated.delay(i * 130),
-        Animated.timing(v, { toValue: 1, duration: 380, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(v, { toValue: 0, duration: 380, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.delay((3 - i) * 130),
-      ])));
+    const loops = anims.map((v, i) => Animated.loop(Animated.sequence([
+      Animated.delay(i * 120),
+      Animated.timing(v, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(v, { toValue: 0, duration: 420, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.delay((spec.bars.length - 1 - i) * 120),
+    ])));
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-  }, [anims]);
-  const hs = [0.55, 1, 0.75, 0.45].map((f) => height * f);
+  }, [anims, spec.bars.length]);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2.5, height }}>
-      {anims.map((v, i) => (
-        <Animated.View key={i} style={{
-          width: 3, height: hs[i], borderRadius: 2, backgroundColor: color,
-          transform: [
-            { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [hs[i] * 0.25, 0] }) },
-            { scaleY: v.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) },
-          ],
-        }} />
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spec.gap, height: spec.h }}>
+      {spec.bars.map(([h, col], i) => (
+        <Animated.View key={i} style={{ width: spec.w, height: h, borderRadius: spec.r, backgroundColor: col,
+          transform: [{ translateY: anims[i].interpolate({ inputRange: [0, 1], outputRange: [0, -h * 0.12] }) },
+                      { scaleY: anims[i].interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] }) }] }} />
       ))}
     </View>
   );
 }
 
-/** The mark on the live status line: turns steadily and breathes, so "waiting"
- *  never looks the same as "stuck". */
-export function LiveMark({ size = 15 }: { size?: number }) {
-  const spin = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
+// ── blocks ──────────────────────────────────────────────────────────────────
+
+/** A tinted note: amber for a warning, clay-pink for a failure. */
+export function Note({ tone = 'warn', icon, children, style }: {
+  tone?: 'warn' | 'danger' | 'plain'; icon?: string; children: React.ReactNode; style?: StyleProp<ViewStyle>;
+}) {
+  const c = useColors();
+  const bg = tone === 'warn' ? c.warnBg : tone === 'danger' ? c.dangerBg : c.fill;
+  const ic = tone === 'warn' ? c.warn : tone === 'danger' ? c.danger : c.muted;
+  return (
+    <View style={[{ flexDirection: 'row', gap: 8, backgroundColor: bg, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }, style]}>
+      {!!icon && <View style={{ paddingTop: 1 }}><Icon name={icon} size={16} color={ic} /></View>}
+      {typeof children === 'string'
+        ? <Text style={{ flex: 1, fontSize: 13, lineHeight: 13 * 1.45, color: c.text2 }}>{children}</Text>
+        : <View style={{ flex: 1 }}>{children}</View>}
+    </View>
+  );
+}
+
+/** The centred "nothing here" of a list: a mark in a well, a line, a hint. */
+export function EmptyState({ icon, title, body, action, style }: {
+  icon?: string; title: string; body?: React.ReactNode; action?: React.ReactNode; style?: StyleProp<ViewStyle>;
+}) {
+  const c = useColors();
+  return (
+    <View style={[{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 40, paddingBottom: 140 }, style]}>
+      {!!icon && (
+        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: c.fill, alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+          <Icon name={icon} size={30} color={c.text2} />
+        </View>
+      )}
+      <Text style={{ fontSize: 18, fontWeight: '600', textAlign: 'center' }}>{title}</Text>
+      {body != null && <Text style={{ fontSize: 14, color: c.muted, lineHeight: 21, textAlign: 'center' }}>{body}</Text>}
+      {!!action && <View style={{ marginTop: 6 }}>{action}</View>}
+    </View>
+  );
+}
+
+/** A block that stands in for text that has not arrived. */
+export function Skeleton({ width, height = 11, radius = 4, color, style }: {
+  width: number | `${number}%`; height?: number; radius?: number; color?: string; style?: StyleProp<ViewStyle>;
+}) {
+  const c = useColors();
+  const a = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    const a = Animated.loop(Animated.timing(spin, {
-      toValue: 1, duration: 2600, easing: Easing.linear, useNativeDriver: true,
-    }));
-    const b = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 620, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 620, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(a, { toValue: 0.55, duration: 800, useNativeDriver: true }),
+      Animated.timing(a, { toValue: 1, duration: 800, useNativeDriver: true }),
     ]));
-    a.start(); b.start();
-    return () => { a.stop(); b.stop(); };
-  }, [spin, pulse]);
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.12] });
-  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
-  return (
-    <Animated.View style={{ width: size, height: size, transform: [{ rotate }, { scale }], opacity }}>
-      <Svg width={size} height={size} viewBox="0 0 24 24" fill={colors.accent}>
-        <Path d={CLAUDE_BURST} />
-      </Svg>
-    </Animated.View>
-  );
+    loop.start();
+    return () => loop.stop();
+  }, [a]);
+  return <Animated.View style={[{ width, height, borderRadius: radius, backgroundColor: color ?? c.line, opacity: a }, style]} />;
 }
-export const QrIcon = () => <I size={34} color={colors.muted} sw={1.6}><Rect x="3" y="3" width="7" height="7" rx="1" /><Rect x="14" y="3" width="7" height="7" rx="1" /><Rect x="3" y="14" width="7" height="7" rx="1" /><Path d="M14 14h3v3M21 14v7h-7" /></I>;
 
-export const Paperclip = ({ size = 14, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Path d="m21 11.5-8.5 8.5a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8" /></I>;
-export const PinIcon = ({ size = 13, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Path d="M12 17v5M9 3h6l-1 6 3 3H7l3-3z" /></I>;
-export const ArchiveIcon = ({ size = 13, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Rect x="3" y="4" width="18" height="4" rx="1" /><Path d="M5 8v12h14V8M10 12h4" /></I>;
-export const GroupedIcon = ({ size = 14, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Rect x="3" y="4" width="18" height="6" rx="1.5" /><Rect x="3" y="14" width="18" height="6" rx="1.5" /></I>;
-export const FlatIcon = ({ size = 14, color = colors.muted }: { size?: number; color?: string }) => <I size={size} color={color} sw={2}><Path d="M4 7h16M4 12h16M4 17h16" /></I>;
-
-/** Chat avatar: a mark drawn in each tool's own visual language.
- *  These are original marks, not the vendors' trademarked logos. */
-const CLAUDE_BURST = "M14.20 13.45L22.60 12.00L14.20 10.55ZM12.53 14.58L19.50 19.50L14.58 12.53ZM10.55 14.20L12.00 22.60L13.45 14.20ZM9.42 12.53L4.50 19.50L11.47 14.58ZM9.80 10.55L1.40 12.00L9.80 13.45ZM11.47 9.42L4.50 4.50L9.42 11.47ZM13.45 9.80L12.00 1.40L10.55 9.80ZM14.58 11.47L19.50 4.50L12.53 9.42Z";
-
-/** The vendors' own app icons, shipped with the app so a chat row reads at a glance.
- *  (Their trademarks; used to identify the tool each chat talks to.) */
-const PROVIDER_ICONS: Record<string, any> = {
-  claude: require('../../assets/provider-claude.png'),
-  codex: require('../../assets/provider-codex.png'),
-};
-
-/** Claude mascot, redrawn from the reference image on a 16x11 pixel grid. */
-const MASCOT: [number, number, number, number, string][] = [
-  [2, 0, 3, 2, 'body'], [11, 0, 3, 2, 'body'],
-  [1, 2, 14, 6, 'body'],
-  [0, 4, 1, 2, 'body'], [15, 4, 1, 2, 'body'],
-  [2, 8, 2, 3, 'body'], [7, 8, 2, 3, 'body'], [12, 8, 2, 3, 'body'],
-  [4, 4, 2, 2, 'eye'], [10, 4, 2, 2, 'eye'],
-].map((r) => r as [number, number, number, number, string]);
-
-export function ClaudeMascot({ size = 24 }: { size?: number }) {
-  const u = size / 16;              // the grid is 16 wide, 11 tall
+/** Placeholder rows in a card, the shape of the chat list's rows. */
+export function SkeletonCard({ rows = 5, chips = true, style }: { rows?: number; chips?: boolean; style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
   return (
-    <Svg width={size} height={size * (11 / 16)} viewBox="0 0 16 11">
-      {MASCOT.map(([x, y, w, h, kind], i) => (
-        <Rect key={i} x={x} y={y} width={w} height={h}
-              fill={kind === 'eye' ? '#141311' : colors.mascot} />
+    <Card style={style}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <View key={i} style={[{ flexDirection: 'row', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
+          { borderBottomWidth: 1, borderBottomColor: c.line }]}>
+          <Skeleton width={26} height={26} radius={8} />
+          <View style={{ flex: 1, gap: 7, paddingTop: 2 }}>
+            <Skeleton width="60%" height={11} />
+            <Skeleton width="85%" height={10} color={c.fill} />
+            {chips && (
+              <View style={{ flexDirection: 'row', gap: 4 }}>
+                <Skeleton width={48} height={14} radius={999} color={c.fill} />
+                <Skeleton width={36} height={14} radius={999} color={c.fill} />
+              </View>
+            )}
+          </View>
+        </View>
       ))}
-    </Svg>
+    </Card>
   );
 }
 
-export function ProviderMark({ provider, size = 24 }: { provider: string; size?: number }) {
-  if (provider === 'codex') {
-    return <Image source={PROVIDER_ICONS.codex} style={{ width: size, height: size, borderRadius: size * 0.22 }} resizeMode="cover" />;
-  }
-  return <ClaudeMascot size={size} />;
-}
-
-export function ProviderGlyph({ provider, size = 44 }: { provider: string; size?: number }) {
-  if (provider === 'codex') {
-    return <Image source={PROVIDER_ICONS.codex}
-                  style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surface }}
-                  resizeMode="cover" />;
-  }
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.accentSoft,
-                   alignItems: 'center', justifyContent: 'center' }}>
-      <ClaudeMascot size={size * 0.62} />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  card: { backgroundColor: colors.surface, borderRadius: radius.lg, overflow: 'hidden' },
-  row: { minHeight: 48, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border2 },
-  seg: { flexDirection: 'row', gap: 4, backgroundColor: colors.bg, borderRadius: radius.md, padding: 4 },
-  segItem: { flex: 1, height: 36, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  segOn: { backgroundColor: colors.surface2 },
-  btn: { height: 52, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
+const s = StyleSheet.create({
+  sq40: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 });

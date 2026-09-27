@@ -5,14 +5,8 @@ does not, and cannot, cover the things below.
 
 ## Trademarks
 
-`app/assets/provider-claude.png` and `app/assets/provider-codex.png` are the
-marks of **Anthropic** and **OpenAI** respectively. They are included for one
-purpose: so that a row in a list of sign-ins can be recognised as the tool it
-belongs to. That is nominative use — identifying someone else's product — and it
-is not a claim of ownership, an endorsement, or a licence to reuse them.
-
-If you fork this and ship it, those two files are not yours to redistribute
-under MIT. Replace them, or satisfy yourself that your use is also nominative.
+The app ships no vendor logos: a chat or an account is marked with two letters
+of the tool's name (`Cl`, `Cx`), drawn in the app's own type.
 
 This project is not affiliated with Anthropic or OpenAI. "Claude", "Claude
 Code", "OpenAI" and "Codex" are their marks, not ours.
@@ -32,3 +26,12 @@ the user asks for them.
   gives it. `daemon/remote_ai_chat/agent-store-snapshot.json` is a cached
   *listing* of file paths from those repositories, used so that the store is not
   empty when GitHub's API is rate-limited. It contains no third-party content.
+
+## Fonts and icons the app ships
+
+- **Inter** and **JetBrains Mono** (`app/assets/fonts/*.ttf`) are licensed
+  under the SIL Open Font License 1.1; their licence texts sit next to them
+  (`OFL-Inter.txt`, `OFL-JetBrainsMono.txt`).
+- **Material Symbols Rounded** by Google is licensed under the Apache License
+  2.0. The app does not ship the font: `app/scripts/gen-icons.py` cuts the
+  glyphs it uses out of it and `app/src/icons.gen.ts` holds them as SVG paths.

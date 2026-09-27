@@ -1,21 +1,39 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore, useT } from '../src/store';
-import { colors, radius, type } from '../src/theme';
-import { Button, Card, Label, OptionList, Segmented, Toggle } from '../src/components/ui';
-import { FolderPicker, GroupPicker, ProviderPicker } from '../src/components/pickers';
+import { useColors } from '../src/theme';
+import { Button, Card, Icon, Label, Segmented, Text, TextInput, Toggle } from '../src/components/ui';
+import { alert, measure, openMenu, prompt } from '../src/components/overlay';
+import { shortCwd, tilde } from '../src/components/pickers';
+import { Sheet, SheetBar, useSheet } from '../src/components/sheet';
 import type { Provider } from '../src/protocol';
 
 export default function ChatSettings() {
   const router = useRouter();
+  return <Sheet kind="page" onClose={() => router.back()}><Body /></Sheet>;
+}
+
+function Body() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const T = useT();
+  const c = useColors();
+  const { close } = useSheet();
   const projectsLoaded = useStore((st) => st.projectsLoaded);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { chats, catalog, projects, groups, loadProjects, updateChat, deleteChat, prefs, authenticate, setDefaults } = useStore();
-  const chat = chats[id!];
+  const chat = useStore((st) => st.chats[id!]);
+  const catalog = useStore((st) => st.catalog);
+  const projects = useStore((st) => st.projects);
+  const groups = useStore((st) => st.groups);
+  const loadProjects = useStore((st) => st.loadProjects);
+  const updateChat = useStore((st) => st.updateChat);
+  const deleteChat = useStore((st) => st.deleteChat);
+  const createGroup = useStore((st) => st.createGroup);
+  const prefs = useStore((st) => st.prefs);
+  const authenticate = useStore((st) => st.authenticate);
+  const setDefaults = useStore((st) => st.setDefaults);
   const [provider, setProvider] = useState<Provider>(chat?.provider ?? 'claude');
   const cat = catalog?.[provider] ?? null;
   const [title, setTitle] = useState(chat?.title ?? '');
@@ -25,10 +43,13 @@ export default function ChatSettings() {
   const [cwd, setCwd] = useState<string | null>(chat?.cwd ?? null);
   const [groupId, setGroupId] = useState<string | null>(chat?.group_id ?? null);
   const [maxTurns, setMaxTurns] = useState(chat?.max_turns ? String(chat.max_turns) : '');
-  const [budget, setBudget] = useState(chat?.max_budget_usd ? String(chat.max_budget_usd) : '');
+  const [budget, setBudget] = useState(chat?.max_budget_usd ? chat.max_budget_usd.toFixed(2) : '');
   const [saving, setSaving] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const pool = useStore((st) => st.pool);
   const [pinned, setPinned] = useState(!!chat?.pool_pinned);
+  const folderRow = useRef<View>(null);
+  const groupRow = useRef<View>(null);
 
   useEffect(() => { void loadProjects().catch(() => {}); }, [loadProjects]);
   useEffect(() => {
@@ -36,6 +57,7 @@ export default function ChatSettings() {
     setModel(cat.models[0].id); setEffort(cat.efforts[0] ?? null); setPerm(cat.perm_modes[0]);
   }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!chat) return null;
+  const efforts: string[] = (cat?.models.find((m: any) => m.id === model) as any)?.efforts ?? cat?.efforts ?? [];
 
   async function choosePerm(p: string) {
     if (p === 'bypass' && prefs.faceIdBypass) {
@@ -52,83 +74,137 @@ export default function ChatSettings() {
         provider, model, effort, perm_mode: perm, cwd: cwd ?? undefined, group_id: groupId,
         title: title.trim().slice(0, 60) || chat!.title,
         max_turns: maxTurns.trim() ? Number(maxTurns) : null,
-        max_budget_usd: budget.trim() ? Number(budget) : null,
+        max_budget_usd: budget.trim() ? Number(budget.replace('$', '')) : null,
         pool_pinned: pinned ? 1 : 0,
       } as any);
       void setDefaults({ provider, model, effort: effort ?? 'high', perm_mode: perm, cwd: cwd ?? undefined });
-      router.back();
-    } catch (e: any) { Alert.alert(T('couldNotSave'), e.message); }
+      close();
+    } catch (e: any) { alert(T('couldNotSave'), e.message); }
     finally { setSaving(false); }
   }
   function remove() {
-    Alert.alert(T('deleteChat'), T('deleteChatBody'), [
+    alert(T('deleteChat'), T('deleteChatBody'), [
       { text: T('cancel'), style: 'cancel' },
       { text: T('delete'), style: 'destructive', onPress: async () => { await deleteChat(chat!.id); router.dismissAll(); router.replace('/chats'); } },
     ]);
   }
 
+  async function pickFolder() {
+    const anchor = await measure(folderRow);
+    openMenu({ anchor, align: 'right', width: 260, items: projects.length
+      ? projects.map((p) => ({ label: tilde(p.path), checked: p.path === cwd, onPress: () => setCwd(p.path) }))
+      : [{ kind: 'cancel', label: projectsLoaded ? T('noFolders') : T('wStarting') }] });
+  }
+  async function pickGroup() {
+    const anchor = await measure(groupRow);
+    openMenu({ anchor, align: 'right', width: 240, items: [
+      { label: T('none'), checked: groupId === null, onPress: () => setGroupId(null) },
+      ...groups.map((g) => ({ label: g.name, checked: g.id === groupId, onPress: () => setGroupId(g.id) })),
+      { kind: 'divider' },
+      { label: T('newGroupAction'), icon: 'add', onPress: () => prompt({
+          title: T('newGroupTitle'), placeholder: T('groupName'), confirm: T('create'), cancel: T('cancel'),
+          submit: async (n) => { if (!n.trim()) return T('groupNameEmpty'); const g = await createGroup(n.trim().slice(0, 60)); setGroupId(g.id); },
+        }) },
+    ] });
+  }
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <View style={styles.handle} />
-      <View style={styles.head}>
-        <Text style={[type.title, { color: colors.text, flex: 1 }]}>{T('chatSettings')}</Text>
-        <Pressable onPress={() => router.back()}><Text style={[type.body, { color: colors.muted }]}>{T('cancel')}</Text></Pressable>
-      </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, gap: 22, paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled">
-        <View style={{ gap: 8 }}>
+    <View style={{ flex: 1 }}>
+      <SheetBar title={T('chatSettings')} action={T('save')} onAction={() => void save()} border={scrolled} />
+      <ScrollView automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled" scrollEventThrottle={32}
+        onScroll={(e) => setScrolled(e.nativeEvent.contentOffset.y > 4)}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 6, gap: 12, flexGrow: 1 }}>
+        <View style={{ gap: 6 }}>
           <Label>{T('titleLabel')}</Label>
-          <TextInput value={title} onChangeText={setTitle} placeholder={T('chatName')} placeholderTextColor={colors.faint} style={styles.input} />
+          <TextInput value={title} onChangeText={setTitle} placeholder={T('chatName')}
+            style={{ backgroundColor: c.card, borderWidth: 1, borderColor: c.lineStrong, borderRadius: 12, paddingVertical: 11, paddingHorizontal: 12, fontSize: 15 }} />
         </View>
-        <View style={{ gap: 8 }}><Label>{T('tool')}</Label><ProviderPicker value={provider} onChange={setProvider} /></View>
+        <View style={{ gap: 6 }}>
+          <Label>{T('tool')}</Label>
+          <Segmented options={['claude', 'codex'] as Provider[]} value={provider} onChange={setProvider} labels={{ claude: 'Claude', codex: 'Codex' }} />
+        </View>
         {cat && (
           <>
-            <View style={{ gap: 8 }}><Label>{T('model')}</Label><OptionList options={cat.models} value={model} onChange={setModel} /></View>
-            {cat.efforts.length > 0 && <View style={{ gap: 8 }}><Label>{T('effort')}</Label><Segmented options={cat.efforts} value={effort} onChange={setEffort} labels={{ medium: 'med' }} /></View>}
-            <View style={{ gap: 8 }}><Label>{T('permMode')}</Label><Segmented options={cat.perm_modes} value={perm} onChange={choosePerm} labels={{ 'accept-edits': 'edits', 'auto-edit': 'edit', 'full-auto': 'auto' }} /></View>
+            <View style={{ gap: 6 }}>
+              <Label>{T('model')}</Label>
+              <Segmented options={cat.models.map((m) => m.id)} value={model} onChange={setModel}
+                labels={Object.fromEntries(cat.models.map((m) => [m.id, m.label]))} />
+            </View>
+            {efforts.length > 0 && (
+              <View style={{ gap: 6 }}>
+                <Label>{T('effort')}</Label>
+                <Segmented options={efforts} value={effort} onChange={setEffort} />
+              </View>
+            )}
+            <View style={{ gap: 6 }}>
+              <Label>{T('permMode')}</Label>
+              <Segmented options={cat.perm_modes} value={perm} onChange={(p) => void choosePerm(p)} />
+            </View>
           </>
         )}
-        <Card style={{ backgroundColor: colors.bg }}>
-          <FolderPicker value={cwd} projects={projects} loading={!projectsLoaded} onChange={setCwd} />
-          <GroupPicker value={groupId} groups={groups} onChange={setGroupId} last />
+        <Card>
+          <Pressable ref={folderRow} onPress={() => void pickFolder()}
+            style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: c.line }, pressed && { backgroundColor: c.fill }]}>
+            <Text style={{ flex: 1, fontSize: 15 }}>{T('folder')}</Text>
+            <Text mono numberOfLines={1} style={{ fontSize: 12, color: c.muted, flexShrink: 1 }}>{shortCwd(cwd)}</Text>
+            <Icon name="chevron_right" size={18} color={c.faint} />
+          </Pressable>
+          <Pressable ref={groupRow} onPress={() => void pickGroup()}
+            style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14 }, pressed && { backgroundColor: c.fill }]}>
+            <Text style={{ flex: 1, fontSize: 15 }}>{T('group')}</Text>
+            <Text numberOfLines={1} style={{ fontSize: 13, color: c.muted, flexShrink: 1 }}>{groups.find((g) => g.id === groupId)?.name ?? T('none')}</Text>
+            <Icon name="chevron_right" size={18} color={c.faint} />
+          </Pressable>
         </Card>
-        <View style={{ gap: 8 }}>
-          <Label>{T('limits')}</Label>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <View style={{ flex: 1, gap: 4 }}>
-              <TextInput value={maxTurns} onChangeText={setMaxTurns} placeholder={T('unlimited')} placeholderTextColor={colors.faint} keyboardType="number-pad" style={styles.input} />
-              <Text style={[type.caption, { color: colors.muted }]}>{T('maxTurns')}</Text>
+
+        <View style={{ gap: 6 }}>
+          <Label style={{ paddingTop: 10 }}>{T('limits')}</Label>
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: c.line }}>
+              <Text style={{ flex: 1, fontSize: 15 }}>{T('maxTurns')}</Text>
+              <NumberPill value={maxTurns} onChange={setMaxTurns} placeholder="∞" />
             </View>
-            <View style={{ flex: 1, gap: 4 }}>
-              <TextInput value={budget} onChangeText={setBudget} placeholder={T('unlimited')} placeholderTextColor={colors.faint} keyboardType="decimal-pad" style={styles.input} editable={provider === 'claude'} />
-              <Text style={[type.caption, { color: colors.muted }]}>{provider === 'claude' ? T('maxBudget') : T('budgetClaudeOnly')}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 14, opacity: provider === 'claude' ? 1 : 0.5 }}>
+              <Text style={{ flex: 1, fontSize: 15 }}>{T('maxBudget')}</Text>
+              <NumberPill value={budget ? (budget.startsWith('$') ? budget : `$${budget}`) : ''} onChange={(v) => setBudget(v.replace('$', ''))} placeholder="∞" decimal editable={provider === 'claude'} />
             </View>
-          </View>
-        </View>
-        {pool?.enabled && (
-          <View style={{ gap: 8 }}>
-            <Label>{T('poolSection')}</Label>
-            <Card style={{ backgroundColor: colors.bg }}>
-              <View style={styles.poolRow}>
-                <Text style={[type.sub, { color: colors.text, flex: 1 }]}>{T('poolChatPin')}</Text>
+          </Card>
+          <Text style={{ fontSize: 12, color: c.faint, paddingHorizontal: 4 }}>{T('budgetClaudeOnly')}</Text>
+          {pool?.enabled && (
+            <>
+              <Label style={{ paddingTop: 10 }}>{T('poolSection')}</Label>
+              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14 }}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ fontSize: 15 }}>{T('poolChatPin')}</Text>
+                  <Text style={{ fontSize: 12, color: c.muted }}>{T('poolChatPinHint')}</Text>
+                </View>
                 <Toggle value={pinned} onChange={setPinned} />
-              </View>
-            </Card>
-            <Text style={[type.caption, { color: colors.muted }]}>{T('poolChatPinHint')}</Text>
-          </View>
-        )}
-        <Text style={[type.caption, { color: colors.muted }]}>
-          {T('sessionInfo', { id: chat.provider_session_id ? chat.provider_session_id.slice(0, 8) : T('notYet'), cost: chat.total_cost_usd.toFixed(2) })}
-        </Text>
-        <Button title={T('save')} onPress={save} disabled={saving} />
-        <Button title={T('deleteChat')} kind="danger" onPress={remove} />
+              </Card>
+            </>
+          )}
+          <Text mono style={{ fontSize: 11.5, color: c.muted, paddingTop: 18, paddingHorizontal: 4 }}>
+            {T('sessionInfo', { id: chat.provider_session_id ? chat.provider_session_id.slice(0, 8) : T('notYet'), cost: chat.total_cost_usd.toFixed(2) })}
+          </Text>
+        </View>
+        <View style={{ marginTop: 'auto', paddingTop: 24, gap: 10 }}>
+          <Button title={T('save')} onPress={() => void save()} disabled={saving} />
+          <Pressable onPress={remove} style={({ pressed }) => [{ padding: 12, alignItems: 'center' }, pressed && { opacity: 0.6 }]}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: c.danger }}>{T('deleteChat')}</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  handle: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: 'rgba(241,236,227,0.2)', marginTop: 10, marginBottom: 12 },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 20, paddingBottom: 18 },
-  poolRow: { minHeight: 48, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  input: { height: 48, borderRadius: radius.md, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, color: colors.text, fontSize: 16 },
-});
+/** A number inside a quiet pill, right-aligned, edited in place. Defined out
+ *  here so it is not a new component on every keystroke. */
+function NumberPill({ value, onChange, placeholder, decimal, editable = true }: { value: string; onChange: (v: string) => void; placeholder: string; decimal?: boolean; editable?: boolean }) {
+  const c = useColors();
+  return (
+    <TextInput value={value} onChangeText={onChange} placeholder={placeholder} mono keyboardType={decimal ? 'decimal-pad' : 'number-pad'} editable={editable}
+      style={{ fontSize: 14, backgroundColor: c.fill, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, textAlign: 'right',
+               // sized to what it holds: JetBrains Mono is 0.6 em a glyph
+               width: 20 + Math.max(2, (value || placeholder).length) * 8.4 }} />
+  );
+}

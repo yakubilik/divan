@@ -1,12 +1,12 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import * as Clipboard from 'expo-clipboard';
 import { useStore, useT } from '../src/store';
-import { colors, mono, radius, type } from '../src/theme';
-import { Lock, Spinner } from '../src/components/ui';
+import { em, useColors } from '../src/theme';
+import { Button, Icon, Spinner, Text } from '../src/components/ui';
 
 /** Where the authorization code comes back. The CLI asks for `code=true`, so
  *  the service redirects here with the code in the query instead of handing it
@@ -58,7 +58,8 @@ export default function LoginWeb() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const T = useT();
-  const { id, url, code: oneTime, email } =
+  const c = useColors();
+  const { id, url, code: oneTime } =
     useLocalSearchParams<{ id: string; url: string; code?: string; email?: string }>();
   const { submitLoginCode } = useStore();
   const authorizeUrl = String(url);
@@ -98,19 +99,30 @@ export default function LoginWeb() {
   }, [id, router, submitLoginCode]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
-      <View style={styles.bar}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.iconBtn}>
-          <Text style={[type.sub, { color: colors.accent }]}>{T('cancel')}</Text>
+    <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 6, paddingHorizontal: 10, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: c.line }}>
+        <Pressable onPress={() => router.back()} hitSlop={8} style={({ pressed }) => [sq36, pressed && { opacity: 0.5 }]}>
+          <Icon name="close" size={24} />
         </Pressable>
-        <View style={styles.host}>
-          <Lock size={13} color={colors.muted} />
-          <Text numberOfLines={1} style={{ fontFamily: mono, fontSize: 12, color: colors.muted }}>{host}</Text>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: c.fill, borderRadius: 10, padding: 7 }}>
+          <Icon name="lock" size={14} color={c.muted} />
+          <Text numberOfLines={1} style={{ fontSize: 13, color: c.text2 }}>{host}</Text>
         </View>
-        <Pressable onPress={restart} hitSlop={10} style={styles.iconBtn}>
-          <Text style={[type.caption, { color: colors.muted, letterSpacing: 0 }]}>{T('loginRestart')}</Text>
+        <Pressable onPress={restart} hitSlop={8} style={({ pressed }) => [sq36, pressed && { opacity: 0.5 }]}>
+          <Icon name="refresh" size={22} />
         </Pressable>
       </View>
+
+      {!!oneTime && (
+        // Codex signs in with a one-time code typed into the page. It stays in
+        // front of the user the whole time, one tap from the clipboard.
+        <Pressable onPress={() => { void Clipboard.setStringAsync(String(oneTime)); setCopied(true); setTimeout(() => setCopied(false), 1600); }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: c.code, borderBottomWidth: 1, borderBottomColor: c.line }}>
+          <Text style={{ fontSize: 12, color: c.muted }}>{T('codeLabel')}</Text>
+          <Text mono style={{ fontSize: 15, fontWeight: '600', letterSpacing: em(15, 0.1), flex: 1 }}>{oneTime}</Text>
+          <Icon name={copied ? 'check' : 'content_copy'} size={18} color={copied ? c.ok : c.muted} />
+        </Pressable>
+      )}
 
       {/* `incognito`, never shared cookies: the phone is signed in to the
           service as somebody already, and the authorize page honours that
@@ -121,61 +133,25 @@ export default function LoginWeb() {
         onNavigationStateChange={onNav}
         style={{ flex: 1, backgroundColor: '#fff' }}
         startInLoadingState renderLoading={() => (
-          <View style={styles.loading}><Spinner size={18} /></View>
+          <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' }]}><Spinner size={18} /></View>
         )} />
 
-      {oneTime ? (
-        // Codex signs in with a one-time code typed into the page. It stays in
-        // front of the user the whole time, one tap from the clipboard.
-        <View style={[styles.codeBar, { paddingBottom: insets.bottom + 16 }]}>
-          <Text style={[type.caption, { color: colors.muted, letterSpacing: 0 }]}>{T('loginTypeThisCode')}</Text>
-          <Pressable onPress={() => { void Clipboard.setStringAsync(String(oneTime)); setCopied(true); setTimeout(() => setCopied(false), 1600); }}
-            style={styles.codeRow}>
-            <Text style={{ fontFamily: mono, fontSize: 26, letterSpacing: 4, color: colors.text, flex: 1 }}>{oneTime}</Text>
-            <View style={styles.copyPill}>
-              <Text style={[type.caption, { color: colors.pillText, letterSpacing: 0 }]}>{copied ? T('copied') : T('copy')}</Text>
-            </View>
-          </Pressable>
-        </View>
-      ) : sending ? (
-        <View style={styles.veil}>
-          <Spinner size={26} />
-          <Text style={[type.headline, { color: colors.text }]}>{T('loginCodeCaught')}</Text>
-          <Text style={[type.caption, { color: colors.muted }]}>{T('loginFinishing')}</Text>
+      {sending ? (
+        <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40, backgroundColor: c.veil }]}>
+          <Spinner size={26} width={3} />
+          <Text style={{ fontSize: 17, fontWeight: '600' }}>{T('loginCodeCaught')}</Text>
+          <Text style={{ fontSize: 13, color: c.muted }}>{T('loginFinishing')}</Text>
         </View>
       ) : strayed ? (
-        <View style={[styles.foot, { paddingBottom: insets.bottom + 16 }]}>
-          <Text style={[type.caption, { color: colors.muted, letterSpacing: 0, flex: 1 }]}>{T('loginStrayed')}</Text>
-          <Pressable onPress={restart} style={styles.returnPill}>
-            <Text style={[type.caption, { color: colors.pillText, letterSpacing: 0 }]}>{T('loginReturn')}</Text>
-          </Pressable>
+        <View style={{ position: 'absolute', left: 12, right: 12, bottom: insets.bottom + 6, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 16,
+                       padding: 16, gap: 10, boxShadow: c.scheme === 'dark' ? '0 24px 56px -20px rgba(0,0,0,.6)' : '0 24px 56px -20px rgba(28,27,22,.3)' }}>
+          <Text style={{ fontSize: 16, fontWeight: '600' }}>{T('loginStrayedTitle')}</Text>
+          <Text style={{ fontSize: 13, color: c.muted, lineHeight: 13 * 1.45 }}>{T('loginStrayed')}</Text>
+          <Button title={T('loginReturn')} onPress={restart} />
         </View>
-      ) : (
-        <View style={[styles.foot, { paddingBottom: insets.bottom + 16 }]}>
-          <Text style={[type.caption, { color: colors.muted, letterSpacing: 0 }]}>
-            {email ? T('loginPickAccount').replace('{e}', String(email)) : T('loginWebHint')}
-          </Text>
-        </View>
-      )}
+      ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 10 },
-  iconBtn: { minWidth: 66, height: 44, alignItems: 'center', justifyContent: 'center' },
-  host: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minWidth: 0 },
-  loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  foot: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.surface },
-  returnPill: { height: 34, paddingHorizontal: 14, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.pillBg, borderWidth: 1, borderColor: colors.pillBorder },
-  codeBar: { paddingHorizontal: 16, paddingTop: 14, gap: 10, backgroundColor: colors.surface,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  codeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.lg,
-    backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.pillBorder },
-  copyPill: { height: 32, paddingHorizontal: 12, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.pillBg, borderWidth: 1, borderColor: colors.pillBorder },
-  veil: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 12,
-    paddingHorizontal: 40, backgroundColor: 'rgba(15,14,12,0.94)' },
-});
+const sq36 = { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' } as const;
