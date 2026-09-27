@@ -52,6 +52,21 @@ jobs:
             python "scripts/$t.py"
           done
 
+  docs:
+    name: docs · links
+    runs-on: ubuntu-latest
+    # A dead docs/screenshots/*.png is invisible until it renders as a broken
+    # image on the front page of the project, which is where most people
+    # arrive. The self-test runs first: a checker nobody has seen fail is a
+    # green tick that means nothing.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python3 scripts/test_check_links.py
+      - run: python3 scripts/check-links.py
+
   web:
     name: web panel
     runs-on: ubuntu-latest
