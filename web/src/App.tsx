@@ -12,6 +12,7 @@ import { Dashboard } from './screens/Dashboard';
 import { Terminal } from './screens/Terminal';
 import { Projects } from './screens/Projects';
 import { Agents } from './screens/Agents';
+import { Screen } from './screens/Screen';
 import { Admin } from './screens/Admin';
 import { Settings } from './screens/Settings';
 import { Onboarding } from './screens/Onboarding';
@@ -306,7 +307,8 @@ export function App() {
       else if (e.key === '2') { e.preventDefault(); setView('projects'); }
       else if (e.key === '3') { e.preventDefault(); setView('agents'); }
       else if (e.key === '4') { e.preventDefault(); setView('terminal'); }
-      else if (e.key === '5') { e.preventDefault(); setView('admin'); }
+      else if (e.key === '5') { e.preventDefault(); setView('screen'); }
+      else if (e.key === '6') { e.preventDefault(); setView('admin'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -364,6 +366,7 @@ export function App() {
         {view === 'agents' && (
           <Agents onStartChat={(agent, accountId) => setNewChat({ agent: { agent, accountId } })} />
         )}
+        {view === 'screen' && <Screen />}
         {view === 'admin' && <Admin />}
         {view === 'settings' && <Settings />}
       </div>

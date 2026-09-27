@@ -12,7 +12,7 @@ const W = 260;
 const RAIL = 48;
 const ALL_LABEL = 'All computers';
 
-export type View = 'chats' | 'terminal' | 'dashboard' | 'projects' | 'agents' | 'admin' | 'settings';
+export type View = 'chats' | 'terminal' | 'screen' | 'dashboard' | 'projects' | 'agents' | 'admin' | 'settings';
 
 export function ProviderMark({ provider, dim }: { provider: string; dim?: boolean }) {
   const claude = provider === 'claude';
@@ -137,6 +137,7 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
 const NAV: { view: View; label: string; icon: string }[] = [
   { view: 'chats', label: 'Chats', icon: 'M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v4l5-4h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z' },
   { view: 'terminal', label: 'Terminal', icon: P.terminal },
+  { view: 'screen', label: 'Screen', icon: P.monitor },
   { view: 'dashboard', label: 'Panel', icon: P.grid },
   { view: 'projects', label: 'Projects', icon: P.folder },
   { view: 'agents', label: 'Agents', icon: P.agent },
