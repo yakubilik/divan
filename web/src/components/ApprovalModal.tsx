@@ -3,6 +3,7 @@ import { Btn, Dot, Icon, P, mono } from '../ui/kit';
 import { Modal } from './Modal';
 import { tilde, toolSummary } from '../lib/format';
 import type { Chat } from '../lib/protocol';
+import { copyText } from '../lib/clipboard';
 
 export interface Pending {
   hostKey: string;
@@ -86,7 +87,7 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
           }}>{command}</span>
           <button
             type="button" title="Kopyala"
-            onClick={() => navigator.clipboard?.writeText(command).catch(() => {})}
+            onClick={() => void copyText(command)}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 0 }}
           >
             <Icon path={P.copy} size={14} color={C.mute} />

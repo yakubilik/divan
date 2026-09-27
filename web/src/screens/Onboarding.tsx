@@ -4,6 +4,7 @@ import { Btn, Dot, Icon, Label, P, Spinner, mono } from '../ui/kit';
 import { parsePairing } from '../lib/actions';
 import { hostKey, useFleet } from '../lib/fleet';
 import type { HostConfig } from '../lib/protocol';
+import { copyText } from '../lib/clipboard';
 
 type StepState = 'done' | 'active' | 'todo';
 
@@ -121,7 +122,7 @@ function CodeBox({ text }: { text: string }) {
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
   const copy = () => {
-    navigator.clipboard?.writeText(text)
+    void copyText(text)
       .then(() => {
         setCopied(true);
         if (timer.current) window.clearTimeout(timer.current);

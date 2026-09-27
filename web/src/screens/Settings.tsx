@@ -21,6 +21,7 @@ import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from '../li
 import { parsePairing, toolStatus } from '../lib/actions';
 import { errText, t } from '../lib/i18n';
 import { ago, tilde, until, uptime, windowName } from '../lib/format';
+import { copyText } from '../lib/clipboard';
 
 /** The daemon labels the machine's own account in English ("This computer's
  *  account") because it has no idea who is asking. i18n already carries the
@@ -363,7 +364,7 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
                     ...mono, flex: 1, minWidth: 0, fontSize: 12, color: C.text2,
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>{maskUrl(prompt.url)}</span>
-                  <Btn onClick={() => navigator.clipboard?.writeText(prompt.url!).catch(() => {})}>
+                  <Btn onClick={() => void copyText(prompt.url!)}>
                     <Icon path={P.copy} size={13} color={C.text} /> Kopyala
                   </Btn>
                   <Btn onClick={() => window.open(prompt.url!, '_blank', 'noopener')}>

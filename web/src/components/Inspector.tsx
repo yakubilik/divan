@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
+import { copyText } from '../lib/clipboard';
 import { Icon, P, mono, Label, Dot } from '../ui/kit';
 import { cost, duration, shortPath, tokens } from '../lib/format';
 import type { Field } from './FieldSheet';
@@ -32,51 +33,56 @@ function Row({ label, value, onClick, dot }: {
   );
 }
 
-/** An id, in full, that copies itself when clicked.
+/** An id, in full, with a way to take it with you.
  *
  *  In full because the reason to want one is always somewhere else — `claude
- *  --resume <session>` in a terminal, a database row, a bug report — and an id
- *  cut to fit a column is one you have to go and find again. */
+ *  --resume <session>` in a terminal, a row in the database, a bug report —
+ *  and an id cut to fit a column is one you have to go and find again.
+ *
+ *  Not a button, either. Text inside one cannot be selected with the mouse:
+ *  the browser reads the drag as a press, so the only way to take the id was
+ *  the copy button, and on a panel opened over plain http that button could
+ *  not reach a clipboard at all. Now the value is ordinary selectable text and
+ *  the copy is a small button of its own beside it.
+ */
 function IdRow({ label, value, last }: { label: string; value?: string | null; last?: boolean }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<'' | 'ok' | 'no'>('');
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
 
   const copy = async () => {
     if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {
-      return;                      // an insecure origin, and nothing to be done
-    }
-    setCopied(true);
+    const ok = await copyText(value);
+    setState(ok ? 'ok' : 'no');
     if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setCopied(false), 1600);
+    timer.current = window.setTimeout(() => setState(''), 1800);
   };
 
   return (
-    <button
-      type="button" onClick={() => void copy()} disabled={!value}
-      title={value ? 'Click to copy' : undefined}
-      style={{
-        display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
-        background: 'transparent', border: 'none',
-        borderBottom: last ? 'none' : `1px solid ${C.border}`,
-        cursor: value ? 'pointer' : 'default',
-      }}
-    >
+    <div style={{ padding: '8px 12px', borderBottom: last ? 'none' : `1px solid ${C.border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 12, color: C.mute, flex: 1 }}>{label}</span>
-        <span style={{ fontSize: 11, color: copied ? C.accent : C.faint }}>
-          {value ? (copied ? 'copied' : 'copy') : 'not yet'}
-        </span>
+        {!!value && (
+          <button
+            type="button" onClick={() => void copy()}
+            title={state === 'no' ? 'Could not reach the clipboard — select it instead' : 'Copy'}
+            style={{
+              fontSize: 11, lineHeight: 1, padding: '4px 7px', borderRadius: 6, cursor: 'pointer',
+              border: `1px solid ${C.border}`, background: C.surface2,
+              color: state === 'ok' ? C.accent : state === 'no' ? C.danger : C.mute,
+            }}
+          >
+            {state === 'ok' ? 'copied' : state === 'no' ? 'select it' : 'copy'}
+          </button>
+        )}
       </div>
-      {!!value && (
-        <div style={{ ...mono, fontSize: 11.5, color: C.text2, marginTop: 3, wordBreak: 'break-all' }}>
-          {value}
-        </div>
-      )}
-    </button>
+      <div style={{
+        ...mono, fontSize: 11.5, color: C.text2, marginTop: 3, wordBreak: 'break-all',
+        userSelect: 'text', cursor: 'text',
+      }}>
+        {value || '—'}
+      </div>
+    </div>
   );
 }
 
