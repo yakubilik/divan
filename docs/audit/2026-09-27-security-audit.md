@@ -28,7 +28,7 @@ python scripts/audit.py --history   # every blob and commit identity in git
 | Secrets in tracked files | **none** |
 | Secrets anywhere in git history | **none** |
 | Personal data in tracked files | none of the shapes the scanner looks for; 3 files carried an author-specific identifier, found by hand and fixed below |
-| Personal data in git history | 21 hits across 18 blobs, plus 2 author identities in commit metadata — **not** rewritten, see [History](#what-only-exists-in-history) |
+| Personal data in git history | 21 hits across 18 blobs, plus 2 author identities in commit metadata — **not** rewritten, see [section 4](#4--what-only-exists-in-history) |
 | Turkish in tracked files | 62 lines in 19 files; all English now except `call.py`, where the language is the feature, and the audit's own three files, which quote what was removed |
 | Doc claims that did not match the daemon | 5, all corrected |
 | Broader cleanup needed | **Yes, but small** — see [Cleanup needed?](#cleanup-needed) |
