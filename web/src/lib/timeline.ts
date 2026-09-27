@@ -147,7 +147,7 @@ export function apply(items: Item[], ev: RacEvent): Item[] {
       }];
 
     case 'turn.error':
-      return [...closeSegments(items), { kind: 'error', id, ts, message: String(d.message ?? 'Bilinmeyen hata') }];
+      return [...closeSegments(items), { kind: 'error', id, ts, message: String(d.message ?? 'Unknown error') }];
 
     default:
       return items;

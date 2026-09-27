@@ -220,7 +220,7 @@ function StoreRow({ source, open, onToggle, busyId, installed, onInstall }: {
             </div>
             {busyId === item.id ? <Spinner size={13} />
               : on ? <Badge tone="accent">installed</Badge>
-              : <Btn kind="primary" onClick={() => onInstall(item)}>Kur</Btn>}
+              : <Btn kind="primary" onClick={() => onInstall(item)}>Install</Btn>}
           </div>
         );
       })}
@@ -329,7 +329,7 @@ export function Agents({ onStartChat }: {
 
   // A store item's id ("hermes:*") is not an agent name, and agent.list does
   // not say where an agent came from, so "installed" is only claimed on an exact
-  // name match. A miss just leaves the Kur button — never a false badge.
+  // name match. A miss just leaves the Install button — never a false badge.
   const installedNames = useMemo(() => {
     const norm = (s: string) => s.toLocaleLowerCase('tr').replace(/[^a-z0-9]/g, '');
     return new Set(agents.flatMap((a) => [norm(a.name), norm(a.label || '')]).filter(Boolean));

@@ -70,7 +70,7 @@ function Sheet({ entries, groups, chat, onMove, onClose }: {
           {row('Ungrouped', P.folder, () => { onMove(null); onClose(); }, false, !chat.group_id)}
           {groups.map((g) => row(g.name, P.folder, () => { onMove(g.id); onClose(); }, false, chat.group_id === g.id))}
           <div style={{ height: 1, background: C.border, margin: '6px 0' }} />
-          {row('Geri', P.chevronLeft, () => setMoving(false))}
+          {row('Back', P.chevronLeft, () => setMoving(false))}
         </>
       ) : (
         <>
@@ -128,7 +128,7 @@ export function ChatMenu({ chat, groups, onUpdate, onDelete, onClose }: {
           />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Btn onClick={onClose}>Cancel</Btn>
-            <Btn kind="primary" type="submit">Kaydet</Btn>
+            <Btn kind="primary" type="submit">Save</Btn>
           </div>
         </form>
       </Modal>

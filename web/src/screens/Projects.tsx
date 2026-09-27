@@ -65,7 +65,7 @@ function GitLine({ git, isGit }: { git: GitInfo | null; isGit: boolean }) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 20 }}>
         <Icon path={P.branch} size={12} color={C.faint} />
-        <span style={{ ...mono, fontSize: 12, color: C.faint }}>git deposu</span>
+        <span style={{ ...mono, fontSize: 12, color: C.faint }}>git repository</span>
       </div>
     );
   }
@@ -85,7 +85,7 @@ function GitLine({ git, isGit }: { git: GitInfo | null; isGit: boolean }) {
         <span style={{ ...mono, fontSize: 12, color: C.faint, flexShrink: 0 }}>?{untracked}</span>
       )}
       <span style={{ ...mono, fontSize: 12, color: dirty ? C.mute : C.faint, marginLeft: 'auto', flexShrink: 0 }}>
-        {dirty ? `${dirty} dosya` : 'temiz'}
+        {dirty ? `${dirty} files` : 'clean'}
       </span>
     </div>
   );
