@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from . import __version__
@@ -148,6 +149,7 @@ class Server:
         self.failed_auth: dict[str, list[float]] = {}
         self.started = time.time()
         self.app = FastAPI(title="remote-ai-chat")
+        self._allow_cross_origin()
         self.app.websocket("/ws")(self.ws_endpoint)
         self.app.get("/health")(lambda: {"ok": True, "version": __version__})
         self.app.post("/upload")(self.upload)
@@ -156,6 +158,36 @@ class Server:
         self._versions: dict | None = None
         self._codex_models: list[dict] | None = None
         self._codex_models_task: asyncio.Task | None = None
+
+    def _allow_cross_origin(self) -> None:
+        """Let a browser talk to a daemon that did not serve the page.
+
+        The socket never needed this — WebSocket is not subject to the same
+        origin rule — so everything the panel does over `/ws` worked, and the
+        one thing it does over HTTP did not: dragging a file onto a chat sends
+        `Authorization` with the POST, which makes the browser ask permission
+        first, and nothing here answered the question. The answer is "failed to
+        fetch", with no status code and nothing in the daemon's log, because the
+        upload was never sent. That is every drop from `npm run dev`, and every
+        drop onto a chat belonging to a second paired computer — the panel is
+        served by one of them and talks to all of them.
+
+        Any origin may ask, because asking is not the same as being answered:
+        every route is guarded by a device token carried in a header, never by a
+        cookie, so a page that does not have one gets the 401 it deserves.
+        `allow_credentials` stays off for the same reason — there is no ambient
+        credential here to attach, and leaving it on would forbid the wildcard.
+        """
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
+            # A file fetched for a download carries the name to save it under.
+            expose_headers=["Content-Disposition"],
+            max_age=600,
+        )
 
     def _mount_panel(self) -> None:
         """Serve the desktop panel, when it has been built.
