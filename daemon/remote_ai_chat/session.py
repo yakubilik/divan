@@ -21,6 +21,34 @@ log = logging.getLogger("rac.session")
 
 PROVIDERS: dict[str, type[Provider]] = {"claude": ClaudeProvider, "codex": CodexProvider}
 NEW_CHAT_TITLE = "New chat"
+# Every title says which project it is about, first. A list of forty chats is
+# read by scanning it, and "Fix the login redirect" is the same sentence in
+# four repositories; the folder is in the chat's own settings, which is a place
+# nobody looks while scanning.
+TITLE_SEP = " · "
+TITLE_MAX = 60
+
+
+def with_project(title: str, project: str | None) -> str:
+    """`project · title`, once.
+
+    Idempotent on purpose: it is applied when a chat is made, when its first
+    message names it and when somebody renames it by hand, and any of those can
+    already carry the prefix.
+    """
+    text = (title or "").strip()[:TITLE_MAX] or NEW_CHAT_TITLE
+    if not project:
+        return text
+    head = f"{project}{TITLE_SEP}"
+    if text.casefold().startswith(head.casefold()):
+        return text
+    return f"{head}{text}"
+
+
+def is_untitled(title: str) -> bool:
+    """A chat still wearing its placeholder, prefixed or not."""
+    t = (title or "").strip()
+    return t == NEW_CHAT_TITLE or t.endswith(f"{TITLE_SEP}{NEW_CHAT_TITLE}")
 # How many messages may wait behind a running turn before a send is refused.
 # A queue is a convenience, not an inbox: past this the phone is typing into
 # a chat that will not catch up for a very long time.
@@ -453,8 +481,9 @@ class ChatSession:
             # No resume id means a session with no memory of this chat.
             self._recap = (None if chat.get("provider_session_id")
                            else self._build_recap(text))
-        if chat["title"] == NEW_CHAT_TITLE:
-            self.db.update_chat(self.chat_id, title=text.strip().split("\n")[0][:60])
+        if is_untitled(chat["title"]):
+            self.db.update_chat(self.chat_id, title=with_project(
+                text.strip().split("\n")[0], self.policy.project_for(chat["cwd"])))
         await self._set_status("running", last_preview=plain(text)[:200])
         return chat
 
