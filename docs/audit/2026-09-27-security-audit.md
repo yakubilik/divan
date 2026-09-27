@@ -342,12 +342,16 @@ Remedy, in the order it is worth doing:
 
 ### Turkish in history
 
-7,870 lines across 261 blobs and 82 distinct paths, which is what you would
-expect of a project that was bilingual for its first weeks. It is not a secret,
-it does not leak anything, and it is not worth rewriting a published history
-over.
-`scripts/audit.py --history` reports it; `scripts/audit.py` (which is what CI
-runs) does not, because the working tree is what a contributor can fix.
+Roughly 7,900 lines across 260-odd blobs and 82 distinct paths — the number
+climbs by one blob every time a commit touches one of those files, including the
+commits that removed the Turkish, so it is a shape rather than a figure. It is
+what you would expect of a project that was bilingual for its first weeks: the
+pre-fix versions of the files section 2 lists, and the pre-open-source design
+artboards. It is not a secret, it leaks nothing, and it is not worth rewriting a
+published history over.
+
+`scripts/audit.py --history` reports it; `scripts/audit.py` — the one CI runs —
+does not, because the working tree is what a contributor can fix.
 
 ### Commit messages
 
