@@ -265,6 +265,11 @@ class FakeProvider:
     def has_pending(self):
         return False
 
+    async def steer(self, prompt, attachments=None):
+        # As in ProviderBase: a provider that cannot be spoken to mid-turn says
+        # so, and the session queues the message instead.
+        return False
+
     async def interrupt(self):
         self.interrupted = True
         if self.gate is not None:
