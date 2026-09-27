@@ -444,8 +444,8 @@ look like artefacts and are not:
    seven files use `toLocaleLowerCase('tr')` or `localeCompare(name, 'tr')` —
    `Projects.tsx`, `Agents.tsx`, `Terminal.tsx`, `NewChat.tsx`, `Palette.tsx`,
    `Sidebar.tsx`, `FieldSheet.tsx` — which is a leftover of who wrote the panel,
-   and a live bug for everyone else: Turkish lowercasing maps `I` to a dotless `ı`, so searching an English
-   project name for `I` does not match it. Not touched here because it is
+   and a live bug for everyone else: Turkish lowercasing maps `I` to a dotless
+   `ı`, so searching an English project name for `I` does not match it. Not touched here because it is
    behaviour, not a string. **Recommendation:** drop the locale argument, in a
    ticket with a search test.
 
