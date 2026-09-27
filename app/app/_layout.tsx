@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { AppState, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -27,6 +27,49 @@ export default function RootLayout() {
   const router = useRouter();
   const bg = useRef<number | null>(null);
   const c = useColors();
+
+  /* A notification tap, and the two things that used to go wrong with it.
+   *
+   * It says which computer it came from now, and the phone may be connected to
+   * another one — a chat id means nothing to a computer that does not have that
+   * chat, and what opened was a screen that could never fill. And a tap that
+   * launches the app arrives before the hosts are out of the keychain and
+   * before Face ID has been answered, so it is held here until the app can act
+   * on it rather than spent on a store that is still empty. Both are the same
+   * symptom from the outside: an empty chat. */
+  const pendingTap = useRef<{ chat: string; device?: string } | null>(null);
+  const lastTap = useRef<{ chat: string; at: number } | null>(null);
+
+  const deliverTap = useCallback(async () => {
+    const tap = pendingTap.current;
+    if (!tap) return;
+    const st = useStore.getState();
+    // Not yet: the effect below tries again the moment either of these turns.
+    if (!st.ready || st.locked) return;
+    pendingTap.current = null;
+    // The launch response and the listener can both report the same tap.
+    if (lastTap.current && lastTap.current.chat === tap.chat
+        && Date.now() - lastTap.current.at < 3000) return;
+    lastTap.current = { chat: tap.chat, at: Date.now() };
+
+    if (tap.device && tap.device !== st.activeHostId
+        && st.hosts.some((h) => h.id === tap.device)) {
+      try { await st.switchHost(tap.device); } catch {}
+    }
+    // The tap only brought the app forward — we are already reading this chat.
+    if (getOpenChat() === tap.chat) return;
+    // A notification is a jump somewhere else, not a step deeper into wherever
+    // the user happened to be. Pushing left the previous chat underneath, so
+    // Back walked into *that* chat instead of leaving. Land on the tapped chat
+    // with the list behind it. The pop unmounts the chat screens above the
+    // list, and an unused one deletes itself on the way out — including,
+    // once, the very chat being opened. Name it first so it is spared.
+    protectChat(tap.chat);
+    try { if (router.canDismiss()) router.dismissTo('/chats'); } catch {}
+    router.push(`/chat/${tap.chat}`);
+  }, [router]);
+
+  useEffect(() => { void deliverTap(); }, [ready, locked, deliverTap]);
   const [fontsLoaded, fontError] = useFonts(FONTS);
 
   useEffect(() => {
@@ -49,23 +92,22 @@ export default function RootLayout() {
         bg.current = Date.now();
       }
     });
-    const tap = Notifications.addNotificationResponseReceivedListener((r) => {
-      const cid = (r.notification.request.content.data as any)?.chat_id;
-      if (!cid) return;
-      // The tap only brought the app forward — we are already reading this chat.
-      if (getOpenChat() === cid) return;
-      // A notification is a jump somewhere else, not a step deeper into wherever
-      // the user happened to be. Pushing left the previous chat underneath, so
-      // Back walked into *that* chat instead of leaving. Land on the tapped chat
-      // with the list behind it. The pop unmounts the chat screens above the
-      // list, and an unused one deletes itself on the way out — including,
-      // once, the very chat being opened. Name it first so it is spared.
-      protectChat(cid);
-      try { if (router.canDismiss()) router.dismissTo('/chats'); } catch {}
-      router.push(`/chat/${cid}`);
-    });
+    const queue = (r: Notifications.NotificationResponse | null) => {
+      const data = (r?.notification.request.content.data ?? {}) as any;
+      if (!data.chat_id) return;
+      pendingTap.current = {
+        chat: String(data.chat_id),
+        device: data.device_id ? String(data.device_id) : undefined,
+      };
+      void deliverTap();
+    };
+    // A tap that launched the app is delivered before any listener can be
+    // attached, so it has to be asked for as well; the listener catches every
+    // tap after that, and the pair of them cannot double-open a chat.
+    void Notifications.getLastNotificationResponseAsync().then(queue).catch(() => {});
+    const tap = Notifications.addNotificationResponseReceivedListener(queue);
     return () => { sub.remove(); tap.remove(); };
-  }, [init, setPushToken, lock, router]);
+  }, [init, setPushToken, lock, router, deliverTap]);
 
   useEffect(() => { if (ready && locked) void unlock(); }, [ready, locked, unlock]);
 

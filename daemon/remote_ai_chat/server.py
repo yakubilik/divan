@@ -827,7 +827,15 @@ class Server:
                 body = PUSH_TEXT.get(d.lang, PUSH_TEXT["en"])["done"]
             else:
                 continue
-            await send_push([d.push_token], title, body, {"chat_id": chat.get("id"), "kind": kind})
+            # Which computer this came from, named by the pairing it was sent
+            # to — the same id the phone files that computer under. A phone
+            # paired to two computers was otherwise told a chat id and left to
+            # guess whose it was, and opened it against whichever one it
+            # happened to be connected to, which does not have it.
+            await send_push([d.push_token], title, body, {
+                "chat_id": chat.get("id"), "kind": kind,
+                "device_id": d.id, "host_name": self.cfg.host_name,
+            })
 
     # ── uploads (attachments) ──────────────────────────────────────────────
     async def upload(self, file: UploadFile = File(...), chat_id: str = Form(""), authorization: str = Header(default="")) -> dict:
