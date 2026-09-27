@@ -96,7 +96,7 @@ $ git log --all --pretty=format: --name-only --diff-filter=A | sort -u \
 
 None. The only key-shaped strings in the repository are the redaction patterns
 the daemon uses to scrub its own output (`daemon/remote_ai_chat/security.py`,
-lines 38–47), which are regexes, not keys.
+lines 37–46), which are regexes, not keys.
 
 ### Personal data
 
