@@ -16,7 +16,7 @@ workflow refuses a tag whose copies disagree with it.
 - Claude Code and Codex both run through one protocol, on the account already signed in on that computer.
 - macOS, Linux and Windows each install with one script, and the daemon registers itself to start at login.
 - A voice call to the computer, answered by a concierge that can see every chat on it; the phone rings through CallKit whether or not the app is open.
-- The computer's screen on the phone and in the panel, with a pointer that can click it — macOS and Windows, every monitor, and nothing moves until the switch in config.toml is on.
+- The computer's screen on the phone and in the panel, with a pointer that can click it: macOS and Windows, every monitor, and the pointer stays dead until remote control is armed, which the daemon persists to config.toml, logs, and announces to every paired device.
 - Terminal mode in the panel: every chat as a window on a wall you arrange yourself, with approvals answered from the tile.
 - Agents defined on the computer are listed on both clients, and a card can start a chat with one.
 - Both of a chat's ids, in full and copyable, in the panel's inspector and the phone's chat settings.

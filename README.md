@@ -86,7 +86,10 @@ for the reason in
   pointer — enough to press Allow in a dialog no agent can answer, on macOS
   and on Windows. Every monitor is listed, and a tap lands where your finger
   did even zoomed in. Nothing streams until you press Connect, and clicking is
-  off until you turn `remote_control` on in `config.toml`.
+  off until control is armed: `remote_control` starts `false`, and arming it —
+  from `config.toml`, or with **Turn on** on the phone and **Take control** in
+  the panel — is written back to `config.toml`, logged, and announced to every
+  other paired device.
 - **Terminal mode in the panel.** Every chat as a window on a wall you arrange
   yourself — see above.
 - **A tapped notification opens the chat it is about.** The right chat, on the
@@ -242,9 +245,13 @@ tells it to. The whole design is about that sentence being safe to say.
   permission mode, and it can be answered from the lock screen.
 - **Output is scrubbed.** Anything shaped like an API key or a bot token is
   redacted before it is stored or sent.
-- **Clicking is off until you turn it on.** Watching the screen is a switch
-  you press per session; driving the mouse and keyboard is `remote_control` in
-  `config.toml`, which starts `false` and survives a restart that way.
+- **Clicking is off until someone turns it on.** Watching the screen is a
+  switch you press per session; driving the mouse and keyboard is
+  `remote_control`, which starts `false`. Arming it does not need the keyboard
+  of the computer — a paired client can do it over the wire — so the daemon
+  persists the change to `config.toml`, writes a warning to the log, and tells
+  every paired device that this machine is now drivable. The switch guards an
+  idle computer, not one whose paired phone is in the wrong hands.
 - **Face ID** can lock the app, and can be required before entering bypass mode.
 
 One default worth knowing about: **the daemon updates itself.** `auto_update` is
