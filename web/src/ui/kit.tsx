@@ -199,6 +199,7 @@ export const KEYFRAMES = `
 @keyframes rac-spin { to { transform: rotate(360deg); } }
 @keyframes rac-pulse { 0%,100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
 @keyframes rac-caret { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+@keyframes rac-breathe { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 `;
 
 export function Icon({ path, size = 16, color = C.mute, fill = false, width = 2.2 }: {
@@ -236,6 +237,12 @@ export const P = {
   copy: 'M9 9h10v10H9zM5 15V5h10',
   cpu: 'M7 7h10v10H7zM4 10h3M4 14h3M17 10h3M17 14h3M10 4v3M14 4v3M10 17v3M14 17v3',
   layout: 'M4 5h16v14H4zM10 5v14',
+  terminal: 'M4 5h16v14H4zM8 10l2.5 2L8 14M13 14.5h3.5',
+  eyeOff: 'M4 4l16 16M10.6 6.2A8 8 0 0 1 12 6c5 0 8 6 8 6a15 15 0 0 1-2.6 3.4M6.6 8.6A15 15 0 0 0 4 12s3 6 8 6a8 8 0 0 0 3.1-.6M9.9 9.9a3 3 0 0 0 4.2 4.2',
+  eye: 'M12 6c5 0 8 6 8 6s-3 6-8 6-8-6-8-6 3-6 8-6zM12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z',
+  pencil: 'M4 20h4L19 9a2 2 0 0 0-3-3L5 17zM15 7l2 2',
+  undo: 'M9 14l-5-4 5-4M4 10h9a5 5 0 0 1 0 10h-3',
+  trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   agent: 'M12 4a4 4 0 0 1 4 4v1h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h1V8a4 4 0 0 1 4-4zM9 14v.1M15 14v.1',
   clock: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2',

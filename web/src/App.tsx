@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { C } from './lib/theme';
-import { KEYFRAMES } from './ui/kit';
+import { Btn, Icon, KEYFRAMES, P, mono } from './ui/kit';
 import { Sidebar, type View } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
 import { Inspector } from './components/Inspector';
@@ -9,6 +9,7 @@ import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
 import { ApprovalModal, type Pending } from './components/ApprovalModal';
 import { Dashboard } from './screens/Dashboard';
+import { Terminal } from './screens/Terminal';
 import { Projects } from './screens/Projects';
 import { Agents } from './screens/Agents';
 import { Settings } from './screens/Settings';
@@ -31,7 +32,29 @@ export function App() {
   const [sending, setSending] = useState(false);
   const [liveTokens, setLiveTokens] = useState<number | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
+  // Terminal mode opens a chat over the wall rather than leaving it: the point
+  // of the wall is that you can answer one thing and still be looking at the
+  // other eleven. It is the same selection the chat screen uses, so everything
+  // hung off `sel` — the live token count, the approval queue, the field sheet
+  // — works inside the overlay without a second copy of any of it.
+  const [peek, setPeek] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // Whether the sidebar is a list or a rail. Remembered because it is a way of
+  // working — terminal mode wants the width, the chat screen wants the list —
+  // and re-picking it every morning is not a preference, it is a chore.
+  const [rail, setRail] = useState(() => {
+    try { return localStorage.getItem('rac.sidebar') === 'rail'; } catch { return false; }
+  });
+  // Functional, so the keyboard shortcut below can live in an effect that is
+  // mounted once and still read the current state.
+  const setRailTo = useCallback((next: boolean | 'toggle') => {
+    setRail((cur) => {
+      const on = next === 'toggle' ? !cur : next;
+      try { localStorage.setItem('rac.sidebar', on ? 'rail' : 'open'); } catch { /* private mode */ }
+      return on;
+    });
+  }, []);
 
   useEffect(() => { fleet.boot(); }, []);
 
@@ -56,12 +79,17 @@ export function App() {
 
   const log = sel ? (logs.logs[logKey(sel.hostKey, sel.chatId)] ?? emptyLog()) : emptyLog();
 
-  const open = useCallback((hostKey: string, chatId: string) => {
+  const select = useCallback((hostKey: string, chatId: string) => {
     setSel({ hostKey, chatId });
-    setView('chats');
-    if (fleet.focus !== hostKey) fleet.setFocus(hostKey);
+    if (useFleet.getState().focus !== hostKey) fleet.setFocus(hostKey);
     logs.open(hostKey, chatId);
-  }, [fleet.focus]);
+  }, []);
+
+  const open = useCallback((hostKey: string, chatId: string) => {
+    select(hostKey, chatId);
+    setPeek(false);
+    setView('chats');
+  }, [select]);
 
   // The chat on screen catches itself up the moment its computer answers
   // again. Without this a panel that was asleep, or whose socket died quietly
@@ -153,6 +181,17 @@ export function App() {
 
   const blocking = pending.find((p) => p.danger) ?? null;
 
+  // Escape closes the chat held over terminal mode — but only when it is the
+  // topmost thing. A field sheet or an approval opened from inside it gets the
+  // key first, and taking the chat out from under them would answer a question
+  // nobody asked.
+  useEffect(() => {
+    if (!peek || palette || field || blocking) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPeek(false); };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [peek, palette, field, blocking]);
+
   const doSend = async (text: string, attachments: any[] = []) => {
     if (!sel) return;
     setSending(true);
@@ -190,9 +229,39 @@ export function App() {
     }
   }, [view, fleet.focus, slot?.status, slot?.accounts.length]);
 
+  // The chat surface is drawn in two places — as the chat screen, and held over
+  // terminal mode — and both are looking at the same selection. One set of
+  // handlers, so what the overlay does cannot drift from what the screen does.
+  const chatProps = {
+    chat, hostKey: sel?.hostKey ?? null, log, sending,
+    groupName: chat?.group_id
+      ? (slot?.groups.find((g) => g.id === chat.group_id)?.name ?? null)
+      : null,
+    accountLabel,
+    groups: slot?.groups ?? [],
+    onSend: doSend,
+    onUpload: doUpload,
+    onInterrupt: () => { if (sel) interrupt(sel.hostKey, sel.chatId).catch(() => {}); },
+    onRespond: (rid: string, d: 'allow' | 'allow_session' | 'deny') => {
+      if (sel) respond(sel.hostKey, sel.chatId, rid, d).catch(() => {});
+    },
+    onEdit: setField,
+    onUpdate: (patch: Record<string, any>) => {
+      if (sel) updateChat(sel.hostKey, sel.chatId, patch).catch(() => {});
+    },
+    onDelete: () => {
+      if (!sel) return;
+      const { hostKey, chatId } = sel;
+      setSel(null);
+      setPeek(false);
+      deleteChat(hostKey, chatId).catch(() => {});
+    },
+  };
+
   const commands: Command[] = useMemo(() => {
     const list: Command[] = [
       { id: 'new', label: 'New chat', shortcut: '⌘N', hint: slot?.info?.name, run: () => setNewChat({}) },
+      { id: 'terminal', label: 'Terminal mode', shortcut: '⌘4', hint: 'every chat at once', run: () => setView('terminal') },
       { id: 'dashboard', label: 'Panele git', shortcut: '⌘1', run: () => setView('dashboard') },
       { id: 'projects', label: 'Projects', shortcut: '⌘2', run: () => setView('projects') },
       { id: 'agents', label: 'Agents', shortcut: '⌘3', run: () => setView('agents') },
@@ -226,12 +295,14 @@ export function App() {
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
       if (e.key === 'k') { e.preventDefault(); setPalette((p) => !p); }
+      else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
       else if (e.key === 'n') { e.preventDefault(); setNewChat({}); }
       else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
       else if (e.key === ',') { e.preventDefault(); setView('settings'); }
       else if (e.key === '1') { e.preventDefault(); setView('dashboard'); }
       else if (e.key === '2') { e.preventDefault(); setView('projects'); }
       else if (e.key === '3') { e.preventDefault(); setView('agents'); }
+      else if (e.key === '4') { e.preventDefault(); setView('terminal'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -255,30 +326,12 @@ export function App() {
           selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
           onNewChat={() => setNewChat({})}
           searchRef={searchRef}
+          collapsed={rail} onCollapse={setRailTo}
         />
 
         {view === 'chats' && (
           <>
-            <ChatView
-              chat={chat} hostKey={sel?.hostKey ?? null} log={log} sending={sending}
-              groupName={chat?.group_id
-                ? (slot?.groups.find((g) => g.id === chat.group_id)?.name ?? null)
-                : null}
-              accountLabel={accountLabel}
-              onSend={doSend}
-              onUpload={doUpload}
-              onInterrupt={() => sel && interrupt(sel.hostKey, sel.chatId).catch(() => {})}
-              onRespond={(rid, d) => sel && respond(sel.hostKey, sel.chatId, rid, d).catch(() => {})}
-              onEdit={setField}
-              groups={slot?.groups ?? []}
-              onUpdate={(patch) => sel && updateChat(sel.hostKey, sel.chatId, patch).catch(() => {})}
-              onDelete={() => {
-                if (!sel) return;
-                const { hostKey, chatId } = sel;
-                setSel(null);
-                deleteChat(hostKey, chatId).catch(() => {});
-              }}
-            />
+            <ChatView {...chatProps} />
             <Inspector
               chat={chat} items={log.items} busy={!!chat && (log.busy || chat.status !== 'idle')}
               liveTokens={liveTokens}
@@ -292,6 +345,12 @@ export function App() {
           </>
         )}
 
+        {view === 'terminal' && (
+          <Terminal
+            onPeek={(hostKey, chatId) => { select(hostKey, chatId); setPeek(true); }}
+            onNewChat={() => setNewChat({})}
+          />
+        )}
         {view === 'dashboard' && (
           <Dashboard onOpenChat={open} onNewChat={() => setNewChat({})} />
         )}
@@ -301,6 +360,50 @@ export function App() {
         {view === 'agents' && <Agents />}
         {view === 'settings' && <Settings />}
       </div>
+
+      {/* A chat answered without leaving the wall. It is the whole chat — the
+          same timeline, the same composer, the same approvals — because half a
+          chat is the thing that sends you to the other screen anyway. */}
+      {view === 'terminal' && peek && chat && sel && (
+        <div
+          onClick={() => setPeek(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 25, padding: 24,
+            background: 'rgba(0,0,0,0.62)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 1040, height: 'min(880px, 100%)',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              background: C.bg, border: `1px solid ${C.borderStrong}`, borderRadius: 18,
+              boxShadow: '0 40px 90px -30px rgba(0,0,0,0.9)',
+            }}
+          >
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
+              padding: '9px 10px 9px 16px', background: C.surface,
+              borderBottom: `1px solid ${C.border}`,
+            }}>
+              <span style={{
+                ...mono, flex: 1, minWidth: 0, fontSize: 12, color: C.mute,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>{slot?.info?.name ?? slot?.cfg.name ?? sel.hostKey}</span>
+              <Btn onClick={() => open(sel.hostKey, sel.chatId)} title="Open in the chat screen">
+                <Icon path={P.external} size={13} color={C.text} />
+                Open
+              </Btn>
+              <Btn onClick={() => setPeek(false)} title="Back to the wall (Esc)">
+                <Icon path={P.x} size={13} color={C.text} />
+                Close
+              </Btn>
+            </div>
+            <ChatView {...chatProps} />
+          </div>
+        </div>
+      )}
 
       {newChat && fleet.focus && (
         <NewChat
