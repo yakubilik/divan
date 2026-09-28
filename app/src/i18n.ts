@@ -1,4 +1,7 @@
-// Tiny i18n. English is the default; Turkish is selectable in Settings.
+// Tiny i18n. One table, English — the second one went out with the first store
+// submission, and nothing selects a language any more. It stays because every
+// user-facing string having a name and living in one file is what makes adding a
+// language a table rather than a search through the screens.
 
 const en = {
   // common
@@ -295,7 +298,7 @@ const en = {
   record: 'Record a voice note',
   // the ustabasi wall: the queue that works while nobody is watching
   ustabasi: 'Ustabaşı',
-  queueRunning: '{n} running', queueRed: '{n} need you', queueNothingRed: 'nothing waiting on you',
+  queueRunning: '{n} running', queueRed: '{n} waiting on you', queueNothingRed: 'nothing waiting on you',
   queueNeverTicked: 'never ticked', queueTicked: 'ticked {d} ago', queueSilent: 'silent for {d}',
   queuePaused: 'paused until {time}',
   queueEmpty: 'Nothing in the queue', queueEmptyBody: 'No ticket on this computer right now.',
