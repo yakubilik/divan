@@ -10,7 +10,7 @@ import { em, useColors } from '../../src/theme';
 import { BackBar, Dot, EmptyState, Icon, Spinner, Text, TextInput } from '../../src/components/ui';
 import { AssistantText, ToolCard, UserBubble } from '../../src/components/chat';
 import { tone } from '../../src/components/ticket';
-import { answerable, around, conversation, hasDetails, mark, noteHint, runStartedAt,
+import { answerable, around, conversation, hasDetails, marks, noteHint, runStartedAt,
          STATUS_KEY, VOICE_KEY, type Msg, type Voice } from '../../src/tickets';
 import type { RunSilence, Turn } from '../../src/transcript';
 import type { Ticket } from '../../src/protocol';
@@ -293,12 +293,20 @@ function Row({ m, asking, tint }: { m: Msg; asking: boolean; tint: string }) {
 }
 
 /** The card's criteria and what the verifier made of them. Not a message —
- *  nobody said it to anybody — so it sits at the end, closed. */
+ *  nobody said it to anybody — so it sits at the end, closed.
+ *
+ *  The marks come from `marks()`, the same reading the (i) page uses, which
+ *  matches a finding to the criterion it is about by its text. This fold used
+ *  to do it by position on the grounds that it was only a summary: a verdict
+ *  answering four of nine points put its fourth cross on the ninth sentence,
+ *  one tap from the page that had already been fixed. A summary of a wrong
+ *  answer is a wrong answer. */
 function Details({ t }: { t: Ticket }) {
   const T = useT();
   const c = useColors();
   const [open, setOpen] = useState(false);
   const n = t.done_criteria.length;
+  const judged = useMemo(() => marks(t.done_criteria || [], t.verdict), [t.done_criteria, t.verdict]);
   return (
     <View style={{ backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14, overflow: 'hidden' }}>
       <Pressable onPress={() => setOpen((o) => !o)}
@@ -313,7 +321,7 @@ function Details({ t }: { t: Ticket }) {
       {open && (
         <View style={{ borderTopWidth: 1, borderTopColor: c.line, padding: 12, gap: 9 }}>
           {t.done_criteria.map((crit, i) => {
-            const m = mark(t.verdict, i);
+            const m = judged[i];
             return (
               <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
                 <View style={{ width: 16, paddingTop: 2, alignItems: 'center' }}>

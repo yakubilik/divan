@@ -60,15 +60,6 @@ export function sortTickets(tickets: Ticket[]): Ticket[] {
   });
 }
 
-/** The verifier's mark against the card's nth criterion, or null where it has
- *  not judged this one. Positional: it answers them in order but writes its own
- *  wording for each, so the card's text stays and only the mark comes from it. */
-export function mark(verdict: TicketVerdict | null | undefined, i: number): { met: boolean; detail?: string } | null {
-  const f = verdict?.findings?.[i];
-  if (!f) return null;
-  return { met: f.status === 'met', detail: f.detail };
-}
-
 // ── the verifier's marks, matched to the criteria they are about ─────────────
 //
 // The card lists what "done" means; the verifier answers those points and
@@ -79,6 +70,13 @@ export function mark(verdict: TicketVerdict | null | undefined, i: number): { me
 // screen showing a red cross against the wrong sentence is worse than showing
 // nothing: it is a wrong answer to the only question the page exists to
 // answer.
+//
+// There is no positional reading left to reach for. There was one — a two-line
+// `mark(verdict, i)`, kept for the fold at the bottom of the chat page on the
+// grounds that the fold was only a summary — and the screen one tap away drew
+// exactly the wrong cross it was written to avoid. A function that is right on
+// a small screen and wrong on a large one is a function that will be called
+// from the wrong one, so this is the only reading there is.
 //
 // So the matching is on the text. Three readings of "is this that", strongest
 // first, and a finding is spent once:

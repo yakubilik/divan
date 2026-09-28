@@ -27,7 +27,7 @@ function load(file, exports) {
 }
 
 const T = load('src/tickets.ts', ['POLL_MS', 'RUN_POLL_MS', 'STATUS_KEY', 'VOICE_KEY', 'answerable', 'redCount', 'sortTickets',
-                                  'mark', 'marks', 'wall', 'oldHost', 'since', 'first', 'repoName',
+                                  'marks', 'wall', 'oldHost', 'since', 'first', 'repoName',
                                   'bullets', 'conversation', 'question', 'stateLine', 'noteHint', 'hasDetails',
                                   'projectName', 'groupByProject', 'totalAge', 'roundAge', 'commitCount',
                                   'cardLine', 'tilde', 'stepMark', 'currentStep', 'stepLine', 'stepAge',
@@ -61,6 +61,10 @@ const WALL = [
 ];
 
 const NOW = 10_000;
+// A card of three points and a verdict that reached the first two, word for
+// word. Three so that the third stands for "the verifier said nothing about
+// this one", which is a different thing from "unmet".
+const CRITERIA = ['the screen exists', 'it is reachable', 'it survives a rotation'];
 const VERDICT = { verdict: 'rejected', findings: [
   { criterion: 'the screen exists', status: 'met' },
   { criterion: 'it is reachable', status: 'unmet', detail: 'nothing links to it' },
@@ -90,11 +94,15 @@ const checks = [
   ['every status has words of its own',
     ['queued', 'running', 'done', 'blocked', 'failed', 'cancelled'].every((s) => !!T.STATUS_KEY[s])],
 
-  ['a met criterion is marked met', T.mark(VERDICT, 0).met === true],
-  ['an unmet one carries the verifier\u2019s reason',
-    T.mark(VERDICT, 1).met === false && T.mark(VERDICT, 1).detail === 'nothing links to it'],
-  ['a criterion the verifier did not reach has no mark', T.mark(VERDICT, 2) === null],
-  ['no verdict, no marks at all', T.mark(null, 0) === null && T.mark({}, 0) === null],
+  ['a met criterion is marked met', T.marks(CRITERIA, VERDICT)[0].met === true],
+  ['an unmet one carries the verifier\u2019s reason', (() => {
+    const m = T.marks(CRITERIA, VERDICT)[1];
+    return m.met === false && m.detail === 'nothing links to it';
+  })()],
+  ['a criterion the verifier did not reach has no mark', T.marks(CRITERIA, VERDICT)[2] === null],
+  ['no verdict, no marks at all',
+    T.marks(CRITERIA, null).every((m) => m === null)
+    && T.marks(CRITERIA, {}).every((m) => m === null)],
 
   ['a computer that is not connected says so, not "no queue"',
     T.wall({ online: false, snapshot: null, error: null, oldHost: false }) === 'offline'],
@@ -741,10 +749,42 @@ checks.push(
     ['a card with no criteria has no marks', T.marks([], verbatim).length === 0],
     ['the mark carries the verifier’s own wording, so the two can be compared',
       T.marks(CARD, numbered)[3].said === '4. Tapping opens the chat'],
-    // The old positional reading, kept for the fold on the chat page, and the
-    // new one, which is the page that draws a cross against a sentence.
-    ['the positional reading would have marked the wrong sentence',
-      T.mark(numbered, 0).met === true && T.marks(CARD, numbered)[0] === null],
+    // ── both screens that draw a cross, and the reading they share ──────────
+    //
+    // The fold at the bottom of the chat page used to read the verdict by
+    // position, on the grounds that it was only a summary. It is not: it draws
+    // a cross against a sentence, which is the one thing a wrong reading gets
+    // wrong. Six points, two of them answered, and the marks have to land on
+    // the two that were answered — under a positional reading they land on the
+    // first two instead, which is the bug, in the shape it took.
+    ['a verdict answering two of six marks those two and no others', (() => {
+      const six = [
+        'The wall groups by project.',
+        'Every card says its status in a plain word.',
+        'A daemon handler streams a run incrementally.',
+        'Tapping a card opens the chat page.',
+        'Each card carries a small information button.',
+        'It stays cheap and degrades honestly.',
+      ];
+      const two = { findings: [
+        { criterion: 'Every card says its status in a plain word', status: 'unmet',
+          detail: 'it is still a token in the corner' },
+        { criterion: 'Tapping a card opens the chat page', status: 'met' },
+      ]};
+      const got = T.marks(six, two);
+      return got.map((m) => (m ? (m.met ? 'y' : 'n') : '-')).join('') === '-n-y--'
+        && got[1].detail === 'it is still a token in the corner';
+    })()],
+    // …and the reading that got it wrong is gone rather than merely unused: a
+    // function that is right on one screen and wrong on the next is a function
+    // that gets called from the wrong one.
+    ['there is no positional reading left to call',
+      !/export function mark\b/.test(fs.readFileSync(path.join(root, 'src/tickets.ts'), 'utf8'))],
+    ['and both screens draw their crosses through the one that is left', (() => {
+      const pages = ['app/ticket/[id].tsx', 'app/ticket-about/[id].tsx']
+        .map((p) => fs.readFileSync(path.join(root, p), 'utf8'));
+      return pages.every((s) => /\bmarks\(/.test(s) && !/\bmark\(\s*t\.verdict/.test(s));
+    })()],
   );
 }
 
