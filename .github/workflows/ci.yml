@@ -93,8 +93,10 @@ jobs:
         run: python scripts/audit.py
       - name: Every string the app asks for is in the app's string table
         # `t(key)` falls back to the key itself, so a renamed key shows a user
-        # the name of a variable. `tsc` would catch it; `app/node_modules` is
-        # not installable from the committed lockfile, so this does instead.
+        # the name of a variable. The `app` job's `tsc` catches it too, and this
+        # catches the ones it cannot see — a key built out of a variable, and a
+        # string the app asks for in a file `tsc` is not looking at. It needs
+        # nothing installed, so it runs here rather than behind an npm install.
         run: python scripts/test_i18n_keys.py
 
   docs:
