@@ -1,7 +1,6 @@
-// Tiny i18n. One table, English — the second one went out with the first store
-// submission, and nothing selects a language any more. It stays because every
-// user-facing string having a name and living in one file is what makes adding a
-// language a table rather than a search through the screens.
+// Tiny i18n. The app ships in English; every string it shows is in here. One
+// name per string, in one file, is what keeps adding a language a table rather
+// than a search through the screens.
 
 const en = {
   // common
@@ -160,7 +159,6 @@ const en = {
   pushOk: 'Push token received',
   pushNo: "This device can't receive notifications (simulator or permission denied). A dev build on a real phone is needed.",
   host: 'Host', system: 'OS', daemon: 'Daemon', uptime: 'Uptime', activeSessions: 'Active sessions', roots: 'Allowed roots',
-  language: 'Language', english: 'English', turkish: 'Türkçe',
   call: 'Call',
   // lock
   locked: 'Locked', unlockBtn: 'Unlock', unlockReason: 'Unlock Remote AI Chat',
@@ -185,7 +183,7 @@ const en = {
   // call (the concierge)
   callVoice: 'voice: {v}', callVoicePick: 'READING VOICE', callVoiceNone: 'No voices installed for this language.',
   callVoiceTry: 'This is how I will read your answers.', callDialling: 'Calling…', callHintDialling: 'Ringing your computer.',
-  callAlo: 'At your service.', callQuiet: 'All quiet here.',
+  callGreeting: 'At your service.', callQuiet: 'All quiet here.',
   callHeadWorking: '{n} running.', callHeadBlocked: '{n} waiting on you.',
   callTitle: 'Concierge', callStart: 'Call', callListening: 'Listening', callThinking: 'Asking…',
   callSpeaking: 'Speaking', callHangUp: 'End call', close: 'Close',
@@ -297,7 +295,7 @@ const en = {
   send: 'Send',
   record: 'Record a voice note',
   // the ustabasi wall: the queue that works while nobody is watching
-  ustabasi: 'Ustabaşı',
+  ustabasi: 'Ustabasi',
   queueRunning: '{n} running', queueRed: '{n} waiting on you', queueNothingRed: 'nothing waiting on you',
   queueNeverTicked: 'never ticked', queueTicked: 'ticked {d} ago', queueSilent: 'silent for {d}',
   queuePaused: 'paused until {time}',

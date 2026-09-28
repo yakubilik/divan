@@ -14,6 +14,13 @@ The snapshot is also the safety rail: with `tools=[]` the model cannot read a
 file, run a command, or look anything up. If a fact is not in the snapshot it
 cannot be produced, so "I don't know" is the only thing left to say — which is
 the correct answer to a status question about a session that does not exist.
+
+A call is answered in the language it was made in, and this is the only module
+in the project that holds words of a language other than English. They are data,
+not prose: a detector cannot recognise Turkish without Turkish in it, and the
+honorific and slang filters below cannot mirror or strip a word they do not
+name. Everything a contributor reads here — comments, docstrings, log lines — is
+English.
 """
 from __future__ import annotations
 

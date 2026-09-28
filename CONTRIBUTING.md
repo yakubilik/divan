@@ -48,6 +48,10 @@ you actually use.
 ## Before you open a PR
 
 ```bash
+python scripts/audit.py                        # nothing private, nothing not-English
+python scripts/test_audit.py                   # and the scanner still finds what it claims to
+python scripts/test_i18n_keys.py               # the app asks for no string that is not there
+
 cd daemon
 python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model turns
 .venv312/bin/python scripts/test_preamble.py   # session context and register
@@ -55,13 +59,18 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_stream.py
 .venv312/bin/python scripts/test_attachments.py
 .venv312/bin/python scripts/test_pool.py
+.venv312/bin/python scripts/test_replay.py
+.venv312/bin/python scripts/test_fanout.py
 .venv312/bin/python scripts/test_agents.py
+.venv312/bin/python scripts/test_titles.py
+.venv312/bin/python scripts/test_push.py
 .venv312/bin/python scripts/test_ustabasi.py    # the ticket queue's snapshot and its one write
 
 cd app && npx tsc --noEmit
 node scripts/test-login-web.cjs                # the sign-in WebView's two judgements
 node scripts/test-ustabasi.cjs                 # the ustabasi wall's, and the i18n table
 cd web && npm run build                        # typechecks, then builds into the daemon
+cd web && npm test                             # a ticket still reads as a conversation
 
 cd <the repo root>
 python3 scripts/check-links.py                 # no dead path in the docs
@@ -71,13 +80,19 @@ If you moved or renamed anything under `docs/`, that last one is the check that
 notices. `scripts/test_check_links.py` is the checker's own test, and it is the
 one to run if you touch the checker.
 
+`cd web && npm run test:ui` drives a real browser over the DevTools protocol —
+typing a note, folding the paperwork open, the layout in portrait. It needs a
+Chrome on the machine (`CHROME=/path/to/chrome`), so it is not in CI. Run it if
+you touch the ustabasi ticket view.
+
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.
 
 Everything above except `smoke.py` and `e2e.py` also runs on CI
 (`.github/workflows/ci.yml`) against the two ends of the supported Python range,
 because the middle is what everybody develops on and the ends are where it
-breaks.
+breaks. `scripts/audit.py` runs there as well, on the tracked files only — the
+history is a report for a person, not a build step (see `docs/audit/`).
 
 If you changed the panel, commit the rebuilt `daemon/remote_ai_chat/webui/`?
 **No** — it is gitignored. The daemon builds it, or the installer does.
@@ -110,12 +125,16 @@ on a release and `v0.2.0+7` seven commits past one, so a machine following
 
 ## House rules
 
-**Language.** Code, comments, commit messages and documentation are English.
-The app is bilingual at runtime (English + Turkish) through `app/src/i18n.ts`;
-the daemon speaks only English and tags every user-visible error with a stable
-`code` in `daemon/remote_ai_chat/errors.py`, which the clients translate. A new
-code means a new entry in `ERR_KEYS` and in both language tables. The desktop
-panel is English only.
+**Language.** Everything is English — code, comments, commit messages,
+documentation and every string either client shows. `python scripts/audit.py`
+fails on anything else, so this is checked rather than asked for. The one place
+another language is allowed is `daemon/remote_ai_chat/call.py`, where it is data
+a language detector cannot work without; that exception is listed in the script.
+
+The app and the panel each keep their strings in one table (`app/src/i18n.ts`,
+`web/src/lib/i18n.ts`) rather than inline. The daemon tags every user-visible
+error with a stable `code` in `daemon/remote_ai_chat/errors.py`; a new code
+means a new entry in `ERR_KEYS` in both clients.
 
 **Comments explain why.** The codebase leans on comments that say what a piece
 of code is defending against, not what the next line does. Match that. A

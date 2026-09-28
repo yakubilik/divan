@@ -71,7 +71,7 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
               ...mono, fontSize: 11, color: C.warn, background: 'rgba(216,166,87,0.16)',
               border: '1px solid rgba(216,166,87,0.32)', borderRadius: R.badge,
               padding: '3px 7px', height: 'fit-content', flexShrink: 0,
-            }}>+{queued - 1} bekliyor</span>
+            }}>+{queued - 1} waiting</span>
           )}
         </div>
 
@@ -86,7 +86,7 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 140, overflowY: 'auto',
           }}>{command}</span>
           <button
-            type="button" title="Kopyala"
+            type="button" title="Copy"
             onClick={() => void copyText(command)}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 0 }}
           >
@@ -113,14 +113,14 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
             </span>
             {chat && (
               <span style={{ fontSize: 12, color: C.mute, flexShrink: 0 }}>
-                izin modu: {chat.perm_mode}
+                permission mode: {chat.perm_mode}
               </span>
             )}
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn kind="danger" onClick={() => onRespond('deny')}>Reddet</Btn>
+          <Btn kind="danger" onClick={() => onRespond('deny')}>Deny</Btn>
           <Btn kind="primary" onClick={() => onRespond('allow')}>Allow</Btn>
           <Btn onClick={() => onRespond('allow_session')}>Always allow this session</Btn>
           <span style={{ flex: 1 }} />

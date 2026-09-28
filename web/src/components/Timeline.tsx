@@ -1,9 +1,9 @@
 import { memo, useCallback, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import { C, R } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import { cost, duration, tokens, toolSummary, clock } from '../lib/format';
 import type { Item } from '../lib/timeline';
+import { Bubble, Prose } from './Bubble';
 import { Lightbox, type Shot } from './Lightbox';
 import { fileUrl } from '../lib/actions';
 
@@ -163,46 +163,14 @@ function Attachments({ list, hostKey }: { list: any[]; hostKey: string }) {
 
 function UserBubble({ item, hostKey }: { item: Extract<Item, { kind: 'user' }>; hostKey: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <div style={{
-        maxWidth: '72%', background: C.surface2, borderRadius: `${R.bubble}px ${R.bubble}px 4px ${R.bubble}px`,
-        padding: '10px 14px', fontSize: 15, lineHeight: '22px', whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-      }}>
-        {item.queued && (
-          <div style={{ ...mono, fontSize: 11, color: C.mute, marginBottom: 4 }}>kuyrukta</div>
-        )}
-        <Attachments list={item.attachments} hostKey={hostKey} />
-        {item.text}
-      </div>
-    </div>
+    <Bubble>
+      {item.queued && (
+        <div style={{ ...mono, fontSize: 11, color: C.mute, marginBottom: 4 }}>queued</div>
+      )}
+      <Attachments list={item.attachments} hostKey={hostKey} />
+      {item.text}
+    </Bubble>
   );
-}
-
-/** The little of Markdown that actually shows up in these answers: fenced code,
- *  inline code, and bold. Headings, tables and links are left as written — a
- *  renderer that half-understands them reads worse than the raw text does. */
-function inline(text: string, keyBase: string) {
-  const out: ReactNode[] = [];
-  const re = /`([^`\n]+)`|\*\*([^*\n]+)\*\*/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
-    if (m.index > last) out.push(text.slice(last, m.index));
-    if (m[1] != null) {
-      out.push(
-        <code key={`${keyBase}-${m.index}`} style={{
-          ...mono, fontSize: 13, background: C.surface, border: `1px solid ${C.border}`,
-          borderRadius: R.badge, padding: '1px 5px', color: C.text2,
-        }}>{m[1]}</code>,
-      );
-    } else {
-      out.push(<strong key={`${keyBase}-${m.index}`} style={{ fontWeight: 600 }}>{m[2]}</strong>);
-    }
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) out.push(text.slice(last));
-  return out;
 }
 
 /** The agent named a file by its path in the text and the daemon lifted it
@@ -219,7 +187,6 @@ function stripLocalRefs(text: string, atts: any[]): string {
 
 function Assistant({ item, hostKey }: { item: Extract<Item, { kind: 'assistant' }>; hostKey: string }) {
   const atts = item.attachments ?? [];
-  const parts = stripLocalRefs(item.text, atts).split(/```/);
   return (
     // `text-wrap: pretty` re-breaks the whole block to balance its last lines.
     // Worth it for a finished answer; on one still streaming it is that work
@@ -228,17 +195,7 @@ function Assistant({ item, hostKey }: { item: Extract<Item, { kind: 'assistant' 
       paddingRight: 32, fontSize: 15, lineHeight: '23px',
       textWrap: (item.done ? 'pretty' : 'wrap') as any,
     }}>
-      {parts.map((part, i) => (
-        i % 2 === 1 ? (
-          <pre key={i} style={{
-            ...mono, fontSize: 13, lineHeight: '19px', background: C.bg,
-            border: `1px solid ${C.border}`, borderRadius: R.card, padding: '10px 12px',
-            overflowX: 'auto', margin: '8px 0', color: C.text2,
-          }}>{part.replace(/^[a-z]*\n/i, '')}</pre>
-        ) : (
-          <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{inline(part, `p${i}`)}</span>
-        )
-      ))}
+      <Prose text={stripLocalRefs(item.text, atts)} />
       {atts.length > 0 && <div style={{ marginTop: 8 }}><Attachments list={atts} hostKey={hostKey} /></div>}
       {!item.done && (
         <span style={{
@@ -344,7 +301,7 @@ function Tool({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
           <span style={{
             ...mono, fontSize: 10, color: C.danger, background: BAD_BG,
             border: `1px solid ${border}`, borderRadius: R.badge, padding: '2px 6px', flexShrink: 0,
-          }}>hata</span>
+          }}>error</span>
         )}
         <Icon path={open ? P.chevronDown : P.chevronRight} size={13} color={C.faint} />
       </button>
@@ -372,9 +329,9 @@ function Approval({ item, onRespond }: {
   onRespond: (d: 'allow' | 'allow_session' | 'deny') => void;
 }) {
   const settled = item.decision != null;
-  const word = item.decision === 'allow' ? 'izin verildi'
+  const word = item.decision === 'allow' ? 'allowed'
     : item.decision === 'allow_session' ? 'always allowed this session'
-    : item.decision === 'deny' ? 'reddedildi'
+    : item.decision === 'deny' ? 'denied'
     : item.decision === 'expired' ? 'timed out' : '';
   return (
     <div style={{
@@ -400,7 +357,7 @@ function Approval({ item, onRespond }: {
       )}
       {!settled && (
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button type="button" onClick={() => onRespond('deny')} style={btn('ghost')}>Reddet</button>
+          <button type="button" onClick={() => onRespond('deny')} style={btn('ghost')}>Deny</button>
           <button type="button" onClick={() => onRespond('allow')} style={btn('primary')}>Allow</button>
           <button type="button" onClick={() => onRespond('allow_session')} style={btn('ghost')}>
             Always allow this session

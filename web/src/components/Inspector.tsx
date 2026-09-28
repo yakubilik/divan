@@ -235,7 +235,7 @@ export function Inspector({ chat, items, busy, liveTokens, accountLabel, account
                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                       }}>{t.arg}</span>
                       <span style={{ ...mono, fontSize: 11, color: t.bad ? C.danger : C.faint }}>
-                        {t.bad ? 'hata' : t.running ? '…' : duration(t.ms)}
+                        {t.bad ? 'error' : t.running ? '…' : duration(t.ms)}
                       </span>
                     </div>
                   ))}

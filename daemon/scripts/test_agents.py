@@ -121,11 +121,11 @@ try:
 
     agents._get = lambda url, **kw: BLOB
     with tempfile.TemporaryDirectory() as td:
-        skill(Path(td) / "skills", "yakup-projects")
+        skill(Path(td) / "skills", "existing-skill")
         r = agents.install_bundle(SRC, td)
         line = skills_line(r["path"])
         check(r["missing"] == [], "a whole install reports nothing missing", repr(r["missing"]))
-        check("yakup-projects" in line, "keeps a skill the account already had", line)
+        check("existing-skill" in line, "keeps a skill the account already had", line)
         check("hermes-persona" in line, "names the one that carries the character", line)
 finally:
     agents._tree, agents._get = real_tree, real_get

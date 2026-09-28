@@ -265,7 +265,7 @@ export function App() {
     const list: Command[] = [
       { id: 'new', label: 'New chat', shortcut: '⌘N', hint: slot?.info?.name, run: () => setNewChat({}) },
       { id: 'terminal', label: 'Terminal mode', shortcut: '⌘4', hint: 'every chat at once', run: () => setView('terminal') },
-      { id: 'dashboard', label: 'Panele git', shortcut: '⌘1', run: () => setView('dashboard') },
+      { id: 'dashboard', label: 'Dashboard', shortcut: '⌘1', run: () => setView('dashboard') },
       { id: 'projects', label: 'Projects', shortcut: '⌘2', run: () => setView('projects') },
       { id: 'agents', label: 'Agents', shortcut: '⌘3', run: () => setView('agents') },
       { id: 'admin', label: 'Admin', shortcut: '⌘4', run: () => setView('admin') },

@@ -2,7 +2,7 @@
 
   python scripts/call_bench.py --token TOKEN
   python scripts/call_bench.py --token TOKEN --digest
-  python scripts/call_bench.py --token TOKEN -q "focus'ta ne oluyor" -q "bitti mi"
+  python scripts/call_bench.py --token TOKEN -q "what is focus doing" -q "is it done"
 
 Phase 1 of the voice call has no voice in it on purpose. The risk in a phone
 call is latency, not audio, and latency is measurable over plain text — if the
@@ -27,9 +27,9 @@ DEFAULT = [
     "What did it do last?",
     "How much have I spent?",
     "Is anything stuck?",
-    # One in the other language: the concierge is bilingual and the answer has
-    # to come back in the language it was asked in.
-    "Onay bekleyen bir şey var mı?",
+    # The concierge is bilingual: an answer has to come back in the language it
+    # was asked in. Pass a question in another language with -q to exercise
+    # that; the built-in set stays English so this file reads in one language.
 ]
 
 
@@ -81,7 +81,7 @@ async def main() -> int:
             # same pot as the rest would hide the number that matters: what a
             # follow-up costs once the call is already up.
             print("warming up the session…")
-            warm = await call("call.ask", {"text": "Kaç sohbet var?", "reset": True})
+            warm = await call("call.ask", {"text": "How many chats are there?", "reset": True})
             print(f"  cold start: {warm['ms']}ms "
                   f"(connect {warm['connect_ms']}ms)\n  {warm['text']}\n")
 

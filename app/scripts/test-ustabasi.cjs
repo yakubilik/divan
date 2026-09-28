@@ -135,8 +135,11 @@ const checks = [
 
   // This screen is one screenshot away from being public; a repository is named
   // by its folder and never by the path to it.
-  ['a repository is named, not located', T.repoName('/Users/someone/projects/thing') === 'thing'],
-  ['a windows path too', T.repoName('C:\\Users\\someone\\projects\\thing') === 'thing'],
+  // The paths here say /Users/you on purpose: a home directory with a name in
+  // it is the one thing scripts/audit.py will not let this repository publish,
+  // test fixture or not.
+  ['a repository is named, not located', T.repoName('/Users/you/projects/thing') === 'thing'],
+  ['a windows path too', T.repoName('C:\\Users\\you\\projects\\thing') === 'thing'],
   ['and an absent one is blank', T.repoName(null) === '' && T.repoName('') === ''],
 ];
 

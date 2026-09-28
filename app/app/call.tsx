@@ -421,25 +421,25 @@ export default function Call() {
     await pickup();
     if (!live.current) return;
 
-    const alo = T('callAlo');
+    const greeting = T('callGreeting');
     setPhaseBoth('speaking');
-    say('them', alo);
+    say('them', greeting);
     if (BARGE_IN) { startListening(lang); micOn.current = true; }
 
     // Every one of these runs on `onStopped` too, which is what cutting in
     // triggers — and cutting in has already opened the microphone itself. The
     // phase guard is what stops the greeting from opening a second one on its
     // way out.
-    sayAloud(alo, () => {
+    sayAloud(greeting, () => {
       if (!live.current || phaseRef.current !== 'speaking') return;
-      // "Alo" takes about half a second to say and the round trip takes
+      // The greeting takes about half a second to say and the round trip takes
       // milliseconds, so the headline is almost always here by now. When it is
       // not, the call simply opens without it rather than holding the line.
       if (rest) {
         say('them', rest);
         sayAloud(rest, () => {
           if (live.current && phaseRef.current === 'speaking') listen();
-        }, `${alo} ${rest}`);
+        }, `${greeting} ${rest}`);
       } else {
         listen();
       }
