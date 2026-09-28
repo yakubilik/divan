@@ -138,6 +138,9 @@ export default function RootLayout() {
         <Stack.Screen name="account-login" />
         <Stack.Screen name="login-web" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="move-signin" />
+        {/* The Divan design system, part by part. Nothing links here outside a
+            development build, and the screen itself turns away in one. */}
+        <Stack.Screen name="divan-gallery" />
       </Stack>
       {ready && locked && <LockScreen onUnlock={() => void unlock()} />}
       <MenuHost />

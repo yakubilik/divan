@@ -44,6 +44,10 @@ export interface Tokens {
   amberBg: string;
   /** Text on top of amber — the one pair the frames spell out. `--onAmber` */
   onAmber: string;
+  /** The amber drawn as a ring rather than as a fill, around a card that is
+   *  asking for something. Mobile1 V1's `inset 0 0 0 1px rgba(234,182,90,.28)`
+   *  and its light counterpart in Web14. */
+  amberRing: string;
   /** Stuck, failed, red. `--red` */
   red: string;
   redBg: string;
@@ -62,6 +66,7 @@ export const DARK: Tokens = {
   line: 'rgba(236,232,225,.08)', line2: 'rgba(236,232,225,.2)',
   ink: '#EDE9E2', ink2: '#A9A499', ink3: '#8C877E',
   amber: '#EAB65A', amberBg: 'rgba(234,182,90,.11)', onAmber: '#1A1609',
+  amberRing: 'rgba(234,182,90,.28)',
   red: '#EE6D55', redBg: 'rgba(238,109,85,.12)',
   run: '#7CC6A6', runBg: 'rgba(124,198,166,.1)',
   sh: 'rgba(0,0,0,.5)',
@@ -75,6 +80,7 @@ export const LIGHT: Tokens = {
   line: 'rgba(27,26,23,.09)', line2: 'rgba(27,26,23,.18)',
   ink: '#1B1A17', ink2: '#5C5850', ink3: '#7A756C',
   amber: '#9C6210', amberBg: 'rgba(214,150,40,.14)', onAmber: '#FFFFFF',
+  amberRing: 'rgba(156,98,16,.35)',
   red: '#C2412B', redBg: 'rgba(194,65,43,.1)',
   run: '#2F8067', runBg: 'rgba(47,128,103,.1)',
   sh: 'rgba(27,26,23,.12)',
@@ -184,6 +190,8 @@ export const stateColour = (t: Tokens, s: State) => toneColours(t, STATE_TONE[s]
 export const RADIUS = {
   /** A small mark: a status chip, an executor's square, a monogram. */
   mark: 8,
+  /** A list row's icon well. */
+  well: 9,
   /** A counter tile, a ticket card. */
   tile: 14,
   /** The board's column tab, a message card in the chat. */

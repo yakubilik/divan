@@ -366,6 +366,8 @@ const en = {
   ticketMore: 'The rest of this report', ticketLess: 'Less',
   // redesign
   loginNewLink: 'New link',
+  // the design gallery, which only a development build can reach
+  devSection: 'Development', divanParts: 'Divan parts', divanPartsNote: 'design system',
 };
 export type Key = keyof typeof en;
 

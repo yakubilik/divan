@@ -1,5 +1,6 @@
+import { createContext, createElement, useContext, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
-import { DARK, LIGHT, scrim, shadows, type Tokens, tokensFor, veil } from './tokens';
+import { DARK, LIGHT, scrim, type Scheme, shadows, type Tokens, tokensFor, veil } from './tokens';
 
 export * from './tokens';
 
@@ -110,14 +111,32 @@ function palette(t: Tokens): Palette {
 export const light: Palette = palette(LIGHT);
 export const dark: Palette = palette(DARK);
 
+/** Normally nothing: the app follows the phone and there is no switch in it,
+ *  because the phone already has one. The design gallery is the exception —
+ *  the frames exist in both themes and the point of the gallery is to be held
+ *  up against them, so it can ask a subtree to be drawn in the other one. */
+const Forced = createContext<Scheme | null>(null);
+
+export function ForceScheme({ scheme, children }: { scheme: Scheme | null; children: ReactNode }) {
+  // `createElement` rather than JSX so that the palette stays a `.ts` file:
+  // every script and document in the repository points at `src/theme.ts`.
+  return createElement(Forced.Provider, { value: scheme }, children);
+}
+
+export function useScheme(): Scheme {
+  const forced = useContext(Forced);
+  const phone = useColorScheme();
+  return forced ?? (phone === 'dark' ? 'dark' : 'light');
+}
+
 export function useColors(): Palette {
-  return useColorScheme() === 'dark' ? dark : light;
+  return useScheme() === 'dark' ? dark : light;
 }
 
 /** The design's own sixteen names, for anything drawn from the Divan frames.
  *  `useColors` is the same table under the names the older screens use. */
 export function useTokens(): Tokens {
-  return tokensFor(useColorScheme() === 'dark' ? 'dark' : 'light');
+  return tokensFor(useScheme());
 }
 
 /** Font families as registered in the root layout. React Native cannot pick a
