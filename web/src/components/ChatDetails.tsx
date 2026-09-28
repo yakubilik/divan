@@ -7,7 +7,7 @@ import type { Field } from './FieldSheet';
 import type { Chat } from '../lib/protocol';
 import type { Item } from '../lib/timeline';
 
-const W = 300;
+const W = 340;
 
 function Row({ label, value, onClick, dot }: {
   label: string; value: string; onClick?: () => void; dot?: string;
@@ -115,7 +115,16 @@ function recentTools(items: Item[]) {
   return out;
 }
 
-export function Inspector({ chat, items, busy, liveTokens, accountLabel, accountUsage, onEdit, onInterrupt, onPopOut }: {
+/**
+ * What this chat is made of — account, model, cost, ids, the last few tools.
+ *
+ * It used to be a 300px panel nailed to the right of every chat, which is a lot of screen
+ * spent on numbers nobody reads most of the time. Now it is behind the header's "Details"
+ * button and opens over the conversation, anchored under the button it came from, closed
+ * again by a click outside or Escape. Nothing here is remembered between openings: closed
+ * is the resting state.
+ */
+export function ChatDetails({ chat, items, busy, liveTokens, accountLabel, accountUsage, onEdit, onInterrupt, onPopOut, onClose }: {
   chat: Chat | null;
   items: Item[];
   busy: boolean;
@@ -126,7 +135,25 @@ export function Inspector({ chat, items, busy, liveTokens, accountLabel, account
   onEdit: (field: Field) => void;
   onInterrupt: () => void;
   onPopOut: () => void;
+  onClose: () => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      // the button that opens this sits outside it; without the guard its own click
+      // would close the popover in the same gesture that opened it
+      const el = e.target as HTMLElement;
+      if (ref.current && !ref.current.contains(el) && !el.closest('[data-chat-details-toggle]')) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
   const tools = chat ? recentTools(items) : [];
   const spent = chat?.total_cost_usd ?? 0;
   const cap = chat?.max_budget_usd ?? null;
@@ -137,10 +164,32 @@ export function Inspector({ chat, items, busy, liveTokens, accountLabel, account
   }, 0);
 
   return (
-    <div style={{
-      width: W, flexShrink: 0, background: C.surface, borderLeft: `1px solid ${C.border}`,
-      display: 'flex', flexDirection: 'column', height: '100%',
-    }}>
+    <div
+      ref={ref}
+      style={{
+        position: 'absolute', top: 42, right: 12, width: W, zIndex: 40,
+        maxHeight: 'min(620px, calc(100vh - 140px))',
+        background: C.surface, border: `1px solid ${C.borderStrong}`, borderRadius: R.card,
+        boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
+        borderBottom: `1px solid ${C.border}`, flexShrink: 0,
+      }}>
+        <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>Chat details</span>
+        <button
+          type="button" onClick={onClose} title="Close (Esc)"
+          style={{
+            width: 24, height: 24, borderRadius: R.btn, cursor: 'pointer', flexShrink: 0,
+            background: C.surface2, border: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Icon path={P.x} size={12} color={C.mute} />
+        </button>
+      </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {!chat ? (
           <div style={{ fontSize: 13, color: C.mute }}>No chat selected</div>
@@ -246,7 +295,10 @@ export function Inspector({ chat, items, busy, liveTokens, accountLabel, account
         )}
       </div>
 
-      <div style={{ padding: 16, borderTop: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{
+        padding: 12, borderTop: `1px solid ${C.border}`, flexShrink: 0,
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
         <button
           type="button" onClick={onInterrupt} disabled={!busy}
           style={{
@@ -276,5 +328,3 @@ export function Inspector({ chat, items, busy, liveTokens, accountLabel, account
     </div>
   );
 }
-
-export { W as INSPECTOR_W };

@@ -3,16 +3,19 @@ import { C, R } from '../lib/theme';
 import { Chip, Dot, Icon, P, Pulse, Spinner, mono, Empty } from '../ui/kit';
 import { Timeline } from './Timeline';
 import { ChatMenu } from './ChatMenu';
+import { ChatDetails } from './ChatDetails';
 import { duration, shortPath, toolSummary } from '../lib/format';
 import { fileUrl } from '../lib/actions';
 import type { Field } from './FieldSheet';
 import type { Chat, Group } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
 
-function Header({ chat, groupName, count, accountLabel, onEdit, onMenu }: {
+function Header({ chat, groupName, count, accountLabel, onEdit, onMenu, onDetails, detailsOpen }: {
   chat: Chat; groupName: string | null; count: number; accountLabel: string | null;
   onEdit: (f: Field) => void;
   onMenu: () => void;
+  onDetails: () => void;
+  detailsOpen: boolean;
 }) {
   const sub = [groupName, chat.cwd.split(/[/\\]/).pop(), `${count} messages`].filter(Boolean).join(' · ');
   const running = chat.status === 'running';
@@ -69,6 +72,23 @@ function Header({ chat, groupName, count, accountLabel, onEdit, onMenu }: {
             ...mono, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{shortPath(chat.cwd, 2)}</span>
         </Chip>
+        {/* The numbers nobody needs open all the time live behind this: cost, tokens,
+            ids, the last few tools. `data-chat-details-toggle` is how the popover tells
+            this click apart from a click outside it. */}
+        <button
+          type="button" onClick={onDetails} title="Chat details" data-chat-details-toggle
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 9px',
+            borderRadius: R.btn, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+            fontSize: 12, fontWeight: 600,
+            background: detailsOpen ? C.surface3 : C.surface2,
+            border: `1px solid ${detailsOpen ? C.borderStrong : C.border}`,
+            color: detailsOpen ? C.text : C.text2,
+          }}
+        >
+          <Icon path={P.info} size={12} color={detailsOpen ? C.text : C.mute} />
+          Details
+        </button>
         <button
           type="button" onClick={onMenu} title="Chat menu"
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, lineHeight: 0 }}
@@ -340,14 +360,18 @@ function Composer({ chat, hostKey, busy, sending, onSend, onInterrupt, onUpload 
   );
 }
 
-export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onUpload, sending }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, liveTokens, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onUpload, onPopOut, sending }: {
   chat: Chat | null;
   hostKey: string | null;
   log: ChatLog;
   groupName: string | null;
   groups: Group[];
   accountLabel: string | null;
+  /** 0–1 of the fullest window that account last reported. Details only. */
+  accountUsage: number | null;
+  liveTokens: number | null;
   sending: boolean;
+  onPopOut: () => void;
   onSend: (text: string, attachments: any[]) => void;
   onInterrupt: () => void;
   onRespond: (requestId: string, d: 'allow' | 'allow_session' | 'deny') => void;
@@ -359,6 +383,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const [menu, setMenu] = useState(false);
+  const [details, setDetails] = useState(false);
 
   useEffect(() => {
     const el = scroller.current;
@@ -398,13 +423,22 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Header
           chat={chat} groupName={groupName} count={msgCount} accountLabel={accountLabel}
-          onEdit={onEdit} onMenu={() => setMenu(true)}
+          onEdit={onEdit} onMenu={() => { setDetails(false); setMenu(true); }}
+          onDetails={() => setDetails((v) => !v)} detailsOpen={details}
         />
         {menu && (
           <ChatMenu
             chat={chat} groups={groups}
             onUpdate={onUpdate} onDelete={onDelete}
             onClose={() => setMenu(false)}
+          />
+        )}
+        {details && (
+          <ChatDetails
+            chat={chat} items={log.items} busy={busy}
+            liveTokens={liveTokens} accountLabel={accountLabel} accountUsage={accountUsage}
+            onEdit={onEdit} onInterrupt={onInterrupt} onPopOut={onPopOut}
+            onClose={() => setDetails(false)}
           />
         )}
       </div>
