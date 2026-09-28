@@ -11,6 +11,12 @@ placeholders this repository does use on purpose (`/Users/you/…`,
 
 The allowlist is checked too: a Turkish word in `remote_ai_chat/call.py` is data
 the language detector cannot work without, and anywhere else it is a bug.
+
+And the scanner's blind spot is covered here rather than left to a person's
+eyes: the three files `audit.SELF` exempts are read back and checked for a home
+directory, an address or a machine name that is not one of the samples written
+down below. An audit report is where such a string is most at hand and least
+noticed.
 """
 from __future__ import annotations
 
@@ -72,6 +78,52 @@ QUIET = [
 ]
 
 
+# ── the hole the exemption leaves ───────────────────────────────────────────
+#
+# `audit.SELF` exempts the scanner, its test and the audit reports from every
+# rule, because all three have to carry the shape of the thing they are about —
+# a report that cannot name what it found is not a report. The exemption is also
+# the one blind spot in the scan: a real home directory, a real address or a
+# real machine name pasted into a report would be published without a word of
+# complaint, and a report of history is exactly where such a string is at hand.
+#
+# So the identifier rules are run against those files here, and every string
+# that is allowed to match is written down: the synthetic samples above, and
+# nothing else. The placeholders the reports are written in (`/Users/<name>`,
+# `<name>@gmail.com`, `<Name>-MacBook-Air.local`) do not appear below because no
+# rule matches them — the angle bracket breaks every one of the shapes, which is
+# the property that makes them usable as placeholders in the first place.
+IDENTIFIER_RULES = ("home-directory", "personal-email", "tailnet-hostname",
+                    "local-hostname")
+
+# This check needs a negative control, and a negative control has to be three
+# real-shaped identifiers, in this file, which is one of the files being
+# checked. So it is named, and its three matches are listed with the rest.
+CONTROL = "run it from /Users/ada, mail ada@icloud.com, on Adas-MacBook.local"
+
+REDACTED = {
+    "/Users/somebody",              # FIRES, home-directory
+    "/home/somebody",               # FIRES, home-directory
+    "first.last@gmail.com",         # FIRES, personal-email
+    "laptop.tail1234.ts.net",       # FIRES, tailnet-hostname
+    "Someones-MacBook-Air.local",   # FIRES, local-hostname
+    "/Users/ada",                   # CONTROL, home-directory
+    "ada@icloud.com",               # CONTROL, personal-email
+    "Adas-MacBook.local",           # CONTROL, local-hostname
+}
+
+
+def unredacted(text: str, allowed: frozenset[str] | set[str] = REDACTED) -> list[str]:
+    """Identifiers in a SELF file that are not one of the samples above."""
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        for rule in IDENTIFIER_RULES:
+            for m in audit.COMPILED[rule][0].finditer(line):
+                if m.group(0) not in allowed:
+                    out.append(f"{i}: {rule} {m.group(0)!r}")
+    return out
+
+
 def main() -> int:
     fails = 0
 
@@ -102,6 +154,23 @@ def main() -> int:
     for path in ("scripts/release.py", "docs/PROTOCOL.md", "daemon/remote_ai_chat/push.py"):
         check(f"{path} is not",
               bool(audit.scan_text(path, "AKIAIOSFODNN7EXAMPLE", "test")))
+
+    print("\nso the exempt files are read for identifiers here instead")
+    exempt = [p for p in audit.git("ls-files").split("\n")
+              if p and p.startswith(audit.SELF)]
+    check("every exempt file is tracked and was found",
+          len(exempt) >= 3 and "scripts/audit.py" in exempt, repr(exempt))
+    for path in exempt:
+        hits = unredacted(Path(path).read_text(encoding="utf-8"))
+        check(f"{path} carries no unredacted identifier", not hits, "; ".join(hits))
+    check("and the check would notice one",
+          unredacted(CONTROL, allowed=frozenset())
+          == ["1: home-directory '/Users/ada'",
+              "1: personal-email 'ada@icloud.com'",
+              "1: local-hostname 'Adas-MacBook.local'"])
+    check("the placeholders the reports are written in are not identifiers",
+          not unredacted("/Users/<name>, <name>@gmail.com, <Name>-MacBook-Air.local,"
+                         " com.<name>.remoteaichat", allowed=frozenset()))
 
     print("\nthe language allowlist covers exactly one file")
     allowed = sorted(audit.ALLOW)

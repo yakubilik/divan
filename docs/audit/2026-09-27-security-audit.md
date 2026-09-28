@@ -3,13 +3,15 @@
 What this is: a read of the whole repository, and of the whole git history,
 looking for the three things that must not be published — a credential, a piece
 of somebody's private life, and a string in a language the project is not
-written in. It was run twice on branch
-`ustabasi/3-remote-ai-chat-pre-publication-security-`: first against the base
+written in. It was run three times on the audit branch: first against the base
 `4fa0358`, over 210 tracked files, 919 blobs and 91 commits; then again after
 `git merge main` brought in `f44b641`, over **222 tracked files, 1,003 blobs and
-114 commits** across every ref in the clone. The second pass is the one this
-document describes, and the reason for it is in
-[A second pass, after merging `main`](#a-second-pass-after-merging-main).
+114 commits** across every ref in the clone; and a third time over this report,
+which is a tracked file too and which the scanner is deliberately blind to. The
+second pass is the one this document describes, and the reason for each of the
+later two is in [A second pass, after merging
+`main`](#a-second-pass-after-merging-main) and [A third pass, over this
+report](#a-third-pass-over-this-report).
 
 The scan is `scripts/audit.py`, written for this audit and kept: a finding that
 can only be reproduced by hand is a finding that comes back. `gitleaks` and
@@ -35,7 +37,7 @@ RAC_AUDIT_NAMES='<name>|<other-project>' python scripts/audit.py --history
 |---|---|
 | Secrets in tracked files | **none** |
 | Secrets anywhere in git history | **none** |
-| Personal data in tracked files | none of the shapes the scanner looks for; 5 files carried an author-specific identifier — 3 found by hand in the first pass, 3 more in the second pass by the two rules those three led to, all 7 fixed below |
+| Personal data in tracked files | none of the shapes the scanner looks for; 5 files carried an author-specific identifier — 3 found by hand in the first pass, 3 more in the second pass by the two rules those three led to, all 7 fixed below; this report was the eighth, redacted in the third pass |
 | Personal data in git history | 163 hits across 49 blobs, plus 2 author identities in commit metadata — **not** rewritten, see [section 4](#4--what-only-exists-in-history) |
 | Turkish in tracked files | 62 lines in 19 files; all English now except `call.py`, where the language is the feature, and the audit's own three files, which quote what was removed |
 | Doc claims that did not match the daemon | 5, all corrected |
@@ -154,6 +156,43 @@ conflict would have been the audit removing a check. `main`'s
 `daemon/scripts/test_titles.py` is now in the daemon job's list too, along with
 the two scripts this branch adds.
 
+### A third pass, over this report
+
+The first two passes looked everywhere the scanner looks. The scanner does not
+look at three files — `scripts/audit.py`, `scripts/test_audit.py` and
+`docs/audit/`, because each has to carry the shape of the thing it is about —
+and one of those three is this document, which had been written with the
+findings quoted verbatim: the author's gmail address twice, the macOS username,
+the laptop's Bonjour name, and the App Store bundle id that is built out of the
+author's name. Section 4 says in as many words that two of those strings are on
+no pushed branch. Committing this file would have published them for the first
+time, in the document arguing they should stay unpublished, and no rule in the
+scan would have said a word.
+
+All of them are now placeholders, to the convention section 4 sets out, and the
+gap that let it happen is closed by a check rather than by care:
+`scripts/test_audit.py` reads every tracked file under `audit.SELF` back off
+disk and fails on a home directory, an e-mail address at a consumer domain, a
+tailnet hostname or a `*-MacBook*.local` machine name that is not one of the
+samples it declares. It was watched failing. With one line appended to this
+file, of the shape
+
+```
+Pasted by accident: /Users/<name>, <name>@gmail.com, <Name>-MacBook-Air.local.
+```
+
+but carrying the four real strings rather than the placeholders, the test
+reports
+
+```
+FAIL  docs/audit/2026-09-27-security-audit.md carries no unredacted identifier
+      710: home-directory '…'; 710: personal-email '…'; 710: local-hostname '…'
+```
+
+and the line was then removed again. A key-shaped string pasted into a report is
+still a reader's job and nobody else's; the three identifier shapes, which are
+the ones an audit of history has on the clipboard, are now mechanical.
+
 ## 2 · Findings in tracked files, and the fix for each
 
 ### Secrets
@@ -167,7 +206,7 @@ lines 37–46), which are regexes, not keys.
 | File · line (before) | Was | Now |
 |---|---|---|
 | `daemon/scripts/test_agents.py` :124, :128 | `"yakup-projects"` — the author's own Claude skill, as a test fixture | `"existing-skill"` |
-| `store/checklist.md` :4 | the real bundle id, `com.yakupkeskin.remoteaichat` | removed; the line now points at `app/identity.local.json`, which is where `app/app.config.js` reads it from and which git does not carry |
+| `store/checklist.md` :4 | the real bundle id, which is built out of the author's own name (`com.<name>.remoteaichat`) | removed; the line now points at `app/identity.local.json`, which is where `app/app.config.js` reads it from and which git does not carry |
 | `store/checklist.md` :15 | the App Store Connect app id | removed |
 | `app/app/chat/[id].tsx` :209 | `ch?.title === 'Yeni sohbet'` — a legacy title only the author's own pre-release database can contain | dropped; the daemon has only ever written `NEW_CHAT_TITLE = "New chat"` (`daemon/remote_ai_chat/session.py` :23) |
 | `daemon/remote_ai_chat/agents.py` :335–336 | a comment crediting the change to the author by first name and dating it to a private conversation: *"<Name> used to introduce itself on every chat; <Name> asked for that to stop (2026-09-22)"* | the comment now says what it is about and not who said it: *"This pack's agent introduced itself on every chat, which readers of a phone screen did not want…"*. The prompt itself and the `PROMPTS` key are untouched — `hermes` there is a public skill pack (`AlexAI-MCP/hermes-CCC`), not a private name |
@@ -395,6 +434,20 @@ $ git ls-files | grep -E '\.env|\.p8$|\.p12$|\.pem$|uploads/|\.sqlite'
 that a person can decide, and the decision turns out to be easy: with one
 exception, none of it is on anything that has been pushed.
 
+Everything below is written as a placeholder, to the same convention section 2
+uses: `<name>` for the author's macOS username and for the local part of an
+address, `<Name>` for a name as it reads in prose, `<Name>-MacBook-Air.local`
+for the laptop. This report is itself a tracked file in the public repository it
+is auditing, and section 4 exists because some of these strings are *not* on
+`origin` — printing them here would publish, for the first time, the thing the
+entry is asking nobody to publish. Nothing is lost by it: every row names the
+commit or the blob, so `git show <commit>:<path>` gives the exact text to
+whoever has the branch, and `RAC_AUDIT_NAMES='…' python scripts/audit.py
+--history` regenerates the whole table. The convention is checked rather than
+promised — `scripts/test_audit.py` reads this file and fails on an unredacted
+home directory, address or machine name, because `scripts/audit.py` is blind to
+its own three files.
+
 ### Not published — local-only branches
 
 `git log -S … --pickaxe-all` over each ref, cross-checked against
@@ -403,10 +456,10 @@ exception, none of it is on anything that has been pushed.
 
 | What | Where | Commits |
 |---|---|---|
-| `yakupkeskin777@gmail.com`, in mock account rows inside the design artboards (`design/Accounts.dc.html`, `design/MoveSignIn.dc.html`, `design/remote-ai-chat-ekranlar.html`) | 15 blobs | introduced `dcdb9c12de30310e3517160500b6808c2633dec9` (2026-09-08), also in `25568075615984e9b88e4a739e217722ff769375`; the files were deleted by `530e873495a04c07c9a0f7381d2e643584748822` and `2003ad31a05588855e2aa638f30f623d669e06d8` (2026-09-17) |
-| `/Users/dilarakilic`, in `docs/QA-REPORT.md` (4 lines) and an older docstring in `web/src/lib/format.ts` | 2 blobs | `b756ab19ac65009cbebe263cda13bcd7d50fefaf` (2026-09-08) and `1264bcf7e74b59691818507f28e1d4beddf8b196` (2026-09-14); both gone by `530e873…` |
-| `Dilara-MacBook-Air.local`, in a mock host row in `design/desktop/Dashboard.dc.html` | 1 blob | `1264bcf7e74b59691818507f28e1d4beddf8b196`; gone by `530e873…` |
-| `dilarakilic@Dilara-MacBook-Air.local` as commit author and committer | 22 commits | 2026-09-08 → 2026-09-17 |
+| the author's personal address, `<name>@gmail.com`, in mock account rows inside the design artboards (`design/Accounts.dc.html`, `design/MoveSignIn.dc.html`, `design/remote-ai-chat-ekranlar.html`) | 15 blobs | introduced `dcdb9c12de30310e3517160500b6808c2633dec9` (2026-09-08), also in `25568075615984e9b88e4a739e217722ff769375`; the files were deleted by `530e873495a04c07c9a0f7381d2e643584748822` and `2003ad31a05588855e2aa638f30f623d669e06d8` (2026-09-17) |
+| the author's home directory, `/Users/<name>`, in `docs/QA-REPORT.md` (4 lines) and an older docstring in `web/src/lib/format.ts` | 2 blobs | `b756ab19ac65009cbebe263cda13bcd7d50fefaf` (2026-09-08) and `1264bcf7e74b59691818507f28e1d4beddf8b196` (2026-09-14); both gone by `530e873…` |
+| the author's laptop, `<Name>-MacBook-Air.local`, in a mock host row in `design/desktop/Dashboard.dc.html` | 1 blob | `1264bcf7e74b59691818507f28e1d4beddf8b196`; gone by `530e873…` |
+| `<name>@<Name>-MacBook-Air.local` as commit author and committer | 22 commits | 2026-09-08 → 2026-09-17 |
 | the names of four of the author's other projects, in mock project lists and mock host rows across the design artboards (`design/*.dc.html`, `design/desktop/*.dc.html`, `design/remote-ai-chat-ekranlar.html`), plus `docs/PLAN.md` and `docs/QA-REPORT.md` | 30 blobs | `b756ab1`, `dcdb9c1`, `0859886`, `2880cab`, `1264bcf` (2026-09-08 → 2026-09-14); all gone by `530e873…` |
 
 Every one of those commits is reachable only from the local branches
@@ -449,19 +502,22 @@ The same rule applies as below: push by branch name, never `--all` or
 
 ### Published — the author's e-mail in commit metadata
 
-`yakupkeskin777@gmail.com` is the author *and* committer address of 10 commits
-on `origin/main`, and of a handful more on the other pushed branches. This is
-already public on GitHub. It cannot be removed without rewriting published
-history, which this ticket forbids and which is the right call anyway: rewriting
-`main` breaks every clone and every fork, to hide an address that has already
-been indexed.
+The author's personal `<name>@gmail.com` address is the author *and* committer
+address of 10 commits on `origin/main`, and of a handful more on the other
+pushed branches. This is already public on GitHub. It cannot be removed without
+rewriting published history, which this ticket forbids and which is the right
+call anyway: rewriting `main` breaks every clone and every fork, to hide an
+address that has already been indexed.
 
 Remedy, in the order it is worth doing:
 
 1. Stop adding more. `git config user.email
    44753768+yakubilik@users.noreply.github.com` in this repository — 42 commits
    already use exactly that address, so this is only making the majority the
-   rule. Turning on **Settings → Emails → Keep my email addresses private** and
+   rule. That one is written out rather than redacted on purpose: it is the
+   address GitHub publishes on the account's behalf, it carries nothing the
+   repository's own URL does not, and a remedy nobody can copy is not a remedy.
+   Turning on **Settings → Emails → Keep my email addresses private** and
    **Block command line pushes that expose my email** on the GitHub account
    makes it mechanical.
 2. Leave the existing commits alone.
@@ -492,7 +548,8 @@ ticket's constraints no commit message was edited.
 ## 5 · The mechanical checks, as run
 
 All of the following were run on the merged tree — this branch with `main`
-(`f44b641`) merged in — and not on the base the first pass used.
+(`f44b641`) merged in — and not on the base the first pass used, then run again
+unchanged after the third pass redacted this report.
 
 ```
 $ cd daemon
@@ -525,12 +582,13 @@ is not a binary:
 ```
 $ git ls-files | … | xargs grep -InE '[şğıİöçüŞĞÖÇÜ]' | cut -d: -f1 | uniq -c
    7 daemon/remote_ai_chat/call.py
-   5 docs/audit/2026-09-27-security-audit.md
+   7 docs/audit/2026-09-27-security-audit.md
    1 scripts/audit.py
    2 scripts/test_audit.py
 
 $ git ls-files | … | xargs grep -InwE 've|için|ile|bir|değil|kanka' | cut -d: -f1 | uniq -c
    3 daemon/remote_ai_chat/call.py
+   1 docs/audit/2026-09-27-security-audit.md
    1 scripts/audit.py
    1 scripts/test_audit.py
 ```
@@ -540,9 +598,9 @@ language is the feature, and the scanner plus its test plus this report, which
 have to contain the shape of what they are about. Nothing else in the repository
 returns a hit.
 
-### Two checks this audit needed and did not have
+### Three checks this audit needed and did not have
 
-Both exist because a claim this document makes was otherwise unverified.
+Each exists because a claim this document makes was otherwise unverified.
 
 1. **`daemon/scripts/test_push.py`** — `PUSH_TEXT` (`server.py` :47) lost its
    Turkish row, and "behaviour is identical" rests entirely on
@@ -567,9 +625,22 @@ Both exist because a claim this document makes was otherwise unverified.
    (`new Error(t(key))` in `ws.ts`, where the key comes from `ERR_KEYS`) is
    printed rather than passed over in silence. The panel's own table
    (`web/src/lib/i18n.ts`) is left to `tsc`, which does run for `web/` in CI.
+3. **the exempt-file check in `scripts/test_audit.py`** — the three files in
+   `audit.SELF` are exempt from every rule, so until the third pass the sentence
+   "no e-mail address, machine name or absolute home path is in any tracked
+   file" was true of 219 files and unchecked for three, one of which is this
+   report. The check reads every tracked file under `audit.SELF` back off disk,
+   runs the four identifier rules over it, and fails on any match that is not
+   one of the samples the test declares — the rule samples themselves, and the
+   three-identifier line the check uses as its own negative control. Its second
+   half is the reason the placeholders were chosen as they were:
+   `/Users/<name>`, `<name>@gmail.com` and `<Name>-MacBook-Air.local` match no
+   rule, because the angle bracket breaks every one of the shapes, and the test
+   asserts that too. See [A third pass, over this
+   report](#a-third-pass-over-this-report) for it failing.
 
-Both run in CI: `test_push.py` in the daemon job, `test_i18n_keys.py` in the
-`audit` job.
+All three run in CI: `test_push.py` in the daemon job, `test_i18n_keys.py` and
+`test_audit.py` in the `audit` job.
 
 `test_session.py` and `test_pool.py` were **failing before this branch**, on
 `main` as well, with `AttributeError: 'FakeProvider' object has no attribute
@@ -689,4 +760,8 @@ another language is a feature; `SELF`, three entries, the files that cannot scan
 themselves; and `NOT_A_PERSON`, the subjects that make an attribution verb prose
 rather than a note to the author. Adding to any of them is a decision, not a
 fix. `AUTHOR_NAMES` is not a list at all — it comes from the environment, and
-the test asserts that the file carries no names of its own.
+the test asserts that the file carries no names of its own. `SELF` is the one
+that buys silence rather than accuracy, so it is the one the test also reads
+back: the three files it exempts are scanned for identifiers by the test itself,
+against a fourth list (`REDACTED`) of the samples that are allowed to look like
+one.

@@ -131,9 +131,12 @@ ALLOW = {
 # The scan cannot scan itself. These three hold the patterns, the samples the
 # patterns are tested against, and the report of what was found — every one of
 # which has to contain the shape of the thing it is about. They are exempt from
-# every rule, not just the language ones, so read them with your eyes: a real
-# secret pasted into an audit report is the one thing this script cannot catch.
-# Nothing else may be added here.
+# every rule, not just the language ones, which leaves one hole: a real secret
+# or a real identifier pasted into an audit report is the thing this script
+# cannot catch. `scripts/test_audit.py` closes half of it — it reads these files
+# back and fails on a home directory, an address or a machine name that is not
+# one of its own samples. A key-shaped string in a report is still a human's
+# job. Nothing else may be added here.
 SELF = (
     "scripts/audit.py",
     "scripts/test_audit.py",
