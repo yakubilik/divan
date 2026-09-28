@@ -1,20 +1,23 @@
-"""The ustabasi ticket queue, read-only, for the panel's terminal wall.
+"""The ustabasi ticket queue: read for the wall, written to only through its CLI.
 
 The queue is a separate program with its own SQLite database and its own CLI;
-this daemon only looks at it. Two things are needed and no more: a snapshot of
-what the workers are doing, and a way to answer a ticket that stopped to ask a
-question. Everything else — starting work, cancelling it, editing a card —
-stays where it belongs, on the other side of that CLI.
+this daemon only looks at it. Three things are needed and no more: a snapshot of
+what the workers are doing, a way to answer a ticket that stopped to ask a
+question, and — since the Divan board became the thing work is arranged on — a
+way to file a new ticket when a card is dragged into In Progress. Everything
+else — cancelling work, editing a card, re-running it — stays where it belongs,
+on the other side of that CLI.
 
 Two readings are not in that database. A ticket's project is the daemon's own
 answer — the folder one level under an allowed root, as chat titles use — and
 what a worker has committed so far is read from the worktree's git log, because
 the queue does not record it and "where is it now" has no other answer.
 
-The one write goes through the CLI rather than the database, because "answer a
-blocked ticket" is not an INSERT: it appends the note, clears the escalation and
-puts the ticket back in the queue, and that sequence is the other program's to
-define. Copying it here would mean maintaining it twice.
+Both writes go through the CLI rather than the database, because neither is an
+INSERT: answering a blocked ticket appends the note, clears the escalation and
+puts the ticket back in the queue, and filing one picks a slug, a branch name, a
+worker model and a place in the queue. Those sequences are the other program's
+to define, and copying them here would mean maintaining them twice.
 
 Absent queue, absent CLI, locked database: all of those are an empty wall, not
 an error. Most machines running this daemon have never heard of ustabasi.
@@ -249,6 +252,54 @@ def snapshot(project_for: Callable[[str], str | None] | None = None) -> dict:
     }
 
 
+#: How long the CLI is given to answer. `add` writes one row and prints a line;
+#: anything slower than this is a database somebody else is holding open.
+CLI_TIMEOUT = 20
+
+
+async def _cli(*args: str, stdin: str | None = None) -> str:
+    """Run the queue's CLI and hand back what it said, or raise what it said."""
+    if not CLI.exists():
+        raise ValueError("ustabasi is not installed on this machine")
+    proc = await asyncio.create_subprocess_exec(
+        str(CLI), *args,
+        stdin=asyncio.subprocess.PIPE if stdin is not None else None,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+    )
+    try:
+        out, _ = await asyncio.wait_for(
+            proc.communicate((stdin or "").encode() if stdin is not None else None),
+            timeout=CLI_TIMEOUT)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise ValueError("ustabasi did not answer")
+    msg = (out or b"").decode(errors="replace").strip()
+    if proc.returncode != 0:
+        raise ValueError(msg or "ustabasi refused")
+    return msg
+
+
+# What `add` prints when it has queued something: `#41 queued: the title …`.
+QUEUED = re.compile(r"#(\d+)\s+queued\b")
+
+
+async def add(spec: dict) -> int:
+    """File a ticket and hand back the number the queue gave it.
+
+    The spec goes in on stdin as JSON — the CLI's own `--json -` — rather than
+    as a dozen flags, because a card's constraints and paths are lists and a
+    goal is a paragraph. The number comes back out of the line it prints, which
+    is the only thing it says: there is no `--porcelain`, and inventing one on
+    the other side of a program this daemon does not own would be a change to
+    that program for the convenience of this one.
+    """
+    out = await _cli("add", "--json", "-", stdin=json.dumps(spec, ensure_ascii=False))
+    m = QUEUED.search(out)
+    if not m:
+        raise ValueError(out or "ustabasi queued nothing")
+    return int(m.group(1))
+
+
 async def note(ticket_id: int, text: str) -> dict:
     """Answer a ticket. The CLI owns what that means; we only report back."""
     text = (text or "").strip()
@@ -256,22 +307,7 @@ async def note(ticket_id: int, text: str) -> dict:
         raise ValueError("empty note")
     if len(text) > MAX_NOTE:
         raise ValueError("note too long")
-    if not CLI.exists():
-        raise ValueError("ustabasi is not installed on this machine")
-
-    proc = await asyncio.create_subprocess_exec(
-        str(CLI), "note", str(int(ticket_id)), text,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-    )
-    try:
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
-    except asyncio.TimeoutError:
-        proc.kill()
-        raise ValueError("ustabasi did not answer")
-    msg = (out or b"").decode(errors="replace").strip()
-    if proc.returncode != 0:
-        raise ValueError(msg or "ustabasi refused the note")
-    return {"ok": True, "message": msg}
+    return {"ok": True, "message": await _cli("note", str(int(ticket_id)), text)}
 
 
 # ── the stage and round history a ticket has been through ────────────────────
