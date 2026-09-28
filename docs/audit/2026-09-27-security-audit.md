@@ -690,19 +690,19 @@ $ git ls-files | grep -E '\.env|\.p8$|\.p12$|\.pem$|uploads/|\.sqlite'  → noth
 
 The one line above that nobody else can reproduce is the one with
 `RAC_AUDIT_NAMES` in it, because the names are deliberately not committed. So
-here is the same command without it, which anybody with the clone can run and
-which is the figure to check this report against:
+here is the same command without it, which anybody with the clone can run:
 
 ```
 $ python scripts/audit.py --history
                                                    → 0 in tracked files,
-                                                     7,907 in history
+   third pass, 2026-09-27                            7,907 in history
+   fifth pass, 2026-09-28                            7,912 in history
 ```
 
-The two reconcile exactly: 7,907 = 7,870 Turkish + 35 personal over blobs + 2
-commit identities, and the name list adds 114 `author-name` hits on top, giving
-8,021 and the personal total of 149. Broken out by rule, the run without names
-is 5,339 `turkish-letter`, 2,531 `turkish-word`, 15 `personal-email`, 14
+The third-pass figure reconciles exactly: 7,907 = 7,870 Turkish + 35 personal
+over blobs + 2 commit identities, and the name list adds 114 `author-name` hits
+on top, giving 8,021 and the personal total of 149. Broken out by rule it was
+5,339 `turkish-letter`, 2,531 `turkish-word`, 15 `personal-email`, 14
 `personal-attribution`, 5 `home-directory`, 1 `local-hostname`, 1
 `personal-email-in-commit-metadata`, 1 `local-hostname-in-commit-metadata` —
 
@@ -711,8 +711,67 @@ $ python scripts/audit.py --history | grep '^   \[history\]' \
     | sed -E 's/.*  ([a-z-]+)  .*/\1/' | sort | uniq -c | sort -rn
 ```
 
-— and it takes about three minutes over the 1,012 blobs in the clone. All of the
-above was run once more, unchanged, on the final tree of this branch.
+### The history total drifts, and what to check instead
+
+Run again on the final tree of this branch the same command says **7,912**, five
+more, and the difference is worth more than the number is. `--history` reads
+every object in the object database — `git cat-file --batch-all-objects` —
+and not only the objects a ref can reach. Objects outlive the refs that reached
+them, nothing in this clone ever packs or prunes them (`git count-objects -v`
+reports `packs: 0` and 1,910 loose objects), and six worktrees share the store.
+So the set it reads grows and its contents shift, and a total taken from it is a
+reading of one machine on one day rather than a property of the project.
+
+Today 11 of the 1,026 blobs it reads have no path in `git rev-list --all
+--objects`, and they carry 46 of the hits, every one of them Turkish: an old
+Turkish `README.md` (28), one half-resolved merge still carrying its
+`<<<<<<< main` marker (5), three older `server.py` (7), two older `i18n.ts` (2)
+and four older panel screens (4) — files whose tracked versions this branch has
+already translated. `git gc --prune=now` would drop them, and the total with
+them. How the third pass's 7,907 split between reachable and unreachable was not
+recorded, which is the other half of why a bare total is not a figure to check a
+report against.
+
+The figure to check this report against is therefore the reachable one:
+
+| | third pass | fifth pass |
+|---|---|---|
+| over blobs a ref names | 7,905 over 261 blobs | **7,864 over 255 blobs** |
+| — of them Turkish | 7,870 | **7,829** (5,318 letter, 2,511 word) |
+| — of them personal | 35 | **35** (15 e-mail, 14 attribution, 5 home directory, 1 machine name) |
+| plus commit identities | 2 | **2** |
+| secrets, either pass | **0** | **0** |
+
+Every personal figure is identical across the two passes, and every secret
+figure is zero in both: all of the drift is Turkish, which is the one class the
+loose-object set is made of. The decomposition is a command rather than a
+claim — run it and the three numbers in the first line are the ones the table
+is built from:
+
+```
+$ python scripts/audit.py --history --json > /tmp/h.json
+$ python3 - <<'EOF'
+import json, collections
+d = [f for f in json.load(open("/tmp/h.json")) if f["where"] == "history"]
+loose = [f for f in d if f["path"] == "<unreachable blob>"]
+named = [f for f in d if f["path"] != "<unreachable blob>"]
+print(len(d), "total,", len(loose), "unreachable,", len(named), "reachable")
+for rule, n in collections.Counter(f["rule"] for f in named).most_common():
+    print(f"{n:6}  {rule}")
+EOF
+7912 total, 46 unreachable, 7866 reachable
+  5318  turkish-letter
+  2511  turkish-word
+    15  personal-email
+    14  personal-attribution
+     5  home-directory
+     1  local-hostname
+     1  personal-email-in-commit-metadata
+     1  local-hostname-in-commit-metadata
+```
+
+It takes about four minutes. The `7,864 over 255 blobs` in the table is the
+`7,866` above minus the 2 commit identities, which belong to no blob.
 
 And the two literal greps this audit was asked for, over every tracked file that
 is not a binary:
