@@ -676,14 +676,17 @@ stub the merge with `main` produced in each of the two fakes (above).
 - `scripts/test_audit.py` — proof the scan would have said something else.
 - `scripts/test_i18n_keys.py` — every string the app asks for exists.
 - `daemon/scripts/test_push.py` — a notification body is English for every
-phone.
+  phone.
 - `docs/audit/2026-09-27-security-audit.md` — this file.
 - an `audit` job in `.github/workflows/ci.yml` (three steps: the scanner's test,
   the scan, the i18n check), kept alongside `main`'s `docs · links` job, and
   `test_agents.py`, `test_titles.py` and `test_push.py` added to the daemon
   job's list.
 
-Two lists in `scripts/audit.py` are the whole of its discretion, and both are
-asserted by `scripts/test_audit.py`: `ALLOW`, one entry, the file where another
-language is a feature; and `SELF`, three entries, the files that cannot scan
-themselves. Adding to either is a decision, not a fix.
+Three lists in `scripts/audit.py` are the whole of its discretion, and all three
+are asserted by `scripts/test_audit.py`: `ALLOW`, one entry, the file where
+another language is a feature; `SELF`, three entries, the files that cannot scan
+themselves; and `NOT_A_PERSON`, the subjects that make an attribution verb prose
+rather than a note to the author. Adding to any of them is a decision, not a
+fix. `AUTHOR_NAMES` is not a list at all — it comes from the environment, and
+the test asserts that the file carries no names of its own.
