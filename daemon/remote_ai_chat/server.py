@@ -32,6 +32,7 @@ from .transcribe import transcribe, available as transcribe_available
 from .attachments import KINDS, normalize_image, sniff
 from .security import PathPolicy
 from . import screen as screenmod
+from . import ustabasi as ustabasimod
 from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager, with_project
 from .providers.codex import live_models as codex_live_models
 
@@ -1575,6 +1576,24 @@ class Server:
         self.accounts.pop(a.id, None)
         self._save_accounts()
         return {}
+
+    # ── the ustabasi wall ──────────────────────────────────────────────────
+    async def h_ustabasi_list(self, dev: Device, d: dict) -> dict:
+        """The ticket queue, for the panel's second wall. Reading someone
+        else's SQLite file is a blocking read, so it goes to a thread."""
+        return await asyncio.to_thread(ustabasimod.snapshot)
+
+    async def h_ustabasi_note(self, dev: Device, d: dict) -> dict:
+        """Answer a ticket that stopped to ask. The only write this daemon
+        makes to that queue, and it goes through the queue's own CLI."""
+        try:
+            tid = int(d.get("id"))
+        except (TypeError, ValueError):
+            raise Err("bad_ticket", "no such ticket")
+        try:
+            return await ustabasimod.note(tid, str(d.get("text") or ""))
+        except ValueError as exc:
+            raise Err("ustabasi_refused", str(exc))
 
     async def _release_chats(self, account_id: str) -> None:
         """Free every chat bound to this account: a running turn is interrupted,
