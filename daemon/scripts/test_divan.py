@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -66,6 +67,12 @@ from remote_ai_chat import ustabasi as u                           # noqa: E402
 from remote_ai_chat.db import DB, SCHEMA as CHAT_SCHEMA            # noqa: E402
 from remote_ai_chat.security import PathPolicy                     # noqa: E402
 from remote_ai_chat.server import Server                           # noqa: E402
+
+# Two of the checks below are a queue declining to take a card, and the handler
+# says so in the log on its way to saying so in the answer. That is the
+# behaviour being checked; printed here it reads like a failure in a script
+# whose whole output is one line.
+logging.getLogger("rac.server").setLevel(logging.ERROR)
 
 fails: list[str] = []
 
