@@ -248,6 +248,10 @@ export function TicketChat({ t, tone, onClose, onNote }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  /** whether the end is what is being read. The wall re-reads the queue every
+   *  few seconds, and a note arriving while somebody is halfway up a report
+   *  must not drag them back down to the bottom of it. */
+  const stick = useRef(true);
 
   const msgs = useMemo(() => conversation(t), [t]);
   const said = useMemo(() => new Set((t.notes || []).map((n) => (n.text || '').trim())), [t.notes]);
@@ -263,11 +267,14 @@ export function TicketChat({ t, tone, onClose, onNote }: {
   // every answer.
   useEffect(() => {
     const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [msgs.length, mine.length]);
 
   const send = useCallback(async (text: string) => {
     const mark = { id: `local-${Date.now()}`, ts: Date.now() / 1000, text };
+    // Answering is asking to be shown the answer, wherever the reading had
+    // got to.
+    stick.current = true;
     setPending((p) => [...p, mark]);
     setBusy(true);
     setError(null);
@@ -335,6 +342,10 @@ export function TicketChat({ t, tone, onClose, onNote }: {
 
         <div
           ref={scroller}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          }}
           style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '16px' }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>

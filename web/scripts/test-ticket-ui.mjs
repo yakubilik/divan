@@ -156,9 +156,46 @@ try {
   ok('the box empties', afterSend.box === '');
   ok('the message lands in the conversation',
     afterSend.text.includes('Take the token from the shared vault.'));
-  ok('it lands at the end',
+  ok('it lands at the end, before the queue has said anything',
     afterSend.text.lastIndexOf('Take the token from the shared vault.')
     > afterSend.text.lastIndexOf('I stopped here'), afterSend.text.slice(-400));
+
+  // The wall re-reads the queue a few seconds after a note lands, and the note
+  // comes back as part of the ticket. The message shown before that must give
+  // way to it rather than sit next to it.
+  const settled = await evaluate(`
+    await new Promise((r) => setTimeout(r, 2000));
+    const text = document.body.innerText;
+    return { copies: text.split('Take the token from the shared vault.').length - 1 };
+  `);
+  ok('once the queue has it, the message is not there twice', settled.copies === 1,
+    `${settled.copies} copies`);
+
+  console.log('── something arriving while it is being read');
+  const read = await evaluate(`
+    const scroller = [...document.querySelectorAll('div')].find((d) => d.style.overflowY === 'auto');
+    scroller.scrollTop = 0;
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 60));
+    window.arrive('the supervisor put this on the ticket');
+    await new Promise((r) => setTimeout(r, 200));
+    return { top: scroller.scrollTop, text: document.body.innerText };
+  `);
+  ok('a note arriving does not drag the reading back down', read.top === 0, String(read.top));
+  ok('but it is in the conversation', read.text.includes('the supervisor put this on the ticket'));
+
+  console.log('── answering brings you back to the end');
+  const back = await evaluate(`
+    const ta = document.querySelector('textarea');
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    set.call(ta, 'and here is the answer');
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 200));
+    const scroller = [...document.querySelectorAll('div')].find((d) => d.style.overflowY === 'auto');
+    return Math.abs(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < 4;
+  `);
+  ok('answering scrolls to the answer', back === true);
 
   console.log('── a note the queue refuses');
   await evaluate(`
