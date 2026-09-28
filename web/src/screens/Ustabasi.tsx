@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
-import { Btn, Dot, Empty, Icon, P, Spinner, mono } from '../ui/kit';
-import { Modal, ModalHead } from '../components/Modal';
+import { Dot, Empty, Icon, P, Spinner, mono } from '../ui/kit';
+import { TicketChat } from '../components/TicketChat';
 import { useFleet } from '../lib/fleet';
-import { ago, duration } from '../lib/format';
-import type { Group } from '../lib/ustabasi';
-import { commitCount, groupByProject, roundAge, stageLine, totalAge } from '../lib/ustabasi';
+import { duration } from '../lib/format';
+import {
+  answerable, commitCount, groupByProject, roundAge, stageLine, totalAge,
+  type Group, type Status, type Ticket,
+} from '../lib/ustabasi';
 
 /** The ustabasi wall: the same question terminal mode asks of chats — what is
  *  happening — asked of the work that runs without anyone watching.
@@ -30,8 +32,6 @@ import { commitCount, groupByProject, roundAge, stageLine, totalAge } from '../l
  *  the same note.
  */
 
-type Status = 'queued' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled';
-
 /** The phase colours are terminal mode's, deliberately: the two warm ones mean
  *  the same thing on both walls. Amber wants an answer from you — an approval
  *  there, a blocked ticket here. Red went wrong on its own. Everything working
@@ -54,44 +54,6 @@ const FILTERS: { key: Status | 'all'; label: string; color: string }[] = [
   { key: 'queued', label: 'Queued', color: STATUS.queued.color },
   { key: 'done', label: 'Done', color: STATUS.done.color },
 ];
-
-/** A ticket you can talk to. The queue re-opens a blocked or failed ticket the
- *  moment a note lands; a running one takes the note at its next stage
- *  boundary, which is useful but not urgent, so the box is offered only where
- *  the ticket is actually stopped waiting for it. */
-function answerable(s: Status): boolean {
-  return s === 'blocked' || s === 'failed';
-}
-
-interface Criterion { criterion: string; status: string; detail?: string }
-interface Verdict { verdict?: string; findings?: Criterion[] }
-
-export interface Ticket {
-  id: number;
-  title: string;
-  status: Status;
-  stage: string;
-  round: number;
-  repo: string;
-  /** the project this is work on, by name: a ticket in babysee/app is babysee */
-  project: string | null;
-  branch: string | null;
-  created_at: number;
-  updated_at: number;
-  started_at: number | null;
-  /** when the round it is in began, which the queue's tickets table does not hold */
-  round_started_at: number | null;
-  finished_at: number | null;
-  /** what the worker has committed on the branch; null when there is nothing to say */
-  git: { commits: number; subject: string } | null;
-  goal: string;
-  done_criteria: string[];
-  escalation: string;
-  verdict: Verdict | null;
-  notes: { ts: number; from: string; text: string }[];
-  note_count: number;
-  last_event: { ts: number; kind: string; msg: string } | null;
-}
 
 interface Snapshot {
   available: boolean;
@@ -165,7 +127,7 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
 
         {/* How long it has been a ticket, first and on its own: it is the
             figure anybody means by "how long has this been going", and the
-            smaller one underneath used to be read as it. */}
+            smaller one under it was being read as that. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
           <div style={{ ...mono, fontSize: 12, color: C.text2 }}>{totalAge(t, now)}</div>
           <div style={{
@@ -215,7 +177,7 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
  *  long commit subject from pushing the page wider than the phone.
  */
 export function Wall({ groups, now, onOpen }: {
-  groups: Group<Ticket>[]; now: number; onOpen: (id: number) => void;
+  groups: Group[]; now: number; onOpen: (id: number) => void;
 }) {
   return (
     <div style={{
@@ -244,168 +206,6 @@ export function Wall({ groups, now, onOpen }: {
         </section>
       ))}
     </div>
-  );
-}
-
-// ── the opened ticket ────────────────────────────────────────────────────────
-
-function Detail({ t, onClose, onNote }: {
-  t: Ticket; onClose: () => void; onNote: (text: string) => Promise<string>;
-}) {
-  const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [sent, setSent] = useState<string | null>(null);
-  const ph = STATUS[t.status] || STATUS.queued;
-  const wants = answerable(t.status);
-
-  const send = useCallback(async () => {
-    const text = draft.trim();
-    if (!text || busy) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      setSent(await onNote(text));
-      setDraft('');
-    } catch (e: any) {
-      setErr(e?.message || 'the queue refused that note');
-    } finally {
-      setBusy(false);
-    }
-  }, [draft, busy, onNote]);
-
-  return (
-    <Modal onClose={onClose} width={720}>
-      <ModalHead title={`#${t.id} ${t.title}`} onClose={onClose} />
-      <div style={{ padding: '4px 20px 20px', display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-        <div style={{ ...mono, fontSize: 11.5, color: C.faint, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ color: ph.color, fontWeight: 600 }}>{ph.label}</span>
-          <span>· {t.stage} r{t.round}</span>
-          <span>· {t.repo.split('/').slice(-1)[0]}</span>
-          {t.branch && <span>· {t.branch}</span>}
-          <span>· {ago(t.updated_at)}</span>
-        </div>
-
-        {/* The question first. On a red ticket nothing else on this screen
-            matters until it is answered. */}
-        {wants && t.escalation && (
-          <section style={{
-            padding: 14, borderRadius: R.card, background: `rgba(${ph.rgb},0.08)`,
-            border: `1px solid rgba(${ph.rgb},0.28)`,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: ph.color, marginBottom: 8, letterSpacing: 0.3 }}>
-              WHAT IT IS WAITING FOR
-            </div>
-            <div style={{
-              fontSize: 13, lineHeight: '20px', color: C.text2,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            }}>{t.escalation}</div>
-          </section>
-        )}
-
-        {wants && (
-          <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <textarea
-              name={`ustabasi-note-${t.id}`}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); }}
-              placeholder="Answer the worker. This is the same as `ustabasi note` — the ticket goes back in the queue with it."
-              rows={5}
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: 12, borderRadius: R.input,
-                background: C.surface2, border: `1px solid ${C.border}`, color: C.text,
-                fontSize: 13, lineHeight: '20px', outline: 'none', resize: 'vertical',
-                fontFamily: 'inherit',
-              }}
-            />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Btn kind="primary" onClick={send} disabled={busy || !draft.trim()}>
-                {busy ? 'Sending…' : 'Send and re-queue'}
-              </Btn>
-              <span style={{ ...mono, fontSize: 11, color: C.faint }}>⌘↵</span>
-              {err && <span style={{ fontSize: 12.5, color: C.danger }}>{err}</span>}
-              {sent && !err && <span style={{ fontSize: 12.5, color: C.ok }}>{sent}</span>}
-            </div>
-          </section>
-        )}
-
-        {t.goal && (
-          <section>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.mute, marginBottom: 8, letterSpacing: 0.3 }}>
-              GOAL
-            </div>
-            <div style={{ fontSize: 13, lineHeight: '20px', color: C.text2, whiteSpace: 'pre-wrap' }}>
-              {t.goal}
-            </div>
-          </section>
-        )}
-
-        {t.done_criteria.length > 0 && (
-          <section>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.mute, marginBottom: 8, letterSpacing: 0.3 }}>
-              DONE WHEN
-            </div>
-            <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {t.done_criteria.map((c, i) => {
-                // The verifier answers the criteria in order but writes its own
-                // wording for each, so the mark comes from its list by position.
-                const f = t.verdict?.findings?.[i];
-                const met = f?.status === 'met';
-                return (
-                  <li key={i} style={{ fontSize: 13, lineHeight: '20px', color: C.text2 }}>
-                    {f && (
-                      <span style={{
-                        ...mono, fontSize: 11, marginRight: 6,
-                        color: met ? C.ok : C.warn,
-                      }}>{met ? '✓' : '✗'}</span>
-                    )}
-                    {c}
-                    {f && !met && f.detail && (
-                      <div style={{ fontSize: 12, lineHeight: '18px', color: C.mute, marginTop: 4 }}>
-                        {first(f.detail, 400)}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        )}
-
-        {!wants && t.escalation && (
-          <section>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.mute, marginBottom: 8, letterSpacing: 0.3 }}>
-              LAST REPORT
-            </div>
-            <div style={{ fontSize: 13, lineHeight: '20px', color: C.text2, whiteSpace: 'pre-wrap' }}>
-              {t.escalation}
-            </div>
-          </section>
-        )}
-
-        {t.notes.length > 0 && (
-          <section>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.mute, marginBottom: 8, letterSpacing: 0.3 }}>
-              NOTES
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {t.notes.map((n, i) => (
-                <div key={i} style={{
-                  padding: 10, borderRadius: R.btn, background: C.surface2,
-                  fontSize: 12.5, lineHeight: '19px', color: C.text2, whiteSpace: 'pre-wrap',
-                }}>
-                  <span style={{ ...mono, fontSize: 11, color: C.faint, marginRight: 8 }}>
-                    {n.from} · {ago(n.ts)}
-                  </span>
-                  {first(n.text, 600)}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
-    </Modal>
   );
 }
 
@@ -548,9 +348,13 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
         )}
       </div>
 
+      {/* Clicking a tile opens the ticket as what it is: a conversation with a
+          question at the end of it. The wall stays behind it, because the
+          point of the wall is the other eleven tickets. */}
       {open && (
-        <Detail
+        <TicketChat
           t={open}
+          tone={STATUS[open.status] || STATUS.queued}
           onClose={() => setOpenId(null)}
           onNote={(text) => sendNote(open.id, text)}
         />
