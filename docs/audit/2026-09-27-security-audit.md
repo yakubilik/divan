@@ -594,6 +594,32 @@ $ python3 scripts/check-links.py                   → all good   (main's)
 $ git ls-files | grep -E '\.env|\.p8$|\.p12$|\.pem$|uploads/|\.sqlite'  → nothing
 ```
 
+The one line above that nobody else can reproduce is the one with
+`RAC_AUDIT_NAMES` in it, because the names are deliberately not committed. So
+here is the same command without it, which anybody with the clone can run and
+which is the figure to check this report against:
+
+```
+$ python scripts/audit.py --history
+                                                   → 0 in tracked files,
+                                                     7,907 in history
+```
+
+The two reconcile exactly: 7,907 = 7,870 Turkish + 35 personal over blobs + 2
+commit identities, and the name list adds 114 `author-name` hits on top, giving
+8,021 and the personal total of 149. Broken out by rule, the run without names
+is 5,339 `turkish-letter`, 2,531 `turkish-word`, 15 `personal-email`, 14
+`personal-attribution`, 5 `home-directory`, 1 `local-hostname`, 1
+`personal-email-in-commit-metadata`, 1 `local-hostname-in-commit-metadata` —
+
+```
+$ python scripts/audit.py --history | grep '^   \[history\]' \
+    | sed -E 's/.*  ([a-z-]+)  .*/\1/' | sort | uniq -c | sort -rn
+```
+
+— and it takes about three minutes over the 1,012 blobs in the clone. All of the
+above was run once more, unchanged, on the final tree of this branch.
+
 And the two literal greps this audit was asked for, over every tracked file that
 is not a binary:
 
