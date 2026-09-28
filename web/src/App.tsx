@@ -3,7 +3,6 @@ import { C } from './lib/theme';
 import { Btn, Icon, KEYFRAMES, P, mono } from './ui/kit';
 import { Sidebar, type View } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
-import { Inspector } from './components/Inspector';
 import { NewChat } from './components/NewChat';
 import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
@@ -235,12 +234,19 @@ export function App() {
   // The chat surface is drawn in two places — as the chat screen, and held over
   // terminal mode — and both are looking at the same selection. One set of
   // handlers, so what the overlay does cannot drift from what the screen does.
+  const popOut = () => sel && window.open(
+    `${location.pathname}?host=${encodeURIComponent(sel.hostKey)}&chat=${encodeURIComponent(sel.chatId)}`,
+    '_blank', 'width=1100,height=860');
+
   const chatProps = {
     chat, hostKey: sel?.hostKey ?? null, log, sending,
     groupName: chat?.group_id
       ? (slot?.groups.find((g) => g.id === chat.group_id)?.name ?? null)
       : null,
     accountLabel,
+    accountUsage,
+    liveTokens,
+    onPopOut: popOut,
     groups: slot?.groups ?? [],
     onSend: doSend,
     onUpload: doUpload,
@@ -336,19 +342,7 @@ export function App() {
         />
 
         {view === 'chats' && (
-          <>
-            <ChatView {...chatProps} />
-            <Inspector
-              chat={chat} items={log.items} busy={!!chat && (log.busy || chat.status !== 'idle')}
-              liveTokens={liveTokens}
-              accountLabel={accountLabel} accountUsage={accountUsage}
-              onEdit={setField}
-              onInterrupt={() => sel && interrupt(sel.hostKey, sel.chatId).catch(() => {})}
-              onPopOut={() => sel && window.open(
-                `${location.pathname}?host=${encodeURIComponent(sel.hostKey)}&chat=${encodeURIComponent(sel.chatId)}`,
-                '_blank', 'width=1100,height=860')}
-            />
-          </>
+          <ChatView {...chatProps} />
         )}
 
         {view === 'terminal' && (

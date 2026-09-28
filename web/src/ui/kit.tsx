@@ -229,6 +229,7 @@ export const P = {
   stop: 'M8 8h8v8H8z',
   send: 'M12 19V5M5 12l7-7 7 7',
   warn: 'M12 3l9 16H3zM12 9v5M12 17.2v.1',
+  info: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 11v5M12 8.1v.1',
   branch: 'M6 4v10M6 20v-2M18 4v4a4 4 0 0 1-4 4H6',
   gear: 'M4 7h10M18 7h2M4 17h4M12 17h8M15 5v4M8 15v4',
   bolt: 'M13 3 5 14h6l-1 7 8-11h-6z',
