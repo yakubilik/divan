@@ -22,6 +22,9 @@
 #     -e NOTE="<the answer to send it>"
 #
 # The bundle id is a parameter because this repository does not carry one.
+# Every matcher is written .*like this.*: Maestro anchors a text selector to
+# the whole of an element's text, so "#7" matches nothing on a card that also
+# says anything else.
 appId: ${APP_ID}
 name: a red ticket, answered from the phone
 ---
@@ -37,11 +40,11 @@ name: a red ticket, answered from the phone
 
 # 2 · the wall, with the ticket that is waiting on it.
 - assertVisible:
-    text: "#${TICKET}"
-- assertVisible: "needs an answer"
+    text: ".*#${TICKET}.*"
+- assertVisible: ".*needs an answer.*"
 - takeScreenshot: 2-wall
 - tapOn:
-    text: "#${TICKET}"
+    text: ".*#${TICKET}.*"
 
 # 3 · the ticket, opened as a conversation that ends on the question.
 - assertVisible:
@@ -50,7 +53,7 @@ name: a red ticket, answered from the phone
 
 # 4 · the box, which is the only write this screen has.
 - tapOn:
-    text: "Answer #${TICKET}.*"
+    text: ".*Answer #${TICKET}.*"
 - inputText: ${NOTE}
 - takeScreenshot: 4-typed
 - tapOn: "Send"
@@ -59,8 +62,8 @@ name: a red ticket, answered from the phone
 #     ticket: the note went through ustabasi's own CLI, which appends it, clears
 #     the escalation and puts the ticket back in the queue. The wall re-reads
 #     every eight seconds, so the red goes away on its own.
-- assertVisible: ${NOTE}
+- assertVisible: ".*${NOTE}.*"
 - extendedWaitUntil:
-    visible: "queued"
+    visible: ".*queued.*"
     timeout: 30000
 - takeScreenshot: 5-answered
