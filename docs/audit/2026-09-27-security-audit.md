@@ -3,15 +3,16 @@
 What this is: a read of the whole repository, and of the whole git history,
 looking for the three things that must not be published — a credential, a piece
 of somebody's private life, and a string in a language the project is not
-written in. It was run three times on the audit branch: first against the base
+written in. It was run four times on the audit branch: first against the base
 `4fa0358`, over 210 tracked files, 919 blobs and 91 commits; then again after
 `git merge main` brought in `f44b641`, over **222 tracked files, 1,003 blobs and
-114 commits** across every ref in the clone; and a third time over this report,
+114 commits** across every ref in the clone; and twice more over this report,
 which is a tracked file too and which the scanner is deliberately blind to. The
 second pass is the one this document describes, and the reason for each of the
-later two is in [A second pass, after merging
-`main`](#a-second-pass-after-merging-main) and [A third pass, over this
-report](#a-third-pass-over-this-report).
+later ones is in [A second pass, after merging
+`main`](#a-second-pass-after-merging-main), [A third pass, over this
+report](#a-third-pass-over-this-report) and [A fourth pass, for the one shape
+that has none](#a-fourth-pass-for-the-one-shape-that-has-none).
 
 The scan is `scripts/audit.py`, written for this audit and kept: a finding that
 can only be reproduced by hand is a finding that comes back. `gitleaks` and
@@ -37,7 +38,7 @@ RAC_AUDIT_NAMES='<name>|<other-project>' python scripts/audit.py --history
 |---|---|
 | Secrets in tracked files | **none** |
 | Secrets anywhere in git history | **none** |
-| Personal data in tracked files | none of the shapes the scanner looks for; 5 files carried an author-specific identifier — 3 found by hand in the first pass, 3 more in the second pass by the two rules those three led to, all 7 fixed below; this report was the eighth, redacted in the third pass |
+| Personal data in tracked files | none of the shapes the scanner looks for; 5 files carried an author-specific identifier — 3 found by hand in the first pass, 3 more in the second pass by the two rules those three led to, all 7 fixed below; this report was the eighth and the ninth, redacted in the third and fourth passes |
 | Personal data in git history | 149 hits across 53 blobs, plus 2 author identities in commit metadata, on the name list the third pass used — **not** rewritten, see [section 4](#4--what-only-exists-in-history) |
 | Turkish in tracked files | 62 lines in 19 files; all English now except `call.py`, where the language is the feature, and the audit's own three files, which quote what was removed |
 | Doc claims that did not match the daemon | 5, all corrected |
@@ -197,8 +198,54 @@ FAIL  docs/audit/2026-09-27-security-audit.md carries no unredacted identifier
 ```
 
 and the line was then removed again. A key-shaped string pasted into a report is
-still a reader's job and nobody else's; the three identifier shapes, which are
+still a reader's job and nobody else's; the four identifier shapes, which are
 the ones an audit of history has on the clipboard, are now mechanical.
+
+### A fourth pass, for the one shape that has none
+
+The third pass closed the gap for the four identifiers that have a shape — a
+home directory, an address, a tailnet name, a machine name. It did not close it
+for the fifth, because the fifth has no shape: the author's own name, and the
+names of the author's other projects, are whatever list the release supplies in
+`RAC_AUDIT_NAMES`, and a list of private names is the one thing a public file
+cannot carry. So the read-back did not look for them, and one got through — the
+row in section 2 for `daemon/scripts/test_agents.py` quoted the private skill
+name it was reporting the removal of, verbatim, while [section
+4](#published--the-authors-name-in-four-files-on-originmain) three hundred lines
+below redacted the same string as "the author's own skill name". Nothing was
+published that `origin/main` did not already carry, but the report's own
+convention was applied to four strings out of five.
+
+It is now a check rather than a convention. With `RAC_AUDIT_NAMES` set,
+`scripts/test_audit.py` runs the `author-name` rule over every tracked file
+under `audit.SELF` as well, with nothing allowed to match — the synthetic
+samples that stand in for the other four rules cannot stand in for a name. Run
+without the variable it says so and skips, so CI, which has no list, stays
+green:
+
+```
+and for the author's own names, which have no shape to sample
+  ok    the read-back finds a name the release named
+  ok    which the scan itself would not, in an exempt file
+  ok    and not on the redaction that replaced one
+  skip  RAC_AUDIT_NAMES is unset, so there is no list to read back for;
+        the release runs this with one, and records that it did
+```
+
+The first of those three is the negative control, and it is a control in the
+strict sense: it fires the rule, on a name list that is nobody's
+(`ada|lovelace-ledger`), and asserts the exact two hits — so a pass on the real
+files means the rule ran, not that it was absent. It was also watched failing on
+the real thing. With one line appended to this file carrying the private skill
+name and one product name, and the release list supplied:
+
+```
+FAIL  docs/audit/2026-09-27-security-audit.md names none of them
+      813: author-name '…'; 813: author-name '…'
+```
+
+and with the list supplied and the line removed, the whole file, `audit.py` and
+`test_audit.py` report `ok`.
 
 ## 2 · Findings in tracked files, and the fix for each
 
@@ -212,7 +259,7 @@ lines 37–46), which are regexes, not keys.
 
 | File · line (before) | Was | Now |
 |---|---|---|
-| `daemon/scripts/test_agents.py` :124, :128 | `"yakup-projects"` — the author's own Claude skill, as a test fixture | `"existing-skill"` |
+| `daemon/scripts/test_agents.py` :124, :128 | `"<name>-projects"` — the author's own Claude skill, as a test fixture | `"existing-skill"` |
 | `store/checklist.md` :4 | the real bundle id, which is built out of the author's own name (`com.<name>.remoteaichat`) | removed; the line now points at `app/identity.local.json`, which is where `app/app.config.js` reads it from and which git does not carry |
 | `store/checklist.md` :15 | the App Store Connect app id | removed |
 | `app/app/chat/[id].tsx` :209 | `ch?.title === 'Yeni sohbet'` — a legacy title only the author's own pre-release database can contain | dropped; the daemon has only ever written `NEW_CHAT_TITLE = "New chat"` (`daemon/remote_ai_chat/session.py` :23) |
@@ -452,8 +499,9 @@ commit or the blob, so `git show <commit>:<path>` gives the exact text to
 whoever has the branch, and `RAC_AUDIT_NAMES='…' python scripts/audit.py
 --history` regenerates the whole table. The convention is checked rather than
 promised — `scripts/test_audit.py` reads this file and fails on an unredacted
-home directory, address or machine name, because `scripts/audit.py` is blind to
-its own three files.
+home directory, address or machine name, and, when the release supplies the name
+list, on an unredacted name as well, because `scripts/audit.py` is blind to its
+own three files.
 
 ### Not published — local-only branches
 
@@ -564,7 +612,7 @@ ticket's constraints no commit message was edited.
 
 All of the following were run on the merged tree — this branch with `main`
 (`f44b641`) merged in — and not on the base the first pass used, then run again
-unchanged after the third pass redacted this report.
+unchanged after the third and the fourth passes redacted this report.
 
 ```
 $ cd daemon
@@ -580,6 +628,10 @@ $ .venv312/bin/python scripts/test_titles.py       → all good   (main's, now i
 $ .venv312/bin/python scripts/test_push.py         → all good   (new, see below)
 
 $ cd .. && python scripts/test_audit.py            → all good
+$ RAC_AUDIT_NAMES='…' python scripts/test_audit.py → all good   (the name
+                                                                 read-back,
+                                                                 which skips
+                                                                 without it)
 $ python scripts/audit.py                          → 0 findings
 $ RAC_AUDIT_NAMES='…' python scripts/audit.py      → 0 findings
 $ RAC_AUDIT_NAMES='…' python scripts/audit.py --history
@@ -808,4 +860,7 @@ the test asserts that the file carries no names of its own. `SELF` is the one
 that buys silence rather than accuracy, so it is the one the test also reads
 back: the three files it exempts are scanned for identifiers by the test itself,
 against a fourth list (`REDACTED`) of the samples that are allowed to look like
-one.
+one, and — when the release supplies `RAC_AUDIT_NAMES` — for the names in it,
+against nothing at all, because a private name has no sample to be mistaken for.
+Both read-backs have a negative control that asserts the exact hits, so a pass
+means the rule ran.
