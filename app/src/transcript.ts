@@ -155,8 +155,12 @@ export function attach(existing: Turn[], answers: Record<string, { text: string;
 /** How much of the log a screen keeps. A run that goes on for three hours is
  *  tens of thousands of turns, and nobody scrolls to the top of one — what the
  *  page is for is the end. Dropping from the front keeps a long read cheap
- *  without ever interrupting the part being read. */
-export const MAX_TURNS = 400;
+ *  without ever interrupting the part being read.
+ *
+ *  Two hundred because the page these are drawn on is a scroll view rather than
+ *  a windowed list: every turn on it is mounted. A first open is twenty or
+ *  thirty of them, and it takes ten minutes of watching a worker to reach this. */
+export const MAX_TURNS = 200;
 
 export function trim(list: Turn[], max = MAX_TURNS): Turn[] {
   return list.length <= max ? list : list.slice(list.length - max);

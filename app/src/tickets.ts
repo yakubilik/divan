@@ -89,10 +89,16 @@ export function mark(verdict: TicketVerdict | null | undefined, i: number): { me
 //   * enough of the same words. The two are written by different hands about
 //     the same thing, so the overlap is high where they match at all.
 
+/** The label a finding opens with, where it opens with one. Verifiers write
+ *  these half a dozen ways — `3.`, `4)`, `2 — `, `DoD 6 — `, `criterion 1:` —
+ *  and every one of them is the verifier naming which point it is answering,
+ *  which is a better answer than the position in a list. */
+const LABEL = /^\s*(?:[A-Za-z]{1,12}\s+)?(\d{1,2})\s*[.)\-:\u2013\u2014]+\s/;
+
 /** A criterion, as a thing to compare: no numbering, no punctuation, no case. */
 function bare(text: string): string {
   return (text || '')
-    .replace(/^\s*\d+\s*[.)\-:]\s*/, '')
+    .replace(LABEL, '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -101,7 +107,7 @@ function bare(text: string): string {
 
 /** The number a finding gave itself, 1-based, or 0. */
 function numbered(text: string): number {
-  const m = /^\s*(\d+)\s*[.)\-:]\s/.exec(text || '');
+  const m = LABEL.exec(text || '');
   return m ? Number(m[1]) : 0;
 }
 

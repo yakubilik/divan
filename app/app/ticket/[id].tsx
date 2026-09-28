@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore, useT } from '../../src/store';
 import { useNavGuard } from '../../src/nav';
-import { useNow, useQueue, useRun } from '../../src/queue';
+import { useQueue, useRun } from '../../src/queue';
 import { LOCALE, type Key } from '../../src/i18n';
 import { em, useColors } from '../../src/theme';
 import { BackBar, Dot, EmptyState, Icon, Spinner, Text, TextInput } from '../../src/components/ui';
@@ -52,7 +52,6 @@ export default function TicketScreen() {
   const go = useNavGuard();
   const T = useT();
   const c = useColors();
-  const now = useNow();
   const { tickets, state } = useQueue();
   const run = useRun(ticketId);
   const noteTicket = useStore((s) => s.noteTicket);
@@ -190,7 +189,7 @@ export default function TicketScreen() {
         onContentSizeChange={() => { if (stick.current) scroller.current?.scrollToEnd({ animated: false }); }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, gap: 18 }}>
         {shown.before.map((m) => <Row key={m.id} m={m} asking={asking} tint={ph.tint} />)}
-        <Run run={run} now={now} />
+        <Run run={run} />
         {shown.after.map((m) => <Row key={m.id} m={m} asking={asking} tint={ph.tint} />)}
         {mine.map((p) => (
           <View key={p.id} style={{ gap: 4 }}>
@@ -348,7 +347,7 @@ function Details({ t }: { t: Ticket }) {
  *  daemon predates this screen, a computer with no queue at all: each of those
  *  is a thing to say once, and each of them was a spinner that never stopped in
  *  some earlier version of this. */
-function Run({ run, now }: { run: ReturnType<typeof useRun>; now: number }) {
+function Run({ run }: { run: ReturnType<typeof useRun> }) {
   const T = useT();
   const c = useColors();
 

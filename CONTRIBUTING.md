@@ -87,10 +87,17 @@ a desk. It needs a Chrome on the machine (`CHROME=/path/to/chrome`), so it is no
 in CI. Run it if you touch the ustabasi screen.
 
 `app/scripts/ustabasi.flow.yaml` is the same idea for the phone, driven by
-[Maestro](https://maestro.mobile.dev) on a real build: open the wall, open the
-ticket that is waiting, type a note, send it, and wait for the queue to re-open
-the ticket. It needs a device, a paired app and a ticket that is actually
-blocked, so it is not in CI either; the header of the file says how to run it.
+[Maestro](https://maestro.mobile.dev) on a real build: open the wall, find the
+ticket under its project's heading, watch a running one fill with what its
+agent is printing, look at the steps behind the (i), then answer the one that
+is waiting and wait for the queue to re-open it. It needs a device, a paired
+app, a blocked ticket and a running one, so it is not in CI either; the header
+of the file says how to run it.
+
+Both readings of a run's log — the daemon's, which pages it, and the app's,
+which turns those pages into a chat — are checked against one recording,
+`app/scripts/fixtures/run.log`. `app/scripts/fixtures/README.md` says where it
+came from and `scripts/capture-run-fixture.py` is how to replace it.
 
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.

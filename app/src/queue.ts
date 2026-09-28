@@ -120,7 +120,11 @@ export function useRun(ticketId: number): {
       // has been read to its end.
       if (!page.live && page.caught_up) over.current = true;
     } catch (e: any) {
-      setQuiet(oldHost(e) ? 'oldHost' : 'offline');
+      // A poll that failed against a run already on screen changes nothing: the
+      // turns are still the turns, and replacing them with "the queue did not
+      // answer" because one request in twenty dropped is the screen panicking.
+      // A failure with nothing read yet is the only one worth a sentence.
+      if (!opened.current) setQuiet(oldHost(e) ? 'oldHost' : 'offline');
     } finally {
       busy.current = false;
       setLoading(false);

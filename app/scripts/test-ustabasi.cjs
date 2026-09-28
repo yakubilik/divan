@@ -701,9 +701,15 @@ checks.push(
   ];
 
   const verbatim = { findings: CARD.map((c, i) => ({ criterion: c, status: i === 1 ? 'unmet' : 'met' })) };
+  // The half-dozen ways a verifier opens a finding, all of them the verifier
+  // saying which point it is answering.
   const numbered = { findings: [
     { criterion: '4. Tapping opens the chat', status: 'met' },
     { criterion: '2. Status in a plain word', status: 'unmet', detail: 'it is still a token' },
+  ]};
+  const labelled = { findings: [
+    { criterion: '3 \u2014 the handler pages a run', status: 'met' },
+    { criterion: 'DoD 1 \u2014 the wall is grouped', status: 'unmet' },
   ]};
   const reworded = { findings: [
     { criterion: 'A new handler streams a run incrementally, capped', status: 'met' },
@@ -717,6 +723,7 @@ checks.push(
     ['a verdict that answers two of four, by its own numbering', got(numbered) === '-n-y'],
     ['…and does not put the second answer on the second criterion',
       T.marks(CARD, numbered)[1].detail === 'it is still a token'],
+    ['a finding labelled the way a verifier labels one', got(labelled) === 'n-y-'],
     ['a point reworded is still the point it is about', got(reworded) === '--y-'],
     ['a finding about nothing on the card marks nothing', got(unrelated) === '----'],
     ['no verdict at all marks nothing', got(null) === '----'],
