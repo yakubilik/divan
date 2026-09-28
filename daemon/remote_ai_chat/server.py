@@ -7,6 +7,7 @@ import json
 import logging
 import platform
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -1634,6 +1635,26 @@ class Server:
     # are kept apart here as strictly as they are in the tables: exactly one
     # request writes a column, and it is the one a finger does.
 
+    def _checked_repo(self, path) -> str:
+        """A repository path that arrived over the wire, or the refusal.
+
+        A card's repository is where an autonomous coding agent gets started
+        with a shell, so it goes through exactly the fence a chat's `cwd` goes
+        through and for exactly the same reason: allowed roots minus denied
+        paths is the whole of what a paired device may point this computer at.
+        Without it, `divan.project.create {repos: ["/"]}` followed by one drag
+        is a worker loose in the home directory.
+
+        The policy's own codes come back rather than this handler's, because
+        "that folder is not there" and "that folder is out of bounds" are
+        different mistakes and a client that cannot tell them apart sends
+        somebody looking through the roots for a folder they only renamed.
+        """
+        path = str(path or "").strip()
+        if err := self.policy.cwd_error(path):
+            raise Err(err, "a card cannot be worked in that folder")
+        return path
+
     async def h_divan_projects(self, dev: Device, d: dict) -> dict:
         """Every product, with its branches and one line saying where it stands."""
         board = self.db.divan
@@ -1643,10 +1664,10 @@ class Server:
     async def h_divan_project_create(self, dev: Device, d: dict) -> dict:
         """A product. Not a folder: it is given the repositories it owns, and it
         may own several or none at all."""
+        repos = [self._checked_repo(r) for r in (d.get("repos") or [])]
         try:
             project = self.db.divan.create_project(
-                str(d.get("name") or ""),
-                repos=[str(r) for r in (d.get("repos") or [])],
+                str(d.get("name") or ""), repos=repos,
                 branches=[str(b) for b in (d.get("branches") or [])])
         except ValueError as exc:
             raise Err("bad_project", str(exc))
@@ -1666,6 +1687,10 @@ class Server:
         required and none is invented: a card written down mid-conversation is
         a line, and it lands in the Ice Box, which starts nothing.
         """
+        # Outside the `try`: `Err` is a `ValueError`, so a fence refusal raised
+        # in there would come back out as `bad_card` and lose which folder
+        # problem it was.
+        repo = self._checked_repo(d["repo"]) if d.get("repo") else None
         try:
             return self.db.divan.create_card(
                 str(d.get("project_id") or ""),
@@ -1675,7 +1700,7 @@ class Server:
                 column=str(d.get("column") or "ice_box"),
                 executor=d.get("executor"),
                 machine=d.get("machine") or self.cfg.host_name,
-                repo=d.get("repo"),
+                repo=repo,
                 agent=d.get("agent") if isinstance(d.get("agent"), dict) else None)
         except ValueError as exc:
             raise Err("bad_card", str(exc))
@@ -1699,12 +1724,17 @@ class Server:
         error = None
         if divanmod.wants_ustabasi(card):
             try:
-                card = await divanmod.file_with_ustabasi(self.db.divan, card_id)
-            except (ValueError, OSError) as exc:
+                card = await divanmod.file_with_ustabasi(
+                    self.db.divan, card_id, is_allowed=self.policy.is_allowed_cwd)
+            except (ValueError, OSError, sqlite3.Error) as exc:
                 # Every way the other program can decline, including not being
-                # runnable at all. The move has already happened and stays.
+                # runnable at all, and every way the board can refuse to record
+                # what it said. The move has already happened and stays: a card
+                # that springs back under a thumb is worse than one carrying a
+                # line saying why nothing started.
                 log.warning("divan: filing %s with ustabasi: %s", card_id, exc)
                 error = str(exc)
+                card = self.db.divan.get_card(card_id) or card
         return {"card": card, "error": error}
 
     async def h_divan_card_update(self, dev: Device, d: dict) -> dict:
@@ -1721,6 +1751,8 @@ class Server:
         agent = d.get("agent") if isinstance(d.get("agent"), dict) else {}
         fields = {k: v for k, v in d.items()
                   if k in ("title", "summary", "repo", "machine")}
+        if fields.get("repo"):
+            fields["repo"] = self._checked_repo(fields["repo"])
         fields.update({k: v for k, v in agent.items()
                        if k in ("goal", "done_criteria", "verify_cmd",
                                 "constraints", "paths", "notes")})

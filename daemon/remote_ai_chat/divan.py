@@ -43,6 +43,7 @@ sequence to define.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import sqlite3
@@ -563,12 +564,39 @@ class Board:
         return self.get_card(card_id)
 
     def attach_ustabasi(self, card_id: str, ticket_id: int) -> dict:
-        """Write the queue's number on the card. Said once, when it is filed."""
+        """Write the queue's number on the card. Said once, when it is filed.
+
+        The mirror may have got there first. Filing is: hand the spec to the
+        CLI, wait for it, then write the number back — and an `ustabasi.list`
+        poll landing in that gap sees a ticket with no card and imports it,
+        which is precisely what the mirror is for. Left alone that ends as two
+        cards for one ticket and a unique index refusing the second, so the
+        import's card is folded into the one somebody actually dragged: it is
+        seconds old, nothing on it was written by a person, and what it does
+        carry — the status the queue had already reached — comes across.
+        """
+        now = time.time()
         with self._lock:
+            dup = self._c.execute(
+                "SELECT * FROM cards WHERE ustabasi_id=? AND id!=?",
+                (int(ticket_id), card_id)).fetchone()
+            status, detail = "queued", ""
+            if dup is not None:
+                status = dup["agent_status"] or status
+                detail = dup["agent_detail"] or ""
+                self._c.execute("DELETE FROM cards WHERE id=?", (dup["id"],))
+                # The gap it leaves, closed here rather than by `delete_card`:
+                # this lock is not re-entrant and the whole fold has to be one
+                # transaction, or a reader sees the board with neither card on
+                # it.
+                self._c.execute(
+                    "UPDATE cards SET position = position - 1"
+                    " WHERE project_id=? AND column=? AND position > ?",
+                    (dup["project_id"], dup["column"], dup["position"]))
             self._c.execute(
-                "UPDATE cards SET ustabasi_id=?, agent_status=?, agent_status_at=?,"
-                " updated_at=? WHERE id=?",
-                (int(ticket_id), "queued", time.time(), time.time(), card_id))
+                "UPDATE cards SET ustabasi_id=?, agent_status=?, agent_detail=?,"
+                " agent_status_at=?, updated_at=? WHERE id=?",
+                (int(ticket_id), status, detail, now, now, card_id))
             self._c.commit()
         return self.get_card(card_id)
 
@@ -812,19 +840,42 @@ def ticket_spec(card: dict, project: dict) -> dict:
             "card": card_spec}
 
 
-async def file_with_ustabasi(board: Board, card_id: str) -> dict:
+#: Filing is: read the card, decide, run a subprocess, write the number back —
+#: and the decision is a long way from the write. Two devices dragging one card
+#: into In Progress at the same moment would otherwise start two workers on it,
+#: and two worktrees on one card is worse than any duplicate row. One lock for
+#: the whole daemon: a filing is a human drag and a tenth of a second of
+#: subprocess, so there is nothing here worth making finer.
+_filing = asyncio.Lock()
+
+
+async def file_with_ustabasi(board: Board, card_id: str,
+                             is_allowed: Callable[[str], bool] | None = None) -> dict:
     """Queue a card as a ticket and write the number it came back with.
 
     The write goes through that program's CLI rather than its database, for the
     same reason a note does: what "queue this" means — the row, the branch name,
     the lane, the priority — is its own sequence and copying it here would mean
     keeping two copies of it correct.
+
+    `is_allowed` is the path fence, asked about the repository this is actually
+    going to be run in — the card's, or the product's first. The handlers check
+    a repository on the way in, and this checks it again on the way out: what
+    goes through here starts an autonomous agent with a shell in that directory,
+    and a path that reached the database by some route nobody has thought of yet
+    must still not become a worktree.
     """
-    card = board.get_card(card_id)
-    if card is None:
-        raise ValueError("no such card")
-    if card["ustabasi_id"]:
-        return card
-    project = board.get_project(card["project_id"])
-    ticket_id = await ustabasimod.add(ticket_spec(card, project or {}))
-    return board.attach_ustabasi(card_id, ticket_id)
+    async with _filing:
+        card = board.get_card(card_id)
+        if card is None:
+            raise ValueError("no such card")
+        # Re-read under the lock, not before it: the card may have been filed
+        # by the drag this one was waiting behind.
+        if card["ustabasi_id"]:
+            return card
+        project = board.get_project(card["project_id"])
+        spec = ticket_spec(card, project or {})
+        if is_allowed is not None and not is_allowed(spec["repo"]):
+            raise ValueError("that folder is outside the allowed roots")
+        ticket_id = await ustabasimod.add(spec)
+        return board.attach_ustabasi(card_id, ticket_id)
