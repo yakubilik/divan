@@ -1,5 +1,10 @@
 """SQLite persistence: groups, chats, events (the timeline), plan limits, and
-the handful of facts that have to outlive the process."""
+the handful of facts that have to outlive the process.
+
+The Divan board — projects, branches, cards, the two faces — is in the same
+file and on the same connection, but its tables, its reads and its writes are
+`divan.py`'s. One process needs one writer, and a board is not a chat.
+"""
 from __future__ import annotations
 
 import json
@@ -9,6 +14,8 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+
+from . import divan as divanmod
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS groups (
@@ -70,6 +77,7 @@ class DB:
         self._c.execute("PRAGMA journal_mode=WAL")
         self._c.executescript(SCHEMA)
         self._migrate()
+        divanmod.migrate(self._c)
         cols = {r["name"] for r in self._c.execute("PRAGMA table_info(chats)").fetchall()}
         if "session_ids" not in cols:
             self._c.execute("ALTER TABLE chats ADD COLUMN session_ids TEXT DEFAULT '{}'")
@@ -81,6 +89,10 @@ class DB:
         self._c.execute("UPDATE chats SET status='idle' WHERE status!='idle'")
         self._c.commit()
         self._lock = threading.Lock()
+        # The board, on this connection and behind this lock. Built here rather
+        # than by the server so that anything holding a DB — a test, a script —
+        # has the board too, and so that there is only ever one of it.
+        self.divan = divanmod.Board(self._c, self._lock)
         self._expire_orphan_approvals()
         # What the last process was doing when it stopped, and whether this one
         # can carry on with it. Decided here, before anything else runs: the

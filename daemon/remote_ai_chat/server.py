@@ -7,6 +7,7 @@ import json
 import logging
 import platform
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -33,6 +34,7 @@ from .attachments import KINDS, normalize_image, sniff
 from .security import PathPolicy
 from . import screen as screenmod
 from . import ustabasi as ustabasimod
+from . import divan as divanmod
 from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager, with_project
 from .providers.codex import live_models as codex_live_models
 
@@ -1581,8 +1583,24 @@ class Server:
     async def h_ustabasi_list(self, dev: Device, d: dict) -> dict:
         """The ticket queue, for the panel's second wall. Reading someone
         else's SQLite file is a blocking read, and so is the git log behind each
-        card, so the whole snapshot goes to a thread."""
-        return await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for)
+        card, so the whole snapshot goes to a thread.
+
+        The same snapshot feeds the board's mirror on the way past: a ticket
+        this computer has not filed a card for becomes one, and every ticket
+        already on a card has its status written onto it. Nothing here moves a
+        card — that is the whole point of the mirror being a separate field —
+        and nothing here writes to the queue.
+        """
+        snap = await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for)
+        try:
+            await asyncio.to_thread(self.db.divan.sync_ustabasi, snap,
+                                    self.cfg.host_name, self.policy.project_for)
+        except Exception as exc:
+            # The wall is older than the board and does not depend on it. A
+            # mirror that cannot write is a board that is a poll behind, not a
+            # terminal tab that has stopped showing what the workers are doing.
+            log.warning("divan mirror: %s", exc)
+        return snap
 
     async def h_ustabasi_run(self, dev: Device, d: dict) -> dict:
         """What the agent on a ticket has printed, a page at a time.
@@ -1610,6 +1628,168 @@ class Server:
             return await ustabasimod.note(tid, str(d.get("text") or ""))
         except ValueError as exc:
             raise Err("ustabasi_refused", str(exc))
+
+    # ── the Divan board ────────────────────────────────────────────────────
+    #
+    # The column is the human's intent and the status is reality, and the two
+    # are kept apart here as strictly as they are in the tables: exactly one
+    # request writes a column, and it is the one a finger does.
+
+    def _checked_repo(self, path) -> str:
+        """A repository path that arrived over the wire, or the refusal.
+
+        A card's repository is where an autonomous coding agent gets started
+        with a shell, so it goes through exactly the fence a chat's `cwd` goes
+        through and for exactly the same reason: allowed roots minus denied
+        paths is the whole of what a paired device may point this computer at.
+        Without it, `divan.project.create {repos: ["/"]}` followed by one drag
+        is a worker loose in the home directory.
+
+        The policy's own codes come back rather than this handler's, because
+        "that folder is not there" and "that folder is out of bounds" are
+        different mistakes and a client that cannot tell them apart sends
+        somebody looking through the roots for a folder they only renamed.
+        """
+        path = str(path or "").strip()
+        if err := self.policy.cwd_error(path):
+            raise Err(err, "a card cannot be worked in that folder")
+        return path
+
+    async def h_divan_projects(self, dev: Device, d: dict) -> dict:
+        """Every product, with its branches and one line saying where it stands."""
+        board = self.db.divan
+        return {"projects": [board.project_view(p) for p in board.list_projects()],
+                "machine": self.cfg.host_name}
+
+    async def h_divan_project_create(self, dev: Device, d: dict) -> dict:
+        """A product. Not a folder: it is given the repositories it owns, and it
+        may own several or none at all."""
+        repos = [self._checked_repo(r) for r in (d.get("repos") or [])]
+        try:
+            project = self.db.divan.create_project(
+                str(d.get("name") or ""), repos=repos,
+                branches=[str(b) for b in (d.get("branches") or [])])
+        except ValueError as exc:
+            raise Err("bad_project", str(exc))
+        return self.db.divan.project_view(project)
+
+    async def h_divan_board(self, dev: Device, d: dict) -> dict:
+        """One project's board: four columns, each in the order somebody put it in."""
+        try:
+            return self.db.divan.board(str(d.get("project_id") or ""))
+        except ValueError as exc:
+            raise Err("no_such_project", str(exc))
+
+    async def h_divan_card_create(self, dev: Device, d: dict) -> dict:
+        """A card, from the human face alone.
+
+        A title and, if there is one, two or three sentences. No agent face is
+        required and none is invented: a card written down mid-conversation is
+        a line, and it lands in the Ice Box, which starts nothing.
+        """
+        # Outside the `try`: `Err` is a `ValueError`, so a fence refusal raised
+        # in there would come back out as `bad_card` and lose which folder
+        # problem it was.
+        repo = self._checked_repo(d["repo"]) if d.get("repo") else None
+        try:
+            return self.db.divan.create_card(
+                str(d.get("project_id") or ""),
+                title=str(d.get("title") or ""),
+                summary=str(d.get("summary") or ""),
+                branch=str(d.get("branch") or "engineering"),
+                column=str(d.get("column") or "ice_box"),
+                executor=d.get("executor"),
+                machine=d.get("machine") or self.cfg.host_name,
+                repo=repo,
+                agent=d.get("agent") if isinstance(d.get("agent"), dict) else None)
+        except ValueError as exc:
+            raise Err("bad_card", str(exc))
+
+    async def h_divan_card_move(self, dev: Device, d: dict) -> dict:
+        """Move a card to a column, and place it within that column.
+
+        Dragging into In Progress with the coding executor on it is what starts
+        work: the card is filed as an ustabasi ticket and the number comes back
+        onto the card. The move itself has already happened by then — a queue
+        that is not installed, or that refuses, leaves the card where the finger
+        put it and says so in `error`, because the alternative is a card that
+        springs back under your thumb.
+        """
+        card_id = str(d.get("card_id") or "")
+        try:
+            card = self.db.divan.move(card_id, str(d.get("column") or ""),
+                                      d.get("position"))
+        except ValueError as exc:
+            raise Err("bad_move", str(exc))
+        error = None
+        if divanmod.wants_ustabasi(card):
+            try:
+                card = await divanmod.file_with_ustabasi(
+                    self.db.divan, card_id, is_allowed=self.policy.is_allowed_cwd)
+            except (ValueError, OSError, sqlite3.Error) as exc:
+                # Every way the other program can decline, including not being
+                # runnable at all, and every way the board can refuse to record
+                # what it said. The move has already happened and stays: a card
+                # that springs back under a thumb is worse than one carrying a
+                # line saying why nothing started.
+                log.warning("divan: filing %s with ustabasi: %s", card_id, exc)
+                error = str(exc)
+                card = self.db.divan.get_card(card_id) or card
+        return {"card": card, "error": error}
+
+    async def h_divan_card_update(self, dev: Device, d: dict) -> dict:
+        """Rewrite a card's faces. Only the fields sent are touched.
+
+        This is where a card that was one line grows an agent face — a goal,
+        done criteria, a test — some time after somebody wrote the line. It
+        cannot write a column, an executor or anything the mirror owns: each of
+        those has a request of its own, and a field writable from two places is
+        how a status update ends up dragging a card.
+        """
+        if self.db.divan.get_card(str(d.get("card_id") or "")) is None:
+            raise Err("no_such_card", "no such card")
+        agent = d.get("agent") if isinstance(d.get("agent"), dict) else {}
+        fields = {k: v for k, v in d.items()
+                  if k in ("title", "summary", "repo", "machine")}
+        if fields.get("repo"):
+            fields["repo"] = self._checked_repo(fields["repo"])
+        fields.update({k: v for k, v in agent.items()
+                       if k in ("goal", "done_criteria", "verify_cmd",
+                                "constraints", "paths", "notes")})
+        try:
+            return self.db.divan.update_card(str(d["card_id"]), **fields)
+        except ValueError as exc:
+            raise Err("bad_card", str(exc))
+
+    async def h_divan_card_executor(self, dev: Device, d: dict) -> dict:
+        """Set or clear who does this one. Clearing is a value, not an omission."""
+        try:
+            return self.db.divan.set_executor(
+                str(d.get("card_id") or ""), d.get("executor"),
+                machine=d.get("machine"))
+        except ValueError as exc:
+            raise Err("bad_executor", str(exc))
+
+    async def h_divan_card_get(self, dev: Device, d: dict) -> dict:
+        """One card: both faces, and what the run on it is doing right now.
+
+        `run` is the live half and is only there for a card the coding executor
+        has a ticket for — a page of what that worker has printed, with the
+        cursor to ask for the next one. Everything else on the card is the same
+        answer whether anything is running or not.
+        """
+        card = self.db.divan.get_card(str(d.get("card_id") or ""), agent=True)
+        if card is None:
+            raise Err("no_such_card", "no such card")
+        out = {"card": card, "project": self.db.divan.get_project(card["project_id"]),
+               "run": None, "ticket": None}
+        if card["ustabasi_id"]:
+            snap = await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for)
+            out["ticket"] = next((t for t in snap["tickets"]
+                                  if t["id"] == card["ustabasi_id"]), None)
+            out["run"] = await asyncio.to_thread(
+                ustabasimod.run, card["ustabasi_id"], d.get("cursor"))
+        return out
 
     async def _release_chats(self, account_id: str) -> None:
         """Free every chat bound to this account: a running turn is interrupted,
