@@ -211,6 +211,88 @@ check("a worktree that is gone says nothing", by_id[4]["git"], None)
 check("a branch level with its base says nothing", by_id[5]["git"], None)
 check("a base branch this copy does not know says nothing", by_id[6]["git"], None)
 
+# ── the steps it has been through ────────────────────────────────────────────
+#
+# `stage` and `round` on the row say where a ticket is, not how it got there.
+# The events say the rest, and they are the only thing that does: a worker
+# restarted twice by a usage limit is three steps, not one, and "what is it on"
+# was otherwise a question you answered by reading a verifier report.
+
+steps = by_id[1]["steps"]
+check("every hand-over is a step of its own",
+      [(s["stage"], s["round"]) for s in steps],
+      [("worker", 1), ("verifier", 1), ("worker", 2), ("verifier", 2)])
+check("a step the next one interrupted did not finish", steps[0]["outcome"], "stopped")
+check("a step the worker reported out of is done", steps[-1]["outcome"], "ok")
+check("whose machine it was on comes with it",
+      (steps[-1]["model"], steps[-1]["account"], steps[-1]["pid"]), ("m", "b", 4))
+check("a ticket nobody has started has no steps", by_id[7]["steps"], [])
+
+# The two shapes a check comes in, and the four ways a step ends.
+conn = sqlite3.connect(DB)
+ticket(9, str(root / "ledger"), worktree=str(work), round_no=1, status="done")
+event(9, NOW - 9000, "start", "worker round 1 pid 11 model m account a")
+event(9, NOW - 8000, "report", "the worker wrote this")
+# A verify_cmd: the queue hands the check out like any other step and then
+# writes down how it went.
+event(9, NOW - 7900, "start", "check round 1 pid 12 model - account -")
+event(9, NOW - 7800, "check", "verify_cmd passed")
+event(9, NOW - 7700, "start", "verifier round 1 pid 13 model m account a")
+event(9, NOW - 7000, "done", "all of it is done")
+
+ticket(10, str(root / "ledger"), worktree=str(work), round_no=1, status="blocked")
+event(10, NOW - 500, "start", "worker round 1 pid 14 model m account a")
+event(10, NOW - 400, "blocked", "stopped to ask which account")
+
+ticket(11, str(root / "ledger"), worktree=str(work), round_no=1, status="running")
+event(11, NOW - 600, "start", "worker round 1 pid 15 model m account a")
+# No verify_cmd: the queue writes only the one event, which is the whole step.
+event(11, NOW - 500, "report", "done my bit")
+event(11, NOW - 490, "check", "no verify_cmd, skipping to verifier")
+event(11, NOW - 480, "start", "verifier round 1 pid 16 model m account a")
+event(11, NOW - 300, "check", "verify_cmd failed: two tests are red")
+
+# Nothing has happened since it was handed out, which is what a ticket looks
+# like for most of the hours it is being worked on.
+ticket(12, str(root / "ledger"), worktree=str(work), round_no=2, status="running")
+event(12, NOW - 9000, "start", "worker round 1 pid 17 model m account a")
+event(12, NOW - 8000, "requeue", "-> worker round 2")
+event(12, NOW - 7000, "start", "worker round 2 pid 18 model m account b")
+conn.commit()
+conn.close()
+
+u._git_cache.clear()
+after = {t["id"]: t for t in u.snapshot(policy.project_for)["tickets"]}
+
+check("a check that was handed out is one step, not two",
+      [(s["stage"], s.get("outcome")) for s in after[9]["steps"]],
+      [("worker", "ok"), ("check", "ok"), ("verifier", "ok")])
+check("a check has no model or account, and is not given a dash as one",
+      [k for k in after[9]["steps"][1] if k in ("model", "account")], [])
+check("a check with no command of its own is still a step",
+      [(s["stage"], s.get("outcome")) for s in after[11]["steps"]][:2],
+      [("worker", "ok"), ("check", "ok")])
+check("a check that failed says so", after[11]["steps"][-1]["outcome"], "failed")
+check("…in its own words", after[11]["steps"][-1]["note"], "verify_cmd failed: two tests are red")
+check("a step that did what it was for needs no line explaining itself",
+      "note" in after[9]["steps"][0], False)
+check("a ticket that stopped to ask has a step that says so",
+      after[10]["steps"][-1]["outcome"], "blocked")
+check("and it is not drawn as the one running now",
+      "ended_at" in after[10]["steps"][-1], True)
+check("a ticket sent back and waiting for a slot has no step running",
+      "ended_at" in by_id[8]["steps"][-1], True)
+
+now_step = after[12]["steps"][-1]
+check("the step nothing has ended is the one running now",
+      "ended_at" not in now_step and "outcome" not in now_step, True)
+check("it says which stage and which round", (now_step["stage"], now_step["round"]), ("worker", 2))
+check("and on which machine", (now_step["model"], now_step["account"], now_step["pid"]), ("m", "b", 18))
+check("a step carries no key it has nothing to say with",
+      sorted(now_step), ["account", "at", "model", "pid", "round", "stage"])
+check("the step before it was closed by the hand-over that replaced it",
+      after[12]["steps"][0]["outcome"], "rejected")
+
 # ── it is still the same snapshot it was ─────────────────────────────────────
 
 check("the queue's own state is still read", snap["available"], True)

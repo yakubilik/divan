@@ -5,11 +5,11 @@ import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { useNow, useQueue } from '../src/queue';
 import { LOCALE } from '../src/i18n';
-import { useColors } from '../src/theme';
+import { em, useColors } from '../src/theme';
 import { Dot, EmptyState, Skeleton, Text } from '../src/components/ui';
 import { LargeTitlePage } from '../src/components/page';
 import { TicketCard } from '../src/components/ticket';
-import { redCount, since, sortTickets, TICK_STALE_S } from '../src/tickets';
+import { groupByProject, redCount, since, TICK_STALE_S } from '../src/tickets';
 
 /** The ustabasi wall, on the phone.
  *
@@ -20,6 +20,17 @@ import { redCount, since, sortTickets, TICK_STALE_S } from '../src/tickets';
  *  someone notices. The desktop panel has this wall already — but the person who
  *  has to answer is holding a phone, not sitting at the Mac, so the noticing has
  *  to happen here.
+ *
+ *  The cards are grouped by project, because "what is happening" is a question
+ *  asked about a project and not about a queue — and the group holding a ticket
+ *  that is waiting on him comes first, which is the only order that matters at
+ *  3am. Each card answers it with counted things only: how long it has been
+ *  open, how long this round has been going, what has landed on the branch. No
+ *  percentage — nothing in the queue knows how far along a ticket is.
+ *
+ *  A card opens the chat: what the agent on it is printing, as it prints it.
+ *  The (i) on it opens the other page — the steps, the criteria and the rest of
+ *  the card — which is the reading rather than the watching.
  *
  *  Nothing on this screen is a second source of truth. The daemon reads the
  *  queue's own database, and the one write — answering a ticket — is that queue's
@@ -37,7 +48,7 @@ export default function Ustabasi() {
   const host = useStore((s) => s.host);
   const hostName = hostInfo?.name?.replace('.local', '') || host?.name || T('computer');
 
-  const shown = useMemo(() => sortTickets(tickets), [tickets]);
+  const groups = useMemo(() => groupByProject(tickets), [tickets]);
   const red = redCount(tickets);
   const running = tickets.filter((t) => t.status === 'running').length;
 
@@ -74,10 +85,26 @@ export default function Ustabasi() {
   } else if (state === 'empty') {
     body = <Empty icon="terminal" title={T('queueEmpty')} body={T('queueEmptyBody')} />;
   } else {
+    // One heading per project, the one holding a ticket that is waiting on him
+    // first. A project with nothing in it is not a heading: the groups are made
+    // out of the tickets, so there is nothing to leave out.
     body = (
-      <View style={{ paddingHorizontal: 16, gap: 8 }}>
-        {shown.map((t) => (
-          <TicketCard key={t.id} t={t} now={now} onPress={() => go(() => router.push(`/ticket/${t.id}`))} />
+      <View style={{ paddingHorizontal: 16, gap: 22 }}>
+        {groups.map((g) => (
+          <View key={g.project} style={{ gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingBottom: 6,
+                           borderBottomWidth: 1, borderBottomColor: c.line }}>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '600', letterSpacing: em(15, -0.01) }}>
+                {g.project}
+              </Text>
+              <Text mono style={{ fontSize: 11, color: c.faint }}>{T('groupCount', { n: g.tickets.length })}</Text>
+            </View>
+            {g.tickets.map((t) => (
+              <TicketCard key={t.id} t={t} now={now}
+                onPress={() => go(() => router.push(`/ticket/${t.id}`))}
+                onAbout={() => go(() => router.push(`/ticket-about/${t.id}`))} />
+            ))}
+          </View>
         ))}
       </View>
     );

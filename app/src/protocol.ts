@@ -280,6 +280,27 @@ export type TicketStatus = 'queued' | 'running' | 'done' | 'blocked' | 'failed' 
  *  whether the work met it. Positional — the verifier answers the card's
  *  criteria in order but writes its own wording for each. */
 export interface TicketCriterion { criterion: string; status: string; detail?: string }
+
+/** One step the ticket has been through: a hand-over to a worker, a check, or a
+ *  verifier. Read out of the queue's events table, which is the only record of
+ *  how a ticket reached the round it is in — a worker restarted twice by a usage
+ *  limit is three steps, not one.
+ *
+ *  Absent keys are absent rather than null. The one step with no `ended_at` is
+ *  the one running right now. */
+export interface TicketStep {
+  stage: string;
+  round: number;
+  at: number;
+  ended_at?: number;
+  /** why it ended; missing on the step that has not */
+  outcome?: 'ok' | 'rejected' | 'blocked' | 'failed' | 'cancelled' | 'stopped';
+  pid?: number;
+  model?: string;
+  account?: string;
+  /** one line of why, on a step that did not simply finish */
+  note?: string;
+}
 export interface TicketVerdict { verdict?: string; findings?: TicketCriterion[] }
 export interface TicketNote { ts: number; from: string; text: string }
 
@@ -305,6 +326,47 @@ export interface Ticket {
   notes: TicketNote[];
   note_count: number;
   last_event: { ts: number; kind: string; msg: string } | null;
+  /** the project this is work on, by name: a ticket in babysee/app is babysee */
+  project: string | null;
+  /** when the round it is in began, which the queue's tickets table does not hold */
+  round_started_at: number | null;
+  /** what the worker has committed on the branch; null when there is nothing to say */
+  git: { commits: number; subject: string } | null;
+  /** every step it has been through, oldest first */
+  steps: TicketStep[];
+}
+
+// ── a run's own log ──────────────────────────────────────────────────────────
+// What the agent on a ticket is printing, as `ustabasi.run` hands it out: one
+// record per block of the model's stream-json, a page at a time. The noise
+// travels too — a hook firing is forty bytes — because what is worth drawing is
+// this end's decision, not that one's. See src/transcript.ts.
+
+export type RunEvent =
+  | { k: 'text'; text: string; clipped?: boolean }
+  | { k: 'thinking'; text: string; clipped?: boolean }
+  | { k: 'tool'; id?: string; name: string; input: Record<string, any>; clipped?: boolean }
+  | { k: 'result'; id?: string; text: string; error?: boolean; clipped?: boolean }
+  | { k: 'done'; error?: boolean; subtype?: string; duration_ms?: number | null; cost?: number | null; output_tokens?: number | null }
+  | { k: 'system'; subtype: string }
+  | { k: 'other'; type: string };
+
+export interface RunPage {
+  available: boolean;
+  /** the silence, where there is one: no_queue, no_ticket, never_run, no_log */
+  reason: string;
+  /** the run directory's own name, never its path */
+  run?: string;
+  events: RunEvent[];
+  /** where to carry on from; null where there is nothing to carry on from */
+  cursor: string | null;
+  /** this page is not continuous with the last one — start again, do not append */
+  reset?: boolean;
+  /** the run is still being written */
+  live: boolean;
+  /** nothing more to read right now */
+  caught_up: boolean;
+  size?: number;
 }
 
 export interface UstabasiSnapshot {

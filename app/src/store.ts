@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { client, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
 
 const HOSTS_KEY = 'rac.hosts';
@@ -85,6 +85,10 @@ interface State {
   /** Answer a blocked ticket. The queue's own CLI does the work on the
    *  computer; this is the only write the wall can make. */
   noteTicket: (id: number, text: string) => Promise<string>;
+  /** A page of what the agent on a ticket has printed. Nothing of it is kept
+   *  here: the log is a river and only the page being read is worth holding,
+   *  which is the screen's business and not the store's. */
+  readRun: (id: number, cursor: string | null) => Promise<RunPage>;
   // tool call id -> what the background agent it started is doing right now.
   // Live only: a helper's step-by-step is progress, not conversation, and the
   // answer it produces arrives as that tool's result.
@@ -812,6 +816,10 @@ export const useStore = create<State>((set, get) => {
         // connection that went away mid-poll (which is already on screen).
         set({ ustabasiError: e?.message ?? null, ustabasiOld: oldHost(e) });
       }
+    },
+
+    readRun: async (id, cursor) => {
+      return await client.call<RunPage>('ustabasi.run', { id, ...(cursor ? { cursor } : {}) });
     },
 
     noteTicket: async (id, text) => {

@@ -26,9 +26,16 @@ function load(file, exports) {
   return require(out);
 }
 
-const T = load('src/tickets.ts', ['POLL_MS', 'STATUS_KEY', 'VOICE_KEY', 'answerable', 'redCount', 'sortTickets',
-                                  'mark', 'wall', 'oldHost', 'since', 'first', 'repoName',
-                                  'bullets', 'conversation', 'question', 'stateLine', 'noteHint', 'hasDetails']);
+const T = load('src/tickets.ts', ['POLL_MS', 'RUN_POLL_MS', 'STATUS_KEY', 'VOICE_KEY', 'answerable', 'redCount', 'sortTickets',
+                                  'mark', 'marks', 'wall', 'oldHost', 'since', 'first', 'repoName',
+                                  'bullets', 'conversation', 'question', 'stateLine', 'noteHint', 'hasDetails',
+                                  'projectName', 'groupByProject', 'totalAge', 'roundAge', 'commitCount',
+                                  'cardLine', 'tilde', 'stepMark', 'currentStep', 'stepLine', 'stepAge',
+                                  'runStartedAt', 'around']);
+// What the agent on a ticket prints, read as a chat. A page of records in, a
+// run of turns out — no React in it, so the reading is checkable against a
+// real recording rather than against a browser.
+const X = load('src/transcript.ts', ['turns', 'attach', 'trim', 'summarise', 'silence', 'MAX_TURNS']);
 // What a tapped notification opens: the reading of the payload, the holding pen
 // a tap waits in while the app is still starting, and the route itself.
 const P = load('src/tap.ts', ['ticketFromPush', 'tapFromPush', 'routeForTap', 'Taps', 'follow']);
@@ -38,7 +45,9 @@ const P = load('src/tap.ts', ['ticketFromPush', 'tapFromPush', 'routeForTap', 'T
 const TR = load('src/i18n.ts', ['t']).t;
 const ticket = (id, status, updated_at = 1000, extra = {}) =>
   ({ id, status, updated_at, title: `#${id}`, stage: 'worker', round: 1, notes: [], note_count: 0,
-     done_criteria: [], escalation: '', verdict: null, last_event: null, goal: '', repo: '', branch: null, ...extra });
+     done_criteria: [], escalation: '', verdict: null, last_event: null, goal: '', repo: '', branch: null,
+     created_at: updated_at, started_at: null, finished_at: null, round_started_at: null,
+     project: null, git: null, steps: [], ...extra });
 
 const snap = (tickets, available = true, queue = {}) => ({ available, tickets, queue });
 const ids = (list) => T.sortTickets(list).map((t) => t.id).join(',');
@@ -316,7 +325,8 @@ checks.push(
 const table = fs.readFileSync(path.join(root, 'src/i18n.ts'), 'utf8');
 // Entries share lines, so this matches every `key: '…'` rather than one a line.
 const known = new Set([...table.matchAll(/([A-Za-z0-9_]+):\s*['"]/g)].map((m) => m[1]));
-const screens = ['app/ustabasi.tsx', 'app/ticket/[id].tsx', 'src/components/ticket.tsx', 'src/components/home.tsx'];
+const screens = ['app/ustabasi.tsx', 'app/ticket/[id].tsx', 'app/ticket-about/[id].tsx',
+                 'src/components/ticket.tsx', 'src/components/home.tsx'];
 const used = new Set();
 for (const f of screens) {
   const src = fs.readFileSync(path.join(root, f), 'utf8');
@@ -498,22 +508,443 @@ checks.push(
   );
 }
 
+// ── 8 · the wall, grouped by project ─────────────────────────────────────────
+//
+// One undifferentiated pile of twenty cards is a wall you have to read twice:
+// the two tickets on the same repository are eight cards apart and look
+// unrelated. Grouped by project, "what is happening in babysee" is one heading.
+
+{
+  const p = (id, project, status, updated_at = 1000, extra = {}) =>
+    ticket(id, status, updated_at, { project, repo: `/x/${project}`, ...extra });
+  const wall = [
+    p(1, 'babysee', 'running', 900),
+    p(2, 'ustabasi', 'done', 800),
+    p(3, 'babysee', 'queued', 700),
+    p(4, 'remote-ai-chat', 'blocked', 100),
+    p(5, 'ustabasi', 'running', 600),
+    p(6, 'remote-ai-chat', 'done', 500),
+  ];
+  const groups = T.groupByProject(wall);
+  const names = groups.map((g) => g.project);
+
+  checks.push(
+    ['a group per project and no more', names.length === 3],
+    ['the group holding the ticket that is waiting on you comes first',
+      names[0] === 'remote-ai-chat'],
+    ['the rest follow their own best ticket', names.join(',') === 'remote-ai-chat,babysee,ustabasi'],
+    ['every ticket is in exactly one group',
+      groups.reduce((n, g) => n + g.tickets.length, 0) === wall.length
+      && new Set(groups.flatMap((g) => g.tickets.map((t) => t.id))).size === wall.length],
+    ['the order inside a group is the order it always was',
+      groups.find((g) => g.project === 'remote-ai-chat').tickets.map((t) => t.id).join(',') === '4,6'
+      && groups.find((g) => g.project === 'babysee').tickets.map((t) => t.id).join(',') === '1,3'],
+    ['a group with nothing in it cannot be drawn, because it is not made',
+      groups.every((g) => g.tickets.length > 0)],
+    ['an empty wall is no groups at all', T.groupByProject([]).length === 0],
+    ['grouping does not reorder the caller’s array', (() => {
+      const given = [p(1, 'b', 'done'), p(2, 'a', 'blocked')];
+      T.groupByProject(given);
+      return given.map((t) => t.id).join(',') === '1,2';
+    })()],
+
+    // The name is the daemon's, which is a project and not a folder: a ticket
+    // in babysee/app is babysee. The folder name is the fallback, and never the
+    // path — this screen is a screenshot away from being public.
+    ['the project is the name the computer gave it',
+      T.projectName(ticket(1, 'done', 1, { project: 'babysee', repo: '/Users/x/projects/babysee/app' })) === 'babysee'],
+    ['…and the folder name where it gave none',
+      T.projectName(ticket(1, 'done', 1, { project: null, repo: '/Users/x/projects/skolalabs' })) === 'skolalabs'],
+    ['no path reaches the heading',
+      !T.projectName(ticket(1, 'done', 1, { project: null, repo: '/Users/x/projects/skolalabs' })).includes('/')],
+    ['a ticket with neither is still under a heading',
+      T.projectName(ticket(1, 'done', 1, { project: null, repo: '' })) === 'unfiled'],
+    ['two names that differ only by their path are one group',
+      T.groupByProject([p(1, 'babysee', 'done', 9, { repo: '/a/babysee' }),
+                        p(2, 'babysee', 'done', 8, { repo: '/b/babysee/app' })]).length === 1],
+  );
+}
+
+// ── 9 · what a card says, and what it no longer says ─────────────────────────
+
+{
+  const NOW = 100_000;
+  const open = ticket(1, 'running', NOW - 60, {
+    created_at: NOW - 54_000, started_at: NOW - 53_000, round_started_at: NOW - 2940,
+    goal: 'Make the wall readable.', git: { commits: 3, subject: 'the newest thing done' },
+    last_event: { ts: NOW - 60, kind: 'start', msg: 'worker round 2 pid 74155 model claude-opus-5 account yakup' },
+  });
+
+  checks.push(
+    // Every status is a word a person would say, with its own colour; blocked
+    // and failed say the same word because they are the same thing to the
+    // person reading — the ticket is not moving until he answers.
+    ['every status has a word', Object.keys(T.STATUS_KEY).every((k) => !!TR(T.STATUS_KEY[k]))],
+    ['a running ticket is working', TR(T.STATUS_KEY.running) === 'working'],
+    ['a blocked one is waiting on you', TR(T.STATUS_KEY.blocked) === 'waiting on you'],
+    ['…and so is a failed one', TR(T.STATUS_KEY.failed) === 'waiting on you'],
+    ['a queued one is queued', TR(T.STATUS_KEY.queued) === 'queued'],
+    ['a finished one is done, and a dropped one cancelled',
+      TR(T.STATUS_KEY.done) === 'done' && TR(T.STATUS_KEY.cancelled) === 'cancelled'],
+    ['no status word is a machine token',
+      Object.values(T.STATUS_KEY).every((k) => !/[_.]/.test(TR(k)))],
+
+    // The total comes first because it is the figure anybody means by "how long
+    // has this been going", and the smaller one under it was being read as it.
+    ['the first figure is the whole age of the ticket',
+      T.totalAge(open, NOW, TR) === 'open 15h 0m'],
+    ['…and says so in a word', /^open /.test(T.totalAge(open, NOW, TR))],
+    ['a finished ticket says how long it took, not how long it is',
+      T.totalAge(ticket(1, 'done', 1, { created_at: NOW - 7200, finished_at: NOW - 3600 }), NOW, TR)
+        === 'took 1h 0m'],
+    ['the second figure is the round, and says which it is',
+      T.roundAge(open, NOW, TR) === '49m in this round'],
+    ['a ticket with no round in progress is not given one',
+      T.roundAge(ticket(1, 'queued', 1, { round_started_at: null }), NOW, TR) === null],
+    ['a finished ticket’s last round does not go on getting longer',
+      T.roundAge(ticket(1, 'done', 1, { created_at: 1, finished_at: NOW - 10, round_started_at: NOW - 900 }), NOW, TR) === null],
+    ['the two figures are not the same figure',
+      T.totalAge(open, NOW, TR) !== T.roundAge(open, NOW, TR)],
+    ['no card says "in this state" any more', !/in this state/.test(T.totalAge(open, NOW, TR) + T.roundAge(open, NOW, TR))],
+
+    // The pid, the model and the account were the widest thing on a card and
+    // the only thing on it nobody could act on. They are on the other page now.
+    ['a hand-over is not what the card says happened',
+      !T.cardLine(open).includes('pid') && !T.cardLine(open).includes('claude-opus-5')],
+    ['…so it says what the ticket is for instead', T.cardLine(open) === 'Make the wall readable.'],
+    ['what did happen is what it says',
+      T.cardLine(ticket(1, 'done', 1, { last_event: { ts: 1, kind: 'merge', msg: 'merged into main (7c715c7)' } }))
+        === 'merged into main (7c715c7)'],
+    ['the filing tag in front of it is not language',
+      T.cardLine(ticket(1, 'done', 1, { last_event: { ts: 1, kind: 'limit', msg: '[worker] all accounts limited' } }))
+        === 'all accounts limited'],
+    // The queue writes its events on the machine they happened on, so they are
+    // full of absolute paths. A card is the widest place one of them could sit.
+    ['no home directory reaches a card',
+      T.cardLine(ticket(1, 'done', 1, { last_event: { ts: 1, kind: 'merge', msg: 'merge skipped: /Users/you/projects/x is dirty' } }))
+        === 'merge skipped: ~/projects/x is dirty'],
+    ['\u2026nor out of the goal, where there is no event',
+      T.cardLine(ticket(1, 'queued', 1, { goal: 'fix /Users/you/projects/x' })) === 'fix ~/projects/x'],
+    ['a line with no home directory in it is left alone',
+      T.tilde('merged into main (7c715c7)') === 'merged into main (7c715c7)'],
+    ['a note is not read back as what happened, because it is already a message',
+      T.cardLine(ticket(1, 'running', 1, { goal: 'the goal', last_event: { ts: 1, kind: 'note', msg: '[user] use staging' } }))
+        === 'the goal'],
+
+    ['what is on the branch is counted where there is something to count',
+      T.commitCount(open, TR) === '3 commits'],
+    ['…and once is once', T.commitCount(ticket(1, 'running', 1, { git: { commits: 1, subject: 'x' } }), TR) === '1 commit'],
+    ['no worktree, no commit line', T.commitCount(ticket(1, 'running', 1, { git: null }), TR) === null],
+
+    // The one thing the queue cannot answer and this must never invent.
+    ['nothing on a card is a percentage or an N-of-M',
+      ![T.totalAge(open, NOW, TR), T.roundAge(open, NOW, TR), T.commitCount(open, TR), T.cardLine(open)]
+        .some((line) => /%|\d+\s*(?:of|\/)\s*\d+/.test(line || ''))],
+  );
+}
+
+// ── 10 · the steps a ticket has been through ─────────────────────────────────
+//
+// "What step is it on" was a question you could only answer by reading two
+// thousand words of the last verifier report. The queue has known all along —
+// it writes an event every time it hands a ticket to somebody — and this is
+// that history as a checklist.
+
+{
+  const NOW = 100_000;
+  const step = (stage, round, at, over) => ({ stage, round, at, ...over });
+  const run = ticket(7, 'running', NOW, { stage: 'verifier', round: 2, steps: [
+    step('worker', 1, NOW - 9000, { ended_at: NOW - 8000, outcome: 'stopped', note: 'account limited' }),
+    step('worker', 1, NOW - 7000, { ended_at: NOW - 5000, outcome: 'ok' }),
+    step('check', 1, NOW - 5000, { ended_at: NOW - 5000, outcome: 'ok' }),
+    step('verifier', 1, NOW - 4900, { ended_at: NOW - 4000, outcome: 'rejected', note: '-> worker round 2' }),
+    step('worker', 2, NOW - 3900, { ended_at: NOW - 900, outcome: 'ok' }),
+    step('verifier', 2, NOW - 880, { pid: 1495, model: 'claude-opus-5', account: 'bedriyan' }),
+  ]});
+  const marks = run.steps.map(T.stepMark);
+  const now = T.currentStep(run);
+
+  checks.push(
+    ['a step that did what it was for is ticked', marks[1] === 'done' && marks[4] === 'done'],
+    ['a step the verifier sent back is crossed', marks[3] === 'crossed'],
+    ['a step that did not get to finish is neither', marks[0] === 'stopped'],
+    ['exactly one step is the one running now',
+      marks.filter((m) => m === 'now').length === 1 && marks[marks.length - 1] === 'now'],
+    ['…and it is the one the page points at', now === run.steps[5]],
+    ['it says which stage and which round', T.stepLine(now, TR) === 'verifier r2'],
+    ['…how long it has been going', T.stepAge(now, NOW, TR) === '14m'],
+    ['…and on whose machine', now.model === 'claude-opus-5' && now.account === 'bedriyan' && now.pid === 1495],
+    ['a finished step is timed by when it ended, not by the clock',
+      T.stepAge(run.steps[1], NOW, TR) === T.stepAge(run.steps[1], NOW + 10_000, TR)],
+    ['a ticket nobody is holding has no step running',
+      T.currentStep(ticket(1, 'blocked', 1, { steps: [step('worker', 1, 1, { ended_at: 2, outcome: 'blocked' })] })) === null],
+    ['a ticket that has never run has no steps at all',
+      T.currentStep(ticket(1, 'queued', 1, { steps: [] })) === null],
+    ['the rounds are in the order they happened',
+      run.steps.map((s) => s.round).every((r, i, all) => i === 0 || r >= all[i - 1])],
+  );
+}
+
+// ── 11 · the verifier's marks, against the criteria they are about ───────────
+//
+// The card lists what done means; the verifier answers those points in its own
+// words — "1. Wall grouped by project, readable name" against a criterion three
+// lines long. Lined up by position the two agree only while the verifier
+// answers every point, in order, every time.
+
+{
+  const CARD = [
+    'The wall groups by project and no empty group is drawn.',
+    'Every card says its status in a plain word.',
+    'A new handler streams a run incrementally.',
+    'Tapping a card opens the chat page.',
+  ];
+
+  const verbatim = { findings: CARD.map((c, i) => ({ criterion: c, status: i === 1 ? 'unmet' : 'met' })) };
+  const numbered = { findings: [
+    { criterion: '4. Tapping opens the chat', status: 'met' },
+    { criterion: '2. Status in a plain word', status: 'unmet', detail: 'it is still a token' },
+  ]};
+  const reworded = { findings: [
+    { criterion: 'A new handler streams a run incrementally, capped', status: 'met' },
+  ]};
+  const unrelated = { findings: [{ criterion: 'The icon is the right shade of blue', status: 'unmet' }] };
+
+  const got = (v) => T.marks(CARD, v).map((m) => (m ? (m.met ? 'y' : 'n') : '-')).join('');
+
+  checks.push(
+    ['a verdict that answers every point, word for word', got(verbatim) === 'ynyy'],
+    ['a verdict that answers two of four, by its own numbering', got(numbered) === '-n-y'],
+    ['…and does not put the second answer on the second criterion',
+      T.marks(CARD, numbered)[1].detail === 'it is still a token'],
+    ['a point reworded is still the point it is about', got(reworded) === '--y-'],
+    ['a finding about nothing on the card marks nothing', got(unrelated) === '----'],
+    ['no verdict at all marks nothing', got(null) === '----'],
+    ['an empty verdict marks nothing', got({ findings: [] }) === '----'],
+    ['one finding cannot mark two criteria, however alike they are', (() => {
+      const alike = ['the wall groups by project', 'the wall groups by project too'];
+      return T.marks(alike, { findings: [{ criterion: 'the wall groups by project', status: 'met' }] })
+        .filter(Boolean).length === 1;
+    })()],
+    ['\u2026and two findings that say the same thing mark it once', (() => {
+      const twice = { findings: [{ criterion: CARD[0], status: 'met' }, { criterion: CARD[0], status: 'unmet' }] };
+      const got = T.marks(CARD, twice);
+      return got.filter(Boolean).length === 1 && got[0].met === true;
+    })()],
+    ['a card with no criteria has no marks', T.marks([], verbatim).length === 0],
+    ['the mark carries the verifier’s own wording, so the two can be compared',
+      T.marks(CARD, numbered)[3].said === '4. Tapping opens the chat'],
+    // The old positional reading, kept for the fold on the chat page, and the
+    // new one, which is the page that draws a cross against a sentence.
+    ['the positional reading would have marked the wrong sentence',
+      T.mark(numbered, 0).met === true && T.marks(CARD, numbered)[0] === null],
+  );
+}
+
+// ── 12 · a run's log, read as a chat ─────────────────────────────────────────
+//
+// The daemon hands out the model's stream a page at a time without deciding
+// what is worth showing. This is that decision: a sentence is a sentence, a
+// tool call is its name and the one thing it was called on, what the tool
+// answered is folded behind it, and the several hundred lines of hook firings
+// and token counters are dropped.
+//
+// Checked against a recording rather than a log written by hand, because a log
+// written by hand agrees with its reader by construction — and the shapes that
+// break a reader are the ones nobody would think to write: a thinking block
+// with no words in it, a tool result the size of a file, a line that is not
+// JSON at all. app/scripts/fixtures/README.md says where it came from.
+
+{
+  const raw = fs.readFileSync(path.join(root, 'scripts/fixtures/run.log'), 'utf8');
+  const lines = raw.split('\n').filter((l) => l.trim());
+  // The daemon's own reading of a line, in the shape it puts on the wire. Kept
+  // to what this side has to draw; `daemon/scripts/test_ustabasi_run.py` is
+  // where the shape itself is checked.
+  const CUT = 2000;
+  const records = [];
+  for (const line of lines) {
+    let d;
+    try { d = JSON.parse(line); } catch { records.push({ k: 'other', type: 'unparsable' }); continue; }
+    if (d.type === 'assistant' || d.type === 'user') {
+      for (const b of (d.message || {}).content || []) {
+        if (b.type === 'text') records.push({ k: 'text', text: b.text });
+        else if (b.type === 'thinking') records.push({ k: 'thinking', text: b.thinking });
+        else if (b.type === 'tool_use') records.push({ k: 'tool', id: b.id, name: b.name, input: b.input });
+        else if (b.type === 'tool_result') {
+          const body = typeof b.content === 'string' ? b.content
+            : (b.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n');
+          records.push({ k: 'result', id: b.tool_use_id, text: body.slice(0, CUT),
+                         error: !!b.is_error, ...(body.length > CUT ? { clipped: true } : {}) });
+        }
+      }
+    } else if (d.type === 'system') records.push({ k: 'system', subtype: d.subtype });
+    else if (d.type === 'result') records.push({ k: 'done', error: !!d.is_error, cost: d.total_cost_usd });
+    else records.push({ k: 'other', type: d.type });
+  }
+
+  const read = X.turns(records);
+  const kinds = read.turns.map((t) => t.kind);
+  const noise = records.filter((r) => r.k === 'system' || r.k === 'other');
+  const calls = read.turns.filter((t) => t.kind === 'did');
+
+  checks.push(
+    ['the recording is a real run, not three lines', lines.length > 90],
+    ['…with every shape in it that a reader has to survive',
+      new Set(records.map((r) => r.k)).size >= 6],
+    ['there is noise in it to drop', noise.length > 20],
+
+    ['nothing the run printed for its own log is a turn',
+      !read.turns.some((t) => t.kind === 'say' && /thinking_tokens|hook_/.test(t.text))],
+    ['the count comes out right: every record is a turn or was dropped',
+      records.filter((r) => r.k === 'text' && r.text.trim()).length
+      + records.filter((r) => r.k === 'thinking' && (r.thinking || r.text || '').trim()).length
+      + records.filter((r) => r.k === 'tool').length
+      + records.filter((r) => r.k === 'done').length === read.turns.length],
+    ['what it said is what it said',
+      read.turns.find((t) => t.kind === 'say').text.length > 10],
+    ['a thinking block with no words in it is not a blank turn',
+      records.some((r) => r.k === 'thinking' && !(r.text || '').trim())
+      && !read.turns.some((t) => t.kind === 'thought' && !t.text.trim())],
+
+    ['every tool call kept its name', calls.length > 5 && calls.every((t) => !!t.tool)],
+    ['…and all but the odd one say in a line what they were called on',
+      calls.filter((t) => t.summary).length >= calls.length - 1],
+    ['a summary is one line, whatever it is about',
+      calls.every((t) => !t.summary.includes('\n'))],
+    ['…and is never the whole argument list',
+      calls.every((t) => t.summary.length <= 121)],
+    ['what a call answered is attached to the call, not left loose',
+      calls.filter((t) => t.output != null).length >= 5],
+    ['…and nothing is drawn twice',
+      !read.turns.some((t) => t.kind === 'say' && calls.some((c) => c.output === t.text))],
+    ['the run’s own last line is the last turn',
+      kinds[kinds.length - 1] === 'ended'],
+    ['every turn has a key of its own',
+      new Set(read.turns.map((t) => t.id)).size === read.turns.length],
+
+    // The reading itself, on the arguments each tool happens to use.
+    ['a command is the command', X.summarise('Bash', { command: 'npm test', description: 'run it' }) === 'npm test'],
+    ['a file is the tail of its path, not its path',
+      X.summarise('Read', { file_path: '/Users/you/projects/app/src/deep/file.ts' }) === '~/…/deep/file.ts'],
+    ['nobody’s home directory reaches a screen',
+      X.summarise('Bash', { command: 'cat /Users/you/.env' }) === 'cat ~/.env'],
+    ['a pattern is the pattern', X.summarise('Grep', { pattern: 'useQueue', output_mode: 'content' }) === 'useQueue'],
+    ['an address is the address', X.summarise('WebFetch', { url: 'https://example.com/x', prompt: 'read it' }) === 'https://example.com/x'],
+    ['a call with nothing worth naming says nothing, rather than printing JSON',
+      X.summarise('StructuredOutput', { verdict: 'approved', findings: [] }) === ''],
+    ['a command of four lines is one line', !X.summarise('Bash', { command: 'a\nb\nc\nd' }).includes('\n')],
+    ['…and a very long one is cut', X.summarise('Bash', { command: 'x'.repeat(400) }).endsWith('…')],
+  );
+
+  // A page at a time is how it actually arrives: the answer to a call usually
+  // comes in the page after the call itself.
+  {
+    const half = records.findIndex((r) => r.k === 'result') + 1;
+    const one = X.turns(records.slice(0, half - 1), 0);
+    const two = X.turns(records.slice(half - 1), one.turns.length);
+    const joined = X.attach([...one.turns, ...two.turns], two.answers);
+    const whole = X.turns(records);
+    checks.push(
+      ['read in two pages it is the same run',
+        joined.filter((t) => t.kind !== 'ended').length === whole.turns.filter((t) => t.kind !== 'ended').length],
+      ['…and the answer found its call across the gap',
+        joined.filter((t) => t.kind === 'did' && t.output != null).length
+          === whole.turns.filter((t) => t.kind === 'did' && t.output != null).length],
+      ['two pages never give two turns the same key',
+        new Set(joined.map((t) => t.id)).size === joined.length],
+      ['a page with nothing in it changes nothing',
+        X.attach(joined, {}) === joined],
+    );
+  }
+
+  checks.push(
+    ['a long read is held to a length a phone can draw',
+      X.trim(new Array(X.MAX_TURNS + 50).fill(read.turns[0])).length === X.MAX_TURNS],
+    ['…and it is the end that is kept', (() => {
+      const many = new Array(X.MAX_TURNS + 3).fill(0).map((_, i) => ({ kind: 'say', id: `x${i}`, text: `${i}` }));
+      return X.trim(many)[X.MAX_TURNS - 1].text === `${X.MAX_TURNS + 2}`;
+    })()],
+    ['a short one is left exactly as it is', X.trim(read.turns) === read.turns],
+
+    // Every silence a run can be, each with its own word. Each of these was a
+    // spinner that never stopped somewhere.
+    ['a ticket nobody has started says so', X.silence('never_run') === 'neverRun'],
+    ['a run whose log is gone says so', X.silence('no_log') === 'noLog'],
+    ['a computer with no queue says so', X.silence('no_queue') === 'noQueue'],
+    ['a ticket the queue does not have says so', X.silence('no_ticket') === 'noTicket'],
+    ['a run that is simply quiet is not a silence', X.silence('') === null && X.silence(undefined) === null],
+  );
+}
+
+// ── 13 · where the log goes in the sequence ──────────────────────────────────
+//
+// The log has no clock in it — it is a stream of blocks, and the queue writes
+// the time beside it in its events instead. What that gives is the one fact
+// that puts it in order: everything in it happened after the step that started
+// it. So the reports and the notes from before that moment come first, the log
+// next, and whatever has been said since after it.
+
+{
+  const NOW = 100_000;
+  const t = ticket(7, 'running', NOW, {
+    created_at: NOW - 9000, goal: 'do the thing', note_count: 3,
+    notes: [
+      { ts: NOW - 8000, from: 'user', text: 'before the run' },
+      { ts: NOW - 500, from: 'supervisor', text: 'during the run' },
+    ],
+    steps: [{ stage: 'worker', round: 1, at: NOW - 7000, ended_at: NOW - 6000, outcome: 'ok' },
+            { stage: 'worker', round: 2, at: NOW - 3000 }],
+    last_event: { ts: NOW, kind: 'report', msg: 'still going' },
+  });
+  const msgs = T.conversation(t, TR);
+  const split = T.around(msgs, T.runStartedAt(t));
+
+  checks.push(
+    ['the run being read is the one that started last',
+      T.runStartedAt(t) === NOW - 3000],
+    ['a ticket that has never run has no run to place',
+      T.runStartedAt(ticket(1, 'queued', 1, { steps: [] })) === null],
+    ['what was said before the run is above it',
+      split.before.map((m) => m.text).join('|').includes('before the run')],
+    ['what was said after it is below it',
+      split.after.map((m) => m.text).join('|').includes('during the run')],
+    ['the opening of the ticket is above it', split.before[0].text === 'do the thing'],
+    ['where the ticket stands now is the last thing on the page',
+      split.after[split.after.length - 1].tail === true],
+    ['nothing is lost in the splitting',
+      split.before.length + split.after.length === msgs.length],
+    ['…and nothing is said twice',
+      new Set([...split.before, ...split.after].map((m) => m.id)).size === msgs.length],
+    ['a ticket with no run reads exactly as it did before there was a log',
+      T.around(msgs, null).before.length === msgs.length && T.around(msgs, null).after.length === 0],
+  );
+}
+
 // The wiring the judgements above cannot see. Every one of these is a line
 // somewhere else in the app, and every one of them has exactly one right
 // answer: a screen nothing registers is a screen nobody reaches, a notification
 // nothing routes lands on the chat list, and a wall with a second way to write
 // to the queue is a wall that can do more than look and answer.
 const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+/** A file with its comments taken out. "The pid is not on the card" is a thing
+ *  to check of the card and not of the paragraph above it explaining why. */
+const code = (f) => src(f).split('\n')
+  .filter((l) => !/^\s*(?:\/\/|\/?\*)/.test(l)).join('\n');
 const layout = src('app/_layout.tsx');
 const home = src('src/components/home.tsx');
 const wallScreen = src('app/ustabasi.tsx');
 const detail = src('app/ticket/[id].tsx');
+const about = src('app/ticket-about/[id].tsx');
+const card = src('src/components/ticket.tsx');
+const cardCode = code('src/components/ticket.tsx');
 const queueHook = src('src/queue.ts');
 const store = src('src/store.ts');
 
 checks.push(
-  ['both screens are registered like the other full ones',
-    /<Stack\.Screen\s+name="ustabasi"/.test(layout) && /<Stack\.Screen\s+name="ticket\/\[id\]"/.test(layout)],
+  ['all three screens are registered like the other full ones',
+    /<Stack\.Screen\s+name="ustabasi"/.test(layout) && /<Stack\.Screen\s+name="ticket\/\[id\]"/.test(layout)
+    && /<Stack\.Screen\s+name="ticket-about\/\[id\]"/.test(layout)],
   // The routing itself is driven above. What is left here is that the layout
   // goes through it rather than keeping a second copy: a tap is offered to the
   // holding pen, taken from it, and followed.
@@ -564,16 +995,107 @@ checks.push(
     /stick\.current = /.test(detail) && /if \(stick\.current\)/.test(detail)],
 );
 
-// Two requests and no more. `ustabasi.list` reads, `ustabasi.note` answers;
-// anything else the queue's CLI can do — start, cancel, rewrite a card — is not
-// this app's to offer, and would be a third string here.
+// The wall, the card and the two pages, as they are wired. Every one of these
+// is a line in a screen with exactly one right answer, and none of them can be
+// seen by looking at a pure function.
+
+checks.push(
+  // 1 · the wall groups, and the grouping is not a second copy of the reading
+  ['the wall draws groups, not one pile', /groupByProject\(/.test(wallScreen)],
+  ['…with the project as the heading', /\{g\.project\}/.test(wallScreen)],
+  ['…and the cards of that project under it', /g\.tickets\.map/.test(wallScreen)],
+  ['the wall does not sort tickets a second way of its own',
+    !/sortTickets\(/.test(wallScreen)],
+
+  // 2 · the card: a word for the status, and the pid gone from it
+  ['the card says the status in the app’s own word', /T\(STATUS_KEY\[t\.status\]/.test(card)],
+  ['…in the colour of the status', /color: ph\.color/.test(card)],
+  ['the whole age is on the card', /totalAge\(t, now, T\)/.test(card)],
+  ['…and the round under it', /roundAge\(t, now, T\)/.test(card)],
+  ['the pid, the model and the account are not on the card',
+    !/\bpid\b/.test(cardCode) && !/\bmodel\b/.test(cardCode) && !/\baccount\b/.test(cardCode)],
+  ['nor is a percentage or an N-of-M', !/%|\bof\b\s*\{?\s*n\b/.test(cardCode)],
+
+  // 3 · the (i): its own target, far enough from the card’s
+  ['the card carries an (i)', /name="info"/.test(card)],
+  ['…which is a button in its own right', /accessibilityRole="button"/.test(card)],
+  ['…named so a thumb can find it', /accessibilityLabel=\{T\('ticketAbout'\)\}/.test(card)],
+  ['…the size of a thumb', /width: 40, height: 40/.test(card) && /hitSlop=\{8\}/.test(card)],
+  ['a tap on the card opens the chat', /router\.push\(`\/ticket\/\$\{t\.id\}`\)/.test(wallScreen)],
+  ['…and a tap on the (i) opens the other page',
+    /router\.push\(`\/ticket-about\/\$\{t\.id\}`\)/.test(wallScreen)],
+  ['the two are different handlers, so one cannot open the other',
+    /onPress=\{\(\) => go\(\(\) => router\.push\(`\/ticket\//.test(wallScreen)
+    && /onAbout=\{\(\) => go\(\(\) => router\.push\(`\/ticket-about\//.test(wallScreen)],
+
+  // 4 · the chat page: the run, in the sequence, appending
+  ['the chat page reads the run', /useRun\(ticketId\)/.test(detail)],
+  ['…and puts it between what was said before it and after it',
+    /shown\.before\.map[\s\S]{0,200}<Run[\s\S]{0,200}shown\.after\.map/.test(detail)],
+  ['…which is the reading, not a second copy of it',
+    /around\(msgs, t \? runStartedAt\(t\) : null\)/.test(detail)],
+  ['the run is drawn in the chat’s own language and no other',
+    /<AssistantText\b/.test(detail) && /<ToolCard\b/.test(detail)],
+  ['a new turn only scrolls a reader who is already at the bottom',
+    /stick\.current = /.test(detail) && /if \(stick\.current\)/.test(detail)],
+  ['the box is still at the bottom of it', /<TextInput\b/.test(detail)],
+  ['the run appends rather than being re-read whole',
+    /cursor\.current/.test(queueHook) && /\.\.\.base, \.\.\.more/.test(queueHook)],
+  ['…and a page that is not continuous with the last starts again',
+    /const fresh = !!page\.reset;/.test(queueHook)],
+  ['…and a finished run stops being asked about',
+    /over\.current = true/.test(queueHook)],
+  ['the log is asked for faster than the wall', T.RUN_POLL_MS < T.POLL_MS],
+  ['a long read is held to a length a phone can draw', /trim\(/.test(queueHook)],
+  ['nothing of the log is kept in the store',
+    !/ustabasiRun|runTurns|setRun\b/.test(store)],
+
+  // 5 · the detail page: the steps, the marks, the way back
+  ['the detail page draws the steps in order', /steps\.map/.test(about)],
+  ['…each ticked, crossed or marked as the one running now', /stepMark\(/.test(about)],
+  ['…and the running one says which stage and round', /stepLine\(s, T\)/.test(about)],
+  ['…how long it has been going', /stepAge\(s, now, T\)/.test(about)],
+  ['…and on which model and account',
+    /detailStepOn', \{ model: s\.model, account: s\.account \}/.test(about)],
+  ['…and which process it is', /detailStepPid', \{ pid: s\.pid \}/.test(about)],
+  ['the criteria are marked by their own text, not by their position',
+    /marks\(t\.done_criteria \|\| \[\], t\.verdict\)/.test(about) && !/\bmark\(t\.verdict, i\)/.test(about)],
+  ['a criterion the verifier said nothing about says so rather than nothing',
+    /detailUnjudged/.test(about)],
+  ['the goal, what it is waiting for and the notes are all on it',
+    /detailAsked/.test(about) && /detailAsking/.test(about) && /detailNotes/.test(about)],
+  ['the detail page has a way to the chat',
+    /router\.replace\(`\/ticket\/\$\{t\.id\}`\)/.test(about)],
+  ['…and the chat page a way back to it',
+    /router\.replace\(`\/ticket-about\/\$\{t\.id\}`\)/.test(detail)],
+  ['neither page pushes the other, so Back leads to the wall from both',
+    !/router\.push\(`\/ticket/.test(about) && !/router\.push\(`\/ticket/.test(detail)],
+  ['both pages have a back', /router\.back\(\)/.test(about) && /router\.back\(\)/.test(detail)],
+  ['the detail page writes nothing', !/noteTicket/.test(about)],
+
+  // 6 · every silence has a sentence, and none of them is a spinner
+  ['a ticket that has never run says so', /runNothing/.test(detail)],
+  ['a run whose log is gone says so', /runNoLog/.test(detail)],
+  ['a computer too old for the request says so', /runOldHost/.test(detail)],
+  ['a computer with no queue says so', /runNoQueueBody/.test(detail)],
+  ['a ticket that is not in the queue says so on the detail page too',
+    /ticketGone/.test(about)],
+  ['…and so does a computer with no queue', /queueNoneBody/.test(about)],
+  ['nothing spins for ever: every silence is drawn instead of the spinner',
+    /if \(run\.silence\) return <RunSilent/.test(detail)],
+);
+
+// Three requests and no more. `ustabasi.list` reads the wall, `ustabasi.run`
+// reads one ticket's log, `ustabasi.note` answers a ticket; anything else the
+// queue's CLI can do — start, cancel, rewrite a card — is not this app's to
+// offer, and would be a fourth string here.
 const calls = new Set();
 for (const f of ['src/store.ts', 'src/queue.ts', 'app/ustabasi.tsx', 'app/ticket/[id].tsx',
-                 'src/components/ticket.tsx', 'src/components/home.tsx']) {
+                 'app/ticket-about/[id].tsx', 'src/components/ticket.tsx', 'src/components/home.tsx']) {
   for (const m of src(f).matchAll(/'(ustabasi\.[a-z.]+)'/g)) calls.add(m[1]);
 }
-checks.push([`the screens ask the computer for two things and no more (${[...calls].sort().join(', ')})`,
-  calls.size === 2 && calls.has('ustabasi.list') && calls.has('ustabasi.note')]);
+checks.push([`the screens ask the computer for three things and no more (${[...calls].sort().join(', ')})`,
+  calls.size === 3 && calls.has('ustabasi.list') && calls.has('ustabasi.note') && calls.has('ustabasi.run')]);
 
 let bad = 0;
 for (const [name, ok] of checks) {

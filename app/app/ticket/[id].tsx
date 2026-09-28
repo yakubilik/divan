@@ -3,14 +3,16 @@ import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View }
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore, useT } from '../../src/store';
-import { useQueue } from '../../src/queue';
-import { LOCALE } from '../../src/i18n';
+import { useNavGuard } from '../../src/nav';
+import { useNow, useQueue, useRun } from '../../src/queue';
+import { LOCALE, type Key } from '../../src/i18n';
 import { em, useColors } from '../../src/theme';
 import { BackBar, Dot, EmptyState, Icon, Spinner, Text, TextInput } from '../../src/components/ui';
-import { AssistantText, UserBubble } from '../../src/components/chat';
+import { AssistantText, ToolCard, UserBubble } from '../../src/components/chat';
 import { tone } from '../../src/components/ticket';
-import { answerable, conversation, hasDetails, mark, noteHint, STATUS_KEY, VOICE_KEY,
-         type Msg, type Voice } from '../../src/tickets';
+import { answerable, around, conversation, hasDetails, mark, noteHint, runStartedAt,
+         STATUS_KEY, VOICE_KEY, type Msg, type Voice } from '../../src/tickets';
+import type { RunSilence, Turn } from '../../src/transcript';
 import type { Ticket } from '../../src/protocol';
 
 /** One ticket, opened.
@@ -24,9 +26,18 @@ import type { Ticket } from '../../src/protocol';
  *  copy of the reading (web/src/lib/ustabasi.ts): one language each, and the
  *  two agree line for line, so a change to one is a change owed to the other.
  *
- *  The paperwork — the card's criteria, the verifier's per-criterion marks — is
- *  still here, behind `Details`, closed, where a thing nobody is answering
- *  belongs.
+ *  And now the part that was never here: what the agent is doing *right now*.
+ *  Every run writes the model's own stream to a file — what it says, what it
+ *  thinks, every tool it calls — and none of it reached the phone, so a ticket
+ *  that had been working for three hours read exactly like one that had been
+ *  working for three minutes. It is in the middle of the sequence, where it
+ *  happened: what was said before the run began, then the run as it is written,
+ *  then whatever has been said since. It appends while the page is open, and it
+ *  only ever scrolls the reader who is already at the bottom.
+ *
+ *  The paperwork — the card's criteria, the verifier's per-criterion marks, the
+ *  steps it has been through — is on the other page, behind the (i) on the
+ *  card. What is left behind `Details` here is the short of it.
  *
  *  The box is the only write this screen has. A note is not an INSERT: the queue
  *  appends it, clears the escalation and puts the ticket back in front of the
@@ -38,9 +49,12 @@ export default function TicketScreen() {
   const ticketId = Number(id);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const go = useNavGuard();
   const T = useT();
   const c = useColors();
+  const now = useNow();
   const { tickets, state } = useQueue();
+  const run = useRun(ticketId);
   const noteTicket = useStore((s) => s.noteTicket);
   const hostInfo = useStore((s) => s.hostInfo);
   const host = useStore((s) => s.host);
@@ -64,6 +78,11 @@ export default function TicketScreen() {
 
   const t = useMemo(() => tickets.find((x) => x.id === ticketId) ?? null, [tickets, ticketId]);
   const msgs = useMemo(() => (t ? conversation(t, T) : []), [t, T]);
+  // The run's own log has no clock in it — it is a stream of blocks, and the
+  // queue writes the time beside it in its events instead. What that gives is
+  // the one fact that puts it in the sequence: everything in it happened after
+  // the step that started it.
+  const shown = useMemo(() => around(msgs, t ? runStartedAt(t) : null), [msgs, t]);
   // A note the queue has taken is in the conversation already; the copy shown
   // before it got there has to give way rather than stand next to it.
   const said = useMemo(() => new Set((t?.notes ?? []).map((n) => (n.text || '').trim())), [t?.notes]);
@@ -142,9 +161,17 @@ export default function TicketScreen() {
           </View>
           <Text mono numberOfLines={1} style={{ fontSize: 11, color: asking ? ph.color : c.faint }}>
             {T(STATUS_KEY[t.status] ?? 'tsQueued')} · {T('ticketRound', { stage: t.stage, round: t.round })}
-            {t.branch ? ` · ${t.branch}` : ''}
+            {run.live ? ` · ${T('runLive')}` : ''}
           </Text>
         </View>
+        {/* The other half of the ticket. `replace`, not `push`: the two pages
+            are one ticket seen twice, and Back leads to the wall from either. */}
+        <Pressable accessibilityRole="button" accessibilityLabel={T('ticketAbout')}
+          onPress={() => go(() => router.replace(`/ticket-about/${t.id}`))} hitSlop={8}
+          style={({ pressed }) => [{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+                                   pressed && { opacity: 0.45 }]}>
+          <Icon name="info" size={20} color={c.faint} />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -162,7 +189,9 @@ export default function TicketScreen() {
         // been added has no height yet at the point the render finishes.
         onContentSizeChange={() => { if (stick.current) scroller.current?.scrollToEnd({ animated: false }); }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, gap: 18 }}>
-        {msgs.map((m) => <Row key={m.id} m={m} asking={asking} tint={ph.tint} />)}
+        {shown.before.map((m) => <Row key={m.id} m={m} asking={asking} tint={ph.tint} />)}
+        <Run run={run} now={now} />
+        {shown.after.map((m) => <Row key={m.id} m={m} asking={asking} tint={ph.tint} />)}
         {mine.map((p) => (
           <View key={p.id} style={{ gap: 4 }}>
             <Who from="you" ts={p.ts} right />
@@ -303,6 +332,101 @@ function Details({ t }: { t: Ticket }) {
           })}
         </View>
       )}
+    </View>
+  );
+}
+
+/** What the agent on this ticket is printing, drawn the way a chat draws it.
+ *
+ *  No new visual language: a sentence is `AssistantText`, a tool call is the
+ *  `ToolCard` a chat already uses, and the run's own last line is a rule with a
+ *  word on it. What is different is only that nobody typed any of it — it is
+ *  one side of a conversation, which is what a run is.
+ *
+ *  Every silence gets a sentence rather than a spinner. A ticket nobody has
+ *  started, a run whose directory has been cleared away, a computer whose
+ *  daemon predates this screen, a computer with no queue at all: each of those
+ *  is a thing to say once, and each of them was a spinner that never stopped in
+ *  some earlier version of this. */
+function Run({ run, now }: { run: ReturnType<typeof useRun>; now: number }) {
+  const T = useT();
+  const c = useColors();
+
+  if (run.silence) return <RunSilent why={run.silence} />;
+  if (run.loading && !run.turns.length) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Spinner size={12} />
+        <Text mono style={{ fontSize: 11, color: c.faint }}>{T('wsStarting')}</Text>
+      </View>
+    );
+  }
+  if (!run.turns.length) return null;
+
+  return (
+    <View style={{ gap: 16 }}>
+      {run.jumped && (
+        <Text mono style={{ fontSize: 11, color: c.faint, textAlign: 'center' }}>{T('runJumped')}</Text>
+      )}
+      {run.turns.map((turn) => <RunTurn key={turn.id} turn={turn} />)}
+      {run.live && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+          <Spinner size={11} color={c.ink} />
+          <Text mono style={{ fontSize: 11, color: c.muted }}>{T('runLive')}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function RunTurn({ turn }: { turn: Turn }) {
+  const T = useT();
+  const c = useColors();
+  if (turn.kind === 'say') return <AssistantText text={turn.text} />;
+  if (turn.kind === 'thought') {
+    return (
+      <Text style={{ fontSize: 13, lineHeight: 13 * 1.45, color: c.muted, fontStyle: 'italic' }}>
+        {turn.text}
+      </Text>
+    );
+  }
+  if (turn.kind === 'did') {
+    return (
+      <ToolCard tool={turn.tool} input={{ ...turn.input, description: turn.summary }}
+        result={turn.output == null ? undefined : { output: turn.output, is_error: !!turn.failed }} />
+    );
+  }
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+      <Text mono style={{ fontSize: 11, color: turn.failed ? c.danger : c.faint }}>
+        {T(turn.failed ? 'runEndedBadly' : 'runEnded')}
+      </Text>
+      <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+    </View>
+  );
+}
+
+/** The six ways there is nothing to read, each with words of its own. The key
+ *  type is what keeps them honest: a renamed string is a compiler error here
+ *  rather than a screen showing the name of a variable. */
+const SILENCE: Record<Exclude<RunSilence, null>, { title: Key; body: Key }> = {
+  neverRun: { title: 'runNothing', body: 'runNothingBody' },
+  noLog: { title: 'runNoLog', body: 'runNoLogBody' },
+  noTicket: { title: 'ticketGone', body: 'ticketGoneBody' },
+  noQueue: { title: 'queueNone', body: 'runNoQueueBody' },
+  oldHost: { title: 'runOldHost', body: 'runOldHostBody' },
+  offline: { title: 'queueUnreachable', body: 'hintOffline' },
+};
+
+function RunSilent({ why }: { why: Exclude<RunSilence, null> }) {
+  const T = useT();
+  const c = useColors();
+  const words = SILENCE[why];
+  return (
+    <View style={{ backgroundColor: c.fill, borderRadius: 12, padding: 12, gap: 3 }}>
+      <Text style={{ fontSize: 13, fontWeight: '600', color: c.muted }}>{T(words.title)}</Text>
+      <Text style={{ fontSize: 12.5, lineHeight: 12.5 * 1.45, color: c.faint }}>{T(words.body)}</Text>
     </View>
   );
 }

@@ -125,10 +125,15 @@ export default function RootLayout() {
         <Stack.Screen name="agent-install" />
         <Stack.Screen name="accounts" />
         <Stack.Screen name="pool" />
-        {/* The ticket queue on the computer, and one of its tickets. A push
-            about a red ticket lands on the second one directly. */}
+        {/* The ticket queue on the computer, and one of its tickets — twice.
+            `ticket/[id]` is the chat: what the agent on it is printing, as it
+            prints it, which is where a push about a red ticket lands.
+            `ticket-about/[id]` is the reading of it: the steps, the criteria
+            and the rest of the card. They replace each other rather than
+            stacking, so Back leads to the wall from either. */}
         <Stack.Screen name="ustabasi" />
         <Stack.Screen name="ticket/[id]" />
+        <Stack.Screen name="ticket-about/[id]" />
         <Stack.Screen name="login-method" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="account-login" />
         <Stack.Screen name="login-web" options={{ presentation: 'fullScreenModal' }} />

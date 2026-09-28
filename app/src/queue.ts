@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useStore } from './store';
-import { POLL_MS, wall, type Wall } from './tickets';
+import { oldHost, POLL_MS, RUN_POLL_MS, wall, type Wall } from './tickets';
+import { attach, silence, trim, turns, type RunSilence, type Turn } from './transcript';
 import type { Ticket, UstabasiSnapshot } from './protocol';
 
 /** The ustabasi queue, kept fresh for as long as a screen is looking at it.
@@ -49,4 +50,89 @@ export function useNow(everyMs = 5000): number {
     return () => clearInterval(t);
   }, [everyMs]);
   return now;
+}
+
+/** What the agent on a ticket is printing, kept up to date while the page is
+ *  open.
+ *
+ *  The log is a file the run appends to, so this is a cursor and a timer: the
+ *  first ask gets the end of it, every ask after that gets what has been
+ *  written since, and the turns are appended to what is already on screen.
+ *  Nothing of it is kept in the store — a run is a river, and what is worth
+ *  holding is the part being read.
+ *
+ *  It stops asking when the run is over and there is nothing more to read.
+ *  A finished run is a finished file: polling it is asking the same question
+ *  of the same bytes every three seconds for as long as the page is open. */
+export function useRun(ticketId: number): {
+  turns: Turn[]; live: boolean; loading: boolean; silence: RunSilence; jumped: boolean;
+} {
+  const conn = useStore((s) => s.conn);
+  const readRun = useStore((s) => s.readRun);
+  const online = conn === 'online';
+
+  const [list, setList] = useState<Turn[]>([]);
+  const [live, setLive] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [quiet, setQuiet] = useState<RunSilence>(null);
+  const [jumped, setJumped] = useState(false);
+  /** In a ref rather than in state: it changes on every poll and nothing draws
+   *  it, so a render for it would be a render a second for nothing. */
+  const cursor = useRef<string | null>(null);
+  const over = useRef(false);
+  const busy = useRef(false);
+  /** Whether anything has been read for this ticket yet. A page that starts
+   *  again is an ordinary first open the first time and a jump every time
+   *  after — the reader had fallen more than a page behind. */
+  const opened = useRef(false);
+
+  // A different ticket is a different run. Everything on screen belongs to the
+  // one that was open, so it goes with it.
+  useEffect(() => {
+    cursor.current = null;
+    over.current = false;
+    opened.current = false;
+    setList([]);
+    setJumped(false);
+    setLoading(true);
+  }, [ticketId]);
+
+  const poll = useCallback(async () => {
+    if (!online || busy.current || over.current || !Number.isFinite(ticketId)) return;
+    busy.current = true;
+    try {
+      const page = await readRun(ticketId, cursor.current);
+      cursor.current = page.cursor;
+      setLive(!!page.live);
+      setQuiet(page.available ? silence(page.reason) : 'noQueue');
+      // A page that is not continuous with the last one — a first open, or a
+      // reader moved up to the end because it had fallen a page behind —
+      // replaces what is on screen rather than being appended to it.
+      const fresh = !!page.reset;
+      setList((had) => {
+        const base = fresh ? [] : had;
+        const { turns: more, answers } = turns(page.events || [], base.length);
+        return trim(attach([...base, ...more], answers));
+      });
+      if (fresh && opened.current) setJumped(true);
+      opened.current = true;
+      // Nothing is going to be appended to a run that has ended, and the file
+      // has been read to its end.
+      if (!page.live && page.caught_up) over.current = true;
+    } catch (e: any) {
+      setQuiet(oldHost(e) ? 'oldHost' : 'offline');
+    } finally {
+      busy.current = false;
+      setLoading(false);
+    }
+  }, [online, readRun, ticketId]);
+
+  useFocusEffect(useCallback(() => {
+    void poll();
+    const timer = setInterval(() => { void poll(); }, RUN_POLL_MS);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void poll(); });
+    return () => { clearInterval(timer); sub.remove(); };
+  }, [poll]));
+
+  return { turns: list, live, loading, silence: quiet, jumped };
 }

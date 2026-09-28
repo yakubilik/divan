@@ -2,13 +2,20 @@
 // they can be checked without a phone (scripts/test-ustabasi.cjs). Nothing in
 // here touches React, the store or the palette.
 import type { Key } from './i18n';
-import type { Ticket, TicketStatus, TicketVerdict, UstabasiSnapshot } from './protocol';
+import type { Ticket, TicketStatus, TicketStep, TicketVerdict, UstabasiSnapshot } from './protocol';
 
 /** How often the wall re-reads the queue while it is open. The supervisor ticks
  *  every few minutes, so a second would be pointless; a minute would mean
  *  answering a ticket and watching a stale card insist it is still red. The
  *  desktop panel polls at the same rate. */
 export const POLL_MS = 8000;
+
+/** How often the chat page asks for what the agent has printed since. Faster
+ *  than the wall by a lot: a line arriving four seconds after it was written is
+ *  a screen you can watch, and a line arriving eight is one you refresh. The
+ *  answer to a poll that finds nothing is a couple of hundred bytes, which is
+ *  what makes that affordable. */
+export const RUN_POLL_MS = 3000;
 
 /** How often the chats screen re-reads the queue for its badge. Slower than the
  *  wall by a lot: nobody is reading the tickets there, and the one thing the
@@ -62,6 +69,96 @@ export function mark(verdict: TicketVerdict | null | undefined, i: number): { me
   return { met: f.status === 'met', detail: f.detail };
 }
 
+// ── the verifier's marks, matched to the criteria they are about ─────────────
+//
+// The card lists what "done" means; the verifier answers those points and
+// writes its own wording for each — "1. Wall grouped by project, readable name"
+// against a criterion three lines long. Lined up by position the two agree only
+// while the verifier answers every point, in order, every time. A verdict that
+// answers four of nine puts the fourth mark on the ninth criterion, and a
+// screen showing a red cross against the wrong sentence is worse than showing
+// nothing: it is a wrong answer to the only question the page exists to
+// answer.
+//
+// So the matching is on the text. Three readings of "is this that", strongest
+// first, and a finding is spent once:
+//
+//   * the same sentence, ignoring case, punctuation and any numbering
+//   * the number the verifier gave itself — "3." is the card's third point,
+//     which is the verifier naming a criterion rather than a list naming it
+//   * enough of the same words. The two are written by different hands about
+//     the same thing, so the overlap is high where they match at all.
+
+/** A criterion, as a thing to compare: no numbering, no punctuation, no case. */
+function bare(text: string): string {
+  return (text || '')
+    .replace(/^\s*\d+\s*[.)\-:]\s*/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** The number a finding gave itself, 1-based, or 0. */
+function numbered(text: string): number {
+  const m = /^\s*(\d+)\s*[.)\-:]\s/.exec(text || '');
+  return m ? Number(m[1]) : 0;
+}
+
+/** Words long enough to mean something. `the` and `a` match everything. */
+function words(text: string): Set<string> {
+  return new Set(bare(text).split(' ').filter((w) => w.length >= 4));
+}
+
+/** How much two sentences are about the same thing, 0 to 1. */
+function overlap(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return (2 * shared) / (a.size + b.size);
+}
+
+/** Below this the two sentences are about different things and the safe answer
+ *  is no mark at all. Set where it is because the card and the verdict are two
+ *  hands writing about one point and share most of the words that carry it. */
+const SAME_ENOUGH = 0.6;
+
+export interface Mark { met: boolean; detail?: string; said?: string }
+
+/** The verifier's marks against the card's criteria, one slot per criterion and
+ *  null where this verdict says nothing about that one. */
+export function marks(criteria: string[], verdict: TicketVerdict | null | undefined): (Mark | null)[] {
+  const out: (Mark | null)[] = criteria.map(() => null);
+  const findings = verdict?.findings || [];
+  const spent = findings.map(() => false);
+  const put = (i: number, f: number) => {
+    if (i < 0 || i >= out.length || out[i] || spent[f]) return false;
+    spent[f] = true;
+    out[i] = { met: findings[f].status === 'met', detail: findings[f].detail,
+               said: findings[f].criterion };
+    return true;
+  };
+
+  const flat = criteria.map(bare);
+  findings.forEach((f, i) => { if (flat.indexOf(bare(f.criterion)) >= 0) put(flat.indexOf(bare(f.criterion)), i); });
+  findings.forEach((f, i) => { if (!spent[i]) put(numbered(f.criterion) - 1, i); });
+
+  const cardWords = criteria.map(words);
+  findings.forEach((f, i) => {
+    if (spent[i]) return;
+    const mine = words(f.criterion);
+    let best = -1;
+    let score = SAME_ENOUGH;
+    cardWords.forEach((w, j) => {
+      if (out[j]) return;
+      const s = overlap(mine, w);
+      if (s >= score) { score = s; best = j; }
+    });
+    if (best >= 0) put(best, i);
+  });
+  return out;
+}
+
 /** Which of the wall's six faces to draw. Every one of these has been a blank
  *  screen or a spinner that never stopped at some point: a computer that is not
  *  connected, one whose daemon predates the two requests, one that simply has
@@ -111,6 +208,21 @@ export function first(text: string | null | undefined, n: number): string {
   // a cut that already fell on one has no half word to throw away.
   const cut = t.slice(0, n);
   return (/\s/.test(t[n]) ? cut : cut.replace(/\s+\S*$/, '')) + '…';
+}
+
+/** A home directory, out of a line that is about to be drawn.
+ *
+ *  The queue writes its events for its own log, on the machine they happened
+ *  on, so they are full of absolute paths — "merge skipped: /Users/you/x has
+ *  uncommitted work", with a real name where that one says `you`. On a card
+ *  that is the widest thing on it, on a screen that is a screenshot away from
+ *  being public.
+ *  Display only — nothing of the queue is rewritten. The chat does the same to
+ *  a tool line (src/transcript.ts), for the same reason. */
+const HOME = /\/Users\/[^/\s'"]+|\/home\/[^/\s'"]+|C:\\Users\\[^\\\s'"]+/gi;
+
+export function tilde(text: string): string {
+  return text.replace(HOME, '~');
 }
 
 /** The repository a ticket works in, named the way the rest of the app names a
@@ -310,4 +422,163 @@ export function conversation(t: Ticket, T: Translate): Msg[] {
  *  conversation — they are the paperwork behind it. */
 export function hasDetails(t: Ticket): boolean {
   return (t.done_criteria?.length || 0) > 0 || !!t.verdict;
+}
+
+// ── the wall, grouped by project ─────────────────────────────────────────────
+//
+// Twenty cards in one list is a pile you have to read twice: the two tickets on
+// the same repository are eight cards apart and look unrelated. Grouped, "what
+// is happening in babysee" is answered by looking at one heading. The panel
+// settled on this in ticket #13 (web/src/lib/ustabasi.ts); this is the same
+// reading in the app's own words, so a change to one is a change owed to the
+// other.
+//
+// There is no percentage here and there will not be one. Nothing in the queue
+// knows how far along a ticket is — the criteria are answered once, at the end,
+// by the verifier — so a bar would be a drawn guess. What can be counted is
+// counted: how long it has been open, how long this round has been going, which
+// step it is on, and what has landed on the branch.
+
+/** The project a ticket is work on, by name. The daemon names it — a ticket in
+ *  `babysee/app` is babysee — and the folder name is the fallback for a
+ *  repository its path policy has nothing to say about. Never the path: this
+ *  screen is a screenshot away from being public. */
+export function projectName(t: Ticket): string {
+  return (t.project || '').trim() || repoName(t.repo) || 'unfiled';
+}
+
+export interface Group { project: string; tickets: Ticket[] }
+
+/** One group per project, the one holding a ticket that is waiting on a person
+ *  first. A project with nothing in it is not a group — the grouping comes out
+ *  of the tickets, so there is nothing to leave out. */
+export function groupByProject(tickets: Ticket[]): Group[] {
+  const by = new Map<string, Ticket[]>();
+  for (const t of tickets) {
+    const name = projectName(t);
+    const list = by.get(name);
+    if (list) list.push(t);
+    else by.set(name, [t]);
+  }
+  return [...by.entries()]
+    .map(([project, list]) => ({ project, tickets: sortTickets(list) }))
+    .sort((a, b) => {
+      // The group's rank is its best ticket's: one red card pulls the whole
+      // project to the front, which is the only order that matters at 3am.
+      const r = (RANK[a.tickets[0].status] ?? 9) - (RANK[b.tickets[0].status] ?? 9);
+      if (r !== 0) return r;
+      const moved = b.tickets[0].updated_at - a.tickets[0].updated_at;
+      return moved !== 0 ? moved : a.project.localeCompare(b.project);
+    });
+}
+
+/** A ticket nobody is going to touch again. `failed` is not one of these: it is
+ *  stopped waiting for a person, which is the most open a ticket gets. */
+const CLOSED = ['done', 'cancelled'];
+
+function closedAt(t: Ticket): number | null {
+  return CLOSED.includes(t.status) && t.finished_at ? t.finished_at : null;
+}
+
+/** How long this has been a ticket — the figure anybody means by "how long has
+ *  it been going". Once it is finished, how long it took. First on the card and
+ *  on its own, because the smaller figure under it was being read as this one. */
+export function totalAge(t: Ticket, now: number, T: Translate): string {
+  const end = closedAt(t);
+  return end ? T('ticketTook', { d: since(end - t.created_at, T) })
+             : T('ticketOpen', { d: since(now - t.created_at, T) });
+}
+
+/** How long the current round has been going, which is the smaller figure and
+ *  is drawn as the smaller one. Null where there is no round in progress: a
+ *  finished ticket's last round does not go on getting longer, and a ticket
+ *  still in the queue has not had one. */
+export function roundAge(t: Ticket, now: number, T: Translate): string | null {
+  if (closedAt(t) || !t.round_started_at) return null;
+  return T('ticketThisRound', { d: since(now - t.round_started_at, T) });
+}
+
+/** What has landed on the branch. Nothing committed yet, or no worktree to look
+ *  in, and the card says nothing rather than N/A. */
+export function commitCount(t: Ticket, T: Translate): string | null {
+  const n = t.git?.commits;
+  if (!n) return null;
+  return n === 1 ? T('ticketOneCommit') : T('ticketCommits', { n });
+}
+
+/** The line under the title: what last happened here, in words.
+ *
+ *  Usually the newest event — "merged into main (4dd999f)", "all accounts
+ *  limited, queue paused until 17:05". Not a `start`, though. That one reads
+ *  `worker round 1 pid 74155 model claude-opus-5 account yakup`, which is the
+ *  queue talking to its own log, and a pid on a card is something to look past.
+ *  With nothing worth repeating, the card says what the ticket is for instead. */
+export function cardLine(t: Ticket): string {
+  const ev = t.last_event;
+  const said = ev && ev.kind !== 'start' && ev.kind !== 'note'
+    ? (ev.msg || '').split('\n').map((l) => l.trim()).find(Boolean)?.replace(/^\[[a-z]+\]\s*/i, '') || ''
+    : '';
+  return tilde(said || (t.goal || '').split('\n').map((l) => l.trim()).find(Boolean) || '');
+}
+
+// ── the steps a ticket has been through ──────────────────────────────────────
+
+/** How a step is marked on the checklist. `now` is the one being worked on,
+ *  which is the whole question a glance at this page is asking. */
+export type StepMark = 'done' | 'crossed' | 'now' | 'stopped';
+
+export function stepMark(s: TicketStep): StepMark {
+  if (s.ended_at == null && s.outcome == null) return 'now';
+  switch (s.outcome) {
+    case 'ok': return 'done';
+    case 'rejected': case 'failed': case 'cancelled': return 'crossed';
+    default: return 'stopped';
+  }
+}
+
+/** The step the ticket is on right now, or null where nobody is holding it. */
+export function currentStep(t: Ticket): TicketStep | null {
+  const last = (t.steps || [])[(t.steps || []).length - 1];
+  return last && stepMark(last) === 'now' ? last : null;
+}
+
+/** Every step's own heading: whose hands, and which round. */
+export function stepLine(s: TicketStep, T: Translate): string {
+  return T('ticketRound', { stage: s.stage, round: s.round });
+}
+
+/** A step that has been going for a while, or has been and gone. `now` is a
+ *  clock in seconds; a step still running is timed against it. */
+export function stepAge(s: TicketStep, now: number, T: Translate): string {
+  const end = s.ended_at ?? now;
+  return since(Math.max(0, end - s.at), T);
+}
+
+/** When the run the chat page is reading began.
+ *
+ *  The log records what the agent printed and not when — the file is a stream
+ *  of blocks, and the queue writes the clock beside it in the events table
+ *  instead. What that gives is one honest fact: everything in the log happened
+ *  after the step that started it. Which is enough to put the log in the
+ *  sequence, because the sequence is a conversation and the log is its last
+ *  turn. */
+export function runStartedAt(t: Ticket): number | null {
+  const steps = t.steps || [];
+  return steps.length ? steps[steps.length - 1].at : null;
+}
+
+/** The conversation, split where the run begins: what was said before it, and
+ *  what has been said since. The log goes between the two, which is where it
+ *  happened.
+ *
+ *  A ticket that has never run puts everything before, so the page reads
+ *  exactly as it did before there was a log to read. */
+export function around(msgs: Msg[], at: number | null): { before: Msg[]; after: Msg[] } {
+  if (at == null) return { before: msgs, after: [] };
+  const before: Msg[] = [];
+  const after: Msg[] = [];
+  // The last message is where the ticket stands now, whatever its clock says:
+  // it is written from the ticket's own state, not from a moment.
+  for (const m of msgs) (m.ts < at && !m.tail ? before : after).push(m);
+  return { before, after };
 }

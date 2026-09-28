@@ -348,17 +348,23 @@ def _steps(events: list[sqlite3.Row], status: str) -> list[dict]:
             out.append(step(
                 stage=m.group(1), round=int(m.group(2)), at=ev["ts"],
                 pid=int(m.group(3)) if m.group(3) else None,
-                model=m.group(4), account=m.group(5),
+                # The queue writes a dash for the two a check has none of.
+                model=None if m.group(4) == "-" else m.group(4),
+                account=None if m.group(5) == "-" else m.group(5),
             ))
         elif kind == "check":
-            # The check is a step the queue runs itself, so it is opened and
-            # closed by the one event. Its own words say whether it passed.
+            # The check's own words on how it went. It is usually a step that
+            # was handed out like any other and is already open, in which case
+            # this closes it; where there is no verify_cmd the queue writes
+            # only this one event, and then it is the whole step.
+            outcome = "failed" if re.search(r"\bfail|\berror", msg, re.I) else "ok"
+            if out and "ended_at" not in out[-1] and out[-1]["stage"] == "check":
+                close(ev["ts"], outcome, line)
+                continue
             close(ev["ts"], "ok")
-            round_no = out[-1]["round"] if out else 1
             out.append(step(
-                stage="check", round=round_no, at=ev["ts"], ended_at=ev["ts"],
-                outcome="failed" if re.search(r"\bfail|\berror", msg, re.I) else "ok",
-                note=line,
+                stage="check", round=out[-1]["round"] if out else 1,
+                at=ev["ts"], ended_at=ev["ts"], outcome=outcome, note=line,
             ))
         elif kind in ENDED_BY:
             close(ev["ts"], ENDED_BY[kind], line)
