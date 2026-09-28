@@ -167,6 +167,52 @@ for (const f of screens) {
 checks.push(['and none of it was typed into the screen instead', hardcoded.length === 0]);
 if (hardcoded.length) console.log('  hardcoded:', hardcoded.join(' | '));
 
+// The wiring the judgements above cannot see. Every one of these is a line
+// somewhere else in the app, and every one of them has exactly one right
+// answer: a screen nothing registers is a screen nobody reaches, a notification
+// nothing routes lands on the chat list, and a wall with a second way to write
+// to the queue is a wall that can do more than look and answer.
+const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+const layout = src('app/_layout.tsx');
+const home = src('src/components/home.tsx');
+const wallScreen = src('app/ustabasi.tsx');
+const detail = src('app/ticket/[id].tsx');
+const queueHook = src('src/queue.ts');
+const store = src('src/store.ts');
+
+checks.push(
+  ['both screens are registered like the other full ones',
+    /<Stack\.Screen\s+name="ustabasi"/.test(layout) && /<Stack\.Screen\s+name="ticket\/\[id\]"/.test(layout)],
+  ['a tapped notification is read for a ticket, not only a chat',
+    /ticketFromPush\(/.test(layout)],
+  ['…and a ticket one lands on the ticket', /router\.push\(`\/ticket\/\$\{.*\}`\)/.test(layout)],
+  ['…with the wall underneath it', /router\.push\('\/ustabasi'\)/.test(layout)],
+  ['the tap waits for the app to be ready and unlocked',
+    /if \(!st\.ready \|\| st\.locked\) return;/.test(layout)],
+  ['the chats screen leads to the wall', /router\.push\('\/ustabasi'\)/.test(home)],
+  ['…and badges it with the count that needs a person', /badge=\{red\}/.test(home) && /redCount\(/.test(home)],
+  ['a card on the wall opens its ticket', /router\.push\(`\/ticket\/\$\{t\.id\}`\)/.test(wallScreen)],
+  ['the opened ticket is the only thing that writes', /noteTicket\(/.test(detail)],
+  ['and the wall itself writes nothing', !/noteTicket\(/.test(wallScreen)],
+  ['the queue is re-read on a timer while a screen is looking',
+    /setInterval\(reload, POLL_MS\)/.test(queueHook)],
+  ['…and again on the way back to the foreground',
+    /AppState\.addEventListener\('change'[\s\S]{0,80}'active'[\s\S]{0,20}reload/.test(queueHook)],
+  ['answering a ticket re-reads the queue rather than guessing at it',
+    /noteTicket: async[\s\S]{0,400}await get\(\)\.loadUstabasi\(\)/.test(store)],
+);
+
+// Two requests and no more. `ustabasi.list` reads, `ustabasi.note` answers;
+// anything else the queue's CLI can do — start, cancel, rewrite a card — is not
+// this app's to offer, and would be a third string here.
+const calls = new Set();
+for (const f of ['src/store.ts', 'src/queue.ts', 'app/ustabasi.tsx', 'app/ticket/[id].tsx',
+                 'src/components/ticket.tsx', 'src/components/home.tsx']) {
+  for (const m of src(f).matchAll(/'(ustabasi\.[a-z.]+)'/g)) calls.add(m[1]);
+}
+checks.push([`the screens ask the computer for two things and no more (${[...calls].sort().join(', ')})`,
+  calls.size === 2 && calls.has('ustabasi.list') && calls.has('ustabasi.note')]);
+
 let bad = 0;
 for (const [name, ok] of checks) {
   console.log((ok ? '  ok    ' : '  FAIL  ') + name);
