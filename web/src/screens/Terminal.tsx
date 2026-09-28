@@ -476,7 +476,7 @@ function loadSource(): Source {
 function SourceToggle({ value, onChange }: { value: Source; onChange: (s: Source) => void }) {
   const opts: { key: Source; label: string }[] = [
     { key: 'chats', label: 'Chats' },
-    { key: 'ustabasi', label: 'Ustabaşı' },
+    { key: 'ustabasi', label: 'Ustabasi' },
   ];
   return (
     <div style={{

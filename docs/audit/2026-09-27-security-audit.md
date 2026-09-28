@@ -3,16 +3,18 @@
 What this is: a read of the whole repository, and of the whole git history,
 looking for the three things that must not be published — a credential, a piece
 of somebody's private life, and a string in a language the project is not
-written in. It was run four times on the audit branch: first against the base
+written in. It was run five times on the audit branch: first against the base
 `4fa0358`, over 210 tracked files, 919 blobs and 91 commits; then again after
-`git merge main` brought in `f44b641`, over **222 tracked files, 1,003 blobs and
-114 commits** across every ref in the clone; and twice more over this report,
-which is a tracked file too and which the scanner is deliberately blind to. The
-second pass is the one this document describes, and the reason for each of the
-later ones is in [A second pass, after merging
+`git merge main` brought in `f44b641`, over 222 tracked files, 1,003 blobs and
+114 commits; twice more over this report, which is a tracked file too and which
+the scanner is deliberately blind to; and once more after a second `git merge
+main` brought in `80f8848`, over **224 tracked files and 124 commits** across
+every ref in the clone. The second pass is the one this document describes, and
+the reason for each of the later ones is in [A second pass, after merging
 `main`](#a-second-pass-after-merging-main), [A third pass, over this
-report](#a-third-pass-over-this-report) and [A fourth pass, for the one shape
-that has none](#a-fourth-pass-for-the-one-shape-that-has-none).
+report](#a-third-pass-over-this-report), [A fourth pass, for the one shape that
+has none](#a-fourth-pass-for-the-one-shape-that-has-none) and [A fifth pass,
+after the second merge of `main`](#a-fifth-pass-after-the-second-merge-of-main).
 
 The scan is `scripts/audit.py`, written for this audit and kept: a finding that
 can only be reproduced by hand is a finding that comes back. `gitleaks` and
@@ -246,6 +248,39 @@ FAIL  docs/audit/2026-09-27-security-audit.md names none of them
 
 and with the list supplied and the line removed, the whole file, `audit.py` and
 `test_audit.py` report `ok`.
+
+### A fifth pass, after the second merge of `main`
+
+`main` moved again while this branch was open: `80f8848` ("The terminal wall can
+show the ticket queue too") added `daemon/remote_ai_chat/ustabasi.py` and
+`web/src/screens/Ustabasi.tsx`, and touched `server.py` and `Terminal.tsx`. The
+same staleness the second pass was about, so the same answer: `main` was merged
+again (`6d4cdc0`, no conflict) and everything re-run over the 224 tracked files
+the merged tree has.
+
+The scanner found two, both in `main`'s new code, and both the kind of thing
+that is invisible to the person who wrote it:
+
+| File · line | Was | Now |
+|---|---|---|
+| `web/src/screens/Terminal.tsx` :479 | `label: 'Ustabaşı'` — the wall switch, in Turkish spelling | `label: 'Ustabasi'` |
+| `web/src/screens/Ustabasi.tsx` :418 | `Ustabaşı` as the screen's heading | `Ustabasi` |
+
+Two display labels, spelled the way the rest of that feature already spells
+itself: the module is `ustabasi.py`, the component is `Ustabasi.tsx`, the stored
+setting is `'ustabasi'`, and only the two strings a user reads carried the `ş`.
+`npx tsc --noEmit` in `web/` passes, which is the check that the panel's strings
+are the compiler's business.
+
+The *name* `ustabasi` is left alone, and deliberately. It is not a fixture the
+way `"<name>-projects"` was in `test_agents.py`: it is the subject of a feature,
+the name of the program whose database the module reads and whose CLI it shells
+out to. Renaming it would rename the feature, which is a product decision and
+`main`'s to make — and the module is honest about what it is ("Most machines
+running this daemon have never heard of ustabasi"), reads nothing unless the
+database exists, and hard-codes no path: `USTABASI_STATE_DIR` and
+`USTABASI_CLI` override, and the defaults are under `Path.home()`. Recorded here
+so the decision is on the record rather than an omission.
 
 ## 2 · Findings in tracked files, and the fix for each
 
