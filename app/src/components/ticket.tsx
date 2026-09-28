@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import { useColors, type Palette } from '../theme';
+import { em, useColors, type Palette } from '../theme';
 import { useT } from '../store';
 import { answerable, first, since, STATUS_KEY } from '../tickets';
 import { Dot, Icon, Spinner, Text } from './ui';
@@ -23,12 +23,14 @@ export function tone(c: Palette, status: TicketStatus | string): { color: string
   }
 }
 
-/** A heading over a block of the opened ticket. */
-export function Section({ title, color, children }: { title: string; color?: string; children: React.ReactNode }) {
+/** A heading over a block of the opened ticket. `Label` is the same type at the
+ *  same size, but it is drawn for a card's edge-to-edge row and carries that
+ *  row's inset; this one sits in a page that has its own. */
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const c = useColors();
   return (
     <View style={{ gap: 8 }}>
-      <Text style={{ fontSize: 12, fontWeight: '600', letterSpacing: 12 * 0.06, textTransform: 'uppercase', color: color ?? c.muted }}>{title}</Text>
+      <Text style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: c.muted }}>{title}</Text>
       {children}
     </View>
   );

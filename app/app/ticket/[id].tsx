@@ -108,7 +108,7 @@ export default function TicketScreen() {
           <View style={{ backgroundColor: ph.tint, borderRadius: 14, padding: 14, gap: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Icon name="warning" size={16} color={ph.color} />
-              <Text style={{ fontSize: 12, fontWeight: '600', letterSpacing: 12 * 0.06, textTransform: 'uppercase', color: ph.color }}>{T('ticketWaiting')}</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: ph.color }}>{T('ticketWaiting')}</Text>
             </View>
             <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.5, color: c.text2 }}>{t.escalation}</Text>
           </View>
