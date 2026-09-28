@@ -22,6 +22,10 @@ Three ways a key is referenced, all of them checked:
 
 It is not a check that every key is *used*: an unused key is a dead string, not
 a broken screen, and the table is written in one place on purpose.
+
+`web/src/lib/i18n.ts` is the panel's equivalent and is deliberately not read
+here: CI typechecks the panel (`npm run build` is `tsc --noEmit && vite build`),
+so its `Key` type already refuses a name that is not in the table.
 """
 from __future__ import annotations
 

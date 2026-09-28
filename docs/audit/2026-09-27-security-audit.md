@@ -132,8 +132,8 @@ The first pass scanned the tree at `4fa0358`. While this branch was open `main`
 moved on — `7fb1390` ("Every chat title says which project it is about") and the
 merge of the README/screenshots ticket — so "every tracked file" had stopped
 being true: 29 paths were added or changed on `main`, 17 of them text, and none
-of them had been looked at. One of them carried a finding of exactly the class this branch had
-already fixed once (`daemon/scripts/test_titles.py`, below).
+of them had been looked at. One of them carried a finding of exactly the class
+this branch had already fixed once (`daemon/scripts/test_titles.py`, below).
 
 `main` was merged into this branch (`484a7c9`) and everything re-run. The scan
 of the merged tree is the one quoted above; the files `main` brought are covered
@@ -565,7 +565,8 @@ Both exist because a claim this document makes was otherwise unverified.
    `T('callGreeting')` put back to `T('callAlo')` it reports
    `app/app/call.tsx:424  T('callAlo')`. The one reference it cannot resolve
    (`new Error(t(key))` in `ws.ts`, where the key comes from `ERR_KEYS`) is
-   printed rather than passed over in silence.
+   printed rather than passed over in silence. The panel's own table
+   (`web/src/lib/i18n.ts`) is left to `tsc`, which does run for `web/` in CI.
 
 Both run in CI: `test_push.py` in the daemon job, `test_i18n_keys.py` in the
 `audit` job.
