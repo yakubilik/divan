@@ -279,6 +279,44 @@ const REPLACED = [
   checks.push(['…and the whole app was read to say so', files.length > 30]);
 }
 
+// 8b · the greys still separate ─────────────────────────────────────────────
+// Two of the app's four text tiers now share one of the design's three, which
+// is the decision here most likely to cost legibility. So it is measured rather
+// than trusted: every tier, on every surface it can land on, in both themes.
+// The floor is 3.5:1 — under it a 12 pt mono timestamp stops being readable on
+// a phone held at arm's length, and the design's own weakest pair sits at 3.8.
+function luminance(hex) {
+  const h = hex.replace('#', '');
+  const ch = [0, 2, 4].map((i) => {
+    const v = parseInt(h.slice(i, i + 2), 16) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+const contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+{
+  const FLOOR = 3.5;
+  const thin = [];
+  for (const scheme of ['dark', 'light']) {
+    const t = K.tokensFor(scheme);
+    for (const fg of ['ink', 'ink2', 'ink3', 'amber', 'red', 'run']) {
+      for (const bg of ['bg', 's1', 's2']) {
+        const r = contrast(t[fg], t[bg]);
+        if (r < FLOOR) thin.push(`${scheme} ${fg} on ${bg} ${r.toFixed(2)}`);
+      }
+    }
+    const onAmber = contrast(t.onAmber, t.amber);
+    if (onAmber < FLOOR) thin.push(`${scheme} onAmber ${onAmber.toFixed(2)}`);
+  }
+  checks.push([`every tier of text separates from every surface it lands on${thin.length ? ` (${thin.join(', ')})` : ''}`,
+    thin.length === 0]);
+  checks.push(['…and the two tiers that were collapsed are the same one on purpose',
+    contrast(K.LIGHT.ink3, K.LIGHT.s2) >= FLOOR && contrast(K.DARK.ink3, K.DARK.s2) >= FLOOR]);
+}
+
 // 9 · the parts, stood up ───────────────────────────────────────────────────
 // Reading a component tells you it asks the table for its colours; it does not
 // tell you which ones came out. So each part is rendered, in both themes, and

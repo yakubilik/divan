@@ -101,6 +101,14 @@ needed a decision:
   `14px 36px` for a drawer. The palette's seven shadow roles map onto those
   three and nothing else.
 
+Collapsing two text tiers into one is the decision most likely to cost
+legibility, so it was measured. Against the surface it is drawn on, `ink3` —
+the tier `muted` and `faint` now share — reads at 5.2:1 on the dark page and
+4.1:1 on the light one, and at worst 3.8:1 where light `ink3` sits on `s2`.
+`ink2` never falls below 5.8:1 and `ink` never below 12.8:1. The three accent
+colours clear 3.9:1 everywhere, and the one pair the frames spell out —
+`onAmber` on `amber` — reads at 9.8:1 dark and 5.0:1 light.
+
 ## Form
 
 Radii, all of them off the frames: **8** a mark, an executor's square · **9** a
