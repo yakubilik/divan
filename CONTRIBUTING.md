@@ -64,9 +64,12 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_agents.py
 .venv312/bin/python scripts/test_titles.py
 .venv312/bin/python scripts/test_push.py
-.venv312/bin/python scripts/test_ustabasi.py   # the ticket wall's readings of the queue
+.venv312/bin/python scripts/test_ustabasi.py   # the queue's snapshot, its one write, its readings
+.venv312/bin/python scripts/test_ustabasi_run.py  # a run's log, read a page at a time
 
 cd app && npx tsc --noEmit
+node scripts/test-login-web.cjs                # the sign-in WebView's two judgements
+node scripts/test-ustabasi.cjs                 # the ustabasi wall's, and the i18n table
 cd web && npm run build                        # typechecks, then builds into the daemon
 cd web && npm test                             # the wall's figures, and a ticket as a conversation
 
@@ -82,6 +85,12 @@ one to run if you touch the checker.
 typing a note, folding the paperwork open, and the wall itself in portrait and on
 a desk. It needs a Chrome on the machine (`CHROME=/path/to/chrome`), so it is not
 in CI. Run it if you touch the ustabasi screen.
+
+`app/scripts/ustabasi.flow.yaml` is the same idea for the phone, driven by
+[Maestro](https://maestro.mobile.dev) on a real build: open the wall, open the
+ticket that is waiting, type a note, send it, and wait for the queue to re-open
+the ticket. It needs a device, a paired app and a ticket that is actually
+blocked, so it is not in CI either; the header of the file says how to run it.
 
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.

@@ -1,26 +1,44 @@
 #!/usr/bin/env python3
-"""The three readings the ustabasi wall needs and the queue does not store.
+"""The ustabasi wall's side of the wire, and the three readings it adds.
 
     python scripts/test_ustabasi.py
 
-A card that says "48m" about a ticket opened fifteen hours ago has been read as
-a total, because nothing on the card was one. So the snapshot now carries three
-figures a person can check against the clock and against git:
+The daemon only looks at that queue: it reads the queue's own SQLite file and
+answers one question about it, and the single write it makes goes through the
+queue's own CLI. Both clients — the desktop panel and the phone — are built on
+the exact shape of that answer, and the shape is not obvious:
 
-  * the project a ticket is work on, by name, so the wall can group by it
+  * a computer with no queue is `available: false`, which is neither an error nor
+    an empty queue. Most computers running this daemon have never heard of
+    ustabasi, and a phone that cannot tell those three apart shows a spinner
+    forever on all of them.
+  * the newest event of every ticket comes out of one query for the whole wall,
+    not one per ticket, and a ticket with no events at all still has to appear.
+  * the notes are the last few, with the true count beside them.
+  * the CLI owns what a note *means* — appended, escalation cleared, ticket back
+    in the queue — so what is checked here is that its words and its failures
+    reach the client rather than being swallowed or rewritten.
+
+Three more readings are the daemon's own, because the queue does not store them.
+A card that says "48m" about a ticket opened fifteen hours ago has been read as
+a total, because nothing on the card was one. So the snapshot also carries:
+
+  * the project a ticket is work on, by name, so a wall can group by it
   * when the round it is in began — the *first* hand-over of that round, since a
     worker that hit a usage limit is started again within the same round
   * what is on the branch: how many commits, and the newest subject
 
 The last one is read from the worktree, which may be gone, may have no commit on
-it yet, or may not be recorded at all. Every one of those is "say nothing", and
-that is most of what this checks.
+it yet, or may not be recorded at all. Every one of those is "say nothing".
 
 The queue's database belongs to another program, so the tables here are built by
 hand from its shape rather than by importing anything of it.
 """
+
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import sqlite3
 import subprocess
@@ -44,6 +62,12 @@ fails: list[str] = []
 def check(what: str, got, want) -> None:
     if got != want:
         fails.append(f"{what}\n    got:  {got!r}\n    want: {want!r}")
+
+
+def holds(what: str, ok: bool, detail: str = "") -> None:
+    """For the checks whose answer is a sentence rather than a value."""
+    if not ok:
+        fails.append(f"{what}\n    got:  {detail}")
 
 
 def git(cwd: Path, *args: str) -> None:
@@ -235,9 +259,149 @@ try:
 finally:
     u.DB_PATH = was
 
+# ── the shape of the answer both clients are built on ────────────────────────
+#
+# A second queue, in its own folder, read through the same module: what a
+# ticket looks like on the wire, and what the one write does. The module was
+# imported against the queue above, so the three paths it reads are pointed at
+# this one rather than the module being imported twice.
+
+wire = tmp / "wire"
+wire.mkdir()
+CLI_STUB = """#!/usr/bin/env python3
+import json, os, sqlite3, sys, time
+if sys.argv[1] != "note":
+    sys.exit("usage: note <id> <text>")
+conn = sqlite3.connect(os.path.join(os.environ["USTABASI_STATE_DIR"], "ustabasi.db"))
+conn.row_factory = sqlite3.Row
+row = conn.execute("SELECT * FROM tickets WHERE id=?", (int(sys.argv[2]),)).fetchone()
+if row is None:
+    sys.exit("no such ticket")
+notes = json.loads(row["notes"] or "[]")
+notes.append({"ts": time.time(), "from": "user", "text": sys.argv[3]})
+conn.execute("UPDATE tickets SET notes=? WHERE id=?", (json.dumps(notes), row["id"]))
+if row["status"] in ("blocked", "failed"):
+    conn.execute("UPDATE tickets SET status='queued', stage='worker', escalation=NULL WHERE id=?", (row["id"],))
+    print("note added; ticket re-queued for the worker")
+else:
+    print("note added; picked up at the next stage boundary")
+conn.commit()
+"""
+
+WIRE_SCHEMA = """
+CREATE TABLE tickets (id INTEGER PRIMARY KEY, title TEXT, status TEXT, stage TEXT, round INTEGER,
+  repo TEXT, branch TEXT, created_at REAL, updated_at REAL, started_at REAL, finished_at REAL,
+  card TEXT, escalation TEXT, verdict TEXT, notes TEXT);
+CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER, ts REAL, kind TEXT, msg TEXT);
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+"""
+
+
+def write_wire_queue(state: Path, *, paused: float | None = None) -> None:
+    """A queue shaped like the real one: one of each state that matters, one
+    ticket with more notes than a client is given, and one with no events."""
+    now = time.time()
+    conn = sqlite3.connect(state / "ustabasi.db")
+    conn.executescript(WIRE_SCHEMA)
+    card = lambda goal, crit: json.dumps({"goal": goal, "done_criteria": crit})  # noqa: E731
+    verdict = json.dumps({"verdict": "rejected", "findings": [
+        {"criterion": "the first thing", "status": "met"},
+        {"criterion": "the second thing", "status": "unmet", "detail": "nothing does this yet"}]})
+    notes = json.dumps([{"ts": now - i, "from": "user", "text": f"note {i}"} for i in range(9)])
+    conn.executemany("INSERT INTO tickets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
+        (1, "nothing has happened to this one", "queued", "worker", 1, "/repo/one", None,
+         now - 90, now - 90, None, None, card("start", ["it starts"]), None, None, "[]"),
+        (2, "stopped to ask", "blocked", "worker", 1, "/repo/two", "b/two",
+         now - 900, now - 800, now - 880, None, card("decide", ["it is decided"]),
+         "Which way should this go?", None, notes),
+        (3, "turned down", "failed", "verifier", 3, "/repo/two", None,
+         now - 9000, now - 30, now - 8000, now - 30,
+         card("pass", ["the first thing", "the second thing"]),
+         "the verifier turned it down twice", verdict, "[]"),
+    ])
+    conn.executemany("INSERT INTO events (ticket_id, ts, kind, msg) VALUES (?,?,?,?)", [
+        (2, now - 900, "stage", "an older event nobody should see"),
+        (2, now - 800, "escalate", "stopped to ask"),
+        (3, now - 30, "verdict", "rejected, round 3"),
+    ])
+    conn.execute("INSERT INTO meta VALUES ('last_tick', ?)", (str(now - 60),))
+    conn.execute("INSERT INTO meta VALUES ('paused_until', ?)", (str(paused) if paused else None,))
+    conn.commit()
+    conn.close()
+    (state / "supervisor.heartbeat").write_text("")
+
+
+async def the_wire() -> None:
+    stub = wire / "ustabasi"
+    u.DB_PATH = wire / "ustabasi.db"
+    u.HEARTBEAT = wire / "supervisor.heartbeat"
+    u.CLI = stub
+    os.environ["USTABASI_STATE_DIR"] = str(wire)
+
+    holds("no database, no queue", u.available() is False)
+    empty = u.snapshot()
+    check("and the answer says so rather than failing", empty,
+          {"available": False, "tickets": [], "queue": {}})
+
+    write_wire_queue(wire, paused=time.time() + 600)
+    # The stub finds the database the way the real CLI does — from the
+    # environment this daemon was started with, which a subprocess inherits.
+    stub.write_text(CLI_STUB)
+    stub.chmod(0o755)
+
+    snap = u.snapshot()
+    holds("the queue is there", snap["available"] is True)
+    check("every ticket, in id order", [t["id"] for t in snap["tickets"]], [1, 2, 3])
+    by = {t["id"]: t for t in snap["tickets"]}
+    holds("the two that need a person say which they are",
+          by[2]["status"] == "blocked" and by[3]["status"] == "failed")
+    check("a ticket's last event is its newest one", by[2]["last_event"]["msg"], "stopped to ask")
+    check("a ticket with no events is still a ticket", by[1]["last_event"], None)
+    check("the question comes through", by[2]["escalation"], "Which way should this go?")
+    check("and is empty, not null, where there is none", by[1]["escalation"], "")
+    check("the card is unpacked into a goal", by[3]["goal"], "pass")
+    check("and into criteria", by[3]["done_criteria"], ["the first thing", "the second thing"])
+    check("no verdict where there is none", by[1]["verdict"], None)
+    check("and a verdict where there is one", by[3]["verdict"]["findings"][1]["status"], "unmet")
+    check("the last six notes", len(by[2]["notes"]), 6)
+    check("and the count of all nine", by[2]["note_count"], 9)
+    check("the six are the last six, in order", by[2]["notes"][-1]["text"], "note 8")
+    holds("the supervisor's heartbeat and its pause are reported",
+          isinstance(snap["queue"]["last_tick"], float) and snap["queue"]["paused_until"] is not None,
+          repr(snap["queue"]))
+
+    r = await u.note(2, "decided: the second way")
+    holds("the queue's own words come back", r["ok"] is True and "re-queued" in r["message"], repr(r))
+    after = {t["id"]: t for t in u.snapshot()["tickets"]}[2]
+    check("and the ticket is back in front of the worker", after["status"], "queued")
+    check("at the stage it was sent back to", after["stage"], "worker")
+    check("with the question cleared", after["escalation"], "")
+    check("the note itself landed", after["notes"][-1]["text"], "decided: the second way")
+
+    for text, why in (("", "an empty note"), ("   ", "whitespace is an empty note"),
+                      ("x" * (u.MAX_NOTE + 1), "a note the size of a new ticket")):
+        try:
+            await u.note(2, text)
+            holds(f"{why} is refused", False, "it was accepted")
+        except ValueError:
+            holds(f"{why} is refused", True)
+    stub.unlink()
+    try:
+        await u.note(2, "anybody there?")
+        holds("a missing CLI is refused", False, "it was accepted")
+    except ValueError:
+        holds("a missing CLI is refused", True)
+
+    (wire / "ustabasi.db").unlink()
+    holds("a queue that went away reads as no queue, not as an error",
+          u.snapshot()["available"] is False)
+
+
+asyncio.run(the_wire())
+
 if fails:
     print(f"FAIL ({len(fails)})")
     for f in fails:
         print(" ", f)
     sys.exit(1)
-print(f"ok — ustabasi snapshot, {len(snap['tickets'])} tickets read")
+print(f"ok — ustabasi snapshot, {len(snap['tickets'])} tickets read, and the wire's shape")

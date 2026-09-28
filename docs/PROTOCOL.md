@@ -54,6 +54,8 @@ other device watching it.
 | `limits.get` | – | `{accounts: {<account_id>: [window, …]}}` — the last word on every plan, as the tool reported it |
 | `pool.get` | `{provider?}` | `{settings, accounts}` — see *The account pool* |
 | `pool.set` | any of `{enabled, threshold, thresholds, use_overage, overage_by_account, reserve, order, max_hops}` | `{settings, accounts}` — only the keys sent are changed |
+| `ustabasi.list` | – | `{available, tickets, queue}` — a snapshot of the ustabasi ticket queue, if this computer runs one. `available: false` is the ordinary answer: most computers have no queue, which is not an error and not an empty one. A ticket carries `{id, title, status, stage, round, repo, branch, goal, done_criteria, escalation, verdict, notes, note_count, last_event, …timestamps}`; `status` is one of `queued running done blocked failed cancelled`, and `escalation` is what a stopped worker is waiting to be told (on a finished ticket, its closing report). `queue` is `{last_tick, paused_until}` — the supervisor stamps `last_tick` at the start of every tick, and a stale one means the queue is not running whatever the tickets say. Read-only, and read straight from that queue's own database |
+| `ustabasi.note` | `{id, text}` | `{ok, message}` — answer a ticket that stopped to ask. Runs the queue's own CLI: the note is appended, the escalation cleared and a blocked or failed ticket put back in front of the worker, which is that program's sequence to define rather than this one's to copy. The only write this daemon makes to that queue — starting work, cancelling it and editing a card all stay on the other side of that CLI. `error: ustabasi_refused` with the CLI's own words when it says no |
 | `update.status` | `{refresh?}` | `{repo, auto, behind, ahead, busy, error, checked_at, local, remote, web, release, latest, last_update, blockers}` — where this computer stands against `origin/main`. `refresh` costs a `git fetch`, so clients only send it when someone is looking. `local` and `remote` are commits, not version numbers: the package version is a constant and cannot tell two computers apart. `web` is the bundle the browser is being served (below). `blockers` is why an update cannot run right now, in words a phone can show — `already up to date`, `uncommitted changes`, `unpushed commits`, `a turn is running` |
 | `daemon.status` | – | `{started_at, uptime_s, restarts, pending, draining, last_restart, supervisor}` — what a restart would cost right now. `pending` is one row per chat holding work a stop would destroy: `{chat_id, busy, queued}` |
 | `daemon.restart` | `{reason?, force?, timeout_s?}` | `{ok, draining, pending, deadline, reason, supervisor}` — stop, so the supervisor starts us again on whatever is on disk. **Drains first:** new `chat.send`s are refused with `restarting`, turns in flight are allowed to finish, and only then does the process exit. Each chat's CLI is a child of this process, so killing it kills every turn mid-sentence — that is what the draining is for. When the deadline passes the restart is **abandoned**, not forced: `daemon.restarting {state: "cancelled"}` and the daemon carries on. `force` waives the waiting and only that. Refused with `no_supervisor` where nothing would bring the process back, unless `force` — doubt is not refusal, a platform this daemon cannot read goes ahead |
@@ -94,6 +96,29 @@ The panel is build output and is not in git, while the daemon is an editable
 install and therefore updates with a pull. Left alone they come apart, invisibly,
 on exactly the machine nobody sits in front of — hence the stamp, and hence one
 button for both.
+
+## Push notifications
+
+Content-free: no message text leaves the computer. The `data` of a notification
+says what it is *about*, and the phone routes on that:
+
+| key | what a tap opens |
+|---|---|
+| `chat_id` (with `kind` `approval` or `done`) | that chat |
+| `ticket_id`, or `ticket` | that ustabasi ticket |
+| `device_id` | which pairing it was sent to — a phone paired to two computers switches to the one that actually has the chat rather than opening it against whichever one it happens to be connected to |
+
+This daemon sends the `chat_id` ones and no others. A ticket push comes from the
+ticket queue itself, which is a separate program: it builds the notification out
+of the ticket's number, its title and what happened, never out of the message —
+an escalation quotes the worker and the worker quotes the repository, and none
+of that belongs in a banner that travels through Expo's servers. It names the
+ticket `ticket`; the phone takes `ticket_id` as well, because the key is an
+agreement rather than one program's spelling of it.
+
+A tap that launches the app cold is held until the keychain is open and Face ID
+has been answered, then delivered — so it lands on the chat or the ticket rather
+than on the list.
 
 ## Events
 

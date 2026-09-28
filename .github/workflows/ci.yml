@@ -52,6 +52,32 @@ jobs:
             python "scripts/$t.py"
           done
 
+  app:
+    name: app · typecheck and judgements
+    runs-on: ubuntu-latest
+    # The phone app was the one part of this repository nothing checked, and it
+    # is the part that cannot be run headless. What can be: the compiler, and
+    # the handful of pure judgements the screens are built on — which screen a
+    # notification opens, which tickets sort to the top of the ustabasi wall,
+    # and whether every word those screens show is in the i18n table.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --legacy-peer-deps
+        working-directory: app
+      - name: Typecheck
+        run: npx tsc --noEmit
+        working-directory: app
+      - name: Judgements
+        working-directory: app
+        run: |
+          node scripts/test-login-web.cjs
+          node scripts/test-ustabasi.cjs
+
   audit:
     name: nothing private, nothing not-English
     runs-on: ubuntu-latest
@@ -67,8 +93,10 @@ jobs:
         run: python scripts/audit.py
       - name: Every string the app asks for is in the app's string table
         # `t(key)` falls back to the key itself, so a renamed key shows a user
-        # the name of a variable. `tsc` would catch it; `app/node_modules` is
-        # not installable from the committed lockfile, so this does instead.
+        # the name of a variable. The `app` job's `tsc` catches it too, and this
+        # catches the ones it cannot see — a key built out of a variable, and a
+        # string the app asks for in a file `tsc` is not looking at. It needs
+        # nothing installed, so it runs here rather than behind an npm install.
         run: python scripts/test_i18n_keys.py
 
   docs:

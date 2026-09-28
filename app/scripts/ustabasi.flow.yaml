@@ -1,0 +1,69 @@
+# The ustabasi wall, driven on a real build of the app.
+#
+# Everything about this screen that a test can judge without a device is judged
+# in scripts/test-ustabasi.cjs: the sort order, which ticket may be answered,
+# which face the wall shows, where a notification lands. What no such test can
+# say is whether a person holding the app can get from a red ticket to an
+# answered one — the badge has to be findable, the card tappable, the box has to
+# take a sentence, and the ticket has to leave the red state afterwards.
+#
+# So this flow does exactly that, once, against a computer with a real queue on
+# it: open the wall, open the ticket that is waiting, type a note, send it, and
+# wait for the ticket to come back queued. The last step is the whole point —
+# the queue re-opened the ticket because the note reached the queue's own CLI.
+#
+# It needs a device, a paired app and a ticket that is actually blocked, so it is
+# not in CI. Run it when you touch the wall or the opened ticket:
+#
+#   maestro test app/scripts/ustabasi.flow.yaml \
+#     -e APP_ID=<the app's bundle id> \
+#     -e TICKET=<the number of a blocked ticket> \
+#     -e MATCH=<a phrase from what that ticket is asking> \
+#     -e NOTE="<the answer to send it>"
+#
+# The bundle id is a parameter because this repository does not carry one.
+# Every matcher is written .*like this.*: Maestro anchors a text selector to
+# the whole of an element's text, so "#7" matches nothing on a card that also
+# says anything else.
+appId: ${APP_ID}
+name: a red ticket, answered from the phone
+---
+- launchApp
+
+# 1 · the queue is visible before anybody goes looking for it: the button on the
+#     chats screen carries the number of tickets waiting on a person.
+- assertVisible:
+    text: "Ustabasi.*"
+- takeScreenshot: 1-chats-badge
+- tapOn:
+    text: "Ustabasi.*"
+
+# 2 · the wall, with the ticket that is waiting on it.
+- assertVisible:
+    text: ".*#${TICKET}.*"
+- assertVisible: ".*needs an answer.*"
+- takeScreenshot: 2-wall
+- tapOn:
+    text: ".*#${TICKET}.*"
+
+# 3 · the ticket, opened as a conversation that ends on the question.
+- assertVisible:
+    text: ".*${MATCH}.*"
+- takeScreenshot: 3-ticket
+
+# 4 · the box, which is the only write this screen has.
+- tapOn:
+    text: ".*Answer #${TICKET}.*"
+- inputText: ${NOTE}
+- takeScreenshot: 4-typed
+- tapOn: "Send"
+
+# 5 · what was typed is in the conversation, and the queue has re-opened the
+#     ticket: the note went through ustabasi's own CLI, which appends it, clears
+#     the escalation and puts the ticket back in the queue. The wall re-reads
+#     every eight seconds, so the red goes away on its own.
+- assertVisible: ".*${NOTE}.*"
+- extendedWaitUntil:
+    visible: ".*queued.*"
+    timeout: 30000
+- takeScreenshot: 5-answered
