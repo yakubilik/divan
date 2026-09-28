@@ -150,6 +150,23 @@ const missing = [...used].filter((k) => !known.has(k));
 checks.push([`every string the wall shows is in the i18n table (${used.size} keys)`, missing.length === 0]);
 if (missing.length) console.log('  missing keys:', missing.join(', '));
 
+// …and nothing on them is a sentence typed straight into the JSX, which is how
+// a screen ends up half-translatable: the table cannot be a second language if
+// half the words are not in it. Text between tags, and the props that carry
+// words rather than names.
+const hardcoded = [];
+for (const f of screens) {
+  const src = fs.readFileSync(path.join(root, f), 'utf8');
+  src.split('\n').forEach((line, i) => {
+    if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;                       // a comment is prose on purpose
+    const text = line.match(/>[A-Z][a-z]+ [^<>{}]{3,}</);
+    const prop = line.match(/\b(title|body|placeholder|label|hint)=["'][^"']{3,}["']/);
+    if (text || prop) hardcoded.push(`${f}:${i + 1} ${(text || prop)[0].trim()}`);
+  });
+}
+checks.push(['and none of it was typed into the screen instead', hardcoded.length === 0]);
+if (hardcoded.length) console.log('  hardcoded:', hardcoded.join(' | '));
+
 let bad = 0;
 for (const [name, ok] of checks) {
   console.log((ok ? '  ok    ' : '  FAIL  ') + name);
