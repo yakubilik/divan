@@ -1584,6 +1584,21 @@ class Server:
         card, so the whole snapshot goes to a thread."""
         return await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for)
 
+    async def h_ustabasi_run(self, dev: Device, d: dict) -> dict:
+        """What the agent on a ticket has printed, a page at a time.
+
+        The queue's runs write the model's stream-json to a file that is
+        hundreds of kilobytes long by the time a worker is done, so this hands
+        out the end of it and then whatever has been appended since, keeping
+        the place in a cursor. A page is capped in records and in bytes both:
+        the whole file has no business crossing a phone's connection, and a
+        poll that finds nothing new is two hundred bytes."""
+        try:
+            tid = int(d.get("id"))
+        except (TypeError, ValueError):
+            raise Err("bad_ticket", "no such ticket")
+        return await asyncio.to_thread(ustabasimod.run, tid, d.get("cursor"))
+
     async def h_ustabasi_note(self, dev: Device, d: dict) -> dict:
         """Answer a ticket that stopped to ask. The only write this daemon
         makes to that queue, and it goes through the queue's own CLI."""
