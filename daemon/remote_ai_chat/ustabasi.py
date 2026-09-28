@@ -122,11 +122,17 @@ def _round_start(starts: list[tuple[float, int]], round_no: int, started_at) -> 
     A round can be started several times — a worker that hit a usage limit is
     picked up again by the next tick — so it is the *first* start of this round
     that answers "how long has this round been going", not the last one.
+
+    Round one began when the ticket did, and that is the only round `started_at`
+    answers for. A later round with no hand-over of its own has not begun: the
+    verifier sent it back and it is waiting for a free slot. Answering that with
+    `started_at` would put hours on a round that has not started — which is the
+    exact misreading this figure exists to stop — so it goes unanswered instead.
     """
     mine = [ts for ts, r in starts if r == round_no]
     if mine:
         return min(mine)
-    return float(started_at) if started_at else None
+    return float(started_at) if started_at and round_no <= 1 else None
 
 
 def _col(row: sqlite3.Row, name: str):

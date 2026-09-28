@@ -143,6 +143,13 @@ ticket(4, str(tmp / "outside"), worktree=str(tmp / "gone"))       # worktree rem
 ticket(5, str(root / "ledger"), worktree=str(empty))             # nothing on the branch yet
 ticket(6, str(root / "ledger"), worktree=str(work), base="no-such-branch")
 ticket(7, str(root / "ledger"), status="queued", started=False)   # not started yet
+
+# Sent back by the verifier and waiting for a free slot: round 2 on the row, but
+# nobody has been handed it yet, so there is no "worker round 2" to time from.
+ticket(8, str(root / "ledger"), worktree=str(work), round_no=2, status="queued")
+event(8, NOW - 53000, "start", "worker round 1 pid 7 model m account a")
+event(8, NOW - 20000, "start", "verifier round 1 pid 8 model m account a")
+event(8, NOW - 19000, "requeue", "-> worker round 2")
 conn.execute("INSERT INTO meta (key, value) VALUES ('paused_until', ?)", (str(NOW + 900),))
 conn.commit()
 conn.close()
@@ -152,7 +159,7 @@ by_id = {t["id"]: t for t in snap["tickets"]}
 
 # ── the project a ticket is work on ──────────────────────────────────────────
 
-check("the wall has a ticket per row", sorted(by_id), [1, 2, 3, 4, 5, 6, 7])
+check("the wall has a ticket per row", sorted(by_id), [1, 2, 3, 4, 5, 6, 7, 8])
 check("a repository is its project", by_id[1]["project"], "ledger")
 check("a folder inside it is still that project", by_id[2]["project"], "ledger")
 check("a project with no ticket work is not invented",
@@ -163,10 +170,13 @@ check("outside every root, the folder name is the name", by_id[4]["project"], "o
 
 check("the round's first hand-over, not its last",
       round(by_id[1]["round_started_at"]), round(NOW - 9000))
-check("a round with no hand-over of its own falls back to the first start",
+check("round one began when the ticket did, with nothing else to go on",
       by_id[3]["round_started_at"], by_id[3]["started_at"])
 check("a ticket still in the queue has no round to time",
       by_id[7]["round_started_at"], None)
+# The one that would have put fifteen hours on a round that has not begun.
+check("a round sent back and still waiting for a slot is not timed from the first",
+      by_id[8]["round_started_at"], None)
 
 # ── what is on the branch ────────────────────────────────────────────────────
 
