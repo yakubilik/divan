@@ -14,6 +14,8 @@ the language detector cannot work without, and anywhere else it is a bug.
 """
 from __future__ import annotations
 
+import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -49,6 +51,8 @@ FIRES = [
     ("personal-email", "first.last@gmail.com"),
     ("tailnet-hostname", "laptop.tail1234.ts.net"),
     ("local-hostname", "Someones-MacBook-Air.local"),
+    ("personal-attribution", "# Kevin asked for that to stop (2026-09-22)"),
+    ("personal-attribution", "# Dana Scully preferred a banner here"),
     ("turkish-letter", "Bir şey yok"),
     ("turkish-word", "onay bekliyor"),
 ]
@@ -62,6 +66,9 @@ QUIET = [
     're.compile(r"github_pat_[A-Za-z0-9_]{20,}"),',
     "const REPO = 'https://github.com/yakubilik/remote-ai-chat';",
     "# The name arrives percent-encoded, so the escape is not read as text.",
+    "    Nobody asked, so there was no turn reading the stream, and the SDK parked",
+    "# The user wanted a banner, so staying silent for every open app was wrong.",
+    "# Apple requested a privacy label; Tailscale asked for nothing.",
 ]
 
 
@@ -107,6 +114,27 @@ def main() -> int:
     check("the allowlist does not also excuse a secret",
           any(h["rule"] == "aws-access-key" for h in
               audit.scan_text("daemon/remote_ai_chat/call.py", "AKIAIOSFODNN7EXAMPLE", "test")))
+
+    print("\nthe author's own names are given at scan time, not written down here")
+    check("no name list in the scanner by default", "author-name" not in audit.PERSONAL,
+          repr(sorted(audit.PERSONAL)))
+    os.environ["RAC_AUDIT_NAMES"] = "ada|lovelace-ledger"
+    try:
+        importlib.reload(audit)
+        check("RAC_AUDIT_NAMES adds the rule", "author-name" in audit.PERSONAL)
+        check("a name given at scan time is found",
+              any(h["rule"] == "author-name" for h in
+                  audit.scan_text("t.py", 'project = "lovelace-ledger"', "test")))
+        check("and it is case-blind, like a name in prose",
+              any(h["rule"] == "author-name" for h in
+                  audit.scan_text("t.py", "# Ada wrote this one", "test")))
+        check("a word that merely contains one is not a name",
+              not audit.scan_text("t.py", "# adapters and ledgers are fine", "test"))
+    finally:
+        os.environ.pop("RAC_AUDIT_NAMES", None)
+        importlib.reload(audit)
+    check("and the rule is gone again once it is not given",
+          "author-name" not in audit.PERSONAL)
 
     print("\nthe forbidden-name list covers what the release checklist forbids")
     for path in (".env", "app/.env.local", "daemon/AuthKey_ABCD123456.p8", "certs/apns.p12",

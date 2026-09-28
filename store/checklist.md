@@ -34,7 +34,7 @@ before, so there is a moment to stop it.
 
 Three things the submission turned out to need and nobody had filled in:
 price (free, all 175 territories), the content rights declaration, and a
-copyright line — "2026 Yakup Keskin".
+copyright line (the year and the holder named in LICENSE).
 
 ## Notes
 - No "What's New" on a first release; App Store Connect refuses to set it, and

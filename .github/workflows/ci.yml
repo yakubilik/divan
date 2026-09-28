@@ -65,6 +65,11 @@ jobs:
         # Tracked files only. History is reported by `--history` and remedied by
         # a person; see docs/audit/.
         run: python scripts/audit.py
+      - name: Every string the app asks for is in the app's string table
+        # `t(key)` falls back to the key itself, so a renamed key shows a user
+        # the name of a variable. `tsc` would catch it; `app/node_modules` is
+        # not installable from the committed lockfile, so this does instead.
+        run: python scripts/test_i18n_keys.py
 
   docs:
     name: docs · links

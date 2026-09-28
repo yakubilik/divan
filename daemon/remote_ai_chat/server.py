@@ -974,6 +974,13 @@ class Server:
 
     # ── auth ───────────────────────────────────────────────────────────────
     def _rate_limited(self, ip: str) -> bool:
+        """Whether this address has already failed five times in ten minutes.
+
+        Nothing acts on the answer: the caller only uses it to stop the history
+        growing, so this is a count, not a throttle. SECURITY.md says as much
+        under "What it does not" — the size of the token is what stands in the
+        way of a guesser, and acting on the count is still to be done.
+        """
         now = time.time()
         hist = [t for t in self.failed_auth.get(ip, []) if now - t < 600]
         self.failed_auth[ip] = hist
@@ -987,7 +994,7 @@ class Server:
             token = auth[7:].strip()
         dev = self.cfg.find_device_by_token(token) if token else None
         if dev is not None:
-            return dev  # a valid token is never locked out; the limiter only slows guessing
+            return dev  # a valid token is always accepted; only failures are counted
         if not self._rate_limited(ip):
             self.failed_auth.setdefault(ip, []).append(time.time())
         return None

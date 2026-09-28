@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -63,13 +64,42 @@ SECRET = {
     "bare-token-literal": r"(?i)\btoken\b\s*[:=]\s*[\"'][A-Za-z0-9_-]{24,}[\"']",
 }
 
+# Subjects that are not a person, so that naming one before an attribution verb
+# is prose rather than a note to the author.
+NOT_A_PERSON = (
+    "Nobody|Somebody|Someone|Anybody|Anyone|Everyone|Everybody|Nothing|Something|"
+    "Anything|Neither|Either|Each|The|This|That|These|Those|They|What|Whoever|"
+    "Users|User|People|Contributors|Reviewers|Apple|Anthropic|Tailscale|Github|GitHub"
+)
+
 PERSONAL = {
     "home-directory": r"/(?:Users|home)/(?!you\b|test\b|runner\b|user\b)[a-z][a-z0-9._-]{2,}",
     "personal-email":
         r"[A-Za-z0-9._%+-]+@(?:gmail|googlemail|icloud|me|hotmail|outlook|live|yahoo|proton|protonmail)\.[A-Za-z.]{2,}",
     "tailnet-hostname": r"\b[a-z0-9][a-z0-9-]*\.[a-z0-9-]+\.ts\.net\b",
     "local-hostname": r"\b[A-Za-z0-9][A-Za-z0-9-]*-(?:MacBook|Macbook|iMac|Mac)(?:-[A-Za-z0-9]+)*\.local\b",
+    # Prose that credits a decision to somebody by name. "X asked for that to
+    # stop (2026-09-22)" is a note the author wrote to the author: a contributor
+    # reading it learns only that they were not in the room, and the name is
+    # somebody's. A shape, not a list of names — see AUTHOR_NAMES below for why
+    # there is no list.
+    "personal-attribution":
+        rf"\b(?!(?:{NOT_A_PERSON})\b)[A-Z][a-z]{{2,}}(?:\s+[A-Z][a-z]+)?\s+"
+        r"(?:asked|wanted|requested|complained|insisted|prefers|preferred)\b",
 }
+
+# The author's own name, and the names of the author's other projects, are the
+# one class of finding this file cannot carry: a denylist of private names is
+# itself the thing it guards. So they are supplied at scan time, as a regular
+# expression, and the release audit records which list was used:
+#
+#     RAC_AUDIT_NAMES='ada|lovelace|some-other-project' python scripts/audit.py
+#
+# Without the variable the rule is absent — which is why the shape-based
+# "personal-attribution" rule above exists as well.
+AUTHOR_NAMES = os.environ.get("RAC_AUDIT_NAMES", "").strip()
+if AUTHOR_NAMES:
+    PERSONAL["author-name"] = rf"(?i)\b(?:{AUTHOR_NAMES})\b"
 
 # Turkish letters English does not have, plus function words no English sentence
 # contains. Both are needed: a short string can carry neither a letter nor a

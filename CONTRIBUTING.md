@@ -50,6 +50,7 @@ you actually use.
 ```bash
 python scripts/audit.py                        # nothing private, nothing not-English
 python scripts/test_audit.py                   # and the scanner still finds what it claims to
+python scripts/test_i18n_keys.py               # the app asks for no string that is not there
 
 cd daemon
 python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model turns
@@ -61,6 +62,8 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_replay.py
 .venv312/bin/python scripts/test_fanout.py
 .venv312/bin/python scripts/test_agents.py
+.venv312/bin/python scripts/test_titles.py
+.venv312/bin/python scripts/test_push.py
 
 cd app && npx tsc --noEmit
 cd web && npm run build                        # typechecks, then builds into the daemon
