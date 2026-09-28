@@ -98,11 +98,20 @@ button for both.
 ## Push notifications
 
 Content-free: no message text leaves the computer. The `data` of a notification
-says what it is about, and the clients route on that — `chat_id` (with `kind`
-`approval` or `done`) opens that chat, `ticket_id` opens that ustabasi ticket.
-`device_id` is the pairing it was sent to, so a phone paired to two computers
-opens the chat on the computer that actually has it rather than on whichever one
-it happens to be connected to.
+says what it is *about*, and the phone routes on that:
+
+| key | what a tap opens |
+|---|---|
+| `chat_id` (with `kind` `approval` or `done`) | that chat |
+| `ticket_id` | that ustabasi ticket |
+| `device_id` | which pairing it was sent to — a phone paired to two computers switches to the one that actually has the chat rather than opening it against whichever one it happens to be connected to |
+
+This daemon sends the `chat_id` ones. Nothing here sends a `ticket_id`: the
+ticket queue is another program and notifies its owner its own way, so the key
+is the phone's side of an agreement, honoured whenever something does send one.
+A tap that launches the app cold is held until the keychain is open and Face ID
+has been answered, then delivered — so it lands on the chat or the ticket rather
+than on the list.
 
 ## Events
 
