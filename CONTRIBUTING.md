@@ -64,7 +64,14 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 
 cd app && npx tsc --noEmit
 cd web && npm run build                        # typechecks, then builds into the daemon
+
+cd <the repo root>
+python3 scripts/check-links.py                 # no dead path in the docs
 ```
+
+If you moved or renamed anything under `docs/`, that last one is the check that
+notices. `scripts/test_check_links.py` is the checker's own test, and it is the
+one to run if you touch the checker.
 
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.

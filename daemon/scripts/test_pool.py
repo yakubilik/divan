@@ -252,6 +252,11 @@ class FakeProvider:
         self.gate: asyncio.Event | None = None
         self.interrupted = False
 
+    async def steer(self, prompt, attachments=None):
+        # This fake answers one message at a time; nothing is ever in flight to
+        # steer into, so a message always waits for the next turn.
+        return False
+
     async def run(self, prompt, attachments=None):
         self.prompts.append(prompt)
         if self.gate is not None:

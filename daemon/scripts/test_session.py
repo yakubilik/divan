@@ -47,6 +47,11 @@ class FakeProvider:
         self.gate: asyncio.Event | None = None
         self.prompts: list[str] = []
 
+    async def steer(self, prompt, attachments=None):
+        # Nothing is ever in flight here to steer into, so a message always
+        # waits for a turn of its own.
+        return False
+
     async def run(self, prompt, attachments=None):
         if self.gate is not None:
             await self.gate.wait()
@@ -316,7 +321,9 @@ async def scenario_update_routing(db):
     host._account = lambda *a, **k: None
     host.broadcast = lambda _ev: asyncio.sleep(0)
     host.policy = type("P", (), {"is_allowed_cwd": staticmethod(lambda _p: True),
-                                 "cwd_error": staticmethod(lambda _p: None)})()
+                                 "cwd_error": staticmethod(lambda _p: None),
+                                 # a rename asks which project it is in
+                                 "project_for": staticmethod(lambda _p: None)})()
 
     for field, value in (("account_id", "acct-2"), ("perm_mode", "bypass"),
                          ("max_turns", 5), ("max_budget_usd", 2.5)):

@@ -113,6 +113,26 @@ class PathPolicy:
             return "cwd_outside"
         return None if p.is_dir() else "no_such_folder"
 
+    def project_for(self, cwd: str) -> str | None:
+        """The project a folder belongs to, by name.
+
+        A project is what `list_projects` says it is: a folder one level under
+        an allowed root. Anything deeper belongs to the project above it —
+        `~/projects/remote-ai-chat/app` is still remote-ai-chat — and a folder
+        that is a root itself, or outside every root, has no project to name.
+        """
+        try:
+            p = Path(cwd).expanduser().resolve()
+        except Exception:
+            return None
+        for r in self.roots:
+            if p == r:
+                return None
+            if r in p.parents:
+                # The first component under the root, which is the project.
+                return p.relative_to(r).parts[0]
+        return None
+
     def list_projects(self) -> list[dict]:
         out = []
         for r in self.roots:

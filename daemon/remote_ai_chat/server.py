@@ -32,7 +32,7 @@ from .transcribe import transcribe, available as transcribe_available
 from .attachments import KINDS, normalize_image, sniff
 from .security import PathPolicy
 from . import screen as screenmod
-from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager
+from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager, with_project
 from .providers.codex import live_models as codex_live_models
 
 log = logging.getLogger("rac.server")
@@ -1166,7 +1166,8 @@ class Server:
             account_id=account_id, agent_id=agent_id, pool_pinned=1 if d.get("pool_pinned") else 0,
             provider=provider, model=model, effort=effort, perm_mode=perm,
             cwd=str(Path(cwd).expanduser().resolve()), group_id=d.get("group_id"),
-            title=(d.get("title") or NEW_CHAT_TITLE)[:60],
+            title=with_project(d.get("title") or NEW_CHAT_TITLE,
+                               self.policy.project_for(cwd)),
             max_turns=d.get("max_turns"), max_budget_usd=d.get("max_budget_usd"),
         )
         await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.created",
@@ -1227,6 +1228,18 @@ class Server:
         prev = self.db.get_chat(cid)
         if prev is None:
             raise Err("no_chat", "no such chat")
+        # A rename keeps the project in front of it, and a chat that moves to
+        # another folder takes the new project's name with it — the old prefix
+        # is dropped first, or moving a chat twice would stack them.
+        moving = fields.get("cwd", prev["cwd"])
+        if "title" in fields or "cwd" in fields:
+            was = self.policy.project_for(prev["cwd"])
+            title = str(fields.get("title", prev["title"]) or "")
+            if was and "cwd" in fields:
+                head = f"{was} · "
+                if title.casefold().startswith(head.casefold()):
+                    title = title[len(head):]
+            fields["title"] = with_project(title, self.policy.project_for(moving))
         if "provider" in fields and fields["provider"] != prev["provider"]:
             if fields["provider"] not in PROVIDERS:
                 raise Err("unknown_provider", "unknown tool")
