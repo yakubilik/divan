@@ -47,7 +47,7 @@ jobs:
         # scripts/e2e.py and scripts/smoke.py need a running daemon and a real
         # sign-in, so they stay a human's job.
         run: |
-          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments test_agents test_titles test_push; do
+          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments test_agents test_titles test_push test_ustabasi; do
             echo "── $t"
             python "scripts/$t.py"
           done
@@ -102,11 +102,13 @@ jobs:
         # `npm run build` is `tsc --noEmit && vite build`, so this is both.
         run: npm run build
         working-directory: web
-      - name: A ticket still reads as a conversation
-        # The ustabasi wall opens a ticket as a run of messages. Which order
-        # they come in, who said them and whether the last one is a question
-        # are all a pure function of the ticket, so they are checked without a
-        # browser — see web/scripts/test-ustabasi.mjs.
+      - name: The wall's figures, and a ticket as a conversation
+        # What a card says about a ticket — which column it is in, how long it
+        # has been open, how long this round has been going, what is on its
+        # branch — and the run of messages a ticket opens as, are both a pure
+        # function of the ticket, so both are checked without a browser. Only
+        # the layout needs one, and that is `npm run test:ui`, which is not in
+        # CI. See web/scripts/test-ustabasi.mjs.
         run: npm test
         working-directory: web
       - name: The build carries no pairing token

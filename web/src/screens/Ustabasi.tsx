@@ -4,7 +4,10 @@ import { Dot, Empty, Icon, P, Spinner, mono } from '../ui/kit';
 import { TicketChat } from '../components/TicketChat';
 import { useFleet } from '../lib/fleet';
 import { duration } from '../lib/format';
-import { answerable, type Status, type Ticket } from '../lib/ustabasi';
+import {
+  answerable, cardLine, commitCount, groupByProject, roundAge, stageLine, totalAge,
+  type Group, type Status, type Ticket,
+} from '../lib/ustabasi';
 
 /** The ustabasi wall: the same question terminal mode asks of chats — what is
  *  happening — asked of the work that runs without anyone watching.
@@ -15,6 +18,13 @@ import { answerable, type Status, type Ticket } from '../lib/ustabasi';
  *  ask something only a person can answer, the ticket goes red and stays red
  *  until someone notices. This screen is the noticing. Red sorts to the top,
  *  and a red tile is the only one you can type into.
+ *
+ *  The cards are grouped by project, one column each, because "what is
+ *  happening" is asked about a project and not about a queue. And each card
+ *  answers it with counted things only — how long it has been open, how long
+ *  this round has been going, whose hands it is in, what is on the branch. No
+ *  percentage: nothing in the queue knows how far along a ticket is, so a bar
+ *  would be a drawing of a guess.
  *
  *  Nothing here is a second source of truth. The daemon reads the queue's own
  *  database, and the one write — answering a ticket — is that queue's CLI run
@@ -34,13 +44,6 @@ const STATUS: Record<Status, { label: string; color: string; rgb: string }> = {
   done: { label: 'done', color: C.ok, rgb: '92,126,79' },
   queued: { label: 'queued', color: C.faint, rgb: '110,104,96' },
   cancelled: { label: 'cancelled', color: C.faint, rgb: '110,104,96' },
-};
-
-/** Red first, then whatever is moving, then the rest by age. An id order would
- *  put the ticket that has been waiting since last night below three that are
- *  merrily working, which is exactly backwards. */
-const RANK: Record<Status, number> = {
-  blocked: 0, failed: 1, running: 2, queued: 3, done: 4, cancelled: 5,
 };
 
 const FILTERS: { key: Status | 'all'; label: string; color: string }[] = [
@@ -78,7 +81,8 @@ function first(text: string, n: number): string {
 function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }) {
   const [hot, setHot] = useState(false);
   const ph = STATUS[t.status] || STATUS.queued;
-  const since = t.updated_at ? duration((now - t.updated_at) * 1000) : null;
+  const round = roundAge(t, now);
+  const commits = commitCount(t);
   const wants = answerable(t.status);
 
   return (
@@ -117,17 +121,33 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
           }}>{first(t.escalation, 260)}</div>
         ) : (
           <div style={{ fontSize: 12.5, lineHeight: '18px', color: C.mute, wordBreak: 'break-word' }}>
-            {first(t.last_event?.msg || t.goal || '', 200) || 'no events yet'}
+            {first(cardLine(t), 200) || 'no events yet'}
           </div>
         )}
 
-        <div style={{
-          ...mono, fontSize: 11, color: C.faint, display: 'flex', gap: 8,
-          flexWrap: 'wrap', alignItems: 'center',
-        }}>
-          <span>{t.stage} r{t.round}</span>
-          {since && <span>· {since} in this state</span>}
-          {t.note_count > 0 && <span>· {t.note_count} {t.note_count === 1 ? 'note' : 'notes'}</span>}
+        {/* How long it has been a ticket, first and on its own: it is the
+            figure anybody means by "how long has this been going", and the
+            smaller one under it was being read as that. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+          <div style={{ ...mono, fontSize: 12, color: C.text2 }}>{totalAge(t, now)}</div>
+          <div style={{
+            ...mono, fontSize: 11, color: C.faint, display: 'flex', gap: 6,
+            flexWrap: 'wrap', alignItems: 'center',
+          }}>
+            <span>{stageLine(t)}</span>
+            {round && <span>· {round}</span>}
+            {commits && <span>· {commits}</span>}
+            {t.note_count > 0 && <span>· {t.note_count} {t.note_count === 1 ? 'note' : 'notes'}</span>}
+          </div>
+          {t.git?.subject && (
+            <div style={{ display: 'flex', gap: 6, minWidth: 0, alignItems: 'baseline' }}>
+              <span style={{ ...mono, fontSize: 11, color: C.faint, flexShrink: 0 }}>last</span>
+              <span style={{
+                fontSize: 12, color: C.mute, minWidth: 0,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{t.git.subject}</span>
+            </div>
+          )}
         </div>
 
         {wants && (
@@ -141,6 +161,50 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── the wall's columns ───────────────────────────────────────────────────────
+
+/** One column per project, the reddest first.
+ *
+ *  The columns are a wrapping grid rather than a row of fixed ones, so the same
+ *  wall is four columns on a desk and a single column on a phone held upright,
+ *  with nothing to scroll sideways. A column is as narrow as the screen when the
+ *  screen is narrow — that is what `min(100%, 340px)` is for — and every box in
+ *  here can shrink (`minWidth: 0`), which is what keeps a long branch name or a
+ *  long commit subject from pushing the page wider than the phone.
+ */
+export function Wall({ groups, now, onOpen }: {
+  groups: Group[]; now: number; onOpen: (id: number) => void;
+}) {
+  return (
+    <div style={{
+      display: 'grid', gap: 18, alignItems: 'start',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))',
+    }}>
+      {groups.map((g) => (
+        <section key={g.project} style={{
+          display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0,
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0,
+            paddingBottom: 7, borderBottom: `1px solid ${C.border}`,
+          }}>
+            <span style={{
+              fontSize: 13.5, fontWeight: 600, color: C.text, minWidth: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{g.project}</span>
+            <span style={{ ...mono, fontSize: 11, color: C.faint, flexShrink: 0 }}>
+              {g.tickets.length}
+            </span>
+          </div>
+          {g.tickets.map((t) => (
+            <Tile key={t.id} t={t} now={now} onOpen={() => onOpen(t.id)} />
+          ))}
+        </section>
+      ))}
     </div>
   );
 }
@@ -184,14 +248,11 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
     return () => clearInterval(t);
   }, [load]);
 
-  const tickets = useMemo(() => {
+  const groups = useMemo(() => {
     const all = snap?.tickets || [];
-    const shown = filter === 'all' ? all : all.filter((t) => t.status === filter);
-    return [...shown].sort((a, b) => {
-      const r = (RANK[a.status] ?? 9) - (RANK[b.status] ?? 9);
-      return r !== 0 ? r : b.updated_at - a.updated_at;
-    });
+    return groupByProject(filter === 'all' ? all : all.filter((t) => t.status === filter));
   }, [snap, filter]);
+  const shown = useMemo(() => groups.reduce((n, g) => n + g.tickets.length, 0), [groups]);
 
   const open = openId != null ? (snap?.tickets || []).find((t) => t.id === openId) || null : null;
   const counts = useMemo(() => {
@@ -280,17 +341,10 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
           <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40 }}><Spinner /></div>
         ) : !snap.available ? (
           <Empty title="No ustabasi queue here" hint="This computer does not run the ticket queue." />
-        ) : tickets.length === 0 ? (
-          <Empty title="Nothing to show" hint="No ticket in this state." />
+        ) : shown === 0 ? (
+          <Empty title="Nothing to show" hint="No ticket has that status right now." />
         ) : (
-          <div style={{
-            display: 'grid', gap: 14,
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))',
-          }}>
-            {tickets.map((t) => (
-              <Tile key={t.id} t={t} now={now} onOpen={() => setOpenId(t.id)} />
-            ))}
-          </div>
+          <Wall groups={groups} now={now} onOpen={setOpenId} />
         )}
       </div>
 

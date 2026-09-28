@@ -115,11 +115,24 @@ function ok(name, cond, detail) {
 
 try {
   await page('Page.enable');
+  // The window is asked for at 390 and a headless Chrome on macOS hands back
+  // about 500 whatever it was asked; the viewport is the one thing it will
+  // actually set to a phone's size.
+  await page('Emulation.setDeviceMetricsOverride', {
+    width: 390, height: 844, deviceScaleFactor: 1, mobile: true,
+  });
   await page('Page.navigate', { url: `file://${join(out, 'harness.html')}` });
-  await evaluate('await new Promise((r) => setTimeout(r, 600));');
-  if (!await evaluate("return !!document.querySelector('textarea');")) {
-    throw new Error('the harness did not come up — nothing to type into');
-  }
+  // Waiting for the box rather than for a number of milliseconds: a browser
+  // opening a cold profile takes a good deal longer to put a megabyte of React
+  // on the screen than a warm one, and a fixed wait fails on the cold one.
+  const up = await evaluate(`
+    for (let i = 0; i < 100; i++) {
+      if (document.querySelector('textarea')) return true;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return false;
+  `);
+  if (!up) throw new Error('the harness did not come up — nothing to type into');
 
   console.log('── how it opens');
   const opened = await evaluate(`

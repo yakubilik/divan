@@ -64,10 +64,11 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_agents.py
 .venv312/bin/python scripts/test_titles.py
 .venv312/bin/python scripts/test_push.py
+.venv312/bin/python scripts/test_ustabasi.py   # the ticket wall's readings of the queue
 
 cd app && npx tsc --noEmit
 cd web && npm run build                        # typechecks, then builds into the daemon
-cd web && npm test                             # a ticket still reads as a conversation
+cd web && npm test                             # the wall's figures, and a ticket as a conversation
 
 cd <the repo root>
 python3 scripts/check-links.py                 # no dead path in the docs
@@ -78,9 +79,9 @@ notices. `scripts/test_check_links.py` is the checker's own test, and it is the
 one to run if you touch the checker.
 
 `cd web && npm run test:ui` drives a real browser over the DevTools protocol —
-typing a note, folding the paperwork open, the layout in portrait. It needs a
-Chrome on the machine (`CHROME=/path/to/chrome`), so it is not in CI. Run it if
-you touch the ustabasi ticket view.
+typing a note, folding the paperwork open, and the wall itself in portrait and on
+a desk. It needs a Chrome on the machine (`CHROME=/path/to/chrome`), so it is not
+in CI. Run it if you touch the ustabasi screen.
 
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.

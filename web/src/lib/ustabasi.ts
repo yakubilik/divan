@@ -1,4 +1,4 @@
-/** A ticket, read as a conversation.
+/** A ticket: as a card on the wall, and as a conversation when it is opened.
  *
  *  The queue keeps a ticket as a card, a pile of notes, a report and a verdict
  *  — four shapes, each with its own heading. Read under those headings it is a
@@ -10,8 +10,13 @@
  *
  *  Nothing here draws anything. It turns one ticket into the list of messages
  *  the panel shows, so that the order, the voices and the wording of the
- *  question can be checked without a browser.
+ *  question can be checked without a browser. The wall's own arithmetic — which
+ *  project a ticket belongs under, what order the columns and the cards come in,
+ *  and what a card says about where it has got to — is at the bottom of this file, and is
+ *  checkable the same way.
  */
+
+import { uptime } from './format';
 
 export type Status = 'queued' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled';
 
@@ -27,11 +32,17 @@ export interface Ticket {
   stage: string;
   round: number;
   repo: string;
+  /** the project this is work on, by name: a ticket in babysee/app is babysee */
+  project: string | null;
   branch: string | null;
   created_at: number;
   updated_at: number;
   started_at: number | null;
+  /** when the round it is in began, which the queue's tickets table does not hold */
+  round_started_at: number | null;
   finished_at: number | null;
+  /** what the worker has committed on the branch; null when there is nothing to say */
+  git: { commits: number; subject: string } | null;
   goal: string;
   done_criteria: string[];
   escalation: string;
@@ -240,4 +251,132 @@ export function conversation(t: Ticket): Msg[] {
  *  conversation — they are the paperwork behind it. */
 export function hasDetails(t: Ticket): boolean {
   return (t.done_criteria?.length || 0) > 0 || !!t.verdict;
+}
+
+// ── the wall ────────────────────────────────────────────────────────────────
+
+/** There is no percentage here and there will not be one. Nothing in the queue
+ *  knows how far along a ticket is — the criteria are answered once, at the end,
+ *  by the verifier — so a bar would be a drawn guess. What can be counted is
+ *  counted: how long it has been open, how long this round has been going, whose
+ *  hands it is in, and what has landed on the branch. */
+
+/** Red first, then whatever is moving, then the rest. An id order would put the
+ *  ticket that has been waiting since last night below three that are merrily
+ *  working, which is exactly backwards. */
+const RANK: Record<string, number> = {
+  blocked: 0, failed: 1, running: 2, queued: 3, done: 4, cancelled: 5,
+};
+
+export function rank(status: string): number {
+  return RANK[status] ?? 9;
+}
+
+/** A ticket nobody is going to touch again. `failed` is not one of these: it is
+ *  stopped waiting for a person, which is the most open a ticket gets. */
+const CLOSED = ['done', 'cancelled'];
+
+function closedAt(t: Ticket): number | null {
+  return CLOSED.includes(t.status) && t.finished_at ? t.finished_at : null;
+}
+
+export function sortTickets(tickets: Ticket[]): Ticket[] {
+  return [...tickets].sort((a, b) => {
+    const r = rank(a.status) - rank(b.status);
+    return r !== 0 ? r : b.updated_at - a.updated_at;
+  });
+}
+
+/** The project a ticket is work on. The daemon names it — `babysee/app` is
+ *  babysee — and the folder name is the fallback for a repository its path
+ *  policy has nothing to say about. */
+export function projectName(t: Ticket): string {
+  const named = (t.project || '').trim();
+  if (named) return named;
+  const parts = (t.repo || '').split('/').filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : 'unfiled';
+}
+
+export interface Group { project: string; tickets: Ticket[] }
+
+/** One column per project, the reddest column first.
+ *
+ *  Twenty cards in one grid is a wall you have to read twice: the two tickets on
+ *  the same repository are three columns apart and look unrelated. Grouped, the
+ *  question "what is happening in babysee" is answered by looking at one column.
+ *  A project with nothing in it is not a column — the grouping comes out of the
+ *  tickets, so there is nothing to leave out.
+ */
+export function groupByProject(tickets: Ticket[]): Group[] {
+  const by = new Map<string, Ticket[]>();
+  for (const t of tickets) {
+    const name = projectName(t);
+    const list = by.get(name);
+    if (list) list.push(t);
+    else by.set(name, [t]);
+  }
+  return [...by.entries()]
+    .map(([project, list]) => ({ project, tickets: sortTickets(list) }))
+    .sort((a, b) => {
+      // The column's rank is its best ticket's: one red card pulls the whole
+      // project to the front, which is the only sort order that matters at 3am.
+      const r = rank(a.tickets[0].status) - rank(b.tickets[0].status);
+      if (r !== 0) return r;
+      const moved = b.tickets[0].updated_at - a.tickets[0].updated_at;
+      return moved !== 0 ? moved : a.project.localeCompare(b.project);
+    });
+}
+
+/** "12s", "49m", "15h 18m", "2d 3h" — the same shape the rest of the panel uses
+ *  for an age, with seconds only while there is nothing else to say. */
+function span(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  return s < 60 ? `${s}s` : uptime(s);
+}
+
+/** How long this has been a ticket — the figure a person means by "how long has
+ *  it been running". Once it is finished, how long it took. */
+export function totalAge(t: Ticket, now: number): string {
+  const end = closedAt(t);
+  return end
+    ? `took ${span(end - t.created_at)}`
+    : `open ${span(now - t.created_at)}`;
+}
+
+/** How long the current round has been going, which is the smaller figure and
+ *  is drawn as the smaller figure. Null where there is no round in progress: a
+ *  finished ticket's last round does not go on getting longer, and a ticket
+ *  still in the queue has not had one. */
+export function roundAge(t: Ticket, now: number): string | null {
+  if (closedAt(t) || !t.round_started_at) return null;
+  return `${span(now - t.round_started_at)} in this round`;
+}
+
+/** Whose hands it is in, and for the how-many-th time. */
+export function stageLine(t: Ticket): string {
+  return `${t.stage} r${t.round}`;
+}
+
+/** What has landed on the branch. Nothing committed yet, or no worktree to
+ *  look in, and the card says nothing rather than N/A. */
+export function commitCount(t: Ticket): string | null {
+  const n = t.git?.commits;
+  if (!n) return null;
+  return `${n} ${n === 1 ? 'commit' : 'commits'}`;
+}
+
+/** The line under the title: what last happened here, in words.
+ *
+ *  Usually the newest event — "merged into main (4dd999f)", "all accounts
+ *  limited, queue paused until 17:05". Not a `start`, though. That one reads
+ *  `worker round 1 pid 74155 model claude-opus-5 account yakup`, which is the
+ *  queue talking to its own log: the card says whose hands the ticket is in and
+ *  which round by itself, and a pid on a card is something to look past. With
+ *  nothing worth repeating, the card says what the ticket is for instead. */
+export function cardLine(t: Ticket): string {
+  const ev = t.last_event;
+  const said = ev && ev.kind !== 'start'
+    ? firstLine(ev.msg).replace(/^\[[a-z]+\]\s*/i, '')
+    : '';
+  return said || firstLine(t.goal || '');
 }

@@ -22,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { REPORT, ticket } from './ticket-fixture.js';
+import { NOW, REPORT, card, ticket, wall } from './ticket-fixture.js';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(web, '.test-build');
@@ -49,7 +49,8 @@ for (const f of readdirSync(out, { recursive: true, withFileTypes: true })) {
 }
 
 const {
-  answerable, bullets, conversation, hasDetails, noteHint, question, stateLine,
+  answerable, bullets, cardLine, commitCount, conversation, groupByProject, hasDetails,
+  noteHint, projectName, question, roundAge, sortTickets, stageLine, stateLine, totalAge,
 } = await import(pathToFileURL(join(out, 'lib', 'ustabasi.js')));
 const { TicketChat } = await import(pathToFileURL(join(out, 'components', 'TicketChat.js')));
 
@@ -262,6 +263,105 @@ group('the view');
     + '<script>for(const d of document.querySelectorAll("div"))'
     + 'if(d.style.overflowY==="auto")d.scrollTop=d.scrollHeight;</scr' + 'ipt>'
     + '</body></html>');
+}
+
+// ── 9 · the wall is a column per project ────────────────────────────────────
+
+group('the columns');
+{
+  const groups = groupByProject(wall());
+
+  ok('one column per project, and none for a project with nothing in it',
+    groups.map((g) => g.project).join('|') === 'remote-ai-chat|babysee|ustabasi',
+    groups.map((g) => g.project).join('|'));
+  ok('the column holding the stopped ticket is first', groups[0].project === 'remote-ai-chat');
+  ok('a column is titled with the project the daemon named, not the folder',
+    projectName(card({ project: 'babysee', repo: '/Users/x/projects/babysee/app' })) === 'babysee');
+  ok('a daemon too old to name it leaves the folder to stand in',
+    projectName(card({ project: null, repo: '/Users/x/projects/babysee' })) === 'babysee');
+  ok('and with no path either, nothing is filed under nothing',
+    projectName(card({ project: null, repo: '' })) === 'unfiled');
+  ok('every ticket is in exactly one column',
+    groups.reduce((n, g) => n + g.tickets.length, 0) === wall().length);
+  ok('an empty wall is no columns', groupByProject([]).length === 0);
+
+  ok('the stopped one is at the top of its column',
+    groups[0].tickets.map((t) => t.id).join(',') === '2,1', groups[0].tickets.map((t) => t.id).join(','));
+  ok('and a finished one is at the bottom of its',
+    groups[1].tickets.map((t) => t.id).join(',') === '3,5', groups[1].tickets.map((t) => t.id).join(','));
+
+  const order = sortTickets([
+    card({ id: 1, status: 'done' }), card({ id: 2, status: 'queued' }),
+    card({ id: 3, status: 'running' }), card({ id: 4, status: 'failed' }),
+    card({ id: 5, status: 'blocked' }), card({ id: 6, status: 'cancelled' }),
+  ]).map((t) => t.id).join(',');
+  ok('the order inside a column is the one the wall has always had',
+    order === '5,4,3,2,1,6', order);
+
+  const byMovement = groupByProject([
+    card({ id: 1, project: 'a', updated_at: NOW - 900 }),
+    card({ id: 2, project: 'b', updated_at: NOW - 10 }),
+  ]).map((g) => g.project).join('|');
+  ok('two columns of equal urgency go by what moved last', byMovement === 'b|a', byMovement);
+}
+
+// ── 10 · what a card says about time and place ──────────────────────────────
+
+group('the figures on a card');
+{
+  ok('how long it has been open, in words a clock can be held to',
+    totalAge(card(), NOW) === 'open 15h 18m', totalAge(card(), NOW));
+  ok('the round is its own figure, and says so',
+    roundAge(card(), NOW) === '49m in this round', roundAge(card(), NOW));
+  ok('a finished ticket says how long it took',
+    totalAge(card({ status: 'done', finished_at: NOW - 3600 }), NOW) === 'took 14h 18m',
+    totalAge(card({ status: 'done', finished_at: NOW - 3600 }), NOW));
+  ok('and has no round still running',
+    roundAge(card({ status: 'done', finished_at: NOW - 3600 }), NOW) === null);
+  ok('a ticket that has stopped to ask is still open, not finished',
+    totalAge(card({ status: 'blocked', finished_at: NOW - 3600 }), NOW) === 'open 15h 18m');
+  ok('a ticket still in the queue has no round to time',
+    roundAge(card({ status: 'queued', round_started_at: null }), NOW) === null);
+  ok('a young ticket is counted in seconds',
+    totalAge(card({ created_at: NOW - 12 }), NOW) === 'open 12s');
+
+  ok('whose hands it is in, and which round',
+    stageLine(card({ stage: 'verifier', round: 3 })) === 'verifier r3');
+  ok('what is on the branch', commitCount(card({ git: { commits: 7, subject: 's' } })) === '7 commits');
+  ok('one commit is one commit', commitCount(card({ git: { commits: 1, subject: 's' } })) === '1 commit');
+  ok('nothing committed, and the card says nothing', commitCount(card()) === null);
+
+  const at = (kind, msg) => card({ last_event: { ts: NOW, kind, msg } });
+  ok('the line under the title is the last thing that happened',
+    cardLine(at('merge', 'merged into main (4dd999f)')) === 'merged into main (4dd999f)');
+  ok('a hand-over is the queue talking to its own log, so the card says what the ticket is for',
+    cardLine(at('start', 'worker round 1 pid 74155 model m account a'))
+      === 'Make a tile open as a conversation instead of a report.',
+    cardLine(at('start', 'worker round 1 pid 74155 model m account a')));
+  ok('who wrote a note is not read out on a card',
+    cardLine(at('note', '[user] have another go')) === 'have another go');
+  ok('a report is cut to its first line',
+    cardLine(at('report', 'the first line\nand a second one')) === 'the first line',
+    cardLine(at('report', 'the first line\nand a second one')));
+  ok('nothing said and nothing asked for is nothing',
+    cardLine(card({ goal: '', last_event: null })) === '');
+}
+
+// ── 11 · what a card does not say ───────────────────────────────────────────
+
+group('nothing invented on a card');
+{
+  // The cards and their columns, which is everything the wall draws before it
+  // hands a clicked ticket over to the conversation view.
+  const screen = readFileSync(join(web, 'src', 'screens', 'Ustabasi.tsx'), 'utf8');
+  const cards = screen.slice(screen.indexOf('function Tile('), screen.indexOf('// ── the wall ─'));
+
+  ok('the wall was found in the file', cards.length > 500);
+  ok('no card says "in this state" about anything', !/in this state/.test(cards));
+  ok('no percentage and no bar', !/percent|progress|toFixed|\* *100/i.test(cards));
+  ok('no count of criteria nobody has answered yet', !/done_criteria|findings/.test(cards));
+  ok('the total is drawn above the round',
+    cards.indexOf('totalAge(t, now)') < cards.indexOf('{round &&'));
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');
