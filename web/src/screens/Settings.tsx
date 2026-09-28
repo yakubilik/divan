@@ -365,7 +365,7 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>{maskUrl(prompt.url)}</span>
                   <Btn onClick={() => void copyText(prompt.url!)}>
-                    <Icon path={P.copy} size={13} color={C.text} /> Kopyala
+                    <Icon path={P.copy} size={13} color={C.text} /> Copy
                   </Btn>
                   <Btn onClick={() => window.open(prompt.url!, '_blank', 'noopener')}>
                     <Icon path={P.external} size={13} color={C.text} /> Open
@@ -463,7 +463,7 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
             : <>
                 <Btn kind="quiet" onClick={onClose}>Close</Btn>
                 <Btn onClick={() => { setStage('method'); setPrompt(null); setCode(''); setProblem(null); }}>
-                  Tekrar dene
+                  Try again
                 </Btn>
               </>
         )}
@@ -516,10 +516,10 @@ function HostsSection() {
               </div>
               <Btn kind="danger" onClick={() => setDoomed(k)}>Remove</Btn>
             </div>
-            <KV k="adres" v={`${slot.cfg.host}:${slot.cfg.port}`} code />
+            <KV k="address" v={`${slot.cfg.host}:${slot.cfg.port}`} code />
             <KV k="token" v="•••••••••• · kept in the panel, never shown" code />
             <KV k="daemon" v={info?.daemon_version ?? '—'} code />
-            <KV k="sistem" v={info ? `${info.os} ${info.os_version}` : '—'} code />
+            <KV k="system" v={info ? `${info.os} ${info.os_version}` : '—'} code />
             <KV k="uptime" v={info ? uptime(info.uptime_s) : '—'} code />
             <KV k="open sessions" v={info ? String(info.active_sessions) : '—'} code />
             <KV k="devices" v={info ? String(info.connected_devices) : '—'} code />
@@ -757,7 +757,7 @@ function AccountsSection({ hostKey, slot, tools }: {
                 setRenaming(null);
                 run(() => call(hostKey, 'account.rename', { account_id: a.id, label: renameText.trim() }));
               }}
-            >Kaydet</Btn>
+            >Save</Btn>
           </div>
         </Modal>
       )}
@@ -820,7 +820,7 @@ function ToolsSection({ tools, npm, loading, problem, onReload }: {
               </div>
             </div>
           </div>
-          {tool.path && <KV k="yol" v={tilde(tool.path)} code />}
+          {tool.path && <KV k="path" v={tilde(tool.path)} code />}
           {!!tool.login_methods?.length && (
             <KV
               k="sign-in methods"
@@ -1042,11 +1042,11 @@ function AboutSection({ slot }: { slot: HostSlot }) {
           <Dot color={slot.status === 'online' ? C.ok : C.faint} live={slot.status === 'online'} size={6} />
         </div>
         <KV k="daemon version" v={info?.daemon_version ?? '—'} code />
-        <KV k="sistem" v={info ? `${info.os} ${info.os_version}` : '—'} code />
+        <KV k="system" v={info ? `${info.os} ${info.os_version}` : '—'} code />
         <KV k="uptime" v={info ? uptime(info.uptime_s) : '—'} code />
         <KV k="devices" v={info ? String(info.connected_devices) : '—'} code />
         <KV k="open sessions" v={info ? String(info.active_sessions) : '—'} code />
-        <KV k="adres" v={`${slot.cfg.host}:${slot.cfg.port}`} code />
+        <KV k="address" v={`${slot.cfg.host}:${slot.cfg.port}`} code />
         <KV k="claude" v={info?.versions?.claude ?? 'not installed'} code />
         <KV k="codex" v={info?.versions?.codex ?? 'not installed'} code />
         {info?.transcription != null && (

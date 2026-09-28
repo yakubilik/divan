@@ -239,7 +239,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
   };
 
   const connect = () => {
-    if (!validAddr) { setError('Adres eksik.'); return; }
+    if (!validAddr) { setError('Address is missing.'); return; }
     if (!token.trim()) { setError('No token — paste the pairing link, or type it in.'); return; }
     const cfg: HostConfig = {
       host: host.trim(), port: portNum, token: token.trim(),
@@ -293,7 +293,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
 
         <Step
           n={1} state={s1} title="The daemon is running"
-          chip={probe.state === 'up' ? <Chip tone="ok">tamam</Chip>
+          chip={probe.state === 'up' ? <Chip tone="ok">ok</Chip>
             : probe.state === 'checking' ? <Spinner size={12} /> : null}
         >
           {probe.state === 'up' ? (
@@ -311,7 +311,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
                 <>
                   <CodeBox text={INSTALL} />
                   <div style={{ display: 'flex', marginTop: 10 }}>
-                    <Btn onClick={recheck}>Tekrar yokla</Btn>
+                    <Btn onClick={recheck}>Check again</Btn>
                   </div>
                 </>
               )}
@@ -321,7 +321,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
 
         <Step
           n={2} state={s2} title="Pair the computer"
-          chip={pairedKey ? <Chip tone="ok">tamam</Chip>
+          chip={pairedKey ? <Chip tone="ok">ok</Chip>
             : s2 === 'active' ? <Chip tone="accent">now</Chip> : null}
         >
           <div style={{ fontSize: 13, color: C.text2, lineHeight: '19px', margin: '8px 0 10px' }}>
@@ -362,7 +362,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
           <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
             <Field label="token" value={token} secret placeholder="device token"
               onChange={(v) => { setToken(v); setFromLink(false); }} />
-            <Field label="ad" value={name} onChange={setName} placeholder="This computer" width={160} />
+            <Field label="name" value={name} onChange={setName} placeholder="This computer" width={160} />
           </div>
 
           <div style={{
@@ -374,7 +374,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
               color: error ? C.danger : C.mute,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }} title={error ?? preview ?? ''}>
-              {error ?? preview ?? 'token bekleniyor'}
+              {error ?? preview ?? 'waiting for a token'}
             </span>
             <Btn kind="primary" onClick={connect} disabled={!token.trim() || !validAddr || !!pairedKey}>
               Connect

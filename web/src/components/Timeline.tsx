@@ -170,7 +170,7 @@ function UserBubble({ item, hostKey }: { item: Extract<Item, { kind: 'user' }>; 
         wordBreak: 'break-word',
       }}>
         {item.queued && (
-          <div style={{ ...mono, fontSize: 11, color: C.mute, marginBottom: 4 }}>kuyrukta</div>
+          <div style={{ ...mono, fontSize: 11, color: C.mute, marginBottom: 4 }}>queued</div>
         )}
         <Attachments list={item.attachments} hostKey={hostKey} />
         {item.text}
@@ -344,7 +344,7 @@ function Tool({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
           <span style={{
             ...mono, fontSize: 10, color: C.danger, background: BAD_BG,
             border: `1px solid ${border}`, borderRadius: R.badge, padding: '2px 6px', flexShrink: 0,
-          }}>hata</span>
+          }}>error</span>
         )}
         <Icon path={open ? P.chevronDown : P.chevronRight} size={13} color={C.faint} />
       </button>
@@ -372,9 +372,9 @@ function Approval({ item, onRespond }: {
   onRespond: (d: 'allow' | 'allow_session' | 'deny') => void;
 }) {
   const settled = item.decision != null;
-  const word = item.decision === 'allow' ? 'izin verildi'
+  const word = item.decision === 'allow' ? 'allowed'
     : item.decision === 'allow_session' ? 'always allowed this session'
-    : item.decision === 'deny' ? 'reddedildi'
+    : item.decision === 'deny' ? 'denied'
     : item.decision === 'expired' ? 'timed out' : '';
   return (
     <div style={{
@@ -400,7 +400,7 @@ function Approval({ item, onRespond }: {
       )}
       {!settled && (
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button type="button" onClick={() => onRespond('deny')} style={btn('ghost')}>Reddet</button>
+          <button type="button" onClick={() => onRespond('deny')} style={btn('ghost')}>Deny</button>
           <button type="button" onClick={() => onRespond('allow')} style={btn('primary')}>Allow</button>
           <button type="button" onClick={() => onRespond('allow_session')} style={btn('ghost')}>
             Always allow this session

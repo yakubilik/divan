@@ -47,10 +47,29 @@ jobs:
         # scripts/e2e.py and scripts/smoke.py need a running daemon and a real
         # sign-in, so they stay a human's job.
         run: |
-          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments; do
+          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments test_agents test_titles test_push; do
             echo "── $t"
             python "scripts/$t.py"
           done
+
+  audit:
+    name: nothing private, nothing not-English
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The scanner finds what it claims to
+        # A scan that reports "none" is worth nothing unless it would have said
+        # something else, so the rules are fired against samples first.
+        run: python scripts/test_audit.py
+      - name: Scan the tracked files
+        # Tracked files only. History is reported by `--history` and remedied by
+        # a person; see docs/audit/.
+        run: python scripts/audit.py
+      - name: Every string the app asks for is in the app's string table
+        # `t(key)` falls back to the key itself, so a renamed key shows a user
+        # the name of a variable. `tsc` would catch it; `app/node_modules` is
+        # not installable from the committed lockfile, so this does instead.
+        run: python scripts/test_i18n_keys.py
 
   docs:
     name: docs · links

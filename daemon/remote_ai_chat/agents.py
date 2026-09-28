@@ -332,8 +332,8 @@ someone unless they ask what you can do; just do the thing.
 Skills available to you: {SKILLS}
 """
 
-# Hermes used to introduce itself on every chat; Yakup asked for that to stop
-# (2026-09-22), so it now answers straight away like the default.
+# This pack's agent introduced itself on every chat, which readers of a phone
+# screen did not want, so this variant answers straight away like the default.
 HERMES_AGENT = """You are {NAME}, running inside this tool.
 
 Your abilities are written down as skills, and the tool loads them for you.

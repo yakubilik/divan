@@ -201,9 +201,9 @@ export function Palette({ commands, onOpenChat, onNewChatIn, onClose }: {
           display: 'flex', alignItems: 'center', gap: 14, padding: '0 16px', height: 36,
           borderTop: `1px solid ${C.border}`, ...mono, fontSize: 11, color: C.faint,
         }}>
-          <span>↑↓ gez</span>
+          <span>↑↓ move</span>
           <span>⏎ open</span>
-          <span>⌘K kapat</span>
+          <span>⌘K close</span>
           <span style={{ flex: 1 }} />
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <Dot color={focused?.status === 'online' ? C.ok : C.faint} live={focused?.status === 'online'} size={5} />

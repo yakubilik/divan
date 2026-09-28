@@ -42,27 +42,27 @@ check("outside every root", policy.project_for("/"), None)
 check("a folder that is not there", policy.project_for(str(here / "nope" / "deeper")), project)
 
 # ── composing the title ──────────────────────────────────────────────────
-check("plain title", with_project("Fix the login redirect", "aristo"),
-      "aristo · Fix the login redirect")
-check("already prefixed", with_project("aristo · Fix it", "aristo"), "aristo · Fix it")
-check("prefixed in another case", with_project("Aristo · Fix it", "aristo"), "Aristo · Fix it")
+check("plain title", with_project("Fix the login redirect", "ledger"),
+      "ledger · Fix the login redirect")
+check("already prefixed", with_project("ledger · Fix it", "ledger"), "ledger · Fix it")
+check("prefixed in another case", with_project("Ledger · Fix it", "ledger"), "Ledger · Fix it")
 check("no project to name", with_project("Fix it", None), "Fix it")
-check("an empty title is still the placeholder", with_project("   ", "aristo"),
-      f"aristo · {NEW_CHAT_TITLE}")
+check("an empty title is still the placeholder", with_project("   ", "ledger"),
+      f"ledger · {NEW_CHAT_TITLE}")
 check("a long first line is cut, the project is not",
-      with_project("x" * 200, "aristo"), "aristo · " + "x" * TITLE_MAX)
+      with_project("x" * 200, "ledger"), "ledger · " + "x" * TITLE_MAX)
 check("a project named like a sentence start",
-      with_project("aristotle is not aristo", "aristo"), "aristo · aristotle is not aristo")
+      with_project("ledgerbook is not ledger", "ledger"), "ledger · ledgerbook is not ledger")
 
 # ── what counts as still untitled ────────────────────────────────────────
 check("bare placeholder", is_untitled(NEW_CHAT_TITLE), True)
-check("prefixed placeholder", is_untitled(f"aristo · {NEW_CHAT_TITLE}"), True)
-check("a real title", is_untitled("aristo · Fix the login redirect"), False)
+check("prefixed placeholder", is_untitled(f"ledger · {NEW_CHAT_TITLE}"), True)
+check("a real title", is_untitled("ledger · Fix the login redirect"), False)
 check("a title that merely mentions it", is_untitled("New chat about the parser"), False)
 
 # ── twice is the same as once ────────────────────────────────────────────
-once = with_project("Fix it", "aristo")
-check("idempotent", with_project(once, "aristo"), once)
+once = with_project("Fix it", "ledger")
+check("idempotent", with_project(once, "ledger"), once)
 
 if fails:
     print(f"FAIL ({len(fails)})")

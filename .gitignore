@@ -3,6 +3,7 @@ node_modules/
 .expo/
 dist/
 app/ios/build/
+**/ios/build/
 app/ios/Pods/
 app/android/
 *.xcuserstate
@@ -10,15 +11,33 @@ app/android/
 
 # python
 .venv/
-.venv312/
+.venv*/
 __pycache__/
 *.egg-info/
 *.pyc
 
-# local machine state (tokens, chat history, uploads all live here)
+# credentials, in every shape they arrive in. None of these belongs in a public
+# repository, and a name that only nearly matches is how one gets in anyway.
+.env
+.env.*
+*.p8
+*.p12
+*.pfx
+*.pem
+*.key
+*.jks
+*.keystore
+*.mobileprovision
+*.cer
+.netrc
+.npmrc
+
+# local machine state: the daemon's home holds the token store, the chat
+# database, the APNs key and every uploaded file.
 .remote-ai-chat/
-*.sqlite
-*.sqlite-*
+uploads/
+*.sqlite*
+*.db
 .xcode.env.local
 
 # scratch
@@ -30,6 +49,7 @@ daemon/remote_ai_chat/webui/
 
 # local build identity (Apple team, EAS project) — never committed
 app/IDENTITY.local.md
+app/identity.local.json
 
 # scratch: web panel build backups
 daemon/remote_ai_chat/webui.bak-*/

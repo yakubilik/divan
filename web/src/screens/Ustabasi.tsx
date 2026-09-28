@@ -415,7 +415,7 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
         }}>
           {header}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexShrink: 0 }}>
-            <span style={{ fontSize: 17, fontWeight: 600 }}>Ustabaşı</span>
+            <span style={{ fontSize: 17, fontWeight: 600 }}>Ustabasi</span>
             <span style={{ ...mono, fontSize: 12, color: C.faint }}>
               {counts.running || 0} running · {(counts.blocked || 0) + (counts.failed || 0)} red
             </span>

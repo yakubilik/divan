@@ -206,7 +206,7 @@ export default function ChatScreen() {
     const empty = !!st.loadedChats[id!] && !st.busy[id!] && !st.live[id!]
       && (st.events[id!]?.length ?? 0) === 0
       && (ch?.total_cost_usd ?? 0) === 0
-      && (ch?.title === 'New chat' || ch?.title === 'Yeni sohbet');
+      && ch?.title === 'New chat';
     if (empty) void st.deleteChat(id!).catch(() => {});
   }, [id]);
 

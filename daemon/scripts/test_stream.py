@@ -254,24 +254,24 @@ async def scenario_unasked_turn() -> None:
     p.on_idle_output = on_idle
     try:
         # nobody asked; the agent's notification is answered anyway
-        cli.say(msg_start(), block_start(), delta("Arka plan bitti."), block_stop(),
-                assistant(TextBlock(text="Arka plan bitti.")), result())
+        cli.say(msg_start(), block_start(), delta("Background job done."), block_stop(),
+                assistant(TextBlock(text="Background job done.")), result())
         for _ in range(200):                     # let the reader and the turn run
             await asyncio.sleep(0)
         check(opened == [1], "a turn is opened for it", f"opened={opened}")
-        check(texts(seen) == ["Arka plan bitti."],
+        check(texts(seen) == ["Background job done."],
               "and it is delivered before anything else is asked", f"got={texts(seen)!r}")
         check(cli.queries == [], "without pretending anyone asked", f"got={cli.queries}")
 
         # now a real question: it must get its own answer, not the one above
         seen.clear()
-        turn = asyncio.create_task(p.run("yeni soru"))
+        turn = asyncio.create_task(p.run("a new question"))
         for _ in range(50):
             await asyncio.sleep(0)
-        cli.say(msg_start(), block_start(), delta("Yeni cevap."), block_stop(),
-                assistant(TextBlock(text="Yeni cevap.")), result())
+        cli.say(msg_start(), block_start(), delta("A new answer."), block_stop(),
+                assistant(TextBlock(text="A new answer.")), result())
         await asyncio.wait_for(turn, timeout=5)
-        check(texts(seen) == ["Yeni cevap."],
+        check(texts(seen) == ["A new answer."],
               "the question gets the answer to itself", f"got={texts(seen)!r}")
     finally:
         p._reader.cancel()
@@ -304,8 +304,8 @@ async def scenario_housekeeping_is_not_a_turn() -> None:
     p._client = cli
     p._reader = asyncio.create_task(p._read_stream(cli))
     try:
-        cli.say(msg_start(), block_start(), delta("Bitti."), block_stop(),
-                assistant(TextBlock(text="Bitti.")), result())
+        cli.say(msg_start(), block_start(), delta("Done."), block_stop(),
+                assistant(TextBlock(text="Done.")), result())
         await p.run("hi")
 
         # the tail the CLI sends once the turn is over

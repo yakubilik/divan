@@ -363,13 +363,13 @@ async def scenario_dropped_session(db):
     # Now the account changes: the resume id goes, the chat history stays.
     db.update_chat(cid, account_id="acct-2", provider_session_id=None)
     s3, built3 = make_session(db, db.get_chat(cid))
-    await turn(s3, "Devam")
+    await turn(s3, "Carry on")
     sent = built3[0].prompts[0]
     check("[Remote AI Chat]" in sent, "a dropped session is handed the chat's history")
     check("first question" in sent and "second question" in sent,
           "the history is this chat's own, both turns of it")
-    check(sent.count("Devam") == 1, "the new message is not quoted back as history")
-    check(sent.endswith("Devam"), "and it still ends with what the user actually typed")
+    check(sent.count("Carry on") == 1, "the new message is not quoted back as history")
+    check(sent.endswith("Carry on"), "and it still ends with what the user actually typed")
 
     # The catch-up is a one-off: the turn that follows resumes normally.
     await turn(s3, "and now?")
