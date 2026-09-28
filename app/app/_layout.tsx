@@ -64,7 +64,9 @@ export default function RootLayout() {
     // the queue rather than out of it.
     if (tap.ticket != null) {
       try { if (router.canDismiss()) router.dismissTo('/chats'); } catch {}
-      router.push('/ustabasi');
+      // The wall goes on first and is allowed to fail: landing on the ticket is
+      // the point, and having the queue under it is only the courtesy.
+      try { router.push('/ustabasi'); } catch {}
       router.push(`/ticket/${tap.ticket}`);
       return;
     }
