@@ -77,6 +77,11 @@ If you moved or renamed anything under `docs/`, that last one is the check that
 notices. `scripts/test_check_links.py` is the checker's own test, and it is the
 one to run if you touch the checker.
 
+`cd web && npm run test:ui` drives a real browser over the DevTools protocol —
+typing a note, folding the paperwork open, the layout in portrait. It needs a
+Chrome on the machine (`CHROME=/path/to/chrome`), so it is not in CI. Run it if
+you touch the ustabasi ticket view.
+
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.
 
