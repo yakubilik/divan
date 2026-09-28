@@ -99,10 +99,14 @@ def refuses(what: str, fn, *args, **kw) -> None:
 # ── a machine with projects on it ────────────────────────────────────────────
 
 ROOT = tmp / "projects"
-for name in ("babysee", "isghocam"):
+for name in ("babysee", "isghocam", "a-new-product", "secrets"):
     (ROOT / name).mkdir(parents=True)
 (ROOT / "babysee" / "app").mkdir()
-policy = PathPolicy([str(ROOT)], [])
+# Outside every root, and therefore no place to start a coding agent: the home
+# directory of the machine running this, as far as the policy is concerned.
+OUTSIDE = tmp / "outside-every-root"
+OUTSIDE.mkdir()
+policy = PathPolicy([str(ROOT)], [str(ROOT / "secrets")])
 
 
 def fresh_db(name: str) -> DB:
@@ -119,7 +123,8 @@ class Host:
         self.policy = policy
         self.cfg = types.SimpleNamespace(host_name=host_name)
         for attr in dir(Server):
-            if attr.startswith("h_divan_") or attr == "h_ustabasi_list":
+            if (attr.startswith("h_divan_") or attr == "h_ustabasi_list"
+                    or attr == "_checked_repo"):
                 setattr(self, attr, getattr(Server, attr).__get__(self))
 
 
@@ -444,6 +449,13 @@ def queue_status(tid: int, status: str, escalation: str = "") -> None:
     conn.close()
 
 
+def queue_count() -> int:
+    conn = sqlite3.connect(QDB)
+    n = conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0]
+    conn.close()
+    return n
+
+
 def queue_card(tid: int) -> dict:
     conn = sqlite3.connect(QDB)
     row = conn.execute("SELECT card FROM tickets WHERE id=?", (tid,)).fetchone()
@@ -637,6 +649,125 @@ async def wire() -> None:
     CLI.write_text(CLI_STUB)
     CLI.chmod(0o755)
 
+    # ── 11b · where a coding agent may be pointed ────────────────────────────
+    #
+    # A card's repository is where an autonomous worker gets a shell. Every
+    # other client-supplied path on this daemon goes through the allowed roots
+    # — a chat's cwd does, `/files` does — and these three arrive from exactly
+    # the same place. Without the fence, "create a project on the home
+    # directory" and one drag is a worker loose in it.
+
+    fenced = board.project_by_name("babysee")
+    for name, data in [
+        ("h_divan_project_create",
+         {"name": "somewhere else entirely", "repos": [str(OUTSIDE)]}),
+        ("h_divan_card_create",
+         {"project_id": fenced["id"], "title": "t", "repo": str(OUTSIDE)}),
+    ]:
+        try:
+            await getattr(host, name)(None, data)
+            holds(f"{name} refuses a repository outside every root", False, "it was accepted")
+        except Exception as exc:
+            check(f"{name} refuses a repository outside every root",
+                  getattr(exc, "code", None), "cwd_outside")
+
+    fence_card = board.create_card(fenced["id"], title="a card to point somewhere")
+    try:
+        await host.h_divan_card_update(None, {"card_id": fence_card["id"],
+                                              "repo": str(OUTSIDE)})
+        holds("h_divan_card_update refuses one too", False, "it was accepted")
+    except Exception as exc:
+        check("h_divan_card_update refuses one too", getattr(exc, "code", None),
+              "cwd_outside")
+    check("and the card's repository is untouched by the attempt",
+          board.get_card(fence_card["id"])["repo"], str(ROOT / "babysee"))
+
+    try:
+        await host.h_divan_card_create(None, {"project_id": fenced["id"], "title": "t",
+                                              "repo": str(ROOT / "secrets")})
+        holds("a denied path inside a root is refused as well", False, "it was accepted")
+    except Exception as exc:
+        check("a denied path inside a root is refused as well",
+              getattr(exc, "code", None), "cwd_outside")
+    try:
+        await host.h_divan_card_create(None, {"project_id": fenced["id"], "title": "t",
+                                              "repo": str(ROOT / "never-existed")})
+        holds("a folder that is simply not there says so", False, "it was accepted")
+    except Exception as exc:
+        check("a folder that is simply not there says so",
+              getattr(exc, "code", None), "no_such_folder")
+    inside = await host.h_divan_card_create(None, {
+        "project_id": fenced["id"], "title": "a card pointed somewhere allowed",
+        "repo": str(ROOT / "babysee" / "app")})
+    check("a repository inside a root is taken", inside["repo"],
+          str(ROOT / "babysee" / "app"))
+
+    # The way in is fenced; so is the way out. A card whose repository is
+    # outside the roots by some route the handlers do not cover — the import
+    # files them from the queue's own rows, which answer to nobody here — still
+    # never becomes a worktree.
+    ledger = board.project_by_name("ledger")
+    check("the imported product's repository is outside every root",
+          policy.is_allowed_cwd(ledger["repos"][0]), False)
+    loose = board.create_card(ledger["id"], title="work in a folder nobody allowed",
+                              executor="coding_agent")
+    before = queue_count()
+    out = await host.h_divan_card_move(None, {"card_id": loose["id"],
+                                              "column": "in_progress"})
+    check("a card pointed outside the roots is never filed", out["error"],
+          "that folder is outside the allowed roots")
+    check("nothing was written on it", out["card"]["ustabasi_id"], None)
+    check("and the queue was never asked", queue_count(), before)
+
+    # ── 11c · the mirror landing in the middle of a filing ───────────────────
+    #
+    # Filing is: hand the spec to the CLI, wait for it, write the number back.
+    # A poll that lands in that gap sees a ticket with no card and imports it —
+    # which is what the mirror is *for* — and the board would end with two cards
+    # for one ticket and a unique index refusing the second. Reproduced exactly
+    # by polling from inside the call the filing is waiting on.
+
+    real_add = u.add
+
+    async def add_then_poll(spec):
+        tid = await real_add(spec)
+        await host.h_ustabasi_list(None, {})          # the mirror, mid-filing
+        return tid
+
+    raced = board.create_card(bs["id"], title="two things happening at once",
+                              executor="coding_agent")
+    u.add = add_then_poll
+    try:
+        out = await host.h_divan_card_move(None, {"card_id": raced["id"],
+                                                  "column": "in_progress", "position": 0})
+    finally:
+        u.add = real_add
+
+    tid = out["card"]["ustabasi_id"]
+    holds("a poll landing mid-filing does not turn the drag into a failure",
+          out["error"] is None and bool(tid), repr(out["error"]))
+    carrying = [c for c in board.cards() if c["ustabasi_id"] == tid]
+    check("exactly one card carries the ticket", len(carrying), 1)
+    check("and it is the one that was dragged", carrying[0]["id"], raced["id"])
+    check("which is still where the finger put it",
+          (carrying[0]["column"], carrying[0]["position"]), ("in_progress", 0))
+    check("the status the mirror had already read comes across",
+          carrying[0]["agent_status"], "queued")
+    check("the card the mirror made in the gap is gone",
+          [c["title"] for c in board.cards()
+           if c["title"] == "two things happening at once"],
+          ["two things happening at once"])
+    for col in divan.COLUMNS:
+        check(f"and the '{col}' column closed up behind it",
+              [c["position"] for c in board.board(bs["id"])["columns"][col]],
+              list(range(len(board.board(bs["id"])["columns"][col]))))
+
+    after_poll = await host.h_ustabasi_list(None, {})
+    check("a later poll mirrors that card rather than importing it again",
+          len([c for c in board.cards() if c["ustabasi_id"] == tid]), 1)
+    check("and the wall is unbothered by any of it",
+          any(t["id"] == tid for t in after_poll["tickets"]), True)
+
     # ── 12 · the requests, as a client sends them ────────────────────────────
     projects = await host.h_divan_projects(None, {})
     names = [p["name"] for p in projects["projects"]]
@@ -647,7 +778,7 @@ async def wire() -> None:
     check("the computer answering says which one it is", projects["machine"], "this-mac")
 
     made = await host.h_divan_project_create(None, {"name": "a new product",
-                                                    "repos": ["/repo/new"],
+                                                    "repos": [str(ROOT / "a-new-product")],
                                                     "branches": ["finance"]})
     check("a product can be created over the wire", made["name"], "a new product")
     check("with an extra branch of its own",
