@@ -28,6 +28,9 @@ export default function TicketScreen() {
   const now = useNow();
   const { tickets, state } = useQueue();
   const noteTicket = useStore((s) => s.noteTicket);
+  const hostInfo = useStore((s) => s.hostInfo);
+  const host = useStore((s) => s.host);
+  const hostName = hostInfo?.name?.replace('.local', '') || host?.name || T('computer');
 
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -54,15 +57,21 @@ export default function TicketScreen() {
 
   // A ticket can go away while somebody is reading it — cancelled on the
   // computer, or the phone switched to a computer that never had it. Say so
-  // rather than drawing an empty page. Not while the first poll is still out:
-  // "not in the queue" and "not asked yet" are different answers.
+  // rather than drawing an empty page. But only when the computer has actually
+  // answered: "not in the queue", "not asked yet" and "not connected" are three
+  // different answers, and a notification tapped on a sleeping phone arrives in
+  // the middle one on its way to the first.
   if (!t) {
     return (
       <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
         <BackBar onPress={() => router.back()} />
-        {state === 'loading'
-          ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Spinner size={22} width={2} /></View>
-          : <EmptyState icon="info" title={T('ticketGone')} body={T('ticketGoneBody')} />}
+        {state === 'loading' ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Spinner size={22} width={2} /></View>
+        ) : state === 'offline' ? (
+          <EmptyState icon="cloud_off" title={T('cantConnect', { host: hostName })} body={T('hintOffline')} />
+        ) : (
+          <EmptyState icon="info" title={T('ticketGone')} body={T('ticketGoneBody')} />
+        )}
       </View>
     );
   }
