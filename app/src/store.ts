@@ -5,7 +5,8 @@ import { useCallback } from 'react';
 import { client, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, ToolStatus } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, ToolStatus, UstabasiSnapshot } from './protocol';
+import { oldHost } from './tickets';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -70,6 +71,20 @@ interface State {
   poolAccounts: PoolAccount[];
   loadPool: () => Promise<void>;
   setPool: (patch: Partial<PoolSettings>) => Promise<void>;
+  /** The ticket queue on the computer, as it last answered. Null until it has
+   *  answered at all — an empty wall and an unasked computer are not the same
+   *  thing, and the screen says something different about each. */
+  ustabasi: UstabasiSnapshot | null;
+  /** The last poll failed, in words. Kept next to the snapshot rather than
+   *  replacing it: a queue eight seconds stale beats an error where a wall was. */
+  ustabasiError: string | null;
+  /** …and the failure was "I have never heard of that request", which is a
+   *  computer running a daemon older than this screen, not a broken one. */
+  ustabasiOld: boolean;
+  loadUstabasi: () => Promise<void>;
+  /** Answer a blocked ticket. The queue's own CLI does the work on the
+   *  computer; this is the only write the wall can make. */
+  noteTicket: (id: number, text: string) => Promise<string>;
   // tool call id -> what the background agent it started is doing right now.
   // Live only: a helper's step-by-step is progress, not conversation, and the
   // answer it produces arrives as that tool's result.
@@ -304,6 +319,10 @@ export const useStore = create<State>((set, get) => {
       // An older computer has no pool at all; that is not an error, it just
       // means the settings screen has nothing to offer.
       void get().loadPool();
+      // The red count on the chats screen: the queue is asked once on connect
+      // so a ticket waiting since last night is visible before anybody goes
+      // looking for it. Costs one existence check on a computer with no queue.
+      void get().loadUstabasi();
       await get().refresh();
       // Nothing else is caught up here on purpose. Every chat ever opened used
       // to be re-fetched, one await after another, on every single reconnect —
@@ -457,6 +476,7 @@ export const useStore = create<State>((set, get) => {
       chats: {}, groups: [], events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
       chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, accounts: [],
       agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
+      ustabasi: null, ustabasiError: null, ustabasiOld: false,
     };
   };
 
@@ -473,6 +493,7 @@ export const useStore = create<State>((set, get) => {
       // everything else now, since no screen draws it without a live computer.
       set({ hostInfo: null, catalog: null, device: null, projects: [], accounts: [],
             agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
+            ustabasi: null, ustabasiError: null, ustabasiOld: false,
             chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, switching: true });
     } else {
       set({ ...perHost(), switching: false });
@@ -499,6 +520,7 @@ export const useStore = create<State>((set, get) => {
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
     chats: {}, groups: [], showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
+    ustabasi: null, ustabasiError: null, ustabasiOld: false,
     chatsLoaded: false, accountsLoaded: false, projectsLoaded: false,
 
     init: async () => {
@@ -777,6 +799,28 @@ export const useStore = create<State>((set, get) => {
     setPool: async (patch) => {
       const r = await client.call<{ settings: PoolSettings; accounts: PoolAccount[] }>('pool.set', patch);
       set({ pool: r.settings ?? null, poolAccounts: r.accounts ?? [] });
+    },
+
+    loadUstabasi: async () => {
+      try {
+        const snap = await client.call<UstabasiSnapshot>('ustabasi.list', {});
+        set({ ustabasi: { available: !!snap?.available, tickets: snap?.tickets ?? [], queue: snap?.queue ?? {} },
+              ustabasiError: null, ustabasiOld: false });
+      } catch (e: any) {
+        // Three different silences, and the wall says which: a daemon that
+        // predates the two requests, a queue that would not open, and a
+        // connection that went away mid-poll (which is already on screen).
+        set({ ustabasiError: e?.message ?? null, ustabasiOld: oldHost(e) });
+      }
+    },
+
+    noteTicket: async (id, text) => {
+      const r = await client.call<{ ok?: boolean; message?: string }>('ustabasi.note', { id, text });
+      // The note re-queues the ticket on the computer, so the wall is stale the
+      // moment this returns — and the whole point of the screen is that the red
+      // goes away when it has been answered.
+      await get().loadUstabasi();
+      return r?.message || '';
     },
 
     loadStore: async () => {

@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useStore, useT } from '../store';
 import { useNavGuard } from '../nav';
+import { redCount } from '../tickets';
 import { useColors } from '../theme';
 import { Dot, Icon, Text } from './ui';
 
@@ -18,7 +19,13 @@ export function HomeTop({ tab }: { tab: 'chats' | 'agents' }) {
   const hostInfo = useStore((s) => s.hostInfo);
   const host = useStore((s) => s.host);
   const switching = useStore((s) => s.switching);
+  const queue = useStore((s) => s.ustabasi);
   const online = conn === 'online';
+  // The ticket queue is only somewhere the phone can go if the computer runs
+  // one, which most do not. When it does, the count of tickets that stopped to
+  // ask is on the badge: a queue that has gone red is the one thing on this
+  // computer nobody would otherwise find out about until they looked.
+  const red = queue?.available ? redCount(queue.tickets) : 0;
   const name = hostInfo?.name?.replace('.local', '') || host?.name || T('computer');
   const status = switching || conn === 'connecting' ? T('connecting')
     : online ? T('active', { n: hostInfo?.active_sessions ?? 0 })
@@ -36,6 +43,9 @@ export function HomeTop({ tab }: { tab: 'chats' | 'agents' }) {
         <Icon name="expand_more" size={18} color={c.faint} />
       </Pressable>
       <View style={{ flexDirection: 'row', gap: 4, marginLeft: 8 }}>
+        {tab === 'chats' && queue?.available && (
+          <Btn icon="terminal" label={T('ustabasi')} badge={red} onPress={() => go(() => router.push('/ustabasi'))} />
+        )}
         {tab === 'chats' && <Btn icon="call" label={T('call')} onPress={() => go(() => router.push('/call'))} />}
         <Btn icon="settings" label={T('settings')} onPress={() => go(() => router.push('/settings'))} />
       </View>
@@ -43,11 +53,18 @@ export function HomeTop({ tab }: { tab: 'chats' | 'agents' }) {
   );
 }
 
-function Btn({ icon, onPress, onLongPress, label }: { icon: string; onPress?: () => void; onLongPress?: () => void; label?: string }) {
+function Btn({ icon, onPress, onLongPress, label, badge }: { icon: string; onPress?: () => void; onLongPress?: () => void; label?: string; badge?: number }) {
+  const c = useColors();
   return (
-    <Pressable accessibilityLabel={label} onPress={onPress} onLongPress={onLongPress} disabled={!onPress && !onLongPress} hitSlop={4}
+    <Pressable accessibilityLabel={badge ? `${label} (${badge})` : label} onPress={onPress} onLongPress={onLongPress} disabled={!onPress && !onLongPress} hitSlop={4}
       style={({ pressed }) => [{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
       <Icon name={icon} size={22} />
+      {!!badge && (
+        <View style={{ position: 'absolute', top: 2, right: 0, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
+                       backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 10, fontWeight: '600', color: '#FFFFFF' }}>{badge > 9 ? '9+' : badge}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }

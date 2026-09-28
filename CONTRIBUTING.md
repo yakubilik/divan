@@ -58,6 +58,8 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_agents.py
 
 cd app && npx tsc --noEmit
+node scripts/test-login-web.cjs                # the sign-in WebView's two judgements
+node scripts/test-ustabasi.cjs                 # the ustabasi wall's, and the i18n table
 cd web && npm run build                        # typechecks, then builds into the daemon
 
 cd <the repo root>

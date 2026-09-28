@@ -11,6 +11,7 @@ import { em, FONTS, useColors } from '../src/theme';
 import { Button, Icon, Text } from '../src/components/ui';
 import { DialogHost, MenuHost } from '../src/components/overlay';
 import { getOpenChat, protectChat, registerForPush } from '../src/push';
+import { ticketFromPush } from '../src/tickets';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { prepareForCalls, startIncomingCalls } from '../src/incoming-call';
 
@@ -37,8 +38,8 @@ export default function RootLayout() {
    * before Face ID has been answered, so it is held here until the app can act
    * on it rather than spent on a store that is still empty. Both are the same
    * symptom from the outside: an empty chat. */
-  const pendingTap = useRef<{ chat: string; device?: string } | null>(null);
-  const lastTap = useRef<{ chat: string; at: number } | null>(null);
+  const pendingTap = useRef<{ chat?: string; ticket?: number; device?: string } | null>(null);
+  const lastTap = useRef<{ key: string; at: number } | null>(null);
 
   const deliverTap = useCallback(async () => {
     const tap = pendingTap.current;
@@ -48,14 +49,26 @@ export default function RootLayout() {
     if (!st.ready || st.locked) return;
     pendingTap.current = null;
     // The launch response and the listener can both report the same tap.
-    if (lastTap.current && lastTap.current.chat === tap.chat
+    const key = tap.ticket != null ? `ticket:${tap.ticket}` : `chat:${tap.chat}`;
+    if (lastTap.current && lastTap.current.key === key
         && Date.now() - lastTap.current.at < 3000) return;
-    lastTap.current = { chat: tap.chat, at: Date.now() };
+    lastTap.current = { key, at: Date.now() };
 
     if (tap.device && tap.device !== st.activeHostId
         && st.hosts.some((h) => h.id === tap.device)) {
       try { await st.switchHost(tap.device); } catch {}
     }
+    // A ticket that went red is announced by its number, and the whole reason
+    // the notification exists is that nobody would otherwise be looking. Land
+    // on the ticket itself, with the wall under it so Back leads to the rest of
+    // the queue rather than out of it.
+    if (tap.ticket != null) {
+      try { if (router.canDismiss()) router.dismissTo('/chats'); } catch {}
+      router.push('/ustabasi');
+      router.push(`/ticket/${tap.ticket}`);
+      return;
+    }
+    if (!tap.chat) return;
     // The tap only brought the app forward — we are already reading this chat.
     if (getOpenChat() === tap.chat) return;
     // A notification is a jump somewhere else, not a step deeper into wherever
@@ -94,9 +107,11 @@ export default function RootLayout() {
     });
     const queue = (r: Notifications.NotificationResponse | null) => {
       const data = (r?.notification.request.content.data ?? {}) as any;
-      if (!data.chat_id) return;
+      const ticket = ticketFromPush(data);
+      if (!data.chat_id && ticket == null) return;
       pendingTap.current = {
-        chat: String(data.chat_id),
+        chat: data.chat_id ? String(data.chat_id) : undefined,
+        ticket: ticket ?? undefined,
         device: data.device_id ? String(data.device_id) : undefined,
       };
       void deliverTap();
@@ -139,6 +154,10 @@ export default function RootLayout() {
         <Stack.Screen name="agent-install" />
         <Stack.Screen name="accounts" />
         <Stack.Screen name="pool" />
+        {/* The ticket queue on the computer, and one of its tickets. A push
+            about a red ticket lands on the second one directly. */}
+        <Stack.Screen name="ustabasi" />
+        <Stack.Screen name="ticket/[id]" />
         <Stack.Screen name="login-method" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="account-login" />
         <Stack.Screen name="login-web" options={{ presentation: 'fullScreenModal' }} />

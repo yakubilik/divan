@@ -266,3 +266,51 @@ export interface LoginDone {
   error: string | null;
   retryable: boolean;
 }
+
+// ── the ustabasi ticket queue ────────────────────────────────────────────────
+// A ticket queue that runs on the computer without anybody watching: a worker,
+// a check and an independent verifier, for hours. The daemon reads that queue's
+// own database (`ustabasi.list`) and can answer one of its tickets through its
+// own CLI (`ustabasi.note`). Nothing here is this app's state — it is a
+// snapshot of somebody else's program, and most computers have none.
+
+export type TicketStatus = 'queued' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled';
+
+/** One line of the verifier's answer: the criterion as *it* worded it, and
+ *  whether the work met it. Positional — the verifier answers the card's
+ *  criteria in order but writes its own wording for each. */
+export interface TicketCriterion { criterion: string; status: string; detail?: string }
+export interface TicketVerdict { verdict?: string; findings?: TicketCriterion[] }
+export interface TicketNote { ts: number; from: string; text: string }
+
+export interface Ticket {
+  id: number;
+  title: string;
+  status: TicketStatus;
+  stage: string;
+  round: number;
+  repo: string;
+  branch: string | null;
+  created_at: number;
+  updated_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  goal: string;
+  done_criteria: string[];
+  /** What the worker stopped to ask, when it stopped. Empty otherwise — and on
+   *  a finished ticket this is its closing report instead. */
+  escalation: string;
+  verdict: TicketVerdict | null;
+  /** The last few only; `note_count` is how many there are in all. */
+  notes: TicketNote[];
+  note_count: number;
+  last_event: { ts: number; kind: string; msg: string } | null;
+}
+
+export interface UstabasiSnapshot {
+  /** False on a computer that has the daemon but no queue, which is most of
+   *  them. Not an error, and not the same as a daemon too old to be asked. */
+  available: boolean;
+  tickets: Ticket[];
+  queue: { last_tick?: number | null; paused_until?: number | null };
+}
