@@ -38,16 +38,23 @@ RAC_AUDIT_NAMES='<name>|<other-project>' python scripts/audit.py --history
 | Secrets in tracked files | **none** |
 | Secrets anywhere in git history | **none** |
 | Personal data in tracked files | none of the shapes the scanner looks for; 5 files carried an author-specific identifier — 3 found by hand in the first pass, 3 more in the second pass by the two rules those three led to, all 7 fixed below; this report was the eighth, redacted in the third pass |
-| Personal data in git history | 163 hits across 49 blobs, plus 2 author identities in commit metadata — **not** rewritten, see [section 4](#4--what-only-exists-in-history) |
+| Personal data in git history | 149 hits across 53 blobs, plus 2 author identities in commit metadata, on the name list the third pass used — **not** rewritten, see [section 4](#4--what-only-exists-in-history) |
 | Turkish in tracked files | 62 lines in 19 files; all English now except `call.py`, where the language is the feature, and the audit's own three files, which quote what was removed |
 | Doc claims that did not match the daemon | 5, all corrected |
 | Broader cleanup needed | **Yes, but small** — see [Cleanup needed?](#cleanup-needed) |
 
-The 163/49 figure is larger than the 21/18 of the first pass for one reason: the
-two new rules described below. No blob gained a finding; the scanner gained the
+That figure is larger than the 21/18 of the first pass for one reason: the two
+new rules described below. No blob gained a finding; the scanner gained the
 rules that could see what was already there. Both counts are from the same
 command — `scripts/audit.py --history` with `RAC_AUDIT_NAMES` set — which also
 reports 7,870 language hits across 261 blobs and 82 paths.
+
+It is not a constant, and should not be quoted as one: 114 of the 149 come from
+`author-name`, whose list is supplied in the environment and deliberately not
+committed, so a longer list finds more. The three numbers that do not move are
+the ones that matter — no secret, in any blob, in any branch; the Turkish, which
+is 7,870 lines whatever names are given; and the tracked-file total, which is
+zero.
 
 Nothing found in this audit is a live credential. No API key, token, password,
 private key, `.env` body or APNs `.p8` has ever been committed to this
@@ -500,6 +507,14 @@ so again — which is what `RAC_AUDIT_NAMES` and `personal-attribution` are for.
 The same rule applies as below: push by branch name, never `--all` or
 `--mirror`.
 
+Twelve of the 149 personal hits in history are not findings at all, and are
+written down here so the count reconciles: the string *"Host asked"* at
+`design/remote-ai-chat-ekranlar.html` :4880, in twelve versions of an artboard
+that was deleted in 2026-09-17. That is `personal-attribution` doing what a
+shape-based rule does — `Host` is not on `NOT_A_PERSON`, and a UI label about a
+host reads like a sentence about a person. The other two hits from that rule are
+the two `agents.py` blobs in the table above, which are the real ones.
+
 ### Published — the author's e-mail in commit metadata
 
 The author's personal `<name>@gmail.com` address is the author *and* committer
@@ -569,7 +584,10 @@ $ python scripts/audit.py                          → 0 findings
 $ RAC_AUDIT_NAMES='…' python scripts/audit.py      → 0 findings
 $ RAC_AUDIT_NAMES='…' python scripts/audit.py --history
                                                    → 0 in tracked files,
-                                                     8,033 in history
+                                                     8,021 in history: 149
+                                                     personal over 53 blobs,
+                                                     7,870 Turkish over 261,
+                                                     2 commit identities
 $ python scripts/test_i18n_keys.py                 → all good   (new, see below)
 $ python3 scripts/test_check_links.py              → all good   (main's)
 $ python3 scripts/check-links.py                   → all good   (main's)
