@@ -342,7 +342,7 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
         ) : !snap.available ? (
           <Empty title="No ustabasi queue here" hint="This computer does not run the ticket queue." />
         ) : shown === 0 ? (
-          <Empty title="Nothing to show" hint="No ticket in this state." />
+          <Empty title="Nothing to show" hint="No ticket has that status right now." />
         ) : (
           <Wall groups={groups} now={now} onOpen={setOpenId} />
         )}
