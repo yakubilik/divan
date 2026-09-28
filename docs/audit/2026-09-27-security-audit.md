@@ -467,10 +467,13 @@ nothing.
 Rewritten to cover credentials by shape rather than by the one name that had
 caught somebody out before. It now carries `.env`, `.env.*`, `*.p8`, `*.p12`,
 `*.pfx`, `*.pem`, `*.key`, `*.jks`, `*.keystore`, `*.mobileprovision`, `*.cer`,
-`.netrc`, `.npmrc`, `uploads/`, `*.sqlite`, `*.sqlite-*`, `*.db`,
-`.remote-ai-chat/`, `.venv*/` (which `.venv312/` needed and did not have as a
-glob), `node_modules/`, `app/ios/build/`, and `app/identity.local.json` (which
-`app/.gitignore` had and the root one did not).
+`.netrc`, `.npmrc`, `uploads/`, `*.sqlite*` (one glob, so that a `.sqlite3`
+and a `-wal` sidecar are both covered), `*.db`, `.remote-ai-chat/`, `.venv*/`
+(which `.venv312/` needed and did not have as a glob), `node_modules/`,
+`app/ios/build/` and `**/ios/build/` — the anchored pattern is the path that
+exists today, the glob is for wherever a native project is generated next — and
+`app/identity.local.json` (which `app/.gitignore` had and the root one did
+not).
 
 Nothing matching any of those is tracked:
 

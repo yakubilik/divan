@@ -3,6 +3,7 @@ node_modules/
 .expo/
 dist/
 app/ios/build/
+**/ios/build/
 app/ios/Pods/
 app/android/
 *.xcuserstate
@@ -35,8 +36,7 @@ __pycache__/
 # database, the APNs key and every uploaded file.
 .remote-ai-chat/
 uploads/
-*.sqlite
-*.sqlite-*
+*.sqlite*
 *.db
 .xcode.env.local
 
