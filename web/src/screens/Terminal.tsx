@@ -7,6 +7,7 @@ import { emptyLog, logKey, useLogs, type ChatLog, type Item } from '../lib/timel
 import { deleteChat, respond, updateChat } from '../lib/actions';
 import { hasChatDrag, readChatDrag, setChatDrag } from '../lib/dnd';
 import type { Chat } from '../lib/protocol';
+import { Ustabasi } from './Ustabasi';
 
 /** Terminal mode: every chat at once, each one drawn as the window it would be
  *  if it were a terminal on a desk. The chat list answers "what have I got";
@@ -460,9 +461,49 @@ export interface TerminalProps {
   onNewChat: () => void;
 }
 
+/** Which wall this screen is showing. Remembered, because it is a way of
+ *  working and not a filter you re-pick every morning: someone who watches the
+ *  queue watches it all day. */
+const SOURCE_KEY = 'rac.terminal.source';
+type Source = 'chats' | 'ustabasi';
+
+function loadSource(): Source {
+  try { return localStorage.getItem(SOURCE_KEY) === 'ustabasi' ? 'ustabasi' : 'chats'; } catch { return 'chats'; }
+}
+
+/** The switch between the two walls. Lives in the header of both, so it reads
+ *  as one screen with two subjects rather than two screens. */
+function SourceToggle({ value, onChange }: { value: Source; onChange: (s: Source) => void }) {
+  const opts: { key: Source; label: string }[] = [
+    { key: 'chats', label: 'Chats' },
+    { key: 'ustabasi', label: 'Ustabaşı' },
+  ];
+  return (
+    <div style={{
+      display: 'inline-flex', padding: 2, borderRadius: R.chip, gap: 2,
+      background: C.surface, border: `1px solid ${C.border}`, flexShrink: 0,
+    }}>
+      {opts.map((o) => {
+        const on = value === o.key;
+        return (
+          <button
+            key={o.key} type="button" onClick={() => onChange(o.key)}
+            style={{
+              height: 24, padding: '0 12px', borderRadius: R.chip, cursor: 'pointer',
+              fontSize: 12.5, fontWeight: 600, border: 'none',
+              background: on ? C.text : 'transparent', color: on ? C.bg : C.mute,
+            }}
+          >{o.label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Terminal({ onPeek, onNewChat }: TerminalProps) {
   const { hosts, order } = useFleet();
   const logs = useLogs((s) => s.logs);
+  const [source, setSourceState] = useState<Source>(loadSource);
   const [filter, setFilter] = useState<Phase | 'all'>('all');
   const [query, setQuery] = useState('');
   const [wall, setWall] = useState<string[]>(() => loadKeys(WALL_KEY));
@@ -599,6 +640,16 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
 
   const onlineCount = order.filter((k) => hosts[k]?.status === 'online').length;
 
+  const setSource = (s: Source) => {
+    try { localStorage.setItem(SOURCE_KEY, s); } catch { /* private mode */ }
+    setSourceState(s);
+  };
+  const toggle = <SourceToggle value={source} onChange={setSource} />;
+
+  // The other wall. Placed after every hook above, so switching walls is not a
+  // change in how many hooks this component runs.
+  if (source === 'ustabasi') return <Ustabasi header={toggle} />;
+
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg, position: 'relative' }}>
       {/* Header: which computers are answering, then the way to narrow the wall
@@ -607,6 +658,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12, padding: '14px 24px 10px', flexWrap: 'wrap',
         }}>
+          {toggle}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexShrink: 0 }}>
             <span style={{ fontSize: 17, fontWeight: 600 }}>Terminal</span>
             <span style={{ ...mono, fontSize: 12, color: C.faint }}>
