@@ -79,6 +79,11 @@ export function useRun(ticketId: number): {
   /** In a ref rather than in state: it changes on every poll and nothing draws
    *  it, so a render for it would be a render a second for nothing. */
   const cursor = useRef<string | null>(null);
+  /** Where the turn numbering got to, which is not how many turns are on
+   *  screen: a record can spend a number without drawing anything, and `trim`
+   *  drops turns off the front of a long read. Counting what is drawn gave two
+   *  turns the same key on the second page. */
+  const numbered = useRef(0);
   const over = useRef(false);
   const busy = useRef(false);
   /** Whether anything has been read for this ticket yet. A page that starts
@@ -90,6 +95,7 @@ export function useRun(ticketId: number): {
   // one that was open, so it goes with it.
   useEffect(() => {
     cursor.current = null;
+    numbered.current = 0;
     over.current = false;
     opened.current = false;
     setList([]);
@@ -109,11 +115,13 @@ export function useRun(ticketId: number): {
       // reader moved up to the end because it had fallen a page behind —
       // replaces what is on screen rather than being appended to it.
       const fresh = !!page.reset;
-      setList((had) => {
-        const base = fresh ? [] : had;
-        const { turns: more, answers } = turns(page.events || [], base.length);
-        return trim(attach([...base, ...more], answers));
-      });
+      // Read outside the updater rather than inside it: numbering the page is
+      // the one part of this that has to happen exactly once, and a state
+      // updater is not promised that.
+      if (fresh) numbered.current = 0;
+      const { turns: more, answers, next } = turns(page.events || [], numbered.current);
+      numbered.current = next;
+      setList((had) => trim(attach([...(fresh ? [] : had), ...more], answers)));
       if (fresh && opened.current) setJumped(true);
       opened.current = true;
       // Nothing is going to be appended to a run that has ended, and the file

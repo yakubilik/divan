@@ -889,7 +889,7 @@ checks.push(
   {
     const half = records.findIndex((r) => r.k === 'result') + 1;
     const one = X.turns(records.slice(0, half - 1), 0);
-    const two = X.turns(records.slice(half - 1), one.turns.length);
+    const two = X.turns(records.slice(half - 1), one.next);
     const joined = X.attach([...one.turns, ...two.turns], two.answers);
     const whole = X.turns(records);
     checks.push(
@@ -902,6 +902,70 @@ checks.push(
         new Set(joined.map((t) => t.id)).size === joined.length],
       ['a page with nothing in it changes nothing',
         X.attach(joined, {}) === joined],
+    );
+  }
+
+  // ── the page boundary, in the shape that broke it ─────────────────────────
+  //
+  // The split above lands where it happens to land, and for a long while it
+  // landed somewhere the numbering could not go wrong. The shape that breaks it
+  // is a page that spends a number without drawing anything — a tool result
+  // belongs to the card already on screen, an empty thinking block is not a
+  // thought — so the page draws fewer turns than it numbered. Number the next
+  // page from what is drawn and it starts on a number already used, and React
+  // is handed two children with one key.
+  //
+  // This is the hook's own loop (`useRun` in src/queue.ts) done by hand: a page,
+  // its `next`, the page after it, appended, trimmed.
+  {
+    const page1 = [
+      { k: 'text', text: 'Reading the wall.' },
+      { k: 'tool', id: 'toolu_a', name: 'Read', input: { file_path: '/Users/you/p/a.ts' } },
+      { k: 'result', id: 'toolu_a', text: 'the file' },
+      { k: 'text', text: 'Now the other one.' },
+    ];
+    const page2 = [{ k: 'text', text: 'Done.' }];
+
+    const a = X.turns(page1, 0);
+    const b = X.turns(page2, a.next);
+    const ids = [...a.turns, ...b.turns].map((t) => t.id);
+
+    // The count the old caller would have passed, and the one it should.
+    const wrong = X.turns(page2, a.turns.length);
+
+    checks.push(
+      ['a page draws fewer turns than it numbers, when a result is in it',
+        a.turns.length === 3 && a.next === 4],
+      ['appending by the cursor gives every turn a key of its own',
+        new Set(ids).size === ids.length],
+      ['…which appending by the turn count would not have',
+        wrong.turns[0].id === a.turns[a.turns.length - 1].id],
+      ['an empty thinking block spends its number too, and draws nothing', (() => {
+        const p = [{ k: 'thinking', text: '   ' }, { k: 'text', text: 'after it' }];
+        const r = X.turns(p, 0);
+        return r.turns.length === 1 && r.next === 2 && r.turns[0].id === 'r1';
+      })()],
+      ['a call keeps the id the CLI gave it and spends a number as well',
+        a.turns[1].id === 'toolu_a'],
+
+      // `trim` drops turns off the front of a long read, so the list gets
+      // shorter while the run goes on. A cursor does not care; a count would
+      // start reissuing keys from the front of the file.
+      ['trim and the numbering agree: a read past the cap repeats no key', (() => {
+        let list = [];
+        let next = 0;
+        // Enough pages to push the list well past the cap, each of them the
+        // shape above so that every page numbers more than it draws.
+        for (let i = 0; i < 90; i++) {
+          const r = X.turns(page1.map((e, j) => (j === 1
+            ? { ...e, id: `toolu_${i}` }
+            : e.k === 'result' ? { ...e, id: `toolu_${i}` } : e)), next);
+          next = r.next;
+          list = X.trim(X.attach([...list, ...r.turns], r.answers));
+        }
+        return list.length === X.MAX_TURNS
+          && new Set(list.map((t) => t.id)).size === list.length;
+      })()],
     );
   }
 
@@ -1087,7 +1151,13 @@ checks.push(
     /stick\.current = /.test(detail) && /if \(stick\.current\)/.test(detail)],
   ['the box is still at the bottom of it', /<TextInput\b/.test(detail)],
   ['the run appends rather than being re-read whole',
-    /cursor\.current/.test(queueHook) && /\.\.\.base, \.\.\.more/.test(queueHook)],
+    /cursor\.current/.test(queueHook) && /\.\.\.more\], answers\)/.test(queueHook)],
+  // The numbering is a cursor the hook carries, not the length of what is on
+  // screen. Those two are different numbers — a record can spend a number
+  // without drawing anything, and `trim` drops turns off the front — and while
+  // the hook counted turns, the second page reissued keys the first had used.
+  ['…and the turn numbering is carried, not counted off the list',
+    /numbered\.current = next/.test(queueHook) && !/turns\([^)]*\.length\)/.test(queueHook)],
   ['…and a page that is not continuous with the last starts again',
     /const fresh = !!page\.reset;/.test(queueHook)],
   ['…and a finished run stops being asked about',

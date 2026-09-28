@@ -90,11 +90,24 @@ function noise(e: RunEvent): boolean {
  *  every turn a key of its own — the records carry no id and two identical
  *  sentences an hour apart are two turns.
  *
+ *  `next` is where the numbering got to, and it is the only thing a caller may
+ *  pass back as the next page's `from`. It is not the number of turns returned
+ *  and it must not be guessed from one: a record can spend a number without
+ *  drawing anything — a tool result belongs to a card already on screen, an
+ *  empty thinking block is not a thought — and a tool call draws itself under
+ *  the id the CLI gave it without spending one at all. Numbering the second
+ *  page from the length of the first is how two turns on screen came to share
+ *  a key: `[text, call, answer, text]` draws three turns and reaches four, so
+ *  a caller counting turns starts the next page on a number already used.
+ *
+ *  Being a cursor rather than a count is also what lets a screen drop turns off
+ *  the front (`trim`) without ever reissuing a key it has already drawn.
+ *
  *  A tool's answer arrives as its own record, usually in the very next page, so
  *  a call with nothing attached is a call still running. `attach` joins the two
  *  up across that gap: the page carrying the answer hands it back rather than
  *  drawing it, and the screen puts it on the card that is already there. */
-export function turns(events: RunEvent[], from = 0): { turns: Turn[]; answers: Record<string, { text: string; failed: boolean; clipped?: boolean }> } {
+export function turns(events: RunEvent[], from = 0): { turns: Turn[]; answers: Record<string, { text: string; failed: boolean; clipped?: boolean }>; next: number } {
   const out: Turn[] = [];
   const answers: Record<string, { text: string; failed: boolean; clipped?: boolean }> = {};
   let n = from;
@@ -133,7 +146,7 @@ export function turns(events: RunEvent[], from = 0): { turns: Turn[]; answers: R
                  cost: e.cost, tokens: e.output_tokens });
     }
   }
-  return { turns: out, answers };
+  return { turns: out, answers, next: n };
 }
 
 /** Join a page's answers onto calls drawn from an earlier page. Returns the
