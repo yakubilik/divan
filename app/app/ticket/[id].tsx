@@ -75,12 +75,6 @@ export default function TicketScreen() {
     return () => { a.remove(); b.remove(); };
   }, []);
 
-  // The end of the conversation is the part that matters, on opening and after
-  // every answer.
-  useEffect(() => {
-    if (stick.current) requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: false }));
-  }, [msgs.length, mine.length, ticketId]);
-
   const send = useCallback(async () => {
     const text = draft.trim();
     if (!text || busy || !t) return;
@@ -162,6 +156,11 @@ export default function TicketScreen() {
           stick.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
         }}
         scrollEventThrottle={64}
+        // The end of the conversation is the part that matters: on opening,
+        // where the question is, and again after every answer. Hung off the
+        // content rather than off a render, because a message that has just
+        // been added has no height yet at the point the render finishes.
+        onContentSizeChange={() => { if (stick.current) scroller.current?.scrollToEnd({ animated: false }); }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, gap: 18 }}>
         {msgs.map((m) => <Row key={m.id} m={m} asking={asking} tint={ph.tint} />)}
         {mine.map((p) => (
