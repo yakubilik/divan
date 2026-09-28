@@ -185,8 +185,11 @@ export default function TicketScreen() {
             style={{ flex: 1, fontSize: 15, paddingVertical: 4, paddingHorizontal: 8, minHeight: 26, maxHeight: 160 }} />
           <Pressable accessibilityLabel={T('send')} onPress={() => void send()} disabled={!draft.trim() || busy}
             style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
-                     backgroundColor: draft.trim() && !busy ? c.accent : c.fill }}>
-            {busy ? <Spinner size={14} color="#FFFFFF" track="rgba(255,255,255,.3)" />
+                     // Still the send colour while the note is in flight: the
+                     // draft is already gone by then, and a white spinner on the
+                     // quiet fill is a spinner nobody can see.
+                     backgroundColor: draft.trim() || busy ? c.accent : c.fill }}>
+            {busy ? <Spinner size={14} color="#FFFFFF" track="rgba(255,255,255,.35)" />
                   : <Icon name="arrow_upward" size={20} weight={500} color={draft.trim() ? '#FFFFFF' : c.faint} />}
           </Pressable>
         </View>
