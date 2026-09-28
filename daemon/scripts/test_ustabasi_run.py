@@ -293,12 +293,26 @@ for silence in (u.run(3), u.run(4), u.run(999)):
 # ── a real log, captured, with this machine's home scrubbed out of it ────────
 #
 # The shapes above are written by hand and agree with each other by
-# construction. This one is 1,300 lines the queue actually wrote, and is the
-# same fixture the app's own reading is checked against — one recording, two
-# languages, so the two cannot drift apart without one of them going red.
+# construction. This one the queue actually wrote: 108 lines and a shade under
+# 114KB, cut down from a 216-line run by `scripts/capture-run-fixture.py`. The
+# line count is small and the byte count is not, which is the whole point — a
+# run log is a few dozen enormous lines, and a reader that pages by line count
+# alone puts a megabyte on the wire. It is the same fixture the app's own
+# reading is checked against: one recording, two languages, so the two cannot
+# drift apart without one of them going red.
 
 fixture = Path(__file__).resolve().parents[2] / "app" / "scripts" / "fixtures" / "run.log"
 holds("the captured log is where both sides look for it", fixture.exists(), str(fixture))
+if fixture.exists():
+    # The comment above says what this file is; these say it in a way that goes
+    # red when somebody recaptures it into something else. A recording that has
+    # shrunk to a handful of lines, or to a size a reader never has to cut, has
+    # stopped being the thing the caps are checked against.
+    n_lines = len([l for l in fixture.read_text("utf-8", "replace").split("\n") if l.strip()])
+    n_bytes = fixture.stat().st_size
+    holds("it is a real run's worth of records", 90 <= n_lines <= 400, str(n_lines))
+    holds("and far more bytes than one page is allowed to carry",
+          n_bytes > 2 * u.MAX_RUN_BYTES, f"{n_bytes} bytes vs {u.MAX_RUN_BYTES}")
 if fixture.exists():
     real = ticket_dir = runs / "r1-worker-real"
     ticket_dir.mkdir()
