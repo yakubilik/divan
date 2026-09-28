@@ -1580,8 +1580,9 @@ class Server:
     # ── the ustabasi wall ──────────────────────────────────────────────────
     async def h_ustabasi_list(self, dev: Device, d: dict) -> dict:
         """The ticket queue, for the panel's second wall. Reading someone
-        else's SQLite file is a blocking read, so it goes to a thread."""
-        return await asyncio.to_thread(ustabasimod.snapshot)
+        else's SQLite file is a blocking read, and so is the git log behind each
+        card, so the whole snapshot goes to a thread."""
+        return await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for)
 
     async def h_ustabasi_note(self, dev: Device, d: dict) -> dict:
         """Answer a ticket that stopped to ask. The only write this daemon
