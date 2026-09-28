@@ -42,7 +42,7 @@ RAC_AUDIT_NAMES='<name>|<other-project>' python scripts/audit.py --history
 | Secrets anywhere in git history | **none** |
 | Personal data in tracked files | none of the shapes the scanner looks for; 5 files carried an author-specific identifier — 3 found by hand in the first pass, 3 more in the second pass by the two rules those three led to, all 7 fixed below; this report was the eighth and the ninth, redacted in the third and fourth passes |
 | Personal data in git history | 149 hits across 53 blobs, plus 2 author identities in commit metadata, on the name list the third pass used — **not** rewritten, see [section 4](#4--what-only-exists-in-history) |
-| Turkish in tracked files | 62 lines in 19 files; all English now except `call.py`, where the language is the feature, and the audit's own three files, which quote what was removed |
+| Turkish in tracked files | 64 lines in 21 files — 62 in the first two passes, 2 more that arrived with `main` and were caught by the scanner in the fifth; all English now except `call.py`, where the language is the feature, and the audit's own three files, which quote what was removed |
 | Doc claims that did not match the daemon | 5, all corrected |
 | Broader cleanup needed | **Yes, but small** — see [Cleanup needed?](#cleanup-needed) |
 
@@ -280,7 +280,9 @@ out to. Renaming it would rename the feature, which is a product decision and
 running this daemon have never heard of ustabasi"), reads nothing unless the
 database exists, and hard-codes no path: `USTABASI_STATE_DIR` and
 `USTABASI_CLI` override, and the defaults are under `Path.home()`. Recorded here
-so the decision is on the record rather than an omission.
+so the decision is on the record rather than an omission — and so that the name
+is kept *out* of the `RAC_AUDIT_NAMES` list a release scans with, which is
+otherwise the list that would flag the feature on every line it names itself.
 
 ## 2 · Findings in tracked files, and the fix for each
 
@@ -325,8 +327,10 @@ scanner is tested not to flag them.
 
 ### Turkish
 
-62 lines in 19 files, by `scripts/audit.py` against the base commit. All of them
-are now English except the one file listed as an exception below.
+62 lines in 19 files, by `scripts/audit.py` against the base commit, and 2 more
+in 2 files that arrived with `main` later and are listed with [the fifth
+pass](#a-fifth-pass-after-the-second-merge-of-main). All of them are now English
+except the one file listed as an exception below.
 
 **The desktop panel**, which was the bulk of it — a panel the author used alone
 and never translated:
@@ -716,7 +720,7 @@ is not a binary:
 ```
 $ git ls-files | … | xargs grep -InE '[şğıİöçüŞĞÖÇÜ]' | cut -d: -f1 | uniq -c
    7 daemon/remote_ai_chat/call.py
-   7 docs/audit/2026-09-27-security-audit.md
+  10 docs/audit/2026-09-27-security-audit.md
    1 scripts/audit.py
    2 scripts/test_audit.py
 
@@ -797,7 +801,7 @@ fixture.
 ## Cleanup needed?
 
 **Yes — but it is a short list, and none of it is dangerous.** The repository is
-in good shape: 222 tracked files, no checked-in build output, no vendored
+in good shape: 224 tracked files, no checked-in build output, no vendored
 dependencies, no stray archives, no generated file that is not either documented
 or needed at runtime. `daemon/remote_ai_chat/webui/` (the built panel),
 `app/ios/`, `app/android/`, `node_modules/` and the virtualenvs are all
@@ -827,6 +831,10 @@ look like artefacts and are not:
   in the second pass. Live documentation and a live check, not artefacts.
   **Keep** (`check-links.py` is in CI, in its own job, and this branch keeps it
   there).
+- `daemon/remote_ai_chat/ustabasi.py`, `web/src/screens/Ustabasi.tsx` —
+  `main`'s, reviewed in the fifth pass: a feature landed two commits ago, wired
+  from `server.py` and `Terminal.tsx`. **Keep.** It has no offline test script
+  of its own, which is worth a ticket and is not this one's.
 
 ### Found, not removed, and why
 
