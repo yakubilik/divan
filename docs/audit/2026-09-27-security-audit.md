@@ -3,9 +3,13 @@
 What this is: a read of the whole repository, and of the whole git history,
 looking for the three things that must not be published — a credential, a piece
 of somebody's private life, and a string in a language the project is not
-written in. It was run against `4fa0358` on branch
-`ustabasi/3-remote-ai-chat-pre-publication-security-`, over 210 tracked files,
-919 blobs and 91 commits across every ref in the clone.
+written in. It was run twice on branch
+`ustabasi/3-remote-ai-chat-pre-publication-security-`: first against the base
+`4fa0358`, over 210 tracked files, 919 blobs and 91 commits; then again after
+`git merge main` brought in `f44b641`, over **222 tracked files, 1,003 blobs and
+114 commits** across every ref in the clone. The second pass is the one this
+document describes, and the reason for it is in
+[A second pass, after merging `main`](#a-second-pass-after-merging-main).
 
 The scan is `scripts/audit.py`, written for this audit and kept: a finding that
 can only be reproduced by hand is a finding that comes back. `gitleaks` and
@@ -13,12 +17,16 @@ can only be reproduced by hand is a finding that comes back. `gitleaks` and
 was run from, so the rules are in the script, they are tested
 (`scripts/test_audit.py` fires every one of them against a sample of its own
 shape and against the placeholders this repository uses on purpose), and CI
-runs both.
+runs the scanner, its test and the i18n check on every push.
 
 ```bash
-python scripts/test_audit.py    # the scanner finds what it claims to
-python scripts/audit.py         # tracked files  → exit 1 on any finding
+python scripts/test_audit.py        # the scanner finds what it claims to
+python scripts/audit.py             # tracked files  → exit 1 on any finding
 python scripts/audit.py --history   # every blob and commit identity in git
+python scripts/test_i18n_keys.py    # the app asks for no string that is not there
+
+# and, for a release audit, with the names that cannot be written down:
+RAC_AUDIT_NAMES='<name>|<other-project>' python scripts/audit.py --history
 ```
 
 ## Verdict
@@ -27,11 +35,17 @@ python scripts/audit.py --history   # every blob and commit identity in git
 |---|---|
 | Secrets in tracked files | **none** |
 | Secrets anywhere in git history | **none** |
-| Personal data in tracked files | none of the shapes the scanner looks for; 3 files carried an author-specific identifier, found by hand and fixed below |
-| Personal data in git history | 21 hits across 18 blobs, plus 2 author identities in commit metadata — **not** rewritten, see [section 4](#4--what-only-exists-in-history) |
+| Personal data in tracked files | none of the shapes the scanner looks for; 5 files carried an author-specific identifier — 3 found by hand in the first pass, 3 more in the second pass by the two rules those three led to, all 7 fixed below |
+| Personal data in git history | 163 hits across 49 blobs, plus 2 author identities in commit metadata — **not** rewritten, see [section 4](#4--what-only-exists-in-history) |
 | Turkish in tracked files | 62 lines in 19 files; all English now except `call.py`, where the language is the feature, and the audit's own three files, which quote what was removed |
 | Doc claims that did not match the daemon | 5, all corrected |
 | Broader cleanup needed | **Yes, but small** — see [Cleanup needed?](#cleanup-needed) |
+
+The 163/49 figure is larger than the 21/18 of the first pass for one reason: the
+two new rules described below. No blob gained a finding; the scanner gained the
+rules that could see what was already there. Both counts are from the same
+command — `scripts/audit.py --history` with `RAC_AUDIT_NAMES` set — which also
+reports 7,870 language hits across 261 blobs and 82 paths.
 
 Nothing found in this audit is a live credential. No API key, token, password,
 private key, `.env` body or APNs `.p8` has ever been committed to this
@@ -58,7 +72,29 @@ and `token = "…24+"`.
 
 *Personal data* — `/Users/<name>` and `/home/<name>` (minus the deliberate
 placeholders `you`, `test`, `user`, `runner`), consumer e-mail domains,
-`*.*.ts.net` tailnet hostnames, and `<something>-MacBook*.local` machine names.
+`*.*.ts.net` tailnet hostnames, `<something>-MacBook*.local` machine names, and
+two rules added in the second pass because the first pass missed two findings
+that none of the others could have caught:
+
+- **`personal-attribution`** — a capitalised name followed by an attribution
+  verb (`asked`, `wanted`, `requested`, `complained`, `insisted`, `prefers`,
+  `preferred`). "X asked for that to stop (2026-09-22)" in a source comment is a
+  note the author wrote to the author; a contributor reading it learns only that
+  they were not in the room. A stop list (`NOT_A_PERSON`) keeps the prose forms
+  out — "Nobody asked, so there was no turn" appears twice in this repository
+  and is not a finding, and `scripts/test_audit.py` asserts both directions.
+- **`author-name`** — the author's own name and the names of the author's other
+  projects. This one has no list in the script, on purpose: a denylist of
+  private names written into a public file is the thing it is guarding. The
+  names are supplied at scan time and the release audit records which:
+
+  ```bash
+  RAC_AUDIT_NAMES='<name>|<name>|<other-project>' python scripts/audit.py
+  ```
+
+  Without the variable the rule is simply absent, which is why
+  `personal-attribution` exists as well: it catches the shape rather than the
+  name, and it is the one that runs in CI.
 
 *Language* — the Turkish letters English does not have (`şğıİöçüŞĞÖÇÜ`) and 99
 Turkish words no English sentence contains, matched with the diacritics folded
@@ -90,6 +126,34 @@ $ git log --all --pretty=format: --name-only --diff-filter=A | sort -u \
 (no output)   # no such file was ever added, on any branch
 ```
 
+### A second pass, after merging `main`
+
+The first pass scanned the tree at `4fa0358`. While this branch was open `main`
+moved on — `7fb1390` ("Every chat title says which project it is about") and the
+merge of the README/screenshots ticket — so "every tracked file" had stopped
+being true: 29 paths were added or changed on `main`, 17 of them text, and none
+of them had been looked at. One of them carried a finding of exactly the class this branch had
+already fixed once (`daemon/scripts/test_titles.py`, below).
+
+`main` was merged into this branch (`484a7c9`) and everything re-run. The scan
+of the merged tree is the one quoted above; the files `main` brought are covered
+by it, and separately by themselves:
+
+```
+$ git diff --name-only 4fa0358..main        # 29 paths, 17 of them text
+$ python3 - <<'EOF'                          # scan just those, with the name rule on
+  … 17 scanned as text
+  findings: 0
+EOF
+```
+
+The merge conflicted in exactly one file, `.github/workflows/ci.yml`, where this
+branch had inserted an `audit` job at the line `main` had inserted its
+`docs · links` job. **Both are kept** — dropping the link checker to resolve a
+conflict would have been the audit removing a check. `main`'s
+`daemon/scripts/test_titles.py` is now in the daemon job's list too, along with
+the two scripts this branch adds.
+
 ## 2 · Findings in tracked files, and the fix for each
 
 ### Secrets
@@ -106,6 +170,24 @@ lines 37–46), which are regexes, not keys.
 | `store/checklist.md` :4 | the real bundle id, `com.yakupkeskin.remoteaichat` | removed; the line now points at `app/identity.local.json`, which is where `app/app.config.js` reads it from and which git does not carry |
 | `store/checklist.md` :15 | the App Store Connect app id | removed |
 | `app/app/chat/[id].tsx` :209 | `ch?.title === 'Yeni sohbet'` — a legacy title only the author's own pre-release database can contain | dropped; the daemon has only ever written `NEW_CHAT_TITLE = "New chat"` (`daemon/remote_ai_chat/session.py` :23) |
+| `daemon/remote_ai_chat/agents.py` :335–336 | a comment crediting the change to the author by first name and dating it to a private conversation: *"<Name> used to introduce itself on every chat; <Name> asked for that to stop (2026-09-22)"* | the comment now says what it is about and not who said it: *"This pack's agent introduced itself on every chat, which readers of a phone screen did not want…"*. The prompt itself and the `PROMPTS` key are untouched — `hermes` there is a public skill pack (`AlexAI-MCP/hermes-CCC`), not a private name |
+| `daemon/scripts/test_titles.py` :45–65 | the name of one of the author's other products, twelve times, as the project fixture | `"ledger"`, and the one case that needed a name which is the prefix of a word is now `"ledgerbook is not ledger"`. Same twelve assertions, same shapes |
+| `store/checklist.md` :37 | the author's full legal name, in a note about the App Store copyright field | *"a copyright line (the year and the holder named in LICENSE)"* — `LICENSE` carries the holder, and carrying it once is enough |
+
+The last three are the ones the first pass missed. They are also why the scanner
+gained `personal-attribution` and `author-name`: two of the three are a bare
+first name and a product name, which no rule about keys, addresses or Turkish
+words would ever have flagged. Re-run with the author's names supplied, the
+scanner now reports zero:
+
+```
+$ RAC_AUDIT_NAMES='<the author's names and projects>' python scripts/audit.py
+── tracked-file: 0
+── secret: 0
+── personal: 0
+── language: 0
+0 finding(s) in tracked files
+```
 
 No e-mail address, tailnet hostname, machine name or absolute home path is in
 any tracked file. `web/src/lib/format.ts` :4 (`/Users/you/projects/…`),
@@ -204,7 +286,18 @@ above, which are the record of the removal. Everywhere else it is silent.
 
 Found while checking `SECURITY.md` and `PRIVACY.md` against the code. All five
 were corrected in the docs; none was "fixed" in the daemon, because changing
-daemon behaviour is outside this ticket.
+daemon behaviour is outside this ticket. `main` has since changed
+`security.py`, `server.py` and `session.py` (the project-name prefix on chat
+titles); those changes were read against both documents in the second pass and
+touch nothing either of them describes — no token, no fence, no notification, no
+path policy decision.
+
+`SECURITY.md` and `PRIVACY.md` as they now stand were checked line by line
+against the merged daemon: the pairing token (`cmd_pair`,
+`daemon/remote_ai_chat/__main__.py`), the panel's web token (`cmd_web`, the URL
+fragment), APNs (`push.py` and `voip.py`, pointers in `config.toml` and the key
+under `~/.remote-ai-chat/`) and the tailnet bind (`Config.bind`,
+`resolve_bind`).
 
 1. **`SECURITY.md`: "Five failures from one address in ten minutes earns a
    temporary lockout."** Not true. `Server._rate_limited`
@@ -214,8 +307,18 @@ daemon behaviour is outside this ticket.
    bad token is closed with 4401 whether it is the first attempt or the
    thousandth, and a good token is accepted regardless. The doc now says the
    counter exists and nothing acts on it, and that the size of the token is what
-   stands in the way. **Recommended follow-up:** make `_rate_limited` actually
-   refuse, in its own ticket, with a test.
+   stands in the way.
+
+   The *code* said the opposite of the corrected doc, in a comment on the line
+   the correction is about: `_auth` (:991) carried *"a valid token is never
+   locked out; the limiter only slows guessing"* — a throttle that does not
+   exist. Leaving that in would have left the repository contradicting itself on
+   the one function this finding is about, so the comment is now
+   `# a valid token is always accepted; only failures are counted`, and
+   `_rate_limited` has a docstring saying that nothing acts on its answer and
+   pointing at this document. Comments only: the function behaves exactly as
+   before. **Recommended follow-up:** make `_rate_limited` actually refuse, in
+   its own ticket, with a test.
 2. **`SECURITY.md`: "Revoking is instant: the token hash is deleted and the open
    socket is closed."** Half true. `Config.revoke` deletes the hash, and
    `reload_devices` is only consulted on a token *lookup miss* — i.e. on a new
@@ -295,7 +398,8 @@ exception, none of it is on anything that has been pushed.
 ### Not published — local-only branches
 
 `git log -S … --pickaxe-all` over each ref, cross-checked against
-`refs/remotes/origin/*`:
+`refs/remotes/origin/*`, and re-checked in the second pass with
+`git for-each-ref --contains <commit>` for every commit named below:
 
 | What | Where | Commits |
 |---|---|---|
@@ -303,6 +407,7 @@ exception, none of it is on anything that has been pushed.
 | `/Users/dilarakilic`, in `docs/QA-REPORT.md` (4 lines) and an older docstring in `web/src/lib/format.ts` | 2 blobs | `b756ab19ac65009cbebe263cda13bcd7d50fefaf` (2026-09-08) and `1264bcf7e74b59691818507f28e1d4beddf8b196` (2026-09-14); both gone by `530e873…` |
 | `Dilara-MacBook-Air.local`, in a mock host row in `design/desktop/Dashboard.dc.html` | 1 blob | `1264bcf7e74b59691818507f28e1d4beddf8b196`; gone by `530e873…` |
 | `dilarakilic@Dilara-MacBook-Air.local` as commit author and committer | 22 commits | 2026-09-08 → 2026-09-17 |
+| the names of four of the author's other projects, in mock project lists and mock host rows across the design artboards (`design/*.dc.html`, `design/desktop/*.dc.html`, `design/remote-ai-chat-ekranlar.html`), plus `docs/PLAN.md` and `docs/QA-REPORT.md` | 30 blobs | `b756ab1`, `dcdb9c1`, `0859886`, `2880cab`, `1264bcf` (2026-09-08 → 2026-09-14); all gone by `530e873…` |
 
 Every one of those commits is reachable only from the local branches
 **`pre-oss-history`** (which is what its name says: the pre-open-source history,
@@ -317,6 +422,31 @@ decision about somebody's own archive, so this branch does not touch them. A
 push must be by branch name and never `git push --all` or `--mirror`, either of
 which would publish all of it in one go.
 
+### Published — the author's name, in four files on `origin/main`
+
+New in the second pass, and the reason the `author-name` rule exists. None of
+this is a credential and none of it is dangerous; all of it is somebody's name,
+and it is already on GitHub.
+
+| What | Where | Introduced by | Reachable from |
+|---|---|---|---|
+| the author's first name, in the `agents.py` comment above | blobs `436433dd6` and `25b3d8d5e` | `b81902e` (2026-09-24) | `origin/main`, `origin/app-redesign`, `origin/panel-wall-and-remote-screen` |
+| the author's own skill name as a test fixture (`test_agents.py`) | blob `940077461` | `4c6f64e` (2026-09-27) | `origin/main` |
+| another of the author's products as a test fixture (`test_titles.py`) | blob `9b0184572` | `7fb1390` (2026-09-27) | `origin/main` |
+| the author's full legal name in `store/checklist.md` | blobs `1f48ef4b6`, `73af7ab02`, `84945f201`, `8cb7844ee` | `2cbc261` (2026-09-23), then three more edits | `origin/main`, `origin/app-redesign`, `origin/panel-wall-and-remote-screen` |
+
+An older `LICENSE` blob (`fcfe79b03`) carries the full legal name too, but it is
+reachable only from `pre-oss-history`; `origin/main`'s `LICENSE` has said
+`Copyright (c) 2026 yakubilik` since the repository was opened.
+
+**Remedy: none, and deliberately.** Rewriting `main` to remove a name that is
+already the public account name of the repository's owner would break every
+clone and every fork to hide nothing. What matters is that the *tip* no longer
+carries them, which section 2 demonstrates, and that the scanner would now say
+so again — which is what `RAC_AUDIT_NAMES` and `personal-attribution` are for.
+The same rule applies as below: push by branch name, never `--all` or
+`--mirror`.
+
 ### Published — the author's e-mail in commit metadata
 
 `yakupkeskin777@gmail.com` is the author *and* committer address of 10 commits
@@ -328,11 +458,12 @@ been indexed.
 
 Remedy, in the order it is worth doing:
 
-1. Stop adding more. `git config user.email 44753768+yakubilik@users.noreply.github.com`
-   in this repository — 42 commits already use exactly that address, so this is
-   only making the majority the rule. Turning on **Settings → Emails → Keep my
-   email addresses private** and **Block command line pushes that expose my
-   email** on the GitHub account makes it mechanical.
+1. Stop adding more. `git config user.email
+   44753768+yakubilik@users.noreply.github.com` in this repository — 42 commits
+   already use exactly that address, so this is only making the majority the
+   rule. Turning on **Settings → Emails → Keep my email addresses private** and
+   **Block command line pushes that expose my email** on the GitHub account
+   makes it mechanical.
 2. Leave the existing commits alone.
 3. Deliberately *not* done: a `.mailmap`. It would make `git shortlog` show one
    identity, but GitHub does not read it for attribution, and the file would
@@ -342,8 +473,8 @@ Remedy, in the order it is worth doing:
 
 ### Turkish in history
 
-Roughly 7,900 lines across 260-odd blobs and 82 distinct paths — the number
-climbs by one blob every time a commit touches one of those files, including the
+7,870 lines across 261 blobs and 82 distinct paths — the number climbs by one
+blob every time a commit touches one of those files, including the
 commits that removed the Turkish, so it is a shape rather than a figure. It is
 what you would expect of a project that was bilingual for its first weeks: the
 pre-fix versions of the files section 2 lists, and the pre-open-source design
@@ -360,22 +491,84 @@ ticket's constraints no commit message was edited.
 
 ## 5 · The mechanical checks, as run
 
+All of the following were run on the merged tree — this branch with `main`
+(`f44b641`) merged in — and not on the base the first pass used.
+
 ```
 $ cd daemon
-$ .venv312/bin/python scripts/test_session.py      → all good
-$ .venv312/bin/python scripts/test_stream.py       → all good
-$ .venv312/bin/python scripts/test_attachments.py  → all good
 $ .venv312/bin/python scripts/test_pool.py         → all good
-$ .venv312/bin/python scripts/test_agents.py       → all good
 $ .venv312/bin/python scripts/test_preamble.py     → all good
 $ .venv312/bin/python scripts/test_replay.py       → all good
+$ .venv312/bin/python scripts/test_session.py      → all good
+$ .venv312/bin/python scripts/test_stream.py       → all good
 $ .venv312/bin/python scripts/test_fanout.py       → all good
+$ .venv312/bin/python scripts/test_attachments.py  → all good
+$ .venv312/bin/python scripts/test_agents.py       → all good
+$ .venv312/bin/python scripts/test_titles.py       → all good   (main's, now in CI)
+$ .venv312/bin/python scripts/test_push.py         → all good   (new, see below)
 
-$ cd web && npm ci && npm run typecheck            → clean
-$ python scripts/test_audit.py                     → all good
+$ cd .. && python scripts/test_audit.py            → all good
 $ python scripts/audit.py                          → 0 findings
+$ RAC_AUDIT_NAMES='…' python scripts/audit.py      → 0 findings
+$ RAC_AUDIT_NAMES='…' python scripts/audit.py --history
+                                                   → 0 in tracked files,
+                                                     8,033 in history
+$ python scripts/test_i18n_keys.py                 → all good   (new, see below)
+$ python3 scripts/test_check_links.py              → all good   (main's)
+$ python3 scripts/check-links.py                   → all good   (main's)
 $ git ls-files | grep -E '\.env|\.p8$|\.p12$|\.pem$|uploads/|\.sqlite'  → nothing
 ```
+
+And the two literal greps this audit was asked for, over every tracked file that
+is not a binary:
+
+```
+$ git ls-files | … | xargs grep -InE '[şğıİöçüŞĞÖÇÜ]' | cut -d: -f1 | uniq -c
+   7 daemon/remote_ai_chat/call.py
+   5 docs/audit/2026-09-27-security-audit.md
+   1 scripts/audit.py
+   2 scripts/test_audit.py
+
+$ git ls-files | … | xargs grep -InwE 've|için|ile|bir|değil|kanka' | cut -d: -f1 | uniq -c
+   3 daemon/remote_ai_chat/call.py
+   1 scripts/audit.py
+   1 scripts/test_audit.py
+```
+
+Four files, and they are the four documented exceptions: `call.py`, where the
+language is the feature, and the scanner plus its test plus this report, which
+have to contain the shape of what they are about. Nothing else in the repository
+returns a hit.
+
+### Two checks this audit needed and did not have
+
+Both exist because a claim this document makes was otherwise unverified.
+
+1. **`daemon/scripts/test_push.py`** — `PUSH_TEXT` (`server.py` :47) lost its
+   Turkish row, and "behaviour is identical" rests entirely on
+   `PUSH_TEXT.get(d.lang, PUSH_TEXT["en"])` answering in English for a device
+   that reports a language the table does not have. No script touched
+   `PUSH_TEXT` at all. This one drives the unbound `Server.notify` against a
+   stub host, with `send_push` replaced by a recorder, and watches the body come
+   out in English for `lang` of `"tr"`, `"de"`, `"en-GB"`, `""` and a device row
+   from before the field existed — and watches the title, the token, the `data`
+   payload and the two per-device switches stay as they were.
+2. **`scripts/test_i18n_keys.py`** — `t(key)` in `app/src/i18n.ts` falls back to
+   `key`, so renaming `callAlo` to `callGreeting` and missing a call site shows
+   a user the name of a variable. `npx tsc --noEmit` is the real check and it
+   cannot run here: `app/node_modules` is absent and `npm ci` fails on the
+   lockfile drift recorded under [Cleanup needed?](#cleanup-needed). So this
+   script reads the `const en = {…}` table out of `i18n.ts` (470 keys) and every
+   `T('…')`, `T(cond ? 'a' : 'b')`, `Record<string, Key>` table and `ERR_KEYS`
+   row under `app/` (425 distinct keys, 45 files, 4 lookup tables, 39 error
+   codes), and fails if one is not in the table. It was watched failing: with
+   `T('callGreeting')` put back to `T('callAlo')` it reports
+   `app/app/call.tsx:424  T('callAlo')`. The one reference it cannot resolve
+   (`new Error(t(key))` in `ws.ts`, where the key comes from `ERR_KEYS`) is
+   printed rather than passed over in silence.
+
+Both run in CI: `test_push.py` in the daemon job, `test_i18n_keys.py` in the
+`audit` job.
 
 `test_session.py` and `test_pool.py` were **failing before this branch**, on
 `main` as well, with `AttributeError: 'FakeProvider' object has no attribute
@@ -384,12 +577,21 @@ $ git ls-files | grep -E '\.env|\.p8$|\.p12$|\.pem$|uploads/|\.sqlite'  → noth
 now answer `steer` the way the base class does — `False`, so the session queues
 the message, which is what those scenarios assert. Neither script is in CI's
 list, which is why it went unnoticed; `test_agents.py` was not either, and now
-is.
+is — nor was `test_titles.py`, `main`'s own script, which is in the list now
+too.
+
+`main` had since fixed the same two fakes the same way, and the merge took both
+copies: each `FakeProvider` ended up with `steer` defined twice, in the same
+class, the second silently shadowing the first. Harmless — both return `False` —
+but it is dead code the merge wrote, so the copy this branch added is gone and
+`main`'s is kept. `daemon/scripts/test_pool.py` is now byte-identical to
+`main`'s and `test_session.py` differs from it only by the one translated
+fixture.
 
 ## Cleanup needed?
 
 **Yes — but it is a short list, and none of it is dangerous.** The repository is
-in good shape: 210 tracked files, no checked-in build output, no vendored
+in good shape: 222 tracked files, no checked-in build output, no vendored
 dependencies, no stray archives, no generated file that is not either documented
 or needed at runtime. `daemon/remote_ai_chat/webui/` (the built panel),
 `app/ios/`, `app/android/`, `node_modules/` and the virtualenvs are all
@@ -414,6 +616,11 @@ look like artefacts and are not:
   need a running daemon. Documented in `CONTRIBUTING.md`. **Keep.**
 - `store/shots/`, `docs/screenshots/` — App Store and README images. **Keep**
   (and out of scope here: a separate ticket owns them).
+- `docs/release-notes/0.2.0.md`, `docs/screenshots/README.md`,
+  `scripts/check-links.py`, `scripts/test_check_links.py` — `main`'s, reviewed
+  in the second pass. Live documentation and a live check, not artefacts.
+  **Keep** (`check-links.py` is in CI, in its own job, and this branch keeps it
+  there).
 
 ### Found, not removed, and why
 
@@ -429,12 +636,13 @@ look like artefacts and are not:
 2. **`app/package-lock.json` is out of sync with `app/package.json`.**
    `npm ci` in `app/` fails: *Missing: react-dom@19.1.0 from lock file*. This
    predates the branch and is invisible to CI, which does not install the app.
-   It means a contributor's first command in `app/` fails. **Recommendation:**
-   `npm install` in `app/` and commit the lockfile, in a ticket that can verify
-   the app still builds — not in a secrets audit. It is also why the app could
-   not be typechecked here; the three app edits in this branch were verified by
-   grep instead (no reference to the removed keys survives, `Key` is
-   `keyof typeof en`).
+   It means a contributor's first command in `app/` fails, and it is why `npx
+   tsc --noEmit` could not be run here. **Recommendation:** `npm install` in
+   `app/` and commit the lockfile, in a ticket that can verify the app still
+   builds — not in a secrets audit. In the meantime the one thing the
+   typechecker was needed for — that the app asks for no string that is not in
+   `i18n.ts` — is now `scripts/test_i18n_keys.py`, which needs no `node_modules`
+   and runs in CI.
 3. **`store/checklist.md` is the author's private release log.** Redacted above,
    but it still records submission dates, build numbers, TestFlight state and
    "another session's uncommitted drag-and-drop module". None of that is a
@@ -450,23 +658,29 @@ look like artefacts and are not:
    `Projects.tsx`, `Agents.tsx`, `Terminal.tsx`, `NewChat.tsx`, `Palette.tsx`,
    `Sidebar.tsx`, `FieldSheet.tsx` — which is a leftover of who wrote the panel,
    and a live bug for everyone else: Turkish lowercasing maps `I` to a dotless
-   `ı`, so searching an English project name for `I` does not match it. Not touched here because it is
-   behaviour, not a string. **Recommendation:** drop the locale argument, in a
-   ticket with a search test.
+   `ı`, so searching an English project name for `I` does not match it. Not
+   touched here because it is behaviour, not a string. **Recommendation:** drop
+   the locale argument, in a ticket with a search test.
 
 ### Removed in this branch
 
-**Nothing.** No file in this repository turned out to be dead. The only
+**No file.** Nothing in this repository turned out to be dead. The only
 deletions are of lines: three unreachable i18n keys, one unreachable
-push-notification table row, and one legacy chat title.
+push-notification table row, one legacy chat title, and the duplicated `steer`
+stub the merge with `main` produced in each of the two fakes (above).
 
 ### Added in this branch
 
 - `scripts/audit.py` — the scan above, rerunnable, exit-1 on a finding.
 - `scripts/test_audit.py` — proof the scan would have said something else.
+- `scripts/test_i18n_keys.py` — every string the app asks for exists.
+- `daemon/scripts/test_push.py` — a notification body is English for every
+phone.
 - `docs/audit/2026-09-27-security-audit.md` — this file.
-- an `audit` job in `.github/workflows/ci.yml`, and `test_agents.py` added to
-  the daemon job's list.
+- an `audit` job in `.github/workflows/ci.yml` (three steps: the scanner's test,
+  the scan, the i18n check), kept alongside `main`'s `docs · links` job, and
+  `test_agents.py`, `test_titles.py` and `test_push.py` added to the daemon
+  job's list.
 
 Two lists in `scripts/audit.py` are the whole of its discretion, and both are
 asserted by `scripts/test_audit.py`: `ALLOW`, one entry, the file where another

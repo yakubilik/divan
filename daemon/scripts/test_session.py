@@ -64,12 +64,6 @@ class FakeProvider:
         # spoken to unasked.
         return False
 
-    async def steer(self, prompt, attachments=None):
-        # What `ProviderBase.steer` does for a tool that cannot take a message
-        # mid-turn: refuse, so the session queues it. The queue is what these
-        # scenarios are about.
-        return False
-
     async def interrupt(self):
         pass
 
