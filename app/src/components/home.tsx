@@ -1,9 +1,9 @@
-import React from 'react';
-import { Pressable, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useCallback } from 'react';
+import { AppState, Pressable, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useStore, useT } from '../store';
 import { useNavGuard } from '../nav';
-import { redCount } from '../tickets';
+import { BADGE_POLL_MS, redCount } from '../tickets';
 import { useColors } from '../theme';
 import { Dot, Icon, Text } from './ui';
 
@@ -26,6 +26,25 @@ export function HomeTop({ tab }: { tab: 'chats' | 'agents' }) {
   // ask is on the badge: a queue that has gone red is the one thing on this
   // computer nobody would otherwise find out about until they looked.
   const red = queue?.available ? redCount(queue.tickets) : 0;
+
+  // Nothing else keeps this number honest. The queue is asked once on connect
+  // and then only by the wall, which is not open — so a ticket that went red an
+  // hour ago would sit behind an unbadged button until something reconnected.
+  // Asked again on the way back to the foreground, and slowly while a home
+  // screen is up: one local read a minute, against a ticket nobody would
+  // otherwise find out about for hours.
+  const loadUstabasi = useStore((s) => s.loadUstabasi);
+  // …and not at all on a computer that has already said it does not know the
+  // request: that answer cannot change without a restart, and a minute is a
+  // long time to keep asking a question already answered.
+  const oldHost = useStore((s) => s.ustabasiOld);
+  useFocusEffect(useCallback(() => {
+    if (conn !== 'online' || oldHost) return;
+    void loadUstabasi();
+    const timer = setInterval(() => void loadUstabasi(), BADGE_POLL_MS);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void loadUstabasi(); });
+    return () => { clearInterval(timer); sub.remove(); };
+  }, [conn, oldHost, loadUstabasi]));
   const name = hostInfo?.name?.replace('.local', '') || host?.name || T('computer');
   const status = switching || conn === 'connecting' ? T('connecting')
     : online ? T('active', { n: hostInfo?.active_sessions ?? 0 })

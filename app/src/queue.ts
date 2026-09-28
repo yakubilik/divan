@@ -25,13 +25,15 @@ export function useQueue(): {
 
   const reload = useCallback(() => { if (online) void loadUstabasi(); }, [online, loadUstabasi]);
 
-  useFocusEffect(reload);
-  useEffect(() => {
+  // Tied to focus rather than to being mounted: the wall stays mounted under an
+  // opened ticket, and two screens polling the same queue is two requests every
+  // eight seconds for one answer.
+  useFocusEffect(useCallback(() => {
     reload();
     const timer = setInterval(reload, POLL_MS);
     const sub = AppState.addEventListener('change', (st) => { if (st === 'active') reload(); });
     return () => { clearInterval(timer); sub.remove(); };
-  }, [reload]);
+  }, [reload]));
 
   return { snapshot, tickets: snapshot?.tickets ?? [], error,
            state: wall({ online, snapshot, error, oldHost: old }) , reload };

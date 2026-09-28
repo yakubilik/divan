@@ -175,6 +175,7 @@ const en = {
   errCwdOutside: 'That folder is outside the allowed roots', errNoChat: 'That chat no longer exists',
   errNoSuchFolder: 'That folder is not on this computer any more',
   errBusy: 'Too many messages waiting in this chat', errEmptyMessage: 'Empty message', errNoPendingApproval: 'That approval is no longer waiting',
+  errBadTicket: 'That ticket is not in the queue any more',
   errRestarting: 'The computer is restarting. Your message was not sent — try again in a moment.',
   errNoSupervisor: 'Nothing would start this daemon again, so it will not stop itself',
   errNotRestarting: 'This computer is not restarting',
@@ -341,6 +342,10 @@ const ERR_KEYS: Record<string, Key> = {
   cwd_outside: 'errCwdOutside', no_such_folder: 'errNoSuchFolder', no_chat: 'errNoChat', busy: 'errBusy',
   empty_message: 'errEmptyMessage', no_pending_approval: 'errNoPendingApproval',
   restarting: 'errRestarting', no_supervisor: 'errNoSupervisor', not_restarting: 'errNotRestarting',
+  bad_ticket: 'errBadTicket',
+  // `ustabasi_refused` is deliberately absent: the queue's CLI answers in its
+  // own words ("ustabasi is not installed on this machine", "note too long"),
+  // and a sentence of ours in its place would say less than it does.
 };
 
 export function errText(code?: string | null, fallback?: string | null): string {

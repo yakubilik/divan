@@ -10,6 +10,11 @@ import type { Ticket, TicketStatus, TicketVerdict, UstabasiSnapshot } from './pr
  *  desktop panel polls at the same rate. */
 export const POLL_MS = 8000;
 
+/** How often the chats screen re-reads the queue for its badge. Slower than the
+ *  wall by a lot: nobody is reading the tickets there, and the one thing the
+ *  number has to do is stop being wrong for hours at a time. */
+export const BADGE_POLL_MS = 60_000;
+
 /** The supervisor stamps a heartbeat at the start of every tick. Older than
  *  this and the queue is not running, whatever the cards say — a supervisor
  *  that died leaves every ticket exactly as it was. */
