@@ -12,7 +12,7 @@
  *  the panel shows, so that the order, the voices and the wording of the
  *  question can be checked without a browser. The wall's own arithmetic — which
  *  project a ticket belongs under, what order the columns and the cards come in,
- *  and the four figures a card shows — is at the bottom of this file, and is
+ *  and what a card says about where it has got to — is at the bottom of this file, and is
  *  checkable the same way.
  */
 
@@ -363,4 +363,20 @@ export function commitCount(t: Ticket): string | null {
   const n = t.git?.commits;
   if (!n) return null;
   return `${n} ${n === 1 ? 'commit' : 'commits'}`;
+}
+
+/** The line under the title: what last happened here, in words.
+ *
+ *  Usually the newest event — "merged into main (4dd999f)", "all accounts
+ *  limited, queue paused until 17:05". Not a `start`, though. That one reads
+ *  `worker round 1 pid 74155 model claude-opus-5 account yakup`, which is the
+ *  queue talking to its own log: the card says whose hands the ticket is in and
+ *  which round by itself, and a pid on a card is something to look past. With
+ *  nothing worth repeating, the card says what the ticket is for instead. */
+export function cardLine(t: Ticket): string {
+  const ev = t.last_event;
+  const said = ev && ev.kind !== 'start'
+    ? firstLine(ev.msg).replace(/^\[[a-z]+\]\s*/i, '')
+    : '';
+  return said || firstLine(t.goal || '');
 }

@@ -49,8 +49,8 @@ for (const f of readdirSync(out, { recursive: true, withFileTypes: true })) {
 }
 
 const {
-  answerable, bullets, commitCount, conversation, groupByProject, hasDetails, noteHint,
-  projectName, question, roundAge, sortTickets, stageLine, stateLine, totalAge,
+  answerable, bullets, cardLine, commitCount, conversation, groupByProject, hasDetails,
+  noteHint, projectName, question, roundAge, sortTickets, stageLine, stateLine, totalAge,
 } = await import(pathToFileURL(join(out, 'lib', 'ustabasi.js')));
 const { TicketChat } = await import(pathToFileURL(join(out, 'components', 'TicketChat.js')));
 
@@ -330,6 +330,21 @@ group('the figures on a card');
   ok('what is on the branch', commitCount(card({ git: { commits: 7, subject: 's' } })) === '7 commits');
   ok('one commit is one commit', commitCount(card({ git: { commits: 1, subject: 's' } })) === '1 commit');
   ok('nothing committed, and the card says nothing', commitCount(card()) === null);
+
+  const at = (kind, msg) => card({ last_event: { ts: NOW, kind, msg } });
+  ok('the line under the title is the last thing that happened',
+    cardLine(at('merge', 'merged into main (4dd999f)')) === 'merged into main (4dd999f)');
+  ok('a hand-over is the queue talking to its own log, so the card says what the ticket is for',
+    cardLine(at('start', 'worker round 1 pid 74155 model m account a'))
+      === 'Make a tile open as a conversation instead of a report.',
+    cardLine(at('start', 'worker round 1 pid 74155 model m account a')));
+  ok('who wrote a note is not read out on a card',
+    cardLine(at('note', '[user] have another go')) === 'have another go');
+  ok('a report is cut to its first line',
+    cardLine(at('report', 'the first line\nand a second one')) === 'the first line',
+    cardLine(at('report', 'the first line\nand a second one')));
+  ok('nothing said and nothing asked for is nothing',
+    cardLine(card({ goal: '', last_event: null })) === '');
 }
 
 // ── 11 · what a card does not say ───────────────────────────────────────────

@@ -5,7 +5,7 @@ import { TicketChat } from '../components/TicketChat';
 import { useFleet } from '../lib/fleet';
 import { duration } from '../lib/format';
 import {
-  answerable, commitCount, groupByProject, roundAge, stageLine, totalAge,
+  answerable, cardLine, commitCount, groupByProject, roundAge, stageLine, totalAge,
   type Group, type Status, type Ticket,
 } from '../lib/ustabasi';
 
@@ -121,7 +121,7 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
           }}>{first(t.escalation, 260)}</div>
         ) : (
           <div style={{ fontSize: 12.5, lineHeight: '18px', color: C.mute, wordBreak: 'break-word' }}>
-            {first(t.last_event?.msg || t.goal || '', 200) || 'no events yet'}
+            {first(cardLine(t), 200) || 'no events yet'}
           </div>
         )}
 

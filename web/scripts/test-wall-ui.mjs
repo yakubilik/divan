@@ -198,6 +198,10 @@ try {
     (phone.text.match(/commits/g) || []).length === 3, phone.text);
   ok('a finished card says how long it took', /took 13h 18m/.test(phone.text));
   ok('no percentage anywhere on the wall', !/\d\s?%/.test(phone.text), phone.text);
+  ok('no pid and no model name: the card says whose hands it is in, not which process',
+    !/\bpid\b|\bmodel\b/.test(phone.text), phone.text);
+  ok('a card with nothing said about it yet says what the ticket is for',
+    phone.text.includes('Make a tile open as a conversation'), phone.text);
 
   console.log('── a desk');
   const desk = await at(1280, 900);

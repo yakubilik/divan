@@ -82,7 +82,12 @@ export function wall() {
       git: { commits: 3, subject: 'The wall is a column per project' },
     }),
     card({ id: 3, project: 'babysee', updated_at: NOW - 30 }),
-    card({ id: 4, project: 'ustabasi', status: 'queued', round_started_at: null }),
+    // The newest thing said about this one is the queue handing it over, which
+    // is not a thing to read on a card.
+    card({
+      id: 4, project: 'ustabasi', status: 'queued', round_started_at: null,
+      last_event: { ts: NOW - 600, kind: 'start', msg: 'worker round 1 pid 74155 model m account a' },
+    }),
     card({
       id: 5, project: 'babysee', status: 'done', finished_at: NOW - 2 * H,
       updated_at: NOW - 2 * H, git: { commits: 6, subject: 'A shorter one' },
