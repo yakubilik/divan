@@ -1,12 +1,14 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import { useColors } from '../theme';
+import { dark, useColors } from '../theme';
 import { useT } from '../store';
 import { Text } from './ui';
 import type { Agent } from '../protocol';
 
-/** #rgb / #rrggbb -> #rrggbb; anything else falls back to the accent. */
-export function hex6(color: string | null | undefined, fallback = '#FF5A48'): string {
+/** #rgb / #rrggbb -> #rrggbb; anything else falls back to the accent. It is
+ *  the one colour in the app that is the same in both themes, so either side of
+ *  the palette can be asked for it. */
+export function hex6(color: string | null | undefined, fallback = dark.accent): string {
   let h = (color || '').replace('#', '');
   if (h.length === 3) h = h.split('').map((ch) => ch + ch).join('');
   return h.length === 6 && !/[^0-9a-f]/i.test(h) ? `#${h}` : fallback;

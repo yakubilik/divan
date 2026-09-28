@@ -390,7 +390,7 @@ function GroupPreview({ title, count }: { title: string; count: number }) {
   const c = useColors();
   return (
     <View style={{ backgroundColor: c.card, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 14,
-                   boxShadow: '0 24px 56px -24px ' + (c.scheme === 'dark' ? 'rgba(0,0,0,.55)' : 'rgba(28,27,22,.35)') }}>
+                   boxShadow: c.shadow.menu }}>
       <Icon name="expand_more" size={16} color={c.text2} />
       <Text style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: c.text2 }}>{title}</Text>
       <View style={{ flex: 1 }} />
@@ -406,7 +406,7 @@ function RowPreview({ chat, T, locale }: { chat: Chat; T: ReturnType<typeof useT
   const waiting = chat.status === 'awaiting_approval';
   return (
     <View style={{ marginHorizontal: 0, backgroundColor: c.card, borderRadius: 14, flexDirection: 'row', gap: 10, paddingVertical: 12, paddingHorizontal: 14,
-                   boxShadow: '0 24px 56px -24px ' + (c.scheme === 'dark' ? 'rgba(0,0,0,.55)' : 'rgba(28,27,22,.35)') }}>
+                   boxShadow: c.shadow.menu }}>
       <ProviderBadge provider={chat.provider} variant={chat.archived ? 'outline' : undefined} />
       <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', gap: 5 }}>

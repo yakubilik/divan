@@ -106,10 +106,15 @@ export const ON_COLOUR = '#FFFFFF';
  *  Pebble 95 (Mobile7 S6, the brand-new project). */
 export const MONOGRAM = ['#4A5D86', '#6F5076', '#226873', '#50663A', '#706332'] as const;
 
-/** Which of them a project gets. A project keeps its colour for as long as it
- *  keeps its name, and two projects on one screen almost never collide — which
- *  is all the frames ask of it. */
-export function monogram(name: string): string {
+/** Which of them a project gets.
+ *
+ *  A screen that has the whole list in front of it — the Dashboard, the project
+ *  bar — passes the project's place in that list, and four projects get four
+ *  different hues, which is the frames' own arrangement. A screen holding one
+ *  project and no list falls back to the name, which at least keeps the same
+ *  project the same colour everywhere it appears. */
+export function monogram(name: string, index?: number | null): string {
+  if (index != null) return MONOGRAM[((index % MONOGRAM.length) + MONOGRAM.length) % MONOGRAM.length];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return MONOGRAM[h % MONOGRAM.length];
@@ -253,3 +258,110 @@ export const scrim = (t: Tokens) => (t.scheme === 'dark' ? t.sh : 'rgba(27,26,23
 /** The page showing faintly through whatever is laid over it — behind the
  *  board's drop target. The page's own colour at the weight the app used. */
 export const veil = (t: Tokens) => (t.scheme === 'dark' ? 'rgba(19,18,16,.92)' : 'rgba(245,243,238,.92)');
+
+/** The whole palette, twice, under the names the screens already use. Every
+ *  screen was drawn in both, element for element, and these are the pairs: a
+ *  value never appears on one side without its counterpart on the other.
+ *  Nothing on screen picks a colour outside this table, and this table picks
+ *  nothing outside the sixteen above it. The app follows the phone's own
+ *  appearance. */
+export interface Palette {
+  scheme: Scheme;
+  /** Screen background. */
+  bg: string;
+  /** Cards, rows, sheets, menus. */
+  card: string;
+  /** Quiet fills: search field, segmented track, chips, icon wells. */
+  fill: string;
+  /** Default border and separator. */
+  line: string;
+  /** Emphasised border, an unfilled track, a disabled fill. */
+  lineStrong: string;
+  /** Primary text, and the primary button that is drawn in it. */
+  ink: string;
+  /** Text on top of `ink`. */
+  onInk: string;
+  /** The reader's own messages. A raised neutral, not an inverted one: a
+   *  white slab in a dark thread reads as an error, not as "mine". */
+  bubble: string;
+  text2: string;
+  muted: string;
+  faint: string;
+  /** The selected segment of a segmented control. */
+  segOn: string;
+  /** Code blocks, table heads, the address bar of the sign-in page. */
+  code: string;
+  warn: string; warnBg: string;
+  ok: string; okBg: string;
+  danger: string; dangerBg: string;
+  /** Allow, send, the recording dot — the same red in both themes. */
+  accent: string;
+  /** Red as text: needs approval, a toggled-on chip. */
+  accentText: string;
+  accentTint: string;
+  /** Dim behind a sheet, a menu or a dialog. */
+  scrim: string;
+  /** Behind the drop target. */
+  veil: string;
+  /** The halo around the live-turn dot. */
+  halo: string;
+  /** The unfilled part of a spinner drawn on a card. */
+  spinTrack: string;
+  /** Second stripe of an image that has not loaded yet. */
+  stripe: string;
+  shadow: {
+    /** A card resting on the page. */
+    card: string;
+    /** The small lift under a pill or a selected segment. */
+    pill: string;
+    seg: string;
+    /** A menu or popover. */
+    menu: string;
+    /** A menu attached to the chat header, a sheet over the page. */
+    pop: string;
+    /** A pending approval, which has to stand out from the transcript. */
+    raised: string;
+    /** The knob of a switch. */
+    knob: string;
+  };
+}
+
+/** The `Palette` is no longer written out twice by hand: both sides of it are
+ *  derived from the design's own sixteen tokens, so a screen that asks for
+ *  `c.card` gets the frames' `--s1` and there is no second table to drift.
+ *
+ *  Most roles are a token under an older name. Four are a judgement, and all
+ *  four are recorded in `design/divan/TOKENS.md`:
+ *
+ *   · `muted` and `faint` both land on `--ink3`. The app grew four tiers of
+ *     text; the frames draw three, and they put mono meta, timestamps,
+ *     placeholders and a row's chevron in the same one.
+ *   · `segOn` is `--s1` on an `--s2` track: the selected segment is a card
+ *     sitting in a well, which is how the frames draw a selected column tab.
+ *   · `accent` is `--red`. The frames give the send button `--ink` and keep red
+ *     for trouble; the app's accent is the colour of Allow, of the recording
+ *     dot and of delete, which is the same red.
+ *   · `scrim` and `veil` are the two derived values, and say so above. */
+function palette(t: Tokens): Palette {
+  const sh = shadows(t);
+  return {
+    scheme: t.scheme,
+    bg: t.bg, card: t.s1, fill: t.s2, line: t.line, lineStrong: t.line2,
+    bubble: t.s2,
+    ink: t.ink, onInk: t.bg, text2: t.ink2, muted: t.ink3, faint: t.ink3,
+    segOn: t.s1, code: t.s2,
+    warn: t.amber, warnBg: t.amberBg,
+    ok: t.run, okBg: t.runBg,
+    danger: t.red, dangerBg: t.redBg,
+    accent: t.red, accentText: t.red, accentTint: t.redBg,
+    scrim: scrim(t), veil: veil(t), halo: t.line2,
+    spinTrack: t.line2, stripe: t.s2,
+    shadow: {
+      card: sh.lift, pill: sh.lift, seg: sh.lift,
+      menu: sh.sheet, pop: sh.pop, raised: sh.pop, knob: sh.lift,
+    },
+  };
+}
+
+export const light: Palette = palette(LIGHT);
+export const dark: Palette = palette(DARK);

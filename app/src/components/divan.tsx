@@ -360,12 +360,17 @@ export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
 /** A project's letter on its own colour. Mobile1 V1: `32px` at `border-radius:
  *  9px` on a project card, `26px` at `7px` in a title bar, white on every one
  *  of the ramp's hues. */
-export function Monogram({ name, size = SIZE.monogram, style }: {
-  name: string; size?: number; style?: StyleProp<ViewStyle>;
+export function Monogram({ name, index, size = SIZE.monogram, style }: {
+  name: string;
+  /** The project's place in the list being drawn, where there is one: the ramp
+   *  is walked in order so that no two projects on a screen share a hue. */
+  index?: number | null;
+  size?: number;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View style={[{ width: size, height: size, borderRadius: Math.round(size * 0.28),
-                    backgroundColor: monogram(name), alignItems: 'center', justifyContent: 'center' }, style]}>
+                    backgroundColor: monogram(name, index), alignItems: 'center', justifyContent: 'center' }, style]}>
       <Text style={{ fontSize: size * 0.47, fontWeight: '600', color: ON_COLOUR }}>
         {(name.trim()[0] ?? '?').toUpperCase()}
       </Text>

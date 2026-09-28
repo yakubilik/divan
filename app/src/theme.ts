@@ -1,115 +1,11 @@
 import { createContext, createElement, useContext, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
-import { DARK, LIGHT, scrim, type Scheme, shadows, type Tokens, tokensFor, veil } from './tokens';
+import { dark, light, type Palette, type Scheme, type Tokens, tokensFor } from './tokens';
 
+/** The palette is plain data and lives next door with the tokens it is made
+ *  of, so that a check can read it without a phone. What is left here is how a
+ *  screen gets at it, and the two typefaces. */
 export * from './tokens';
-
-/** The whole palette, twice, under the names the screens already use. Every
- *  screen was drawn in both, element for element, and these are the pairs: a
- *  value never appears on one side without its counterpart on the other.
- *  Nothing on screen picks a colour outside this table, and this table picks
- *  nothing outside `tokens.ts`, which is the design's own. The app follows the
- *  phone's own appearance. */
-export interface Palette {
-  scheme: 'light' | 'dark';
-  /** Screen background. */
-  bg: string;
-  /** Cards, rows, sheets, menus. */
-  card: string;
-  /** Quiet fills: search field, segmented track, chips, icon wells. */
-  fill: string;
-  /** Default border and separator. */
-  line: string;
-  /** Emphasised border, an unfilled track, a disabled fill. */
-  lineStrong: string;
-  /** Primary text, and the primary button that is drawn in it. */
-  ink: string;
-  /** Text on top of `ink`. */
-  onInk: string;
-  /** The reader's own messages. A raised neutral, not an inverted one: a
-   *  white slab in a dark thread reads as an error, not as "mine". */
-  bubble: string;
-  text2: string;
-  muted: string;
-  faint: string;
-  /** The selected segment of a segmented control. */
-  segOn: string;
-  /** Code blocks, table heads, the address bar of the sign-in page. */
-  code: string;
-  warn: string; warnBg: string;
-  ok: string; okBg: string;
-  danger: string; dangerBg: string;
-  /** Allow, send, the recording dot — the same red in both themes. */
-  accent: string;
-  /** Red as text: needs approval, a toggled-on chip. */
-  accentText: string;
-  accentTint: string;
-  /** Dim behind a sheet, a menu or a dialog. */
-  scrim: string;
-  /** Behind the drop target. */
-  veil: string;
-  /** The halo around the live-turn dot. */
-  halo: string;
-  /** The unfilled part of a spinner drawn on a card. */
-  spinTrack: string;
-  /** Second stripe of an image that has not loaded yet. */
-  stripe: string;
-  shadow: {
-    /** A card resting on the page. */
-    card: string;
-    /** The small lift under a pill or a selected segment. */
-    pill: string;
-    seg: string;
-    /** A menu or popover. */
-    menu: string;
-    /** A menu attached to the chat header, a sheet over the page. */
-    pop: string;
-    /** A pending approval, which has to stand out from the transcript. */
-    raised: string;
-    /** The knob of a switch. */
-    knob: string;
-  };
-}
-
-/** The `Palette` is no longer written out twice by hand: both sides of it are
- *  derived from the design's own sixteen tokens, so a screen that asks for
- *  `c.card` gets the frames' `--s1` and there is no second table to drift.
- *
- *  Most roles are a token under an older name. Four are a judgement, and all
- *  four are recorded in `design/divan/TOKENS.md`:
- *
- *   · `muted` and `faint` both land on `--ink3`. The app grew four tiers of
- *     text; the frames draw three, and they put mono meta, timestamps,
- *     placeholders and a row's chevron in the same one.
- *   · `segOn` is `--s1` on an `--s2` track: the selected segment is a card
- *     sitting in a well, which is how the frames draw a selected column tab.
- *   · `accent` is `--red`. The frames give the send button `--ink` and keep red
- *     for trouble; the app's accent is the colour of Allow, of the recording
- *     dot and of delete, which is the same red.
- *   · `scrim` and `veil` are derived in `tokens.ts`, where the reason is. */
-function palette(t: Tokens): Palette {
-  const sh = shadows(t);
-  return {
-    scheme: t.scheme,
-    bg: t.bg, card: t.s1, fill: t.s2, line: t.line, lineStrong: t.line2,
-    bubble: t.s2,
-    ink: t.ink, onInk: t.bg, text2: t.ink2, muted: t.ink3, faint: t.ink3,
-    segOn: t.s1, code: t.s2,
-    warn: t.amber, warnBg: t.amberBg,
-    ok: t.run, okBg: t.runBg,
-    danger: t.red, dangerBg: t.redBg,
-    accent: t.red, accentText: t.red, accentTint: t.redBg,
-    scrim: scrim(t), veil: veil(t), halo: t.line2,
-    spinTrack: t.line2, stripe: t.s2,
-    shadow: {
-      card: sh.lift, pill: sh.lift, seg: sh.lift,
-      menu: sh.sheet, pop: sh.pop, raised: sh.pop, knob: sh.lift,
-    },
-  };
-}
-
-export const light: Palette = palette(LIGHT);
-export const dark: Palette = palette(DARK);
 
 /** Normally nothing: the app follows the phone and there is no switch in it,
  *  because the phone already has one. The design gallery is the exception —

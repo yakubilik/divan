@@ -144,7 +144,7 @@ export default function LoginWeb() {
         </View>
       ) : strayed ? (
         <View style={{ position: 'absolute', left: 12, right: 12, bottom: insets.bottom + 6, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 16,
-                       padding: 16, gap: 10, boxShadow: c.scheme === 'dark' ? '0 24px 56px -20px rgba(0,0,0,.6)' : '0 24px 56px -20px rgba(28,27,22,.3)' }}>
+                       padding: 16, gap: 10, boxShadow: c.shadow.menu }}>
           <Text style={{ fontSize: 16, fontWeight: '600' }}>{T('loginStrayedTitle')}</Text>
           <Text style={{ fontSize: 13, color: c.muted, lineHeight: 13 * 1.45 }}>{T('loginStrayed')}</Text>
           <Button title={T('loginReturn')} onPress={restart} />

@@ -134,8 +134,8 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
             <ExecutorBadge executor="coder" size={22} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 }}>
-            {['Quire', 'Kanji Daily', 'Hush', 'The Long Walk', 'Pebble'].map((p) => (
-              <Monogram key={p} name={p} />
+            {['Quire', 'Kanji Daily', 'Hush', 'The Long Walk', 'Pebble'].map((p, i) => (
+              <Monogram key={p} name={p} index={i} />
             ))}
             <Monogram name="Quire" size={26} />
           </View>
