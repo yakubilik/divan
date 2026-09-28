@@ -108,6 +108,9 @@ const checks = [
   ['nor is nothing at all', T.oldHost(null) === false],
 
   ['a ticket push names its ticket', T.ticketFromPush({ ticket_id: 5 }) === 5],
+  // The queue spells it `ticket`, which is the payload that actually arrives.
+  ['the queue\u2019s own payload is read',
+    T.ticketFromPush({ source: 'ustabasi', ticket: 10, kind: 'blocked', screen: 'ustabasi' }) === 10],
   ['as a string too, which is how JSON arrives', T.ticketFromPush({ ticket_id: '12' }) === 12],
   ['a chat push is not a ticket', T.ticketFromPush({ chat_id: 'abc', kind: 'done' }) === null],
   ['an empty payload is not a ticket', T.ticketFromPush({}) === null && T.ticketFromPush(undefined) === null],

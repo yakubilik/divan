@@ -103,12 +103,17 @@ says what it is *about*, and the phone routes on that:
 | key | what a tap opens |
 |---|---|
 | `chat_id` (with `kind` `approval` or `done`) | that chat |
-| `ticket_id` | that ustabasi ticket |
+| `ticket_id`, or `ticket` | that ustabasi ticket |
 | `device_id` | which pairing it was sent to — a phone paired to two computers switches to the one that actually has the chat rather than opening it against whichever one it happens to be connected to |
 
-This daemon sends the `chat_id` ones. Nothing here sends a `ticket_id`: the
-ticket queue is another program and notifies its owner its own way, so the key
-is the phone's side of an agreement, honoured whenever something does send one.
+This daemon sends the `chat_id` ones and no others. A ticket push comes from the
+ticket queue itself, which is a separate program: it builds the notification out
+of the ticket's number, its title and what happened, never out of the message —
+an escalation quotes the worker and the worker quotes the repository, and none
+of that belongs in a banner that travels through Expo's servers. It names the
+ticket `ticket`; the phone takes `ticket_id` as well, because the key is an
+agreement rather than one program's spelling of it.
+
 A tap that launches the app cold is held until the keychain is open and Face ID
 has been answered, then delivered — so it lands on the chat or the ticket rather
 than on the list.
