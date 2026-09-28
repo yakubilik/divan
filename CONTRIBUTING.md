@@ -56,6 +56,7 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_attachments.py
 .venv312/bin/python scripts/test_pool.py
 .venv312/bin/python scripts/test_agents.py
+.venv312/bin/python scripts/test_ustabasi.py    # the ticket queue's snapshot and its one write
 
 cd app && npx tsc --noEmit
 node scripts/test-login-web.cjs                # the sign-in WebView's two judgements
