@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import { em, useColors, type Palette } from '../theme';
+import { useColors, type Palette } from '../theme';
 import { useT } from '../store';
 import { answerable, first, since, STATUS_KEY } from '../tickets';
 import { Dot, Icon, Spinner, Text } from './ui';
@@ -21,19 +21,6 @@ export function tone(c: Palette, status: TicketStatus | string): { color: string
     case 'done': return { color: c.ok, tint: c.okBg };
     default: return { color: c.faint, tint: c.fill };
   }
-}
-
-/** A heading over a block of the opened ticket. `Label` is the same type at the
- *  same size, but it is drawn for a card's edge-to-edge row and carries that
- *  row's inset; this one sits in a page that has its own. */
-export function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const c = useColors();
-  return (
-    <View style={{ gap: 8 }}>
-      <Text style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: c.muted }}>{title}</Text>
-      {children}
-    </View>
-  );
 }
 
 /** One ticket on the wall. Everything a glance is owed: whose colour it is, its

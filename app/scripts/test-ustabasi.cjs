@@ -26,10 +26,13 @@ function load(file, exports) {
   return require(out);
 }
 
-const T = load('src/tickets.ts', ['POLL_MS', 'STATUS_KEY', 'answerable', 'redCount', 'sortTickets',
-                                  'mark', 'wall', 'oldHost', 'ticketFromPush', 'since', 'first', 'repoName']);
+const T = load('src/tickets.ts', ['POLL_MS', 'STATUS_KEY', 'VOICE_KEY', 'answerable', 'redCount', 'sortTickets',
+                                  'mark', 'wall', 'oldHost', 'ticketFromPush', 'since', 'first', 'repoName',
+                                  'bullets', 'conversation', 'question', 'stateLine', 'noteHint', 'hasDetails']);
 
-const unit = (k) => ({ unitSec: 's', unitMin: 'm', unitHour: 'h', unitDay: 'd' }[k]);
+// The real table, so that what the conversation says is what the screen shows
+// rather than a sentence written twice.
+const TR = load('src/i18n.ts', ['t']).t;
 const ticket = (id, status, updated_at = 1000, extra = {}) =>
   ({ id, status, updated_at, title: `#${id}`, stage: 'worker', round: 1, notes: [], note_count: 0,
      done_criteria: [], escalation: '', verdict: null, last_event: null, goal: '', repo: '', branch: null, ...extra });
@@ -114,12 +117,12 @@ const checks = [
 
   ['the wall re-reads at least as often as the desktop panel', T.POLL_MS <= 8000],
 
-  ['seconds read as seconds', T.since(42, unit) === '42s'],
-  ['minutes drop the seconds', T.since(12 * 60 + 30, unit) === '12m'],
-  ['hours keep the minutes', T.since(3 * 3600 + 5 * 60, unit) === '3h 5m'],
-  ['a ticket stuck since yesterday says so', T.since(26 * 3600, unit) === '1d 2h'],
+  ['seconds read as seconds', T.since(42, TR) === '42s'],
+  ['minutes drop the seconds', T.since(12 * 60 + 30, TR) === '12m'],
+  ['hours keep the minutes', T.since(3 * 3600 + 5 * 60, TR) === '3h 5m'],
+  ['a ticket stuck since yesterday says so', T.since(26 * 3600, TR) === '1d 2h'],
   ['a missing timestamp is not "NaN in this state"',
-    T.since(null, unit) === '' && T.since(undefined, unit) === '' && T.since(-1, unit) === ''],
+    T.since(null, TR) === '' && T.since(undefined, TR) === '' && T.since(-1, TR) === ''],
 
   ['a long escalation is cut on a word', T.first('the quick brown fox jumps', 17) === 'the quick brown…'],
   ['a cut that lands on a space keeps the word before it',
@@ -134,6 +137,171 @@ const checks = [
   ['and an absent one is blank', T.repoName(null) === '' && T.repoName('') === ''],
 ];
 
+// ── the opened ticket, which is a conversation ───────────────────────────────
+// A ticket used to open as a report: the goal under a heading, the criteria
+// under another, what it was waiting for under a third. Everything was there
+// and none of it asked anything. Read as a conversation instead, the part that
+// can be wrong without anybody noticing is not the drawing — it is the reading:
+// which order the messages come in, who is said to have said them, and whether
+// the last one is a question. All of that is a pure function of one ticket.
+
+const REPORT = 'The verifier found two of the nine criteria unmet. '
+  + 'The sequence order is built but it is not tested. '.repeat(12)
+  + 'This sentence is the end of the report.';
+
+const convo = (over = {}) => ticket(7, 'blocked', 5000, {
+  title: 'open a ticket as a conversation',
+  stage: 'worker', round: 2, repo: '/tmp/repo', branch: 'topic',
+  created_at: 1000, started_at: 1100, finished_at: null,
+  goal: 'Make a card open as a conversation instead of a report.',
+  done_criteria: ['the sequence reads as a chat', 'the box sends a note'],
+  escalation: '- A token with **write** access is needed\n'
+    + '  and nobody has one yet\n'
+    + '- Once that exists the whole ticket closes',
+  verdict: { verdict: 'changes_requested', findings: [
+    { criterion: 'first', status: 'met' },
+    { criterion: 'second', status: 'unmet', detail: 'the long detail nobody reads' },
+  ]},
+  notes: [
+    { ts: 3000, from: 'user', text: 'Use the staging account, not the live one.' },
+    { ts: 2000, from: 'verifier', text: REPORT },
+    { ts: 4000, from: 'triage', text: 'Picked this up after the crash.' },
+  ],
+  note_count: 3,
+  last_event: { ts: 4500, kind: 'blocked', msg: 'stopped to ask about the token' },
+  ...over,
+});
+
+const say = (t) => T.conversation(t, TR);
+const whole = (m) => `${m.text}\n${m.more ?? ''}`;
+
+{
+  const t = convo();
+  const msgs = say(t);
+  const everything = msgs.map(whole).join('\n');
+  const shown = msgs.map((m) => m.text).join('\n');
+  const notes = msgs.slice(1, -1);
+  const tail = msgs[msgs.length - 1];
+  const stamps = msgs.map((m) => m.ts);
+
+  checks.push(
+    // 1 · it is a conversation, not a report
+    ['every message has a voice and a time',
+      msgs.every((m) => m.from && Number.isFinite(m.ts) && m.ts > 0)],
+    ['every message is from a voice the app can name',
+      msgs.every((m) => !!T.VOICE_KEY[m.from])],
+
+    // 2 · the order is the order it happened in
+    ['the goal opens it, in the voice of whoever opened the ticket',
+      msgs[0].from === 'you' && msgs[0].text === t.goal],
+    ['the opening carries the time the ticket was opened', msgs[0].ts === 1000],
+    ['no message is older than the one above it',
+      stamps.every((ts, i) => i === 0 || ts >= stamps[i - 1])],
+    ['the notes are in the order they were written',
+      notes.map((m) => m.ts).join(',') === '2000,3000,4000'],
+    ['a note says who wrote it', notes.map((m) => m.from).join(',') === 'verifier,you,triage'],
+    ['the last message is the only tail',
+      msgs.filter((m) => m.tail).length === 1 && tail.tail === true],
+    ['the tail is not older than the ticket', tail.ts >= 5000],
+
+    // 3 · the paperwork is not in the conversation
+    ['a criterion is not a message', t.done_criteria.every((c) => !everything.includes(c))],
+    ['the verifier’s per-criterion detail is not a message',
+      !everything.includes('the long detail nobody reads')],
+    ['a long report is cut down to its opening',
+      msgs.find((m) => m.from === 'verifier').text.length < 500],
+    ['the rest of it is kept, folded',
+      (msgs.find((m) => m.from === 'verifier').more || '').length > 100],
+    ['nothing of the report is lost', (() => {
+      const r = msgs.find((m) => m.from === 'verifier');
+      return `${r.text} ${r.more}`.replace(/\s+/g, ' ').trim() === REPORT.replace(/\s+/g, ' ').trim();
+    })()],
+    ['the folded part is not shown by default',
+      !shown.includes('This sentence is the end of the report.')],
+    ['what a person typed is never cut',
+      msgs.find((m) => m.from === 'you' && m.ts === 3000).more === undefined],
+    ['there is paperwork to fold away', T.hasDetails(t) === true],
+    ['a ticket with neither criteria nor verdict has no details',
+      T.hasDetails(convo({ done_criteria: [], verdict: null })) === false],
+  );
+}
+
+// 4 · a stopped ticket ends on a question
+for (const status of ['blocked', 'failed']) {
+  const tail = say(convo({ status })).at(-1);
+  checks.push(
+    [`${status}: the last message is one paragraph`, !tail.text.includes('\n')],
+    [`${status}: no bullet is left in it`, !/(^|\s)[-*•]\s/.test(tail.text)],
+    [`${status}: it asks`, tail.text.trim().endsWith('?')],
+    [`${status}: it is addressed to a person`, /\byou\b/i.test(tail.text)],
+    [`${status}: the points of the escalation survived`,
+      tail.text.includes('token with **write** access') && tail.text.includes('the whole ticket closes')],
+    [`${status}: a wrapped bullet stayed with its bullet`,
+      tail.text.includes('is needed and nobody has one yet')],
+    [`${status}: nothing of the question is clipped away`, tail.more === undefined],
+  );
+}
+checks.push(
+  ['a stopped ticket with no report still asks something',
+    say(convo({ escalation: '' })).at(-1).text.trim().endsWith('?')],
+  ['an escalation written as prose becomes one paragraph',
+    !T.question(convo({ escalation: 'The API key is missing and I cannot make one.' }), TR).includes('\n')],
+  ['…and is kept whole',
+    T.question(convo({ escalation: 'The API key is missing and I cannot make one.' }), TR)
+      .includes('The API key is missing and I cannot make one.')],
+  ['a question the worker already asked is not asked twice',
+    (T.question(convo({ escalation: 'Which account should I use?' }), TR).match(/\?/g) || []).length === 1],
+);
+
+// 5 · a ticket that is not asking ends on one line about where it stands
+{
+  const running = say(convo({ status: 'running' })).at(-1);
+  checks.push(
+    ['a working ticket ends on one line', !running.text.includes('\n')],
+    ['…which says what is happening', running.text.includes('stopped to ask about the token')],
+    ['…in the worker’s voice', running.from === 'worker'],
+    ['a queued ticket is the queue talking',
+      say(convo({ status: 'queued', last_event: null })).at(-1).from === 'supervisor'],
+    ['…saying it has not started',
+      T.stateLine(convo({ status: 'queued', last_event: null }), TR) === TR('stateQueuedBare')],
+    ['a finished ticket says so',
+      T.stateLine(convo({ status: 'done', last_event: null }), TR) === TR('stateDoneBare')],
+    // The queue files an event for every note, with the note copied into it.
+    // The note is already a message a few lines up; saying it again as the
+    // state of the ticket reads as the screen talking to itself.
+    ['a note is not read back as the state of the ticket',
+      !T.stateLine(convo({ status: 'queued',
+        last_event: { ts: 4600, kind: 'note', msg: '[user] Use the staging account.' } }), TR)
+        .includes('staging account')],
+    ['the filing tag in front of an event is not language',
+      T.stateLine(convo({ status: 'done',
+        last_event: { ts: 4600, kind: 'merge', msg: '[worker] merged into main' } }), TR)
+        === TR('stateDone', { ev: 'merged into main' })],
+  );
+}
+
+// 6 · the box, and the line that says what sending will do
+checks.push(
+  ['a stopped ticket goes straight back', T.noteHint('blocked') === 'noteHintStopped'],
+  ['…and a failed one too', T.noteHint('failed') === 'noteHintStopped'],
+  ['a working one waits for the stage boundary', T.noteHint('running') === 'noteHintWorking'],
+  ['a queued one waits for it too', T.noteHint('queued') === 'noteHintWorking'],
+  ['a closed one keeps the note',
+    T.noteHint('done') === 'noteHintClosed' && T.noteHint('cancelled') === 'noteHintClosed'],
+);
+
+// 7 · the shapes an escalation is written in
+checks.push(
+  ['dashes are points', T.bullets('- one\n- two').join('|') === 'one|two'],
+  ['stars are points', T.bullets('* one\n* two').join('|') === 'one|two'],
+  ['numbers are points', T.bullets('1. one\n2) two').join('|') === 'one|two'],
+  ['blank lines are not points', T.bullets('- one\n\n- two').join('|') === 'one|two'],
+  ['a wrapped bullet is one point',
+    T.bullets('- one\n  still one\n- two').join('|') === 'one still one|two'],
+  ['prose is one point', T.bullets('just the one thing').join('|') === 'just the one thing'],
+  ['nothing is no points', T.bullets('').length === 0 && T.bullets(null).length === 0],
+);
+
 // Every word the new screens show comes out of the i18n table. A missing key
 // renders as its own name, which is the sort of thing that ships.
 const table = fs.readFileSync(path.join(root, 'src/i18n.ts'), 'utf8');
@@ -145,10 +313,37 @@ for (const f of screens) {
   const src = fs.readFileSync(path.join(root, f), 'utf8');
   for (const m of src.matchAll(/\bT\(\s*'([A-Za-z0-9_]+)'/g)) used.add(m[1]);
 }
-for (const m of fs.readFileSync(path.join(root, 'src/tickets.ts'), 'utf8').matchAll(/'(ts[A-Z][A-Za-z]+|unit[A-Z][a-z]+)'/g)) used.add(m[1]);
+// The words the model itself reaches for — the voices, the question, the line
+// about where a ticket stands — are named in `tickets.ts` rather than on a
+// screen, either as a key it hands back or as one it looks up.
+const model = fs.readFileSync(path.join(root, 'src/tickets.ts'), 'utf8');
+for (const m of model.matchAll(/\bT\(\s*'([A-Za-z0-9_]+)'/g)) used.add(m[1]);
+for (const m of model.matchAll(/'(ts[A-Z]|unit[A-Z]|voice[A-Z]|ask[A-Z]|state[A-Z]|noteHint[A-Z])([A-Za-z]+)'/g)) used.add(m[1] + m[2]);
 const missing = [...used].filter((k) => !known.has(k));
 checks.push([`every string the wall shows is in the i18n table (${used.size} keys)`, missing.length === 0]);
 if (missing.length) console.log('  missing keys:', missing.join(', '));
+
+// The model is where a sentence would hide from that check: it builds the
+// question and the line about where a ticket stands out of the table, and a
+// word written into it instead would never be missed. Asked with a translator
+// that answers in markers, everything it hands back is a marker or came off
+// the ticket — there is no third thing, which is to say no English of its own.
+{
+  const mark = (k) => `\u00ab${k}\u00bb`;
+  const left = (text, ...fromTicket) => {
+    let rest = text.replace(/\u00ab[A-Za-z0-9_]+\u00bb/g, '');
+    for (const w of fromTicket) rest = rest.split(w).join('');
+    return rest;
+  };
+  const asked = T.question(convo({ escalation: '- alpha\n- beta' }), mark);
+  const stood = T.stateLine(convo({ status: 'running' }), mark);
+  checks.push(
+    ['the question is the table\u2019s words and the ticket\u2019s, nothing else',
+      !/[A-Za-z]/.test(left(asked, 'alpha', 'beta'))],
+    ['so is the line about where a ticket stands',
+      !/[A-Za-z]/.test(left(stood, 'stopped to ask about the token'))],
+  );
+}
 
 // …and nothing on them is a sentence typed straight into the JSX, which is how
 // a screen ends up half-translatable: the table cannot be a second language if
@@ -200,6 +395,31 @@ checks.push(
     /AppState\.addEventListener\('change'[\s\S]{0,80}'active'[\s\S]{0,20}reload/.test(queueHook)],
   ['answering a ticket re-reads the queue rather than guessing at it',
     /noteTicket: async[\s\S]{0,400}await get\(\)\.loadUstabasi\(\)/.test(store)],
+  // The opened ticket is a conversation, which is a claim about how it is
+  // built: it draws the run of messages the model hands it, in the app's own
+  // two halves, with a box under it — and not the headings it used to have.
+  ['the opened ticket is drawn from the conversation, not from the fields',
+    /conversation\(t, T\)/.test(detail)],
+  ['what a person said is the app\u2019s own bubble', /<UserBubble\b/.test(detail)],
+  ['\u2026and what came back is drawn the way an answer in a chat is',
+    /<AssistantText\b/.test(detail)],
+  ['there is a box at the bottom of it, whatever the ticket is doing',
+    /<TextInput\b/.test(detail) && !/wants &&[\s\S]{0,40}<TextInput/.test(detail)],
+  ['\u2026and a line saying what sending will do', /T\(noteHint\(t\.status\)\)/.test(detail)],
+  ['the paperwork is behind a disclosure that starts closed',
+    /hasDetails\(t\) && <Details/.test(detail) && /useState\(false\)/.test(detail)],
+  ['none of the old headings is on it',
+    !/ticketGoal|ticketDoneWhen|ticketWaiting|ticketLastReport|ticketNotes\b/.test(detail)],
+  ['\u2026nor left in the table behind it',
+    !/\b(ticketGoal|ticketDoneWhen|ticketWaiting|ticketLastReport|ticketNotes):/.test(table)],
+  ['a message sent shows up before the queue confirms it',
+    /setPending\(\(p\) => \[\.\.\.p, local\]\)/.test(detail)],
+  ['\u2026and gives way to the note when it comes back',
+    /said\.has\(p\.text\)/.test(detail)],
+  ['\u2026and is taken back off if the queue refuses it',
+    /setPending\(\(p\) => p\.filter\(\(x\) => x\.id !== local\.id\)\)/.test(detail)],
+  ['a note arriving while a report is being read does not drag it down',
+    /stick\.current = /.test(detail) && /if \(stick\.current\)/.test(detail)],
 );
 
 // Two requests and no more. `ustabasi.list` reads, `ustabasi.note` answers;

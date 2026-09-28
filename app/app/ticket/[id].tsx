@@ -1,17 +1,32 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore, useT } from '../../src/store';
-import { useNow, useQueue } from '../../src/queue';
+import { useQueue } from '../../src/queue';
+import { LOCALE } from '../../src/i18n';
 import { em, useColors } from '../../src/theme';
-import { BackBar, Button, Dot, EmptyState, Icon, Spinner, Text, TextInput } from '../../src/components/ui';
-import { Section, tone } from '../../src/components/ticket';
-import { answerable, first, mark, repoName, since, STATUS_KEY } from '../../src/tickets';
+import { BackBar, Dot, EmptyState, Icon, Spinner, Text, TextInput } from '../../src/components/ui';
+import { AssistantText, UserBubble } from '../../src/components/chat';
+import { tone } from '../../src/components/ticket';
+import { answerable, conversation, hasDetails, mark, noteHint, STATUS_KEY, VOICE_KEY,
+         type Msg, type Voice } from '../../src/tickets';
+import type { Ticket } from '../../src/protocol';
 
-/** One opened ticket: what it is for, how far the loop got, what the verifier
- *  made of it — and, on a ticket that stopped to ask, the question in full with a
- *  box under it.
+/** One ticket, opened.
+ *
+ *  It used to open as a report: the goal under a heading, the criteria under
+ *  another, what it was waiting for under a third. Everything was there and none
+ *  of it asked anything, so the answer never came. This is the same ticket read
+ *  as the conversation it always was — what was asked for, what came back, and
+ *  at the end the question, in the words a person would use. The desktop panel
+ *  opens a ticket the same way and out of the same fields; both read it through
+ *  `conversation()`, so neither can drift into saying something the other does
+ *  not.
+ *
+ *  The paperwork — the card's criteria, the verifier's per-criterion marks — is
+ *  still here, behind `Details`, closed, where a thing nobody is answering
+ *  belongs.
  *
  *  The box is the only write this screen has. A note is not an INSERT: the queue
  *  appends it, clears the escalation and puts the ticket back in front of the
@@ -25,7 +40,6 @@ export default function TicketScreen() {
   const insets = useSafeAreaInsets();
   const T = useT();
   const c = useColors();
-  const now = useNow();
   const { tickets, state } = useQueue();
   const noteTicket = useStore((s) => s.noteTicket);
   const hostInfo = useStore((s) => s.hostInfo);
@@ -35,20 +49,55 @@ export default function TicketScreen() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [sent, setSent] = useState<string | null>(null);
+  const [kbVisible, setKbVisible] = useState(false);
+  /** What has been said from here but has not come back from the queue yet. The
+   *  wall re-reads every eight seconds; until it does, a note that vanished on
+   *  being sent reads as a note that was not sent. */
+  const [pending, setPending] = useState<{ id: string; ts: number; text: string }[]>([]);
+
+  const scroller = useRef<ScrollView>(null);
+  /** Whether the end is what is being read. The queue is re-read every few
+   *  seconds, and a note arriving while somebody is halfway up a long report
+   *  must not drag them back down to the bottom of it — the same thing the chat
+   *  timeline learned not to do. */
+  const stick = useRef(true);
 
   const t = useMemo(() => tickets.find((x) => x.id === ticketId) ?? null, [tickets, ticketId]);
+  const msgs = useMemo(() => (t ? conversation(t, T) : []), [t, T]);
+  // A note the queue has taken is in the conversation already; the copy shown
+  // before it got there has to give way rather than stand next to it.
+  const said = useMemo(() => new Set((t?.notes ?? []).map((n) => (n.text || '').trim())), [t?.notes]);
+  const mine = pending.filter((p) => !said.has(p.text));
+
+  useEffect(() => {
+    const a = Keyboard.addListener('keyboardWillShow', () => setKbVisible(true));
+    const b = Keyboard.addListener('keyboardWillHide', () => setKbVisible(false));
+    return () => { a.remove(); b.remove(); };
+  }, []);
+
+  // The end of the conversation is the part that matters, on opening and after
+  // every answer.
+  useEffect(() => {
+    if (stick.current) requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: false }));
+  }, [msgs.length, mine.length, ticketId]);
 
   const send = useCallback(async () => {
     const text = draft.trim();
     if (!text || busy || !t) return;
+    const local = { id: `local-${Date.now()}`, ts: Date.now() / 1000, text };
+    // Answering is asking to be shown the answer, wherever the reading had got to.
+    stick.current = true;
+    setPending((p) => [...p, local]);
+    setDraft('');
     setBusy(true);
     setErr(null);
     try {
-      const msg = await noteTicket(t.id, text);
-      setSent(msg || T('ticketSend'));
-      setDraft('');
+      await noteTicket(t.id, text);
     } catch (e: any) {
+      // A note the queue refused is not in the conversation, whatever the screen
+      // said for a second.
+      setPending((p) => p.filter((x) => x.id !== local.id));
+      setDraft(text);
       setErr(e?.message || T('ticketNoteRefused'));
     } finally {
       setBusy(false);
@@ -77,115 +126,181 @@ export default function TicketScreen() {
   }
 
   const ph = tone(c, t.status);
-  const wants = answerable(t.status);
-  const held = since(t.updated_at ? now - t.updated_at : null, T);
-  const repo = repoName(t.repo);
+  const asking = answerable(t.status);
+  const composerBottom = kbVisible ? 8 : Math.max(insets.bottom - 4, 10);
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
-      <BackBar onPress={() => router.back()} />
-      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 28, paddingHorizontal: 16, gap: 18 }}>
-        <View style={{ gap: 8, paddingTop: 2 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+      style={{ flex: 1, backgroundColor: c.bg }}>
+      {/* The header a chat has, saying which ticket this is instead of which
+          folder: its colour, its number, its title, and where the loop got to. */}
+      <View style={{ paddingTop: insets.top + 2, paddingHorizontal: 10, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 4,
+                     borderBottomWidth: 1, borderBottomColor: c.line }}>
+        <Pressable accessibilityLabel={T('back')} onPress={() => router.back()} hitSlop={6}
+          style={({ pressed }) => [{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
+          <Icon name="chevron_left" size={26} />
+        </Pressable>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             {t.status === 'running' ? <Spinner size={11} color={c.ink} /> : <Dot color={ph.color} size={7} />}
             <Text mono style={{ fontSize: 12, fontWeight: '600', color: ph.color }}>#{t.id}</Text>
-            <Text mono style={{ fontSize: 12, color: wants ? ph.color : c.muted }}>{T(STATUS_KEY[t.status] ?? 'tsQueued')}</Text>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, fontWeight: '600', letterSpacing: em(16, -0.01) }}>{t.title}</Text>
           </View>
-          <Text style={{ fontSize: 24, fontWeight: '600', lineHeight: 24 * 1.25, letterSpacing: em(24, -0.02) }}>{t.title}</Text>
-          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <Text mono style={{ fontSize: 11, color: c.faint }}>{T('ticketRound', { stage: t.stage, round: t.round })}</Text>
-            {!!repo && <Text mono style={{ fontSize: 11, color: c.faint }}>· {repo}</Text>}
-            {!!t.branch && <Text mono numberOfLines={1} style={{ fontSize: 11, color: c.faint, flexShrink: 1 }}>· {t.branch}</Text>}
-            {!!held && <Text mono style={{ fontSize: 11, color: c.faint }}>· {T('ticketInState', { d: held })}</Text>}
-          </View>
+          <Text mono numberOfLines={1} style={{ fontSize: 11, color: asking ? ph.color : c.faint }}>
+            {T(STATUS_KEY[t.status] ?? 'tsQueued')} · {T('ticketRound', { stage: t.stage, round: t.round })}
+            {t.branch ? ` · ${t.branch}` : ''}
+          </Text>
         </View>
+      </View>
 
-        {/* The question first. On a red ticket nothing else here matters until
-            it has been answered. */}
-        {wants && !!t.escalation && (
-          <View style={{ backgroundColor: ph.tint, borderRadius: 14, padding: 14, gap: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Icon name="warning" size={16} color={ph.color} />
-              <Text style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: ph.color }}>{T('ticketWaiting')}</Text>
-            </View>
-            <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.5, color: c.text2 }}>{t.escalation}</Text>
+      <ScrollView
+        ref={scroller}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        onScroll={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+          stick.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
+        }}
+        scrollEventThrottle={64}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, gap: 18 }}>
+        {msgs.map((m) => <Row key={m.id} m={m} asking={asking} tint={ph.tint} />)}
+        {mine.map((p) => (
+          <View key={p.id} style={{ gap: 4 }}>
+            <Who from="you" ts={p.ts} right />
+            <UserBubble text={p.text} />
           </View>
-        )}
-
-        {wants && (
-          <View style={{ gap: 8 }}>
-            <TextInput value={draft} onChangeText={setDraft} multiline editable={!busy}
-              placeholder={T('ticketNoteHint')}
-              style={{ backgroundColor: c.card, borderWidth: 1.5, borderColor: draft.trim() ? c.ink : c.lineStrong, borderRadius: 12,
-                       paddingVertical: 11, paddingHorizontal: 12, fontSize: 14, lineHeight: 14 * 1.45, minHeight: 104, textAlignVertical: 'top' }} />
-            <Button title={busy ? T('ticketSending') : T('ticketSend')} kind={busy ? 'busy' : 'primary'}
-              disabled={!draft.trim()} onPress={() => void send()} />
-            {!!err && <Text style={{ fontSize: 13, color: c.danger }}>{err}</Text>}
-          </View>
-        )}
-        {/* What the queue said back, kept after the ticket has left the red
-            state — otherwise the send reads as having done nothing. */}
-        {!!sent && !err && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Icon name="check" size={16} color={c.ok} />
-            <Text style={{ flex: 1, fontSize: 13, color: c.ok }}>{sent}</Text>
-          </View>
-        )}
-
-        {!!t.goal && (
-          <Section title={T('ticketGoal')}>
-            <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.5, color: c.text2 }}>{t.goal}</Text>
-          </Section>
-        )}
-
-        {t.done_criteria.length > 0 && (
-          <Section title={T('ticketDoneWhen')}>
-            <View style={{ gap: 9 }}>
-              {t.done_criteria.map((crit, i) => {
-                const m = mark(t.verdict, i);
-                return (
-                  <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
-                    <View style={{ width: 16, paddingTop: 2, alignItems: 'center' }}>
-                      {m
-                        ? <Icon name={m.met ? 'check' : 'close'} size={14} color={m.met ? c.ok : c.warn} />
-                        : <Text mono style={{ fontSize: 11, color: c.faint }}>{i + 1}</Text>}
-                    </View>
-                    <View style={{ flex: 1, gap: 3 }}>
-                      <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: c.text2 }}>{crit}</Text>
-                      {m && !m.met && !!m.detail && (
-                        <Text style={{ fontSize: 12.5, lineHeight: 12.5 * 1.45, color: c.muted }}>{first(m.detail, 400)}</Text>
-                      )}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </Section>
-        )}
-
-        {/* On a finished ticket the escalation field holds its closing report
-            instead of a question, so it is shown under its own heading. */}
-        {!wants && !!t.escalation && (
-          <Section title={T('ticketLastReport')}>
-            <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.5, color: c.text2 }}>{t.escalation}</Text>
-          </Section>
-        )}
-
-        {t.notes.length > 0 && (
-          <Section title={T('ticketNotes')}>
-            <View style={{ gap: 8 }}>
-              {t.notes.map((n, i) => (
-                <View key={i} style={{ backgroundColor: c.fill, borderRadius: 12, padding: 12, gap: 4 }}>
-                  <Text mono style={{ fontSize: 11, color: c.faint }}>{n.from} · {since(now - n.ts, T)}</Text>
-                  <Text style={{ fontSize: 13, lineHeight: 13 * 1.45, color: c.text2 }}>{n.text}</Text>
-                </View>
-              ))}
-            </View>
-          </Section>
-        )}
+        ))}
+        {hasDetails(t) && <Details t={t} />}
       </ScrollView>
+
+      {/* The box. It is offered whatever the ticket is doing, because a note is
+          always allowed; the line under it says what sending will actually do,
+          which is the one thing that changes with the state. */}
+      <View style={{ paddingHorizontal: 10, paddingBottom: composerBottom, gap: 6 }}>
+        {!!err && <Text style={{ fontSize: 12.5, color: c.danger, paddingHorizontal: 6 }}>{err}</Text>}
+        <View style={{ backgroundColor: c.card, borderWidth: 1, borderColor: c.lineStrong, borderRadius: 26, padding: 8,
+                       flexDirection: 'row', alignItems: 'flex-end', gap: 6, boxShadow: c.shadow.card }}>
+          <TextInput value={draft} onChangeText={setDraft} multiline editable={!busy}
+            placeholder={T('ticketAnswerBox', { id: t.id })}
+            numberOfLines={Platform.OS === 'web' ? 1 : undefined}
+            style={{ flex: 1, fontSize: 15, paddingVertical: 4, paddingHorizontal: 8, minHeight: 26, maxHeight: 160 }} />
+          <Pressable accessibilityLabel={T('send')} onPress={() => void send()} disabled={!draft.trim() || busy}
+            style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
+                     backgroundColor: draft.trim() && !busy ? c.accent : c.fill }}>
+            {busy ? <Spinner size={14} color="#FFFFFF" track="rgba(255,255,255,.3)" />
+                  : <Icon name="arrow_upward" size={20} weight={500} color={draft.trim() ? '#FFFFFF' : c.faint} />}
+          </Pressable>
+        </View>
+        <Text mono style={{ fontSize: 11, color: c.faint, paddingHorizontal: 6 }}>{T(noteHint(t.status))}</Text>
+      </View>
     </KeyboardAvoidingView>
+  );
+}
+
+/** When a message was said. The day is in it because a ticket runs for days, and
+ *  "14:02" on its own is a lie by omission on the second morning. */
+function when(ts: number, T: ReturnType<typeof useT>): string {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const time = d.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', hour12: false });
+  if (new Date().toDateString() === d.toDateString()) return T('ticketToday', { time });
+  return `${d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })} ${time}`;
+}
+
+const VOICE_TONE: Record<Voice, (c: ReturnType<typeof useColors>) => string> = {
+  you: (c) => c.muted, worker: (c) => c.ink, verifier: (c) => c.ok,
+  triage: (c) => c.warn, supervisor: (c) => c.faint,
+};
+
+function Who({ from, ts, right }: { from: Voice; ts: number; right?: boolean }) {
+  const T = useT();
+  const c = useColors();
+  return (
+    <View style={{ flexDirection: 'row', gap: 6, justifyContent: right ? 'flex-end' : 'flex-start' }}>
+      <Text mono style={{ fontSize: 11, color: VOICE_TONE[from](c) }}>{T(VOICE_KEY[from])}</Text>
+      <Text mono style={{ fontSize: 11, color: c.faint }}>· {when(ts, T)}</Text>
+    </View>
+  );
+}
+
+/** One message. What a person said is a bubble on the right, the way it is in a
+ *  chat; everything the machinery said is plain words on the left. */
+function Row({ m, asking, tint }: { m: Msg; asking: boolean; tint: string }) {
+  const c = useColors();
+  const [open, setOpen] = useState(false);
+  const T = useT();
+  if (m.from === 'you') {
+    return (
+      <View style={{ gap: 4 }}>
+        <Who from={m.from} ts={m.ts} right />
+        <UserBubble text={m.text} />
+      </View>
+    );
+  }
+  // The question at the end of a stopped ticket is the only thing on this
+  // screen that wants an answer, and it is washed in the colour the card said
+  // so with on the wall.
+  const highlit = !!m.tail && asking;
+  return (
+    <View style={{ gap: 4 }}>
+      <Who from={m.from} ts={m.ts} />
+      <View style={highlit ? { backgroundColor: tint, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14 } : undefined}>
+        <AssistantText text={m.text} />
+      </View>
+      {!!m.more && (
+        <View style={{ gap: 8, marginTop: 4 }}>
+          {open && <AssistantText text={m.more} />}
+          <Pressable onPress={() => setOpen((o) => !o)}
+            style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4,
+                     borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10 }}>
+            <Icon name={open ? 'expand_less' : 'chevron_right'} size={14} color={c.muted} />
+            <Text style={{ fontSize: 12, fontWeight: '600', color: c.muted }}>{open ? T('ticketLess') : T('ticketMore')}</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** The card's criteria and what the verifier made of them. Not a message —
+ *  nobody said it to anybody — so it sits at the end, closed. */
+function Details({ t }: { t: Ticket }) {
+  const T = useT();
+  const c = useColors();
+  const [open, setOpen] = useState(false);
+  const n = t.done_criteria.length;
+  return (
+    <View style={{ backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14, overflow: 'hidden' }}>
+      <Pressable onPress={() => setOpen((o) => !o)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11, paddingHorizontal: 12 }}>
+        <Icon name={open ? 'expand_less' : 'chevron_right'} size={15} color={c.faint} />
+        <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: c.muted }}>{T('ticketDetails')}</Text>
+        <Text mono numberOfLines={1} style={{ fontSize: 11, color: c.faint, flexShrink: 1 }}>
+          {n === 1 ? T('ticketOneCriterion') : T('ticketCriteria', { n })}
+          {t.verdict?.verdict ? ` · ${t.verdict.verdict}` : ''}
+        </Text>
+      </Pressable>
+      {open && (
+        <View style={{ borderTopWidth: 1, borderTopColor: c.line, padding: 12, gap: 9 }}>
+          {t.done_criteria.map((crit, i) => {
+            const m = mark(t.verdict, i);
+            return (
+              <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ width: 16, paddingTop: 2, alignItems: 'center' }}>
+                  {m ? <Icon name={m.met ? 'check' : 'close'} size={14} color={m.met ? c.ok : c.warn} />
+                     : <Text mono style={{ fontSize: 11, color: c.faint }}>{i + 1}</Text>}
+                </View>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={{ fontSize: 13, lineHeight: 13 * 1.45, color: c.text2 }}>{crit}</Text>
+                  {m && !m.met && !!m.detail && (
+                    <Text style={{ fontSize: 12.5, lineHeight: 12.5 * 1.45, color: c.muted }}>{m.detail}</Text>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
 }
