@@ -1,9 +1,14 @@
 import { useColorScheme } from 'react-native';
+import { DARK, LIGHT, scrim, shadows, type Tokens, tokensFor, veil } from './tokens';
 
-/** The whole palette, twice. Every screen was drawn in both, element for
- *  element, and these are the pairs: a value never appears on one side
- *  without its counterpart on the other. Nothing on screen picks a colour
- *  outside this table. The app follows the phone's own appearance. */
+export * from './tokens';
+
+/** The whole palette, twice, under the names the screens already use. Every
+ *  screen was drawn in both, element for element, and these are the pairs: a
+ *  value never appears on one side without its counterpart on the other.
+ *  Nothing on screen picks a colour outside this table, and this table picks
+ *  nothing outside `tokens.ts`, which is the design's own. The app follows the
+ *  phone's own appearance. */
 export interface Palette {
   scheme: 'light' | 'dark';
   /** Screen background. */
@@ -65,52 +70,54 @@ export interface Palette {
   };
 }
 
-const SHADOW_INK = 'rgba(28,27,22,';
+/** The `Palette` is no longer written out twice by hand: both sides of it are
+ *  derived from the design's own sixteen tokens, so a screen that asks for
+ *  `c.card` gets the frames' `--s1` and there is no second table to drift.
+ *
+ *  Most roles are a token under an older name. Four are a judgement, and all
+ *  four are recorded in `design/divan/TOKENS.md`:
+ *
+ *   · `muted` and `faint` both land on `--ink3`. The app grew four tiers of
+ *     text; the frames draw three, and they put mono meta, timestamps,
+ *     placeholders and a row's chevron in the same one.
+ *   · `segOn` is `--s1` on an `--s2` track: the selected segment is a card
+ *     sitting in a well, which is how the frames draw a selected column tab.
+ *   · `accent` is `--red`. The frames give the send button `--ink` and keep red
+ *     for trouble; the app's accent is the colour of Allow, of the recording
+ *     dot and of delete, which is the same red.
+ *   · `scrim` and `veil` are derived in `tokens.ts`, where the reason is. */
+function palette(t: Tokens): Palette {
+  const sh = shadows(t);
+  return {
+    scheme: t.scheme,
+    bg: t.bg, card: t.s1, fill: t.s2, line: t.line, lineStrong: t.line2,
+    bubble: t.s2,
+    ink: t.ink, onInk: t.bg, text2: t.ink2, muted: t.ink3, faint: t.ink3,
+    segOn: t.s1, code: t.s2,
+    warn: t.amber, warnBg: t.amberBg,
+    ok: t.run, okBg: t.runBg,
+    danger: t.red, dangerBg: t.redBg,
+    accent: t.red, accentText: t.red, accentTint: t.redBg,
+    scrim: scrim(t), veil: veil(t), halo: t.line2,
+    spinTrack: t.line2, stripe: t.s2,
+    shadow: {
+      card: sh.lift, pill: sh.lift, seg: sh.lift,
+      menu: sh.sheet, pop: sh.pop, raised: sh.pop, knob: sh.lift,
+    },
+  };
+}
 
-export const light: Palette = {
-  scheme: 'light',
-  bg: '#FBFAF8', card: '#FFFFFF', fill: '#F1F0EB', line: '#ECEAE3', lineStrong: '#DEDBD2',
-  bubble: '#EDEBE4',
-  ink: '#1C1B18', onInk: '#FBFAF8', text2: '#3C3A33', muted: '#6A685F', faint: '#9C9A8F',
-  segOn: '#FFFFFF', code: '#FAF9F6',
-  warn: '#B5852B', warnBg: '#F7EFDB', ok: '#3F7A52', okBg: '#E7F1EA', danger: '#B14A33', dangerBg: '#F8E3DB',
-  accent: '#FF5A48', accentText: '#FF373D', accentTint: '#FFE4DD',
-  scrim: 'rgba(28,27,22,.35)', veil: 'rgba(251,250,248,.92)', halo: 'rgba(28,27,22,.12)',
-  spinTrack: 'rgba(28,27,22,.15)', stripe: '#E6E4DD',
-  shadow: {
-    card: `0 1px 2px ${SHADOW_INK}.04), 0 4px 10px -6px ${SHADOW_INK}.08)`,
-    pill: `0 1px 2px ${SHADOW_INK}.05)`,
-    seg: `0 1px 2px ${SHADOW_INK}.08)`,
-    menu: `0 24px 56px -16px ${SHADOW_INK}.35)`,
-    pop: `0 24px 56px -16px ${SHADOW_INK}.3)`,
-    raised: `0 8px 28px -10px ${SHADOW_INK}.13)`,
-    knob: `0 1px 2px ${SHADOW_INK}.2)`,
-  },
-};
-
-export const dark: Palette = {
-  scheme: 'dark',
-  bg: '#100F0A', card: '#1E1C15', fill: '#1A1811', line: '#2D2B21', lineStrong: '#3F3C30',
-  bubble: '#2A2722',
-  ink: '#F2F0E8', onInk: '#17160F', text2: '#D2CFC5', muted: '#9E9C90', faint: '#706E63',
-  segOn: '#3F3C30', code: '#1C1B13',
-  warn: '#D9A84A', warnBg: '#2F2915', ok: '#6FAE82', okBg: '#1F2D23', danger: '#E0735A', dangerBg: '#311E16',
-  accent: '#FF5A48', accentText: '#FF8B72', accentTint: '#3A241C',
-  scrim: 'rgba(0,0,0,.55)', veil: 'rgba(23,22,15,.92)', halo: 'rgba(242,240,232,.15)',
-  spinTrack: 'rgba(242,240,232,.2)', stripe: '#2D2B21',
-  shadow: {
-    card: `0 1px 2px ${SHADOW_INK}.04), 0 4px 10px -6px ${SHADOW_INK}.08)`,
-    pill: `0 1px 2px ${SHADOW_INK}.05)`,
-    seg: `0 1px 2px ${SHADOW_INK}.08)`,
-    menu: '0 24px 56px -16px rgba(0,0,0,.55)',
-    pop: '0 24px 56px -16px rgba(0,0,0,.6)',
-    raised: `0 8px 28px -10px ${SHADOW_INK}.13)`,
-    knob: `0 1px 2px ${SHADOW_INK}.2)`,
-  },
-};
+export const light: Palette = palette(LIGHT);
+export const dark: Palette = palette(DARK);
 
 export function useColors(): Palette {
   return useColorScheme() === 'dark' ? dark : light;
+}
+
+/** The design's own sixteen names, for anything drawn from the Divan frames.
+ *  `useColors` is the same table under the names the older screens use. */
+export function useTokens(): Tokens {
+  return tokensFor(useColorScheme() === 'dark' ? 'dark' : 'light');
 }
 
 /** Font families as registered in the root layout. React Native cannot pick a

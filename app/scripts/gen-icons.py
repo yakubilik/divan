@@ -65,6 +65,13 @@ USED = [
     ('unfold_more', 16, 300), ('verified', 16, 300), ('videocam', 26, 300),
     ('view_agenda', 16, 300), ('view_agenda', 16, 500), ('visibility', 20, 300),
     ('visibility_off', 20, 300), ('warning', 16, 300), ('warning', 18, 400),
+    # Divan's mobile design system (design/divan/TOKENS.md). The frames draw
+    # Lucide; these are the Material Symbols the app already speaks, at the
+    # sizes the frames draw them: 22 in the tab bar, 17 in a list row's well.
+    ('grid_view', 22, 300), ('chat_bubble', 22, 300), ('dns', 22, 300),
+    ('monitor', 17, 300), ('group', 17, 300), ('terminal', 17, 300),
+    ('screen_share', 17, 300), ('key', 17, 300), ('speed', 17, 300),
+    ('shield', 17, 300), ('settings', 17, 300),
 ]
 
 
