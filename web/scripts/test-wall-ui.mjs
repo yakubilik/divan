@@ -114,10 +114,24 @@ function ok(name, cond, detail) {
   console.error(`  ✗ ${name}${detail ? `\n    ${detail}` : ''}`);
 }
 
-/** The wall as the browser has it: the columns, their width, and whether
- *  anything at all sticks out past the right edge of the page. */
+/** The wall as the browser has it: the columns, their width, whether anything
+ *  at all sticks out past the right edge of the page, and where on the card the
+ *  two figures about time are drawn — the whole point of the card being that the
+ *  total is the one you read first, which is a matter of position and size and
+ *  so is only true in a browser. */
 const READ = `
   const root = document.getElementById('root');
+  // The innermost element that says it, so a size is the size of the words and
+  // not of some box four levels up that happens to contain them.
+  const saying = (re) => [...root.querySelectorAll('*')].find((e) =>
+    re.test(e.textContent || '')
+    && ![...e.children].some((c) => re.test(c.textContent || ''))) || null;
+  const drawn = (re) => {
+    const e = saying(re);
+    if (!e) return null;
+    const box = e.getBoundingClientRect();
+    return { size: parseFloat(getComputedStyle(e).fontSize), top: Math.round(box.top) };
+  };
   const grid = root.firstElementChild;
   const cols = [...grid.children];
   const de = document.documentElement;
@@ -132,6 +146,8 @@ const READ = `
       .filter((e) => e.getBoundingClientRect().right > innerWidth + 0.5)
       .map((e) => e.tagName + '@' + Math.round(e.getBoundingClientRect().right)
         + ' ' + (e.textContent || '').slice(0, 40)),
+    total: drawn(/^open 15h 18m$/),
+    round: drawn(/in this round/),
     text: root.innerText,
   };
 `;
@@ -167,6 +183,12 @@ try {
     /open 15h 18m/.test(phone.text), phone.text.slice(0, 300));
   ok('the round comes after it, labelled as the round',
     phone.text.indexOf('open 15h 18m') < phone.text.indexOf('49m in this round'));
+  ok('and is drawn under it, not beside it',
+    phone.total && phone.round && phone.total.top < phone.round.top,
+    JSON.stringify([phone.total, phone.round]));
+  ok('and smaller than it, so the total is the figure read first',
+    phone.total.size > phone.round.size,
+    JSON.stringify([phone.total, phone.round]));
   ok('no card says "in this state"', !phone.text.includes('in this state'));
   ok('where the work is: whose hands, which round', /worker r2/.test(phone.text),
     phone.text.slice(0, 300));
