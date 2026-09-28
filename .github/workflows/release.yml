@@ -89,7 +89,7 @@ jobs:
       - name: Daemon tests
         working-directory: daemon
         run: |
-          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments; do
+          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments test_ustabasi; do
             python "scripts/$t.py"
           done
 

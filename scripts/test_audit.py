@@ -61,6 +61,8 @@ FIRES = [
     ("bare-token-literal", "token: 'abcdefghijklmnopqrstuvwxyz0123'"),
     ("home-directory", "/Users/somebody/projects/thing"),
     ("home-directory", "/home/somebody/projects/thing"),
+    ("home-directory-slug", "/projects/-Users-somebody-projects-thing/memory"),
+    ("home-directory-slug", "/projects/-home-somebody-projects-thing/memory"),
     ("personal-email", "first.last@gmail.com"),
     ("tailnet-hostname", "laptop.tail1234.ts.net"),
     ("local-hostname", "Someones-MacBook-Air.local"),
@@ -82,6 +84,11 @@ QUIET = [
     "    Nobody asked, so there was no turn reading the stream, and the SDK parked",
     "# The user wanted a banner, so staying silent for every open app was wrong.",
     "# Apple requested a privacy label; Tailscale asked for nothing.",
+    # The slug rule's own near misses: the scrubbed form the fixture carries,
+    # and two ordinary dashed words that happen to spell one of its segments.
+    '"cwd": "/Users/you/.claude/projects/-Users-you-projects-thing/memory/"',
+    "a link to the some-home-page-header anchor",
+    "the-users-list is sorted by name",
 ]
 
 
@@ -113,8 +120,8 @@ QUIET = [
 # The list is the author's *private* names. The public GitHub handle belongs in
 # the repository URL and in LICENSE, so putting it in the list would only fail
 # this check on the places the ticket says are fine.
-IDENTIFIER_RULES = ("home-directory", "personal-email", "tailnet-hostname",
-                    "local-hostname")
+IDENTIFIER_RULES = ("home-directory", "home-directory-slug", "personal-email",
+                    "tailnet-hostname", "local-hostname")
 
 # This check needs a negative control, and a negative control has to be three
 # real-shaped identifiers, in this file, which is one of the files being
@@ -124,6 +131,8 @@ CONTROL = "run it from /Users/ada, mail ada@icloud.com, on Adas-MacBook.local"
 REDACTED = {
     "/Users/somebody",              # FIRES, home-directory
     "/home/somebody",               # FIRES, home-directory
+    "-Users-somebody-",             # FIRES, home-directory-slug
+    "-home-somebody-",              # FIRES, home-directory-slug
     "first.last@gmail.com",         # FIRES, personal-email
     "laptop.tail1234.ts.net",       # FIRES, tailnet-hostname
     "Someones-MacBook-Air.local",   # FIRES, local-hostname
@@ -222,6 +231,25 @@ def main() -> int:
     check("the placeholders the reports are written in are not identifiers",
           not unredacted("/Users/<name>, <name>@gmail.com, <Name>-MacBook-Air.local,"
                          " com.<name>.remoteaichat", allowed=frozenset()))
+
+    # ── the fixture, by name ────────────────────────────────────────────────
+    #
+    # `app/scripts/fixtures/run.log` is a recording of a real run, and a run log
+    # is nothing but absolute paths: it is the one tracked file in this tree
+    # whose whole content is other people's home directories, copied in. It is
+    # scanned like anything else, and it still went out carrying the author's
+    # username — in the slug form, which neither the scrubber that made it nor
+    # the rule above knew about at the time. So it is also checked here by name,
+    # because the file that regressed is worth a line that says so.
+    print("\nthe captured run fixture carries nobody's home directory")
+    fixture = Path("app/scripts/fixtures/run.log")
+    check("the fixture is where both readers look for it", fixture.exists(), str(fixture))
+    if fixture.exists():
+        hits = unredacted(fixture.read_text(encoding="utf-8", errors="replace"),
+                          allowed=frozenset())
+        check("no identifier in any of its forms", not hits, "; ".join(hits[:4]))
+        check("and the scan reaches it — it is not exempt",
+              not fixture.as_posix().startswith(audit.SELF))
 
     print("\nand for the author's own names, which have no shape to sample")
     control = names_in(NAME_CONTROL, NAME_CONTROL_NAMES)

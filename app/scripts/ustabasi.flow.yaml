@@ -1,0 +1,101 @@
+# The ustabasi wall, driven on a real build of the app.
+#
+# Everything about this screen that a test can judge without a device is judged
+# in scripts/test-ustabasi.cjs: the sort order, which ticket may be answered,
+# which face the wall shows, where a notification lands. What no such test can
+# say is whether a person holding the app can get from a red ticket to an
+# answered one — the badge has to be findable, the card tappable, the box has to
+# take a sentence, and the ticket has to leave the red state afterwards.
+#
+# So this flow does exactly that, once, against a computer with a real queue on
+# it: open the wall, find the ticket under its project's heading, read what the
+# agent on it is printing, look at the steps behind the (i), then go back and
+# answer the one that is waiting. The last step is the whole point — the queue
+# re-opened the ticket because the note reached the queue's own CLI.
+#
+# It needs a device, a paired app, a ticket that is actually blocked and one
+# that is actually running, so it is not in CI. Run it when you touch the wall
+# or either of the ticket's two pages:
+#
+#   maestro test app/scripts/ustabasi.flow.yaml \
+#     -e APP_ID=<the app's bundle id> \
+#     -e TICKET=<the number of a blocked ticket> \
+#     -e PROJECT=<the project that ticket is work on> \
+#     -e MATCH=<a phrase from what that ticket is asking> \
+#     -e RUNNING=<the number of a ticket that is running right now> \
+#     -e NOTE="<the answer to send it>"
+#
+# The bundle id is a parameter because this repository does not carry one.
+# Every matcher is written .*like this.*: Maestro anchors a text selector to
+# the whole of an element's text, so "#7" matches nothing on a card that also
+# says anything else.
+appId: ${APP_ID}
+name: a red ticket, answered from the phone
+---
+- launchApp
+
+# 1 · the queue is visible before anybody goes looking for it: the button on the
+#     chats screen carries the number of tickets waiting on a person.
+- assertVisible:
+    text: "Ustabasi.*"
+- takeScreenshot: 1-chats-badge
+- tapOn:
+    text: "Ustabasi.*"
+
+# 2 · the wall: grouped by project, the group with the waiting ticket in it at
+#     the top, and every card saying what it is doing in a word.
+- assertVisible:
+    text: ".*${PROJECT}.*"
+- assertVisible:
+    text: ".*#${TICKET}.*"
+- assertVisible: ".*waiting on you.*"
+- assertVisible: ".*open .*"
+- takeScreenshot: 2-wall
+
+# 3 · the chat: a ticket that is running, opened by tapping the card itself,
+#     with what the agent is printing arriving in it. The wait is the check —
+#     a page that fills is a page that is being appended to.
+- tapOn:
+    text: ".*#${RUNNING}.*"
+- extendedWaitUntil:
+    visible: ".*working now.*"
+    timeout: 20000
+- takeScreenshot: 3-chat
+
+# 4 · the (i) in the corner of that page: the same ticket, read rather than
+#     watched. The steps, ticked, with the one running now marked.
+- tapOn: "What this ticket is doing"
+- assertVisible: "Steps"
+- assertVisible: ".*running now.*"
+- assertVisible: "Done when"
+- takeScreenshot: 4-steps
+# …and the way back to the chat from it.
+- tapOn: "Watch it work"
+- assertVisible:
+    text: ".*#${RUNNING}.*"
+- back
+
+# 5 · the ticket that is waiting, opened as a conversation that ends on the
+#     question. The (i) on its card is its own target: this taps the card.
+- tapOn:
+    text: ".*#${TICKET}.*"
+- assertVisible:
+    text: ".*${MATCH}.*"
+- takeScreenshot: 5-ticket
+
+# 6 · the box, which is the only write this screen has.
+- tapOn:
+    text: ".*Answer #${TICKET}.*"
+- inputText: ${NOTE}
+- takeScreenshot: 6-typed
+- tapOn: "Send"
+
+# 7 · what was typed is in the conversation, and the queue has re-opened the
+#     ticket: the note went through ustabasi's own CLI, which appends it, clears
+#     the escalation and puts the ticket back in the queue. The wall re-reads
+#     every eight seconds, so the red goes away on its own.
+- assertVisible: ".*${NOTE}.*"
+- extendedWaitUntil:
+    visible: ".*queued.*"
+    timeout: 30000
+- takeScreenshot: 7-answered

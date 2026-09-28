@@ -64,9 +64,12 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_agents.py
 .venv312/bin/python scripts/test_titles.py
 .venv312/bin/python scripts/test_push.py
-.venv312/bin/python scripts/test_ustabasi.py   # the ticket wall's readings of the queue
+.venv312/bin/python scripts/test_ustabasi.py   # the queue's snapshot, its one write, its readings
+.venv312/bin/python scripts/test_ustabasi_run.py  # a run's log, read a page at a time
 
 cd app && npx tsc --noEmit
+node scripts/test-login-web.cjs                # the sign-in WebView's two judgements
+node scripts/test-ustabasi.cjs                 # the ustabasi wall's, and the i18n table
 cd web && npm run build                        # typechecks, then builds into the daemon
 cd web && npm test                             # the wall's figures, and a ticket as a conversation
 
@@ -82,6 +85,33 @@ one to run if you touch the checker.
 typing a note, folding the paperwork open, and the wall itself in portrait and on
 a desk. It needs a Chrome on the machine (`CHROME=/path/to/chrome`), so it is not
 in CI. Run it if you touch the ustabasi screen.
+
+`app/scripts/ustabasi.flow.yaml` is the same idea for the phone, driven by
+[Maestro](https://maestro.mobile.dev) on a real build: open the wall, find the
+ticket under its project's heading, watch a running one fill with what its
+agent is printing, look at the steps behind the (i), then answer the one that
+is waiting and wait for the queue to re-open it. It needs a device, a paired
+app, a blocked ticket and a running one, so it is not in CI either; the header
+of the file says how to run it.
+
+`node app/scripts/ustabasi-live.cjs` is the cheap half of that flow, without a
+device: it asks the real daemon for the real snapshot and a real run's log, and
+pushes both through the same pure modules the three screens draw from — so it
+prints the grouped wall, the (i) page's checklist with the running step marked,
+and the chat's turns, and fails on an empty group, a path used as a heading, a
+pid on a card, two steps marked as running, a first open over the byte cap or
+two turns sharing a key. `--watch=30` holds one cursor open at the hook's own
+interval, which is the only way to see a turn arrive. It needs the queue on the
+machine, so it is not in CI; with no queue it says so and exits 0.
+
+Both readings of a run's log — the daemon's, which pages it, and the app's,
+which turns those pages into a chat — are checked against one recording,
+`app/scripts/fixtures/run.log`. `app/scripts/fixtures/README.md` says where it
+came from and `scripts/capture-run-fixture.py` is how to replace it. That
+script scrubs a home directory out of the recording in both the forms a run log
+writes one — `/Users/<name>` and the dash-joined slug `-Users-<name>-` — and
+`scripts/audit.py` fails on either, because a fixture went out carrying the
+second one while both sides were only looking for the first.
 
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.

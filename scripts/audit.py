@@ -74,6 +74,16 @@ NOT_A_PERSON = (
 
 PERSONAL = {
     "home-directory": r"/(?:Users|home)/(?!you\b|test\b|runner\b|user\b)[a-z][a-z0-9._-]{2,}",
+    # The same home directory with its slashes turned into dashes. Tools that
+    # key a directory by the path it belongs to write the path as one slug —
+    # `~/.claude/projects/-Users-<name>-projects-thing` — and a run log is full of
+    # them. It is the same person's name, it carries none of the slashes the
+    # rule above is anchored on, and a fixture went out with one in it because
+    # of exactly that. A name segment stops at the next dash, so the character
+    # class does not include one; the lookbehind is what keeps this off
+    # `some-home-page`, where the `-home-` is two English words.
+    "home-directory-slug":
+        r"(?<![A-Za-z0-9])-(?:Users|home)-(?!you-|test-|runner-|user-)[a-z][a-z0-9._]{2,}-",
     "personal-email":
         r"[A-Za-z0-9._%+-]+@(?:gmail|googlemail|icloud|me|hotmail|outlook|live|yahoo|proton|protonmail)\.[A-Za-z.]{2,}",
     "tailnet-hostname": r"\b[a-z0-9][a-z0-9-]*\.[a-z0-9-]+\.ts\.net\b",

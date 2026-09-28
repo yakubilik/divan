@@ -1,4 +1,6 @@
-// Tiny i18n. The app ships in English; every string it shows is in here.
+// Tiny i18n. The app ships in English; every string it shows is in here. One
+// name per string, in one file, is what keeps adding a language a table rather
+// than a search through the screens.
 
 const en = {
   // common
@@ -126,7 +128,7 @@ const en = {
   acctSwitchBody: 'Run this chat on {name}? The thread starts fresh there — each account keeps its own transcripts, so this conversation will not be remembered.',
   acctSwitchBusy: 'Wait for the turn to finish, or stop it first.',
   wStarting: 'Starting…', wReconnecting: 'Reconnecting…',
-  unitSec: 's', unitMin: 'm', unitTok: 'tok', unitTool: 'tools', unitK: 'k',
+  unitSec: 's', unitMin: 'm', unitHour: 'h', unitDay: 'd', unitTok: 'tok', unitTool: 'tools', unitK: 'k',
   copied: 'Copied', archived: 'Archived', revokeDevice: "Revoke this device's access", runningFor: 'Working for {m} min', uploadsNote: 'Uploads are saved on {host} in',
   // the account pool
   pool: 'Pool', poolSection: 'Pool', on: 'On', off: 'Off',
@@ -174,6 +176,7 @@ const en = {
   errCwdOutside: 'That folder is outside the allowed roots', errNoChat: 'That chat no longer exists',
   errNoSuchFolder: 'That folder is not on this computer any more',
   errBusy: 'Too many messages waiting in this chat', errEmptyMessage: 'Empty message', errNoPendingApproval: 'That approval is no longer waiting',
+  errBadTicket: 'That ticket is not in the queue any more',
   errRestarting: 'The computer is restarting. Your message was not sent — try again in a moment.',
   errNoSupervisor: 'Nothing would start this daemon again, so it will not stop itself',
   errNotRestarting: 'This computer is not restarting',
@@ -291,6 +294,76 @@ const en = {
   stop: 'Stop',
   send: 'Send',
   record: 'Record a voice note',
+  // the ustabasi wall: the queue that works while nobody is watching
+  ustabasi: 'Ustabasi',
+  queueRunning: '{n} running', queueRed: '{n} waiting on you', queueNothingRed: 'nothing waiting on you',
+  queueNeverTicked: 'never ticked', queueTicked: 'ticked {d} ago', queueSilent: 'silent for {d}',
+  queuePaused: 'paused until {time}',
+  queueEmpty: 'Nothing in the queue', queueEmptyBody: 'No ticket on this computer right now.',
+  queueNone: 'No queue on this computer', queueNoneBody: 'This computer does not run the ustabasi ticket queue.',
+  queueOld: 'This computer cannot show the queue',
+  queueOldBody: 'Its daemon is older than this screen. Update the computer and the wall appears.',
+  queueUnreachable: 'The queue did not answer',
+  // A status is a word, not a token. Blocked and failed are the same word
+  // because they are the same thing to the person reading: the ticket is not
+  // moving until he says something. Their colours differ — one stopped to ask,
+  // the other fell over — and the line under the title says which.
+  tsRunning: 'working', tsBlocked: 'waiting on you', tsFailed: 'waiting on you',
+  tsDone: 'done', tsQueued: 'queued', tsCancelled: 'cancelled',
+  ticketAnswer: 'Answer it', ticketInState: '{d} in this state', ticketNoEvents: 'no events yet',
+  ticketNoteCount: '{n} notes', ticketOneNote: '1 note', ticketRound: '{stage} r{round}',
+  // What a card counts, which is only what is countable. No percentage.
+  ticketOpen: 'open {d}', ticketTook: 'took {d}', ticketThisRound: '{d} in this round',
+  ticketCommits: '{n} commits', ticketOneCommit: '1 commit',
+  ticketAbout: 'What this ticket is doing',
+  groupCount: '{n}',
+  // the ticket's own page: the steps, the criteria, and the rest of the card
+  detailTitle: 'Ticket #{id}',
+  detailSteps: 'Steps', detailStepsNone: 'Nothing has been handed to anybody yet.',
+  detailStepNow: 'running now', detailStepOn: '{model} · {account}', detailStepPid: 'pid {pid}',
+  detailStepStopped: 'stopped', detailStepRejected: 'sent back',
+  detailCriteria: 'Done when', detailCriteriaNone: 'The card names no criteria.',
+  detailUnjudged: 'not judged yet',
+  detailVerdictLine: 'verifier round {round}: {verdict}',
+  detailAsked: 'What was asked for', detailAsking: 'What it is waiting for',
+  detailNotes: 'Notes', detailNoteFrom: '{who}',
+  detailOpenChat: 'Watch it work', detailBranch: 'branch',
+  // the chat page: the run's own log, as it is written
+  runLive: 'working now', runOver: 'this run has ended',
+  runThinking: 'Thinking', runClipped: 'cut here',
+  runEnded: 'The run ended.', runEndedBadly: 'The run ended badly.',
+  runJumped: 'There was more than a page of this. Jumped to the end.',
+  runNothing: 'Nothing has run on this ticket yet',
+  runNothingBody: 'Nobody has been handed it. When a worker picks it up, what it prints appears here.',
+  runNoLog: 'This run left nothing behind',
+  runNoLogBody: 'Its working directory has no log in it any more.',
+  runOldHost: 'This computer cannot show the run',
+  runOldHostBody: 'Its daemon is older than this screen. Update the computer and the run appears.',
+  runNoQueueBody: 'This computer does not run the ustabasi ticket queue.',
+  ticketNoteRefused: 'The queue refused that note',
+  ticketGone: 'That ticket is not in the queue any more',
+  ticketGoneBody: 'It may have been cancelled, or this phone is looking at another computer.',
+  // an opened ticket, which is a conversation: who is speaking, what the queue
+  // says back, and the question a stopped worker ends on
+  voiceYou: 'You', voiceWorker: 'Worker', voiceVerifier: 'Verifier',
+  voiceTriage: 'Triage', voiceSupervisor: 'Supervisor',
+  askStopped: 'I stopped here, because there is something I need from you.',
+  askFailed: 'This one fell over and I could not get myself past it.',
+  askCloseStopped: 'Can you sort that out, or tell me another way round it?',
+  askCloseFailed: 'What do you want me to do with it?',
+  askSilentStopped: 'I have stopped and I am waiting on you, but I left no note saying what for. Can you tell me how to carry on?',
+  askSilentFailed: 'This one fell over and it left nothing behind saying why. Do you want me to run it again?',
+  stateRunning: 'Still on it — {ev}', stateRunningBare: 'Still on it: {stage}, round {round}.',
+  stateQueued: 'Waiting for a free slot — {ev}', stateQueuedBare: 'Waiting for a free slot. Nothing has started yet.',
+  stateDone: 'Finished — {ev}', stateDoneBare: 'Finished.',
+  stateCancelled: 'Cancelled — {ev}', stateCancelledBare: 'Cancelled.',
+  stateNothing: 'Nothing has happened here yet.',
+  noteHintStopped: 'This goes back in the queue with your answer, straight away.',
+  noteHintClosed: 'This ticket is closed — the note is kept on it.',
+  noteHintWorking: 'It is working; the note is picked up at the next stage boundary.',
+  ticketAnswerBox: 'Answer #{id}…', ticketToday: 'Today {time}',
+  ticketDetails: 'Details', ticketOneCriterion: '1 criterion', ticketCriteria: '{n} criteria',
+  ticketMore: 'The rest of this report', ticketLess: 'Less',
   // redesign
   loginNewLink: 'New link',
 };
@@ -320,6 +393,10 @@ const ERR_KEYS: Record<string, Key> = {
   cwd_outside: 'errCwdOutside', no_such_folder: 'errNoSuchFolder', no_chat: 'errNoChat', busy: 'errBusy',
   empty_message: 'errEmptyMessage', no_pending_approval: 'errNoPendingApproval',
   restarting: 'errRestarting', no_supervisor: 'errNoSupervisor', not_restarting: 'errNotRestarting',
+  bad_ticket: 'errBadTicket',
+  // `ustabasi_refused` is deliberately absent: the queue's CLI answers in its
+  // own words ("ustabasi is not installed on this machine", "note too long"),
+  // and a sentence of ours in its place would say less than it does.
 };
 
 export function errText(code?: string | null, fallback?: string | null): string {

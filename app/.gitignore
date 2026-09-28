@@ -6,6 +6,9 @@ dist/
 /ios/
 /android/
 *.log
+# …except the one recording both readings of a run's log are checked
+# against, which is a fixture rather than something a run left behind.
+!scripts/fixtures/*.log
 .DS_Store
 identity.local.json
 scripts/.material-symbols-rounded.woff2
