@@ -12,9 +12,12 @@ all — are exactly the ones nobody would think to write.
 
 What this does to the recording, and why:
 
-  * every `/Users/<somebody>` and `/home/<somebody>` becomes `/Users/you`. A run
-    log is full of absolute paths and every one of them is a person's home
-    directory. `scripts/audit.py` fails on them, which is what it is for.
+  * every `/Users/<somebody>` and `/home/<somebody>` becomes `/Users/you`, and
+    so does the same path written as a dash-joined slug, `-Users-<somebody>-`.
+    A run log is full of absolute paths and every one of them is a person's home
+    directory. `scripts/audit.py` fails on both forms, which is what it is for —
+    though it only learned the second one after a fixture went out with one in
+    it, the scrubber and the audit sharing a blind spot between them.
   * the run of identical `thinking_tokens` lines in the middle is cut to a few
     of each. They are two hundred bytes each, there are hundreds of them, and
     what they are checked for is that the reader drops them — three prove that
@@ -52,6 +55,14 @@ KEEP_NOISE = 3
 KEEP_RESULT = 4000
 
 HOME = re.compile(r"/(?:Users|home)/[A-Za-z0-9._-]+")
+
+#: The same home directory with its slashes turned into dashes. The CLI keys a
+#: project's own directory by the path it belongs to, written as one slug —
+#: `.../projects/-Users-<name>-projects-thing/memory` — and `HOME` above, anchored
+#: on slashes, walks straight past it. It is the same person's name, and the
+#: first cut of this fixture went out with one in it. A slug's name segment ends
+#: at the next dash, so the class here has no dash in it.
+SLUG = re.compile(r"(?<![A-Za-z0-9])(-(?:Users|home)-)[A-Za-z0-9._]+")
 
 OUT = Path(__file__).resolve().parents[1] / "app" / "scripts" / "fixtures" / "run.log"
 
@@ -102,7 +113,7 @@ def main() -> int:
                 continue
         else:
             run = 0
-        kept.append(HOME.sub("/Users/you", shrink(line)))
+        kept.append(SLUG.sub(r"\1you", HOME.sub("/Users/you", shrink(line))))
 
     OUT.write_text("\n".join(kept) + "\n")
     print(f"{OUT.relative_to(Path.cwd()) if OUT.is_relative_to(Path.cwd()) else OUT}: "
