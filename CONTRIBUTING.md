@@ -67,6 +67,7 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 
 cd app && npx tsc --noEmit
 cd web && npm run build                        # typechecks, then builds into the daemon
+cd web && npm test                             # a ticket still reads as a conversation
 
 cd <the repo root>
 python3 scripts/check-links.py                 # no dead path in the docs

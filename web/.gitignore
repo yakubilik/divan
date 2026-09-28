@@ -1,3 +1,4 @@
 node_modules/
 dist/
+.test-build/
 public/dev-host.json
