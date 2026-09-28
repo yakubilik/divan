@@ -85,6 +85,12 @@ typing a note, folding the paperwork open, the layout in portrait. It needs a
 Chrome on the machine (`CHROME=/path/to/chrome`), so it is not in CI. Run it if
 you touch the ustabasi ticket view.
 
+`app/scripts/ustabasi.flow.yaml` is the same idea for the phone, driven by
+[Maestro](https://maestro.mobile.dev) on a real build: open the wall, open the
+ticket that is waiting, type a note, send it, and wait for the queue to re-open
+the ticket. It needs a device, a paired app and a ticket that is actually
+blocked, so it is not in CI either; the header of the file says how to run it.
+
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.
 

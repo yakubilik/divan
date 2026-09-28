@@ -20,9 +20,9 @@ import type { Ticket } from '../../src/protocol';
  *  of it asked anything, so the answer never came. This is the same ticket read
  *  as the conversation it always was — what was asked for, what came back, and
  *  at the end the question, in the words a person would use. The desktop panel
- *  opens a ticket the same way and out of the same fields; both read it through
- *  `conversation()`, so neither can drift into saying something the other does
- *  not.
+ *  opens a ticket the same way, out of the same four fields, through its own
+ *  copy of the reading (web/src/lib/ustabasi.ts): one language each, and the
+ *  two agree line for line, so a change to one is a change owed to the other.
  *
  *  The paperwork — the card's criteria, the verifier's per-criterion marks — is
  *  still here, behind `Details`, closed, where a thing nobody is answering
