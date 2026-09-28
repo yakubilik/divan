@@ -53,3 +53,10 @@ app/identity.local.json
 
 # scratch: web panel build backups
 daemon/remote_ai_chat/webui.bak-*/
+
+# the Divan drawings. They live in a working copy on the machine they were
+# made on and stay there: they are private and this repository is public. The
+# only part of them the code has to obey is written down in
+# design/divan/TOKENS.md, which is tracked.
+design/divan/*
+!design/divan/TOKENS.md
