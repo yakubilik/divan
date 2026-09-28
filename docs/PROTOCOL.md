@@ -65,6 +65,14 @@ other device watching it.
 | `ustabasi.note` | `{id, text}` | `{ok, message}` — answer a ticket that stopped to ask a question. The one write, and it runs the queue's own CLI rather than touching its database: a note clears the escalation and puts the ticket back in the queue, and that sequence is the other program's to define. `ustabasi_refused` carries the CLI's own words |
 | `ustabasi.run` | `{id, cursor?}` | `{available, reason, run, events, cursor, reset, live, caught_up, size}` — what the agent on that ticket has printed, a page at a time. Every run writes the model's stream-json to a file that is hundreds of kilobytes long by the time a worker is done, so a first open (no cursor, or one naming another run) answers with the **end** of it and `reset: true`; every later call with the cursor it gave back answers with what has been appended since, and a poll that finds nothing is a couple of hundred bytes and an empty `events`. A page is capped in records **and** in bytes, and a reader that has fallen further behind than one page is moved up to the end with `reset: true` rather than made to read its way there. `cursor` is `<run directory name>:<byte offset>` and carries no path. `live` is a run that is still being written — the ticket is running and the queue has not written its exit code. `reason` is the silence, where there is one: `no_queue`, `no_ticket`, `never_run` (nobody has been handed this ticket yet), `no_log`; each answers the same shape, with no events, no cursor and `caught_up: true`. Read-only |
 | `update.apply` | `{force?}` | `{ok, error, pulled, web, restarting, revision}` — fast-forward onto `origin/main` **and** rebuild the panel; either half can be the only work there is. Never anything but a fast-forward, and never on a checkout with uncommitted or unpushed work — `force` waives only *waiting* (being behind, being idle), never somebody's work. A pull ends by asking the supervisor to restart the daemon, so the answer arrives before the socket drops and there is nothing to re-read afterwards; a panel-only rebuild restarts nothing |
+| `divan.projects` | – | `{projects, machine}` — every product, each with its branches and one line saying where it stands. A project carries `{id, name, slug, summary, repos, branches, counts, running, waiting, summary_line}`; `repos` is a list because a product is a product and not a folder — isghocam owns its site and its API — and `counts` is its cards per column. `summary_line` is counted, never guessed: `2 running · 1 waiting on you · 5 queued`, with everything that is zero left out, and `nothing running` when all of it is. `waiting` is the dashboard's real number — an agent that stopped to ask, one that was turned down, and every card whose executor is a person. A branch carries `{id, kind, name, summary, summary_at, cards, open}`; `summary` is empty until that branch has a source connected, and a branch with nothing to say says nothing rather than a placeholder number |
+| `divan.project.create` | `{name, repos?, branches?}` | the project, as `divan.projects` lists one. `branches` names kinds beyond the default five, so a product with a support desk gets a support branch without a migration. `bad_project` on an empty name or one this computer already has |
+| `divan.board` | `{project_id}` | `{project, branches, columns}` — one project's board. `columns` is keyed by `ice_box`, `queued`, `in_progress`, `done`, each an array **in the order somebody put it in**: `position` is 0..n-1 with no gaps, and the order of `queued` is the only planning this product has. The cards here carry the human face and the marks (`executor`, `machine`, `agent_status`, `ustabasi_id`) and **not** the agent face — `divan.card.get` is where that lives. `no_such_project` |
+| `divan.card.create` | `{project_id, title, summary?, branch?, column?, executor?, machine?, repo?, agent?}` | the card. Everything but `project_id` and `title` is optional, which is the point: a card written down mid-conversation is a line, and it lands in `ice_box`, which starts nothing. `branch` defaults to `engineering`, `machine` to this computer, `repo` to the product's first. `agent` is `{goal?, done_criteria?, verify_cmd?, constraints?, paths?, notes?}` and may be left out entirely. `bad_card` on a missing title, a column or branch that does not exist, or an executor that is not one of the four |
+| `divan.card.move` | `{card_id, column, position?}` | `{card, error}` — **the only request that writes a column.** `position` is the index in the target column *after* the card has left where it was: `0` is the top, past the end is the bottom, and omitting it means the bottom of a column the card is arriving in and no move at all within the one it is already in. Moving into `in_progress` on the `coding_agent` executor is what starts work — the card is filed as an ustabasi ticket and its number comes back as `ustabasi_id`. That half can fail on its own (no queue on this computer, no repository on the product, the CLI saying no) and then `error` carries the reason **and the move still stands**: a card that springs back under your thumb is worse than a card with a red line on it. A card that already has a `ustabasi_id` is never filed twice. `bad_move` |
+| `divan.card.update` | `{card_id, title?, summary?, repo?, machine?, agent?}` | the card. Only what is sent is touched, and `agent` takes the same six fields `divan.card.create` does. This is where a card that was written down as one line grows an agent face — a goal, done criteria, a test — some time after the line. It cannot write a `column`, an `executor` or anything the mirror owns: each of those has a request of its own, and a field writable from two places is how a status update ends up dragging a card. `no_such_card`, `bad_card` |
+| `divan.card.executor` | `{card_id, executor, machine?}` | the card. One of `coding_agent`, `branch_agent`, `assistant`, `human`, or `null` to clear it — clearing is a value and not an omission, because a card whose agent was the wrong guess goes back to having none rather than to having a person. `machine` is only written when sent, so setting an executor twice does not forget which computer it was set on. `bad_executor` |
+| `divan.card.get` | `{card_id, cursor?}` | `{card, project, ticket, run}` — one card with **both faces**: `card.agent` is `{goal, done_criteria, verify_cmd, constraints, paths, notes}` beside the human face's `title` and `summary`. `ticket` and `run` are the live half and are `null` on a card no coding ticket was filed for; where there is one, `ticket` is that ticket as `ustabasi.list` reports it and `run` is a page of what the worker has printed, paged by `cursor` exactly as `ustabasi.run` describes. `no_such_card` |
 
 A record in `ustabasi.run`'s `events` is one block of the stream, by `k`:
 
@@ -111,6 +119,79 @@ The panel is build output and is not in git, while the daemon is an editable
 install and therefore updates with a pull. Left alone they come apart, invisibly,
 on exactly the machine nobody sits in front of — hence the stamp, and hence one
 button for both.
+
+## The Divan board
+
+The daemon owns how work is arranged; the ustabasi queue stays the thing that
+does coding work. Four tables in the daemon's own database hold it.
+
+**Projects are products, not folders.** isghocam is a product, and its
+repository is a detail of its engineering branch — it may have several, or none
+at all. So `repos` is a list on the project rather than the project being one
+path.
+
+**Branches are the faces of a product**: `engineering`, `seo`, `analytics`,
+`marketing`, `customers`, one row per project per branch, seeded when the
+project is created. The set is open — `divan.project.create {branches}` adds
+kinds beyond those five — because a product that grows a support desk should not
+need a migration. Only engineering has a real source behind it today; the rest
+report an empty `summary` and the client says so rather than drawing a number
+nobody measured.
+
+**Cards sit in one of four columns** — `ice_box`, `queued`, `in_progress`,
+`done` — at an explicit `position` in it. There is no calendar and no due date:
+planning is the order of `queued`, top to bottom, and it is an order somebody
+arranged by hand rather than a sort. Positions are contiguous, and every request
+that moves a card closes the gap behind it and opens one where it goes.
+
+**A card has two faces.** The human face is `title` — one line — and `summary`,
+two or three sentences. The agent face is `goal`, `done_criteria`, `verify_cmd`,
+`constraints`, `paths` and `notes`, as long as it needs to be. Text an agent
+produced never lands on the human face, including on the cards made out of
+tickets that predate the board: their titles come across and their goals go to
+the agent face. The board's card list carries the human face and the marks only;
+`divan.card.get` is the one place both travel together.
+
+**Every card has an executor, or none yet.** `coding_agent` is ustabasi and is
+the only one this daemon can start. `branch_agent` is the overnight
+SEO/marketing/customer kind. `assistant` is a one-off piece of research or
+writing. `human` is a card nothing runs on: it waits for a person and shows up
+in `waiting`. `machine` says which computer the work runs on.
+
+### The column is intent; the status is reality
+
+This is the rule the rest is built around, and it is why they are two fields and
+not one.
+
+`column` is written by exactly one request, `divan.card.move`, and that request
+is a finger on a screen. `agent_status` is written by the mirror, on the
+ordinary `ustabasi.list` poll, and is one of:
+
+| `agent_status` | the queue said |
+|---|---|
+| `queued` | filed, waiting for a slot |
+| `running` | a worker has it |
+| `asking` | `blocked`, with a question — `agent_detail` is the question. This is what "waiting on you" is made of |
+| `blocked` | `blocked`, with nothing said yet |
+| `failed` | the verifier turned it down, or it gave up |
+| `verified` | the verifier passed it. **Not** the same as the `done` column, which is somebody deciding they are finished with it |
+| `cancelled` | it was called off |
+
+A worker that starts, stalls, asks or fails at four in the morning changes
+`agent_status` and nothing else. The card stays exactly where it was left, with
+a mark on it. The one exception is the **import**, which happens once per
+ticket: tickets that existed before the board become cards on their product's
+engineering branch, and their first column is read off their status because they
+have to land somewhere honest. After that the column is the person's.
+
+The mirror is one way. The daemon reads the queue's database and writes what it
+saw onto its own cards; the two writes in the other direction both go through
+that queue's CLI — `ustabasi.note` to answer a question, and the filing that
+`divan.card.move` does when a card is dragged into `in_progress` on the coding
+executor. A card with no agent face is still filed: the summary stands in for the
+goal and the title for the one done criterion the queue insists on, because a
+board that demanded a specification before it would accept a drag would be a
+form.
 
 ## Push notifications
 
