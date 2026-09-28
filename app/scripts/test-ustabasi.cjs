@@ -27,8 +27,11 @@ function load(file, exports) {
 }
 
 const T = load('src/tickets.ts', ['POLL_MS', 'STATUS_KEY', 'VOICE_KEY', 'answerable', 'redCount', 'sortTickets',
-                                  'mark', 'wall', 'oldHost', 'ticketFromPush', 'since', 'first', 'repoName',
+                                  'mark', 'wall', 'oldHost', 'since', 'first', 'repoName',
                                   'bullets', 'conversation', 'question', 'stateLine', 'noteHint', 'hasDetails']);
+// What a tapped notification opens: the reading of the payload, the holding pen
+// a tap waits in while the app is still starting, and the route itself.
+const P = load('src/tap.ts', ['ticketFromPush', 'tapFromPush', 'routeForTap', 'Taps', 'follow']);
 
 // The real table, so that what the conversation says is what the screen shows
 // rather than a sentence written twice.
@@ -107,16 +110,16 @@ const checks = [
     T.oldHost({ message: 'ustabasi is not installed on this machine', code: 'ustabasi_refused' }) === false],
   ['nor is nothing at all', T.oldHost(null) === false],
 
-  ['a ticket push names its ticket', T.ticketFromPush({ ticket_id: 5 }) === 5],
+  ['a ticket push names its ticket', P.ticketFromPush({ ticket_id: 5 }) === 5],
   // The queue spells it `ticket`, which is the payload that actually arrives.
   ['the queue\u2019s own payload is read',
-    T.ticketFromPush({ source: 'ustabasi', ticket: 10, kind: 'blocked', screen: 'ustabasi' }) === 10],
-  ['as a string too, which is how JSON arrives', T.ticketFromPush({ ticket_id: '12' }) === 12],
-  ['a chat push is not a ticket', T.ticketFromPush({ chat_id: 'abc', kind: 'done' }) === null],
-  ['an empty payload is not a ticket', T.ticketFromPush({}) === null && T.ticketFromPush(undefined) === null],
+    P.ticketFromPush({ source: 'ustabasi', ticket: 10, kind: 'blocked', screen: 'ustabasi' }) === 10],
+  ['as a string too, which is how JSON arrives', P.ticketFromPush({ ticket_id: '12' }) === 12],
+  ['a chat push is not a ticket', P.ticketFromPush({ chat_id: 'abc', kind: 'done' }) === null],
+  ['an empty payload is not a ticket', P.ticketFromPush({}) === null && P.ticketFromPush(undefined) === null],
   ['and neither is nonsense',
-    T.ticketFromPush({ ticket_id: 'five' }) === null && T.ticketFromPush({ ticket_id: 0 }) === null
-    && T.ticketFromPush({ ticket_id: -3 }) === null && T.ticketFromPush({ ticket_id: 1.5 }) === null],
+    P.ticketFromPush({ ticket_id: 'five' }) === null && P.ticketFromPush({ ticket_id: 0 }) === null
+    && P.ticketFromPush({ ticket_id: -3 }) === null && P.ticketFromPush({ ticket_id: 1.5 }) === null],
 
   ['the wall re-reads at least as often as the desktop panel', T.POLL_MS <= 8000],
 
@@ -368,6 +371,133 @@ for (const f of screens) {
 checks.push(['and none of it was typed into the screen instead', hardcoded.length === 0]);
 if (hardcoded.length) console.log('  hardcoded:', hardcoded.join(' | '));
 
+// ── a tapped notification, driven rather than read ───────────────────────────
+// This is the one part of the screen nobody can check by looking: the phone is
+// asleep, the banner is tapped, and where the app lands is decided in the three
+// hundred milliseconds before there is anything on screen to see. So the
+// decision is a function of a payload and a state, and the router is an
+// interface with three calls in it — a fake one here records what it was asked
+// to open, in order.
+
+const nav = () => {
+  const calls = [];
+  return {
+    calls,
+    canDismiss: () => true,
+    dismissTo: (p) => calls.push(`dismissTo ${p}`),
+    push: (p) => calls.push(`push ${p}`),
+  };
+};
+/** The app, as the holding pen sees it: started, and Face ID answered. */
+const AWAKE = { ready: true, locked: false };
+/** The queue's own payload, as it actually arrives. */
+const TICKET_PUSH = { source: 'ustabasi', ticket: 7, kind: 'blocked', screen: 'ustabasi' };
+
+checks.push(
+  ['a payload about neither a chat nor a ticket is not a tap',
+    P.tapFromPush({ kind: 'limits' }) === null && P.tapFromPush({}) === null],
+  ['a ticket payload is a tap on that ticket', P.tapFromPush(TICKET_PUSH).ticket === 7],
+  ['a chat payload is a tap on that chat', P.tapFromPush({ chat_id: 'abc' }).chat === 'abc'],
+  ['a tap carries the computer it was sent to',
+    P.tapFromPush({ chat_id: 'abc', device_id: 'dev1' }).device === 'dev1'],
+
+  ['a ticket tap opens the wall and then the ticket',
+    P.routeForTap({ ticket: 7 }).join(' ') === '/ustabasi /ticket/7'],
+  ['a chat tap opens the chat and nothing else',
+    P.routeForTap({ chat: 'abc' }).join(' ') === '/chat/abc'],
+  ['a tap with neither opens nothing', P.routeForTap({}).length === 0 && P.routeForTap(null).length === 0],
+);
+
+{
+  // (a) the ticket push, followed all the way to the screen it opens
+  const taps = new P.Taps();
+  taps.offer(TICKET_PUSH);
+  const tap = taps.take(AWAKE);
+  const n = nav();
+  P.follow(tap, n);
+  checks.push(
+    ['the queue\u2019s push is followed to its ticket, with the wall under it',
+      n.calls.join(' | ') === 'dismissTo /chats | push /ustabasi | push /ticket/7'],
+    ['\u2026and the stack is popped back to the list first, not pushed on top of',
+      n.calls[0] === 'dismissTo /chats'],
+  );
+}
+
+{
+  // (b) the chat push, which this must not have changed
+  const taps = new P.Taps();
+  taps.offer({ chat_id: 'abc', kind: 'approval' });
+  const n = nav();
+  P.follow(taps.take(AWAKE), n);
+  checks.push(['a chat push still opens its chat, and no wall',
+    n.calls.join(' | ') === 'dismissTo /chats | push /chat/abc']);
+}
+
+{
+  // (c) the cold start: tapped on a sleeping phone, delivered before the
+  // keychain is open and before Face ID has been answered.
+  const taps = new P.Taps();
+  taps.offer(TICKET_PUSH);
+  const early = taps.take({ ready: false, locked: false });
+  const lockedStill = taps.take({ ready: true, locked: true });
+  const held = taps.held;
+  const late = taps.take(AWAKE);
+  const n = nav();
+  P.follow(late, n);
+  checks.push(
+    ['a tap on an app that has not started yet is not spent', early === null],
+    ['nor is one on a locked app', lockedStill === null],
+    ['\u2026it is held', held === true],
+    ['\u2026and delivered once the app is ready and unlocked', late && late.ticket === 7],
+    ['\u2026landing on the ticket rather than on the chat list',
+      n.calls.join(' | ') === 'dismissTo /chats | push /ustabasi | push /ticket/7'],
+    ['\u2026and only once', taps.take(AWAKE) === null && taps.held === false],
+  );
+}
+
+{
+  // The launch response and the listener both report the tap that launched the
+  // app. Two reports, one opening.
+  let clock = 1_000_000;
+  const taps = new P.Taps(() => clock);
+  taps.offer(TICKET_PUSH);
+  const first = taps.take(AWAKE);
+  taps.offer(TICKET_PUSH);
+  const twice = taps.take(AWAKE);
+  clock += 4000;
+  taps.offer(TICKET_PUSH);
+  const later = taps.take(AWAKE);
+  checks.push(
+    ['the same tap reported twice opens once', first.ticket === 7 && twice === null],
+    ['\u2026but the same ticket tapped again later does open',
+      later !== null && later.ticket === 7],
+  );
+  // Two different notifications arriving together are two taps, not one.
+  const both = new P.Taps(() => clock);
+  both.offer(TICKET_PUSH);
+  both.take(AWAKE);
+  both.offer({ chat_id: 'abc' });
+  checks.push(['a different tap is not swallowed by the last one',
+    (both.take(AWAKE) || {}).chat === 'abc']);
+}
+
+{
+  // The wall under a ticket is a courtesy; a courtesy that throws must not cost
+  // the tap its ticket.
+  const calls = [];
+  const brittle = {
+    canDismiss: () => { throw new Error('nothing to dismiss'); },
+    dismissTo: () => calls.push('dismissTo'),
+    push: (p) => { if (p === '/ustabasi') throw new Error('no wall'); calls.push(`push ${p}`); },
+  };
+  let threw = false;
+  try { P.follow({ ticket: 7 }, brittle); } catch { threw = true; }
+  checks.push(
+    ['a router that cannot pop does not lose the tap', threw === false],
+    ['\u2026and a wall that will not open does not either', calls.join(' | ') === 'push /ticket/7'],
+  );
+}
+
 // The wiring the judgements above cannot see. Every one of these is a line
 // somewhere else in the app, and every one of them has exactly one right
 // answer: a screen nothing registers is a screen nobody reaches, a notification
@@ -384,12 +514,18 @@ const store = src('src/store.ts');
 checks.push(
   ['both screens are registered like the other full ones',
     /<Stack\.Screen\s+name="ustabasi"/.test(layout) && /<Stack\.Screen\s+name="ticket\/\[id\]"/.test(layout)],
-  ['a tapped notification is read for a ticket, not only a chat',
-    /ticketFromPush\(/.test(layout)],
-  ['…and a ticket one lands on the ticket', /router\.push\(`\/ticket\/\$\{.*\}`\)/.test(layout)],
-  ['…with the wall underneath it', /router\.push\('\/ustabasi'\)/.test(layout)],
-  ['the tap waits for the app to be ready and unlocked',
-    /if \(!st\.ready \|\| st\.locked\) return;/.test(layout)],
+  // The routing itself is driven above. What is left here is that the layout
+  // goes through it rather than keeping a second copy: a tap is offered to the
+  // holding pen, taken from it, and followed.
+  ['a tapped notification goes into the holding pen',
+    /taps\.current\.offer\(/.test(layout)],
+  ['…is taken out of it with the app\u2019s own state',
+    /taps\.current\.take\(st\)/.test(layout)],
+  ['…and followed to whatever it opens', /follow\(tap, router\)/.test(layout)],
+  ['…and asked for again the moment the app is ready or unlocked',
+    /useEffect\(\(\) => \{ void deliverTap\(\); \}, \[ready, locked, deliverTap\]\)/.test(layout)],
+  ['nothing routes a notification on its own words',
+    !/router\.push\(`\/ticket/.test(layout) && !/router\.push\('\/ustabasi'\)/.test(layout)],
   ['the chats screen leads to the wall', /router\.push\('\/ustabasi'\)/.test(home)],
   ['…and badges it with the count that needs a person', /badge=\{red\}/.test(home) && /redCount\(/.test(home)],
   ['a card on the wall opens its ticket', /router\.push\(`\/ticket\/\$\{t\.id\}`\)/.test(wallScreen)],

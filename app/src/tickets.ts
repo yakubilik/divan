@@ -89,16 +89,6 @@ export function oldHost(e: { message?: string; code?: string | null } | null | u
   return /unknown (type|request)/i.test(e.message || '');
 }
 
-/** The ticket a notification is about, if it is about one. The daemon's chat
- *  pushes carry `chat_id`; a ticket push carries the ticket's number, and the
- *  two are routed to different screens. */
-export function ticketFromPush(data: any): number | null {
-  const raw = data?.ticket_id ?? data?.ticket;
-  if (raw == null || raw === '') return null;
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
-
 /** A gap in seconds, as short as it can be read at a glance. */
 export function since(seconds: number | null | undefined, unit: (k: 'unitSec' | 'unitMin' | 'unitHour' | 'unitDay') => string): string {
   if (seconds == null) return '';
