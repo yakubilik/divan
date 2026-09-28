@@ -102,6 +102,13 @@ jobs:
         # `npm run build` is `tsc --noEmit && vite build`, so this is both.
         run: npm run build
         working-directory: web
+      - name: A ticket still reads as a conversation
+        # The ustabasi wall opens a ticket as a run of messages. Which order
+        # they come in, who said them and whether the last one is a question
+        # are all a pure function of the ticket, so they are checked without a
+        # browser — see web/scripts/test-ustabasi.mjs.
+        run: npm test
+        working-directory: web
       - name: The build carries no pairing token
         # public/dev-host.json is a real token and vite copies public/ into the
         # build; the daemon then serves that build with no auth of its own.
