@@ -164,7 +164,16 @@ async function at(width, height) {
 try {
   await page('Page.enable');
   await page('Page.navigate', { url: `file://${join(out, 'wall.html')}` });
-  await evaluate('await new Promise((r) => setTimeout(r, 600));');
+  // Waiting for the wall rather than for a number of milliseconds: a browser
+  // opening a cold profile takes a good deal longer to put a megabyte of React
+  // on the screen than a warm one, and a fixed wait fails on the cold one.
+  await evaluate(`
+    for (let i = 0; i < 100; i++) {
+      if (document.querySelector('#root section')) return;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error('the wall never came up');
+  `);
 
   console.log('── a phone, held upright');
   const phone = await at(390, 844);
