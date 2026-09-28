@@ -12,10 +12,12 @@
  *  to be written down somewhere a check can reach. `design/divan/TOKENS.md`
  *  says the same thing in prose; this file is the copy that fails a build.
  *
- *  The parts are checked the way the rest of the app's screens are: by reading
- *  them. A React tree needs a phone, but "this component takes its colours from
- *  the token table" and "the gallery draws every part" are questions about the
- *  source, and the source is here.
+ *  The parts are checked twice. Once by reading them — is there a part at all,
+ *  does the gallery draw it, is it reachable only in a development build. And
+ *  once by standing them up: `render-divan.cjs` renders every one of them in
+ *  both themes out of the app's own React, with React Native stubbed down to a
+ *  style you can read, so that "every colour a new screen uses comes from the
+ *  table" is answered by what came out rather than by what was written.
  *
  *  Run: node scripts/test-divan.cjs  (also folded into test-ustabasi.cjs, so
  *  one command covers both.)
@@ -275,6 +277,189 @@ const REPLACED = [
   checks.push([`no screen still writes a value from the palette that was replaced${left.length ? ` (${left.join(', ')})` : ''}`,
     left.length === 0]);
   checks.push(['…and the whole app was read to say so', files.length > 30]);
+}
+
+// 9 · the parts, stood up ───────────────────────────────────────────────────
+// Reading a component tells you it asks the table for its colours; it does not
+// tell you which ones came out. So each part is rendered, in both themes, and
+// the styles are read back off it.
+const R = require('./render-divan.cjs');
+const h = R.React.createElement;
+
+/** One of each, in the states the frames draw. A part that needs a parent to
+ *  make sense gets one. */
+const SPECIMENS = {
+  Card: () => h(R.parts.Card, { ring: 'amber' }, h(R.parts.Pill, { label: 'Quire', dot: 'running' })),
+  CardLifted: () => h(R.parts.Card, { lifted: true, ring: 'none', bar: 0.38 }),
+  ListRow: () => h(R.parts.ListRow, { first: true, icon: 'monitor', title: 'Machines', note: '3 paired', meta: 'all reachable', tone: 'run' }),
+  Pill: () => h(R.parts.Pill, { label: 'Follow Stripe', face: 'amber' }),
+  PillOutline: () => h(R.parts.Pill, { label: 'Keep 3', face: 'outline' }),
+  Button: () => h(R.parts.Button, { label: 'New ticket', icon: 'add', tall: true }),
+  TabBar: () => h(R.parts.TabBar, { value: 'dashboard', onChange() {},
+    tabs: [{ key: 'dashboard', label: 'Dashboard', icon: 'grid_view', badge: 2 },
+           { key: 'chat', label: 'Chat', icon: 'chat_bubble' },
+           { key: 'machine', label: 'Machine', icon: 'dns' }] }),
+  ColumnTabs: () => h(R.parts.ColumnTabs, { value: 'progress', dragging: true, target: 'queued',
+    columns: [{ key: 'icebox', label: 'Ice Box', count: 11 }, { key: 'queued', label: 'Queued', count: 4 },
+              { key: 'progress', label: 'In Progress', count: 3 }, { key: 'done', label: 'Done', count: 48 }] }),
+  StatusDot: () => h(R.parts.StatusDot, { state: 'stuck' }),
+  StateMark: () => h(R.parts.StateMark, { state: 'asking' }),
+  ExecutorBadge: () => h(R.parts.ExecutorBadge, { executor: 'coder' }),
+  ExecutorPending: () => h(R.parts.ExecutorBadge, { executor: 'unassigned' }),
+  ExecutorYou: () => h(R.parts.ExecutorBadge, { executor: 'you' }),
+  Monogram: () => h(R.parts.Monogram, { name: 'Quire', index: 0 }),
+  CounterHot: () => h(R.parts.Counter, { value: 2, label: 'Needs you', tone: 'amber' }),
+  CounterZero: () => h(R.parts.Counter, { value: 0, label: 'Needs you', tone: 'amber' }),
+  SectionHeader: () => h(R.parts.SectionHeader, { title: 'Needs you', count: 2 }),
+  SectionMark: () => h(R.parts.SectionHeader, { kind: 'mark', tone: 'red', title: '\u25a0 stuck', count: 1 }),
+  EmptyState: () => h(R.parts.EmptyState, { title: 'A new board.', body: 'Write the first ticket.', foot: 'Nothing starts until you move one.' }),
+  Sheet: () => h(R.parts.Sheet, { title: 'Machine', note: 'Infrastructure.', onClose() {} },
+    h(R.parts.ListRow, { first: true, title: 'Machines' })),
+};
+
+/** A shadow is a string of colours; count each of them. */
+const paintOf = (markup) => {
+  const out = new Set();
+  for (const v of R.paint(markup)) {
+    const inside = v.match(COLOUR);
+    if (inside && (inside.length > 1 || inside[0] !== v)) inside.forEach((c) => out.add(c));
+    else out.add(v);
+  }
+  return out;
+};
+
+const drawn = {};
+for (const scheme of ['dark', 'light']) {
+  const tok = K.tokensFor(scheme);
+  const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR,
+                       ...K.MONOGRAM, '#6F7BBC', '#92A0E3',
+                       ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean)]);
+  const strayed = [];
+  let threw = null;
+  for (const [name, make] of Object.entries(SPECIMENS)) {
+    let markup;
+    try { markup = R.render(scheme, make()); } catch (e) { threw = `${name}: ${e.message}`; break; }
+    drawn[`${scheme}:${name}`] = markup;
+    for (const c of paintOf(markup)) if (!own.has(c)) strayed.push(`${name}: ${c}`);
+  }
+  checks.push([`every part stands up in the ${scheme} theme${threw ? ` (${threw})` : ''}`, threw === null]);
+  checks.push([`…and paints nothing that is not a ${scheme} token${strayed.length ? ` (${strayed.slice(0, 4).join(', ')})` : ''}`,
+    strayed.length === 0]);
+}
+
+/** The flattened style of the nth element of a rendered part. */
+const styleOf = (key, n = 0) => R.styles(drawn[key])[n];
+const anyStyle = (key, pred) => R.styles(drawn[key]).some(pred);
+
+checks.push(['a card is drawn on the frames\u2019 first surface, in both themes',
+  styleOf('dark:Card').backgroundColor === K.DARK.s1 && styleOf('light:Card').backgroundColor === K.LIGHT.s1]);
+checks.push(['…and a card being held is drawn on the lifted one',
+  styleOf('dark:CardLifted').backgroundColor === K.DARK.sLift
+  && styleOf('light:CardLifted').backgroundColor === K.LIGHT.sLift]);
+checks.push(['a card that is asking wears the amber ring rather than the hairline',
+  styleOf('dark:Card').borderColor === K.DARK.amberRing]);
+checks.push(['the running rule across a card is green, and as wide as the work is done',
+  anyStyle('dark:CardLifted', (s) => s.backgroundColor === K.DARK.run && s.width === '38%' && s.height === 2)]);
+checks.push(['the tab bar stands 84 high over a hairline, as Mobile1 draws it',
+  styleOf('dark:TabBar').height === K.SIZE.tabBar && styleOf('dark:TabBar').borderTopColor === K.DARK.line]);
+checks.push(['…and the selected tab\u2019s glyph sits in a 60\u00d732 well of the second surface',
+  anyStyle('dark:TabBar', (s) => s.width === 60 && s.height === 32 && s.backgroundColor === K.DARK.s2)]);
+checks.push(['…and the badge over it is amber, ringed in the page colour',
+  anyStyle('dark:TabBar', (s) => s.backgroundColor === K.DARK.amber && s.borderColor === K.DARK.bg)]);
+checks.push(['a column tab is 46 high on the design\u2019s own corner',
+  anyStyle('dark:ColumnTabs', (s) => s.height === K.SIZE.columnTab && s.borderRadius === K.RADIUS.tab)]);
+checks.push(['the tab a card is being dropped on turns green, and only that one',
+  R.styles(drawn['dark:ColumnTabs']).filter((s) => s.backgroundColor === K.DARK.runBg && s.borderColor === K.DARK.run).length === 1]);
+checks.push(['…while the others show they would take it',
+  R.styles(drawn['dark:ColumnTabs']).filter((s) => s.borderStyle === 'dashed').length === 2]);
+checks.push(['a counter that has something to say is tinted and coloured',
+  styleOf('dark:CounterHot').backgroundColor === K.DARK.amberBg
+  && anyStyle('dark:CounterHot', (s) => s.color === K.DARK.amber)]);
+checks.push(['…and one at zero drops both, which is the whole of the calm screen',
+  styleOf('dark:CounterZero').backgroundColor === K.DARK.s1
+  && !anyStyle('dark:CounterZero', (s) => s.color === K.DARK.amber)]);
+checks.push(['a pill stands 34 high, filled or outlined',
+  styleOf('dark:Pill').height === K.SIZE.pill && styleOf('dark:PillOutline').height === K.SIZE.pill
+  && styleOf('dark:PillOutline').backgroundColor === 'transparent']);
+checks.push(['the amber pill carries the one text colour the frames spell out',
+  anyStyle('dark:Pill', (s) => s.color === K.DARK.onAmber)
+  && anyStyle('light:Pill', (s) => s.color === K.LIGHT.onAmber)]);
+checks.push(['a ticket nobody has taken has an outline where a Coder has a square',
+  styleOf('dark:ExecutorPending').borderStyle === 'dashed'
+  && styleOf('dark:ExecutorBadge').backgroundColor === K.EXECUTORS.coder.fill]);
+checks.push(['you are drawn in the page\u2019s own ink, in either theme',
+  styleOf('dark:ExecutorYou').backgroundColor === K.DARK.ink
+  && styleOf('light:ExecutorYou').backgroundColor === K.LIGHT.ink]);
+checks.push(['a section mark is set in the colour of the state it groups',
+  anyStyle('dark:SectionMark', (s) => s.color === K.DARK.red)]);
+checks.push(['an empty state is a sentence and not a mark in a circle',
+  anyStyle('dark:EmptyState', (s) => s.fontSize === 24 && s.fontFamily === 'Inter-SemiBold')
+  && !anyStyle('dark:EmptyState', (s) => s.borderRadius >= 30)]);
+checks.push(['a sheet comes up in the page\u2019s colour, on the design\u2019s corner',
+  anyStyle('dark:Sheet', (s) => s.backgroundColor === K.DARK.bg && s.borderTopLeftRadius === K.RADIUS.sheet)]);
+checks.push(['…over a dim rather than over a shrunken page',
+  anyStyle('dark:Sheet', (s) => s.backgroundColor === K.scrim(K.DARK))]);
+
+// 10 · the screens that were already here ──────────────────────────────────
+// They were not rebuilt, but the palette under them was replaced, so the parts
+// they are made of are stood up too: nothing of theirs may paint a colour that
+// is not in the new table, and the one place where two greys have to stay
+// apart — the selected segment and the track it sits in — is looked at.
+const OLD_PARTS = (tok) => ({
+  Card: () => h(R.ui.Card, {}, h(R.ui.Row, { label: 'Accounts', value: 'two', onPress() {}, last: true })),
+  Button: () => h(R.ui.Button, { title: 'Pair computer', onPress() {} }),
+  ButtonOutline: () => h(R.ui.Button, { title: 'Later', kind: 'outline', onPress() {} }),
+  SmallButton: () => h(R.ui.SmallButton, { title: 'Update now', onPress() {} }),
+  Segmented: () => h(R.ui.Segmented, { options: ['a', 'b'], value: 'a', onChange() {} }),
+  Tabs: () => h(R.ui.Tabs, { value: 0, onChange() {}, labels: ['Chats', 'Agents'] }),
+  Toggle: () => h(R.ui.Toggle, { value: true, onChange() {} }),
+  ToggleOff: () => h(R.ui.Toggle, { value: false, onChange() {} }),
+  Radio: () => h(R.ui.Radio, { on: true }),
+  Chip: () => h(R.ui.Chip, {}, 'opus'),
+  NoteWarn: () => h(R.ui.Note, { tone: 'warn', icon: 'warning' }, 'Connecting'),
+  NoteDanger: () => h(R.ui.Note, { tone: 'danger' }, 'It failed'),
+  Empty: () => h(R.ui.EmptyState, { icon: 'chat_bubble', title: 'No chats yet', body: 'Tap the pen.' }),
+  Label: () => h(R.ui.Label, {}, 'Computers'),
+  Eyebrow: () => h(R.ui.Eyebrow, {}, 'STEP 1 OF 2'),
+  LargeTitle: () => h(R.ui.LargeTitle, {}, 'Settings'),
+  Dot: () => h(R.ui.Dot, { color: tok.run }),
+  Rule: () => h(R.ui.Rule, {}),
+});
+const old = {};
+for (const scheme of ['dark', 'light']) {
+  const tok = K.tokensFor(scheme);
+  const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR, '#fff', '#000']);
+  const strayed = [];
+  let threw = null;
+  for (const [name, make] of Object.entries(OLD_PARTS(tok))) {
+    let markup;
+    try { markup = R.render(scheme, make()); } catch (e) { threw = `${name}: ${e.message}`; break; }
+    old[`${scheme}:${name}`] = markup;
+    for (const c of paintOf(markup)) if (!own.has(c)) strayed.push(`${name}: ${c}`);
+  }
+  checks.push([`the parts the older screens are made of still stand up in the ${scheme} theme${threw ? ` (${threw})` : ''}`,
+    threw === null]);
+  checks.push([`…and every colour they paint is one of the ${scheme} tokens${strayed.length ? ` (${strayed.slice(0, 4).join(', ')})` : ''}`,
+    strayed.length === 0]);
+  // A segmented control whose thumb is the colour of its track is a control
+  // with nothing selected, which is the one way this substitution could have
+  // gone quietly wrong.
+  const seg = R.styles(old[`${scheme}:Segmented`]);
+  checks.push([`…and the selected segment is still a different grey from its track in the ${scheme} theme`,
+    seg.some((s) => s.backgroundColor === tok.s2) && seg.some((s) => s.backgroundColor === tok.s1)]);
+  const on = R.styles(old[`${scheme}:Toggle`]).find((s) => s.width === 46);
+  const off = R.styles(old[`${scheme}:ToggleOff`]).find((s) => s.width === 46);
+  checks.push([`…and a switch still says which way it is thrown in the ${scheme} theme`,
+    !!on && !!off && on.backgroundColor === tok.ink && off.backgroundColor === tok.line2]);
+}
+
+// The gallery itself: it is the room the design review happens in, so it has
+// to come up.
+{
+  let markup = null, threw = null;
+  try { markup = R.render(null, h(R.gallery.default)); } catch (e) { threw = e.message; }
+  checks.push([`the gallery comes up${threw ? ` (${threw})` : ''}`, threw === null]);
+  checks.push(['…with every part on it', markup !== null && R.styles(markup).length > 200]);
 }
 
 module.exports = { checks };
