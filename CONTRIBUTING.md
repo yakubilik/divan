@@ -64,9 +64,11 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_agents.py
 .venv312/bin/python scripts/test_titles.py
 .venv312/bin/python scripts/test_push.py
+.venv312/bin/python scripts/test_ustabasi.py   # the ticket wall's readings of the queue
 
 cd app && npx tsc --noEmit
 cd web && npm run build                        # typechecks, then builds into the daemon
+cd web && node scripts/test-wall.mjs           # the ticket wall, in Chrome at phone width
 
 cd <the repo root>
 python3 scripts/check-links.py                 # no dead path in the docs

@@ -38,6 +38,7 @@ per computer, all live, results merged in one place.
 | `lib/timeline.ts` | A chat's timeline. `useLogs().open(hostKey, chatId)` loads it and events stream in on their own. `logs[logKey(h,c)]` → `{items, busy, pending}`. |
 | `lib/actions.ts` | `send`, `interrupt`, `respond`, `createChat`, `updateChat`, `deleteChat`, `listAgents`, `agentStore`, `installAgent`, `removeAgent`, `toolStatus`, `upload`, `fileUrl`, `parsePairing`. |
 | `lib/format.ts` | `tilde`, `tildeAll`, `shortPath`, `cost`, `tokens`, `duration`, `uptime`, `ago`, `until`, `clock`, `windowName`, `toolSummary`. |
+| `lib/ustabasi.ts` | The ticket wall's arithmetic: `groupByProject`, `sortTickets`, `projectName`, and the card's four figures — `totalAge`, `roundAge`, `stageLine`, `commitCount`. No progress percentage, and there will not be one: nothing in the queue knows how far along a ticket is. `scripts/test-wall.mjs` checks all of it, and renders the wall in Chrome at 390px. |
 | `lib/theme.ts` | `C` (colours), `MONO`, `R` (radii). No colour exists outside this file. |
 | `ui/kit.tsx` | `Chip`, `Btn`, `Dot`, `Pulse`, `Spinner`, `Segment`, `Label`, `Empty`, `Icon`+`P` (icon paths). |
 
