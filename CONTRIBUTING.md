@@ -94,10 +94,24 @@ is waiting and wait for the queue to re-open it. It needs a device, a paired
 app, a blocked ticket and a running one, so it is not in CI either; the header
 of the file says how to run it.
 
+`node app/scripts/ustabasi-live.cjs` is the cheap half of that flow, without a
+device: it asks the real daemon for the real snapshot and a real run's log, and
+pushes both through the same pure modules the three screens draw from — so it
+prints the grouped wall, the (i) page's checklist with the running step marked,
+and the chat's turns, and fails on an empty group, a path used as a heading, a
+pid on a card, two steps marked as running, a first open over the byte cap or
+two turns sharing a key. `--watch=30` holds one cursor open at the hook's own
+interval, which is the only way to see a turn arrive. It needs the queue on the
+machine, so it is not in CI; with no queue it says so and exits 0.
+
 Both readings of a run's log — the daemon's, which pages it, and the app's,
 which turns those pages into a chat — are checked against one recording,
 `app/scripts/fixtures/run.log`. `app/scripts/fixtures/README.md` says where it
-came from and `scripts/capture-run-fixture.py` is how to replace it.
+came from and `scripts/capture-run-fixture.py` is how to replace it. That
+script scrubs a home directory out of the recording in both the forms a run log
+writes one — `/Users/<name>` and the dash-joined slug `-Users-<name>-` — and
+`scripts/audit.py` fails on either, because a fixture went out carrying the
+second one while both sides were only looking for the first.
 
 `scripts/e2e.py` is the one that spends real model turns. Run it when you have
 touched the session or the provider adapters.
