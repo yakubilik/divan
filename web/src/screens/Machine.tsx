@@ -62,9 +62,9 @@ export function Machine(props: MachineProps) {
   // What under this place wants a person, on the row it is about: a chat
   // waiting to be allowed to do something — which is on the wall as well as in
   // the Chat place — and an update in hand.
-  const waiting = order.reduce(
+  const approvals = order.reduce(
     (n, k) => n + (hosts[k]?.chats.filter((c) => c.status === 'awaiting_approval').length ?? 0), 0);
-  const stale = order.some((k) => updateWaiting(hosts[k]?.info?.update));
+  const update = order.some((k) => updateWaiting(hosts[k]?.info?.update));
   const items: PanelItem[] = MACHINE_ROWS.map((row) => ({
     key: row.view,
     label: row.label,
@@ -75,8 +75,8 @@ export function Machine(props: MachineProps) {
     // that wants a person, which is the state that colour belongs to.
     ...(row.view === 'machines' && unreachable > 0
       ? { dot: 'asking' as const, hollow: true } : {}),
-    ...(row.view === 'terminal' && waiting > 0 ? { count: waiting } : {}),
-    ...(row.view === 'admin' && stale ? { dot: 'asking' as const } : {}),
+    ...(row.view === 'terminal' && approvals > 0 ? { count: approvals } : {}),
+    ...(row.view === 'admin' && update ? { dot: 'asking' as const } : {}),
   }));
 
   return (

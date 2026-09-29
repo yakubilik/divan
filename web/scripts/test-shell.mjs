@@ -268,7 +268,10 @@ group('nothing was dropped in the move');
       eq(union, shell.OLD_PANEL.map((o) => o.view === 'machines' ? 'dashboard' : o.view).sort()),
       `${union.join(', ')} vs ${shell.OLD_PANEL.map((o) => o.view).join(', ')}`);
   } else {
-    console.log('  · git could not be read: the old list is the one written down in shell.ts');
+    // Once this work is in `main` there is no `View` union there to read, and
+    // the list in `shell.ts` is the only record of what the old panel had —
+    // which is what it is for. The same line covers a checkout with no `main`.
+    console.log('  · the old panel’s union is no longer in main: the list in shell.ts is the record');
   }
   ok('every screen the old panel had is a place or a page of the Machine list',
     shell.OLD_PANEL.every((o) => shell.reachable(o.view)),
@@ -745,7 +748,7 @@ group('the chat is untouched');
   if (known.length) {
     ok('the five files this is about are five files git has', known.length === 5, known.join(', '));
   }
-  if (diff === null) console.log('  · git could not be read: the chat files were read instead of diffed');
+  if (diff === null) console.log('  · no git to diff against: the chat files were read instead');
   else ok('not one line of the five chat files has changed', diff === '', diff);
 
   const app = src('src/App.tsx');
