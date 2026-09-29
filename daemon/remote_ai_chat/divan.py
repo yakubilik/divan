@@ -1166,7 +1166,7 @@ class Board:
         for ever, the counts beside each project already say how many are in it,
         and nothing on a dashboard is drawn from a card finished last March.
 
-        `unfiled` is the same list for the work no product has claimed: a ticket
+        `unfiled` is the work no product has claimed, whole: a ticket
         out of a folder this computer's board knows nothing about is a card in
         the holding place, and it travels here so that it can be seen and filed
         rather than quietly waiting in a project nobody made. It is deliberately
@@ -1187,7 +1187,13 @@ class Board:
         cards = [c for c in self.cards()
                  if c["project_id"] in mine and c["column"] != "done"]
         holder = self.unfiled_project()
-        unfiled = [c for c in self.cards(holder["id"]) if c["column"] != "done"]
+        # All of them, `done` included, unlike the boards above. A card in the
+        # holding place is not a card somebody has finished with — the column it
+        # is in was read off a ticket's status and no person has ever looked at
+        # it — so dropping the finished ones would be the one way a ticket out of
+        # an unknown folder could still go unseen. The list stays short on its
+        # own: a card leaves it as soon as a product claims its path.
+        unfiled = self.cards(holder["id"])
         names = {p["id"]: p["name"] for p in projects}
         names[holder["id"]] = holder["name"]
         return {
