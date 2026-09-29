@@ -1253,6 +1253,11 @@ checks.push(...require('./test-project.cjs').checks);
 // including a worker that failed at four in the morning and a machine that has
 // stopped answering since.
 checks.push(...require('./test-board.cjs').checks);
+// …and the one gesture on that board that changes what a computer is doing:
+// press and hold, the column tabs as the drop targets, what is felt at each
+// step, the worker a drop into In Progress starts — and the drag that is
+// cancelled or dropped nowhere, which asks nothing of anybody.
+checks.push(...require('./test-drag.cjs').checks);
 
 let bad = 0;
 for (const [name, ok] of checks) {

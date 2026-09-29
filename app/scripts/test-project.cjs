@@ -898,10 +898,12 @@ for (const scheme of ['dark', 'light']) {
 
   // The frames are outside the repository, so a citation cannot be followed by
   // a machine. These three files may cite the frames of this page and its board
-  // (Mobile8 S7 since the Board tab), and nothing else.
+  // (Mobile8 S7 since the Board tab, Mobile3 D1-D4 since the drag), and nothing
+  // else.
   const FRAMES = { V4: 'Mobile2', V5: 'Mobile2', S1: 'Mobile5', S2: 'Mobile5', S4: 'Mobile7',
                    S5: 'Mobile7', S6: 'Mobile7', S7: 'Mobile8', S10: 'Mobile9', S11: 'Mobile9',
-                   V1: 'Mobile1', V2: 'Mobile1', V3: 'Mobile1', S3: 'Mobile6' };
+                   V1: 'Mobile1', V2: 'Mobile1', V3: 'Mobile1', S3: 'Mobile6',
+                   D1: 'Mobile3', D2: 'Mobile3', D3: 'Mobile3', D4: 'Mobile3' };
   const bad = [];
   for (const [file, text] of [['src/project.ts', judgement], ['src/components/project.tsx', parts],
                               ['app/dashboard.tsx', screen]]) {
@@ -910,7 +912,7 @@ for (const scheme of ['dark', 'light']) {
       const group = groups[i][0];
       const from = groups[i].index + group.length;
       const until = Math.min(from + 90, i + 1 < groups.length ? groups[i + 1].index : text.length);
-      const ids = [...text.slice(from, until).matchAll(/\b([VTCSW]\d{1,2})\b/g)].map((m) => m[1]);
+      const ids = [...text.slice(from, until).matchAll(/\b([DVTCSW]\d{1,2})\b/g)].map((m) => m[1]);
       if (!ids.length) bad.push(`${file}: ${group} names no frame`);
       for (const id of ids) {
         if (!FRAMES[id]) bad.push(`${file}: ${id} is not a frame this work may cite`);

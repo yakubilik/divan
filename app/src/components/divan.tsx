@@ -17,7 +17,7 @@
  *  A gallery of all of it is at `app/divan-gallery.tsx`, reachable from
  *  Settings in a development build. */
 import React from 'react';
-import { Pressable, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Pressable, View, type GestureResponderEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { Icon } from './icon';
 import { Text } from './text';
 import { Sheet as SheetShell, SheetBar as _SheetBar, useSheet } from './sheet';
@@ -38,12 +38,25 @@ const dim = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } :
  *
  *  Exported because a row inside a card is pressable too, and the feedback a
  *  press gets is the design system's to decide rather than each screen's. */
-export function Tap({ onPress, onLongPress, style, children }: {
-  onPress?: () => void; onLongPress?: () => void; style?: StyleProp<ViewStyle>; children: React.ReactNode;
+export function Tap({ onPress, onLongPress, holdMs, onPressOut, style, children }: {
+  onPress?: () => void;
+  onLongPress?: (e: GestureResponderEvent) => void;
+  /** How long a hold is, where the design says: the board's drag is 350 ms
+   *  (`src/drag.ts HOLD_MS`) against the half second a `Pressable` takes by
+   *  default. A number rather than the constant itself, because this file is the
+   *  design system and knows nothing about a board. */
+  holdMs?: number;
+  /** The finger came up, however it came up. The board needs it: a card that was
+   *  held and then let go without moving is a cancelled drag, and a press that
+   *  ended is the only thing that says so. */
+  onPressOut?: () => void;
+  style?: StyleProp<ViewStyle>;
+  children: React.ReactNode;
 }) {
   if (!onPress && !onLongPress) return <View style={style}>{children}</View>;
   return (
-    <Pressable onPress={onPress} onLongPress={onLongPress}
+    <Pressable onPress={onPress} onLongPress={onLongPress} onPressOut={onPressOut}
+      delayLongPress={holdMs}
       style={(st) => [style as ViewStyle, dim(st) as ViewStyle]}>{children}</Pressable>
   );
 }
@@ -75,8 +88,8 @@ export function Tap({ onPress, onLongPress, style, children }: {
  *  padding:16px; box-shadow:inset 0 0 0 1px var(--line2)` over the page itself.
  *  It is a statement rather than a thing lying on the page, and the empty middle
  *  is what says so. */
-export function Card({ ring = 'line', lifted, hollow, dashed, bar, radius = RADIUS.card, inset = true,
-                       onPress, onLongPress, style, children }: {
+export function Card({ ring = 'line', lifted, hollow, dashed, wash, bar, radius = RADIUS.card, inset = true,
+                       onPress, onLongPress, holdMs, onPressOut, style, children }: {
   ring?: 'line' | 'amber' | 'red' | 'run' | 'none';
   lifted?: boolean;
   /** No surface, and the emphasised line around it (Mobile7 S5). */
@@ -84,12 +97,19 @@ export function Card({ ring = 'line', lifted, hollow, dashed, bar, radius = RADI
   /** …drawn as a `1.5px` dashed outline instead: the card nothing runs on,
    *  which on the board is the one a person owns (Mobile2 V5). */
   dashed?: boolean;
+  /** …or on that tone's wash instead of the ordinary surface: Mobile3 D4's card
+   *  that has just been dropped into In Progress, `background:runBg` inside a
+   *  solid `run` ring. The one card on a board that is not quiet, and it is
+   *  quiet again five seconds later. */
+  wash?: Tone | null;
   bar?: number | null;
   radius?: number;
   /** The card's own padding. False where its children carry it. */
   inset?: boolean;
   onPress?: () => void;
-  onLongPress?: () => void;
+  onLongPress?: (e: GestureResponderEvent) => void;
+  holdMs?: number;
+  onPressOut?: () => void;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
 }) {
@@ -100,8 +120,9 @@ export function Card({ ring = 'line', lifted, hollow, dashed, bar, radius = RADI
     : ring === 'run' ? t.run
     : lifted || hollow ? t.line2 : t.line;
   return (
-    <Tap onPress={onPress} onLongPress={onLongPress}
-      style={[{ backgroundColor: hollow || dashed ? 'transparent' : lifted ? t.sLift : t.s1,
+    <Tap onPress={onPress} onLongPress={onLongPress} holdMs={holdMs} onPressOut={onPressOut}
+      style={[{ backgroundColor: hollow || dashed ? 'transparent'
+                  : wash ? toneColours(t, wash).bg : lifted ? t.sLift : t.s1,
                 borderRadius: radius, overflow: 'hidden',
                 borderWidth: 1, borderColor: border },
               dashed && { borderWidth: 1.5, borderColor: t.line2, borderStyle: 'dashed' },
@@ -286,7 +307,7 @@ export interface Column { key: string; label: string; count: number }
  *  one under the thumb turns green — `1.5px solid var(--run)` over `runBg`,
  *  with its name and its count in `run` — which is the whole of the gesture's
  *  feedback. */
-export function ColumnTabs({ columns, value, onChange, dragging, target, style }: {
+export function ColumnTabs({ columns, value, onChange, dragging, target, onMeasure, style }: {
   columns: Column[];
   value: string;
   onChange?: (key: string) => void;
@@ -294,9 +315,22 @@ export function ColumnTabs({ columns, value, onChange, dragging, target, style }
   dragging?: boolean;
   /** The one under the thumb. */
   target?: string | null;
+  /** Where each tab ended up, in this strip's own coordinates, so that the board
+   *  can tell which one a thumb is over. Reported from here rather than worked
+   *  out by the screen: how wide a tab is and how far apart they sit is this
+   *  part's business, and a second copy of it in a gesture is how a drop target
+   *  comes to be four points off the thing it is drawn on. */
+  onMeasure?: (tabs: { key: string; x: number; y: number; w: number; h: number }[]) => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
+  const seen = React.useRef<Record<string, { key: string; x: number; y: number; w: number; h: number }>>({});
+  const measured = (key: string, x: number, y: number, w: number, h: number) => {
+    if (!onMeasure) return;
+    seen.current[key] = { key, x, y, w, h };
+    const all = columns.map((c) => seen.current[c.key]).filter(Boolean);
+    if (all.length === columns.length) onMeasure(all);
+  };
   return (
     <View style={[{ flexDirection: 'row', gap: 4, paddingHorizontal: 12, paddingBottom: 10,
                     borderBottomWidth: 1, borderBottomColor: t.line }, style]}>
@@ -307,6 +341,8 @@ export function ColumnTabs({ columns, value, onChange, dragging, target, style }
         return (
           <Pressable key={col.key} accessibilityRole="tab" accessibilityState={{ selected: on }}
             onPress={onChange && (() => onChange(col.key))}
+            onLayout={onMeasure && ((e) => { const l = e.nativeEvent.layout;
+                                             measured(col.key, l.x, l.y, l.width, l.height); })}
             style={{ flex: 1, height: SIZE.columnTab, borderRadius: RADIUS.tab, alignItems: 'center',
                      justifyContent: 'center', gap: 1,
                      borderWidth: isTarget ? 1.5 : 1, borderColor: outline,

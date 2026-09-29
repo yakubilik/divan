@@ -35,6 +35,11 @@ export interface DeviceInfo { id: string; name: string; push_approval: boolean; 
  *  draw, which outlives the original being deleted (see attachments.py). */
 export interface Attachment { path: string; view?: string; name: string; size?: number; kind?: 'image' | 'video' | 'audio' | 'file'; url?: string; transcript?: string; duration?: number; localUri?: string }
 
+/** What a computer answers a move with. The move itself always happened; this
+ *  is about the worker it may also have asked for — empty where nothing was
+ *  asked for or where it started, and the queue's own refusal otherwise. */
+export interface Moved { error: string }
+
 interface State {
   ready: boolean;
   hosts: StoredHost[];
@@ -109,9 +114,20 @@ interface State {
    *  answering it has to reach the mini — so the machine is named rather than
    *  assumed, the same way a sign-in is read off a second computer. */
   answerCard: (what: { ticket: number; host: string }, text: string) => Promise<void>;
-  /** Move a card to a column, on whichever computer it is on. The one board
-   *  write this app makes: a card that is a person's own, done. */
-  moveCard: (what: { card: string; host: string; column: DivanColumn }) => Promise<void>;
+  /** Move a card to a column, on whichever computer it is on, and to a place in
+   *  that column where one was picked — position is priority on this board.
+   *
+   *  The one board write this app makes: a card that is a person's own, done, and
+   *  a card dragged into In Progress, which is what starts a worker on it.
+   *
+   *  It answers with what the computer said rather than nothing, because the
+   *  interesting case is the half-done one: the move always happens and the
+   *  filing may not, and a queue that is not installed leaves the card where the
+   *  finger put it with a reason attached (`server.py h_divan_card_move`). A
+   *  screen that threw that away would show a card in In Progress with nothing
+   *  running on it and no explanation. */
+  moveCard: (what: { card: string; host: string; column: DivanColumn; position?: number | null })
+    => Promise<Moved>;
   /** A page of what the agent on a ticket has printed. Nothing of it is kept
    *  here: the log is a river and only the page being read is worth holding,
    *  which is the screen's business and not the store's. */
@@ -930,8 +946,14 @@ export const useStore = create<State>((set, get) => {
     },
 
     moveCard: async (what) => {
-      await onHost(what.host, 'divan.card.move', { card_id: what.card, column: what.column });
+      // Position omitted rather than sent as null: no position means the bottom
+      // of the column it is arriving in, which is what the daemon's own `move`
+      // reads an absent one as.
+      const at = what.position == null ? {} : { position: what.position };
+      const r = await onHost(what.host, 'divan.card.move',
+                             { card_id: what.card, column: what.column, ...at }) as Moved;
       await get().loadDivan(what.host);
+      return { error: r?.error || '' };
     },
 
     noteTicket: async (id, text) => {
