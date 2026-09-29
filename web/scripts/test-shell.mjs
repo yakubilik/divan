@@ -296,6 +296,13 @@ group('nothing was dropped in the move');
   );
   ok('…and the place the panel opens on has one of its own',
     app.includes("e.key === '0') { e.preventDefault(); setView('overview')"));
+  // The shortcut each row advertises has to be the one that opens it: the
+  // palette prints these beside the label, and a wrong one is a lie in the one
+  // list that is meant to say where everything is.
+  const lying = shell.MACHINE_ROWS.filter((r) => r.shortcut && !app.includes(
+    `e.key === '${r.shortcut.replace('⌘', '')}') { e.preventDefault(); setView('${r.view}')`));
+  ok('…and every shortcut a row advertises opens that row',
+    lying.length === 0, lying.map((r) => `${r.label} ${r.shortcut}`).join(', '));
   ok('the chat list no longer carries a second navigation',
     !/const NAV|NavRow/.test(src('src/components/Sidebar.tsx')));
 
@@ -463,6 +470,11 @@ group('the page is scoped, not a second screen');
   ok('a page built partly out of a quiet machine says how old it is',
     renderToStaticMarkup(h(OverviewUI.Overview, { view: view('stale'), project: null, onProject() {} }))
       .includes('quiet for'));
+  ok('…in whole words, and one machine and several are different sentences',
+    OV.staleWords({ asOf: 0, machines: [{ machine: 'mini', age: 500 }] }, () => '8m')
+      === 'mini has been quiet for 8m. What it last said is still below.'
+    && OV.staleWords({ asOf: 0, machines: [{ machine: 'mini', age: 1 }, { machine: 'air', age: 2 }] },
+      () => '8m').startsWith('2 machines have been quiet — mini for 8m · air for 8m.'));
   ok('…and a page with nothing on it is a sentence rather than a blank',
     renderToStaticMarkup(h(OverviewUI.Overview, { view: view('never'), project: null, onProject() {} }))
       .includes('No machine has answered yet'));

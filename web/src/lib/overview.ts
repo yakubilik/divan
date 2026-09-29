@@ -30,6 +30,19 @@ export function staleness(view: DivanView): Staleness | null {
   };
 }
 
+/** What a page built partly out of a quiet machine says about itself, in whole
+ *  words: which machines have gone quiet, how long each has been quiet for, and
+ *  that what is below is what they last said. One machine and several are
+ *  different sentences, because "it" and "they" are. */
+export function staleWords(old: Staleness, ago: (seconds: number) => string): string {
+  const list = old.machines.map((m) => `${m.machine} for ${ago(m.age)}`).join(' · ');
+  return old.machines.length === 1
+    ? `${old.machines[0].machine} has been quiet for ${ago(old.machines[0].age)}.`
+      + ' What it last said is still below.'
+    : `${old.machines.length} machines have been quiet — ${list}.`
+      + ' What they last said is still below.';
+}
+
 /** The states a product is in, as the board's own summary line reads them:
  *  `? 1 asking · ■ 1 stuck · ● 2 running`. Worst first, and a state nothing is
  *  in is left out — a calm product is quiet rather than three zeroes.

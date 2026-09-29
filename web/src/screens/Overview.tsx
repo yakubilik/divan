@@ -19,7 +19,7 @@
  *  would notice.
  */
 import { uptime } from '../lib/format';
-import { COLUMN_LABEL, columnCounts, marks, staleness, summaryOf } from '../lib/overview';
+import { COLUMN_LABEL, columnCounts, marks, staleWords, staleness, summaryOf } from '../lib/overview';
 import { T } from '../lib/theme';
 import type { DivanView, MergedProject } from '../lib/divan';
 import { Card, EmptyState, Monogram, Row, SectionHeader, StateMark } from '../ui/divan';
@@ -53,8 +53,7 @@ export function Overview({ view, project, onProject }: OverviewProps) {
       />
       {!!old && (
         <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>
-          {old.machines.map((m) => `${m.machine} has been quiet for ${uptime(m.age)}`).join(' · ')}
-          {'. '}What it last said is still below.
+          {staleWords(old, uptime)}
         </div>
       )}
       {project ? <Product project={project} /> : <Products view={view} onProject={onProject} />}
@@ -140,7 +139,7 @@ function Nothing({ view }: { view: DivanView }) {
         body={older.length
           ? 'The daemon on the other end is older than this panel and has never heard of the board.'
           : 'Nothing has come back from the computers this browser is paired with.'}
-        foot={view.hosts.map((h) => `${h.machine} · ${h.error || 'no answer'}`).join('\n')}
+        foot={view.hosts.map((h) => `${h.machine} — ${h.error || 'no answer'}`).join(' · ')}
       />
     );
   }
