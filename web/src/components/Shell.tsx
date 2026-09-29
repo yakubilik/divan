@@ -18,6 +18,7 @@ import { P, glyph } from '../ui/kit';
 import {
   PLACES, PLACE_ICON, PLACE_LABEL, PLACE_VIEW, placeOf, type Chip, type Place, type View,
 } from '../lib/shell';
+import type { State } from '../lib/theme';
 
 /** The bar's own clock: Web12 W1's `Mon 28 Sep · 23:14`. The date is the day it
  *  is read on, in the frame's own order, and the time is to the minute — a
@@ -75,7 +76,7 @@ export function ThemeSwitch() {
 }
 
 /** A place: the bar, and the place's own content under it. */
-export function Shell({ view, onView, now, chips, onProject, children }: {
+export function Shell({ view, onView, now, chips, dots, onProject, children }: {
   view: View;
   onView: (view: View) => void;
   /** The clock the merged view was worked out at, so that the bar and the page
@@ -83,6 +84,8 @@ export function Shell({ view, onView, now, chips, onProject, children }: {
   now: number;
   /** The project bar, where this place has one. */
   chips?: Chip[] | null;
+  /** Which places have something in them that wants a person. */
+  dots?: Partial<Record<Place, State>>;
   onProject?: (key: string | null) => void;
   children?: React.ReactNode;
 }) {
@@ -94,7 +97,7 @@ export function Shell({ view, onView, now, chips, onProject, children }: {
         {PLACES.map((place: Place) => (
           <NavItem
             key={place} label={PLACE_LABEL[place]} icon={glyph(PLACE_ICON[place])}
-            on={place === here}
+            on={place === here} dot={dots?.[place] ?? null}
             title={place === here ? undefined : `Go to ${PLACE_LABEL[place]}`}
             // A place you are already in is not re-entered: it would drop the
             // Machine page you are reading for the first one in the list.

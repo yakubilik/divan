@@ -141,6 +141,32 @@ export function reachable(view: View): boolean {
     || MACHINE_ROWS.some((r) => r.view === view);
 }
 
+// ── the two lights the old sidebar carried ──────────────────────────────────
+
+/** The old sidebar put an amber dot on two of its rows: one where a chat was
+ *  waiting to be allowed to do something, and one where the computer had an
+ *  update in hand. Both are still true of a panel with three places in it, and
+ *  both belong to a place rather than to a screen now — so the rules are here,
+ *  the bar draws the dot on the place, and the Machine list draws it again on
+ *  the page it is actually about.
+ *
+ *  Neither is Divan's "needs you", which is a board's count and belongs to the
+ *  Dashboard: this is a chat that cannot go on, and a computer that is running
+ *  something older than what is in hand. */
+export function chatNeedsYou(chats: { status: string }[]): boolean {
+  return chats.some((c) => c.status === 'awaiting_approval');
+}
+
+/** Straight off `host.info`, which every computer sends on connect: no extra
+ *  round trip to light this up, and it is true before anyone has opened Admin.
+ *  `web.stale !== false` because a daemon that cannot answer the question is
+ *  not the same as one answering no. */
+export function updateWaiting(update: {
+  behind: number; web?: { npm?: boolean; stale?: boolean | null } | null;
+} | null | undefined): boolean {
+  return !!update && (update.behind > 0 || (!!update.web?.npm && update.web?.stale !== false));
+}
+
 // ── the project bar ─────────────────────────────────────────────────────────
 
 /** One chip in the bar across the top of the Dashboard (Web12 W1): a product, or

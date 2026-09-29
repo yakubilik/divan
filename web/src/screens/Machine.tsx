@@ -14,7 +14,8 @@
  *  under each row says what it is for — which is the part of "findable,
  *  forgettable" a list of bare words was missing.
  */
-import { MACHINE_ROWS, type View } from '../lib/shell';
+import { MACHINE_ROWS, updateWaiting, type View } from '../lib/shell';
+import { useFleet } from '../lib/fleet';
 import { T } from '../lib/theme';
 import type { DivanView } from '../lib/divan';
 import { glyph } from '../ui/kit';
@@ -56,17 +57,26 @@ export function machineNote(fleet: DivanView): string {
 
 export function Machine(props: MachineProps) {
   const { view, onView, fleet } = props;
+  const { hosts, order } = useFleet();
   const unreachable = fleet.hosts.filter((h) => !h.reachable).length;
+  // What under this place wants a person, on the row it is about: a chat
+  // waiting to be allowed to do something — which is on the wall as well as in
+  // the Chat place — and an update in hand.
+  const waiting = order.reduce(
+    (n, k) => n + (hosts[k]?.chats.filter((c) => c.status === 'awaiting_approval').length ?? 0), 0);
+  const stale = order.some((k) => updateWaiting(hosts[k]?.info?.update));
   const items: PanelItem[] = MACHINE_ROWS.map((row) => ({
     key: row.view,
     label: row.label,
     icon: glyph(row.icon),
-    // The frame puts a hollow dot on the row that has something wrong under it,
-    // and the machines are the only row on this list that can.
-    // …drawn in the amber of something that wants a person, which is the state
-    // that colour belongs to.
+    // The frame puts a mark on the row that has something under it: a hollow
+    // dot for the machine that cannot be reached (Web15 W12), an amber count
+    // for the sign-in that is expiring (W16). Both are the amber of something
+    // that wants a person, which is the state that colour belongs to.
     ...(row.view === 'machines' && unreachable > 0
       ? { dot: 'asking' as const, hollow: true } : {}),
+    ...(row.view === 'terminal' && waiting > 0 ? { count: waiting } : {}),
+    ...(row.view === 'admin' && stale ? { dot: 'asking' as const } : {}),
   }));
 
   return (

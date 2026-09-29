@@ -14,8 +14,8 @@ import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
 import { project as projectIn, useDivanView } from './lib/divan';
 import {
-  MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chips, placeOf, projectFromSearch,
-  searchWithProject, type View,
+  MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, chips, placeOf, projectFromSearch,
+  searchWithProject, updateWaiting, type View,
 } from './lib/shell';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
 import { deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
@@ -92,6 +92,20 @@ export function App() {
   /** Which of the three the panel is in, worked out from the screen rather than
    *  held beside it: a place and the page it is on cannot then disagree. */
   const place = placeOf(view);
+
+  /** The two lights the old sidebar carried on its rows, now on the place each
+   *  belongs to: a chat that cannot go on until somebody allows something, and
+   *  a computer running something older than what it has in hand. */
+  const dots = useMemo(() => {
+    const out: { chat?: 'asking'; machine?: 'asking' } = {};
+    for (const key of fleet.order) {
+      const slot = fleet.hosts[key];
+      if (!slot) continue;
+      if (chatNeedsYou(slot.chats)) out.chat = 'asking';
+      if (updateWaiting(slot.info?.update)) out.machine = 'asking';
+    }
+    return out;
+  }, [fleet.hosts, fleet.order]);
 
   const slot = sel ? fleet.hosts[sel.hostKey] : (fleet.focus ? fleet.hosts[fleet.focus] : null);
   const chat: Chat | null = useMemo(() => {
@@ -384,7 +398,7 @@ export function App() {
       <style>{themeCss()}</style>
       <style>{KEYFRAMES}</style>
       <Shell
-        view={view} onView={setView} now={divan.now}
+        view={view} onView={setView} now={divan.now} dots={dots}
         // The chips are over the Dashboard and the pages under it, which is
         // where the frames draw them and where they mean something.
         chips={place === 'dashboard' ? chips(divan, project) : null}

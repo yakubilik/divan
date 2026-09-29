@@ -739,11 +739,17 @@ export function TopBar({ children, style }: {
  *  in filled with `s2` in the primary ink and the other two in `ink3`. Web14 W6
  *  is Dashboard, Web15 W12 is Machine, and between them all three faces are
  *  drawn. */
-export function NavItem({ label, icon, on, onClick, title, style }: {
+export function NavItem({ label, icon, on, dot, onClick, title, style }: {
   label: React.ReactNode;
   /** A path out of `P`. */
   icon?: string;
   on?: boolean;
+  /** Something in that place wants a person. The desktop frames draw no mark on
+   *  a nav item — every one of them is a screen with the trouble in plain sight
+   *  — so this is the phone's, Mobile1 V1, whose tab bar carries the same dot
+   *  for the same reason: a panel is not always looking at the place the thing
+   *  happened in. */
+  dot?: State | null;
   onClick?: () => void;
   title?: string;
   style?: React.CSSProperties;
@@ -759,6 +765,7 @@ export function NavItem({ label, icon, on, onClick, title, style }: {
     }}>
       {!!icon && <Icon path={icon} size={SIZE.rowIcon} color={colour} />}
       {label}
+      {!!dot && <StatusDot state={dot} />}
     </Tap>
   );
 }

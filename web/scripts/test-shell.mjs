@@ -198,6 +198,29 @@ const WORLDS = {
 
 const view = (world, now = NOW) => D.merge(WORLDS[world](), now);
 
+/** The store the old screens read, seeded the way `test-divan.mjs` seeds it: a
+ *  render on a server is handed the store's *initial* state, so writing only
+ *  with `setState` is invisible to it. */
+function seed(patch) {
+  Object.assign(useFleet.getInitialState(), patch);
+  useFleet.setState(patch);
+}
+
+function machineProps(view, fleet) {
+  return {
+    view, fleet, onView() {}, onOpenChat() {}, onNewChat() {},
+    onNewChatIn() {}, onStartChat() {}, onPeek() {},
+  };
+}
+
+/** The made-up computer, with an update in hand: the fixture has the chat that
+ *  is waiting to be allowed something, and this is the other light. */
+function withUpdate() {
+  const slot = fakeHost();
+  slot.info = { ...slot.info, update: { behind: 3, ahead: 0, auto: false, repo: true } };
+  return slot;
+}
+
 // ── 1 · the three places ───────────────────────────────────────────────────
 
 group('three places, and nothing beside them');
@@ -275,6 +298,33 @@ group('nothing was dropped in the move');
     app.includes("e.key === '0') { e.preventDefault(); setView('overview')"));
   ok('the chat list no longer carries a second navigation',
     !/const NAV|NavRow/.test(src('src/components/Sidebar.tsx')));
+
+  // …and the two lights that navigation carried are not dropped with it: a chat
+  // that cannot go on until somebody allows something, and a computer running
+  // something older than what it has in hand.
+  ok('a chat waiting to be allowed to do something is still a light',
+    shell.chatNeedsYou([{ status: 'idle' }, { status: 'awaiting_approval' }])
+    && !shell.chatNeedsYou([{ status: 'running' }]));
+  ok('…and so is an update in hand, whichever of its two shapes it is in',
+    shell.updateWaiting({ behind: 2 })
+    && shell.updateWaiting({ behind: 0, web: { npm: true, stale: true } })
+    && !shell.updateWaiting({ behind: 0, web: { npm: true, stale: false } })
+    && !shell.updateWaiting(null));
+  const lit = renderToStaticMarkup(h(ShellUI.Shell, {
+    view: 'overview', onView() {}, now: NOW, chips: null,
+    dots: { chat: 'asking', machine: 'asking' }, onProject() {},
+  }));
+  ok('…and the bar draws each on the place it belongs to',
+    styles(lit).filter((d) => d.width === '7px' && d.background === v('amber')).length === 2);
+  seed({ hosts: { studio: withUpdate() }, order: ['studio'], focus: 'studio', ready: true });
+  // The column, and not the screen beside it: the fleet panel on the right
+  // draws dots of its own and counting those would say nothing.
+  const column = renderToStaticMarkup(h(MachineUI.Machine, machineProps('machines', view('fresh'))))
+    .split('</nav>')[0];
+  ok('…and the Machine list draws them again on the page each is about',
+    /Terminals<\/span><span[^>]*>1</.test(column)
+    && styles(column).filter((d) => d.width === '7px' && d.background === v('amber')).length === 1,
+    `${styles(column).filter((d) => d.width === '7px').length} dots`);
 }
 
 // ── 3 · the merge behind the bar ───────────────────────────────────────────
@@ -548,21 +598,6 @@ group('the switch changes the theme and nothing else');
 }
 
 // ── 8 · every screen, in every state, in both themes ───────────────────────
-
-function machineProps(view, fleet) {
-  return {
-    view, fleet, onView() {}, onOpenChat() {}, onNewChat() {},
-    onNewChatIn() {}, onStartChat() {}, onPeek() {},
-  };
-}
-
-/** The store the old screens read, seeded the way `test-divan.mjs` seeds it: a
- *  render on a server is handed the store's *initial* state, so writing only
- *  with `setState` is invisible to it. */
-function seed(patch) {
-  Object.assign(useFleet.getInitialState(), patch);
-  useFleet.setState(patch);
-}
 
 group('every screen renders with nothing, with something stale and with a machine that is gone');
 {
