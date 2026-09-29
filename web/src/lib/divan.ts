@@ -28,13 +28,18 @@
  *  merges the same snapshots by the same rules for the same screens, down to
  *  the names (`answered`, `silent`, `waiting`, `stuck`, `projectKey`). Two
  *  clients that disagreed about which product a card belongs to would be two
- *  different products. What is here is the part the desktop shell needs — the
- *  machines, the products, and how each is doing; the branches, the quota and
- *  the git activity are read the same way by the screens that draw them.
+ *  different products. The agreement is not a hope: `scripts/test-overview.mjs`
+ *  compiles this file and the phone's together, hands them the same boards and
+ *  compares every figure the two put on a screen. What is here is everything a
+ *  desktop screen counts — the machines, the products, the agents at work, what
+ *  each computer has left to start one on and what git said about the
+ *  repositories a product owns; the branches are the one thing left out, because
+ *  the screen that draws them is the board, and it comes later.
  *
  *  Nothing in here draws anything, and the poll at the bottom is the only part
- *  that knows there is a socket: `scripts/test-shell.mjs` holds the merge to
- *  these rules with no daemon anywhere.
+ *  that knows there is a socket: `scripts/test-shell.mjs` and
+ *  `scripts/test-overview.mjs` hold the merge to these rules with no daemon
+ *  anywhere.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
