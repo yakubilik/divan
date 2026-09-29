@@ -118,6 +118,18 @@ export function nowWords(view: DivanView, p: MergedProject): Line {
   // machine that has gone quiet, and not on one with no quota left. `paused` and
   // `unknown` are the merge's counts of the other two, off the same two rules.
   const live = view.agents.filter((a) => a.projectKey === p.key && !a.unknown && !stopped.has(a.host));
+  // …and the machines work could be running on at all: this product's computers
+  // that are answering and still have quota. Every clause names the machines it
+  // is actually about, and this is the running clause's set — one agent or five,
+  // the sentence must not put work on a computer that has gone quiet or stopped.
+  const working = view.hosts
+    .filter((h) => p.hosts.includes(h.id) && !h.stale && !stopped.has(h.id))
+    .map((h) => h.machine);
+  const names = (list: string[]) => [...new Set(list)].filter(Boolean).join(', ');
+  // The agents' own machines where there are agent rows to read them off, and the
+  // answering computers otherwise — a daemon older than the agent list sends a
+  // count and no rows.
+  const busyOn = names(live.length ? live.map((a) => a.machine) : working);
   // What was last known, minus what cannot be vouched for: an agent on a silent
   // machine and one stopped on a spent machine are both still in `running`.
   const busy = Math.max(0, p.running - p.unknown - p.paused);
@@ -152,22 +164,35 @@ export function nowWords(view: DivanView, p: MergedProject): Line {
       who: null, tone: 'red',
     });
   }
-  if (busy > 0) {
-    const one = live[0];
+  if (busy > 0 && busyOn) {
+    // One agent is named by what it is and what it is on. A count with no agent
+    // row behind it — an older daemon sends the figure and not the rows — is said
+    // without a name rather than naming whatever agent came to hand, and in both
+    // cases the machines are the ones the work could actually be on.
+    const one = busy === 1 ? live[0] : undefined;
     const who = one ? executorKey(one.executor) : null;
     clauses.push({
-      // A count with no agent behind it is a machine whose snapshot says one is
-      // running and does not say which: the figure is still true and is said
-      // without a name, rather than naming whatever agent came to hand.
-      said: busy === 1 && one && who
-        ? { key: 'prNowOne', params: { who, title: one.title, machine: one.machine || on } }
-        : busy === 1 ? { key: 'prNowOneBare', params: { on } }
-        : { key: 'prNowMany', params: { n: busy, on } },
-      who: busy === 1 && one ? who : null, tone: 'run',
+      said: one && who
+        ? { key: 'prNowOne', params: { who, title: one.title, machine: one.machine || busyOn } }
+        : busy === 1 ? { key: 'prNowOneBare', params: { on: busyOn } }
+        : { key: 'prNowMany', params: { n: busy, on: busyOn } },
+      who, tone: 'run',
+    });
+  } else if (busy > 0 && !clauses.length) {
+    // A running count with no computer left to be running on: every machine this
+    // product is on has gone quiet or run out, and the figure came off one of
+    // them before it did. That is not work in progress, it is a figure nobody can
+    // vouch for, and it is said as one — never as work on a machine that stopped.
+    clauses.push({
+      said: { key: busy === 1 ? 'prNowUnknownBareOne' : 'prNowUnknownBare', params: { n: busy, on } },
+      who: null, tone: 'amber',
     });
   }
   if (!clauses.length) {
-    return { clauses: [{ said: { key: 'prNowIdle', params: { on } }, who: null }], tone: null };
+    // Where it is running nothing, name the computers that are answering: a
+    // product also checked out on a machine that has gone quiet cannot be said to
+    // be running nothing there, and the sentence above this row says so.
+    return { clauses: [{ said: { key: 'prNowIdle', params: { on: busyOn || on } }, who: null }], tone: null };
   }
   return { clauses: clauses.map(({ said, who }) => ({ said, who })), tone: clauses[0].tone };
 }

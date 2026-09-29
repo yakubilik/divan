@@ -225,6 +225,33 @@ const ALSO = paired('h4', 'shed', {
     agents: [agent('s1', { project: 'Kanji Daily-id', projectName: 'Kanji Daily', machine: 'shed',
                            title: 'Streak screen' })] }) });
 
+/** The same computer with two agents at work on it. A count is not one agent,
+ *  and the sentence that counts has to name the same machines the sentence that
+ *  names an agent does. */
+const SHED_TWO = paired('h4', 'shed', {
+  reachable: true, at: NOW - 8,
+  snapshot: snapshot('shed', { at: NOW - 8, quota: quota({ left: 0.4, resets_at: NOW + 2 * HOUR }),
+    projects: [project('Kanji Daily', {
+      kind: 'iOS · Android', summary: 'five kanji a day', repos: ['/r/kanji-ios'],
+      running: 2, updated_at: NOW - 20, counts: { in_progress: 2 },
+      branches: [branch('engineering', 'Engineering', { open: 2, cards: { in_progress: 2 } })] })],
+    cards: [card('s1', { project: 'Kanji Daily-id', status: 'running', title: 'Streak screen' }),
+            card('s2', { project: 'Kanji Daily-id', status: 'running', title: 'Deck import' })],
+    agents: [agent('s1', { project: 'Kanji Daily-id', projectName: 'Kanji Daily', machine: 'shed',
+                           title: 'Streak screen' }),
+             agent('s2', { project: 'Kanji Daily-id', projectName: 'Kanji Daily', machine: 'shed',
+                           title: 'Deck import' })] }) });
+
+/** …and a computer running a daemon older than the agent list: it says one agent
+ *  is running on this product and says nothing about which. */
+const old = (id, name, o) => paired(id, name, {
+  reachable: !!o.reachable, at: o.at ?? NOW - 9,
+  snapshot: snapshot(name, { at: o.at ?? NOW - 9,
+    projects: [project('Kanji Daily', { running: 1, updated_at: NOW - 40,
+      branches: [branch('engineering', 'Engineering', { open: 1, cards: { in_progress: 1 } })] })],
+    cards: [card('o1', { project: 'Kanji Daily-id', status: 'running', title: 'Nightly build' })],
+    agents: [] }) });
+
 const view = (hosts) => M.merge(hosts, NOW);
 const ONE = view([STUDIO]);
 const TWO = view([STUDIO, MINI]);
@@ -233,6 +260,14 @@ const TWO = view([STUDIO, MINI]);
 const GONE = view([MINI]);
 const OUT = view([SPENT]);
 const MIXED = view([SPENT, ALSO]);
+/** The same fleet with two agents at work on the machine that is working. */
+const MIXED_TWO = view([SPENT, SHED_TWO]);
+/** Two at work on a machine that answers, beside one that has gone quiet. */
+const QUIET_TWO = view([SHED_TWO, MINI]);
+/** …and the older daemon's count, once beside a spent machine and once on a
+ *  machine that has since gone quiet itself. */
+const MIXED_BARE = view([SPENT, old('h4', 'shed', { reachable: true })]);
+const LOST = view([old('h2', 'mini', { reachable: false, at: NOW - QUIET })]);
 const of = (v, key) => M.project(v, key);
 const quire = of(ONE, 'quire');
 const kanji = of(ONE, 'kanji-daily');
@@ -352,6 +387,81 @@ const ago = (s) => (s == null ? '' : `${Math.round(s)}s`);
           // nothing about this row, and a quiet product's row is quiet too.
           return corner !== 'pcQuiet' || tone === null;
         })],
+
+    // ── the same fleet, counted rather than named ─────────────────────────
+    // One agent is named and several are counted, and the counting sentence has
+    // to name the same machines the naming one does: "2 agents are running on
+    // studio, shed" over a studio whose agents are stopped is the round-1 defect
+    // wearing a plural.
+    ['two agents at work beside one stopped agent are counted on the machine they are on',
+      (() => {
+        const p = of(MIXED_TWO, 'kanji-daily');
+        const said = P.nowWords(MIXED_TWO, p);
+        return p.running === 3 && p.paused === 1 && p.unknown === 0
+          && eq(said.clauses.map((c) => c.said.key), ['prNowPausedOne', 'prNowMany'])
+          && eq(said.clauses[1].said.params, { n: 2, on: 'shed' })
+          && said.clauses[0].said.params.on === 'studio';
+      })()],
+    ['…and never on the machine that has nothing left to run on',
+      (() => {
+        const said = P.nowWords(MIXED_TWO, of(MIXED_TWO, 'kanji-daily'));
+        return said.clauses.filter((c) => /^prNow(One|OneBare|Many)$/.test(c.said.key))
+          .every((c) => !`${c.said.params.machine || ''} ${c.said.params.on || ''}`.includes('studio'));
+      })()],
+    ['two agents at work beside a machine that has gone quiet are counted on the one that answers',
+      (() => {
+        const p = of(QUIET_TWO, 'kanji-daily');
+        const said = P.nowWords(QUIET_TWO, p);
+        return p.machines.join(', ') === 'shed, mini' && p.unknown === 1
+          && eq(said.clauses.map((c) => c.said.key), ['prNowUnknownOne', 'prNowMany'])
+          // The clause before it has just said the mini has not answered; this
+          // one must not put work on it.
+          && said.clauses[0].said.params.on === 'mini'
+          && eq(said.clauses[1].said.params, { n: 2, on: 'shed' });
+      })()],
+    ['a count with no agent behind it is placed on the machine that answers, not on the fleet',
+      (() => {
+        // A daemon older than the agent list sends the figure and no rows, so
+        // there is no agent to name: the sentence says how many and where, and
+        // "where" is still not the computer that has stopped.
+        const said = P.nowWords(MIXED_BARE, of(MIXED_BARE, 'kanji-daily'));
+        return eq(said.clauses.map((c) => c.said.key), ['prNowPausedOne', 'prNowOneBare'])
+          && eq(said.clauses[1].said.params, { on: 'shed' });
+      })()],
+    ['…and with no machine left to run on it is a figure nobody can vouch for, not work',
+      (() => {
+        // The same older daemon on a machine that has since gone quiet: there is
+        // nowhere the work could be happening, so the row does not say it is.
+        const said = P.nowWords(LOST, of(LOST, 'kanji-daily'));
+        return eq(said.clauses.map((c) => c.said.key), ['prNowUnknownBareOne'])
+          && eq(said.clauses[0].said.params, { n: 1, on: 'mini' })
+          && said.tone === 'amber';
+      })()],
+    ['…and a product running nothing names the computers that are answering',
+      (() => {
+        // "Nothing is running on cloud" about a computer that has not answered is
+        // a claim about now that nobody can make either. Hush has a card on its
+        // board, a commit this week and no agent: neither asleep nor new, so this
+        // row is the one its page draws.
+        const board = (o) => project('Hush', { kind: 'iOS', summary: 'private notes',
+          repos: [o.repo], updated_at: o.updated_at, counts: { ice_box: 1 },
+          branches: [branch('engineering', 'Engineering', { open: 1, cards: { ice_box: 1 } })] });
+        const spread = view([
+          paired('h1', 'studio', { reachable: true, at: NOW - 10,
+            snapshot: snapshot('studio', { at: NOW - 10,
+              projects: [board({ repo: '/r/hush', updated_at: NOW - 60 })],
+              cards: [card('hc', { project: 'Hush-id', column: 'ice_box', title: 'Widget' })],
+              activity: { '/r/hush': { at: NOW - 2 * DAY, week: 3, today: 0 } } }) }),
+          paired('h9', 'cloud', { reachable: false, at: NOW - QUIET,
+            snapshot: snapshot('cloud', { at: NOW - QUIET,
+              projects: [board({ repo: '/r/hush-api', updated_at: NOW - 300 })] }) }),
+        ]);
+        const p = of(spread, 'hush');
+        return p.machines.join(', ') === 'studio, cloud' && p.stale
+          && !P.blank(p) && !D.dormant(p, NOW)
+          && eq(P.nowWords(spread, p).clauses[0].said, { key: 'prNowIdle', params: { on: 'studio' } });
+      })()],
+
     ['…and every state of the row is a sentence the table has, not a joined fragment',
       [[MIXED, 'kanji-daily'], [OUT, 'kanji-daily'], [GONE, 'kanji-daily'], [TWO, 'kanji-daily'],
        [ONE, 'kanji-daily'], [ONE, 'quire'], [ONE, 'the-long-walk'], [ONE, 'pebble']]
@@ -554,6 +664,9 @@ const PAGES = {
   'a product spread over an answering machine and a quiet one': [[STUDIO, MINI], 'kanji-daily'],
   'a product out of quota': [[SPENT], 'kanji-daily'],
   'a product with one machine out of quota and another working': [[SPENT, ALSO], 'kanji-daily'],
+  'two agents at work beside a stopped one': [[SPENT, SHED_TWO], 'kanji-daily'],
+  'two agents at work beside a machine that has gone quiet': [[SHED_TWO, MINI], 'kanji-daily'],
+  'a daemon that sends a count and no agent rows': [[SPENT, old('h4', 'shed', { reachable: true })], 'kanji-daily'],
   'a product nothing has touched in weeks': [[STUDIO], 'the-long-walk'],
   'a brand-new product': [[STUDIO], 'pebble'],
   'a product whose only machine never answered': [[STUDIO, NEVER], 'quire'],
