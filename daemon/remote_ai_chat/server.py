@@ -1703,22 +1703,80 @@ class Server:
                           **(queue.get("queue") or {})}}
 
     async def h_divan_projects(self, dev: Device, d: dict) -> dict:
-        """Every product, with its branches and one line saying where it stands."""
+        """Every product, with its branches and one line saying where it stands.
+
+        `unfiled` comes along beside them and is not one of them: it is the
+        holding place, the board every card whose folder no product owns waits
+        on. It is listed separately because it must never be counted as a
+        product — and it is listed at all because the way a card leaves it is
+        somebody creating the product it belongs to, which needs to be seen
+        first.
+        """
         board = self.db.divan
         return {"projects": [board.project_view(p) for p in board.list_projects()],
+                "unfiled": board.project_view(board.unfiled_project()),
                 "machine": self.cfg.host_name}
 
     async def h_divan_project_create(self, dev: Device, d: dict) -> dict:
-        """A product. Not a folder: it is given the repositories it owns, and it
-        may own several or none at all."""
+        """A product. The only thing on this computer that makes one.
+
+        Not a folder: it is given the repositories it owns, and it may own
+        several or none at all. Nothing else creates a project — the mirror that
+        reads the coding queue used to, from the name of whatever folder a ticket
+        was in, and that is exactly what made products nobody had decided on.
+
+        Everything but the name is optional, and the four products that predate
+        these fields keep working without them: `kind` is what sort of thing it
+        is, `purpose` (or `summary`) is what it is for in a sentence or two, and
+        `started_at` is the day the product actually began — a date a person
+        writes, `2026-03-01`, not the moment this row was written.
+        """
         repos = [self._checked_repo(r) for r in (d.get("repos") or [])]
         try:
             project = self.db.divan.create_project(
                 str(d.get("name") or ""), repos=repos,
-                branches=[str(b) for b in (d.get("branches") or [])])
+                branches=[str(b) for b in (d.get("branches") or [])],
+                slug=d.get("slug"), kind=d.get("kind") or "",
+                summary=str(d.get("purpose") or d.get("summary") or ""),
+                started_at=d.get("started_at"))
         except ValueError as exc:
             raise Err("bad_project", str(exc))
         return self.db.divan.project_view(project)
+
+    async def h_divan_project_update(self, dev: Device, d: dict) -> dict:
+        """Change a product: its name, its kind, what it is for, when it began,
+        the repositories it owns, where it sits, whether it is still on the
+        board.
+
+        The other half of the entrance, and it is the whole of it: there is no
+        project form in either client and none is planned, so a product is
+        created and edited by saying so to the agent in a chat. Which is why a
+        field this does not know is an error naming the ones it does rather than
+        a silent no-op, and why the product can be named by id, by slug or by the
+        name on the screen.
+
+        `repos` replaces the list rather than adding to it, and every path in it
+        goes through the same fence a chat's `cwd` does. `slug` cannot be
+        changed: it is what two computers match the same product by, so a rename
+        moves the name and leaves the key.
+        """
+        board = self.db.divan
+        ref = str(d.get("project_id") or d.get("project") or "")
+        project = board.find_project(ref)
+        if project is None:
+            raise Err("no_such_project", "no such project")
+        fields = {k: v for k, v in d.items() if k not in ("project_id", "project")}
+        if "repos" in fields:
+            # Outside the `try`, as on the card handlers: `Err` is a `ValueError`
+            # and a fence refusal raised in there would come back as
+            # `bad_project` having lost which folder problem it was.
+            sent = fields["repos"] or []
+            sent = [sent] if isinstance(sent, str) else list(sent)
+            fields["repos"] = [self._checked_repo(r) for r in sent]
+        try:
+            return board.project_view(board.update_project(project["id"], **fields))
+        except ValueError as exc:
+            raise Err("bad_project", str(exc))
 
     async def h_divan_board(self, dev: Device, d: dict) -> dict:
         """One project's board: four columns, each in the order somebody put it in."""

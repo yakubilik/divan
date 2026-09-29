@@ -102,9 +102,12 @@ def refuses(what: str, fn, *args, **kw) -> None:
 # ── a machine with projects on it ────────────────────────────────────────────
 
 ROOT = tmp / "projects"
-for name in ("babysee", "isghocam", "a-new-product", "secrets"):
+for name in ("babysee", "isghocam", "a-new-product", "secrets", "remote-ai-chat"):
     (ROOT / name).mkdir(parents=True)
 (ROOT / "babysee" / "app").mkdir()
+# The case the folder's name cannot answer: the product checked out here is
+# called Divan, and nothing about the board may rename it back.
+(ROOT / "remote-ai-chat" / "app").mkdir()
 
 # babysee is a real repository, because "is this product alive at all" is a
 # question only git can answer and the answer travels on the snapshot. Two
@@ -525,6 +528,17 @@ async def wire() -> None:
     conn.close()
 
     # ── 8 · the tickets that already existed become cards ────────────────────
+    #
+    # Onto boards somebody made. A product exists because a person said it does
+    # — `divan.project.create` and nothing else — so the three this queue is
+    # working on are created before the first poll. One of them is created the
+    # way the real one is: a visible name that is nothing like the folder every
+    # machine knows it by.
+    board.create_project("babysee", repos=[str(ROOT / "babysee")])
+    board.create_project("isghocam", repos=[str(ROOT / "isghocam")])
+    board.create_project("Divan", slug="remote-ai-chat",
+                         repos=[str(ROOT / "remote-ai-chat")])
+
     run_dir = tmp / "run-1"
     run_dir.mkdir()
     (run_dir / "stdout.log").write_text("".join(json.dumps(r) + "\n" for r in [
@@ -540,17 +554,36 @@ async def wire() -> None:
     queue_ticket(4, "which account should this use?", str(ROOT / "isghocam"), "blocked",
                  escalation="Which account should the beta use?")
     queue_ticket(5, "a job on a repository nobody registered", "/elsewhere/ledger", "done")
+    queue_ticket(6, "the board draws nothing on the second wall",
+                 str(ROOT / "remote-ai-chat" / "app"), "queued")
+    queue_ticket(7, "rank tracking shipped", str(ROOT / "isghocam"), "done")
 
+    rows = lambda: sqlite3.connect(str(tmp / "wire.sqlite")).execute(
+        "SELECT id, slug, name, archived, hidden FROM projects").fetchall()
+    before_rows = rows()
     snap = await host.h_ustabasi_list(None, {})
-    check("the wall still answers what it always did", len(snap["tickets"]), 5)
+    check("the wall still answers what it always did", len(snap["tickets"]), 7)
 
+    check("a poll of a queue full of tickets writes no project of its own",
+          rows(), before_rows)
     names = sorted(p["name"] for p in board.list_projects())
-    check("a project per product the queue is working on, by the panel's own rule",
-          names, ["babysee", "isghocam", "ledger"])
+    check("the products are the ones somebody created, and no more",
+          names, ["Divan", "babysee", "isghocam"])
     by_ticket = {c["ustabasi_id"]: c for c in board.cards()}
-    check("every ticket is a card", sorted(by_ticket), [1, 2, 3, 4, 5])
+    check("every ticket is a card", sorted(by_ticket), [1, 2, 3, 4, 5, 6, 7])
     check("a ticket in a folder under a product belongs to the product",
           board.get_project(by_ticket[3]["project_id"])["name"], "babysee")
+    check("…by the path and not by the name of the folder",
+          board.get_project(by_ticket[6]["project_id"])["name"], "Divan")
+    check("and the name the person gave it is untouched by having work under it",
+          [(p["name"], p["slug"]) for p in board.list_projects()
+           if p["slug"] == "remote-ai-chat"], [("Divan", "remote-ai-chat")])
+    check("a ticket out of a folder no product owns is not lost",
+          bool(by_ticket[5]), True)
+    check("…it is in the holding place",
+          by_ticket[5]["project_id"], board.unfiled_project()["id"])
+    check("…which is in no project list",
+          [p["slug"] for p in board.list_projects() if p["slug"] == divan.UNFILED], [])
     check("every one of them is engineering work",
           {c["branch"] for c in by_ticket.values()}, {"engineering"})
     check("and the coding executor's", {c["executor"] for c in by_ticket.values()},
@@ -579,11 +612,11 @@ async def wire() -> None:
 
     before = {c["id"]: (c["column"], c["position"]) for c in board.cards()}
     again = await host.h_ustabasi_list(None, {})
-    check("the same snapshot twice imports nothing twice", len(board.cards()), 5)
+    check("the same snapshot twice imports nothing twice", len(board.cards()), 7)
     check("and moves nothing", {c["id"]: (c["column"], c["position"])
                                 for c in board.cards()}, before)
     check("the wall is unchanged by having been mirrored",
-          [t["id"] for t in again["tickets"]], [1, 2, 3, 4, 5])
+          [t["id"] for t in again["tickets"]], [1, 2, 3, 4, 5, 6, 7])
 
     # ── 9 · a status change never moves a column ─────────────────────────────
     #
@@ -752,11 +785,11 @@ async def wire() -> None:
     # outside the roots by some route the handlers do not cover — the import
     # files them from the queue's own rows, which answer to nobody here — still
     # never becomes a worktree.
-    ledger = board.project_by_name("ledger")
-    check("the imported product's repository is outside every root",
-          policy.is_allowed_cwd(ledger["repos"][0]), False)
-    loose = board.create_card(ledger["id"], title="work in a folder nobody allowed",
-                              executor="coding_agent")
+    check("a card imported out of a folder nobody registered kept that folder",
+          policy.is_allowed_cwd(board.card_by_ustabasi(5)["repo"]), False)
+    loose = board.create_card(board.unfiled_project()["id"],
+                              title="work in a folder nobody allowed",
+                              executor="coding_agent", repo=str(OUTSIDE))
     before = queue_count()
     out = await host.h_divan_card_move(None, {"card_id": loose["id"],
                                               "column": "in_progress"})

@@ -40,6 +40,16 @@ executor; this side reads its snapshot and writes down what it saw. The single
 write in the other direction is filing a new ticket, and it goes through that
 program's own CLI (`ustabasi.add`), because what "queue this" means is its
 sequence to define.
+
+And the mirror **creates nothing**. A product exists because somebody said it
+does, which is one request (`divan.project.create`) and no other, so a ticket in
+a folder no product owns does not conjure a product out of the folder's name. It
+lands in the single hidden holding place instead — in no list and no count a
+dashboard draws — and it moves onto a real board the moment a product claims its
+path. Which product that is comes off the **path** first and the name second:
+the ticket in `~/projects/babysee/app` is babysee's because babysee owns that
+folder, and a product whose name is nothing like its folder — Divan, checked out
+in `remote-ai-chat` — must be neither matched nor renamed by a folder name.
 """
 from __future__ import annotations
 
@@ -68,6 +78,12 @@ COLUMNS = ("ice_box", "queued", "in_progress", "done")
 #: kind; `assistant` is a one-off piece of research or writing; `human` is a
 #: card nothing runs on — it waits for a person and says so.
 EXECUTORS = ("coding_agent", "branch_agent", "assistant", "human")
+
+#: What kind of thing a product is. Suggestions and not a closed set, the same
+#: arrangement as `BRANCH_KINDS`: `create_project` takes any word, so a product
+#: that turns out to be a newsletter is a `newsletter` without a migration.
+#: Written as a slug, which is why `client work` arrives as `client-work`.
+PROJECT_KINDS = ("app", "web", "library", "client", "research", "content", "infra")
 
 #: The branches a product gets on the day it is created. Not a closed set:
 #: `Board.ensure_branch` takes any kind, which is how a product that needs a
@@ -118,19 +134,51 @@ IMPORT_COLUMN = {
 MAX_TITLE = 160
 MAX_SUMMARY = 600
 
-#: A repository path this daemon has nothing to say about still names a project
-#: — the last component of it — which is what the panel already does with a
-#: ticket whose repo is outside every allowed root (`web/src/lib/ustabasi.ts`).
+#: The slug of the one row in `projects` that is not a product: where a card
+#: goes when no product owns its repository and no product answers to the name
+#: the path suggests. Seeded by the migration — never by the mirror — and
+#: `hidden`, so it is in no project list and in no count a dashboard draws. A
+#: ticket out of an unknown folder is work waiting to be filed, not a
+#: twenty-second product on somebody's board.
 UNFILED = "unfiled"
+UNFILED_NAME = "Unfiled"
+
+#: How long a kind may be. A product's purpose is held to `MAX_SUMMARY`, the
+#: same as a card's: it is the sentence or two a screen draws under the name.
+MAX_KIND = 40
+
+#: What `update_project` will write, and the words it answers to. `purpose` is
+#: `summary` said the other way round and is accepted as such: what a product is
+#: *for* is the line a screen draws under its name, and one field cannot
+#: contradict itself the way two would. `slug` and `hidden` are not here — the
+#: first is the key two machines match a product by and the second is what marks
+#: the row that is not a product at all.
+PROJECT_FIELDS = frozenset({"name", "summary", "purpose", "kind", "started_at",
+                            "sort", "archived", "repos"})
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
+  -- what a screen calls it, and what two machines match the same product by.
+  -- The name is editable and the slug is not: it is the merge key the clients
+  -- fold two computers' answers under (`app/src/divan.ts projectKey`), so a
+  -- rename moves the name and leaves the key where it was.
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
+  -- what the product is *for*, in a sentence or two. One field and not two:
+  -- "summary" and "purpose" are the same sentence said twice, and two of them
+  -- is two things to keep from contradicting each other.
   summary TEXT DEFAULT '',
+  -- app, web, library, client work, research… an open set (`PROJECT_KINDS`).
+  kind TEXT DEFAULT '',
+  -- when the product actually began, which is not when this row was written:
+  -- a board met on Tuesday can hold a product started last March.
+  started_at REAL,
   sort INTEGER DEFAULT 0,
   archived INTEGER DEFAULT 0,
+  -- a row in this table that is not a product. Exactly one, seeded by the
+  -- migration, holding the cards no product has claimed.
+  hidden INTEGER DEFAULT 0,
   created_at REAL, updated_at REAL
 );
 -- A product may be several repositories, and a repository belongs to one
@@ -192,7 +240,8 @@ CREATE INDEX IF NOT EXISTS idx_repos_path ON project_repos(path);
 #: already there — and rebuilding the table would mean rewriting a board.
 ADDED_COLUMNS = {
     "cards": (("agent_detail", "TEXT DEFAULT ''"),),
-    "projects": (("summary", "TEXT DEFAULT ''"),),
+    "projects": (("summary", "TEXT DEFAULT ''"), ("kind", "TEXT DEFAULT ''"),
+                 ("started_at", "REAL"), ("hidden", "INTEGER DEFAULT 0")),
 }
 
 
@@ -203,6 +252,68 @@ def new_id() -> str:
 def slugify(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
     return s or "project"
+
+
+def project_kind(value) -> str:
+    """A kind, as a word. Empty is a value: most products never say.
+
+    Slugged rather than checked against a list, because the list is a set of
+    suggestions and not a fence — `PROJECT_KINDS` is what the clients offer,
+    `client work` is stored as `client-work`, and a product that is none of them
+    still gets to say what it is.
+    """
+    text = ("" if value is None else str(value)).strip()
+    if not text:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:MAX_KIND]
+
+
+def parse_when(value) -> float | None:
+    """A date somebody typed, as a timestamp. `None` and "" clear it.
+
+    `started_at` is the day the *product* began and is given by a person, so it
+    arrives the way a person writes one: `2026-03-01`, `2026-03`, `2026`, an ISO
+    moment, or a timestamp from a client that already has one. A date nobody can
+    read is refused rather than silently dropped — a product quietly missing the
+    one thing that was being set is worse than an error.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"I could not read {value!r} as a date: try 2026-03-01")
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    if re.fullmatch(r"\d{4}", text):
+        text += "-01-01"
+    elif re.fullmatch(r"\d{4}-\d{2}", text):
+        text += "-01"
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        pass
+    try:
+        # A client that has a timestamp and sent it as text.
+        return float(text)
+    except ValueError:
+        raise ValueError(f"I could not read {value!r} as a date: try 2026-03-01")
+
+
+def repo_path(path) -> str:
+    """A repository path, as this side compares two of them.
+
+    Lexical and nothing else: `resolve()` would touch the filesystem, and the
+    folder a card names may have been renamed or be on a volume that is not
+    mounted, neither of which changes which product owns it. Windows sends
+    backslashes and the same checkout may arrive with a trailing separator, so
+    both are flattened.
+    """
+    text = str(path or "").strip().replace("\\", "/")
+    while len(text) > 1 and text.endswith("/"):
+        text = text[:-1]
+    return text
 
 
 def project_name_for(repo: str, project_for: Callable[[str], str | None] | None) -> str:
@@ -256,7 +367,43 @@ def migrate(conn: sqlite3.Connection) -> None:
         for col, decl in cols:
             if col not in have:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    _seed_unfiled(conn)
     conn.commit()
+
+
+def _seed_unfiled(conn: sqlite3.Connection) -> None:
+    """The one place a card can be, on no product's board.
+
+    Making a product is a decision a person takes, so the mirror does not take
+    it — and a ticket out of a folder no product owns still has to land where it
+    can be found again. Hence exactly one holding row, written here, by the
+    migration, once: the mirror only ever puts cards in it.
+
+    It is `hidden`, which is the whole of the difference between this and what
+    the mirror used to do. A hidden row is in no project list, in no dashboard
+    count and in nobody's board — so a strange folder costs a line under
+    "unfiled" rather than a product nobody created.
+
+    A database that already has a project of this slug — one the old mirror made
+    — is adopted rather than argued with: it becomes the holding place and its
+    cards are already where they belong.
+    """
+    now = time.time()
+    conn.execute(
+        "INSERT INTO projects (id,name,slug,summary,kind,started_at,sort,archived,hidden,"
+        "created_at,updated_at) SELECT ?,?,?,'','',NULL,0,0,1,?,? WHERE NOT EXISTS"
+        " (SELECT 1 FROM projects WHERE slug=?)",
+        (UNFILED, UNFILED_NAME, UNFILED, now, now, UNFILED))
+    conn.execute("UPDATE projects SET hidden=1 WHERE slug=? AND hidden!=1", (UNFILED,))
+    # It needs the one branch a card can sit on. `ensure_branch` is a Board
+    # method and the migration runs before there is a Board, so it is said here
+    # in SQL, guarded by the same unique index that guards that method.
+    conn.execute(
+        "INSERT INTO branches (id,project_id,kind,name,summary,summary_at,sort,created_at)"
+        " SELECT ?,p.id,'engineering',?,'',NULL,0,? FROM projects p WHERE p.slug=?"
+        " AND NOT EXISTS (SELECT 1 FROM branches b WHERE b.project_id=p.id"
+        " AND b.kind='engineering')",
+        (new_id(), BRANCH_NAMES["engineering"], now, UNFILED))
 
 
 class Board:
@@ -274,8 +421,10 @@ class Board:
     # ── projects and branches ──────────────────────────────────────────────
 
     def list_projects(self) -> list[dict]:
+        """The products. Not the archived ones, and never the holding place."""
         rows = self._c.execute(
-            "SELECT * FROM projects WHERE archived=0 ORDER BY sort, name").fetchall()
+            "SELECT * FROM projects WHERE archived=0 AND hidden=0 ORDER BY sort, name"
+        ).fetchall()
         return [self._project(r) for r in rows]
 
     def get_project(self, pid: str) -> dict | None:
@@ -287,52 +436,201 @@ class Board:
                             (slugify(name),)).fetchone()
         return self._project(r) if r else None
 
-    def create_project(self, name: str, repos: list[str] | None = None,
-                       branches: list[str] | None = None) -> dict:
-        """A product, with its branches and the repositories it owns.
+    def find_project(self, ref: str) -> dict | None:
+        """A product by its id, its slug, or the name on the screen.
 
-        The branch list is the default five plus whatever else was asked for:
-        a product with a support desk gets a support branch here rather than in
-        a migration, and one that never needs SEO simply never looks at it.
+        Three spellings of one question, asked in the order that cannot be
+        ambiguous: an id is unique, a slug is unique, and a name is neither but
+        is what a person says out loud. The last is why this exists at all — the
+        entrance to a project is a sentence in a chat, and `divan.project.update
+        {project: "Divan"}` has to work without anybody looking up a hex id.
+        """
+        ref = (ref or "").strip()
+        if not ref:
+            return None
+        for sql, arg in (("id=?", ref), ("slug=?", ref), ("slug=?", slugify(ref)),
+                         ("name=?", ref)):
+            r = self._c.execute(f"SELECT * FROM projects WHERE {sql} ORDER BY sort, name",
+                                (arg,)).fetchone()
+            if r is not None:
+                return self._project(r)
+        return None
+
+    def unfiled_project(self) -> dict:
+        """The holding place: the one row in this table that is not a product.
+
+        Seeded by the migration, so it is here on every database this daemon has
+        opened. Read by slug rather than by id, because a database whose old
+        mirror already made an `unfiled` project has that row adopted as the
+        holding place.
+        """
+        r = self._c.execute("SELECT * FROM projects WHERE slug=?", (UNFILED,)).fetchone()
+        if r is None:                                            # pragma: no cover
+            raise ValueError("the unfiled holding place is missing; run the migration")
+        return self._project(r)
+
+    def create_project(self, name: str, repos: list[str] | None = None,
+                       branches: list[str] | None = None, *, slug: str | None = None,
+                       kind: Any = "", summary: str = "",
+                       started_at: Any = None) -> dict:
+        """A product, with its branches, its repositories and what it is.
+
+        **The only thing on this computer that writes a row into `projects`.**
+        Nothing derives a product from a folder any more: the mirror files the
+        work it finds and a product exists because somebody said it does, which
+        is this call and the one request that reaches it.
+
+        Everything past the name is optional and stays empty on the four
+        products that predate it. `kind` is a word (`PROJECT_KINDS` is the list
+        of suggestions, not a fence), `summary` is what the product is *for* in
+        a sentence or two, and `started_at` is the day it actually began, which
+        has nothing to do with the day this row was written.
+
+        `slug` is the cross-machine key and is normally the name, slugged. It is
+        given by hand for the one case that needs it: a product whose visible
+        name has moved away from the checkout every machine knows it by — Divan,
+        in `remote-ai-chat`.
+
+        The branch list is the default five plus whatever else was asked for: a
+        product with a support desk gets a support branch here rather than in a
+        migration, and one that never needs SEO simply never looks at it.
         """
         name = (name or "").strip()
         if not name:
             raise ValueError("a project needs a name")
-        existing = self.project_by_name(name)
-        if existing:
+        key = slugify(slug) if (slug or "").strip() else slugify(name)
+        if key == UNFILED:
+            raise ValueError(f"'{UNFILED}' is reserved for the cards no product has claimed")
+        if self._c.execute("SELECT 1 FROM projects WHERE slug=?", (key,)).fetchone():
             raise ValueError("a project with that name already exists")
         now = time.time()
-        row = {"id": new_id(), "name": name[:MAX_TITLE], "slug": slugify(name),
-               "summary": "", "sort": 0, "archived": 0,
+        row = {"id": new_id(), "name": name[:MAX_TITLE], "slug": key,
+               "summary": (summary or "").strip()[:MAX_SUMMARY],
+               "kind": project_kind(kind), "started_at": parse_when(started_at),
+               "sort": 0, "archived": 0, "hidden": 0,
                "created_at": now, "updated_at": now}
+        cols = ",".join(row)
+        vals = ",".join(":" + k for k in row)
         with self._lock:
-            self._c.execute(
-                "INSERT INTO projects (id,name,slug,summary,sort,archived,created_at,updated_at)"
-                " VALUES (:id,:name,:slug,:summary,:sort,:archived,:created_at,:updated_at)", row)
+            self._c.execute(f"INSERT INTO projects ({cols}) VALUES ({vals})", row)
             self._c.commit()
         kinds = list(BRANCH_KINDS) + [k for k in (branches or []) if k not in BRANCH_KINDS]
-        for i, kind in enumerate(kinds):
-            self.ensure_branch(row["id"], kind, sort=i)
+        for i, kind_name in enumerate(kinds):
+            self.ensure_branch(row["id"], kind_name, sort=i)
         for path in repos or []:
             self.attach_repo(row["id"], path)
         return self.get_project(row["id"])
 
-    def ensure_project(self, name: str, repo: str | None = None) -> dict:
-        """The project of this name, created if this computer has not met it yet.
+    def update_project(self, project_id: str, **fields: Any) -> dict:
+        """Change a product: its name, what it is, what it is for, when it
+        began, where its code is, and whether it is still on the board.
 
-        The import path: a ticket names a product, and the product either
-        already has a board or is about to.
+        The other half of the entrance. There is no form for a project anywhere
+        in the clients and none is planned — a product is made and changed by
+        saying so, in a chat, to the agent that can call this — so this takes
+        every field `create_project` does and answers a wrong word with the list
+        of right ones rather than ignoring it. A quiet no-op is the one thing a
+        conversational entrance cannot afford.
+
+        `repos` is the list, not an addition to it: a product whose API moved is
+        told where its repositories are now. `slug` is absent on purpose. It is
+        the key two machines fold the same product under, so a rename moves the
+        name and leaves the key — which is exactly how a product can be called
+        Divan while every computer still knows it as `remote-ai-chat`.
         """
-        found = self.project_by_name(name)
+        project = self.get_project(project_id)
+        if project is None:
+            raise ValueError("no such project")
+        if project["slug"] == UNFILED:
+            raise ValueError("the unfiled holding place is not a project")
+        unknown = sorted(set(fields) - PROJECT_FIELDS)
+        if unknown:
+            raise ValueError(f"a project has no {', '.join(unknown)}"
+                             f" — it has {', '.join(sorted(PROJECT_FIELDS))}")
+        out: dict[str, Any] = {}
+        if "name" in fields:
+            name = str(fields["name"] or "").strip()
+            if not name:
+                raise ValueError("a project needs a name")
+            out["name"] = name[:MAX_TITLE]
+        for said in ("summary", "purpose"):
+            if said in fields:
+                out["summary"] = str(fields[said] or "").strip()[:MAX_SUMMARY]
+        if "kind" in fields:
+            out["kind"] = project_kind(fields["kind"])
+        if "started_at" in fields:
+            out["started_at"] = parse_when(fields["started_at"])
+        if "sort" in fields:
+            try:
+                out["sort"] = int(fields["sort"])
+            except (TypeError, ValueError):
+                raise ValueError("sort is a number")
+        if "archived" in fields:
+            out["archived"] = 1 if fields["archived"] else 0
+        if out:
+            out["updated_at"] = time.time()
+            sets = ",".join(f"{k}=:{k}" for k in out)
+            out["id"] = project_id
+            with self._lock:
+                self._c.execute(f"UPDATE projects SET {sets} WHERE id=:id", out)
+                self._c.commit()
+        if "repos" in fields:
+            paths = [repo_path(x) for x in _lines(fields["repos"])]
+            with self._lock:
+                self._c.execute("DELETE FROM project_repos WHERE project_id=?", (project_id,))
+                self._c.executemany(
+                    "INSERT OR IGNORE INTO project_repos (project_id, path) VALUES (?,?)",
+                    [(project_id, x) for x in paths if x])
+                self._c.execute("UPDATE projects SET updated_at=? WHERE id=?",
+                                (time.time(), project_id))
+                self._c.commit()
+        return self.get_project(project_id)
+
+    def project_for_repo(self, repo: str) -> dict | None:
+        """The product whose repository this path is in, or none.
+
+        Asked **before** any name, because the path is the fact and the name is
+        a label. `~/projects/babysee/app` is work on babysee because babysee owns
+        that folder; and the product checked out in `remote-ai-chat` is called
+        Divan, which no rule about folder names would ever have guessed and
+        which the old mirror used to overwrite.
+
+        The longest registered path containing it wins, so a product that owns
+        both `x` and `x/api` gets the one that is nearer the work.
+        """
+        path = repo_path(repo)
+        if not path:
+            return None
+        best: tuple[str, str] | None = None
+        for row in self._c.execute("SELECT project_id, path FROM project_repos"):
+            owned = repo_path(row["path"])
+            if not owned:
+                continue
+            if path == owned or path.startswith(owned + "/"):
+                if best is None or len(owned) > len(best[1]):
+                    best = (row["project_id"], owned)
+        return self.get_project(best[0]) if best else None
+
+    def project_for_ticket(self, ticket: dict,
+                           project_for: Callable[[str], str | None] | None = None
+                           ) -> dict:
+        """Which board a queue ticket's card belongs on. Nothing is created here.
+
+        The path first, the name second, the holding place last. The name is
+        still asked because a product may own no repository yet and a ticket may
+        carry one nobody registered; the holding place is what makes the first
+        two able to answer "no" without a product being invented.
+        """
+        found = self.project_for_repo(ticket.get("repo") or "")
         if found is None:
-            found = self.create_project(name)
-        if repo:
-            self.attach_repo(found["id"], repo)
-            found = self.get_project(found["id"])
-        return found
+            found = self.project_by_name(
+                (ticket.get("project") or "").strip()
+                or project_name_for(ticket.get("repo") or "", project_for))
+        return found or self.unfiled_project()
 
     def attach_repo(self, project_id: str, path: str) -> None:
-        path = (path or "").strip()
+        """One more repository on a product. Written as it will be compared."""
+        path = repo_path(path)
         if not path:
             return
         with self._lock:
@@ -633,25 +931,40 @@ class Board:
         `agent_status` and `agent_detail`. It does not touch `column`, it does
         not touch `position`, and a ticket that finishes, fails or is picked up
         by a worker while nobody is watching leaves its card where it is.
+
+        Neither of them creates a product, and neither writes anything else a
+        person owns: no project row, no branch, not even a repository added to
+        somebody's product because a ticket mentioned a folder inside it. The
+        whole of what this writes is cards and the marks on them. What it cannot
+        place goes to the holding place, and `filed` counts the cards it was
+        able to move out of there afterwards, once a product claimed their path.
         """
         if not snapshot.get("available"):
-            return {"imported": 0, "mirrored": 0}
-        imported = mirrored = 0
+            return {"imported": 0, "mirrored": 0, "filed": 0}
+        imported = mirrored = filed = 0
         for ticket in snapshot.get("tickets") or []:
             card = self.card_by_ustabasi(ticket["id"])
             if card is None:
                 self._import_ticket(ticket, machine, project_for)
                 imported += 1
-            elif self._mirror(card, ticket):
+                continue
+            if self._refile(card, ticket, project_for):
+                filed += 1
+                card = self.get_card(card["id"]) or card
+            if self._mirror(card, ticket):
                 mirrored += 1
-        return {"imported": imported, "mirrored": mirrored}
+        return {"imported": imported, "mirrored": mirrored, "filed": filed}
 
     def _import_ticket(self, ticket: dict, machine: str | None,
                        project_for: Callable[[str], str | None] | None) -> dict:
-        name = (ticket.get("project") or "").strip() or project_name_for(
-            ticket.get("repo") or "", project_for)
-        project = self.ensure_project(name, ticket.get("repo"))
-        self.ensure_branch(project["id"], "engineering")
+        project = self.project_for_ticket(ticket, project_for)
+        branch = self._import_branch(project)
+        if branch is None:
+            # A product with no branch at all is one this import cannot sit on,
+            # and adding one is a decision about a product. The holding place
+            # has had its engineering branch since the migration.
+            project = self.unfiled_project()
+            branch = self._import_branch(project)
         status, detail = self._status_of(ticket)
         card = self.create_card(
             project["id"],
@@ -659,7 +972,7 @@ class Board:
             # Nothing of the agent's goes on the human face, not even on a card
             # that was an agent's ticket before it was a card.
             summary="",
-            branch="engineering",
+            branch=branch["kind"],
             column=IMPORT_COLUMN.get(ticket.get("status") or "", "queued"),
             executor="coding_agent", machine=machine, repo=ticket.get("repo"),
             agent={"goal": ticket.get("goal") or "",
@@ -671,6 +984,57 @@ class Board:
                 (status, time.time(), detail, card["id"]))
             self._c.commit()
         return self.get_card(card["id"])
+
+    def _import_branch(self, project: dict) -> dict | None:
+        """The branch an imported card lands on.
+
+        Engineering, which every product gets on the day it is created — or, on
+        a product somebody has rearranged, whichever branch it has first. The
+        mirror does not add one: a face of a product is a decision too.
+        """
+        return (self.branch(project["id"], "engineering")
+                or (self.branches(project["id"]) or [None])[0])
+
+    def _refile(self, card: dict, ticket: dict,
+                project_for: Callable[[str], str | None] | None) -> bool:
+        """A card in the holding place, put on the board that now claims it.
+
+        The one move the mirror is allowed, and it is not a move on anybody's
+        board: a card lands in the holding place because no product owned its
+        folder at the time, and the answer to that is usually somebody creating
+        the product a day later. Without this the card would sit under "unfiled"
+        for ever and the board it belongs to would look empty.
+
+        Cards that are already on a product's board are never touched. That one
+        is where a person put it, and the whole rule of this side is that the
+        mirror does not move those.
+        """
+        if card["project_id"] != self.unfiled_project()["id"]:
+            return False
+        project = self.project_for_ticket(ticket, project_for)
+        if project["id"] == card["project_id"]:
+            return False
+        branch = self._import_branch(project)
+        if branch is None:
+            return False
+        with self._lock:
+            # The bottom of the column it is already in: the column was read off
+            # the ticket's status when it was imported and is still the truest
+            # thing said about it, and the order of a column it is arriving in
+            # is not this side's to guess at.
+            n = self._c.execute(
+                "SELECT COUNT(*) FROM cards WHERE project_id=? AND column=?",
+                (project["id"], card["column"])).fetchone()[0]
+            self._c.execute(
+                "UPDATE cards SET project_id=?, branch_id=?, position=?, updated_at=?"
+                " WHERE id=?", (project["id"], branch["id"], n, time.time(), card["id"]))
+            # …and the gap it left behind in the holding place.
+            self._c.execute(
+                "UPDATE cards SET position = position - 1"
+                " WHERE project_id=? AND column=? AND position > ?",
+                (card["project_id"], card["column"], card["position"]))
+            self._c.commit()
+        return True
 
     def _mirror(self, card: dict, ticket: dict) -> bool:
         status, detail = self._status_of(ticket)
@@ -704,8 +1068,10 @@ class Board:
             "SELECT path FROM project_repos WHERE project_id=? ORDER BY path",
             (r["id"],)).fetchall()]
         return {"id": r["id"], "name": r["name"], "slug": r["slug"],
-                "summary": r["summary"] or "", "sort": r["sort"],
-                "archived": bool(r["archived"]), "repos": repos,
+                "summary": r["summary"] or "", "kind": r["kind"] or "",
+                "started_at": r["started_at"], "sort": r["sort"],
+                "archived": bool(r["archived"]), "hidden": bool(r["hidden"]),
+                "repos": repos,
                 "created_at": r["created_at"], "updated_at": r["updated_at"]}
 
     def _card(self, r: sqlite3.Row, agent: bool = False) -> dict:
@@ -800,6 +1166,13 @@ class Board:
         for ever, the counts beside each project already say how many are in it,
         and nothing on a dashboard is drawn from a card finished last March.
 
+        `unfiled` is the same list for the work no product has claimed: a ticket
+        out of a folder this computer's board knows nothing about is a card in
+        the holding place, and it travels here so that it can be seen and filed
+        rather than quietly waiting in a project nobody made. It is deliberately
+        *not* in `projects`: it is in no count, no dashboard total and no
+        product's board, because a strange folder is not a product.
+
         `activity` is what git says about the repositories those products own —
         the one thing on the answer that is not the board. It is keyed by path
         and not by project so that a phone holding two machines can tell the
@@ -813,13 +1186,21 @@ class Board:
         # project it was never told about.
         cards = [c for c in self.cards()
                  if c["project_id"] in mine and c["column"] != "done"]
+        holder = self.unfiled_project()
+        unfiled = [c for c in self.cards(holder["id"]) if c["column"] != "done"]
         names = {p["id"]: p["name"] for p in projects}
+        names[holder["id"]] = holder["name"]
         return {
             "machine": machine,
             "projects": [self.project_view(p) for p in projects],
             "cards": cards,
+            "unfiled": unfiled,
+            "unfiled_project_id": holder["id"],
+            # Every agent actually at work on this computer, including one on a
+            # card nothing has claimed: a worker is running whether or not the
+            # board has worked out whose product it is.
             "agents": [self._agent_view(c, machine, names.get(c["project_id"], ""))
-                       for c in cards if c["agent_status"] == "running"],
+                       for c in cards + unfiled if c["agent_status"] == "running"],
             "activity": activity_of([path for p in projects for path in p["repos"]]),
         }
 
