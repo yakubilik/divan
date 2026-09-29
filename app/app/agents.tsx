@@ -5,11 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { agentAccountOf, useStore, useT } from '../src/store';
 import { client } from '../src/ws';
 import { useColors } from '../src/theme';
-import { Icon, Skeleton, Tabs, Text } from '../src/components/ui';
+import { BackBar, Icon, LargeTitle, Skeleton, Text } from '../src/components/ui';
 import { alert, measure, openMenu } from '../src/components/overlay';
 import { accountOptions } from '../src/components/pickers';
 import { AgentCard } from '../src/components/agentcard';
-import { HomeTop } from '../src/components/home';
 import type { Agent } from '../src/protocol';
 
 /** Two columns of squares, the way an app grid reads. */
@@ -107,10 +106,13 @@ export default function Agents() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
-      <HomeTop tab="agents" />
-      <Tabs value={1} labels={[T('chatsTab'), T('agentsTab')]} onChange={() => router.replace('/chats')} />
+      {/* Moved under Machine, where everything about a computer now lives: no
+          computer picker over it and no chats tab beside it — one page with a
+          way back to the list it was opened from. */}
+      <BackBar onPress={() => router.back()} />
+      <LargeTitle style={{ paddingTop: 2, paddingBottom: 8 }}>{T('mAgents')}</LargeTitle>
       <Pressable ref={change} onPress={() => void pickAccount()}
-        style={{ marginTop: 14, marginHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.fill, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
+        style={{ marginTop: 4, marginHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.fill, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
         <Text numberOfLines={1} style={{ fontSize: 13, color: c.muted, flex: 1 }}>{T('agentsFor')}<Text style={{ color: c.ink, fontWeight: '600' }}>{accountLabel}</Text></Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text style={{ fontSize: 13, fontWeight: '600' }}>{T('change')}</Text>

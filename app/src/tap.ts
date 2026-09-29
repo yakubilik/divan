@@ -115,11 +115,16 @@ export interface Nav {
 
 /** Open what a tap is about.
  *
- *  The stack is popped back to the list first, so that Back leaves the app
- *  rather than walking down through whatever was open when the banner arrived.
+ *  The stack is popped back to the place the app opens on first, so that Back
+ *  leaves the app rather than walking down through whatever was open when the
+ *  banner arrived. That used to be the chat list; Divan's first place is the
+ *  Dashboard (`src/shell.ts`, `HOME` — written out here rather than imported,
+ *  because this file is read on its own by scripts/test-ustabasi.cjs, which is
+ *  also where the two are checked against each other).
+ *
  *  Of the pushes, only the last one matters — the wall under a ticket is a
  *  courtesy, and a courtesy that throws must not cost the tap its ticket. */
-export function follow(tap: Tap, nav: Nav, home = '/chats'): string[] {
+export function follow(tap: Tap, nav: Nav, home = '/dashboard'): string[] {
   const routes = routeForTap(tap);
   if (!routes.length) return [];
   try { if (nav.canDismiss()) nav.dismissTo(home); } catch {}

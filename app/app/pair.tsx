@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import { useStore, useT } from '../src/store';
+import { HOME } from '../src/shell';
 import { useColors } from '../src/theme';
 import { BackBar, Button, Card, Icon, LargeTitle, Text, TextInput } from '../src/components/ui';
 import { alert } from '../src/components/overlay';
@@ -50,7 +51,7 @@ export default function Pair() {
     try {
       await addHost(cfg);
       if (router.canGoBack()) router.dismissAll();
-      router.replace('/chats');
+      router.replace(HOME);
     } finally { setBusy(false); }
   }
 

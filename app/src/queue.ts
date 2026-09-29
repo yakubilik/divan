@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useStore } from './store';
-import { oldHost, POLL_MS, RUN_POLL_MS, wall, type Wall } from './tickets';
+import { BADGE_POLL_MS, oldHost, POLL_MS, redCount, RUN_POLL_MS, wall, type Wall } from './tickets';
 import { attach, silence, trim, turns, type RunSilence, type Turn } from './transcript';
 import { DIVAN_POLL_MS, entries, merge, type DivanView } from './divan';
 import type { Ticket, UstabasiSnapshot } from './protocol';
@@ -39,6 +39,39 @@ export function useQueue(): {
 
   return { snapshot, tickets: snapshot?.tickets ?? [], error,
            state: wall({ online, snapshot, error, oldHost: old }) , reload };
+}
+
+/** The same queue, asked slowly, for the one line about it that is on a screen
+ *  nobody opened the wall from: how many of its tickets stopped to ask.
+ *
+ *  Nothing else keeps that number honest. The queue is asked once on connect
+ *  and then only by the wall, which is not open — so a ticket that went red an
+ *  hour ago would sit behind an unbadged row until something reconnected. Asked
+ *  again on the way back to the foreground, and slowly while the Dashboard is
+ *  up: one local read a minute, against a ticket nobody would otherwise find
+ *  out about for hours.
+ *
+ *  …and not at all on a computer that has already said it does not know the
+ *  request: that answer cannot change without a restart, and a minute is a long
+ *  time to keep asking a question already answered. */
+export function useQueueBadge(): { available: boolean; red: number } {
+  const conn = useStore((s) => s.conn);
+  const snapshot = useStore((s) => s.ustabasi);
+  const old = useStore((s) => s.ustabasiOld);
+  const loadUstabasi = useStore((s) => s.loadUstabasi);
+
+  useFocusEffect(useCallback(() => {
+    if (conn !== 'online' || old) return;
+    void loadUstabasi();
+    const timer = setInterval(() => void loadUstabasi(), BADGE_POLL_MS);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void loadUstabasi(); });
+    return () => { clearInterval(timer); sub.remove(); };
+  }, [conn, old, loadUstabasi]));
+
+  return {
+    available: !!snapshot?.available,
+    red: snapshot?.available ? redCount(snapshot.tickets) : 0,
+  };
 }
 
 /** A clock for the "twelve minutes in this state" lines, in seconds. Nothing

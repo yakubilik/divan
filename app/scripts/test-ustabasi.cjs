@@ -8,9 +8,10 @@
  *  spinner that never stops, and a push about a red ticket has to land on the
  *  ticket rather than on the chat list.
  *
- *  `scripts/test-divan.cjs` and `scripts/test-divan-merge.cjs` are folded in at
- *  the end — the design system and the merged view across several machines each
- *  have their own file — and this is the command that runs everything.
+ *  `scripts/test-divan.cjs`, `scripts/test-divan-merge.cjs` and
+ *  `scripts/test-shell.cjs` are folded in at the end — the design system, the
+ *  merged view across several machines and Divan's three places each have their
+ *  own file — and this is the command that runs everything.
  *
  *  Run: node scripts/test-ustabasi.cjs
  */
@@ -338,7 +339,7 @@ const table = fs.readFileSync(path.join(root, 'src/i18n.ts'), 'utf8');
 // Entries share lines, so this matches every `key: '…'` rather than one a line.
 const known = new Set([...table.matchAll(/([A-Za-z0-9_]+):\s*['"]/g)].map((m) => m[1]));
 const screens = ['app/ustabasi.tsx', 'app/ticket/[id].tsx', 'app/ticket-about/[id].tsx',
-                 'src/components/ticket.tsx', 'src/components/home.tsx'];
+                 'src/components/ticket.tsx', 'app/dashboard.tsx'];
 const used = new Set();
 for (const f of screens) {
   const src = fs.readFileSync(path.join(root, f), 'utf8');
@@ -439,9 +440,9 @@ checks.push(
   P.follow(tap, n);
   checks.push(
     ['the queue\u2019s push is followed to its ticket, with the wall under it',
-      n.calls.join(' | ') === 'dismissTo /chats | push /ustabasi | push /ticket/7'],
-    ['\u2026and the stack is popped back to the list first, not pushed on top of',
-      n.calls[0] === 'dismissTo /chats'],
+      n.calls.join(' | ') === 'dismissTo /dashboard | push /ustabasi | push /ticket/7'],
+    ['\u2026and the stack is popped back to the place the app opens on, not pushed on top of',
+      n.calls[0] === 'dismissTo /dashboard'],
   );
 }
 
@@ -452,7 +453,7 @@ checks.push(
   const n = nav();
   P.follow(taps.take(AWAKE), n);
   checks.push(['a chat push still opens its chat, and no wall',
-    n.calls.join(' | ') === 'dismissTo /chats | push /chat/abc']);
+    n.calls.join(' | ') === 'dismissTo /dashboard | push /chat/abc']);
 }
 
 {
@@ -471,8 +472,8 @@ checks.push(
     ['nor is one on a locked app', lockedStill === null],
     ['\u2026it is held', held === true],
     ['\u2026and delivered once the app is ready and unlocked', late && late.ticket === 7],
-    ['\u2026landing on the ticket rather than on the chat list',
-      n.calls.join(' | ') === 'dismissTo /chats | push /ustabasi | push /ticket/7'],
+    ['\u2026landing on the ticket rather than on the Dashboard it was popped back to',
+      n.calls.join(' | ') === 'dismissTo /dashboard | push /ustabasi | push /ticket/7'],
     ['\u2026and only once', taps.take(AWAKE) === null && taps.held === false],
   );
 }
@@ -1047,7 +1048,7 @@ const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const code = (f) => src(f).split('\n')
   .filter((l) => !/^\s*(?:\/\/|\/?\*)/.test(l)).join('\n');
 const layout = src('app/_layout.tsx');
-const home = src('src/components/home.tsx');
+const dash = src('app/dashboard.tsx');
 const wallScreen = src('app/ustabasi.tsx');
 const detail = src('app/ticket/[id].tsx');
 const about = src('app/ticket-about/[id].tsx');
@@ -1072,8 +1073,13 @@ checks.push(
     /useEffect\(\(\) => \{ void deliverTap\(\); \}, \[ready, locked, deliverTap\]\)/.test(layout)],
   ['nothing routes a notification on its own words',
     !/router\.push\(`\/ticket/.test(layout) && !/router\.push\('\/ustabasi'\)/.test(layout)],
-  ['the chats screen leads to the wall', /router\.push\('\/ustabasi'\)/.test(home)],
-  ['…and badges it with the count that needs a person', /badge=\{red\}/.test(home) && /redCount\(/.test(home)],
+  // The wall used to hang off the chat list's top bar. It is work rather than
+  // infrastructure, so in Divan it hangs off the Dashboard.
+  ['the Dashboard leads to the wall', /router\.push\('\/ustabasi'\)/.test(dash)],
+  ['…and says how many of its tickets need a person',
+    /queue\.red/.test(dash) && /redCount\(/.test(queueHook)],
+  ['…on a number that is re-read slowly rather than once on connect',
+    /setInterval\(\(\) => void loadUstabasi\(\), BADGE_POLL_MS\)/.test(queueHook)],
   ['a card on the wall opens its ticket', /router\.push\(`\/ticket\/\$\{t\.id\}`\)/.test(wallScreen)],
   ['the opened ticket is the only thing that writes', /noteTicket\(/.test(detail)],
   ['and the wall itself writes nothing', !/noteTicket\(/.test(wallScreen)],
@@ -1212,7 +1218,7 @@ checks.push(
 // offer, and would be a fourth string here.
 const calls = new Set();
 for (const f of ['src/store.ts', 'src/queue.ts', 'app/ustabasi.tsx', 'app/ticket/[id].tsx',
-                 'app/ticket-about/[id].tsx', 'src/components/ticket.tsx', 'src/components/home.tsx']) {
+                 'app/ticket-about/[id].tsx', 'src/components/ticket.tsx', 'app/dashboard.tsx']) {
   for (const m of src(f).matchAll(/'(ustabasi\.[a-z.]+)'/g)) calls.add(m[1]);
 }
 checks.push([`the screens ask the computer for three things and no more (${[...calls].sort().join(', ')})`,
@@ -1226,6 +1232,9 @@ checks.push([`the screens ask the computer for three things and no more (${[...c
 // without a phone.
 checks.push(...require('./test-divan.cjs').checks);
 checks.push(...require('./test-divan-merge.cjs').checks);
+// …and the shell those screens stand in: the three places, the project bar,
+// and everything about a computer having moved under the third one.
+checks.push(...require('./test-shell.cjs').checks);
 
 let bad = 0;
 for (const [name, ok] of checks) {
