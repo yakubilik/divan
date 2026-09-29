@@ -1385,8 +1385,11 @@ def _float(text: str | None) -> float | None:
 _PULLS_TTL = 600.0
 _pulls_cache: dict[str, tuple[float, dict | None]] = {}
 
-#: Shorter than git's, because this one can hang on DNS rather than on disk.
-_GH_TIMEOUT_S = 2.5
+#: Shorter than git's, because this one can hang on DNS rather than on disk — and
+#: because the git readings above have already had their share of the eight
+#: seconds the phone allows a machine for the whole answer. One `gh` that is
+#: slower than this is a slow network, and its answer arrives on the next poll.
+_GH_TIMEOUT_S = 2.0
 
 #: …and a smaller budget than the git readings have, for the same reason. It is
 #: spent on new readings only; everything already known travels for free.
