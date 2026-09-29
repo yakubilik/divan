@@ -460,6 +460,20 @@ const en = {
   caLiveQuietBody: 'No worker is printing anything on this card right now.',
   caGone: 'That card is not on any board any more',
   caGoneBody: 'It may have been deleted, or the computer it was on has not answered yet.',
+  // the fastest screen (src/compose.ts): a title, two or three sentences, and
+  // two buttons. There is no string here for an executor or a brief, because
+  // there is no field for one.
+  ntAdd: '+ ticket', ntNew: 'New ticket',
+  ntTitleHint: 'What is it?',
+  ntSummaryHint: 'Two or three sentences, or none.',
+  ntLater: 'executor & agent brief: later, or drafted by Divan',
+  ntCount: '{n} / {max}',
+  ntIceBox: 'Add to Ice Box', ntQueued: 'Queue it',
+  ntOn: 'on {machine}',
+  ntQuiet: '{machine} has not answered lately. Filing it will say whether that stuck.',
+  ntNotFiled: "Couldn't write it down on {machine}",
+  ntNowhere: 'Nowhere to put a card yet',
+  ntNowhereBody: 'No paired computer has answered with a product on it, so there is no board for this to land on.',
   chatPlacePick: 'Pick a folder and a model for this conversation.',
   mTitle: 'Machine', mSubtitle: 'Infrastructure. Nothing here needs you.',
   mMachines: 'Machines', mMachinesNote: '{n} paired',

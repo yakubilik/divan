@@ -22,7 +22,7 @@ import {
 import {
   SETTLE_MS, back, carry, foot as dropFoot, hint, says, type Carried, type Landed,
 } from '../src/drag';
-import { ColumnTabs, EmptyState, ListRow, SectionHeader, Segments } from '../src/components/divan';
+import { Button, ColumnTabs, EmptyState, ListRow, SectionHeader, Segments, Tap } from '../src/components/divan';
 import {
   AgentLine, AgentRoster, AskCard, Counters, Note, NoteFoot, ProjectCard, SystemLine,
 } from '../src/components/dashboard';
@@ -333,7 +333,8 @@ function Project({ project: p, index, view, now, ago, face, column, onFace, onCo
   const stale = oldWords(p, now, ago);
   const head = (
     <>
-      <ProjectHead name={p.name} index={index} note={subtitle(p)} />
+      <ProjectHead name={p.name} index={index} note={subtitle(p)}
+        right={face === 'board' ? <AddTicket project={p.key} /> : undefined} />
       {!!stale && (
         <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
           {T(stale.key, stale.params)}
@@ -364,6 +365,24 @@ function Project({ project: p, index, view, now, ago, face, column, onFace, onCo
       {head}
       <Overview project={p} view={view} now={now} ago={ago} />
     </View>
+  );
+}
+
+/** `+ ticket` at the far end of the board's head (Mobile2 V5, Mobile8 S7): mono
+ *  12 in `ink3`, which is the quietest way in this design has. It is the right
+ *  weight for it — writing a card down is the thing done most often here and the
+ *  one that needs the least ceremony, and the screen it opens is the fastest in
+ *  the product (Mobile8 S9). */
+function AddTicket({ project }: { project: string }) {
+  const T = useT();
+  const t = useTokens();
+  const router = useRouter();
+  const go = useNavGuard();
+  return (
+    <Tap onPress={() => go(() => router.push(`/new-ticket?project=${project}`))}
+      style={{ paddingVertical: 6, paddingLeft: 10 }}>
+      <Text mono style={{ fontSize: 12, color: t.ink3 }}>{T('ntAdd')}</Text>
+    </Tap>
   );
 }
 
@@ -465,6 +484,8 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
 }) {
   const T = useT();
   const t = useTokens();
+  const router = useRouter();
+  const go = useNavGuard();
   const moveCard = useStore((s) => s.moveCard);
   const list = items(view, p, column, ago);
   const said = foot(p, column, view.now);
@@ -570,7 +591,11 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
         contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingTop: 6,
                                  paddingBottom: 24, gap: 6 }}>
         {blank(p) ? (
-          <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')} />
+          /* Mobile7 S6's own state, with its own button on it: a board with
+             nothing on it is a board asking for the first card. */
+          <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')}
+            actions={<Button label={T('ntNew')} icon="add" tall
+              onPress={() => go(() => router.push(`/new-ticket?project=${p.key}`))} />} />
         ) : (
           <>
             {air ? <DragHint tone={air.tone} text={words(T, air)} />

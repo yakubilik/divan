@@ -26,11 +26,15 @@ import { em, RADIUS, toneColours, useTokens, type State, type Tone } from '../th
  *
  *  The mono line is content and not ours (`project.ts subtitle`), so a product
  *  nobody has described has no line rather than an invented one. */
-export function ProjectHead({ name, index, note, style }: {
+export function ProjectHead({ name, index, note, right, style }: {
   name: string;
   /** Its place in the project list, so one product is one hue everywhere. */
   index: number | null;
   note?: string;
+  /** What sits at the far end of the head. The board face puts `+ ticket`
+   *  there (Mobile2 V5 and Mobile8 S7 both draw it in the head's far corner);
+   *  the Overview has nothing to put there and passes none. */
+  right?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
@@ -45,6 +49,7 @@ export function ProjectHead({ name, index, note, style }: {
           <Text mono numberOfLines={1} style={{ fontSize: 12, color: t.ink3, marginTop: 5 }}>{note}</Text>
         )}
       </View>
+      {right}
     </View>
   );
 }

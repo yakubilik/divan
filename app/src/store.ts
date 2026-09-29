@@ -5,10 +5,11 @@ import { useCallback } from 'react';
 import { callOnce, client, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, DivanCardDetail, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
-import { answered, DIVAN_TIMEOUT_MS, silent, type HostDivan } from './divan';
+import { answered, DIVAN_TIMEOUT_MS, Polls, silent, type HostDivan } from './divan';
 import { missed, opening, took, type Open, type Say } from './card';
+import { filed, type Filing } from './compose';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -129,6 +130,14 @@ interface State {
    *  running on it and no explanation. */
   moveCard: (what: { card: string; host: string; column: DivanColumn; position?: number | null })
     => Promise<Moved>;
+  /** Write a card down on one computer's board (Mobile8 S9).
+   *
+   *  The other board write, and the quiet one: a card filed into Ice Box or
+   *  Queued starts nothing. Which machine it goes to and what it carries are
+   *  `src/compose.ts`'s; what is here is the pair of requests it takes — the
+   *  card, and then that machine's board again, so the board the phone lands on
+   *  already has it. */
+  createCard: (what: { host: string; card: Filing }) => Promise<void>;
   /** A page of what the agent on a ticket has printed. Nothing of it is kept
    *  here: the log is a river and only the page being read is worth holding,
    *  which is the screen's business and not the store's. */
@@ -357,10 +366,12 @@ function bufferDelta(cid: string, segment: number, text: string) {
   if (!deltaTimer) deltaTimer = setTimeout(flushDeltas, DELTA_FLUSH_MS);
 }
 
-/** Which machines have a Divan poll out right now. Module-level rather than in
- *  the store: it is about a request in flight, not about anything a screen
- *  draws, and a re-render has no business being triggered by it. */
-const divanPolls = new Set<string>();
+/** Which machines have a Divan poll out right now, and whose answer is still
+ *  worth keeping. Module-level rather than in the store: it is about requests
+ *  in flight, not about anything a screen draws, and a re-render has no
+ *  business being triggered by it. The rules themselves are `Polls`
+ *  (`src/divan.ts`), where they can be driven without a phone. */
+const polls = new Polls();
 
 /** …and which card has one out. Module-level for the same reason, and one value
  *  rather than a set because one card is open at a time — but the card itself
@@ -932,9 +943,15 @@ export const useStore = create<State>((set, get) => {
         // A poll that is still out is the answer to this one. Without this, a
         // foreground while a timer's requests are in flight is two requests per
         // machine, and a machine that always times out never stops being asked.
-        if (divanPolls.has(h.id)) return;
-        divanPolls.add(h.id);
-        const put = (d: HostDivan) => set((st) => ({ divan: { ...st.divan, [h.id]: d } }));
+        const era = polls.start(h.id);
+        if (era == null) return;
+        // …and an answer from before something was written to this board is not
+        // an answer about now: it comes back without the card that was just
+        // filed on it, and drawing it would take that card off the board again.
+        const put = (d: HostDivan) => {
+          if (!polls.keep(h.id, era)) return;
+          set((st) => ({ divan: { ...st.divan, [h.id]: d } }));
+        };
         try {
           const active = h.id === get().activeHostId;
           // The live socket for the computer the phone is on, and a socket of
@@ -952,7 +969,7 @@ export const useStore = create<State>((set, get) => {
           // rather than written out again here.
           put(silent(get().divan[h.id], e?.message ?? null, oldHost(e)));
         } finally {
-          divanPolls.delete(h.id);
+          polls.done(h.id);
         }
       }));
     },
@@ -1027,6 +1044,22 @@ export const useStore = create<State>((set, get) => {
                              { card_id: what.card, column: what.column, ...at }) as Moved;
       await get().loadDivan(what.host);
       return { error: r?.error || '' };
+    },
+
+    createCard: async ({ host, card }) => {
+      const made = await onHost<DivanCard>(host, 'divan.card.create', card);
+      // The second half of filing, and the whole of "it appears on the board
+      // without a refresh". The board is merged out of the last answer each
+      // machine gave and the next one is a minute away, so it is told rather
+      // than asked: the row that came back is the row that snapshot will carry
+      // (`compose.filed`), and `wrote` is what stops a poll that went out
+      // before the card from taking it off the board again.
+      polls.wrote(host);
+      set((st) => ({ divan: filed(st.divan, host, made) }));
+      // …and the ordinary read after it, for whatever else that machine has
+      // done. Best effort and only that machine: the board is already right
+      // without it, and a quiet one's read runs to the timeout.
+      void get().loadDivan(host);
     },
 
     noteTicket: async (id, text) => {

@@ -487,24 +487,27 @@ checks.push(
   ['every one of those requests is timed out',
     (store.match(/'divan\.snapshot', \{\}, DIVAN_TIMEOUT_MS\)/g) || []).length === 2],
   ['a machine with a poll already out is not asked twice',
-    /if \(divanPolls\.has\(h\.id\)\) return;/.test(store)],
+    /const era = polls\.start\(h\.id\);\n\s*if \(era == null\) return;/.test(store)],
+  ['…and an answer older than the last thing written to that board is dropped',
+    /if \(!polls\.keep\(h\.id, era\)\) return;/.test(store)],
   ['nothing waits for one machine before asking the next',
     /await Promise\.all\(targets\.map/.test(store)],
   ['an answer is taken through the same reading the merge is checked against',
     /put\(answered\(snap, Date\.now\(\) \/ 1000\)\);/.test(store)],
   ['…and a failed poll through the one that keeps the last answer',
     /put\(silent\(get\(\)\.divan\[h\.id\], e\?\.message \?\? null, oldHost\(e\)\)\);/.test(store)],
-  // Three requests, and one of them is a write. `divan.snapshot` is the whole of
+  // Four requests, and two of them are writes. `divan.snapshot` is the whole of
   // the reading a board is drawn from — one answer per machine, merged here —
   // `divan.card.get` is one card opened, which is the only thing that asks a
-  // machine for a single row, and `divan.card.move` is the one thing a Divan
-  // screen changes about a board. Everything else a board can do (making a card,
-  // rewriting one, setting an executor) is said to the agent in a chat, which is
-  // the entrance the protocol document describes, and would be a fourth string
-  // here.
-  ['the board asks the computer for three things and no more',
+  // machine for a single row, and the two writes are the two things a Divan
+  // screen changes about a board: where a card is (`divan.card.move`, the drag)
+  // and that there is one at all (`divan.card.create`, Mobile8 S9). Everything
+  // else a board can do — rewriting a card, setting an executor, writing an
+  // agent face — is said to the agent in a chat, which is the entrance the
+  // protocol document describes, and would be a fifth string here.
+  ['the board asks the computer for four things and no more',
     [...store.matchAll(/'(divan\.[a-z.]+)'/g)].map((m) => m[1]).join(',')
-      === 'divan.snapshot,divan.snapshot,divan.card.get,divan.card.move'],
+      === 'divan.snapshot,divan.snapshot,divan.card.get,divan.card.move,divan.card.create'],
   // …and the write goes to the machine the card is on, which on a screen made
   // of four computers' boards is not the one this phone holds a socket to.
   ['a write goes to the computer the card is on, by name',
