@@ -34,6 +34,14 @@ const card = (over = {}) => ({
   ...over,
 });
 
+/** A face of a product. `summary` is empty until a source is connected behind
+ *  it, which is every one of them but engineering today. */
+const branch = (kind, over = {}) => ({
+  id: `b-${kind.toLowerCase().replace(/\s+/g, '-')}`, kind, name: kind,
+  summary: '', summary_at: null, cards: {}, open: 0,
+  ...over,
+});
+
 const project = (over = {}) => ({
   id: 'p-quire',
   name: 'Quire',
@@ -68,11 +76,18 @@ export function studio() {
     daemon_version: '0.9.0',
     at: NOW,
     projects: [
-      project({ running: 1, waiting: 2, counts: { ice_box: 1, in_progress: 2, done: 3 } }),
+      project({ running: 1, waiting: 2, counts: { ice_box: 1, in_progress: 2, done: 3 },
+        branches: [
+          branch('Engineering', { summary: 'Bulk invite is three checks in.',
+                                  summary_at: NOW - 600,
+                                  cards: { ice_box: 1, in_progress: 2, done: 3 }, open: 3 }),
+          branch('SEO'),
+        ] }),
       project({
         id: 'p-hush', name: 'Hush', slug: 'hush', summary: 'a quieter phone',
         kind: 'app', repos: ['/Users/x/projects/hush'], sort: 2,
         running: 0, waiting: 0, counts: { done: 2 },
+        branches: [branch('App Review', { cards: { done: 2 } })],
       }),
       // The holding place for work no product has claimed. Never a product, and
       // a screen that drew it as one would be inventing a product out of a
@@ -107,6 +122,12 @@ export function mini() {
       project({
         id: 'q-1', name: 'Quire', slug: 'quire', repos: ['/Users/x/projects/quire-api'],
         running: 1, waiting: 1, counts: { in_progress: 1 },
+        branches: [
+          // The same face on the second machine with nothing written on it: the
+          // summary the studio wrote has to survive the merge.
+          branch('Engineering', { id: 'mb-eng' }),
+          branch('API', { cards: { in_progress: 1 }, open: 1 }),
+        ],
       }),
     ],
     cards: [

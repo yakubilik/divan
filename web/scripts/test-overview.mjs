@@ -57,8 +57,11 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 execFileSync(join(web, 'node_modules', '.bin', 'tsc'), [
   'web/src/App.tsx', 'web/src/lib/divan.ts', 'web/src/lib/overview.ts', 'web/src/lib/sessions.ts',
-  'web/src/screens/Overview.tsx', 'web/src/components/Sessions.tsx', 'web/src/vite-env.d.ts',
-  'app/src/divan.ts', 'app/src/dashboard.ts', 'app/src/waiting.ts', 'app/src/i18n.ts',
+  'web/src/lib/project.ts', 'web/src/lib/ticket.ts',
+  'web/src/screens/Overview.tsx', 'web/src/screens/Project.tsx', 'web/src/screens/Branch.tsx',
+  'web/src/screens/Ticket.tsx', 'web/src/components/Sessions.tsx', 'web/src/vite-env.d.ts',
+  'app/src/divan.ts', 'app/src/dashboard.ts', 'app/src/project.ts', 'app/src/waiting.ts',
+  'app/src/i18n.ts',
   '--outDir', out, '--rootDir', '.',
   '--target', 'ES2022', '--module', 'ESNext', '--moduleResolution', 'bundler',
   '--jsx', 'react-jsx', '--strict', '--skipLibCheck',
@@ -100,13 +103,17 @@ const load = (p) => import(pathToFileURL(join(out, p)).href);
 const K = await load('web/src/lib/theme.js');
 const D = await load('web/src/lib/divan.js');
 const OV = await load('web/src/lib/overview.js');
+const PR = await load('web/src/lib/project.js');
+const TK = await load('web/src/lib/ticket.js');
 const S = await load('web/src/lib/sessions.js');
 const OverviewUI = await load('web/src/screens/Overview.js');
+const TicketUI = await load('web/src/screens/Ticket.js');
 const SessionsUI = await load('web/src/components/Sessions.js');
 const parts = await load('web/src/ui/divan.js');
 // …and the phone, which is the answer this page is held to.
 const PD = await load('app/src/divan.js');
 const PH = await load('app/src/dashboard.js');
+const PP = await load('app/src/project.js');
 const { t } = await load('app/src/i18n.js');
 const { createElement: h } = await import('react');
 const { renderToStaticMarkup } = await import('react-dom/server');
@@ -210,6 +217,14 @@ group('the panel and the phone say the same thing about the same board');
     && phoneScreen.includes("[r.agent.title, detail || when].filter(Boolean).join(' · ')"));
 
   const said = (x) => (x ? t(x.key, x.params) : null);
+  /** One of the phone's two lines as its screen composes it: every clause, with
+   *  the executor each names put into the reader's language. */
+  const line = (x) => ({
+    text: x.clauses
+      .map((c) => t(c.said.key, c.who ? { ...c.said.params, who: t(c.who) } : c.said.params))
+      .join(' '),
+    tone: x.tone,
+  });
   const differ = [];
   for (const name of NAMES) {
     const mine = view(name);
@@ -250,6 +265,25 @@ group('the panel and the phone say the same thing about the same board');
       note(`${card} · the board's own marks`, OV.cardMarks(p), PH.marks(q));
       note(`${card} · the worst card's line`, OV.latest(p.cards), PH.latest(q.cards));
       note(`${card} · whether it is dormant`, OV.dormant(p, mine.now), PH.dormant(q, theirs.now));
+      // The faces of a product, which the merge folds across machines: the
+      // counts add up, and the summary of the machine that has a source behind
+      // it survives the machine that has not.
+      note(`${card} · its faces`,
+        p.branches.map((b) => [b.kind, b.summary, b.summary_at, b.cards, b.open, b.machines]),
+        q.branches.map((b) => [b.kind, b.summary, b.summary_at, b.cards, b.open, b.machines]));
+      note(`${card} · what each face says`,
+        PR.branchCards(p, mine.now).map((b) => [b.key, b.name, b.state, b.line,
+          b.figures, b.refreshed]),
+        PP.branchCards(q, theirs.now).map((b) => [b.key, b.name, b.state,
+          b.said ? said(b.said) : b.text,
+          b.figures.map((f) => ({ value: f.value, label: t(f.label) })),
+          b.refreshed ? { text: said(b.refreshed.said), tone: b.refreshed.tone } : null]));
+      note(`${card} · the two lines at the top`,
+        [PR.nowLine(mine, p), PR.waitingLine(p)],
+        [line(PP.nowWords(theirs, q)), line(PP.waitingWords(theirs, q))]);
+      note(`${card} · whether its board has never been used`,
+        [PR.blank(p), PR.blank(p) ? PR.blankBody(p) : null],
+        [PP.blank(q), PP.blank(q) ? said(PP.blankBody(q)) : null]);
     }
 
     const rows = OV.agentRows(mine);
@@ -268,6 +302,16 @@ group('the panel and the phone say the same thing about the same board');
     busy.projects.length === 2 && busy.agents.length === 2 && busy.cards.length === 5
     && OV.counters(busy).length === 4,
     `${busy.projects.length} products · ${busy.agents.length} agents · ${busy.cards.length} cards`);
+  // …including the faces of a product that is on two machines, which is what
+  // the branch comparison above is about: three from the studio and one only
+  // the mini has, with the studio's summary surviving the mini's empty one.
+  const faces = busy.projects.find((p) => p.key === 'quire').branches;
+  ok('…and a product on two machines has every face either of them knows',
+    faces.map((b) => b.kind).join(' ') === 'Engineering SEO Analytics API'
+    && faces[0].summary === 'Bulk invite is three checks in.'
+    && faces[0].cards.in_progress === 2 && faces[0].open === 3
+    && faces.find((b) => b.kind === 'API').open === 1,
+    faces.map((b) => `${b.kind}:${b.open}`).join(' '));
   ok('…including the three counters that only a fleet in trouble has',
     OV.counters(view('busy')).some((c) => c.label === 'Paused')
     && OV.counters(view('quiet')).some((c) => c.label === 'Unknown' && c.ring)
@@ -377,9 +421,14 @@ group('Web12 W1, and Web13 W3 which is the same page in the light');
   ok('…and every colour it names exists in both themes',
     [...paint(dark).vars].every((n) => K.DARK[n] !== undefined && K.LIGHT[n] !== undefined));
   ok('the page is composed of the parts and spells no style of its own',
-    ['src/screens/Overview.tsx', 'src/components/Sessions.tsx']
+    ['src/screens/Overview.tsx', 'src/components/Sessions.tsx',
+     'src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
       .every((f) => /from '\.\.\/ui\/divan'/.test(src(f))
         && !COLOUR.test(src(f).replace(/\/\*[\s\S]*?\*\//g, ''))));
+  ok('…and none of the pages under a product reaches the chat',
+    ['src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
+      .every((f) => !/from '[^']*(ChatView|Bubble|Timeline|ChatDetails|TicketChat|NewChat)'/
+        .test(src(f))));
   for (const part of ['Note', 'Panel', 'PanelHead', 'Composer', 'Quoted', 'DockTab',
                       'DockMore', 'CommandBar', 'Tag', 'RosterRow']) {
     ok(`${part} is a part rather than something this screen invented`,
@@ -559,7 +608,137 @@ group('a morning where nothing needs anybody is a designed state');
     && (src('src/screens/Overview.tsx').match(/needsYou === 0/g) ?? []).length === 0);
 }
 
-// ── 5 · every board, both themes, nothing thrown ───────────────────────────
+// ── 5 · the three pages under a product ───────────────────────────────────
+
+group('Web14 W6, W7 and W8');
+{
+  const busy = view('busy');
+  const quire = busy.projects.find((p) => p.key === 'quire');
+  const scoped = (props) => renderToStaticMarkup(h(OverviewUI.Overview, {
+    view: busy, project: quire, onProject() {}, ...props,
+  }));
+  const product = scoped({});
+  const engineeringNow = () => scoped({ branch: 'Engineering' });
+  const engineering = engineeringNow();
+  const seo = scoped({ branch: 'SEO' });
+
+  ok('the product page is the two lines, the branches, and their own numbers',
+    /now/.test(product) && /waiting/.test(product)
+    && product.includes('Branches') && product.includes('Engineering')
+    && product.includes('SEO') && product.includes('open') && product.includes('done'));
+  ok('…with the word that opens a new ticket at the end of its head',
+    product.includes('+ New ticket'));
+
+  // A branch with no source connected says so — on the grid, and on the page
+  // the grid opens.
+  ok('a branch with nothing connected behind it says so',
+    product.includes(PR.NO_SOURCE) && seo.includes(PR.NO_SOURCE)
+    && PR.branchCards(quire, busy.now).find((b) => b.kind === 'SEO').sourceless === true);
+  ok('…and one that has a source says what it said instead',
+    engineering.includes('Bulk invite is three checks in.')
+    && !engineering.slice(engineering.indexOf('Engineering'), engineering.indexOf('Repositories'))
+      .includes(PR.NO_SOURCE)
+    && PR.branchCards(quire, busy.now).find((b) => b.kind === 'Engineering').sourceless === false);
+  ok('…and one nothing is connected to but something was said on quotes that',
+    PR.branchCards(quire, busy.now).find((b) => b.kind === 'API').line
+      === 'The provider replays events out of order and I gave up.');
+  ok('a branch page is that face’s numbers, its repositories and what was said on it',
+    engineering.includes('Repositories') && engineering.includes('Cards')
+    && engineering.includes('Recent activity') && engineering.includes('quire')
+    // …and it is the branch's page rather than the product's with a name on it.
+    && !engineering.includes('Branches'));
+  ok('…and a card opens its own page under the same product',
+    scoped({ card: 'studio:k2' }).includes('Agent brief')
+    && !scoped({ card: 'studio:k2' }).includes('Branches'));
+
+  // ── the ticket, and the rule its three faces are kept apart by ──
+  const card = quire.cards.find((c) => c.id === 'k2');
+  const AGENT = {
+    goal: 'Add POST /clients/import accepting text/csv, max 500 rows.',
+    done_criteria: ['dry run valid/duplicate/invalid', 'duplicates on lower(email)',
+                    '501 rows → 422', 'commit idempotent per upload_id', 'preview passes axe'],
+    verify_cmd: 'pnpm test clients/import',
+    constraints: ['No new deps. Don’t touch billing/.'],
+    paths: ['api/src/routes/clients/import.ts'],
+    notes: 'The mailer is rate limited to 100 a minute.',
+  };
+  const QUEUE = {
+    id: 42, title: card.title, status: 'running', stage: 'worker', round: 1, repo: '/w/quire',
+    project: 'Quire', branch: 'Engineering', created_at: NOW - 7200, updated_at: NOW - 240,
+    started_at: NOW - 3600, round_started_at: NOW - 1380, finished_at: null, git: null,
+    goal: '', done_criteria: [], escalation: '', verdict: null, note_count: 1,
+    notes: [{ ts: NOW - 300, from: 'user', text: 'batch the commit, 100 at a time' }],
+    last_event: { ts: NOW - 240, kind: 'run', msg: 'e2e timeout at 501 rows' },
+  };
+  const opened = { full: { ...card, agent: AGENT }, ticket: QUEUE, error: null };
+  const draw = (over = {}) => renderToStaticMarkup(h(TicketUI.TicketPage, {
+    card, project: quire, index: 0, now: busy.now, onProject() {}, onBranch() {},
+    opened, ...over,
+  }));
+  const page = draw();
+  const LABEL = 'What to do · title + 3 sentences';
+  const above = page.slice(0, page.indexOf(LABEL));
+
+  ok('the ticket page is all three faces at once',
+    page.includes(card.title) && page.includes(card.summary)
+    && page.includes(AGENT.goal) && page.includes(AGENT.verify_cmd)
+    && page.includes('Live') && page.includes('Executor'));
+  // The one failure this page could have that nobody would notice: the box
+  // reads perfectly well with the agent's goal in it, and it is the wrong text.
+  ok('nothing an agent wrote is on the human face',
+    [AGENT.goal, AGENT.verify_cmd, AGENT.notes, ...AGENT.done_criteria, ...AGENT.constraints]
+      .every((text) => !above.includes(text))
+    && TK.human({ ...card, ...AGENT }).summary === card.summary,
+    above.slice(Math.max(0, above.length - 300)));
+  ok('…and a card nobody wrote sentences for says so rather than borrowing the goal',
+    TK.human({ title: 'x', summary: '' }).bare === true
+    && TK.human({ title: 'x', summary: '' }).summary === ''
+    && !draw({ card: { ...card, summary: '' } })
+      .slice(0, draw({ card: { ...card, summary: '' } }).indexOf(LABEL)).includes(AGENT.goal));
+
+  // The verifier answers the criteria in order and writes its own wording; a
+  // verdict that answers four of five would put the fourth mark on the fifth
+  // sentence, and a cross against the wrong criterion is a wrong answer to the
+  // question the page exists to answer.
+  const findings = (n) => ({ findings: Array.from({ length: n }, (_, i) => (
+    { criterion: `c${i}`, status: i < 3 ? 'met' : 'unmet' })) });
+  ok('a criterion is marked only when the verdict answers every one of them',
+    TK.brief(opened.full, { ...QUEUE, verdict: findings(5) }).passed === '3/5'
+    && TK.brief(opened.full, { ...QUEUE, verdict: findings(4) }).passed === null
+    && TK.brief(opened.full, { ...QUEUE, verdict: findings(4) }).criteria
+      .every((c) => c.met === null)
+    && TK.brief(opened.full, QUEUE).passed === null);
+  ok('a machine that has not handed the brief over says so, and the card is still readable',
+    draw({ opened: { full: null, ticket: null, error: 'connection refused' } })
+      .includes('did not hand the brief over')
+    && draw({ opened: { full: null, ticket: null, error: 'connection refused' } })
+      .includes(card.title));
+  // The whole of the difference between a frame and its light twin, which is
+  // the claim "in both themes" makes: one attribute on <html>, and not a line
+  // of any of these four pages.
+  const twins = {
+    'W6 · the product': () => scoped({}),
+    'W7 · a branch': () => engineeringNow(),
+    'W8 · a ticket': () => draw(),
+    'W9 · the board': () => scoped({ tab: 'board' }),
+  };
+  const differ = Object.entries(twins).filter(([, of]) => {
+    K.setThemeChoice('dark');
+    const dark = of();
+    K.setThemeChoice('light');
+    const light = of();
+    return dark !== light;
+  }).map(([what]) => what);
+  K.setThemeChoice('dark');
+  ok('each of the four is the same page in the light: the same markup, one attribute apart',
+    differ.length === 0, differ.join(', '));
+
+  ok('…and a card with no ticket behind it offers no box to answer one',
+    !draw({ card: quire.cards.find((c) => c.id === 'k3'), opened: { full: null, ticket: null, error: null } })
+      .includes('Say one sentence'));
+}
+
+// ── 6 · every board, both themes, nothing thrown ───────────────────────────
 
 group('every state of the fleet, drawn');
 {
@@ -571,10 +750,25 @@ group('every state of the fleet, drawn');
     for (const scheme of ['dark', 'light']) {
       K.setThemeChoice(scheme);
       const fleet = view(name);
+      const p = fleet.projects[0] ?? null;
+      const face = p?.branches[0]?.kind ?? null;
+      const one = p?.cards[0] ?? null;
       const screens = {
         Overview: [OverviewUI.Overview, { view: fleet, project: null, onProject() {}, onAsk() {} }],
-        'Overview, scoped': [OverviewUI.Overview, {
-          view: fleet, project: fleet.projects[0] ?? null, onProject() {}, onAsk() {},
+        // The four pages of Web14, each as a reader meets it: inside the page
+        // the product's head hangs over, with the same fleet under it.
+        'W6 · the product': [OverviewUI.Overview, {
+          view: fleet, project: p, onProject() {}, onAsk() {},
+        }],
+        'W9 · the board a card is written on': [OverviewUI.Overview, {
+          view: fleet, project: p, tab: 'board', onProject() {}, onAsk() {},
+        }],
+        'W7 · a branch': [OverviewUI.Overview, {
+          view: fleet, project: p, branch: face, onProject() {}, onAsk() {},
+        }],
+        'W8 · a ticket': [OverviewUI.Overview, {
+          view: fleet, project: p, card: one ? `${one.host}:${one.id}` : null,
+          onProject() {}, onAsk() {},
         }],
         'the sessions on their own': [SessionsUI.Sessions, { view: fleet }],
       };
@@ -593,7 +787,7 @@ group('every state of the fleet, drawn');
   ok('the page stands up on every board, in both themes', broken.length === 0,
     [...new Set(broken)].slice(0, 6).join('\n    '));
   ok('…and there were enough of them for that to mean something',
-    drawn === NAMES.length * 2 * 3, `${drawn} renders`);
+    drawn === NAMES.length * 2 * 6, `${drawn} renders`);
   ok('…none of them painting a value of its own', strayed.length === 0,
     [...new Set(strayed)].slice(0, 6).join(', '));
   ok('…so every colour on every one of them exists in both themes',
