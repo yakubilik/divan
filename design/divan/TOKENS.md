@@ -67,8 +67,8 @@ will not find them.
 | `amberRing` light | `rgba(156,98,16,.35)` | Web13 W3 and W4, the same ring around the asking agent's panel |
 
 **The light `sLift` borrows its role.** Nothing is dragged on a light artboard —
-there is no light drag frame — so there is no light counterpart to Mobile3's
-`--s2` to extract. `#E9E6DE` is a real value of the design: it is the `--s2` of
+there is no light drag frame — so there is no light counterpart to the `--s2`
+of Mobile3's drag frame to extract. `#E9E6DE` is a real value of the design: it is the `--s2` of
 Mobile4 C1, the light chat, and the only raised light surface the frames draw.
 It is used here for the card you are holding, which is a role the artboard does
 not itself assign to it. That is the one provenance claim in this document that
@@ -99,14 +99,20 @@ which React Native cannot read, so each was converted to the sRGB a browser woul
 show (CSS Color 4 gamut mapping; only one of them was outside the gamut at all,
 and it clips to the same value).
 
+The first four of the ramp are drawn together on one screen — Mobile5 S1, the
+dashboard with four projects on it — and the fifth belongs to the project
+Mobile7 S6 invents. All seven executor faces are drawn in a column in
+Mobile11 S14, and the eighth, the one nobody has taken, only in Mobile3's drag
+frame.
+
 | | on the artboard | in code | from |
 |---|---|---|---|
-| project ramp | `oklch(0.48 0.07 265 / 320 / 210 / 130)`, `oklch(0.5 0.07 95)` | `#4A5D86` `#6F5076` `#226873` `#50663A` `#706332` | Mobile1 V1 · Mobile7 S6 |
-| Coder | `oklch(0.46 0.1 275)` | `#48528F` | Mobile11 `EXS` |
-| SEO | `oklch(0.5 0.09 215)` | `#007083` | Mobile11 `EXS` |
-| Analyst | `oklch(0.48 0.07 250)` | `#3E6084` | Mobile11 `EXS` |
-| Research | `oklch(0.47 0.1 330)` | `#7A4475` | Mobile11 `EXS` |
-| a ticket nobody has taken | `oklch(0.6 0.1 275)` outline, `oklch(0.72 0.1 275)` mark | `#6F7BBC` / `#92A0E3` | Mobile3 |
+| project ramp | `oklch(0.48 0.07 265 / 320 / 210 / 130)`, `oklch(0.5 0.07 95)` | `#4A5D86` `#6F5076` `#226873` `#50663A` `#706332` | Mobile5 S1 · Mobile7 S6 |
+| Coder | `oklch(0.46 0.1 275)` | `#48528F` | Mobile11 S14 |
+| SEO | `oklch(0.5 0.09 215)` | `#007083` | Mobile11 S14 |
+| Analyst | `oklch(0.48 0.07 250)` | `#3E6084` | Mobile11 S14 |
+| Research | `oklch(0.47 0.1 330)` | `#7A4475` | Mobile11 S14 |
+| a ticket nobody has taken | `oklch(0.6 0.1 275)` outline, `oklch(0.72 0.1 275)` mark | `#6F7BBC` / `#92A0E3` | Mobile3 Drag frame |
 
 Divan and you take the page's own tones rather than a colour: Divan is `ink` on
 `s2` behind a `line2` ring, you are `bg` on `ink`. White sits on every other one,

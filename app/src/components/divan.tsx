@@ -49,14 +49,17 @@ function Tap({ onPress, onLongPress, style, children }: {
 
 /** The block everything on a Divan screen sits in.
  *
- *  Mobile1 V1 (the Needs-you card) and Mobile6 S3: `background:var(--s1);
- *  border-radius:16px; padding:12px 14px 13px; gap:10px`, with a hairline ring
- *  drawn inside it. The ring is the card's whole state vocabulary — `line`
- *  when it is ordinary, `amber` when it is asking, `red` when it has stopped —
- *  and Mobile3 gives a card being dragged the lifted surface instead.
+ *  Mobile6 S3: `background:var(--s1); border-radius:16px; padding:12px 14px
+ *  13px; gap:10px`, with a hairline ring drawn inside it. (Mobile1 V1's
+ *  Needs-you card is the same shape at `padding:12px 12px 12px`; the padding
+ *  taken here is S3's, which is the one four cards in a column agree on.)
  *
- *  `bar` is Mobile3's two-pixel green rule across the top of a card whose work
- *  is running, at the fraction of it that is done. */
+ *  The ring is the card's whole state vocabulary — `line` when it is ordinary,
+ *  `amber` when it is asking, `red` when it has stopped — and Mobile3's drag
+ *  frame gives a card being carried the lifted surface instead.
+ *
+ *  `bar` is that same drag frame's two-pixel green rule across the top of a
+ *  card whose work is running, at the fraction of it that is done. */
 export function Card({ ring = 'line', lifted, bar, radius = RADIUS.card, onPress, onLongPress, style, children }: {
   ring?: 'line' | 'amber' | 'red' | 'run' | 'none';
   lifted?: boolean;
@@ -206,8 +209,8 @@ export interface Tab {
  *
  *  Mobile1 V1: `height:84px` over the home indicator, a `line` above it, three
  *  equal columns, and the selected one's glyph sitting in a 60×32 well of `s2`
- *  with the label a weight heavier. The badge is Mobile1's own: amber, with a
- *  two-pixel ring in the page colour so it reads as separate from the icon. */
+ *  with the label a weight heavier. The badge is Mobile1 V1's own: amber, with
+ *  a two-pixel ring in the page colour so it reads as separate from the icon. */
 export function TabBar({ tabs, value, onChange, style }: {
   tabs: Tab[]; value: string; onChange: (key: string) => void; style?: StyleProp<ViewStyle>;
 }) {
@@ -249,7 +252,8 @@ export interface Column { key: string; label: string; count: number }
 /** Ice Box · Queued · In Progress · Done — the board's four columns as four
  *  tabs, which on a phone are also the only drop targets there is room for.
  *
- *  Mobile2 V5 and Mobile3: four equal `height:46px` tiles, `border-radius:12px`,
+ *  Mobile2 V5 and Mobile3's drag frame: four equal `height:46px` tiles,
+ *  `border-radius:12px`,
  *  4 pt apart, over a `line`. The selected one is filled with `s2`. While a
  *  card is in the air every other tab picks up a dashed `line2` outline and the
  *  one under the thumb turns green — `1.5px solid var(--run)` over `runBg`,
@@ -314,10 +318,10 @@ export function StatusDot({ state, size = SIZE.dot, hollow, style }: {
   );
 }
 
-/** The same state as a character. Mobile1 V2's agent roster and Mobile6's
- *  section heads label a state `■ ? ● ✓ ○` as well as colouring it, which is
- *  what keeps the board readable to an eye that does not separate red from
- *  green. */
+/** The same state as a character. Mobile1 V2's project counts and agent
+ *  roster, and Mobile6 S3's section heads, label a state `■ ? ● ✓ ○` as well as
+ *  colouring it, which is what keeps the board readable to an eye that does not
+ *  separate red from green. */
 export function StateMark({ state, size = 12, style }: { state: State; size?: number; style?: StyleProp<TextStyle> }) {
   const t = useTokens();
   return (
@@ -331,11 +335,12 @@ export function StateMark({ state, size = 12, style }: { state: State; size?: nu
 
 /** Who is on a ticket, in a square you can read at 28 pt.
  *
- *  Mobile11's `EXS` table: a Coder is `</>` on indigo, a branch agent its
- *  initial on its own colour, the research assistant and the two members of the
- *  household are circles. Mobile3's floating card draws the fourth face — a
- *  ticket nobody has picked up yet, whose square is a dashed outline. The mark
- *  is always mono, 700, tightened by a tenth of an em so `</>` fits. */
+ *  Mobile11 S14 draws all seven in one column: a Coder is `</>` on indigo, a
+ *  branch agent its initial on its own colour, the research assistant and the
+ *  two members of the household are circles. Mobile3's drag frame draws the
+ *  eighth face — a ticket nobody has picked up yet, whose square is a dashed
+ *  outline. The mark is always mono, 700, tightened by a tenth of an em so
+ *  `</>` fits. */
 export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
   executor: string; size?: number; style?: StyleProp<ViewStyle>;
 }) {
@@ -492,7 +497,7 @@ export function EmptyState({ title, body, actions, foot, style }: {
  *
  *  The phone frames draw no sheet: every Divan screen on the phone is a whole
  *  page, and the machine drawer — the one thing that is a panel — is a drawer
- *  only on the desktop (Web15). So the shell is the app's own
+ *  only on the desktop (Web15 W12). So the shell is the app's own
  *  (`components/sheet`), which already comes up in the page's colour under a
  *  dim rather than shrinking the page behind it; what is new is that it is
  *  drawn in Divan's tokens, and that its head is the drawer's head from Web15

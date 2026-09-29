@@ -126,7 +126,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
           </View>
         </Part>
 
-        <Part name="Executor badge · monogram" frame="Mobile11 EXS · Mobile3 · Mobile1 V1">
+        <Part name="Executor badge · monogram" frame="Mobile11 S14 · Mobile3 Drag frame · Mobile1 V1">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 }}>
             {['coder', 'unassigned', 'seo', 'analyst', 'research', 'divan', 'you'].map((e) => (
               <ExecutorBadge key={e} executor={e} />
@@ -141,7 +141,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
           </View>
         </Part>
 
-        <Part name="Card" frame="Mobile1 V1 · Mobile3 · Mobile6 S3">
+        <Part name="Card" frame="Mobile6 S3 · Mobile1 V1 · Mobile3 Drag frame">
           <View style={{ gap: 8, paddingHorizontal: 4 }}>
             <Card ring="amber">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -189,7 +189,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
           </View>
         </Part>
 
-        <Part name="Column tabs" frame="Mobile2 V5 · Mobile3">
+        <Part name="Column tabs" frame="Mobile2 V5 · Mobile3 Drag frame">
           <ColumnTabs value={column} onChange={setColumn} dragging={dragging} target="progress"
             columns={[
               { key: 'icebox', label: 'Ice Box', count: 11 },

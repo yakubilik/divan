@@ -51,7 +51,7 @@ const K = load('src/tokens.ts', ['DARK', 'LIGHT', 'light', 'dark', 'tokensFor', 
 //
 // Seventeen dark frames carry the sixteen names as one block, character for
 // character. This is Mobile6 S3, "Waiting on you · everything that needs a
-// human", which is the whole of Mobile6 and so the easiest one to find.
+// human", which is the whole of that group and so the easiest one to find.
 const FRAME_DARK =
   '--bg:#131210;--s1:#1C1B18;--s2:#26241F;--line:rgba(236,232,225,.08);--line2:rgba(236,232,225,.2);' +
   '--ink:#EDE9E2;--ink2:#A9A499;--ink3:#8C877E;--amber:#EAB65A;--amberBg:rgba(234,182,90,.11);' +
@@ -65,8 +65,8 @@ const FRAME_LIGHT =
   '--red:#C2412B;--redBg:rgba(194,65,43,.1);--run:#2F8067;--runBg:rgba(47,128,103,.1);' +
   '--onAmber:#fff;--sh:rgba(27,26,23,.12)';
 // The two frames `sLift` is read off, quoted the same way and for the same
-// reason. Mobile3's is the only frame in which a card is held in the air, and
-// its `--s2` is that card; Mobile4 C1 is the light chat, whose `--s2` is the
+// reason. Mobile3's drag frame is the only one in which a card is held in the
+// air, and its `--s2` is that card; Mobile4 C1 is the light chat, whose `--s2` is the
 // only raised light surface the design draws. Both blocks are fourteen names
 // or fewer and differ from the majority — which is precisely what makes them
 // worth quoting: `sLift` is the tone they differ *by*.
@@ -81,8 +81,8 @@ const FRAME_CHAT =
 /** Every frame in the set, by the id the artboard labels it with: which group
  *  it belongs to, which theme it is drawn in, and how many of the sixteen names
  *  it declares. Nothing in this repository can look at the frames, so a
- *  citation is only as good as this list — it is what turns "Web14" in a
- *  document into a claim that can be wrong. */
+ *  citation is only as good as this list — it is what turns a group's name in
+ *  a document into a claim that can be wrong. */
 const FRAMES = {
   V1: ['Mobile1', 'dark', 14], V2: ['Mobile1', 'dark', 14], V3: ['Mobile1', 'light', 14],
   V4: ['Mobile2', 'dark', 14], V5: ['Mobile2', 'dark', 14],
@@ -105,6 +105,28 @@ const FRAMES = {
   W17: ['Web15', 'light', 16], W18: ['Web15', 'light', 16],
 };
 const GROUPS = new Set(Object.values(FRAMES).map(([g]) => g));
+
+/** And which frames each value that is *not* one of the sixteen was read off.
+ *
+ *  FRAMES alone catches a citation that names a frame of the wrong group or the
+ *  wrong theme. It cannot catch one that names a frame which exists, is the
+ *  right theme, and simply does not contain the value — which is the shape a
+ *  wrong attribution takes once the obvious ones are gone. This is the answer
+ *  key for that: every value below was searched for across all forty-two
+ *  frames, and these are the ones it is in. Anything citing one of these values
+ *  has to name a frame on its line. */
+const READ_OFF = {
+  'sLift dark': ['Drag frame'],
+  'sLift light': ['C1'],
+  'amberRing dark': ['V1', 'V4'],
+  'amberRing light': ['W3', 'W4'],
+  'project ramp': ['S1', 'S6'],
+  Coder: ['S14'],
+  SEO: ['S14'],
+  Analyst: ['S14'],
+  Research: ['S14'],
+  'a ticket nobody has taken': ['Drag frame'],
+};
 
 /** `--bg:#131210;--s1:…` -> `{ bg: '#131210', s1: … }`, with `#fff` spelled
  *  out: CSS's shorthand and the app's six digits are the same colour. */
@@ -197,7 +219,7 @@ for (const file of ['src/theme.ts', 'src/components/divan.tsx', 'app/divan-galle
   // derived ones that say so in place, and the marks converted out of oklch.
   const extra = [...new Set(coloursInCode(src('src/tokens.ts')))]
     .filter((v) => !TOKEN_VALUES.has(v) && !DERIVED.has(v)
-      && v !== '#6F7BBC' && v !== '#92A0E3');   // the dashed Coder, Mobile3
+      && v !== '#6F7BBC' && v !== '#92A0E3');   // the dashed Coder, Mobile3 Drag frame
   checks.push([`tokens.ts holds nothing but the design's own values${extra.length ? ` (${extra.join(', ')})` : ''}`,
     extra.length === 0]);
 }
@@ -244,7 +266,7 @@ checks.push(['every colour a monogram can take is in the ramp',
   ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].every((n) => K.MONOGRAM.includes(K.monogram(n)))]);
 checks.push(['a project with no name still gets one rather than nothing',
   typeof K.monogram('') === 'string' && K.MONOGRAM.includes(K.monogram(''))]);
-checks.push(['the seven executors of Mobile11 are all there',
+checks.push(['the seven executors of Mobile11 S14 are all there',
   eq(keys(K.EXECUTORS), ['analyst', 'coder', 'divan', 'research', 'seo', 'unassigned', 'you'])]);
 checks.push(['a Coder is `</>` and a ticket nobody has taken is the same mark, unfilled',
   K.EXECUTORS.coder.mark === '</>' && K.EXECUTORS.unassigned.mark === '</>'
@@ -468,7 +490,7 @@ checks.push(['a card that is asking wears the amber ring rather than the hairlin
   styleOf('dark:Card').borderColor === K.DARK.amberRing]);
 checks.push(['the running rule across a card is green, and as wide as the work is done',
   anyStyle('dark:CardLifted', (s) => s.backgroundColor === K.DARK.run && s.width === '38%' && s.height === 2)]);
-checks.push(['the tab bar stands 84 high over a hairline, as Mobile1 draws it',
+checks.push(['the tab bar stands 84 high over a hairline, as Mobile1 V1 draws it',
   styleOf('dark:TabBar').height === K.SIZE.tabBar && styleOf('dark:TabBar').borderTopColor === K.DARK.line]);
 checks.push(['…and the selected tab\u2019s glyph sits in a 60\u00d732 well of the second surface',
   anyStyle('dark:TabBar', (s) => s.width === 60 && s.height === 32 && s.backgroundColor === K.DARK.s2)]);
@@ -576,19 +598,38 @@ for (const scheme of ['dark', 'light']) {
 // noticed. FRAMES above is the set as it actually is; these checks hold every
 // citation in the document, the parts and the gallery against it.
 const DOC = fs.readFileSync(path.join(root, '..', 'design/divan/TOKENS.md'), 'utf8');
-const CITING = { 'design/divan/TOKENS.md': DOC, 'src/components/divan.tsx': divan, 'app/divan-gallery.tsx': gallery };
+/** Every file that says where something came from. `tokens.ts` is on this list
+ *  because it is the file a screen author actually opens: a wrong group in a
+ *  doc comment misleads exactly as far as a wrong group in the document does,
+ *  and round two had one there after round one had four here. This file is on
+ *  it too, minus its own FRAMES table, which is the answer key rather than a
+ *  citation. */
+const CITING = {
+  'design/divan/TOKENS.md': DOC,
+  'src/tokens.ts': src('src/tokens.ts'),
+  'src/theme.ts': src('src/theme.ts'),
+  'src/components/divan.tsx': divan,
+  'app/divan-gallery.tsx': gallery,
+  'scripts/test-divan.cjs': src('scripts/test-divan.cjs').replace(/const FRAMES = \{[\s\S]*?\n\};/, ''),
+};
 
-/** `Mobile6 S3`, `Web13 W3 and W4`, `Mobile3 'Drag frame'` — a group, and the
- *  frames named before the next group is. */
+/** `Mobile6 S3`, `Web13 W3 and W4`, `Mobile3's drag frame` — a group, and the
+ *  frames named in the ninety characters after it, which is as far as a
+ *  citation ever reaches in this codebase. */
+/** The frame ids named in a piece of text, however they are spelled. */
+function frameIds(text) {
+  return [...text.matchAll(/\b([VTCSW]\d{1,2})\b|'?([Dd]rag[\s*]+frame)'?/g)]
+    .map((m) => (m[1] || (m[2] && 'Drag frame')));
+}
+
 function citations(text) {
   const out = [];
   const groups = [...text.matchAll(/\b(Mobile|Web)(\d+)\b/g)];
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i][0];
-    const window = text.slice(groups[i].index + g.length,
-      i + 1 < groups.length ? groups[i + 1].index : groups[i].index + g.length + 90);
-    const ids = [...window.matchAll(/\b([VTCSW]\d{1,2})\b|'(Drag frame)'/g)].map((m) => m[1] || m[2]);
-    out.push([g, ids]);
+    const from = groups[i].index + g.length;
+    const until = Math.min(from + 90, i + 1 < groups.length ? groups[i + 1].index : text.length);
+    out.push([g, frameIds(text.slice(from, until))]);
   }
   return out;
 }
@@ -597,16 +638,23 @@ for (const [file, text] of Object.entries(CITING)) {
   const bad = [];
   for (const [group, ids] of citations(text)) {
     if (!GROUPS.has(group)) { bad.push(`${group} is not a screen group`); continue; }
+    // A group with no frame named after it is the shape the wrong attribution
+    // took in round one: naming only the group is unfalsifiable until it has to
+    // say which of that group's frames, at which point it plainly is not there.
+    if (!ids.length) { bad.push(`${group} names no frame`); continue; }
     for (const id of ids) {
       if (!FRAMES[id]) bad.push(`${group} ${id}: no such frame`);
       else if (FRAMES[id][0] !== group) bad.push(`${group} ${id}: ${id} is in ${FRAMES[id][0]}`);
     }
   }
-  checks.push([`every frame ${file} cites is in the group it cites it under${bad.length ? ` (${bad.join('; ')})` : ''}`,
+  checks.push([`every frame ${file} cites is a frame of the group it names${bad.length ? ` (${bad.join('; ')})` : ''}`,
     bad.length === 0]);
 }
+checks.push(['…and the six files between them make enough citations for that to mean something',
+  Object.values(CITING).reduce((n, t) => n + citations(t).length, 0) >= 80]);
 checks.push(['…and the set it is checked against is the whole set, with its gaps',
-  Object.keys(FRAMES).length === 42 && !FRAMES.S8 && !FRAMES.W5 && FRAMES['Drag frame'][0] === 'Mobile3']);
+  Object.keys(FRAMES).length === 42 && GROUPS.size === 15
+  && !FRAMES.S8 && !FRAMES.W5 && FRAMES['Drag frame'] !== undefined]);
 
 // The error round one made was subtler than a bad id: a light value cited to a
 // frame that exists but is drawn dark. The rows that carry their own provenance
@@ -615,7 +663,7 @@ checks.push(['…and the set it is checked against is the whole set, with its ga
   const rows = [...DOC.matchAll(/^\| `([a-zA-Z]+)` (dark|light) \| ([^|]+)\| ([^|]+)\|/gm)];
   const wrong = [];
   for (const [, token, side, , from] of rows) {
-    const ids = [...from.matchAll(/\b([VTCSW]\d{1,2})\b|'(Drag frame)'/g)].map((m) => m[1] || m[2]);
+    const ids = frameIds(from);
     if (!ids.length) wrong.push(`${token} ${side}: names no frame`);
     for (const id of ids) {
       if (!FRAMES[id]) wrong.push(`${token} ${side}: no frame ${id}`);
@@ -624,6 +672,46 @@ checks.push(['…and the set it is checked against is the whole set, with its ga
   }
   checks.push([`a value read off a frame is read off a frame of its own theme${wrong.length ? ` (${wrong.join('; ')})` : ''}`,
     wrong.length === 0 && rows.length === 4]);
+
+  // …and off a frame that actually contains it.
+  const astray = [];
+  for (const [, token, side, , from] of rows) {
+    const key = `${token} ${side}`;
+    const ids = frameIds(from);
+    const allowed = READ_OFF[key];
+    if (!allowed) { astray.push(`${key}: nothing recorded`); continue; }
+    for (const id of ids) if (!allowed.includes(id)) astray.push(`${key}: ${id} does not carry it`);
+  }
+  checks.push([`…and off one it is actually in${astray.length ? ` (${astray.join('; ')})` : ''}`, astray.length === 0]);
+
+  // The marks — the ramp and the executor faces — are cited the same way and
+  // checked the same way.
+  const marks = [...DOC.matchAll(/^\| ([a-zA-Z][^|`]*?) \| `oklch[^|]*\| [^|]*\| ([^|]+)\|/gm)];
+  const lost = [];
+  for (const [, label, from] of marks) {
+    const allowed = READ_OFF[label.trim()];
+    if (!allowed) { lost.push(`${label.trim()}: nothing recorded`); continue; }
+    const ids = frameIds(from);
+    if (!ids.length) lost.push(`${label.trim()}: names no frame`);
+    for (const id of ids) if (!allowed.includes(id)) lost.push(`${label.trim()}: ${id} does not draw it`);
+  }
+  checks.push([`every mark is cited to a frame that draws it${lost.length ? ` (${lost.join('; ')})` : ''}`,
+    lost.length === 0 && marks.length === 6]);
+
+  // The same claims live a second time in the token module's doc comments, and
+  // round two is what happens when only one copy is checked.
+  const tokens = src('src/tokens.ts');
+  const drifted = [];
+  for (const name of ['sLift', 'amberRing']) {
+    const at = tokens.indexOf(`\n  ${name}: string;`);
+    const doc = tokens.slice(tokens.lastIndexOf('/**', at), at);
+    const allowed = [...READ_OFF[`${name} dark`], ...READ_OFF[`${name} light`]];
+    const ids = frameIds(doc);
+    if (!ids.length) drifted.push(`${name}: its comment names no frame`);
+    for (const id of ids) if (!allowed.includes(id)) drifted.push(`${name}: ${id} does not carry it`);
+  }
+  checks.push([`the token module says the same thing the document does${drifted.length ? ` (${drifted.join('; ')})` : ''}`,
+    drifted.length === 0]);
 }
 // And the two frames the whole block is quoted from have to be able to carry it.
 checks.push(['the frames the sixteen are quoted from declare all sixteen, one of each theme',

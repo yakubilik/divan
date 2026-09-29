@@ -49,8 +49,9 @@ export interface Tokens {
   /** Text on top of amber — the one pair the frames spell out. `--onAmber` */
   onAmber: string;
   /** The amber drawn as a ring rather than as a fill, around a card that is
-   *  asking for something. Mobile1 V1's `inset 0 0 0 1px rgba(234,182,90,.28)`
-   *  and its light counterpart in Web14. */
+   *  asking for something. Mobile1 V1's `inset 0 0 0 1px rgba(234,182,90,.28)`,
+   *  and on the light side Web13 W3's `inset 0 0 0 1px rgba(156,98,16,.35)` —
+   *  the only place the design draws this ring in a light theme. */
   amberRing: string;
   /** Stuck, failed, red. `--red` */
   red: string;
@@ -110,8 +111,9 @@ export const ON_COLOUR = '#FFFFFF';
  *
  *  They are written `oklch(0.48 0.07 H)` on the artboard, which React Native
  *  cannot parse, so each is converted to the sRGB the browser would show.
- *  In frame order: Quire 265, Kanji Daily 320, Hush 210, The Long Walk 130,
- *  Pebble 95 (Mobile7 S6, the brand-new project). */
+ *  Mobile5 S1 draws the first four on one dashboard — Quire 265, Kanji Daily
+ *  320, Hush 210, The Long Walk 130 — and Mobile7 S6 the fifth, 95, which
+ *  belongs to the project it invents. */
 export const MONOGRAM = ['#4A5D86', '#6F5076', '#226873', '#50663A', '#706332'] as const;
 
 /** Which of them a project gets.
@@ -129,8 +131,9 @@ export function monogram(name: string, index?: number | null): string {
 }
 
 /** How an executor is drawn on a card: its mark, its colour, and whether the
- *  square is rounded off into a circle. Mobile11's `EXS` table, plus the two
- *  Coder faces from its `exOf` — one assigned, one still to be picked up.
+ *  square is rounded off into a circle. Mobile11 S14 draws all seven of them in
+ *  one column — it is the frame the `EXS` table in that file feeds — and
+ *  Mobile3's drag frame draws the eighth face, a ticket nobody has taken.
  *
  *  `fill: null` means the badge takes the page's own tones, which only the two
  *  members of the household do: Divan sits in `s2` behind a `line2` ring, and
@@ -149,8 +152,9 @@ export interface ExecutorFace {
   kind: string;
 }
 
-/** The dashed Coder: `1.5px dashed oklch(0.6 0.1 275)` around
- *  `oklch(0.72 0.1 275)`, converted the same way as the monograms. */
+/** The dashed Coder, which only Mobile3's drag frame draws: `1.5px dashed
+ *  oklch(0.6 0.1 275)` around `oklch(0.72 0.1 275)`, converted the same way as
+ *  the monograms. */
 export const EXEC_PENDING_LINE = '#6F7BBC';
 export const EXEC_PENDING_INK = '#92A0E3';
 
@@ -173,7 +177,8 @@ export type ExecutorName = keyof typeof EXECUTORS;
  *  question mark, so a state survives being read in grey. */
 export type State = 'stuck' | 'asking' | 'running' | 'done' | 'yours' | 'quiet';
 
-/** Mobile1 V2's `counts`, Mobile6's section heads. */
+/** Mobile1 V2's project counts and agent roster, and Mobile6 S3's section
+ *  heads: between them the five are all drawn. */
 export const STATE_MARK: Record<State, string> = {
   stuck: '■', asking: '?', running: '●', done: '✓', yours: '○', quiet: '·',
 };
