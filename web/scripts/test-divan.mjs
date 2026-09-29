@@ -650,6 +650,10 @@ const drawn = {};
 
 group('the screens the panel already had');
 {
+  // Every section of this computer's page, because five of the seven are
+  // behind a press and a static render cannot press one — and it is the screen
+  // this ticket rewrote hardest.
+  const SECTIONS = ['hosts', 'accounts', 'defaults', 'tools', 'appearance', 'security', 'about'];
   const screens = {
     Fleet: ['src/screens/Fleet.js', 'Fleet', { onOpenChat() {}, onNewChat() {} }],
     Projects: ['src/screens/Projects.js', 'Projects', { onNewChatIn() {}, onOpenChat() {} }],
@@ -657,7 +661,9 @@ group('the screens the panel already had');
     Terminal: ['src/screens/Terminal.js', 'Terminal', { onPeek() {}, onNewChat() {} }],
     Screen: ['src/screens/Screen.js', 'Screen', {}],
     Update: ['src/screens/Update.js', 'Update', {}],
-    Preferences: ['src/screens/Preferences.js', 'Preferences', {}],
+    ...Object.fromEntries(SECTIONS.map((x) => (
+      [`Preferences·${x}`, ['src/screens/Preferences.js', 'Preferences', { section: x }]]
+    ))),
     Onboarding: ['src/screens/Onboarding.js', 'Onboarding', { onPaired() {} }],
     Ustabasi: ['src/screens/Ustabasi.js', 'Ustabasi', {}],
     Sidebar: ['src/components/Sidebar.js', 'Sidebar', {
@@ -735,13 +741,43 @@ group('the screens the panel already had');
   globalThis.localStorage.setItem('rac.terminal.wall',
     JSON.stringify(['studio/c1', 'studio/c2', 'studio/c3']));
 
+  // The Machine place and its thirteen pages. Six of them — the machines
+  // table, the executors, the sign-ins, the thresholds, Admin and Settings —
+  // are drawn by no other tree in this file, so until now nothing here read a
+  // colour, a white or a placeholder off them. The drawer takes a merged view
+  // as well as the store, so the two move together: a world where the store
+  // has no computer is a world where the view has none either.
+  const D = await load('src/lib/divan.js');
+  const { studio: studioSnap, mini: miniSnap } =
+    await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
+  const NOW_S = Math.floor(Date.now() / 1000);
+  const FLEET = {
+    alone: D.merge([], NOW_S),
+    paired: D.merge([{ key: 'studio', name: 'studio', state: D.answered(studioSnap(), NOW_S) }], NOW_S),
+    stale: D.merge([{ key: 'studio', name: 'studio', state: D.answered(studioSnap(), NOW_S - 8 * 60) }], NOW_S),
+    unreachable: D.merge([
+      { key: 'studio', name: 'studio', state: D.answered(studioSnap(), NOW_S) },
+      { key: 'mini', name: 'mini',
+        state: D.silent(D.answered(miniSnap(), NOW_S - 600), 'connection refused') },
+    ], NOW_S),
+  };
+  const shell = await load('src/lib/shell.js');
+  const DRAWER = [...shell.MACHINE_ROWS.map((r) => r.view),
+                  ...shell.MACHINE_ASIDE.map((a) => a.view)];
+  const drawerPages = (world) => Object.fromEntries(DRAWER.map((v) => (
+    [`Machine·${v}`, ['src/screens/Machine.js', 'Machine', {
+      view: v, fleet: FLEET[world], onView() {}, onOpenChat() {}, onNewChat() {},
+      onNewChatIn() {}, onStartChat() {}, onPeek() {},
+    }]]
+  )));
+
   // Four worlds, because that is what the screens have to survive: nothing
   // paired, a computer answering, one whose answer is eight minutes old, and
   // one that has stopped answering with its last answer still on screen.
   for (const [world, state] of [['alone', nothing], ['paired', paired],
                                ['stale', stale()], ['unreachable', gone()]]) {
     seed(state);
-    for (const [name, [path, exp, props]] of Object.entries(screens)) {
+    for (const [name, [path, exp, props]] of Object.entries({ ...screens, ...drawerPages(world) })) {
       let markup;
       try {
         const mod = await load(path);
@@ -757,6 +793,10 @@ group('the screens the panel already had');
   }
   ok('every screen still stands up: alone, paired, stale and unreachable',
     broken.length === 0, broken.join('\n    '));
+  ok('…and that is every page of the Machine place as well as every screen',
+    DRAWER.length === 13
+    && DRAWER.every((v) => (drawn[`screen:Machine·${v} unreachable`] ?? '').length > 400),
+    DRAWER.map((v) => `${v} ${(drawn[`screen:Machine·${v} unreachable`] ?? '').length}`).join(' · '));
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
   ok('…so every colour on every screen exists in both themes', undeclared.length === 0, undeclared.join(', '));
   ok('the wall draws its tiles, which is the only place the phase colours are',
@@ -764,8 +804,14 @@ group('the screens the panel already had');
     && (drawn['screen:Terminal paired'] ?? '').includes('Invoice PDF'),
     (drawn['screen:Terminal paired'] ?? '').length.toString());
   ok('…and a paired screen is a fuller screen than an empty one',
-    (drawn['screen:Preferences paired'] ?? '').length > (drawn['screen:Preferences alone'] ?? '').length * 1.5,
-    `${(drawn['screen:Preferences paired'] ?? '').length} vs ${(drawn['screen:Preferences alone'] ?? '').length}`);
+    (drawn['screen:Preferences·accounts paired'] ?? '').length
+      > (drawn['screen:Preferences·accounts alone'] ?? '').length * 1.5,
+    `${(drawn['screen:Preferences·accounts paired'] ?? '').length} vs `
+      + `${(drawn['screen:Preferences·accounts alone'] ?? '').length}`);
+  ok('…and all seven sections of this computer’s page drew in all four worlds',
+    SECTIONS.every((x) => ['alone', 'paired', 'stale', 'unreachable']
+      .every((w) => (drawn[`screen:Preferences·${x} ${w}`] ?? '').length > 400)),
+    SECTIONS.map((x) => `${x} ${(drawn[`screen:Preferences·${x} unreachable`] ?? '').length}`).join(' · '));
   // The panels that open over a screen are drawn against a paired computer
   // too: New chat reads the catalog off one.
   seed(paired);
@@ -876,7 +922,7 @@ group('the panels the screens open over themselves');
     (drawn['overlay:ProviderMarkDim'] ?? '').includes('&lt;&gt;')
     && (drawn['overlay:ProviderMarkDim'] ?? '') !== (drawn['overlay:ProviderMarkLive'] ?? ''));
   ok('…and a paired preferences page draws that dim mark itself, where the real one is',
-    (drawn['screen:Preferences paired'] ?? '').includes('&lt;&gt;'));
+    (drawn['screen:Preferences·accounts paired'] ?? '').includes('&lt;&gt;'));
 }
 
 group('white belongs on a filled colour and nowhere else');
@@ -1152,16 +1198,20 @@ group('design/divan/TOKENS.md');
 
 // ── the screens that were carried over last ────────────────────────────────
 
-/** Every page of the panel that was still speaking the older vocabulary after
- *  the drawer was built, and the two pieces of chrome around them. The chat and
- *  the sheets that belong to it are deliberately not in here: the chat is not
- *  being rebuilt. */
-const CARRIED = [
-  'src/screens/Fleet.tsx', 'src/screens/Projects.tsx', 'src/screens/Agents.tsx',
-  'src/screens/Update.tsx', 'src/screens/Preferences.tsx', 'src/screens/Onboarding.tsx',
-  'src/screens/Ustabasi.tsx', 'src/screens/Terminal.tsx', 'src/screens/Screen.tsx',
-  'src/components/Palette.tsx', 'src/App.tsx',
-];
+/** Everything under `web/src` this branch touched, asked of git rather than
+ *  written down: a list kept by hand is a list that goes stale the first time
+ *  a file is added to the work, and then the check quietly stops covering it.
+ *  The merge base is the comparison, so it says the same thing on the branch
+ *  and after a merge. */
+function carried() {
+  try {
+    const out = execFileSync('git', ['diff', '--name-only', 'main...HEAD', '--', 'web/src'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const list = out.split('\n').filter(Boolean).map((f) => f.replace(/^web\//, ''));
+    if (list.length) return list;
+  } catch { /* no git, no main, or nothing between them */ }
+  return null;
+}
 
 group('no page is still drawn in the older vocabulary');
 {
@@ -1220,12 +1270,15 @@ group('every carried screen asks its computer for exactly what it did');
     const dropped = ON_PURPOSE[f] ?? [];
     return JSON.stringify([reqs, drives.filter((d) => !dropped.includes(d))]);
   };
+  const CARRIED = carried();
   let was = null;
   try {
-    was = CARRIED.map((f) => execFileSync('git', ['show', `main:web/${f}`],
-      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
-  } catch { /* no git, or no main */ }
-  if (was === null) console.log('  · no git to read main from: nothing to compare against');
+    const git = (args) => execFileSync('git', args,
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const base = git(['merge-base', 'main', 'HEAD']).trim();
+    was = CARRIED.map((f) => git(['show', `${base}:web/${f}`]));
+  } catch { /* no git, no main, or a file this branch added has no `before` */ }
+  if (was === null) console.log('  · no git to read the merge base from: nothing to compare against');
   else {
     const changed = CARRIED
       .map((f, i) => [f, allow(f, surface(was[i])), surface(src(f))])
@@ -1233,8 +1286,8 @@ group('every carried screen asks its computer for exactly what it did');
     ok('none of them gained a request, lost one, or dropped an event it drove with',
       changed.length === 0,
       changed.map(([f, before, after]) => `${f}:\n      was ${before}\n      now ${after}`).join('\n    '));
-    ok('…over all eleven of them, which is every page that moved',
-      CARRIED.length === 11 && was.every((t) => t.length > 200));
+    ok('…over every file under src this branch touched, which git named rather than a list',
+      CARRIED.length >= 11 && was.every((t) => t.length > 200), CARRIED.join(', '));
   }
 }
 
@@ -1255,29 +1308,44 @@ group('nothing on a screen is standing in for something');
     [/\bTODO\b|\bTBD\b|\bFIXME\b/, 'a note to the author'],
     [/coming soon|not implemented|under construction/i, 'a promise'],
     [/\bfoo\b|\bbar\b|\bbaz\b/i, 'a stand-in name'],
-    [/>[\s]*[—–][\s]*</, 'a dash where a value goes'],
-    [/>[\s]*\.\.\.[\s]*</, 'three dots where a value goes'],
+    [/>\s*[—–]\s*</, 'a dash where a value goes'],
+    [/>\s*(?:\.\.\.|…)\s*</, 'an ellipsis where a value goes'],
   ];
+
+  /** What a person would read off a render, with the tags taken out of the way.
+   *  Attributes are not words on a screen — `placeholder="Search…"` is the field
+   *  saying what it is for — so an opening tag becomes `<>`, which closes the
+   *  run of text before it and opens the next one. Writing `><` instead puts a
+   *  `<` in front of an element's own text, and `<span>—</span>` then reads as
+   *  `><—</span>`: the dash has a `<` before it rather than a `>`, and no
+   *  pattern anchored on a value can ever fire. */
+  const standingIn = (markup) => {
+    const words = markup
+      .replace(/<button[\s\S]*?<\/button>/g, ' ')
+      .replace(/<[a-zA-Z][^>]*>/g, '<>');
+    return HOLDING.filter(([re]) => re.test(words)).map(([, what]) => what);
+  };
+
+  // The check can fail. A cell with a dash in it is exactly what was taken out
+  // of the executors table, and is drawn here so that the pattern is held to
+  // something rather than to the absence of everything.
+  const dash = renderToStaticMarkup(createElement(parts.Cell, { text: '—' }));
+  ok('a value that is only a dash is reported', standingIn(dash).includes('a dash where a value goes'),
+    dash);
+  ok('…and the same cell with a word in it is not',
+    standingIn(renderToStaticMarkup(createElement(parts.Cell, { text: 'no machine' }))).length === 0);
+
   const found = [];
   let read = 0;
   for (const [where, markup] of Object.entries(drawn)) {
     if (CHAT.test(where)) continue;
     read++;
-    // Attributes are not words on a screen — `placeholder="Search…"` is the
-    // field saying what it is for — so the tags are dropped and only what is
-    // between them is read.
-    const words = markup
-      .replace(/<button[\s\S]*?<\/button>/g, '<span></span>')
-      .replace(/<[a-zA-Z][^>]*>/g, '><');
-    for (const [re, what] of HOLDING) {
-      const hit = re.exec(words);
-      if (hit) found.push(`${where}: ${what} — ${hit[0].trim().slice(0, 40)}`);
-    }
+    for (const what of standingIn(markup)) found.push(`${where}: ${what}`);
   }
   ok('no screen, panel or part draws a placeholder where a value belongs',
     found.length === 0, [...new Set(found)].slice(0, 8).join('\n    '));
   ok('…over every tree drawn in this file that is not the chat',
-    read >= 50, `${read} trees`);
+    read >= 70, `${read} trees`);
 }
 
 // ── the gallery, written out ────────────────────────────────────────────────

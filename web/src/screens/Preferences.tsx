@@ -1046,9 +1046,14 @@ export function AppearanceSection() {
 
 /* ── screen ───────────────────────────────────────────────────────────── */
 
-export function Preferences() {
+/** `section` is which row of the column this page opens on. It is a prop and
+ *  not only local state because five of the seven sections are otherwise
+ *  reachable by pressing something, and a static render cannot press. Nothing
+ *  passes it in the panel — the drawer opens this page on Accounts, which is
+ *  the one that is usually the reason for coming. */
+export function Preferences({ section: opening = 'accounts' }: { section?: SectionId }) {
   const { hosts, order, focus } = useFleet();
-  const [section, setSection] = useState<SectionId>('accounts');
+  const [section, setSection] = useState<SectionId>(opening);
   const slot = focus ? hosts[focus] : null;
   const online = slot?.status === 'online';
 
