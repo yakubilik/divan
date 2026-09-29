@@ -351,8 +351,13 @@ Geist; the panel does not ship it.
   `C`, the older vocabulary pointed at the same table.
 - `web/src/ui/divan.tsx` — the parts: card, row, pill, tab, column tab, status
   dot, executor badge, counter, section header, empty state, side panel, and the
-  button and state mark the frames draw beside them. Each names the frame it was
-  measured off. The desktop frames draw no empty screen, so that one part is the
+  button and state mark the frames draw beside them; and the top bar — the bar
+  itself, a nav item, the rule between the places and the chips, and the mono
+  chip and stamp at its far end. Each names the frame it was measured off. The
+  bar is the one the thirteen later frames draw (`height:58px`, the third place
+  an item beside the other two) rather than the 56 pt bar of Web12 W1 and Web13
+  W3, which is the same bar one step earlier with that place set as a word at
+  the end; `SIZE.topBar`, `SIZE.navItem` and `RADIUS.nav` are the thirteen's. The desktop frames draw no empty screen, so that one part is the
   phone's Mobile7 S6 at desktop sizes, and says so where it is defined.
 - `web/src/ui/kit.tsx` — the older set the existing screens are built from. Not
   being replaced in this ticket, and not to be mixed with the parts above in one
@@ -376,6 +381,16 @@ Geist; the panel does not ship it.
   own times every one above it — and what it cannot work out at all is counted
   and asserted to be nothing, because a colour a check quietly skips is a colour
   nobody is checking.
+- `web/scripts/test-shell.mjs` — also in `npm test`, and about the shape the
+  parts are arranged into rather than the palette: the three places, the project
+  bar, the switch, and every screen of the shell drawn in five states of the
+  fleet. Its one colour claim is the one the switch rests on — the two themes
+  produce the same markup, because nothing is a value and everything is a
+  reference.
+- `web/scripts/test-drive.mjs` — the fourth in `npm test`: the panel mounted in
+  a document and pressed. Its one colour claim is the switch's, driven rather
+  than reasoned about — the document's theme attribute moves and the markup
+  under the bar does not change, which is why a theme costs no render.
 - `web/scripts/test-divan-ui.mjs` — the same page in a real browser, not in
   `npm test` because it needs Chrome. It reads back every colour the browser
   actually resolved, and then measures every pair it painted: each piece of text

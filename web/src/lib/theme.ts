@@ -439,6 +439,10 @@ export const SIZE = {
   navItem: 34,
   /** A pill, and a small button — a row's own actions in Web15 W12. */
   pill: 32,
+  /** The mono chip at the far end of the top bar, which is where that bar says
+   *  something rather than goes somewhere: `height:30px;border-radius:9px` at
+   *  `500 11.5px` mono, in all eight frames of Web15. */
+  barChip: 30,
   /** The button a card or an empty state ends on. */
   button: 34,
   /** A status dot; the hollow one is the same circle at 1.5px. */
