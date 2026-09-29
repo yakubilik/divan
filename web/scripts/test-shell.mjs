@@ -120,6 +120,7 @@ const AppUI = await load('src/App.js');
 const parts = await load('src/ui/divan.js');
 const kit = await load('src/ui/kit.js');
 const { useFleet } = await load('src/lib/fleet.js');
+const { useDivanStore } = await load('src/lib/divan.js');
 const { createElement: h } = await import('react');
 const { renderToStaticMarkup } = await import('react-dom/server');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
@@ -503,6 +504,23 @@ group('the page is scoped, not a second screen');
     OV.summaryOf({ summary: '', kind: 'web', counts: {}, cards: [{ column: 'ice_box' }] }) === 'web · 1 open card'
     && OV.summaryOf({ summary: '', kind: '', counts: { done: 2 }, cards: [] }) === 'nothing open'
     && OV.summaryOf({ summary: '', kind: '', counts: {}, cards: [] }) === 'no description yet');
+  // …and the whole way round, through the panel: the address says which product,
+  // and the page that comes up is that product's.
+  {
+    seed({ hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true });
+    const snaps = { studio: D.answered(fixture.studio(), Date.now() / 1000) };
+    Object.assign(useDivanStore.getInitialState(), { snaps });
+    useDivanStore.setState({ snaps });
+    env.url.search = '?project=quire';
+    const scoped = renderToStaticMarkup(h(AppUI.App));
+    env.url.search = '';
+    const whole = renderToStaticMarkup(h(AppUI.App));
+    ok('the panel opened at a product reads that product, and without one reads them all',
+      scoped.includes('Quire') && !scoped.includes('Overview')
+      && whole.includes('Overview') && whole.includes('Hush'),
+      `${scoped.length} vs ${whole.length}`);
+  }
+
   ok('the four columns are the machines’ own counts added up, not the cards in hand',
     eq(OV.columnCounts(D.project(view('fresh'), 'quire')),
       { ice_box: 1, queued: 0, in_progress: 3, done: 3 }));
@@ -711,9 +729,22 @@ group('the chat is untouched');
   // from. Where git cannot be reached the reading above is what is left.
   let diff = null;
   try {
-    diff = execFileSync('git', ['diff', '--stat', 'main', '--', ...chat.map((f) => `web/${f}`)],
+    // Pathspecs are relative to where git is run, which is this directory —
+    // `web/src/…` from in here is `web/web/src/…`, matches nothing, and reports
+    // a clean diff about files it never looked at.
+    diff = execFileSync('git', ['diff', '--stat', 'main', '--', ...chat],
       { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch { /* no git, or no main */ }
+  // …and a pathspec that matches nothing is not an answer either: the five have
+  // to be five files git knows about.
+  let known = [];
+  try {
+    known = execFileSync('git', ['ls-files', '--', ...chat],
+      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split('\n').filter(Boolean);
+  } catch { /* no git */ }
+  if (known.length) {
+    ok('the five files this is about are five files git has', known.length === 5, known.join(', '));
+  }
   if (diff === null) console.log('  · git could not be read: the chat files were read instead of diffed');
   else ok('not one line of the five chat files has changed', diff === '', diff);
 
