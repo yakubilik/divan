@@ -144,8 +144,8 @@ export function theChat(chats: Record<string, Chat>, held?: string | null): stri
 export interface MachineRow {
   key: string;
   icon: string;
-  /** What the row opens. Every one of these is a screen that already existed
-   *  and moved here unchanged. */
+  /** What the row opens: one of the frame's own two pages, or one of the
+   *  screens that already existed and moved here unchanged. */
   route: string;
   title: Key;
   note: Key;
@@ -157,26 +157,32 @@ export interface MachineRow {
 
 /** The list, in the frame's order.
  *
- *  Four of Mobile11 S16's rows have nothing on this phone to stand behind
+ *  Three of Mobile11 S16's rows have nothing on this phone to stand behind
  *  them: Terminals and Admin are screens the desktop panel has and the app
- *  never had, Executors is the registry the board tickets get their faces from
- *  (the app's own agents are the nearest thing, and they are here under their
- *  own name), and quota thresholds are not settable from anywhere yet. They
+ *  never had, and quota thresholds are not settable from anywhere yet. They
  *  arrive with the screens that own them rather than as rows that lead
- *  nowhere. What is here instead is what the app already had and what was
- *  about a computer: the paired machines, the agents, the computer's screen,
- *  its sign-ins, the pool that drives them, the voice line to it, and
- *  Settings. */
-export function machineRows(m: { machines: number; unreachable: number }): MachineRow[] {
+ *  nowhere. The other five are here — Machines and Executors as the two pages
+ *  this ticket draws (`src/machine.ts`), the computer's screen, its sign-ins
+ *  and Settings — and beside them what the app already had that was about a
+ *  computer: the agent definitions it can install, the sign-in pool, and the
+ *  voice line.
+ *
+ *  `face` and not `group` on the agents row: the frame draws Executors with
+ *  Lucide's `users`, the app's agents are personas it installs, and two
+ *  people-shaped glyphs one above the other would say the two rows were the
+ *  same kind of thing. */
+export function machineRows(m: { machines: number; unreachable: number; executors: number }): MachineRow[] {
   return [
     {
-      key: 'machines', icon: 'monitor', route: '/host-sheet',
+      key: 'machines', icon: 'monitor', route: '/machines',
       title: 'mMachines', note: 'mMachinesNote', noteParams: { n: m.machines },
       ...(m.machines === 0 ? {} : m.unreachable > 0
         ? { meta: 'mUnreachable' as Key, metaParams: { n: m.unreachable }, tone: 'red' as Tone }
         : { meta: 'mAllReachable' as Key, tone: 'run' as Tone }),
     },
-    { key: 'agents', icon: 'group', route: '/agents', title: 'mAgents', note: 'mAgentsNote' },
+    { key: 'executors', icon: 'group', route: '/executors',
+      title: 'mExecutors', note: 'mExecutorsNote', noteParams: { n: m.executors } },
+    { key: 'agents', icon: 'face', route: '/agents', title: 'mAgents', note: 'mAgentsNote' },
     { key: 'screen', icon: 'screen_share', route: '/screen', title: 'mScreen', note: 'mScreenNote' },
     { key: 'accounts', icon: 'key', route: '/accounts', title: 'mAccounts', note: 'mAccountsNote' },
     { key: 'pool', icon: 'swap_horiz', route: '/pool', title: 'mPool', note: 'mPoolNote' },
@@ -188,4 +194,5 @@ export function machineRows(m: { machines: number; unreachable: number }): Machi
 /** Every route the Machine list leads to. Nothing outside that place may link
  *  to one of them — that is the whole point of the move, and it is what
  *  `scripts/test-shell.cjs` holds the three screens to. */
-export const MACHINE_ROUTES: string[] = machineRows({ machines: 0, unreachable: 0 }).map((r) => r.route);
+export const MACHINE_ROUTES: string[] = machineRows({ machines: 0, unreachable: 0, executors: 0 })
+  .map((r) => r.route);
