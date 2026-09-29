@@ -81,7 +81,7 @@ const MINI = paired('h2', 'mini', {
   at: NOW - QUIET, reachable: false,
   snapshot: snapshot('mini', { at: NOW - QUIET,
     projects: [QUIRE({ updated_at: NOW - 300, counts: { in_progress: 1 } })],
-    cards: [card('m1', { status: 'blocked', at: NOW - (HOUR + 12 * MIN),
+    cards: [card('m1', { status: 'blocked', at: NOW - (HOUR + 12 * MIN), ustabasi: 21,
                          title: 'Fix portal login on Safari 17' })] }),
 });
 
@@ -150,7 +150,7 @@ const ids = (list) => list.map((i) => i.card.id).join(',');
       && eq(B.spread(alone, of('in_progress', ONE, alone).map((i) => i.card)), [])],
     ['a card is a way in only where this phone can open the run behind it',
       by.q3.ticket === 9 && by.q4.ticket === null
-      && of('in_progress', TWO, quire).find((i) => i.card.id === 'm1').ticket === null],
+      && by.m1.card.ustabasi_id === 21 && by.m1.ticket === null],
   );
 }
 
@@ -277,7 +277,7 @@ for (const scheme of ['dark', 'light']) {
   checks.push(
     ['tapping a card opens the run behind it, on the computer this phone holds',
       cards.length === 1 && eq(R.nav.pushed(), ['/ticket/9'])],
-    ['…and a card on another machine is not a press at all',
+    ['…and a card whose run is on another machine is not a press, ticket or no ticket',
       !R.presses().some((p) => p.text.includes('Fix portal login'))],
   );
   const face = draw('dark', [STUDIO], { project: 'quire' });
