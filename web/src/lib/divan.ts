@@ -39,7 +39,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { useFleet, type HostSlot } from './fleet';
-import type { DivanCard, DivanProject, DivanSnapshot } from './protocol';
+import type { DivanCard, DivanColumn, DivanProject, DivanSnapshot } from './protocol';
 
 /** How often a screen that is open re-asks every machine. The board moves when
  *  a worker does — a stage boundary is minutes apart, not seconds — and this is
@@ -173,10 +173,22 @@ export interface MergedProject {
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
   machines: string[];
+  /** Its **open** board: the daemon sends everything outside `done`, because
+   *  that column grows for ever and nothing on a dashboard is drawn from a card
+   *  finished last March. How many are in it is in `counts` and nowhere else. */
   cards: MergedCard[];
+  /** How many cards are in each column, added up across the machines. The
+   *  daemon counts these over its whole board, `done` included, which is why
+   *  they are read rather than counted here. */
+  counts: Partial<Record<DivanColumn, number>>;
   running: number;
+  /** Cards that need a person: an agent that stopped to ask, one that was
+   *  turned down, and every card whose executor is a person. The daemon's own
+   *  count (`divan.py _waiting`), added up. */
   waiting: number;
-  /** Cards an agent gave up on or was turned down on. */
+  /** …and how many of those are stuck rather than asking: an agent gave up or
+   *  was turned down. Counted here, off the open cards, because it is the one
+   *  of the three the daemon does not send. */
   stuck: number;
   updated_at: number;
   /** One of the machines it lives on has gone quiet, so these numbers are not
@@ -215,18 +227,9 @@ export interface DivanView {
   now: number;
 }
 
-/** A card that needs a person before anything else happens to it. The same rule
- *  the daemon counts `waiting` by (`divan.py _waiting`), applied to one card so
- *  that a screen can mark it as well as count it. */
-export function waiting(card: { column: string; agent_status: string | null; executor: string | null }): boolean {
-  if (card.column === 'done') return false;
-  if (card.agent_status === 'asking' || card.agent_status === 'blocked' || card.agent_status === 'failed') return true;
-  return card.executor === 'human' && card.column === 'in_progress';
-}
-
-/** A card an agent gave up on or was turned down on. Red, and a subset of the
- *  above: it needs a person, and it needs one because something went wrong
- *  rather than because somebody was asked a question. */
+/** A card an agent gave up on or was turned down on. Red, and a subset of what
+ *  the daemon counts as waiting: it needs a person, and it needs one because
+ *  something went wrong rather than because somebody was asked a question. */
 export function stuck(card: { agent_status: string | null }): boolean {
   return card.agent_status === 'blocked' || card.agent_status === 'failed';
 }
@@ -316,6 +319,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           hosts: [h.key],
           machines: [h.machine],
           cards: [],
+          counts: { ...(p.counts || {}) },
           running: p.running || 0,
           waiting: p.waiting || 0,
           stuck: 0,
@@ -336,6 +340,10 @@ export function merge(list: HostEntry[], now: number): DivanView {
       found.kind = found.kind || p.kind || '';
       found.running += p.running || 0;
       found.waiting += p.waiting || 0;
+      for (const [column, n] of Object.entries(p.counts || {})) {
+        const col = column as DivanColumn;
+        found.counts[col] = (found.counts[col] ?? 0) + (n ?? 0);
+      }
       found.updated_at = Math.max(found.updated_at, p.updated_at || 0);
       if (h.stale) {
         found.stale = true;

@@ -54,12 +54,14 @@ export const COLUMN_LABEL: { key: DivanColumn; label: string }[] = [
   { key: 'done', label: 'Done' },
 ];
 
-/** What a product's cards add up to, counted here rather than read off the
- *  snapshot: two machines each send their own copy of the product and the cards
- *  are what has to be added up, not the counts. */
+/** What a product's board adds up to. Read off the counts the machines sent and
+ *  not counted off the cards in hand: the cards are the *open* board — the
+ *  daemon leaves `done` out of them, because that column grows for ever — so
+ *  counting them would say a product that shipped forty-eight things has
+ *  shipped none. */
 export function columnCounts(p: MergedProject): Record<DivanColumn, number> {
   const out: Record<DivanColumn, number> = { ice_box: 0, queued: 0, in_progress: 0, done: 0 };
-  for (const c of p.cards) if (c.column in out) out[c.column] += 1;
+  for (const c of COLUMN_LABEL) out[c.key] = p.counts[c.key] ?? 0;
   return out;
 }
 
@@ -70,8 +72,9 @@ export function summaryOf(p: MergedProject): string {
   if (p.summary.trim()) return p.summary.trim();
   const bits: string[] = [];
   if (p.kind.trim()) bits.push(p.kind.trim());
-  const open = p.cards.filter((c) => c.column !== 'done').length;
+  // Every card in hand is an open one; the finished ones are a number.
+  const open = p.cards.length;
   if (open) bits.push(`${open} open card${open === 1 ? '' : 's'}`);
-  else if (p.cards.length) bits.push('nothing open');
+  else if (p.counts.done) bits.push('nothing open');
   return bits.length ? bits.join(' · ') : 'no description yet';
 }

@@ -416,6 +416,9 @@ export interface DivanSnapshot {
   daemon_version?: string;
   at: number;
   projects: DivanProject[];
+  /** The **open** board: everything outside `done`. That column grows for ever
+   *  and `DivanProject.counts` already says how many are in it, so nothing on a
+   *  dashboard is drawn from a card finished last March. */
   cards: DivanCard[];
   /** The work no product has claimed. Whole, `done` included, and in none of
    *  the counts above. Absent on a daemon older than the list. */

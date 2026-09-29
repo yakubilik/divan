@@ -55,7 +55,12 @@ const project = (over = {}) => ({
 });
 
 /** The studio: two products, one of which is also on the mini. One card is
- *  running, one has stopped to ask, one was turned down. */
+ *  running and one has stopped to ask; the second product has nothing open at
+ *  all, which a screen has to be able to say without a card to say it with.
+ *
+ *  `cards` is the open board, the way the daemon sends it: everything outside
+ *  `done`. How many are in that column is in the project's `counts` and nowhere
+ *  else. */
 export function studio() {
   return {
     machine: 'studio',
@@ -78,8 +83,6 @@ export function studio() {
       card(),
       card({ id: 'k2', column: 'in_progress', agent_status: 'asking', title: 'Stripe keys' }),
       card({ id: 'k3', column: 'ice_box', agent_status: null, executor: null, title: 'CSV export' }),
-      card({ id: 'k4', project_id: 'p-hush', branch: 'App Review', column: 'done',
-             agent_status: 'verified', title: 'Paywall wording' }),
     ],
     agents: [{
       card_id: 'k1', project_id: 'p-quire', project: 'Quire', branch: 'Engineering',

@@ -343,6 +343,9 @@ group('one product, however many machines it is on');
   ok('every card is attributed to the product its own machine calls by that id',
     fresh.cards.filter((c) => c.projectKey === 'quire').length === 4
     && fresh.cards.find((c) => c.id === 'm1').projectKey === 'quire');
+  ok('…and what is finished is a number, because the open board is all that is sent',
+    eq(quire.counts, { ice_box: 1, in_progress: 3, done: 3 })
+    && quire.cards.every((c) => c.column !== 'done'), JSON.stringify(quire.counts));
   ok('…and a card carries the machine it runs on',
     fresh.cards.find((c) => c.id === 'm1').machine === 'mini'
     && fresh.cards.find((c) => c.id === 'k1').machine === 'studio');
@@ -350,11 +353,9 @@ group('one product, however many machines it is on');
     !fresh.projects.some((p) => p.name === 'Unfiled'));
   ok('a card that was turned down is stuck, one with a question is not',
     quire.stuck === 1 && D.stuck({ agent_status: 'blocked' })
-    && !D.stuck({ agent_status: 'asking' })
-    && D.waiting({ column: 'in_progress', agent_status: 'asking', executor: null }));
-  ok('a card nobody has to answer is neither',
-    !D.waiting({ column: 'done', agent_status: 'blocked', executor: 'human' })
-    && !D.waiting({ column: 'ice_box', agent_status: null, executor: 'coding_agent' }));
+    && D.stuck({ agent_status: 'failed' }) && !D.stuck({ agent_status: 'asking' }));
+  ok('…and what is stuck is never more than what is waiting, so no state is drawn twice',
+    fresh.projects.every((p) => p.stuck <= p.waiting));
   ok('the worst product is first',
     fresh.projects[0].key === 'quire');
   ok('the totals are counted, not guessed',
@@ -454,8 +455,8 @@ group('the page is scoped, not a second screen');
     one.includes('Quire') && one.includes('studio · mini') && !one.includes('Hush'));
   ok('…and it is the same screen rather than a second one',
     all !== one && one.length > 200 && all.length > 200);
-  ok('a product says what its board holds, counted off the cards themselves',
-    one.includes('In Progress 3') && one.includes('Ice Box 1') && one.includes('Queued 0'),
+  ok('a product says what its board holds, the finished ones included',
+    one.includes('In Progress 3') && one.includes('Ice Box 1') && one.includes('Done 3'),
     one.slice(one.indexOf('Ice Box'), one.indexOf('Ice Box') + 80));
   ok('…and which states it is in, as characters and not only as colour',
     ['■', '?', '●'].every((c) => one.includes(c)));
@@ -483,11 +484,14 @@ group('the page is scoped, not a second screen');
     && eq(OV.marks({ stuck: 1, waiting: 2, running: 3 }).map((m) => m.label),
       ['1 stuck', '1 asking', '3 running']));
   ok('a product with no description says something true instead of nothing',
-    OV.summaryOf({ summary: '', kind: 'web', cards: [{ column: 'ice_box' }] }) === 'web · 1 open card'
-    && OV.summaryOf({ summary: '', kind: '', cards: [] }) === 'no description yet');
-  ok('the four columns are counted off the cards, not read off one machine',
+    OV.summaryOf({ summary: '', kind: 'web', counts: {}, cards: [{ column: 'ice_box' }] }) === 'web · 1 open card'
+    && OV.summaryOf({ summary: '', kind: '', counts: { done: 2 }, cards: [] }) === 'nothing open'
+    && OV.summaryOf({ summary: '', kind: '', counts: {}, cards: [] }) === 'no description yet');
+  ok('the four columns are the machines’ own counts added up, not the cards in hand',
     eq(OV.columnCounts(D.project(view('fresh'), 'quire')),
-      { ice_box: 1, queued: 0, in_progress: 3, done: 0 }));
+      { ice_box: 1, queued: 0, in_progress: 3, done: 3 }));
+  ok('…so a product that shipped forty-eight things does not read as none',
+    OV.columnCounts({ counts: { done: 48 }, cards: [] }).done === 48);
 }
 
 // ── 6 · the bar is the design system’s, in both themes ─────────────────────
