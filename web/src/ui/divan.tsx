@@ -27,21 +27,29 @@ import {
 } from '../lib/theme';
 import { Icon, P, mono } from './kit';
 
+/** What a part hands to the browser's own drag: a ticket is picked up, a column
+ *  catches it. Handlers only — no part draws differently for having one. What a
+ *  card in the air looks like is `lifted` on a card and `dragging`/`dropping` on
+ *  a column, which are states the frames draw and these are not. */
+export type DragProps = Pick<React.HTMLAttributes<HTMLElement>,
+  'onDragStart' | 'onDragEnd' | 'onDragOver' | 'onDragLeave' | 'onDrop'> & { draggable?: boolean };
+
 /** A part that goes somewhere is a button; one that does not is a plain box.
  *  The frames draw no pressed or hovered state, so neither is invented here:
  *  what a press does is the screen's business, and what it looks like is the
  *  browser's default cursor and nothing else. */
-function Tap({ onClick, title, current, style, children }: {
+function Tap({ onClick, title, current, drag, style, children }: {
   onClick?: () => void; title?: string;
   /** The one of a set that is where you are. The frames say it with a fill;
    *  this says it to a reader who cannot see one, and to a check. */
   current?: boolean;
+  drag?: DragProps;
   style: React.CSSProperties; children?: React.ReactNode;
 }) {
   const here = current ? ('page' as const) : undefined;
-  if (!onClick) return <div style={style} title={title} aria-current={here}>{children}</div>;
+  if (!onClick) return <div style={style} title={title} aria-current={here} {...drag}>{children}</div>;
   return (
-    <button type="button" onClick={onClick} title={title} aria-current={here}
+    <button type="button" onClick={onClick} title={title} aria-current={here} {...drag}
       style={{ ...style, border: style.border ?? 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
       {children}
     </button>
@@ -73,10 +81,16 @@ function Tap({ onClick, title, current, style, children }: {
  *
  *  `inset={false}` is the card whose children carry the padding, because they
  *  are rows rather than a block — the agent roster of Web12 W1 (`padding:2px
- *  12px`, each row over a `line`) and the machines table of Web15 W12. */
+ *  12px`, each row over a `line`) and the machines table of Web15 W12.
+ *
+ *  `hollow` is the one ticket on Web12 W2's board that is not a surface at all:
+ *  the card nothing runs on, drawn `background:transparent` inside a `1.5px
+ *  dashed var(--line2)` outline, because a card waiting for a person is a slot
+ *  rather than a thing at work. */
 export function Card({
-  ring = 'line', lifted, raised, bar, radius = RADIUS.card, inset = true, tight,
-  onClick, title, style, children,
+  ring = 'line', lifted, raised, bar, inset = true, tight, hollow,
+  radius = tight ? RADIUS.tile : RADIUS.card,
+  onClick, title, drag, style, children,
 }: {
   ring?: 'line' | 'amber' | 'red' | 'run' | 'none';
   /** Being carried: the surface a step further from the page. */
@@ -85,16 +99,21 @@ export function Card({
    *  written. Thickens the ring to 1.5px, the way Web14 W9 draws it. */
   raised?: boolean;
   bar?: number | null;
-  radius?: number;
   inset?: boolean;
-  /** A ticket card rather than a section of a page. */
+  /** A ticket card rather than a section of a page: the board's own padding
+   *  and, with it, the board's own 14 pt corner. */
   tight?: boolean;
+  radius?: number;
+  /** An outline rather than a surface: the ticket nothing runs on. */
+  hollow?: boolean;
   onClick?: () => void;
   title?: string;
+  drag?: DragProps;
   style?: React.CSSProperties;
   children?: React.ReactNode;
 }) {
-  const edge = ring === 'none' ? null
+  const edge = hollow ? null
+    : ring === 'none' ? null
     : ring === 'amber' ? T.amberRing
     : ring === 'red' ? T.red
     : ring === 'run' ? T.run
@@ -105,13 +124,14 @@ export function Card({
     raised ? `0 12px 30px ${T.sh}` : lifted ? SHADOW.pop : null,
   ].filter(Boolean).join(', ');
   return (
-    <Tap onClick={onClick} title={title} style={{
-      background: lifted ? T.sLift : T.s1,
+    <Tap onClick={onClick} title={title} drag={drag} style={{
+      background: hollow ? 'transparent' : lifted ? T.sLift : T.s1,
       borderRadius: radius,
+      border: hollow ? `1.5px dashed ${T.line2}` : undefined,
       boxShadow: shadow || undefined,
       padding: !inset ? 0 : tight ? '12px 14px 13px' : '16px 18px',
       display: 'flex', flexDirection: 'column', gap: !inset ? 0 : tight ? 8 : 12,
-      minWidth: 0, overflow: 'hidden',
+      minWidth: 0, overflow: 'hidden', boxSizing: 'border-box',
       ...style,
     }}>
       {bar != null && (
@@ -339,7 +359,7 @@ export function Tabs({ tabs, value, onChange, style }: {
  *  has), and while a card is in the air every column that would take it shows a
  *  `1.5px dashed var(--line2)` outline and the one under the cursor turns green. */
 export function ColumnTab({
-  label, count, sub, live, dragging, dropping, onClick, style, children,
+  label, count, sub, live, dragging, dropping, onClick, drag, style, children,
 }: {
   label: string;
   count?: number | string | null;
@@ -352,12 +372,15 @@ export function ColumnTab({
   /** This is the one under the cursor. */
   dropping?: boolean;
   onClick?: () => void;
+  /** The column is the drop target, so the handlers go on the whole of it and
+   *  not on the head that names it. */
+  drag?: DragProps;
   style?: React.CSSProperties;
   children?: React.ReactNode;
 }) {
   const edge = dropping ? T.run : dragging ? T.line2 : null;
   return (
-    <div style={{
+    <div {...drag} style={{
       display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, minWidth: 0,
       borderRadius: RADIUS.card, padding: 12, boxSizing: 'border-box',
       background: dropping || live ? T.runBg : 'transparent',
@@ -552,9 +575,13 @@ export function Counter({ value, label, tone, ring, onClick, style }: {
  *  `mark` is the smallest: a run of states in mono at `500 12px`, each in its
  *  own colour, which is what the board's summary line is made of. */
 export function SectionHeader({
-  title, count, note, right, kind = 'title', tone, children, style,
+  title, count, note, right, kind = 'title', tone, lead, children, style,
 }: {
   title: React.ReactNode;
+  /** What stands before the title on a product's page: its monogram, 44 pt in
+   *  Web12 W2 and 46 in Web14 W6, so that one product is one hue wherever it
+   *  is named. Only a `page` head has one. */
+  lead?: React.ReactNode;
   /** The mono number that follows the title. */
   count?: number | string | null;
   /** A plain aside beside it: `3 paired`. */
@@ -584,6 +611,7 @@ export function SectionHeader({
     <div style={{
       display: 'flex', alignItems: big ? 'center' : 'baseline', gap: big ? 14 : 8, minWidth: 0, ...style,
     }}>
+      {big ? lead : null}
       <span style={{
         fontSize: big ? 28 : 15, fontWeight: 600,
         letterSpacing: big ? '-.02em' : undefined, whiteSpace: 'nowrap',

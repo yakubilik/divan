@@ -7,6 +7,13 @@
  *  products two abreast on the left and the agent roster on the right, with the
  *  command bar across the bottom and the questions open over the corner.
  *
+ *  Scoped to one product by the bar, it is that product's page instead, and the
+ *  head is the one Web12 W2 draws: the monogram, the name, what it is and where
+ *  it is checked out, the tabs, and the states its board is in at the far end.
+ *  The Board tab is `screens/Board.tsx`, drawn here rather than in a place of
+ *  its own so that the questions in the corner stay on screen beside it — the
+ *  whole point of W2 is the board and the asking agent's chat at once.
+ *
  *  Three things are true of everything on it:
  *
  *  **Nothing here is invented.** Every counter is counted, every project card
@@ -44,10 +51,21 @@ import { T } from '../lib/theme';
 import type { DivanView, MergedProject } from '../lib/divan';
 import {
   Card, CommandBar, Counter, EmptyState, Monogram, Note, RosterRow, SectionHeader,
-  StateMark, Tag,
+  StateMark, Tabs, Tag,
 } from '../ui/divan';
 import { mono } from '../ui/kit';
 import { Sessions } from '../components/Sessions';
+import { Board } from './Board';
+
+/** The tabs over a product (Web12 W2, Web14 W6). The frame draws a third,
+ *  `Chats 6`; the chat is a place of its own on this end and is reached from
+ *  the bar above, so the page offers the two that are its own — what the
+ *  product is, and what is on its board. */
+export const PROJECT_TABS = [
+  { key: 'overview', label: 'Overview' }, { key: 'board', label: 'Board' },
+] as const;
+
+export type ProjectTab = typeof PROJECT_TABS[number]['key'];
 
 export interface OverviewProps {
   view: DivanView;
@@ -57,34 +75,60 @@ export interface OverviewProps {
   /** The command bar across the bottom opens the panel's own palette, which is
    *  what ⌘K has always opened here. */
   onAsk?: () => void;
+  /** Which tab of a scoped product is open. Held above this screen, beside the
+   *  product it belongs to, so that scoping to another product lands on its
+   *  Overview rather than on whichever tab the last one was left on. */
+  tab?: ProjectTab;
+  onTab?: (tab: ProjectTab) => void;
 }
 
-export function Overview({ view, project, onProject, onAsk }: OverviewProps) {
+export function Overview({ view, project, onProject, onAsk, tab, onTab }: OverviewProps) {
   const old = staleness(view);
   const agents = agentRows(view);
+  const here: ProjectTab = tab ?? 'overview';
+  const board = !!project && here === 'board';
   const aside = project
     ? (project.machines.join(' · ') || 'no machine')
     : old
       ? `partly as of ${clock(old.asOf)}`
       : `${count(view.projects.length, 'project')} · ${count(agents.length, 'agent')}`;
+  const said = project ? marks(project) : [];
 
   return (
     <div style={{
       flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20,
-      padding: '24px 32px 96px', overflowY: 'auto', background: T.bg,
+      padding: '24px 32px 96px', background: T.bg,
+      // The board fills the page and its columns scroll; everything else is a
+      // page that scrolls under a bar fixed over it.
+      overflowY: board ? 'hidden' : 'auto',
     }}>
       <SectionHeader
         kind="page"
+        lead={project
+          ? <Monogram name={project.name} index={view.projects.indexOf(project)} size={44} />
+          : undefined}
         title={project ? project.name : 'Overview'}
-        right={aside}
+        // The frame's own line under a product's name, with the machines it is
+        // checked out on after it: `SaaS · client portals for studios · studio
+        // · mini`.
+        note={project ? [summaryOf(project), aside].join(' · ') : undefined}
+        right={project ? (said.length ? <Marks project={project} /> : null) : aside}
         tone={!project && old ? 'amber' : undefined}
-      />
+      >
+        {!!project && (
+          <Tabs tabs={PROJECT_TABS.map((t) => ({ ...t }))} value={here}
+            onChange={(key) => onTab?.(key as ProjectTab)} style={{ marginLeft: 14 }} />
+        )}
+      </SectionHeader>
       {!!old && (
         <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>
           {staleWords(old, uptime)}
         </div>
       )}
-      {project ? <Product project={project} /> : <Everything view={view} onProject={onProject} />}
+      {!project && <Everything view={view} onProject={onProject} />}
+      {!!project && (board
+        ? <Board view={view} project={project} />
+        : <Product project={project} />)}
       {/* The bar and the windows are over the page rather than in it: the page
           scrolls, and a question that scrolled away with it would be a
           notification again. */}
@@ -215,16 +259,16 @@ function ProjectCard({ project: p, index, now, onClick }: {
   );
 }
 
-/** One product, scoped to by the bar: what it is, where it is checked out, and
- *  what its board says. */
+/** The Overview tab of one product: what its board adds up to, and where it is
+ *  checked out. Its name, what it is for, the machines it is on and the states
+ *  it is in are the page head above this, which is the head Web12 W2 draws over
+ *  both tabs — saying any of it twice on one screen would be the card and the
+ *  head disagreeing the first time one of them changed. */
 function Product({ project }: { project: MergedProject }) {
   const columns = columnCounts(project);
   return (
     <Card>
-      <SectionHeader title={project.name} note={project.kind || undefined}>
-        <Marks project={project} style={{ marginLeft: 12 }} />
-      </SectionHeader>
-      <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>{summaryOf(project)}</div>
+      <SectionHeader title="Board" note={`${project.cards.length} open`} />
       <div style={{ ...mono, fontSize: 12, lineHeight: 1.6, color: T.ink3 }}>
         {COLUMN_LABEL.map((c) => `${c.label} ${columns[c.key]}`).join(' · ')}
         <br />

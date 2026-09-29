@@ -1,5 +1,5 @@
 import { hostKey, useFleet } from './fleet';
-import type { Chat, HostConfig, Provider } from './protocol';
+import type { Chat, DivanCard, HostConfig, Provider } from './protocol';
 
 function slot(key: string) {
   const s = useFleet.getState().hosts[key];
@@ -21,6 +21,18 @@ export const send = (key: string, chatId: string, text: string, attachments: any
  *  question a worker asked: nothing else has to be moved or restarted. */
 export const ticketNote = (key: string, id: number, text: string) =>
   call<{ message?: string }>(key, 'ustabasi.note', { id, text });
+
+/** Move a card into a column of the board, at the bottom of it.
+ *
+ *  The move has happened by the time this answers, whatever `error` says: a
+ *  card landing in In Progress with a coding agent on it is also what files it
+ *  with that computer's queue, and a queue that is not installed or that
+ *  refuses leaves the card where it was put and says why. The board never
+ *  springs back under a cursor, so a screen reports the line and keeps the
+ *  card. */
+export const moveCard = (key: string, cardId: string, column: string) =>
+  call<{ card: DivanCard; error: string | null }>(key, 'divan.card.move',
+    { card_id: cardId, column });
 
 export const interrupt = (key: string, chatId: string) =>
   call(key, 'chat.interrupt', { chat_id: chatId });

@@ -9,7 +9,7 @@ import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
 import { ApprovalModal, type Pending } from './components/ApprovalModal';
 import { Machine } from './screens/Machine';
-import { Overview } from './screens/Overview';
+import { Overview, type ProjectTab } from './screens/Overview';
 import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
 import { project as projectIn, useDivanView } from './lib/divan';
@@ -42,6 +42,10 @@ export function App() {
   // somebody.
   const [project, setProject] = useState<string | null>(
     () => projectFromSearch(typeof location === 'undefined' ? '' : location.search));
+  // Which tab of a scoped product is open. Beside the product rather than
+  // inside the page, so that choosing another product lands on its Overview:
+  // "the board" is a thing about one product, not a mode the panel is in.
+  const [tab, setTab] = useState<ProjectTab>('overview');
   const [sel, setSel] = useState<Selection | null>(null);
   const [newChat, setNewChat] = useState<
     { cwd?: string; agent?: { agent: Agent; accountId: string | null } } | null>(null);
@@ -134,6 +138,7 @@ export function App() {
    *  not what the back button is for. */
   const chooseProject = useCallback((key: string | null) => {
     setProject(key);
+    setTab('overview');
     if (typeof history !== 'undefined') {
       history.replaceState(null, '', location.pathname + searchWithProject(location.search, key));
     }
@@ -407,6 +412,7 @@ export function App() {
         {place === 'dashboard' && (
           <Overview
             view={divan} project={projectIn(divan, project)} onProject={chooseProject}
+            tab={tab} onTab={setTab}
             // The bar across the bottom of every desktop frame. What it opens is
             // the palette — the panel's own ⌘K, which is the key the frame
             // writes on it — rather than a composer for a conversation that does

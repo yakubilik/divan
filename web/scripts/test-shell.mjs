@@ -553,10 +553,14 @@ group('the page is scoped, not a second screen');
     const scoped = renderToStaticMarkup(h(AppUI.App));
     env.url.search = '';
     const whole = renderToStaticMarkup(h(AppUI.App));
+    // …read off the one 28 pt line on a Divan page rather than off the whole
+    // markup: a scoped page carries the word "Overview" now, as the first of
+    // the tabs over a product (Web12 W2), and what must not be the Dashboard's
+    // is the head.
+    const pageHead = (m) => (m.match(/font-size:28px[^>]*>([^<]*)</) ?? [, null])[1];
     ok('the panel opened at a product reads that product, and without one reads them all',
-      scoped.includes('Quire') && !scoped.includes('Overview')
-      && whole.includes('Overview') && whole.includes('Hush'),
-      `${scoped.length} vs ${whole.length}`);
+      pageHead(scoped) === 'Quire' && pageHead(whole) === 'Overview' && whole.includes('Hush'),
+      `${pageHead(scoped)} vs ${pageHead(whole)}`);
   }
 
   ok('the four columns are the machines’ own counts added up, not the cards in hand',
