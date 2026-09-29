@@ -53,15 +53,15 @@ function Chip({ tone, children }: { tone: 'ok' | 'accent'; children: React.React
       ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 0.4, padding: '3px 7px',
       borderRadius: R.badge, flexShrink: 0,
       color: ok ? C.ok : C.accentSoft,
-      background: ok ? 'rgba(92,126,79,0.16)' : C.accentTint,
-      border: `1px solid ${ok ? 'rgba(92,126,79,0.32)' : C.accentRing}`,
+      background: ok ? C.okBg : C.accentTint,
+      border: `1px solid ${ok ? C.okLine : C.accentRing}`,
     }}>{children}</span>
   );
 }
 
 function Marker({ state, n }: { state: StepState; n: number }) {
-  const bg = state === 'done' ? 'rgba(92,126,79,0.16)' : state === 'active' ? C.accentTint : C.surface;
-  const bd = state === 'done' ? 'rgba(92,126,79,0.32)' : state === 'active' ? C.accentRing : C.border;
+  const bg = state === 'done' ? C.okBg : state === 'active' ? C.accentTint : C.surface;
+  const bd = state === 'done' ? C.okLine : state === 'active' ? C.accentRing : C.border;
   return (
     <div style={{
       width: 26, height: 26, borderRadius: 13, flexShrink: 0,
@@ -93,7 +93,7 @@ function Step({ n, state, title, chip, last, children }: {
         {!last && (
           <div style={{
             flex: 1, width: 1, minHeight: 16,
-            background: state === 'done' ? 'rgba(92,126,79,0.32)' : C.border,
+            background: state === 'done' ? C.okLine : C.border,
           }} />
         )}
       </div>

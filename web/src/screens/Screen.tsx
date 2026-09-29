@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, MEDIA, R } from '../lib/theme';
 import { Btn, Chip, Empty, Icon, P, Spinner } from '../ui/kit';
 import { useFleet } from '../lib/fleet';
 
@@ -362,7 +362,7 @@ export function Screen() {
         </span>
       </div>
 
-      <div ref={boxRef} style={{ flex: 1, minHeight: 0, background: '#000', display: 'flex',
+      <div ref={boxRef} style={{ flex: 1, minHeight: 0, background: MEDIA.stage, display: 'flex',
                                  alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
         {live && fit.w > 0 && (
           <div

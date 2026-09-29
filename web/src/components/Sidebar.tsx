@@ -16,15 +16,19 @@ export type View = 'chats' | 'terminal' | 'screen' | 'dashboard' | 'projects' | 
 
 export function ProviderMark({ provider, dim }: { provider: string; dim?: boolean }) {
   const claude = provider === 'claude';
+  // `dim` is "this one is not there": an account not signed in, a tool not
+  // installed. It goes grey rather than faint — fading the whole tile toward
+  // the page put its mark at 2.2:1 on a light one, and whether the tool is
+  // there is the one thing the tile has to say.
+  const live = !dim;
   return (
     <div style={{
       width: 30, height: 30, borderRadius: R.btn, flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: claude ? C.accentTint : C.surface2,
-      border: `1px solid ${claude ? C.accentRing : C.border}`,
-      color: claude ? C.accentSoft : C.mute,
+      background: claude && live ? C.accentTint : C.surface2,
+      border: `1px solid ${claude && live ? C.accentRing : C.border}`,
+      color: claude && live ? C.accentSoft : C.mute,
       fontSize: claude ? 13 : 11, fontWeight: 600,
-      opacity: dim ? 0.6 : 1,
       ...(claude ? {} : mono),
     }}>
       {claude ? 'A' : '<>'}
@@ -258,8 +262,8 @@ function ChatRow({ chat, hostKey, selected, onPick }: {
         {awaiting ? (
           <span style={{
             ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 0.4,
-            color: C.warn, background: 'rgba(216,166,87,0.16)',
-            border: '1px solid rgba(216,166,87,0.32)', borderRadius: R.badge, padding: '2px 6px',
+            color: C.warn, background: C.warnBg,
+            border: `1px solid ${C.warnLine}`, borderRadius: R.badge, padding: '2px 6px',
           }}>APPROVE</span>
         ) : running ? <Pulse /> : (
           <span style={{ fontSize: 11, color: C.faint }}>{ago(chat.updated_at)}</span>
@@ -366,7 +370,7 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <Icon path={P.plus} size={15} color="#FFFFFF" width={2.6} />
+          <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
         </button>
         <div title={slot?.status === 'online' ? 'Online' : 'Offline'} style={{ padding: '6px 0 2px' }}>
           <Dot color={slot?.status === 'online' ? C.ok : C.faint} live={slot?.status === 'online'} size={6} />
@@ -428,12 +432,12 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 width: '100%', height: 34, borderRadius: R.btn, cursor: 'pointer',
                 background: C.accent, border: `1px solid ${C.accent}`,
-                color: '#FFFFFF', fontSize: 13, fontWeight: 600,
+                color: C.onAccent, fontSize: 13, fontWeight: 600,
               }}
             >
-              <Icon path={P.plus} size={15} color="#FFFFFF" width={2.6} />
+              <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
               New chat
-              <span style={{ ...mono, fontSize: 11, opacity: 0.75 }}>⌘N</span>
+              <span style={{ ...mono, fontSize: 11 }}>⌘N</span>
             </button>
           </div>
           <div style={{ padding: '0 8px 8px' }}>

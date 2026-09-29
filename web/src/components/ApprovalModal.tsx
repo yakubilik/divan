@@ -53,7 +53,7 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
         <div style={{ display: 'flex', gap: 14, marginBottom: 16 }}>
           <div style={{
             width: 38, height: 38, borderRadius: R.card, flexShrink: 0,
-            background: 'rgba(224,83,63,0.14)', border: '1px solid rgba(224,83,63,0.4)',
+            background: C.dangerBg, border: `1px solid ${C.dangerLine}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <Icon path={P.warn} size={18} color={C.danger} />
@@ -68,8 +68,8 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
           </div>
           {queued > 1 && (
             <span style={{
-              ...mono, fontSize: 11, color: C.warn, background: 'rgba(216,166,87,0.16)',
-              border: '1px solid rgba(216,166,87,0.32)', borderRadius: R.badge,
+              ...mono, fontSize: 11, color: C.warn, background: C.warnBg,
+              border: `1px solid ${C.warnLine}`, borderRadius: R.badge,
               padding: '3px 7px', height: 'fit-content', flexShrink: 0,
             }}>+{queued - 1} waiting</span>
           )}

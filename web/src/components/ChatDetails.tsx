@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, R, SHADOW } from '../lib/theme';
 import { copyText } from '../lib/clipboard';
 import { Icon, P, mono, Label, Dot } from '../ui/kit';
 import { cost, duration, shortPath, tokens } from '../lib/format';
@@ -170,7 +170,7 @@ export function ChatDetails({ chat, items, busy, liveTokens, accountLabel, accou
         position: 'absolute', top: 42, right: 12, width: W, zIndex: 40,
         maxHeight: 'min(620px, calc(100vh - 140px))',
         background: C.surface, border: `1px solid ${C.borderStrong}`, borderRadius: R.card,
-        boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+        boxShadow: SHADOW.pop,
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}
     >
@@ -304,8 +304,8 @@ export function ChatDetails({ chat, items, busy, liveTokens, accountLabel, accou
           style={{
             height: 36, borderRadius: R.btn, fontSize: 13, fontWeight: 600, cursor: busy ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            border: `1px solid ${busy ? 'rgba(224,83,63,0.4)' : C.border}`,
-            background: busy ? 'rgba(224,83,63,0.14)' : 'transparent',
+            border: `1px solid ${busy ? C.dangerLine : C.border}`,
+            background: busy ? C.dangerBg : 'transparent',
             color: busy ? C.danger : C.faint,
           }}
         >
@@ -316,12 +316,16 @@ export function ChatDetails({ chat, items, busy, liveTokens, accountLabel, accou
           type="button" onClick={onPopOut} disabled={!chat}
           style={{
             height: 36, borderRadius: R.btn, fontSize: 13, fontWeight: 600,
-            cursor: chat ? 'pointer' : 'default', opacity: chat ? 1 : 0.45,
+            cursor: chat ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            border: `1px solid ${C.border}`, background: C.surface2, color: C.text,
+            border: `1px solid ${C.border}`, background: C.surface2,
+            // Grey rather than faded, like every other button that cannot be
+            // pressed: a label at 0.45 over this fill is under 3:1 in either
+            // theme.
+            color: chat ? C.text : C.mute,
           }}
         >
-          <Icon path={P.external} size={13} color={C.text} />
+          <Icon path={P.external} size={13} color={chat ? C.text : C.mute} />
           Open in a new window
         </button>
       </div>

@@ -216,9 +216,15 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
                 style={{
                   flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
                   borderRadius: R.card, cursor: catalog?.[p] ? 'pointer' : 'default',
-                  opacity: catalog?.[p] ? 1 : 0.5, textAlign: 'left',
+                  textAlign: 'left',
                   background: on ? C.accentTint : C.bg,
                   border: `1px solid ${on ? C.accentRing : C.border}`,
+                  // A tool that is not on that computer goes grey rather than
+                  // faint: "not installed" is the one thing this tile has to
+                  // say, and at half opacity it said it at 2:1. The colour is
+                  // spelled out because a disabled <button> otherwise takes the
+                  // browser's own disabled grey, which is in no palette.
+                  color: catalog?.[p] ? C.text : C.mute,
                 }}
               >
                 <ProviderMark provider={p} />
@@ -320,8 +326,8 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
         {perm === 'bypass' && (
           <div style={{
             display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px',
-            borderRadius: R.btn, background: 'rgba(216,166,87,0.10)',
-            border: '1px solid rgba(216,166,87,0.32)', marginBottom: 20,
+            borderRadius: R.btn, background: C.warnBg,
+            border: `1px solid ${C.warnLine}`, marginBottom: 20,
           }}>
             <Icon path={P.warn} size={14} color={C.warn} />
             <span style={{ fontSize: 12, lineHeight: '18px', color: C.warn }}>

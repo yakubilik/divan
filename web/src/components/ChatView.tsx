@@ -145,7 +145,7 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
         style={{
           height: 28, padding: '0 12px', borderRadius: R.btn, fontSize: 12, fontWeight: 600,
           cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-          border: '1px solid rgba(224,83,63,0.4)', background: 'rgba(224,83,63,0.14)', color: C.danger,
+          border: `1px solid ${C.dangerLine}`, background: C.dangerBg, color: C.danger,
         }}
       >
         <Icon path={P.stop} size={12} color={C.danger} /> Stop
@@ -279,6 +279,15 @@ function Composer({ chat, hostKey, busy, sending, onSend, onInterrupt, onUpload 
 
   const folder = chat.cwd.split(/[/\\]/).pop();
   const ready = !!text.trim() || pending.length > 0;
+  // The disc takes a colour only when pressing it would do something: red to
+  // send, red to stop, and at rest the quiet fill. What is drawn on it follows
+  // — `onAccent` is the white that belongs on a filled colour and nothing else,
+  // so a resting button gets an ink instead. (It used to be white at half
+  // opacity on `surface2`, which in the light theme is white on off-white: the
+  // send button looked empty until you typed.)
+  const armed = busy || ready || sending;
+  const sendFace = busy && !ready ? C.danger : armed ? C.accent : C.surface2;
+  const sendGlyph = armed ? C.onAccent : C.mute;
   return (
     <div
       style={{ padding: '8px 20px 16px', flexShrink: 0 }}
@@ -341,14 +350,13 @@ function Composer({ chat, hostKey, busy, sending, onSend, onInterrupt, onUpload 
           style={{
             width: 36, height: 36, borderRadius: 18, flexShrink: 0,
             cursor: busy || ready ? 'pointer' : 'default',
-            background: busy && !ready ? C.danger : ready ? C.accent : C.surface2,
-            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: !busy && !ready ? 0.5 : 1,
+            background: sendFace, color: sendGlyph, border: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          {sending ? <Spinner size={14} color="#FFFFFF" />
-            : busy && !ready ? <Icon path={P.stop} size={14} color="#FFFFFF" fill />
-            : <Icon path={P.send} size={16} color="#FFFFFF" width={2.4} />}
+          {sending ? <Spinner size={14} color={sendGlyph} />
+            : busy && !ready ? <Icon path={P.stop} size={14} color={sendGlyph} fill />
+            : <Icon path={P.send} size={16} color={sendGlyph} width={2.4} />}
         </button>
       </div>
       <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 6, display: 'flex', gap: 16 }}>

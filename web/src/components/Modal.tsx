@@ -16,7 +16,7 @@ export function Modal({ children, onClose, width = 680, align = 'center' }: {
     <div
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(6,6,5,0.62)', zIndex: 50,
+        position: 'fixed', inset: 0, background: C.scrim, zIndex: 50,
         display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center',
         justifyContent: 'center', paddingTop: align === 'top' ? 110 : 0,
       }}

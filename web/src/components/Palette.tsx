@@ -107,7 +107,7 @@ export function Palette({ commands, onOpenChat, onNewChatIn, onClose }: {
     <div
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(6,6,5,0.62)', zIndex: 60,
+        position: 'fixed', inset: 0, background: C.scrim, zIndex: 60,
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 110,
       }}
     >

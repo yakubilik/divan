@@ -51,7 +51,7 @@ writeFileSync(join(out, 'harness.html'),
   '<!doctype html><html lang="en"><head><meta charset="utf-8">'
   + '<meta name="viewport" content="width=device-width, initial-scale=1">'
   + '<title>Ticket harness</title><style>'
-  + 'html,body,#root{height:100%;margin:0;background:#0F0E0C;color:#F1ECE3;overflow:hidden;'
+  + 'html,body,#root{height:100%;margin:0;overflow:hidden;'
   + 'font-family:-apple-system,system-ui,sans-serif}</style></head>'
   + '<body><div id="root"></div><script src="./harness.js"></script></body></html>');
 

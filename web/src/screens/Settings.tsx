@@ -12,7 +12,7 @@
 //    folder; there is no request that sets it.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, R, useTheme } from '../lib/theme';
 import { Btn, Dot, Icon, Label, P, Radio, Segment, Spinner, mono } from '../ui/kit';
 import { Modal, ModalHead } from '../components/Modal';
 import { ProviderMark } from '../components/Sidebar';
@@ -35,13 +35,14 @@ import type {
 
 const RAIL_W = 232;
 
-type SectionId = 'hosts' | 'accounts' | 'defaults' | 'tools' | 'security' | 'about';
+type SectionId = 'hosts' | 'accounts' | 'defaults' | 'tools' | 'appearance' | 'security' | 'about';
 
 const SECTIONS: { id: SectionId; label: string; icon: string }[] = [
   { id: 'hosts', label: 'Computers', icon: P.cpu },
   { id: 'accounts', label: 'Accounts', icon: P.agent },
   { id: 'defaults', label: 'New chats', icon: P.plus },
   { id: 'tools', label: 'Tools', icon: P.bolt },
+  { id: 'appearance', label: 'Appearance', icon: P.eye },
   { id: 'security', label: 'Security', icon: P.shield },
   { id: 'about', label: 'About', icon: P.layout },
 ];
@@ -139,8 +140,8 @@ function Note({ children, tone = 'mute' }: { children: React.ReactNode; tone?: '
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px',
-      borderRadius: R.btn, background: tone === 'warn' ? 'rgba(216,166,87,0.10)' : C.surface,
-      border: `1px solid ${tone === 'warn' ? 'rgba(216,166,87,0.28)' : C.border}`,
+      borderRadius: R.btn, background: tone === 'warn' ? C.warnBg : C.surface,
+      border: `1px solid ${tone === 'warn' ? C.warnLine : C.border}`,
       fontSize: 12.5, lineHeight: '18px', color: tone === 'warn' ? C.warn : C.mute,
       marginBottom: 10,
     }}>
@@ -427,8 +428,8 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
         {problem && (
           <div style={{
             marginTop: 12, padding: '10px 12px', borderRadius: R.btn, fontSize: 12.5,
-            color: C.danger, background: 'rgba(224,83,63,0.10)',
-            border: '1px solid rgba(224,83,63,0.28)', lineHeight: '18px',
+            color: C.danger, background: C.dangerBg,
+            border: `1px solid ${C.dangerLine}`, lineHeight: '18px',
           }}>{problem}</div>
         )}
       </div>
@@ -1057,6 +1058,32 @@ function AboutSection({ slot }: { slot: HostSlot }) {
   );
 }
 
+/* ── appearance ───────────────────────────────────────────────────────── */
+
+/** The one setting on this screen that belongs to the browser rather than to a
+ *  computer: Divan is drawn in both themes (Web12 and Web13 are the same
+ *  desktop screens dark and light) and which one is on screen is the reader's,
+ *  not the daemon's. It follows the computer until it is told not to, and then
+ *  it is remembered — a theme that resets every morning is not a setting. */
+export function AppearanceSection() {
+  const { choice, scheme, set } = useTheme();
+  return (
+    <>
+      <Label>theme</Label>
+      <Segment
+        value={choice}
+        options={['system', 'light', 'dark'] as const}
+        onChange={(v) => set(v)}
+      />
+      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: '18px', padding: '10px 0 0' }}>
+        {choice === 'system'
+          ? `Following this computer, which is ${scheme} right now. It changes with it.`
+          : `Set by hand. This browser will open ${choice} until you change it back.`}
+      </div>
+    </>
+  );
+}
+
 /* ── screen ───────────────────────────────────────────────────────────── */
 
 export function Settings() {
@@ -1150,7 +1177,9 @@ export function Settings() {
           <div style={{ maxWidth: 820 }}>
             {section === 'hosts' && <HostsSection />}
 
-            {section !== 'hosts' && !slot && (
+            {section === 'appearance' && <AppearanceSection />}
+
+            {section !== 'hosts' && section !== 'appearance' && !slot && (
               <Note>No computer paired yet. Add one from “Computers” on the left.</Note>
             )}
 

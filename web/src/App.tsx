@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C } from './lib/theme';
+import { C, SHADOW, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { Btn, Icon, KEYFRAMES, P, mono } from './ui/kit';
 import { Sidebar, type View } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
@@ -24,6 +24,10 @@ interface Selection { hostKey: string; chatId: string }
 
 export function App() {
   const fleet = useFleet();
+  // Read for one reason: the palette has to offer the theme that is not on
+  // screen. Nothing else in the panel re-renders on a theme change — the
+  // colours are custom properties and the switch is one attribute on <html>.
+  const theme = useTheme();
   const logs = useLogs();
   const [view, setView] = useState<View>('chats');
   const [sel, setSel] = useState<Selection | null>(null);
@@ -276,6 +280,12 @@ export function App() {
       { id: 'agents', label: 'Agents', shortcut: '⌘3', run: () => setView('agents') },
       { id: 'admin', label: 'Admin', shortcut: '⌘4', run: () => setView('admin') },
       { id: 'settings', label: 'Settings', shortcut: '⌘,', run: () => setView('settings') },
+      {
+        id: 'theme',
+        label: theme.scheme === 'dark' ? 'Light theme' : 'Dark theme',
+        hint: theme.choice === 'system' ? 'following this computer' : 'set by hand',
+        run: () => setThemeChoice(theme.scheme === 'dark' ? 'light' : 'dark'),
+      },
     ];
     // Only means anything with more than one computer paired.
     if (fleet.order.length > 1) {
@@ -298,7 +308,7 @@ export function App() {
       });
     }
     return list;
-  }, [fleet.hosts, fleet.order, fleet.allHosts, slot?.info?.name]);
+  }, [fleet.hosts, fleet.order, fleet.allHosts, slot?.info?.name, theme.scheme, theme.choice]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -323,6 +333,7 @@ export function App() {
   if (fleet.ready && !fleet.order.length) {
     return (
       <>
+        <style>{themeCss()}</style>
         <style>{KEYFRAMES}</style>
         <Onboarding onPaired={() => setView('chats')} />
       </>
@@ -331,6 +342,7 @@ export function App() {
 
   return (
     <>
+      <style>{themeCss()}</style>
       <style>{KEYFRAMES}</style>
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
         <Sidebar
@@ -373,7 +385,7 @@ export function App() {
           onClick={() => setPeek(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 25, padding: 24,
-            background: 'rgba(0,0,0,0.62)', display: 'flex',
+            background: C.scrim, display: 'flex',
             alignItems: 'center', justifyContent: 'center',
           }}
         >
@@ -383,7 +395,7 @@ export function App() {
               width: '100%', maxWidth: 1040, height: 'min(880px, 100%)',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
               background: C.bg, border: `1px solid ${C.borderStrong}`, borderRadius: 18,
-              boxShadow: '0 40px 90px -30px rgba(0,0,0,0.9)',
+              boxShadow: SHADOW.drawer,
             }}
           >
             <div style={{

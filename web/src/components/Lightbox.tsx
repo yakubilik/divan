@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { R } from '../lib/theme';
+import { MEDIA, R } from '../lib/theme';
 import { Icon, P, mono } from '../ui/kit';
 
 export interface Shot {
@@ -15,10 +15,13 @@ function Tool({ icon, title, onClick, href }: {
 }) {
   const style: React.CSSProperties = {
     width: 34, height: 34, borderRadius: R.btn, flexShrink: 0, cursor: 'pointer',
-    background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)',
+    background: MEDIA.chrome, border: `1px solid ${MEDIA.chromeLine}`,
     display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none',
+    // One of these two is an <a>, and an <a> that names no colour is the
+    // browser's own blue — which is in no palette and sits over a photograph.
+    color: MEDIA.ink,
   };
-  const glyph = <Icon path={icon} size={16} color="#EDEAE3" />;
+  const glyph = <Icon path={icon} size={16} color={MEDIA.ink} />;
   return href
     ? <a href={href} title={title} download style={style}>{glyph}</a>
     : <button type="button" title={title} onClick={onClick} style={style}>{glyph}</button>;
@@ -52,17 +55,17 @@ export function Lightbox({ shots, start, onClose }: {
     <div
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
-        position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(6,6,5,0.88)',
+        position: 'fixed', inset: 0, zIndex: 60, background: MEDIA.backdrop,
         display: 'flex', flexDirection: 'column', padding: 16, gap: 12,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <span style={{
-          ...mono, flex: 1, minWidth: 0, fontSize: 12.5, color: '#EDEAE3',
+          ...mono, flex: 1, minWidth: 0, fontSize: 12.5, color: MEDIA.ink,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{shot.name}</span>
         {many && (
-          <span style={{ ...mono, fontSize: 12, color: 'rgba(237,234,227,0.6)', flexShrink: 0 }}>
+          <span style={{ ...mono, fontSize: 12, color: MEDIA.inkDim, flexShrink: 0 }}>
             {i + 1} / {shots.length}
           </span>
         )}

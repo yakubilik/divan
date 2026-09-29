@@ -28,7 +28,7 @@ export function Chip({ children, onClick, tone = 'plain', title, shrink }: {
   shrink?: boolean;
 }) {
   const bg = tone === 'accent' ? C.accentTint : C.surface;
-  const bd = tone === 'accent' ? C.accentRing : tone === 'warn' ? 'rgba(216,166,87,0.32)' : C.border;
+  const bd = tone === 'accent' ? C.accentRing : tone === 'warn' ? C.warnLine : C.border;
   return (
     <button
       type="button" onClick={onClick} title={title} disabled={!onClick}
@@ -58,13 +58,22 @@ export function Btn({ children, onClick, kind = 'ghost', disabled, wide, title, 
   const style: React.CSSProperties = {
     height: 34, padding: '0 14px', borderRadius: R.btn, fontSize: 13, fontWeight: 600,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-    cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1,
+    cursor: disabled ? 'default' : 'pointer',
     width: wide ? '100%' : undefined, whiteSpace: 'nowrap',
     border: `1px solid ${C.border}`, background: C.surface2, color: C.text,
   };
-  if (kind === 'primary') { style.background = C.accent; style.borderColor = C.accent; style.color = '#FFFFFF'; }
-  if (kind === 'danger') { style.background = 'rgba(224,83,63,0.14)'; style.borderColor = 'rgba(224,83,63,0.4)'; style.color = C.danger; }
+  if (kind === 'primary') { style.background = C.accent; style.borderColor = C.accent; style.color = C.onAccent; }
+  if (kind === 'danger') { style.background = C.dangerBg; style.borderColor = C.dangerLine; style.color = C.danger; }
   if (kind === 'quiet') { style.background = 'transparent'; style.color = C.mute; }
+  // A button that cannot be pressed drops its colour rather than fading behind
+  // it: "zero is grey" is the design's own way of saying nothing-to-do, and a
+  // white label at 0.45 over the accent read at 1.7:1 — an empty-looking
+  // button in either theme.
+  if (disabled) {
+    style.background = C.surface2;
+    style.borderColor = C.border;
+    style.color = C.mute;
+  }
   return (
     <button type={type ?? 'button'} onClick={onClick} disabled={disabled} title={title} style={style}>
       {children}
@@ -106,7 +115,7 @@ export function Segment<T extends string>({ value, options, onChange, tone }: {
               flex: '1 1 auto', height: 28, padding: '0 8px',
               borderRadius: 6, border: 'none', cursor: 'pointer',
               fontSize: 13, fontWeight: on ? 600 : 400,
-              background: on ? (warn ? 'rgba(216,166,87,0.18)' : C.surface2) : 'transparent',
+              background: on ? (warn ? C.warnBg : C.surface2) : 'transparent',
               color: on ? (warn ? C.warn : C.text) : C.mute,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}
@@ -139,7 +148,7 @@ export function Radio({ label, hint, right, on, last = false, onPick }: {
         background: on ? C.accent : 'transparent',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {on && <span style={{ width: 5, height: 5, borderRadius: 3, background: '#FFF' }} />}
+        {on && <span style={{ width: 5, height: 5, borderRadius: 3, background: C.onAccent }} />}
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>{label}</span>

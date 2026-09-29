@@ -52,6 +52,11 @@ const {
   answerable, bullets, cardLine, commitCount, conversation, groupByProject, hasDetails,
   noteHint, projectName, question, roundAge, sortTickets, stageLine, stateLine, totalAge,
 } = await import(pathToFileURL(join(out, 'lib', 'ustabasi.js')));
+// The colours a ticket is drawn in are the design's own tones now, so the view
+// is handed the same thing the wall hands it rather than a copy of four values.
+// `theme.ts` reads the browser as it loads; a static render has none.
+globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+const { toneFace, themeCss } = await import(pathToFileURL(join(out, 'lib', 'theme.js')));
 const { TicketChat } = await import(pathToFileURL(join(out, 'components', 'TicketChat.js')));
 
 let failures = 0;
@@ -231,7 +236,7 @@ group('the view');
   const t = ticket();
   const html = renderToStaticMarkup(createElement(TicketChat, {
     t,
-    tone: { label: 'needs an answer', color: '#D8A657', rgb: '216,166,87' },
+    tone: toneFace('needs an answer', 'amber'),
     onClose: () => {},
     onNote: async () => 'note added',
   }));
@@ -255,9 +260,12 @@ group('the view');
     '<!doctype html><html lang="en"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width, initial-scale=1">'
     + '<title>Ticket preview</title><style>'
-    + 'html,body{height:100%;margin:0;background:#0F0E0C;color:#F1ECE3;overflow:hidden;'
+    // The panel's own palette, both themes, so the preview is the colour the
+    // phone browser's own setting says it should be.
+    + themeCss()
+    + 'html,body{height:100%;margin:0;overflow:hidden;'
     + 'font-family:-apple-system,"SF Pro Text",system-ui,sans-serif}'
-    + '</style></head><body>' + html
+    + '</style></head><body data-theme="dark">' + html
     // A static render runs no effects, so it opens at the top; the panel opens
     // at the end, which is where the question is.
     + '<script>for(const d of document.querySelectorAll("div"))'

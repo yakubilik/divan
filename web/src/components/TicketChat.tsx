@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, R, type ToneFace } from '../lib/theme';
 import { Dot, Icon, P, Spinner, mono } from '../ui/kit';
 import { Bubble, Prose } from './Bubble';
 import { answerable, conversation, hasDetails, noteHint, VOICE, type Msg, type Ticket } from '../lib/ustabasi';
@@ -75,7 +75,7 @@ function More({ text }: { text: string }) {
  *  a chat; everything the machinery said is plain words on the left. */
 function Row({ m, tone, asking }: {
   m: Msg;
-  tone: { color: string; rgb: string };
+  tone: { color: string; wash: string; edge: string };
   /** the last message is the ticket's question, not a line about its state */
   asking: boolean;
 }) {
@@ -101,7 +101,7 @@ function Row({ m, tone, asking }: {
         {m.tail && asking ? (
           <div style={{
             padding: '12px 14px', borderRadius: R.card, color: C.text,
-            background: `rgba(${tone.rgb},0.08)`, border: `1px solid rgba(${tone.rgb},0.28)`,
+            background: tone.wash, border: `1px solid ${tone.edge}`,
           }}>
             <Prose text={m.text} />
           </div>
@@ -194,6 +194,10 @@ function Composer({ t, busy, error, onSend }: {
   };
 
   const ready = !!text.trim();
+  // Armed while there is something to send and while it is being sent. The
+  // white `onAccent` glyph belongs on the red disc; a resting disc is a quiet
+  // fill and takes an ink, or it is white on off-white in the light theme.
+  const armed = ready || busy;
   return (
     <div style={{ padding: '8px 16px 14px', flexShrink: 0 }}>
       {error && <div style={{ fontSize: 12.5, color: C.danger, marginBottom: 6 }}>{error}</div>}
@@ -218,13 +222,13 @@ function Composer({ t, busy, error, onSend }: {
           style={{
             width: 36, height: 36, borderRadius: 18, flexShrink: 0,
             cursor: ready && !busy ? 'pointer' : 'default',
-            background: ready ? C.accent : C.surface2, border: 'none',
+            background: armed ? C.accent : C.surface2, border: 'none',
+            color: armed ? C.onAccent : C.mute,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: ready ? 1 : 0.5,
           }}
         >
-          {busy ? <Spinner size={14} color="#FFFFFF" />
-            : <Icon path={P.send} size={16} color="#FFFFFF" width={2.4} />}
+          {busy ? <Spinner size={14} color={armed ? C.onAccent : C.mute} />
+            : <Icon path={P.send} size={16} color={armed ? C.onAccent : C.mute} width={2.4} />}
         </button>
       </div>
       <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 6 }}>
@@ -237,7 +241,7 @@ function Composer({ t, busy, error, onSend }: {
 export function TicketChat({ t, tone, onClose, onNote }: {
   t: Ticket;
   /** the tile's own colour, so the ticket that was red stays red */
-  tone: { label: string; color: string; rgb: string };
+  tone: ToneFace;
   onClose: () => void;
   onNote: (text: string) => Promise<string>;
 }) {
@@ -294,7 +298,7 @@ export function TicketChat({ t, tone, onClose, onNote }: {
     <div
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
-        position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(6,6,5,0.62)',
+        position: 'fixed', inset: 0, zIndex: 40, background: C.scrim,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         // Room to see the wall behind it on a desktop; on a phone the ticket
         // gets the whole window, because there is no room to spare.
