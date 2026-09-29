@@ -496,6 +496,9 @@ const drawn = {};
     styles(drawn.Card)[0]['border-radius'] === '16px');
   ok('a card that is asking wears the amber ring instead',
     styles(drawn.CardAsking)[0]['box-shadow'].includes(v('amberRing')));
+  ok('…and a ticket card is the tighter of the two paddings the frames draw',
+    styles(drawn.CardAsking)[0].padding === '12px 14px 13px'
+    && styles(drawn.Card)[0].padding === '16px 18px');
   ok('a card being carried is drawn on the lifted surface, and falls further',
     styles(drawn.CardLifted)[0].background === v('sLift')
     && styles(drawn.CardLifted)[0]['box-shadow'].includes('24px'));

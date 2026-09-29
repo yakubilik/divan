@@ -62,11 +62,16 @@ function Tap({ onClick, title, style, children }: {
  *  `bar` is the two-pixel green rule across the top of a card whose work is
  *  running, at the fraction of it that is done.
  *
+ *  The frames draw two paddings and this is both of them: a card that is a
+ *  section of a page is `16px 18px` (Web14 W6), and a card that is a ticket in
+ *  a board column is `12px 14px 13px` at `gap:8px`, which is `tight` (Web12 W2,
+ *  where four columns of them agree).
+ *
  *  `inset={false}` is the card whose children carry the padding, because they
  *  are rows rather than a block — the agent roster of Web12 W1 (`padding:2px
  *  12px`, each row over a `line`) and the machines table of Web15 W12. */
 export function Card({
-  ring = 'line', lifted, raised, bar, radius = RADIUS.card, inset = true,
+  ring = 'line', lifted, raised, bar, radius = RADIUS.card, inset = true, tight,
   onClick, title, style, children,
 }: {
   ring?: 'line' | 'amber' | 'red' | 'run' | 'none';
@@ -78,6 +83,8 @@ export function Card({
   bar?: number | null;
   radius?: number;
   inset?: boolean;
+  /** A ticket card rather than a section of a page. */
+  tight?: boolean;
   onClick?: () => void;
   title?: string;
   style?: React.CSSProperties;
@@ -98,15 +105,15 @@ export function Card({
       background: lifted ? T.sLift : T.s1,
       borderRadius: radius,
       boxShadow: shadow || undefined,
-      padding: inset ? '16px 18px' : 0,
-      display: 'flex', flexDirection: 'column', gap: inset ? 12 : 0,
+      padding: !inset ? 0 : tight ? '12px 14px 13px' : '16px 18px',
+      display: 'flex', flexDirection: 'column', gap: !inset ? 0 : tight ? 8 : 12,
       minWidth: 0, overflow: 'hidden',
       ...style,
     }}>
       {bar != null && (
         <div style={{
           height: 2, width: `${Math.max(0, Math.min(1, bar)) * 100}%`, background: T.run,
-          margin: inset ? '-16px -18px 0' : 0, flexShrink: 0,
+          margin: !inset ? 0 : tight ? '-12px -14px 0' : '-16px -18px 0', flexShrink: 0,
         }} />
       )}
       {children}

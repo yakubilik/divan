@@ -51,7 +51,7 @@ export const SPECIMENS: Specimen[] = [
   {
     name: 'CardAsking', frame: 'Web12 W1', width: 380,
     node: (
-      <Card ring="amber" radius={14}>
+      <Card ring="amber" radius={14} tight>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <ExecutorBadge executor="coder" />
           <span style={{ fontSize: 13, fontWeight: 600 }}>Coder</span>
