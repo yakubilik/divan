@@ -23,7 +23,7 @@
 //     itself while a laptop is shut — but what an *agent* is doing there cannot
 //     be known, so that is a counter of its own and every line built on it says
 //     how old it is.
-import { stuck, waiting, type DivanView, type MergedAgent, type MergedCard,
+import { spent, stuck, waiting, type DivanView, type MergedAgent, type MergedCard,
          type MergedProject } from './divan';
 import { LOCALE, type Key } from './i18n';
 import type { DivanExecutor } from './protocol';
@@ -483,12 +483,14 @@ export interface AgentRow {
 
 export function agentRows(view: DivanView): AgentRow[] {
   const at = new Map(view.projects.map((p, i) => [p.key, i]));
-  const spent = new Set(view.hosts.filter((h) => !h.stale && h.quota?.spent).map((h) => h.id));
+  // The merge's own reading of "this machine has nothing left to run on", not a
+  // second spelling of it (`divan.ts outOfQuota`).
+  const stopped = spent(view);
   const rank = (r: AgentRow) => (r.mark === '◌' ? 0 : r.mark === '⏸' ? 1 : 2);
   return view.agents.map((agent) => ({
     agent,
-    mark: agent.unknown ? '◌' : spent.has(agent.host) ? '⏸' : STATE_MARK.running,
-    tone: (agent.unknown ? 'amber' : spent.has(agent.host) ? 'red' : 'run') as Tone,
+    mark: agent.unknown ? '◌' : stopped.has(agent.host) ? '⏸' : STATE_MARK.running,
+    tone: (agent.unknown ? 'amber' : stopped.has(agent.host) ? 'red' : 'run') as Tone,
     who: executorKey(agent.executor),
     index: at.has(agent.projectKey) ? at.get(agent.projectKey)! : -1,
   })).sort((a, b) => rank(a) - rank(b) || (b.agent.since ?? 0) - (a.agent.since ?? 0));

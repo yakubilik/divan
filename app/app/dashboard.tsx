@@ -319,9 +319,14 @@ function Project({ project: p, index, view, now, ago }: {
   const body = blankBody(p);
   const happening = nowWords(view, p);
   const pending = waitingWords(view, p);
-  /** One of the two lines, with the executor it names put into the reader's
-   *  language — the same two-step the Dashboard's questions take. */
-  const line = (x: Line) => T(x.said.key, x.who ? { ...x.said.params, who: T(x.who) } : x.said.params);
+  /** One of the two lines: every sentence it is made of, worst first, with the
+   *  executor each names put into the reader's language — the same two-step the
+   *  Dashboard's questions take. Several sentences where several things are true
+   *  at once, which is what keeps "1 agent is running" off a page whose own card
+   *  says `⏸ 1 paused`. */
+  const line = (x: Line) => x.clauses
+    .map((c) => T(c.said.key, c.who ? { ...c.said.params, who: T(c.who) } : c.said.params))
+    .join(' ');
   return (
     // `flexGrow` so that the empty board, which centres itself in what it is
     // given, has the page to centre itself in. Mobile7 S4's own body: `padding:

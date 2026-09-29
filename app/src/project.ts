@@ -25,7 +25,7 @@
 // Mobile7 S4), one nothing has touched in weeks (Mobile7 S5) and one whose board
 // is still empty (Mobile7 S6). None of them is the busy page with things taken
 // out of it — each is decided here, by name.
-import { COLUMNS, stuck, waiting, type DivanView, type MergedBranch, type MergedCard,
+import { COLUMNS, spent, stuck, waiting, type DivanView, type MergedBranch, type MergedCard,
          type MergedProject } from './divan';
 import { age, asks, clock, dormant, executorKey, latest, staleFor,
          type Ago, type Said } from './dashboard';
@@ -64,65 +64,112 @@ export function subtitle(p: MergedProject): string {
 
 // ── the two lines at the top ────────────────────────────────────────────────
 
-/** One of them: `now` or `waiting`, in words, with the tone the label takes and
- *  — where the sentence names an executor — which one. The screen puts `who`
- *  into the gap in the reader's language, the way the Dashboard's questions do;
- *  nothing here holds a sentence. */
-export interface Line {
+/** One sentence of a line. `who` is the executor it names, where it names one:
+ *  the screen puts it into the gap in the reader's language, the way the
+ *  Dashboard's questions do. Nothing here holds a sentence. */
+export interface Clause {
   said: Said;
   who: Key | null;
+}
+
+/** One of the two rows — `now` or `waiting` — as the sentences it is made of and
+ *  the tone of the mono label in front of them.
+ *
+ *  Several sentences rather than one, because the state of a product's agents is
+ *  not always one fact: a product checked out on two computers can have an agent
+ *  at work on one of them and an agent stopped on the other, and a row that
+ *  picked the worse of the two and dropped the other would be the row that says
+ *  "1 agent is running" on a page whose own project card reads `⏸ 1 paused`.
+ *  Worst first, and all of it. */
+export interface Line {
+  clauses: Clause[];
   /** The colour of the mono label in front of it. Null is the ordinary grey. */
   tone: Tone | null;
 }
 
 /** What is happening on this product right now (Mobile7 S4's `now` row).
  *
- *  Worst-to-plainest, and every one of them counted: agents at work, agents on a
- *  machine that has gone quiet, agents stopped because the quota ran out, and
- *  nothing running at all. The machines are named in every case — a product
- *  checked out on the studio and the mini is one product on two computers, and
- *  which ones is the fact a person needs before any of the numbers mean
- *  anything.
+ *  Three things can be true of a product's agents at once, and they are three
+ *  different facts: some are at work, some were at work on a computer that has
+ *  since gone quiet, and some are stopped where they stood because a machine ran
+ *  out of quota. A product on two computers can be in all three states at the
+ *  same moment.
  *
- *  A single agent is named by what it is and what it is on; several are counted,
- *  because five names is a paragraph. */
+ *  So the row is every one of them that is true, worst first, and the order is
+ *  `chip()`'s own (`src/dashboard.ts`): a machine that has gone quiet, then
+ *  agents stopped for want of quota, then work actually running. The tone is the
+ *  worst of them, which is the same word the product's card in the Dashboard's
+ *  list puts in its corner — the two cannot disagree, because they are sorted by
+ *  the same rule, and nothing is dropped to make them agree.
+ *
+ *  A single agent at work is named by what it is and what it is on; several are
+ *  counted, because five names is a paragraph. The one named is picked from the
+ *  agents that are *actually running* — not on a quiet machine and not on a spent
+ *  one — so the sentence can never put "running on studio" against the title of
+ *  a worker that is stopped there.
+ *
+ *  The machines are named in every clause: a product checked out on the studio
+ *  and the mini is one product on two computers, and which ones is the fact a
+ *  person needs before any of the numbers mean anything. */
 export function nowWords(view: DivanView, p: MergedProject): Line {
   const on = p.machines.join(', ');
-  const mine = view.agents.filter((a) => a.projectKey === p.key);
+  const stopped = spent(view);
+  // The agents of this product that nothing is keeping from working: not on a
+  // machine that has gone quiet, and not on one with no quota left. `paused` and
+  // `unknown` are the merge's counts of the other two, off the same two rules.
+  const live = view.agents.filter((a) => a.projectKey === p.key && !a.unknown && !stopped.has(a.host));
   // What was last known, minus what cannot be vouched for: an agent on a silent
   // machine and one stopped on a spent machine are both still in `running`.
   const busy = Math.max(0, p.running - p.unknown - p.paused);
-  if (busy > 0) {
-    const one = mine.find((a) => !a.unknown);
-    if (busy === 1 && one) {
-      const who = executorKey(one.executor);
-      return { said: { key: 'prNowOne', params: { who, title: one.title, machine: one.machine || on } },
-               who, tone: 'run' };
-    }
-    return { said: busy === 1 ? { key: 'prNowOneBare', params: { on } }
-                              : { key: 'prNowMany', params: { n: busy, on } },
-             who: null, tone: 'run' };
-  }
+  const clauses: { said: Said; who: Key | null; tone: Tone }[] = [];
+
   if (p.unknown > 0) {
     const n = p.unknown;
-    return {
+    // The machines that went quiet, not every machine the product is on: an
+    // agent that was running on the mini was not running on the studio, which is
+    // answering and has its own clause below.
+    const where = p.staleMachines.join(', ') || on;
+    clauses.push({
       said: p.lastSeen == null
-        ? { key: n === 1 ? 'prNowUnknownBareOne' : 'prNowUnknownBare', params: { n, on } }
+        ? { key: n === 1 ? 'prNowUnknownBareOne' : 'prNowUnknownBare', params: { n, on: where } }
         : { key: n === 1 ? 'prNowUnknownOne' : 'prNowUnknown',
-            params: { n, on, time: clock(p.lastSeen) } },
+            params: { n, on: where, time: clock(p.lastSeen) } },
       who: null, tone: 'amber',
-    };
+    });
   }
   if (p.paused > 0) {
     const n = p.paused;
-    return {
+    // …and likewise the machines its stopped agents are stopped on, read off
+    // those agents rather than off the fleet: on a product checked out on a spent
+    // computer and a working one, only one of them stopped anything.
+    const held = view.agents.filter((a) => a.projectKey === p.key && !a.unknown && stopped.has(a.host));
+    const where = [...new Set(held.map((a) => a.machine))].filter(Boolean).join(', ') || on;
+    clauses.push({
       said: p.pausedUntil == null
-        ? { key: n === 1 ? 'prNowPausedBareOne' : 'prNowPausedBare', params: { n } }
-        : { key: n === 1 ? 'prNowPausedOne' : 'prNowPaused', params: { n, time: clock(p.pausedUntil) } },
+        ? { key: n === 1 ? 'prNowPausedBareOne' : 'prNowPausedBare', params: { n, on: where } }
+        : { key: n === 1 ? 'prNowPausedOne' : 'prNowPaused',
+            params: { n, on: where, time: clock(p.pausedUntil) } },
       who: null, tone: 'red',
-    };
+    });
   }
-  return { said: { key: 'prNowIdle', params: { on } }, who: null, tone: null };
+  if (busy > 0) {
+    const one = live[0];
+    const who = one ? executorKey(one.executor) : null;
+    clauses.push({
+      // A count with no agent behind it is a machine whose snapshot says one is
+      // running and does not say which: the figure is still true and is said
+      // without a name, rather than naming whatever agent came to hand.
+      said: busy === 1 && one && who
+        ? { key: 'prNowOne', params: { who, title: one.title, machine: one.machine || on } }
+        : busy === 1 ? { key: 'prNowOneBare', params: { on } }
+        : { key: 'prNowMany', params: { n: busy, on } },
+      who: busy === 1 && one ? who : null, tone: 'run',
+    });
+  }
+  if (!clauses.length) {
+    return { clauses: [{ said: { key: 'prNowIdle', params: { on } }, who: null }], tone: null };
+  }
+  return { clauses: clauses.map(({ said, who }) => ({ said, who })), tone: clauses[0].tone };
 }
 
 /** …and what it is waiting for (the `waiting` row).
@@ -137,21 +184,17 @@ export function nowWords(view: DivanView, p: MergedProject): Line {
  *  that says so is worth more than a row that is not there. */
 export function waitingWords(view: DivanView, p: MergedProject): Line {
   const list = asks(view).filter((a) => a.card.projectKey === p.key);
-  if (!list.length) return { said: { key: 'prWaitNothing' }, who: null, tone: null };
+  const one = (said: Said, who: Key | null, tone: Tone | null): Line => ({ clauses: [{ said, who }], tone });
+  if (!list.length) return one({ key: 'prWaitNothing' }, null, null);
   const worst: Tone = list.some((a) => a.state === 'stuck') ? 'red' : 'amber';
-  if (list.length > 1) {
-    return { said: { key: 'prWaitMany', params: { n: list.length } }, who: null, tone: worst };
-  }
+  if (list.length > 1) return one({ key: 'prWaitMany', params: { n: list.length } }, null, worst);
   const first = list[0];
   if (first.state === 'yours') {
-    return { said: { key: 'prWaitYours', params: { title: first.card.title } }, who: null, tone: 'amber' };
+    return one({ key: 'prWaitYours', params: { title: first.card.title } }, null, 'amber');
   }
-  return {
-    said: { key: first.state === 'stuck' ? 'prWaitStuck' : 'prWaitAsking',
-            params: { who: first.who, title: first.card.title } },
-    who: first.who,
-    tone: first.state === 'stuck' ? 'red' : 'amber',
-  };
+  return one({ key: first.state === 'stuck' ? 'prWaitStuck' : 'prWaitAsking',
+               params: { who: first.who, title: first.card.title } },
+             first.who, first.state === 'stuck' ? 'red' : 'amber');
 }
 
 /** Which machine of this product's has gone quiet, and how old what is on the

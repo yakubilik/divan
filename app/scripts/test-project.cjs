@@ -210,6 +210,21 @@ const SPENT = paired('h1', 'studio', {
     activity: { '/r/kanji': { at: NOW - 2 * DAY, week: 4, today: 0 } } }),
 });
 
+/** …and a second computer that is working, with its own checkout of the same
+ *  product on it. Together with `SPENT` this is the case the page has to get
+ *  right: one product, one agent stopped for want of quota and one plainly
+ *  running, on two machines that are both answering. */
+const ALSO = paired('h4', 'shed', {
+  reachable: true, at: NOW - 8,
+  snapshot: snapshot('shed', { at: NOW - 8, quota: quota({ left: 0.4, resets_at: NOW + 2 * HOUR }),
+    projects: [project('Kanji Daily', {
+      kind: 'iOS · Android', summary: 'five kanji a day', repos: ['/r/kanji-ios'],
+      running: 1, updated_at: NOW - 20, counts: { in_progress: 1 },
+      branches: [branch('engineering', 'Engineering', { open: 1, cards: { in_progress: 1 } })] })],
+    cards: [card('s1', { project: 'Kanji Daily-id', status: 'running', title: 'Streak screen' })],
+    agents: [agent('s1', { project: 'Kanji Daily-id', projectName: 'Kanji Daily', machine: 'shed',
+                           title: 'Streak screen' })] }) });
+
 const view = (hosts) => M.merge(hosts, NOW);
 const ONE = view([STUDIO]);
 const TWO = view([STUDIO, MINI]);
@@ -217,6 +232,7 @@ const TWO = view([STUDIO, MINI]);
  *  every number on the page is a memory, and the page has to say so. */
 const GONE = view([MINI]);
 const OUT = view([SPENT]);
+const MIXED = view([SPENT, ALSO]);
 const of = (v, key) => M.project(v, key);
 const quire = of(ONE, 'quire');
 const kanji = of(ONE, 'kanji-daily');
@@ -245,39 +261,102 @@ const ago = (s) => (s == null ? '' : `${Math.round(s)}s`);
 // ── 2 · what is happening now ───────────────────────────────────────────────
 
 {
-  const line = (v, p) => P.nowWords(v, p);
+  /** The row, as the keys it is made of. Several where several things are true. */
+  const keys = (v, p) => P.nowWords(v, p).clauses.map((c) => c.said.key);
+  const first = (v, p) => P.nowWords(v, p).clauses[0];
   const kanjiTwo = of(TWO, 'kanji-daily');
+  const mixed = of(MIXED, 'kanji-daily');
   checks.push(
     ['one agent at work is named, by what it is and what it is on',
-      eq(line(ONE, kanji).said,
+      eq(first(ONE, kanji).said,
          { key: 'prNowOne', params: { who: 'exCoder', title: 'Gradle 8.6 bump', machine: 'studio' } })
-      && line(ONE, kanji).who === 'exCoder' && line(ONE, kanji).tone === 'run'],
+      && first(ONE, kanji).who === 'exCoder' && P.nowWords(ONE, kanji).tone === 'run'],
     ['several are counted, and the computers they are on are named',
-      eq(line(ONE, quire).said, { key: 'prNowMany', params: { n: 2, on: 'studio' } })],
+      eq(first(ONE, quire).said, { key: 'prNowMany', params: { n: 2, on: 'studio' } })],
     ['…on every one of the machines the product is checked out on',
       of(TWO, 'kanji-daily').machines.join(', ') === 'studio, mini'],
     ['nothing running says so, and still says where the product lives',
-      eq(line(ONE, walk).said, { key: 'prNowIdle', params: { on: 'studio' } })
-      && line(ONE, walk).tone === null],
+      eq(first(ONE, walk).said, { key: 'prNowIdle', params: { on: 'studio' } })
+      && P.nowWords(ONE, walk).tone === null && keys(ONE, walk).length === 1],
     ['an agent on a machine that has gone quiet is a different sentence, with the clock on it',
       (() => {
         const p = of(GONE, 'kanji-daily');
         const said = P.nowWords(GONE, p);
-        return said.said.key === 'prNowUnknownOne' && said.said.params.on === 'mini'
-          && /^\d{2}:\d{2}$/.test(said.said.params.time) && said.tone === 'amber';
+        return said.clauses[0].said.key === 'prNowUnknownOne' && said.clauses[0].said.params.on === 'mini'
+          && /^\d{2}:\d{2}$/.test(said.clauses[0].said.params.time) && said.tone === 'amber';
       })()],
     ['…and so is one stopped because the quota ran out, with the hour it starts again',
-      P.nowWords(OUT, of(OUT, 'kanji-daily')).said.key === 'prNowPausedOne'
+      eq(keys(OUT, of(OUT, 'kanji-daily')), ['prNowPausedOne'])
       && P.nowWords(OUT, of(OUT, 'kanji-daily')).tone === 'red'],
     ['a quiet machine that never said when it was heard from has no clock to print',
-      P.nowWords(GONE, { ...of(GONE, 'kanji-daily'), lastSeen: null }).said.key === 'prNowUnknownBareOne'],
+      first(GONE, { ...of(GONE, 'kanji-daily'), lastSeen: null }).said.key === 'prNowUnknownBareOne'],
     ['…and neither does a spent machine that never said when it comes back',
-      P.nowWords(OUT, { ...of(OUT, 'kanji-daily'), pausedUntil: null }).said.key === 'prNowPausedBareOne'],
+      first(OUT, { ...of(OUT, 'kanji-daily'), pausedUntil: null }).said.key === 'prNowPausedBareOne'],
     ['an agent still at work on the machine that is answering is not hidden by the one that is not',
       // Kanji Daily is checked out on both: the mini's agent cannot be vouched
-      // for, the studio's is plainly running, and the line names the one that is.
+      // for, the studio's is plainly running, and the row says both — the quiet
+      // machine first, because that is the order the project card ranks them in.
       kanjiTwo.running === 2 && kanjiTwo.unknown === 1
-      && line(TWO, kanjiTwo).said.key === 'prNowOne'],
+      && eq(keys(TWO, kanjiTwo), ['prNowUnknownOne', 'prNowOne'])],
+
+    // ── one machine spent, another working, one product ───────────────────
+    // The case that had the page calling a stopped worker a running one. Both
+    // machines answer; the studio has nothing left to run on and its agent is
+    // stopped where it stood, the shed is working.
+    ['a product with one machine out of quota and another working says both, worst first',
+      mixed.running === 2 && mixed.paused === 1 && mixed.unknown === 0
+      && eq(keys(MIXED, mixed), ['prNowPausedOne', 'prNowOne'])
+      && P.nowWords(MIXED, mixed).tone === 'red'],
+    ['…naming the agent on the machine that is working, and never the one that is stopped',
+      (() => {
+        const said = P.nowWords(MIXED, mixed);
+        const running = said.clauses.find((c) => c.said.key === 'prNowOne');
+        return eq(running.said.params,
+                  { who: 'exCoder', title: 'Streak screen', machine: 'shed' })
+          // The stopped agent is on the studio and is called `Gradle 8.6 bump`.
+          // No clause that says work is running may name either: not the title,
+          // and not the computer it is stopped on.
+          && said.clauses.filter((c) => /^prNow(One|OneBare|Many)$/.test(c.said.key))
+            .every((c) => !`${c.said.params.machine || ''} ${c.said.params.on || ''}`.includes('studio'))
+          && said.clauses.every((c) => (c.said.params || {}).title !== 'Gradle 8.6 bump')
+          // …while the clause about what is stopped names the computer it is
+          // stopped on, which is the studio and only the studio.
+          && said.clauses[0].said.params.on === 'studio';
+      })()],
+    ['…and the label takes the same word the product\u2019s card in the list puts in its corner',
+      D.chip(mixed, NOW, ago).key === 'pcPaused' && P.nowWords(MIXED, mixed).tone === 'red'],
+    ['…and "this machine has nothing left to run on" is the merge\u2019s own reading of it',
+      (() => {
+        // One exported rule (`divan.ts outOfQuota`), three readers: the merge's
+        // own paused count, the Dashboard's agent roster and this row. A second
+        // spelling of it is what let the row call a stopped worker a running one.
+        const stopped = M.spent(MIXED);
+        const held = MIXED.agents.filter((a) => !a.unknown && stopped.has(a.host));
+        return stopped.size === 1 && stopped.has('h1') && held.length === mixed.paused
+          && D.agentRows(MIXED).filter((r) => r.mark === '⏸').length === mixed.paused;
+      })()],
+    ['the two readings cannot disagree, on any of the fleets here',
+      // `chip()` ranks a quiet machine over stopped agents over running work;
+      // this row is ordered by the same rule, so where the corner is about
+      // agents at all the tone is the corner's own colour.
+      [[MIXED, 'kanji-daily'], [OUT, 'kanji-daily'], [GONE, 'kanji-daily'],
+       [TWO, 'kanji-daily'], [ONE, 'kanji-daily'], [ONE, 'the-long-walk'], [ONE, 'pebble']]
+        .every(([v, key]) => {
+          const p = of(v, key);
+          const corner = D.chip(p, NOW, ago).key;
+          const tone = P.nowWords(v, p).tone;
+          if (corner === 'pcStale') return tone === 'amber';
+          if (corner === 'pcPaused') return tone === 'red';
+          if (corner === 'pcRunning') return tone === 'run';
+          // A corner about cards rather than agents (stuck, asking, yours) says
+          // nothing about this row, and a quiet product's row is quiet too.
+          return corner !== 'pcQuiet' || tone === null;
+        })],
+    ['…and every state of the row is a sentence the table has, not a joined fragment',
+      [[MIXED, 'kanji-daily'], [OUT, 'kanji-daily'], [GONE, 'kanji-daily'], [TWO, 'kanji-daily'],
+       [ONE, 'kanji-daily'], [ONE, 'quire'], [ONE, 'the-long-walk'], [ONE, 'pebble']]
+        .every(([v, key]) => P.nowWords(v, of(v, key)).clauses
+          .every((c) => /^pr(Now|Wait)/.test(c.said.key)))],
   );
 }
 
@@ -292,9 +371,11 @@ const ago = (s) => (s == null ? '' : `${Math.round(s)}s`);
                            title: 'Write the onboarding email' })] }) })]);
   checks.push(
     ['nothing waiting is a sentence of its own, not a row that is missing',
-      eq(wait(kanji).said, { key: 'prWaitNothing' }) && wait(kanji).tone === null],
+      eq(wait(kanji).clauses, [{ said: { key: 'prWaitNothing' }, who: null }])
+      && wait(kanji).tone === null],
     ['two things waiting are counted, in the colour of the worst of them',
-      eq(wait(quire).said, { key: 'prWaitMany', params: { n: 2 } }) && wait(quire).tone === 'red'],
+      eq(wait(quire).clauses[0].said, { key: 'prWaitMany', params: { n: 2 } })
+      && wait(quire).clauses.length === 1 && wait(quire).tone === 'red'],
     ['one thing that fell over is named, and is red',
       (() => {
         const one = { ...quire, cards: quire.cards.filter((c) => c.id === 'q2') };
@@ -309,13 +390,14 @@ const ago = (s) => (s == null ? '' : `${Math.round(s)}s`);
             cards: [card('q1', { project: 'Quire-id', status: 'asking', title: 'Webhook retry policy',
                                  detail: 'Keep 3 retries, or follow Stripe?' })] }) })]);
         const said = P.waitingWords(only, of(only, 'quire'));
-        return eq(said.said, { key: 'prWaitAsking', params: { who: 'exCoder', title: 'Webhook retry policy' } })
-          && said.who === 'exCoder' && said.tone === 'amber';
+        return eq(said.clauses[0].said,
+                  { key: 'prWaitAsking', params: { who: 'exCoder', title: 'Webhook retry policy' } })
+          && said.clauses[0].who === 'exCoder' && said.tone === 'amber';
       })()],
     ['a card that is nobody’s but yours names nobody: the reader is the one waiting',
-      eq(P.waitingWords(hush, of(hush, 'hush')).said,
+      eq(P.waitingWords(hush, of(hush, 'hush')).clauses[0].said,
          { key: 'prWaitYours', params: { title: 'Write the onboarding email' } })
-      && P.waitingWords(hush, of(hush, 'hush')).who === null],
+      && P.waitingWords(hush, of(hush, 'hush')).clauses[0].who === null],
     ['the one named is the one the Waiting screen would put at the top',
       (() => {
         const first = D.asks(ONE).filter((a) => a.card.projectKey === 'quire')[0];
@@ -471,12 +553,20 @@ const PAGES = {
   'a product on a machine that has gone quiet': [[MINI], 'kanji-daily'],
   'a product spread over an answering machine and a quiet one': [[STUDIO, MINI], 'kanji-daily'],
   'a product out of quota': [[SPENT], 'kanji-daily'],
+  'a product with one machine out of quota and another working': [[SPENT, ALSO], 'kanji-daily'],
   'a product nothing has touched in weeks': [[STUDIO], 'the-long-walk'],
   'a brand-new product': [[STUDIO], 'pebble'],
   'a product whose only machine never answered': [[STUDIO, NEVER], 'quire'],
   'a project that is no longer in the view': [[STUDIO], 'gone'],
   'nothing paired at all': [[], 'quire'],
 };
+
+/** The style the given word came out in, where a check is about a colour on one
+ *  particular word rather than a colour being on the page at all. */
+const styleOf = (markup, word) => [...markup.matchAll(/<span data-rn="Text"([^>]*)>([^<]*)<\/span>/g)]
+  .filter((m) => m[2] === word)
+  .map((m) => JSON.parse((m[1].match(/data-style="([^"]*)"/) ?? [, '{}'])[1]
+    .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")))[0];
 
 for (const scheme of ['dark', 'light']) {
   const t = K.tokensFor(scheme);
@@ -485,6 +575,7 @@ for (const scheme of ['dark', 'light']) {
   const asleep = draw(scheme, [STUDIO], 'the-long-walk');
   const fresh = draw(scheme, [STUDIO], 'pebble');
   const quiet = draw(scheme, [MINI], 'kanji-daily');
+  const mixed = draw(scheme, [SPENT, ALSO], 'kanji-daily');
   const inked = (m, colour) => R.styles(m).some((s) => s.color === colour);
 
   checks.push(
@@ -543,6 +634,17 @@ for (const scheme of ['dark', 'light']) {
     // A machine that has gone quiet, on a product that lives there.
     [`${scheme}: a product with a quiet machine under it says which, and how old this is`,
       quiet.includes('prStale') && quiet.includes('prNowUnknownOne')],
+    // …and the mixed case, drawn: one machine spent, one working, one product.
+    // (The titles themselves are parameters, which the render's string table is
+    // a stub for; that the named agent is the working one is checked where the
+    // words are, in section 2.)
+    [`${scheme}: a stopped agent and a running one are both on the page, the stopped one first`,
+      mixed.includes('prNowPausedOne') && mixed.includes('prNowOne')
+      && mixed.indexOf('prNowPausedOne') < mixed.indexOf('prNowOne')],
+    [`${scheme}: …and the label in front of them is the colour of the worse of the two`,
+      styleOf(mixed, 'prNow').color === t.red
+      && styleOf(page, 'prNow').color === t.run
+      && styleOf(quiet, 'prNow').color === t.amber],
     [`${scheme}: every state this page can be in renders`,
       Object.entries(PAGES).every(([, [hosts, key]]) => {
         const markup = draw(scheme, hosts, key);
