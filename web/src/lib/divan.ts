@@ -33,8 +33,7 @@
  *  compares every figure the two put on a screen. What is here is everything a
  *  desktop screen counts — the machines, the products, the agents at work, what
  *  each computer has left to start one on and what git said about the
- *  repositories a product owns; the branches are the one thing left out, because
- *  the screen that draws them is the board, and it comes later.
+ *  repositories a product owns, and the faces it has beside its code.
  *
  *  Nothing in here draws anything, and the poll at the bottom is the only part
  *  that knows there is a socket: `scripts/test-shell.mjs` and
@@ -45,13 +44,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { useFleet, type HostSlot } from './fleet';
 import type {
-  DivanAgent, DivanCard, DivanColumn, DivanProject, DivanQuota, DivanSnapshot, RepoActivity,
+  DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanProject, DivanQuota, DivanSnapshot,
+  RepoActivity,
 } from './protocol';
 
 /** How often a screen that is open re-asks every machine. The board moves when
  *  a worker does — a stage boundary is minutes apart, not seconds — and this is
  *  one request per machine rather than one in total. */
 export const DIVAN_POLL_MS = 60_000;
+
+/** The four, in the order the board runs in. The labels are `lib/overview.ts`'s;
+ *  this is the set, for the places that add a column up rather than name it. */
+export const COLUMNS: DivanColumn[] = ['ice_box', 'queued', 'in_progress', 'done'];
 
 /** How long one machine is given to answer before the view is drawn without it.
  *  A laptop with the lid shut does not refuse a request, it says nothing, and
@@ -157,6 +161,14 @@ export interface HostView {
   quota: DivanQuota | null;
 }
 
+/** One face of a product — engineering, seo, analytics — as both machines have
+ *  it. The phone's own type, down to the name (`app/src/divan.ts`). */
+export interface MergedBranch extends Omit<DivanBranch, 'cards'> {
+  cards: Partial<Record<DivanColumn, number>>;
+  /** Which machines this branch's work is spread over. */
+  machines: string[];
+}
+
 /** A card, with the machine it runs on and whether that machine is still
  *  answering. `machine` is the card's own where it has one and otherwise the
  *  computer that carried it: a card nobody assigned is worked where it lives. */
@@ -205,6 +217,12 @@ export interface MergedProject {
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
   machines: string[];
+  /** That machine's own id for this product, by host key. A write names one
+   *  computer's row — a card is created on a machine — and two machines give the
+   *  same product two ids, so the merged key cannot be sent anywhere. */
+  ids: Record<string, string>;
+  /** Its faces beside the code, in the order the computer keeps them. */
+  branches: MergedBranch[];
   /** Its **open** board: the daemon sends everything outside `done`, because
    *  that column grows for ever and nothing on a dashboard is drawn from a card
    *  finished last March. How many are in it is in `counts` and nowhere else. */
@@ -434,6 +452,9 @@ export function merge(list: HostEntry[], now: number): DivanView {
           repos: [...(p.repos || [])],
           hosts: [h.key],
           machines: [h.machine],
+          ids: { [h.key]: p.id },
+          branches: (p.branches || []).map((b) => ({
+            ...b, cards: { ...(b.cards || {}) }, machines: work(b) ? [h.machine] : [] })),
           cards: [],
           counts: { ...(p.counts || {}) },
           running: p.running || 0,
@@ -459,6 +480,8 @@ export function merge(list: HostEntry[], now: number): DivanView {
       found.kind = newer && p.kind ? p.kind : (found.kind || p.kind || '');
       found.hosts = [...new Set([...found.hosts, h.key])];
       found.machines = [...new Set([...found.machines, h.machine])];
+      found.ids[h.key] = p.id;
+      mergeBranches(found, p, h.machine);
       found.repos = [...new Set([...found.repos, ...(p.repos || [])])].sort();
       found.running += p.running || 0;
       found.waiting += p.waiting || 0;
@@ -539,6 +562,40 @@ export function merge(list: HostEntry[], now: number): DivanView {
   };
 
   return { hosts, projects, cards, agents, totals, quota: fleetQuota(hosts), now };
+}
+
+/** The branches of a product that is on two machines. A branch is a face of the
+ *  product — engineering, seo — and both machines have the same faces, so the
+ *  counts add up and the machines each face has work on are recorded. A summary
+ *  is whichever machine wrote one most recently; an empty one never wins,
+ *  because a branch with no source connected says nothing rather than
+ *  overwriting the branch that has one. The phone's rule, in its own words
+ *  (`app/src/divan.ts mergeBranches`). */
+function mergeBranches(into: MergedProject, p: DivanProject, machine: string): void {
+  for (const b of p.branches || []) {
+    const found = into.branches.find((x) => x.kind === b.kind);
+    if (!found) {
+      into.branches.push({ ...b, cards: { ...(b.cards || {}) }, machines: work(b) ? [machine] : [] });
+      continue;
+    }
+    for (const col of COLUMNS) {
+      const n = (b.cards || {})[col];
+      if (n) found.cards[col] = (found.cards[col] || 0) + n;
+    }
+    found.open += b.open || 0;
+    if (b.summary && (b.summary_at || 0) >= (found.summary_at || 0)) {
+      found.summary = b.summary;
+      found.summary_at = b.summary_at;
+    }
+    if (work(b)) found.machines = [...new Set([...found.machines, machine])];
+  }
+}
+
+/** Is there any work on this branch at all? A branch every product has and
+ *  nobody has used says nothing, and naming the machines it is "on" would be
+ *  naming every machine the product is on. */
+function work(b: DivanBranch): boolean {
+  return (b.open || 0) > 0 || Object.values(b.cards || {}).some((n) => (n || 0) > 0);
 }
 
 /** Several repositories' histories as one product's. The counts add up and the
