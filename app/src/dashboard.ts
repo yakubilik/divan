@@ -299,16 +299,29 @@ export interface Ask {
    *  sentence, and never an empty card. */
   question: string;
   who: Key;
+  /** The mono line in the corner of the card — `? Coder asks`, `■ Coder
+   *  stopped`, `○ Your call` — with `who` in the gap where it has one. Three
+   *  states, three sentences: "it fell over" and "it wants an answer" are not
+   *  the same thing to the person about to deal with them. */
+  says: Said;
 }
 
 export function asks(view: DivanView): Ask[] {
   const rank = (a: Ask) => (a.state === 'stuck' ? 0 : a.state === 'asking' ? 1 : 2);
-  return view.cards.filter(waiting).map((card) => ({
-    card,
-    state: stuck(card) ? 'stuck' : card.agent_status === 'asking' ? 'asking' : 'yours',
-    question: (card.agent_detail || '').trim() || card.title,
-    who: executorKey(card.executor),
-  } as Ask)).sort((a, b) => rank(a) - rank(b)
+  return view.cards.filter(waiting).map((card) => {
+    const state: State = stuck(card) ? 'stuck' : card.agent_status === 'asking' ? 'asking' : 'yours';
+    const who = executorKey(card.executor);
+    return {
+      card,
+      state,
+      question: (card.agent_detail || '').trim() || card.title,
+      who,
+      // "Your call" names nobody: the card is a person's and the person is the
+      // one reading it.
+      says: state === 'yours' ? { key: 'whoYours' as Key }
+        : { key: (state === 'stuck' ? 'whoStopped' : 'whoAsks') as Key, params: { who } },
+    } as Ask;
+  }).sort((a, b) => rank(a) - rank(b)
     || (b.card.agent_status_at ?? 0) - (a.card.agent_status_at ?? 0)
     || a.card.title.localeCompare(b.card.title));
 }

@@ -304,6 +304,26 @@ const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
       list[1].question === 'Write the onboarding email'],
     ['who is waiting is who the card is on',
       list[0].who === 'exCoder' && list[1].who === 'exYou'],
+    ['\u2026and every kind of executor has a name of its own',
+      eq(['coding_agent', 'branch_agent', 'assistant', 'human', null].map(D.executorKey),
+         ['exCoder', 'exBranch', 'exAssistant', 'exYou', 'exNobody'])],
+
+    // The corner of the card, which is three sentences and not one: an agent
+    // that fell over and an agent with a question are not the same thing to the
+    // person about to deal with them, and neither is a card that is simply his.
+    ['an agent that fell over says so, naming it',
+      eq(list[0].says, { key: 'whoStopped', params: { who: 'exCoder' } })],
+    ['\u2026one that stopped to ask says that instead',
+      (() => {
+        const one = view([paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
+          quota: quota({ left: 0.5 }), projects: [project('Quire', { waiting: 1 })],
+          cards: [card('a1', { project: 'Quire-id', status: 'asking', detail: 'Keep our 3 attempts?' })] }) })]);
+        const [ask] = D.asks(one);
+        return ask.state === 'asking' && ask.question === 'Keep our 3 attempts?'
+          && eq(ask.says, { key: 'whoAsks', params: { who: 'exCoder' } });
+      })()],
+    ['\u2026and a card that is yours names nobody, because the reader is the one it means',
+      eq(list[1].says, { key: 'whoYours' })],
   );
 }
 
@@ -519,6 +539,17 @@ for (const scheme of ['dark', 'light']) {
       busy.includes('agents') && busy.includes('exCoder') && busy.includes('Bulk CSV invite · 3 of 5 checks')],
     [`${scheme}: …each card carrying what git said and what the board says`,
       busy.includes('pfFinished') && busy.includes('14') && busy.includes('pcStuck')],
+    [`${scheme}: \u2026and a repository whose last commit has no readable date says so, rather than a time`,
+      (() => {
+        const m = draw(scheme, [paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
+          quota: quota({ left: 0.5 }), projects: [project('Quire', { repos: ['/r/quire'] })],
+          activity: { '/r/quire': { at: null, week: 3, today: 0 } } }) })]);
+        return m.includes('pfNeverMoved') && !m.includes('pfMoved') && m.includes('pfFinished');
+      })()],
+    [`${scheme}: the way in is offered on the question that has one and on no other`,
+      (busy.match(/ticketAnswer/g) ?? []).length === 1 && D.asks(BUSY).length === 2],
+    [`${scheme}: the quota track is labelled on the healthy line and on neither of the others`,
+      busy.includes('>sysQuota<') && !stale.includes('>sysQuota<') && !spent.includes('>sysQuota<')],
     [`${scheme}: …and a product with no repository is drawn without that figure rather than with an empty one`,
       busy.includes('Pebble') && (busy.match(/pfFinished/g) ?? []).length === 3
       && BUSY.projects.filter((p) => p.activity).length === 3],

@@ -202,11 +202,9 @@ function Asks({ view, onOpen }: {
       <SectionHeader title={T('needsYou')} count={list.length} />
       {list.map((ask) => {
         const name = view.projects[at.get(ask.card.projectKey) ?? -1]?.name ?? ask.card.branch;
-        const who = T(ask.who);
         return (
           <AskCard key={ask.card.id} project={name} index={at.get(ask.card.projectKey) ?? null}
-            who={ask.state === 'stuck' ? T('whoStopped', { who })
-               : ask.state === 'asking' ? T('whoAsks', { who }) : T('whoYours')}
+            who={said(T, { ...ask.says, params: ask.says.params && { who: T(ask.who) } })}
             question={ask.question}
             action={'ticket' in target(ask.card, host?.id) ? T('ticketAnswer') : null}
             onPress={() => onOpen(ask.card)} onAction={() => onOpen(ask.card)} />
