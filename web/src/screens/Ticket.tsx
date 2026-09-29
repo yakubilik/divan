@@ -46,27 +46,30 @@ import { mono } from '../ui/kit';
 
 /** What came back from the machine that holds the card, and nothing invented
  *  while it is on its way. */
-interface Opened {
+export interface Opened {
   full: DivanCardFull | null;
   ticket: QueueTicket | null;
   error: string | null;
 }
 
-export function Ticket({ card, project, index, now, onProject, onBranch }: {
+const NOTHING: Opened = { full: null, ticket: null, error: null };
+
+export interface TicketProps {
   card: MergedCard;
   project: MergedProject | null;
   index: number;
   now: number;
   onProject: () => void;
   onBranch: (kind: string) => void;
-}) {
-  const [got, setGot] = useState<Opened>({ full: null, ticket: null, error: null });
-  const [open, setOpen] = useState(true);
-  const [sent, setSent] = useState<string | null>(null);
+}
 
-  // Asked for when the page opens, and again when the board says the card has
-  // moved on: the live half of a ticket goes stale in a minute, and the board is
-  // re-read on its own timer.
+/** The page, and the one request it makes. Asked for when the page opens and
+ *  again when the board says the card has moved on: the live half of a ticket
+ *  goes stale in a minute, and the board is re-read on its own timer. */
+export function Ticket(props: TicketProps) {
+  const { card } = props;
+  const [got, setGot] = useState<Opened>(NOTHING);
+
   useEffect(() => {
     let mine = true;
     setGot((was) => ({ ...was, error: null }));
@@ -81,6 +84,19 @@ export function Ticket({ card, project, index, now, onProject, onBranch }: {
       });
     return () => { mine = false; };
   }, [card.host, card.id, card.updated_at]);
+
+  return <TicketPage {...props} opened={got} />;
+}
+
+/** …and the page itself, which is a render of what is in hand and nothing else:
+ *  the human face and the marks are on the board's own card, and the brief and
+ *  the live half are whatever the machine has handed over so far. Until it does,
+ *  this is the card a person can already read rather than a spinner over it. */
+export function TicketPage({
+  card, project, index, now, onProject, onBranch, opened: got = NOTHING,
+}: TicketProps & { opened?: Opened }) {
+  const [open, setOpen] = useState(true);
+  const [sent, setSent] = useState<string | null>(null);
 
   const face = human(card);
   const said = brief(got.full, got.ticket);

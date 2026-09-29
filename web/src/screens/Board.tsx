@@ -258,15 +258,19 @@ function Draft({ view, project, onClose }: {
   const [busy, setBusy] = useState(false);
 
   // Whichever of its computers is answering, and its own id for this product.
-  const host = view.hosts.find((h) => h.reachable && !h.stale && project.ids[h.key])
-    ?? view.hosts.find((h) => h.reachable && project.ids[h.key])
-    ?? null;
+  // A machine that has gone quiet is still asked where it is the only one that
+  // has this product: what came back from the last poll is a memory, and a card
+  // refused on the strength of a memory is a card nobody wrote — the request
+  // fails in words if the machine really is gone.
+  const mine = view.hosts.filter((h) => project.ids[h.key]);
+  const host = mine.find((h) => h.reachable && !h.stale) ?? mine.find((h) => h.reachable)
+    ?? mine[0] ?? null;
 
   const add = async () => {
     const line = title.trim();
     if (!line || busy) return;
     if (!host) {
-      setFailed('No computer of this product is answering, so there is nowhere to put it.');
+      setFailed('No computer of this product is paired, so there is nowhere to put it.');
       return;
     }
     setBusy(true);

@@ -452,6 +452,43 @@ group('the board, with the asking agent’s chat beside it');
     `${column('Ice Box').textContent} → ${column('Queued').textContent}`);
 }
 
+group('a new ticket, written at the top of Ice Box');
+{
+  /** Typing, as React hears it: the value is set through the prototype's own
+   *  setter so that React's tracker sees a change and the input event is not
+   *  swallowed as a no-op. */
+  const type = async (el, value) => {
+    const setter = Object.getOwnPropertyDescriptor(
+      el.tagName === 'TEXTAREA' ? w.HTMLTextAreaElement.prototype : w.HTMLInputElement.prototype,
+      'value').set;
+    await act(async () => {
+      setter.call(el, value);
+      el.dispatchEvent(new w.Event('input', { bubbles: true }));
+    });
+  };
+  const field = (label) => doc.querySelector(`[aria-label="${label}"]`);
+  const iceBox = () => [...doc.querySelectorAll('[role="tab"]')]
+    .find((b) => (b.textContent ?? '').startsWith('Ice Box'))?.parentElement ?? null;
+
+  await click(find('+ New ticket'));
+  ok('the word at the end of a product’s head opens the board with a card being written',
+    !!field('Title') && !!iceBox()?.contains(field('Title')),
+    doc.body.textContent?.slice(0, 120));
+
+  await type(field('Title'), 'Export client list as CSV');
+  await type(field('What to do'), 'Studios keep asking to download their client list.');
+  asked.length = 0;
+  await act(async () => {
+    field('Title').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+  ok('…and pressing return files it on the machine that holds the product, in Ice Box',
+    asked.some((a) => a.key === 'studio' && a.type === 'divan.card.create'
+      && a.data.project_id === 'p-quire' && a.data.column === 'ice_box'
+      && a.data.title === 'Export client list as CSV'
+      && a.data.summary === 'Studios keep asking to download their client list.'),
+    JSON.stringify(asked.slice(0, 3)));
+}
+
 group('nothing was lost on the way');
 {
   ok('no screen the panel opened let a rejection go unhandled',
