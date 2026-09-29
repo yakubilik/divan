@@ -1715,6 +1715,11 @@ class Server:
         board = self.db.divan
         return {"projects": [board.project_view(p) for p in board.list_projects()],
                 "unfiled": board.project_view(board.unfiled_project()),
+                # What a client offers when it asks what kind of thing a product
+                # is. A list and not a fence: `kind` takes any word, and this is
+                # the vocabulary, sent from here so that one computer's suggestions
+                # are every client's.
+                "kinds": list(divanmod.PROJECT_KINDS),
                 "machine": self.cfg.host_name}
 
     async def h_divan_project_create(self, dev: Device, d: dict) -> dict:

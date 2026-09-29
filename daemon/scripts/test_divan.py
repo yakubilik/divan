@@ -869,6 +869,8 @@ async def wire() -> None:
     check("the project list says the same: products here, the holding place beside",
           (divan.UNFILED in [p["slug"] for p in listed["projects"]],
            listed["unfiled"]["slug"]), (False, divan.UNFILED))
+    check("and it carries the vocabulary a client offers for a product's kind",
+          listed["kinds"], list(divan.PROJECT_KINDS))
 
     # ── 8c · a product taken off the board is not put back by a poll ──────────
     iggy = board.project_by_name("isghocam")
