@@ -794,9 +794,10 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
         </div>
       </div>
 
-      {/* Anything dropped on the scroller rather than on a tile goes last —
-          that includes the empty wall, which is how the first chat gets up
-          there at all. */}
+      {/* A tile dropped on the scroller rather than on another tile goes last.
+          What puts a chat up in the first place is Add: the list it used to be
+          dragged from is the Chat place now, and the two are never on screen
+          together. */}
       <div
         style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 44px' }}
         onDragOver={(e) => { if (hasChatDrag(e.dataTransfer)) { e.preventDefault(); setDropAt({ key: null, before: false }); } }}
@@ -876,7 +877,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
             {!order.length ? 'No computer paired yet.'
               : !entries.length ? 'No chats yet.'
               : wall.length ? 'No chat on the wall matches.'
-              : 'The wall is empty. Drag a chat onto it from the list — or use Add to put them all up.'}
+              : 'The wall is empty. Add puts the chats up; a tile can then be dragged into any order.'}
           </div>
         )}
       </div>

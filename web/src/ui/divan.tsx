@@ -31,13 +31,17 @@ import { Icon, P, mono } from './kit';
  *  The frames draw no pressed or hovered state, so neither is invented here:
  *  what a press does is the screen's business, and what it looks like is the
  *  browser's default cursor and nothing else. */
-function Tap({ onClick, title, style, children }: {
+function Tap({ onClick, title, current, style, children }: {
   onClick?: () => void; title?: string;
+  /** The one of a set that is where you are. The frames say it with a fill;
+   *  this says it to a reader who cannot see one, and to a check. */
+  current?: boolean;
   style: React.CSSProperties; children?: React.ReactNode;
 }) {
-  if (!onClick) return <div style={style} title={title}>{children}</div>;
+  const here = current ? ('page' as const) : undefined;
+  if (!onClick) return <div style={style} title={title} aria-current={here}>{children}</div>;
   return (
-    <button type="button" onClick={onClick} title={title}
+    <button type="button" onClick={onClick} title={title} aria-current={here}
       style={{ ...style, border: style.border ?? 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
       {children}
     </button>
@@ -135,10 +139,13 @@ export function Card({
  *  `right` is what that table puts at the far end: the row's own buttons. A row
  *  that goes somewhere instead has the chevron. */
 export function Row({
-  icon, title, note, meta, tone, wash, right, first, chevron, mark, onClick, style,
+  icon, lead, title, note, meta, tone, wash, right, first, chevron, mark, onClick, style,
 }: {
   /** A path out of `P`, the panel's own icon vocabulary. */
   icon?: string;
+  /** What stands where that glyph well does, for a row whose subject has a mark
+   *  of its own: Web12 W1's agent roster puts a project's monogram there. */
+  lead?: React.ReactNode;
   title: React.ReactNode;
   /** The grey line under it. */
   note?: React.ReactNode;
@@ -166,14 +173,14 @@ export function Row({
       width: '100%', boxSizing: 'border-box', minWidth: 0, color: T.ink,
       ...style,
     }}>
-      {!!icon && (
+      {lead ?? (!!icon && (
         <span style={{
           flex: 'none', width: SIZE.rowWell, height: SIZE.rowWell, borderRadius: RADIUS.well,
           background: T.s2, color: T.ink2, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <Icon path={icon} size={SIZE.rowIcon} color={T.ink2} />
         </span>
-      )}
+      ))}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{
           ...(mark ? mono : null), display: 'block', fontSize: 14, fontWeight: 600,
@@ -694,5 +701,124 @@ export function SidePanel({ title, note, items, value, onChange, style }: {
         );
       })}
     </nav>
+  );
+}
+
+// ── 12 · the top bar ────────────────────────────────────────────────────────
+
+/** The bar every desktop screen hangs under, and the three parts that stand in
+ *  it.
+ *
+ *  Web14 W6 and all eight frames of Web15 draw the same bar: `height:58px;
+ *  border-bottom:1px solid var(--line); padding:0 20px; gap:14px`, opening on
+ *  the wordmark in mono at `600 13px` with `margin-right:6px`. Web12 W1 and
+ *  Web13 W3 — the first desktop pair — draw it one step earlier, at 56 pt and
+ *  with the third place set as a word at the far end rather than as an item
+ *  beside the other two; the thirteen later frames are the same bar with that
+ *  third place promoted, and they are the ones `SIZE.topBar`, `SIZE.navItem`
+ *  and `RADIUS.nav` were measured off. So this is the thirteen's bar, holding
+ *  everything W1 and W3 hold.
+ *
+ *  The wordmark is drawn here rather than passed in, because there is no frame
+ *  in which the bar does not open on it. */
+export function TopBar({ children, style }: {
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <header style={{
+      flex: 'none', boxSizing: 'border-box', height: SIZE.topBar, minWidth: 0,
+      display: 'flex', alignItems: 'center', gap: 14, padding: '0 20px',
+      borderBottom: `1px solid ${T.line}`, background: T.bg, color: T.ink,
+      ...style,
+    }}>
+      <span style={{ ...mono, flex: 'none', fontSize: 13, fontWeight: 600, marginRight: 6 }}>divan</span>
+      {children}
+    </header>
+  );
+}
+
+/** One of the three places, in the bar: `height:34px; border-radius:10px;
+ *  padding:0 12px; gap:7px` at `500 14px` with a 17 pt glyph, the one you are
+ *  in filled with `s2` in the primary ink and the other two in `ink3`. Web14 W6
+ *  is Dashboard, Web15 W12 is Machine, and between them all three faces are
+ *  drawn. */
+export function NavItem({ label, icon, on, dot, onClick, title, style }: {
+  label: React.ReactNode;
+  /** A path out of `P`. */
+  icon?: string;
+  on?: boolean;
+  /** Something in that place wants a person. The desktop frames draw no mark on
+   *  a nav item — every one of them is a screen with the trouble in plain sight
+   *  — so this is the phone's, Mobile1 V1, whose tab bar carries the same dot
+   *  for the same reason: a panel is not always looking at the place the thing
+   *  happened in. */
+  dot?: State | null;
+  onClick?: () => void;
+  title?: string;
+  style?: React.CSSProperties;
+}) {
+  const colour = on ? T.ink : T.ink3;
+  return (
+    <Tap onClick={onClick} title={title} current={on} style={{
+      flex: 'none', boxSizing: 'border-box', height: SIZE.navItem, padding: '0 12px',
+      borderRadius: RADIUS.nav, display: 'inline-flex', alignItems: 'center', gap: 7,
+      fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap',
+      background: on ? T.s2 : 'transparent', color: colour,
+      ...style,
+    }}>
+      {!!icon && <Icon path={icon} size={SIZE.rowIcon} color={colour} />}
+      {label}
+      {!!dot && <StatusDot state={dot} />}
+    </Tap>
+  );
+}
+
+/** The rule between the places and the project chips: `width:1px; height:22px`
+ *  in `line2`, in every frame that draws both. */
+export function BarDivider({ style }: { style?: React.CSSProperties }) {
+  return <div style={{ flex: 'none', width: 1, height: 22, background: T.line2, ...style }} />;
+}
+
+/** What the far end of the bar says, as opposed to where it goes: Web15's
+ *  `mini unreachable · 2h 14m · quota 64%`, drawn `height:30px;
+ *  border-radius:9px; padding:0 12px; gap:8px` at `500 11.5px` mono — on `s1`
+ *  in `ink2` when it is a fact, and washed in a tone when it is a state. */
+export function BarChip({ label, tone, icon, onClick, title, style }: {
+  label: React.ReactNode;
+  tone?: Tone;
+  /** A path out of `P`, drawn in front at the mono line's own size. */
+  icon?: string;
+  onClick?: () => void;
+  title?: string;
+  style?: React.CSSProperties;
+}) {
+  const t = tone ? toneColours(tone) : null;
+  const colour = t ? t.fg : T.ink2;
+  return (
+    <Tap onClick={onClick} title={title} style={{
+      ...mono, flex: 'none', boxSizing: 'border-box', height: SIZE.barChip, padding: '0 12px',
+      borderRadius: RADIUS.well, display: 'inline-flex', alignItems: 'center', gap: 8,
+      fontSize: 11.5, fontWeight: 500, whiteSpace: 'nowrap',
+      background: t ? t.bg : T.s1, color: colour,
+      ...style,
+    }}>
+      {!!icon && <Icon path={icon} size={14} color={colour} />}
+      {label}
+    </Tap>
+  );
+}
+
+/** The clock at that end, which is the one thing in the bar that is neither a
+ *  place nor a chip: Web12 W1's `Mon 28 Sep · 23:14` at `400 12px` mono in
+ *  `ink3`, with nothing behind it. */
+export function BarStamp({ children, style }: {
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span style={{
+      ...mono, flex: 'none', fontSize: 12, fontWeight: 400, color: T.ink3, whiteSpace: 'nowrap', ...style,
+    }}>{children}</span>
   );
 }
