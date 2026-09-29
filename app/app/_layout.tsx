@@ -124,6 +124,10 @@ export default function RootLayout() {
             Dashboard the way the Waiting screen is — it is a card of one of its
             boards opened up, and Back leads to the board it came from. */}
         <Stack.Screen name="card/[id]" />
+        {/* Writing one down (Mobile8 S9). A modal over the board rather than a
+            page pushed onto it: it is a thing you do mid-thought, and Cancel
+            has to leave the board exactly where it was. */}
+        <Stack.Screen name="new-ticket" options={{ presentation: 'modal' }} />
         {/* Every conversation on this computer. Not a place: the Chat tab
             enters the conversation itself, and this is the side door off the
             Dashboard — where a second one is started and where one that was
