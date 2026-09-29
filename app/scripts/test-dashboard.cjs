@@ -568,6 +568,24 @@ for (const scheme of ['dark', 'light']) {
     ['nothing on the Dashboard leads to a screen that is about a computer',
       !/'\/host-sheet'|'\/pool'|'\/accounts'|'\/screen'|'\/agents'/.test(screen)],
   );
+
+  // A judgement nothing calls is worse than no judgement: it is a rule that
+  // reads as settled, has checks of its own, and is not the rule the product
+  // follows. `calm()` was exactly that for a round — written, tested and never
+  // imported, while the screen kept a shorter copy of it beside the block. So
+  // every judgement this module exports has to be reached: called by the screen
+  // or by one of its blocks, or called by another judgement in here.
+  const exported = [...judgement.matchAll(/export function (\w+)/g)].map((m) => m[1]);
+  const orphans = exported.filter((name) => {
+    if (new RegExp(`\\b${name}\\b`).test(screen) || new RegExp(`\\b${name}\\b`).test(parts)) return false;
+    // …or something else in here calls it, which is more than its own definition.
+    return (judgement.match(new RegExp(`\\b${name}\\s*\\(`, 'g')) ?? []).length <= 1;
+  });
+  checks.push(
+    [`every rule the module states is a rule the screen follows${
+      orphans.length ? ` (orphaned: ${orphans.join(', ')})` : ''}`, orphans.length === 0],
+    ['…and there are enough of them in it to be worth saying', exported.length >= 12],
+  );
 }
 
 module.exports = { checks };
