@@ -13,7 +13,6 @@
  *  a computer — so what is here instead is the one that is true: the agents
  *  installed on this computer, which is the page under this one.
  */
-import { count } from '../lib/overview';
 import type { DivanView } from '../lib/divan';
 import { executorLines } from '../lib/machine';
 import { T } from '../lib/theme';
@@ -72,9 +71,7 @@ export function Executors({ view, onView }: {
       />
 
       <Card>
-        <SectionHeader
-          title="Agents on this computer" note={count(view.hosts.length, 'machine')}
-        />
+        <SectionHeader title="Agents on this computer" />
         <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
           A branch agent is a folder on a computer: what is installed there is what can be
           asked for by name. The store, and what each of them is, is one level down.

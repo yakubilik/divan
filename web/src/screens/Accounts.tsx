@@ -103,7 +103,7 @@ export function Accounts({ now, onView, onFocus }: {
     <>
       <SectionHeader
         kind="page" title="Accounts & sign-ins"
-        note={`${rows.length} connected`}
+        note={`${rows.filter((r) => r.state === 'connected').length} of ${rows.length} connected`}
         right={wanting ? `${wanting} want you` : undefined}
         tone={wanting ? 'amber' : undefined}
       />

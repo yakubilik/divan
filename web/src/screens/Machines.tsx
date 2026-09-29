@@ -22,7 +22,6 @@
  */
 import { useState } from 'react';
 import { uptime } from '../lib/format';
-import { count } from '../lib/overview';
 import { STALE_AFTER_S, type DivanView } from '../lib/divan';
 import {
   ACTION_LABEL, machineLines, quotaVerdict, useThresholds,
@@ -38,6 +37,12 @@ import {
   type Column,
 } from '../ui/divan';
 import { Icon, P, mono } from '../ui/kit';
+
+/** How long ago it answered, the way W12 says it: `12s ago` while it is still
+ *  seconds, and the panel's own `2h 14m` after that. */
+function since(seconds: number | null): string {
+  return seconds != null && seconds < 60 ? `${Math.round(seconds)}s` : uptime(seconds);
+}
 
 const COLUMNS: Column[] = [
   { width: '34px' },
@@ -75,7 +80,7 @@ export function Machines({ view, onView, onFocus }: {
     addHost(cfg);
   };
 
-  const lines = machineLines(view, uptime, thresholds);
+  const lines = machineLines(view, since, thresholds);
   const quota = quotaVerdict(view.quota, thresholds);
 
   const act = (key: string, action: MachineAction) => {
@@ -108,7 +113,7 @@ export function Machines({ view, onView, onFocus }: {
 
   return (
     <>
-      <SectionHeader kind="page" title="Machines" note={count(view.hosts.length, 'paired')} />
+      <SectionHeader kind="page" title="Machines" note={`${view.hosts.length} paired`} />
 
       <Table
         columns={COLUMNS}

@@ -92,7 +92,8 @@ export function machineLines(view: DivanView, ago: Ago, t: Thresholds): MachineL
     return {
       key: h.key,
       machine: h.machine,
-      detail: [h.os, h.error].filter(Boolean).join(' · '),
+      detail: [[h.os, h.osVersion].filter(Boolean).join(' '), h.error]
+        .filter(Boolean).join(' · '),
       state,
       says: h.reachable ? 'reachable' : never ? 'never answered' : 'unreachable',
       tone: h.reachable ? 'run' : never ? 'ink3' : 'amber',

@@ -141,6 +141,10 @@ export interface HostView {
    *  the paired name until it has answered once. */
   machine: string;
   os: string | null;
+  /** …and which of it, where the machine says: the grey line under a machine's
+   *  name on Web15 W12 is what it is running, not only what kind of thing it
+   *  is. Null on a daemon that does not say. */
+  osVersion: string | null;
   reachable: boolean;
   /** It has answered at some point, but what is in hand is not current. */
   stale: boolean;
@@ -358,6 +362,7 @@ function hostView(e: HostEntry, now: number): HostView {
     name: e.name,
     machine: (snap?.machine || '').trim() || e.name,
     os: snap?.os ?? null,
+    osVersion: snap?.os_version ?? null,
     reachable: e.state.reachable && !past,
     stale: !!snap && (!e.state.reachable || past),
     missing: !snap,
