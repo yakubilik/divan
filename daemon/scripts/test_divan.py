@@ -49,6 +49,7 @@ import json
 import logging
 import os
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -104,6 +105,33 @@ ROOT = tmp / "projects"
 for name in ("babysee", "isghocam", "a-new-product", "secrets"):
     (ROOT / name).mkdir(parents=True)
 (ROOT / "babysee" / "app").mkdir()
+
+# babysee is a real repository, because "is this product alive at all" is a
+# question only git can answer and the answer travels on the snapshot. Two
+# commits: one now, one three weeks ago. isghocam is left a plain folder, which
+# is the other case that matters — a figure nobody can measure has to be absent
+# rather than zero.
+def _git(*args: str, at: float | None = None) -> None:
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": str(tmp / "gitconfig"),
+           "GIT_CONFIG_SYSTEM": "/dev/null",
+           "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    if at is not None:
+        stamp = f"{int(at)} +0000"
+        env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = stamp
+    r = subprocess.run(("git", "-C", str(ROOT / "babysee"), *args),
+                       capture_output=True, text=True, env=env)
+    if r.returncode:                                        # pragma: no cover
+        raise SystemExit(f"git {args}: {r.stderr}")
+
+
+_git("init", "-q", "-b", "main")
+(ROOT / "babysee" / "old.txt").write_text("x")
+_git("add", "-A")
+_git("commit", "-qm", "three weeks ago", at=time.time() - 21 * 24 * 3600)
+(ROOT / "babysee" / "new.txt").write_text("y")
+_git("add", "-A")
+_git("commit", "-qm", "this morning", at=time.time() - 120)
 # Outside every root, and therefore no place to start a coding agent: the home
 # directory of the machine running this, as far as the policy is concerned.
 OUTSIDE = tmp / "outside-every-root"
@@ -907,6 +935,32 @@ async def wire() -> None:
     holds("a card that stopped to ask is not an agent at work",
           bool(asking) and not any(a["card_id"] == asking[0]["id"] for a in running),
           repr([a["card_id"] for a in running]))
+
+    # What git says about the products on this machine, which is the one thing
+    # on the answer that is not the board — and the only thing that can say
+    # whether a product with an empty board is alive.
+    act = snapshot["activity"]
+    mine = act.get(str(ROOT / "babysee"))
+    holds("a product's repository says when it last moved",
+          bool(mine) and abs(mine["at"] - (time.time() - 120)) < 30, repr(act))
+    check("…and how much was finished in the last seven days", mine["week"], 1)
+    check("…and how much of that was today", mine["today"], 1)
+    holds("a folder that is not a repository is absent rather than zero",
+          str(ROOT / "isghocam") not in act, repr(sorted(act)))
+    holds("…and so is one nobody could read",
+          divan.repo_activity(str(tmp / "never-existed")) is None)
+    check("the map is keyed by path, so two machines cannot count one checkout twice",
+          sorted(divan.activity_of([str(ROOT / "babysee"), str(ROOT / "babysee")])),
+          [str(ROOT / "babysee")])
+    # The phone gives a machine eight seconds for the whole answer. Twenty cold
+    # repositories must not be able to spend it, so new readings run against a
+    # budget: what is already known still travels, and a path nobody has had
+    # time to read is absent until the next poll.
+    divan._activity_cache.pop(str(tmp / "unread"), None)
+    check("a repository there was no time to read is absent rather than holding up the answer",
+          divan.activity_of([str(tmp / "unread")], budget_s=-1), {})
+    holds("…while one that was read before still travels, budget or no budget",
+          str(ROOT / "babysee") in divan.activity_of([str(ROOT / "babysee")], budget_s=-1))
 
     q = snapshot["quota"]
     check("the quota is this machine's, read off the pool", q["accounts"], len(ACCOUNTS))

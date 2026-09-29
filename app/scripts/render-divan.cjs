@@ -125,7 +125,13 @@ const STUBS = {
     SafeAreaProvider: host('div', 'SafeAreaProvider'),
   },
   'expo-router': {
-    useRouter: () => ({ back() {}, push() {}, replace() {}, canGoBack: () => false,
+    useRouter: () => ({ back() {}, replace() {}, canGoBack: () => false,
+                        // Where a press went. A tap that leaves the screen
+                        // cannot be seen in the markup it left, and "tapping an
+                        // agent opens the run it is printing" is a claim about a
+                        // route, so the pushes are recorded the same way the
+                        // address is.
+                        push: (to) => { PUSHED.push(typeof to === 'string' ? to : to); },
                         setParams: (patch) => Object.assign(PARAMS, patch) }),
     // The shell lights the tab the route is in, so a render has to be able to
     // say where it is. Every place is rendered by name in test-shell.cjs, so
@@ -148,6 +154,7 @@ const STUBS = {
  *  selector answers `undefined`, which is what it did before there was one. */
 const STATE = {};
 const PARAMS = {};
+const PUSHED = [];
 const STORE = {
   useT: () => (key) => key,
   useStore: Object.assign((selector) => (typeof selector === 'function' ? selector(STATE) : undefined),
@@ -162,6 +169,12 @@ const store = {
 const params = {
   set(patch) { Object.assign(PARAMS, patch); },
   reset() { for (const k of Object.keys(PARAMS)) delete PARAMS[k]; },
+};
+/** Every route a press pushed, oldest first. Not cleared by `render`: a push
+ *  happens when a handler is called, which is after the render that offered it. */
+const nav = {
+  pushed() { return PUSHED.slice(); },
+  reset() { PUSHED.length = 0; },
 };
 
 const realLoad = Module._load;
@@ -218,4 +231,4 @@ function paint(markup) {
   return out;
 }
 
-module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten, store, params, presses, pressOn };
+module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten, store, params, nav, presses, pressOn };

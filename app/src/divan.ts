@@ -34,6 +34,7 @@
 // snapshots are the whole input.
 import type {
   DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanProject, DivanQuota, DivanSnapshot,
+  RepoActivity,
 } from './protocol';
 
 /** How often a screen that is open re-asks every machine. The board moves when
@@ -95,6 +96,7 @@ export function answered(snap: Partial<DivanSnapshot> | null | undefined, at: nu
       cards: snap?.cards ?? [],
       agents: snap?.agents ?? [],
       quota: snap?.quota ?? null,
+      activity: snap?.activity ?? {},
       queue: snap?.queue ?? {},
     },
     at, reachable: true, error: null, old: false,
@@ -180,6 +182,16 @@ export interface MergedBranch extends Omit<DivanBranch, 'cards'> {
   machines: string[];
 }
 
+/** A product's own history, folded out of every repository it owns on every
+ *  machine it is on. `at` is the newest commit any of them has seen; the two
+ *  counts add up across repositories, which is what makes a product with its
+ *  site on one machine and its API on another one figure. */
+export interface ProjectActivity {
+  at: number | null;
+  week: number;
+  today: number;
+}
+
 /** One product, however many machines it is checked out on. */
 export interface MergedProject {
   /** What the same product on two machines is matched by. */
@@ -200,7 +212,32 @@ export interface MergedProject {
    *  "2 agents, state unknown". The figure above is what was last known and is
    *  drawn as such; this is how much of it is a memory. */
   unknown: number;
+  /** …and how many are stopped where they were because their machine has no
+   *  quota left (Mobile5 S2). They pick up again on their own, so this is a
+   *  clock rather than a fault. */
+  paused: number;
+  /** …and that clock: the first moment any of *those* agents can start again,
+   *  read off the machines they are stopped on and nowhere else.
+   *
+   *  It is on the project rather than being looked up from the fleet's figure
+   *  because the two are not the same number. `MergedQuota.resets_at` is when
+   *  the roomiest machine's window rolls over, which on a fleet where one
+   *  computer is spent and another is not belongs to the computer that is
+   *  *still running* — printing it beside "3 paused" would put a live machine's
+   *  hour on a card whose work stopped somewhere else.
+   *
+   *  Null where none of the stopped machines said when, which is a card that
+   *  says its agents are paused and does not say until when. */
+  pausedUntil: number | null;
   updated_at: number;
+  /** What git says about the repositories it owns: when the product last moved
+   *  and how much landed in the last seven days. Null where no repository of it
+   *  could be read — a product with no repository attached, or a machine whose
+   *  daemon is older than the figure. Absent, never zero: nobody measured it.
+   *
+   *  What a product *earns* is the third figure and has no source yet, so there
+   *  is no field for it here at all. */
+  activity: ProjectActivity | null;
   /** One of the machines it lives on has gone quiet, so these numbers are not
    *  all current. */
   stale: boolean;
@@ -229,6 +266,10 @@ export interface Totals {
   /** The oldest answer any of this is built out of — "partly as of 21:02". Null
    *  when nothing has answered at all. */
   asOf: number | null;
+  /** What was finished today, across every repository every product owns. Null
+   *  where no machine could read one: the fourth counter is then a figure with
+   *  no source and the dashboard puts something it does count in its place. */
+  doneToday: number | null;
 }
 
 /** What the whole fleet has left to run an agent on. */
@@ -251,6 +292,11 @@ export interface DivanView {
   agents: MergedAgent[];
   totals: Totals;
   quota: MergedQuota;
+  /** The moment this was worked out, in seconds. The one thing in the view that
+   *  is not read off a snapshot — staleness is measured against it — so it
+   *  travels with the answer rather than each screen fetching a clock of its own
+   *  and ageing the same machine to two different numbers on one page. */
+  now: number;
 }
 
 /** The paired list and what the phone holds for each, as one list. Hosts with
@@ -378,6 +424,9 @@ export function merge(list: HostEntry[], now: number): DivanView {
           waiting: p.waiting || 0,
           cards: [],
           unknown: 0,
+          paused: 0,
+          pausedUntil: null,
+          activity: null,
           updated_at: p.updated_at || 0,
           stale: h.stale,
           staleMachines: h.stale ? [h.machine] : [],
@@ -414,10 +463,38 @@ export function merge(list: HostEntry[], now: number): DivanView {
     }
   }
 
+  // ── what git said, by path ───────────────────────────────────────────────
+  // Keyed by path on the wire for exactly this: the same checkout reported by
+  // two machines is one entry here, not two, so a product on both of them is
+  // not counted twice. Where they disagree the newer reading wins — a machine
+  // that has been asleep for two hours read its own `git log` two hours ago.
+  const history = new Map<string, RepoActivity>();
+  for (const e of list) {
+    for (const [path, a] of Object.entries(e.state.snapshot?.activity ?? {})) {
+      const had = history.get(path);
+      if (!had || (a.at ?? 0) > (had.at ?? 0)) history.set(path, a);
+    }
+  }
+
+  // A machine with no quota left has stopped its agents where they were; that is
+  // a different thing from a machine that is not answering, and a project card
+  // has to be able to say which (Mobile5 S1 against S2).
+  const stopped = new Set(hosts.filter(outOfQuota).map((h) => h.id));
+
   const projects = [...byKey.values()].sort(order);
   for (const p of projects) {
     p.cards = cards.filter((c) => c.projectKey === p.key);
     p.unknown = agents.filter((a) => a.projectKey === p.key && a.unknown).length;
+    const held = agents.filter((a) => a.projectKey === p.key && !a.unknown && stopped.has(a.host));
+    p.paused = held.length;
+    // The earliest of the machines its own agents are stopped on: the first
+    // moment any of this product's work moves again. A machine that is spent and
+    // cannot say when it comes back contributes nothing rather than a guess.
+    p.pausedUntil = held
+      .map((a) => byId.get(a.host)?.quota?.resets_at ?? null)
+      .filter((at): at is number => at != null)
+      .sort((x, y) => x - y)[0] ?? null;
+    p.activity = fold(p.repos.map((path) => history.get(path)));
   }
 
   // ── the counters ─────────────────────────────────────────────────────────
@@ -426,7 +503,6 @@ export function merge(list: HostEntry[], now: number): DivanView {
   // machine is unreachable, and nothing but a person changes it. What cannot be
   // carried over is what an agent is *doing*, which is why running and unknown
   // are two counters and not one.
-  const stopped = new Set(hosts.filter(outOfQuota).map((h) => h.id));
   const totals: Totals = {
     needsYou: cards.filter(waiting).length,
     stuck: cards.filter(stuck).length,
@@ -439,9 +515,13 @@ export function merge(list: HostEntry[], now: number): DivanView {
     complete: hosts.length > 0 && hosts.every((h) => h.reachable && !h.missing),
     asOf: hosts.reduce<number | null>((oldest, h) => (
       h.at == null ? oldest : oldest == null ? h.at : Math.min(oldest, h.at)), null),
+    // Every repository once, whatever product claims it: the counter is "what
+    // was finished today", and a repository two products share is one history.
+    doneToday: history.size === 0 ? null
+      : [...history.values()].reduce((n, a) => n + (a.today || 0), 0),
   };
 
-  return { hosts, projects, cards, agents, totals, quota: fleetQuota(hosts) };
+  return { hosts, projects, cards, agents, totals, quota: fleetQuota(hosts), now };
 }
 
 /** The branches of a product that is on two machines. A branch is a face of the
@@ -468,6 +548,21 @@ function mergeBranches(into: MergedProject, p: DivanProject, machine: string): v
     }
     if (work(b)) found.machines = [...new Set([...found.machines, machine])];
   }
+}
+
+/** Several repositories' histories as one product's. The counts add up and the
+ *  clock is the newest of them; nothing measured at all stays nothing measured,
+ *  because a product with no repository attached has no figure rather than a
+ *  zero one. */
+function fold(list: (RepoActivity | undefined)[]): ProjectActivity | null {
+  const found = list.filter((a): a is RepoActivity => !!a);
+  if (!found.length) return null;
+  return {
+    at: found.reduce<number | null>((newest, a) => (
+      a.at == null ? newest : newest == null ? a.at : Math.max(newest, a.at)), null),
+    week: found.reduce((n, a) => n + (a.week || 0), 0),
+    today: found.reduce((n, a) => n + (a.today || 0), 0),
+  };
 }
 
 /** Is there any work on this branch at all? A branch every product has and

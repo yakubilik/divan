@@ -47,9 +47,11 @@ import asyncio
 import json
 import re
 import sqlite3
+import subprocess
 import threading
 import time
 import uuid
+from datetime import datetime
 from typing import Any, Callable
 
 from . import ustabasi as ustabasimod
@@ -797,6 +799,12 @@ class Board:
         `cards` is the open board: everything outside `done`. That column grows
         for ever, the counts beside each project already say how many are in it,
         and nothing on a dashboard is drawn from a card finished last March.
+
+        `activity` is what git says about the repositories those products own —
+        the one thing on the answer that is not the board. It is keyed by path
+        and not by project so that a phone holding two machines can tell the
+        same checkout on both from two halves of one product; which of its
+        products each path belongs to is already in `projects`.
         """
         projects = self.list_projects()
         mine = {p["id"] for p in projects}
@@ -812,6 +820,7 @@ class Board:
             "cards": cards,
             "agents": [self._agent_view(c, machine, names.get(c["project_id"], ""))
                        for c in cards if c["agent_status"] == "running"],
+            "activity": activity_of([path for p in projects for path in p["repos"]]),
         }
 
     def _agent_view(self, card: dict, machine: str, project: str) -> dict:
@@ -832,6 +841,124 @@ class Board:
                 "executor": card["executor"], "machine": card["machine"] or machine,
                 "status": card["agent_status"], "detail": card["agent_detail"],
                 "since": card["agent_status_at"], "ustabasi_id": card["ustabasi_id"]}
+
+
+# ── what git has to say about a product ──────────────────────────────────────
+# The board says what is being worked on. It cannot say whether a product is
+# alive: a project with an empty board and nine commits this week is busy, and
+# one with four cards nobody has touched since August is not. That fact is in
+# the repositories the product owns and nowhere else, so it is read out of them
+# — by this end, because the repositories are here.
+#
+# Two figures and no third. What a product *earns* — the MRR, the DAU, the
+# visits the frames put at the top of a project card — has no source connected
+# yet, and a card with a made-up number on it is worse than a card with a gap.
+
+#: How long a repository's history is believed for. A week's worth of commits
+#: does not change between two polls a minute apart, and every miss is two
+#: `git log` calls per repository on a computer that may have twenty.
+_ACTIVITY_TTL = 300.0
+_activity_cache: dict[str, tuple[float, dict | None]] = {}
+
+#: Long enough that a repository on a network volume does not hold up a whole
+#: snapshot, short enough that the phone's own wait (8 s for everything) is not
+#: spent here.
+_GIT_TIMEOUT_S = 3.0
+
+#: What "finished in the last seven days" is counted over.
+ACTIVITY_WINDOW_S = 7 * 24 * 3600
+
+
+def repo_activity(path: str, now: float | None = None) -> dict | None:
+    """When one repository last moved, and how much landed in it lately.
+
+    `at` is the last commit's own time, `week` the commits of the last seven
+    days and `today` those since midnight here — the two figures a project card
+    carries and the one a dashboard counts "done today" out of.
+
+    Commits, not merges and not tickets: a merge is one worker's work landing
+    and so is a commit pushed straight to the branch, and this repository is run
+    both ways. Nothing is guessed — `None` comes back for a path that is not a
+    git repository, that is not there any more, or that git would not answer
+    about, and a figure nobody could measure is then absent rather than zero.
+    """
+    now = now or time.time()
+    hit = _activity_cache.get(path)
+    if hit and now - hit[0] < _ACTIVITY_TTL:
+        return hit[1]
+
+    def run(*args: str) -> str | None:
+        try:
+            r = subprocess.run(("git", "-C", path, *args), capture_output=True,
+                               text=True, timeout=_GIT_TIMEOUT_S)
+        except Exception:
+            return None
+        return r.stdout if r.returncode == 0 else None
+
+    out = run("log", "-1", "--format=%ct")
+    if out is None:
+        # Not a repository, gone, or a repository with no commit in it yet.
+        # All three are "nothing to say", which is what the phone draws.
+        info = None
+    else:
+        head = out.strip().splitlines()
+        at = _float(head[0]) if head else None
+        # One pass over the window, counted twice: the day is inside the week.
+        midnight = datetime.fromtimestamp(now).replace(
+            hour=0, minute=0, second=0, microsecond=0).timestamp()
+        stamps = [t for t in (_float(x) for x in
+                              (run("log", f"--since={int(now - ACTIVITY_WINDOW_S)}",
+                                   "--format=%ct") or "").split())
+                  if t is not None]
+        info = {"at": at, "week": len(stamps),
+                "today": sum(1 for t in stamps if t >= midnight)}
+    _activity_cache[path] = (now, info)
+    return info
+
+
+#: How long the whole set of repositories may take on one snapshot. The phone
+#: gives a machine eight seconds for *everything* and a computer here has twenty
+#: products on it; twenty cold `git log` pairs on a spinning network volume is
+#: how this request would come to be the one that times out. So it is a budget:
+#: whatever is already known travels for free, new readings stop when the time is
+#: up, and the rest arrive on the next poll — a card without a figure for a
+#: minute, rather than a dashboard with nothing on it at all.
+_BUDGET_S = 2.5
+
+
+def activity_of(paths: list[str], now: float | None = None,
+                budget_s: float = _BUDGET_S) -> dict[str, dict]:
+    """The same, for every repository a machine's products own, keyed by path.
+
+    Keyed by path rather than by project because the phone merges several
+    machines: isghocam's site may be checked out on the studio and its API on
+    the mini, and one product's figure is the union of its repositories. Two
+    machines that hold the *same* checkout would otherwise have their commits
+    counted twice, and a path is the only thing the two answers agree on.
+    """
+    now = now or time.time()
+    out: dict[str, dict] = {}
+    deadline = time.monotonic() + budget_s
+    for path in dict.fromkeys(paths):
+        hit = _activity_cache.get(path)
+        cold = hit is None or now - hit[0] >= _ACTIVITY_TTL
+        if cold and time.monotonic() >= deadline:
+            # Out of time for a new reading. A reading from six minutes ago is
+            # still worth sending — a week's commit count does not move in
+            # minutes — and a path never read is absent until the next poll.
+            info = hit[1] if hit else None
+        else:
+            info = repo_activity(path, now)
+        if info is not None:
+            out[path] = info
+    return out
+
+
+def _float(text: str | None) -> float | None:
+    try:
+        return float((text or "").strip())
+    except (TypeError, ValueError):
+        return None
 
 
 def _waiting(card: dict) -> bool:

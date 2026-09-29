@@ -34,8 +34,11 @@ export { useSheet } from './sheet';
 const dim = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } : null);
 
 /** A `Pressable` where a press is optional: a card that goes somewhere is a
- *  button, and one that does not is a `View` that cannot swallow a touch. */
-function Tap({ onPress, onLongPress, style, children }: {
+ *  button, and one that does not is a `View` that cannot swallow a touch.
+ *
+ *  Exported because a row inside a card is pressable too, and the feedback a
+ *  press gets is the design system's to decide rather than each screen's. */
+export function Tap({ onPress, onLongPress, style, children }: {
   onPress?: () => void; onLongPress?: () => void; style?: StyleProp<ViewStyle>; children: React.ReactNode;
 }) {
   if (!onPress && !onLongPress) return <View style={style}>{children}</View>;
@@ -59,12 +62,21 @@ function Tap({ onPress, onLongPress, style, children }: {
  *  frame gives a card being carried the lifted surface instead.
  *
  *  `bar` is that same drag frame's two-pixel green rule across the top of a
- *  card whose work is running, at the fraction of it that is done. */
-export function Card({ ring = 'line', lifted, bar, radius = RADIUS.card, onPress, onLongPress, style, children }: {
+ *  card whose work is running, at the fraction of it that is done.
+ *
+ *  `inset: false` is the card whose contents are rows rather than a block — the
+ *  agent roster of Mobile1 V2 (`padding:4px 14px`, each row `9px 0` over a
+ *  `line`) and the system line of Mobile1 V1, which is one row 34 pt tall. The
+ *  surface, the corner and the ring are the card's; the spacing inside it
+ *  belongs to the rows, and a card that kept its own would push them apart. */
+export function Card({ ring = 'line', lifted, bar, radius = RADIUS.card, inset = true,
+                       onPress, onLongPress, style, children }: {
   ring?: 'line' | 'amber' | 'red' | 'run' | 'none';
   lifted?: boolean;
   bar?: number | null;
   radius?: number;
+  /** The card's own padding. False where its children carry it. */
+  inset?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
   style?: StyleProp<ViewStyle>;
@@ -84,7 +96,9 @@ export function Card({ ring = 'line', lifted, bar, radius = RADIUS.card, onPress
       {bar != null && (
         <View style={{ height: 2, width: `${Math.max(0, Math.min(1, bar)) * 100}%`, backgroundColor: t.run }} />
       )}
-      <View style={{ padding: 12, paddingHorizontal: 14, paddingBottom: 13, gap: 10 }}>{children}</View>
+      {inset
+        ? <View style={{ padding: 12, paddingHorizontal: 14, paddingBottom: 13, gap: 10 }}>{children}</View>
+        : children}
     </Tap>
   );
 }
@@ -392,12 +406,19 @@ export function Monogram({ name, index, size = SIZE.monogram, style }: {
  *  at `26px/1` and its name 8 pt under it at `11.5px`. A counter that is at
  *  zero drops its tint and its colour and goes grey on `s1` — Mobile1 V3 is the
  *  same four tiles on a calm morning, and the difference between the two is
- *  this component's whole behaviour. */
-export function Counter({ value, label, tone, onPress, style }: {
+ *  this component's whole behaviour.
+ *
+ *  `ring` is Mobile5 S1's fourth tile: `box-shadow: inset 0 0 0 1.5px
+ *  var(--amber)` and no wash at all. It is how "2 agents whose state nobody
+ *  knows" is told apart from "2 things need you" — the same colour, and not the
+ *  same kind of fact, which two identical washes side by side would deny. */
+export function Counter({ value, label, tone, ring, onPress, style }: {
   value: number | string;
   label: string;
   /** What it is a count of. Ignored while the count is 0. */
   tone?: Tone;
+  /** Outlined in its tone rather than washed with it. */
+  ring?: boolean;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -407,7 +428,8 @@ export function Counter({ value, label, tone, onPress, style }: {
   return (
     <Tap onPress={onPress}
       style={[{ flex: 1, borderRadius: RADIUS.tile, paddingTop: 10, paddingHorizontal: 10, paddingBottom: 9,
-                backgroundColor: col ? col.bg : t.s1 }, style]}>
+                backgroundColor: col && !ring ? col.bg : ring ? 'transparent' : t.s1 },
+              col && ring ? { borderWidth: 1.5, borderColor: col.fg } : null, style]}>
       <Text mono style={{ fontSize: 26, lineHeight: 26, fontWeight: '500', color: col ? col.fg : zero ? t.ink3 : t.ink }}>
         {value}
       </Text>
@@ -429,7 +451,12 @@ export function Counter({ value, label, tone, onPress, style }: {
  *  `mark` (Mobile6 S3) is the smaller one that groups a list by state —
  *  `? questions · 1` — set entirely in mono at 11.5 pt in that state's colour.
  *  It is a label on a group, not a heading over a section, and it is why the
- *  Waiting-on-you screen needs no dividers. */
+ *  Waiting-on-you screen needs no dividers.
+ *
+ *  `page` is the third and there is one of it per screen: Mobile1 V1's
+ *  `Overview` at `600 26px` with `letter-spacing:-.02em`, and the mono aside at
+ *  the far end that says how much of the page below it is true — `4 projects ·
+ *  Mon 28 Sep`, or Mobile5 S1's amber `partly as of 21:02`. */
 export function SectionHeader({ title, count, note, right, kind = 'title', tone, style }: {
   title: string;
   /** The mono number that follows the title. */
@@ -438,12 +465,25 @@ export function SectionHeader({ title, count, note, right, kind = 'title', tone,
   note?: string | null;
   /** A mono aside pushed to the far end instead: `4 projects · Mon 28 Sep`. */
   right?: string | null;
-  kind?: 'title' | 'mark';
-  /** Which state's colour a `mark` takes. Grey without one. */
+  kind?: 'title' | 'mark' | 'page';
+  /** Which state's colour a `mark`, or a `page`'s aside, takes. Grey without
+   *  one. */
   tone?: Tone;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
+  if (kind === 'page') {
+    return (
+      <View style={[{ flexDirection: 'row', alignItems: 'baseline', paddingHorizontal: 4 }, style]}>
+        <Text style={{ fontSize: 26, fontWeight: '600', letterSpacing: em(26, -0.02) }}>{title}</Text>
+        {!!right && (
+          <Text mono numberOfLines={1}
+            style={{ fontSize: 12, fontWeight: tone ? '500' : '400', marginLeft: 'auto',
+                     color: tone ? toneColours(t, tone).fg : t.ink3 }}>{right}</Text>
+        )}
+      </View>
+    );
+  }
   if (kind === 'mark') {
     return (
       <View style={[{ paddingTop: 4, paddingHorizontal: 4 }, style]}>

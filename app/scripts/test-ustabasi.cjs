@@ -1235,6 +1235,10 @@ checks.push(...require('./test-divan-merge.cjs').checks);
 // …and the shell those screens stand in: the three places, the project bar,
 // and everything about a computer having moved under the third one.
 checks.push(...require('./test-shell.cjs').checks);
+// …and the first of the screens: the Dashboard, which is the reason for all of
+// it — every counter counted, a quiet machine said out loud, and a morning with
+// nothing on it drawn as the state it is.
+checks.push(...require('./test-dashboard.cjs').checks);
 
 let bad = 0;
 for (const [name, ok] of checks) {

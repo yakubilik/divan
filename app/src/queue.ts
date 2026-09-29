@@ -225,6 +225,10 @@ export function useDivanView(): DivanView & { reload: () => void } {
     return () => { clearInterval(timer); sub.remove(); };
   }, [reload]));
 
+  // The clock the merge aged the machines against comes back on the view itself
+  // (`DivanView.now`): a screen that asked for its own would be a second timer
+  // ticking at a second's offset, and two answers to "how long has mini been
+  // quiet" on one page.
   const view = useMemo(() => merge(entries(hosts, divan), now), [hosts, divan, now]);
   return { ...view, reload };
 }
