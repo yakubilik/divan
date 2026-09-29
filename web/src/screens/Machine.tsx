@@ -5,10 +5,11 @@
  *  itself in the rest of the width, and its eight rows are all here: Machines,
  *  Executors, Terminals, Remote screen, Accounts & sign-ins, Quota thresholds,
  *  Admin and Settings. Six of them are pages built out of the design system
- *  (`ui/divan.tsx`) against the decisions in `lib/machine.ts`; the two the
- *  frames tell to stay as they are — the wall of terminals and the remote
- *  screen — are the screens the panel already had, unchanged, because what they
- *  do is the whole of what they are.
+ *  (`ui/divan.tsx`) against the decisions in `lib/machine.ts`; the other two —
+ *  the wall of terminals and the remote screen — do what they have always done
+ *  and now say so under the head their frames put over them: W15's own chips
+ *  for the computers and its line under the picture are there, and what neither
+ *  of them has (a pty behind W14's tabs) says so where it would be.
  *
  *  Four pages have no row of their own (`MACHINE_ASIDE`): a computer's folders,
  *  the agents installed on it, the update, and every default a new chat takes.

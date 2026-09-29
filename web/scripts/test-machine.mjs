@@ -313,20 +313,56 @@ group('the thresholds are editable, remembered, and change what the panel does')
 
 // ── 4 · the two the frames leave alone ─────────────────────────────────────
 
-group('Terminals and Remote screen are the screens they were');
+group('Terminals and Remote screen: the frames’ chrome, today’s behaviour');
 {
+  const terminal = page('terminal');
+  ok('Terminals stands under the page head every Divan page has, in the drawer’s own word',
+    has(terminal.body, 'Terminals')
+    && anyStyle(terminal.body, (d) => d['font-size'] === '28px' && d['letter-spacing'] === '-.02em'),
+    words(terminal.body).slice(0, 120));
+
+  const screen = page('screen');
+  ok('Remote screen does too, and its computers are W15’s chips rather than a menu',
+    has(screen.body, 'Remote screen', 'studio')
+    && anyStyle(screen.body, (d) => d['border-radius'] === '16px' && d.height === '32px')
+    && !/<select/.test(screen.body),
+    words(screen.body).slice(0, 160));
+
+  const source = src('src/screens/Screen.tsx');
+  ok('…and the line W15 draws under the picture says what the link is doing while it is live',
+    ['live screen', 'latency ', 'quality auto', 'no audio'].every((w) => source.includes(w))
+    && !has(screen.body, 'live screen'),
+    words(screen.body).slice(-120));
+
+  const REQUEST = /'((?:screen|chat|ustabasi|host|divan|account|agent|tool|approval|group|limits)\.[a-z_.]+)'/g;
+  const DRIVE = /\bon(MouseDown|MouseUp|MouseMove|MouseLeave|Wheel|ContextMenu|DoubleClick|KeyDown|DragStart|DragEnd|DragOver|DragLeave|Drop|Click)=/g;
+  const surface = (text) => JSON.stringify([
+    [...new Set([...text.matchAll(REQUEST)].map((m) => m[1]))].sort(),
+    [...new Set([...text.matchAll(DRIVE)].map((m) => m[1]))].sort(),
+  ]);
+  const files = ['src/screens/Terminal.tsx', 'src/screens/Screen.tsx'];
+  let was = null;
+  try {
+    was = files.map((f) => execFileSync('git', ['show', `main:web/${f}`],
+      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+  } catch { /* no git, or no main: the dispatch below is what is left */ }
+  if (was === null) console.log('  · no git to read main from: the dispatch was read instead');
+  else {
+    const changed = files.filter((f, i) => surface(was[i]) !== surface(src(f)));
+    ok('neither asks a computer for anything new, and neither dropped an event it drove with',
+      changed.length === 0,
+      changed.map((f, i) => `${f}: ${surface(was[i])} vs ${surface(src(f))}`).join('\n    '));
+    const keys = (t) => t.slice(t.indexOf('const KEYS'), t.indexOf('const MAX_ZOOM'));
+    ok('…the keyboard the remote screen speaks is the same table it always was',
+      keys(was[1]) === keys(src(files[1])));
+  }
+  ok('the picture is the same request it was, at the same quality',
+    /screen\.jpg\?token=\$\{encodeURIComponent\(slot\.cfg\.token\)\}&w=\$\{w\}&q=72/.test(source));
+
   const machine = src('src/screens/Machine.tsx');
-  ok('both are still what those two rows open',
+  ok('and both are still what those two rows open',
     /view === 'terminal'\) return <Terminal onPeek=\{onPeek\} onNewChat=\{onNewChat\} \/>/.test(machine)
     && /view === 'screen'\) return <Screen \/>/.test(machine));
-  let diff = null;
-  const files = ['src/screens/Terminal.tsx', 'src/screens/Screen.tsx'];
-  try {
-    diff = execFileSync('git', ['diff', '--stat', 'main', '--', ...files],
-      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch { /* no git, or no main: the reading above is what is left */ }
-  if (diff === null) console.log('  · no git to diff against: the dispatch was read instead');
-  else ok('…and not one line of either has changed', diff === '', diff);
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');

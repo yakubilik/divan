@@ -6,6 +6,7 @@ import { useFleet } from '../lib/fleet';
 import { emptyLog, logKey, useLogs, type ChatLog, type Item } from '../lib/timeline';
 import { deleteChat, respond, updateChat } from '../lib/actions';
 import { hasChatDrag, readChatDrag, setChatDrag } from '../lib/dnd';
+import { SectionHeader } from '../ui/divan';
 import type { Chat } from '../lib/protocol';
 import { Ustabasi } from './Ustabasi';
 
@@ -14,7 +15,15 @@ import { Ustabasi } from './Ustabasi';
  *  this answers "what is happening", which is a different question and needs
  *  the last few lines of each conversation, not a one-line preview of the most
  *  recent one. Nothing here is a new source of truth — the tiles read the same
- *  fleet store and the same folded event logs the chat screen reads. */
+ *  fleet store and the same folded event logs the chat screen reads.
+ *
+ *  TODO(daemon): Web15 W14, the frame behind this row of the Machine drawer,
+ *  draws a different product — tabs of a real shell on a reachable machine, a
+ *  pty with `git status` and `divan ps` typed into it, and an agent's own
+ *  session attached to. Nothing carries one: there is no request that opens a
+ *  shell, and none that writes to one. So what this page is is what it has
+ *  always been — every chat on every computer at once, with the ticket queue
+ *  beside it — under the head that frame puts over it. */
 
 // ── what a tile is doing ─────────────────────────────────────────────────────
 // The daemon's `chat.status` has three values, and a tile needs to tell apart
@@ -664,12 +673,16 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
           display: 'flex', alignItems: 'center', gap: 12, padding: '14px 24px 10px', flexWrap: 'wrap',
         }}>
           {toggle}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexShrink: 0 }}>
-            <span style={{ fontSize: 17, fontWeight: 600 }}>Terminal</span>
-            <span style={{ ...mono, fontSize: 12, color: C.faint }}>
-              {onlineCount} of {order.length} online
-            </span>
-          </div>
+          {/* The page head Web15 W14 draws over this, under the name the drawer
+              gives the row: `600 26px` at `-.02em` with one plain aside, which
+              is the design system's own `page` head and not a size invented
+              here. Everything below it is the older set, until the wall itself
+              is rebuilt. */}
+          <SectionHeader
+            kind="page" title="Terminals"
+            note={`${onlineCount} of ${order.length} online`}
+            style={{ flexShrink: 0 }}
+          />
 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
             {order.map((k) => {
