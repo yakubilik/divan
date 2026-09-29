@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, View, type GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
@@ -19,12 +19,16 @@ import {
 import {
   COLUMN_LABEL, OPENS_ON, faces, foot, items, spread, tabs, tally, type Face, type Item,
 } from '../src/board';
+import {
+  SETTLE_MS, back, carry, foot as dropFoot, hint, type Carried, type Landed,
+} from '../src/drag';
 import { ColumnTabs, EmptyState, ListRow, SectionHeader, Segments } from '../src/components/divan';
 import {
   AgentLine, AgentRoster, AskCard, Counters, Note, NoteFoot, ProjectCard, SystemLine,
 } from '../src/components/dashboard';
 import { BranchCard, ProjectHead, QuietNote, StateLines } from '../src/components/project';
 import { BoardCard, ColumnLine } from '../src/components/board';
+import { DragHint, DropSlot, Float, floatAt, useDrag } from '../src/components/drag';
 import { Text } from '../src/components/text';
 import { useTokens } from '../src/theme';
 import { ProjectBar, Shell } from '../src/components/shell';
@@ -99,21 +103,27 @@ export default function Dashboard() {
     ? T('dashPartly', { time: clock(old.asOf) })
     : `${T('dashProjects', { n: view.projects.length })} · ${today}`;
 
+  const product = picked ? (
+    <Project project={picked} index={view.projects.findIndex((p) => p.key === picked.key)}
+      view={view} now={now} ago={ago} face={face} column={col}
+      onFace={(to) => router.setParams({ tab: to })}
+      onColumn={(to) => router.setParams({ col: to })}
+      onOpen={(ticket) => go(() => router.push(`/ticket/${ticket}`))} />
+  ) : null;
+
   return (
     <Shell place="dashboard" badge={view.totals.needsYou}>
       <ProjectBar chips={bar} onSelect={enter} />
       <Line view={view} ago={ago} />
-      {/* `flexGrow` so that the empty state, which centres itself in what it
-          is given, has the page to centre itself in. */}
-      {/* Mobile1 V1's body: `padding:16px 16px 0; gap:16`. */}
+      {/* A product's board pins its column tabs and scrolls its cards under
+          them, so that face is given the page rather than a place in a scroll
+          view (`Project`). Everything else on this screen is one page. */}
+      {product && face === 'board' ? product : (
+      /* `flexGrow` so that the empty state, which centres itself in what it
+         is given, has the page to centre itself in. */
+      /* Mobile1 V1's body: `padding:16px 16px 0; gap:16`. */
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
-        {picked ? (
-          <Project project={picked} index={view.projects.findIndex((p) => p.key === picked.key)}
-            view={view} now={now} ago={ago} face={face} column={col}
-            onFace={(to) => router.setParams({ tab: to })}
-            onColumn={(to) => router.setParams({ col: to })}
-            onOpen={(ticket) => go(() => router.push(`/ticket/${ticket}`))} />
-        ) : (
+        {product ?? (
           <>
             <SectionHeader kind="page" title={T('overview')} right={aside}
               tone={old ? 'amber' : undefined} />
@@ -161,6 +171,7 @@ export default function Dashboard() {
           </>
         )}
       </ScrollView>
+      )}
     </Shell>
   );
 }
@@ -301,6 +312,13 @@ function Agents({ view, now, ago, onOpen }: {
  *  The frame puts three tabs over them. Two are drawn: the chats a product owns
  *  are not filed yet, and a tab that dims under a thumb and does nothing is worse
  *  than a tab that is not there.
+ *
+ *  The two faces scroll differently, which is the one structural difference
+ *  between them. The Overview is a page and scrolls as one, inside the
+ *  Dashboard's own. The board is a head and a list: its column tabs are the drop
+ *  targets of the drag, and a drop target that can be scrolled off the top of the
+ *  page is not a drop target — so it is pinned, the cards move under it, and that
+ *  face owns its own scrolling (`board` here, and the branch in `Dashboard`).
  */
 function Project({ project: p, index, view, now, ago, face, column, onFace, onColumn, onOpen }: {
   project: MergedProject; index: number; view: DivanView; now: number; ago: Ago;
@@ -313,11 +331,8 @@ function Project({ project: p, index, view, now, ago, face, column, onFace, onCo
   const T = useT();
   const t = useTokens();
   const stale = oldWords(p, now, ago);
-  return (
-    // `flexGrow` so that the empty board, which centres itself in what it is
-    // given, has the page to centre itself in. Mobile7 S4's own body: `padding:
-    // 14px 16px 0; gap:12`.
-    <View style={{ flexGrow: 1, gap: 12 }}>
+  const head = (
+    <>
       <ProjectHead name={p.name} index={index} note={subtitle(p)} />
       {!!stale && (
         <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
@@ -329,9 +344,25 @@ function Project({ project: p, index, view, now, ago, face, column, onFace, onCo
           needs anybody (`src/board.ts boardMark`). */}
       <Segments value={face} onChange={(key) => onFace(key as Face)}
         segments={faces(p).map((f) => ({ key: f.key, label: T(f.label), mark: f.mark, tone: f.tone }))} />
-      {face === 'board'
-        ? <Board project={p} view={view} ago={ago} column={column} onColumn={onColumn} onOpen={onOpen} />
-        : <Overview project={p} view={view} now={now} ago={ago} />}
+    </>
+  );
+  if (face === 'board') {
+    // The page's own padding, which the Dashboard's scroll view was carrying
+    // until this face took the scrolling off it.
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 12, gap: 12 }}>{head}</View>
+        <Board project={p} view={view} ago={ago} column={column} onColumn={onColumn} onOpen={onOpen} />
+      </View>
+    );
+  }
+  return (
+    // `flexGrow` so that the empty page, which centres itself in what it is
+    // given, has the page to centre itself in. Mobile7 S4's own body: `padding:
+    // 14px 16px 0; gap:12`.
+    <View style={{ flexGrow: 1, gap: 12 }}>
+      {head}
+      <Overview project={p} view={view} now={now} ago={ago} />
     </View>
   );
 }
@@ -399,18 +430,29 @@ function Overview({ project: p, view, now, ago }: {
   );
 }
 
-/** …and the board (Mobile2 V5, Mobile8 S7): four columns as four tabs, one of
- *  them open, and the cards in it.
+/** …and the board (Mobile2 V5, Mobile8 S7, Mobile3 D1-D4): four columns as four
+ *  tabs, one of them open, the cards in it, and the one gesture on this phone
+ *  that changes what a computer is doing.
  *
  *  The column is where a person put a card and the mark on the card is what is
  *  actually happening to it — two facts, kept apart, and `src/board.ts` decides
  *  both. A card that failed at four in the morning is therefore still in the
  *  column it was in, with a red mark and how long it has been like that; nothing
- *  on this screen moves a card, and nothing on the computer does either.
+ *  on the computer moves a card, and on this screen only a thumb does.
  *
- *  Dragging a card between the columns is the next ticket. The tabs are taps
- *  until then, which is the whole of the gesture the frames call for on a phone
- *  minus the part that starts work.
+ *  **The tabs are pinned and the cards scroll under them.** That is the frame's
+ *  own layout and it is also what makes the gesture possible: they are the drop
+ *  targets, and a drop target that can be scrolled off the top of the page is
+ *  not one. It is why this face of the project page owns its own scrolling
+ *  instead of sitting inside the Dashboard's.
+ *
+ *  What a drag *decides* is `src/drag.ts` and what it draws is
+ *  `components/drag.tsx`; what is left here is the arrangement and the one thing
+ *  neither of them can do — ask a computer to move the card, and say what came
+ *  back. Two things can come back short, and the screen tells them apart because
+ *  they are not the same news: a machine that did not answer moved nothing and
+ *  the board is as it was, while a queue that declined leaves the card where the
+ *  thumb put it with nothing running on it.
  *
  *  A board with no card anywhere on it is Mobile7 S6's designed state, with the
  *  four tabs still over it at zero — the design's own rule for an empty screen is
@@ -426,47 +468,156 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
   // The computer this phone holds a socket to: the one whose runs have a screen
   // in this app, and so the only cards that are a way in (`src/board.ts items`).
   const host = useStore((s) => s.host);
+  const moveCard = useStore((s) => s.moveCard);
   const list = items(view, p, column, ago, host?.id ?? null);
   const said = foot(p, column, view.now);
   const where = spread(p, list.map((i) => i.card));
   const empty = blankBody(p);
+
+  /** The card that has just been put down, for the five seconds it says so.
+   *  Held here and nowhere else: it is a fact about this phone rather than
+   *  about any board (Mobile3 D4). */
+  const [landed, setLanded] = React.useState<Landed | null>(null);
+  const settle = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const put = React.useCallback((l: Landed | null) => {
+    if (settle.current) clearTimeout(settle.current);
+    setLanded(l);
+    if (l) settle.current = setTimeout(() => setLanded(null), SETTLE_MS);
+  }, []);
+  React.useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
+
+  /** Ask the computer the card is on. The move is the whole of the request; what
+   *  it answers with is whether a worker was also started, and the card says
+   *  whichever of the four things happened. */
+  const ask = React.useCallback(async (
+    to: { carried: Carried; column: DivanColumn; position: number | null; starts: boolean },
+  ) => {
+    try {
+      const { error } = await moveCard({ card: to.carried.card, host: to.carried.host,
+                                         column: to.column, position: to.position });
+      put({ carried: to.carried, column: to.column,
+            moved: true, started: to.starts && !error, error });
+    } catch (e: any) {
+      // Nothing moved. The board is exactly as it was and the line above the
+      // cards says why, because there is no card here to put it on: the list may
+      // by now be showing the column it was aimed at.
+      put({ carried: to.carried, column: to.column,
+            moved: false, started: false, error: e?.message ?? '' });
+    }
+  }, [moveCard, put]);
+
+  const drag = useDrag({
+    open: column,
+    rows: list.map((i) => i.card.id),
+    onOpen: onColumn,
+    onMove: (to) => { put(null); void ask(to); },
+  });
+
+  const carried = drag.drag?.carried ?? null;
+  // What the line above the cards says. While a card is in the air it is the
+  // gesture's (Mobile3 D1–D3); for five seconds after a move that never arrived
+  // it is the reason; otherwise it is the column's own tally.
+  const air = drag.drag
+    ? hint(drag.drag, list.filter((i) => i.card.id !== carried?.card).length)
+    : null;
+  const trouble = !landed || landed.moved ? null : dropFoot(landed);
+  /** Where the card in the air would land, among the cards that are drawn. */
+  const slot = drag.drag && drag.drag.over === column ? drag.drag.slot : null;
+
+  // The card in the air is out of the list once a place in this column has been
+  // picked: the slot the frame draws is the one it is about to fill, and drawing
+  // the hole it left as well would be two holes for one card. Before that — the
+  // thumb over another column's tab — its own place is the hole (D2).
+  const cards = list
+    .filter((item) => !(slot != null && item.card.id === carried?.card))
+    .map((item) => (
+      <View key={item.card.id} onLayout={drag.list.row(item.card.id)}>
+        <BoardRow item={item} onOpen={onOpen}
+          hold={drag.hold(carry(item.card, item.face, item.who))}
+          held={carried?.card === item.card.id}
+          flying={drag.flying}
+          landed={landed && landed.moved && landed.carried.card === item.card.id ? landed : null}
+          onUndo={() => { if (!landed) return; put(null); void moveCard(back(landed)); }} />
+      </View>
+    ));
+  if (slot != null) cards.splice(slot, 0, <DropSlot key="slot" landing />);
+
   return (
-    <View style={{ flexGrow: 1, gap: 6 }}>
+    // `flex` rather than `flexGrow`: the cards scroll under the tabs, which is
+    // the frame's layout and the gesture's requirement both.
+    <View style={{ flex: 1 }} {...drag.pan.panHandlers}>
       {/* The tab strip is the width of the page in the frame, rule and all, and
           the page it is on is inset by 16. */}
-      <ColumnTabs value={column} onChange={(key) => onColumn(key as DivanColumn)}
-        style={{ marginHorizontal: -16 }}
-        columns={tabs(p, view.now).map((c) => ({ key: c.key, label: T(c.label), count: c.count }))} />
-      {blank(p) ? (
-        <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')} />
-      ) : (
-        <>
-          <ColumnLine marks={tally(list.map((i) => i.card), view.now, ago)}
-            machines={where.map((m) => `${m.name} ${m.n}`).join(' · ')} style={{ paddingTop: 6 }} />
-          {list.map((item) => <BoardRow key={item.card.id} item={item} onOpen={onOpen} />)}
-          {!!said && (
-            <Text style={{ fontSize: 13, lineHeight: 13 * 1.45, color: t.ink2,
-                           paddingHorizontal: 4, paddingTop: 2 }}>
-              {T(said.key, said.params)}
-            </Text>
-          )}
-        </>
+      <View ref={drag.strip.ref} onLayout={drag.strip.onLayout}>
+        <ColumnTabs value={column} onChange={(key) => onColumn(key as DivanColumn)}
+          dragging={!!drag.drag} target={drag.drag?.over ?? null} onMeasure={drag.strip.onMeasure}
+          columns={tabs(p, view.now).map((c) => ({ key: c.key, label: T(c.label), count: c.count }))} />
+      </View>
+      <ScrollView scrollEnabled={!drag.drag}
+        contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingTop: 6,
+                                 paddingBottom: 24, gap: 6 }}>
+        {blank(p) ? (
+          <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')} />
+        ) : (
+          <>
+            {air ? <DragHint tone={air.tone}
+                     text={T(air.said.key, air.col ? { ...air.said.params, col: T(air.col) } : air.said.params)} />
+             : trouble ? <DragHint tone={trouble.tone} text={T(trouble.said.key, trouble.said.params)} />
+             : <ColumnLine marks={tally(list.map((i) => i.card), view.now, ago)}
+                 machines={where.map((m) => `${m.name} ${m.n}`).join(' · ')} />}
+            {/* Measured as one block: a card's place in the column is read off its
+                own layout inside this view, and this view's place on the glass. */}
+            <View ref={drag.list.ref} onLayout={drag.list.onLayout} style={{ gap: 6 }}>{cards}</View>
+            {!!said && (
+              <Text style={{ fontSize: 13, lineHeight: 13 * 1.45, color: t.ink2,
+                             paddingHorizontal: 4, paddingTop: 2 }}>
+                {T(said.key, said.params)}
+              </Text>
+            )}
+          </>
+        )}
+      </ScrollView>
+      {/* The card under the thumb, over everything and outside the list that is
+          no longer holding it (Mobile3 D2). */}
+      {!!drag.drag && drag.flying && (
+        <Float face={drag.drag.carried.face} who={T(drag.drag.carried.who)}
+          title={drag.drag.carried.title}
+          style={floatAt(drag.drag.at.x, drag.drag.at.y)} />
       )}
     </View>
   );
 }
 
-/** One card of the open column. */
-function BoardRow({ item, onOpen }: { item: Item; onOpen: (ticket: number) => void }) {
+/** One card of the open column, in whichever of its three states it is: lying
+ *  there, held (D1), or newly put down (D4). The card it left behind while it is
+ *  in the air is an empty slot rather than the card (D2). */
+function BoardRow({ item, onOpen, hold, held, flying, landed, onUndo }: {
+  item: Item;
+  onOpen: (ticket: number) => void;
+  hold: { holdMs: number; onLongPress: (e: GestureResponderEvent) => void; onPressOut: () => void };
+  held?: boolean;
+  flying?: boolean;
+  landed?: Landed | null;
+  onUndo: () => void;
+}) {
   const T = useT();
+  if (held && flying) return <DropSlot />;
+  const say = landed ? dropFoot(landed) : null;
   return (
-    <BoardCard face={item.face} who={T(item.who)} mine={item.mine}
+    <BoardCard face={item.face} who={T(item.who)} mine={item.mine} hold={hold} lifted={held}
       title={item.card.title} line={item.summary}
       machine={item.machine && { name: item.machine.name,
                                  seen: item.machine.seen == null ? null
                                    : T('pfLastSeen', { time: clock(item.machine.seen) }) }}
       mark={item.mark && { text: `${item.mark.mark} ${T(item.mark.key, item.mark.params)}`,
                            tone: item.mark.tone }}
+      landed={say && {
+        text: T(say.said.key, say.who ? { ...say.said.params, who: T(say.who) }
+                            : say.col ? { ...say.said.params, col: T(say.col) } : say.said.params),
+        tone: say.tone,
+        action: say.undo ? T('dgUndo') : undefined,
+        onAction: say.undo ? onUndo : undefined,
+      }}
       onPress={item.ticket == null ? undefined : () => onOpen(item.ticket!)} />
   );
 }
