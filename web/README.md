@@ -39,8 +39,29 @@ per computer, all live, results merged in one place.
 | `lib/actions.ts` | `send`, `interrupt`, `respond`, `createChat`, `updateChat`, `deleteChat`, `listAgents`, `agentStore`, `installAgent`, `removeAgent`, `toolStatus`, `upload`, `fileUrl`, `parsePairing`. |
 | `lib/format.ts` | `tilde`, `tildeAll`, `shortPath`, `cost`, `tokens`, `duration`, `uptime`, `ago`, `until`, `clock`, `windowName`, `toolSummary`. |
 | `lib/ustabasi.ts` | A ticket, twice: as a card on the wall (`groupByProject`, `sortTickets`, `projectName`, and the card's own lines `cardLine`, `totalAge`, `roundAge`, `stageLine`, `commitCount`) and as a conversation when it is opened (`conversation`, `question`, `stateLine`, `bullets`). No progress percentage on a card, and there will not be one: nothing in the queue knows how far along a ticket is. `npm test` checks all of it. |
-| `lib/theme.ts` | `C` (colours), `MONO`, `R` (radii). No colour exists outside this file. |
-| `ui/kit.tsx` | `Chip`, `Btn`, `Dot`, `Pulse`, `Spinner`, `Segment`, `Label`, `Empty`, `Icon`+`P` (icon paths). |
+| `lib/theme.ts` | Divan's palette in **both themes**, the `--dv-*` rules, the switch, the marks, the radii and the shadows — and `C`, the older vocabulary the screens speak, pointed at the same table. No colour exists outside this file. `T.ink3` is a reference (`var(--dv-ink3)`), not a value, so one render is correct in either theme. |
+| `ui/divan.tsx` | The parts the new desktop screens are made of: `Card`, `Row`, `Pill`, `Button`, `Tabs`, `ColumnTab`, `StatusDot`, `StateMark`, `ExecutorBadge`, `Monogram`, `Counter`, `SectionHeader`, `EmptyState`, `SidePanel`. Each names the frame it was measured off. |
+| `ui/kit.tsx` | The older set the existing screens are built from: `Chip`, `Btn`, `Dot`, `Pulse`, `Spinner`, `Segment`, `Label`, `Empty`, `Icon`+`P` (icon paths). |
+
+## The two themes
+
+Light and dark are equals. The switch follows the computer by default, can be
+set by hand in Settings › Appearance or from the command palette, and is
+remembered; the resolved theme is on `<html>` before the first paint, so the
+panel never opens in the wrong one. Everything else is CSS custom properties,
+which is why a theme change costs no render.
+
+```
+npm test                          # the palette, the parts, the switch, every screen
+node scripts/test-divan-ui.mjs    # the same in a real browser, with screenshots
+```
+
+The second one needs Chrome (`CHROME=…` if it is somewhere unusual) and is not
+in `npm test`. It leaves `.test-build/divan/` behind: `gallery.html` — every
+part in both themes, no daemon, no pairing — and a screenshot of the parts and
+of three screens in each theme. `design/divan/TOKENS.md` is where the values
+come from and what was decided; the artboards it quotes are private and not in
+this repository.
 
 ## Language
 
@@ -53,4 +74,5 @@ browser.
 
 A screen shows only fields the daemon actually sends. If a number is not in the
 protocol, it either gets added to the daemon or it does not appear at all —
-there are no invented indicators. The artboards live in `design/desktop/`.
+there are no invented indicators. The artboards are Divan's
+(`design/divan/frames/`, private); `design/desktop/` is what came before them.

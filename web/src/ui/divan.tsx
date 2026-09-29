@@ -358,7 +358,7 @@ export function ColumnTab({
           cursor: onClick ? 'pointer' : 'default', color: dropping ? T.run : T.ink,
         }}
       >
-        <span style={{ fontSize: 14, fontWeight: 600 }}>{label}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>
         {count != null && (
           <span style={{ ...mono, fontSize: 12, color: dropping ? T.run : T.ink3 }}>{count}</span>
         )}
