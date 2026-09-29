@@ -1248,6 +1248,11 @@ checks.push(...require('./test-waiting.cjs').checks);
 // two states that are not that, a product asleep for weeks and one whose board
 // has never had a card on it.
 checks.push(...require('./test-project.cjs').checks);
+// …and its other face: the board, four columns of it, where the column is what a
+// person intended and the mark on a card is what is actually happening to it —
+// including a worker that failed at four in the morning and a machine that has
+// stopped answering since.
+checks.push(...require('./test-board.cjs').checks);
 
 let bad = 0;
 for (const [name, ok] of checks) {
