@@ -248,6 +248,7 @@ const styleOf = (markup, word) => [...markup.matchAll(/<span data-rn="Text"([^>]
   .map((m) => JSON.parse((m[1].match(/data-style="([^"]*)"/) ?? [, '{}'])[1]
     .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")))[0];
 
+/** The two boxes, title first: S9's 24 pt line and the fixed three-line space. */
 const boxes = (markup) => R.styles(markup).filter((s) => s.fontSize === 24 || s.height === 72);
 
 /** Every state this screen can be in, which the last check of the loop draws. */
@@ -272,6 +273,9 @@ for (const scheme of ['dark', 'light']) {
       styleOf(page, 'cancel').color === t.ink2 && page.includes('>Quire<')
       && boxes(page).length === 2
       && page.includes('>ntIceBox<') && page.includes('>ntQueued<')],
+    [`${scheme}: …and the boxes are set in the app's own type, not the phone's`,
+      eq(boxes(page).map((s) => s.fontFamily), ['Inter-SemiBold', 'Inter-Regular'])
+      && !boxes(page).some((s) => s.fontWeight)],
     [`${scheme}: the line under the box says what is not being asked for, and counts`,
       styleOf(page, 'ntLater').color === t.ink3 && styleOf(page, 'ntLater').fontFamily.includes('Mono')
       && page.includes('>ntCount<')],

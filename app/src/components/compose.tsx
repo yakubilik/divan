@@ -12,8 +12,12 @@
  *  test. That is not an omission — S9 draws none, and the mono line under the
  *  box is the screen saying so out loud. */
 import React from 'react';
-import { TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Text } from './text';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
+// Both boxes go through the app's own input rather than React Native's, the
+// way every other field in the app does (`components/card` `SayBox`): it is
+// what turns a weight into the Inter file that has it, and what brings the
+// caret colour, the keyboard's own theme and the padding the design draws.
+import { Text, TextInput } from './text';
 import { Icon } from './icon';
 import { Monogram, Pill, Tap } from './divan';
 import { LINE_HEIGHT, SUMMARY_LINES } from '../compose';
