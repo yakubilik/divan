@@ -100,6 +100,19 @@ export function cards(p: MergedProject, col: DivanColumn, now: number): MergedCa
     .sort((a, b) => (finishedAt(b) ?? 0) - (finishedAt(a) ?? 0));
 }
 
+/** Is this a column a person arranges by hand?
+ *
+ *  Three of the four are: their cards are drawn in the order somebody put them
+ *  in, so a place in one is a place worth dragging a card to and `position` means
+ *  something. Done is not, and `cards` above is where that is decided — it is
+ *  drawn newest-finished-first, whatever any card's position says. Dropping into
+ *  it is therefore a move with no place in it to ask for, and the drag must not
+ *  offer one: a slot drawn between two finished cards would be a promise that
+ *  column cannot keep (`src/drag.ts place`). */
+export function arranged(col: DivanColumn): boolean {
+  return col !== 'done';
+}
+
 /** The grey line under a column that has something to say about itself: an
  *  empty column, and what Done is not holding.
  *
@@ -143,8 +156,15 @@ export interface Mark {
  *  the quietest thing in the vocabulary rather than a colour of their own.
  *
  *  Null where there is nothing to say: a card nobody has picked up yet, and a
- *  ticket waiting its turn in a queue. The column it is in already says that,
- *  and a chip reading "queued" inside the Queued column is furniture.
+ *  ticket waiting its turn in a queue *in the Queued column*, where the column
+ *  already says it and a chip repeating it is furniture.
+ *
+ *  In Progress is the exception and it is Mobile3 D4's own chip. A card dragged
+ *  there with the coding executor on it is filed with the queue as it lands, and
+ *  a filed ticket that no worker has started yet is `queued` — so between the drop
+ *  and the first line of work the card would otherwise carry nothing at all, which
+ *  is the one moment a person is actually watching it. The ticket number is what
+ *  makes the difference sayable: the queue has this one.
  *
  *  S7 draws a sixth, `◐ Under review` — a second agent checking the work — and
  *  it is deliberately not here. Reviewing is a stage of a run and a card carries
@@ -160,6 +180,8 @@ export function mark(card: MergedCard, now: number, ago: Ago): Mark | null {
   const since = (key: Key, bare: Key, tone: Tone, glyph: string): Mark =>
     (d ? { mark: glyph, key, params: { d }, tone } : { mark: glyph, key: bare, tone });
   switch (card.agent_status) {
+    case 'queued': return card.column === 'in_progress' && card.ustabasi_id != null
+      ? { mark: STATE_MARK.running, key: 'bdPickedUp', tone: 'run' } : null;
     case 'asking': return { mark: STATE_MARK.asking, key: 'bdAsking', tone: 'amber' };
     case 'blocked': return since('bdStuck', 'bdStuckBare', 'red', STATE_MARK.stuck);
     case 'failed': return since('bdFailed', 'bdFailedBare', 'red', MARK_FAILED);

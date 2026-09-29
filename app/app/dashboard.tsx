@@ -3,7 +3,7 @@ import { ScrollView, View, type GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
-import { LOCALE } from '../src/i18n';
+import { LOCALE, type Key } from '../src/i18n';
 import { useDivanView, useQueueBadge } from '../src/queue';
 import { COLUMNS, project as projectIn, type DivanView, type MergedProject } from '../src/divan';
 import { chips } from '../src/shell';
@@ -20,7 +20,7 @@ import {
   COLUMN_LABEL, OPENS_ON, faces, foot, items, spread, tabs, tally, type Face, type Item,
 } from '../src/board';
 import {
-  SETTLE_MS, back, carry, foot as dropFoot, hint, type Carried, type Landed,
+  SETTLE_MS, announce, back, carry, foot as dropFoot, hint, type Carried, type Landed,
 } from '../src/drag';
 import { ColumnTabs, EmptyState, ListRow, SectionHeader, Segments } from '../src/components/divan';
 import {
@@ -28,7 +28,7 @@ import {
 } from '../src/components/dashboard';
 import { BranchCard, ProjectHead, QuietNote, StateLines } from '../src/components/project';
 import { BoardCard, ColumnLine } from '../src/components/board';
-import { DragHint, DropSlot, Float, floatAt, useDrag } from '../src/components/drag';
+import { DragHint, DropSlot, Float, useDrag } from '../src/components/drag';
 import { Text } from '../src/components/text';
 import { useTokens } from '../src/theme';
 import { ProjectBar, Shell } from '../src/components/shell';
@@ -486,9 +486,17 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
   }, []);
   React.useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
 
-  /** Ask the computer the card is on. The move is the whole of the request; what
-   *  it answers with is whether a worker was also started, and the card says
-   *  whichever of the four things happened. */
+  /** Ask the computer the card is on to move it, and say what came back.
+   *
+   *  Every move this screen makes goes through here — the drop, and the Undo that
+   *  takes one back — so that there is one place a machine that has stopped
+   *  answering can be caught. A rejected move is the whole reason the card in
+   *  Mobile3 D4 has four things it can say rather than one, and the Undo used to
+   *  have no catch of its own: a board left showing a card in the column somebody
+   *  had just said they did not want it in.
+   *
+   *  `starts` is what the release promised: a worker was asked for. It is only
+   *  true of the drop, never of an Undo. */
   const ask = React.useCallback(async (
     to: { carried: Carried; column: DivanColumn; position: number | null; starts: boolean },
   ) => {
@@ -498,9 +506,9 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
       put({ carried: to.carried, column: to.column,
             moved: true, started: to.starts && !error, error });
     } catch (e: any) {
-      // Nothing moved. The board is exactly as it was and the line above the
-      // cards says why, because there is no card here to put it on: the list may
-      // by now be showing the column it was aimed at.
+      // Nothing moved. The board is exactly as it was, and what says so is the
+      // line above the cards rather than the card: the list may by now be showing
+      // the column the card was aimed at, where that card is not.
       put({ carried: to.carried, column: to.column,
             moved: false, started: false, error: e?.message ?? '' });
     }
@@ -508,21 +516,26 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
 
   const drag = useDrag({
     open: column,
-    rows: list.map((i) => i.card.id),
+    rows: list.map((i) => ({ card: i.card.id, host: i.card.host })),
     onOpen: onColumn,
     onMove: (to) => { put(null); void ask(to); },
   });
 
   const carried = drag.drag?.carried ?? null;
   // What the line above the cards says. While a card is in the air it is the
-  // gesture's (Mobile3 D1–D3); for five seconds after a move that never arrived
-  // it is the reason; otherwise it is the column's own tally.
+  // gesture's (Mobile3 D1-D3); after it lands it is the card's own line, but only
+  // where the card is not on screen to carry it — a move that never arrived left
+  // the card in a column this list may no longer be showing, and a board that
+  // opened the column the card went to may not have re-read it yet. Otherwise it
+  // is the column's own tally.
   const air = drag.drag
-    ? hint(drag.drag, list.filter((i) => i.card.id !== carried?.card).length)
+    ? hint(drag.drag, { others: list.filter((i) => i.card.id !== carried?.card).length,
+                        mixed: p.machines.length > 1 })
     : null;
-  const trouble = !landed || landed.moved ? null : dropFoot(landed);
+  const where_ = landed ? announce(landed, list.map((i) => i.card.id)) : null;
+  const note = landed && where_ === 'line' ? dropFoot(landed) : null;
   /** Where the card in the air would land, among the cards that are drawn. */
-  const slot = drag.drag && drag.drag.over === column ? drag.drag.slot : null;
+  const slot = drag.target === column ? drag.drag?.slot ?? null : null;
 
   // The card in the air is out of the list once a place in this column has been
   // picked: the slot the frame draws is the one it is about to fill, and drawing
@@ -536,8 +549,8 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
           hold={drag.hold(carry(item.card, item.face, item.who))}
           held={carried?.card === item.card.id}
           flying={drag.flying}
-          landed={landed && landed.moved && landed.carried.card === item.card.id ? landed : null}
-          onUndo={() => { if (!landed) return; put(null); void moveCard(back(landed)); }} />
+          landed={landed && where_ === 'card' && landed.carried.card === item.card.id ? landed : null}
+          onUndo={() => { if (landed) { put(null); void ask({ ...back(landed), starts: false }); } }} />
       </View>
     ));
   if (slot != null) cards.splice(slot, 0, <DropSlot key="slot" landing />);
@@ -545,12 +558,13 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
   return (
     // `flex` rather than `flexGrow`: the cards scroll under the tabs, which is
     // the frame's layout and the gesture's requirement both.
-    <View style={{ flex: 1 }} {...drag.pan.panHandlers}>
+    <View ref={drag.frame.ref} onLayout={drag.frame.onLayout}
+      style={{ flex: 1 }} {...drag.pan.panHandlers}>
       {/* The tab strip is the width of the page in the frame, rule and all, and
           the page it is on is inset by 16. */}
       <View ref={drag.strip.ref} onLayout={drag.strip.onLayout}>
         <ColumnTabs value={column} onChange={(key) => onColumn(key as DivanColumn)}
-          dragging={!!drag.drag} target={drag.drag?.over ?? null} onMeasure={drag.strip.onMeasure}
+          dragging={!!drag.drag} target={drag.target} onMeasure={drag.strip.onMeasure}
           columns={tabs(p, view.now).map((c) => ({ key: c.key, label: T(c.label), count: c.count }))} />
       </View>
       <ScrollView scrollEnabled={!drag.drag}
@@ -560,9 +574,8 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
           <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')} />
         ) : (
           <>
-            {air ? <DragHint tone={air.tone}
-                     text={T(air.said.key, air.col ? { ...air.said.params, col: T(air.col) } : air.said.params)} />
-             : trouble ? <DragHint tone={trouble.tone} text={T(trouble.said.key, trouble.said.params)} />
+            {air ? <DragHint tone={air.tone} text={words(T, air)} />
+             : note ? <DragHint tone={note.tone} text={words(T, note)} />
              : <ColumnLine marks={tally(list.map((i) => i.card), view.now, ago)}
                  machines={where.map((m) => `${m.name} ${m.n}`).join(' · ')} />}
             {/* Measured as one block: a card's place in the column is read off its
@@ -578,14 +591,26 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
         )}
       </ScrollView>
       {/* The card under the thumb, over everything and outside the list that is
-          no longer holding it (Mobile3 D2). */}
-      {!!drag.drag && drag.flying && (
+          no longer holding it (Mobile3 D2). Where it goes is the hook's own
+          answer, in this view's coordinates: the thumb arrives in the window's
+          and this view starts a long way down it. */}
+      {!!drag.drag && drag.flying && !!drag.float && (
         <Float face={drag.drag.carried.face} who={T(drag.drag.carried.who)}
-          title={drag.drag.carried.title}
-          style={floatAt(drag.drag.at.x, drag.drag.at.y)} />
+          title={drag.drag.carried.title} style={drag.float} />
       )}
     </View>
   );
+}
+
+/** One sentence out of the drag's own words: a column's name and an executor's
+ *  name are keys themselves, and are put into the reader's language before they
+ *  are put into the sentence — the same two-step every other line on this screen
+ *  takes. */
+function words(T: ReturnType<typeof useT>,
+               say: { said: Said; col?: Key; who?: Key }): string {
+  const params = say.who ? { ...say.said.params, who: T(say.who) }
+    : say.col ? { ...say.said.params, col: T(say.col) } : say.said.params;
+  return T(say.said.key, params);
 }
 
 /** One card of the open column, in whichever of its three states it is: lying
@@ -612,8 +637,7 @@ function BoardRow({ item, onOpen, hold, held, flying, landed, onUndo }: {
       mark={item.mark && { text: `${item.mark.mark} ${T(item.mark.key, item.mark.params)}`,
                            tone: item.mark.tone }}
       landed={say && {
-        text: T(say.said.key, say.who ? { ...say.said.params, who: T(say.who) }
-                            : say.col ? { ...say.said.params, col: T(say.col) } : say.said.params),
+        text: words(T, say),
         tone: say.tone,
         action: say.undo ? T('dgUndo') : undefined,
         onAction: say.undo ? onUndo : undefined,

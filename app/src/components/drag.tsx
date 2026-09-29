@@ -33,8 +33,8 @@ import * as Haptics from 'expo-haptics';
 import { Text } from './text';
 import { ExecutorBadge } from './divan';
 import {
-  airborne, columnAt, HOLD_MS, slotAt, step, type Carried, type Drag, type Effect, type Event,
-  type Rect, type Target,
+  airborne, columnAt, HOLD_MS, place, step, target, type Carried, type Drag, type Effect,
+  type Event, type Point, type Rect, type Row, type Target,
 } from '../drag';
 import type { DivanColumn } from '../protocol';
 import { RADIUS, shadows, toneColours, useTokens, type Tone } from '../theme';
@@ -82,9 +82,18 @@ export const SLOT_H = 104;
 export const FLOAT_W = 260;
 export const FLOAT_LIFT = 48;
 
-/** …and where the board draws it, for a thumb at this point. */
-export function floatAt(x: number, y: number): { left: number; top: number } {
-  return { left: x - FLOAT_W / 2, top: y - FLOAT_LIFT };
+/** …and where the board draws it: under the thumb, in the coordinates the view it
+ *  is absolutely positioned inside actually uses.
+ *
+ *  Both arguments are the window's own. A gesture arrives in window coordinates
+ *  and so does every rect this drag is measured against, but `left` and `top`
+ *  resolve against the containing block — the board's own body, which starts a
+ *  safe-area inset, a project bar, a system line, a product's head and a
+ *  segmented control down the page. Handing it a raw `pageY` drew the carried
+ *  card a couple of hundred points below the thumb. `origin` is that body's place
+ *  on the glass, measured, and the subtraction is the whole of this function. */
+export function floatAt(at: Point, origin: Point): { left: number; top: number } {
+  return { left: at.x - origin.x - FLOAT_W / 2, top: at.y - origin.y - FLOAT_LIFT };
 }
 
 /** The card in the air (Mobile3 D2): `background:s2; border:1px solid line2;
@@ -130,9 +139,10 @@ export function Float({ face, who, title, style }: {
 export function useDrag({ open, rows, onOpen, onMove }: {
   /** Which column the list is showing. */
   open: DivanColumn;
-  /** …and the cards in it, in the order they are drawn: what a position is an
-   *  index into. */
-  rows: string[];
+  /** …and the cards in it, in the order they are drawn, each with the machine its
+   *  work is on: what a place in the column is read against, and what turns a
+   *  drawn index into a position on one computer (`src/drag.ts place`). */
+  rows: { card: string; host: string }[];
   onOpen: (column: DivanColumn) => void;
   onMove: (to: { carried: Carried; column: DivanColumn;
                  position: number | null; starts: boolean }) => void;
@@ -157,6 +167,7 @@ export function useDrag({ open, rows, onOpen, onMove }: {
   const cardsAt = useRef<{ x: number; y: number } | null>(null);
   const strip = useRef<View | null>(null);
   const body = useRef<View | null>(null);
+  const frame = useRef<View | null>(null);
 
   /** The things the machine's effects run through, and what the board looks like
    *  right now. All in refs, because the responder is built once and must always
@@ -167,6 +178,10 @@ export function useDrag({ open, rows, onOpen, onMove }: {
   where.current = open;
   const order = useRef(rows);
   order.current = rows;
+  /** Where the board's own body is on the glass. The carried card is positioned
+   *  inside it, so this is what turns a thumb's window coordinates into the ones
+   *  `left` and `top` are resolved in. */
+  const [origin, setOrigin] = useState<Point>({ x: 0, y: 0 });
 
   const retarget = useCallback(() => {
     const o = tabsAt.current;
@@ -182,6 +197,11 @@ export function useDrag({ open, rows, onOpen, onMove }: {
   const measure = useCallback(() => {
     strip.current?.measureInWindow((x, y) => { tabsAt.current = { x, y }; retarget(); });
     body.current?.measureInWindow((x, y) => { cardsAt.current = { x, y }; });
+    frame.current?.measureInWindow((x, y) => {
+      // In state rather than a ref: the carried card is drawn from it, so a
+      // reading that arrives after the lift has to redraw the float.
+      setOrigin((had) => (had.x === x && had.y === y ? had : { x, y }));
+    });
   }, [retarget]);
 
   const run = useCallback((effects: Effect[]) => {
@@ -208,14 +228,17 @@ export function useDrag({ open, rows, onOpen, onMove }: {
   }, [run]);
 
   /** Where in the open column the thumb is pointing: its cards, without the one
-   *  in the air, in the order they are drawn. */
-  const slot = useCallback((y: number, carried: string): number => {
+   *  in the air, in the order they are drawn, each moved onto the glass. */
+  const pointing = useCallback((y: number, column: DivanColumn, carried: Carried) => {
     const o = cardsAt.current;
-    if (!o) return 0;
-    const drawn = order.current.filter((id) => id !== carried)
-      .map((id) => cards.current[id]).filter((r): r is Rect => !!r)
-      .map((r) => ({ ...r, y: o.y + r.y }));
-    return slotAt(y, drawn);
+    if (!o) return { slot: null, position: null };
+    const drawn: Row[] = [];
+    for (const r of order.current) {
+      if (r.card === carried.card) continue;
+      const rect = cards.current[r.card];
+      if (rect) drawn.push({ host: r.host, rect: { ...rect, y: o.y + rect.y } });
+    }
+    return place(y, column, carried.host, drawn);
   }, []);
 
   const at = (e: GestureResponderEvent) => ({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
@@ -241,19 +264,27 @@ export function useDrag({ open, rows, onOpen, onMove }: {
     onPanResponderMove: (e) => {
       if (held.current == null) return;
       const p = at(e);
-      send((d) => ({ do: 'over', at: p, column: columnAt(p, targets.current),
-                     slot: d ? slot(p.y, d.carried.card) : null, now: Date.now() }));
+      // The place is always read against the column on screen, because that is
+      // the only list an index can point into; whether it is the column the card
+      // would land in is the machine's to decide (`step`).
+      send((d) => ({
+        do: 'over', at: p, column: columnAt(p, targets.current), now: Date.now(),
+        ...(d ? pointing(p.y, where.current, d.carried) : { slot: null, position: null }),
+      }));
     },
     // While a card is in the air nothing else may have the touch.
     onPanResponderTerminationRequest: () => held.current == null,
     onPanResponderRelease: () => { if (held.current != null) send(() => ({ do: 'drop' })); },
     onPanResponderTerminate: () => { if (held.current != null) send(() => ({ do: 'cancel' })); },
-  }), [send, slot]);
+  }), [send, pointing]);
 
   return {
     drag,
     /** On the board's body, above both the tabs and the list. */
     pan,
+    /** …on the board's own body, which is what the carried card is positioned
+     *  inside and so what its coordinates are relative to. */
+    frame: { ref: frame, onLayout: measure },
     /** …on the run of cards inside it, whose own place on the glass is what a
      *  card's place is measured against. */
     list: {
@@ -299,5 +330,13 @@ export function useDrag({ open, rows, onOpen, onMove }: {
     /** Whether the card has left its place: under Mobile3 D1 it is drawn lifted
      *  where it lies, and only past that does it follow the thumb. */
     flying: !!drag && airborne(drag),
+    /** Which column it is aimed at — the tab that lights, which stays lit while
+     *  the thumb is down among that column's cards picking a place (D3). */
+    target: drag ? target(drag) : null,
+    /** …and where to draw it while it has, in `frame`'s own coordinates. Null
+     *  while nothing is being carried. The screen never computes this: a raw
+     *  window point handed to an absolutely positioned view is the one mistake
+     *  this whole arrangement is arranged against. */
+    float: drag ? floatAt(drag.at, origin) : null,
   };
 }

@@ -40,7 +40,7 @@
 //     on the coding executor, not already filed — `divan.py wants_ustabasi`. The
 //     screen has to know before the finger comes up, because that is what the
 //     tab going green and the words "release to start" are promising.
-import { COLUMN_LABEL } from './board';
+import { arranged, COLUMN_LABEL } from './board';
 import type { Said } from './dashboard';
 import type { MergedCard } from './divan';
 import type { Key } from './i18n';
@@ -122,18 +122,45 @@ export interface Drag {
    *  has actually left its place yet (`airborne`). */
   from: Point;
   /** The tab under it, if any. Null is an honest state and the common one: most
-   *  of a drag is spent between the card and the tabs. */
+   *  of a drag is spent between the card and the tabs. It is not by itself where
+   *  the card would land — see `target`. */
   over: DivanColumn | null;
+  /** The thumb has rested on a tab long enough for the list under it to be that
+   *  column: the drag is aimed somewhere, and stays aimed there while the thumb
+   *  moves down into the cards.
+   *
+   *  D3 is the frame this exists for. The thumb is at `220,380` — in the list,
+   *  not on the tab — the tab is still green, and the hint is naming a position.
+   *  Picking a place in a column is done with the thumb over that column's cards,
+   *  which is the one thing it cannot be doing while it is on a 46 pt tab. Without
+   *  this the whole second half of the gesture is unreachable.
+   *
+   *  It is also what keeps the fourth promise exact: a drag that never rested on
+   *  a tab at all has never been aimed at anything, and releasing it anywhere is
+   *  releasing it nowhere. */
+  opened: boolean;
   /** When the thumb arrived on that tab, so that `OPEN_MS` can be measured
    *  without a timer of the screen's own. Null while it is over nothing. */
   since: number | null;
   /** Which column the list is showing. It starts as the one the board was open
    *  on and changes when the thumb rests on a tab (D3). */
   open: DivanColumn;
-  /** Where in the open column the card would land, once the list has caught up
-   *  with the thumb. Null until the two are the same column: an index into a
-   *  list of other cards is meaningless against a list nobody can see. */
+  /** Where in the drawn column the card would land: an index among the cards on
+   *  screen, and what the empty slot is drawn at. Null until the list under the
+   *  thumb is the column it would go to — an index into a list nobody can see is
+   *  meaningless — and null in a column that has no arrangement to point at.
+   *
+   *  It is *not* what a move is asked for by. See `position`. */
   slot: number | null;
+  /** …and what that place means on the one machine this card is on, which is the
+   *  only coordinate space a `move` can be asked in.
+   *
+   *  The two differ on a product checked out on two computers, where the column
+   *  on screen is two machines' queues interleaved (`divan.ts column`): drawn
+   *  index 3 may be that machine's position 1. Sending the drawn index would move
+   *  a card that was released exactly where it lies. Null where the column has no
+   *  arrangement to ask for. */
+  position: number | null;
 }
 
 /** What the screen has to do about a step. Every one of them is something with a
@@ -158,10 +185,11 @@ export type Effect =
 export type Event =
   /** 350 ms of stillness: the card is in the air. */
   | { do: 'lift'; carried: Carried; open: DivanColumn; at: Point }
-  /** The thumb moved. `column` and `slot` are read off the geometry by the
-   *  screen (`columnAt`, `slotAt`) rather than passed in as pixels, because
+  /** The thumb moved. `column` and the two places are read off the geometry by
+   *  the screen (`columnAt`, `place`) rather than passed in as pixels, because
    *  where a tab is is the one thing this file cannot know. */
-  | { do: 'over'; at: Point; column: DivanColumn | null; slot: number | null; now: number }
+  | { do: 'over'; at: Point; column: DivanColumn | null;
+      slot: number | null; position: number | null; now: number }
   /** Nothing moved, but time passed. The list opening after 300 ms is a fact
    *  about a still thumb, so it cannot only be decided on movement. */
   | { do: 'tick'; now: number }
@@ -181,8 +209,8 @@ export type Event =
 export function step(drag: Drag | null, e: Event): { drag: Drag | null; effects: Effect[] } {
   if (e.do === 'lift') {
     return {
-      drag: { carried: e.carried, at: e.at, from: e.at, over: null, since: null, open: e.open,
-              slot: null },
+      drag: { carried: e.carried, at: e.at, from: e.at, over: null, opened: false, since: null,
+              open: e.open, slot: null, position: null },
       effects: [{ do: 'haptic', weight: 'light' }],
     };
   }
@@ -190,12 +218,19 @@ export function step(drag: Drag | null, e: Event): { drag: Drag | null; effects:
   switch (e.do) {
     case 'over': {
       const crossed = e.column !== drag.over;
+      // Resting on the tab of the column already on screen aims the drag at it
+      // with no dwell to wait for: the list is already showing what it would be
+      // switched to.
+      const opened = drag.opened || (e.column != null && e.column === drag.open);
+      const to = e.column ?? (opened ? drag.open : null);
+      // Both places are an answer only while the column the card would land in is
+      // the one whose cards are on screen — `e.slot` is an index into those.
+      const there = to === drag.open;
       const next: Drag = {
-        ...drag, at: e.at, over: e.column,
+        ...drag, at: e.at, over: e.column, opened,
         since: crossed ? (e.column == null ? null : e.now) : drag.since,
-        // The slot is only an answer while the list under the thumb is the
-        // column it would land in.
-        slot: e.column != null && e.column === drag.open ? e.slot : null,
+        slot: there ? e.slot : null,
+        position: there ? e.position : null,
       };
       const effects: Effect[] = crossed && e.column != null
         ? [{ do: 'haptic', weight: 'tick' }] : [];
@@ -210,6 +245,12 @@ export function step(drag: Drag | null, e: Event): { drag: Drag | null; effects:
         drag: null,
         effects: [
           { do: 'haptic', weight: 'firm' },
+          // The list follows the card. D4 draws the board open on the column the
+          // card was just dropped into, and it is the only arrangement in which
+          // the card can say what happened to it: a release onto a tab before the
+          // 300 ms dwell moves a card out of the column on screen, and a
+          // confirmation drawn on a card nobody can see is no confirmation.
+          ...(to.column === drag.open ? [] : [{ do: 'open' as const, column: to.column }]),
           { do: 'move', carried: drag.carried, column: to.column,
             position: to.position, starts: starts(drag.carried, to.column) },
         ],
@@ -228,24 +269,36 @@ function settle(drag: Drag, now: number, effects: Effect[]): { drag: Drag; effec
   if (drag.over == null || drag.over === drag.open) return { drag, effects };
   if (drag.since == null || now - drag.since < OPEN_MS) return { drag, effects };
   return {
-    drag: { ...drag, open: drag.over, since: now, slot: null },
+    drag: { ...drag, open: drag.over, opened: true, since: now, slot: null, position: null },
     effects: [...effects, { do: 'open', column: drag.over }],
   };
 }
 
+/** Which column the card is aimed at, which is not the same as the tab under the
+ *  thumb: once a tab has been rested on, the cards below it are that column's and
+ *  the aim stays there while a place in them is picked (D3, and `Drag.opened`).
+ *  Null while the drag has never been aimed anywhere. */
+export function target(drag: Drag): DivanColumn | null {
+  return drag.over ?? (drag.opened ? drag.open : null);
+}
+
 /** Where a release lands, and null where it lands nowhere.
  *
- *  Three ways to land nowhere, and they are one answer: the thumb is not on a
- *  tab at all; it is on the tab the card came from and no place in it was
- *  picked; it is on that tab at the place the card already occupies. In all
- *  three the board is already correct, and the honest thing is to ask nothing
+ *  Three ways to land nowhere, and they are one answer: the drag was never aimed
+ *  at a column at all; it is aimed at the column the card came from and no place
+ *  in it was picked; it is aimed there at the place the card already occupies. In
+ *  all three the board is already correct, and the honest thing is to ask nothing
  *  and say nothing. */
 export function landing(drag: Drag): { column: DivanColumn; position: number | null } | null {
-  const { over, slot, carried } = drag;
+  const { position, carried } = drag;
+  const over = target(drag);
   if (over == null) return null;
-  if (over !== carried.from) return { column: over, position: slot };
-  if (slot == null || slot === carried.position) return null;
-  return { column: over, position: slot };
+  if (over !== carried.from) return { column: over, position };
+  // Its own column. `position` is in the card's machine's own numbering and so
+  // is `carried.position`, which is what makes this comparison mean "released
+  // where it lies" on a board drawn out of two machines' queues.
+  if (position == null || position === carried.position) return null;
+  return { column: over, position };
 }
 
 /** How far the thumb has to travel before the card is out of its place: the
@@ -275,51 +328,91 @@ export function columnAt(p: Point, targets: Target[]): DivanColumn | null {
   return null;
 }
 
-/** …and where in the open column it would sit: the index the card would take
- *  among the others, counted by which of them the thumb is past the middle of.
+/** One card of the open column as the drag sees it: which machine its work is on,
+ *  and where it is on the glass. */
+export interface Row { host: string; rect: Rect }
+
+/** …and where in the open column the thumb is pointing: the index the card would
+ *  take among the others, counted by which of them the thumb is past the middle
+ *  of.
  *
- *  `rows` are the cards of the open column **without the one in the air**, in
- *  the order they are drawn, each with where it is on the glass. So the answer
- *  is between `0` and `rows.length`, and inserting at index `i` among `n` others
- *  is exactly the position the daemon's `move` takes.
- *
- *  On a product that lives on two computers it is an index into the *drawn*
- *  column, which is two machines' queues interleaved (`divan.ts column`), and it
- *  is sent to the one machine the card is on. There is no global order to be
- *  exact about — each daemon numbers its own board — so the honest reading is
- *  "this far down the list you are looking at", and a machine that has fewer
- *  cards than that clamps it to its own bottom. */
-export function slotAt(y: number, rows: Rect[]): number {
+ *  `rows` are the cards of the open column **without the one in the air**, in the
+ *  order they are drawn. So the answer is between `0` and `rows.length`, and it is
+ *  an index into the list on screen — which is what the empty slot is drawn at
+ *  and is not, on a board built out of two computers, a position. */
+export function slotAt(y: number, rows: Row[]): number {
   let n = 0;
-  for (const r of rows) if (y > r.y + r.h / 2) n += 1;
+  for (const r of rows) if (y > r.rect.y + r.rect.h / 2) n += 1;
   return n;
+}
+
+/** …and what that index means on one machine: how many of *its* cards are above
+ *  it.
+ *
+ *  This is the whole of the translation between the two coordinate spaces. A
+ *  column on screen is every machine's queue interleaved by position and then by
+ *  machine name (`divan.ts column`), so drawn index 3 on a board of two computers
+ *  may be position 1 on the computer the card is on — and a `move` can only be
+ *  asked for in the second. Counting its own machine's cards above the insertion
+ *  point gives exactly the place that reproduces what the thumb pointed at,
+ *  because the drawn order preserves each machine's own order within itself. */
+export function positionAt(slot: number, host: string, rows: Row[]): number {
+  return rows.slice(0, slot).filter((r) => r.host === host).length;
+}
+
+/** Where a release would put the card, as the two numbers that answer the two
+ *  different questions: where to draw the gap, and what to ask the computer for.
+ *
+ *  Both are null in a column nobody arranges. Done is drawn newest-finished-first
+ *  whatever any card's position says (`board.ts cards`, `board.ts arranged`), so a
+ *  place in it is not a thing to point at: a card dropped there goes to the
+ *  bottom of that machine's column and is drawn wherever its finishing time puts
+ *  it. Offering a slot would be drawing a promise that column cannot keep. */
+export function place(y: number, column: DivanColumn, host: string, rows: Row[]):
+  { slot: number | null; position: number | null } {
+  if (!arranged(column)) return { slot: null, position: null };
+  const slot = slotAt(y, rows);
+  return { slot, position: positionAt(slot, host, rows) };
 }
 
 // ── what the board says while a card is in the air ───────────────────────────
 
 /** The mono line above the cards, which the frames put exactly where the
  *  column's own tally sits: while a card is in the air it says what the gesture
- *  will do instead of what the column holds (D1–D3).
+ *  will do instead of what the column holds (D1-D3).
  *
- *  Its three sentences are the gesture's three states, and the last one is the
- *  one that matters: it names the position the card is about to take, and says
- *  "to start" only where the release actually starts a worker. `col` is a
- *  column's name and is translated by the screen, the way every other
- *  executor-or-column word in this app is.
+ *  Its sentences are the gesture's states, and the last one is the one that
+ *  matters: it names the position the card is about to take, and says "to start"
+ *  only where the release actually starts a worker. `col` is a column's name and
+ *  is translated by the screen, the way every other executor-or-column word in
+ *  this app is.
+ *
+ *  The position is named only where the board can keep the promise. Two cases
+ *  where it cannot, and both drop the numbers rather than the sentence: a column
+ *  nobody arranges (`position` is then null — Done), and a column drawn out of
+ *  more than one machine's queue, where the place a `move` is asked for is exact
+ *  on that machine and the drawn index it lands at also depends on what the other
+ *  machines are holding. "Release to start" is true in both.
  *
  *  `others` is how many cards the open column holds apart from the one in the
- *  air, so the column it is read against is the one on screen and the counting
- *  is not done twice. */
-export function hint(drag: Drag, others: number): { said: Said; col?: Key; tone: Tone } {
-  if (drag.over == null) return { said: { key: 'dgHold' }, tone: 'ink3' };
-  if (drag.over !== drag.open) {
-    return { said: { key: 'dgOpen' }, col: COLUMN_LABEL[drag.over], tone: 'run' };
+ *  air, so the column it is read against is the one on screen and the counting is
+ *  not done twice. */
+export function hint(drag: Drag, { others, mixed }: { others: number; mixed?: boolean }):
+  { said: Said; col?: Key; tone: Tone } {
+  const aim = target(drag);
+  if (aim == null) return { said: { key: 'dgHold' }, tone: 'ink3' };
+  if (aim !== drag.open) {
+    return { said: { key: 'dgOpen' }, col: COLUMN_LABEL[aim], tone: 'run' };
   }
   const to = landing(drag);
   if (to == null) return { said: { key: 'dgBack' }, tone: 'ink3' };
+  const starting = starts(drag.carried, to.column);
+  if (drag.slot == null || mixed) {
+    return { said: { key: starting ? 'dgStartBare' : 'dgRelease' }, tone: 'run' };
+  }
   return {
-    said: { key: starts(drag.carried, to.column) ? 'dgStart' : 'dgDrop',
-            params: { n: (to.position ?? others) + 1, of: others + 1 } },
+    said: { key: starting ? 'dgStart' : 'dgDrop',
+            params: { n: drag.slot + 1, of: others + 1 } },
     tone: 'run',
   };
 }
@@ -370,9 +463,22 @@ export function foot(l: Landed): { said: Said; col?: Key; who?: Key; tone: Tone;
   return { said: { key: 'dgMoved' }, col: COLUMN_LABEL[l.column], tone: 'ink2', undo: true };
 }
 
+/** Where the sentence about a card that has just landed belongs: on the card, or
+ *  on the line above the cards.
+ *
+ *  On the card is D4 and is where it belongs — it is that card's own news, and it
+ *  is what carries the way to take the move back. But the card is not always
+ *  there to carry it, and announcing it nowhere is the one outcome that must not
+ *  happen: a move that never reached its computer left the card in a column this
+ *  list may not be showing, and a board that has just opened the column the card
+ *  went to may not have re-read that machine yet. */
+export function announce(l: Landed, drawn: string[]): 'card' | 'line' {
+  return drawn.includes(l.carried.card) ? 'card' : 'line';
+}
+
 /** …and where a card that was taken back goes: exactly the column and the place
- *  it was lifted from. */
-export function back(l: Landed): { card: string; host: string; column: DivanColumn; position: number } {
-  return { card: l.carried.card, host: l.carried.host,
-           column: l.carried.from, position: l.carried.position };
+ *  it was lifted from, in the shape a move is asked for in — so that an Undo is
+ *  the same request as a drop and goes down the same caught path. */
+export function back(l: Landed): { carried: Carried; column: DivanColumn; position: number } {
+  return { carried: l.carried, column: l.carried.from, position: l.carried.position };
 }
