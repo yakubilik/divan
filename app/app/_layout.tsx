@@ -119,6 +119,11 @@ export default function RootLayout() {
             rather than being a fourth place — it is one of the Dashboard's own
             numbers with the things behind it shown. */}
         <Stack.Screen name="waiting" />
+        {/* One card of a board, opened: what it is, what the machine was told,
+            and what the worker on it is doing right now. Pushed over the
+            Dashboard the way the Waiting screen is — it is a card of one of its
+            boards opened up, and Back leads to the board it came from. */}
+        <Stack.Screen name="card/[id]" />
         {/* Every conversation on this computer. Not a place: the Chat tab
             enters the conversation itself, and this is the side door off the
             Dashboard — where a second one is started and where one that was

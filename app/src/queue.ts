@@ -5,6 +5,7 @@ import { useStore } from './store';
 import { BADGE_POLL_MS, oldHost, POLL_MS, redCount, RUN_POLL_MS, wall, type Wall } from './tickets';
 import { attach, silence, trim, turns, type RunSilence, type Turn } from './transcript';
 import { DIVAN_POLL_MS, entries, merge, type DivanView } from './divan';
+import { opening, type Open } from './card';
 import type { Ticket, UstabasiSnapshot } from './protocol';
 
 /** The ustabasi queue, kept fresh for as long as a screen is looking at it.
@@ -181,6 +182,47 @@ export function useRun(ticketId: number): {
   }, [poll]));
 
   return { turns: list, live, loading, silence: quiet, jumped };
+}
+
+/** One card, opened, kept up to date while the page is open: its brief, its
+ *  ticket, and what the worker on it is printing as it prints it.
+ *
+ *  `useRun` above does the same job for a ticket on the computer this phone
+ *  holds a socket to. A Divan card is not that: it is on whichever machine it is
+ *  on, so it is asked of that machine by name and the answer carries the card's
+ *  two faces as well as the page of the run (`store.loadCard`, `src/card.ts`).
+ *
+ *  What is kept, and the folding of one page of a run into the last, is in the
+ *  store and in `src/card.ts` — a screen that held a log would lose it on the
+ *  way to another page and back. What is here is the asking: on opening, on the
+ *  way back to the foreground, and on a timer that knows the difference between
+ *  a worker being watched and a card nobody is working on.
+ *
+ *  A card that is not the one the store holds answers as a card nothing has been
+ *  read about yet, which is what it is: the first page is on its way. */
+export function useCard(card: string, host: string | null | undefined): Open {
+  const loadCard = useStore((s) => s.loadCard);
+  const held = useStore((s) => s.openCard);
+  // Not a gate, a dependency: which socket carries the request is the store's
+  // business, and what this is for is the ask being made again the moment a
+  // connection comes back.
+  const conn = useStore((s) => s.conn);
+  const open = held && held.id === card && held.host === host ? held : null;
+  const live = !!open?.live;
+  const mine = useMemo(() => open ?? opening(card, host || ''), [open, card, host]);
+
+  useFocusEffect(useCallback(() => {
+    if (!card || !host) return;
+    const ask = () => { void loadCard({ card, host }); };
+    ask();
+    // Three seconds is for a worker being watched; a card nobody is working on
+    // is a minute's worth of gentle, which is what a board itself costs.
+    const timer = setInterval(ask, live ? RUN_POLL_MS : DIVAN_POLL_MS);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') ask(); });
+    return () => { clearInterval(timer); sub.remove(); };
+  }, [card, host, live, conn, loadCard]));
+
+  return mine;
 }
 
 /** The Divan view of every paired computer, kept fresh while a screen is looking

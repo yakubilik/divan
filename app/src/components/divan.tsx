@@ -413,6 +413,57 @@ export function Segments({ segments, value, onChange, style }: {
   );
 }
 
+// ── 5c · the three faces of one card ────────────────────────────────────────
+
+export interface Face {
+  key: string;
+  label: string;
+  /** The mono number after the name: how long the brief is (Mobile4 T1's `46`).
+   *  Nothing is drawn without one. */
+  count?: number | null;
+  /** The green dot in front of it: something is being written right now. */
+  live?: boolean;
+}
+
+/** Human · Agent · Live — one card read three ways, as an underlined tab strip.
+ *
+ *  Mobile4 T1: three equal columns over a `line`, each `padding:10px 0` and
+ *  centred at 13.5 pt medium, the selected one in `ink` with a two-pixel rule
+ *  under it and the other two in `ink3`. The count beside a name is mono 11 in
+ *  `ink3` whichever tab it is on, and the Live tab's 6 pt dot is `run`.
+ *
+ *  Not `Segments`, which is the same idea drawn as a track: that one switches
+ *  between two faces of a *page* and this one between three readings of one
+ *  thing, and the frames draw them differently on purpose — a segmented track
+ *  under a title would read as a second navigation bar. */
+export function FaceTabs({ faces, value, onChange, style }: {
+  faces: Face[]; value: string; onChange: (key: string) => void; style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTokens();
+  return (
+    <View style={[{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: t.line }, style]}>
+      {faces.map((face) => {
+        const on = face.key === value;
+        return (
+          <Pressable key={face.key} accessibilityRole="tab" accessibilityState={{ selected: on }}
+            onPress={() => onChange(face.key)}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                     paddingVertical: 10, borderBottomWidth: 2,
+                     borderBottomColor: on ? t.ink : 'transparent', marginBottom: -1 }}>
+            {!!face.live && <StatusDot state={t.run} size={6} />}
+            <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500', color: on ? t.ink : t.ink3 }}>
+              {face.label}
+            </Text>
+            {face.count != null && (
+              <Text mono style={{ fontSize: 11, color: t.ink3 }}>{face.count}</Text>
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 // ── 6 · status dot ──────────────────────────────────────────────────────────
 
 /** The smallest thing on the screen that carries a state.

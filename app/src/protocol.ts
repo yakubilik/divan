@@ -520,3 +520,34 @@ export interface DivanSnapshot {
   activity?: Record<string, RepoActivity>;
   queue: { available?: boolean; last_tick?: number | null; paused_until?: number | null };
 }
+
+/** The second face of a card: the brief the agent works from.
+ *
+ *  It travels apart from the card (`divan.card.get`, never the snapshot): a
+ *  board of forty cards has no use for forty sets of constraints, and the rule
+ *  that agent text stays off the human face is easiest to keep when the two are
+ *  not in one object. Every field is what somebody — or Divan — wrote for the
+ *  machine, and none of it belongs on a page a person reads.
+ *
+ *  `verify_cmd` is one command per line, which is how the queue takes it. */
+export interface DivanBrief {
+  goal: string;
+  done_criteria: string[];
+  verify_cmd: string;
+  constraints: string[];
+  paths: string[];
+  notes: string;
+}
+
+/** One card, opened: both faces, and what the run on it is doing right now.
+ *
+ *  `ticket` and `run` are the coding executor's half and are null where the card
+ *  has no ticket in the queue — a card nobody has started, or one whose work is
+ *  a person's. `run` is a page of the worker's own stream and carries the cursor
+ *  the next page is asked for with (`RunPage`). */
+export interface DivanCardDetail {
+  card: DivanCard & { agent?: DivanBrief };
+  project: DivanProject | null;
+  ticket: Ticket | null;
+  run: RunPage | null;
+}

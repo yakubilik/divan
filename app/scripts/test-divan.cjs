@@ -304,8 +304,8 @@ checks.push(['a tone answers with both a colour and the wash behind it',
   })]);
 
 // 6 · the parts, and the one room they can all be seen in ───────────────────
-const PARTS = ['Card', 'ListRow', 'Pill', 'TabBar', 'ColumnTabs', 'Segments', 'StatusDot',
-               'ExecutorBadge', 'Counter', 'SectionHeader', 'EmptyState', 'Sheet'];
+const PARTS = ['Card', 'ListRow', 'Pill', 'TabBar', 'ColumnTabs', 'Segments', 'FaceTabs',
+               'StatusDot', 'ExecutorBadge', 'Counter', 'SectionHeader', 'EmptyState', 'Sheet'];
 const divan = src('src/components/divan.tsx');
 const gallery = src('app/divan-gallery.tsx');
 for (const part of PARTS) {

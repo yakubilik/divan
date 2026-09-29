@@ -5,9 +5,10 @@ import { useCallback } from 'react';
 import { callOnce, client, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, DivanCardDetail, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, silent, type HostDivan } from './divan';
+import { missed, opening, took, type Open, type Say } from './card';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -132,6 +133,25 @@ interface State {
    *  here: the log is a river and only the page being read is worth holding,
    *  which is the screen's business and not the store's. */
   readRun: (id: number, cursor: string | null) => Promise<RunPage>;
+  /** The card that is open, and everything the machine it is on has said about
+   *  it: its two faces, its ticket, the run being written on it and whatever has
+   *  been said into that run from here (`src/card.ts`).
+   *
+   *  One card, because one is open at a time — and here rather than on the
+   *  screen because a run arrives a page at a time while somebody is reading it,
+   *  and a screen that held it would lose the whole log on the way to another
+   *  page and back. */
+  openCard: Open | null;
+  /** Ask the machine a card is on for it, and fold the answer into the above.
+   *
+   *  Named rather than assumed, for the reason `answerCard` is: a Divan screen
+   *  is every machine at once, and the card being read may be on the mini while
+   *  this phone holds a socket to the studio. */
+  loadCard: (what: { card: string; host: string }) => Promise<void>;
+  /** Say one sentence into the run on the open card. It lands in the log where
+   *  it was said and goes to the queue that is running it, which is on that
+   *  card's machine and not necessarily this phone's. */
+  sayCard: (to: { ticket: number; host: string }, text: string) => Promise<void>;
   // tool call id -> what the background agent it started is doing right now.
   // Live only: a helper's step-by-step is progress, not conversation, and the
   // answer it produces arrives as that tool's result.
@@ -341,6 +361,12 @@ function bufferDelta(cid: string, segment: number, text: string) {
  *  the store: it is about a request in flight, not about anything a screen
  *  draws, and a re-render has no business being triggered by it. */
 const divanPolls = new Set<string>();
+
+/** …and which card has one out. Module-level for the same reason, and one value
+ *  rather than a set because one card is open at a time — but the card itself
+ *  rather than a flag: a read still out for the card somebody has just left must
+ *  not be the reason the card they opened waits a minute for its first page. */
+let cardPoll: string | null = null;
 
 export const useStore = create<State>((set, get) => {
   // Fast Refresh can re-evaluate this module; make sure only the newest store listens.
@@ -599,7 +625,7 @@ export const useStore = create<State>((set, get) => {
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
     chats: {}, groups: [], showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
-    ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {},
+    ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {}, openCard: null,
     chatsLoaded: false, accountsLoaded: false, projectsLoaded: false,
 
     init: async () => {
@@ -933,6 +959,53 @@ export const useStore = create<State>((set, get) => {
 
     readRun: async (id, cursor) => {
       return await client.call<RunPage>('ustabasi.run', { id, ...(cursor ? { cursor } : {}) });
+    },
+
+    loadCard: async ({ card, host }) => {
+      const had = get().openCard;
+      const mine = (o: Open | null) => !!o && o.id === card && o.host === host;
+      // Another card than the one that was open is a different run and a
+      // different brief; nothing of the last one is carried over.
+      if (!mine(had)) set({ openCard: opening(card, host) });
+      // A read that is still out for this card is the answer to this one.
+      // Without it, a foreground while a request is in flight is two requests
+      // for one page, and a machine that always times out never stops being
+      // asked.
+      const key = `${host}:${card}`;
+      if (cardPoll === key) return;
+      cardPoll = key;
+      try {
+        const open = get().openCard!;
+        const got = await onHost<DivanCardDetail>(host, 'divan.card.get',
+          { card_id: card, ...(open.cursor ? { cursor: open.cursor } : {}) });
+        set((st) => (mine(st.openCard) ? { openCard: took(st.openCard!, got, Date.now() / 1000) } : {}));
+      } catch (e: any) {
+        set((st) => (mine(st.openCard)
+          ? { openCard: missed(st.openCard!, e?.message ?? null, oldHost(e)) } : {}));
+      } finally {
+        if (cardPoll === key) cardPoll = null;
+      }
+    },
+
+    sayCard: async (to, text) => {
+      const open = get().openCard;
+      if (!open) return;
+      // Where in the log it was said. The run's own file has no clock in it, so
+      // a sentence's place among its steps is not something that can be worked
+      // out later — it is what the screen knows at the moment it is sent.
+      const mine: Say = { id: `say-${Date.now()}`, at: Date.now() / 1000, text,
+                          after: open.turns.length };
+      const put = (list: (said: Say[]) => Say[]) =>
+        set((st) => (st.openCard ? { openCard: { ...st.openCard, said: list(st.openCard.said) } } : {}));
+      put((said) => [...said, mine]);
+      try {
+        await get().answerCard(to, text);
+      } catch (e) {
+        // A sentence the machine never took is not in the log, whatever the
+        // screen said for a second.
+        put((said) => said.filter((s) => s.id !== mine.id));
+        throw e;
+      }
     },
 
     answerCard: async (what, text) => {
