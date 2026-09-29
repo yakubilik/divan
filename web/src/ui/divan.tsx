@@ -21,7 +21,7 @@
  */
 import React from 'react';
 import {
-  C, EXEC_PENDING_INK, EXEC_PENDING_LINE, EXECUTORS, monogram, ON_COLOUR, outline, RADIUS,
+  EXEC_PENDING_INK, EXEC_PENDING_LINE, EXECUTORS, monogram, ON_COLOUR, outline, RADIUS,
   SHADOW, SIZE, STATE_MARK, stateColour, T, toneColours,
   type ExecutorFace, type State, type Tone,
 } from '../lib/theme';
@@ -695,7 +695,3 @@ export function SidePanel({ title, note, items, value, onChange, style }: {
     </nav>
   );
 }
-
-/** The older screens' vocabulary, for a file that has to draw one of each while
- *  the new screens are being built. Nothing new should reach for this. */
-export { C };
