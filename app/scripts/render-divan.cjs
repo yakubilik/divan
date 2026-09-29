@@ -109,8 +109,31 @@ const Animated = {
   delay: () => ({ start: () => {} }),
 };
 
+/** A list that really walks what it was handed. The other stubs can afford to
+ *  be boxes, because what is asked of them is a colour; "every conversation is
+ *  on the screen" is a question about the rows, so this one renders them. */
+const SectionList = React.forwardRef(function SectionList(props, _ref) {
+  const { sections = [], renderItem, renderSectionHeader, ListHeaderComponent,
+          contentContainerStyle, keyExtractor } = props;
+  const kids = [];
+  const at = (node, key) => kids.push(React.createElement(React.Fragment, { key }, node));
+  if (ListHeaderComponent) {
+    at(React.isValidElement(ListHeaderComponent) ? ListHeaderComponent
+       : React.createElement(ListHeaderComponent), 'head');
+  }
+  sections.forEach((section, si) => {
+    if (renderSectionHeader) at(renderSectionHeader({ section }), `h${si}`);
+    (section.data ?? []).forEach((item, index) => {
+      at(renderItem({ item, index, section }), keyExtractor ? keyExtractor(item, index) : `${si}.${index}`);
+    });
+  });
+  return React.createElement('div',
+    { 'data-rn': 'SectionList', 'data-style': JSON.stringify(flatten(contentContainerStyle)) }, kids);
+});
+
 const ReactNative = {
   View: host('div', 'View'),
+  SectionList,
   Text: host('span', 'Text'),
   TextInput: host('span', 'TextInput'),
   Pressable: host('div', 'Pressable'),
@@ -180,6 +203,12 @@ const STUBS = {
     selectionAsync: () => { BUZZES.push('selection'); return Promise.resolve(); },
     impactAsync: (style) => { BUZZES.push(String(style)); return Promise.resolve(); },
   },
+  // The one native import the menus and dialogs reach for: the layer they are
+  // drawn on, above everything the navigator owns. Here it is just a box.
+  'react-native-screens': { FullWindowOverlay: host('div', 'FullWindowOverlay') },
+  // Zustand's shallow compare. A screen that pulls its actions out in one slice
+  // goes through it, and nothing here re-renders, so it is the identity.
+  'zustand/react/shallow': { useShallow: (fn) => fn },
 };
 
 /** The app's own store reaches the keychain, the socket and the notification

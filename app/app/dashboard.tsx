@@ -6,7 +6,7 @@ import { useNavGuard } from '../src/nav';
 import { LOCALE, type Key } from '../src/i18n';
 import { useDivanView, useQueueBadge } from '../src/queue';
 import { COLUMNS, project as projectIn, type DivanView, type MergedCard, type MergedProject } from '../src/divan';
-import { chips } from '../src/shell';
+import { chips, PLACE_ROUTE } from '../src/shell';
 import type { DivanColumn } from '../src/protocol';
 import { since } from '../src/tickets';
 import {
@@ -156,9 +156,9 @@ export default function Dashboard() {
             {/* The two things on this screen that are not a project. Both are
                 work rather than infrastructure, which is why neither is in the
                 Machine list: the queue this computer is working through, and
-                every conversation it has — the Chat place is one conversation
-                and has no list in front of it, so this is where a second one
-                is started and where one that was put away is found again. */}
+                every conversation it has. The second is the Chat place itself,
+                so this row is a shortcut into that tab rather than a screen of
+                its own — which is why it moves sideways instead of pushing. */}
             <View>
               {queue.available && (
                 <ListRow first icon="terminal" title={T('ustabasi')} note={T('dashQueueNote')}
@@ -166,7 +166,7 @@ export default function Dashboard() {
                   onPress={() => go(() => router.push('/ustabasi'))} />
               )}
               <ListRow first={!queue.available} icon="chat_bubble" title={T('conversations')}
-                note={T('dashChatsNote')} onPress={() => go(() => router.push('/chats'))} />
+                note={T('dashChatsNote')} onPress={() => go(() => router.replace(PLACE_ROUTE.chat))} />
             </View>
           </>
         )}

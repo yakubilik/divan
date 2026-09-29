@@ -133,11 +133,6 @@ export default function RootLayout() {
             page pushed onto it: it is a thing you do mid-thought, and Cancel
             has to leave the board exactly where it was. */}
         <Stack.Screen name="new-ticket" options={{ presentation: 'modal' }} />
-        {/* Every conversation on this computer. Not a place: the Chat tab
-            enters the conversation itself, and this is the side door off the
-            Dashboard — where a second one is started and where one that was
-            put away is found again. */}
-        <Stack.Screen name="chats" />
         <Stack.Screen name="new-chat" options={SHEET} />
         <Stack.Screen name="chat-settings" options={SHEET} />
         <Stack.Screen name="model-sheet" options={SHEET} />

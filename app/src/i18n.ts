@@ -499,7 +499,6 @@ const en = {
   ntNotFiled: "Couldn't write it down on {machine}",
   ntNowhere: 'Nowhere to put a card yet',
   ntNowhereBody: 'No paired computer has answered with a product on it, so there is no board for this to land on.',
-  chatPlacePick: 'Pick a folder and a model for this conversation.',
   mTitle: 'Machine', mSubtitle: 'Infrastructure. Nothing here needs you.',
   mMachines: 'Machines', mMachinesNote: '{n} paired',
   mAllReachable: 'all reachable', mUnreachable: '{n} unreachable',
