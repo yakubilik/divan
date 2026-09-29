@@ -16,10 +16,10 @@ import React from 'react';
 import { T, themeCss, type Scheme } from '../src/lib/theme';
 import { P, mono } from '../src/ui/kit';
 import {
-  BarChip, BarDivider, BarStamp, Button, Card, ColumnTab, CommandBar, Composer, Counter,
-  DockMore, DockTab, EmptyState, ExecutorBadge, FieldRow, Figures, Monogram, NavItem, Note, Panel,
-  PanelHead, Pill, Quoted, Row, RosterRow, SectionHeader, SidePanel, StampRow, StateMark, StatusDot,
-  Tabs, Tag, TopBar, Write,
+  BarChip, BarDivider, BarStamp, Button, Card, Cell, Choice, ColumnTab, CommandBar, Composer,
+  Counter, DockMore, DockTab, EmptyState, ExecutorBadge, FieldRow, Figures, Monogram, NameCell,
+  NavItem, Note, Panel, PanelHead, Pill, Quoted, Row, RosterRow, SectionHeader, SidePanel, Slider,
+  StampRow, StateMark, StatusDot, Table, Tabs, Tag, TopBar, Write,
 } from '../src/ui/divan';
 
 export interface Specimen {
@@ -411,6 +411,55 @@ export const SPECIMENS: Specimen[] = [
           <Write lines={3} value="Studios keep asking to download their client list."
             onChange={() => {}} label="What to do" style={{ height: 60 }} />
         </div>
+      </Card>
+    ),
+  },
+  {
+    name: 'Table', frame: 'Web15 W12 · the machines', width: 700,
+    node: (
+      <Table
+        columns={[
+          { width: '34px' }, { label: 'machine', width: 'minmax(0, 1.4fr)' },
+          { label: 'state', width: '120px' }, { label: 'last contact', width: '110px' },
+          { width: '110px' },
+        ]}
+        rows={[
+          { key: 'studio', cells: [
+            <StatusDot state="running" />,
+            <NameCell mark title="studio" note="Mac Studio · macOS 15.1" />,
+            <Cell text="reachable" tone="run" />, <Cell text="12s ago" />,
+            <Button small face="outline" label="Terminal" />,
+          ] },
+          { key: 'mini', tone: 'amber', wash: true, cells: [
+            <StatusDot state="asking" hollow />,
+            <NameCell mark title="mini" note="Mac mini · macOS 15.0" />,
+            <Cell text="unreachable" tone="amber" />, <Cell text="2h 14m ago" tone="amber" />,
+            <Button small face="outline" label="Try again" />,
+          ] },
+        ]}
+      />
+    ),
+  },
+  {
+    name: 'Slider', frame: 'Web15 W11 · a quota threshold', width: 380,
+    node: (
+      <Card>
+        <Slider label="Warn on the system line at" value={0.2}
+          format={(v) => `${Math.round(v * 100)}%`} onChange={() => {}} />
+      </Card>
+    ),
+  },
+  {
+    name: 'Choice', frame: 'Web15 W18 · a setting answered', width: 380,
+    node: (
+      <Card inset={false} style={{ padding: '4px 0' }}>
+        <Row first title="Theme" note="Follows this computer, which is dark right now"
+          style={{ padding: '14px 20px' }}
+          right={<Choice
+            label="Theme" value="system" onChange={() => {}}
+            options={[{ key: 'system', label: 'Auto' }, { key: 'light', label: 'Light' },
+                      { key: 'dark', label: 'Dark' }]}
+          />} />
       </Card>
     ),
   },

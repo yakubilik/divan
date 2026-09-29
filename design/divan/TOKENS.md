@@ -385,7 +385,11 @@ Geist; the panel does not ship it.
   button and state mark the frames draw beside them; the three-slot block of
   numbers under a name, the line with a clock in front of it, a field of a
   details panel and the field of a card being typed into rather than read, which
-  are the four Web14's own screens repeat; and the top bar — the bar
+  are the four Web14's own screens repeat; the table the Machine drawer is made
+  of — the card with a grid in it, the mono cell a figure stands in and the
+  name-over-a-line that opens a row — which Web15 W12, W13 and W16 draw three
+  times as one construction, with the slider a threshold is set on (W11) and the
+  segmented choice a setting is answered with (W18); and the top bar — the bar
   itself, a nav item, the rule between the places and the chips, and the mono
   chip and stamp at its far end. Each names the frame it was measured off. The
   bar is the one the thirteen later frames draw (`height:58px`, the third place
