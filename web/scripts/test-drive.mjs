@@ -147,6 +147,9 @@ const seed = (store, patch) => {
  *  what a pressed answer actually sends is the one thing about a session that a
  *  render cannot say. */
 const asked = [];
+/** Set while the computer is to refuse the one request a page in here makes of
+ *  it: an older daemon that has never heard of it, or one that times out. */
+let accountsFail = false;
 seed(useFleet, {
   hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true,
   call: async (key, type, data) => {
@@ -159,7 +162,10 @@ seed(useFleet, {
     // The one other request a page in here makes of a computer. Answered from
     // the same fixture the slot is seeded with, so what the panel does with the
     // answer is what is being read rather than what it was handed.
-    if (type === 'account.list') return { accounts: fakeHost().accounts };
+    if (type === 'account.list') {
+      if (accountsFail) throw new Error('unknown type account.list');
+      return { accounts: fakeHost().accounts };
+    }
     return {};
   },
 });
@@ -593,6 +599,25 @@ group('the sign-in that is expiring is counted before that page is opened');
     page() === 'Admin' && text().includes('2 want you')
     && asked.filter((a) => a.type === 'account.list').length === 1,
     `${page()} · ${asked.filter((a) => a.type === 'account.list').length} asks`);
+
+  accountsFail = true;
+  await click(find('Dashboard', header));
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } } });
+  });
+  asked.length = 0;
+  await click(find('Machine', header));
+  for (let i = 0; i < 4; i++) await act(async () => {});
+  ok('a computer that refuses the question is asked once and not again',
+    asked.filter((a) => a.type === 'account.list').length === 1,
+    `${asked.filter((a) => a.type === 'account.list').length} asks`);
+  await press('6');
+  for (let i = 0; i < 4; i++) await act(async () => {});
+  ok('…and the place goes on being used, saying nothing about sign-ins rather than none of them',
+    page() === 'Admin' && text().includes('not read yet') && !text().includes('0 connected')
+    && asked.filter((a) => a.type === 'account.list').length === 1,
+    `${page()} · ${asked.filter((a) => a.type === 'account.list').length} asks`);
+  accountsFail = false;
 }
 
 group('nothing was lost on the way');

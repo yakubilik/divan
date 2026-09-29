@@ -18,7 +18,7 @@
  *  vocabulary (`C` in `lib/theme.ts`), which is the same palette under other
  *  names, so they follow both themes without a line of theirs changing.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MACHINE_ROWS, machineRow, updateWaiting, type View } from '../lib/shell';
 import { useFleet } from '../lib/fleet';
 import { signIns, signInsWanting, quotaVerdict, useThresholds } from '../lib/machine';
@@ -79,6 +79,8 @@ export function Machine(props: MachineProps) {
   const { hosts, order } = useFleet();
   const refreshAccounts = useFleet((s) => s.refreshAccounts);
   const { thresholds } = useThresholds();
+  /** Which computers have been asked which sign-ins they have. */
+  const put = useRef(new Set<string>());
 
   // Entering the place asks every computer which sign-ins it has.
   //
@@ -86,14 +88,28 @@ export function Machine(props: MachineProps) {
   // part of the connect path — which meant, until this asked for it, that the
   // amber count on the Accounts row was 0 on a panel nobody had opened that
   // page on. The one thing that page exists to say was the one thing you had to
-  // go and look for. Asked once per computer: a slot that has answered has its
-  // own two accounts at least, so a list that is still empty is a question
-  // nobody has put yet.
-  const cold = order.filter((k) => hosts[k]?.status === 'online'
-    && !hosts[k].accounts.length && !hosts[k].loading.accounts).join(',');
+  // go and look for.
+  //
+  // **Asked once, and once means once even when the answer never comes.** What
+  // was asked is remembered here rather than inferred from the slot: an empty
+  // list and `loading` back to false is what a refusal looks like as well as
+  // what a question nobody has put looks like, and a condition that cannot tell
+  // those two apart re-fires the moment the failure lands — which on a daemon
+  // that has never heard of the request, or one still thirty seconds deep in
+  // two CLI shell-outs, is a fresh shell-out on that machine every round trip,
+  // for as long as this place is open. A computer that goes away is forgotten,
+  // so coming back is asked again; so is re-entering the place, which is
+  // somebody's own doing rather than a loop.
+  const online = order.filter((k) => hosts[k]?.status === 'online').join(',');
   useEffect(() => {
-    for (const key of cold ? cold.split(',') : []) refreshAccounts(key).catch(() => {});
-  }, [cold, refreshAccounts]);
+    const live = online ? online.split(',') : [];
+    for (const key of [...put.current]) if (!live.includes(key)) put.current.delete(key);
+    for (const key of live) {
+      if (put.current.has(key) || useFleet.getState().hosts[key]?.accounts.length) continue;
+      put.current.add(key);
+      refreshAccounts(key).catch(() => {});
+    }
+  }, [online, refreshAccounts]);
   const unreachable = fleet.hosts.filter((h) => !h.reachable).length;
   // What under this place wants a person, on the row it is about: a chat
   // waiting to be allowed to do something — which is on the wall as well as in
