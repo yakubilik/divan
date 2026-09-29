@@ -33,7 +33,7 @@ import * as Haptics from 'expo-haptics';
 import { Text } from './text';
 import { ExecutorBadge } from './divan';
 import {
-  airborne, columnAt, HOLD_MS, place, step, target, type Carried, type Drag, type Effect,
+  airborne, columnAt, HOLD_MS, place, step, target, within, type Carried, type Drag, type Effect,
   type Event, type Point, type Rect, type Row, type Target,
 } from '../drag';
 import type { DivanColumn } from '../protocol';
@@ -178,14 +178,18 @@ export function useDrag({ open, rows, onOpen, onMove }: {
   where.current = open;
   const order = useRef(rows);
   order.current = rows;
-  /** Where the board's own body is on the glass. The carried card is positioned
-   *  inside it, so this is what turns a thumb's window coordinates into the ones
-   *  `left` and `top` are resolved in.
+  /** Where the board's own body is on the glass, and how big it is. Two things
+   *  come off it: the carried card is positioned inside it, so this is what turns
+   *  a thumb's window coordinates into the ones `left` and `top` are resolved in;
+   *  and it is the board — a thumb outside it has left the drop area altogether.
    *
    *  Null until it has actually been read, and the card in the air is not drawn
-   *  until then: a guessed origin of zero is the bug this whole pair exists to
-   *  prevent, drawn one frame at a time instead of always. */
-  const [origin, setOrigin] = useState<Point | null>(null);
+   *  until then: a guessed origin of zero is the bug this pair exists to prevent,
+   *  drawn one frame at a time instead of always. */
+  const [area, setArea] = useState<Rect | null>(null);
+  /** …and the same reading where the responder can reach it without being built
+   *  again every time the board is re-measured. */
+  const areaAt = useRef<Rect | null>(null);
 
   const retarget = useCallback(() => {
     const o = tabsAt.current;
@@ -201,10 +205,12 @@ export function useDrag({ open, rows, onOpen, onMove }: {
   const measure = useCallback(() => {
     strip.current?.measureInWindow((x, y) => { tabsAt.current = { x, y }; retarget(); });
     body.current?.measureInWindow((x, y) => { cardsAt.current = { x, y }; });
-    frame.current?.measureInWindow((x, y) => {
+    frame.current?.measureInWindow((x, y, w, h) => {
       // In state rather than a ref: the carried card is drawn from it, so a
       // reading that arrives after the lift has to redraw the float.
-      setOrigin((had) => (had && had.x === x && had.y === y ? had : { x, y }));
+      areaAt.current = { x, y, w, h };
+      setArea((had) => (had && had.x === x && had.y === y && had.w === w && had.h === h
+        ? had : { x, y, w, h }));
     });
   }, [retarget]);
 
@@ -273,6 +279,9 @@ export function useDrag({ open, rows, onOpen, onMove }: {
       // would land in is the machine's to decide (`step`).
       send((d) => ({
         do: 'over', at: p, column: columnAt(p, targets.current), now: Date.now(),
+        // Unmeasured is on the board rather than off it: a drag must not become
+        // undroppable because a layout reading has not arrived.
+        onBoard: !areaAt.current || within(p, areaAt.current),
         ...(d ? pointing(p.y, where.current, d.carried) : { slot: null, position: null }),
       }));
     },
@@ -341,6 +350,6 @@ export function useDrag({ open, rows, onOpen, onMove }: {
      *  while nothing is being carried. The screen never computes this: a raw
      *  window point handed to an absolutely positioned view is the one mistake
      *  this whole arrangement is arranged against. */
-    float: drag && origin ? floatAt(drag.at, origin) : null,
+    float: drag && area ? floatAt(drag.at, area) : null,
   };
 }

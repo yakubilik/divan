@@ -63,14 +63,18 @@ function play(events, drag = null) {
 }
 
 const lift = (c = carried(), open = 'queued') => ({ do: 'lift', carried: c, open, at: { x: 195, y: 300 } });
-const over = (p, now, col = null, slot = null, position = slot) =>
-  ({ do: 'over', at: p, column: col, slot, position, now });
-/** Aim at the open column's tab, then slide down among its cards to `y`, reading
- *  both places off real geometry the way the board does. */
-const pick = (col, y, c, rows, now = 1000) => [
-  lift(c, col),
-  over(ON(col), now, col, ...Object.values(D.place(ON(col).y, col, c.host, rows))),
-  { do: 'over', at: { x: 195, y }, column: null, ...D.place(y, col, c.host, rows), now: now + 50 },
+const over = (p, now, col = null, slot = null, position = slot, onBoard = true) =>
+  ({ do: 'over', at: p, column: col, onBoard, slot, position, now });
+/** The thumb among the open column's cards at `y`, with both places read off real
+ *  geometry the way the board does. */
+const among = (col, y, c, rows, now) =>
+  ({ do: 'over', at: { x: 195, y }, column: null, onBoard: true,
+     ...D.place(y, col, c.host, rows), now });
+/** Rest on a column's tab until it is the one on screen, then slide down among
+ *  its cards to `y` — the whole of D2 into D3. */
+const pick = (col, y, c, rows, now = 1000, from = col) => [
+  lift(c, from), over(ON(col), now, col), { do: 'tick', now: now + D.OPEN_MS },
+  among(col, y, c, rows, now + 400),
 ];
 
 // ── 1 · the gesture, D1 to D4 ───────────────────────────────────────────────
@@ -78,13 +82,8 @@ const pick = (col, y, c, rows, now = 1000) => [
 {
   const T0 = 1000;
   const onIP = ON('in_progress');
-  const { drag, effects } = play([
-    lift(),
-    over(onIP, T0, 'in_progress', null),
-    { do: 'tick', now: T0 + D.OPEN_MS },
-    over({ x: onIP.x, y: ROWS[0].y + 80 }, T0 + 400, 'in_progress', 1),
-    { do: 'drop' },
-  ]);
+  const { drag, effects } = play([...pick('in_progress', MID(0), carried(), ROWS, T0, 'queued'),
+                                  { do: 'drop' }]);
   checks.push(
     ['a card is held for 350 ms, carried onto a tab, and the column under it opens after 300',
       D.HOLD_MS === 350 && D.OPEN_MS === 300
@@ -92,7 +91,8 @@ const pick = (col, y, c, rows, now = 1000) => [
     ['…and the release asks one computer to move one card, once, to the place the thumb picked',
       drag === null
       && eq(effects.filter((e) => e.do === 'move'),
-            [{ do: 'move', carried: carried(), column: 'in_progress', position: 1, starts: true }])],
+            [{ do: 'move', carried: carried(), column: 'in_progress', position: 1, starts: true }])
+      && D.place(MID(0), 'in_progress', 'h1', ROWS).slot === 1],
     ['resting on a tab for less than that opens nothing',
       play([lift(), over(onIP, T0, 'in_progress'), { do: 'tick', now: T0 + D.OPEN_MS - 1 }])
         .effects.every((e) => e.do !== 'open')],
@@ -174,6 +174,10 @@ checks.push(
       eq(D.says(LANDED, ['q9', 'q1']), { line: false, card: 'q1' })
       && eq(D.says(LANDED, ['q9']), { line: true, card: null })
       && eq(D.says(null, ['q1']), { line: false, card: null })],
+    ['…and the board reads both halves of that one answer, one for each of its two surfaces',
+      (SCREEN.match(/\bsays\(/g) ?? []).length === 1
+      && /told\.line \? dropFoot\(landed\)/.test(SCREEN)
+      && /told\.card === item\.card\.id/.test(SCREEN)],
     ['a release onto a tab before the column opens brings the list with it, so there is a card to say it on',
       eq(play([lift(), over(ON('in_progress'), 1000, 'in_progress'), { do: 'drop' }])
            .effects.filter((e) => e.do === 'open'), [{ do: 'open', column: 'in_progress' }])],
@@ -206,16 +210,43 @@ checks.push(
     ['a drag the phone took away asks nothing either, wherever the thumb had got to',
       nothing(play([lift(), over(ON('done'), T0, 'done', 0), { do: 'cancel' }]))],
     ['a card put back in its own column at its own place is not a move',
-      nothing(play([lift(), over(ON('queued'), T0, 'queued', 2), { do: 'drop' }]))],
+      nothing(play([...pick('queued', MID(1), carried(), ROWS), { do: 'drop' }]))],
     ['…including on a board of two computers, where the place it lies at is not its index',
       eq(D.place(MID(1), 'queued', 'h1', MIXED), { slot: 2, position: 0 })
       && nothing(play([...pick('queued', MID(1), MINE(), MIXED), { do: 'drop' }]))
       && moved(play([...pick('queued', MID(2), MINE(), MIXED), { do: 'drop' }])).position === 1],
     ['…but moved within it, it is: position is priority on this board',
-      play([lift(), over(ON('queued'), T0, 'queued', 0), { do: 'drop' }])
-        .effects.find((e) => e.do === 'move').position === 0],
+      moved(play([...pick('queued', ROWS[0].rect.y - 10, carried(), ROWS), { do: 'drop' }]))
+        .position === 0],
     ['and an event for a drag that has already ended is answered with nothing',
       nothing(play([{ do: 'drop' }])) && nothing(play([{ do: 'tick', now: T0 }]))],
+  );
+
+  /** Over In Progress long enough that the list under the tabs is that column. */
+  const opened = [lift(), over(ON('in_progress'), T0, 'in_progress'), { do: 'tick', now: T0 + D.OPEN_MS }];
+  const felt = (r) => r.effects.some((e) => e.do === 'haptic' && e.weight === 'firm');
+  checks.push(
+    ['a card let go of past the edge of the board is let go of, however long a column was held open',
+      D.target(play(opened).drag) === 'in_progress'
+      && nothing(play([...opened, over({ x: 195, y: 820 }, T0 + 400, null, null, null, false),
+                       { do: 'drop' }]))],
+    ['coming back onto its own column’s tab is how an opened drag is called off, and it says so',
+      eq(D.hint(play([...opened, over(ON('queued'), T0 + 400, 'queued')]).drag, { others: 3 }).said,
+         { key: 'dgBack' })
+      && nothing(play([...opened, over(ON('queued'), T0 + 400, 'queued'), { do: 'drop' }]))
+      && !felt(play([...opened, over(ON('queued'), T0 + 400, 'queued'), { do: 'drop' }]))],
+    ['…and a thumb that leaves the board and comes back is aimed again at once, not one event later',
+      moved(play([...pick('in_progress', MID(0), carried(), ROWS, T0, 'queued'),
+                  over({ x: 195, y: 820 }, T0 + 500, null, null, null, false),
+                  among('in_progress', MID(0), carried(), ROWS, T0 + 600),
+                  { do: 'drop' }])).position === 1],
+    ['a thumb resting on a tab picks no place in the column under it, so releasing there moves nothing',
+      nothing(play([lift(), over(ON('queued'), T0, 'queued'), { do: 'tick', now: T0 + D.OPEN_MS },
+                    over(ON('queued'), T0 + 400, 'queued', 0, 0), { do: 'drop' }]))],
+    ['a thumb that only passed over a tab on its way somewhere never aimed the drag at it',
+      nothing(play([lift(), over(ON('queued'), T0, 'queued'),
+                    among('queued', ROWS[0].rect.y - 10, carried(), ROWS, T0 + 100),
+                    { do: 'drop' }]))],
   );
 }
 
@@ -229,8 +260,7 @@ checks.push(
     lift(MINE(), 'queued'),
     over(ON('in_progress'), T0, 'in_progress'),
     { do: 'tick', now: T0 + D.OPEN_MS },
-    { do: 'over', at: { x: 195, y }, column: null,
-      ...D.place(y, 'in_progress', 'h1', rows), now: T0 + 400 },
+    among('in_progress', y, MINE(), rows, T0 + 400),
   ];
   checks.push(
     ['the tab stays the target while the thumb comes down among the cards to pick a place',

@@ -125,20 +125,28 @@ export interface Drag {
    *  of a drag is spent between the card and the tabs. It is not by itself where
    *  the card would land — see `target`. */
   over: DivanColumn | null;
-  /** The thumb has rested on a tab long enough for the list under it to be that
-   *  column: the drag is aimed somewhere, and stays aimed there while the thumb
-   *  moves down into the cards.
+  /** The thumb has rested on a tab for `OPEN_MS`: the list under it is that
+   *  column, and the drag is aimed at it even after the thumb leaves the tab.
    *
    *  D3 is the frame this exists for. The thumb is at `220,380` — in the list,
    *  not on the tab — the tab is still green, and the hint is naming a position.
    *  Picking a place in a column is done with the thumb over that column's cards,
-   *  which is the one thing it cannot be doing while it is on a 46 pt tab. Without
-   *  this the whole second half of the gesture is unreachable.
+   *  which is the one thing it cannot be doing while it is on a 46 pt tab.
    *
-   *  It is also what keeps the fourth promise exact: a drag that never rested on
-   *  a tab at all has never been aimed at anything, and releasing it anywhere is
-   *  releasing it nowhere. */
+   *  A dwell and nothing else sets it, including on the tab of the column already
+   *  on screen. Aiming a drag on the way past a tab, with no dwell and nothing
+   *  drawn differently, is how a card that was being carried to Done came to be
+   *  re-ordered inside the column it started in. */
   opened: boolean;
+  /** …and the thumb is still on the board's own body: the tabs and the cards
+   *  under them, and nothing else on the page.
+   *
+   *  `opened` alone is not an aim. Between the board and the edges of the glass
+   *  are the project bar at the top and the app's own tab bar at the bottom, and
+   *  a finger lifted over either of those has left the board — which under the
+   *  fourth promise must change nothing, and which without this committed a move
+   *  and, on In Progress, started a worker. */
+  onBoard: boolean;
   /** When the thumb arrived on that tab, so that `OPEN_MS` can be measured
    *  without a timer of the screen's own. Null while it is over nothing. */
   since: number | null;
@@ -188,7 +196,7 @@ export type Event =
   /** The thumb moved. `column` and the two places are read off the geometry by
    *  the screen (`columnAt`, `place`) rather than passed in as pixels, because
    *  where a tab is is the one thing this file cannot know. */
-  | { do: 'over'; at: Point; column: DivanColumn | null;
+  | { do: 'over'; at: Point; column: DivanColumn | null; onBoard: boolean;
       slot: number | null; position: number | null; now: number }
   /** Nothing moved, but time passed. The list opening after 300 ms is a fact
    *  about a still thumb, so it cannot only be decided on movement. */
@@ -209,8 +217,8 @@ export type Event =
 export function step(drag: Drag | null, e: Event): { drag: Drag | null; effects: Effect[] } {
   if (e.do === 'lift') {
     return {
-      drag: { carried: e.carried, at: e.at, from: e.at, over: null, opened: false, since: null,
-              open: e.open, slot: null, position: null },
+      drag: { carried: e.carried, at: e.at, from: e.at, over: null, opened: false, onBoard: true,
+              since: null, open: e.open, slot: null, position: null },
       effects: [{ do: 'haptic', weight: 'light' }],
     };
   }
@@ -218,19 +226,22 @@ export function step(drag: Drag | null, e: Event): { drag: Drag | null; effects:
   switch (e.do) {
     case 'over': {
       const crossed = e.column !== drag.over;
-      // Resting on the tab of the column already on screen aims the drag at it
-      // with no dwell to wait for: the list is already showing what it would be
-      // switched to.
-      const opened = drag.opened || (e.column != null && e.column === drag.open);
-      const to = e.column ?? (opened ? drag.open : null);
-      // Both places are an answer only while the column the card would land in is
-      // the one whose cards are on screen — `e.slot` is an index into those.
-      const there = to === drag.open;
-      const next: Drag = {
-        ...drag, at: e.at, over: e.column, opened,
+      const moved: Drag = {
+        ...drag, at: e.at, over: e.column, onBoard: e.onBoard,
         since: crossed ? (e.column == null ? null : e.now) : drag.since,
-        slot: there ? e.slot : null,
-        position: there ? e.position : null,
+      };
+      // A place in the column is picked with the thumb among its cards and never
+      // while it is on the tabs (D2 against D3): a tab is a column, and the list
+      // it covers is not somewhere to point at. Dropping on a tab is therefore
+      // "into this column", and where in it is the column's own business.
+      //
+      // Asked of where the thumb is now and not where it was: a thumb that goes
+      // off the board and comes back is aimed again the moment it returns, and
+      // reading the old aim here left it pointing at nothing for one more event —
+      // which is one release, if that is when the finger came up.
+      const there = e.column == null && target(moved) === moved.open;
+      const next: Drag = {
+        ...moved, slot: there ? e.slot : null, position: there ? e.position : null,
       };
       const effects: Effect[] = crossed && e.column != null
         ? [{ do: 'haptic', weight: 'tick' }] : [];
@@ -266,8 +277,14 @@ export function step(drag: Drag | null, e: Event): { drag: Drag | null; effects:
  *  on In Progress and then sliding to Done opens Done 300 ms later and not
  *  immediately. */
 function settle(drag: Drag, now: number, effects: Effect[]): { drag: Drag; effects: Effect[] } {
-  if (drag.over == null || drag.over === drag.open) return { drag, effects };
+  if (drag.over == null) return { drag, effects };
   if (drag.since == null || now - drag.since < OPEN_MS) return { drag, effects };
+  // The tab of the column already on screen: there is nothing to switch, and the
+  // dwell still has to count, or the one column a card cannot be re-ordered
+  // inside is the one it is already in.
+  if (drag.over === drag.open) {
+    return drag.opened ? { drag, effects } : { drag: { ...drag, opened: true }, effects };
+  }
   return {
     drag: { ...drag, open: drag.over, opened: true, since: now, slot: null, position: null },
     effects: [...effects, { do: 'open', column: drag.over }],
@@ -276,10 +293,16 @@ function settle(drag: Drag, now: number, effects: Effect[]): { drag: Drag; effec
 
 /** Which column the card is aimed at, which is not the same as the tab under the
  *  thumb: once a tab has been rested on, the cards below it are that column's and
- *  the aim stays there while a place in them is picked (D3, and `Drag.opened`).
- *  Null while the drag has never been aimed anywhere. */
+ *  the aim stays there while a place among them is picked (D3, and `Drag.opened`).
+ *
+ *  Null in the two cases that are the fourth promise: a drag that has never
+ *  rested on a tab has never been aimed at anything, and a thumb that has left
+ *  the board has taken the aim with it. Between the board and the edges of the
+ *  glass are the project bar and the app's own tab bar, and a card released over
+ *  either of those is a card put down, not a card filed. */
 export function target(drag: Drag): DivanColumn | null {
-  return drag.over ?? (drag.opened ? drag.open : null);
+  if (drag.over != null) return drag.over;
+  return drag.opened && drag.onBoard ? drag.open : null;
 }
 
 /** Where a release lands, and null where it lands nowhere.
@@ -321,11 +344,16 @@ export function airborne(drag: Drag): boolean {
  *  drop into the middle of the page a cancelled drag rather than a guess at the
  *  nearest column. */
 export function columnAt(p: Point, targets: Target[]): DivanColumn | null {
-  for (const t of targets) {
-    if (p.x >= t.rect.x && p.x <= t.rect.x + t.rect.w
-        && p.y >= t.rect.y && p.y <= t.rect.y + t.rect.h) return t.key;
-  }
+  for (const t of targets) if (within(p, t.rect)) return t.key;
   return null;
+}
+
+/** Is this point inside that rectangle? The one piece of arithmetic two different
+ *  questions are asked by — which tab the thumb is on, and whether it is still on
+ *  the board at all — and a second spelling of it is how the two would come to
+ *  disagree about an edge. */
+export function within(p: Point, r: Rect): boolean {
+  return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 }
 
 /** One card of the open column as the drag sees it: which machine its work is on,
@@ -401,11 +429,15 @@ export function hint(drag: Drag, { others, mixed }: { others: number; mixed?: bo
   { said: Said; col?: Key; tone: Tone } {
   const aim = target(drag);
   if (aim == null) return { said: { key: 'dgHold' }, tone: 'ink3' };
+  // Aimed somewhere, but releasing there would change nothing: the card's own
+  // column, at the place it is already in. Said before "hold to open" because it
+  // is the more useful of the two — one is about what a release does now, the
+  // other about what a further 300 ms would do.
+  const to = landing(drag);
+  if (to == null) return { said: { key: 'dgBack' }, tone: 'ink3' };
   if (aim !== drag.open) {
     return { said: { key: 'dgOpen' }, col: COLUMN_LABEL[aim], tone: 'run' };
   }
-  const to = landing(drag);
-  if (to == null) return { said: { key: 'dgBack' }, tone: 'ink3' };
   const starting = starts(drag.carried, to.column);
   if (drag.slot == null || mixed) {
     return { said: { key: starting ? 'dgStartBare' : 'dgRelease' }, tone: 'run' };
