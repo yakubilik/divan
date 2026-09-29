@@ -139,8 +139,8 @@ function Note({ children, tone = 'mute' }: { children: React.ReactNode; tone?: '
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px',
-      borderRadius: R.btn, background: tone === 'warn' ? 'rgba(216,166,87,0.10)' : C.surface,
-      border: `1px solid ${tone === 'warn' ? 'rgba(216,166,87,0.28)' : C.border}`,
+      borderRadius: R.btn, background: tone === 'warn' ? C.warnBg : C.surface,
+      border: `1px solid ${tone === 'warn' ? C.warnLine : C.border}`,
       fontSize: 12.5, lineHeight: '18px', color: tone === 'warn' ? C.warn : C.mute,
       marginBottom: 10,
     }}>
@@ -427,8 +427,8 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
         {problem && (
           <div style={{
             marginTop: 12, padding: '10px 12px', borderRadius: R.btn, fontSize: 12.5,
-            color: C.danger, background: 'rgba(224,83,63,0.10)',
-            border: '1px solid rgba(224,83,63,0.28)', lineHeight: '18px',
+            color: C.danger, background: C.dangerBg,
+            border: `1px solid ${C.dangerLine}`, lineHeight: '18px',
           }}>{problem}</div>
         )}
       </div>

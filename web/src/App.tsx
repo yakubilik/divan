@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C } from './lib/theme';
+import { C, SHADOW, themeCss } from './lib/theme';
 import { Btn, Icon, KEYFRAMES, P, mono } from './ui/kit';
 import { Sidebar, type View } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
@@ -323,6 +323,7 @@ export function App() {
   if (fleet.ready && !fleet.order.length) {
     return (
       <>
+        <style>{themeCss()}</style>
         <style>{KEYFRAMES}</style>
         <Onboarding onPaired={() => setView('chats')} />
       </>
@@ -331,6 +332,7 @@ export function App() {
 
   return (
     <>
+      <style>{themeCss()}</style>
       <style>{KEYFRAMES}</style>
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
         <Sidebar
@@ -373,7 +375,7 @@ export function App() {
           onClick={() => setPeek(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 25, padding: 24,
-            background: 'rgba(0,0,0,0.62)', display: 'flex',
+            background: C.scrim, display: 'flex',
             alignItems: 'center', justifyContent: 'center',
           }}
         >
@@ -383,7 +385,7 @@ export function App() {
               width: '100%', maxWidth: 1040, height: 'min(880px, 100%)',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
               background: C.bg, border: `1px solid ${C.borderStrong}`, borderRadius: 18,
-              boxShadow: '0 40px 90px -30px rgba(0,0,0,0.9)',
+              boxShadow: SHADOW.drawer,
             }}
           >
             <div style={{

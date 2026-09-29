@@ -15,17 +15,18 @@ import type { LimitWindow } from '../lib/protocol';
 // - Daemon restart count and last error: the daemon keeps neither.
 // - "N sessions closed in the last 24h": there is no closed-session history query.
 
-/** Alpha variants of the theme colours, exactly as the artboards use them —
- *  kit.tsx does the same. No new hues, only opacity. */
+/** The washes and lines behind a badge. Every one of them is now a token: the
+ *  design gives each tone a wash and an outline of its own, so nothing here
+ *  thins a colour by hand. */
 const TINT = {
-  warnBg: 'rgba(216,166,87,0.16)',
-  warnBd: 'rgba(216,166,87,0.32)',
-  infoBg: 'rgba(125,154,209,0.14)',
-  infoBd: 'rgba(125,154,209,0.28)',
-  dangerBg: 'rgba(224,83,63,0.10)',
-  dangerBd: 'rgba(224,83,63,0.28)',
-  plain: 'rgba(241,236,227,0.08)',
-  track: 'rgba(241,236,227,0.10)',
+  warnBg: C.warnBg,
+  warnBd: C.warnLine,
+  infoBg: C.infoBg,
+  infoBd: C.infoLine,
+  dangerBg: C.dangerBg,
+  dangerBd: C.dangerLine,
+  plain: C.surface2,
+  track: C.borderStrong,
 };
 
 const IC = {
@@ -182,7 +183,7 @@ function HostCard({ slot, known }: { slot: HostSlot; known: number }) {
   return (
     <div style={{
       minHeight: 156, boxSizing: 'border-box', borderRadius: R.card,
-      background: online ? C.surface : C.hair,
+      background: online ? C.surface : C.inset,
       border: `1px solid ${online ? C.borderStrong : C.border}`,
       padding: '14px 16px', display: 'flex', flexDirection: 'column', minWidth: 0,
     }}>
@@ -634,7 +635,7 @@ export function Dashboard({ onOpenChat, onNewChat }: DashboardProps) {
           Refresh
         </Btn>
         <Btn kind="primary" onClick={onNewChat}>
-          <Icon path={P.plus} size={14} color="#FFFFFF" width={2.4} />
+          <Icon path={P.plus} size={14} color={C.onAccent} width={2.4} />
           New chat
         </Btn>
       </div>
@@ -677,7 +678,7 @@ export function Dashboard({ onOpenChat, onNewChat }: DashboardProps) {
                 <>
                   <div style={{
                     height: 32, boxSizing: 'border-box', padding: '0 14px 0 12px',
-                    display: 'flex', alignItems: 'center', background: C.hair,
+                    display: 'flex', alignItems: 'center', background: C.inset,
                     borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
                   }}>
                     <div style={{ ...cell(COL.chat), ...headText }}>Chat</div>
@@ -703,7 +704,7 @@ export function Dashboard({ onOpenChat, onNewChat }: DashboardProps) {
                   <div style={{
                     height: 38, boxSizing: 'border-box', padding: '0 14px',
                     display: 'flex', alignItems: 'center', gap: 8,
-                    borderTop: `1px solid ${C.border}`, background: C.hair,
+                    borderTop: `1px solid ${C.border}`, background: C.inset,
                   }}>
                     <div style={{ fontSize: 12, color: C.mute }}>
                       Lifetime total across open chats
@@ -737,7 +738,7 @@ export function Dashboard({ onOpenChat, onNewChat }: DashboardProps) {
 
         {/* live event stream */}
         <div style={{
-          borderRadius: R.card, background: C.hair, border: `1px solid ${C.border}`,
+          borderRadius: R.card, background: C.inset, border: `1px solid ${C.border}`,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
           <div style={{

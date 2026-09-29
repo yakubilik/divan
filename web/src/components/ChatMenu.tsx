@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, R, SHADOW } from '../lib/theme';
 import { Icon, P } from '../ui/kit';
 import { Modal } from './Modal';
 import { Btn } from '../ui/kit';
@@ -61,7 +61,7 @@ function Sheet({ entries, groups, chat, onMove, onClose }: {
       style={{
         position: 'absolute', top: 42, right: 12, width: 232, zIndex: 40,
         background: C.surface, border: `1px solid ${C.borderStrong}`, borderRadius: R.card,
-        padding: '6px 0', boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+        padding: '6px 0', boxShadow: SHADOW.pop,
       }}
     >
       {moving ? (

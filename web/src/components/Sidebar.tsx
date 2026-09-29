@@ -258,8 +258,8 @@ function ChatRow({ chat, hostKey, selected, onPick }: {
         {awaiting ? (
           <span style={{
             ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 0.4,
-            color: C.warn, background: 'rgba(216,166,87,0.16)',
-            border: '1px solid rgba(216,166,87,0.32)', borderRadius: R.badge, padding: '2px 6px',
+            color: C.warn, background: C.warnBg,
+            border: `1px solid ${C.warnLine}`, borderRadius: R.badge, padding: '2px 6px',
           }}>APPROVE</span>
         ) : running ? <Pulse /> : (
           <span style={{ fontSize: 11, color: C.faint }}>{ago(chat.updated_at)}</span>
@@ -366,7 +366,7 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <Icon path={P.plus} size={15} color="#FFFFFF" width={2.6} />
+          <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
         </button>
         <div title={slot?.status === 'online' ? 'Online' : 'Offline'} style={{ padding: '6px 0 2px' }}>
           <Dot color={slot?.status === 'online' ? C.ok : C.faint} live={slot?.status === 'online'} size={6} />
@@ -428,10 +428,10 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 width: '100%', height: 34, borderRadius: R.btn, cursor: 'pointer',
                 background: C.accent, border: `1px solid ${C.accent}`,
-                color: '#FFFFFF', fontSize: 13, fontWeight: 600,
+                color: C.onAccent, fontSize: 13, fontWeight: 600,
               }}
             >
-              <Icon path={P.plus} size={15} color="#FFFFFF" width={2.6} />
+              <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
               New chat
               <span style={{ ...mono, fontSize: 11, opacity: 0.75 }}>⌘N</span>
             </button>

@@ -50,8 +50,8 @@ function Badge({ tone, children }: { tone: 'accent' | 'warn'; children: React.Re
       fontSize: 10, fontWeight: 600, letterSpacing: 0.4, padding: '3px 7px',
       borderRadius: R.badge,
       color: accent ? C.accentSoft : C.warn,
-      background: accent ? C.accentTint : 'rgba(216,166,87,0.16)',
-      border: `1px solid ${accent ? C.accentRing : 'rgba(216,166,87,0.32)'}`,
+      background: accent ? C.accentTint : C.warnBg,
+      border: `1px solid ${accent ? C.accentRing : C.warnLine}`,
     }}>{children}</span>
   );
 }

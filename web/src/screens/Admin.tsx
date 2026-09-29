@@ -109,8 +109,8 @@ function Note({ tone, children }: { tone: Tone; children: React.ReactNode }) {
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 8, margin: '0 16px 14px',
       padding: '9px 11px', borderRadius: R.btn, fontSize: 12, color,
-      background: tone === 'danger' ? 'rgba(224,83,63,0.10)' : 'rgba(216,166,87,0.12)',
-      border: `1px solid ${tone === 'danger' ? 'rgba(224,83,63,0.28)' : 'rgba(216,166,87,0.28)'}`,
+      background: tone === 'danger' ? C.dangerBg : C.warnBg,
+      border: `1px solid ${tone === 'danger' ? C.dangerLine : C.warnLine}`,
     }}>
       <Icon path={P.warn} size={13} color={color} />
       <span style={{ flex: 1, minWidth: 0 }}>{children}</span>
@@ -271,7 +271,7 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
         >
           {busy ? <Spinner size={13} color={C.text} />
             : <Icon path={current ? P.check : P.download} size={14}
-                    color={current || held ? C.mute : '#FFFFFF'} />}
+                    color={current || held ? C.mute : C.onAccent} />}
           {busy ? 'Updating…' : current ? 'Up to date' : 'Update'}
         </Btn>
       </div>
@@ -389,8 +389,8 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
           result.ok ? (
             <div style={{
               margin: '0 16px 14px', padding: '9px 11px', borderRadius: R.btn,
-              fontSize: 12, color: C.ok, background: 'rgba(92,126,79,0.12)',
-              border: '1px solid rgba(92,126,79,0.28)',
+              fontSize: 12, color: C.ok, background: C.okBg,
+              border: `1px solid ${C.okLine}`,
             }}>
               {[
                 result.pulled ? `pulled to ${result.revision?.commit ?? 'origin/main'}` : null,

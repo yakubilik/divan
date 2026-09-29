@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { C, MONO, R } from '../lib/theme';
+import { C, MONO, R, SHADOW, toneFace, type ToneFace } from '../lib/theme';
 import { Dot, Icon, P, mono } from '../ui/kit';
 import { ago, cost, duration, shortPath, tildeAll, tokens, toolSummary } from '../lib/format';
 import { useFleet } from '../lib/fleet';
@@ -34,13 +34,13 @@ type Phase = 'working' | 'approval' | 'error' | 'done' | 'stopped' | 'idle';
  *  red that went wrong — are the only warm things on the wall, and the eye goes
  *  to them. Painting "busy" in the brand clay put a third warm hue next to the
  *  two that matter and buried them. */
-const PHASE: Record<Phase, { label: string; color: string; rgb: string }> = {
-  working: { label: 'working', color: C.info, rgb: '125,154,209' },
-  approval: { label: 'needs approval', color: C.warn, rgb: '216,166,87' },
-  error: { label: 'error', color: C.danger, rgb: '224,83,63' },
-  done: { label: 'done', color: C.ok, rgb: '92,126,79' },
-  stopped: { label: 'stopped', color: C.faint, rgb: '110,104,96' },
-  idle: { label: 'idle', color: C.faint, rgb: '110,104,96' },
+const PHASE: Record<Phase, ToneFace> = {
+  working: toneFace('working', 'run'),
+  approval: toneFace('needs approval', 'amber'),
+  error: toneFace('error', 'red'),
+  done: toneFace('done', 'ink3'),
+  stopped: toneFace('stopped', 'ink3'),
+  idle: toneFace('idle', 'ink3'),
 };
 
 const FILTERS: { key: Phase | 'all'; label: string; color: string }[] = [
@@ -227,7 +227,7 @@ function TileButton({ icon, title, tone, onClick }: {
         width: 24, height: 24, borderRadius: R.badge, flexShrink: 0, padding: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
         border: 'none',
-        background: !hot ? 'transparent' : tone === 'danger' ? 'rgba(224,83,63,0.14)' : C.surface2,
+        background: !hot ? 'transparent' : tone === 'danger' ? C.dangerBg : C.surface2,
       }}
     >
       <Icon path={icon} size={13} color={hot ? (tone === 'danger' ? C.danger : C.text) : C.faint} width={2} />
@@ -273,10 +273,12 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
       style={{
         display: 'flex', flexDirection: 'column', minHeight: 270, cursor: 'pointer',
         borderRadius: R.media, overflow: 'hidden',
-        background: `rgba(${ph.rgb},0.045)`,
-        border: `1px solid rgba(${ph.rgb},0.32)`,
+        // A tile is a card on the page, and its phase is the line round it —
+        // Web14 W10 draws exactly this: `s1` behind, the tone as the outline.
+        background: C.surface,
+        border: `1px solid ${ph.edge}`,
         transform: hot && !lifted ? 'translateY(-2px)' : 'none',
-        boxShadow: hot && !lifted ? '0 18px 40px -20px rgba(0,0,0,0.8)' : 'none',
+        boxShadow: hot && !lifted ? SHADOW.pop : 'none',
         // The tile being carried stays faintly in place, so the gap it will
         // leave is visible while the drop target is being chosen.
         opacity: lifted ? 0.4 : 1,
@@ -287,8 +289,8 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
           rectangle read as a window at a glance across a wall of them. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-        background: `rgba(${ph.rgb},0.09)`,
-        borderBottom: `1px solid rgba(${ph.rgb},0.32)`, flexShrink: 0,
+        background: ph.wash,
+        borderBottom: `1px solid ${ph.edge}`, flexShrink: 0,
       }}>
         <span style={{ display: 'flex', gap: 5, flexShrink: 0, paddingRight: 4 }}>
           {[0, 1, 2].map((i) => (
@@ -381,7 +383,7 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
                 // conversation it is a window onto.
                 borderRadius: you ? '14px 14px 5px 14px' : '14px 14px 14px 5px',
                 background: you ? C.accent : C.surface2,
-                color: you ? '#FFFFFF' : C.text,
+                color: you ? C.onAccent : C.text,
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 wordBreak: 'break-word',
               }}>{l.text}</span>
@@ -392,7 +394,7 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, minHeight: 38, padding: '9px 12px',
-        borderTop: `1px solid rgba(${ph.rgb},0.32)`, flexShrink: 0,
+        borderTop: `1px solid ${ph.edge}`, flexShrink: 0,
       }}>
         <span style={{
           ...mono, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.6,
@@ -418,7 +420,7 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
               type="button" onClick={answer('allow')}
               style={{
                 height: 26, padding: '0 10px', borderRadius: R.btn, cursor: 'pointer',
-                fontSize: 12, fontWeight: 600, color: '#1A1512',
+                fontSize: 12, fontWeight: 600, color: C.onWarn,
                 background: C.warn, border: `1px solid ${C.warn}`,
               }}
             >Allow</button>
@@ -711,10 +713,10 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 14px',
                 borderRadius: R.chip, cursor: 'pointer', background: C.accent,
-                border: `1px solid ${C.accent}`, color: '#FFFFFF', fontSize: 13, fontWeight: 600,
+                border: `1px solid ${C.accent}`, color: C.onAccent, fontSize: 13, fontWeight: 600,
               }}
             >
-              <Icon path={P.plus} size={15} color="#FFFFFF" width={2.6} />
+              <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
               New chat
             </button>
           </div>
@@ -881,7 +883,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
           onClick={() => setConfirm(null)}
           style={{
             position: 'fixed', inset: 0, zIndex: 40, padding: 24,
-            background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: C.scrim, display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
           <div
@@ -890,11 +892,11 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
               width: '100%', maxWidth: 400, padding: 22, borderRadius: R.media,
               background: C.surface, border: `1px solid ${C.borderStrong}`,
               display: 'flex', flexDirection: 'column', gap: 10,
-              boxShadow: '0 40px 90px -30px rgba(0,0,0,0.9)',
+              boxShadow: SHADOW.drawer,
             }}
           >
             <div style={{
-              width: 38, height: 38, borderRadius: R.card, background: 'rgba(224,83,63,0.14)',
+              width: 38, height: 38, borderRadius: R.card, background: C.dangerBg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <Icon path={P.trash} size={19} color={C.danger} />
@@ -924,7 +926,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
                 }}
                 style={{
                   flex: 1, height: 38, borderRadius: R.btn, cursor: 'pointer', fontSize: 13.5,
-                  fontWeight: 600, color: '#FFFFFF', background: C.danger,
+                  fontWeight: 600, color: C.onAccent, background: C.danger,
                   border: `1px solid ${C.danger}`,
                 }}
               >Delete</button>
@@ -938,7 +940,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
           position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 30,
           display: 'flex', alignItems: 'center', gap: 14, padding: '9px 12px 9px 18px',
           borderRadius: R.chip, background: C.text, color: C.bg, fontSize: 13.5,
-          boxShadow: '0 18px 40px -16px rgba(0,0,0,0.8)',
+          boxShadow: SHADOW.pop,
         }}>
           <span>{toast.text}</span>
           {toast.undo && (

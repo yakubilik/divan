@@ -320,8 +320,8 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
         {perm === 'bypass' && (
           <div style={{
             display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px',
-            borderRadius: R.btn, background: 'rgba(216,166,87,0.10)',
-            border: '1px solid rgba(216,166,87,0.32)', marginBottom: 20,
+            borderRadius: R.btn, background: C.warnBg,
+            border: `1px solid ${C.warnLine}`, marginBottom: 20,
           }}>
             <Icon path={P.warn} size={14} color={C.warn} />
             <span style={{ fontSize: 12, lineHeight: '18px', color: C.warn }}>

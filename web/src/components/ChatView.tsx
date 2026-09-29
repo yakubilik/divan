@@ -145,7 +145,7 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
         style={{
           height: 28, padding: '0 12px', borderRadius: R.btn, fontSize: 12, fontWeight: 600,
           cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-          border: '1px solid rgba(224,83,63,0.4)', background: 'rgba(224,83,63,0.14)', color: C.danger,
+          border: `1px solid ${C.dangerLine}`, background: C.dangerBg, color: C.danger,
         }}
       >
         <Icon path={P.stop} size={12} color={C.danger} /> Stop
@@ -346,9 +346,9 @@ function Composer({ chat, hostKey, busy, sending, onSend, onInterrupt, onUpload 
             opacity: !busy && !ready ? 0.5 : 1,
           }}
         >
-          {sending ? <Spinner size={14} color="#FFFFFF" />
-            : busy && !ready ? <Icon path={P.stop} size={14} color="#FFFFFF" fill />
-            : <Icon path={P.send} size={16} color="#FFFFFF" width={2.4} />}
+          {sending ? <Spinner size={14} color={C.onAccent} />
+            : busy && !ready ? <Icon path={P.stop} size={14} color={C.onAccent} fill />
+            : <Icon path={P.send} size={16} color={C.onAccent} width={2.4} />}
         </button>
       </div>
       <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 6, display: 'flex', gap: 16 }}>

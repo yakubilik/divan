@@ -7,8 +7,8 @@ import { Bubble, Prose } from './Bubble';
 import { Lightbox, type Shot } from './Lightbox';
 import { fileUrl } from '../lib/actions';
 
-const OK_BG = 'rgba(92,126,79,0.14)';
-const BAD_BG = 'rgba(224,83,63,0.10)';
+const OK_BG = C.okBg;
+const BAD_BG = C.dangerBg;
 
 function Divider({ ts }: { ts: number }) {
   const d = new Date(ts * 1000);
@@ -245,7 +245,7 @@ function DiffBody({ input }: { input: any }) {
     <div style={{
       display: 'flex', gap: 10, padding: '1px 12px',
       background: sign === '-' ? BAD_BG : sign === '+' ? OK_BG : 'transparent',
-      color: sign === '-' ? '#E8A79A' : sign === '+' ? '#A9C79C' : C.mute,
+      color: sign === '-' ? C.danger : sign === '+' ? C.ok : C.mute,
     }}>
       <span style={{ width: 8, flexShrink: 0, opacity: sign === ' ' ? 0 : 1 }}>{sign}</span>
       <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{text || ' '}</span>
@@ -264,7 +264,7 @@ function DiffBody({ input }: { input: any }) {
 function Tool({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
   const [open, setOpen] = useState(false);
   const bad = item.isError;
-  const border = bad ? 'rgba(224,83,63,0.4)' : C.border;
+  const border = bad ? C.dangerLine : C.border;
   const summary = toolSummary(item.tool, item.input);
   const isEdit = item.tool === 'Edit' || item.tool === 'Write';
   const counts = isEdit && typeof item.input?.new_string === 'string'
@@ -308,14 +308,14 @@ function Tool({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
       {open && (isEdit ? <DiffBody input={item.input} /> : (
         <pre style={{
           ...mono, fontSize: 12, lineHeight: '18px', margin: 0, padding: '10px 12px',
-          borderTop: `1px solid ${C.border}`, color: bad ? '#E8A79A' : C.mute,
+          borderTop: `1px solid ${C.border}`, color: bad ? C.danger : C.mute,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 300, overflowY: 'auto',
         }}>{item.output ?? (item.running ? 'running…' : '(no output)')}</pre>
       ))}
       {!open && bad && item.output && (
         <div style={{
           ...mono, fontSize: 12, lineHeight: '18px', padding: '8px 12px',
-          borderTop: `1px solid ${border}`, color: '#E8A79A', background: BAD_BG,
+          borderTop: `1px solid ${border}`, color: C.danger, background: BAD_BG,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           maxHeight: 60, overflow: 'hidden',
         }}>{item.output.split('\n').slice(0, 2).join('\n')}</div>
@@ -336,7 +336,7 @@ function Approval({ item, onRespond }: {
   return (
     <div style={{
       marginRight: 32, borderRadius: R.card, background: C.surface,
-      border: `1px solid ${settled ? C.border : 'rgba(216,166,87,0.32)'}`, padding: 12,
+      border: `1px solid ${settled ? C.border : C.warnLine}`, padding: 12,
       opacity: settled ? 0.7 : 1,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -374,7 +374,7 @@ function btn(kind: 'ghost' | 'primary') {
     cursor: 'pointer',
     border: `1px solid ${kind === 'primary' ? C.accent : C.border}`,
     background: kind === 'primary' ? C.accent : C.surface2,
-    color: kind === 'primary' ? '#FFFFFF' : C.text,
+    color: kind === 'primary' ? C.onAccent : C.text,
   } as const;
 }
 
@@ -399,11 +399,11 @@ function Failure({ item }: { item: Extract<Item, { kind: 'error' }> }) {
   return (
     <div style={{
       marginRight: 32, borderRadius: R.card, background: BAD_BG,
-      border: '1px solid rgba(224,83,63,0.4)', padding: '10px 12px',
+      border: `1px solid ${C.dangerLine}`, padding: '10px 12px',
       display: 'flex', gap: 8, alignItems: 'flex-start',
     }}>
       <Icon path={P.warn} size={14} color={C.danger} />
-      <div style={{ fontSize: 13, lineHeight: '19px', color: '#E8A79A', whiteSpace: 'pre-wrap' }}>
+      <div style={{ fontSize: 13, lineHeight: '19px', color: C.danger, whiteSpace: 'pre-wrap' }}>
         {item.message}
       </div>
     </div>

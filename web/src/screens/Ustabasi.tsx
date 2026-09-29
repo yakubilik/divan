@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, outline, R, toneFace, type ToneFace } from '../lib/theme';
 import { Dot, Empty, Icon, P, Spinner, mono } from '../ui/kit';
 import { TicketChat } from '../components/TicketChat';
 import { useFleet } from '../lib/fleet';
@@ -37,13 +37,13 @@ import {
  *  there, a blocked ticket here. Red went wrong on its own. Everything working
  *  is the cool blue, so that on a wall of twenty tiles the eye still goes to
  *  the two that need a person. */
-const STATUS: Record<Status, { label: string; color: string; rgb: string }> = {
-  running: { label: 'running', color: C.info, rgb: '125,154,209' },
-  blocked: { label: 'needs an answer', color: C.warn, rgb: '216,166,87' },
-  failed: { label: 'failed', color: C.danger, rgb: '224,83,63' },
-  done: { label: 'done', color: C.ok, rgb: '92,126,79' },
-  queued: { label: 'queued', color: C.faint, rgb: '110,104,96' },
-  cancelled: { label: 'cancelled', color: C.faint, rgb: '110,104,96' },
+const STATUS: Record<Status, ToneFace> = {
+  running: toneFace('running', 'run'),
+  blocked: toneFace('needs an answer', 'amber'),
+  failed: toneFace('failed', 'red'),
+  done: toneFace('done', 'ink3'),
+  queued: toneFace('queued', 'ink3'),
+  cancelled: toneFace('cancelled', 'ink3'),
 };
 
 const FILTERS: { key: Status | 'all'; label: string; color: string }[] = [
@@ -93,8 +93,8 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
       style={{
         display: 'flex', flexDirection: 'column', minWidth: 0, cursor: 'pointer',
         borderRadius: R.card, overflow: 'hidden', background: C.surface,
-        border: `1px solid ${wants ? `rgba(${ph.rgb},0.45)` : hot ? C.borderStrong : C.border}`,
-        boxShadow: wants ? `0 0 0 1px rgba(${ph.rgb},0.18)` : 'none',
+        border: `1px solid ${wants ? ph.edge : hot ? C.borderStrong : C.border}`,
+        boxShadow: wants ? outline(ph.edge) : 'none',
         transition: 'border-color 120ms, box-shadow 120ms',
       }}
     >
@@ -102,7 +102,7 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
           colour — the wall is read by hue from across the room. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px',
-        background: `rgba(${ph.rgb},0.10)`, borderBottom: `1px solid rgba(${ph.rgb},0.20)`,
+        background: ph.wash, borderBottom: `1px solid ${ph.edge}`,
       }}>
         <Dot color={ph.color} live={t.status === 'running'} size={7} />
         <span style={{ ...mono, fontSize: 12, color: ph.color, fontWeight: 600 }}>#{t.id}</span>
@@ -154,7 +154,7 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
             height: 24, padding: '0 10px', borderRadius: R.chip, fontSize: 12, fontWeight: 600,
-            background: `rgba(${ph.rgb},0.16)`, color: ph.color,
+            background: ph.wash, color: ph.color,
           }}>
             <Icon path={P.chevronRight} size={13} color={ph.color} />
             Answer it
