@@ -213,7 +213,8 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
         first
         lead={<StatusDot state={online ? 'running' : 'quiet'} hollow={!online} />}
         title={name} mark
-        note={detail(version, online ? `up ${uptime(slot.info?.uptime_s)}` : 'offline',
+        note={detail(version, !online ? 'offline'
+          : slot.info ? `up ${uptime(slot.info.uptime_s)}` : 'no uptime reported',
           st?.checked_at && `checked ${ago(st.checked_at)}`,
           st?.auto === false && 'auto-update off')}
         right={
@@ -269,7 +270,8 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
         meta={slot.info?.started_at ? ago(slot.info.started_at)
           : online ? 'not reported' : 'offline'}
         tone={slot.info?.started_at ? 'run' : 'ink3'}
-        note={detail(stamp(slot.info?.started_at), `up ${uptime(slot.info?.uptime_s)}`,
+        note={detail(stamp(slot.info?.started_at),
+          slot.info ? `up ${uptime(slot.info.uptime_s)}` : 'no uptime reported',
           // Counted on the way back in, so it is every start this database has
           // ever seen — including the ones an update asked for.
           slot.info?.restarts && `start #${slot.info.restarts}`)}

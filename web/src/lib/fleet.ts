@@ -270,7 +270,7 @@ function activityText(ev: RacEvent): string | null {
     case 'approval.request': return `awaiting approval · ${d.tool}`;
     case 'approval.resolved': return `approval ${d.decision}`;
     case 'turn.started': return 'turn started';
-    case 'turn.done': return `turn done · ${fmtCost(d.cost_usd)}`;
+    case 'turn.done': { const c = fmtCost(d.cost_usd); return c ? `turn done · ${c}` : 'turn done'; }
     case 'turn.error': return `error · ${String(d.message ?? '').slice(0, 120)}`;
     case 'message.user': return d.queued ? 'message queued' : 'message sent';
     default: return null;
@@ -283,9 +283,11 @@ function firstArg(input: any): string {
   return String(v).replace(/\s+/g, ' ').slice(0, 90);
 }
 
+/** Empty where the turn reported no cost, so that the line says `turn done`
+ *  rather than `turn done · —`: a dash is not a figure. */
 function fmtCost(v: any): string {
   const n = Number(v);
-  return Number.isFinite(n) ? `$${n.toFixed(3)}` : '—';
+  return Number.isFinite(n) ? `$${n.toFixed(3)}` : '';
 }
 
 function attach(cfg: HostConfig, set: Setter, get: () => FleetState) {

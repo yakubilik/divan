@@ -755,8 +755,11 @@ group('the screens the panel already had');
     alone: D.merge([], NOW_S),
     paired: D.merge([{ key: 'studio', name: 'studio', state: D.answered(studioSnap(), NOW_S) }], NOW_S),
     stale: D.merge([{ key: 'studio', name: 'studio', state: D.answered(studioSnap(), NOW_S - 8 * 60) }], NOW_S),
+    // Two machines the drawer has to draw and one of them has never answered:
+    // that is where a table has nothing to put in a cell, which is the state
+    // criterion 4 is about.
     unreachable: D.merge([
-      { key: 'studio', name: 'studio', state: D.answered(studioSnap(), NOW_S) },
+      { key: 'studio', name: 'studio', state: D.silent(null, 'not connected') },
       { key: 'mini', name: 'mini',
         state: D.silent(D.answered(miniSnap(), NOW_S - 600), 'connection refused') },
     ], NOW_S),
@@ -1294,33 +1297,55 @@ group('every carried screen asks its computer for exactly what it did');
 group('nothing on a screen is standing in for something');
 {
   // Read off the rendered markup, over every tree in this file except the
-  // chat, which is not being rebuilt. A dash inside a button is a glyph — the
-  // `–` that puts a chat session away — and is dropped before the scan.
+  // chat, which is not being rebuilt. A dash counts wherever it ends a run of
+  // text, not only where it is the whole of one, so `up —` is caught as well
+  // as `—`. The one exemption is a button whose whole label is a glyph.
   const CHAT = /Chat|Sidebar|FieldSheet|Lightbox|Approval|Timeline|Bubble|NewChat/;
   const HOLDING = [
     [/\blorem\b|\bipsum\b/i, 'lorem ipsum'],
     [/\bTODO\b|\bTBD\b|\bFIXME\b/, 'a note to the author'],
     [/coming soon|not implemented|under construction/i, 'a promise'],
     [/\bfoo\b|\bbar\b|\bbaz\b/i, 'a stand-in name'],
-    [/>\s*[—–]\s*</, 'a dash where a value goes'],
+    [/[—–]\s*</, 'a dash where a value goes'],
     [/>\s*(?:\.\.\.|…)\s*</, 'an ellipsis where a value goes'],
   ];
+
+  /** A button that is one glyph and nothing else: the minimise and close marks
+   *  at the end of a panel's head. Anything else a button holds is words on a
+   *  screen — most rows on these pages are buttons, because most rows go
+   *  somewhere — so only this shape is dropped, and the inner match cannot
+   *  cross another `<button`. */
+  const GLYPH = /^(?:[–—×✓✕]|&times;|&#\d+;)$/;
+  const BUTTON = /<button\b[^>]*>((?:(?!<\/?button)[\s\S])*)<\/button>/g;
 
   /** The words, with the tags out of the way. An opening tag becomes `<>`, not
    *  `><`: the latter puts a `<` in front of an element's own text, and every
    *  value on these screens is the sole child of a tag. */
   const standingIn = (markup) => {
     const words = markup
-      .replace(/<button[\s\S]*?<\/button>/g, ' ')
+      .replace(BUTTON, (whole, inner) => (
+        GLYPH.test(inner.replace(/<[^>]*>/g, '').trim()) ? ' ' : whole))
       .replace(/<[a-zA-Z][^>]*>/g, '<>');
     return HOLDING.filter(([re]) => re.test(words)).map(([, what]) => what);
   };
 
-  const dash = renderToStaticMarkup(createElement(parts.Cell, { text: '—' }));
-  ok('a value that is only a dash is reported', standingIn(dash).includes('a dash where a value goes'),
-    dash);
-  ok('…and the same cell with a word in it is not',
-    standingIn(renderToStaticMarkup(createElement(parts.Cell, { text: 'no machine' }))).length === 0);
+  const DASH = 'a dash where a value goes';
+  ok('a value that is only a dash is reported',
+    standingIn(renderToStaticMarkup(createElement(parts.Cell, { text: '—' }))).includes(DASH));
+  ok('…inside a row that goes somewhere, which is most rows on these pages',
+    standingIn(renderToStaticMarkup(createElement(parts.Table, {
+      columns: [{ label: 'chat', width: '1fr' }, { label: 'cost', width: '80px' }],
+      rows: [{ key: 'r', onClick() {}, cells: [
+        createElement(parts.NameCell, { title: 'Webhook retry policy' }),
+        createElement(parts.Cell, { text: '—' }),
+      ] }],
+    }))).includes(DASH));
+  ok('…and where the dash ends a line rather than being the whole of it',
+    standingIn(renderToStaticMarkup(createElement(parts.Cell, { text: 'up —' }))).includes(DASH));
+  ok('…while the glyph a panel is put away with is not a missing value',
+    standingIn(renderToStaticMarkup(createElement(parts.PanelHead, {
+      title: 'Coder', onMinimise() {}, onClose() {},
+    }))).length === 0);
 
   const found = [];
   let read = 0;
@@ -1330,7 +1355,7 @@ group('nothing on a screen is standing in for something');
     for (const what of standingIn(markup)) found.push(`${where}: ${what}`);
   }
   ok('no screen, panel or part draws a placeholder where a value belongs',
-    found.length === 0, [...new Set(found)].slice(0, 8).join('\n    '));
+    found.length === 0, [...new Set(found)].slice(0, 10).join('\n    '));
   ok('…over every tree drawn in this file that is not the chat',
     read >= 70, `${read} trees`);
 }
