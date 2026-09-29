@@ -157,7 +157,11 @@ export function Overview({
         )}
       </SectionHeader>
       )}
-      {!!old && !deep && (
+      {/* The fleet's own sentence, over the page that is about the fleet. A
+          product's page says which of *its* machines has gone quiet, which is
+          the same fact said more precisely — twice would be the page arguing
+          with itself. */}
+      {!!old && !project && (
         <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>
           {staleWords(old, uptime)}
         </div>

@@ -213,10 +213,12 @@ export function details(card: MergedCard, project: MergedProject | null,
     note: card.machine || undefined,
   });
   if (card.ustabasi_id != null) out.push({ label: 'Ticket', value: `#${card.ustabasi_id}` });
-  out.push({ label: 'Created', value: stamp(card.created_at, now, ago) });
-  if (card.updated_at) {
-    out.push({ label: 'Updated', value: stamp(card.updated_at, now, ago) });
-  }
+  // A moment nobody recorded is no row: a label against an empty value reads as
+  // a field that failed rather than as a fact nobody has.
+  const made = stamp(card.created_at, now, ago);
+  if (made) out.push({ label: 'Created', value: made });
+  const moved = stamp(card.updated_at, now, ago);
+  if (moved) out.push({ label: 'Updated', value: moved });
   out.push({ label: 'Branch', value: card.branch || 'engineering' });
   if (card.repo) {
     out.push({ label: 'Repository', value: card.repo.split(/[/\\]/).filter(Boolean).pop() || '' });

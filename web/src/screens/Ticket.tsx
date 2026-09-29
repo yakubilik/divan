@@ -35,7 +35,7 @@ import { COLUMN_LABEL } from '../lib/overview';
 import { uptime } from '../lib/format';
 import { brief, details, human, live, liveHead, nowMark, sayTo } from '../lib/ticket';
 import { executorFace } from '../lib/sessions';
-import { RADIUS, STATE_MARK, T, stateColour } from '../lib/theme';
+import { RADIUS, STATE_MARK, STATE_TONE, T, stateColour } from '../lib/theme';
 import type { MergedCard, MergedProject } from '../lib/divan';
 import type { DivanCardFull } from '../lib/protocol';
 import type { Ticket as QueueTicket } from '../lib/ustabasi';
@@ -125,11 +125,18 @@ export function TicketPage({
         <Crumb label={project?.name ?? card.machine} onClick={onProject} />
         <span style={{ color: T.ink3 }}>/</span>
         <Crumb label={card.branch || 'engineering'} onClick={() => onBranch(card.branch)} />
-        <span style={{ color: T.ink3 }}>/</span>
-        <span style={{
-          ...mono, flex: 'none', fontSize: 12, fontWeight: 600, color: T.ink,
-          background: T.s2, padding: '3px 7px', borderRadius: 6, whiteSpace: 'nowrap',
-        }}>{card.ustabasi_id == null ? card.id.slice(0, 8) : `#${card.ustabasi_id}`}</span>
+        {/* The frame ends the crumb on the ticket's number. A card no ticket was
+            filed for has none, and the card's own id is a word nobody reads —
+            so the crumb ends on the face it is on. */}
+        {card.ustabasi_id != null && (
+          <>
+            <span style={{ color: T.ink3 }}>/</span>
+            <span style={{
+              ...mono, flex: 'none', fontSize: 12, fontWeight: 600, color: T.ink,
+              background: T.s2, padding: '3px 7px', borderRadius: 6, whiteSpace: 'nowrap',
+            }}>#{card.ustabasi_id}</span>
+          </>
+        )}
         <span style={{ ...mono, marginLeft: 'auto', fontSize: 12, color: T.ink3 }}>
           {card.machine}{card.stale ? ' · not answering' : ''}
         </span>
@@ -150,7 +157,7 @@ export function TicketPage({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Pill face="ink" label={column?.label ?? card.column} />
             {!!mark && <Tag mark={STATE_MARK[mark.state]} label={mark.label}
-              tone={mark.state === 'stuck' ? 'red' : mark.state === 'asking' ? 'amber' : 'run'} />}
+              tone={STATE_TONE[mark.state]} />}
             <span style={{ ...mono, fontSize: 12, color: T.ink3, whiteSpace: 'nowrap' }}>
               #{card.position + 1} in column
             </span>
