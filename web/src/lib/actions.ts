@@ -1,5 +1,5 @@
 import { hostKey, useFleet } from './fleet';
-import type { Chat, DivanCard, HostConfig, Provider } from './protocol';
+import type { Chat, DivanCard, DivanCardGet, HostConfig, Provider } from './protocol';
 
 function slot(key: string) {
   const s = useFleet.getState().hosts[key];
@@ -33,6 +33,22 @@ export const ticketNote = (key: string, id: number, text: string) =>
 export const moveCard = (key: string, cardId: string, column: string) =>
   call<{ card: DivanCard; error: string | null }>(key, 'divan.card.move',
     { card_id: cardId, column });
+
+/** One card with **both faces**, and the live half where a ticket was filed for
+ *  it. The board's cards carry the human face only — this is the one request
+ *  that has the brief as well, which is what keeps agent text off a card
+ *  everywhere else. */
+export const cardGet = (key: string, cardId: string) =>
+  call<DivanCardGet>(key, 'divan.card.get', { card_id: cardId });
+
+/** A card written down in one go: a title, the sentences under it, and the
+ *  column it lands in. Everything else is the daemon's default — `ice_box`,
+ *  `engineering`, this computer, the product's first repository — because a card
+ *  written mid-thought is a line and not a form. The executor and the brief are
+ *  filled in later or never. */
+export const createCard = (key: string, data: {
+  project_id: string; title: string; summary?: string; branch?: string; column?: string;
+}) => call<DivanCard>(key, 'divan.card.create', data);
 
 export const interrupt = (key: string, chatId: string) =>
   call(key, 'chat.interrupt', { chat_id: chatId });

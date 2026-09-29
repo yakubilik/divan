@@ -42,13 +42,16 @@
  *  against: no machine has answered yet, a machine answered and has since gone
  *  quiet, and a machine that cannot be reached at all.
  */
+import { useEffect, useState } from 'react';
 import { uptime } from '../lib/format';
 import {
-  COLUMN_LABEL, agentLine, agentRows, calm, calmWords, cardMarks, chip, clock, columnCounts,
+  agentLine, agentRows, calm, calmWords, cardMarks, chip, clock,
   count, counters, figure, freshness, latest, line, marks, staleWords, staleness, summaryOf,
 } from '../lib/overview';
 import { T } from '../lib/theme';
-import type { DivanView, MergedProject } from '../lib/divan';
+import { branchOf } from '../lib/project';
+import { idOf } from '../lib/sessions';
+import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
 import {
   Card, CommandBar, Counter, EmptyState, Monogram, Note, RosterRow, SectionHeader,
   StateMark, Tabs, Tag,
@@ -56,6 +59,9 @@ import {
 import { mono } from '../ui/kit';
 import { Sessions } from '../components/Sessions';
 import { Board } from './Board';
+import { Branch } from './Branch';
+import { Project } from './Project';
+import { Ticket } from './Ticket';
 
 /** The tabs over a product (Web12 W2, Web14 W6). The frame draws a third,
  *  `Chats 6`; the chat is a place of its own on this end and is reached from
@@ -80,13 +86,38 @@ export interface OverviewProps {
    *  Overview rather than on whichever tab the last one was left on. */
   tab?: ProjectTab;
   onTab?: (tab: ProjectTab) => void;
+  /** Which face of the product is open (Web14 W7), by kind, and which card
+   *  (Web14 W8), by `host:id`. Both are held above this screen beside the
+   *  product, for the same reason the tab is: they are places inside one
+   *  product, and choosing another product leaves them. */
+  branch?: string | null;
+  onBranch?: (kind: string | null) => void;
+  card?: string | null;
+  onCard?: (id: string | null) => void;
 }
 
-export function Overview({ view, project, onProject, onAsk, tab, onTab }: OverviewProps) {
+export function Overview({
+  view, project, onProject, onAsk, tab, onTab, branch, onBranch, card, onCard,
+}: OverviewProps) {
   const old = staleness(view);
   const agents = agentRows(view);
   const here: ProjectTab = tab ?? 'overview';
-  const board = !!project && here === 'board';
+  // The two pages inside a product that have a head of their own. A key that is
+  // no longer in the view — a card that has been finished, a machine that has
+  // been unpaired — leaves the product's own page rather than a blank one.
+  const open = project && card
+    ? view.cards.find((c) => idOf(c) === card) ?? null
+    : null;
+  const face = project && !open ? branchOf(project, branch ?? null) : null;
+  const deep = !!open || !!face;
+  const board = !!project && !deep && here === 'board';
+  const [drafting, setDrafting] = useState(false);
+  // A half-written card belongs to the board it was opened on: leaving the
+  // product, or the board for a card's own page, puts it down. A *tab* is put
+  // down where the tab is pressed rather than here — the word that opens a
+  // draft moves the tab itself, and an effect watching the tab would close the
+  // card in the same commit that opened it.
+  useEffect(() => { setDrafting(false); }, [project?.key, deep]);
   const aside = project
     ? (project.machines.join(' · ') || 'no machine')
     : old
@@ -102,6 +133,7 @@ export function Overview({ view, project, onProject, onAsk, tab, onTab }: Overvi
       // page that scrolls under a bar fixed over it.
       overflowY: board ? 'hidden' : 'auto',
     }}>
+      {!deep && (
       <SectionHeader
         kind="page"
         lead={project
@@ -117,18 +149,51 @@ export function Overview({ view, project, onProject, onAsk, tab, onTab }: Overvi
       >
         {!!project && (
           <Tabs tabs={PROJECT_TABS.map((t) => ({ ...t }))} value={here}
-            onChange={(key) => onTab?.(key as ProjectTab)} style={{ marginLeft: 14 }} />
+            onChange={(key) => { setDrafting(false); onTab?.(key as ProjectTab); }}
+            style={{ marginLeft: 14 }} />
+        )}
+        {/* Web14 W6 puts it at the far end of this line, and W9 is what it
+            opens: the card is written at the top of Ice Box, so the press lands
+            on the board with the draft open. */}
+        {!!project && (
+          <button type="button" style={NEW_TICKET}
+            onClick={() => { onTab?.('board'); setDrafting(true); }}>+ New ticket</button>
         )}
       </SectionHeader>
-      {!!old && (
+      )}
+      {/* The fleet's own sentence, over the page that is about the fleet. A
+          product's page says which of *its* machines has gone quiet, which is
+          the same fact said more precisely — twice would be the page arguing
+          with itself. */}
+      {!!old && !project && (
         <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>
           {staleWords(old, uptime)}
         </div>
       )}
       {!project && <Everything view={view} onProject={onProject} />}
-      {!!project && (board
-        ? <Board view={view} project={project} />
-        : <Product project={project} />)}
+      {!!project && !!open && (
+        <Ticket
+          card={open} project={project} index={view.projects.indexOf(project)} now={view.now}
+          onProject={() => { onCard?.(null); onBranch?.(null); }}
+          onBranch={(kind) => { onCard?.(null); onBranch?.(kind); }}
+        />
+      )}
+      {!!project && !open && !!face && (
+        <Branch
+          project={project} branch={face} index={view.projects.indexOf(project)} now={view.now}
+          onProject={() => onBranch?.(null)}
+          onCard={(c: MergedCard) => onCard?.(idOf(c))}
+        />
+      )}
+      {!!project && !deep && (board
+        ? (
+          <Board
+            view={view} project={project}
+            drafting={drafting} onDraft={setDrafting}
+            onCard={(t) => onCard?.(idOf(t.card))}
+          />
+        )
+        : <Project view={view} project={project} onBranch={(kind) => onBranch?.(kind)} />)}
       {/* The bar and the windows are over the page rather than in it: the page
           scrolls, and a question that scrolled away with it would be a
           notification again. */}
@@ -259,24 +324,13 @@ function ProjectCard({ project: p, index, now, onClick }: {
   );
 }
 
-/** The Overview tab of one product: what its board adds up to, and where it is
- *  checked out. Its name, what it is for, the machines it is on and the states
- *  it is in are the page head above this, which is the head Web12 W2 draws over
- *  both tabs — saying any of it twice on one screen would be the card and the
- *  head disagreeing the first time one of them changed. */
-function Product({ project }: { project: MergedProject }) {
-  const columns = columnCounts(project);
-  return (
-    <Card>
-      <SectionHeader title="Board" note={`${project.cards.length} open`} />
-      <div style={{ ...mono, fontSize: 12, lineHeight: 1.6, color: T.ink3 }}>
-        {COLUMN_LABEL.map((c) => `${c.label} ${columns[c.key]}`).join(' · ')}
-        <br />
-        {project.repos.length ? project.repos.join(' · ') : 'no repository attached'}
-      </div>
-    </Card>
-  );
-}
+/** The word at the far end of a product's head, which the frame sets as plain
+ *  type rather than as a button. */
+const NEW_TICKET: React.CSSProperties = {
+  marginLeft: 'auto', flex: 'none', background: 'transparent', border: 'none', padding: 0,
+  font: 'inherit', fontSize: 13, fontWeight: 500, color: T.ink, cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
 
 /** `? 1 asking · ■ 1 stuck · ● 2 running`, and nothing at all where none of the
  *  three is true — a calm product says so by being quiet. */

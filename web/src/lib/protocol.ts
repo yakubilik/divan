@@ -1,5 +1,7 @@
 // Mirrors docs/PROTOCOL.md
 
+import type { Ticket } from './ustabasi';
+
 export type Provider = 'claude' | 'codex';
 export type ChatStatus = 'idle' | 'running' | 'awaiting_approval';
 
@@ -368,6 +370,37 @@ export interface DivanCard {
   agent_status_at: number | null;
   agent_detail: string;
   created_at: number; updated_at: number; moved_at: number | null;
+}
+
+/** The other face of a card: what an agent is told, as long as it needs to be.
+ *  It travels only on `divan.card.get` — the board's card list carries the human
+ *  face and the marks, which is how the rule that agent text never lands on
+ *  `title` or `summary` is kept by the wire and not by a screen. */
+export interface DivanAgentFace {
+  goal: string;
+  done_criteria: string[];
+  verify_cmd: string;
+  constraints: string[];
+  paths: string[];
+  notes: string;
+}
+
+/** …and the card with both of them, which is the one answer that has both. */
+export interface DivanCardFull extends DivanCard {
+  agent?: DivanAgentFace;
+}
+
+/** `divan.card.get`: one card, the product it is on, and the live half. `ticket`
+ *  and `run` are null on a card no coding ticket was filed for. */
+export interface DivanCardGet {
+  card: DivanCardFull;
+  project: DivanProject | null;
+  /** That ticket as `ustabasi.list` reports one (`lib/ustabasi.ts`). */
+  ticket: Ticket | null;
+  /** A page of what the worker has printed. The wall is where a run is read —
+   *  this page draws the conversation and not the stream — so nothing here
+   *  unpacks it. */
+  run: unknown;
 }
 
 /** An agent at work right now, as a line on a dashboard. Only the running ones:

@@ -46,6 +46,13 @@ export function App() {
   // inside the page, so that choosing another product lands on its Overview:
   // "the board" is a thing about one product, not a mode the panel is in.
   const [tab, setTab] = useState<ProjectTab>('overview');
+  // Which face of that product is open, and which card. Beside the product for
+  // the same reason the tab is: both are places inside one product, and choosing
+  // another product leaves them. Not in the address — a branch and a card are
+  // reached by pressing something on the page above them, and the product is the
+  // scope worth sending to somebody.
+  const [branch, setBranch] = useState<string | null>(null);
+  const [card, setCard] = useState<string | null>(null);
   const [sel, setSel] = useState<Selection | null>(null);
   const [newChat, setNewChat] = useState<
     { cwd?: string; agent?: { agent: Agent; accountId: string | null } } | null>(null);
@@ -139,6 +146,8 @@ export function App() {
   const chooseProject = useCallback((key: string | null) => {
     setProject(key);
     setTab('overview');
+    setBranch(null);
+    setCard(null);
     if (typeof history !== 'undefined') {
       history.replaceState(null, '', location.pathname + searchWithProject(location.search, key));
     }
@@ -413,6 +422,8 @@ export function App() {
           <Overview
             view={divan} project={projectIn(divan, project)} onProject={chooseProject}
             tab={tab} onTab={setTab}
+            branch={branch} onBranch={setBranch}
+            card={card} onCard={setCard}
             // The bar across the bottom of every desktop frame. What it opens is
             // the palette — the panel's own ⌘K, which is the key the frame
             // writes on it — rather than a composer for a conversation that does

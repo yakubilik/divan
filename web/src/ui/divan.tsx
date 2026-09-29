@@ -1186,3 +1186,159 @@ export function RosterRow({ mark, tone = 'run', who, lead, text, first, onClick,
     </Tap>
   );
 }
+
+// ── 19 · the numbers under a name ───────────────────────────────────────────
+
+/** Two or three figures in three fixed slots: a branch card's own numbers
+ *  (Web14 W6) and the same block again across the top of that branch's page
+ *  (Web14 W7), where it sits against the title.
+ *
+ *  `grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px`, each figure a
+ *  `500 17px` mono number tightened by `-.01em` over a `400 10.5px` mono label
+ *  in `ink3`. The slots stay fixed at three: a branch with two numbers leaves
+ *  the third empty, which is the frames' own arrangement and the reason a card
+ *  with fewer figures still reads as complete rather than broken. A figure can
+ *  carry a state — Web14 W7's `212/214 tests` is red — and takes the ordinary
+ *  ink where it carries none. */
+export function Figures({ figures, slots = 3, style }: {
+  figures: { value: React.ReactNode; label: string; tone?: Tone }[];
+  slots?: number;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: `repeat(${slots}, minmax(0, 1fr))`, gap: 8, ...style,
+    }}>
+      {Array.from({ length: Math.max(slots, figures.length) }, (_, i) => figures[i]).map((f, i) => (
+        <div key={i} style={{ minWidth: 0 }}>
+          {!!f && (
+            <>
+              <div style={{
+                ...mono, fontSize: 17, fontWeight: 500, letterSpacing: '-.01em',
+                whiteSpace: 'nowrap', color: f.tone ? toneColours(f.tone).fg : T.ink,
+              }}>{f.value}</div>
+              <div style={{
+                ...mono, fontSize: 10.5, color: T.ink3, marginTop: 2, whiteSpace: 'nowrap',
+              }}>{f.label}</div>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── 20 · a line with a clock in front of it ─────────────────────────────────
+
+/** What happened, and when. Web14 W6 draws two lists of them down its right-hand
+ *  side — the conversations filed under a product, and what its agents did — as
+ *  `grid-template-columns:62px 1fr; gap:8px` with the moment in mono at
+ *  `400 11px/19px` in `ink3` and the line beside it at `400 13.5px/1.4` in
+ *  `ink2`. Web14 W8's live log is the same row one step tighter (`44px`, mono
+ *  throughout at `12px/1.6`), which is `code`.
+ *
+ *  A line can carry a state — that log's red timeout, the amber of a sentence a
+ *  person said — and takes the reading grey where it carries none. */
+export function StampRow({ at, text, tone, code, style }: {
+  at: React.ReactNode;
+  text: React.ReactNode;
+  tone?: Tone | null;
+  /** The tighter, all-mono row of a live log. */
+  code?: boolean;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: `${code ? 44 : 62}px minmax(0, 1fr)`, gap: 8,
+      ...style,
+    }}>
+      <span style={{
+        ...mono, fontSize: code ? 12 : 11, lineHeight: code ? 1.6 : '19px', color: T.ink3,
+        whiteSpace: 'nowrap',
+      }}>{at}</span>
+      <span style={{
+        ...(code ? mono : null), fontSize: code ? 12 : 13.5, lineHeight: code ? 1.6 : 1.4,
+        color: tone ? toneColours(tone).fg : T.ink2, minWidth: 0, overflowWrap: 'anywhere',
+      }}>{text}</span>
+    </div>
+  );
+}
+
+// ── 21 · a field of a details panel ────────────────────────────────────────
+
+/** One row of the panel down the right of Web14 W8: what it is at `400 12.5px`
+ *  in `ink3` against what it says at `500 13.5px`, on
+ *  `grid-template-columns:110px minmax(0,1fr); gap:10px; padding:10px 0` over a
+ *  hairline. `lead` is what the frame puts in front of a value that has a face —
+ *  the executor's square, the creator's circle — and `note` the quieter half of
+ *  a value: `Divan` *from your chat*, `4 min ago` *by Coder*. */
+export function FieldRow({ label, value, lead, note, first, style }: {
+  label: React.ReactNode;
+  value: React.ReactNode;
+  lead?: React.ReactNode;
+  note?: React.ReactNode;
+  /** The first row of the panel has no line above it. */
+  first?: boolean;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '110px minmax(0, 1fr)', gap: 10, alignItems: 'center',
+      padding: '10px 0', borderTop: first ? undefined : `1px solid ${T.line}`, minWidth: 0, ...style,
+    }}>
+      <span style={{ fontSize: 12.5, color: T.ink3 }}>{label}</span>
+      <span style={{
+        display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
+        fontSize: 13.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden',
+      }}>
+        {lead}
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
+        {!!note && <span style={{ fontSize: 12, fontWeight: 400, color: T.ink3 }}>{note}</span>}
+      </span>
+    </div>
+  );
+}
+
+// ── 22 · a card being written into ─────────────────────────────────────────
+
+/** The field of a card that is being typed rather than read: Web14 W9's new
+ *  ticket, written in place at the top of Ice Box.
+ *
+ *  It has no box of its own — the card around it is the box — so this is a field
+ *  with no chrome at all: the page's own surface behind it, the type the card
+ *  would have set that line in, and the caret in the amber the frame draws it in.
+ *  A composer inside a panel is a different thing and is `Composer`; this one is
+ *  a line of a card.
+ *
+ *  `lines` makes it the block of sentences under the title, at the fixed height
+ *  the frame gives that block (`height:60px`) so the card does not grow under the
+ *  cursor. */
+export function Write({
+  value, onChange, onKeyDown, placeholder, lines = 1, autoFocus, label, style,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+  placeholder?: string;
+  lines?: number;
+  autoFocus?: boolean;
+  /** What it is, for a reader who cannot see the card it is in. */
+  label?: string;
+  style?: React.CSSProperties;
+}) {
+  const common = {
+    value,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value),
+    onKeyDown,
+    placeholder,
+    autoFocus,
+    'aria-label': label,
+    style: {
+      width: '100%', boxSizing: 'border-box' as const, background: 'transparent',
+      border: 'none', outline: 'none', padding: 0, margin: 0,
+      color: T.ink, caretColor: T.amber, font: 'inherit', resize: 'none' as const,
+      ...style,
+    },
+  };
+  return lines > 1 ? <textarea {...common} rows={lines} /> : <input {...common} type="text" />;
+}
