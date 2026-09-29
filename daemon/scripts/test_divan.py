@@ -952,6 +952,15 @@ async def wire() -> None:
     check("the map is keyed by path, so two machines cannot count one checkout twice",
           sorted(divan.activity_of([str(ROOT / "babysee"), str(ROOT / "babysee")])),
           [str(ROOT / "babysee")])
+    # The phone gives a machine eight seconds for the whole answer. Twenty cold
+    # repositories must not be able to spend it, so new readings run against a
+    # budget: what is already known still travels, and a path nobody has had
+    # time to read is absent until the next poll.
+    divan._activity_cache.pop(str(tmp / "unread"), None)
+    check("a repository there was no time to read is absent rather than holding up the answer",
+          divan.activity_of([str(tmp / "unread")], budget_s=-1), {})
+    holds("…while one that was read before still travels, budget or no budget",
+          str(ROOT / "babysee") in divan.activity_of([str(ROOT / "babysee")], budget_s=-1))
 
     q = snapshot["quota"]
     check("the quota is this machine's, read off the pool", q["accounts"], len(ACCOUNTS))

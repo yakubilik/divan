@@ -916,7 +916,18 @@ def repo_activity(path: str, now: float | None = None) -> dict | None:
     return info
 
 
-def activity_of(paths: list[str], now: float | None = None) -> dict[str, dict]:
+#: How long the whole set of repositories may take on one snapshot. The phone
+#: gives a machine eight seconds for *everything* and a computer here has twenty
+#: products on it; twenty cold `git log` pairs on a spinning network volume is
+#: how this request would come to be the one that times out. So it is a budget:
+#: whatever is already known travels for free, new readings stop when the time is
+#: up, and the rest arrive on the next poll — a card without a figure for a
+#: minute, rather than a dashboard with nothing on it at all.
+_BUDGET_S = 2.5
+
+
+def activity_of(paths: list[str], now: float | None = None,
+                budget_s: float = _BUDGET_S) -> dict[str, dict]:
     """The same, for every repository a machine's products own, keyed by path.
 
     Keyed by path rather than by project because the phone merges several
@@ -925,9 +936,19 @@ def activity_of(paths: list[str], now: float | None = None) -> dict[str, dict]:
     machines that hold the *same* checkout would otherwise have their commits
     counted twice, and a path is the only thing the two answers agree on.
     """
+    now = now or time.time()
     out: dict[str, dict] = {}
+    deadline = time.monotonic() + budget_s
     for path in dict.fromkeys(paths):
-        info = repo_activity(path, now)
+        hit = _activity_cache.get(path)
+        cold = hit is None or now - hit[0] >= _ACTIVITY_TTL
+        if cold and time.monotonic() >= deadline:
+            # Out of time for a new reading. A reading from six minutes ago is
+            # still worth sending — a week's commit count does not move in
+            # minutes — and a path never read is absent until the next poll.
+            info = hit[1] if hit else None
+        else:
+            info = repo_activity(path, now)
         if info is not None:
             out[path] = info
     return out

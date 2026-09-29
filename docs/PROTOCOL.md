@@ -215,6 +215,12 @@ beside the board — one entry per repository path any product on that machine
 owns, each with `at` (the last commit's own time), `week` (commits in the last
 seven days) and `today` (commits since midnight there).
 
+The reading is cached for five minutes and the whole set runs against a time
+budget: the phone allows a machine eight seconds for the entire answer, and a
+computer with twenty products on it must not spend that on `git log`. A
+repository there was no time to read is absent from the map and arrives on the
+next poll — a card without a figure for a minute beats a request that times out.
+
 Keyed by path, not by project, for the same reason the merge exists: isghocam's
 site may be checked out on the studio and its API on the mini, and one product's
 figure is the union of its repositories — while two machines holding the *same*
