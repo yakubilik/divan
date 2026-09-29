@@ -1314,8 +1314,10 @@ group('nothing on a screen is standing in for something');
    *  at the end of a panel's head. Anything else a button holds is words on a
    *  screen — most rows on these pages are buttons, because most rows go
    *  somewhere — so only this shape is dropped, and the inner match cannot
-   *  cross another `<button`. */
-  const GLYPH = /^(?:[–—×✓✕]|&times;|&#\d+;)$/;
+   *  cross another `<button`. The em dash is deliberately not in the set: no
+   *  control on these screens is labelled with one, so exempting it would only
+   *  ever hide a missing value. */
+  const GLYPH = /^(?:[–×✓✕]|&times;|&#\d+;)$/;
   const BUTTON = /<button\b[^>]*>((?:(?!<\/?button)[\s\S])*)<\/button>/g;
 
   /** The words, with the tags out of the way. An opening tag becomes `<>`, not

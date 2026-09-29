@@ -77,8 +77,9 @@ export interface MachineLine {
   contact: string;
   /** `3 tasks`, `1 · unknown`, `idle`. */
   running: string;
-  /** How much of its plan today is gone — the frame's `quota use today`. `—`
-   *  on a machine that measures none. */
+  /** How much of its plan today is gone — the frame's `quota use today`.
+   *  `not measured` on a machine that measures none: a table with nothing to
+   *  put in a cell says so in words, it does not draw a dash. */
   quota: string;
   quotaTone: Tone;
   actions: MachineAction[];
