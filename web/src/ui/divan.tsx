@@ -1061,7 +1061,13 @@ export function DockMore({ n, onClick, title }: { n: number; onClick?: () => voi
  *  opens it in mono at the far end, and a 36 pt round button after that.
  *
  *  It is a button and not a field: what it opens is the panel's own command
- *  palette, which is the thing ⌘K has always opened here. */
+ *  palette, which is the thing ⌘K has always opened here.
+ *
+ *  One deviation from the frame, and it is the palette's own rule: the artboard
+ *  draws the glyph in the *page* colour on that hairline fill — an empty
+ *  composer whose send is not available yet — which composites to 2.2:1 in the
+ *  dark and 1.6:1 in the light. Nothing in this panel is drawn at a weight that
+ *  cannot be read, so the arrow takes the primary ink on the same fill. */
 export function CommandBar({ placeholder, shortcut = '⌘K', onClick, style }: {
   placeholder: string;
   shortcut?: string;
@@ -1082,7 +1088,7 @@ export function CommandBar({ placeholder, shortcut = '⌘K', onClick, style }: {
       <span style={{ ...mono, fontSize: 11, color: T.ink3, flex: 'none' }}>{shortcut}</span>
       <span style={{
         flex: 'none', width: SIZE.send, height: SIZE.send, borderRadius: SIZE.send / 2,
-        background: T.line2, color: T.bg,
+        background: T.line2, color: T.ink,
         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600,
       }}>↑</span>
     </Tap>

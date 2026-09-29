@@ -16,8 +16,9 @@ import React from 'react';
 import { T, themeCss, type Scheme } from '../src/lib/theme';
 import { P, mono } from '../src/ui/kit';
 import {
-  BarChip, BarDivider, BarStamp, Button, Card, ColumnTab, Counter, EmptyState, ExecutorBadge,
-  Monogram, NavItem, Pill, Row, SectionHeader, SidePanel, StateMark, StatusDot, Tabs, TopBar,
+  BarChip, BarDivider, BarStamp, Button, Card, ColumnTab, CommandBar, Composer, Counter,
+  DockMore, DockTab, EmptyState, ExecutorBadge, Monogram, NavItem, Note, Panel, PanelHead,
+  Pill, Quoted, Row, RosterRow, SectionHeader, SidePanel, StateMark, StatusDot, Tabs, Tag, TopBar,
 } from '../src/ui/divan';
 
 export interface Specimen {
@@ -282,6 +283,74 @@ export const SPECIMENS: Specimen[] = [
         <BarChip label="3 machines" />
       </div>
     ),
+  },
+  {
+    name: 'Note', frame: 'Mobile1 V3 · the desktop frames draw none', width: 380,
+    node: (
+      <Note tone="run" dot title="All clear. Nothing needs you." foot={['9 finished today']} />
+    ),
+  },
+  {
+    name: 'Tag', frame: 'Web12 W1 · a project card’s corner', width: 380,
+    node: (
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <Tag mark="■" label="1 stuck" tone="red" />
+        <Tag mark="?" label="2 asks" tone="amber" />
+        <Tag mark="●" label="2 running" tone="run" />
+        <Tag label="quiet" />
+      </div>
+    ),
+  },
+  {
+    name: 'RosterRow', frame: 'Web12 W1 · the agent roster', width: 380,
+    node: (
+      <Card inset={false} style={{ padding: '2px 12px' }}>
+        <RosterRow first mark="●" tone="run" who="Coder" text="Webhook retry policy · 5m"
+          lead={<Monogram name="Quire" index={0} size={18} />} />
+        <RosterRow mark="◌" tone="amber" who="Branch" text="Ranking report · last seen 21:02"
+          lead={<Monogram name="Kanji Daily" index={1} size={18} />} />
+        <RosterRow mark="⏸" tone="red" who="Research" text="Reading App Review’s reply"
+          lead={<Monogram name="Hush" index={2} size={18} />} />
+      </Card>
+    ),
+  },
+  {
+    name: 'Panel', frame: 'Web12 W1 · the asking agent’s window', width: 350,
+    node: (
+      <Panel
+        head={(
+          <PanelHead
+            lead={<ExecutorBadge executor="coder" />}
+            title="Coder" badge="asks you" note="Quire · Webhook retry policy · 23:02"
+            onMinimise={() => {}} onClose={() => {}}
+          />
+        )}
+        foot={<Composer placeholder="Reply to Coder…" value="" onChange={() => {}} />}
+      >
+        <div style={{ fontSize: 13.5, lineHeight: 1.45, maxWidth: '94%' }}>
+          Picking up the webhook retry ticket. One thing I can’t decide on my own:
+        </div>
+        <Quoted>{'today  3 attempts · 1, 5, 30 min → drop\nstripe up to 3 days · exponential'}</Quoted>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <Pill label="Follow Stripe" face="amber" />
+          <Pill label="Keep 3" face="outline" />
+        </div>
+      </Panel>
+    ),
+  },
+  {
+    name: 'DockTab', frame: 'Web12 W1 · the corner', width: 380,
+    node: (
+      <div style={{ display: 'flex', gap: 8 }}>
+        <DockTab open label="Webhook retries" lead={<ExecutorBadge executor="coder" size={20} />} />
+        <DockTab label="Gradle 8.7 build" lead={<ExecutorBadge executor="seo" size={20} />} />
+        <DockMore n={1} />
+      </div>
+    ),
+  },
+  {
+    name: 'CommandBar', frame: 'Web12 W1 · every desktop frame', width: 420,
+    node: <CommandBar placeholder="Tell Divan anything…" />,
   },
 ];
 
