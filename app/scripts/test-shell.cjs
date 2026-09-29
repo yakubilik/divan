@@ -45,6 +45,8 @@ const SCREEN = {
   '/machine': 'app/machine.tsx',
 };
 
+const PLACES_SRC = Object.values(SCREEN);
+
 const layout = src('app/_layout.tsx');
 const dash = src('app/dashboard.tsx');
 const chatPlace = src('app/chat/index.tsx');
@@ -118,9 +120,11 @@ checks.push(
     /<Redirect href=\{host \? HOME : '\/welcome'\} \/>/.test(src('app/index.tsx'))],
   ['a notification pops the stack back to that same place',
     new RegExp(`follow\\(tap: Tap, nav: Nav, home = '${S.HOME}'\\)`).test(tap)],
-  ['nothing anywhere still leads to the chat list, because there is not one',
-    !has('app/chats.tsx') && !has('src/components/home.tsx')
-    && !files().some((f) => /['"`]\/chats['"`]|router\.replace\('\/chats/.test(src(f)))],
+  ['the computer picker the old top level was built around is gone',
+    !has('src/components/home.tsx') && !files().some((f) => /HomeTop/.test(src(f)))],
+  ['\u2026and nothing enters the app on a list of chats any more',
+    !/['"`]\/chats['"`]/.test(src('app/index.tsx'))
+    && !PLACES_SRC.some((f) => /replace\(['"`]\/chats['"`]\)/.test(src(f)))],
 );
 
 /** Every source file of the app, so that "nowhere else" can be asked of all of
@@ -239,10 +243,62 @@ checks.push(
 checks.push(
   ['the bar belongs to the shell rather than to the Dashboard alone',
     /export function ProjectBar/.test(src('src/components/shell.tsx')) && /<ProjectBar/.test(dash)],
-  ['selecting a project enters it: the Dashboard is then that project',
-    /onSelect=\{setSelected\}/.test(dash) && /projectIn\(view, selected\)/.test(dash)
-    && /picked \? picked\.name/.test(dash)],
 );
+
+// Selecting a project enters it — pressed rather than read off the source.
+// The chip's own handler is called, which is a `router.setParams`, which is
+// what puts the project in the address; the screen is then drawn again and
+// asked what it is showing.
+{
+  const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+  /** The words of every `Text` that came out, with the style it came out in. */
+  const texts = (markup) => [...markup.matchAll(/<span data-rn="Text"([^>]*)>([^<]*)<\/span>/g)].map((m) => ({
+    style: JSON.parse((m[1].match(/data-style="([^"]*)"/) ?? [, '{}'])[1]
+      .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")),
+    text: m[2],
+  }));
+  /** The 15 pt semibold at the top of the page (Mobile1 V1's section title). */
+  const title = (markup) => (texts(markup).find((t) => t.style.fontSize === 15
+    && t.style.fontFamily === 'Inter-SemiBold') ?? {}).text;
+
+  const machines = () => {
+    R.store.reset();
+    R.params.reset();
+    R.store.set({ hosts: [{ id: 'h1', name: 'studio' }, { id: 'h2', name: 'mini' }],
+                  divan: { h1: STUDIO.state, h2: MINI.state }, loadDivan() {},
+                  conn: 'online', ustabasi: null, ustabasiOld: false, loadUstabasi() {} });
+    return R.render('dark', h(Dashboard));
+  };
+
+  const all = machines();
+  R.pressOn('Quire');                                   // the chip
+  const scoped = R.render('dark', h(Dashboard));
+  const chips = R.styles(scoped).filter((st) => st.height === 34);
+  const t = R.theme.tokensFor('dark');
+  R.pressOn('allProjects');                             // …and back out of it
+  const back = R.render('dark', h(Dashboard));
+
+  checks.push(
+    ['nothing selected, the Dashboard is every project', title(all) === 'overview'
+      && all.includes('dashSorted') && ['Quire', 'Hush', 'Kanji Daily'].every((n) => all.includes(n))],
+    ['pressing a chip enters that project: the title is its name',
+      title(scoped) === 'Quire'],
+    ['…the body is that project and not the list of them',
+      scoped.includes('branches') && scoped.includes('engineering') && !scoped.includes('dashSorted')],
+    ['…and the bar says which one you are in',
+      chips.filter((st) => st.backgroundColor === t.ink).length === 1],
+    ['pressing All comes back out to every project',
+      title(back) === 'overview' && back.includes('dashSorted')],
+  );
+
+  // A row in the body enters the same project the chip does.
+  const row = R.presses().find((press) => press.text.startsWith('Kanji Daily'));
+  row.press();
+  checks.push(['a project in the body enters it too',
+    title(R.render('dark', h(Dashboard))) === 'Kanji Daily']);
+  R.store.reset();
+  R.params.reset();
+}
 
 // ── 4 · everything about a computer is under Machine ────────────────────────
 
@@ -378,6 +434,81 @@ checks.push(
     S.placeOf('/machine/') === 'machine' && S.placeOf('/dashboard?project=quire') === 'dashboard'],
   ['a screen pushed over a place is not one', S.placeOf('/settings') === null && S.placeOf('/ustabasi') === null],
   ['…nor is nothing at all', S.placeOf(null) === null && S.placeOf('') === null],
+);
+
+// ── 7 · what can be reached from a place, and what cannot ──────────────────
+//
+// "Reachable inside Machine and nowhere else in the top level" is a question
+// about walking, not about one file, and so is "there is still a way to start a
+// second conversation". So the screens' own pushes are read into a graph and
+// walked from each of the three places.
+
+/** The routes one screen leads to. Read off what it pushes: a literal, a
+ *  `pathname:` in an object, or a template with an id in it. */
+function leadsTo(file) {
+  const code = src(file);
+  const out = new Set();
+  for (const m of code.matchAll(/router\.(?:push|replace)\(\s*['"`](\/[\w\-/[\]]+)['"`]/g)) out.add(m[1]);
+  for (const m of code.matchAll(/pathname:\s*['"`](\/[\w\-/[\]]+)['"`]/g)) out.add(m[1]);
+  for (const m of code.matchAll(/router\.(?:push|replace)\(\s*`(\/[\w-]+)\/\$\{/g)) out.add(`${m[1]}/[id]`);
+  // The Machine list pushes `row.route`, which is the list itself; that it
+  // does is checked above, and this is what the rows are.
+  if (file === 'app/machine.tsx') for (const route of routes) out.add(route);
+  return [...out];
+}
+
+const ROUTE_OF = (f) => '/' + f.replace(/^app\//, '').replace(/\/index\.tsx$/, '').replace(/\.tsx?$/, '');
+const GRAPH = new Map(files('app')
+  .filter((f) => !/_layout\.tsx$|^app\/index\.tsx$/.test(f))
+  .map((f) => [ROUTE_OF(f), leadsTo(f)]));
+
+/** Everything you can get to from a place, however many presses it takes. */
+function reachable(from) {
+  const seen = new Set([from]);
+  const queue = [from];
+  while (queue.length) {
+    for (const next of GRAPH.get(queue.shift()) ?? []) {
+      if (!seen.has(next)) { seen.add(next); queue.push(next); }
+    }
+  }
+  return seen;
+}
+
+const fromDashboard = reachable(S.PLACE_ROUTE.dashboard);
+const fromChat = reachable(S.PLACE_ROUTE.chat);
+const fromMachine = reachable(S.PLACE_ROUTE.machine);
+const chatsList = src('app/chats.tsx');
+
+checks.push(
+  ['every screen about a computer is reachable from Machine',
+    routes.every((route) => fromMachine.has(route))],
+  ['…and pairing with it, one level further in',
+    fromMachine.has('/pair')],
+  ['…and from neither of the other two places',
+    routes.every((route) => !fromDashboard.has(route) && !fromChat.has(route))],
+
+  // The two the verifier caught: with the chat list gone from the top level,
+  // a second conversation could only be started by deleting the one you were
+  // in, and a conversation you put away could never be found again.
+  ['a second conversation can be started without deleting the one you are in',
+    files().some((f) => f !== 'app/chat/index.tsx' && /router\.push\('\/new-chat'\)/.test(src(f)))
+    && fromDashboard.has('/new-chat')],
+  ['…and the pen on that screen makes one outright, so it is not only a form',
+    /quickNew/.test(chatsList) && /createChat\(/.test(chatsList)],
+  ['a conversation that was put away can be found again',
+    fromDashboard.has('/chats') && /setShowArchived\(/.test(chatsList)
+    && /unarchive/.test(chatsList) && fromDashboard.has('/chat/[id]')],
+  ['…which is what makes the Chat place skipping an archived one safe',
+    S.theChat({ a: { id: 'a', updated_at: 5, archived: 1 } }) === null
+    && /router\.push\(`\/chat\/\$\{chat\.id\}`\)/.test(chatsList)],
+  ['…and unarchiving is offered where the archived ones are, not only inside one',
+    /showArchived/.test(chatsList) && /T\('unarchive'\)/.test(chatsList)],
+
+  // …without the list becoming a fourth place, or standing in front of the chat.
+  ['the list of conversations is not a place', S.placeOf('/chats') === null],
+  ['…and nothing lands on it: the Chat tab enters the conversation itself',
+    !fromChat.has('/chats') && !PLACES_SRC.some((f) => /replace\(['"`]\/chats['"`]\)/.test(src(f)))],
+  ['the ticket queue is reachable from the Dashboard', fromDashboard.has('/ustabasi')],
 );
 
 module.exports = { checks };

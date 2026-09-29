@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { LOCALE } from '../src/i18n';
@@ -23,21 +23,29 @@ import { ProjectBar, Shell } from '../src/components/shell';
  *
  *  Selecting a project in the bar enters it. Until the project page exists the
  *  Dashboard *is* the project page — same place, scoped — which is also how the
- *  frames read it: Mobile2 V4 is this screen with a chip lit. */
+ *  frames read it: Mobile2 V4 is this screen with a chip lit. Which project is
+ *  in the address (`/dashboard?project=quire`) rather than in a `useState`, so
+ *  that it survives the screen being redrawn, can be linked to, and is the same
+ *  shape the project page will want when it arrives. */
 export default function Dashboard() {
   const router = useRouter();
   const go = useNavGuard();
   const T = useT();
   const view = useDivanView();
   const queue = useQueueBadge();
-  const [selected, setSelected] = useState<string | null>(null);
+  // A parameter can arrive twice; one project is being read either way.
+  const param = useLocalSearchParams<{ project?: string }>().project;
+  const selected = (Array.isArray(param) ? param[0] : param) || null;
   const picked = selected ? projectIn(view, selected) : null;
+  // An empty string rather than nothing: `setParams` writes what it is given,
+  // and "no project" has to be sayable.
+  const enter = (key: string | null) => router.setParams({ project: key ?? '' });
   const bar = chips(view, picked ? picked.key : null, T('allProjects'));
   const today = new Date().toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
 
   return (
     <Shell place="dashboard" badge={view.totals.needsYou}>
-      <ProjectBar chips={bar} onSelect={setSelected} />
+      <ProjectBar chips={bar} onSelect={enter} />
       {/* `flexGrow` so that the empty state, which centres itself in what it
           is given, has the page to centre itself in. */}
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
@@ -45,13 +53,21 @@ export default function Dashboard() {
           right={picked ? picked.machines.join(' · ') : `${T('dashProjects', { n: view.projects.length })} · ${today}`} />
         {picked ? <Project project={picked} /> : (
           <>
-            {queue.available && (
-              <View>
+            {/* The two things on this screen that are not a project. Both are
+                work rather than infrastructure, which is why neither is in the
+                Machine list: the queue this computer is working through, and
+                every conversation it has — the Chat place is one conversation
+                and has no list in front of it, so this is where a second one
+                is started and where one that was put away is found again. */}
+            <View>
+              {queue.available && (
                 <ListRow first icon="terminal" title={T('ustabasi')} note={T('dashQueueNote')}
                   meta={queue.red ? T('queueRed', { n: queue.red }) : undefined} tone={queue.red ? 'red' : undefined}
                   onPress={() => go(() => router.push('/ustabasi'))} />
-              </View>
-            )}
+              )}
+              <ListRow first={!queue.available} icon="chat_bubble" title={T('conversations')}
+                note={T('dashChatsNote')} onPress={() => go(() => router.push('/chats'))} />
+            </View>
             {view.projects.length === 0
               ? <Nothing />
               : (
@@ -61,7 +77,7 @@ export default function Dashboard() {
                     {view.projects.map((p, i) => (
                       <ListRow key={p.key} first={i === 0} title={p.name}
                         note={p.machines.join(' · ')} {...state(p, T)}
-                        onPress={() => setSelected(p.key)} />
+                        onPress={() => enter(p.key)} />
                     ))}
                   </View>
                 </View>

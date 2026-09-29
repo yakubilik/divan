@@ -49,6 +49,22 @@ function flatten(style) {
   return style;
 }
 
+/** Everything that was pressable in the last render, with the words on it.
+ *  Markup cannot carry a function, and a gesture is the only way to ask a
+ *  screen a question it answers by changing — "selecting a project enters it"
+ *  is a claim about a tap, not about a source line. */
+const PRESSES = [];
+
+/** The words inside an element, however deep. A chip is a dot and a label; the
+ *  label is what a check is looking for. */
+function textOf(node) {
+  if (node == null || node === false || node === true) return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (node.props) return textOf(node.props.children);
+  return '';
+}
+
 /** Every React Native element becomes a `div` (or a `span`, for text) carrying
  *  its flattened style, so that react-dom can render it and a check can read
  *  it back out of the markup. */
@@ -58,6 +74,7 @@ function host(tag, kind) {
     const attrs = { 'data-rn': kind, 'data-style': JSON.stringify(flatten(style)) };
     if (rest.accessibilityLabel) attrs['data-label'] = rest.accessibilityLabel;
     if (rest.numberOfLines) attrs['data-lines'] = String(rest.numberOfLines);
+    if (typeof rest.onPress === 'function') PRESSES.push({ text: textOf(children), press: rest.onPress });
     return React.createElement(tag, attrs, children);
   });
   H.displayName = kind;
@@ -108,11 +125,15 @@ const STUBS = {
     SafeAreaProvider: host('div', 'SafeAreaProvider'),
   },
   'expo-router': {
-    useRouter: () => ({ back() {}, push() {}, replace() {}, canGoBack: () => false }),
+    useRouter: () => ({ back() {}, push() {}, replace() {}, canGoBack: () => false,
+                        setParams: (patch) => Object.assign(PARAMS, patch) }),
     // The shell lights the tab the route is in, so a render has to be able to
     // say where it is. Every place is rendered by name in test-shell.cjs, so
     // the one this answers with is deliberately not one of them.
     usePathname: () => '/',
+    // What is in the address. The Dashboard keeps the project being read
+    // there, so a check can render it scoped by putting one in first.
+    useLocalSearchParams: () => PARAMS,
     Redirect: () => null,
     useFocusEffect: () => {},
     Stack: Object.assign(host('div', 'Stack'), { Screen: () => null }),
@@ -126,16 +147,21 @@ const STUBS = {
  *  of a plain object a check can fill in first (`store.set`). Left empty, every
  *  selector answers `undefined`, which is what it did before there was one. */
 const STATE = {};
+const PARAMS = {};
 const STORE = {
   useT: () => (key) => key,
   useStore: Object.assign((selector) => (typeof selector === 'function' ? selector(STATE) : undefined),
     { getState: () => STATE, setState: (patch) => Object.assign(STATE, patch) }),
 };
 
-/** What a screen being rendered will find in the store. */
+/** What a screen being rendered will find in the store, and in the address. */
 const store = {
   set(patch) { Object.assign(STATE, patch); },
   reset() { for (const k of Object.keys(STATE)) delete STATE[k]; },
+};
+const params = {
+  set(patch) { Object.assign(PARAMS, patch); },
+  reset() { for (const k of Object.keys(PARAMS)) delete PARAMS[k]; },
 };
 
 const realLoad = Module._load;
@@ -157,9 +183,22 @@ const ui = require(path.join(root, 'src/components/ui.tsx'));
 const agentcard = require(path.join(root, 'src/components/agentcard.tsx'));
 const gallery = require(path.join(root, 'app/divan-gallery.tsx'));
 
-/** Render a tree in one of the two themes and hand back its markup. */
+/** Render a tree in one of the two themes and hand back its markup. Whatever
+ *  was pressable in it is left in `presses()` for a check that wants to press
+ *  one of them. */
 function render(scheme, element) {
+  PRESSES.length = 0;
   return renderToStaticMarkup(React.createElement(theme.ForceScheme, { scheme }, element));
+}
+
+/** What the last render left pressable. */
+function presses() { return PRESSES.slice(); }
+
+/** …and the one whose words are exactly this. */
+function pressOn(text) {
+  const found = PRESSES.filter((p) => p.text === text);
+  if (found.length !== 1) throw new Error(`pressOn(${JSON.stringify(text)}): ${found.length} of them`);
+  found[0].press();
 }
 
 /** Every `data-style` in a piece of markup, as objects. */
@@ -179,4 +218,4 @@ function paint(markup) {
   return out;
 }
 
-module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten, store };
+module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten, store, params, presses, pressOn };

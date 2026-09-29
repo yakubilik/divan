@@ -300,6 +300,8 @@ const en = {
   allProjects: 'All', overview: 'Overview', projects: 'Projects', branches: 'Branches',
   dashProjects: '{n} projects', dashSorted: 'sorted by urgency',
   dashQueueNote: 'what this computer is working through',
+  conversations: 'Conversations',
+  dashChatsNote: 'every chat on this computer, including the ones put away',
   dashQuiet: 'quiet {d}',
   dashEmpty: 'No projects yet',
   dashEmptyBody: 'Nothing has answered with a board. A computer shows its projects here once its daemon is new enough and it is reachable.',

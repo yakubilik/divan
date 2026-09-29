@@ -323,8 +323,8 @@ checks.push(['…and nothing links to it outside one',
   /\{__DEV__ && \(/.test(src('app/settings.tsx')) && /\/divan-gallery/.test(src('app/settings.tsx'))]);
 checks.push(['the only screen that may ask for a theme is the gallery',
   /ForceScheme/.test(gallery)
-  && !['app/dashboard.tsx', 'app/machine.tsx', 'app/chat/index.tsx', 'app/index.tsx',
-       'app/settings.tsx', 'app/ustabasi.tsx', 'src/components/chat.tsx']
+  && !['app/dashboard.tsx', 'app/machine.tsx', 'app/chat/index.tsx', 'app/chats.tsx',
+       'app/index.tsx', 'app/settings.tsx', 'app/ustabasi.tsx', 'src/components/chat.tsx']
        .some((f) => /ForceScheme/.test(src(f)))]);
 
 // 7 · the chat screens are left alone ───────────────────────────────────────
