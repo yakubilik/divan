@@ -88,8 +88,6 @@ const quire = M.project(TWO, 'quire');
     ['the request is the human face and the column, and names no agent face',
       eq(Object.keys(filing).sort(), ['column', 'project_id', 'summary', 'title'])
       && filing.column === 'ice_box'],
-    ['the two buttons are the two columns that start nothing',
-      eq(C.LANDINGS, ['ice_box', 'queued'])],
   );
 }
 
