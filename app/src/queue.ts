@@ -153,6 +153,10 @@ export function useRun(ticketId: number): {
 /** The Divan view of every paired computer, kept fresh while a screen is looking
  *  at it.
  *
+ *  `useDivanView`, not `useDivan`: the design system already has one of those
+ *  (`components/divan.tsx`) and it hands out tokens. A screen that reached for
+ *  the wrong one would be asking for a palette and getting a fleet.
+ *
  *  Same shape as `useQueue` above and for the same reason — nothing on the other
  *  end pushes, so the only way to know is to ask — with two differences that
  *  come out of there being several computers rather than one.
@@ -170,7 +174,7 @@ export function useRun(ticketId: number): {
  *  `now` comes from the same slow clock the ticket screens age their lines with,
  *  which is what makes "unreachable · 2h 14m" go on being true while nobody
  *  asks anything. */
-export function useDivan(): DivanView & { reload: () => void } {
+export function useDivanView(): DivanView & { reload: () => void } {
   const hosts = useStore((s) => s.hosts);
   const divan = useStore((s) => s.divan);
   const loadDivan = useStore((s) => s.loadDivan);

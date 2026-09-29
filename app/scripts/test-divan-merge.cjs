@@ -123,7 +123,7 @@ const STUDIO = paired('h-studio', 'studio', {
     cards: [
       card('c-site', { title: 'the header collapses on iPad', status: 'running', ticket: 41 }),
       card('c-ask', { title: 'which account should the beta use?', status: 'asking',
-                      detail: 'Which account should the beta use?' }),
+                      position: 1, detail: 'Which account should the beta use?' }),
       card('c-idea', { project: 'babysee-id', column: 'ice_box', executor: null }),
     ],
     agents: [agent('c-site', { title: 'the header collapses on iPad', ticket: 41 })],
@@ -137,18 +137,27 @@ const MINI = paired('h-mini', 'mini', {
     quota: quota({ left: 0.0, spent: true, blocked: 2, resets_at: NOW + 4 * 3600 }),
     projects: [
       project('isghocam', { id: 'isghocam-mini', repos: ['/w/isghocam-api'], updated_at: NOW - QUIET,
-                            running: 1, counts: { in_progress: 1, queued: 1 },
-                            branches: [branch('engineering', { on: 'mini', open: 2, cards: { in_progress: 1, queued: 1 } }),
+                            running: 1, waiting: 1, counts: { in_progress: 2, queued: 1 },
+                            branches: [branch('engineering', { on: 'mini', open: 3, cards: { in_progress: 2, queued: 1 } }),
                                        branch('seo', { on: 'mini', summary: 'rank 4 of 12', summary_at: NOW - QUIET })] }),
-      project('Kanji Daily', { id: 'kanji-mini', updated_at: NOW - QUIET, running: 1,
-                               counts: { in_progress: 1 } }),
+      project('Kanji Daily', { id: 'kanji-mini', updated_at: NOW - QUIET, running: 1, waiting: 1,
+                               counts: { in_progress: 2 } }),
     ],
+    // Two of these are the reason a quiet machine is not the same as a machine
+    // with nothing on it: a worker there stopped to ask a question at 21:02 and
+    // another was turned down, and neither of those unhappens while the lid is
+    // shut. Nothing but a person answers them.
     cards: [
       card('m-api', { project: 'isghocam-mini', title: 'the webhook retries for ever',
                       status: 'running', ticket: 77 }),
+      card('m-ask', { project: 'isghocam-mini', title: 'which region should the API run in?',
+                      position: 1, status: 'asking', ticket: 79,
+                      detail: 'Which region should the API run in?' }),
       card('m-next', { project: 'isghocam-mini', column: 'queued', position: 0 }),
       card('m-kanji', { project: 'kanji-mini', title: 'stroke order is wrong for 熊',
                         status: 'running', machine: 'mini', ticket: 78 }),
+      card('m-dead', { project: 'kanji-mini', title: 'the stroke data import',
+                       position: 1, status: 'failed', ticket: 80 }),
     ],
     agents: [
       agent('m-api', { project: 'isghocam-mini', title: 'the webhook retries for ever', ticket: 77 }),
@@ -167,9 +176,9 @@ const checks = [
   ['every paired machine is in the view', view.hosts.length === 2],
   ['the projects of both are in it',
     view.projects.map((p) => p.name).sort().join(',') === 'Kanji Daily,babysee,isghocam'],
-  ['so are the cards of both', view.cards.length === 6],
+  ['so are the cards of both', view.cards.length === 8],
   ['every card says which machine it came from',
-    view.cards.every((c) => c.host && c.hostName) && view.cards.filter((c) => c.host === 'h-mini').length === 3],
+    view.cards.every((c) => c.host && c.hostName) && view.cards.filter((c) => c.host === 'h-mini').length === 5],
   ['a card nobody assigned is attributed to the computer that carried it',
     view.cards.find((c) => c.id === 'm-api').machine === 'mini'
     && view.cards.find((c) => c.id === 'c-site').machine === 'studio'],
@@ -216,7 +225,7 @@ const checks = [
   // 3 · a silent machine does not disappear, and nothing pretends it is current
   ['an unreachable machine keeps the projects it had',
     view.projects.some((p) => p.name === 'Kanji Daily')],
-  ['…and the cards it had', view.cards.filter((c) => c.host === 'h-mini').length === 3],
+  ['…and the cards it had', view.cards.filter((c) => c.host === 'h-mini').length === 5],
   ['every one of them marked stale', view.cards.filter((c) => c.host === 'h-mini').every((c) => c.stale)],
   ['…and nothing of the live machine marked with it',
     view.cards.filter((c) => c.host === 'h-studio').every((c) => !c.stale)],
@@ -232,10 +241,33 @@ const checks = [
   ['…and it carries when it was last seen running',
     view.agents.filter((a) => a.unknown).every((a) => a.since_contact === NOW - QUIET)],
   ['a card waiting on a person still counts while its machine is quiet', (() => {
-    // Nothing but a person answers a question, so a silent machine cannot have
-    // answered it. This is the one figure that does carry across.
+    // The mini alone, so that the studio's own asking card cannot stand in for
+    // this. Two of the mini's cards need a person — one stopped to ask at 21:02
+    // and one was turned down — and neither of those unhappens while the lid is
+    // shut: nothing but a person answers them, and a machine going quiet is not
+    // a person. This is the one figure that carries across a silence.
     const v = D.merge([MINI], NOW);
-    return v.totals.needsYou === D.merge([MINI], NOW).cards.filter(D.waiting).length;
+    return v.totals.needsYou === 2 && v.totals.stuck === 1;
+  })()],
+  ['…and those same cards are marked stale while they are counted', (() => {
+    // Both at once, which is the whole judgement: the count is honest because a
+    // question is still a question, and the card is marked because what the
+    // agent on it is doing now is not known.
+    const v = D.merge([MINI], NOW);
+    const needing = v.cards.filter(D.waiting);
+    return needing.length === 2 && needing.every((c) => c.stale && c.machine === 'mini')
+      && needing.map((c) => c.id).sort().join(',') === 'm-ask,m-dead';
+  })()],
+  ['…and the totals still say they are short of a machine', (() => {
+    const v = D.merge([MINI], NOW);
+    return v.totals.complete === false && v.totals.asOf === NOW - QUIET;
+  })()],
+  ['a quiet machine\u2019s red card is in the merged totals as well as its own', (() => {
+    // The one the frame counts: "1 Needs you · 1 Stuck" with a machine down.
+    // Both hosts, so the figure is the sum of a live machine and a quiet one and
+    // cannot be either one of them by accident.
+    return view.totals.needsYou === 3 && view.totals.stuck === 1
+      && view.cards.filter((c) => D.stuck(c)).every((c) => c.host === 'h-mini' && c.stale);
   })()],
   ['everything reachable is a complete view', (() => {
     const v = D.merge([STUDIO], NOW);
@@ -254,16 +286,16 @@ const checks = [
   ['…and the machines it is on, in the order they were asked',
     isghocam.machines.join(',') === 'studio,mini'],
   ['its cards are all there, each attributed to the machine it runs on',
-    isghocam.cards.length === 4
+    isghocam.cards.length === 5
     && isghocam.cards.filter((c) => c.machine === 'studio').length === 2
-    && isghocam.cards.filter((c) => c.machine === 'mini').length === 2],
+    && isghocam.cards.filter((c) => c.machine === 'mini').length === 3],
   ['its counts are the two boards added up',
-    isghocam.counts.in_progress === 3 && isghocam.counts.queued === 1 && isghocam.counts.done === 3],
+    isghocam.counts.in_progress === 4 && isghocam.counts.queued === 1 && isghocam.counts.done === 3],
   ['so are its agents and what it is waiting on',
-    isghocam.running === 2 && isghocam.waiting === 1],
+    isghocam.running === 2 && isghocam.waiting === 2],
   ['a branch of it counts the work on both machines', (() => {
     const e = isghocam.branches.find((b) => b.kind === 'engineering');
-    return e.cards.in_progress === 3 && e.cards.queued === 1 && e.open === 4;
+    return e.cards.in_progress === 4 && e.cards.queued === 1 && e.open === 5;
   })()],
   ['…and says which machines that work is on', (() => {
     const e = isghocam.branches.find((b) => b.kind === 'engineering');
@@ -288,7 +320,7 @@ const checks = [
     D.project(view, 'kanji-daily').unknown === 1],
   ['every card and agent says which product it is work on, across both machines',
     view.cards.every((c) => c.projectKey) && view.agents.every((a) => a.projectKey)
-    && view.cards.filter((c) => c.projectKey === 'isghocam').length === 4],
+    && view.cards.filter((c) => c.projectKey === 'isghocam').length === 5],
   ['…and says when that half of it was last true', isghocam.lastSeen === NOW - QUIET],
   ['a product on one machine only is not stale because another machine is',
     D.project(view, 'babysee').stale === false],
@@ -299,7 +331,7 @@ const checks = [
     // true answer to "who is third". Position first, then the machine's name:
     // arbitrary, stable, and it does not shuffle under a thumb.
     const q = D.column(isghocam, 'in_progress').map((c) => c.id);
-    return q.length === 3 && q.join(',') === 'm-api,c-site,c-ask';
+    return q.length === 4 && q.join(',') === 'm-api,c-site,m-ask,c-ask';
   })()],
 
   // 5 · the quota of each machine, and of the fleet
@@ -371,8 +403,8 @@ const checks = [
     D.waiting({ column: 'in_progress', agent_status: 'running', executor: 'coding_agent' }) === false],
   ['stuck is the half of that which went wrong, not the half that asked',
     D.stuck({ agent_status: 'failed' }) === true && D.stuck({ agent_status: 'asking' }) === false],
-  ['the counters are counted, not carried: one asking card is one needs-you',
-    view.totals.needsYou === 1 && view.totals.stuck === 0],
+  ['the counters are counted: three cards need a person, one of them red',
+    view.totals.needsYou === 3 && view.totals.stuck === 1],
   ['…and a queued card is counted once, wherever it is queued',
     view.totals.queued === 1],
   ['…and the machines are counted too',
@@ -463,16 +495,39 @@ checks.push(
 // request — the active machine is a transport, not a scope.
 const walk = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes: true })
   .flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+// Both ways in count. A screen can import the view itself, or — which is how a
+// screen will actually do it — take `useDivanView`, which polls and merges for
+// it. A rule that only watched the first would let the Dashboard read the active
+// computer through the second, which is exactly the habit being broken here.
+//
+// `src/components/divan.tsx` is the design system and a different module; the
+// merged view is `src/divan.ts` and is imported as a path ending in `/divan`.
+const DRAWS = /from '(?:\.{1,2}\/)+(?:src\/)?divan'|\buseDivanView\b/;
 const readers = [...walk('app'), ...walk('src')]
   .filter((f) => /\.tsx?$/.test(f))
-  // `src/components/divan.tsx` is the design system and a different module; the
-  // merged view is `src/divan.ts` and is imported as a path ending in `/divan`.
-  .filter((f) => /from '(?:\.{1,2}\/)+(?:src\/)?divan'/.test(src(f)))
+  .filter((f) => DRAWS.test(src(f)))
+  // The store is the one exemption and it is a narrow one: it reads the active
+  // host to decide which socket carries a request. That is a transport, not a
+  // scope, and it keeps one snapshot per paired machine either way.
   .filter((f) => f !== path.join('src', 'store.ts'));
 checks.push(
   ['something in the app draws from the merged view', readers.length > 0],
   [`no screen that draws it reads the active computer (${readers.join(', ')})`,
     readers.every((f) => !/activeHostId/.test(src(f)))],
+  // …and the rule is worth nothing if it cannot see a file. A screen written
+  // tomorrow reaches the view through the hook, so the pattern is held to a
+  // file that does exactly that.
+  ['the rule sees a screen that only ever imports the hook', (() => {
+    const pretend = "import { useDivanView } from '../src/queue';\nexport default function Dashboard() {}\n";
+    return DRAWS.test(pretend);
+  })()],
+  ['…and does not mistake the design system for the view',
+    !DRAWS.test("import { Card } from '../src/components/divan';")
+    // The design system has a `useDivan` of its own that hands out tokens. The
+    // view's hook is `useDivanView` so that neither the compiler nor this rule
+    // has to guess which one a screen meant.
+    && !DRAWS.test(src('src/components/divan.tsx'))
+    && /export function useDivanView/.test(src('src/queue.ts'))],
 );
 
 const hook = src('src/queue.ts');
@@ -492,7 +547,7 @@ checks.push(
     /const timer = setTimeout\(\(\) => finish\(\(\) => reject\(connError\('wsTimeout'\)\)\), timeoutMs\);/.test(ws)],
   ['the hook reads the paired list and the snapshots, and no active computer',
     /merge\(entries\(hosts, divan\), now\)/.test(hook)
-    && !/activeHostId/.test(hook.slice(hook.indexOf('export function useDivan')))],
+    && !/activeHostId/.test(hook.slice(hook.indexOf('export function useDivanView')))],
 );
 
 module.exports = { checks };
