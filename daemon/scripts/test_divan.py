@@ -478,6 +478,20 @@ check("and a folder nobody owns is nobody's", board.project_for_repo("/w/other")
 check("nor does a product's name match a path by accident",
       board.project_for_repo(""), None)
 
+# And the second question, asked only where the first has no answer: the name. A
+# product may own no repository yet, and a ticket may name a folder nobody
+# registered — which is the case the panel's own rule was written for.
+board.create_project("ledger")
+check("a product that owns no repository is still found by the name a path suggests",
+      board.project_for_ticket({"repo": "/w/none/ledger"})["name"], "ledger")
+check("the path wins over a name, when both have something to say",
+      board.project_for_ticket({"repo": "/w/isghocam/seo",
+                                "project": "isghocam"})["name"], "isghocam SEO")
+check("a ticket with no repository at all is not a product called 'unfiled'",
+      board.project_for_ticket({"repo": ""})["hidden"], True)
+check("and neither is one nothing answers for",
+      board.project_for_ticket({"repo": "/w/nobody/here"})["slug"], divan.UNFILED)
+
 # ── 3 · the order somebody put them in ───────────────────────────────────────
 
 db = fresh_db("order")
