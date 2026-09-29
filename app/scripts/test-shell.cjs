@@ -82,7 +82,7 @@ checks.push(
     S.PLACES.every((p) => new RegExp(`<Shell place="${p}"`).test(src(SCREEN[S.PLACE_ROUTE[p]])))
     && !/TabBar/.test(dash) && !/TabBar/.test(chatPlace) && !/TabBar/.test(machine)],
   ['every glyph the shell names is one the app has generated',
-    [...Object.values(S.PLACE_ICON), ...S.machineRows({ machines: 1, unreachable: 0 }).map((r) => r.icon)]
+    [...Object.values(S.PLACE_ICON), ...S.machineRows({ machines: 1, unreachable: 0, executors: 1 }).map((r) => r.icon)]
       .every((name) => Object.keys(icons.ICON_PATHS).some((k) => k.split(':')[0] === name))],
 );
 
@@ -310,19 +310,19 @@ checks.push(
 
 // ── 4 · everything about a computer is under Machine ────────────────────────
 
-const rows = S.machineRows({ machines: 3, unreachable: 0 });
+const rows = S.machineRows({ machines: 3, unreachable: 0, executors: 9 });
 const routes = rows.map((r) => r.route);
 
 checks.push(
   ['the Machine list holds the screens that were about a computer',
-    eq(routes, ['/host-sheet', '/agents', '/screen', '/accounts', '/pool', '/call', '/settings'])],
+    eq(routes, ['/machines', '/executors', '/agents', '/screen', '/accounts', '/pool', '/call', '/settings'])],
   ['…in the frame’s shape: a name, a grey line, and a chevron one level deeper',
     rows.every((r) => r.title && r.note) && /ListRow/.test(machine)],
   ['…and the machines row says how many answered',
     rows[0].meta === 'mAllReachable' && rows[0].tone === 'run'
-    && S.machineRows({ machines: 3, unreachable: 1 })[0].meta === 'mUnreachable'],
+    && S.machineRows({ machines: 3, unreachable: 1, executors: 9 })[0].meta === 'mUnreachable'],
   ['nothing is coloured unless a machine is actually unreachable',
-    S.machineRows({ machines: 3, unreachable: 1 })[0].tone === 'red'
+    S.machineRows({ machines: 3, unreachable: 1, executors: 9 })[0].tone === 'red'
     && rows.slice(1).every((r) => !r.tone)],
   ['the Machine screen opens exactly those rows',
     /machineRows\(/.test(machine) && /router\.push\(row\.route\)/.test(machine)],

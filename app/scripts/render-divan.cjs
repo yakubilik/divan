@@ -134,6 +134,8 @@ const ReactNative = {
   useColorScheme: () => 'light',
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   AppState: { addEventListener: () => ({ remove() {} }) },
+  // The app's own dialog closes the keyboard before it comes up.
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove() {} }) },
   Platform: { OS: 'ios', select: (o) => o.ios ?? o.default },
 };
 
@@ -169,6 +171,10 @@ const STUBS = {
     useFocusEffect: () => {},
     Stack: Object.assign(host('div', 'Stack'), { Screen: () => null }),
   },
+  // A menu or a dialog goes straight onto the window rather than into the view
+  // controller it was asked for from (`components/overlay`), which is a native
+  // view and here is just a box.
+  'react-native-screens': { FullWindowOverlay: host('div', 'FullWindowOverlay'), enableFreeze: () => {} },
   'expo-haptics': {
     ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
     selectionAsync: () => { BUZZES.push('selection'); return Promise.resolve(); },
