@@ -90,7 +90,7 @@ const paired = (id, name, o) => ({ id, name, state: { snapshot: o.snapshot ?? nu
  *  branch and something that fell over on another. Its Engineering summary was
  *  written a few minutes ago, its Customers summary three days ago. */
 const QUIRE = project('Quire', {
-  kind: 'SaaS', summary: 'client portals for studios', repos: ['/r/quire'],
+  kind: 'SaaS', summary: 'client portals for studios', repos: ['/r/quire', '/r/quire-web'],
   running: 2, waiting: 2, counts: { ice_box: 11, queued: 4, in_progress: 5, done: 48 },
   branches: [
     branch('engineering', 'Engineering', { summary: 'v3.18 deployed, Safari login still red',
@@ -191,7 +191,8 @@ const MINI = paired('h2', 'mini', {
       running: 1, updated_at: NOW - 30,
       counts: { in_progress: 1 },
       branches: [branch('engineering', 'Engineering', { open: 1, cards: { in_progress: 1 } })] })],
-    cards: [card('m1', { project: 'Kanji Daily-id', status: 'running', title: 'Deck sync' })],
+    cards: [card('m1', { project: 'Kanji Daily-id', status: 'running', title: 'Deck sync',
+                         at: NOW - QUIET - 60, detail: 'Merging two decks' })],
     agents: [agent('m1', { project: 'Kanji Daily-id', projectName: 'Kanji Daily', machine: 'mini',
                            title: 'Deck sync' })] }),
 });
@@ -674,6 +675,40 @@ const PAGES = {
   'nothing paired at all': [[], 'quire'],
 };
 
+const Branch = require(path.join(root, 'app/branch/[id].tsx')).default;
+
+/** …and one branch of one of those products, which is a route of its own. */
+function drawBranch(scheme, hosts, key, kind) {
+  R.store.reset();
+  R.params.reset();
+  R.nav.reset();
+  R.store.set({
+    hosts: hosts.map((e) => ({ id: e.id, name: e.name })),
+    divan: Object.fromEntries(hosts.map((e) => [e.id, e.state])),
+    host: hosts.length ? { id: hosts[0].id } : null,
+    conn: 'online', loadDivan() {}, ustabasi: null, ustabasiOld: false, loadUstabasi() {},
+  });
+  R.params.set({ project: key, id: kind });
+  return R.render(scheme, h(Branch));
+}
+
+/** Every state the branch page can be in. */
+const BRANCHES = {
+  'the generic layout': [[STUDIO], 'quire', 'seo'],
+  'the densest branch': [[STUDIO], 'quire', 'engineering'],
+  'a branch whose source has never written anything': [[STUDIO], 'quire', 'analytics'],
+  'a branch nobody has put a card on': [[STUDIO], 'kanji-daily', 'marketing'],
+  'a branch nothing has touched in weeks': [[STUDIO], 'the-long-walk', 'seo'],
+  'a branch of a brand-new product': [[STUDIO], 'pebble', 'engineering'],
+  'a branch on a machine that has gone quiet': [[MINI], 'kanji-daily', 'engineering'],
+  'a branch spread over an answering machine and a quiet one': [[STUDIO, MINI], 'kanji-daily', 'engineering'],
+  'a branch of a product out of quota': [[SPENT], 'kanji-daily', 'engineering'],
+  'a branch beside a machine that never answered': [[STUDIO, NEVER], 'quire', 'engineering'],
+  'a branch this product does not have': [[STUDIO], 'quire', 'design'],
+  'a branch of a project that is no longer in the view': [[STUDIO], 'gone', 'engineering'],
+  'nothing paired at all': [[], 'quire', 'engineering'],
+};
+
 /** The style the given word came out in, where a check is about a colour on one
  *  particular word rather than a colour being on the page at all. */
 const styleOf = (markup, word) => [...markup.matchAll(/<span data-rn="Text"([^>]*)>([^<]*)<\/span>/g)]
@@ -780,8 +815,10 @@ for (const scheme of ['dark', 'light']) {
                          ...K.MONOGRAM, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                          K.EXEC_PENDING_INK, K.EXEC_PENDING_LINE, 'transparent']);
     const strayed = new Set();
-    for (const [, [hosts, key]] of Object.entries(PAGES)) {
-      for (const v of R.paint(draw(scheme, hosts, key))) {
+    const every = [...Object.values(PAGES).map(([hosts, key]) => () => draw(scheme, hosts, key)),
+                   ...Object.values(BRANCHES).map(([hosts, key, kind]) => () => drawBranch(scheme, hosts, key, kind))];
+    for (const page of every) {
+      for (const v of R.paint(page())) {
         const inside = v.match(COLOUR) ?? [];
         for (const c of (inside.length > 1 || inside[0] !== v ? inside : [v])) {
           if (!own.has(c)) strayed.add(c);
@@ -881,8 +918,6 @@ for (const scheme of ['dark', 'light']) {
       !/>[A-Z][a-z]+ [^<>{}]{3,}</.test(parts)],
     ['the chat is not touched by any of it',
       !/components\/chat|chat\//.test(parts) && !/chat/.test(judgement)],
-    ['the branch page is not linked to before it exists: no card here is a press that does nothing',
-      !/onPress/.test(parts)],
   );
 
   // A judgement nothing calls is worse than no judgement: it is a rule that
@@ -922,6 +957,126 @@ for (const scheme of ['dark', 'light']) {
   }
   checks.push([`every frame this page cites is a frame of the group it names${bad.length ? ` (${bad.join('; ')})` : ''}`,
     bad.length === 0]);
+}
+
+// ── 12 · the branch page (Mobile9 S10, S11) ─────────────────────────────────
+//
+// One layout for every branch: S10 is the layout and S11 is the same layout
+// with Engineering's three blocks inside it. Covered here: that the two are one
+// page in both themes, that a block with no source says so instead of showing a
+// figure, that Engineering's repositories and commits are git's own, and that
+// the branch's cards are listed and open.
+
+{
+  const B = require(path.join(root, 'src/branch.ts'));
+  const engineering = quire.branches[0];
+  const seo = quire.branches[1];
+
+  checks.push(
+    ['the log is the mirror\u2019s own words about this branch, newest first and cut at six',
+      (() => {
+        const list = B.log(ONE, quire, engineering);
+        return list.length === 2 && list[0].at > list[1].at
+          && list[0].text === 'Keep 3 retries, or follow Stripe?' && list[0].who === 'exCoder'
+          && B.log(ONE, quire, seo).length === 0
+          // Two cards, two coders: one worker is started per card, so the
+          // heading over them is the plural one (S11 against S10).
+          && B.logTitle(list) === 'bpLogMany'
+          && B.logTitle(list.slice(0, 1)) === 'bpLog';
+      })()],
+    ['\u2026and a line off a machine that has gone quiet is marked as one',
+      (() => {
+        const p = of(GONE, 'kanji-daily');
+        const [first] = B.log(GONE, p, p.branches[0]);
+        return first.stale === true && first.text === 'Merging two decks';
+      })()],
+    ['what landed in a repository is git\u2019s own figure, and a repository it would not answer about has none',
+      (() => {
+        const list = B.commits(quire, NOW);
+        return list.length === 1 && list[0].name === 'quire'
+          && list[0].week === 14 && list[0].today === 3
+          && list[0].said.key === 'bnAt'
+          && B.repos(quire).map((r) => r.name).join(',') === 'quire,quire-web';
+      })()],
+    ['a branch is found by the kind two machines agree on, not by either\u2019s id for it',
+      (() => {
+        const two = B.find(TWO, 'kanji-daily', 'engineering');
+        return two.branch.machines.join(', ') === 'studio, mini'
+          && B.find(ONE, 'quire', engineering.id) === null
+          && B.find(ONE, 'quire', 'design') === null
+          && B.dense(engineering) === true && B.dense(seo) === false;
+      })()],
+  );
+
+  for (const scheme of ['dark', 'light']) {
+    const generic = drawBranch(scheme, [STUDIO], 'quire', 'seo');
+    const densest = drawBranch(scheme, [STUDIO], 'quire', 'engineering');
+    const unused = drawBranch(scheme, [STUDIO], 'kanji-daily', 'marketing');
+    const quiet = drawBranch(scheme, [MINI], 'kanji-daily', 'engineering');
+    /** Which of the page's blocks are in this markup, in the order they appear.
+     *  The log's heading is singular or plural by what ran (`logTitle`). */
+    const at = (m, k) => (k === 'bpLog' ? Math.max(m.indexOf('>bpLog<'), m.indexOf('>bpLogMany<'))
+      : m.indexOf(`>${k}<`));
+    const order = (m) => ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'bpLog', 'bpTickets']
+      .filter((k) => at(m, k) >= 0)
+      .sort((a, b) => at(m, a) - at(m, b));
+
+    checks.push(
+      [`${scheme}: S10 and S11 are one page: the same blocks, in the same order`,
+        eq(order(generic), ['bpOverTime', 'bpLog', 'bpTickets'])
+        && eq(order(densest), ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'bpLog', 'bpTickets'])
+        && ['>SEO<', '>Quire<', 'Pages 9 of 14 rewritten'].every((x) => generic.includes(x))
+        && ['>Engineering<', '>Quire<', 'v3.18 deployed'].every((x) => densest.includes(x))],
+      [`${scheme}: \u2026over the same numbers, which are the board\u2019s own counts`,
+        [['>4<', '>bnOpen<'], ['>12<', '>bnDone<']].every(([n, l]) => generic.includes(n) && generic.includes(l))
+        && ['>9<', '>3<', '>31<', '>bnProgress<'].every((x) => densest.includes(x))],
+      [`${scheme}: a block with no source says so where it would have been`,
+        generic.includes('>bpOverTimeBody<') && densest.includes('>bpOverTimeBody<')
+        && densest.includes('>bpPullsBody<')
+        && !densest.includes('checks') && !densest.includes('failing')],
+      [`${scheme}: a branch nothing writes to says so, and draws no number nobody counted`,
+        unused.includes('>branchNoSource<') && unused.includes('>bpBareTitle<')
+        && !unused.includes('>bnOpen<') && !unused.includes('>bnDone<')
+        && !unused.includes('>bpTickets<') && !unused.includes('>bpLog<')],
+      [`${scheme}: Engineering lists the repositories the product owns and what landed in them`,
+        ['>quire<', '>quire-web<', '>bpCommits<', '>bnAt<', '>bpLandedToday<'].every((x) => densest.includes(x))
+        && !generic.includes('>quire-web<')],
+      [`${scheme}: the branch\u2019s own cards are listed, each with the column it is in`,
+        generic.includes('Comparison page: Quire vs Notion') && generic.includes('>bdQueued<')
+        && ['Webhook retry policy', 'Fix portal login on Safari 17', 'Bulk CSV invite']
+          .every((t) => densest.includes(t))
+        && densest.includes('>bdInProgress<') && densest.includes('? bdAsking')
+        // …and nothing from another branch of the same product.
+        && !densest.includes('Comparison page: Quire vs Notion')],
+      [`${scheme}: a branch on a machine that has gone quiet says so and still draws what it said`,
+        quiet.includes('prStale') && quiet.includes('>bpDid<')
+        && R.styles(quiet).some((s2) => s2.color === K.tokensFor(scheme).amber)],
+      [`${scheme}: every state of the page renders, inside the place it is a page of`,
+        Object.values(BRANCHES).every(([hosts, key, kind]) =>
+          drawBranch(scheme, hosts, key, kind).includes('tabDashboard'))
+        && drawBranch(scheme, [STUDIO], 'quire', 'design').includes('>bpGone<')
+        && drawBranch(scheme, [], 'quire', 'engineering').includes('>bpGone<')],
+    );
+  }
+
+  checks.push(
+    ['tapping a card on a branch page opens that card, on the machine it is on',
+      (() => {
+        drawBranch('dark', [STUDIO], 'quire', 'seo');
+        const found = R.presses().filter((x) => x.text.includes('Comparison page: Quire vs Notion'));
+        if (found.length !== 1) throw new Error(`${found.length} of them`);
+        found[0].press();
+        return eq(R.nav.pushed(), ['/card/q4?host=h1']);
+      })()],
+    ['\u2026and a branch card on the product\u2019s page is the way into that branch',
+      (() => {
+        draw('dark', [STUDIO], 'quire');
+        const found = R.presses().filter((x) => x.text.startsWith('SEO'));
+        if (found.length !== 1) throw new Error(`${found.length} of them`);
+        found[0].press();
+        return eq(R.nav.pushed(), ['/branch/seo?project=quire']);
+      })()],
+  );
 }
 
 R.store.reset();
