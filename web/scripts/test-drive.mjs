@@ -123,6 +123,7 @@ const load = (p) => import(pathToFileURL(join(out, p)).href);
 const { App } = await load('src/App.js');
 const { useFleet } = await load('src/lib/fleet.js');
 const { useDivanStore, answered } = await load('src/lib/divan.js');
+const { useDock } = await load('src/lib/sessions.js');
 const { themeScheme, setThemeChoice } = await load('src/lib/theme.js');
 const { MACHINE_ROWS } = await load('src/lib/shell.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
@@ -191,6 +192,23 @@ const find = (label, within = doc) => [...within.querySelectorAll('button')]
   .find((b) => (b.textContent ?? '').trim() === label) ?? null;
 const click = async (el) => {
   await act(async () => { el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); });
+};
+
+/** jsdom has neither `DragEvent` nor `DataTransfer`, so the payload the board
+ *  agrees on (`lib/dnd.ts`) is carried by this — the three methods and the type
+ *  list a drop target is allowed to read during `dragover`, and nothing else. */
+class Transfer {
+  constructor() { this.held = new Map(); this.effectAllowed = 'none'; this.dropEffect = 'none'; }
+  setData(type, value) { this.held.set(type, String(value)); }
+  getData(type) { return this.held.get(type) ?? ''; }
+  get types() { return [...this.held.keys()]; }
+}
+const drag = async (el, type, dataTransfer) => {
+  await act(async () => {
+    const ev = new w.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: dataTransfer });
+    el.dispatchEvent(ev);
+  });
 };
 
 group('the panel comes up');
@@ -349,6 +367,89 @@ group('what needs a person opens itself as a conversation');
   ok('…and pressing it opens what ⌘K opens', !!doc.querySelector('input[name="palette-query"]'));
   await press('k');
   ok('…which closes again', !doc.querySelector('input[name="palette-query"]'));
+}
+
+group('the board, with the asking agent’s chat beside it');
+{
+  const now = Math.floor(Date.now() / 1000);
+  const studio = boards(now).busy[0].snap;
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(studio, now) } }); });
+  const chip = (label) => find(label, doc.querySelector('header'));
+  await click(chip('Quire'));
+  await click(find('Board'));
+
+  /** A column of the board, by its name: the head is a tab and the column is
+   *  what catches a drop, which is the element around it. */
+  const column = (name) => [...doc.querySelectorAll('[role="tab"]')]
+    .find((b) => (b.textContent ?? '').startsWith(name))?.parentElement ?? null;
+  /** A ticket, by the words on it. Every one of them can be picked up, which is
+   *  what tells a card apart from everything else on the page. */
+  const ticket = (words) => [...doc.querySelectorAll('[draggable="true"]')]
+    .find((e) => (e.textContent ?? '').includes(words)) ?? null;
+  const windows = () => [...doc.querySelectorAll('section')].map((e) => e.textContent ?? '').join(' · ');
+
+  ok('the Board tab of a product is its board, four columns of the machines’ own',
+    ['Ice Box', 'Queued', 'In Progress', 'Done'].every((c) => !!column(c))
+    && !!ticket('Webhook retry policy') && !!ticket('CSV export'),
+    [...doc.querySelectorAll('[role="tab"]')].map((b) => b.textContent).join(' | '));
+  ok('…still on the Dashboard, and still the page the bar is over',
+    place() === 'Dashboard' && head() === 'Quire', `${place()} · ${head()}`);
+
+  // Every window put away, so that what opens next opened because it was
+  // pressed rather than because the desktop opens two by itself.
+  await act(async () => { useDock.setState({ minimised: ['studio:k2', 'studio:h1'], closed: {}, raised: [] }); });
+  ok('with every question put away, nothing is open over the board', windows() === '',
+    windows().slice(0, 200));
+
+  await click(ticket('Stripe keys'));
+  ok('pressing the card of an agent that is asking opens its chat beside the board',
+    windows().includes('asks you') && windows().includes('Use the live ones now')
+    && windows().includes('Quire · Stripe keys'), windows().slice(0, 300));
+  ok('…without leaving the page: the board is still under it',
+    place() === 'Dashboard' && !!column('In Progress') && !!ticket('Webhook retry policy'));
+
+  asked.length = 0;
+  await click(find('Use the live ones now'));
+  ok('answering it there is a note on that ticket, which is what re-opens the queue',
+    asked.some((a) => a.key === 'studio' && a.type === 'ustabasi.note'
+      && a.data.id === 42 && a.data.text === 'Use the live ones now'),
+    JSON.stringify(asked.slice(0, 3)));
+  // …and the card says it is unblocked when the board does, and not before:
+  // what the window sent is kept on screen until the machine that holds the
+  // board has been re-read.
+  ok('…and until the board is re-read the card still says it is asking',
+    !!ticket('Stripe keys') && (ticket('Stripe keys').textContent ?? '').includes('Asking you'));
+  const back = {
+    ...studio,
+    cards: studio.cards.map((c) => (c.id === 'k2'
+      ? { ...c, agent_status: 'running', agent_detail: 'Using the live keys.' } : c)),
+  };
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(back, now) } }); });
+  ok('…and when it is, the mark clears on the card and the window is gone',
+    (ticket('Stripe keys').textContent ?? '').includes('Running')
+    && !windows().includes('Use the live ones now'),
+    `${ticket('Stripe keys')?.textContent} · ${windows().slice(0, 120)}`);
+
+  // A card carried from one column to another with a mouse.
+  const dt = new Transfer();
+  const moving = ticket('CSV export');
+  await drag(moving, 'dragstart', dt);
+  ok('picking a card up puts the board’s own payload on the drag, and nothing else’s',
+    dt.types.includes('application/x-rac-card'), dt.types.join(', '));
+  await drag(column('Queued'), 'dragover', dt);
+  ok('…a column that would take it says so, and the one it came out of does not',
+    column('Queued').querySelector('[role="tab"]').getAttribute('aria-selected') === 'true'
+    && column('Ice Box').querySelector('[role="tab"]').getAttribute('aria-selected') === 'false');
+  asked.length = 0;
+  await drag(column('Queued'), 'drop', dt);
+  ok('dropping it asks the machine that holds the board to move it there',
+    asked.some((a) => a.key === 'studio' && a.type === 'divan.card.move'
+      && a.data.card_id === 'k3' && a.data.column === 'queued'),
+    JSON.stringify(asked.slice(0, 3)));
+  ok('…and the card is in the new column before that machine has answered',
+    (column('Queued').textContent ?? '').includes('CSV export')
+    && !(column('Ice Box').textContent ?? '').includes('CSV export'),
+    `${column('Ice Box').textContent} → ${column('Queued').textContent}`);
 }
 
 group('nothing was lost on the way');
