@@ -9,8 +9,8 @@ import { project as projectIn, type DivanView, type MergedProject } from '../src
 import { chips } from '../src/shell';
 import { since } from '../src/tickets';
 import {
-  agentRows, asks, calm, chip, clock, counters, freshness, latest, line, marks,
-  staleness, systemLine, target, type Ago,
+  agentRows, asks, calm, chip, clock, counters, freshness, latest, line, machineWords,
+  marks, quotaWords, staleness, staleWords, systemLine, target, type Ago, type Said,
 } from '../src/dashboard';
 import { EmptyState, ListRow, SectionHeader } from '../src/components/divan';
 import {
@@ -96,12 +96,7 @@ export default function Dashboard() {
           <>
             {!!old && (
               <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
-                {old.machines.length > 1
-                  ? T('dashStaleMany', { n: old.machines.length, time: clock(old.asOf) })
-                  : old.projects.length
-                    ? T('dashStale', { name: old.machines[0], d: ago(old.age),
-                                       projects: old.projects.join(', '), time: clock(old.asOf) })
-                    : T('dashStaleBare', { name: old.machines[0], d: ago(old.age) })}
+                {said(T, staleWords(old, ago))}
               </Text>
             )}
             <Paused view={view} now={now} ago={ago} />
@@ -149,25 +144,17 @@ export default function Dashboard() {
 function Line({ view, ago }: { view: DivanView; ago: Ago }) {
   const T = useT();
   const sys = systemLine(view);
-  const say = sys.state === 'none' ? T('sysNoMachines')
-    : sys.state === 'unreachable' && sys.unreachable > 1 ? T('sysUnreachableMany', { n: sys.unreachable })
-    : sys.state === 'unreachable' && sys.quiet
-      ? (sys.quiet.age == null
-          ? T('sysUnreachableNever', { name: sys.quiet.name })
-          : T('sysUnreachable', { name: sys.quiet.name, d: ago(sys.quiet.age) }))
-    : sys.machines === 1 ? T('sysOneMachine') : T('sysMachines', { n: sys.machines });
-  const q = sys.quota;
-  const quota = !q ? null
-    : q.spent
-      ? (q.resets_at ? T('sysQuotaSpent', { time: clock(q.resets_at) }) : T('sysQuotaOut'))
-      : sys.state === 'unreachable'
-        ? T('sysQuotaShort', { p: q.pct })
-        : q.resets_at ? T('sysQuotaLeft', { p: q.pct, time: clock(q.resets_at) })
-        : T('sysQuotaBare', { p: q.pct });
+  const quota = quotaWords(sys);
   // The healthy line labels its track; the other two have spent their left half
   // on a sentence and say "quota" inside the figure instead.
-  return <SystemLine line={sys} say={say} quota={quota}
-    label={q && !q.spent && sys.state === 'healthy' ? T('sysQuota') : null} />;
+  return <SystemLine line={sys} say={said(T, machineWords(sys, ago))}
+    quota={quota ? said(T, quota) : null}
+    label={sys.quota && !sys.quota.spent && sys.state === 'healthy' ? T('sysQuota') : null} />;
+}
+
+/** A line the judgements chose, in the reader's language. */
+function said(T: ReturnType<typeof useT>, x: Said): string {
+  return T(x.key, x.params);
 }
 
 /** Out of quota (Mobile5 S2). Red, and not an alarm: what stopped, that nothing

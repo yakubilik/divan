@@ -160,6 +160,66 @@ const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
   );
 }
 
+// ── 1b · …and what the line actually says, in every one of its branches ────
+//
+// The words are chosen in the judgement rather than in the screen so that the
+// branches no fixture reaches on a rendered page can still be held to something:
+// three machines down rather than one, and a machine that has never answered at
+// all, which has no duration to print.
+
+{
+  const say = (hosts) => D.machineWords(D.systemLine(view(hosts)), ago);
+  const figure = (hosts) => D.quotaWords(D.systemLine(view(hosts)));
+  const never = paired('h3', 'cloud', { reachable: false, at: null, snapshot: null });
+  /** A second computer that is answering and has nothing on it. */
+  const cloud = paired('h3', 'cloud', { reachable: true, at: NOW, snapshot: snapshot('cloud', {}) });
+  const alsoQuiet = paired('h4', 'shed', { at: NOW - 40 * 60, reachable: false,
+    snapshot: snapshot('shed', { at: NOW - 40 * 60 }) });
+  checks.push(
+    ['a healthy fleet is counted', eq(say([studio(), cloud]), { key: 'sysMachines', params: { n: 2 } })],
+    ['\u2026and one computer is one computer, not "1 machines"',
+      eq(say([studio()]), { key: 'sysOneMachine' })],
+    ['a phone paired with nothing says that', eq(say([]), { key: 'sysNoMachines' })],
+    ['one machine down is named, with how long it has been silent',
+      eq(say([studio(), MINI]), { key: 'sysUnreachable', params: { name: 'mini', d: ago(QUIET) } })],
+    ['\u2026two are counted instead, because naming them all is a paragraph',
+      eq(say([studio(), MINI, alsoQuiet]), { key: 'sysUnreachableMany', params: { n: 2 } })],
+    ['a machine that has never answered at all has no duration, and prints none',
+      eq(say([studio(), never]), { key: 'sysUnreachableNever', params: { name: 'cloud' } })],
+    ['the figure on the right is the share left, with the clock it comes back on',
+      eq(figure([studio()]), { key: 'sysQuotaLeft', params: { p: 64, time: D.clock(NOW + 4 * HOUR) } })],
+    ['\u2026without that clock where nothing said when',
+      eq(figure([studio({ quota: quota({ left: 0.4 }) })]), { key: 'sysQuotaBare', params: { p: 40 } })],
+    ['\u2026labelled inside itself while the left half is busy with a silent machine',
+      eq(figure([studio(), MINI]), { key: 'sysQuotaShort', params: { p: 64 } })],
+    ['a spent fleet says when it starts again',
+      eq(figure([studio({ quota: quota({ spent: true, left: 0, resets_at: NOW + 4 * HOUR }) })]),
+         { key: 'sysQuotaSpent', params: { time: D.clock(NOW + 4 * HOUR) } })],
+    ['\u2026and says only that it is spent when nothing said when',
+      eq(figure([studio({ quota: quota({ spent: true, left: 0 }) })]), { key: 'sysQuotaOut' })],
+    ['a quota nobody measured has no words at all',
+      figure([studio({ quota: null })]) === null],
+  );
+
+  // The sentence under the title, the same way.
+  const words = (hosts) => {
+    const old = D.staleness(view(hosts));
+    return old && D.staleWords(old, ago);
+  };
+  checks.push(
+    ['the sentence names the machine, what runs there, and the hour it is true of',
+      eq(words([studio(), MINI]), { key: 'dashStale', params: {
+        name: 'mini', d: ago(QUIET), projects: 'Kanji Daily', time: D.clock(NOW - QUIET) } })],
+    ['\u2026says only what it can where nothing was running on the machine that went quiet',
+      eq(words([studio(), alsoQuiet]),
+         { key: 'dashStaleBare', params: { name: 'shed', d: ago(40 * 60) } })],
+    ['\u2026counts them where more than one went quiet',
+      words([studio(), MINI, alsoQuiet]).key === 'dashStaleMany'],
+    ['\u2026and there is no sentence at all while every machine is answering',
+      words([studio()]) === null],
+  );
+}
+
 // ── 2 · the counters ────────────────────────────────────────────────────────
 
 {

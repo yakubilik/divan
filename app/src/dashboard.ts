@@ -34,6 +34,19 @@ import { STATE_MARK, type State, type Tone } from './tokens';
  *  Mobile5 S1's "quiet for 23 days". Two weeks: one week is a holiday. */
 export const DORMANT_AFTER_S = 14 * 24 * 3600;
 
+/** A line of the screen, as the string table's name for it and what goes in the
+ *  gaps. Nothing in this file holds a sentence: the words are in `src/i18n.ts`
+ *  and the screen is the only thing that has the table. */
+export interface Said {
+  key: Key;
+  params?: Record<string, string | number>;
+}
+
+/** How long ago, in whole words. The screen passes the app's own
+ *  (`since(seconds, T)`); nothing here formats a duration itself, because the
+ *  units are strings in the table and the table is not this file's business. */
+export type Ago = (seconds: number | null) => string;
+
 /** `21:02`, the way every frame writes a time of day — the app's own locale, and
  *  24 hours because the frames are. Null in, empty out: a clock for a moment
  *  nobody recorded is the one thing this must not invent. */
@@ -101,6 +114,40 @@ export function systemTone(line: SystemLine): Tone | null {
   return line.state === 'spent' ? 'red' : line.state === 'unreachable' ? 'amber' : null;
 }
 
+/** The left half of the line, in words: which computers answered.
+ *
+ *  With one machine down its name is what a person needs (`mini unreachable ·
+ *  2h 14m`) and with three the count is; a machine that has never answered at
+ *  all has no duration to print and says so rather than printing `0s`. */
+export function machineWords(line: SystemLine, ago: Ago): Said {
+  if (line.state === 'none') return { key: 'sysNoMachines' };
+  if (line.state === 'unreachable' && line.unreachable > 1) {
+    return { key: 'sysUnreachableMany', params: { n: line.unreachable } };
+  }
+  if (line.state === 'unreachable' && line.quiet) {
+    return line.quiet.age == null
+      ? { key: 'sysUnreachableNever', params: { name: line.quiet.name } }
+      : { key: 'sysUnreachable', params: { name: line.quiet.name, d: ago(line.quiet.age) } };
+  }
+  return line.machines === 1 ? { key: 'sysOneMachine' } : { key: 'sysMachines', params: { n: line.machines } };
+}
+
+/** …and the right half: what is left to start an agent on. Null where no machine
+ *  has ever measured a quota, and the line then says nothing about one. */
+export function quotaWords(line: SystemLine): Said | null {
+  const q = line.quota;
+  if (!q) return null;
+  if (q.spent) {
+    return q.resets_at ? { key: 'sysQuotaSpent', params: { time: clock(q.resets_at) } } : { key: 'sysQuotaOut' };
+  }
+  // A silent machine has spent the left half on a sentence; the figure then says
+  // "quota" itself instead of being labelled (Mobile5 S1 against Mobile1 V1).
+  if (line.state === 'unreachable') return { key: 'sysQuotaShort', params: { p: q.pct } };
+  return q.resets_at
+    ? { key: 'sysQuotaLeft', params: { p: q.pct, time: clock(q.resets_at) } }
+    : { key: 'sysQuotaBare', params: { p: q.pct } };
+}
+
 // ── how old the whole screen is ─────────────────────────────────────────────
 
 /** What a machine going quiet costs this screen: which machines, which products
@@ -119,6 +166,22 @@ export interface Staleness {
   asOf: number | null;
   /** …and how long ago that was, on the longest-quiet machine. */
   age: number | null;
+}
+
+/** The amber sentence under the title, in words: which machine went quiet, what
+ *  ran there, and that everything else on the screen is live (Mobile5 S1). With
+ *  more than one machine down, naming them all is a paragraph and the count is
+ *  the fact; with nothing running on the one that went quiet, there is no
+ *  product to name and the sentence says only what it can. */
+export function staleWords(old: Staleness, ago: Ago): Said {
+  if (old.machines.length > 1) {
+    return { key: 'dashStaleMany', params: { n: old.machines.length, time: clock(old.asOf) } };
+  }
+  return old.projects.length
+    ? { key: 'dashStale',
+        params: { name: old.machines[0], d: ago(old.age),
+                  projects: old.projects.join(', '), time: clock(old.asOf) } }
+    : { key: 'dashStaleBare', params: { name: old.machines[0], d: ago(old.age) } };
 }
 
 export function staleness(view: DivanView): Staleness | null {
@@ -234,11 +297,6 @@ export interface Chip {
   params?: Record<string, string | number>;
   tone: Tone;
 }
-
-/** How long ago, in whole words. The screen passes the app's own
- *  (`since(seconds, T)`); nothing here formats a duration itself, because the
- *  units are strings in the table and the table is not this file's business. */
-export type Ago = (seconds: number | null) => string;
 
 /** Worst first, and the order is the order the question is asked in at three in
  *  the morning: something fell over, something is asking me, something is mine
