@@ -659,6 +659,9 @@ group('the screens the panel already had');
       const mod = await load(path);
       markup = renderToStaticMarkup(createElement(mod[exp], props));
     } catch (e) { broken.push(`${name}: ${e.message.slice(0, 120)}`); continue; }
+    // Kept, because the two checks that measure pairs read every tree drawn in
+    // this file and a screen is the biggest of them.
+    drawn[`screen:${name}`] = markup;
     const { vars, literal } = paint(markup);
     for (const c of literal) if (!OWN.has(c)) strayed.push(`${name}: ${c}`);
     for (const v of vars) if (K.DARK[v] === undefined) undeclared.push(`${name}: ${v}`);
@@ -778,7 +781,9 @@ group('white belongs on a filled colour and nowhere else');
   }
   ok('nothing drawn in the two "on a filled colour" values sits on a neutral surface',
     misplaced.length === 0, [...new Set(misplaced)].slice(0, 8).join('\n    '));
-  ok('…and there are enough of them for that to mean something', placed >= 10, String(placed));
+  ok('…over every tree drawn in this file: the parts, the screens and the panels',
+    placed >= 10 && Object.keys(drawn).some((k) => k.startsWith('screen:'))
+    && Object.keys(drawn).some((k) => k.startsWith('overlay:')), String(placed));
 }
 
 group('every pair of tokens that meets can be read');
@@ -854,7 +859,7 @@ group('every pair of tokens that meets can be read');
   ok('every ink a component puts on a surface separates from it, in both themes',
     thin.length === 0, [...new Set(thin)].slice(0, 10).join('\n    '));
   ok('…measured over both themes and every component rendered above',
-    pairs > 600, `${pairs} pairs, ${skipped} left to the browser`);
+    pairs > 800, `${pairs} pairs, ${skipped} left to the browser`);
 }
 
 group('the chat was left alone');
