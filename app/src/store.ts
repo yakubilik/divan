@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { callOnce, client, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, DivanCardDetail, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, silent, type HostDivan } from './divan';
 
@@ -132,6 +132,15 @@ interface State {
    *  here: the log is a river and only the page being read is worth holding,
    *  which is the screen's business and not the store's. */
   readRun: (id: number, cursor: string | null) => Promise<RunPage>;
+  /** One card, opened: its brief, its ticket and a page of the run on it, from
+   *  whichever computer the card is on.
+   *
+   *  Named rather than assumed, for the reason `answerCard` is: a Divan screen
+   *  is every machine at once, and the card being read may be on the mini while
+   *  this phone holds a socket to the studio. Nothing of it is kept here — the
+   *  brief belongs to the page reading it and the run is a river. */
+  readCard: (what: { card: string; host: string; cursor?: string | null })
+    => Promise<DivanCardDetail>;
   // tool call id -> what the background agent it started is doing right now.
   // Live only: a helper's step-by-step is progress, not conversation, and the
   // answer it produces arrives as that tool's result.
@@ -933,6 +942,11 @@ export const useStore = create<State>((set, get) => {
 
     readRun: async (id, cursor) => {
       return await client.call<RunPage>('ustabasi.run', { id, ...(cursor ? { cursor } : {}) });
+    },
+
+    readCard: async (what) => {
+      return await onHost<DivanCardDetail>(what.host, 'divan.card.get',
+        { card_id: what.card, ...(what.cursor ? { cursor: what.cursor } : {}) });
     },
 
     answerCard: async (what, text) => {

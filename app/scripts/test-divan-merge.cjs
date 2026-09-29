@@ -494,16 +494,17 @@ checks.push(
     /put\(answered\(snap, Date\.now\(\) \/ 1000\)\);/.test(store)],
   ['…and a failed poll through the one that keeps the last answer',
     /put\(silent\(get\(\)\.divan\[h\.id\], e\?\.message \?\? null, oldHost\(e\)\)\);/.test(store)],
-  // Two requests, and the second one is a write. `divan.snapshot` is the whole
-  // of the reading — one answer per machine, merged here — and `divan.card.move`
-  // is the one thing a Divan screen changes about a board: a card that is a
-  // person's own, finished. Everything else a board can do (making a card,
-  // rewriting one, setting an executor) is said to the agent in a chat, which
-  // is the entrance the protocol document describes, and would be a third
-  // string here.
-  ['the board asks the computer for two things and no more',
+  // Three requests, and one of them is a write. `divan.snapshot` is the whole of
+  // the reading a board is drawn from — one answer per machine, merged here —
+  // `divan.card.get` is one card opened, which is the only thing that asks a
+  // machine for a single row, and `divan.card.move` is the one thing a Divan
+  // screen changes about a board. Everything else a board can do (making a card,
+  // rewriting one, setting an executor) is said to the agent in a chat, which is
+  // the entrance the protocol document describes, and would be a fourth string
+  // here.
+  ['the board asks the computer for three things and no more',
     [...store.matchAll(/'(divan\.[a-z.]+)'/g)].map((m) => m[1]).join(',')
-      === 'divan.snapshot,divan.snapshot,divan.card.move'],
+      === 'divan.snapshot,divan.snapshot,divan.card.get,divan.card.move'],
   // …and the write goes to the machine the card is on, which on a screen made
   // of four computers' boards is not the one this phone holds a socket to.
   ['a write goes to the computer the card is on, by name',

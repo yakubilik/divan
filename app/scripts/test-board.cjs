@@ -148,9 +148,6 @@ const ids = (list) => list.map((i) => i.card.id).join(',');
       && eq(B.spread(quire, of('in_progress').map((i) => i.card)),
             [{ name: 'studio', n: 5 }, { name: 'mini', n: 1 }])
       && eq(B.spread(alone, of('in_progress', ONE, alone).map((i) => i.card)), [])],
-    ['a card is a way in only where this phone can open the run behind it',
-      by.q3.ticket === 9 && by.q4.ticket === null
-      && by.m1.card.ustabasi_id === 21 && by.m1.ticket === null],
   );
 }
 
@@ -274,11 +271,17 @@ for (const scheme of ['dark', 'light']) {
   draw('dark', [STUDIO, MINI], { project: 'quire', tab: 'board' });
   const cards = R.presses().filter((p) => p.text.includes('Bulk invite clients'));
   cards[0].press();
+  const here = R.nav.pushed();
+  // A fresh page, because the guard against a double tap lets one navigation
+  // out of a screen and no more (`src/nav.ts`).
+  draw('dark', [STUDIO, MINI], { project: 'quire', tab: 'board' });
+  const elsewhere = R.presses().filter((p) => p.text.includes('Fix portal login'));
+  elsewhere[0].press();
   checks.push(
-    ['tapping a card opens the run behind it, on the computer this phone holds',
-      cards.length === 1 && eq(R.nav.pushed(), ['/ticket/9'])],
-    ['…and a card whose run is on another machine is not a press, ticket or no ticket',
-      !R.presses().some((p) => p.text.includes('Fix portal login'))],
+    ['tapping a card opens the card itself, on the machine it is on',
+      cards.length === 1 && eq(here, ['/card/q3?host=h1'])],
+    ['…including one on a machine this phone is not holding a socket to',
+      elsewhere.length === 1 && eq(R.nav.pushed(), ['/card/m1?host=h2'])],
   );
   const face = draw('dark', [STUDIO], { project: 'quire' });
   R.presses().filter((p) => p.text.includes('bdBoard'))[0].press();

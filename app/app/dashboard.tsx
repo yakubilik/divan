@@ -5,7 +5,7 @@ import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { LOCALE, type Key } from '../src/i18n';
 import { useDivanView, useQueueBadge } from '../src/queue';
-import { COLUMNS, project as projectIn, type DivanView, type MergedProject } from '../src/divan';
+import { COLUMNS, project as projectIn, type DivanView, type MergedCard, type MergedProject } from '../src/divan';
 import { chips } from '../src/shell';
 import type { DivanColumn } from '../src/protocol';
 import { since } from '../src/tickets';
@@ -108,7 +108,7 @@ export default function Dashboard() {
       view={view} now={now} ago={ago} face={face} column={col}
       onFace={(to) => router.setParams({ tab: to })}
       onColumn={(to) => router.setParams({ col: to })}
-      onOpen={(ticket) => go(() => router.push(`/ticket/${ticket}`))} />
+      onOpen={(c) => go(() => router.push(`/card/${c.id}?host=${c.host}`))} />
   ) : null;
 
   return (
@@ -326,7 +326,7 @@ function Project({ project: p, index, view, now, ago, face, column, onFace, onCo
   column: DivanColumn;
   onFace: (to: Face) => void;
   onColumn: (to: DivanColumn) => void;
-  onOpen: (ticket: number) => void;
+  onOpen: (card: MergedCard) => void;
 }) {
   const T = useT();
   const t = useTokens();
@@ -461,15 +461,12 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
   project: MergedProject; view: DivanView; ago: Ago;
   column: DivanColumn;
   onColumn: (to: DivanColumn) => void;
-  onOpen: (ticket: number) => void;
+  onOpen: (card: MergedCard) => void;
 }) {
   const T = useT();
   const t = useTokens();
-  // The computer this phone holds a socket to: the one whose runs have a screen
-  // in this app, and so the only cards that are a way in (`src/board.ts items`).
-  const host = useStore((s) => s.host);
   const moveCard = useStore((s) => s.moveCard);
-  const list = items(view, p, column, ago, host?.id ?? null);
+  const list = items(view, p, column, ago);
   const said = foot(p, column, view.now);
   const where = spread(p, list.map((i) => i.card));
   const empty = blankBody(p);
@@ -620,7 +617,7 @@ function words(T: ReturnType<typeof useT>,
  *  in the air is an empty slot rather than the card (D2). */
 function BoardRow({ item, onOpen, hold, held, flying, landed, onUndo }: {
   item: Item;
-  onOpen: (ticket: number) => void;
+  onOpen: (card: MergedCard) => void;
   hold: { holdMs: number; onLongPress: (e: GestureResponderEvent) => void; onPressOut: () => void };
   held?: boolean;
   flying?: boolean;
@@ -644,7 +641,7 @@ function BoardRow({ item, onOpen, hold, held, flying, landed, onUndo }: {
         action: say.undo ? T('dgUndo') : undefined,
         onAction: say.undo ? onUndo : undefined,
       }}
-      onPress={item.ticket == null ? undefined : () => onOpen(item.ticket!)} />
+      onPress={() => onOpen(item.card)} />
   );
 }
 

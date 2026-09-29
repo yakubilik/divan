@@ -225,7 +225,13 @@ export function spread(p: MergedProject, list: MergedCard[]): { name: string; n:
 
 // ── a card ──────────────────────────────────────────────────────────────────
 
-/** One card on the board, as everything the screen draws about it. */
+/** One card on the board, as everything the screen draws about it.
+ *
+ *  There is no ticket number on it. Every card opens its own page (`app/card`),
+ *  which reads the machine the card is on by name — so a card on the laptop with
+ *  the lid shut is as much a way in as one on the computer this phone holds a
+ *  socket to, and what it can show about a quiet machine is that page's
+ *  business. */
 export interface Item {
   card: MergedCard;
   /** Which face the executor wears (`components/divan` `ExecutorBadge`), and its
@@ -245,15 +251,10 @@ export interface Item {
   /** The card's own two or three sentences, as somebody wrote them. Empty where
    *  nobody did, and the card is then its title alone. */
   summary: string;
-  /** The run behind it, where this phone can open one: a ticket on the computer
-   *  it holds a socket to. Null otherwise, and the card is then not a press —
-   *  another machine's ticket number would open this machine's queue. */
-  ticket: number | null;
 }
 
 /** The cards of one column, ready to draw. */
-export function items(view: DivanView, p: MergedProject, col: DivanColumn,
-                      ago: Ago, activeHost: string | null | undefined): Item[] {
+export function items(view: DivanView, p: MergedProject, col: DivanColumn, ago: Ago): Item[] {
   const seenAt = new Map(view.hosts.map((h) => [h.id, h.at]));
   const several = p.machines.length > 1;
   return cards(p, col, view.now).map((card) => ({
@@ -266,7 +267,6 @@ export function items(view: DivanView, p: MergedProject, col: DivanColumn,
       : null,
     mine: card.executor === 'human',
     summary: (card.summary || '').trim(),
-    ticket: card.ustabasi_id != null && card.host === activeHost ? card.ustabasi_id : null,
   }));
 }
 
