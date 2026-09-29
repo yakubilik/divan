@@ -408,10 +408,23 @@ export interface DivanBranch {
 }
 
 export interface DivanProject {
+  /** `name` is what a screen says and `slug` is what two machines match the same
+   *  product by, so they are not always the same word: this product is called
+   *  Divan and is matched as `remote-ai-chat`. `summary` is what it is *for*. */
   id: string; name: string; slug: string; summary: string;
+  /** What sort of thing it is — `app`, `web`, `library`, `client-work`,
+   *  `research`… an open set, as the branch kinds are. Empty where nobody said,
+   *  which is every product that predates the field. */
+  kind?: string;
+  /** The day the product began, which is not `created_at` — that is the moment
+   *  its row was written. Null where nobody said. */
+  started_at?: number | null;
   /** A product is not a folder: isghocam owns its site and its API. */
   repos: string[];
   sort: number; archived: boolean; created_at: number; updated_at: number;
+  /** The one row in that table that is not a product: the holding place for
+   *  cards no product has claimed. Never in `snapshot.projects`. */
+  hidden?: boolean;
   branches: DivanBranch[];
   counts: Partial<Record<DivanColumn, number>>;
   running: number;
@@ -489,6 +502,15 @@ export interface DivanSnapshot {
   at: number;
   projects: DivanProject[];
   cards: DivanCard[];
+  /** The work no product has claimed: cards the daemon's mirror could put on no
+   *  board, because no product owns the folder their ticket names. Whole, `done`
+   *  included — nobody has ever looked at them — and in none of the counts
+   *  above, because a strange folder is not a product. A card leaves this list
+   *  as soon as somebody creates the product that owns its path. Absent on a
+   *  daemon older than the list. */
+  unfiled?: DivanCard[];
+  /** Which board to ask for to see them. */
+  unfiled_project_id?: string;
   agents: DivanAgent[];
   quota: DivanQuota | null;
   /** Keyed by repository path, not by project: one product's figure is the

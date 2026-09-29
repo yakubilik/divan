@@ -34,8 +34,15 @@ The rest is the things that are easy to get subtly wrong and impossible to see:
     through that queue's own CLI and writes the number back — and a queue that
     is absent or refuses leaves the card where the finger put it rather than
     springing it back;
-  * the tickets that already existed become cards, under the project name the
-    panel already groups them by.
+  * the tickets that already existed become cards, on the board of the product
+    that owns the folder they are in;
+  * and **a poll creates nothing**: no product, no branch, not a repository
+    added to somebody's product because a ticket mentioned a folder inside it.
+    Every ticket in that queue names a folder and the mirror used to be allowed
+    to make a product out of it, which is how the machine this runs on came to
+    have seventeen projects nobody had decided on. What cannot be placed waits
+    in the one hidden holding row — in no list and no count — and moves onto a
+    real board the poll after a product claims its path.
 
 Nothing here talks to the network or starts a model. The queue is a SQLite file
 and a stub CLI built here, the way `test_ustabasi.py` builds one: its database
@@ -44,6 +51,7 @@ imported.
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import logging
@@ -52,6 +60,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import types
 from pathlib import Path
@@ -102,9 +111,13 @@ def refuses(what: str, fn, *args, **kw) -> None:
 # ── a machine with projects on it ────────────────────────────────────────────
 
 ROOT = tmp / "projects"
-for name in ("babysee", "isghocam", "a-new-product", "secrets"):
+for name in ("babysee", "isghocam", "a-new-product", "secrets", "remote-ai-chat",
+             "yatak-kontrol"):
     (ROOT / name).mkdir(parents=True)
 (ROOT / "babysee" / "app").mkdir()
+# The case the folder's name cannot answer: the product checked out here is
+# called Divan, and nothing about the board may rename it back.
+(ROOT / "remote-ai-chat" / "app").mkdir()
 
 # babysee is a real repository, because "is this product alive at all" is a
 # question only git can answer and the answer travels on the snapshot. Two
@@ -219,6 +232,47 @@ check("and the card that was there kept every word of itself",
       ("a card written by an older daemon", "queued", 0))
 conn.close()
 
+# The same, for the four columns a project grew: what it is, what it is for,
+# when it began, and the flag on the row that is not a product. There is real
+# data in this table on the machine this runs on — four products and a board of
+# cards — so the pass has to be additive and the rows have to come through it
+# saying exactly what they said before.
+older = tmp / "older-projects.sqlite"
+conn = sqlite3.connect(older)
+conn.row_factory = sqlite3.Row
+conn.executescript("""
+CREATE TABLE projects (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
+  summary TEXT DEFAULT '', sort INTEGER DEFAULT 0, archived INTEGER DEFAULT 0,
+  created_at REAL, updated_at REAL);
+""")
+conn.execute("INSERT INTO projects (id,name,slug,summary,sort,archived,created_at,"
+             "updated_at) VALUES ('p1','Divan','remote-ai-chat','',0,0,1.0,2.0)")
+conn.execute("INSERT INTO projects (id,name,slug,summary,sort,archived,created_at,"
+             "updated_at) VALUES ('p2','tutor-v3','tutor-v3','',0,1,1.0,2.0)")
+conn.commit()
+divan.migrate(conn)
+check("the columns a project grew arrive on their own",
+      {"kind", "started_at", "hidden"}
+      <= {r[1] for r in conn.execute("PRAGMA table_info(projects)")}, True)
+older_board = divan.Board(conn, threading.Lock())
+kept = older_board.find_project("remote-ai-chat")
+check("and the product that was there is word for word what it was",
+      (kept["name"], kept["slug"], kept["summary"]), ("Divan", "remote-ai-chat", ""))
+check("with the new fields simply empty", (kept["kind"], kept["started_at"]), ("", None))
+check("a product that was archived is still archived",
+      older_board.find_project("tutor-v3")["archived"], True)
+check("…and the migration did not put it back on the board",
+      [p["slug"] for p in older_board.list_projects()], ["remote-ai-chat"])
+check("the holding place arrives with the migration, once",
+      len(conn.execute("SELECT id FROM projects WHERE hidden=1").fetchall()), 1)
+divan.migrate(conn)
+check("…and running the migration again does not add a second",
+      len(conn.execute("SELECT id FROM projects WHERE hidden=1").fetchall()), 1)
+check("nor a second branch on it",
+      len(older_board.branches(older_board.unfiled_project()["id"])), 1)
+conn.close()
+
 # ── 2 · projects, branches, and the two faces ────────────────────────────────
 
 db = fresh_db("model")
@@ -289,6 +343,154 @@ check("the human face stays short", len(board.create_card(
     bs["id"], title="x" * 400, summary="y" * 2000)["title"]), divan.MAX_TITLE)
 check("both halves of it", len(board.get_card(board.create_card(
     bs["id"], title="t", summary="y" * 2000)["id"])["summary"]), divan.MAX_SUMMARY)
+
+# ── 2b · what a product is, beside its name ──────────────────────────────────
+#
+# The table used to hold a name, a slug and a sort order, so the answer to "what
+# is this project" was the folder it happened to be in. A product now says what
+# kind of thing it is, what it is for, and when it actually began — none of it
+# required, because the products that predate the fields have to keep working
+# without them, and all of it written from the one entrance: the create and
+# update calls an agent makes from a chat. There is no form for this anywhere in
+# the clients and none is coming.
+
+db = fresh_db("config")
+board = db.divan
+
+full_p = board.create_project(
+    "Babysee", repos=[str(ROOT / "babysee")], kind="app",
+    summary="A time capsule a parent fills in and a child opens at eighteen.",
+    started_at="2026-03-01")
+check("a product says what kind of thing it is", full_p["kind"], "app")
+check("and what it is for", full_p["summary"],
+      "A time capsule a parent fills in and a child opens at eighteen.")
+holds("and when it actually began, which is not when the row was written",
+      full_p["started_at"] and full_p["started_at"] < full_p["created_at"] - 86400,
+      repr((full_p["started_at"], full_p["created_at"])))
+check("the kind is an open set, not five choices",
+      board.create_project("A client", kind="newsletter")["kind"], "newsletter")
+check("…and is a word however it was typed",
+      board.create_project("Research", kind="  Client Work  ")["kind"], "client-work")
+
+bare = board.create_project("an old product")
+check("none of it is required: the four products that predate it still open",
+      (bare["kind"], bare["summary"], bare["started_at"]), ("", "", None))
+
+# The name is what a screen says; the slug is what two computers match the same
+# product by (`app/src/divan.ts projectKey`). They are separate for one real
+# product — Divan, in ~/projects/remote-ai-chat — so the slug can be given.
+divan_p = board.create_project("Divan", slug="remote-ai-chat")
+check("a product's key can be the checkout every machine knows it by",
+      (divan_p["name"], divan_p["slug"]), ("Divan", "remote-ai-chat"))
+
+edited = board.update_project(divan_p["id"], name="Divan board", kind="web",
+                             purpose="The board every project is run from.",
+                             started_at="2026-09-28",
+                             repos=[str(ROOT / "babysee" / "app")])
+check("a product can be renamed", edited["name"], "Divan board")
+check("…and the key does not move with the name, or two machines stop agreeing",
+      edited["slug"], "remote-ai-chat")
+check("its kind rewritten", edited["kind"], "web")
+check("what it is for, said as a purpose, is the same field as the summary",
+      edited["summary"], "The board every project is run from.")
+check("its start date given", time.strftime("%Y-%m-%d",
+                                           time.localtime(edited["started_at"])),
+      "2026-09-28")
+check("and its repositories are the list, not an addition to it",
+      edited["repos"], [str(ROOT / "babysee" / "app")])
+check("only what was sent is touched",
+      board.update_project(divan_p["id"], sort=3)["name"], "Divan board")
+check("a date can be cleared", board.update_project(
+    divan_p["id"], started_at=None)["started_at"], None)
+board.update_project(divan_p["id"], archived=True)
+check("a product can be taken off the board",
+      [p["slug"] for p in board.list_projects() if p["slug"] == "remote-ai-chat"], [])
+check("…and put back", board.update_project(divan_p["id"], archived=False)["archived"],
+      False)
+holds("…where it is listed again",
+      "remote-ai-chat" in [p["slug"] for p in board.list_projects()],
+      repr([p["slug"] for p in board.list_projects()]))
+
+check("a start date can be a year", time.strftime("%Y-%m-%d", time.localtime(
+    board.update_project(bare["id"], started_at="2025")["started_at"])), "2025-01-01")
+check("…or a month", time.strftime("%Y-%m-%d", time.localtime(
+    board.update_project(bare["id"], started_at="2025-06")["started_at"])), "2025-06-01")
+check("…or a timestamp a client already had",
+      board.update_project(bare["id"], started_at=1_700_000_000)["started_at"],
+      1_700_000_000.0)
+refuses("a date nobody can read", board.update_project, bare["id"],
+        started_at="last spring")
+refuses("a field a project has not got", board.update_project, bare["id"],
+        deadline="friday")
+refuses("a product left with no name", board.update_project, bare["id"], name="  ")
+refuses("an update to a product that is not there", board.update_project, "nope",
+        kind="app")
+try:
+    board.update_project(bare["id"], owner="me")
+    fails.append("an unknown field is refused by name")
+except ValueError as exc:
+    holds("…and the refusal says which fields there are",
+          "kind" in str(exc) and "started_at" in str(exc), str(exc))
+
+check("a product is found by its id", board.find_project(bare["id"])["id"], bare["id"])
+check("…by its key", board.find_project("remote-ai-chat")["name"], "Divan board")
+check("…and by the name on the screen, which is what a person says out loud",
+      board.find_project("Divan board")["slug"], "remote-ai-chat")
+check("and a product nobody has is nobody's", board.find_project("nothing"), None)
+
+# ── 2c · the row in `projects` that is not a product ─────────────────────────
+
+holder = board.unfiled_project()
+check("every database has one holding place", holder["slug"], divan.UNFILED)
+check("it is hidden, which is the whole of the difference", holder["hidden"], True)
+check("so it is in no project list",
+      [p["slug"] for p in board.list_projects() if p["hidden"]], [])
+check("it has the one branch a card can sit on",
+      [b["kind"] for b in board.branches(holder["id"])], ["engineering"])
+refuses("it cannot be edited like a product", board.update_project, holder["id"],
+        name="My unfiled things")
+refuses("and nobody can create a second one", board.create_project, "unfiled")
+check("opening the database again does not add another",
+      len(fresh_db("config")._c.execute(
+          "SELECT id FROM projects WHERE slug=?", (divan.UNFILED,)).fetchall()), 1)
+
+# ── 2d · which product a path belongs to ─────────────────────────────────────
+#
+# Asked before any name, because the path is the fact and the name is a label.
+
+db = fresh_db("paths")
+board = db.divan
+site = board.create_project("isghocam", repos=["/w/isghocam", "/w/isghocam-api"])
+seo = board.create_project("isghocam SEO", repos=["/w/isghocam/seo"])
+check("a repository a product owns is that product",
+      board.project_for_repo("/w/isghocam")["name"], "isghocam")
+check("a folder inside it is still that product",
+      board.project_for_repo("/w/isghocam/app/src")["name"], "isghocam")
+check("a second repository of the same product, likewise",
+      board.project_for_repo("/w/isghocam-api")["name"], "isghocam")
+check("the longest path that contains it wins, not the first",
+      board.project_for_repo("/w/isghocam/seo/notes")["name"], "isghocam SEO")
+check("a trailing separator is the same folder",
+      board.project_for_repo("/w/isghocam/")["name"], "isghocam")
+check("a neighbour whose name merely starts the same is not it",
+      board.project_for_repo("/w/isghocam-seo"), None)
+check("and a folder nobody owns is nobody's", board.project_for_repo("/w/other"), None)
+check("nor does a product's name match a path by accident",
+      board.project_for_repo(""), None)
+
+# And the second question, asked only where the first has no answer: the name. A
+# product may own no repository yet, and a ticket may name a folder nobody
+# registered — which is the case the panel's own rule was written for.
+board.create_project("ledger")
+check("a product that owns no repository is still found by the name a path suggests",
+      board.project_for_ticket({"repo": "/w/none/ledger"})["name"], "ledger")
+check("the path wins over a name, when both have something to say",
+      board.project_for_ticket({"repo": "/w/isghocam/seo",
+                                "project": "isghocam"})["name"], "isghocam SEO")
+check("a ticket with no repository at all is not a product called 'unfiled'",
+      board.project_for_ticket({"repo": ""})["hidden"], True)
+check("and neither is one nothing answers for",
+      board.project_for_ticket({"repo": "/w/nobody/here"})["slug"], divan.UNFILED)
 
 # ── 3 · the order somebody put them in ───────────────────────────────────────
 
@@ -525,6 +727,17 @@ async def wire() -> None:
     conn.close()
 
     # ── 8 · the tickets that already existed become cards ────────────────────
+    #
+    # Onto boards somebody made. A product exists because a person said it does
+    # — `divan.project.create` and nothing else — so the three this queue is
+    # working on are created before the first poll. One of them is created the
+    # way the real one is: a visible name that is nothing like the folder every
+    # machine knows it by.
+    board.create_project("babysee", repos=[str(ROOT / "babysee")])
+    board.create_project("isghocam", repos=[str(ROOT / "isghocam")])
+    board.create_project("Divan", slug="remote-ai-chat",
+                         repos=[str(ROOT / "remote-ai-chat")])
+
     run_dir = tmp / "run-1"
     run_dir.mkdir()
     (run_dir / "stdout.log").write_text("".join(json.dumps(r) + "\n" for r in [
@@ -540,17 +753,36 @@ async def wire() -> None:
     queue_ticket(4, "which account should this use?", str(ROOT / "isghocam"), "blocked",
                  escalation="Which account should the beta use?")
     queue_ticket(5, "a job on a repository nobody registered", "/elsewhere/ledger", "done")
+    queue_ticket(6, "the board draws nothing on the second wall",
+                 str(ROOT / "remote-ai-chat" / "app"), "queued")
+    queue_ticket(7, "rank tracking shipped", str(ROOT / "isghocam"), "done")
 
+    rows = lambda: sqlite3.connect(str(tmp / "wire.sqlite")).execute(
+        "SELECT id, slug, name, archived, hidden FROM projects").fetchall()
+    before_rows = rows()
     snap = await host.h_ustabasi_list(None, {})
-    check("the wall still answers what it always did", len(snap["tickets"]), 5)
+    check("the wall still answers what it always did", len(snap["tickets"]), 7)
 
+    check("a poll of a queue full of tickets writes no project of its own",
+          rows(), before_rows)
     names = sorted(p["name"] for p in board.list_projects())
-    check("a project per product the queue is working on, by the panel's own rule",
-          names, ["babysee", "isghocam", "ledger"])
+    check("the products are the ones somebody created, and no more",
+          names, ["Divan", "babysee", "isghocam"])
     by_ticket = {c["ustabasi_id"]: c for c in board.cards()}
-    check("every ticket is a card", sorted(by_ticket), [1, 2, 3, 4, 5])
+    check("every ticket is a card", sorted(by_ticket), [1, 2, 3, 4, 5, 6, 7])
     check("a ticket in a folder under a product belongs to the product",
           board.get_project(by_ticket[3]["project_id"])["name"], "babysee")
+    check("…by the path and not by the name of the folder",
+          board.get_project(by_ticket[6]["project_id"])["name"], "Divan")
+    check("and the name the person gave it is untouched by having work under it",
+          [(p["name"], p["slug"]) for p in board.list_projects()
+           if p["slug"] == "remote-ai-chat"], [("Divan", "remote-ai-chat")])
+    check("a ticket out of a folder no product owns is not lost",
+          bool(by_ticket[5]), True)
+    check("…it is in the holding place",
+          by_ticket[5]["project_id"], board.unfiled_project()["id"])
+    check("…which is in no project list",
+          [p["slug"] for p in board.list_projects() if p["slug"] == divan.UNFILED], [])
     check("every one of them is engineering work",
           {c["branch"] for c in by_ticket.values()}, {"engineering"})
     check("and the coding executor's", {c["executor"] for c in by_ticket.values()},
@@ -579,11 +811,127 @@ async def wire() -> None:
 
     before = {c["id"]: (c["column"], c["position"]) for c in board.cards()}
     again = await host.h_ustabasi_list(None, {})
-    check("the same snapshot twice imports nothing twice", len(board.cards()), 5)
+    check("the same snapshot twice imports nothing twice", len(board.cards()), 7)
     check("and moves nothing", {c["id"]: (c["column"], c["position"])
                                 for c in board.cards()}, before)
     check("the wall is unchanged by having been mirrored",
-          [t["id"] for t in again["tickets"]], [1, 2, 3, 4, 5])
+          [t["id"] for t in again["tickets"]], [1, 2, 3, 4, 5, 6, 7])
+
+    # ── 8b · a poll creates nothing ──────────────────────────────────────────
+    #
+    # The behaviour this whole section exists for. Every ticket in that queue
+    # names a folder, and it used to be enough for the mirror to make a product
+    # out of it — which is how this machine came to have seventeen projects
+    # nobody had decided on and one called "unfiled". A poll now writes cards and
+    # the marks on them, and nothing else at all.
+
+    # Said once at the source, because it is the rule and not an outcome: two
+    # places in that module put a row in `projects`, and a third one appearing is
+    # this whole behaviour coming back by a different route.
+    tree = ast.parse(Path(divan.__file__).read_text())
+    writers = sorted({n.name for n in ast.walk(tree)
+                      if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                      and "INSERT INTO projects" in ast.unparse(n)})
+    check("only two things in the module write a project row: the create, and the"
+          " migration that seeds the holding place", writers,
+          ["_seed_unfiled", "create_project"])
+
+    bare = fresh_db("bare")
+    bare_host = Host(bare)
+    bare_rows = lambda: sqlite3.connect(str(tmp / "bare.sqlite")).execute(
+        "SELECT id, slug, hidden FROM projects").fetchall()
+    before_rows = bare_rows()
+    await bare_host.h_ustabasi_list(None, {})
+    check("a whole queue of tickets, mirrored onto a board with no products on it,"
+          " writes no project", bare_rows(), before_rows)
+    check("and creates no product by any other name either",
+          bare.divan.list_projects(), [])
+    check("every ticket is still a card that can be found",
+          len(bare.divan.cards()), 7)
+    check("…all of them in the one holding place",
+          {c["project_id"] for c in bare.divan.cards()},
+          {bare.divan.unfiled_project()["id"]})
+    check("no branch was invented on the way either",
+          [b["kind"] for b in bare.divan.branches(bare.divan.unfiled_project()["id"])],
+          ["engineering"])
+    check("and no repository was written onto anybody's product",
+          sqlite3.connect(str(tmp / "bare.sqlite")).execute(
+              "SELECT COUNT(*) FROM project_repos").fetchone()[0], 0)
+    await bare_host.h_ustabasi_list(None, {})
+    check("a second poll neither creates nor duplicates", len(bare.divan.cards()), 7)
+
+    # The holding place on the board that does have products: one card, the same
+    # card on every poll, and not a figure on anybody's dashboard.
+    holder = board.unfiled_project()
+    unclaimed = board.card_by_ustabasi(5)
+    check("the card out of the unknown folder is in the holding place",
+          unclaimed["project_id"], holder["id"])
+    check("…and stays there, on the same card, poll after poll",
+          [c["ustabasi_id"] for c in board.cards(holder["id"])], [5])
+    shot = await host.h_divan_snapshot(None, {})
+    check("the holding place is in no project the answer lists",
+          [p["slug"] for p in shot["projects"] if p["slug"] == divan.UNFILED], [])
+    check("so it is in no count a dashboard adds up",
+          sum(sum(p["counts"].values()) for p in shot["projects"]),
+          len([c for c in board.cards() if c["project_id"] != holder["id"]]))
+    check("but the work is on the answer, under its own name, rather than lost",
+          [c["title"] for c in shot["unfiled"]],
+          ["a job on a repository nobody registered"])
+    check("…and it says where to look for it",
+          shot["unfiled_project_id"], holder["id"])
+    listed = await host.h_divan_projects(None, {})
+    check("the project list says the same: products here, the holding place beside",
+          (divan.UNFILED in [p["slug"] for p in listed["projects"]],
+           listed["unfiled"]["slug"]), (False, divan.UNFILED))
+    check("and it carries the vocabulary a client offers for a product's kind",
+          listed["kinds"], list(divan.PROJECT_KINDS))
+
+    # ── 8c · a product taken off the board is not put back by a poll ──────────
+    iggy = board.project_by_name("isghocam")
+    board.update_project(iggy["id"], archived=True)
+    queue_ticket(8, "a ticket on a product nobody is looking at any more",
+                 str(ROOT / "isghocam"), "queued")
+    await host.h_ustabasi_list(None, {})
+    landed = board.card_by_ustabasi(8)
+    check("a ticket on an archived product's repository is filed to that product",
+          landed["project_id"], iggy["id"])
+    check("and the product is still archived: a poll does not reopen a board",
+          board.get_project(iggy["id"])["archived"], True)
+    check("…so it is still in no list",
+          [p["slug"] for p in board.list_projects() if p["slug"] == "isghocam"], [])
+    check("and the card did not go to the holding place either",
+          [c["ustabasi_id"] for c in board.cards(holder["id"])], [5])
+    board.update_project(iggy["id"], archived=False)
+
+    # ── 8d · and what could not be placed is placed when a product claims it ──
+    #
+    # Which is the answer to the only real objection to not creating products:
+    # the ticket arrives on Tuesday and the product is created on Wednesday.
+    queue_ticket(9, "the sleep chart is empty on the first night",
+                 str(ROOT / "yatak-kontrol"), "queued")
+    await host.h_ustabasi_list(None, {})
+    waiting = board.card_by_ustabasi(9)
+    check("a ticket out of a folder no product owns waits in the holding place",
+          waiting["project_id"], holder["id"])
+    settled = {c["id"]: (c["project_id"], c["column"], c["position"])
+               for c in board.cards() if c["project_id"] != holder["id"]}
+    claimed = board.create_project("yatak kontrol", kind="app",
+                                  repos=[str(ROOT / "yatak-kontrol")])
+    await host.h_ustabasi_list(None, {})
+    moved = board.card_by_ustabasi(9)
+    check("creating the product moves its card onto its board",
+          moved["project_id"], claimed["id"])
+    check("onto the engineering branch", moved["branch"], "engineering")
+    check("in the column its status put it in", moved["column"], waiting["column"])
+    check("and the holding place is closed up behind it",
+          sorted(c["position"] for c in board.cards(holder["id"])),
+          list(range(len(board.cards(holder["id"])))))
+    check("nothing that was already on a board was touched by any of it",
+          {c["id"]: (c["project_id"], c["column"], c["position"])
+           for c in board.cards() if c["project_id"] != holder["id"]
+           and c["id"] in settled}, settled)
+    check("and the card that nobody can place is still where it was",
+          board.card_by_ustabasi(5)["project_id"], holder["id"])
 
     # ── 9 · a status change never moves a column ─────────────────────────────
     #
@@ -752,11 +1100,11 @@ async def wire() -> None:
     # outside the roots by some route the handlers do not cover — the import
     # files them from the queue's own rows, which answer to nobody here — still
     # never becomes a worktree.
-    ledger = board.project_by_name("ledger")
-    check("the imported product's repository is outside every root",
-          policy.is_allowed_cwd(ledger["repos"][0]), False)
-    loose = board.create_card(ledger["id"], title="work in a folder nobody allowed",
-                              executor="coding_agent")
+    check("a card imported out of a folder nobody registered kept that folder",
+          policy.is_allowed_cwd(board.card_by_ustabasi(5)["repo"]), False)
+    loose = board.create_card(board.unfiled_project()["id"],
+                              title="work in a folder nobody allowed",
+                              executor="coding_agent", repo=str(OUTSIDE))
     before = queue_count()
     out = await host.h_divan_card_move(None, {"card_id": loose["id"],
                                               "column": "in_progress"})
@@ -825,10 +1173,72 @@ async def wire() -> None:
 
     made = await host.h_divan_project_create(None, {"name": "a new product",
                                                     "repos": [str(ROOT / "a-new-product")],
-                                                    "branches": ["finance"]})
+                                                    "branches": ["finance"],
+                                                    "kind": "app",
+                                                    "purpose": "The one it is for.",
+                                                    "started_at": "2026-04-15"})
     check("a product can be created over the wire", made["name"], "a new product")
     check("with an extra branch of its own",
           [b["kind"] for b in made["branches"]][-1], "finance")
+    check("and with what it is", made["kind"], "app")
+    check("what it is for", made["summary"], "The one it is for.")
+    check("and when it began", time.strftime("%Y-%m-%d",
+                                            time.localtime(made["started_at"])),
+          "2026-04-15")
+
+    # ── 12b · a product is created and edited by saying so ───────────────────
+    #
+    # There is no project form in either client and none is planned: this is the
+    # entrance, called by the agent in a chat on the phone. So it takes every
+    # field the model does, it answers to the name a person would say rather than
+    # a hex id, and a word it does not know comes back as an error naming the
+    # ones it does — a conversational entrance cannot afford a silent no-op.
+    changed = await host.h_divan_project_update(None, {
+        "project": "a new product", "name": "The new product",
+        "kind": "client work", "purpose": "What it turned out to be for.",
+        "started_at": "2026-05-01", "sort": 2})
+    check("a product can be edited over the wire, named as a person names it",
+          changed["name"], "The new product")
+    check("its kind", changed["kind"], "client-work")
+    check("what it is for", changed["summary"], "What it turned out to be for.")
+    check("when it began", time.strftime("%Y-%m-%d",
+                                        time.localtime(changed["started_at"])),
+          "2026-05-01")
+    check("where it sits", changed["sort"], 2)
+    check("and the key two machines match it by has not moved with the name",
+          changed["slug"], "a-new-product")
+    check("it can be found by that key too",
+          (await host.h_divan_project_update(None, {
+              "project": "a-new-product", "kind": "app"}))["kind"], "app")
+    check("and by its id, as every other request names a thing",
+          (await host.h_divan_project_update(None, {
+              "project_id": changed["id"], "kind": "web"}))["kind"], "web")
+    check("its repositories can be moved, and are the list rather than an addition",
+          (await host.h_divan_project_update(None, {
+              "project_id": changed["id"],
+              "repos": [str(ROOT / "babysee" / "app")]}))["repos"],
+          [str(ROOT / "babysee" / "app")])
+    check("and the board it holds came through the rename",
+          (await host.h_divan_board(None, {"project_id": changed["id"]}))["project"]["name"],
+          "The new product")
+
+    # The fence, on the way in, exactly as on `divan.project.create`: a
+    # repository is where an autonomous worker is given a shell.
+    for data, code in [
+        ({"project_id": changed["id"], "repos": [str(OUTSIDE)]}, "cwd_outside"),
+        ({"project_id": changed["id"], "repos": [str(ROOT / "secrets")]}, "cwd_outside"),
+        ({"project_id": changed["id"], "repos": [str(ROOT / "never-existed")]},
+         "no_such_folder"),
+    ]:
+        try:
+            await host.h_divan_project_update(None, data)
+            holds(f"h_divan_project_update refuses {data['repos']}", False,
+                  "it was accepted")
+        except Exception as exc:
+            check(f"h_divan_project_update refuses {data['repos']} by name",
+                  getattr(exc, "code", None), code)
+    check("and the repositories it had are untouched by the attempt",
+          board.get_project(changed["id"])["repos"], [str(ROOT / "babysee" / "app")])
 
     b = await host.h_divan_board(None, {"project_id": one["id"]})
     check("a board comes back as four columns", sorted(b["columns"]), sorted(divan.COLUMNS))
@@ -1029,6 +1439,17 @@ async def wire() -> None:
         ("h_divan_card_create", {"project_id": "nope", "title": "t"}, "bad_card"),
         ("h_divan_card_executor", {"card_id": "nope", "executor": "human"}, "bad_executor"),
         ("h_divan_project_create", {"name": "babysee"}, "bad_project"),
+        ("h_divan_project_create", {"name": "  "}, "bad_project"),
+        ("h_divan_project_create", {"name": "unfiled"}, "bad_project"),
+        ("h_divan_project_create", {"name": "a product with a bad date",
+                                    "started_at": "some time in spring"}, "bad_project"),
+        ("h_divan_project_update", {"project": "nothing at all", "kind": "app"},
+         "no_such_project"),
+        ("h_divan_project_update", {"project": "babysee", "deadline": "friday"},
+         "bad_project"),
+        ("h_divan_project_update", {"project": "babysee", "name": " "}, "bad_project"),
+        ("h_divan_project_update", {"project": "unfiled", "name": "mine"},
+         "bad_project"),
         ("h_divan_card_update", {"card_id": "nope", "title": "t"}, "no_such_card"),
         ("h_divan_card_update", {"card_id": created["id"], "title": " "}, "bad_card"),
     ]:
@@ -1040,6 +1461,52 @@ async def wire() -> None:
 
 
 asyncio.run(wire())
+
+# ── 14 · the entrance an agent in a chat actually has ────────────────────────
+#
+# The requests above are reached from the phone over a socket. The thing that has
+# to be able to make a product is the agent in the app's chat, which has a shell
+# on this computer and no screen — so `remote-ai-chat project` is that entrance,
+# and it speaks the same two requests over the daemon's own socket rather than
+# writing to the database behind it. What is checked here is the part that can be
+# wrong quietly: which flags become which fields, and that a flag nobody passed
+# is not a field set to nothing.
+
+from remote_ai_chat.__main__ import _project_fields, _project_line   # noqa: E402
+
+
+def flags(**kw) -> dict:
+    given = {"name": None, "slug": None, "kind": None, "purpose": None,
+             "started": None, "sort": None, "repo": None, "branch": None,
+             "archive": False, "unarchive": False}
+    return _project_fields(types.SimpleNamespace(**{**given, **kw}))
+
+
+check("a command that gives nothing sends nothing", flags(), {})
+check("every field a product has can be given",
+      flags(name="Divan", slug="remote-ai-chat", kind="app", purpose="The board.",
+            started="2026-09-28", sort=2, repo=["/w/rac"], branch=["finance"]),
+      {"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+       "purpose": "The board.", "started_at": "2026-09-28", "sort": 2,
+       "repos": ["/w/rac"], "branches": ["finance"]})
+check("a repeated repository is the list", flags(repo=["/a", "/b"])["repos"], ["/a", "/b"])
+check("and an empty one is an emptied list, not an absent field",
+      flags(repo=[]), {"repos": []})
+check("a purpose can be cleared, which is not the same as not saying",
+      flags(purpose=""), {"purpose": ""})
+check("taking a product off the board is one flag", flags(archive=True),
+      {"archived": True})
+check("and putting it back is the other", flags(unarchive=True), {"archived": False})
+holds("a product reads back as one line saying what it is and where it stands",
+      _project_line({"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+                     "started_at": 1_759_000_000, "summary_line": "2 running"})
+      == "Divan (app)  [remote-ai-chat] since "
+      + time.strftime("%Y-%m-%d", time.localtime(1_759_000_000)) + "  — 2 running",
+      _project_line({"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+                     "started_at": 1_759_000_000, "summary_line": "2 running"}))
+check("and a product with none of it still reads",
+      _project_line({"name": "an old product", "slug": "an-old-product"}),
+      "an old product  [an-old-product]")
 
 if fails:
     print(f"FAIL ({len(fails)})")
