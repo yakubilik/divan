@@ -30,7 +30,7 @@ import { Overview } from '../src/screens/Overview';
 import { Shell } from '../src/components/Shell';
 import { merge } from '../src/lib/divan';
 import { chips } from '../src/lib/shell';
-import { studio } from './divan-fixture.js';
+import { boards } from './overview-fixture.js';
 import { ChatView } from '../src/components/ChatView';
 import { Modal } from '../src/components/Modal';
 import { ApprovalModal } from '../src/components/ApprovalModal';
@@ -90,10 +90,17 @@ const emptyView = merge([{ key: 'studio', name: 'studio', state: {
 
 // …and one that has, so that the project bar has products in it. This is the
 // page to hold up against Web12 W1 and Web13 W3: the bar, its chips, the clock
-// and the switch, over the place they belong to.
-const board = merge([{ key: 'studio', name: 'studio', state: {
-  snapshot: studio(), at: Date.now() / 1000, reachable: true, error: null, old: false,
-} }], Date.now() / 1000);
+// and the switch, over the place they belong to — and under them the counters,
+// the products, the roster and the questions that open themselves. The board is
+// `overview-fixture.js`'s, which is the one with a question that has a choice in
+// it and a card that is nobody's but yours; `divan-fixture.js`'s would draw the
+// windows with nothing to answer.
+const NOW = Math.floor(Date.now() / 1000);
+const board = merge(boards(NOW).busy.map((host) => ({
+  key: host.key, name: host.name, state: {
+    snapshot: host.snap, at: NOW - (host.age ?? 0), reachable: true, error: null, old: false,
+  },
+})), NOW);
 
 const SCREENS: [string, React.ReactNode][] = [
   ['Dashboard', <Dashboard onOpenChat={noop} onNewChat={noop} />],
@@ -113,7 +120,7 @@ const SCREENS: [string, React.ReactNode][] = [
   // the one screen here that can be shown with no machine answering as well.
   ['Shell', <Shell view="overview" onView={noop} now={board.now}
     chips={chips(board, null)} onProject={noop}>
-    <Overview view={board} project={null} onProject={noop} />
+    <Overview view={board} project={null} onProject={noop} onAsk={noop} />
   </Shell>],
   // The chat place: the bar, the list and the chat, which is the composition
   // the panel is in most of the time and the one place the shell has to leave
@@ -129,6 +136,13 @@ const SCREENS: [string, React.ReactNode][] = [
       onRespond={noop} onEdit={noop} onUpdate={noop} onDelete={noop} onPopOut={noop} />
   </Shell>],
   ['Overview', <Overview view={emptyView} project={null} onProject={noop} />],
+  // …and the calm morning, which is a designed state rather than the busy page
+  // with its numbers at zero.
+  ['OverviewCalm', <Overview view={merge(boards(NOW).calm.map((host) => ({
+    key: host.key, name: host.name, state: {
+      snapshot: host.snap, at: NOW, reachable: true, error: null, old: false,
+    },
+  })), NOW)} project={null} onProject={noop} onAsk={noop} />],
   ['Machine', <Machine
     view="machines" onView={noop} fleet={emptyView} onOpenChat={noop} onNewChat={noop}
     onNewChatIn={noop} onStartChat={noop} onPeek={noop} />],

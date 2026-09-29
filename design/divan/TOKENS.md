@@ -328,17 +328,43 @@ status chip · **8** an executor's square · **9** a row's icon well, a small
 button, the selected tab inside its track · **10** a top-bar item, a side-panel
 row · **11** the button a card ends on · **12** a tab strip's track · **14** a
 counter tile, a ticket card · **16** a card, a board column, a pill, the drawer ·
-**20** the composer inside a panel · **26** the command bar.
+**20** the composer inside a panel · **26** the command bar. And **10** twice
+over: a top-bar item and a side-panel row, and the inset block a worker quotes
+its figures in inside a chat session (Web12 W1).
 
 Heights: top bar **58** · a nav item **34** · a pill **32** · a button **34**, or
 **32** where it is a row's own action · an executor's square **28** · a
 monogram **34** on a card and **46** in a page head · a row's well **32** with a
 **17** glyph · a status dot **7** · the side panel **260** with **40** pt rows.
 
+The window a question opens in, and what stands beside it (Web12 W1, Web13 W3):
+the session **350 × 500** with a **40** pt composer in it, a minimised one in the
+dock **136 × 44** and the `+1` after them **44 × 44**, and the command bar across
+the bottom **420 × 52** with a **36** pt round send in it. W1 draws its *second*
+window a size down (**320 × 440**) to say which of the two is being read; the
+panel opens both at the first size, because on this end either of the two can be
+the one you answer.
+
 Shadows, as the frames write them: `0 0 0 1px var(--line)` is the ring a card
 wears instead of a border — 56 times across the four groups — then
 `0 1px 2px var(--sh)` for a lift, `0 0 0 1px var(--line2), 0 10px 24px var(--sh)`
-for a popover and the same at `14px 36px` for the drawer.
+for a popover and the same at `14px 36px` for the drawer — and `0 24px 60px
+var(--sh)` under a window standing over the page, whose *ring* is not in the list
+because which colour that ring is, is what the window is saying.
+
+Two things W1 draws that the panel does not, and one it draws differently:
+
+- **the sparkline** beside a product's figure — fourteen bars of `var(--line2)`.
+  Nothing carries a day-by-day history of a repository, so the panel draws the two
+  numbers that exist (what landed in seven days, and when it last moved) and no
+  chart of numbers that do not. A figure with no source is not drawn; a
+  placeholder is worse than a gap.
+- **what a product earns**, which the frames put at the top of a card. No source
+  is connected, so there is no line for it.
+- **the send arrow** in the command bar, which the frame draws in `var(--bg)` on
+  the `var(--line2)` fill — an empty composer whose send is not available, and
+  2.2:1 in the dark, 1.6:1 in the light. Nothing in this panel is drawn at a
+  weight that cannot be read, so the arrow takes `--ink` on the same fill.
 
 Type is the panel's own faces at the frames' sizes and weights, mono for numbers,
 times, counts and identifiers and never for sentences. The frames are drawn in
@@ -350,7 +376,10 @@ Geist; the panel does not ship it.
   `--dv-*` rules, the switch, the marks, the radii, the heights, the shadows, and
   `C`, the older vocabulary pointed at the same table.
 - `web/src/ui/divan.tsx` — the parts: card, row, pill, tab, column tab, status
-  dot, executor badge, counter, section header, empty state, side panel, and the
+  dot, executor badge, counter, section header, empty state, side panel, note,
+  the mono tag in a card's corner, a line of the agent roster, the window a
+  question opens in (panel, its head, the block it quotes figures in, its
+  composer), the dock a minimised one waits in, the command bar, and the
   button and state mark the frames draw beside them; and the top bar — the bar
   itself, a nav item, the rule between the places and the chips, and the mono
   chip and stamp at its far end. Each names the frame it was measured off. The
