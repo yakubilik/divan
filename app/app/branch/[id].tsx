@@ -9,8 +9,9 @@ import { clock, type Ago, type Said } from '../../src/dashboard';
 import { oldWords } from '../../src/project';
 import {
   OVER_TIME, PULLS, bare, commits, dense, find, head, landedWords, log, logTitle, numbers,
-  repos, status, tickets,
+  repos, status, tickets, type Found,
 } from '../../src/branch';
+import type { DivanView } from '../../src/divan';
 import { EmptyState, SectionHeader } from '../../src/components/divan';
 import { BranchHead, CommitRow, LogRow, Nothing, NoSource, RepoRow, TicketRow } from '../../src/components/branch';
 import { Figures } from '../../src/components/project';
@@ -82,7 +83,7 @@ export default function BranchScreen() {
         <BackRow label={found ? found.project.name : T('overview')} onPress={back}
           style={{ paddingHorizontal: 4 }} />
         {found
-          ? <Face view={view} found={found} ago={ago} onOpen={(id, host) =>
+          ? <Page view={view} found={found} ago={ago} onOpen={(id, host) =>
               go(() => router.push(`/card/${id}?host=${host}`))} />
           : (
             /* The product is not on this phone, or it has no branch by this
@@ -95,10 +96,10 @@ export default function BranchScreen() {
   );
 }
 
-/** The page itself. */
-function Face({ view, found, ago, onOpen }: {
-  view: ReturnType<typeof useDivanView>;
-  found: NonNullable<ReturnType<typeof find>>;
+/** The page itself, once there is a branch to draw. */
+function Page({ view, found, ago, onOpen }: {
+  view: DivanView;
+  found: Found;
   ago: Ago;
   onOpen: (card: string, host: string) => void;
 }) {
@@ -111,7 +112,7 @@ function Face({ view, found, ago, onOpen }: {
   const stale = oldWords(p, now, ago);
   const said = (x: Said) => T(x.key, x.params);
 
-  const sentence = (
+  const intro = (
     <>
       <BranchHead name={who.name} project={who.project} state={who.state}
         refreshed={who.refreshed ? said(who.refreshed.said) : null}
@@ -134,7 +135,7 @@ function Face({ view, found, ago, onOpen }: {
   if (bare(p, b, now)) {
     return (
       <View style={{ flexGrow: 1, gap: 12 }}>
-        {sentence}
+        {intro}
         <EmptyState title={T('bpBareTitle')} body={T('bpBare')} />
       </View>
     );
@@ -148,7 +149,7 @@ function Face({ view, found, ago, onOpen }: {
 
   return (
     <View style={{ flexGrow: 1, gap: 12 }}>
-      {sentence}
+      {intro}
       <Figures figures={numbers(b).map((f) => ({ value: f.value, label: T(f.label) }))}
         style={{ paddingHorizontal: 4 }} />
       <NoSource label={T(OVER_TIME.key)} body={T(OVER_TIME.body)} />
