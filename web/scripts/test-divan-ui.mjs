@@ -345,6 +345,26 @@ try {
     ok('…and it is legible too, which a regex could not have said',
       afterClick.thin.length === 0, afterClick.thin.slice(0, 8).join('\n    '));
 
+    // And the rest of the rail while we are in there: every section of the one
+    // screen that has sections, each drawn and each measured.
+    const sections = await evaluate(`
+      const rail = [...document.querySelectorAll('[data-screen="Settings"] button')]
+        .filter((b) => b.style.width === '100%' && b.textContent.trim());
+      const seen = [];
+      for (const b of rail) {
+        const name = b.textContent.trim().split(/\\s+/)[0];
+        b.click();
+        await new Promise((r) => setTimeout(r, 90));
+        const thin = window.__audit().thin;
+        seen.push({ name, thin, size: document.querySelector('[data-screen="Settings"]').innerText.length });
+      }
+      return seen;
+    `);
+    const unreadable = sections.flatMap((x) => x.thin.map((t) => `${x.name}: ${t}`));
+    ok('every section of Settings draws something and is legible',
+      sections.length >= 6 && sections.every((x) => x.size > 40) && unreadable.length === 0,
+      unreadable.slice(0, 6).join('\n    ') || sections.map((x) => `${x.name} ${x.size}`).join(' · '));
+
     const shot = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     writeFileSync(join(out, `parts-${scheme}.png`), Buffer.from(shot.data, 'base64'));
 
