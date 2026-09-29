@@ -5,6 +5,7 @@ import { useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { useDivanView } from '../src/queue';
 import { machineRows } from '../src/shell';
+import { executorCount } from '../src/machine';
 import { ListRow } from '../src/components/divan';
 import { Text } from '../src/components/text';
 import { em, useTokens } from '../src/theme';
@@ -15,8 +16,9 @@ import { Shell } from '../src/components/shell';
  *
  *  It is a plain list, visited monthly. Each row has one grey summary line,
  *  nothing is coloured unless a machine is actually unreachable, and every row
- *  goes one level deeper and no further — to the screen that was already
- *  there, unchanged, which is all this ticket moves. */
+ *  goes one level deeper and no further — to Machines and Executors
+ *  (`app/machines.tsx`, `app/executors.tsx`, S15 and S14), and to the screens
+ *  that were already there and moved under here unchanged. */
 export default function Machine() {
   const router = useRouter();
   const go = useNavGuard();
@@ -26,6 +28,7 @@ export default function Machine() {
   const rows = machineRows({
     machines: view.totals.machines,
     unreachable: view.totals.machines - view.totals.reachable,
+    executors: executorCount(view),
   });
 
   return (

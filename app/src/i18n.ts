@@ -508,6 +508,32 @@ const en = {
   mPool: 'Sign-in pool', mPoolNote: 'several sign-ins driven as one',
   mCall: 'Call', mCallNote: 'talk to this computer out loud',
   mSettings: 'Settings', mSettingsNote: 'appearance, security, notifications',
+  mExecutors: 'Executors', mExecutorsNote: '{n} who can do work',
+  // Machine › Machines (Mobile11 S15): one card per computer, and the quota
+  // that belongs to the account rather than to any of them over the top.
+  maTitle: 'Machines', maPair: '+ Pair',
+  maQuota: 'Agent quota', maQuotaLeft: '{p}% left', maQuotaNone: 'none left',
+  maResets: 'resets {time} · in {d}',
+  maReachable: 'reachable', maUnreachable: 'unreachable', maNever: 'never answered',
+  maAgo: '{d} ago', maLastContact: 'last contact',
+  maTasks: '{n} tasks', maOneTask: '1 task', maIdleTasks: 'idle',
+  maOneTaskUnknown: '1 task · unknown', maUnknownTasks: '{n} tasks · unknown',
+  maRunning: 'running',
+  maScreen: 'Screen', maRetry: 'Try again',
+  maPicker: 'Computer picker', maPickerNote: 'which one this phone is holding, and where it answers',
+  maNone: 'No computer is paired', maNoneBody: 'Nothing has been paired with this phone yet, so there is no machine to show.',
+  // Machine › Executors (Mobile11 S14): everyone who can do work, grouped by
+  // kind, each saying what it is on and whether it can be.
+  exTitle: 'Executors',
+  exgCoders: 'Coders', exgCodersNote: 'write code, run tests, open PRs',
+  exgBranch: 'Branch agents', exgBranchNote: 'one per branch, often overnight',
+  exgHouse: 'Assistant and you', exgYou: 'You',
+  exBusy: 'busy', exIdle: 'idle', exUnavailable: 'unavailable', exNWaiting: '{n} waiting',
+  exSilent: '{what} · {machine} not reachable', exNoQuota: '{what} · no quota left',
+  exNoQuotaBare: 'no quota left', exMachineSilent: 'machine silent',
+  exNothing: 'Nothing assigned', exNothingWaiting: 'Nothing waiting', exNoMachine: 'no machine',
+  exNone: 'Nobody can do any work yet',
+  exNoneBody: 'No computer is paired, so there is no worker to hand a ticket to.',
   // the ustabasi wall: the queue that works while nobody is watching
   ustabasi: 'Ustabasi',
   queueRunning: '{n} running', queueRed: '{n} waiting on you', queueNothingRed: 'nothing waiting on you',

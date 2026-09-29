@@ -137,6 +137,13 @@ export default function RootLayout() {
         <Stack.Screen name="chat-settings" options={SHEET} />
         <Stack.Screen name="model-sheet" options={SHEET} />
         <Stack.Screen name="host-sheet" options={SHEET} />
+        {/* The two pages of the Machine drawer that are made of what the
+            computers answered (Mobile11 S15, S14): the machines themselves,
+            with the one that stopped answering said out loud, and everyone who
+            can be handed a ticket. Pushed over the Machine tab, which stays
+            lit under them. */}
+        <Stack.Screen name="machines" />
+        <Stack.Screen name="executors" />
         {/* A call is a mode, not a place: it comes up over whatever you were
             reading and leaves it exactly where it was. */}
         <Stack.Screen name="call" options={{ presentation: 'modal' }} />
