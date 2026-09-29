@@ -47,7 +47,7 @@ jobs:
         # scripts/e2e.py and scripts/smoke.py need a running daemon and a real
         # sign-in, so they stay a human's job.
         run: |
-          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments test_agents test_titles test_push test_ustabasi test_ustabasi_run; do
+          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments test_agents test_titles test_push test_ustabasi test_ustabasi_run test_divan; do
             echo "── $t"
             python "scripts/$t.py"
           done

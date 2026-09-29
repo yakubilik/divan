@@ -1591,6 +1591,18 @@ class Server:
         card — that is the whole point of the mirror being a separate field —
         and nothing here writes to the queue.
         """
+        return await self._mirrored_queue()
+
+    async def _mirrored_queue(self) -> dict:
+        """The queue's snapshot, with the board brought up to date from it.
+
+        Reality on a Divan card — running, asking, failed, verified — is written
+        here and nowhere else, so a read of the board that is meant to be
+        current has to come through this. Both requests that draw work do:
+        `ustabasi.list` for the wall and `divan.snapshot` for the boards. A
+        dashboard that only ever polled the board would show a worker that
+        finished in the night as still running.
+        """
         snap = await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for)
         try:
             await asyncio.to_thread(self.db.divan.sync_ustabasi, snap,
@@ -1654,6 +1666,33 @@ class Server:
         if err := self.policy.cwd_error(path):
             raise Err(err, "a card cannot be worked in that folder")
         return path
+
+    async def h_divan_snapshot(self, dev: Device, d: dict) -> dict:
+        """Everything this computer has to say about Divan, in one answer.
+
+        One request per machine, asked by a phone that is paired with several of
+        them and draws all of them at once: the boards, the agents at work, what
+        is left of the plans the agents run on, and this computer's own name so
+        that a merged view can say which machine each line came from. The clock
+        is here too — `at` is when this answer was true, which is what the phone
+        ages a silent machine against.
+
+        The mirror runs first. A dashboard that read the board without it would
+        draw a worker that finished at four in the morning as still running.
+        """
+        queue = await self._mirrored_queue()
+        board = await asyncio.to_thread(self.db.divan.snapshot, self.cfg.host_name)
+        return {**board, "at": time.time(),
+                "os": platform.system(), "os_version": _os_version(),
+                "daemon_version": __version__,
+                # Per machine, because the sign-ins are: this is the one number
+                # that decides whether an agent can start here at all.
+                "quota": self.pool.quota(),
+                # The queue is the coding executor and the mirror has just read
+                # it, so its two facts come along rather than being asked for a
+                # second time: is it installed here, and is it paused.
+                "queue": {"available": bool(queue.get("available")),
+                          **(queue.get("queue") or {})}}
 
     async def h_divan_projects(self, dev: Device, d: dict) -> dict:
         """Every product, with its branches and one line saying where it stands."""
