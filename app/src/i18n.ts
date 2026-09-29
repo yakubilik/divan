@@ -410,6 +410,21 @@ const en = {
   bdNothing: 'Nothing in this column.',
   bdDoneNote: 'The last month of finished work, out of {n}.',
   bdDoneNone: 'Nothing finished in the last month is on this phone. {n} in all.',
+  // …and carrying a card between those columns (src/drag.ts). The first four are
+  // the one mono line above the cards while a card is in the air, and they say
+  // "to start" only where the release actually starts a worker. The last three
+  // are what the card says for five seconds after it lands — including the one
+  // sentence a queue that would not take it leaves behind.
+  dgHold: 'Drag onto a column above',
+  dgOpen: 'Hold to open {col}',
+  dgBack: 'Release to leave it where it is',
+  dgDrop: 'Release · position {n} of {of}',
+  dgStart: 'Release to start · position {n} of {of}',
+  dgStarted: 'Started · {who}',
+  dgMoved: 'Moved to {col}',
+  dgNoStart: 'Moved, but nothing started: {why}',
+  dgNoMove: "Couldn't move it: {why}",
+  dgUndo: 'Undo',
   chatPlacePick: 'Pick a folder and a model for this conversation.',
   mTitle: 'Machine', mSubtitle: 'Infrastructure. Nothing here needs you.',
   mMachines: 'Machines', mMachinesNote: '{n} paired',
