@@ -36,3 +36,35 @@ export function readChatDrag(dt: DataTransfer | null): ChatDrag | null {
 export function hasChatDrag(dt: DataTransfer | null): boolean {
   return !!dt && Array.from(dt.types).includes(CHAT_DND);
 }
+
+// ── a card on the board ─────────────────────────────────────────────────────
+
+/** Dragging a ticket from one column of the board into another (Web12 W2). The
+ *  same agreement as above and for the same reason: the column that catches a
+ *  drop must be able to tell a card being moved from a file dropped in off the
+ *  desktop, and during `dragover` the type list is all it is allowed to see.
+ *
+ *  What the drag *means* — which columns would take it, what a landing does —
+ *  is `lib/board.ts` and the screen's own state. This is only the payload. */
+export const CARD_DND = 'application/x-rac-card';
+
+export interface CardDrag { hostKey: string; cardId: string }
+
+export function setCardDrag(dt: DataTransfer, drag: CardDrag): void {
+  dt.setData(CARD_DND, `${drag.hostKey}/${drag.cardId}`);
+  // As above: Firefox will not start a drag that carries nothing it knows.
+  dt.setData('text/plain', drag.cardId);
+  dt.effectAllowed = 'move';
+}
+
+export function readCardDrag(dt: DataTransfer | null): CardDrag | null {
+  const raw = dt?.getData(CARD_DND);
+  if (!raw) return null;
+  const cut = raw.lastIndexOf('/');
+  if (cut <= 0) return null;
+  return { hostKey: raw.slice(0, cut), cardId: raw.slice(cut + 1) };
+}
+
+export function hasCardDrag(dt: DataTransfer | null): boolean {
+  return !!dt && Array.from(dt.types).includes(CARD_DND);
+}
