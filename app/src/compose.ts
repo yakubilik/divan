@@ -16,18 +16,24 @@
 //     and the mini is one product with two boards behind it, and each of them
 //     has its own id for it (`divan.ts` `MergedProject.ids`). `writer` picks
 //     which, and it is allowed to pick one that is not answering.
-//   * **filing is two requests, in an order.** The machine takes the card, and
-//     then that machine's board is read again — which is the whole of "it
-//     appears on the board without a refresh", because Divan otherwise polls on
-//     a minute. That pair is the store's (`createCard`), next to the same pair
-//     the one other board write makes (`moveCard`); what is here is everything
-//     it needs to be able to make it.
-import type { DivanView, MergedProject } from './divan';
-import type { DivanColumn } from './protocol';
+//   * **the board is told about the card, not asked.** Divan polls on a minute
+//     and a quiet machine's read runs to a timeout, so waiting for either is
+//     waiting: `filed` puts the row the machine just handed back onto the board
+//     the phone is already holding. The store makes the request and applies it
+//     (`createCard`); the reading is here, where it can be checked.
+import type { DivanView, HostDivan, MergedProject } from './divan';
+import type { DivanCard, DivanColumn } from './protocol';
 
 /** How long the card's own sentences are allowed to be. S9 counts `108 / 220`
  *  under the box and the desktop's composer counts against the same limit
- *  (`web/src/lib/ticket.ts`): one field, written from two places. */
+ *  (`web/src/lib/ticket.ts`): one field, written from two places.
+ *
+ *  It is a number the line under the box counts against and nothing else.
+ *  Nothing shortens a description: what is in the box is what is filed, down
+ *  to the last character — a card quietly filed without its last sentence is
+ *  one whose author will never find out — and the desktop's composer counts
+ *  against the same number and sends the whole thing too. The cap that is real
+ *  is the daemon's (`divan.py MAX_SUMMARY`), and it is far above this. */
 export const SUMMARY_MAX = 220;
 
 /** The description box is the same fixed three-line space as the ticket's human
@@ -99,7 +105,7 @@ export interface Draft {
 }
 
 export function draft(title: string, summary: string): Draft {
-  const text = (summary || '').trim().slice(0, SUMMARY_MAX);
+  const text = (summary || '').trim();
   return { title: (title || '').trim(), summary: text, ready: !!(title || '').trim(), used: text.length };
 }
 
@@ -117,4 +123,43 @@ export interface Filing {
 
 export function filing(w: Writer, d: Draft, into: Landing): Filing {
   return { project_id: w.project, title: d.title, summary: d.summary, column: into };
+}
+
+/** The card the machine just made, put on the board this phone is holding.
+ *
+ *  This is the whole of "it appears on the board without a refresh". A board is
+ *  merged out of the last answer each machine gave and the next one is a minute
+ *  away (`DIVAN_POLL_MS`), so the board is not asked whether the card exists —
+ *  it is told. The row that came back is the row the next snapshot will carry,
+ *  and the count on its column goes up with it; that snapshot then replaces the
+ *  lot. Nothing here waits on a poll, which matters most exactly where waiting
+ *  is worst: a machine that has gone quiet, whose next read runs to the timeout.
+ *
+ *  A machine the phone has never had an answer from is left alone. There is no
+ *  board of it to put a card on, and a snapshot invented here would be a
+ *  machine invented here. */
+export function filed(divan: Record<string, HostDivan>, host: string,
+                      card: DivanCard): Record<string, HostDivan> {
+  const had = divan[host];
+  const snap = had?.snapshot;
+  // Already reported: a second copy of one card is worse than a slow board,
+  // and so is a column counted twice.
+  if (!snap || snap.cards.some((c) => c.id === card.id)) return divan;
+  return {
+    ...divan,
+    [host]: {
+      ...had,
+      snapshot: {
+        ...snap,
+        // At the top of its column, which is where the machine put it
+        // (`divan.py create_card`) and where the thing just written down
+        // belongs.
+        cards: [card, ...snap.cards],
+        projects: snap.projects.map((p) => (p.id !== card.project_id ? p : {
+          ...p,
+          counts: { ...p.counts, [card.column]: (p.counts?.[card.column] ?? 0) + 1 },
+        })),
+      },
+    },
+  };
 }

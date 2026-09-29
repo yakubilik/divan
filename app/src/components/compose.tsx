@@ -104,7 +104,11 @@ export function TitleBox({ value, onChangeText, placeholder, editable }: {
 /** …and the card's own two or three sentences, in the same fixed three-line
  *  space the ticket's human face reads them in (S9's own note): `height:72;
  *  font:400 16px/24px` in `ink2`. Fixed, so that the buttons under it do not
- *  move down the page while the thumb is on its way to them. */
+ *  move down the page while the thumb is on its way to them.
+ *
+ *  The number under it counts and nothing else: the box takes what is typed
+ *  into it and that is what is filed, which is what the desktop's composer
+ *  does with the same field (`src/compose.ts` `SUMMARY_MAX`). */
 export function SentenceBox({ value, onChangeText, placeholder, editable }: {
   value: string;
   onChangeText: (text: string) => void;

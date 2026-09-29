@@ -1,9 +1,9 @@
-/** The fastest screen in the product, checked without a phone: a card filed
- *  from a title alone, with no agent face asked for, landing in Ice Box on a
- *  board that already has it (Mobile8 S9).
+/** The fastest screen in the product, checked without a phone (Mobile8 S9): a
+ *  card filed from a title alone, no agent face asked for, and the board it
+ *  lands on carrying it before any machine has answered.
  *  Run: node scripts/test-new-ticket.cjs  (also folded into test-ustabasi.cjs.)
  */
-const fs = require('fs');
+const Module = require('module');
 const path = require('path');
 const R = require('./render-divan.cjs');
 
@@ -13,12 +13,53 @@ const h = R.React.createElement;
 const C = require(path.join(root, 'src/compose.ts'));
 const M = require(path.join(root, 'src/divan.ts'));
 const K = require(path.join(root, 'src/tokens.ts'));
-const { HOSTS } = require('./test-board.cjs');
-const [STUDIO, MINI] = HOSTS;
 
 const checks = [];
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const settle = () => new Promise((done) => setImmediate(done));
 const NOW = Math.floor(Date.now() / 1000);
+const QUIET = 2 * 3600;
+
+// ── the fixture ─────────────────────────────────────────────────────────────
+//
+// One product on two computers, and the two boards give it **two different
+// ids** — they are separate databases, and that is the whole reason the merged
+// product carries each machine's own (`divan.ts` `MergedProject.ids`).
+
+const ON_STUDIO = 'quire-on-studio';
+const ON_MINI = 'quire-on-mini';
+
+const branch = { id: 'b', kind: 'engineering', name: 'Engineering', summary: '', summary_at: null,
+                 cards: {}, open: 1 };
+const product = (id, counts) => ({
+  id, name: 'Quire', slug: 'quire', summary: 'client portals for studios', kind: 'SaaS',
+  repos: ['/r/quire'], sort: 0, archived: false, created_at: 0, updated_at: NOW - 60,
+  branches: [branch], counts, running: 0, waiting: 0, summary_line: '',
+});
+const card = (id, project_id, o = {}) => ({
+  id, project_id, branch_id: 'b', branch: 'engineering',
+  column: o.column || 'ice_box', position: o.position ?? 0, title: o.title || id,
+  summary: o.summary || '', executor: o.executor ?? 'coding_agent', machine: null, repo: null,
+  ustabasi_id: null, agent_status: o.status ?? null, agent_status_at: null, agent_detail: '',
+  created_at: 0, updated_at: 0, moved_at: null,
+});
+const snapshot = (machine, at, projects, cards) => ({
+  machine, os: 'Darwin', at, projects, cards, agents: [], quota: null, activity: {}, queue: {} });
+const paired = (id, name, o) => ({ id, name, state: { snapshot: o.snapshot ?? null, at: o.at ?? null,
+  reachable: !!o.reachable, error: null, old: false } });
+
+const STUDIO = paired('h1', 'studio', { reachable: true, at: NOW - 10,
+  snapshot: snapshot('studio', NOW - 10, [product(ON_STUDIO, { ice_box: 1, in_progress: 1 })],
+    [card('q1', ON_STUDIO, { column: 'in_progress', status: 'running', title: 'Bulk invite clients' }),
+     card('q2', ON_STUDIO, { title: 'Zapier integration' })]) });
+
+/** …and the laptop with the lid shut, which is the machine this screen has to
+ *  keep working against. */
+const MINI = paired('h2', 'mini', { reachable: false, at: NOW - QUIET,
+  snapshot: snapshot('mini', NOW - QUIET, [product(ON_MINI, { ice_box: 1 })],
+    [card('m1', ON_MINI, { title: 'Fix portal login on Safari 17' })]) });
+
+const NEVER = paired('h3', 'cloud', { reachable: false, at: null, snapshot: null });
 
 const TWO = M.merge([STUDIO, MINI], NOW);
 const ONLY_QUIET = M.merge([MINI], NOW);
@@ -33,8 +74,8 @@ const quire = M.project(TWO, 'quire');
   checks.push(
     ['a title alone is enough, and the sentences are optional',
       bare.ready && bare.summary === '' && !C.draft('   ', 'sentences but no title').ready],
-    ['…and the box stops at the limit it counts against',
-      long.used === C.SUMMARY_MAX && long.summary.length === C.SUMMARY_MAX],
+    ['nothing shortens a description: the count is a count',
+      long.summary.length === 400 && long.used === 400],
   );
 }
 
@@ -42,46 +83,142 @@ const quire = M.project(TWO, 'quire');
 
 {
   const to = C.writer(TWO, quire);
-  const card = C.filing(to, C.draft('Export client list as CSV', 'One button on the Clients page.'), 'ice_box');
+  const filing = C.filing(to, C.draft('Export client list as CSV', 'One button on the Clients page.'), 'ice_box');
   checks.push(
     ['the request is the human face and the column, and names no agent face',
-      eq(Object.keys(card).sort(), ['column', 'project_id', 'summary', 'title'])
-      && card.column === 'ice_box' && card.project_id === 'Quire-id'],
+      eq(Object.keys(filing).sort(), ['column', 'project_id', 'summary', 'title'])
+      && filing.column === 'ice_box'],
     ['the two buttons are the two columns that start nothing',
       eq(C.LANDINGS, ['ice_box', 'queued'])],
   );
 }
 
-// ── 3 · which computer takes it ─────────────────────────────────────────────
+// ── 3 · which computer takes it, and its own name for the product ───────────
 
 {
   const both = C.writer(TWO, quire);
   const quiet = C.writer(ONLY_QUIET, M.project(ONLY_QUIET, 'quire'));
   checks.push(
     ['a card goes to a machine that is answering, over one that is not',
-      both.host === 'h1' && both.machine === 'studio' && !both.quiet],
+      both.host === 'h1' && both.machine === 'studio' && !both.quiet
+      && both.project === ON_STUDIO],
     ['…and to a quiet one where that is the only machine that has the product',
-      quiet.host === 'h2' && quiet.quiet && quiet.project === 'Quire-id'],
+      quiet.host === 'h2' && quiet.quiet && quiet.project === ON_MINI],
+    ['…carrying that machine’s own id for it, never the other machine’s',
+      eq(quire.ids, { h1: ON_STUDIO, h2: ON_MINI })],
     ['no paired computer has the product: there is nowhere to put a card',
       C.writer(NOTHING, null) === null && C.opens(NOTHING, 'quire') === null],
   );
 }
 
-// ── 4 · the board it lands on ──────────────────────────────────────
+// ── 4 · the board it lands on ───────────────────────────────────────────────
+//
+// The store is the one part of the app that cannot be stood up by importing it
+// — it reaches a socket, a keychain and the notification centre — so the four
+// modules that do that are answered here and the real one is driven for the
+// length of this section. What is held to account is the criterion itself: the
+// board has the card on it, without a refresh, on a machine whose poll has not
+// come back.
 
-// Filing is two requests and the second one is the whole of "without a
-// refresh": Divan's own poll is a minute away, so the machine that took the
-// card is asked for its board again before the phone gets there. It is the
-// store's, next to the same pair the one other board write makes — which is
-// where this reads it, because a store that reaches a keychain and a socket
-// the moment it is imported cannot be stood up here.
+const asked = [];
+let releaseStale = () => {};
+let releaseFresh = () => {};
+const stale = new Promise((done) => { releaseStale = () => done(MINI.state.snapshot); });
+
+const MADE = card('new-1', ON_MINI, { column: 'ice_box', title: 'Export client list as CSV',
+                                      executor: null });
+const REPORTED = snapshot('mini', NOW, [product(ON_MINI, { ice_box: 2 })],
+                          [MADE, card('m1', ON_MINI, { title: 'Fix portal login on Safari 17' })]);
+const fresh = new Promise((done) => { releaseFresh = () => done(REPORTED); });
+
+let store = null;
 {
-  const store = fs.readFileSync(path.join(root, 'src/store.ts'), 'utf8');
-  const write = (store.match(/createCard: async[\s\S]*?\n {4}\},/) ?? [''])[0];
+  const client = { onStatus: () => () => {}, on: () => () => {}, poke() {}, connect() {}, disconnect() {},
+                   call: async () => ({}) };
+  let polled = 0;
+  const callOnce = async (host, port, token, type) => {
+    asked.push([host, type]);
+    if (type === 'divan.card.create') return MADE;
+    if (type !== 'divan.snapshot') return {};
+    polled += 1;
+    return polled === 1 ? await stale : await fresh;
+  };
+  const stand = {
+    [path.join(root, 'src/ws.ts')]: { client, callOnce },
+    [path.join(root, 'src/push.ts')]: { dismissChatNotifications() {} },
+  };
+  const packaged = {
+    'expo-secure-store': { getItemAsync: async () => null, setItemAsync: async () => {},
+                           deleteItemAsync: async () => {} },
+    'expo-local-authentication': { hasHardwareAsync: async () => false, isEnrolledAsync: async () => false,
+                                   authenticateAsync: async () => ({ success: true }) },
+  };
+  const under = Module._load;
+  Module._load = function load(request, parent, isMain) {
+    if (packaged[request]) return packaged[request];
+    if (request.startsWith('.') && parent) {
+      const to = path.resolve(path.dirname(parent.filename), request);
+      for (const ext of ['', '.ts', '.tsx']) if (stand[to + ext]) return stand[to + ext];
+    }
+    return under.call(this, request, parent, isMain);
+  };
+  store = require(path.join(root, 'src/store.ts')).useStore;
+  Module._load = under;
+}
+
+/** The board of one product, drawn from a given set of machine answers. */
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+
+function board(scheme, divan, hosts, params) {
+  R.store.reset();
+  R.params.reset();
+  R.nav.reset();
+  R.store.set({ hosts, divan, host: { id: hosts[0].id }, conn: 'online',
+                loadDivan() {}, ustabasi: null, ustabasiOld: false, loadUstabasi() {} });
+  R.params.set({ project: 'quire', tab: 'board', col: 'ice_box', ...params });
+  return R.render(scheme, h(Dashboard));
+}
+
+const MINE = [{ id: 'h2', name: 'mini', host: 'mini.ts.net', port: 8765, token: 't' }];
+
+async function landed() {
+  store.setState({ hosts: MINE, activeHostId: null, conn: 'idle', divan: { h2: MINI.state } });
+
+  const poll = store.getState().loadDivan('h2');
+  await settle();
+  const once = asked.length;
+  void store.getState().loadDivan('h2');
+  await settle();
+  checks.push(['a machine with a poll already out is not asked again', asked.length === once]);
+
+  await store.getState().createCard({ host: 'h2', card: {
+    project_id: ON_MINI, title: 'Export client list as CSV', summary: '', column: 'ice_box' } });
+  await settle();
+
+  const held = store.getState().divan;
+  const drawn = board('dark', held, [{ id: 'h2', name: 'mini' }]);
   checks.push(
-    ['the card is written down, and then that machine\u2019s board is read again',
-      /'divan\.card\.create'/.test(write) && /loadDivan\(host\)/.test(write)
-      && write.indexOf('divan.card.create') < write.indexOf('loadDivan')],
+    ['the board has the card on it before any machine has answered',
+      held.h2.snapshot.cards.some((c) => c.id === 'new-1')
+      && drawn.includes('Export client list as CSV')],
+    ['…and the column it went into counts one more',
+      held.h2.snapshot.projects[0].counts.ice_box === 2],
+  );
+
+  releaseStale();
+  await settle();
+  checks.push(
+    ['a poll that went out before the card came back without it and did not take it off',
+      store.getState().divan.h2.snapshot.cards.some((c) => c.id === 'new-1')],
+  );
+
+  releaseFresh();
+  await poll;
+  await settle();
+  checks.push(
+    ['…and the machine’s own answer, when it comes, is what the board is drawn from',
+      store.getState().divan.h2.reachable
+      && store.getState().divan.h2.snapshot.at === NOW],
   );
 }
 
@@ -89,7 +226,7 @@ const quire = M.project(TWO, 'quire');
 
 const NewTicket = require(path.join(root, 'app/new-ticket.tsx')).default;
 
-/** Every filing the screen asked for in the last render's presses. */
+/** Every filing the screen asked for since the last `draw`. */
 let filed = [];
 
 function draw(scheme, hosts, params, props) {
@@ -121,6 +258,7 @@ const STATES = {
   'opened with the card already written': [[STUDIO, MINI], { project: 'quire' },
     { opening: 'Export client list as CSV', sentences: 'Studios keep asking.' }],
   'a product whose only machine has gone quiet': [[MINI], { project: 'quire' }, {}],
+  'a machine that has never answered': [[STUDIO, NEVER], { project: 'quire' }, {}],
   'no such product in the view': [[STUDIO], { project: 'gone' }, {}],
   'nothing paired at all': [[], { project: 'quire' }, {}],
   'opened with no product named': [[STUDIO], {}, {}],
@@ -152,14 +290,16 @@ for (const scheme of ['dark', 'light']) {
   );
 }
 
-// ── 6 · pressing the buttons ───────────────────────────────────────
-
+// ── 6 · pressing the buttons ────────────────────────────────────────────────
+//
 // Filing is a request, so what the button does is not finished in the tick it
-// was pressed: the page it lands on is chosen when the machine answers. Hence
-// the promise — `ready` is exported and awaited before anything is printed, by
+// was pressed. `ready` is exported and awaited before anything is printed, by
 // the runner below and by test-ustabasi.cjs.
-const ready = (async () => {
-  const settle = () => new Promise((done) => setImmediate(done));
+
+const LONG = 'These are the sentences somebody actually typed. '.repeat(9);
+
+async function pressed() {
+  await landed();
 
   draw('dark', [STUDIO, MINI], { project: 'quire' },
        { opening: 'Export client list as CSV', sentences: 'Studios keep asking to download their list.' });
@@ -178,20 +318,27 @@ const ready = (async () => {
   await settle();
   const nothing = filed.slice();
 
+  draw('dark', [STUDIO, MINI], { project: 'quire' }, { opening: 'Long one', sentences: LONG });
+  R.pressOn('ntIceBox');
+  await settle();
+  const over = filed.slice();
+
   checks.push(
     ['Add to Ice Box files it into Ice Box, on the machine that has the product',
-      eq(ice, [{ host: 'h1', card: { project_id: 'Quire-id', title: 'Export client list as CSV',
+      eq(ice, [{ host: 'h1', card: { project_id: ON_STUDIO, title: 'Export client list as CSV',
                                      summary: 'Studios keep asking to download their list.',
                                      column: 'ice_box' } }])],
-    ['…and leaves the phone on that column of that board, which by then has the card on it',
+    ['…and leaves the phone on that column of that board',
       eq(where, ['/dashboard?project=quire&tab=board&col=ice_box'])],
     ['Queue it is the same card one column along, with no sentences written',
       queued.length === 1 && queued[0].card.column === 'queued' && queued[0].card.summary === ''],
     ['a card with no title is not filed',
       nothing.length === 0],
+    ['what is in the box is what is filed, past the limit the line counts against',
+      LONG.length > C.SUMMARY_MAX && over.length === 1 && over[0].card.summary === LONG.trim()],
   );
 
-  // ── 7 · a machine that would not take it ───────────────────────────
+  // ── 7 · a machine that would not take it ──────────────────────────────────
   R.store.reset();
   R.params.reset();
   R.nav.reset();
@@ -203,9 +350,6 @@ const ready = (async () => {
   });
   R.params.set({ project: 'quire' });
   R.render('dark', h(NewTicket, { opening: 'Export client list as CSV' }));
-  // A press that throws would come back out of `pressOn` and take the script
-  // with it; what is left to check is that nothing was filed and nothing
-  // moved — the page stays, with the half-written card still on it.
   R.pressOn('ntIceBox');
   await settle();
   checks.push(
@@ -216,6 +360,22 @@ const ready = (async () => {
   R.store.reset();
   R.params.reset();
   R.nav.reset();
+}
+
+/** A section that never finished would otherwise read as a pass: nothing is
+ *  printed, the loop drains and node leaves with 0. */
+const ready = (async () => {
+  let timer = null;
+  const late = new Promise((_, no) => {
+    timer = setTimeout(() => no(new Error('a section never finished')), 20000);
+  });
+  try {
+    await Promise.race([pressed(), late]);
+  } catch (e) {
+    checks.push([`every section of this file ran to the end (${e.message})`, false]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 })();
 
 module.exports = { checks, ready };

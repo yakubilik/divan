@@ -73,8 +73,9 @@ export default function NewTicket({ opening = '', sentences = '' }: {
 
   /** File it, and land on the column it went into — the card is drawn there,
    *  which is the difference between a screen that says it filed something and
-   *  one that shows it. That machine's board is re-read before this returns
-   *  (the store's `createCard`), so what comes up already has the card on it. */
+   *  one that shows it. The board is told about the card as it is made (the
+   *  store's `createCard`, `compose.filed`), so what comes up has it on it
+   *  whatever any machine's next answer is doing. */
   const file = async (into: Landing) => {
     if (!d.ready || !to || !project || busy) return;
     setBusy(true);
