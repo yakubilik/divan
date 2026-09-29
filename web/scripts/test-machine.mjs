@@ -101,11 +101,16 @@ function seed(patch) {
 }
 const paired = { hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true };
 const nothing = { hosts: {}, order: [], focus: null, ready: true };
+/** Paired, online, and not yet asked what sign-ins it has. */
+const cold = {
+  hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } },
+  order: ['studio'], focus: 'studio', ready: true,
+};
 
 /** One page of the drawer, without the drawer: the column is a `<nav>` and
  *  every page is drawn after it. */
-function page(name, world = 'fresh') {
-  seed(world === 'alone' ? nothing : paired);
+function page(name, world = 'fresh', fleet = paired) {
+  seed(world === 'alone' ? nothing : fleet);
   const markup = renderToStaticMarkup(h(MachineUI.Machine, {
     view: name, fleet: view(world), onView() {}, onOpenChat() {}, onNewChat() {},
     onNewChatIn() {}, onStartChat() {}, onPeek() {},
@@ -135,9 +140,9 @@ const has = (markup, ...all) => all.every((w) => words(markup).includes(w));
 group('each page is the frame’s page');
 {
   const machines = page('machines');
-  ok('Machines is W12’s table on W12’s tracks, under its own column names',
+  ok('Machines is W12’s table on W12’s tracks, bar the column our third button widens',
     anyStyle(machines.body, (d) => d['grid-template-columns']
-      === '34px minmax(0, 1.4fr) 120px 110px 100px 110px minmax(0, 210px)')
+      === '34px minmax(0, 1.4fr) 130px 120px 110px 110px minmax(0, 230px)')
     && has(machines.body, 'Machines', 'machine', 'state', 'last contact', 'running',
       'quota use today', 'studio', 'mini'),
     words(machines.body).slice(0, 200));
@@ -146,7 +151,7 @@ group('each page is the frame’s page');
       'Pair a new machine', 'remote-ai-chat pair', 'When a machine goes quiet'));
 
   const executors = page('executors');
-  ok('Executors is W13’s table, and everyone who can do work is on it',
+  ok('Executors is W13’s table without the column its `···` stood in, and everyone who can do work is on it',
     anyStyle(executors.body, (d) => d['grid-template-columns']
       === '30px 110px minmax(0, 1.3fr) 90px minmax(0, 1.2fr) 110px')
     && has(executors.body, 'executor', 'what it is for', 'doing now', 'state')
@@ -154,9 +159,9 @@ group('each page is the frame’s page');
     words(executors.body).slice(0, 240));
 
   const accounts = page('accounts');
-  ok('Accounts & sign-ins is W16’s table',
+  ok('Accounts & sign-ins is W16’s table, on W16’s tracks',
     anyStyle(accounts.body, (d) => d['grid-template-columns']
-      === '36px minmax(0, 1.2fr) 150px minmax(0, 1fr) 110px 110px')
+      === '36px minmax(0, 1.2fr) 150px minmax(0, 1fr) 120px 150px')
     && has(accounts.body, 'account', 'state', 'used by', 'last used'),
     words(accounts.body).slice(0, 200));
 
@@ -241,6 +246,12 @@ group('a sign-in is seen expiring before it expires');
     eq(rows.map((r) => [r.accountId, r.action]), [['soon', 'Renew'], ['ok', 'Manage']])
     && rows[0].tone === 'amber' && M.signInsWanting(rows) === 1,
     JSON.stringify(rows.map((r) => [r.accountId, r.says, r.action])));
+
+  const unasked = page('admin', 'fresh', cold);
+  ok('a computer that has not answered about its sign-ins is not reported as having none',
+    has(unasked.body, 'not read yet') && !has(unasked.body, '0 connected')
+    && !/Accounts &amp; sign-ins<\/span><span/.test(unasked.drawer),
+    words(unasked.body).slice(0, 200));
 
   const drawn = page('accounts');
   ok('the page draws it in amber with the button on its row',

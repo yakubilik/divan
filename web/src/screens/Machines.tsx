@@ -44,14 +44,18 @@ function since(seconds: number | null): string {
   return seconds != null && seconds < 60 ? `${Math.round(seconds)}s` : uptime(seconds);
 }
 
+/** W12's own tracks, `34px minmax(0,1.4fr) 130px 120px 110px 110px 200px`, with
+ *  one of them ours: the frame ends its rows on two buttons and a `···`, and
+ *  this panel has no menu to put behind that — so the third action is a word
+ *  (`Folders`) and the column it stands in is as wide as three words need. */
 const COLUMNS: Column[] = [
   { width: '34px' },
   { label: 'machine', width: 'minmax(0, 1.4fr)' },
-  { label: 'state', width: '120px' },
-  { label: 'last contact', width: '110px' },
-  { label: 'running', width: '100px' },
+  { label: 'state', width: '130px' },
+  { label: 'last contact', width: '120px' },
+  { label: 'running', width: '110px' },
   { label: 'quota use today', width: '110px' },
-  { width: 'minmax(0, 210px)' },
+  { width: 'minmax(0, 230px)' },
 ];
 
 export function Machines({ view, onView, onFocus }: {

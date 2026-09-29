@@ -20,8 +20,12 @@
  *  Renewing is signing in again, which is a pty on that computer and lives
  *  where it always has — one level down, under Settings › This computer. The
  *  button goes there with the computer already chosen.
+ *
+ *  Nothing here asks for `account.list`: the place around this page does, on
+ *  the way in (`screens/Machine.tsx`), because the amber count belongs to the
+ *  drawer as much as to this table and a page that asked for it itself would be
+ *  a page you had to open before the warning existed.
  */
-import { useEffect } from 'react';
 import { ago, uptime } from '../lib/format';
 import { signIns, signInsWanting, type SignInSource } from '../lib/machine';
 import { useFleet } from '../lib/fleet';
@@ -39,13 +43,14 @@ function left(seconds: number | null): string {
   return days ? `${days} day${days === 1 ? '' : 's'}` : uptime(seconds);
 }
 
+/** W16's own tracks, exactly. */
 const COLUMNS: Column[] = [
   { width: '36px' },
   { label: 'account', width: 'minmax(0, 1.2fr)' },
   { label: 'state', width: '150px' },
   { label: 'used by', width: 'minmax(0, 1fr)' },
-  { label: 'last used', width: '110px' },
-  { width: '110px' },
+  { label: 'last used', width: '120px' },
+  { width: '150px' },
 ];
 
 /** What the screens need out of the fleet store to say anything here. Built
@@ -72,15 +77,6 @@ export function Accounts({ now, onView, onFocus }: {
 }) {
   const hosts = useFleet((s) => s.hosts);
   const order = useFleet((s) => s.order);
-  const refreshAccounts = useFleet((s) => s.refreshAccounts);
-
-  // `account.list` shells out to both CLIs and is never part of the connect
-  // path, so the page that needs it asks for it — once per computer that is
-  // online, when it is opened.
-  const online = order.filter((k) => hosts[k]?.status === 'online').join(',');
-  useEffect(() => {
-    for (const key of online ? online.split(',') : []) void refreshAccounts(key);
-  }, [online, refreshAccounts]);
 
   const list = sources(hosts, order);
   const rows = signIns(list, now, left, ago);

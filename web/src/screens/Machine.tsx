@@ -17,6 +17,7 @@
  *  vocabulary (`C` in `lib/theme.ts`), which is the same palette under other
  *  names, so they follow both themes without a line of theirs changing.
  */
+import { useEffect } from 'react';
 import { MACHINE_ROWS, machineRow, updateWaiting, type View } from '../lib/shell';
 import { useFleet } from '../lib/fleet';
 import { signIns, signInsWanting, quotaVerdict, useThresholds } from '../lib/machine';
@@ -75,7 +76,23 @@ const DRAWN_HERE = new Set<View>([
 export function Machine(props: MachineProps) {
   const { view, onView, fleet } = props;
   const { hosts, order } = useFleet();
+  const refreshAccounts = useFleet((s) => s.refreshAccounts);
   const { thresholds } = useThresholds();
+
+  // Entering the place asks every computer which sign-ins it has.
+  //
+  // `account.list` shells out to both CLIs and can take seconds, so it is not
+  // part of the connect path — which meant, until this asked for it, that the
+  // amber count on the Accounts row was 0 on a panel nobody had opened that
+  // page on. The one thing that page exists to say was the one thing you had to
+  // go and look for. Asked once per computer: a slot that has answered has its
+  // own two accounts at least, so a list that is still empty is a question
+  // nobody has put yet.
+  const cold = order.filter((k) => hosts[k]?.status === 'online'
+    && !hosts[k].accounts.length && !hosts[k].loading.accounts).join(',');
+  useEffect(() => {
+    for (const key of cold ? cold.split(',') : []) refreshAccounts(key).catch(() => {});
+  }, [cold, refreshAccounts]);
   const unreachable = fleet.hosts.filter((h) => !h.reachable).length;
   // What under this place wants a person, on the row it is about: a chat
   // waiting to be allowed to do something — which is on the wall as well as in

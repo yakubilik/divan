@@ -525,7 +525,11 @@ export interface AdminSource {
   update: boolean;
   version: string;
   roots: number;
-  signIns: number;
+  /** How many sign-ins every paired computer has between them, and null while
+   *  no computer has answered `account.list` yet — which is not zero. A daemon
+   *  always reports at least its own two, so an empty list is a question nobody
+   *  has asked rather than a computer with nothing signed in. */
+  signIns: number | null;
   wantingSignIns: number;
   chats: number;
   spend: number;
@@ -558,7 +562,9 @@ export function adminLines(s: AdminSource, cost: (n: number) => string): AdminLi
       key: 'keys',
       title: 'Sign-ins and keys',
       note: 'what the agents work through, and which of them is expiring',
-      says: s.wantingSignIns ? `${s.wantingSignIns} want you` : `${s.signIns} connected`,
+      says: s.signIns == null ? 'not read yet'
+        : s.wantingSignIns ? `${s.wantingSignIns} want you`
+        : `${s.signIns} connected`,
       tone: s.wantingSignIns ? 'amber' : 'ink3',
       action: 'Manage',
       goes: 'accounts',

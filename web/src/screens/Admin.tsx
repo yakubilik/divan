@@ -41,7 +41,12 @@ export function Admin({ now, onView }: { now: number; onView: (view: View) => vo
     );
   }
 
-  const rows = signIns(sources(hosts, order), now, () => '', () => '');
+  // Nothing on this page asks for `account.list` — the place around it does,
+  // on the way in (`screens/Machine.tsx`) — so an empty list here is a computer
+  // that has not answered yet, and this row says that rather than `0`.
+  const list = sources(hosts, order);
+  const rows = signIns(list, now, () => '', () => '');
+  const read = list.some((s) => s.accounts.length > 0);
   const source: AdminSource = {
     machine: slot.info?.name || slot.cfg.name,
     online: slot.status === 'online',
@@ -50,7 +55,7 @@ export function Admin({ now, onView }: { now: number; onView: (view: View) => vo
     update: updateWaiting(slot.info?.update),
     version: slot.info?.release?.version || slot.info?.daemon_version || '',
     roots: slot.info?.roots?.length ?? 0,
-    signIns: rows.length,
+    signIns: read ? rows.length : null,
     wantingSignIns: signInsWanting(rows),
     chats: slot.chats.length,
     spend: slot.chats.reduce((n, c) => n + (c.total_cost_usd || 0), 0),

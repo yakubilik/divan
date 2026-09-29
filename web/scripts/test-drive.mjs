@@ -156,6 +156,10 @@ seed(useFleet, {
     // an empty board. A poll that fails is one of the states the panel has to
     // survive anyway, and it is the state the groups above are read in.
     if (type === 'divan.snapshot') throw new Error('That computer did not answer');
+    // The one other request a page in here makes of a computer. Answered from
+    // the same fixture the slot is seeded with, so what the panel does with the
+    // answer is what is being read rather than what it was handed.
+    if (type === 'account.list') return { accounts: fakeHost().accounts };
     return {};
   },
 });
@@ -559,6 +563,36 @@ group('a new ticket, written at the top of Ice Box');
     seed(useDivanStore, { snaps: { studio: was } });
   });
   await click(find('Esc'));
+}
+
+group('the sign-in that is expiring is counted before that page is opened');
+{
+  const header = doc.querySelector('header');
+  /** A row of the drawer, by the name on it. */
+  const row = (label) => [...doc.querySelectorAll('nav button')]
+    .find((b) => (b.querySelector('span')?.textContent ?? '').trim() === label) ?? null;
+
+  await click(find('Dashboard', header));
+  // A computer that has answered nothing about its sign-ins, which is every
+  // computer on a panel that has just been loaded.
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } } });
+  });
+  asked.length = 0;
+  await click(find('Machine', header));
+  await act(async () => {});
+  ok('entering the Machine place asks the computer which sign-ins it has',
+    asked.some((a) => a.key === 'studio' && a.type === 'account.list'),
+    JSON.stringify(asked.map((a) => a.type)));
+  ok('…and the drawer counts the ones that want a person, on the page it opens on',
+    page() === 'Machines' && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
+    && (row('Accounts & sign-ins')?.innerHTML ?? '').includes('var(--dv-amber)'),
+    `${page()} · ${row('Accounts & sign-ins')?.textContent}`);
+  await press('6');
+  ok('…and Admin says the same thing about them, on a page nobody asked twice',
+    page() === 'Admin' && text().includes('2 want you')
+    && asked.filter((a) => a.type === 'account.list').length === 1,
+    `${page()} · ${asked.filter((a) => a.type === 'account.list').length} asks`);
 }
 
 group('nothing was lost on the way');

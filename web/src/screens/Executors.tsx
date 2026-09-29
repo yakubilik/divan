@@ -22,6 +22,9 @@ import {
   type Column,
 } from '../ui/divan';
 
+/** W13's own tracks, bar the last: the frame keeps `40px` at the end for a
+ *  `···` menu, and there is nothing to put in one — a row here goes nowhere and
+ *  does nothing, so the table is the six columns that say something. */
 const COLUMNS: Column[] = [
   { width: '30px' },
   { label: 'executor', width: '110px' },
