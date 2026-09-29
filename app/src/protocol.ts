@@ -491,6 +491,39 @@ export interface RepoActivity {
   today: number;
 }
 
+/** One pull request open on a repository, as the code host has it.
+ *
+ *  `checks` is the whole rollup reduced to a word — the phone draws `× 2 checks`
+ *  and has no use for forty check names — and `null` where the pull request has
+ *  no checks at all, which is not the same as passing: a repository with no CI
+ *  must not be drawn with a green tick. `failing` is how many are failing, and
+ *  is zero in every other case. */
+export interface RepoPull {
+  number: number;
+  title: string;
+  /** The branch it is from. */
+  branch: string;
+  draft: boolean;
+  checks: 'passing' | 'failing' | 'pending' | null;
+  failing: number;
+  /** When it last moved. Null where the host's stamp could not be read. */
+  at: number | null;
+}
+
+/** …and what one repository's pull requests are, as one answer.
+ *
+ *  The distinction this type exists for: **an empty `open` is an answer** —
+ *  nothing is open on that repository — and a repository with no entry in the
+ *  map at all is the absence of one, because nobody could be asked. The daemon
+ *  only asks about a checkout whose `origin` is on GitHub, only through a `gh`
+ *  that is installed and signed in, and a phone must be able to tell "nothing to
+ *  review" from "no source connected". */
+export interface RepoPulls {
+  /** When this was read. */
+  at: number;
+  open: RepoPull[];
+}
+
 /** Everything one computer has to say about Divan. One request per machine, on
  *  connect, on foreground and on a slow timer; `at` is when it was true, which
  *  is what a silent machine is aged against. */
@@ -518,6 +551,10 @@ export interface DivanSnapshot {
    *  not have their commits counted twice. Absent on a daemon older than the
    *  figure. */
   activity?: Record<string, RepoActivity>;
+  /** …and what the code host says about those same repositories, keyed the same
+   *  way and for the same reason. Absent per path where nobody could be asked,
+   *  and absent whole on a daemon older than the reading. */
+  pulls?: Record<string, RepoPulls>;
   queue: { available?: boolean; last_tick?: number | null; paused_until?: number | null };
 }
 

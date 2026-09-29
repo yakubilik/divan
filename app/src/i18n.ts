@@ -396,6 +396,31 @@ const en = {
   prNewFoot: 'Nothing starts by itself: a card runs when it is moved into In Progress.',
   bnOpen: 'open', bnProgress: 'in progress', bnDone: 'done',
   bnAt: '{time}', bnYesterday: 'yesterday', bnDaysOld: '{n} days old',
+  // One branch's page (src/branch.ts): the same layout for every face of a
+  // product, with three more blocks on the one that owns the code. Every figure
+  // in here is a count off the board or something git said; the blocks whose
+  // source is not connected have a string that says so, and no string for a
+  // number.
+  bpLog: 'What the agent did', bpLogMany: 'What the agents did',
+  bpLogNothing: 'Nothing has run on this branch yet, so there is nothing to log.',
+  bpDid: '{who}: {what}',
+  bpSeen: 'as of {time}',
+  bpOverTime: 'over time · 30 days',
+  bpOverTimeBody: 'A figure a day needs a source that measures this branch daily. None is connected yet, so there is no chart — the numbers above are the board’s own.',
+  bpRepos: 'Repositories', bpReposNone: 'No repository is attached to this product.',
+  bpCommits: 'Recent commits',
+  bpCommitsNone: 'Git could not be read on any of these repositories, so nothing is said about what landed.',
+  bpLanded: '{n} · 7d', bpLandedToday: '{today} today · {n} · 7d', bpLandedNone: 'nothing in 7 days',
+  bpPulls: 'Pull requests',
+  bpPullsBody: 'Nothing has answered about these repositories yet. The code host is read through the gh signed in on the computer that holds the checkout, and only where the origin is on GitHub — so this is a gap and not an empty list.',
+  bpPullsNone: 'Nothing is open on the repositories of this branch.',
+  bpChecksFailing: '× {n} checks', bpChecksPassing: '✓ checks', bpChecksPending: '◐ checks',
+  bpDraft: 'draft',
+  bpTickets: 'Tickets', bpNoTickets: 'No cards on this branch yet.',
+  bpBareTitle: 'Nothing on this branch yet.',
+  bpBare: 'No card has been filed here, and no source writes to it. It keeps its place so that work has somewhere to go.',
+  bpGone: 'That branch is not on this phone.',
+  bpGoneBody: 'Nothing that has answered has a branch by this name on this product. It may be on a computer that is not paired.',
   // …and its board (src/board.ts): the four columns, and the mark on a card.
   // The column is where a person put the card; the mark is what the agent on it
   // is actually doing, which is why "Stuck" carries how long and "Done" says

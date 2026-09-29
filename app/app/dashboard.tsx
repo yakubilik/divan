@@ -411,6 +411,8 @@ function Overview({ project: p, view, now, ago }: {
   project: MergedProject; view: DivanView; now: number; ago: Ago;
 }) {
   const T = useT();
+  const router = useRouter();
+  const go = useNavGuard();
   const asleep = quiet(p, now, ago);
   const body = blankBody(p);
   const happening = nowWords(view, p);
@@ -442,7 +444,10 @@ function Overview({ project: p, view, now, ago }: {
             line={b.said ? T(b.said.key, b.said.params) : b.text}
             figures={b.figures.map((f) => ({ value: f.value, label: T(f.label) }))}
             refreshed={b.refreshed ? T(b.refreshed.said.key, b.refreshed.said.params) : null}
-            tone={b.refreshed?.tone ?? null} />
+            tone={b.refreshed?.tone ?? null}
+            /* Each card opens that branch's own page (Mobile9 S10, S11), by the
+               kind the merge folded it under rather than by one machine's id. */
+            onPress={() => go(() => router.push(`/branch/${b.kind}?project=${p.key}`))} />
         ))}
       </View>
     </View>
