@@ -134,7 +134,7 @@ export function LimitsRing({ chatId, accountId, provider, label, sub, dot, onOpe
         <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(null)} />
         {(
           <View style={{ position: 'absolute', top: open.y + open.height + 32, left: 16, right: 16, backgroundColor: c.card, borderWidth: 1, borderColor: c.lineStrong,
-                         borderRadius: 16, padding: 16, gap: 14, boxShadow: c.scheme === 'dark' ? '0 24px 56px -24px rgba(0,0,0,.6)' : '0 24px 56px -24px rgba(28,27,22,.22)' }}>
+                         borderRadius: 16, padding: 16, gap: 14, boxShadow: c.shadow.menu }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
               <Text style={{ fontSize: 15, fontWeight: '600' }}>{T('limTitle')}</Text>
               {!!measured && <Text mono style={{ fontSize: 11, color: c.faint }}>{ageLabel(measured, T)}</Text>}

@@ -580,7 +580,9 @@ export function ConnectionBanner({ text }: { text: string }) {
   const c = useColors();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: c.warnBg, padding: 6 }}>
-      <Spinner size={11} color={c.warn} track="rgba(181,133,43,.3)" />
+      {/* The ring sits on the band's own amber wash, so its unfilled part is
+          the emphasised line — which is what that token is for. */}
+      <Spinner size={11} color={c.warn} track={c.lineStrong} />
       <Text style={{ fontSize: 12, fontWeight: '500', color: c.warn }}>{text}</Text>
     </View>
   );

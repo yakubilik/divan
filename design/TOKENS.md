@@ -1,48 +1,26 @@
 # remote-ai-chat — design tokens
 
-The whole palette and scale, in one place. There are two sets: the phone app,
-drawn in a light and a dark theme, and the desktop panel, which is still on the
-earlier dark-only palette. `app/src/theme.ts` mirrors the first and
-`web/src/lib/theme.ts` the second; nothing in either may drift from them, and
-nothing may introduce a colour that is not here.
+Two sets: the phone app, drawn in a light and a dark theme, and the desktop
+panel, which is still on the earlier dark-only palette. The phone's is Divan's
+and lives in [divan/TOKENS.md](divan/TOKENS.md); `web/src/lib/theme.ts` mirrors
+the second. Nothing in either may drift, and nothing may introduce a colour that
+is not written down.
 
 ## Phone app
 
-Every value has a light and a dark counterpart, element for element; the app
-follows the phone's appearance setting.
-
-| role | light | dark | used for |
-|---|---|---|---|
-| bg | `#FBFAF8` | `#17160F` | screen background, sheets |
-| card | `#FFFFFF` | `#242219` | cards, rows, menus, dialogs |
-| fill | `#F1F0EB` | `#211F17` | search field, segmented track, chips, icon wells |
-| line | `#ECEAE3` | `#2D2B21` | default border and separator |
-| line-strong | `#DEDBD2` | `#3F3C30` | emphasised border, empty track, disabled fill |
-| ink | `#1C1B18` | `#F2F0E8` | primary text, primary button, user bubble |
-| on-ink | `#FBFAF8` | `#17160F` | text on ink |
-| text-2 | `#3C3A33` | `#D2CFC5` | assistant text, secondary text |
-| muted | `#6A685F` | `#9E9C90` | labels, mono meta |
-| faint | `#9C9A8F` | `#706E63` | timestamps, placeholders, hints |
-| seg-on | `#FFFFFF` | `#3F3C30` | the selected segment |
-| code | `#FAF9F6` | `#1C1B13` | code blocks, table heads |
-| accent | `#FF5A48` | `#FF5A48` | Allow, send, the recording dot |
-| accent-text | `#FF373D` | `#FF8B72` | red as text: needs approval, archive shown |
-| accent-tint | `#FFE4DD` | `#3A241C` | a toggled-on chip |
-| ok / ok-bg | `#3F7A52` / `#E7F1EA` | `#6FAE82` / `#1F2D23` | success, online |
-| warn / warn-bg | `#B5852B` / `#F7EFDB` | `#D9A84A` / `#2F2915` | connecting, limits, notes |
-| danger / danger-bg | `#B14A33` / `#F8E3DB` | `#E0735A` / `#311E16` | errors, dangerous commands, delete |
-| scrim | `rgba(28,27,22,.35)` | `rgba(0,0,0,.55)` | behind a sheet, menu or dialog |
+The phone app's palette is Divan's, and it is written down in
+[divan/TOKENS.md](divan/TOKENS.md) — sixteen values, light and dark, each read
+out of the artboard it came from, plus the ramps the project monograms and the
+executor badges are drawn with. `app/src/tokens.ts` is that table and
+`app/src/theme.ts` derives everything else from it, so there is exactly one
+place a colour can come from.
 
 - UI type is Inter (400/500/600, 700 unused), machine data is JetBrains Mono.
   Both ship in `app/assets/fonts`.
 - Icons are Material Symbols Rounded, weight 300 unless a design says
   otherwise, cut out of the font at the optical size they are drawn at
   (`app/scripts/gen-icons.py`).
-- Radius: 8 chip badge · 10 small button / segment track · 12 input · 14 card
-  and primary button · 16 dialog · 18 bubble · 22 sheet · 26 composer ·
-  999 pill.
-- Shadows are soft and only in the light theme's sense of depth: a card rests,
-  a menu floats (`0 24px 56px -16px`). Dark keeps the same geometry.
+- Radii, heights and the rules the drawings keep are in divan/TOKENS.md too.
 
 ## Desktop panel
 

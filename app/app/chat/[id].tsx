@@ -542,7 +542,7 @@ export default function ChatScreen() {
       {toast && (
         <View pointerEvents="none" style={{ position: 'absolute', alignSelf: 'center', bottom: composerBottom + 110, flexDirection: 'row', alignItems: 'center', gap: 8,
                                             backgroundColor: c.ink, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 16,
-                                            boxShadow: c.scheme === 'dark' ? '0 8px 28px -10px rgba(0,0,0,.6)' : '0 8px 28px -10px rgba(28,27,22,.3)' }}>
+                                            boxShadow: c.shadow.raised }}>
           <Icon name="inventory_2" size={18} color={c.onInk} />
           <Text style={{ fontSize: 14, fontWeight: '500', color: c.onInk }}>{toast}</Text>
         </View>

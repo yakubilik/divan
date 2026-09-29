@@ -8,6 +8,9 @@
  *  spinner that never stops, and a push about a red ticket has to land on the
  *  ticket rather than on the chat list.
  *
+ *  `scripts/test-divan.cjs` is folded in at the end: the design system's checks
+ *  have their own file, and this is the command that runs everything.
+ *
  *  Run: node scripts/test-ustabasi.cjs
  */
 const { transform } = require('sucrase');
@@ -1213,6 +1216,12 @@ for (const f of ['src/store.ts', 'src/queue.ts', 'app/ustabasi.tsx', 'app/ticket
 }
 checks.push([`the screens ask the computer for three things and no more (${[...calls].sort().join(', ')})`,
   calls.size === 3 && calls.has('ustabasi.list') && calls.has('ustabasi.note') && calls.has('ustabasi.run')]);
+
+// The Divan design system is checked next door, where its subject is — the
+// palette read off the artboards, and the parts the new screens are made of.
+// Folded in here so that one command still covers everything in the app that
+// can be checked without a phone.
+checks.push(...require('./test-divan.cjs').checks);
 
 let bad = 0;
 for (const [name, ok] of checks) {

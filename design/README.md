@@ -4,9 +4,15 @@ Every screen in this project was drawn before it was built. What survives here
 is the part that the code still has to obey: the tokens.
 
 [TOKENS.md](TOKENS.md) is the whole design system — colour, type scale, spacing,
-radii, icons. `app/src/theme.ts` and `web/src/lib/theme.ts` mirror it, and
+radii, icons. `app/src/tokens.ts` and `web/src/lib/theme.ts` mirror it, and
 neither invents a value of its own. If you are adding a screen and reach for a
 colour that is not in that table, the answer is one of the ones that is.
+
+[divan/TOKENS.md](divan/TOKENS.md) is the phone app's half of it: Divan, the
+interface the app grows into — a dashboard over several projects, a board per
+project, a ticket, a branch, a machine tab. It records which frame every value
+was read out of, so a later disagreement is settled by the artboard. The
+drawings themselves are not in this repository.
 
 Two rules hold across the interface and are easier to state than to derive from
 the tokens:

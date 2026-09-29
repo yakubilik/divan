@@ -190,6 +190,18 @@ export default function Settings() {
           <Text style={{ fontSize: 12, color: c.muted, flex: 1 }}>{pushToken ? T('pushOk') : T('pushNo')}</Text>
         </View>
 
+        {/* Only a development build has anything to say here, and only one
+            thing: the design system's own screen, where every part the Divan
+            screens are made of is drawn beside the frame it came from. */}
+        {__DEV__ && (
+          <>
+            <Label style={{ paddingTop: 12 }}>{T('devSection')}</Label>
+            <Card>
+              <Row label={T('divanParts')} value={T('divanPartsNote')} onPress={() => router.push('/divan-gallery')} last />
+            </Card>
+          </>
+        )}
+
         {hostInfo && (
           <>
             <Label style={{ paddingTop: 12 }}>{T('host')}</Label>

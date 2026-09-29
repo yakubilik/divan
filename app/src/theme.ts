@@ -1,116 +1,38 @@
+import { createContext, createElement, useContext, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
+import { dark, light, type Palette, type Scheme, type Tokens, tokensFor } from './tokens';
 
-/** The whole palette, twice. Every screen was drawn in both, element for
- *  element, and these are the pairs: a value never appears on one side
- *  without its counterpart on the other. Nothing on screen picks a colour
- *  outside this table. The app follows the phone's own appearance. */
-export interface Palette {
-  scheme: 'light' | 'dark';
-  /** Screen background. */
-  bg: string;
-  /** Cards, rows, sheets, menus. */
-  card: string;
-  /** Quiet fills: search field, segmented track, chips, icon wells. */
-  fill: string;
-  /** Default border and separator. */
-  line: string;
-  /** Emphasised border, an unfilled track, a disabled fill. */
-  lineStrong: string;
-  /** Primary text, and the primary button that is drawn in it. */
-  ink: string;
-  /** Text on top of `ink`. */
-  onInk: string;
-  /** The reader's own messages. A raised neutral, not an inverted one: a
-   *  white slab in a dark thread reads as an error, not as "mine". */
-  bubble: string;
-  text2: string;
-  muted: string;
-  faint: string;
-  /** The selected segment of a segmented control. */
-  segOn: string;
-  /** Code blocks, table heads, the address bar of the sign-in page. */
-  code: string;
-  warn: string; warnBg: string;
-  ok: string; okBg: string;
-  danger: string; dangerBg: string;
-  /** Allow, send, the recording dot — the same red in both themes. */
-  accent: string;
-  /** Red as text: needs approval, a toggled-on chip. */
-  accentText: string;
-  accentTint: string;
-  /** Dim behind a sheet, a menu or a dialog. */
-  scrim: string;
-  /** Behind the drop target. */
-  veil: string;
-  /** The halo around the live-turn dot. */
-  halo: string;
-  /** The unfilled part of a spinner drawn on a card. */
-  spinTrack: string;
-  /** Second stripe of an image that has not loaded yet. */
-  stripe: string;
-  shadow: {
-    /** A card resting on the page. */
-    card: string;
-    /** The small lift under a pill or a selected segment. */
-    pill: string;
-    seg: string;
-    /** A menu or popover. */
-    menu: string;
-    /** A menu attached to the chat header, a sheet over the page. */
-    pop: string;
-    /** A pending approval, which has to stand out from the transcript. */
-    raised: string;
-    /** The knob of a switch. */
-    knob: string;
-  };
+/** The palette is plain data and lives next door with the tokens it is made
+ *  of, so that a check can read it without a phone. What is left here is how a
+ *  screen gets at it, and the two typefaces. */
+export * from './tokens';
+
+/** Normally nothing: the app follows the phone and there is no switch in it,
+ *  because the phone already has one. The design gallery is the exception —
+ *  the frames exist in both themes and the point of the gallery is to be held
+ *  up against them, so it can ask a subtree to be drawn in the other one. */
+const Forced = createContext<Scheme | null>(null);
+
+export function ForceScheme({ scheme, children }: { scheme: Scheme | null; children: ReactNode }) {
+  // `createElement` rather than JSX so that the palette stays a `.ts` file:
+  // every script and document in the repository points at `src/theme.ts`.
+  return createElement(Forced.Provider, { value: scheme }, children);
 }
 
-const SHADOW_INK = 'rgba(28,27,22,';
-
-export const light: Palette = {
-  scheme: 'light',
-  bg: '#FBFAF8', card: '#FFFFFF', fill: '#F1F0EB', line: '#ECEAE3', lineStrong: '#DEDBD2',
-  bubble: '#EDEBE4',
-  ink: '#1C1B18', onInk: '#FBFAF8', text2: '#3C3A33', muted: '#6A685F', faint: '#9C9A8F',
-  segOn: '#FFFFFF', code: '#FAF9F6',
-  warn: '#B5852B', warnBg: '#F7EFDB', ok: '#3F7A52', okBg: '#E7F1EA', danger: '#B14A33', dangerBg: '#F8E3DB',
-  accent: '#FF5A48', accentText: '#FF373D', accentTint: '#FFE4DD',
-  scrim: 'rgba(28,27,22,.35)', veil: 'rgba(251,250,248,.92)', halo: 'rgba(28,27,22,.12)',
-  spinTrack: 'rgba(28,27,22,.15)', stripe: '#E6E4DD',
-  shadow: {
-    card: `0 1px 2px ${SHADOW_INK}.04), 0 4px 10px -6px ${SHADOW_INK}.08)`,
-    pill: `0 1px 2px ${SHADOW_INK}.05)`,
-    seg: `0 1px 2px ${SHADOW_INK}.08)`,
-    menu: `0 24px 56px -16px ${SHADOW_INK}.35)`,
-    pop: `0 24px 56px -16px ${SHADOW_INK}.3)`,
-    raised: `0 8px 28px -10px ${SHADOW_INK}.13)`,
-    knob: `0 1px 2px ${SHADOW_INK}.2)`,
-  },
-};
-
-export const dark: Palette = {
-  scheme: 'dark',
-  bg: '#100F0A', card: '#1E1C15', fill: '#1A1811', line: '#2D2B21', lineStrong: '#3F3C30',
-  bubble: '#2A2722',
-  ink: '#F2F0E8', onInk: '#17160F', text2: '#D2CFC5', muted: '#9E9C90', faint: '#706E63',
-  segOn: '#3F3C30', code: '#1C1B13',
-  warn: '#D9A84A', warnBg: '#2F2915', ok: '#6FAE82', okBg: '#1F2D23', danger: '#E0735A', dangerBg: '#311E16',
-  accent: '#FF5A48', accentText: '#FF8B72', accentTint: '#3A241C',
-  scrim: 'rgba(0,0,0,.55)', veil: 'rgba(23,22,15,.92)', halo: 'rgba(242,240,232,.15)',
-  spinTrack: 'rgba(242,240,232,.2)', stripe: '#2D2B21',
-  shadow: {
-    card: `0 1px 2px ${SHADOW_INK}.04), 0 4px 10px -6px ${SHADOW_INK}.08)`,
-    pill: `0 1px 2px ${SHADOW_INK}.05)`,
-    seg: `0 1px 2px ${SHADOW_INK}.08)`,
-    menu: '0 24px 56px -16px rgba(0,0,0,.55)',
-    pop: '0 24px 56px -16px rgba(0,0,0,.6)',
-    raised: `0 8px 28px -10px ${SHADOW_INK}.13)`,
-    knob: `0 1px 2px ${SHADOW_INK}.2)`,
-  },
-};
+export function useScheme(): Scheme {
+  const forced = useContext(Forced);
+  const phone = useColorScheme();
+  return forced ?? (phone === 'dark' ? 'dark' : 'light');
+}
 
 export function useColors(): Palette {
-  return useColorScheme() === 'dark' ? dark : light;
+  return useScheme() === 'dark' ? dark : light;
+}
+
+/** The design's own sixteen names, for anything drawn from the Divan frames.
+ *  `useColors` is the same table under the names the older screens use. */
+export function useTokens(): Tokens {
+  return tokensFor(useScheme());
 }
 
 /** Font families as registered in the root layout. React Native cannot pick a
