@@ -205,6 +205,25 @@ goal and the title for the one done criterion the queue insists on, because a
 board that demanded a specification before it would accept a drag would be a
 form.
 
+### Whether a product is alive at all
+
+The board says what is being worked on and cannot say whether a product is
+alive: an empty board with nine commits this week is a busy project, and four
+cards nobody has touched since August is not. That fact lives in the
+repositories the product owns, so `divan.snapshot` carries an `activity` map
+beside the board — one entry per repository path any product on that machine
+owns, each with `at` (the last commit's own time), `week` (commits in the last
+seven days) and `today` (commits since midnight there).
+
+Keyed by path, not by project, for the same reason the merge exists: isghocam's
+site may be checked out on the studio and its API on the mini, and one product's
+figure is the union of its repositories — while two machines holding the *same*
+checkout must not have their commits counted twice. A path git would not answer
+about is **absent from the map**, and the client then draws no figure rather than
+a zero. What a product earns — the MRR, the DAU, the visits the frames put at the
+top of a project card — has no source connected yet and is absent for the same
+reason.
+
 ### One view across several machines
 
 Every Divan surface is every paired computer at once. A project is the context
