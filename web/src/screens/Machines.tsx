@@ -33,10 +33,10 @@ import { useDivanStore } from '../lib/divan';
 import { T, type Tone } from '../lib/theme';
 import type { View } from '../lib/shell';
 import {
-  Button, Card, Cell, EmptyState, NameCell, SectionHeader, StatusDot, Table, Tag, Write,
-  type Column,
+  Button, Card, Cell, EmptyState, NameCell, Quoted, SectionHeader, StatusDot, Table, Tag,
+  Well, Write, type Column,
 } from '../ui/divan';
-import { Icon, P, mono } from '../ui/kit';
+import { P } from '../ui/kit';
 
 /** How long ago it answered, the way W12 says it: `12s ago` while it is still
  *  seconds, and the panel's own `2h 14m` after that. */
@@ -122,10 +122,7 @@ export function Machines({ view, onView, onFocus }: {
           tone: 'amber' as Tone,
           wash: m.wash,
           cells: [
-            <span style={{
-              flex: 'none', width: 32, height: 32, borderRadius: 9, background: T.s2,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}><Icon path={P.cpu} size={17} color={T.ink2} /></span>,
+            <Well icon={P.cpu} />,
             <NameCell mark title={m.machine} note={m.detail || undefined} />,
             <>
               <StatusDot state={m.state} hollow={m.state === 'asking'} />
@@ -167,22 +164,16 @@ export function Machines({ view, onView, onFocus }: {
             Run this on the computer you want to add and paste the link it prints. It appears
             here within a few seconds.
           </div>
-          <div style={{
-            ...mono, fontSize: 12, color: T.ink, background: T.s2,
-            padding: '10px 12px', borderRadius: 10, overflowX: 'auto',
-          }}>{PAIR_CMD}</div>
+          <Quoted>{PAIR_CMD}</Quoted>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              flex: 1, minWidth: 0, ...mono, fontSize: 12, background: T.s2,
-              padding: '9px 12px', borderRadius: 10,
-            }}>
+            <Quoted style={{ flex: 1, minWidth: 0 }}>
               <Write
                 value={link} onChange={(v) => { setLink(v); setPairError(null); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') pair(); }}
                 label="The pairing link that command printed"
                 placeholder="remoteaichat://pair?host=…"
               />
-            </span>
+            </Quoted>
             <Button small label="Pair" onClick={pair} />
           </div>
           {!!pairError && (

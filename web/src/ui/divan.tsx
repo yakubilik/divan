@@ -193,14 +193,7 @@ export function Row({
       width: '100%', boxSizing: 'border-box', minWidth: 0, color: T.ink,
       ...style,
     }}>
-      {lead ?? (!!icon && (
-        <span style={{
-          flex: 'none', width: SIZE.rowWell, height: SIZE.rowWell, borderRadius: RADIUS.well,
-          background: T.s2, color: T.ink2, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Icon path={icon} size={SIZE.rowIcon} color={T.ink2} />
-        </span>
-      ))}
+      {lead ?? (!!icon && <Well icon={icon} />)}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{
           ...(mark ? mono : null), display: 'block', fontSize: 14, fontWeight: 600,
@@ -222,6 +215,30 @@ export function Row({
       {right}
       {chevron && <Icon path={P.chevronRight} size={16} color={T.ink3} />}
     </Tap>
+  );
+}
+
+/** The square a row opens on: `32px` of `s2` at `border-radius:9px` holding a
+ *  `17px` glyph (Web15 W12's machines) or, where what it stands for has no
+ *  glyph, two letters in mono (W16's accounts, drawn `34px` at `600 12px`).
+ *  The frames draw it 33 times; a row draws its own, and a table hands it in
+ *  as the first cell. */
+export function Well({ icon, mark, size = SIZE.rowWell, style }: {
+  icon?: string;
+  /** Two letters, for a thing the vocabulary has no glyph for. */
+  mark?: string;
+  size?: number;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span style={{
+      ...(mark ? mono : null), flex: 'none', width: size, height: size,
+      borderRadius: RADIUS.well, background: T.s2, color: T.ink2,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 12, fontWeight: 600, ...style,
+    }}>
+      {icon ? <Icon path={icon} size={SIZE.rowIcon} color={T.ink2} /> : mark}
+    </span>
   );
 }
 

@@ -28,9 +28,8 @@ import { useFleet } from '../lib/fleet';
 import { T } from '../lib/theme';
 import type { View } from '../lib/shell';
 import {
-  Button, Card, Cell, EmptyState, NameCell, SectionHeader, Table, Tag, type Column,
+  Button, Card, Cell, EmptyState, NameCell, SectionHeader, Table, Tag, Well, type Column,
 } from '../ui/divan';
-import { mono } from '../ui/kit';
 
 /** How long a sign-in has left, said the way W16 says it — `12 days` — and in
  *  the panel's own `2h 14m` once there are hours rather than days left, which
@@ -115,11 +114,7 @@ export function Accounts({ now, onView, onFocus }: {
           tone: s.tone,
           wash: s.state === 'expiring' || s.state === 'expired',
           cells: [
-            <span style={{
-              ...mono, flex: 'none', width: 34, height: 34, borderRadius: 9, background: T.s2,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 600, color: T.ink2,
-            }}>{s.mark}</span>,
+            <Well mark={s.mark} size={34} />,
             <NameCell title={s.title} note={s.note} />,
             <Tag label={s.says} tone={s.tone} />,
             <Cell text={s.usedBy} style={{ color: T.ink2 }} />,
