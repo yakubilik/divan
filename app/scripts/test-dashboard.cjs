@@ -249,6 +249,46 @@ const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
   );
 }
 
+// ── 2b · out of quota, in words ─────────────────────────────────
+
+{
+  const spent = (o, hosts = []) => view([studio({ quota: quota({ spent: true, left: 0, ...o }) }), ...hosts]);
+  const words = (o, hosts) => D.pausedWords(spent(o, hosts), ago);
+  const back = NOW + 4 * HOUR;
+  checks.push(
+    ['there is no such block while there is quota left anywhere',
+      D.pausedWords(BUSY, ago) === null],
+    ['a spent fleet says when the agents pick up again, and how long that is',
+      (() => {
+        const w = words({ resets_at: back });
+        return eq(w.title, { key: 'pausedTitle', params: { time: D.clock(back) } })
+          && w.body.key === 'pausedBodyOne' && w.body.params.d === ago(4 * HOUR);
+      })()],
+    ['\u2026counts them where more than one was stopped',
+      (() => {
+        const w = D.pausedWords(view([studio({ quota: quota({ spent: true, left: 0, resets_at: back }) }),
+                                      paired('h9', 'shed', { reachable: true, at: NOW, snapshot: snapshot('shed', {
+                                        quota: quota({ spent: true, left: 0, resets_at: back }),
+                                        projects: [project('Pebble')],
+                                        cards: [card('s1', { project: 'Pebble-id', status: 'running' })],
+                                        agents: [agent('s1', { project: 'Pebble-id', projectName: 'Pebble' })] }) })]), ago);
+        return w.body.key === 'pausedBody' && w.body.params.n === 2;
+      })()],
+    ['\u2026and says nothing was running where nothing was, rather than "0 agents stopped"',
+      D.pausedWords(view([paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
+        quota: quota({ spent: true, left: 0, resets_at: back }), projects: [project('Pebble')] }) })]), ago)
+        .body.key === 'pausedBodyNone'],
+    ['a pool that cannot say when it comes back does not promise an hour',
+      (() => {
+        const w = words({});
+        return eq(w.title, { key: 'pausedTitleBare' }) && eq(w.foot, []) && w.body.params.d === '';
+      })()],
+    ['\u2026and where it can, the footer is the two clocks the frame ends on',
+      eq(words({ resets_at: back }).foot,
+         [{ key: 'pausedUsed' }, { key: 'pausedResets', params: { time: D.clock(back) } }])],
+  );
+}
+
 // ── 3 · what needs a person ─────────────────────────────────────────────────
 
 {
@@ -516,6 +556,8 @@ for (const scheme of ['dark', 'light']) {
         const m = draw(scheme, QUIET_CALM);
         return !m.includes('calmTitle') && m.includes('cUnknown') && m.includes('dashStale');
       })()],
+    [`${scheme}: an agent that has said nothing yet is timed instead, rather than reading as a bare title`,
+      /Bulk CSV invite · \d/.test(draw(scheme, QUIET_CALM))],
     [`${scheme}: \u2026nor over a fleet that has run out of quota`,
       (() => {
         const m = draw(scheme, SPENT_ONLY);

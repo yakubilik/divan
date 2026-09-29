@@ -148,6 +148,34 @@ export function quotaWords(line: SystemLine): Said | null {
     : { key: 'sysQuotaBare', params: { p: q.pct } };
 }
 
+/** What the red block says when the quota has run out (Mobile5 S2): what
+ *  stopped, that nothing was lost, and exactly when work resumes.
+ *
+ *  Null while there is quota left anywhere — this is the one block on the screen
+ *  that is drawn by an absence of something rather than by the presence of it,
+ *  so the rule for whether it appears at all belongs with the words.
+ *
+ *  A pool that says it is spent but not when it comes back is an ordinary thing
+ *  (nothing has measured a window yet, or every reading was of a window with no
+ *  reset on it), and the block then says what stopped without promising an hour
+ *  it does not know — and drops its footer, which is two clocks. */
+export function pausedWords(view: DivanView, ago: Ago):
+  { title: Said; body: Said; foot: Said[] } | null {
+  const q = view.quota;
+  if (!q.spent) return null;
+  const back = q.resets_at;
+  const n = view.totals.paused;
+  return {
+    title: back ? { key: 'pausedTitle', params: { time: clock(back) } } : { key: 'pausedTitleBare' },
+    // Nothing was running when the last window closed: there is nobody to pick
+    // up again, and what the block is really saying is that nothing new starts.
+    body: n === 0 ? { key: 'pausedBodyNone' }
+      : { key: n === 1 ? 'pausedBodyOne' : 'pausedBody',
+          params: { n, d: ago(back == null ? null : Math.max(0, back - view.now)) } },
+    foot: back ? [{ key: 'pausedUsed' }, { key: 'pausedResets', params: { time: clock(back) } }] : [],
+  };
+}
+
 // ── how old the whole screen is ─────────────────────────────────────────────
 
 /** What a machine going quiet costs this screen: which machines, which products

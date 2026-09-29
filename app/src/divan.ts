@@ -279,6 +279,11 @@ export interface DivanView {
   agents: MergedAgent[];
   totals: Totals;
   quota: MergedQuota;
+  /** The moment this was worked out, in seconds. The one thing in the view that
+   *  is not read off a snapshot — staleness is measured against it — so it
+   *  travels with the answer rather than each screen fetching a clock of its own
+   *  and ageing the same machine to two different numbers on one page. */
+  now: number;
 }
 
 /** The paired list and what the phone holds for each, as one list. Hosts with
@@ -494,7 +499,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
       : [...history.values()].reduce((n, a) => n + (a.today || 0), 0),
   };
 
-  return { hosts, projects, cards, agents, totals, quota: fleetQuota(hosts) };
+  return { hosts, projects, cards, agents, totals, quota: fleetQuota(hosts), now };
 }
 
 /** The branches of a product that is on two machines. A branch is a face of the

@@ -10,7 +10,7 @@ import { chips } from '../src/shell';
 import { since } from '../src/tickets';
 import {
   agentRows, asks, calm, chip, clock, counters, freshness, latest, line, machineWords,
-  marks, quotaWords, staleness, staleWords, systemLine, target, type Ago, type Said,
+  marks, pausedWords, quotaWords, staleness, staleWords, systemLine, target, type Ago, type Said,
 } from '../src/dashboard';
 import { EmptyState, ListRow, SectionHeader } from '../src/components/divan';
 import {
@@ -99,7 +99,7 @@ export default function Dashboard() {
                 {said(T, staleWords(old, ago))}
               </Text>
             )}
-            <Paused view={view} now={now} ago={ago} />
+            <Paused view={view} ago={ago} />
             <Counters counters={counters(view)} label={(c) => T(c.key)} />
             <Calm view={view} />
             <Asks view={view} onOpen={open} />
@@ -159,24 +159,15 @@ function said(T: ReturnType<typeof useT>, x: Said): string {
 
 /** Out of quota (Mobile5 S2). Red, and not an alarm: what stopped, that nothing
  *  was lost, and exactly when it starts again. */
-function Paused({ view, now, ago }: { view: DivanView; now: number; ago: Ago }) {
+function Paused({ view, ago }: { view: DivanView; ago: Ago }) {
   const T = useT();
-  const q = view.quota;
-  if (!q.spent) return null;
-  const back = q.resets_at;
-  const n = view.totals.paused;
+  const words = pausedWords(view, ago);
+  if (!words) return null;
   return (
-    <Note tone="red" icon="pause"
-      title={back ? T('pausedTitle', { time: clock(back) }) : T('pausedTitleBare')}
-      body={n === 0 ? T('pausedBodyNone')
-        : T(n === 1 ? 'pausedBodyOne' : 'pausedBody',
-            { n, d: ago(back == null ? null : Math.max(0, back - now)) })}
-      foot={back ? (
-        <>
-          <NoteFoot text={T('pausedUsed')} />
-          <NoteFoot text={T('pausedResets', { time: clock(back) })} />
-        </>
-      ) : null} />
+    <Note tone="red" icon="pause" title={said(T, words.title)} body={said(T, words.body)}
+      foot={words.foot.length
+        ? words.foot.map((x) => <NoteFoot key={x.key} text={said(T, x)} />)
+        : null} />
   );
 }
 
