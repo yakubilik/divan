@@ -399,7 +399,11 @@ Geist; the panel does not ship it.
   phone's Mobile7 S6 at desktop sizes, and says so where it is defined.
 - `web/src/ui/kit.tsx` — the older set the existing screens are built from. Not
   being replaced in this ticket, and not to be mixed with the parts above in one
-  file.
+  file — with one exception, which is where the two meet: the two Machine pages
+  the frames keep as they are (`Terminal.tsx`, `Screen.tsx`) take their page
+  head, their chips and their status line from the parts above while the rest of
+  each screen stays in the older set, because the alternative was a page head
+  invented at a size nothing else uses. Both say so where they are defined.
 - `web/scripts/divan-gallery.tsx` — every part in both themes, each beside the
   name of its frame. Rendered to `.test-build/divan/gallery.html` by the check
   below, which opens in a browser with no daemon and no pairing.
