@@ -109,7 +109,7 @@ function figures(h: HostView, ago: Ago): Figure[] {
  *  quiet was running something when it was last heard and nobody can say what it
  *  is doing now — the frame's `1 task · unknown`. */
 function running(h: HostView): Words {
-  if (!h.reachable) return key('maUnknownTasks', { n: h.running });
+  if (!h.reachable) return h.running === 1 ? key('maOneTaskUnknown') : key('maUnknownTasks', { n: h.running });
   if (!h.running) return key('maIdleTasks');
   return key(h.running === 1 ? 'maOneTask' : 'maTasks', { n: h.running });
 }
@@ -193,6 +193,11 @@ export interface ExecutorGroup {
 const RANK: Record<ExecutorState, number> = { unavailable: 0, busy: 1, idle: 2 };
 
 export function executorGroups(view: DivanView): ExecutorGroup[] {
+  // Nothing paired is nobody, and that includes the one worker who is on no
+  // machine: his work is the cards a person has to move, and there are no
+  // boards for them to be on yet. An empty list here is what lets the page and
+  // the drawer's own count say the same thing about that phone.
+  if (view.hosts.length === 0) return [];
   const stopped = spent(view);
   const coders: ExecutorLine[] = [];
   const branches: ExecutorLine[] = [];

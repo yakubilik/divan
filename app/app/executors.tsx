@@ -32,6 +32,8 @@ export default function Executors() {
   const say = (w: Words) => (w.said ? T(w.said.key, w.said.params) : w.text);
 
   const back = () => { if (router.canGoBack()) router.back(); else router.replace('/machine'); };
+  // One reading of "is there anybody", so the count beside the title cannot
+  // stand over a page that says there is nobody.
   const groups = executorGroups(view);
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
 
@@ -40,8 +42,8 @@ export default function Executors() {
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 20,
                                            paddingBottom: 24 }}>
         <BackRow label={T('mTitle')} onPress={back} />
-        <PageHead title={T('exTitle')} count={total} style={{ marginTop: 6, paddingHorizontal: 0 }} />
-        {view.hosts.length === 0
+        <PageHead title={T('exTitle')} count={total || null} style={{ marginTop: 6, paddingHorizontal: 0 }} />
+        {total === 0
           ? <EmptyState title={T('exNone')} body={T('exNoneBody')} />
           : groups.map((g) => (
             <View key={g.key}>

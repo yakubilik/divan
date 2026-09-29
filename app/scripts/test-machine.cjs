@@ -1,14 +1,6 @@
-/** The Machine place: the drawer, the machines and the executors (Mobile11
- *  S16, S15, S14).
- *
- *  Four promises, and each of them is checked here: the three screens are drawn
- *  in the design's own colours in both themes and against no data, stale data
- *  and a machine that cannot be reached; an unreachable machine says when it
- *  was last reached and wears it; every executor says what it is for, where it
- *  runs, what it is on and which of the three states it is in; and nothing the
- *  Machine place led to before this ticket stopped being reachable from it.
- *
- *  Run: node scripts/test-machine.cjs  (also folded into test-ustabasi.cjs.)
+/** The drawer, Machines and Executors (Mobile11 S16, S15, S14): the three drawn
+ *  in both themes with no data and with a machine that cannot be reached, what
+ *  that machine and every executor say, and nothing under Machine gone missing.
  */
 const fs = require('fs');
 const path = require('path');
@@ -22,19 +14,12 @@ const A = require(path.join(root, 'src/machine.ts'));
 const S = require(path.join(root, 'src/shell.ts'));
 const D = require(path.join(root, 'src/divan.ts'));
 const K = require(path.join(root, 'src/tokens.ts'));
+const I = require(path.join(root, 'src/i18n.ts'));
 
 const checks = [];
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-// ── the fleet the frames draw ───────────────────────────────────────────────
-//
-// Mobile11 S15's three computers: `studio` answering with work on it, `mini`
-// quiet for two hours and fourteen minutes with a worker that was running when
-// it went, and a third that has never answered at all — which no frame draws
-// and every phone meets the first time it pairs something.
-//
-// Measured against this moment, not a round number: every age on the page is
-// aged off the phone's own clock.
+// S15's three computers, aged off this moment rather than a round number.
 const NOW = Math.floor(Date.now() / 1000);
 const QUIET = 2 * 3600 + 14 * 60;
 
@@ -78,8 +63,7 @@ const MINI = paired('h2', 'mini', {
     projects: [project('Hush', { running: 1 })], cards: [],
     agents: [agent('c4', { project: 'Hush-id', machine: 'mini', title: 'Safari 17 login' })] }),
 });
-/** Paired a moment ago and still silent: nothing of it to draw at all. */
-const CLOUD = paired('h3', 'cloud', { reachable: false });
+const CLOUD = paired('h3', 'cloud', { reachable: false });  // never answered
 
 const FLEET = [STUDIO, MINI, CLOUD];
 const view = D.merge(FLEET, NOW);
@@ -89,14 +73,7 @@ const at = (name) => lines.find((m) => m.machine === name);
 const groups = A.executorGroups(view);
 const rows = groups.flatMap((g) => g.rows);
 const words = (w) => (w.said ? w.said.key : w.text);
-
-// ── 1 · the three screens, in both themes and in every state ────────────────
-//
-// "Matches S16, S15 and S14 in both themes" is a claim about what comes out, so
-// the three are stood up for real — against a phone that has heard nothing,
-// against the fleet above (which is stale data and an unreachable machine at
-// once), and in each theme. Nothing on any of them may paint a colour the
-// artboards did not name.
+const said = (w) => (w.said ? I.t(w.said.key, w.said.params) : w.text);
 
 const SCREENS = {
   drawer: require(path.join(root, 'app/machine.tsx')).default,
@@ -151,31 +128,24 @@ const drawn = {};
 }
 
 const page = (name) => drawn[`dark:${name}:fleet`];
+/** How many executor rows came out: each one ends on its state's chip. */
+const chips = (markup) => (markup.match(/>(?:exBusy|exIdle|exUnavailable|exNWaiting)</g) ?? []).length;
 
 checks.push(
-  // S16: the drawer's own list, with the two pages this ticket draws at the top
-  // of it and everything that was already here under them.
   ['the drawer opens on Machines and Executors, above the screens that were already here',
     eq(S.machineRows({ machines: 3, unreachable: 1, executors: 9 }).map((r) => r.route),
        ['/machines', '/executors', '/agents', '/screen', '/accounts', '/pool', '/call', '/settings'])
     && page('drawer').includes('mExecutors') && page('drawer').includes('mMachines')],
-  // S15: quota over the cards, a card per computer, and the two ways in and out
-  // of the list — pairing one and putting one away.
   ['the machines page is the quota, a card per computer, and the way to pair another',
     page('machines').includes('maQuota') && page('machines').includes('maQuotaLeft')
     && ['studio', 'mini', 'cloud'].every((n) => page('machines').includes(n))
     && page('machines').includes('maPair')],
-  // S14: the group heading carries what that kind of worker is for, which is
-  // what keeps a row one line long.
   ['the executors page groups them by kind, and the heading says what each kind is for',
     page('executors').includes('exgCoders') && page('executors').includes('exgCodersNote')
     && page('executors').includes('exgBranch') && page('executors').includes('exgBranchNote')],
-  // Neither page invents a fleet it has not got.
   ['a phone with nothing paired says so on both pages rather than drawing an empty list',
     drawn['dark:machines:empty'].includes('maNone') && drawn['dark:executors:empty'].includes('exNone')],
 );
-
-// ── 2 · a machine that cannot be reached ────────────────────────────────────
 
 checks.push(
   ['a machine that stopped answering says so, and says when it was last reached',
@@ -188,8 +158,8 @@ checks.push(
     && R.styles(page('machines')).some((s) => s.borderColor === K.DARK.amberRing)
     && R.styles(page('machines')).some((s) => s.color === K.DARK.amber)],
   ['…and what it was running is not read as what it is running',
-    at('mini').figures[1].value.said.key === 'maUnknownTasks'
-    && at('studio').figures[1].value.said.key === 'maTasks'],
+    said(at('mini').figures[1].value) === '1 task · unknown'
+    && said(at('studio').figures[1].value) === '2 tasks'],
   ['a machine that has never answered has no last contact to print, and says that instead',
     at('cloud').says === 'maNever' && at('cloud').figures.length === 0
     && at('studio').says === 'maReachable'],
@@ -197,8 +167,6 @@ checks.push(
     eq(at('cloud').actions, ['retry']) && eq(at('mini').actions, ['retry'])
     && eq(at('studio').actions, ['screen'])],
 );
-
-// ── 3 · what an executor says ──────────────────────────────────────────────
 
 checks.push(
   ['every executor says who it is, which machine it is on, what it is doing and which of the three states it is in',
@@ -210,8 +178,6 @@ checks.push(
                && r.doing.said.params.what === 'Safari 17 login'; })()],
   ['a branch agent is named by its branch and grouped with the others of its kind',
     (() => { const g = groups.find((x) => x.title === 'exgBranch');
-             // `SEO` and not `seo`: the kind is how the merge folds a branch, the
-             // name is what anybody calls it, and the branch page says the same.
              return !!g && g.rows.length === 1 && g.rows[0].who.text === 'SEO'
                && words(g.rows[0].machine) === 'studio' && g.rows[0].state === 'busy'; })()],
   ['a computer with nothing running on it is the row that says it could take the next ticket',
@@ -238,17 +204,15 @@ checks.push(
     (() => { const you = A.executorGroups(D.merge([CLOUD], NOW)).flatMap((g) => g.rows)
                .find((r) => r.key === 'you');
              return !!you && you.state === 'idle' && you.says.key === 'exIdle'; })()],
-  ['the drawer counts the same workers the page lists',
-    A.executorCount(view) === rows.length],
+  ['the drawer counts exactly the workers the page draws, on a fleet and on an empty phone',
+    A.executorCount(view) === rows.length && rows.length === chips(page('executors'))
+    && A.executorCount(D.merge([], NOW)) === 0 && chips(drawn['dark:executors:empty']) === 0],
+  ['…so an empty phone is told nobody can work rather than being given a count of one',
+    drawn['dark:executors:empty'].includes('exNone')
+    && !drawn['dark:executors:empty'].includes('exYou')],
 );
 
-// ── 4 · nothing that was reachable stopped being reachable ─────────────────
-//
-// The Machine place is where everything about a computer lives, and this ticket
-// moves two of those screens behind new pages. The list below is every route
-// reachable from `/machine` before it did — walked out of the sources the way
-// `test-shell.cjs` walks them — and every one of them has to still be there.
-
+// Every route `/machine` led to before this ticket, walked the way test-shell does.
 const BEFORE = ['/account-login', '/accounts', '/agent-install', '/agent-store', '/agents', '/call',
                 '/chat-settings', '/chat/[id]', '/divan-gallery', '/host-sheet', '/login-method',
                 '/login-web', '/model-sheet', '/move-signin', '/pair', '/pool', '/screen', '/settings'];
