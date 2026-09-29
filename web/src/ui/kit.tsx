@@ -262,4 +262,13 @@ export const P = {
   mic: 'M9 4h6v8H9zM5 11a7 7 0 0 0 14 0M12 18v3',
   expand: 'M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3',
   shrink: 'M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M8 21v-3a2 2 0 0 0-2-2H3M16 21v-3a2 2 0 0 1 2-2h3',
+  // The three places of the Divan shell and the two faces of its theme switch.
+  // The frames draw Lucide's `layout-grid`, `message-circle` and `server` over
+  // the three — `grid` above is the first of them — and these are the two
+  // others in this file's own hand.
+  chat: 'M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v4l5-4h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z',
+  server: 'M4 4h16v6H4zM4 14h16v6H4zM7.5 7v.1M7.5 17v.1',
+  sun: 'M12 6.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12 2v2M12 20v2M2 12h2M20 12h2'
+     + 'M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4',
+  moon: 'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z',
 } as const;

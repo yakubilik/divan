@@ -16,8 +16,8 @@ import React from 'react';
 import { T, themeCss, type Scheme } from '../src/lib/theme';
 import { P, mono } from '../src/ui/kit';
 import {
-  Button, Card, ColumnTab, Counter, EmptyState, ExecutorBadge, Monogram, Pill, Row,
-  SectionHeader, SidePanel, StateMark, StatusDot, Tabs,
+  BarChip, BarDivider, BarStamp, Button, Card, ColumnTab, Counter, EmptyState, ExecutorBadge,
+  Monogram, NavItem, Pill, Row, SectionHeader, SidePanel, StateMark, StatusDot, Tabs, TopBar,
 } from '../src/ui/divan';
 
 export interface Specimen {
@@ -255,6 +255,32 @@ export const SPECIMENS: Specimen[] = [
           { key: 'settings', label: 'Settings', icon: P.gear },
         ]}
       />
+    ),
+  },
+  {
+    name: 'TopBar', frame: 'Web12 W1 · Web14 W6', width: 800,
+    node: (
+      <TopBar>
+        <NavItem label="Dashboard" icon={P.grid} on />
+        <NavItem label="Chat" icon={P.chat} />
+        <NavItem label="Machine" icon={P.server} />
+        <BarDivider />
+        <Pill label="All" dot="asking" face="ink" />
+        <Pill label="Quire" dot="stuck" />
+        <Pill label="Kanji Daily" dot="running" />
+        <span style={{ marginLeft: 'auto' }} />
+        <BarStamp>Mon 28 Sep · 23:14</BarStamp>
+        <BarChip icon={P.sun} label="Light" />
+      </TopBar>
+    ),
+  },
+  {
+    name: 'BarChip', frame: 'Web15 W12', width: 380,
+    node: (
+      <div style={{ display: 'flex', gap: 8 }}>
+        <BarChip label="mini unreachable · 2h 14m" tone="amber" icon={P.warn} />
+        <BarChip label="3 machines" />
+      </div>
     ),
   },
 ];

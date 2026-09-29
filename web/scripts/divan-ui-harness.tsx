@@ -25,6 +25,9 @@ import { Settings } from '../src/screens/Settings';
 import { Onboarding } from '../src/screens/Onboarding';
 import { Ustabasi } from '../src/screens/Ustabasi';
 import { Sidebar } from '../src/components/Sidebar';
+import { Machine } from '../src/screens/Machine';
+import { Overview } from '../src/screens/Overview';
+import { merge } from '../src/lib/divan';
 import { ChatView } from '../src/components/ChatView';
 import { Modal } from '../src/components/Modal';
 import { ApprovalModal } from '../src/components/ApprovalModal';
@@ -75,6 +78,13 @@ try {
 
 const noop = () => {};
 
+// One paired computer that has never answered the board: the state every screen
+// in this place opens in, and the one the Dashboard has to have something to say
+// about rather than a blank page.
+const emptyView = merge([{ key: 'studio', name: 'studio', state: {
+  snapshot: null, at: null, reachable: false, error: null, old: false,
+} }], Date.now() / 1000);
+
 const SCREENS: [string, React.ReactNode][] = [
   ['Dashboard', <Dashboard onOpenChat={noop} onNewChat={noop} />],
   ['Projects', <Projects onNewChatIn={noop} onOpenChat={noop} />],
@@ -86,8 +96,15 @@ const SCREENS: [string, React.ReactNode][] = [
   ['Onboarding', <Onboarding onPaired={noop} />],
   ['Ustabasi', <Ustabasi />],
   ['Sidebar', <Sidebar
-    view="chats" onView={noop} selected={null} selectedHost={null} onSelect={noop}
+    selected={null} selectedHost={null} onSelect={noop}
     onNewChat={noop} searchRef={{ current: null }} collapsed={false} onCollapse={noop} />],
+  // The shell and the two places this ticket draws, over the same made-up
+  // computer. `Overview` is handed a merged view rather than a store, so it is
+  // the one screen here that can be shown with no machine answering as well.
+  ['Overview', <Overview view={emptyView} project={null} onProject={noop} />],
+  ['Machine', <Machine
+    view="machines" onView={noop} fleet={emptyView} onOpenChat={noop} onNewChat={noop}
+    onNewChatIn={noop} onStartChat={noop} onPeek={noop} />],
   ['ChatView', <ChatView
     chat={null} hostKey={null} log={{ items: [], busy: false } as any} sending={false}
     groups={[]} groupName={null} accountLabel={null} accountUsage={null} liveTokens={null}

@@ -12,8 +12,6 @@ const W = 260;
 const RAIL = 48;
 const ALL_LABEL = 'All computers';
 
-export type View = 'chats' | 'terminal' | 'screen' | 'dashboard' | 'projects' | 'agents' | 'admin' | 'settings';
-
 export function ProviderMark({ provider, dim }: { provider: string; dim?: boolean }) {
   const claude = provider === 'claude';
   // `dim` is "this one is not there": an account not signed in, a tool not
@@ -138,40 +136,6 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
   );
 }
 
-const NAV: { view: View; label: string; icon: string }[] = [
-  { view: 'chats', label: 'Chats', icon: 'M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v4l5-4h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z' },
-  { view: 'terminal', label: 'Terminal', icon: P.terminal },
-  { view: 'screen', label: 'Screen', icon: P.monitor },
-  { view: 'dashboard', label: 'Panel', icon: P.grid },
-  { view: 'projects', label: 'Projects', icon: P.folder },
-  { view: 'agents', label: 'Agents', icon: P.agent },
-  { view: 'admin', label: 'Admin', icon: P.download },
-  { view: 'settings', label: 'Settings', icon: P.gear },
-];
-
-function NavRow({ item, active, count, alert, onClick }: {
-  item: typeof NAV[number]; active: boolean; count?: number; alert?: boolean; onClick: () => void;
-}) {
-  return (
-    <button
-      type="button" onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 36,
-        padding: '0 10px', borderRadius: R.btn, cursor: 'pointer', textAlign: 'left',
-        background: active ? C.accentTint : 'transparent',
-        border: `1px solid ${active ? C.accentRing : 'transparent'}`,
-      }}
-    >
-      <Icon path={item.icon} size={16} color={active ? C.accentSoft : C.mute} />
-      <span style={{ flex: 1, fontSize: 14, fontWeight: active ? 600 : 400, color: active ? C.text : C.text2 }}>
-        {item.label}
-      </span>
-      {alert ? <Dot color={C.warn} live />
-        : count != null ? <span style={{ fontSize: 12, color: C.faint }}>{count}</span> : null}
-    </button>
-  );
-}
-
 interface Section { key: string; title: string; hostKey: string; chats: Chat[] }
 
 const rank = (c: Chat) => (c.pinned ? 0 : 1);
@@ -276,10 +240,8 @@ function ChatRow({ chat, hostKey, selected, onPick }: {
 // `collapsed` arrives renamed: the section headers in the list below already
 // own that word, and two different things called collapsed in one component is
 // how you end up hiding the wrong one.
-export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewChat, searchRef,
+export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef,
                           collapsed: railed = false, onCollapse }: {
-  view: View;
-  onView: (v: View) => void;
   selected: string | null;
   selectedHost: string | null;
   onSelect: (hostKey: string, chatId: string) => void;
@@ -303,27 +265,10 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
     return sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!);
   }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query]);
 
-  const counts: Partial<Record<View, number>> = {
-    chats: fleetWide
-      ? order.reduce((n, k) => n + (hosts[k]?.chats.filter((c) => !c.archived).length ?? 0), 0)
-      : slot?.chats.filter((c) => !c.archived).length,
-    // Terminal mode is the wall of what is happening, so its number is what is
-    // happening — not how many chats exist, which the row above already says.
-    terminal: order.reduce((n, k) => n + (hosts[k]?.chats.filter((c) => c.status !== 'idle').length ?? 0), 0),
-    projects: slot?.projects.length,
-  };
-  const anyAwaiting = order.some((k) => hosts[k]?.chats.some((c) => c.status === 'awaiting_approval'));
-  // Straight off host.info, which every computer sends on connect: no extra
-  // round trip to light this up, and it is already true before anyone has
-  // opened the Admin screen.
-  const anyPending = order.some((k) => {
-    const u = hosts[k]?.info?.update;
-    return !!u && (u.behind > 0 || (!!u.web?.npm && u.web?.stale !== false));
-  });
-
-  // Collapsed: the chat list is gone but the screens are not. Terminal mode is
-  // the reason this exists — a wall of tiles wants the width — and a wall you
-  // cannot get out of is a trap, so the navigation stays whatever happens.
+  // Collapsed: the chat list is gone. It exists because the wall of tiles under
+  // the Machine place wants the width, and it can give the whole list up without
+  // trapping anybody — the three places are in the bar above, which is drawn
+  // whatever this does.
   if (railed) {
     return (
       <div style={{
@@ -341,26 +286,6 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
         >
           <Icon path={P.chevronRight} size={14} color={C.mute} />
         </button>
-        <div style={{ width: 24, height: 1, background: C.border, margin: '4px 0' }} />
-        {NAV.map((item) => (
-          <button
-            key={item.view} type="button" onClick={() => onView(item.view)} title={item.label}
-            style={{
-              width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
-              background: view === item.view ? C.accentTint : 'transparent',
-              border: `1px solid ${view === item.view ? C.accentRing : 'transparent'}`,
-            }}
-          >
-            <Icon path={item.icon} size={16} color={view === item.view ? C.accentSoft : C.mute} />
-            {(item.view === 'dashboard' || item.view === 'terminal') && anyAwaiting && (
-              <span style={{
-                position: 'absolute', top: 3, right: 3, width: 6, height: 6,
-                borderRadius: 3, background: C.warn,
-              }} />
-            )}
-          </button>
-        ))}
         <div style={{ flex: 1 }} />
         <button
           type="button" onClick={onNewChat} title="New chat"
@@ -406,108 +331,92 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
         )}
       </div>
 
-      <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {NAV.map((item) => (
-          <NavRow
-            key={item.view} item={item} active={view === item.view}
-            count={counts[item.view]}
-            alert={((item.view === 'dashboard' || item.view === 'terminal') && anyAwaiting)
-              || (item.view === 'admin' && anyPending)}
-            onClick={() => onView(item.view)}
+      {/* The list, which is now all there is: a chat is picked here, and the
+          wall under the Machine place drags its tiles out of here.
+
+          Starting a chat belongs above it rather than on a screen of its own:
+          this is where someone is standing when they want one. */}
+      <div style={{ padding: '0 8px 8px' }}>
+        <button
+          type="button" onClick={onNewChat}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            width: '100%', height: 34, borderRadius: R.btn, cursor: 'pointer',
+            background: C.accent, border: `1px solid ${C.accent}`,
+            color: C.onAccent, fontSize: 13, fontWeight: 600,
+          }}
+        >
+          <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
+          New chat
+          <span style={{ ...mono, fontSize: 11 }}>⌘N</span>
+        </button>
+      </div>
+      <div style={{ padding: '0 8px 8px' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 10px',
+          background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
+        }}>
+          <Icon path={P.search} size={14} color={C.mute} />
+          <input
+            ref={searchRef} name="chat-search"
+            value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search chats"
+            style={{
+              flex: 1, minWidth: 0, background: 'transparent', border: 'none',
+              outline: 'none', fontSize: 13, color: C.text,
+            }}
           />
-        ))}
+          <span style={{ ...mono, fontSize: 11, color: C.faint }}>⌘F</span>
+        </div>
       </div>
 
-      {/* Terminal mode gets the list too. The wall answers "what is happening";
-          the list is still how you reach a chat that is not on the wall — and
-          it is where a tile is dragged from. */}
-      {view === 'chats' || view === 'terminal' ? (
-        <>
-          {/* Starting a chat belongs above the list of chats, not on the panel
-              screen: this is where someone is standing when they want one. */}
-          <div style={{ padding: '0 8px 8px' }}>
-            <button
-              type="button" onClick={onNewChat}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                width: '100%', height: 34, borderRadius: R.btn, cursor: 'pointer',
-                background: C.accent, border: `1px solid ${C.accent}`,
-                color: C.onAccent, fontSize: 13, fontWeight: 600,
-              }}
-            >
-              <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
-              New chat
-              <span style={{ ...mono, fontSize: 11 }}>⌘N</span>
-            </button>
-          </div>
-          <div style={{ padding: '0 8px 8px' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 10px',
-              background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
-            }}>
-              <Icon path={P.search} size={14} color={C.mute} />
-              <input
-                ref={searchRef} name="chat-search"
-                value={query} onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search chats"
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
+        {list.map((s) => {
+          const shut = collapsed[s.key];
+          return (
+            <div key={s.key} style={{ marginBottom: 4 }}>
+              <button
+                type="button"
+                onClick={() => setCollapsed((c) => ({ ...c, [s.key]: !shut }))}
                 style={{
-                  flex: 1, minWidth: 0, background: 'transparent', border: 'none',
-                  outline: 'none', fontSize: 13, color: C.text,
+                  display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 30,
+                  padding: '0 4px', background: 'transparent', border: 'none', cursor: 'pointer',
                 }}
-              />
-              <span style={{ ...mono, fontSize: 11, color: C.faint }}>⌘F</span>
+              >
+                <Icon path={shut ? P.chevronRight : P.chevronDown} size={12} color={C.mute} />
+                {/* Merged list: a section is a computer, so it carries that
+                    computer's state — otherwise an offline machine's chats
+                    look as live as any other. */}
+                {fleetWide && (
+                  <Dot
+                    color={hosts[s.hostKey]?.status === 'online' ? C.ok
+                      : hosts[s.hostKey]?.status === 'unauthorized' ? C.danger : C.faint}
+                    live={hosts[s.hostKey]?.status === 'online'} size={5}
+                  />
+                )}
+                <span style={{
+                  flex: 1, textAlign: 'left', fontSize: 11, fontWeight: 600,
+                  letterSpacing: 0.6, textTransform: 'uppercase', color: C.mute,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>{s.title}</span>
+                <span style={{ fontSize: 11, color: C.faint }}>{s.chats.length}</span>
+              </button>
+              {!shut && s.chats.map((c) => (
+                <ChatRow
+                  key={`${s.hostKey}/${c.id}`} chat={c} hostKey={s.hostKey}
+                  selected={selected === c.id && selectedHost === s.hostKey}
+                  onPick={() => onSelect(s.hostKey, c.id)}
+                />
+              ))}
             </div>
+          );
+        })}
+        {(slot || fleetWide) && !list.length && (
+          <div style={{ padding: '24px 12px', fontSize: 13, color: C.mute, textAlign: 'center' }}>
+            {query ? 'No chat matches' : 'No chats yet'}
           </div>
-
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
-            {list.map((s) => {
-              const shut = collapsed[s.key];
-              return (
-                <div key={s.key} style={{ marginBottom: 4 }}>
-                  <button
-                    type="button"
-                    onClick={() => setCollapsed((c) => ({ ...c, [s.key]: !shut }))}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 30,
-                      padding: '0 4px', background: 'transparent', border: 'none', cursor: 'pointer',
-                    }}
-                  >
-                    <Icon path={shut ? P.chevronRight : P.chevronDown} size={12} color={C.mute} />
-                    {/* Merged list: a section is a computer, so it carries that
-                        computer's state — otherwise an offline machine's chats
-                        look as live as any other. */}
-                    {fleetWide && (
-                      <Dot
-                        color={hosts[s.hostKey]?.status === 'online' ? C.ok
-                          : hosts[s.hostKey]?.status === 'unauthorized' ? C.danger : C.faint}
-                        live={hosts[s.hostKey]?.status === 'online'} size={5}
-                      />
-                    )}
-                    <span style={{
-                      flex: 1, textAlign: 'left', fontSize: 11, fontWeight: 600,
-                      letterSpacing: 0.6, textTransform: 'uppercase', color: C.mute,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>{s.title}</span>
-                    <span style={{ fontSize: 11, color: C.faint }}>{s.chats.length}</span>
-                  </button>
-                  {!shut && s.chats.map((c) => (
-                    <ChatRow
-                      key={`${s.hostKey}/${c.id}`} chat={c} hostKey={s.hostKey}
-                      selected={selected === c.id && selectedHost === s.hostKey}
-                      onPick={() => onSelect(s.hostKey, c.id)}
-                    />
-                  ))}
-                </div>
-              );
-            })}
-            {(slot || fleetWide) && !list.length && (
-              <div style={{ padding: '24px 12px', fontSize: 13, color: C.mute, textAlign: 'center' }}>
-                {query ? 'No chat matches' : 'No chats yet'}
-              </div>
-            )}
-          </div>
-        </>
-      ) : <div style={{ flex: 1 }} />}
+        )}
+      </div>
 
       <div style={{ borderTop: `1px solid ${C.border}`, padding: '10px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.mute }}>

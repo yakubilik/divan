@@ -1,21 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { C, SHADOW, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { Btn, Icon, KEYFRAMES, P, mono } from './ui/kit';
-import { Sidebar, type View } from './components/Sidebar';
+import { Sidebar } from './components/Sidebar';
+import { Shell } from './components/Shell';
 import { ChatView } from './components/ChatView';
 import { NewChat } from './components/NewChat';
 import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
 import { ApprovalModal, type Pending } from './components/ApprovalModal';
-import { Dashboard } from './screens/Dashboard';
-import { Terminal } from './screens/Terminal';
-import { Projects } from './screens/Projects';
-import { Agents } from './screens/Agents';
-import { Screen } from './screens/Screen';
-import { Admin } from './screens/Admin';
-import { Settings } from './screens/Settings';
+import { Machine } from './screens/Machine';
+import { Overview } from './screens/Overview';
 import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
+import { project as projectIn, useDivanView } from './lib/divan';
+import {
+  MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chips, placeOf, projectFromSearch,
+  searchWithProject, type View,
+} from './lib/shell';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
 import { deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
 import type { Agent, Chat } from './lib/protocol';
@@ -29,7 +30,18 @@ export function App() {
   // colours are custom properties and the switch is one attribute on <html>.
   const theme = useTheme();
   const logs = useLogs();
-  const [view, setView] = useState<View>('chats');
+  // Every product on every machine, merged here and read by both the bar and
+  // the page under it. `now` comes back on the view, so the bar's clock and a
+  // machine's age are the same moment.
+  const divan = useDivanView();
+  // The panel opens on the Dashboard: it is the screen that is looked at instead
+  // of a question being asked. The chat is a place you go to on purpose.
+  const [view, setView] = useState<View>('overview');
+  // Which product is being read lives in the address, the way the phone keeps it
+  // in the route — so it survives a reload and a scoped page can be sent to
+  // somebody.
+  const [project, setProject] = useState<string | null>(
+    () => projectFromSearch(typeof location === 'undefined' ? '' : location.search));
   const [sel, setSel] = useState<Selection | null>(null);
   const [newChat, setNewChat] = useState<
     { cwd?: string; agent?: { agent: Agent; accountId: string | null } } | null>(null);
@@ -77,6 +89,10 @@ export function App() {
     if (key) open(key, chatId);
   }, [fleet.ready, fleet.hosts, sel]);
 
+  /** Which of the three the panel is in, worked out from the screen rather than
+   *  held beside it: a place and the page it is on cannot then disagree. */
+  const place = placeOf(view);
+
   const slot = sel ? fleet.hosts[sel.hostKey] : (fleet.focus ? fleet.hosts[fleet.focus] : null);
   const chat: Chat | null = useMemo(() => {
     if (!sel) return null;
@@ -96,6 +112,18 @@ export function App() {
     setPeek(false);
     setView('chats');
   }, [select]);
+
+  /** A chip in the project bar, or a row on the Dashboard: the same thing, and
+   *  both of them scope this page rather than opening another one. The address
+   *  is written rather than pushed — going back through every product you have
+   *  looked at is not what the back button is for. */
+  const chooseProject = useCallback((key: string | null) => {
+    setProject(key);
+    setView((v) => (placeOf(v) === 'dashboard' ? v : PLACE_VIEW.dashboard));
+    if (typeof history !== 'undefined') {
+      history.replaceState(null, '', location.pathname + searchWithProject(location.search, key));
+    }
+  }, []);
 
   // The chat on screen catches itself up the moment its computer answers
   // again. Without this a panel that was asleep, or whose socket died quietly
@@ -274,12 +302,18 @@ export function App() {
   const commands: Command[] = useMemo(() => {
     const list: Command[] = [
       { id: 'new', label: 'New chat', shortcut: '⌘N', hint: slot?.info?.name, run: () => setNewChat({}) },
-      { id: 'terminal', label: 'Terminal mode', shortcut: '⌘4', hint: 'every chat at once', run: () => setView('terminal') },
-      { id: 'dashboard', label: 'Dashboard', shortcut: '⌘1', run: () => setView('dashboard') },
-      { id: 'projects', label: 'Projects', shortcut: '⌘2', run: () => setView('projects') },
-      { id: 'agents', label: 'Agents', shortcut: '⌘3', run: () => setView('agents') },
-      { id: 'admin', label: 'Admin', shortcut: '⌘4', run: () => setView('admin') },
-      { id: 'settings', label: 'Settings', shortcut: '⌘,', run: () => setView('settings') },
+      // The three places first, then every page of the third one: the palette is
+      // the one list of everywhere you can go, so it says the same thing the
+      // shell does and in the same order.
+      { id: 'dashboard', label: PLACE_LABEL.dashboard, hint: 'every product', run: () => setView(PLACE_VIEW.dashboard) },
+      { id: 'chat', label: PLACE_LABEL.chat, hint: slot?.info?.name, run: () => setView(PLACE_VIEW.chat) },
+      { id: 'machine', label: PLACE_LABEL.machine, hint: 'the computers', run: () => setView(PLACE_VIEW.machine) },
+      ...MACHINE_ROWS.map((row) => ({
+        id: row.view,
+        label: `${PLACE_LABEL.machine} › ${row.label}`,
+        shortcut: row.shortcut,
+        run: () => setView(row.view),
+      })),
       {
         id: 'theme',
         label: theme.scheme === 'dark' ? 'Light theme' : 'Dark theme',
@@ -293,7 +327,7 @@ export function App() {
         id: 'all-hosts',
         label: fleet.allHosts ? 'Show one computer' : 'Show every computer',
         hint: fleet.allHosts ? (slot?.info?.name ?? undefined) : `${fleet.order.length} paired`,
-        run: () => { fleet.setAllHosts(!fleet.allHosts); setView('chats'); },
+        run: () => { fleet.setAllHosts(!fleet.allHosts); setView(PLACE_VIEW.chat); },
       });
     }
     const running = fleet.order.flatMap((k) =>
@@ -318,8 +352,13 @@ export function App() {
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
       else if (e.key === 'n') { e.preventDefault(); setNewChat({}); }
       else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
+      // The six keys the panel already had open the six pages they always did —
+      // they are pages of the Machine place now, and nothing about where they
+      // land has changed. ⌘0 is the one new key, for the place the panel opens
+      // on; ⌘1 is the fleet panel, which is the first row of that list.
+      else if (e.key === '0') { e.preventDefault(); setView('overview'); }
       else if (e.key === ',') { e.preventDefault(); setView('settings'); }
-      else if (e.key === '1') { e.preventDefault(); setView('dashboard'); }
+      else if (e.key === '1') { e.preventDefault(); setView('machines'); }
       else if (e.key === '2') { e.preventDefault(); setView('projects'); }
       else if (e.key === '3') { e.preventDefault(); setView('agents'); }
       else if (e.key === '4') { e.preventDefault(); setView('terminal'); }
@@ -335,7 +374,7 @@ export function App() {
       <>
         <style>{themeCss()}</style>
         <style>{KEYFRAMES}</style>
-        <Onboarding onPaired={() => setView('chats')} />
+        <Onboarding onPaired={() => setView(PLACE_VIEW.dashboard)} />
       </>
     );
   }
@@ -344,38 +383,43 @@ export function App() {
     <>
       <style>{themeCss()}</style>
       <style>{KEYFRAMES}</style>
-      <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
-        <Sidebar
-          view={view} onView={setView}
-          selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
-          onNewChat={() => setNewChat({})}
-          searchRef={searchRef}
-          collapsed={rail} onCollapse={setRailTo}
-        />
-
-        {view === 'chats' && (
-          <ChatView {...chatProps} />
+      <Shell
+        view={view} onView={setView} now={divan.now}
+        // The chips are over the Dashboard and the pages under it, which is
+        // where the frames draw them and where they mean something.
+        chips={place === 'dashboard' ? chips(divan, project) : null}
+        onProject={chooseProject}
+      >
+        {place === 'dashboard' && (
+          <Overview view={divan} project={projectIn(divan, project)} onProject={chooseProject} />
         )}
 
-        {view === 'terminal' && (
-          <Terminal
-            onPeek={(hostKey, chatId) => { select(hostKey, chatId); setPeek(true); }}
+        {/* The chat, untouched: the list it is picked from and the chat itself,
+            exactly as they were. The list no longer carries the navigation —
+            the bar above does — so what is left of it is the chats. */}
+        {place === 'chat' && (
+          <>
+            <Sidebar
+              selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
+              onNewChat={() => setNewChat({})}
+              searchRef={searchRef}
+              collapsed={rail} onCollapse={setRailTo}
+            />
+            <ChatView {...chatProps} />
+          </>
+        )}
+
+        {place === 'machine' && (
+          <Machine
+            view={view} onView={setView} fleet={divan}
+            onOpenChat={open}
             onNewChat={() => setNewChat({})}
+            onNewChatIn={(cwd) => setNewChat({ cwd })}
+            onStartChat={(agent, accountId) => setNewChat({ agent: { agent, accountId } })}
+            onPeek={(hostKey, chatId) => { select(hostKey, chatId); setPeek(true); }}
           />
         )}
-        {view === 'dashboard' && (
-          <Dashboard onOpenChat={open} onNewChat={() => setNewChat({})} />
-        )}
-        {view === 'projects' && (
-          <Projects onNewChatIn={(cwd) => setNewChat({ cwd })} onOpenChat={open} />
-        )}
-        {view === 'agents' && (
-          <Agents onStartChat={(agent, accountId) => setNewChat({ agent: { agent, accountId } })} />
-        )}
-        {view === 'screen' && <Screen />}
-        {view === 'admin' && <Admin />}
-        {view === 'settings' && <Settings />}
-      </div>
+      </Shell>
 
       {/* A chat answered without leaving the wall. It is the whole chat — the
           same timeline, the same composer, the same approvals — because half a

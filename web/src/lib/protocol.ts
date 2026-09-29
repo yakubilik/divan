@@ -299,3 +299,133 @@ export interface LoginDone {
   error: string | null;
   retryable: boolean;
 }
+
+// ── the Divan board ──────────────────────────────────────────────────────────
+// The daemon owns how work is arranged; the ustabasi queue stays the thing that
+// does the coding. A project is a product and may own several repositories; a
+// card sits in one of four columns at a position somebody chose, and what the
+// agent on it is doing is a separate field the mirror writes. See
+// docs/PROTOCOL.md, "The Divan board" — and `app/src/protocol.ts`, which is the
+// same block: the phone and the panel read the same daemon.
+
+export type DivanColumn = 'ice_box' | 'queued' | 'in_progress' | 'done';
+
+/** Who does the work. `coding_agent` is ustabasi; `human` is a card nothing
+ *  runs on — it waits for a person and says so. */
+export type DivanExecutor = 'coding_agent' | 'branch_agent' | 'assistant' | 'human';
+
+/** Reality on a card, written by the mirror and by nothing else. `asking` is a
+ *  stopped ticket with a question on it and `blocked` one without; `verified` is
+ *  the verifier passing it, which is not the same as somebody being finished
+ *  with it — that is the `done` column. */
+export type AgentStatus = 'queued' | 'running' | 'asking' | 'blocked' | 'failed'
+                        | 'verified' | 'cancelled';
+
+export interface DivanBranch {
+  id: string; kind: string; name: string;
+  /** Empty until that branch has a source connected. */
+  summary: string;
+  summary_at: number | null;
+  cards: Partial<Record<DivanColumn, number>>;
+  open: number;
+}
+
+export interface DivanProject {
+  /** `name` is what a screen says and `slug` is what two machines match the
+   *  same product by. `summary` is what it is *for*. */
+  id: string; name: string; slug: string; summary: string;
+  /** What sort of thing it is — `app`, `web`, `library`, `client-work`… an open
+   *  set. Empty where nobody said. */
+  kind?: string;
+  /** The day the product began, which is not `created_at`. */
+  started_at?: number | null;
+  /** A product is not a folder: isghocam owns its site and its API. */
+  repos: string[];
+  sort: number; archived: boolean; created_at: number; updated_at: number;
+  /** The one row in that table that is not a product: the holding place for
+   *  cards no product has claimed. Never in `snapshot.projects`. */
+  hidden?: boolean;
+  branches: DivanBranch[];
+  counts: Partial<Record<DivanColumn, number>>;
+  running: number;
+  /** An agent that stopped to ask, one that was turned down, and every card
+   *  whose executor is a person. */
+  waiting: number;
+  summary_line: string;
+}
+
+export interface DivanCard {
+  id: string; project_id: string; branch_id: string; branch: string;
+  column: DivanColumn; position: number;
+  title: string; summary: string;
+  executor: DivanExecutor | null;
+  /** Which computer the work runs on. Null where nobody said, in which case it
+   *  is the machine whose snapshot carried the card. */
+  machine: string | null;
+  repo: string | null;
+  ustabasi_id: number | null;
+  agent_status: AgentStatus | null;
+  agent_status_at: number | null;
+  agent_detail: string;
+  created_at: number; updated_at: number; moved_at: number | null;
+}
+
+/** An agent at work right now, as a line on a dashboard. Only the running ones:
+ *  a card that stopped to ask is waiting on a person rather than working. */
+export interface DivanAgent {
+  card_id: string; project_id: string; project: string; branch: string;
+  title: string;
+  executor: DivanExecutor | null;
+  machine: string;
+  status: AgentStatus | null;
+  detail: string;
+  since: number | null;
+  ustabasi_id: number | null;
+}
+
+/** What one machine has left to run an agent on. `left` is the share of a
+ *  window the roomiest sign-in still has — not a number of turns — and null
+ *  while nothing has ever been measured, which is not a full plan. */
+export interface DivanQuota {
+  enabled: boolean;
+  accounts: number;
+  blocked: number;
+  /** No sign-in left that could take a turn. */
+  spent: boolean;
+  left: number | null;
+  /** When `left` goes back up, or when a spent machine starts work again. */
+  resets_at: number | null;
+  unknown: boolean;
+}
+
+/** What git says about one repository: when it last moved, and how much landed
+ *  in it lately. A repository git would not answer about is left out of the map
+ *  rather than reported as zero. */
+export interface RepoActivity {
+  at: number | null;
+  week: number;
+  today: number;
+}
+
+/** Everything one computer has to say about Divan, in one answer. `at` is when
+ *  it was true, which is what a silent machine is aged against. */
+export interface DivanSnapshot {
+  machine: string;
+  os?: string;
+  os_version?: string;
+  daemon_version?: string;
+  at: number;
+  projects: DivanProject[];
+  cards: DivanCard[];
+  /** The work no product has claimed. Whole, `done` included, and in none of
+   *  the counts above. Absent on a daemon older than the list. */
+  unfiled?: DivanCard[];
+  /** Which board to ask for to see them. */
+  unfiled_project_id?: string;
+  agents: DivanAgent[];
+  quota: DivanQuota | null;
+  /** Keyed by repository path, not by project. Absent on a daemon older than
+   *  the figure. */
+  activity?: Record<string, RepoActivity>;
+  queue: { available?: boolean; last_tick?: number | null; paused_until?: number | null };
+}
