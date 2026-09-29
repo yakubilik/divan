@@ -35,6 +35,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(web, '.test-build', 'overview');
 const src = (p) => readFileSync(join(web, p), 'utf8');
+/** …and the phone's own files, which this check reads for the two lines its
+ *  screen composes rather than its judgements. */
+const appSrc = (p) => readFileSync(join(web, '..', p), 'utf8');
 
 let failures = 0;
 function ok(name, cond, detail) {
@@ -192,6 +195,19 @@ group('the panel and the phone say the same thing about the same board');
       : r.agent.since == null ? '' : ago(Math.max(0, now - r.agent.since));
     return [r.agent.title, detail || when].filter(Boolean).join(' · ');
   };
+
+  // The two transcriptions above are the one part of this comparison that is a
+  // copy rather than a call, so they are held to the file they were copied from:
+  // a phone screen that changes how it writes those lines has to fail here
+  // rather than quietly compare the panel against something nobody draws.
+  const phoneScreen = appSrc('app/app/dashboard.tsx');
+  ok('the two lines the phone composes in its screen are still composed that way',
+    phoneScreen.includes("latest={latest(p.cards)}")
+    && phoneScreen.includes("value: p.activity.week")
+    && phoneScreen.includes("T('pfMoved', { d: ago(Math.max(0, now - p.activity.at)) })")
+    && phoneScreen.includes("T('pfNeverMoved')")
+    && phoneScreen.includes("T('pfLastSeen', { time: clock(r.agent.since_contact) })")
+    && phoneScreen.includes("[r.agent.title, detail || when].filter(Boolean).join(' · ')"));
 
   const said = (x) => (x ? t(x.key, x.params) : null);
   const differ = [];
