@@ -267,8 +267,33 @@ const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
       eq(D.line(quire, NOW), { key: 'plRunning', params: { on: 'studio', n: 2 } })],
     ['…and one on a quiet machine says the state of them is a memory',
       D.line(kanji, NOW).key === 'plUnknown'],
+    ['one whose agents the quota stopped says so, and when they pick up again',
+      (() => {
+        const c = D.chip({ ...quire, cards: [], waiting: 0, running: 3, paused: 3 }, NOW, ago);
+        return c.key === 'pcPaused' && c.mark === '⏸' && c.tone === 'red' && c.params.n === 3;
+      })()],
     ['the line worth reading on a card is the worst card’s own',
       D.latest(quire) === 'Coder stuck on Safari login' && D.latest(walk) === ''],
+  );
+}
+
+// ── 4b · the calm morning is a judgement, not an absence ──────────────────
+
+{
+  const still = view([studio({ quota: quota({ left: 0.6 }) })]);
+  const out = view([studio({ quota: quota({ spent: true, left: 0, resets_at: NOW + 4 * HOUR }) })]);
+  const easy = view([paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
+    quota: quota({ left: 0.6 }), projects: [project('Quire', { running: 1, repos: ['/r/quire'] })],
+    cards: [card('c3', { project: 'Quire-id', status: 'running', title: 'Bulk CSV invite' })],
+    agents: [agent('c3', { project: 'Quire-id', projectName: 'Quire' })],
+    activity: { '/r/quire': { at: NOW - HOUR, week: 14, today: 14 } } }) })]);
+  checks.push(
+    ['nothing needing anybody is the calm state', D.calm(easy) === true],
+    ['…and something needing somebody is not', D.calm(still) === false],
+    ['"all clear" is not said over agents nobody can vouch for', D.calm(STALE) === false],
+    ['…nor over a fleet that ran out of quota an hour ago', D.calm(out) === false],
+    ['…nor by a phone that is not paired with anything, which has its own words',
+      D.calm(view([])) === false],
   );
 }
 
@@ -391,6 +416,35 @@ for (const scheme of ['dark', 'light']) {
     [`${scheme}: the system line is plain while all is well and coloured when it is not`,
       !painted(busy, t.amberBg + 'x') && inked(stale, t.amber) && inked(spent, t.red)],
   );
+}
+
+// ── 6b · not one colour of its own ────────────────────────────────
+//
+// The screen is built out of the design system's parts, and the check for that
+// is not what it imports: it is what comes out. Every colour on the whole page,
+// in either theme and in every state, has to be one the artboards named — the
+// sixteen tokens, the two derived values, the monogram ramp and the white that
+// sits on it. A single hand-picked grey would show up here.
+
+{
+  const COLOUR = /#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|oklch\([^)]*\)/g;
+  for (const scheme of ['dark', 'light']) {
+    const tok = K.tokensFor(scheme);
+    const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR,
+                         ...K.MONOGRAM, 'transparent']);
+    const strayed = new Set();
+    for (const markup of [draw(scheme, [studio()]), draw(scheme, [studio(), MINI]),
+                          draw(scheme, CALM), draw(scheme, SPENT), draw(scheme, [])]) {
+      for (const v of R.paint(markup)) {
+        const inside = v.match(COLOUR) ?? [];
+        for (const c of (inside.length > 1 || inside[0] !== v ? inside : [v])) {
+          if (!own.has(c)) strayed.add(c);
+        }
+      }
+    }
+    checks.push([`${scheme}: the whole screen is drawn in the design's own colours${
+      strayed.size ? ` (${[...strayed].join(', ')})` : ''}`, strayed.size === 0]);
+  }
 }
 
 // ── 7 · where a tap lands ───────────────────────────────────────────────────

@@ -168,6 +168,21 @@ export function counters(view: DivanView): CounterSpec[] {
   return four;
 }
 
+/** Is this the calm morning of Mobile1 V3?
+ *
+ *  Nothing needs a person, and nothing is being kept from them: a screen that
+ *  said "all clear" over two agents whose machine has gone quiet, or over a
+ *  fleet whose quota ran out an hour ago, would be the one sentence on it that
+ *  was not true. Those two have their own block and it is the one that speaks.
+ *
+ *  A phone paired with nothing is not calm either — it has nothing to be calm
+ *  about, and the empty state says so instead. */
+export function calm(view: DivanView): boolean {
+  return view.hosts.length > 0
+    && view.totals.needsYou === 0 && view.totals.stuck === 0
+    && view.totals.unknown === 0 && !view.quota.spent;
+}
+
 // ── what needs a person ─────────────────────────────────────────────────────
 
 /** Who is on a card, in one word. The frames write "Coder asks", "Your call",
