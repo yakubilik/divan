@@ -1239,6 +1239,10 @@ checks.push(...require('./test-shell.cjs').checks);
 // it — every counter counted, a quiet machine said out loud, and a morning with
 // nothing on it drawn as the state it is.
 checks.push(...require('./test-dashboard.cjs').checks);
+// …and the screen its first counter opens: everything that needs a person,
+// across every project and every machine, grouped by the kind of answer it
+// needs — and answered in one tap where the question offered the words for it.
+checks.push(...require('./test-waiting.cjs').checks);
 
 let bad = 0;
 for (const [name, ok] of checks) {
