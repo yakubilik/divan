@@ -110,6 +110,17 @@ const MINI = paired('h2', 'mini', {
                          title: 'Gradle 8.7 bump', detail: 'Should we ship the Gradle 8.7 bump now?' })] }),
 });
 
+/** The same laptop, with a question on it that does offer two words to quote.
+ *  `MINI`'s does not, and between them they are the two halves of the rule: the
+ *  machine an answer is sent to is the card's, and whether there is an answer to
+ *  send at all is the question's. */
+const MINI_ASKING = paired('h2', 'mini', {
+  at: NOW - QUIET, reachable: false,
+  snapshot: snapshot('mini', { at: NOW - QUIET,
+    projects: [project('Kanji Daily', { waiting: 1, repos: ['/r/kanji'] })],
+    cards: [card('k2', { project: 'Kanji Daily-id', status: 'asking', ustabasi: 4, at: NOW - HOUR,
+                         title: 'Gradle 8.7 bump', detail: 'Bump to 8.7, or pin 8.5?' })] }) });
+
 /** A computer that has never answered at all: nothing of it to draw. */
 const NEVER = paired('h3', 'cloud', { reachable: false, at: null, snapshot: null });
 
@@ -177,15 +188,17 @@ const CALM = view([EASY]);
 
     // Every item says which product and which computer. The whole screen turns
     // on this: the same question on two machines is two questions.
-    ['every item names the product it is work on', list.every((i) => !!i.project)],
-    ['…and the computer it came off', list.every((i) => !!i.machine)],
+    ['every item names the product it is work on',
+      list.length === 5 && list.every((i) => !!i.project)],
+    ['…and the computer it came off',
+      list.length === 5 && list.every((i) => !!i.machine)],
     ['…and both of them, with the card itself between, are the line the card draws',
       eq(W.source(byId.q1), { key: 'waitFrom',
         params: { project: 'Quire', title: 'Webhook retry policy', machine: 'studio' } })
       && eq(W.source(byId.k1), { key: 'waitFrom',
         params: { project: 'Kanji Daily', title: 'Gradle 8.7 bump', machine: 'mini' } })],
     ['…on every one of them, with nothing left empty',
-      list.map(W.source).every((x) => x.key === 'waitFrom'
+      list.length === 5 && list.map(W.source).every((x) => x.key === 'waitFrom'
         && ['project', 'title', 'machine'].every((k) => typeof x.params[k] === 'string' && !!x.params[k]))],
     ['…the machine’s own name, not the one the phone paired it under',
       byId.k1.machine === 'mini' && byId.q1.machine === 'studio'],
@@ -300,12 +313,28 @@ const CALM = view([EASY]);
       })()],
 
     // A queue on another computer has no page in this app, so there is nothing
-    // to open — but the answer is a request and goes straight to that machine.
-    ['a question on a machine this phone is not on can still be answered',
-      eq(k1.map((a) => a.doing.do), []) === false || k1.length === 0
-      || k1.every((a) => a.doing.do === 'note' && a.doing.host === 'h2')],
+    // to open; and the mini's question opens on an auxiliary, so there are no
+    // words in it to quote and nothing to send either. Both guards have to hold
+    // for that card to end up with no buttons at all, which is what it has.
+    // That it is still *on* the screen is the point of the screen: it says who
+    // is waiting and where, and the way to answer it is the machine it is on.
+    // The cross-machine answer itself is checked further down, on the question
+    // that does offer words.
+    ['a question on another computer with no words to quote is offered nothing at all',
+      k1.length === 0 && item('k1').answers.length === 0],
+    ['…and is on the screen regardless, naming the machine that is waiting',
+      item('k1').machine === 'mini' && item('k1').kind === 'question'],
+    ['…while one whose words do offer an answer is offered it, addressed to that machine',
+      (() => {
+        const quiet = view([STUDIO, MINI_ASKING]);
+        const acts = W.actions(W.items(quiet).find((i) => i.card.id === 'k2'), 'h1');
+        return eq(acts.map((a) => a.doing),
+          [{ do: 'note', ticket: 4, host: 'h2', text: 'Bump to 8.7' },
+           { do: 'note', ticket: 4, host: 'h2', text: 'Pin 8.5' }]);
+      })()],
     ['…and is offered no run to open, because that screen reads this phone’s own queue',
-      W.actions(item('q1'), 'h2').every((a) => a.doing.do !== 'open')],
+      W.actions(item('q1'), 'h2').length === 2
+      && W.actions(item('q1'), 'h2').every((a) => a.doing.do !== 'open')],
     ['a card no queue is holding is offered nothing to send a note to',
       eq(W.actions({ ...item('q1'), card: { ...item('q1').card, ustabasi_id: null } }, 'h1'), [])],
   );
@@ -343,6 +372,7 @@ function draw(scheme, hosts, o = {}) {
 
 const FLEETS = {
   'the four kinds on two computers': [STUDIO, MINI],
+  'a question waiting on a machine that is not answering': [STUDIO, MINI_ASKING],
   'one computer, nothing waiting': [EASY],
   'a machine that never answered': [STUDIO, NEVER],
   'only a machine that never answered': [NEVER],
@@ -453,30 +483,17 @@ for (const scheme of ['dark', 'light']) {
   checks.push(['…and the other answer sends the other answer',
     eq(sent.notes, [{ ticket: 12, host: 'h1', text: "Follow Stripe's schedule" }])]);
 
-  // The one on the laptop that is not answering: the request still goes to that
-  // laptop, because a machine that has been quiet for two hours may be awake
-  // again by the time a thumb reaches the button.
-  // The question on the laptop that is not answering: the request goes to that
-  // laptop, because a machine quiet for two hours may be awake again by the
-  // time a thumb reaches the button — and there is no run of it to open,
-  // because that page reads this phone's own queue.
-  draw('dark', [STUDIO, MINI]);
-  checks.push(['a question on another computer whose words offer no answer is offered nothing at all',
-    (() => {
-      const acts = W.actions(W.items(BUSY).find((i) => i.card.id === 'k1'), 'h1');
-      return acts.length === 0 && W.items(BUSY).find((i) => i.card.id === 'k1').answers.length === 0;
-    })()],
-    ['…and one that does offer an answer sends it to the machine that asked',
-      (() => {
-        const quiet = view([STUDIO, paired('h2', 'mini', { at: NOW - QUIET, reachable: false,
-          snapshot: snapshot('mini', { at: NOW - QUIET, projects: [project('Kanji Daily')],
-            cards: [card('k2', { project: 'Kanji Daily-id', status: 'asking', ustabasi: 4,
-                                 at: NOW - HOUR, title: 'Gradle', detail: 'Bump to 8.7, or pin 8.5?' })] }) })]);
-        const acts = W.actions(W.items(quiet).find((i) => i.card.id === 'k2'), 'h1');
-        return eq(acts.map((a) => a.doing),
-          [{ do: 'note', ticket: 4, host: 'h2', text: 'Bump to 8.7' },
-           { do: 'note', ticket: 4, host: 'h2', text: 'Pin 8.5' }]);
-      })()]);
+  // The hardest case the promise has to hold in: a question asked by a worker
+  // on the laptop whose lid is shut. The answer is sent to that laptop — it may
+  // be awake again by the time a thumb reaches the button — and it is sent
+  // without leaving the screen, from a phone that has no socket to it.
+  draw('dark', [STUDIO, MINI_ASKING]);
+  press('Bump to 8.7');
+  checks.push(
+    ['a question on a machine this phone is not on is answered on that machine, in one tap',
+      eq(sent.notes, [{ ticket: 4, host: 'h2', text: 'Bump to 8.7' }])],
+    ['…and that tap does not leave the screen either', eq(R.nav.pushed(), [])],
+  );
 
   draw('dark', [STUDIO, MINI]);
   press('waitDone');
@@ -542,7 +559,9 @@ for (const scheme of ['dark', 'light']) {
   });
   R.render('dark', h(Dashboard));
   checks.push(['…and it is not a way in when there is nothing behind it',
-    !R.presses().some((p) => p.text.includes('cNeedsYou'))]);
+    // Against a screen that did draw something pressable, so that "nothing is
+    // pressable here" is not "nothing rendered at all".
+    R.presses().length > 0 && !R.presses().some((p) => p.text.includes('cNeedsYou'))]);
   R.store.reset();
   R.params.reset();
   R.nav.reset();
