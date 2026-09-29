@@ -7,7 +7,7 @@ import { Text } from '../src/components/text';
 import { Icon } from '../src/components/icon';
 import {
   Button, Card, ColumnTabs, Counter, EmptyState, ExecutorBadge, ListRow, Monogram, Pill,
-  SectionHeader, Sheet, StateMark, StatusDot, TabBar,
+  SectionHeader, Segments, Sheet, StateMark, StatusDot, TabBar,
 } from '../src/components/divan';
 
 /** Every part of the Divan design system, on one screen, in whichever theme you
@@ -48,6 +48,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
   const t = useTokens();
   const [tab, setTab] = useState('dashboard');
   const [column, setColumn] = useState('progress');
+  const [face, setFace] = useState('board');
   const [dragging, setDragging] = useState(false);
   const [sheet, setSheet] = useState(false);
 
@@ -202,6 +203,16 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
             <ListRow icon="speed" title="Quota thresholds" note="warn at 20% · pause at 0%" />
             <ListRow icon="shield" title="Admin" note="backups, logs, API keys" />
             <ListRow icon="settings" title="Settings" note="appearance, haptics, voice" />
+          </View>
+        </Part>
+
+        <Part name="Segments" frame="Mobile2 V4">
+          <View style={{ paddingHorizontal: 16, gap: 6 }}>
+            <Segments value={face} onChange={setFace}
+              segments={[{ key: 'overview', label: 'Overview' },
+                         { key: 'board', label: 'Board', mark: '■', tone: 'red' }]} />
+            <Segments value="overview" onChange={() => {}}
+              segments={[{ key: 'overview', label: 'Overview' }, { key: 'board', label: 'Board' }]} />
           </View>
         </Part>
 
