@@ -1293,15 +1293,9 @@ group('every carried screen asks its computer for exactly what it did');
 
 group('nothing on a screen is standing in for something');
 {
-  // A carried screen is allowed to say "nothing yet"; it is not allowed to say
-  // it with a dash, a row of dots or a word from the artboard. The rendered
-  // markup is read rather than the source, because what matters is what a
-  // person sees.
-  //
-  // Two things are left out on purpose. The chat and the panels that belong to
-  // it are not being rebuilt, so its own dashes are its own business. And a
-  // dash inside a button is a glyph — the `–` that puts a chat session away is
-  // the minimise control, not a missing value.
+  // Read off the rendered markup, over every tree in this file except the
+  // chat, which is not being rebuilt. A dash inside a button is a glyph — the
+  // `–` that puts a chat session away — and is dropped before the scan.
   const CHAT = /Chat|Sidebar|FieldSheet|Lightbox|Approval|Timeline|Bubble|NewChat/;
   const HOLDING = [
     [/\blorem\b|\bipsum\b/i, 'lorem ipsum'],
@@ -1312,13 +1306,9 @@ group('nothing on a screen is standing in for something');
     [/>\s*(?:\.\.\.|…)\s*</, 'an ellipsis where a value goes'],
   ];
 
-  /** What a person would read off a render, with the tags taken out of the way.
-   *  Attributes are not words on a screen — `placeholder="Search…"` is the field
-   *  saying what it is for — so an opening tag becomes `<>`, which closes the
-   *  run of text before it and opens the next one. Writing `><` instead puts a
-   *  `<` in front of an element's own text, and `<span>—</span>` then reads as
-   *  `><—</span>`: the dash has a `<` before it rather than a `>`, and no
-   *  pattern anchored on a value can ever fire. */
+  /** The words, with the tags out of the way. An opening tag becomes `<>`, not
+   *  `><`: the latter puts a `<` in front of an element's own text, and every
+   *  value on these screens is the sole child of a tag. */
   const standingIn = (markup) => {
     const words = markup
       .replace(/<button[\s\S]*?<\/button>/g, ' ')
@@ -1326,9 +1316,6 @@ group('nothing on a screen is standing in for something');
     return HOLDING.filter(([re]) => re.test(words)).map(([, what]) => what);
   };
 
-  // The check can fail. A cell with a dash in it is exactly what was taken out
-  // of the executors table, and is drawn here so that the pattern is held to
-  // something rather than to the absence of everything.
   const dash = renderToStaticMarkup(createElement(parts.Cell, { text: '—' }));
   ok('a value that is only a dash is reported', standingIn(dash).includes('a dash where a value goes'),
     dash);
