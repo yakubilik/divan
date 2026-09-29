@@ -79,7 +79,7 @@ export default function Dashboard() {
   const old = staleness(view);
   const today = new Date().toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
   const aside = old
-    ? T('dashPartly', { time: clock(old.asOf, LOCALE) })
+    ? T('dashPartly', { time: clock(old.asOf) })
     : `${T('dashProjects', { n: view.projects.length })} · ${today}`;
 
   return (
@@ -88,7 +88,8 @@ export default function Dashboard() {
       <Line view={view} ago={ago} />
       {/* `flexGrow` so that the empty state, which centres itself in what it
           is given, has the page to centre itself in. */}
-      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 14, paddingHorizontal: 16, paddingBottom: 24, gap: 14 }}>
+      {/* Mobile1 V1's body: `padding:16px 16px 0; gap:16`. */}
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
         <SectionHeader kind="page" title={picked ? picked.name : T('overview')}
           right={picked ? picked.machines.join(' · ') : aside} tone={!picked && old ? 'amber' : undefined} />
         {picked ? <Project project={picked} /> : (
@@ -96,10 +97,10 @@ export default function Dashboard() {
             {!!old && (
               <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
                 {old.machines.length > 1
-                  ? T('dashStaleMany', { n: old.machines.length, time: clock(old.asOf, LOCALE) })
+                  ? T('dashStaleMany', { n: old.machines.length, time: clock(old.asOf) })
                   : old.projects.length
                     ? T('dashStale', { name: old.machines[0], d: ago(old.age),
-                                       projects: old.projects.join(', '), time: clock(old.asOf, LOCALE) })
+                                       projects: old.projects.join(', '), time: clock(old.asOf) })
                     : T('dashStaleBare', { name: old.machines[0], d: ago(old.age) })}
               </Text>
             )}
@@ -158,10 +159,10 @@ function Line({ view, ago }: { view: DivanView; ago: Ago }) {
   const q = line.quota;
   const quota = !q ? null
     : q.spent
-      ? (q.resets_at ? T('sysQuotaSpent', { time: clock(q.resets_at, LOCALE) }) : T('sysQuotaOut'))
+      ? (q.resets_at ? T('sysQuotaSpent', { time: clock(q.resets_at) }) : T('sysQuotaOut'))
       : line.state === 'unreachable'
         ? T('sysQuotaShort', { p: q.pct })
-        : q.resets_at ? T('sysQuotaLeft', { p: q.pct, time: clock(q.resets_at, LOCALE) })
+        : q.resets_at ? T('sysQuotaLeft', { p: q.pct, time: clock(q.resets_at) })
         : T('sysQuotaBare', { p: q.pct });
   // The healthy line labels its track; the other two have spent their left half
   // on a sentence and say "quota" inside the figure instead.
@@ -179,14 +180,14 @@ function Paused({ view, now, ago }: { view: DivanView; now: number; ago: Ago }) 
   const n = view.totals.paused;
   return (
     <Note tone="red" icon="pause"
-      title={back ? T('pausedTitle', { time: clock(back, LOCALE) }) : T('pausedTitleBare')}
+      title={back ? T('pausedTitle', { time: clock(back) }) : T('pausedTitleBare')}
       body={n === 0 ? T('pausedBodyNone')
         : T(n === 1 ? 'pausedBodyOne' : 'pausedBody',
             { n, d: ago(back == null ? null : Math.max(0, back - now)) })}
       foot={back ? (
         <>
           <NoteFoot text={T('pausedUsed')} />
-          <NoteFoot text={T('pausedResets', { time: clock(back, LOCALE) })} />
+          <NoteFoot text={T('pausedResets', { time: clock(back) })} />
         </>
       ) : null} />
   );
@@ -246,8 +247,8 @@ function Product({ project: p, index, view, now, ago, onPress }: {
     <ProjectCard index={index} name={p.name} onPress={onPress}
       line={T(said.key, said.params)}
       chip={{ mark: mark.mark, text: T(mark.key, mark.params), tone: mark.tone }}
-      freshness={p.stale ? (p.lastSeen == null ? null : T('pfLastSeen', { time: clock(p.lastSeen, LOCALE) }))
-        : p.paused > 0 && back ? T('pfResume', { time: clock(back, LOCALE) })
+      freshness={p.stale ? (p.lastSeen == null ? null : T('pfLastSeen', { time: clock(p.lastSeen) }))
+        : p.paused > 0 && back ? T('pfResume', { time: clock(back) })
         : null}
       figure={p.activity ? {
         value: p.activity.week,
@@ -275,7 +276,7 @@ function Agents({ view, now, ago, onOpen }: {
           const name = view.projects[r.index]?.name ?? r.agent.project;
           const detail = (r.agent.detail || '').trim();
           const when = r.agent.unknown
-            ? T('pfLastSeen', { time: clock(r.agent.since_contact, LOCALE) })
+            ? T('pfLastSeen', { time: clock(r.agent.since_contact) })
             : r.agent.since == null ? '' : ago(Math.max(0, now - r.agent.since));
           return (
             <AgentLine key={r.agent.card_id} first={i === 0} mark={r.mark} tone={r.tone}

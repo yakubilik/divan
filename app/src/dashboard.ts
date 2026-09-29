@@ -25,7 +25,7 @@
 //     how old it is.
 import { stuck, waiting, type DivanView, type MergedAgent, type MergedCard,
          type MergedProject } from './divan';
-import type { Key } from './i18n';
+import { LOCALE, type Key } from './i18n';
 import type { DivanExecutor } from './protocol';
 import { STATE_MARK, type State, type Tone } from './tokens';
 
@@ -34,9 +34,10 @@ import { STATE_MARK, type State, type Tone } from './tokens';
  *  Mobile5 S1's "quiet for 23 days". Two weeks: one week is a holiday. */
 export const DORMANT_AFTER_S = 14 * 24 * 3600;
 
-/** `21:02`, the way every frame writes a time of day. Null in, empty out: a
- *  clock for a moment nobody recorded is the one thing this must not invent. */
-export function clock(at: number | null | undefined, locale = 'en-US'): string {
+/** `21:02`, the way every frame writes a time of day — the app's own locale, and
+ *  24 hours because the frames are. Null in, empty out: a clock for a moment
+ *  nobody recorded is the one thing this must not invent. */
+export function clock(at: number | null | undefined, locale = LOCALE): string {
   if (at == null || !Number.isFinite(at)) return '';
   return new Date(at * 1000).toLocaleTimeString(locale,
     { hour: '2-digit', minute: '2-digit', hour12: false });

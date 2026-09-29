@@ -17,8 +17,8 @@ import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon } from './icon';
 import { Text } from './text';
 import { Button, Card, Counter, Monogram, StatusDot, Tap } from './divan';
-import { em, RADIUS, SIZE, stateColour, toneColours, useTokens, type State, type Tone } from '../theme';
-import type { CounterSpec, SystemLine as Line } from '../dashboard';
+import { em, RADIUS, SIZE, STATE_MARK, stateColour, toneColours, useTokens, type State, type Tone } from '../theme';
+import { systemTone, type CounterSpec, type SystemLine as Line } from '../dashboard';
 
 // ── 1 · the system line ─────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ import type { CounterSpec, SystemLine as Line } from '../dashboard';
  *  The two halves are drawn from the same data in all three: which machines
  *  answered on the left, quota on the right. Where nothing has ever measured a
  *  quota there is no right half — an empty track would be a number. */
-export function SystemLine({ line, say, quota, label, onPress, style }: {
+export function SystemLine({ line, say, quota, label, style }: {
   line: Line;
   /** The words on the left, already in the reader's language. */
   say: string;
@@ -43,11 +43,14 @@ export function SystemLine({ line, say, quota, label, onPress, style }: {
   /** The word in front of the track, which only the healthy line has room for:
    *  the other two have spent their left half on a sentence. */
   label?: string | null;
-  onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
-  const tone: Tone | null = line.state === 'spent' ? 'red' : line.state === 'unreachable' ? 'amber' : null;
+  // Nothing on this line is a way in. What it is about — the machines and the
+  // sign-ins — lives in the Machine place, and the Dashboard is not allowed to
+  // lead there: that is the whole point of the three places, and the shell's own
+  // check holds every screen to it.
+  const tone = systemTone(line);
   const col = tone ? toneColours(t, tone) : null;
   // The left words carry the trouble, except when the trouble is the quota:
   // "3 machines" is then the one ordinary fact on a red line and is drawn as
@@ -55,7 +58,7 @@ export function SystemLine({ line, say, quota, label, onPress, style }: {
   const said = line.state === 'spent' ? t.ink2 : col ? col.fg : t.ink2;
   const bar = line.quota && line.state !== 'unreachable';
   return (
-    <Card ring="none" inset={false} radius={RADIUS.button} onPress={onPress}
+    <Card ring="none" inset={false} radius={RADIUS.button}
       style={[{ height: 34, marginTop: 10, marginHorizontal: 16,
                 backgroundColor: col ? col.bg : t.s1 }, style]}>
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 }}>
@@ -135,10 +138,13 @@ export function Note({ tone, icon, dot, title, body, foot, style }: {
   return (
     <View style={[{ backgroundColor: col.bg, borderRadius: RADIUS.card,
                     padding: 14, paddingHorizontal: 16, gap: 10 }, style]}>
+      {/* The calm block's sentence is ordinary ink with a green dot in front of
+          it; the paused one's is in its own red, behind a glyph. The frames draw
+          the difference and it is the right one — one of them is good news. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         {dot ? <StatusDot state={col.fg} size={8} />
              : !!icon && <Icon name={icon} size={18} color={col.fg} />}
-        <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: icon ? col.fg : t.ink }}>{title}</Text>
+        <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: dot ? t.ink : col.fg }}>{title}</Text>
       </View>
       {!!body && <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink }}>{body}</Text>}
       {!!foot && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>{foot}</View>}
@@ -266,7 +272,7 @@ export function ProjectCard({ index, name, line, chip, freshness, figure, marks,
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {(marks ?? []).map((m) => (
               <Text key={m.mark} mono style={{ fontSize: 11.5, fontWeight: '500', color: stateColour(t, m.mark) }}>
-                {markOf(m.mark)}{m.n}
+                {STATE_MARK[m.mark]}{m.n}
               </Text>
             ))}
           </View>
@@ -279,11 +285,6 @@ export function ProjectCard({ index, name, line, chip, freshness, figure, marks,
       )}
     </Card>
   );
-}
-
-/** The character a state is drawn with, so that the footer reads in grey. */
-function markOf(state: State): string {
-  return { stuck: '■', asking: '?', running: '●', done: '✓', yours: '○', quiet: '·' }[state];
 }
 
 // ── 6 · who is on what, where ───────────────────────────────────────────────
