@@ -12,10 +12,14 @@ import {
   agentRows, asks, calm, chip, clock, counters, freshness, latest, line, machineWords,
   marks, pausedWords, quotaWords, staleness, staleWords, systemLine, target, type Ago, type Said,
 } from '../src/dashboard';
+import {
+  blank, blankBody, branchCards, nowWords, oldWords, quiet, subtitle, waitingWords, type Line,
+} from '../src/project';
 import { EmptyState, ListRow, SectionHeader } from '../src/components/divan';
 import {
   AgentLine, AgentRoster, AskCard, Counters, Note, NoteFoot, ProjectCard, SystemLine,
 } from '../src/components/dashboard';
+import { BranchCard, ProjectHead, QuietNote, StateLines } from '../src/components/project';
 import { Text } from '../src/components/text';
 import { useTokens } from '../src/theme';
 import { ProjectBar, Shell } from '../src/components/shell';
@@ -51,8 +55,10 @@ import { ProjectBar, Shell } from '../src/components/shell';
  *
  *  Selecting a project enters it, in the address (`/dashboard?project=quire`)
  *  rather than in a `useState`, so that it survives a redraw and can be linked
- *  to. Until the project page exists the Dashboard *is* the project page — same
- *  place, scoped — which is how Mobile2 V4 reads it too. */
+ *  to. The Dashboard *is* the project page — same place, scoped — which is how
+ *  Mobile2 V4 reads it too: the project bar stays at the top with one chip
+ *  selected, the tab bar stays lit on the Dashboard, and what changes is the page
+ *  between them (`Project` below). */
 export default function Dashboard() {
   const router = useRouter();
   const go = useNavGuard();
@@ -90,10 +96,13 @@ export default function Dashboard() {
           is given, has the page to centre itself in. */}
       {/* Mobile1 V1's body: `padding:16px 16px 0; gap:16`. */}
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
-        <SectionHeader kind="page" title={picked ? picked.name : T('overview')}
-          right={picked ? picked.machines.join(' · ') : aside} tone={!picked && old ? 'amber' : undefined} />
-        {picked ? <Project project={picked} /> : (
+        {picked ? (
+          <Project project={picked} index={view.projects.findIndex((p) => p.key === picked.key)}
+            view={view} now={now} ago={ago} />
+        ) : (
           <>
+            <SectionHeader kind="page" title={T('overview')} right={aside}
+              tone={old ? 'amber' : undefined} />
             {!!old && (
               <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
                 {said(T, staleWords(old, ago))}
@@ -237,7 +246,7 @@ function Product({ project: p, index, view, now, ago, onPress }: {
         label: T('pfFinished'),
         moved: p.activity.at == null ? T('pfNeverMoved') : T('pfMoved', { d: ago(Math.max(0, now - p.activity.at)) }),
       } : null}
-      marks={marks(p)} latest={latest(p)} />
+      marks={marks(p)} latest={latest(p.cards)} />
   );
 }
 
@@ -272,22 +281,81 @@ function Agents({ view, now, ago, onOpen }: {
   );
 }
 
-/** One product: its branches, which is everything the merged view knows about
- *  it that is not a card. A branch with no source connected says so rather than
- *  showing a number nobody measured. */
-function Project({ project }: { project: MergedProject }) {
+/** One product alone (Mobile2 V4, Mobile7 S4): who it is, a line of what is
+ *  happening and a line of what it is waiting for, then its branches as cards.
+ *
+ *  The same page carries the two states that are not that. A product nothing has
+ *  touched in a fortnight gets Mobile7 S5's block where the two lines would be —
+ *  "quiet for 23 days", what happened last — because "nothing running, nothing
+ *  waiting" said twice over a dead product is true and useless. A product whose
+ *  board is still empty gets Mobile7 S6's designed state instead of a page of
+ *  zeros. Which of the three it is, is `src/project.ts`'s to decide.
+ *
+ *  The frame's three tabs — Overview, Board, Chats — are not here: the Board is
+ *  the next ticket and the chats a product owns are not filed yet, and a tab
+ *  that dims under a thumb and does nothing is worse than a tab that is not
+ *  there. This page is the Overview, which is the one of the three that exists.
+ *
+ *  Mobile2 V4 also puts the asking agent's card on this page, with its two
+ *  proposed answers as buttons. Mobile7 S4 draws the same page without it and
+ *  with the `waiting` line instead, which is the later of the two and the one
+ *  followed here: answering is a screen of its own (Mobile6 S3, reached from the
+ *  Dashboard's first counter), every question is on it, and a second place to
+ *  answer the same question from would be two places to keep in step. The line
+ *  says what is waiting and names it; the answering happens where it is designed
+ *  to.
+ *
+ *  Nor are the frame's own branch figures: `99.2% crash-free`, `6,412 clicks
+ *  28d`, `€1,140 MRR`. Nothing is connected to those sources (the plan puts them
+ *  after the screens), and the numbers drawn instead are the board's own — what
+ *  is open on a branch, what is in progress, what is done. */
+function Project({ project: p, index, view, now, ago }: {
+  project: MergedProject; index: number; view: DivanView; now: number; ago: Ago;
+}) {
   const T = useT();
+  const t = useTokens();
+  const stale = oldWords(p, now, ago);
+  const asleep = quiet(p, now, ago);
+  const body = blankBody(p);
+  const happening = nowWords(view, p);
+  const pending = waitingWords(view, p);
+  /** One of the two lines, with the executor it names put into the reader's
+   *  language — the same two-step the Dashboard's questions take. */
+  const line = (x: Line) => T(x.said.key, x.who ? { ...x.said.params, who: T(x.who) } : x.said.params);
   return (
-    <View style={{ gap: 8 }}>
-      <SectionHeader title={T('branches')} count={project.branches.length} />
-      <View>
-        {project.branches.map((b, i) => (
-          <ListRow key={b.id || b.kind} first={i === 0} title={b.name || b.kind}
-            note={b.summary || T('branchNoSource')}
-            meta={b.open ? T('branchOpen', { n: b.open }) : undefined}
-            chevron={false} />
-        ))}
-      </View>
+    // `flexGrow` so that the empty board, which centres itself in what it is
+    // given, has the page to centre itself in. Mobile7 S4's own body: `padding:
+    // 14px 16px 0; gap:12`.
+    <View style={{ flexGrow: 1, gap: 12 }}>
+      <ProjectHead name={p.name} index={index} note={subtitle(p)} />
+      {!!stale && (
+        <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
+          {T(stale.key, stale.params)}
+        </Text>
+      )}
+      {blank(p) ? (
+        <EmptyState title={T('prNewTitle')} body={T(body.key, body.params)} foot={T('prNewFoot')} />
+      ) : (
+        <>
+          {asleep
+            ? <QuietNote title={T(asleep.title.key, asleep.title.params)}
+                body={T(asleep.body.key, asleep.body.params)} />
+            : <StateLines rows={[
+                { label: T('prNow'), text: line(happening), tone: happening.tone },
+                { label: T('prWaiting'), text: line(pending), tone: pending.tone, quiet: true },
+              ]} />}
+          <View style={{ gap: 6 }}>
+            <SectionHeader title={T('branches')} count={p.branches.length} />
+            {branchCards(p, now).map((b) => (
+              <BranchCard key={b.key} name={b.name} state={b.state} dim={b.dim}
+                line={b.said ? T(b.said.key, b.said.params) : b.text}
+                figures={b.figures.map((f) => ({ value: f.value, label: T(f.label) }))}
+                refreshed={b.refreshed ? T(b.refreshed.said.key, b.refreshed.said.params) : null}
+                tone={b.refreshed?.tone ?? null} />
+            ))}
+          </View>
+        </>
+      )}
     </View>
   );
 }

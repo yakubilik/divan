@@ -199,6 +199,11 @@ export interface MergedProject {
   name: string;
   slug: string;
   summary: string;
+  /** What sort of thing it is — `app`, `web`, `content`, `client-work` — as
+   *  somebody wrote it. Empty where nobody said, which is every product that
+   *  predates the field; the project page then draws what it is *for* alone
+   *  rather than a guessed word. */
+  kind: string;
   repos: string[];
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
@@ -414,6 +419,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           name: p.name,
           slug: p.slug,
           summary: p.summary || '',
+          kind: p.kind || '',
           repos: [...(p.repos || [])],
           hosts: [h.id],
           machines: [h.machine],
@@ -441,6 +447,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
       const newer = (p.updated_at || 0) > found.updated_at;
       found.name = newer ? p.name : found.name;
       found.summary = newer && p.summary ? p.summary : (found.summary || p.summary || '');
+      found.kind = newer && p.kind ? p.kind : (found.kind || p.kind || '');
       found.updated_at = Math.max(found.updated_at, p.updated_at || 0);
       found.repos = [...new Set([...found.repos, ...(p.repos || [])])].sort();
       found.hosts = [...new Set([...found.hosts, h.id])];

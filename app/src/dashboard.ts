@@ -447,14 +447,19 @@ export function marks(p: MergedProject): { mark: State; n: number }[] {
   return found.filter((m) => m.n > 0);
 }
 
-/** The one thing worth saying about a product in the corner of its card: the
- *  worst card's own line. Written by the mirror, so it is what the queue said
- *  rather than a sentence composed here — and empty where nothing has been
- *  said, in which case the card says nothing there. */
-export function latest(p: MergedProject): string {
-  const worst = p.cards.filter(stuck)[0]
-    ?? p.cards.find((c) => c.agent_status === 'asking')
-    ?? p.cards.find((c) => c.agent_status === 'running')
+/** The one thing worth saying about a run of cards in the corner of whatever
+ *  they are on: the worst card's own line. Written by the mirror, so it is what
+ *  the queue said rather than a sentence composed here — and empty where nothing
+ *  has been said, in which case the corner says nothing.
+ *
+ *  Takes the cards and not the product, because a branch card asks the same
+ *  question of its own share of them (`src/project.ts`) and two spellings of
+ *  "the worst card" would drift apart. */
+export function latest(cards: MergedCard[]): string {
+  const worst = cards.filter(stuck)[0]
+    ?? cards.find((c) => c.agent_status === 'asking')
+    ?? cards.find((c) => c.agent_status === 'running')
+    ?? cards.find(waiting)
     ?? null;
   if (!worst) return '';
   return (worst.agent_detail || '').trim() || worst.title;

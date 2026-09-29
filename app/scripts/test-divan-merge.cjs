@@ -61,7 +61,7 @@ const branch = (kind, o = {}) => ({
 
 const project = (name, o = {}) => ({
   id: o.id || `${name}-id`, name, slug: o.slug ?? name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-  summary: o.summary || '', repos: o.repos || [], sort: 0, archived: false,
+  summary: o.summary || '', kind: o.kind || '', repos: o.repos || [], sort: 0, archived: false,
   created_at: 0, updated_at: o.updated_at || 0,
   branches: o.branches || [branch('engineering', { on: name })],
   counts: o.counts || {}, running: o.running || 0, waiting: o.waiting || 0,
@@ -300,6 +300,19 @@ const checks = [
   ['…and says which machines that work is on', (() => {
     const e = isghocam.branches.find((b) => b.kind === 'engineering');
     return e.machines.join(',') === 'studio,mini';
+  })()],
+  ['what sort of thing a product is travels with it, off whichever copy was edited last', (() => {
+    // The kind is written on the product and not on a machine, so two copies of
+    // one product are one answer said twice — and the newer copy is the one that
+    // was edited. A copy that has nothing to say does not blank the one that has.
+    const of = (kinds) => D.merge([
+      paired('h1', 'studio', { reachable: true, at: NOW,
+        snapshot: snapshot('studio', { at: NOW,
+          projects: [project('isghocam', { kind: kinds[0], updated_at: NOW - 600 })] }) }),
+      paired('h2', 'mini', { reachable: true, at: NOW,
+        snapshot: snapshot('mini', { at: NOW, projects: [project('isghocam', { id: 'x', kind: kinds[1], updated_at: NOW })] }) }),
+    ], NOW).projects[0].kind;
+    return of(['web', 'content']) === 'content' && of(['web', '']) === 'web' && of(['', '']) === '';
   })()],
   ['a branch only one machine has anything to say about keeps what it said', (() => {
     const seo = isghocam.branches.find((b) => b.kind === 'seo');
