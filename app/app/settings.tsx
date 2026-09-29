@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
-import { useColors } from '../src/theme';
+import { useTokens } from '../src/theme';
 import type { Key } from '../src/i18n';
 import type { UpdateStatus } from '../src/protocol';
-import { Card, Dot, Icon, IconLine, Label, Row, SmallButton, Text, Toggle } from '../src/components/ui';
+import { Group, ListRow, RowButton, StatusDot, Switch } from '../src/components/divan';
+import { PageHead } from '../src/components/machine';
+import { BackRow } from '../src/components/waiting';
+import { Icon } from '../src/components/icon';
+import { Text } from '../src/components/text';
 import { alert } from '../src/components/overlay';
-import { LargeTitlePage } from '../src/components/page';
 import { tilde } from '../src/components/pickers';
 
 /** Why this computer cannot follow main, in the reader's words. A blocker is
@@ -20,75 +23,27 @@ const BLOCKER: Record<string, Key> = {
   'a turn is running': 'updBusy',
 };
 
-function Software({ status, busy, onUpdate }: { status: UpdateStatus; busy: boolean; onUpdate: () => void }) {
-  const T = useT();
-  const c = useColors();
-  const behind = status.behind ?? 0;
-  // "already up to date" cannot be a blocker here — we are behind.
-  const blocking = (status.blockers ?? []).filter((b) => b !== 'already up to date');
-  const local = `${status.local?.commit ?? '–'}${status.local?.branch ? ` · ${status.local.branch}` : ''}`;
-  const foot = `${status.auto ? T('autoOn') : T('autoOff')} · ${T('dirtyFiles', { n: String(status.local?.dirty_files ?? 0) })}`;
-  return (
-    <Card style={{ paddingVertical: 12, paddingHorizontal: 14, gap: behind > 0 && !blocking.length ? 8 : 6 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text mono style={{ fontSize: 12 }}>{local}</Text>
-        <Text mono style={{ fontSize: 12, color: behind > 0 ? c.warn : c.ok }}>{behind > 0 ? T('behindN', { n: String(behind) }) : T('upToDate')}</Text>
-      </View>
-      {behind > 0 && blocking.length > 0 ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Icon name="block" size={16} color={c.muted} />
-          <Text style={{ fontSize: 13, color: c.muted, flex: 1 }}>{T('cantUpdate', { why: blocking.map((b) => (BLOCKER[b] ? T(BLOCKER[b]) : b)).join(' · ') })}</Text>
-        </View>
-      ) : behind > 0 && !!status.remote?.subject ? (
-        <Text style={{ fontSize: 13, color: c.muted, lineHeight: 13 * 1.4 }}>{T('latest', { s: status.remote.subject })}</Text>
-      ) : null}
-      {behind > 0 && !blocking.length ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <Text style={{ fontSize: 12, color: c.faint, flexShrink: 1 }}>{foot}</Text>
-          <SmallButton title={busy ? T('updating') : T('updateNow')} onPress={onUpdate} disabled={busy} padH={14} padV={8} />
-        </View>
-      ) : (
-        <Text style={{ fontSize: 12, color: c.faint }}>{foot}</Text>
-      )}
-    </Card>
-  );
-}
-
-function ToggleRow({ label, value, onChange, last }: { label: string; value: boolean; onChange: (v: boolean) => void; last?: boolean }) {
-  const c = useColors();
-  return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14 }, !last && { borderBottomWidth: 1, borderBottomColor: c.line }]}>
-      <Text style={{ flex: 1, fontSize: 15 }}>{label}</Text>
-      <Toggle value={value} onChange={onChange} />
-    </View>
-  );
-}
-
-function InfoRow({ label, value, last }: { label: string; value: string; last?: boolean }) {
-  const c = useColors();
-  return (
-    <View style={[{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, paddingHorizontal: 14 }, !last && { borderBottomWidth: 1, borderBottomColor: c.line }]}>
-      <Text style={{ flex: 1, fontSize: 14 }}>{label}</Text>
-      <Text mono style={{ fontSize: 12, color: c.muted, textAlign: 'right', lineHeight: value.includes('\n') ? 19.2 : undefined }}>{value}</Text>
-    </View>
-  );
-}
-
 function uptime(s: number): string {
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
   return d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`;
 }
 
+/** Everything about this phone and the computer it is holding, in the short
+ *  groups Web15 W18 puts them in.
+ *
+ *  W18 is the desktop's own Settings and is what this is drawn from: a card per
+ *  group with its name in mono lowercase at the top, a row per setting with one
+ *  grey line under the title saying what it does, and the control at the end of
+ *  the row — a switch, a value with a chevron, or the small button W16 puts
+ *  there. Nothing on the page is coloured except the one dot that says which
+ *  computer is answering and the one button that takes something away. */
 export default function Settings() {
   const router = useRouter();
   const T = useT();
-  const c = useColors();
+  const t = useTokens();
   const pool = useStore((s) => s.pool);
   const { accounts, hosts, activeHostId, hostInfo, conn, defaults, prefs, device, setPrefs, setDevicePrefs, switchHost, removeHost, authenticate, pushToken, refreshHost, catalog, updateStatus, checkUpdate, applyUpdate } = useStore();
   const [updBusy, setUpdBusy] = useState(false);
-  const accountSummary = accounts.length
-    ? `${accounts.filter((a) => a.logged_in).length}/${accounts.length}`
-    : undefined;
   useEffect(() => { if (conn === 'online') { void refreshHost().catch(() => {}); const t = setInterval(() => void refreshHost().catch(() => {}), 30000); return () => clearInterval(t); } }, [conn, refreshHost]);
   // Ask the computer where it stands the moment this screen is open. `refresh`
   // makes it talk to GitHub, which is why it happens here and not on a timer.
@@ -117,105 +72,145 @@ export default function Settings() {
   const err = (e: any) => alert(T('error'), e.message);
 
   return (
-    <LargeTitlePage title={T('settings')} contentStyle={{ paddingBottom: 40 }}>
-      <View style={{ paddingHorizontal: 16, gap: 6 }}>
-        <Label>{T('computers')}</Label>
-        <Card>
-          {hosts.map((h) => {
+    <View style={{ flex: 1, backgroundColor: t.bg }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 16,
+                                           paddingBottom: 40, gap: 10 }}>
+        <BackRow label={T('mTitle')} onPress={() => router.back()} style={{ paddingHorizontal: 4 }} />
+        <PageHead title={T('settings')} style={{ marginBottom: 2 }} />
+
+        <Group label={T('sgComputers')}>
+          {hosts.map((h, i) => {
             const active = h.id === activeHostId;
-            const meta = active && hostInfo
+            const meta = busyHost === h.id ? T('hostRemoving')
+              : active ? (online ? T('online') : T(conn === 'connecting' ? 'connecting' : 'offline'))
+              : T('offline');
+            const detail = active && hostInfo
               ? `${h.host}:${h.port} · claude ${short(hostInfo.versions.claude)} · codex ${short(hostInfo.versions.codex)}`
-              : `${h.host}:${h.port}${active ? ` · ${conn === 'online' ? T('online') : T(conn === 'connecting' ? 'connecting' : 'offline')}` : ` · ${T('offline')}`}`;
+              : `${h.host}:${h.port}`;
             return (
-              <Pressable key={h.id} onPress={() => !active && switchHost(h.id)} onLongPress={() => confirmRemove(h.id, h.name)}
-                style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: c.line }, pressed && { backgroundColor: c.fill }]}>
-                <Dot color={active ? (online ? c.ok : conn === 'connecting' ? c.warn : c.lineStrong) : c.lineStrong} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '500' }}>{(active && hostInfo?.name?.replace('.local', '')) || h.name}</Text>
-                  <Text mono style={{ fontSize: 11, color: c.muted }}>{meta}</Text>
-                </View>
-                {busyHost === h.id ? <Text style={{ color: c.muted }}>…</Text> : active ? <Icon name="check" size={18} /> : null}
-              </Pressable>
+              <ListRow key={h.id} first={i === 0} boxed chevron={!active}
+                onPress={() => !active && switchHost(h.id)} onLongPress={() => confirmRemove(h.id, h.name)}
+                lead={<StatusDot state={active && online ? 'running' : active && conn === 'connecting' ? 'asking' : 'quiet'}
+                  hollow={!active} />}
+                title={(active && hostInfo?.name?.replace('.local', '')) || h.name}
+                note={detail} noteMono
+                meta={meta} tone={active && online ? 'run' : 'ink3'}
+                right={active && busyHost !== h.id ? <Icon name="check" size={18} color={t.ink} /> : undefined} />
             );
           })}
-          <Pressable onPress={() => router.push({ pathname: '/pair', params: { add: '1' } })}
-            style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11, paddingHorizontal: 14 }, pressed && { backgroundColor: c.fill }]}>
-            <IconLine name="add" size={18} />
-            <Text style={{ fontSize: 15, fontWeight: '500' }}>{T('addComputer')}</Text>
-          </Pressable>
-        </Card>
+          <ListRow first={hosts.length === 0} boxed chevron={false} icon="add" title={T('addComputer')}
+            onPress={() => router.push({ pathname: '/pair', params: { add: '1' } })} />
+        </Group>
 
         {!!updateStatus?.repo && (
-          <>
-            <Label style={{ paddingTop: 12 }}>{T('software')}</Label>
-            <Software status={updateStatus} busy={updBusy} onUpdate={async () => {
-              setUpdBusy(true);
-              const r = await applyUpdate();
-              setUpdBusy(false);
-              if (!r.ok && r.error) alert(T('software'), T('updFailed', { e: r.error }));
-            }} />
-          </>
+          <Software status={updateStatus} busy={updBusy} onUpdate={async () => {
+            setUpdBusy(true);
+            const r = await applyUpdate();
+            setUpdBusy(false);
+            if (!r.ok && r.error) alert(T('software'), T('updFailed', { e: r.error }));
+          }} />
         )}
 
-        <Label style={{ paddingTop: 12 }}>{T('accounts')}</Label>
-        <Card>
-          <Row label={T('accounts')} value={accountSummary} mono valueSize={13} onPress={() => router.push('/accounts')} />
-          <Row label={T('pool')} value={pool?.enabled ? T('on') : T('off')} onPress={() => router.push('/pool')} last />
-        </Card>
+        <Group label={T('sgAccounts')}>
+          <ListRow first boxed title={T('accounts')} note={T('mAccountsNote')}
+            meta={accounts.length ? `${accounts.filter((a) => a.logged_in).length}/${accounts.length}` : null}
+            onPress={() => router.push('/accounts')} />
+          <ListRow boxed title={T('pool')} note={T('mPoolNote')}
+            meta={T(pool?.enabled ? 'on' : 'off')} monoMeta={false}
+            onPress={() => router.push('/pool')} />
+        </Group>
 
-        <Label style={{ paddingTop: 12 }}>{T('defaults')}</Label>
-        <Card>
-          <Row label={T('toolRow')} value={defaults.provider === 'codex' ? 'Codex' : 'Claude'} onPress={openDefaults} />
-          <Row label={T('modelRow')} value={[modelLabel, defaults.effort].filter(Boolean).join(' · ')} mono onPress={openDefaults} />
-          <Row label={T('permRow')} value={defaults.perm_mode} mono onPress={openDefaults} last />
-        </Card>
+        <Group label={T('sgDefaults')}>
+          <ListRow first boxed title={T('toolRow')} note={T('sgDefaultsNote')}
+            meta={defaults.provider === 'codex' ? 'Codex' : 'Claude'} monoMeta={false} onPress={openDefaults} />
+          <ListRow boxed title={T('modelRow')}
+            meta={[modelLabel, defaults.effort].filter(Boolean).join(' · ')} onPress={openDefaults} />
+          <ListRow boxed title={T('permRow')} meta={defaults.perm_mode} onPress={openDefaults} />
+        </Group>
 
-        <Label style={{ paddingTop: 12 }}>{T('security')}</Label>
-        <Card>
-          <ToggleRow label={T('faceIdLaunch')} value={prefs.faceIdLaunch} onChange={(v) => void toggleFaceId('faceIdLaunch', v)} />
-          <ToggleRow label={T('faceIdBypass')} value={prefs.faceIdBypass} onChange={(v) => void toggleFaceId('faceIdBypass', v)} />
-          <Pressable onPress={() => activeHostId && confirmRemove(activeHostId, hosts.find((h) => h.id === activeHostId)?.name ?? '')}
-            style={({ pressed }) => [{ paddingVertical: 12, paddingHorizontal: 14 }, pressed && { backgroundColor: c.fill }]}>
-            <Text style={{ fontSize: 15, fontWeight: '500', color: c.danger }}>{T('revokeDevice')}</Text>
-          </Pressable>
-        </Card>
-
-        <Label style={{ paddingTop: 12 }}>{T('notifications')}</Label>
-        <Card>
-          <ToggleRow label={T('pushApproval')} value={device?.push_approval ?? true} onChange={(v) => void setDevicePrefs({ push_approval: v }).catch(err)} />
-          <ToggleRow label={T('pushDone')} value={device?.push_done ?? true} onChange={(v) => void setDevicePrefs({ push_done: v }).catch(err)} last />
-        </Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 4 }}>
-          {pushToken ? <Icon name="check" size={14} color={c.ok} /> : <Icon name="info" size={16} color={c.faint} />}
-          <Text style={{ fontSize: 12, color: c.muted, flex: 1 }}>{pushToken ? T('pushOk') : T('pushNo')}</Text>
+        <Group label={T('sgSecurity')}>
+          <ListRow first boxed chevron={false} title={T('faceIdLaunch')}
+            right={<Switch label={T('faceIdLaunch')} value={prefs.faceIdLaunch} onChange={(v) => void toggleFaceId('faceIdLaunch', v)} />} />
+          <ListRow boxed chevron={false} title={T('faceIdBypass')} note={T('sgBypassNote')}
+            right={<Switch label={T('faceIdBypass')} value={prefs.faceIdBypass} onChange={(v) => void toggleFaceId('faceIdBypass', v)} />} />
+        </Group>
+        {/* W16's own foot: the one destructive thing, as a button under the card
+            with the sentence that says what it costs beside it. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 }}>
+          <RowButton face="danger" label={T('revokeDevice')}
+            onPress={() => activeHostId && confirmRemove(activeHostId, hosts.find((h) => h.id === activeHostId)?.name ?? '')} />
+          <Text style={{ flex: 1, fontSize: 12, lineHeight: 12 * 1.4, color: t.ink3 }}>{T('sgRevokeNote')}</Text>
         </View>
+
+        <Group label={T('sgNotifications')}>
+          <ListRow first boxed chevron={false} title={T('pushApproval')}
+            right={<Switch label={T('pushApproval')} value={device?.push_approval ?? true}
+              onChange={(v) => void setDevicePrefs({ push_approval: v }).catch(err)} />} />
+          <ListRow boxed chevron={false} title={T('pushDone')}
+            right={<Switch label={T('pushDone')} value={device?.push_done ?? true}
+              onChange={(v) => void setDevicePrefs({ push_done: v }).catch(err)} />} />
+        </Group>
+        <Text style={{ fontSize: 12, lineHeight: 12 * 1.4, color: t.ink3, paddingHorizontal: 4 }}>
+          {pushToken ? T('pushOk') : T('pushNo')}
+        </Text>
 
         {/* Only a development build has anything to say here, and only one
             thing: the design system's own screen, where every part the Divan
             screens are made of is drawn beside the frame it came from. */}
         {__DEV__ && (
-          <>
-            <Label style={{ paddingTop: 12 }}>{T('devSection')}</Label>
-            <Card>
-              <Row label={T('divanParts')} value={T('divanPartsNote')} onPress={() => router.push('/divan-gallery')} last />
-            </Card>
-          </>
+          <Group label={T('sgDev')}>
+            <ListRow first boxed title={T('divanParts')} note={T('divanPartsNote')}
+              onPress={() => router.push('/divan-gallery')} />
+          </Group>
         )}
 
-        {hostInfo && (
+        {!!hostInfo && (
           <>
-            <Label style={{ paddingTop: 12 }}>{T('host')}</Label>
-            <Card>
-              <InfoRow label={T('system')} value={`${hostInfo.os} ${hostInfo.os_version}`} />
-              <InfoRow label={T('daemon')} value={hostInfo.daemon_version} />
-              <InfoRow label={T('uptime')} value={uptime(hostInfo.uptime_s)} />
-              <InfoRow label={T('activeSessions')} value={String(hostInfo.active_sessions)} />
-              <InfoRow label={T('roots')} value={hostInfo.roots.map(tilde).join('\n')} last />
-            </Card>
-            <Text style={{ fontSize: 12, color: c.faint, paddingHorizontal: 4 }}>{T('hostRefresh')}</Text>
+            <Group label={T('sgHost')}>
+              <ListRow first boxed chevron={false} title={T('system')}
+                meta={`${hostInfo.os} ${hostInfo.os_version}`} />
+              <ListRow boxed chevron={false} title={T('daemon')} meta={hostInfo.daemon_version} />
+              <ListRow boxed chevron={false} title={T('uptime')} meta={uptime(hostInfo.uptime_s)} />
+              <ListRow boxed chevron={false} title={T('activeSessions')} meta={String(hostInfo.active_sessions)} />
+              <ListRow boxed chevron={false} title={T('roots')}
+                note={hostInfo.roots.map(tilde).join('\n')} noteMono
+                noteLines={Math.max(1, hostInfo.roots.length)} />
+            </Group>
+            <Text style={{ fontSize: 12, color: t.ink3, paddingHorizontal: 4 }}>{T('hostRefresh')}</Text>
           </>
         )}
-      </View>
-    </LargeTitlePage>
+      </ScrollView>
+    </View>
+  );
+}
+
+/** Where this computer's checkout stands against main, and the one button that
+ *  moves it. Three rows: what it is on, what is in the way or what is waiting,
+ *  and whether it follows main by itself. */
+function Software({ status, busy, onUpdate }: { status: UpdateStatus; busy: boolean; onUpdate: () => void }) {
+  const T = useT();
+  const behind = status.behind ?? 0;
+  // "already up to date" cannot be a blocker here — we are behind.
+  const blocking = (status.blockers ?? []).filter((b) => b !== 'already up to date');
+  const local = `${status.local?.commit ?? '–'}${status.local?.branch ? ` · ${status.local.branch}` : ''}`;
+  const why = blocking.map((b) => (BLOCKER[b] ? T(BLOCKER[b]) : b)).join(' · ');
+  return (
+    <Group label={T('sgSoftware')}>
+      <ListRow first boxed chevron={false} title={T('sgCheckout')} note={local} noteMono
+        meta={behind > 0 ? T('behindN', { n: String(behind) }) : T('upToDate')}
+        tone={behind > 0 ? 'amber' : 'run'}
+        right={behind > 0 && !blocking.length
+          ? <RowButton face="ink" label={busy ? T('updating') : T('updateNow')} busy={busy} onPress={onUpdate} />
+          : undefined} />
+      {behind > 0 && (blocking.length > 0 || !!status.remote?.subject) && (
+        <ListRow boxed chevron={false} icon={blocking.length ? 'block' : 'download'}
+          title={T(blocking.length ? 'sgBlocked' : 'sgWaiting')}
+          note={blocking.length ? T('cantUpdate', { why }) : T('latest', { s: status.remote?.subject ?? '' })}
+          noteLines={3} />
+      )}
+      <ListRow boxed chevron={false} title={T('sgAuto')}
+        note={T('dirtyFiles', { n: String(status.local?.dirty_files ?? 0) })}
+        meta={T(status.auto ? 'autoOn' : 'autoOff')} monoMeta={false} />
+    </Group>
   );
 }

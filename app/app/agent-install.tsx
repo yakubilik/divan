@@ -1,13 +1,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { agentAccountOf, useStore, useT } from '../src/store';
-import { em, useColors } from '../src/theme';
-import { BackBar, Button, Card, Icon, Label, Note, Radio, Spinner, Text } from '../src/components/ui';
+import { useTokens } from '../src/theme';
+import { Button, Group, ListRow, StatusDot } from '../src/components/divan';
+import { PageHead } from '../src/components/machine';
+import { BackRow } from '../src/components/waiting';
+import { AgentGlyph } from '../src/components/agentcard';
+import { Icon } from '../src/components/icon';
+import { Text } from '../src/components/text';
 import { alert } from '../src/components/overlay';
 import { accountOptions } from '../src/components/pickers';
-import { hex6 } from '../src/components/agentcard';
 import type { StoreItem } from '../src/protocol';
 
 /** Installing a skill pack is three things happening in order, so it says which
@@ -15,12 +19,19 @@ import type { StoreItem } from '../src/protocol';
 type Step = 0 | 1 | 2 | 3;
 
 /** One agent from the store, and the install that puts it on this computer.
- *  Reached from the store list — which agent it is arrives as `id`. */
+ *  Reached from the store list — which agent it is arrives as `id`.
+ *
+ *  Drawn out of the design system's parts: the page's own name over the agent's
+ *  badge, W18's card of rows for the account it is written under, and the three
+ *  steps as the marks Divan already has for a state — a green tick behind, a
+ *  running dot on the one happening now, a hollow grey dot ahead. The only
+ *  colour that is not a token is the agent's own, which it brings with it the
+ *  way a project's monogram does. */
 export default function AgentInstall() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const T = useT();
-  const c = useColors();
+  const t = useTokens();
   const { agents, storeSources, storeLoaded, loadStore, installAgent, defaults, conn,
           accounts, loadAccounts, setDefaults } = useStore();
   const [step, setStep] = useState<Step>(0);
@@ -66,75 +77,96 @@ export default function AgentInstall() {
     }
   }
 
-  const color = hex6(item?.color, c.accent);
+  // The store has not answered, or it answered and this agent is not in it —
+  // an address arrived for something nobody can describe. Two different
+  // silences, and neither of them is a page with an unnamed Install on it.
+  if (!item) {
+    return (
+      <View style={{ flex: 1, backgroundColor: t.bg }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + 8, paddingHorizontal: 16,
+                                             paddingBottom: insets.bottom + 10 }}>
+          <BackRow label={T('addAgent')} onPress={() => router.back()} style={{ paddingHorizontal: 4 }} />
+          <PageHead lines={2} title={T(storeLoaded ? 'aiUnknown' : 'addAgent')} style={{ marginTop: 6 }} />
+          <Text style={{ fontSize: 14, lineHeight: 14 * 1.5, color: t.ink2, paddingTop: 8, paddingHorizontal: 4 }}>
+            {T(storeLoaded ? 'aiUnknownBody' : 'asLoading')}
+          </Text>
+        </ScrollView>
+      </View>
+    );
+  }
+
   const lines: { title: string; now: string }[] = [
     { title: T('hStep1'), now: T('hStep1Now') },
     { title: T('hStep2'), now: T('hStep2Now') },
     { title: T('hStep3'), now: T('hStep3') },
   ];
   const finished = have || step === 3;
+  const locked = step > 0 || finished;
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View style={{ paddingTop: insets.top + 4, paddingHorizontal: 10, paddingBottom: 24, alignItems: 'center', gap: 10,
-                       experimental_backgroundImage: `linear-gradient(180deg, ${color}26 0%, ${c.bg} 100%)` } as any}>
-          <View style={{ alignSelf: 'flex-start', marginHorizontal: -10 }}><BackBar onPress={() => router.back()} style={{ paddingTop: 0 }} /></View>
-          <View style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontSize: 30, fontWeight: '600', color: '#FFFFFF' }}>{(item?.label.trim()[0] ?? '?').toUpperCase()}</Text>
+    <View style={{ flex: 1, backgroundColor: t.bg }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + 8, paddingHorizontal: 16,
+                                           paddingBottom: 8 }}>
+        <BackRow label={T('addAgent')} onPress={() => router.back()} style={{ paddingHorizontal: 4 }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 10, paddingHorizontal: 4 }}>
+          <AgentGlyph label={item.label} color={item.color} size={44} radius={12} font={20} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <PageHead title={item.label} style={{ paddingHorizontal: 0 }} />
+            <Text mono numberOfLines={1} style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}>
+              {[item.skills ? T('nSkills', { n: String(item.skills) }) : '', source?.label].filter(Boolean).join(' · ')}
+            </Text>
           </View>
-          <Text style={{ fontSize: 24, fontWeight: '600', letterSpacing: em(24, -0.02) }}>{item?.label ?? ''}</Text>
-          <Text mono style={{ fontSize: 12, color: c.muted }}>
-            {[item?.skills ? T('nSkills', { n: String(item.skills) }) : '', source?.label].filter(Boolean).join(' · ')}
-          </Text>
         </View>
 
-        {(
-          <View style={{ paddingTop: 4, paddingHorizontal: 16, gap: 6 }}>
-            <Label style={{ paddingTop: 10 }}>{T('installInto')}</Label>
-            <Card>
-              {opts.map((o, i) => (
-                <Pressable key={o.id} disabled={step > 0 || finished} onPress={() => void setDefaults({ agentAccountId: o.id || null })}
-                  style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14 },
-                    i < opts.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.line }]}>
-                  <Radio on={(account ?? '') === o.id} />
-                  <Text style={{ fontSize: 15 }}>{o.label}</Text>
-                </Pressable>
-              ))}
-            </Card>
-            <Text style={{ fontSize: 12, color: c.faint, paddingHorizontal: 4 }}>{T('skillsWhere')}</Text>
-            {needsAccount && !finished && (
-              <Note icon="warning" style={{ marginTop: 6 }}>{hasAdded ? T('hermesPickAccount') : T('hermesNeedsAccount')}</Note>
-            )}
-          </View>
+        <Group label={T('installInto')} style={{ marginTop: 16 }}>
+          {opts.map((o, i) => {
+            const on = (account ?? '') === o.id;
+            return (
+              <ListRow key={o.id} first={i === 0} boxed chevron={false} title={o.label}
+                onPress={locked ? undefined : () => void setDefaults({ agentAccountId: o.id || null })}
+                right={on ? <Icon name="check" size={18} color={t.ink} /> : undefined} />
+            );
+          })}
+        </Group>
+        <Text style={{ fontSize: 12, lineHeight: 12 * 1.45, color: t.ink3, paddingTop: 8, paddingHorizontal: 4 }}>
+          {T('skillsWhere')}
+        </Text>
+        {needsAccount && !finished && (
+          <Group style={{ marginTop: 10 }}>
+            <ListRow first boxed chevron={false} wash="amber" icon="warning"
+              title={T(hasAdded ? 'hermesPickAccount' : 'hermesNeedsAccount')} noteLines={3} />
+          </Group>
         )}
 
-        {(step > 0 || finished) && (
-          <View style={{ paddingTop: 18, paddingHorizontal: 20, gap: 10 }}>
+        {locked && (
+          <View style={{ paddingTop: 18, paddingHorizontal: 4, gap: 10 }}>
             {lines.map((l, i) => {
               const n = i + 1;
               const done = finished || step > n;
               const active = !finished && step === n;
               return (
                 <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  {done ? <Icon name="check_circle" size={20} color={c.ok} />
-                    : active ? <View style={{ width: 20, alignItems: 'center' }}><Spinner size={14} /></View>
-                    : <Icon name="radio_button_unchecked" size={18} color={c.faint} />}
-                  <Text style={{ fontSize: 15, fontWeight: n === 3 && done ? '600' : '400', color: done || active ? c.ink : c.faint }}>{done ? l.title : l.now}</Text>
+                  {done ? <Icon name="check" size={16} color={t.run} />
+                    : <View style={{ width: 16, alignItems: 'center' }}>
+                        <StatusDot state={active ? 'running' : 'quiet'} hollow={!active} />
+                      </View>}
+                  <Text style={{ fontSize: 15, fontWeight: n === 3 && done ? '500' : '400',
+                                 color: done || active ? t.ink : t.ink3 }}>{done ? l.title : l.now}</Text>
                 </View>
               );
             })}
           </View>
         )}
 
-        <View style={{ marginTop: 'auto', paddingTop: 24, paddingHorizontal: 16, paddingBottom: insets.bottom + 10 }}>
+        <View style={{ marginTop: 'auto', paddingTop: 24, paddingBottom: insets.bottom + 10 }}>
           {finished ? (
-            <Button title={T('goToAgents')} onPress={() => router.back()} />
+            <Button label={T('goToAgents')} tall onPress={() => router.back()} />
           ) : !hasAdded && needsAccount ? (
-            <Button title={T('goToAccounts')} onPress={() => router.push('/accounts')} />
+            <Button label={T('goToAccounts')} tall onPress={() => router.push('/accounts')} />
           ) : (
-            <Button title={step > 0 ? T('installing') : T('installNamed', { name: item?.label ?? '' })} kind={step > 0 ? 'busy' : 'primary'}
-              onPress={() => void install()} disabled={!item || needsAccount} />
+            <Button label={step > 0 ? T('installing') : T('installNamed', { name: item.label })} tall
+              style={needsAccount || step > 0 ? { opacity: 0.4 } : undefined}
+              onPress={() => { if (!needsAccount && step === 0) void install(); }} />
           )}
         </View>
       </ScrollView>
