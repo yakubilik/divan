@@ -687,6 +687,22 @@ group('the screens the panel already had');
     useFleet.setState(patch);
   };
 
+  // Terminal's wall is a list this browser keeps rather than something the
+  // daemon sends, and a tile's transcript comes from the log store — so a wall
+  // with tiles on it, which is the only thing that draws the phase table, needs
+  // both seeded as well.
+  const { useLogs } = await load('src/lib/timeline.js');
+  const { items: timeline } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
+  const oneLog = (patch) => ({ items: timeline(), seq: 8, busy: false, pending: [],
+                               loading: false, error: null, truncated: false, ...patch });
+  const wallLogs = {
+    'studio/c1': oneLog(), 'studio/c2': oneLog({ busy: true }), 'studio/c3': oneLog(),
+  };
+  Object.assign(useLogs.getInitialState(), { logs: wallLogs });
+  useLogs.setState({ logs: wallLogs });
+  globalThis.localStorage.setItem('rac.terminal.wall',
+    JSON.stringify(['studio/c1', 'studio/c2', 'studio/c3']));
+
   for (const [world, state] of [['alone', nothing], ['paired', paired]]) {
     seed(state);
     for (const [name, [path, exp, props]] of Object.entries(screens)) {
@@ -706,6 +722,10 @@ group('the screens the panel already had');
   ok('every screen still stands up, paired and alone', broken.length === 0, broken.join('\n    '));
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
   ok('…so every colour on every screen exists in both themes', undeclared.length === 0, undeclared.join(', '));
+  ok('the wall draws its tiles, which is the only place the phase colours are',
+    ['needs approval', 'working', 'done'].some((w) => (drawn['screen:Terminal paired'] ?? '').includes(w))
+    && (drawn['screen:Terminal paired'] ?? '').includes('Invoice PDF'),
+    (drawn['screen:Terminal paired'] ?? '').length.toString());
   ok('…and a paired screen is a fuller screen than an empty one',
     (drawn['screen:Settings paired'] ?? '').length > (drawn['screen:Settings alone'] ?? '').length * 1.5,
     `${(drawn['screen:Settings paired'] ?? '').length} vs ${(drawn['screen:Settings alone'] ?? '').length}`);
@@ -721,6 +741,10 @@ group('the panels the screens open over themselves');
   // were the half of "every screen in both themes" that neither check drew.
   const { chat: makeChat, pending: makePending, items: makeItems, shots, groups } =
     await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
+  const { NOW: ticketNow, wall: ticketWall } =
+    await import(pathToFileURL(join(web, 'scripts', 'ticket-fixture.js')).href);
+  const { groupByProject } = await load('src/lib/ustabasi.js');
+  const ticketGroups = groupByProject(ticketWall());
   const chat = makeChat();
   const pending = makePending();
   const items = makeItems();
@@ -773,6 +797,13 @@ group('the panels the screens open over themselves');
     // behind a click on the rail, and the mark the panel dims for a tool that
     // is not installed or an account not signed in.
     AppearanceSection: ['src/screens/Settings.js', 'AppearanceSection', {}],
+    // The ticket queue's wall, whose cards carry the other copy of the phase
+    // table. The screen itself reads the queue over the socket and draws
+    // nothing without one; its wall takes the tickets as a prop, which is what
+    // `test-wall-ui.mjs` does with them too.
+    TicketWall: ['src/screens/Ustabasi.js', 'Wall', {
+      groups: ticketGroups, now: ticketNow, onOpen() {},
+    }],
     ProviderMarkDim: ['src/components/Sidebar.js', 'ProviderMark', { provider: 'codex', dim: true }],
     ProviderMarkLive: ['src/components/Sidebar.js', 'ProviderMark', { provider: 'claude' }],
   };
@@ -795,8 +826,12 @@ group('the panels the screens open over themselves');
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
   ok('…so they are drawn in either theme like everything else',
     undeclared.length === 0, undeclared.join(', '));
-  ok('…and there are thirteen of them, the chat among them with a chat open in it',
-    Object.keys(overlays).length === 13 && (drawn['overlay:ChatOpen'] ?? '').includes('<textarea'));
+  ok('…and there are fourteen of them, the chat among them with a chat open in it',
+    Object.keys(overlays).length === 14 && (drawn['overlay:ChatOpen'] ?? '').includes('<textarea'));
+  ok('the ticket wall draws its cards, which carry the queue’s own phase colours',
+    (drawn['overlay:TicketWall'] ?? '').includes('needs an answer')
+    || (drawn['overlay:TicketWall'] ?? '').includes('stopped'),
+    (drawn['overlay:TicketWall'] ?? '').slice(0, 120));
   ok('the switch this ticket adds is drawn rather than grepped for',
     (drawn['overlay:AppearanceSection'] ?? '').includes('system')
     && (drawn['overlay:AppearanceSection'] ?? '').includes('theme'));

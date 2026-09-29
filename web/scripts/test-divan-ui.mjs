@@ -220,7 +220,7 @@ try {
     ok('…and there were enough of them for that to mean something',
       resolved.painted > 2000, String(resolved.painted));
     ok('every screen and every panel it opens is on the page',
-      resolved.screens.length === 20, resolved.screens.join(', '));
+      resolved.screens.length === 21, resolved.screens.join(', '));
     ok('the page itself is the theme’s own background',
       resolved.body === asRgb(tokens.bg), resolved.body);
     const shadowStray = resolved.shadows

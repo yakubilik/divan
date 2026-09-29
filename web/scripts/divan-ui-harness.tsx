@@ -36,8 +36,11 @@ import { FieldSheet } from '../src/components/FieldSheet';
 import { TicketChat } from '../src/components/TicketChat';
 import { toneFace } from '../src/lib/theme';
 import { useFleet } from '../src/lib/fleet';
+import { useLogs } from '../src/lib/timeline';
+import { Wall } from '../src/screens/Ustabasi';
+import { groupByProject } from '../src/lib/ustabasi';
 import { chat, groups, host, items, pending, shots } from './panel-fixture.js';
-import { ticket } from './ticket-fixture.js';
+import { NOW as TICKET_NOW, ticket, wall as tickets } from './ticket-fixture.js';
 
 const q = new URLSearchParams(location.search);
 const scheme = (q.get('theme') === 'light' ? 'light' : 'dark') as Scheme;
@@ -51,6 +54,24 @@ const scheme = (q.get('theme') === 'light' ? 'light' : 'dark') as Scheme;
 useFleet.setState({
   hosts: { studio: host() as any }, order: ['studio'], focus: 'studio', ready: true,
 });
+
+// The wall is a list this browser keeps, and a tile's transcript comes from the
+// log store: without both, terminal mode draws "the wall is empty" and the
+// phase colours — the tile's outline, the wash behind its head — are drawn
+// nowhere at all.
+const oneLog = (patch: object = {}) => ({
+  items: items(), seq: 8, busy: false, pending: [], loading: false,
+  error: null, truncated: false, ...patch,
+});
+useLogs.setState({
+  logs: {
+    'studio/c1': oneLog(), 'studio/c2': oneLog({ busy: true }), 'studio/c3': oneLog(),
+  } as any,
+});
+try {
+  localStorage.setItem('rac.terminal.wall',
+    JSON.stringify(['studio/c1', 'studio/c2', 'studio/c3']));
+} catch { /* private mode */ }
 
 const noop = () => {};
 
@@ -105,6 +126,8 @@ const OVERLAYS: [string, React.ReactNode][] = [
   ['TicketChat', <TicketChat
     t={ticket() as any} tone={toneFace('needs an answer', 'amber')}
     onClose={noop} onNote={async () => 'ok'} />],
+  // The ticket queue's wall, which carries the other copy of the phase table.
+  ['TicketWall', <Wall groups={groupByProject(tickets() as any)} now={TICKET_NOW} onOpen={noop} />],
 ];
 
 function Page() {
