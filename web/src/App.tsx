@@ -380,18 +380,21 @@ export function App() {
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
       else if (e.key === 'n') { e.preventDefault(); setNewChat({}); }
       else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
-      // The six keys the panel already had open the six pages they always did —
-      // they are pages of the Machine place now, and nothing about where they
-      // land has changed. ⌘0 is the one new key, for the place the panel opens
-      // on; ⌘1 is the fleet panel, which is the first row of that list.
+      // The keys the panel already had open the pages they always did — they
+      // are pages of the Machine place now, and nothing about where they land
+      // has changed. ⌘0 is for the place the panel opens on; ⌘7 and ⌘8 are the
+      // two rows the drawer gained, and ⌘2 still opens a computer's folders,
+      // which is a page under the first row rather than a row of its own.
       else if (e.key === '0') { e.preventDefault(); setView('overview'); }
       else if (e.key === ',') { e.preventDefault(); setView('settings'); }
       else if (e.key === '1') { e.preventDefault(); setView('machines'); }
       else if (e.key === '2') { e.preventDefault(); setView('projects'); }
-      else if (e.key === '3') { e.preventDefault(); setView('agents'); }
+      else if (e.key === '3') { e.preventDefault(); setView('executors'); }
       else if (e.key === '4') { e.preventDefault(); setView('terminal'); }
       else if (e.key === '5') { e.preventDefault(); setView('screen'); }
       else if (e.key === '6') { e.preventDefault(); setView('admin'); }
+      else if (e.key === '7') { e.preventDefault(); setView('accounts'); }
+      else if (e.key === '8') { e.preventDefault(); setView('quota'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

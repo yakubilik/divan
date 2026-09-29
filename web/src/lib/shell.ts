@@ -36,7 +36,10 @@ export const PLACES: Place[] = ['dashboard', 'chat', 'machine'];
 export type View =
   | 'overview'
   | 'chats'
-  | 'machines' | 'agents' | 'terminal' | 'screen' | 'projects' | 'admin' | 'settings';
+  // the eight rows of the Machine drawer, in the order Web15 draws them
+  | 'machines' | 'executors' | 'terminal' | 'screen' | 'accounts' | 'quota' | 'admin' | 'settings'
+  // …and the four pages that are one level under one of those rows
+  | 'projects' | 'agents' | 'update' | 'preferences';
 
 /** What each place is drawn with. The frames use Lucide's `layout-grid`,
  *  `message-circle` and `server`; these are the three paths out of the panel's
@@ -64,25 +67,22 @@ export interface MachineRow {
   shortcut?: string;
 }
 
-/** The Machine list, in the order Web15's own side panel runs in — Machines,
- *  Executors, Terminals, Remote screen, …, Admin, Settings — as far as the
- *  panel has a screen for each.
+/** The Machine list, in the order Web15's own side panel runs in: Machines,
+ *  Executors, Terminals, Remote screen, Accounts & sign-ins, Quota thresholds,
+ *  Admin, Settings. All eight of the frame's rows, and nothing beside them —
+ *  the drawer is the one list of what is about a computer rather than about
+ *  work, and a ninth row would be a ninth thing to forget.
  *
- *  Two of that frame's rows have nothing here to stand behind them: quota
- *  thresholds are not settable from anywhere yet, and accounts & sign-ins are a
- *  section of Settings rather than a page. They arrive with the screens that own
- *  them rather than as rows that lead nowhere. What is here instead is what the
- *  old sidebar had and what was about a computer — and that is all of it: the
- *  fleet panel, the agents, the wall of chats with the ticket queue in it, the
- *  computer's screen, its folders, its update and its settings. */
+ *  Each row's note is the sentence under it: what that page is for, which is
+ *  the half of "findable, forgettable" a list of bare words is missing. */
 export const MACHINE_ROWS: MachineRow[] = [
   {
     view: 'machines', label: 'Machines', icon: 'cpu', shortcut: '⌘1',
     note: 'every paired computer, what it is running and how full its plans are',
   },
   {
-    view: 'agents', label: 'Agents', icon: 'agent', shortcut: '⌘3',
-    note: 'what is installed on this computer, and the store',
+    view: 'executors', label: 'Executors', icon: 'users', shortcut: '⌘3',
+    note: 'who can do work, where they are and what they are on',
   },
   {
     view: 'terminal', label: 'Terminals', icon: 'terminal', shortcut: '⌘4',
@@ -93,18 +93,47 @@ export const MACHINE_ROWS: MachineRow[] = [
     note: "this computer's own screen, watched and driven",
   },
   {
-    view: 'projects', label: 'Folders', icon: 'folder', shortcut: '⌘2',
-    note: 'the repositories on this computer, and what git says about them',
+    view: 'accounts', label: 'Accounts & sign-ins', icon: 'key', shortcut: '⌘7',
+    note: 'what the agents work through, and which of them is expiring',
   },
   {
-    view: 'admin', label: 'Admin', icon: 'download', shortcut: '⌘6',
-    note: 'what is running here, and the update',
+    view: 'quota', label: 'Quota thresholds', icon: 'gauge', shortcut: '⌘8',
+    note: 'when a thin plan is said in amber, and when new work stops being started',
+  },
+  {
+    view: 'admin', label: 'Admin', icon: 'shield', shortcut: '⌘6',
+    note: 'the update, the logs, the keys and what an agent may open',
   },
   {
     view: 'settings', label: 'Settings', icon: 'gear', shortcut: '⌘,',
-    note: 'sign-ins, defaults, tools and the paired computers',
+    note: 'appearance, what a new chat opens with, and the tools',
   },
 ];
+
+/** A page of the Machine place that the frames give no row of its own: it is
+ *  opened from the page above it and is drawn with that row still selected,
+ *  because it is one level deeper and not somewhere else.
+ *
+ *  Four of them, and each is a screen the panel already had. Folders and the
+ *  agents installed on a computer are what the drawer's eight have no row for;
+ *  the update and this computer's preferences are the two the frames draw as
+ *  rows of Admin and of Settings rather than as pages — and they are pages
+ *  here, because what they hold (a pull, a restart, every default a new chat
+ *  takes) does not fit in a row with a button at the end. */
+export interface MachineAside { view: View; under: View; label: string }
+
+export const MACHINE_ASIDE: MachineAside[] = [
+  { view: 'projects', under: 'machines', label: 'Folders' },
+  { view: 'agents', under: 'executors', label: 'Agents on this computer' },
+  { view: 'update', under: 'admin', label: 'Update' },
+  { view: 'preferences', under: 'settings', label: 'This computer' },
+];
+
+/** Which row of the drawer is filled while a page is on screen: its own, or —
+ *  for a page one level deeper — the row it was opened from. */
+export function machineRow(view: View): View {
+  return MACHINE_ASIDE.find((a) => a.view === view)?.under ?? view;
+}
 
 /** Where a place is entered: the page it opens on. The Machine place opens on
  *  the first row of its list, the way Web15 W12 draws it. */
@@ -130,15 +159,19 @@ export const OLD_PANEL: { view: View; was: string }[] = [
   { view: 'machines', was: 'Panel' },
   { view: 'projects', was: 'Projects' },
   { view: 'agents', was: 'Agents' },
-  { view: 'admin', was: 'Admin' },
-  { view: 'settings', was: 'Settings' },
+  // The two the drawer took the names of: the frames' Admin and Settings are
+  // pages of rows, and what the old panel called Admin and Settings — the pull
+  // and the restart, every default a new chat takes — is a page under each.
+  { view: 'update', was: 'Admin' },
+  { view: 'preferences', was: 'Settings' },
 ];
 
 /** …and whether the shell can get to one: it is a place's own page, or a row of
  *  the Machine list. */
 export function reachable(view: View): boolean {
   return PLACES.some((p) => PLACE_VIEW[p] === view)
-    || MACHINE_ROWS.some((r) => r.view === view);
+    || MACHINE_ROWS.some((r) => r.view === view)
+    || MACHINE_ASIDE.some((a) => a.view === view);
 }
 
 // ── the two lights the old sidebar carried ──────────────────────────────────

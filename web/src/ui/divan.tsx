@@ -1342,3 +1342,253 @@ export function Write({
   };
   return lines > 1 ? <textarea {...common} rows={lines} /> : <input {...common} type="text" />;
 }
+
+// ── 23 · a table ────────────────────────────────────────────────────────────
+
+/** One column of it: what the head calls it, and the track it takes. */
+export interface Column {
+  /** Empty for the two columns that have no name — the glyph at the start of a
+   *  row, and the buttons at the end. */
+  label?: string;
+  /** A CSS grid track, in the frames' own numbers: `34px`,
+   *  `minmax(0, 1.4fr)`. */
+  width: string;
+}
+
+export interface TableRow {
+  key: string;
+  /** One per column, in the head's order. */
+  cells: React.ReactNode[];
+  /** The row washed in a state, which is what Web15 W12 does to the machine
+   *  that cannot be reached. */
+  tone?: Tone;
+  wash?: boolean;
+  title?: string;
+  onClick?: () => void;
+}
+
+/** The shape three of the Machine pages are: the machines of Web15 W12, the
+ *  executors of W13 and the sign-ins of W16, which are one construction drawn
+ *  three times.
+ *
+ *  A card with a grid in it. The head is the column names in mono at `400 11px`
+ *  in `ink3` on `padding:10px 18px`, each row `padding:13px 18px` over a
+ *  hairline, and every cell of every row on the same track as the name above it
+ *  — `gap:14px` throughout. The eye reads down a column, which is the whole
+ *  reason a table is a table and not a list of sentences.
+ *
+ *  A table with nothing in it draws its head and says so underneath, rather
+ *  than drawing an empty card: the columns are what the page is about, and they
+ *  are true before anything has answered. */
+export function Table({ columns, rows, empty, style }: {
+  columns: Column[];
+  rows: TableRow[];
+  /** What stands where the rows would be, with nothing to put in them. */
+  empty?: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  const grid: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: columns.map((c) => c.width).join(' '),
+    gap: 14,
+    minWidth: 0,
+  };
+  return (
+    <Card inset={false} style={style}>
+      <div style={{ ...grid, ...mono, padding: '10px 18px', fontSize: 11, color: T.ink3 }}>
+        {columns.map((c, i) => <span key={i} style={{ minWidth: 0 }}>{c.label ?? ''}</span>)}
+      </div>
+      {rows.map((row) => (
+        <Tap key={row.key} onClick={row.onClick} title={row.title} style={{
+          ...grid, alignItems: 'center', padding: '13px 18px', width: '100%',
+          boxSizing: 'border-box', color: T.ink,
+          borderTop: `1px solid ${T.line}`,
+          background: row.wash && row.tone ? toneColours(row.tone).bg : 'transparent',
+        }}>
+          {row.cells.map((cell, i) => (
+            <span key={i} style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {cell}
+            </span>
+          ))}
+        </Tap>
+      ))}
+      {!rows.length && !!empty && (
+        <div style={{
+          padding: '14px 18px', borderTop: `1px solid ${T.line}`,
+          fontSize: 13.5, lineHeight: 1.5, color: T.ink2,
+        }}>{empty}</div>
+      )}
+    </Card>
+  );
+}
+
+/** The mono cell a table says a figure in: a last contact, a count, a share of
+ *  a plan. Grey unless something is wrong with it, which is the one thing a
+ *  column of numbers has to be able to say. */
+export function Cell({ text, tone, style }: {
+  text: React.ReactNode;
+  tone?: Tone;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span style={{
+      ...mono, fontSize: 12.5, fontWeight: tone && tone !== 'ink3' ? 500 : 400,
+      color: tone ? toneColours(tone).fg : T.ink2,
+      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
+      ...style,
+    }}>{text}</span>
+  );
+}
+
+/** What a table puts in its first column: a name in `600 14px` over one grey
+ *  line at `12px`, which is the same two lines `Row` sets and the reason a
+ *  table row and a list row read as the same thing at two widths. */
+export function NameCell({ title, note, mark, style }: {
+  title: React.ReactNode;
+  note?: React.ReactNode;
+  /** A name set in mono: a machine's. */
+  mark?: boolean;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span style={{ minWidth: 0, display: 'block', ...style }}>
+      <span style={{
+        ...(mark ? mono : null), display: 'block', fontSize: 14, fontWeight: 600,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+      }}>{title}</span>
+      {!!note && (
+        <span style={{
+          display: 'block', fontSize: 12, color: T.ink3, marginTop: 2,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{note}</span>
+      )}
+    </span>
+  );
+}
+
+// ── 24 · a slider ───────────────────────────────────────────────────────────
+
+/** The one control in the frames that is neither a button nor a field: the
+ *  thresholds of Web15 W11.
+ *
+ *  A `500 15px` label with the value in mono at `600 15px` at the far end, over
+ *  a `6px` track of `s2` filled to the value in `ink`, with an `18px` knob
+ *  standing on it at `0 0 0 1px var(--line2), 0 2px 6px var(--sh)`. Drawn
+ *  rather than set on an `<input type="range">`, because every pixel of that
+ *  arrangement is a browser-specific pseudo-element and a design system that
+ *  cannot say what its own control looks like is not one.
+ *
+ *  It is a slider to the keyboard and to a reader as well as to a mouse: arrow
+ *  keys move it by one step, Home and End take it to either end, and what it is
+ *  and where it stands are on the element (`role`, `aria-valuenow`,
+ *  `aria-valuetext`). A disabled one is drawn the same and says why in its own
+ *  label — a value that cannot be moved is still a value worth reading. */
+export function Slider({ label, value, onChange, step = 0.01, format, note, style }: {
+  label: React.ReactNode;
+  /** Between 0 and 1. */
+  value: number;
+  /** Absent for a value that is stated rather than set. */
+  onChange?: (value: number) => void;
+  step?: number;
+  /** How the number is said: `20%`. */
+  format: (value: number) => string;
+  /** The grey line under the track, where there is something to say about what
+   *  this one does. */
+  note?: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  const at = Math.min(1, Math.max(0, value));
+  const move = (next: number) => onChange?.(Math.min(1, Math.max(0, next)));
+  const fromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    if (!box.width) return;
+    move(Math.round(((e.clientX - box.left) / box.width) / step) * step);
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, ...style }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+        <span style={{ fontSize: 15, fontWeight: 500, minWidth: 0 }}>{label}</span>
+        <span style={{ ...mono, marginLeft: 'auto', fontSize: 15, fontWeight: 600 }}>
+          {format(at)}
+        </span>
+      </div>
+      <div
+        role="slider" tabIndex={onChange ? 0 : -1}
+        aria-label={typeof label === 'string' ? label : undefined}
+        aria-valuemin={0} aria-valuemax={100}
+        aria-valuenow={Math.round(at * 100)} aria-valuetext={format(at)}
+        aria-disabled={onChange ? undefined : true}
+        onPointerDown={onChange && ((e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          fromPointer(e);
+        })}
+        onPointerMove={onChange && ((e) => { if (e.buttons) fromPointer(e); })}
+        onKeyDown={onChange && ((e) => {
+          const by = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? step
+            : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -step : 0;
+          if (by) { e.preventDefault(); move(at + by); }
+          else if (e.key === 'Home') { e.preventDefault(); move(0); }
+          else if (e.key === 'End') { e.preventDefault(); move(1); }
+        })}
+        style={{
+          position: 'relative', height: 6, borderRadius: 3, background: T.s2,
+          cursor: onChange ? 'pointer' : 'default', touchAction: 'none',
+        }}
+      >
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: `${at * 100}%`,
+          background: T.ink, borderRadius: 3,
+        }} />
+        <div style={{
+          position: 'absolute', left: `calc(${at * 100}% - 9px)`, top: -6,
+          width: 18, height: 18, borderRadius: 9, background: T.s1,
+          boxShadow: `${outline(T.line2)}, 0 2px 6px ${T.sh}`,
+        }} />
+      </div>
+      {!!note && <div style={{ fontSize: 12.5, lineHeight: 1.5, color: T.ink3 }}>{note}</div>}
+    </div>
+  );
+}
+
+// ── 25 · a choice of two or three ───────────────────────────────────────────
+
+/** What a setting is answered with in Web15 W18: a track of `s2` at
+ *  `border-radius:10px; padding:3px` holding options `height:30px; padding:0
+ *  14px; border-radius:8px` at `500 13px`, the chosen one lifted out of it —
+ *  `s1` with `0 1px 2px var(--sh)` under it — and the rest in `ink2`.
+ *
+ *  `Tabs` is the same construction the other way up, on the page rather than on
+ *  a card, and it names a place you go to. This names an answer you give, so it
+ *  is a group of radio buttons to anything that is not looking at it. */
+export function Choice<T extends string>({ value, options, onChange, label, style }: {
+  value: T;
+  options: { key: T; label: string }[];
+  onChange?: (value: T) => void;
+  /** What the group is, for a reader who cannot see the row it is in. */
+  label?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span role="radiogroup" aria-label={label} style={{
+      flex: 'none', display: 'flex', background: T.s2, borderRadius: RADIUS.nav, padding: 3, ...style,
+    }}>
+      {options.map((o) => {
+        const on = o.key === value;
+        return (
+          <button
+            key={o.key} type="button" role="radio" aria-checked={on}
+            onClick={onChange && (() => onChange(o.key))}
+            style={{
+              height: 30, padding: '0 14px', borderRadius: RADIUS.mark, border: 'none',
+              display: 'flex', alignItems: 'center', whiteSpace: 'nowrap',
+              fontSize: 13, fontWeight: 500, font: 'inherit',
+              background: on ? T.s1 : 'transparent', color: on ? T.ink : T.ink2,
+              boxShadow: on ? SHADOW.lift : undefined,
+              cursor: onChange ? 'pointer' : 'default',
+            }}
+          >{o.label}</button>
+        );
+      })}
+    </span>
+  );
+}

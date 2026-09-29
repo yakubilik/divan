@@ -263,6 +263,18 @@ export interface CliAccount {
   logged_in: boolean;
   detail: string;
   is_default: boolean;
+  /** The plan the sign-in is on ("max", "pro", "api", …), where the tool says. */
+  plan?: string;
+  /** A sign-in copied from another computer: signing out here does not sign
+   *  that one out. */
+  imported?: boolean;
+  /** When this sign-in stops working and has to be made again — the moment the
+   *  tool's own refresh token runs out, not the hourly token it renews by
+   *  itself. Absent on a sign-in that does not end (an API key) and on a
+   *  computer whose daemon does not report one, which is not the same as one
+   *  that never expires: `lib/machine.ts` says nothing about a sign-in with no
+   *  date rather than guessing at one. */
+  expires_at?: number | null;
 }
 
 /** One way a tool can be signed in. The computer decides what is on offer;

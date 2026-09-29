@@ -271,6 +271,12 @@ export const P = {
   // the three — `grid` above is the first of them — and these are the two
   // others in this file's own hand.
   chat: 'M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v4l5-4h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z',
+  // The three rows of the Machine drawer the panel had no glyph for. Web15
+  // draws Lucide's `users`, `key-round` and `gauge` over Executors, Accounts &
+  // sign-ins and Quota thresholds; these are the three in this file's own hand.
+  users: 'M9 11a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7zM3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5 5 0 0 1 3 4.6V20',
+  key: 'M14.5 4a5.5 5.5 0 1 1-4.3 8.9L4 19.1V21H2v-2l1-1 5.1-5.1A5.5 5.5 0 0 1 14.5 4zM16 8.5v.1',
+  gauge: 'M12 20a8 8 0 1 1 8-8M12 12l4.5-3.5M12 20a8 8 0 0 0 6.9-4',
   server: 'M4 4h16v6H4zM4 14h16v6H4zM7.5 7v.1M7.5 17v.1',
   sun: 'M12 6.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12 2v2M12 20v2M2 12h2M20 12h2'
      + 'M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4',
