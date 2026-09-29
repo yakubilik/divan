@@ -6,12 +6,14 @@
  *  `t.s1`. So this file stands the parts up for real, in both themes, and looks
  *  at the styles that fall out of them.
  *
- *  It needs no dependency the app does not already have. React and react-dom
- *  are both installed (react-dom is expo-router's), and everything React Native
- *  supplies is stubbed here down to what a style can be read through: a host
- *  element carrying its flattened style as an attribute. The stubs are
- *  deliberately dumb — this is not a simulator, and the only questions it
- *  answers are "did it render" and "in which colours".
+ *  It needs React, and react-dom to render to a string — a devDependency of the
+ *  app for that reason and no other. It was written believing react-dom came in
+ *  with expo-router; it does not, and on a clean `npm ci` the whole judgement
+ *  suite stopped at this require. Everything React Native supplies is stubbed
+ *  here down to what a style can be read through: a host element carrying its
+ *  flattened style as an attribute. The stubs are deliberately dumb — this is not
+ *  a simulator, and the only questions it answers are "did it render" and "in
+ *  which colours".
  *
  *  Used by `test-divan.cjs`; it has nothing to say on its own.
  */

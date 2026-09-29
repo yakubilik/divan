@@ -70,7 +70,8 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 
 cd app && npx tsc --noEmit
 node scripts/test-login-web.cjs                # the sign-in WebView's two judgements
-node scripts/test-ustabasi.cjs                 # the ustabasi wall's, and the i18n table
+node scripts/test-ustabasi.cjs                 # the wall's judgements, the Divan design system,
+                                               # the merged view across machines, and the i18n table
 cd web && npm run build                        # typechecks, then builds into the daemon
 cd web && npm test                             # the wall's figures, and a ticket as a conversation
 
@@ -94,6 +95,18 @@ agent is printing, look at the steps behind the (i), then answer the one that
 is waiting and wait for the queue to re-open it. It needs a device, a paired
 app, a blocked ticket and a running one, so it is not in CI either; the header
 of the file says how to run it.
+
+`node app/scripts/divan-live.cjs studio=host:port:token mini=host:port:token` is
+the same idea for the boards: it asks each paired computer for the real
+`divan.snapshot` over a real socket, through the app's own `callOnce`, and prints
+the merged view — every machine's freshness, the counters, and each product with
+the machines it lives on. A machine given without a token
+(`sleeping=10.255.255.1:8790`) is the case that cannot be staged on a desk: a
+computer that neither refuses the connection nor answers it, which the view has
+to render without, inside the timeout. `--again=20` polls once more after twenty
+seconds, so stopping one of the daemons in between shows the rule the whole
+feature rests on — its cards stay, marked with how long ago they were true, and
+the totals stop claiming to be complete. It needs computers, so it is not in CI.
 
 `node app/scripts/ustabasi-live.cjs` is the cheap half of that flow, without a
 device: it asks the real daemon for the real snapshot and a real run's log, and

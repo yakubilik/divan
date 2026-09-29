@@ -935,6 +935,21 @@ async def wire() -> None:
     check("a machine nobody has run anything on has not run out of anything",
           (empty["spent"], empty["left"], empty["unknown"]), (False, None, True))
 
+    # What a poll costs. The mirror reads statuses; the commit counts are a
+    # `git log` per worktree, one subprocess each, and on a real queue of
+    # twenty-five tickets they were three and a half seconds of a four-second
+    # answer — long enough for the phone's own timeout to give up on a computer
+    # that was answering perfectly well. The wall still asks for them.
+    real_git, asked = u._git, []
+    u._git = lambda *a, **kw: asked.append(a) or None
+    try:
+        await host.h_divan_snapshot(None, {})
+        check("a board poll does not pay for a git log per worktree", asked, [])
+        await host.h_ustabasi_list(None, {})
+        holds("…and the wall, which draws them, still asks", bool(asked), repr(asked))
+    finally:
+        u._git = real_git
+
     check("the coding executor's own state comes along",
           snapshot["queue"]["available"], True)
     holds("including whether it is paused", "paused_until" in snapshot["queue"],

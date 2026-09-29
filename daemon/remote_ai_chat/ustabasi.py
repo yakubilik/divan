@@ -157,7 +157,7 @@ def _json(raw, default):
 
 def _ticket(row: sqlite3.Row, last_event: dict | None,
             starts: list[tuple[float, int]], project: str | None,
-            steps: list[dict]) -> dict:
+            steps: list[dict], git: bool = True) -> dict:
     card = _json(row["card"], {})
     verdict = _json(row["verdict"], None)
     notes = _json(row["notes"], [])
@@ -177,7 +177,10 @@ def _ticket(row: sqlite3.Row, last_event: dict | None,
         "started_at": row["started_at"],
         "round_started_at": _round_start(starts, row["round"], row["started_at"]),
         "finished_at": row["finished_at"],
-        "git": _git(_col(row, "worktree"), _col(row, "base_branch")),
+        # One `git log` per worktree, and that is a subprocess: twenty-five
+        # tickets is seconds, not milliseconds. Whoever is only reading statuses
+        # asks for it to be left out (see `snapshot`).
+        "git": _git(_col(row, "worktree"), _col(row, "base_branch")) if git else None,
         "goal": card.get("goal") or "",
         "done_criteria": card.get("done_criteria") or [],
         "escalation": row["escalation"] or "",
@@ -192,12 +195,20 @@ def _ticket(row: sqlite3.Row, last_event: dict | None,
     }
 
 
-def snapshot(project_for: Callable[[str], str | None] | None = None) -> dict:
+def snapshot(project_for: Callable[[str], str | None] | None = None,
+             git: bool = True) -> dict:
     """Everything the wall draws, in one read.
 
     `project_for` names the project a repository path belongs to — the daemon's
     own path policy answers that, and it is the same answer chat titles get, so
     a ticket and a chat about the same work are filed under the same name.
+
+    `git=False` leaves out what has landed on each branch, which is the only
+    part of this that is not a database read: a `git log` per worktree, one
+    subprocess each, and twenty-five tickets took three and a half seconds of a
+    poll's four. The board's mirror does not draw commits — it reads statuses —
+    so the request behind a dashboard asks without it and comes back in
+    milliseconds. The wall itself still asks for everything.
     """
     if not available():
         return {"available": False, "tickets": [], "queue": {}}
@@ -242,7 +253,7 @@ def snapshot(project_for: Callable[[str], str | None] | None = None) -> dict:
         "tickets": [
             _ticket(r, last.get(r["id"]), starts.get(r["id"], []),
                     _project(r["repo"], project_for),
-                    _steps(by_ticket.get(r["id"], []), r["status"]))
+                    _steps(by_ticket.get(r["id"], []), r["status"]), git)
             for r in rows
         ],
         "queue": {

@@ -2,11 +2,12 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useCallback } from 'react';
-import { client, type ConnStatus } from './ws';
+import { callOnce, client, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
+import { answered, DIVAN_TIMEOUT_MS, silent, type HostDivan } from './divan';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -82,6 +83,21 @@ interface State {
    *  computer running a daemon older than this screen, not a broken one. */
   ustabasiOld: boolean;
   loadUstabasi: () => Promise<void>;
+  /** One Divan snapshot per **paired** computer, keyed by host id — not by the
+   *  active one, and deliberately not part of `perHost()`. Divan's whole subject
+   *  is every machine at once: the project is the context and the machine is a
+   *  detail of a running task, so switching which computer the phone holds a
+   *  socket to must not change what a board or a dashboard shows. It is merged
+   *  into one view by `src/divan.ts`, which is also where staleness is read.
+   *
+   *  An entry is dropped when a machine is unpaired and at no other time: a
+   *  computer that has gone quiet keeps the last answer it gave, marked with how
+   *  old it is, because dropping it would quietly remove five running agents
+   *  from a screen. */
+  divan: Record<string, HostDivan>;
+  /** Ask every paired computer, or one of them, for its Divan snapshot. Gentle
+   *  on purpose — on connect, on foreground, and on a slow timer. */
+  loadDivan: (hostId?: string) => Promise<void>;
   /** Answer a blocked ticket. The queue's own CLI does the work on the
    *  computer; this is the only write the wall can make. */
   noteTicket: (id: number, text: string) => Promise<string>;
@@ -294,6 +310,11 @@ function bufferDelta(cid: string, segment: number, text: string) {
   if (!deltaTimer) deltaTimer = setTimeout(flushDeltas, DELTA_FLUSH_MS);
 }
 
+/** Which machines have a Divan poll out right now. Module-level rather than in
+ *  the store: it is about a request in flight, not about anything a screen
+ *  draws, and a re-render has no business being triggered by it. */
+const divanPolls = new Set<string>();
+
 export const useStore = create<State>((set, get) => {
   // Fast Refresh can re-evaluate this module; make sure only the newest store listens.
   const anyClient = client as any;
@@ -327,6 +348,11 @@ export const useStore = create<State>((set, get) => {
       // so a ticket waiting since last night is visible before anybody goes
       // looking for it. Costs one existence check on a computer with no queue.
       void get().loadUstabasi();
+      // Every paired machine, not just this one: a dashboard is every computer
+      // at once, and a connection is the moment its numbers are most likely to
+      // be hours old. One request each, and a machine that is asleep costs one
+      // timeout rather than a blank screen.
+      void get().loadDivan();
       await get().refresh();
       // Nothing else is caught up here on purpose. Every chat ever opened used
       // to be re-fetched, one await after another, on every single reconnect —
@@ -524,7 +550,7 @@ export const useStore = create<State>((set, get) => {
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
     chats: {}, groups: [], showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
-    ustabasi: null, ustabasiError: null, ustabasiOld: false,
+    ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {},
     chatsLoaded: false, accountsLoaded: false, projectsLoaded: false,
 
     init: async () => {
@@ -579,6 +605,11 @@ export const useStore = create<State>((set, get) => {
       const active = wasActive ? (hosts[0]?.id ?? null) : get().activeHostId;
       const byHost = { ...get().defaultsByHost };
       delete byHost[id];                  // its folders and accounts go with it
+      // …and so does its board. This is the one thing that drops a machine out
+      // of the merged view: unreachable keeps its last answer, unpaired is gone.
+      const divan = { ...get().divan };
+      delete divan[id];
+      set({ divan });
       await persistDefaults(byHost);
       await persistHosts(hosts, active);
       if (wasActive) connectTo(hosts.find((h) => h.id === active) ?? null);
@@ -816,6 +847,39 @@ export const useStore = create<State>((set, get) => {
         // connection that went away mid-poll (which is already on screen).
         set({ ustabasiError: e?.message ?? null, ustabasiOld: oldHost(e) });
       }
+    },
+
+    loadDivan: async (only) => {
+      const targets = get().hosts.filter((h) => !only || h.id === only);
+      // Every machine at once, and each on its own clock: one that is asleep
+      // must not hold up the view, so nothing here awaits another host's turn.
+      await Promise.all(targets.map(async (h) => {
+        // A poll that is still out is the answer to this one. Without this, a
+        // foreground while a timer's requests are in flight is two requests per
+        // machine, and a machine that always times out never stops being asked.
+        if (divanPolls.has(h.id)) return;
+        divanPolls.add(h.id);
+        const put = (d: HostDivan) => set((st) => ({ divan: { ...st.divan, [h.id]: d } }));
+        try {
+          const active = h.id === get().activeHostId;
+          // The live socket for the computer the phone is on, and a socket of
+          // its own for each of the others — the same way a sign-in is read off
+          // a second machine (`callOnce`). A second socket to the computer that
+          // already has one would be a second session for no reason.
+          if (active && get().conn !== 'online') throw new Error(tt('wsNotConnected'));
+          const snap = active
+            ? await client.call<DivanSnapshot>('divan.snapshot', {}, DIVAN_TIMEOUT_MS)
+            : await callOnce<DivanSnapshot>(h.host, h.port, h.token, 'divan.snapshot', {}, DIVAN_TIMEOUT_MS);
+          put(answered(snap, Date.now() / 1000));
+        } catch (e: any) {
+          // The last answer stays, and `silent` is where that rule lives — the
+          // one the merged view is built on, so it is checked where the merge is
+          // rather than written out again here.
+          put(silent(get().divan[h.id], e?.message ?? null, oldHost(e)));
+        } finally {
+          divanPolls.delete(h.id);
+        }
+      }));
     },
 
     readRun: async (id, cursor) => {

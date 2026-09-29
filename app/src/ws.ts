@@ -30,6 +30,11 @@ export type ConnStatus = 'idle' | 'connecting' | 'online' | 'offline' | 'unautho
 const HEARTBEAT_MS = 15000;
 const HEARTBEAT_TIMEOUT_MS = 10000;
 
+/** How long a request is given to be answered when nobody said otherwise. Long,
+ *  because it covers a computer that is busy rather than one that is gone: a
+ *  turn's worth of work can sit in front of an answer. */
+const DEFAULT_TIMEOUT_MS = 30000;
+
 export class RacClient {
   private ws: WebSocket | null = null;
   private rid = 0;
@@ -194,15 +199,21 @@ export class RacClient {
     });
   }
 
-  async call<T = any>(type: string, data: Record<string, any> = {}): Promise<T> {
+  /** A request, on a connection this will wait out a reconnect for.
+   *
+   *  `timeoutMs` is how long the daemon is given to answer. The default is
+   *  generous because most requests are a person waiting for something they
+   *  asked for; a poll that nobody is watching wants a short one, so that a
+   *  computer with the lid shut costs seconds rather than half a minute. */
+  async call<T = any>(type: string, data: Record<string, any> = {}, timeoutMs?: number): Promise<T> {
     await this.ready();
-    return this.request<T>(type, data);
+    return this.request<T>(type, data, timeoutMs);
   }
 
   /** One request on the socket as it stands — no waiting for a reconnect. The
    *  heartbeat needs this: asking ready() to heal the connection first would
    *  defeat the point of asking whether it is healthy. */
-  private request<T = any>(type: string, data: Record<string, any> = {}, timeoutMs = 30000): Promise<T> {
+  private request<T = any>(type: string, data: Record<string, any> = {}, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.reject(connError('wsNotConnected'));
     const id = ++this.rid;
@@ -236,7 +247,8 @@ export const client = new RacClient();
  *  Used to read a sign-in off a second machine without dropping the live
  *  connection. The socket is closed as soon as the reply lands. */
 export function callOnce<T = any>(host: string, port: number, token: string,
-                                  type: string, data: Record<string, any> = {}): Promise<T> {
+                                  type: string, data: Record<string, any> = {},
+                                  timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let ws: WebSocket;
     try {
@@ -253,7 +265,10 @@ export function callOnce<T = any>(host: string, port: number, token: string,
       clearTimeout(timer);
       fn();
     };
-    const timer = setTimeout(() => finish(() => reject(connError('wsTimeout'))), 30000);
+    // The whole round trip, not just the answer: a computer that is asleep
+    // never finishes the handshake, so a timeout on the reply alone would wait
+    // for ever on the one case this exists to survive.
+    const timer = setTimeout(() => finish(() => reject(connError('wsTimeout'))), timeoutMs);
     ws.onopen = () => { try { ws.send(JSON.stringify({ id: 1, type, data })); } catch {} };
     ws.onerror = () => {};
     ws.onclose = (e: any) => finish(() => reject(

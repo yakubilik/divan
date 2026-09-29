@@ -1593,7 +1593,7 @@ class Server:
         """
         return await self._mirrored_queue()
 
-    async def _mirrored_queue(self) -> dict:
+    async def _mirrored_queue(self, git: bool = True) -> dict:
         """The queue's snapshot, with the board brought up to date from it.
 
         Reality on a Divan card — running, asking, failed, verified — is written
@@ -1602,8 +1602,12 @@ class Server:
         `ustabasi.list` for the wall and `divan.snapshot` for the boards. A
         dashboard that only ever polled the board would show a worker that
         finished in the night as still running.
+
+        `git=False` is for the caller that only needs the statuses written: what
+        has landed on each branch is a subprocess per worktree, and the mirror
+        does not draw commits.
         """
-        snap = await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for)
+        snap = await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for, git)
         try:
             await asyncio.to_thread(self.db.divan.sync_ustabasi, snap,
                                     self.cfg.host_name, self.policy.project_for)
@@ -1680,7 +1684,11 @@ class Server:
         The mirror runs first. A dashboard that read the board without it would
         draw a worker that finished at four in the morning as still running.
         """
-        queue = await self._mirrored_queue()
+        # Without the commit counts: the mirror writes statuses, nothing in this
+        # answer draws a branch, and a `git log` per worktree is what turned it
+        # from milliseconds into seconds — long enough for a phone's own timeout
+        # to give up on a computer that was answering perfectly well.
+        queue = await self._mirrored_queue(git=False)
         board = await asyncio.to_thread(self.db.divan.snapshot, self.cfg.host_name)
         return {**board, "at": time.time(),
                 "os": platform.system(), "os_version": _os_version(),
