@@ -1,4 +1,4 @@
-"""CLI: serve | pair | devices | revoke | status"""
+"""CLI: serve | pair | web | project | devices | revoke | status"""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +8,7 @@ import logging
 import os
 from pathlib import Path
 import sys
+import time
 
 from .config import CONFIG_DIR, Config, LOG_DIR, DEFAULT_PORT
 
@@ -182,6 +183,165 @@ def cmd_revoke(args: argparse.Namespace) -> None:
     print("revoked" if cfg.revoke(args.device_id) else "no such device")
 
 
+# ── products, from a shell on the computer they are run from ─────────────────
+#
+# Divan has no form for making a project and is not getting one. A product is
+# something a person decides exists, and the way that is said is a sentence in
+# the app's chat — so the thing that has to be able to make one is the agent in
+# that chat, which has this shell and no screen at all.
+#
+# So this is that entrance, and it goes the way the phone goes: the
+# `divan.project.*` requests over the daemon's own socket, through the handlers
+# that fence a repository path and refuse a field nobody has. Writing to the
+# database directly would skip both, on the one table whose rows decide where an
+# autonomous worker gets a shell.
+
+#: How long the daemon is given to answer. Generous for a call over loopback,
+#: because the first connection to a daemon that has just started costs it a
+#: probe of every CLI it can find (seconds, once) — and a request that gave up
+#: early would be a product created by a command that printed a timeout, which
+#: the next attempt would then refuse as a duplicate.
+_ANSWER_TIMEOUT_S = 120
+
+
+async def _protocol(cfg: Config, typ: str, data: dict) -> dict:
+    """One request to the daemon on this computer, as a paired device.
+
+    The token is minted for the call and revoked after it, the way `web` mints
+    one for a browser: a command that leaves a permanent key in the device list
+    is a key nobody knows is there.
+    """
+    import websockets
+    dev, token = cfg.add_device("cli")
+    try:
+        uri = f"ws://127.0.0.1:{cfg.port}/ws?token={token}"
+        async with websockets.connect(uri, max_size=8 * 1024 * 1024) as ws:
+            await ws.send(json.dumps({"id": 1, "type": typ, "data": data}))
+            while True:
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), _ANSWER_TIMEOUT_S)
+                except asyncio.TimeoutError:
+                    raise SystemExit(
+                        "the daemon did not answer. It may have done the work"
+                        " anyway — check `remote-ai-chat project list` before"
+                        " trying again.")
+                msg = json.loads(raw)
+                if msg.get("id") != 1:
+                    # Every connection opens with a `host.status` event.
+                    continue
+                if msg.get("type") == "error":
+                    d = msg.get("data") or {}
+                    raise SystemExit(f"{d.get('code') or 'refused'}: {d.get('message')}")
+                return msg.get("data") or {}
+    finally:
+        cfg.revoke(dev.id)
+
+
+#: The flags, and the fields they are. Kept as a table because the mapping is
+#: the whole of this command: `--started` is `started_at`, and a flag nobody
+#: passed is not a field set to nothing.
+PROJECT_FLAGS = (("name", "name"), ("slug", "slug"), ("kind", "kind"),
+                 ("purpose", "purpose"), ("started", "started_at"), ("sort", "sort"))
+
+
+def _project_fields(args: argparse.Namespace) -> dict:
+    """The fields this invocation actually gives.
+
+    Only what was passed. `--purpose ""` clears a purpose and no `--purpose` at
+    all leaves it alone, and the request tells those apart by whether the key is
+    in the object — which is also why `--archive` and `--unarchive` are two
+    flags and not one with a value.
+    """
+    out: dict = {}
+    for flag, field in PROJECT_FLAGS:
+        value = getattr(args, flag, None)
+        if value is not None:
+            out[field] = value
+    if getattr(args, "repo", None) is not None:
+        out["repos"] = list(args.repo)
+    if getattr(args, "branch", None):
+        out["branches"] = list(args.branch)
+    if getattr(args, "archive", False):
+        out["archived"] = True
+    if getattr(args, "unarchive", False):
+        out["archived"] = False
+    return out
+
+
+def _project_line(p: dict) -> str:
+    """One product, on one line: what it is called, what it is, where it stands."""
+    kind = f" ({p['kind']})" if p.get("kind") else ""
+    since = (" since " + time.strftime("%Y-%m-%d", time.localtime(p["started_at"]))
+             if p.get("started_at") else "")
+    where = p.get("summary_line") or ""
+    return (f"{p.get('name', '')}{kind}  [{p.get('slug', '')}]{since}"
+            + (f"  — {where}" if where else ""))
+
+
+def cmd_project(args: argparse.Namespace) -> None:
+    cfg = Config.load()
+    if not _already_serving(cfg.port):
+        print(f"Nothing answers on port {cfg.port}. Start it first: remote-ai-chat serve",
+              file=sys.stderr)
+        sys.exit(2)
+    fields = _project_fields(args)
+    if args.what == "list":
+        out = asyncio.run(_protocol(cfg, "divan.projects", {}))
+        if args.json:
+            print(json.dumps(out, indent=2))
+            return
+        for p in out.get("projects") or []:
+            print(_project_line(p))
+            for repo in p.get("repos") or []:
+                print(f"    {repo}")
+        held = sum(((out.get("unfiled") or {}).get("counts") or {}).values())
+        if held:
+            print(f"\n{held} card(s) no product has claimed yet — `unfiled`.")
+        return
+    if args.what == "create":
+        fields["name"] = args.name
+        out = asyncio.run(_protocol(cfg, "divan.project.create", fields))
+    else:
+        fields["project"] = args.project
+        out = asyncio.run(_protocol(cfg, "divan.project.update", fields))
+    print(json.dumps(out, indent=2) if args.json else _project_line(out))
+
+
+def _project_parser(sub) -> None:
+    p = sub.add_parser("project", help="create or edit a product on the board")
+    what = p.add_subparsers(dest="what", required=True)
+
+    def shared(sp, creating: bool) -> None:
+        sp.add_argument("--repo", action="append",
+                        help="a repository this product owns; repeatable, and on"
+                             " `update` it replaces the list")
+        sp.add_argument("--kind", help="app, web, library, client work, research…")
+        sp.add_argument("--purpose", help="what it is for, in a sentence or two")
+        sp.add_argument("--started", help="when the product began: 2026-03-01")
+        sp.add_argument("--json", action="store_true")
+        if creating:
+            sp.add_argument("--branch", action="append",
+                            help="a branch beyond the default five; repeatable")
+            sp.add_argument("--slug", help="the key every machine matches it by,"
+                                          " when that is not the name")
+        else:
+            sp.add_argument("--name", help="what a screen calls it; the key stays put")
+            sp.add_argument("--sort", type=int)
+            sp.add_argument("--archive", action="store_true",
+                            help="take it off the board without deleting it")
+            sp.add_argument("--unarchive", action="store_true")
+
+    ls = what.add_parser("list", help="every product, and what is unclaimed")
+    ls.add_argument("--json", action="store_true")
+    create = what.add_parser("create", help="a product. The only thing that makes one")
+    create.add_argument("name")
+    shared(create, True)
+    update = what.add_parser("update", help="change one, by id, key or name")
+    update.add_argument("project")
+    shared(update, False)
+    p.set_defaults(fn=cmd_project)
+
+
 PLIST_LABEL = "com.remote-ai-chat.daemon"
 
 
@@ -339,6 +499,7 @@ def main() -> None:
     s = sub.add_parser("web", help="open the desktop panel in a browser")
     s.add_argument("--name", default="Panel"); s.add_argument("--no-open", action="store_true")
     s.set_defaults(fn=cmd_web)
+    _project_parser(sub)
     s = sub.add_parser("devices"); s.set_defaults(fn=cmd_devices)
     s = sub.add_parser("revoke"); s.add_argument("device_id"); s.set_defaults(fn=cmd_revoke)
     s = sub.add_parser("status"); s.set_defaults(fn=cmd_status)

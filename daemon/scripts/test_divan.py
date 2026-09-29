@@ -1434,6 +1434,52 @@ async def wire() -> None:
 
 asyncio.run(wire())
 
+# ── 14 · the entrance an agent in a chat actually has ────────────────────────
+#
+# The requests above are reached from the phone over a socket. The thing that has
+# to be able to make a product is the agent in the app's chat, which has a shell
+# on this computer and no screen — so `remote-ai-chat project` is that entrance,
+# and it speaks the same two requests over the daemon's own socket rather than
+# writing to the database behind it. What is checked here is the part that can be
+# wrong quietly: which flags become which fields, and that a flag nobody passed
+# is not a field set to nothing.
+
+from remote_ai_chat.__main__ import _project_fields, _project_line   # noqa: E402
+
+
+def flags(**kw) -> dict:
+    given = {"name": None, "slug": None, "kind": None, "purpose": None,
+             "started": None, "sort": None, "repo": None, "branch": None,
+             "archive": False, "unarchive": False}
+    return _project_fields(types.SimpleNamespace(**{**given, **kw}))
+
+
+check("a command that gives nothing sends nothing", flags(), {})
+check("every field a product has can be given",
+      flags(name="Divan", slug="remote-ai-chat", kind="app", purpose="The board.",
+            started="2026-09-28", sort=2, repo=["/w/rac"], branch=["finance"]),
+      {"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+       "purpose": "The board.", "started_at": "2026-09-28", "sort": 2,
+       "repos": ["/w/rac"], "branches": ["finance"]})
+check("a repeated repository is the list", flags(repo=["/a", "/b"])["repos"], ["/a", "/b"])
+check("and an empty one is an emptied list, not an absent field",
+      flags(repo=[]), {"repos": []})
+check("a purpose can be cleared, which is not the same as not saying",
+      flags(purpose=""), {"purpose": ""})
+check("taking a product off the board is one flag", flags(archive=True),
+      {"archived": True})
+check("and putting it back is the other", flags(unarchive=True), {"archived": False})
+holds("a product reads back as one line saying what it is and where it stands",
+      _project_line({"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+                     "started_at": 1_759_000_000, "summary_line": "2 running"})
+      == "Divan (app)  [remote-ai-chat] since "
+      + time.strftime("%Y-%m-%d", time.localtime(1_759_000_000)) + "  — 2 running",
+      _project_line({"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+                     "started_at": 1_759_000_000, "summary_line": "2 running"}))
+check("and a product with none of it still reads",
+      _project_line({"name": "an old product", "slug": "an-old-product"}),
+      "an old product  [an-old-product]")
+
 if fails:
     print(f"FAIL ({len(fails)})")
     for f in fails:
