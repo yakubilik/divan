@@ -208,6 +208,11 @@ export interface MergedProject {
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
   machines: string[];
+  /** Each machine's own id for this product, by host id. Two computers are two
+   *  databases and give the same product two ids, so this is the only way to
+   *  write to one of them — a card is created on one machine (`src/compose.ts`)
+   *  and `project_id` there means nothing on the other. */
+  ids: Record<string, string>;
   branches: MergedBranch[];
   counts: Partial<Record<DivanColumn, number>>;
   running: number;
@@ -434,6 +439,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           repos: [...(p.repos || [])],
           hosts: [h.id],
           machines: [h.machine],
+          ids: { [h.id]: p.id },
           branches: (p.branches || []).map((b) => ({
             ...b, cards: { ...(b.cards || {}) }, machines: work(b) ? [h.machine] : [] })),
           counts: { ...(p.counts || {}) },
@@ -463,6 +469,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
       found.repos = [...new Set([...found.repos, ...(p.repos || [])])].sort();
       found.hosts = [...new Set([...found.hosts, h.id])];
       found.machines = [...new Set([...found.machines, h.machine])];
+      found.ids[h.id] = p.id;
       found.running += p.running || 0;
       found.waiting += p.waiting || 0;
       for (const col of COLUMNS) {

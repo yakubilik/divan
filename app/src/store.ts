@@ -9,6 +9,7 @@ import type { Agent, Catalog, Chat, CliAccount, DivanCardDetail, DivanColumn, Di
 import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, silent, type HostDivan } from './divan';
 import { missed, opening, took, type Open, type Say } from './card';
+import type { Filing } from './compose';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -129,6 +130,14 @@ interface State {
    *  running on it and no explanation. */
   moveCard: (what: { card: string; host: string; column: DivanColumn; position?: number | null })
     => Promise<Moved>;
+  /** Write a card down on one computer's board (Mobile8 S9).
+   *
+   *  The other board write, and the quiet one: a card filed into Ice Box or
+   *  Queued starts nothing. Which machine it goes to and what it carries are
+   *  `src/compose.ts`'s; what is here is the pair of requests it takes — the
+   *  card, and then that machine's board again, so the board the phone lands on
+   *  already has it. */
+  createCard: (what: { host: string; card: Filing }) => Promise<void>;
   /** A page of what the agent on a ticket has printed. Nothing of it is kept
    *  here: the log is a river and only the page being read is worth holding,
    *  which is the screen's business and not the store's. */
@@ -1027,6 +1036,16 @@ export const useStore = create<State>((set, get) => {
                              { card_id: what.card, column: what.column, ...at }) as Moved;
       await get().loadDivan(what.host);
       return { error: r?.error || '' };
+    },
+
+    createCard: async ({ host, card }) => {
+      await onHost(host, 'divan.card.create', card);
+      // The second half of filing, and the whole of "it appears on the board
+      // without a refresh": the board Divan draws is merged out of the last
+      // answer each machine gave, and the next poll is a minute away. Only the
+      // machine that took the card — asking the other three would be three
+      // requests about boards that did not change.
+      await get().loadDivan(host);
     },
 
     noteTicket: async (id, text) => {
