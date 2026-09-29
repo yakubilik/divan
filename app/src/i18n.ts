@@ -396,6 +396,20 @@ const en = {
   prNewFoot: 'Nothing starts by itself: a card runs when it is moved into In Progress.',
   bnOpen: 'open', bnProgress: 'in progress', bnDone: 'done',
   bnAt: '{time}', bnYesterday: 'yesterday', bnDaysOld: '{n} days old',
+  // …and its board (src/board.ts): the four columns, and the mark on a card.
+  // The column is where a person put the card; the mark is what the agent on it
+  // is actually doing, which is why "Stuck" carries how long and "Done" says
+  // which month it is holding rather than how many are in the archive.
+  bdBoard: 'Board',
+  bdIceBox: 'Ice Box', bdQueued: 'Queued', bdInProgress: 'In Progress', bdDone: 'Done',
+  bdAsking: 'Asking you', bdYours: 'Waiting on you',
+  bdStuck: 'Stuck {d}', bdStuckBare: 'Stuck',
+  bdFailed: 'Failed {d}', bdFailedBare: 'Failed',
+  bdRunning: 'Running {d}', bdRunningBare: 'Running',
+  bdReviewed: 'Passed review', bdCancelled: 'Cancelled',
+  bdNothing: 'Nothing in this column.',
+  bdDoneNote: 'The last month of finished work, out of {n}.',
+  bdDoneNone: 'Nothing finished in the last month is on this phone. {n} in all.',
   chatPlacePick: 'Pick a folder and a model for this conversation.',
   mTitle: 'Machine', mSubtitle: 'Infrastructure. Nothing here needs you.',
   mMachines: 'Machines', mMachinesNote: '{n} paired',

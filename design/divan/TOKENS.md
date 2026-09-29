@@ -156,8 +156,10 @@ colours clear 3.9:1 everywhere, and the one pair the frames spell out —
 
 ## Form
 
-Radii, all of them off the frames: **8** a mark, an executor's square · **9** a
-list row's icon well · **11** a button · **12** a board column tab · **13** the
+Radii, all of them off the frames: **7** a state chip on a board card · **8** a
+mark, an executor's square · **9** a list row's icon well, and the selected
+segment inside its track · **11** a button · **12** a board column tab, and that
+track · **13** the
 taller button of an empty state · **14** a counter tile, a ticket card · **16** a
 card · **22** a sheet · **999** a pill, the tab bar's icon well.
 
@@ -193,8 +195,8 @@ without a person moving something.
 - `app/src/tokens.ts` — the sixteen, the ramps, the radii, the heights, and the
   `Palette` derived from them.
 - `app/src/components/divan.tsx` — the parts: card, list row, pill, button, tab
-  bar, column tabs, status dot, executor badge, monogram, counter, section
-  header, empty state, sheet. Each names the frame it was measured off.
+  bar, column tabs, segments, status dot, executor badge, monogram, counter,
+  section header, empty state, sheet. Each names the frame it was measured off.
 - `app/app/divan-gallery.tsx` — all of them on one screen, in either theme,
   each beside the name of its frame. Development builds only, reachable from
   Settings.
