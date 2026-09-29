@@ -121,12 +121,21 @@ const STUBS = {
 };
 
 /** The app's own store reaches the keychain, the socket and the notification
- *  centre the moment it is imported, none of which exists here. Nothing being
- *  rendered reads from it — the parts take props — so it is answered with the
- *  two things a component can ask it for. */
+ *  centre the moment it is imported, none of which exists here. The parts take
+ *  props and read nothing from it; a whole screen does, so it is answered out
+ *  of a plain object a check can fill in first (`store.set`). Left empty, every
+ *  selector answers `undefined`, which is what it did before there was one. */
+const STATE = {};
 const STORE = {
   useT: () => (key) => key,
-  useStore: Object.assign(() => undefined, { getState: () => ({}), setState: () => {} }),
+  useStore: Object.assign((selector) => (typeof selector === 'function' ? selector(STATE) : undefined),
+    { getState: () => STATE, setState: (patch) => Object.assign(STATE, patch) }),
+};
+
+/** What a screen being rendered will find in the store. */
+const store = {
+  set(patch) { Object.assign(STATE, patch); },
+  reset() { for (const k of Object.keys(STATE)) delete STATE[k]; },
 };
 
 const realLoad = Module._load;
@@ -170,4 +179,4 @@ function paint(markup) {
   return out;
 }
 
-module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten };
+module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten, store };

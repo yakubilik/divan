@@ -308,6 +308,55 @@ checks.push(
     /if \(router\.canGoBack\(\)\) router\.back\(\); else router\.replace\(HOME\);/.test(conversation)],
 );
 
+// ── 5b · the two places that are made of data, standing up ─────────────────
+//
+// Both of them are drawn out of what the machines answered, and the first state
+// either will ever be in is "nothing has answered yet" — which is exactly the
+// state that throws if a screen assumes a project, a machine or a queue. So
+// they are rendered for real, twice: once against a phone that has heard
+// nothing and once against the fixture above.
+
+{
+  R.store.reset();
+  R.store.set({ hosts: [], divan: {}, loadDivan() {}, conn: 'online', ustabasi: null,
+                ustabasiOld: false, loadUstabasi() {} });
+  const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+  const Machine = require(path.join(root, 'app/machine.tsx')).default;
+  const empty = R.render('dark', h(Dashboard));
+  const machineScreen = R.render('light', h(Machine));
+  checks.push(
+    ['a phone that has heard nothing still draws the Dashboard, and says so',
+      empty.includes('dashEmpty') && empty.includes('tabDashboard')],
+    ['\u2026with the project bar over it either way', empty.includes('allProjects')],
+    ['\u2026and no ticket queue on it, because no computer said it had one',
+      !empty.includes('dashQueueNote')],
+    ['the Machine list draws every row it names, under the frame\u2019s own two lines',
+      machineScreen.includes('mTitle') && machineScreen.includes('mSubtitle')
+      && rows.every((r) => machineScreen.includes(r.title))],
+  );
+
+  // …and the same two screens against four products on two machines, one of
+  // which has been quiet for two hours, with a red ticket in the queue.
+  R.store.set({
+    hosts: [{ id: 'h1', name: 'studio' }, { id: 'h2', name: 'mini' }],
+    divan: { h1: STUDIO.state, h2: MINI.state },
+    ustabasi: { available: true, tickets: [{ status: 'blocked' }, { status: 'running' }] },
+  });
+  const full = R.render('dark', h(Dashboard));
+  const machineFull = R.render('light', h(Machine));
+  checks.push(
+    ['the Dashboard names every product once the machines have answered',
+      ['Quire', 'Hush', 'Kanji Daily', 'The Long Walk'].every((n) => full.includes(n))],
+    ['\u2026and carries the queue with the count that needs a person',
+      full.includes('dashQueueNote') && full.includes('queueRed')],
+    ['\u2026and a machine that has gone quiet is not drawn as a machine that is working',
+      full.includes('dashQuiet')],
+    ['the Machine list counts the machines it is a list of',
+      machineFull.includes('mMachinesNote')],
+  );
+  R.store.reset();
+}
+
 // ── 6 · which place a route is in ───────────────────────────────────────────
 
 checks.push(

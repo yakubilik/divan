@@ -38,7 +38,9 @@ export default function Dashboard() {
   return (
     <Shell place="dashboard" badge={view.totals.needsYou}>
       <ProjectBar chips={bar} onSelect={setSelected} />
-      <ScrollView contentContainerStyle={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
+      {/* `flexGrow` so that the empty state, which centres itself in what it
+          is given, has the page to centre itself in. */}
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
         <SectionHeader title={picked ? picked.name : T('overview')}
           right={picked ? picked.machines.join(' · ') : `${T('dashProjects', { n: view.projects.length })} · ${today}`} />
         {picked ? <Project project={picked} /> : (
