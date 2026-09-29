@@ -133,9 +133,23 @@ function Nothing({ view }: { view: DivanView }) {
     );
   }
   if (!answered) {
+    // A machine that has not answered *yet* is not a machine that would not:
+    // nothing has failed until something says why, and the first poll of a
+    // panel that has just opened is still out.
+    const asking = view.hosts.every((h) => !h.error);
+    if (asking) {
+      return (
+        <EmptyState
+          title="Asking every computer…"
+          body="The board is read from each of them at once. This is the moment before the
+                first one answers."
+          foot={view.hosts.map((h) => h.machine).join(' · ')}
+        />
+      );
+    }
     return (
       <EmptyState
-        title="No machine has answered yet"
+        title="No machine has answered"
         body={older.length
           ? 'The daemon on the other end is older than this panel and has never heard of the board.'
           : 'Nothing has come back from the computers this browser is paired with.'}

@@ -477,7 +477,11 @@ group('the page is scoped, not a second screen');
       () => '8m').startsWith('2 machines have been quiet — mini for 8m · air for 8m.'));
   ok('…and a page with nothing on it is a sentence rather than a blank',
     renderToStaticMarkup(h(OverviewUI.Overview, { view: view('never'), project: null, onProject() {} }))
-      .includes('No machine has answered yet'));
+      .includes('No machine has answered'));
+  ok('…while the moment before the first answer says that instead of saying nothing came',
+    renderToStaticMarkup(h(OverviewUI.Overview, {
+      view: D.merge([entry('studio', 'studio', D.NO_DIVAN)], NOW), project: null, onProject() {},
+    })).includes('Asking every computer'));
   ok('…as is a fleet that answered with an empty board',
     renderToStaticMarkup(h(OverviewUI.Overview, {
       view: D.merge([entry('laptop', 'laptop', D.answered(fixture.empty(), NOW))], NOW),
