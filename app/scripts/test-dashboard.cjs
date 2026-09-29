@@ -481,7 +481,7 @@ const MIXED = [
     ['a machine that has never answered at all has no clock to print, and prints none',
       D.freshness({ ...kanji, lastSeen: null }) === null],
     ['the line worth reading on a card is the worst card’s own',
-      D.latest(quire) === 'Coder stuck on Safari login' && D.latest(walk) === ''],
+      D.latest(quire.cards) === 'Coder stuck on Safari login' && D.latest(walk.cards) === ''],
   );
 }
 

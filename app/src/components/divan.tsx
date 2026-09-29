@@ -68,11 +68,19 @@ export function Tap({ onPress, onLongPress, style, children }: {
  *  agent roster of Mobile1 V2 (`padding:4px 14px`, each row `9px 0` over a
  *  `line`) and the system line of Mobile1 V1, which is one row 34 pt tall. The
  *  surface, the corner and the ring are the card's; the spacing inside it
- *  belongs to the rows, and a card that kept its own would push them apart. */
-export function Card({ ring = 'line', lifted, bar, radius = RADIUS.card, inset = true,
+ *  belongs to the rows, and a card that kept its own would push them apart.
+ *
+ *  `hollow` is the one card the frames draw with no surface at all: Mobile7 S5's
+ *  block about a product nothing has touched in weeks, `border-radius:16px;
+ *  padding:16px; box-shadow:inset 0 0 0 1px var(--line2)` over the page itself.
+ *  It is a statement rather than a thing lying on the page, and the empty middle
+ *  is what says so. */
+export function Card({ ring = 'line', lifted, hollow, bar, radius = RADIUS.card, inset = true,
                        onPress, onLongPress, style, children }: {
   ring?: 'line' | 'amber' | 'red' | 'run' | 'none';
   lifted?: boolean;
+  /** No surface, and the emphasised line around it (Mobile7 S5). */
+  hollow?: boolean;
   bar?: number | null;
   radius?: number;
   /** The card's own padding. False where its children carry it. */
@@ -87,10 +95,11 @@ export function Card({ ring = 'line', lifted, bar, radius = RADIUS.card, inset =
     : ring === 'amber' ? t.amberRing
     : ring === 'red' ? t.red
     : ring === 'run' ? t.run
-    : lifted ? t.line2 : t.line;
+    : lifted || hollow ? t.line2 : t.line;
   return (
     <Tap onPress={onPress} onLongPress={onLongPress}
-      style={[{ backgroundColor: lifted ? t.sLift : t.s1, borderRadius: radius, overflow: 'hidden',
+      style={[{ backgroundColor: hollow ? 'transparent' : lifted ? t.sLift : t.s1,
+                borderRadius: radius, overflow: 'hidden',
                 borderWidth: 1, borderColor: border },
               lifted && { boxShadow: shadows(t).pop }, style]}>
       {bar != null && (
