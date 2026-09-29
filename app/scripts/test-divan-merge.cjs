@@ -446,6 +446,28 @@ checks.push(
     [...store.matchAll(/'(divan\.[a-z.]+)'/g)].map((m) => m[1]).join(',') === 'divan.snapshot,divan.snapshot'],
 );
 
+// ── and the rule every Divan screen after this one is held to ──────────────
+//
+// Six of the eleven screens are still to be written, and the way this gets lost
+// is one of them reaching for `activeHostId` because that is how every screen
+// before Divan worked. So the rule is a check rather than a paragraph: a file
+// that draws the merged view does not read which computer the phone is
+// connected to. The store may, and only to decide which socket carries a
+// request — the active machine is a transport, not a scope.
+const walk = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes: true })
+  .flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+const readers = [...walk('app'), ...walk('src')]
+  .filter((f) => /\.tsx?$/.test(f))
+  // `src/components/divan.tsx` is the design system and a different module; the
+  // merged view is `src/divan.ts` and is imported as a path ending in `/divan`.
+  .filter((f) => /from '(?:\.{1,2}\/)+(?:src\/)?divan'/.test(src(f)))
+  .filter((f) => f !== path.join('src', 'store.ts'));
+checks.push(
+  ['something in the app draws from the merged view', readers.length > 0],
+  [`no screen that draws it reads the active computer (${readers.join(', ')})`,
+    readers.every((f) => !/activeHostId/.test(src(f)))],
+);
+
 const hook = src('src/queue.ts');
 const ws = src('src/ws.ts');
 checks.push(
