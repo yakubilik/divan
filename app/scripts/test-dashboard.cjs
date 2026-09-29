@@ -356,6 +356,37 @@ const SPENT = [paired('h1', 'studio', { reachable: true, at: NOW - 10,
     agents: [agent('c3', { project: 'Quire-id', projectName: 'Quire', title: 'Bulk CSV invite' })],
     activity: { '/r/quire': { at: NOW - 3 * HOUR, week: 14, today: 3 } } }) })];
 
+/** A quiet machine and nothing waiting on a person. The state that caught the
+ *  calm block out: every counter a person reads is zero, and two agents on the
+ *  silent laptop are anything but clear. */
+const QUIET_CALM = [paired('h1', 'studio', { reachable: true, at: NOW - 10,
+  snapshot: snapshot('studio', { at: NOW - 10, quota: quota({ left: 0.64, resets_at: NOW + 4 * HOUR }),
+    projects: [project('Quire', { running: 1, repos: ['/r/quire'] })],
+    cards: [card('c3', { project: 'Quire-id', status: 'running', ustabasi: 9, title: 'Bulk CSV invite' })],
+    agents: [agent('c3', { project: 'Quire-id', projectName: 'Quire', ustabasi: 9, title: 'Bulk CSV invite' })],
+    activity: { '/r/quire': { at: NOW - 3 * HOUR, week: 14, today: 14 } } }) }), MINI];
+
+/** …and the other one: the quota is gone and nothing is waiting on a person
+ *  either, so the red block and the green block are both eligible. */
+const SPENT_ONLY = [paired('h1', 'studio', { reachable: true, at: NOW - 10,
+  snapshot: snapshot('studio', { at: NOW - 10,
+    quota: quota({ spent: true, left: 0, resets_at: NOW + 4 * HOUR, blocked: 2 }),
+    projects: [project('Quire', { running: 1, repos: ['/r/quire'] })],
+    cards: [card('c3', { project: 'Quire-id', status: 'running', title: 'Bulk CSV invite' })],
+    agents: [agent('c3', { project: 'Quire-id', projectName: 'Quire', title: 'Bulk CSV invite' })],
+    activity: { '/r/quire': { at: NOW - 3 * HOUR, week: 14, today: 3 } } }) })];
+
+/** Every fleet the screen is rendered against, by what it is a case of. */
+const FLEETS = {
+  busy: [studio()],
+  'a machine gone quiet': [studio(), MINI],
+  'quiet, and nothing waiting on a person': QUIET_CALM,
+  'out of quota': SPENT,
+  'out of quota, and nothing waiting on a person': SPENT_ONLY,
+  calm: CALM,
+  'nothing paired at all': [],
+};
+
 for (const scheme of ['dark', 'light']) {
   const t = K.tokensFor(scheme);
   const busy = draw(scheme, [studio()]);
@@ -408,6 +439,28 @@ for (const scheme of ['dark', 'light']) {
       && painted(spent, t.redBg)],
     [`${scheme}: …and the counter is what was paused, not what is running`,
       spent.includes('cPaused') && !spent.includes('cDoneToday')],
+    // …and the two the calm block was drawn over. Both are "nothing needs you"
+    // as far as the three counters a person reads are concerned, and in neither
+    // of them is the screen entitled to say so.
+    [`${scheme}: "all clear" is not said over a machine that has gone quiet with agents on it`,
+      (() => {
+        const m = draw(scheme, QUIET_CALM);
+        return !m.includes('calmTitle') && m.includes('cUnknown') && m.includes('dashStale');
+      })()],
+    [`${scheme}: \u2026nor over a fleet that has run out of quota`,
+      (() => {
+        const m = draw(scheme, SPENT_ONLY);
+        return m.includes('pausedTitle') && !m.includes('calmTitle');
+      })()],
+    // The screen and the rule are one thing, checked as one: `calm()` decides,
+    // and this is every fleet above put through the screen to see that what it
+    // decided is what came out. A guard written out a second time in the screen
+    // is exactly how the block came to be drawn over a quiet machine's own
+    // sentence, and it is this check that would have caught it.
+    [`${scheme}: the calm block is drawn exactly when the rule says it is, in every state`,
+      Object.entries(FLEETS).every(([, hosts]) =>
+        draw(scheme, hosts).includes('calmTitle') === D.calm(view(hosts)))],
+
     // …and the states a screen made of other computers' answers is really in
     [`${scheme}: a phone paired with nothing draws the whole screen without throwing`,
       empty.includes('sysNoMachines') && empty.includes('dashEmpty') && empty.includes('tabDashboard')],
@@ -469,18 +522,29 @@ for (const scheme of ['dark', 'light']) {
     title(R.render('dark', h(Dashboard))) === 'Quire']);
 
   // …and an agent row opens what that agent is doing. The one on this phone's
-  // own computer has a ticket behind it; the one on the machine that has gone
-  // quiet has a queue this phone cannot read, and enters its product instead.
+  // own computer has a ticket behind it — the run itself, as the model prints
+  // it — and that is a route rather than anything visible in the markup it left,
+  // so the push is recorded. The one on the machine that has gone quiet has a
+  // queue this phone cannot read, and enters its product instead.
   R.params.reset();
+  R.nav.reset();
   draw('dark', [studio(), MINI]);
   const rows = R.presses().filter((p) => p.text.startsWith('◌') || p.text.startsWith('●'));
   checks.push(['there is a line for every agent at work, and every one of them is pressable',
     rows.length === 3]);
-  rows.find((p) => p.text.startsWith('◌')).press();
-  checks.push(['an agent on a machine that has gone quiet enters its product',
-    title(R.render('dark', h(Dashboard))) === 'Kanji Daily']);
+  rows.find((p) => p.text.startsWith('●')).press();
+  checks.push(['an agent on this phone’s own computer opens the run it is printing',
+    eq(R.nav.pushed(), ['/ticket/9'])]);
+
+  R.nav.reset();
+  R.params.reset();
+  draw('dark', [studio(), MINI]);
+  R.presses().filter((p) => p.text.startsWith('◌'))[0].press();
+  checks.push(['an agent on a machine that has gone quiet enters its product instead',
+    title(R.render('dark', h(Dashboard))) === 'Kanji Daily' && eq(R.nav.pushed(), [])]);
   R.store.reset();
   R.params.reset();
+  R.nav.reset();
 }
 
 // ── 8 · the rules the screen is written under ───────────────────────────────

@@ -9,7 +9,7 @@ import { project as projectIn, type DivanView, type MergedProject } from '../src
 import { chips } from '../src/shell';
 import { since } from '../src/tickets';
 import {
-  agentRows, asks, chip, clock, counters, latest, line, marks, staleness,
+  agentRows, asks, calm, chip, clock, counters, latest, line, marks, staleness,
   systemLine, target, type Ago,
 } from '../src/dashboard';
 import { EmptyState, ListRow, SectionHeader } from '../src/components/divan';
@@ -198,8 +198,11 @@ function Paused({ view, now, ago }: { view: DivanView; now: number; ago: Ago }) 
  *  anything can be counted. */
 function Calm({ view }: { view: DivanView }) {
   const T = useT();
-  const { needsYou, stuck, doneToday } = view.totals;
-  if (needsYou > 0 || stuck > 0 || view.hosts.length === 0) return null;
+  const { doneToday } = view.totals;
+  // The rule is `calm()` and not a copy of it. A guard written out again here
+  // was how this block came to be drawn over a quiet machine's own amber
+  // sentence: two spellings of one rule, and only one of them was checked.
+  if (!calm(view)) return null;
   return (
     <Note tone="run" dot title={T('calmTitle')}
       foot={doneToday ? <NoteFoot text={T(doneToday === 1 ? 'calmDoneOne' : 'calmDone', { n: doneToday })} /> : null} />
