@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C, MEDIA, R } from '../lib/theme';
+import { C, MEDIA } from '../lib/theme';
 import { Btn, Chip, Empty, Icon, P, Spinner } from '../ui/kit';
+import { Cell, Pill, SectionHeader } from '../ui/divan';
 import { useFleet } from '../lib/fleet';
 
 /* The computer's own screen, in the panel.
@@ -68,7 +69,15 @@ export function Screen() {
   const lastMove = useRef(0);
   const held = useRef<string | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  // What W15's status line says about the picture: the size the computer is
+  // actually sending, and how long the last frame took to arrive. Both are
+  // measured here rather than reported by the daemon, which is the only way
+  // either of them can be true of this link.
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [lag, setLag] = useState<number | null>(null);
+  const askedAt = useRef(0);
 
+  const machineName = slot?.info?.name?.replace('.local', '') || slot?.cfg.name || '';
   const base = slot ? `http://${slot.cfg.host}:${slot.cfg.port}` : null;
   const controllable = !!caps?.control && !!caps?.enabled;
 
@@ -87,6 +96,7 @@ export function Screen() {
     const w = Math.max(640, Math.min(3840, wide));
     const uri = `${base}/screen.jpg?token=${encodeURIComponent(slot.cfg.token)}&w=${w}&q=72`
       + `&display=${encodeURIComponent(displayRef.current)}&t=${tick.current}`;
+    askedAt.current = Date.now();
     const backSlot = frontRef.current === 0 ? 1 : 0;
     setSlots((s) => (backSlot === 1 ? [s[0], uri] : [uri, s[1]]));
   }, [base, slot, box.w, zoom]);
@@ -99,6 +109,7 @@ export function Screen() {
     setFront(frontRef.current);
     setError(null);
     lastAt.current = Date.now();
+    if (askedAt.current) setLag(Date.now() - askedAt.current);
     window.setTimeout(() => nextFrame(), 60);
   }, [nextFrame]);
 
@@ -315,29 +326,37 @@ export function Screen() {
   return (
     <div ref={rootRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
                                 height: '100%', minHeight: 0, background: C.bg }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${C.hair}` }}>
-        <Icon path={P.terminal} size={15} />
-        <select
-          value={key ?? ''}
-          onChange={(e) => setFocus(e.target.value)}
-          style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}`, borderRadius: R.btn,
-                   padding: '5px 8px', fontSize: 13, outline: 'none' }}
-        >
+      {/* Web15 W15's head and its machines: the page says what it is at the size
+          every Divan page head is set at, and the computers are the frame's own
+          chips — a run of them with the one being watched filled — rather than
+          the menu this screen used to pick a machine from. Which computer is
+          being watched is the fleet's own `focus`, so pressing a chip does
+          exactly what choosing from that menu did. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px 10px', flexWrap: 'wrap' }}>
+        <SectionHeader kind="page" title="Remote screen" note={machineName} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
           {order.filter((k) => hosts[k]).map((k) => (
-            <option key={k} value={k}>{hosts[k].info?.name?.replace('.local', '') || hosts[k].cfg.name}</option>
+            <Pill
+              key={k} label={hosts[k].info?.name?.replace('.local', '') || hosts[k].cfg.name}
+              face={k === key ? 'ink' : 'surface'}
+              dot={hosts[k].status === 'online' ? 'running' : null}
+              title={k === key ? undefined : `Watch this computer instead`}
+              onClick={() => setFocus(k)}
+            />
           ))}
-        </select>
-        {(caps?.displays?.length ?? 0) > 1 && (
-          <select
-            value={display || caps!.displays!.find((d) => d.primary)?.id || caps!.displays![0].id}
-            onChange={(e) => pickDisplay(e.target.value)}
-            title="Which screen of that computer"
-            style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}`, borderRadius: R.btn,
-                     padding: '5px 8px', fontSize: 13, outline: 'none' }}
-          >
-            {caps!.displays!.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-          </select>
-        )}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px 10px', borderBottom: `1px solid ${C.hair}` }}>
+        {(caps?.displays?.length ?? 0) > 1 && caps!.displays!.map((d) => {
+          const on = (display || caps!.displays!.find((x) => x.primary)?.id
+            || caps!.displays![0].id) === d.id;
+          return (
+            <Pill
+              key={d.id} label={d.label} face={on ? 'ink' : 'surface'}
+              title="Which screen of that computer" onClick={() => pickDisplay(d.id)}
+            />
+          );
+        })}
         {zoom > 1.01 && <Chip onClick={() => setZoom(1)} title="Back to actual size">{zoom.toFixed(1)}×</Chip>}
         <div style={{ flex: 1 }} />
         {caps?.view && (
@@ -385,7 +404,10 @@ export function Screen() {
                 draggable={false}
                 onLoad={(e) => {
                   const img = e.currentTarget;
-                  if (img.naturalWidth && img.naturalHeight) setAspect(img.naturalWidth / img.naturalHeight);
+                  if (img.naturalWidth && img.naturalHeight) {
+                    setAspect(img.naturalWidth / img.naturalHeight);
+                    setSize({ w: img.naturalWidth, h: img.naturalHeight });
+                  }
                   if (i !== front) onFrame();
                 }}
                 onError={() => {
@@ -416,6 +438,23 @@ export function Screen() {
         )}
       </div>
 
+      {/* W15's own line under the picture. Four of its six readings exist on
+          this link and are measured here; the two that do not are left off
+          rather than made up — this panel carries no audio at all, and
+          TODO(daemon): nothing reports who else is watching the same screen
+          (`connected_devices` is sockets on the daemon, not viewers). */}
+      {live && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+          padding: '7px 14px', borderTop: `1px solid ${C.hair}`,
+        }}>
+          <Cell text={`live screen · ${machineName}`} />
+          {!!size && <Cell text={`${size.w} × ${size.h}`} />}
+          {lag != null && <Cell text={`latency ${lag} ms`} />}
+          <Cell text="quality auto" />
+          <Cell text="no audio" />
+        </div>
+      )}
       {!!error && (
         <div style={{ padding: '8px 14px', fontSize: 12, color: C.danger, borderTop: `1px solid ${C.hair}` }}>{error}</div>
       )}

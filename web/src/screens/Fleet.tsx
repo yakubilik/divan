@@ -35,7 +35,7 @@ const IC = {
   lock: 'M6 11h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2zM8 11V7a4 4 0 0 1 8 0v4',
 };
 
-export interface DashboardProps {
+export interface FleetProps {
   onOpenChat: (hostKey: string, chatId: string) => void;
   onNewChat: () => void;
 }
@@ -555,7 +555,7 @@ function HealthPanel({ hosts, order }: { hosts: Record<string, HostSlot>; order:
 
 /* ─────────────────────────── screen ─────────────────────────── */
 
-export function Dashboard({ onOpenChat, onNewChat }: DashboardProps) {
+export function Fleet({ onOpenChat, onNewChat }: FleetProps) {
   const fleet = useFleet();
   const { hosts, order, activity } = fleet;
   const [live, setLive] = useState<Record<string, Live>>({});

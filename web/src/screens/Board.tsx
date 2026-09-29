@@ -34,6 +34,7 @@ import { columns, settled, takes, type Moves, type Ticket } from '../lib/board';
 import { useDivanStore, type DivanView, type MergedProject } from '../lib/divan';
 import { hasCardDrag, setCardDrag } from '../lib/dnd';
 import { uptime } from '../lib/format';
+import { refusedWords, startsWork, useThresholds } from '../lib/machine';
 import { useDock } from '../lib/sessions';
 import { SUMMARY_MAX } from '../lib/ticket';
 import { RADIUS, STATE_MARK, T } from '../lib/theme';
@@ -57,6 +58,7 @@ export function Board({ view, project, drafting, onDraft, onCard }: {
   onCard?: (ticket: Ticket) => void;
 }) {
   const raise = useDock((s) => s.raise);
+  const { thresholds } = useThresholds();
   const [lift, setLift] = useState<Lift | null>(null);
   const [over, setOver] = useState<DivanColumn | null>(null);
   const [moved, setMoved] = useState<Moves>({});
@@ -99,6 +101,15 @@ export function Board({ view, project, drafting, onDraft, onCard }: {
     setOver(null);
     if (!carried || !takes(column, carried.from)) return;
     setRefused(null);
+    // Dropping a card into In Progress is what starts a worker, so it is where
+    // the threshold on Machine › Quota thresholds is kept: under it the card
+    // stays where it was and the line says which machine and which number
+    // stopped it (`lib/machine.ts`).
+    const on = view.hosts.find((h) => h.key === carried.host) ?? null;
+    if (column === 'in_progress' && on && !startsWork(on, thresholds)) {
+      setRefused(refusedWords(on, thresholds));
+      return;
+    }
     setMoved((was) => ({ ...was, [carried.id]: column }));
     try {
       const answer = await moveCard(carried.host, carried.id, column);

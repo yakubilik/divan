@@ -224,13 +224,17 @@ export const useFleet = create<FleetState>((set, get) => ({
   },
 
   /** account.list shells out to both CLIs and can take seconds, so it is never
-   *  part of the connect path — screens that need it ask for it. */
+   *  part of the connect path — whoever needs it asks for it, and the Machine
+   *  place asks on the way in because the sign-in that is expiring is counted
+   *  on a row of its drawer.
+   *
+   *  Asked through this store's own `call` rather than by reaching into the
+   *  client map, like every other request the panel makes: a caller that wants
+   *  to say why it failed (Settings › Accounts does) still gets the rejection. */
   refreshAccounts: async (key) => {
-    const c = clients.get(key);
-    if (!c) return;
     patch(set, key, (s) => ({ ...s, loading: { ...s.loading, accounts: true } }));
     try {
-      const r = await c.call('account.list', {});
+      const r = await get().call<{ accounts?: CliAccount[] }>(key, 'account.list', {});
       patch(set, key, (s) => ({ ...s, accounts: r.accounts ?? [] }));
     } finally {
       patch(set, key, (s) => ({ ...s, loading: { ...s.loading, accounts: false } }));

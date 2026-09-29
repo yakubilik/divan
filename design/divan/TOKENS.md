@@ -386,7 +386,11 @@ Geist; the panel does not ship it.
   button and state mark the frames draw beside them; the three-slot block of
   numbers under a name, the line with a clock in front of it, a field of a
   details panel and the field of a card being typed into rather than read, which
-  are the four Web14's own screens repeat; and the top bar — the bar
+  are the four Web14's own screens repeat; the table the Machine drawer is made
+  of — the card with a grid in it, the mono cell a figure stands in, the
+  name-over-a-line that opens a row and the square in front of it — which Web15 W12, W13 and W16 draw three
+  times as one construction, with the slider a threshold is set on (W11) and the
+  segmented choice a setting is answered with (W18); and the top bar — the bar
   itself, a nav item, the rule between the places and the chips, and the mono
   chip and stamp at its far end. Each names the frame it was measured off. The
   bar is the one the thirteen later frames draw (`height:58px`, the third place
@@ -396,7 +400,11 @@ Geist; the panel does not ship it.
   phone's Mobile7 S6 at desktop sizes, and says so where it is defined.
 - `web/src/ui/kit.tsx` — the older set the existing screens are built from. Not
   being replaced in this ticket, and not to be mixed with the parts above in one
-  file.
+  file — with one exception, which is where the two meet: the two Machine pages
+  the frames keep as they are (`Terminal.tsx`, `Screen.tsx`) take their page
+  head, their chips and their status line from the parts above while the rest of
+  each screen stays in the older set, because the alternative was a page head
+  invented at a size nothing else uses. Both say so where they are defined.
 - `web/scripts/divan-gallery.tsx` — every part in both themes, each beside the
   name of its frame. Rendered to `.test-build/divan/gallery.html` by the check
   below, which opens in a browser with no daemon and no pairing.

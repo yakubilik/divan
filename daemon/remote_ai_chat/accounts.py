@@ -189,6 +189,12 @@ class Account:
     # shows it above the chat, so what is being spent is visible before it
     # is spent; empty when the CLI does not say.
     plan: str = ""
+    # when this sign-in stops working and has to be made again, where the tool
+    # writes one down. None on a sign-in with no end (a key), on a tool that
+    # keeps its credentials somewhere this cannot read (a keychain), and on one
+    # that does not say — which is not the same as a sign-in that never expires,
+    # so the panel says nothing rather than guessing.
+    expires_at: float | None = None
 
     def env(self) -> dict[str, str]:
         """Environment for running this account's CLI."""
@@ -211,6 +217,7 @@ class Account:
         return {"id": self.id, "provider": self.provider, "label": self.label,
                 "logged_in": self.logged_in, "detail": self.detail, "plan": self.plan,
                 "imported": self.imported, "has_key": bool(self.api_key),
+                "expires_at": self.expires_at,
                 "is_default": self.home is None}
 
 
@@ -221,9 +228,38 @@ def default_accounts() -> list[Account]:
     ]
 
 
+def sign_in_expiry(acc: Account) -> float | None:
+    """When this sign-in has to be made again, in epoch seconds.
+
+    The tools keep two tokens: a short-lived one they renew by themselves every
+    few hours, and a long-lived one that *is* the sign-in. Only the second is
+    worth telling anybody about — a panel warning every morning that something
+    expires in three hours would be a panel nobody reads — so this is the
+    refresh token's own end and nothing else.
+
+    Claude writes that date next to the tokens; Codex keeps its own inside the
+    token, and a token is not a thing this opens. Never raises, and never reads
+    anything but that one number: what is beside it is not touched, logged or
+    sent anywhere. A key has no end, a sign-in kept in a keychain cannot be read
+    from here, and a tool that says nothing gets None — which is not the same
+    as a sign-in that never expires, so the panel then says nothing about one.
+    """
+    if acc.api_key or acc.provider != "claude":
+        return None
+    try:
+        data = json.loads(_cred_path(acc).read_text())
+        at = (data.get("claudeAiOauth") or {}).get("refreshTokenExpiresAt")
+        # Written in milliseconds by the tool, and only believed when it is a
+        # date rather than a zero or a string.
+        return float(at) / 1000 if isinstance(at, (int, float)) and at > 0 else None
+    except Exception:
+        return None
+
+
 def refresh(acc: Account) -> Account:
     """Ask the CLI whether this account is signed in. Never raises."""
     acc.logged_in, acc.detail, acc.plan = False, "", ""
+    acc.expires_at = None
     try:
         if acc.provider == "claude":
             cli = tools.find_cli("claude")
@@ -259,6 +295,8 @@ def refresh(acc: Account) -> Account:
                             else "api" if acc.api_key else "")
     except Exception as exc:
         acc.detail = str(exc)[:80]
+    if acc.logged_in:
+        acc.expires_at = sign_in_expiry(acc)
     return acc
 
 

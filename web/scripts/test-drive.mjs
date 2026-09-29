@@ -126,6 +126,7 @@ const { useDivanStore, answered, silent } = await load('src/lib/divan.js');
 const { useDock } = await load('src/lib/sessions.js');
 const { themeScheme, setThemeChoice } = await load('src/lib/theme.js');
 const { MACHINE_ROWS } = await load('src/lib/shell.js');
+const { useThresholds, DEFAULT_THRESHOLDS } = await load('src/lib/machine.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
 const { boards } = await import(pathToFileURL(join(web, 'scripts', 'overview-fixture.js')).href);
 const { host: fakeHost } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
@@ -146,6 +147,9 @@ const seed = (store, patch) => {
  *  what a pressed answer actually sends is the one thing about a session that a
  *  render cannot say. */
 const asked = [];
+/** Set while the computer is to refuse the one request a page in here makes of
+ *  it: an older daemon that has never heard of it, or one that times out. */
+let accountsFail = false;
 seed(useFleet, {
   hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true,
   call: async (key, type, data) => {
@@ -155,6 +159,13 @@ seed(useFleet, {
     // an empty board. A poll that fails is one of the states the panel has to
     // survive anyway, and it is the state the groups above are read in.
     if (type === 'divan.snapshot') throw new Error('That computer did not answer');
+    // The one other request a page in here makes of a computer. Answered from
+    // the same fixture the slot is seeded with, so what the panel does with the
+    // answer is what is being read rather than what it was handed.
+    if (type === 'account.list') {
+      if (accountsFail) throw new Error('unknown type account.list');
+      return { accounts: fakeHost().accounts };
+    }
     return {};
   },
 });
@@ -450,6 +461,34 @@ group('the board, with the asking agent’s chat beside it');
     (column('Queued').textContent ?? '').includes('CSV export')
     && !(column('Ice Box').textContent ?? '').includes('CSV export'),
     `${column('Ice Box').textContent} → ${column('Queued').textContent}`);
+
+  // The threshold on Machine › Quota thresholds, kept where work is actually
+  // started: the studio has 64% of its window left, and dropping a card into In
+  // Progress is what starts a worker on it. Its board is put back in hand first
+  // — the poll the last drop set off found no socket, and a machine whose
+  // answer is a memory is never refused on the strength of it.
+  await act(async () => {
+    seed(useDivanStore, { snaps: { studio: answered(back, now) } });
+    useThresholds.setState({ thresholds: { warn: 0.8, stop: 0.7 } });
+  });
+  asked.length = 0;
+  const held = new Transfer();
+  await drag(ticket('CSV export'), 'dragstart', held);
+  await drag(column('In Progress'), 'drop', held);
+  ok('a card dropped where a worker would start is not started under the threshold you set',
+    !asked.some((a) => a.type === 'divan.card.move')
+    && !(column('In Progress').textContent ?? '').includes('CSV export')
+    && (doc.body.textContent ?? '').includes('under the 70% you set'),
+    `${JSON.stringify(asked.slice(0, 2))} · ${(doc.body.textContent ?? '').slice(-160)}`);
+
+  await act(async () => { useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS }); });
+  asked.length = 0;
+  const free = new Transfer();
+  await drag(ticket('CSV export'), 'dragstart', free);
+  await drag(column('In Progress'), 'drop', free);
+  ok('…and started as soon as that number is back under what the machine has left',
+    asked.some((a) => a.type === 'divan.card.move' && a.data.column === 'in_progress'),
+    JSON.stringify(asked.slice(0, 2)));
 }
 
 group('a new ticket, written at the top of Ice Box');
@@ -530,6 +569,55 @@ group('a new ticket, written at the top of Ice Box');
     seed(useDivanStore, { snaps: { studio: was } });
   });
   await click(find('Esc'));
+}
+
+group('the sign-in that is expiring is counted before that page is opened');
+{
+  const header = doc.querySelector('header');
+  /** A row of the drawer, by the name on it. */
+  const row = (label) => [...doc.querySelectorAll('nav button')]
+    .find((b) => (b.querySelector('span')?.textContent ?? '').trim() === label) ?? null;
+
+  await click(find('Dashboard', header));
+  // A computer that has answered nothing about its sign-ins, which is every
+  // computer on a panel that has just been loaded.
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } } });
+  });
+  asked.length = 0;
+  await click(find('Machine', header));
+  await act(async () => {});
+  ok('entering the Machine place asks the computer which sign-ins it has',
+    asked.some((a) => a.key === 'studio' && a.type === 'account.list'),
+    JSON.stringify(asked.map((a) => a.type)));
+  ok('…and the drawer counts the ones that want a person, on the page it opens on',
+    page() === 'Machines' && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
+    && (row('Accounts & sign-ins')?.innerHTML ?? '').includes('var(--dv-amber)'),
+    `${page()} · ${row('Accounts & sign-ins')?.textContent}`);
+  await press('6');
+  ok('…and Admin says the same thing about them, on a page nobody asked twice',
+    page() === 'Admin' && text().includes('2 want you')
+    && asked.filter((a) => a.type === 'account.list').length === 1,
+    `${page()} · ${asked.filter((a) => a.type === 'account.list').length} asks`);
+
+  accountsFail = true;
+  await click(find('Dashboard', header));
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } } });
+  });
+  asked.length = 0;
+  await click(find('Machine', header));
+  for (let i = 0; i < 4; i++) await act(async () => {});
+  ok('a computer that refuses the question is asked once and not again',
+    asked.filter((a) => a.type === 'account.list').length === 1,
+    `${asked.filter((a) => a.type === 'account.list').length} asks`);
+  await press('6');
+  for (let i = 0; i < 4; i++) await act(async () => {});
+  ok('…and the place goes on being used, saying nothing about sign-ins rather than none of them',
+    page() === 'Admin' && text().includes('not read yet') && !text().includes('0 connected')
+    && asked.filter((a) => a.type === 'account.list').length === 1,
+    `${page()} · ${asked.filter((a) => a.type === 'account.list').length} asks`);
+  accountsFail = false;
 }
 
 group('nothing was lost on the way');

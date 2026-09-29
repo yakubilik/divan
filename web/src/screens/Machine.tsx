@@ -1,32 +1,44 @@
-/** The Machine place: everything that is about a computer rather than about work.
+/** The Machine place: everything that is about a computer rather than about
+ *  work.
  *
- *  Seven of the old panel's eight screens were this — the fleet's health, the
- *  agents installed on a machine, the wall of its sessions, its own screen, its
- *  folders, its update, its settings — and they are all still here, unchanged,
- *  behind the column Web15 draws them behind: `260px` of rows, the selected one
- *  filled, and the page itself in the rest of the width.
+ *  Web15 draws it as `260px` of rows with the selected one filled and the page
+ *  itself in the rest of the width, and its eight rows are all here: Machines,
+ *  Executors, Terminals, Remote screen, Accounts & sign-ins, Quota thresholds,
+ *  Admin and Settings. Six of them are pages built out of the design system
+ *  (`ui/divan.tsx`) against the decisions in `lib/machine.ts`; the other two —
+ *  the wall of terminals and the remote screen — do what they have always done
+ *  and now say so under the head their frames put over them: W15's own chips
+ *  for the computers and its line under the picture are there, and what neither
+ *  of them has (a pty behind W14's tabs) says so where it would be.
  *
- *  Nothing on this page was rewritten by this ticket. The screens speak the older
+ *  Four pages have no row of their own (`MACHINE_ASIDE`): a computer's folders,
+ *  the agents installed on it, the update, and every default a new chat takes.
+ *  Each is opened from the page above it and drawn with that page's row still
+ *  filled — one level deeper, not somewhere else. Those four speak the older
  *  vocabulary (`C` in `lib/theme.ts`), which is the same palette under other
- *  names, so they follow both themes without a line of theirs changing; the ones
- *  the design has frames for are rebuilt in their own tickets. What changed is
- *  where they are: one place instead of seven rows in a sidebar, and the note
- *  under each row says what it is for — which is the part of "findable,
- *  forgettable" a list of bare words was missing.
+ *  names, so they follow both themes without a line of theirs changing.
  */
-import { MACHINE_ROWS, updateWaiting, type View } from '../lib/shell';
+import { useEffect, useRef } from 'react';
+import { MACHINE_ROWS, machineRow, updateWaiting, type View } from '../lib/shell';
 import { useFleet } from '../lib/fleet';
+import { signIns, signInsWanting, quotaVerdict, useThresholds } from '../lib/machine';
 import { T } from '../lib/theme';
 import type { DivanView } from '../lib/divan';
 import { glyph } from '../ui/kit';
 import { SidePanel, type PanelItem } from '../ui/divan';
-import { Dashboard } from './Dashboard';
+import { sources, Accounts } from './Accounts';
+import { Machines } from './Machines';
+import { Executors } from './Executors';
+import { Quota } from './Quota';
+import { Admin } from './Admin';
+import { Settings } from './Settings';
+import { Fleet } from './Fleet';
 import { Terminal } from './Terminal';
 import { Projects } from './Projects';
 import { Agents } from './Agents';
 import { Screen } from './Screen';
-import { Admin } from './Admin';
-import { Settings } from './Settings';
+import { Update } from './Update';
+import { Preferences } from './Preferences';
 import type { Agent } from '../lib/protocol';
 
 export interface MachineProps {
@@ -55,16 +67,62 @@ export function machineNote(fleet: DivanView): string {
   return `${out.length} of ${fleet.hosts.length} computers cannot be reached.`;
 }
 
+/** The six pages this ticket built. They stand in the page column beside the
+ *  drawer, which carries their scroll and their padding; the four older ones
+ *  bring their own head and take the whole width, as they always did. */
+const DRAWN_HERE = new Set<View>([
+  'machines', 'executors', 'accounts', 'quota', 'admin', 'settings',
+]);
+
 export function Machine(props: MachineProps) {
   const { view, onView, fleet } = props;
   const { hosts, order } = useFleet();
+  const refreshAccounts = useFleet((s) => s.refreshAccounts);
+  const { thresholds } = useThresholds();
+  /** Which computers have been asked which sign-ins they have. */
+  const put = useRef(new Set<string>());
+
+  // Entering the place asks every computer which sign-ins it has.
+  //
+  // `account.list` shells out to both CLIs and can take seconds, so it is not
+  // part of the connect path — which meant, until this asked for it, that the
+  // amber count on the Accounts row was 0 on a panel nobody had opened that
+  // page on. The one thing that page exists to say was the one thing you had to
+  // go and look for.
+  //
+  // **Asked once, and once means once even when the answer never comes.** What
+  // was asked is remembered here rather than inferred from the slot: an empty
+  // list and `loading` back to false is what a refusal looks like as well as
+  // what a question nobody has put looks like, and a condition that cannot tell
+  // those two apart re-fires the moment the failure lands — which on a daemon
+  // that has never heard of the request, or one still thirty seconds deep in
+  // two CLI shell-outs, is a fresh shell-out on that machine every round trip,
+  // for as long as this place is open. A computer that goes away is forgotten,
+  // so coming back is asked again; so is re-entering the place, which is
+  // somebody's own doing rather than a loop.
+  const online = order.filter((k) => hosts[k]?.status === 'online').join(',');
+  useEffect(() => {
+    const live = online ? online.split(',') : [];
+    for (const key of [...put.current]) if (!live.includes(key)) put.current.delete(key);
+    for (const key of live) {
+      if (put.current.has(key) || useFleet.getState().hosts[key]?.accounts.length) continue;
+      put.current.add(key);
+      refreshAccounts(key).catch(() => {});
+    }
+  }, [online, refreshAccounts]);
   const unreachable = fleet.hosts.filter((h) => !h.reachable).length;
   // What under this place wants a person, on the row it is about: a chat
   // waiting to be allowed to do something — which is on the wall as well as in
-  // the Chat place — and an update in hand.
+  // the Chat place — an update in hand, a sign-in about to stop working, and a
+  // plan under the threshold somebody set on the sixth row.
   const approvals = order.reduce(
     (n, k) => n + (hosts[k]?.chats.filter((c) => c.status === 'awaiting_approval').length ?? 0), 0);
   const update = order.some((k) => updateWaiting(hosts[k]?.info?.update));
+  const expiring = signInsWanting(
+    signIns(sources(hosts, order), fleet.now, () => '', () => ''));
+  const quota = quotaVerdict(fleet.quota, thresholds);
+  const here = machineRow(view);
+
   const items: PanelItem[] = MACHINE_ROWS.map((row) => ({
     key: row.view,
     label: row.label,
@@ -76,6 +134,9 @@ export function Machine(props: MachineProps) {
     ...(row.view === 'machines' && unreachable > 0
       ? { dot: 'asking' as const, hollow: true } : {}),
     ...(row.view === 'terminal' && approvals > 0 ? { count: approvals } : {}),
+    ...(row.view === 'accounts' && expiring > 0 ? { count: expiring } : {}),
+    ...(row.view === 'quota' && (quota.state === 'warn' || quota.state === 'stop'
+      || quota.state === 'spent') ? { dot: 'asking' as const } : {}),
     ...(row.view === 'admin' && update ? { dot: 'asking' as const } : {}),
   }));
 
@@ -87,29 +148,51 @@ export function Machine(props: MachineProps) {
       <div style={{ flex: 'none', padding: '28px 12px 28px 20px', overflowY: 'auto' }}>
         <SidePanel
           title="Machine" note={machineNote(fleet)}
-          items={items} value={view} onChange={(key) => onView(key as View)}
+          items={items} value={here} onChange={(key) => onView(key as View)}
         />
         <div style={{ fontSize: 12.5, lineHeight: 1.5, color: T.ink3, margin: '14px 12px 0' }}>
-          {MACHINE_ROWS.find((r) => r.view === view)?.note}
+          {MACHINE_ROWS.find((r) => r.view === here)?.note}
         </div>
       </div>
-      {/* The screens bring their own head, their own scroll and their own
-          padding: each of them was the whole width of the panel until now, and
-          this place is the width they are given rather than a layout of its own. */}
-      <Page {...props} />
+      {/* The page beside it: Web15's `grid-template-columns:260px minmax(0,1fr);
+          gap:40px`, as a column of blocks `gap:18px` apart. The four older
+          screens bring their own head, their own scroll and their own padding —
+          each of them was the whole width of the panel until now — so they are
+          handed the width and left alone. */}
+      {DRAWN_HERE.has(view) ? (
+        <div style={{
+          flex: 1, minWidth: 0, overflowY: 'auto', padding: '28px 32px 40px 28px',
+        }}>
+          <div style={{
+            display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0, maxWidth: 1080,
+          }}>
+            <Page {...props} />
+          </div>
+        </div>
+      ) : <Page {...props} />}
     </div>
   );
 }
 
-function Page({ view, onOpenChat, onNewChat, onNewChatIn, onStartChat, onPeek }: MachineProps) {
+function Page(props: MachineProps) {
+  const { view, onView, fleet, onOpenChat, onNewChat, onNewChatIn, onStartChat, onPeek } = props;
+  const setFocus = useFleet.getState().setFocus;
+  if (view === 'executors') return <Executors view={fleet} onView={onView} />;
   if (view === 'terminal') return <Terminal onPeek={onPeek} onNewChat={onNewChat} />;
   if (view === 'screen') return <Screen />;
+  if (view === 'accounts') {
+    return <Accounts now={fleet.now} onView={onView} onFocus={setFocus} />;
+  }
+  if (view === 'quota') return <Quota view={fleet} />;
+  if (view === 'admin') return <Admin now={fleet.now} onView={onView} />;
+  if (view === 'settings') return <Settings onView={onView} />;
+  if (view === 'fleet') return <Fleet onOpenChat={onOpenChat} onNewChat={onNewChat} />;
   if (view === 'projects') return <Projects onNewChatIn={onNewChatIn} onOpenChat={onOpenChat} />;
   if (view === 'agents') return <Agents onStartChat={onStartChat} />;
-  if (view === 'admin') return <Admin />;
-  if (view === 'settings') return <Settings />;
-  // Every other view in this place is the fleet panel, which is where the
-  // machines themselves are: it is the first row and the page this place opens
-  // on, so it is also the answer to a view that has drifted.
-  return <Dashboard onOpenChat={onOpenChat} onNewChat={onNewChat} />;
+  if (view === 'update') return <Update />;
+  if (view === 'preferences') return <Preferences />;
+  // Every other view in this place is the machines themselves: it is the first
+  // row and the page this place opens on, so it is also the answer to a view
+  // that has drifted.
+  return <Machines view={fleet} onView={onView} onFocus={setFocus} />;
 }

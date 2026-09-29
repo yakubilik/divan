@@ -386,9 +386,15 @@ cleaned up after itself.
 
 ## Accounts and tools
 
+`expires_at` is when a sign-in has to be made again — the long-lived token's own
+end, not the hourly one the tool renews by itself — and is `null` on a sign-in with
+no end (a key), on a tool that keeps its credentials where the daemon cannot read
+them, and on one that does not say. `null` is not "never expires": a client that
+has no date says nothing about one rather than guessing.
+
 | type | data | returns |
 |---|---|---|
-| `account.list` | – | `{accounts: [{id, provider, label, logged_in, detail, is_default}]}` |
+| `account.list` | – | `{accounts: [{id, provider, label, logged_in, detail, plan, imported, has_key, expires_at, is_default}]}` |
 | `account.create` | `{provider, label}` | account |
 | `account.login` | `{account_id}` | `{started, provider, needs_code}` — the prompt goes **only to the asking socket** |
 | `account.login.submit` | `{account_id, code}` | – (Claude only) |

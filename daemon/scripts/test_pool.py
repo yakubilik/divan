@@ -18,6 +18,7 @@ Two halves, and they fail differently:
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import tempfile
 import time
@@ -25,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from remote_ai_chat import accounts as acct                     # noqa: E402
 from remote_ai_chat.accounts import Account                    # noqa: E402
 from remote_ai_chat.config import Config                       # noqa: E402
 from remote_ai_chat.db import DB                               # noqa: E402
@@ -130,6 +132,41 @@ def scenario_reading() -> None:
             window("overage", 1.0, status="rejected")]
     check(make_pool({"acct-2": rows}).state("acct-2", "claude").blocked,
           "a spent overage allowance is not a rescue either")
+
+
+def scenario_expiry() -> None:
+    """When a sign-in itself runs out, which is not a plan window running out."""
+    print("\nwhen the sign-in runs out")
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp) / "acct"
+        home.mkdir()
+        acc = Account(id="a1", provider="claude", label="mira", home=str(home))
+        check(acct.sign_in_expiry(acc) is None, "a sign-in with nothing written down has no date")
+
+        ends = time.time() + 12 * 86_400
+        (home / ".credentials.json").write_text(json.dumps({"claudeAiOauth": {
+            "accessToken": "short-lived", "refreshToken": "long-lived",
+            "expiresAt": int((time.time() + 3600) * 1000),
+            "refreshTokenExpiresAt": int(ends * 1000),
+        }}))
+        read = acct.sign_in_expiry(acc)
+        check(read is not None and abs(read - ends) < 1,
+              "the sign-in's own end is read, not the token it renews by itself",
+              f"{read} vs {ends}")
+
+        (home / ".credentials.json").write_text("{ this is not json")
+        check(acct.sign_in_expiry(acc) is None, "a file that cannot be read says nothing")
+        (home / ".credentials.json").write_text(json.dumps({"claudeAiOauth": {
+            "refreshTokenExpiresAt": 0}}))
+        check(acct.sign_in_expiry(acc) is None, "…and neither does a zero")
+
+        keyed = Account(id="a2", provider="claude", label="key", home=str(home),
+                        api_key="sk-x")
+        check(acct.sign_in_expiry(keyed) is None, "a key has no end")
+        check(acct.sign_in_expiry(Account(id="a3", provider="codex", label="c",
+                                          home=str(home))) is None,
+              "and codex keeps its own inside the token, which is not opened")
+        check("expires_at" in acc.public(), "the date goes on the wire for the panel to warn with")
 
 
 def scenario_quota() -> None:
@@ -734,6 +771,7 @@ async def scenario_nowhere_to_go(db) -> None:
 async def main() -> None:
     scenario_reading()
     scenario_never_spend()
+    scenario_expiry()
     scenario_quota()
     scenario_learning()
     scenario_choosing()

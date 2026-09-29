@@ -1,0 +1,140 @@
+/** Accounts & sign-ins: what the agents work through, and which of them stops
+ *  working soon.
+ *
+ *  Web15 W16. Five columns — the account, its state, what uses it, when it last
+ *  did, and the one button worth having at the end — with the sign-in that is
+ *  expiring lifted to the top of the table in amber, and the same amber counted
+ *  on the drawer's own row so that it is visible from the other seven pages.
+ *  **That is the whole point of this page:** a sign-in that has already expired
+ *  is a morning of failed turns, and the only moment worth saying so is before
+ *  it happens.
+ *
+ *  The frame draws seven services — GitHub, App Store Connect, Stripe, Search
+ *  Console — because that is the fleet Divan is heading for. This panel's
+ *  sign-ins are the ones its agents actually work through: the Claude and Codex
+ *  accounts on each paired computer, as `account.list` reports them. A computer
+ *  that says when one of them runs out (`CliAccount.expires_at`) gets the amber
+ *  countdown; one that does not say is drawn as connected rather than as
+ *  something with an invented date on it.
+ *
+ *  Renewing is signing in again, which is a pty on that computer and lives
+ *  where it always has — one level down, under Settings › This computer. The
+ *  button goes there with the computer already chosen.
+ *
+ *  Nothing here asks for `account.list`: the place around this page does, on
+ *  the way in (`screens/Machine.tsx`), because the amber count belongs to the
+ *  drawer as much as to this table and a page that asked for it itself would be
+ *  a page you had to open before the warning existed.
+ */
+import { ago, uptime } from '../lib/format';
+import { signIns, signInsWanting, type SignInSource } from '../lib/machine';
+import { useFleet } from '../lib/fleet';
+import { T } from '../lib/theme';
+import type { View } from '../lib/shell';
+import {
+  Button, Card, Cell, EmptyState, NameCell, SectionHeader, Table, Tag, Well, type Column,
+} from '../ui/divan';
+
+/** How long a sign-in has left, said the way W16 says it — `12 days` — and in
+ *  the panel's own `2h 14m` once there are hours rather than days left, which
+ *  is the point at which the hours are what you want to know. */
+function left(seconds: number | null): string {
+  const days = seconds == null ? 0 : Math.floor(seconds / 86_400);
+  return days ? `${days} day${days === 1 ? '' : 's'}` : uptime(seconds);
+}
+
+/** W16's own tracks, exactly. */
+const COLUMNS: Column[] = [
+  { width: '36px' },
+  { label: 'account', width: 'minmax(0, 1.2fr)' },
+  { label: 'state', width: '150px' },
+  { label: 'used by', width: 'minmax(0, 1fr)' },
+  { label: 'last used', width: '120px' },
+  { width: '150px' },
+];
+
+/** What the screens need out of the fleet store to say anything here. Built
+ *  from the slots so that `lib/machine.ts` never has to know there is a store. */
+export function sources(hosts: ReturnType<typeof useFleet.getState>['hosts'],
+                        order: string[]): SignInSource[] {
+  return order.filter((k) => hosts[k]).map((k) => {
+    const slot = hosts[k];
+    return {
+      hostKey: k,
+      machine: slot.info?.name || slot.cfg.name || k,
+      online: slot.status === 'online',
+      accounts: slot.accounts,
+      limits: slot.limits,
+      chats: slot.chats,
+    };
+  });
+}
+
+export function Accounts({ now, onView, onFocus }: {
+  now: number;
+  onView: (view: View) => void;
+  onFocus: (hostKey: string) => void;
+}) {
+  const hosts = useFleet((s) => s.hosts);
+  const order = useFleet((s) => s.order);
+
+  const list = sources(hosts, order);
+  const rows = signIns(list, now, left, ago);
+  const wanting = signInsWanting(rows);
+  const loading = order.some((k) => hosts[k]?.loading.accounts);
+
+  if (!order.length) {
+    return (
+      <EmptyState
+        title="No sign-ins to show."
+        body="A sign-in belongs to a paired computer — it is how the agents on it reach a
+              model. Pair a computer under Machines and its accounts appear here."
+        actions={<Button label="Machines" onClick={() => onView('machines')} />}
+      />
+    );
+  }
+
+  return (
+    <>
+      <SectionHeader
+        kind="page" title="Accounts & sign-ins"
+        note={`${rows.filter((r) => r.state === 'connected').length} of ${rows.length} connected`}
+        right={wanting ? `${wanting} want you` : undefined}
+        tone={wanting ? 'amber' : undefined}
+      />
+
+      <Table
+        columns={COLUMNS}
+        rows={rows.map((s) => ({
+          key: s.key,
+          tone: s.tone,
+          wash: s.state === 'expiring' || s.state === 'expired',
+          cells: [
+            <Well mark={s.mark} size={34} />,
+            <NameCell title={s.title} note={s.note} />,
+            <Tag label={s.says} tone={s.tone} />,
+            <Cell text={s.usedBy} style={{ color: T.ink2 }} />,
+            <Cell text={s.lastUsed || 'never'} tone={s.lastUsed ? undefined : 'ink3'} />,
+            <span style={{ marginLeft: 'auto' }}>
+              <Button
+                small face={s.wants ? 'ink' : 'outline'} label={s.action}
+                onClick={() => { onFocus(s.hostKey); onView('preferences'); }}
+              />
+            </span>,
+          ],
+        }))}
+        empty={loading ? 'Asking each computer which accounts it has…'
+          : 'No computer has reported an account yet.'}
+      />
+
+      <Card>
+        <SectionHeader title="Where the keys are" />
+        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+          Every sign-in lives on the computer it belongs to, in that tool's own folder. The
+          panel reads whether it works and when it stops working; it never holds one, and
+          nothing about a sign-in leaves the machine it is on.
+        </div>
+      </Card>
+    </>
+  );
+}

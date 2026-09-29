@@ -14,7 +14,8 @@ import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
 import { project as projectIn, useDivanView } from './lib/divan';
 import {
-  MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, chips, placeOf, projectFromSearch,
+  MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, chips, placeOf,
+  projectFromSearch,
   searchWithProject, updateWaiting, type View,
 } from './lib/shell';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
@@ -342,6 +343,15 @@ export function App() {
         shortcut: row.shortcut,
         run: () => setView(row.view),
       })),
+      // …and the pages that have no row of their own, by name: they are opened
+      // from the page above them, and a page you can only reach by remembering
+      // which button it is behind is a page that was mislaid.
+      ...MACHINE_ASIDE.map((aside) => ({
+        id: aside.view,
+        label: `${PLACE_LABEL.machine} › ${aside.label}`,
+        shortcut: aside.view === 'projects' ? '⌘2' : undefined,
+        run: () => setView(aside.view),
+      })),
       {
         id: 'theme',
         label: theme.scheme === 'dark' ? 'Light theme' : 'Dark theme',
@@ -380,18 +390,21 @@ export function App() {
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
       else if (e.key === 'n') { e.preventDefault(); setNewChat({}); }
       else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
-      // The six keys the panel already had open the six pages they always did —
-      // they are pages of the Machine place now, and nothing about where they
-      // land has changed. ⌘0 is the one new key, for the place the panel opens
-      // on; ⌘1 is the fleet panel, which is the first row of that list.
+      // The keys the panel already had open the pages they always did — they
+      // are pages of the Machine place now, and nothing about where they land
+      // has changed. ⌘0 is for the place the panel opens on; ⌘7 and ⌘8 are the
+      // two rows the drawer gained, and ⌘2 still opens a computer's folders,
+      // which is a page under the first row rather than a row of its own.
       else if (e.key === '0') { e.preventDefault(); setView('overview'); }
       else if (e.key === ',') { e.preventDefault(); setView('settings'); }
       else if (e.key === '1') { e.preventDefault(); setView('machines'); }
       else if (e.key === '2') { e.preventDefault(); setView('projects'); }
-      else if (e.key === '3') { e.preventDefault(); setView('agents'); }
+      else if (e.key === '3') { e.preventDefault(); setView('executors'); }
       else if (e.key === '4') { e.preventDefault(); setView('terminal'); }
       else if (e.key === '5') { e.preventDefault(); setView('screen'); }
       else if (e.key === '6') { e.preventDefault(); setView('admin'); }
+      else if (e.key === '7') { e.preventDefault(); setView('accounts'); }
+      else if (e.key === '8') { e.preventDefault(); setView('quota'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
