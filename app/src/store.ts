@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { callOnce, client, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, silent, type HostDivan } from './divan';
 
@@ -101,6 +101,17 @@ interface State {
   /** Answer a blocked ticket. The queue's own CLI does the work on the
    *  computer; this is the only write the wall can make. */
   noteTicket: (id: number, text: string) => Promise<string>;
+  /** The same answer, to a ticket on whichever computer holds it.
+   *
+   *  `noteTicket` above goes to the computer this phone has a socket to, which
+   *  is the only one the ticket wall can be about. A Divan screen is every
+   *  machine at once: the question on it was asked by a worker on the mini, and
+   *  answering it has to reach the mini — so the machine is named rather than
+   *  assumed, the same way a sign-in is read off a second computer. */
+  answerCard: (what: { ticket: number; host: string }, text: string) => Promise<void>;
+  /** Move a card to a column, on whichever computer it is on. The one board
+   *  write this app makes: a card that is a person's own, done. */
+  moveCard: (what: { card: string; host: string; column: DivanColumn }) => Promise<void>;
   /** A page of what the agent on a ticket has printed. Nothing of it is kept
    *  here: the log is a river and only the page being read is worth holding,
    *  which is the screen's business and not the store's. */
@@ -538,6 +549,28 @@ export const useStore = create<State>((set, get) => {
           defaults: defaultsFor(get().defaultsByHost, active) });
   }
 
+  /** One request to a named computer, whichever one it is.
+   *
+   *  Every Divan surface reads all the paired machines at once, so a write that
+   *  comes out of one of them is about a machine that may not be the one this
+   *  phone is holding a socket to. The live socket is used where it is that
+   *  computer — a second socket to it would be a second session for no reason —
+   *  and a socket of its own is opened for every other, the same way a sign-in
+   *  is read off a second machine (`callOnce`).
+   *
+   *  It throws where the computer cannot be reached, which is the honest answer
+   *  and the one the screen draws: an answer that silently did not arrive is
+   *  worse than one that says it did not. */
+  async function onHost<T>(hostId: string, type: string, data: Record<string, any>): Promise<T> {
+    const h = get().hosts.find((x) => x.id === hostId);
+    if (!h) throw new Error(tt('wsNotConnected'));
+    if (hostId === get().activeHostId) {
+      if (get().conn !== 'online') throw new Error(tt('wsNotConnected'));
+      return await client.call<T>(type, data, DIVAN_TIMEOUT_MS);
+    }
+    return await callOnce<T>(h.host, h.port, h.token, type, data, DIVAN_TIMEOUT_MS);
+  }
+
   async function persistDefaults(byHost: DefaultsByHost) {
     set({ defaultsByHost: byHost, defaults: defaultsFor(byHost, get().activeHostId) });
     await SecureStore.setItemAsync(DEFAULTS_KEY, JSON.stringify(byHost));
@@ -884,6 +917,21 @@ export const useStore = create<State>((set, get) => {
 
     readRun: async (id, cursor) => {
       return await client.call<RunPage>('ustabasi.run', { id, ...(cursor ? { cursor } : {}) });
+    },
+
+    answerCard: async (what, text) => {
+      await onHost(what.host, 'ustabasi.note', { id: what.ticket, text });
+      // The note re-opens the ticket on that computer, so its board is stale the
+      // moment this returns — and the whole point of the screen the answer came
+      // from is that the card stops waiting once it has been answered. Only the
+      // machine that was written to: asking the other three would be three
+      // requests about a thing that did not change.
+      await get().loadDivan(what.host);
+    },
+
+    moveCard: async (what) => {
+      await onHost(what.host, 'divan.card.move', { card_id: what.card, column: what.column });
+      await get().loadDivan(what.host);
     },
 
     noteTicket: async (id, text) => {

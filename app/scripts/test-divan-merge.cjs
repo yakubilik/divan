@@ -481,8 +481,25 @@ checks.push(
     /put\(answered\(snap, Date\.now\(\) \/ 1000\)\);/.test(store)],
   ['…and a failed poll through the one that keeps the last answer',
     /put\(silent\(get\(\)\.divan\[h\.id\], e\?\.message \?\? null, oldHost\(e\)\)\);/.test(store)],
-  ['the board asks the computer for one thing and no more',
-    [...store.matchAll(/'(divan\.[a-z.]+)'/g)].map((m) => m[1]).join(',') === 'divan.snapshot,divan.snapshot'],
+  // Two requests, and the second one is a write. `divan.snapshot` is the whole
+  // of the reading — one answer per machine, merged here — and `divan.card.move`
+  // is the one thing a Divan screen changes about a board: a card that is a
+  // person's own, finished. Everything else a board can do (making a card,
+  // rewriting one, setting an executor) is said to the agent in a chat, which
+  // is the entrance the protocol document describes, and would be a third
+  // string here.
+  ['the board asks the computer for two things and no more',
+    [...store.matchAll(/'(divan\.[a-z.]+)'/g)].map((m) => m[1]).join(',')
+      === 'divan.snapshot,divan.snapshot,divan.card.move'],
+  // …and the write goes to the machine the card is on, which on a screen made
+  // of four computers' boards is not the one this phone holds a socket to.
+  ['a write goes to the computer the card is on, by name',
+    /async function onHost<T>\(hostId: string, type: string/.test(store)
+    && /callOnce<T>\(h\.host, h\.port, h\.token, type, data, DIVAN_TIMEOUT_MS\)/.test(store)
+    && /onHost\(what\.host, 'ustabasi\.note'/.test(store)
+    && /onHost\(what\.host, 'divan\.card\.move'/.test(store)],
+  ['…and only that machine is re-read afterwards',
+    (store.match(/await get\(\)\.loadDivan\(what\.host\);/g) || []).length === 2],
 );
 
 // ── and the rule every Divan screen after this one is held to ──────────────
