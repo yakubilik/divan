@@ -60,7 +60,11 @@ export function Btn({ children, onClick, kind = 'ghost', disabled, wide, title, 
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
     cursor: disabled ? 'default' : 'pointer',
     width: wide ? '100%' : undefined, whiteSpace: 'nowrap',
-    border: `1px solid ${C.border}`, background: C.surface2, color: C.text,
+    // The three pieces rather than the shorthand: every state below sets a
+    // border colour of its own, and React warns (on every rerender, in every
+    // browser console) when a longhand is dropped from under a shorthand.
+    borderWidth: 1, borderStyle: 'solid', borderColor: C.border,
+    background: C.surface2, color: C.text,
   };
   if (kind === 'primary') { style.background = C.accent; style.borderColor = C.accent; style.color = C.onAccent; }
   if (kind === 'danger') { style.background = C.dangerBg; style.borderColor = C.dangerLine; style.color = C.danger; }

@@ -31,13 +31,17 @@ import { Icon, P, mono } from './kit';
  *  The frames draw no pressed or hovered state, so neither is invented here:
  *  what a press does is the screen's business, and what it looks like is the
  *  browser's default cursor and nothing else. */
-function Tap({ onClick, title, style, children }: {
+function Tap({ onClick, title, current, style, children }: {
   onClick?: () => void; title?: string;
+  /** The one of a set that is where you are. The frames say it with a fill;
+   *  this says it to a reader who cannot see one, and to a check. */
+  current?: boolean;
   style: React.CSSProperties; children?: React.ReactNode;
 }) {
-  if (!onClick) return <div style={style} title={title}>{children}</div>;
+  const here = current ? ('page' as const) : undefined;
+  if (!onClick) return <div style={style} title={title} aria-current={here}>{children}</div>;
   return (
-    <button type="button" onClick={onClick} title={title}
+    <button type="button" onClick={onClick} title={title} aria-current={here}
       style={{ ...style, border: style.border ?? 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
       {children}
     </button>
@@ -756,7 +760,7 @@ export function NavItem({ label, icon, on, dot, onClick, title, style }: {
 }) {
   const colour = on ? T.ink : T.ink3;
   return (
-    <Tap onClick={onClick} title={title} style={{
+    <Tap onClick={onClick} title={title} current={on} style={{
       flex: 'none', boxSizing: 'border-box', height: SIZE.navItem, padding: '0 12px',
       borderRadius: RADIUS.nav, display: 'inline-flex', alignItems: 'center', gap: 7,
       fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap',

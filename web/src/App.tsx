@@ -128,12 +128,12 @@ export function App() {
   }, [select]);
 
   /** A chip in the project bar, or a row on the Dashboard: the same thing, and
-   *  both of them scope this page rather than opening another one. The address
-   *  is written rather than pushed — going back through every product you have
-   *  looked at is not what the back button is for. */
+   *  both of them scope this page rather than opening another one — which is
+   *  why neither can be pressed from anywhere else. The address is written
+   *  rather than pushed: going back through every product you have looked at is
+   *  not what the back button is for. */
   const chooseProject = useCallback((key: string | null) => {
     setProject(key);
-    setView((v) => (placeOf(v) === 'dashboard' ? v : PLACE_VIEW.dashboard));
     if (typeof history !== 'undefined') {
       history.replaceState(null, '', location.pathname + searchWithProject(location.search, key));
     }

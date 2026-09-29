@@ -387,6 +387,10 @@ Geist; the panel does not ship it.
   fleet. Its one colour claim is the one the switch rests on — the two themes
   produce the same markup, because nothing is a value and everything is a
   reference.
+- `web/scripts/test-drive.mjs` — the fourth in `npm test`: the panel mounted in
+  a document and pressed. Its one colour claim is the switch's, driven rather
+  than reasoned about — the document's theme attribute moves and the markup
+  under the bar does not change, which is why a theme costs no render.
 - `web/scripts/test-divan-ui.mjs` — the same page in a real browser, not in
   `npm test` because it needs Chrome. It reads back every colour the browser
   actually resolved, and then measures every pair it painted: each piece of text

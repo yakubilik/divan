@@ -97,7 +97,18 @@ frames' own numbers, both themes producing the *same markup* — which is what "
 switch needs no reload" means mechanically — and every screen of the shell drawn
 in five states of the fleet: nothing paired, two machines answering, one gone
 quiet, one refusing with its board still in hand, and one that has never
-answered. `scripts/divan-fixture.js` is the board it is all drawn from. `design/divan/TOKENS.md` is where the values come from and what
+answered. `scripts/divan-fixture.js` is the board it is all drawn from.
+
+`scripts/test-drive.mjs` is the fourth, and it is the only one that presses
+anything. It mounts the whole panel into a document (jsdom, the one dependency
+these checks add) with the renderer the panel actually ships with, and then uses
+it: ⌘0 and the six keys the panel already had are dispatched at the window and
+the page that comes up is read off the Machine list's own selected row; a place
+and a project chip are clicked and the place, the address and the scoped page are
+read back; the switch is clicked and the document's theme moves while the markup
+under the bar does not. A render cannot say whether an effect ran or a handler is
+wired — this can, and it is where "the switch changes the theme without a reload"
+and "the bar scopes the page" are actually settled. `design/divan/TOKENS.md` is where the values come from and what
 was decided; the artboards it quotes are private and not in this repository.
 
 ## Language

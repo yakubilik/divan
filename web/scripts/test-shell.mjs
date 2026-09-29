@@ -293,20 +293,12 @@ group('nothing was dropped in the move');
   const app = src('src/App.tsx');
   ok('the palette offers the three places and every page of the third',
     ["id: 'dashboard'", "id: 'chat'", "id: 'machine'", 'MACHINE_ROWS.map'].every((s) => app.includes(s)));
-  ok('…and the six keys the panel already had still open the six pages they did',
-    [['1', 'machines'], ['2', 'projects'], ['3', 'agents'], ['4', 'terminal'],
-     ['5', 'screen'], ['6', 'admin'], [',', 'settings']]
-      .every(([key, view]) => app.includes(`e.key === '${key}') { e.preventDefault(); setView('${view}')`)),
-  );
-  ok('…and the place the panel opens on has one of its own',
-    app.includes("e.key === '0') { e.preventDefault(); setView('overview')"));
-  // The shortcut each row advertises has to be the one that opens it: the
-  // palette prints these beside the label, and a wrong one is a lie in the one
-  // list that is meant to say where everything is.
-  const lying = shell.MACHINE_ROWS.filter((r) => r.shortcut && !app.includes(
-    `e.key === '${r.shortcut.replace('⌘', '')}') { e.preventDefault(); setView('${r.view}')`));
-  ok('…and every shortcut a row advertises opens that row',
-    lying.length === 0, lying.map((r) => `${r.label} ${r.shortcut}`).join(', '));
+  // What each key actually does is not read here: `test-drive.mjs` mounts the
+  // panel and presses them, because a handler's source says nothing about
+  // whether the effect that registers it ever ran. What is held here is that
+  // every page has a way in that does not go through the mouse.
+  ok('…and every page of the Machine list advertises a shortcut',
+    shell.MACHINE_ROWS.every((r) => !!r.shortcut));
   ok('the chat list no longer carries a second navigation',
     !/const NAV|NavRow/.test(src('src/components/Sidebar.tsx')));
 
@@ -442,11 +434,9 @@ group('the project bar scopes the page');
     && shell.searchWithProject('?host=studio&chat=c1&project=quire', null) === '?host=studio&chat=c1');
   ok('…and All takes the parameter out rather than writing an empty one',
     shell.searchWithProject('?project=quire', null) === '');
-  const app = src('src/App.tsx');
-  ok('the panel reads it at the start and replaces it rather than pushing',
-    /projectFromSearch\(/.test(app) && /history\.replaceState\(null, '', location\.pathname \+ searchWithProject/.test(app));
-  ok('…and a chip pressed from anywhere but the Dashboard goes there first',
-    /placeOf\(v\) === 'dashboard' \? v : PLACE_VIEW\.dashboard/.test(app));
+  // What happens when a chip is pressed — the address written, the page
+  // scoped, and nothing pushed onto the history — is driven in
+  // `test-drive.mjs`, where there is a document to press it in.
 }
 
 // ── 5 · the page under the bar is a different page ─────────────────────────

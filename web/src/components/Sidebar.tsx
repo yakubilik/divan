@@ -3,12 +3,11 @@ import { C, R } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
 import { ago, uptime } from '../lib/format';
 import { useFleet, type HostSlot } from '../lib/fleet';
-import { setChatDrag } from '../lib/dnd';
 import type { Chat, Group } from '../lib/protocol';
 
 const W = 260;
-/** Collapsed, the sidebar keeps the one thing it cannot give up: the way back
- *  to the other screens. Anything narrower than this stops being a target. */
+/** Collapsed, the sidebar is a strip with the way back to the list on it and
+ *  the button that starts a chat. Anything narrower stops being a target. */
 const RAIL = 48;
 const ALL_LABEL = 'All computers';
 
@@ -183,19 +182,14 @@ function sections(chats: Chat[], groups: Group[], hostKey: string): Section[] {
   return out;
 }
 
-function ChatRow({ chat, hostKey, selected, onPick }: {
-  chat: Chat; hostKey: string; selected: boolean; onPick: () => void;
+function ChatRow({ chat, selected, onPick }: {
+  chat: Chat; selected: boolean; onPick: () => void;
 }) {
   const awaiting = chat.status === 'awaiting_approval';
   const running = chat.status === 'running';
   return (
     <button
       type="button" onClick={onPick}
-      // Draggable everywhere, not only in terminal mode: the list does not
-      // know which screen is on the right, and a drag that finds no target
-      // simply ends where it started.
-      draggable
-      onDragStart={(e) => setChatDrag(e.dataTransfer, { hostKey, chatId: chat.id })}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56,
         padding: '8px 10px', borderRadius: R.card, cursor: 'pointer', textAlign: 'left',
@@ -403,7 +397,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
               </button>
               {!shut && s.chats.map((c) => (
                 <ChatRow
-                  key={`${s.hostKey}/${c.id}`} chat={c} hostKey={s.hostKey}
+                  key={`${s.hostKey}/${c.id}`} chat={c}
                   selected={selected === c.id && selectedHost === s.hostKey}
                   onPick={() => onSelect(s.hostKey, c.id)}
                 />
