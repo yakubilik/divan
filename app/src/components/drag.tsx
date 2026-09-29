@@ -180,8 +180,12 @@ export function useDrag({ open, rows, onOpen, onMove }: {
   order.current = rows;
   /** Where the board's own body is on the glass. The carried card is positioned
    *  inside it, so this is what turns a thumb's window coordinates into the ones
-   *  `left` and `top` are resolved in. */
-  const [origin, setOrigin] = useState<Point>({ x: 0, y: 0 });
+   *  `left` and `top` are resolved in.
+   *
+   *  Null until it has actually been read, and the card in the air is not drawn
+   *  until then: a guessed origin of zero is the bug this whole pair exists to
+   *  prevent, drawn one frame at a time instead of always. */
+  const [origin, setOrigin] = useState<Point | null>(null);
 
   const retarget = useCallback(() => {
     const o = tabsAt.current;
@@ -200,7 +204,7 @@ export function useDrag({ open, rows, onOpen, onMove }: {
     frame.current?.measureInWindow((x, y) => {
       // In state rather than a ref: the carried card is drawn from it, so a
       // reading that arrives after the lift has to redraw the float.
-      setOrigin((had) => (had.x === x && had.y === y ? had : { x, y }));
+      setOrigin((had) => (had && had.x === x && had.y === y ? had : { x, y }));
     });
   }, [retarget]);
 
@@ -337,6 +341,6 @@ export function useDrag({ open, rows, onOpen, onMove }: {
      *  while nothing is being carried. The screen never computes this: a raw
      *  window point handed to an absolutely positioned view is the one mistake
      *  this whole arrangement is arranged against. */
-    float: drag ? floatAt(drag.at, origin) : null,
+    float: drag && origin ? floatAt(drag.at, origin) : null,
   };
 }
