@@ -300,9 +300,26 @@ group('nothing was dropped in the move');
       new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from './${name}'`).test(machine));
   }
 
+  // …and a page with no row of its own is opened from the page above it: a
+  // screen that is only in a list is a screen nobody gets to.
+  const pages = {
+    machines: ['src/screens/Machines.tsx'],
+    executors: ['src/screens/Executors.tsx'],
+    // Admin's rows — what each one is and where its button goes — are decided
+    // in the same place everything else on these pages is.
+    admin: ['src/screens/Admin.tsx', 'src/lib/machine.ts'],
+    settings: ['src/screens/Settings.tsx'],
+  };
+  const orphan = shell.MACHINE_ASIDE.filter((a) => (
+    !pages[a.under].some((f) => new RegExp(`'${a.view}'`).test(src(f)))
+  ));
+  ok('…and every page under one of them is opened from the page it is under',
+    orphan.length === 0, orphan.map((a) => a.label).join(', '));
+
   const app = src('src/App.tsx');
   ok('the palette offers the three places and every page of the third',
-    ["id: 'dashboard'", "id: 'chat'", "id: 'machine'", 'MACHINE_ROWS.map'].every((s) => app.includes(s)));
+    ["id: 'dashboard'", "id: 'chat'", "id: 'machine'", 'MACHINE_ROWS.map', 'MACHINE_ASIDE.map']
+      .every((s) => app.includes(s)));
   // What each key actually does is not read here: `test-drive.mjs` mounts the
   // panel and presses them, because a handler's source says nothing about
   // whether the effect that registers it ever ran. What is held here is that

@@ -14,7 +14,8 @@ import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
 import { project as projectIn, useDivanView } from './lib/divan';
 import {
-  MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, chips, placeOf, projectFromSearch,
+  MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, chips, placeOf,
+  projectFromSearch,
   searchWithProject, updateWaiting, type View,
 } from './lib/shell';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
@@ -341,6 +342,15 @@ export function App() {
         label: `${PLACE_LABEL.machine} › ${row.label}`,
         shortcut: row.shortcut,
         run: () => setView(row.view),
+      })),
+      // …and the pages that have no row of their own, by name: they are opened
+      // from the page above them, and a page you can only reach by remembering
+      // which button it is behind is a page that was mislaid.
+      ...MACHINE_ASIDE.map((aside) => ({
+        id: aside.view,
+        label: `${PLACE_LABEL.machine} › ${aside.label}`,
+        shortcut: aside.view === 'projects' ? '⌘2' : undefined,
+        run: () => setView(aside.view),
       })),
       {
         id: 'theme',

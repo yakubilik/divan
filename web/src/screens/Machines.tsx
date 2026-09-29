@@ -87,8 +87,12 @@ export function Machines({ view, onView, onFocus }: {
     }
     setConfirming(null);
     if (action === 'retry') { void load(key); return; }
+    // The three pages that are about one computer, opened with that computer in
+    // hand: its wall, its screen and its folders.
     onFocus(key);
-    onView(action === 'terminal' ? 'terminal' : action === 'screen' ? 'screen' : 'projects');
+    if (action === 'terminal') onView('terminal');
+    else if (action === 'screen') onView('screen');
+    else onView('projects');
   };
 
   if (!view.hosts.length) {
