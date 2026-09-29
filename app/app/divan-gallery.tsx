@@ -152,7 +152,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
           </View>
         </Part>
 
-        <Part name="Card" frame="Mobile6 S3 · Mobile1 V1 · Mobile3 Drag frame · Mobile7 S5">
+        <Part name="Card" frame="Mobile6 S3 · Mobile1 V1 · Mobile3 D1 and D4 · Mobile7 S5">
           <View style={{ gap: 8, paddingHorizontal: 4 }}>
             <Card ring="amber">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -183,6 +183,10 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
             </Card>
             <Card lifted ring="none">
               <Text style={{ fontSize: 15, fontWeight: '600' }}>Custom domains for client portals</Text>
+            </Card>
+            <Card wash="run" ring="run">
+              <Text style={{ fontSize: 15, fontWeight: '600' }}>Custom domains for client portals</Text>
+              <Text mono style={{ fontSize: 11, color: t.run }}>● Picked up</Text>
             </Card>
             <Card hollow>
               <Text style={{ fontSize: 20, fontWeight: '600' }}>Quiet for 23 days.</Text>
