@@ -1150,6 +1150,136 @@ group('design/divan/TOKENS.md');
     && K.BORROWED.every((n) => new RegExp(`\`${n}\``).test(doc)));
 }
 
+// ── the screens that were carried over last ────────────────────────────────
+
+/** Every page of the panel that was still speaking the older vocabulary after
+ *  the drawer was built, and the two pieces of chrome around them. The chat and
+ *  the sheets that belong to it are deliberately not in here: the chat is not
+ *  being rebuilt. */
+const CARRIED = [
+  'src/screens/Fleet.tsx', 'src/screens/Projects.tsx', 'src/screens/Agents.tsx',
+  'src/screens/Update.tsx', 'src/screens/Preferences.tsx', 'src/screens/Onboarding.tsx',
+  'src/screens/Ustabasi.tsx', 'src/screens/Terminal.tsx', 'src/screens/Screen.tsx',
+  'src/components/Palette.tsx', 'src/App.tsx',
+];
+
+group('no page is still drawn in the older vocabulary');
+{
+  // The palette that predates Divan is the same table under other names
+  // (`C` in `lib/theme.ts`), so a page built out of it follows both themes and
+  // no colour check can see it. What is visible is the *shape*: `Btn` is not
+  // `Button`, `R.card` is 12 where a Divan card is 16, and a page made of them
+  // is a page from before the frames. So this is the one criterion that is
+  // answered by what a screen is written with rather than by what it paints.
+  const OLD = ['Btn', 'Chip', 'Dot', 'Label', 'Segment', 'Radio', 'Empty'];
+  const pages = [];
+  for (const e of readdirSync(join(web, 'src/screens'), { withFileTypes: true })) {
+    if (e.isFile() && e.name.endsWith('.tsx')) pages.push(`src/screens/${e.name}`);
+  }
+  pages.push('src/components/Palette.tsx', 'src/App.tsx');
+
+  const speaking = [];
+  for (const f of pages) {
+    const text = src(f);
+    const kit = /import\s*\{([^}]*)\}\s*from\s*'[^']*ui\/kit'/.exec(text)?.[1] ?? '';
+    const took = kit.split(',').map((n) => n.trim()).filter((n) => OLD.includes(n));
+    const palette = [...new Set([...text.matchAll(/\b([CR])\.[a-zA-Z0-9]+/g)].map((m) => m[1]))];
+    if (took.length || palette.length) speaking.push(`${f}: ${[...took, ...palette].join(', ')}`);
+  }
+  ok('every page of the panel is built out of the design system and nothing older',
+    speaking.length === 0, speaking.join('\n    '));
+  ok('…and there were enough pages for that to mean something',
+    pages.length >= 20, `${pages.length} pages`);
+  // The two that still hold the older set are the reason it is still there:
+  // the chat is not being rebuilt, and the icon vocabulary is shared.
+  ok('…while the chat, which is not being rebuilt, still speaks it',
+    /\bC\./.test(src('src/components/ChatView.tsx')));
+}
+
+group('every carried screen asks its computer for exactly what it did');
+{
+  // A carry is a change of language, not of behaviour, and the half of that
+  // which a render cannot see is the half that leaves this browser: which
+  // requests a screen makes, and which events it drives with. Both are read
+  // off the source and held to `main` — a screen that quietly dropped a
+  // handler or gained a call would show up here as a difference.
+  const REQUEST = /'((?:screen|chat|ustabasi|host|divan|account|agent|tool|approval|group|limits|update|daemon)\.[a-z_.]+)'/g;
+  const DRIVE = /\bon(MouseDown|MouseUp|MouseMove|MouseEnter|MouseLeave|Wheel|ContextMenu|DoubleClick|KeyDown|DragStart|DragEnd|DragOver|DragLeave|Drop|Click|Change|Blur|Paste|Load|Error)\s*[=:]/g;
+  const surface = (text) => JSON.stringify([
+    [...new Set([...text.matchAll(REQUEST)].map((m) => m[1]))].sort(),
+    [...new Set([...text.matchAll(DRIVE)].map((m) => m[1]))].sort(),
+  ]);
+  /** The one difference that is on purpose, with the reason. The frames draw
+   *  no hovered state at all — a card says what it is with its ring — so the
+   *  wall's tiles stopped lighting up under the pointer when they became
+   *  `Card`s. Nothing a person can do changed; a colour that appeared under
+   *  the mouse did not. */
+  const ON_PURPOSE = { 'src/screens/Ustabasi.tsx': ['MouseEnter', 'MouseLeave'] };
+  const allow = (f, before) => {
+    const [reqs, drives] = JSON.parse(before);
+    const dropped = ON_PURPOSE[f] ?? [];
+    return JSON.stringify([reqs, drives.filter((d) => !dropped.includes(d))]);
+  };
+  let was = null;
+  try {
+    was = CARRIED.map((f) => execFileSync('git', ['show', `main:web/${f}`],
+      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+  } catch { /* no git, or no main */ }
+  if (was === null) console.log('  · no git to read main from: nothing to compare against');
+  else {
+    const changed = CARRIED
+      .map((f, i) => [f, allow(f, surface(was[i])), surface(src(f))])
+      .filter(([, before, after]) => before !== after);
+    ok('none of them gained a request, lost one, or dropped an event it drove with',
+      changed.length === 0,
+      changed.map(([f, before, after]) => `${f}:\n      was ${before}\n      now ${after}`).join('\n    '));
+    ok('…over all eleven of them, which is every page that moved',
+      CARRIED.length === 11 && was.every((t) => t.length > 200));
+  }
+}
+
+group('nothing on a screen is standing in for something');
+{
+  // A carried screen is allowed to say "nothing yet"; it is not allowed to say
+  // it with a dash, a row of dots or a word from the artboard. The rendered
+  // markup is read rather than the source, because what matters is what a
+  // person sees.
+  //
+  // Two things are left out on purpose. The chat and the panels that belong to
+  // it are not being rebuilt, so its own dashes are its own business. And a
+  // dash inside a button is a glyph — the `–` that puts a chat session away is
+  // the minimise control, not a missing value.
+  const CHAT = /Chat|Sidebar|FieldSheet|Lightbox|Approval|Timeline|Bubble|NewChat/;
+  const HOLDING = [
+    [/\blorem\b|\bipsum\b/i, 'lorem ipsum'],
+    [/\bTODO\b|\bTBD\b|\bFIXME\b/, 'a note to the author'],
+    [/coming soon|not implemented|under construction/i, 'a promise'],
+    [/\bfoo\b|\bbar\b|\bbaz\b/i, 'a stand-in name'],
+    [/>[\s]*[—–][\s]*</, 'a dash where a value goes'],
+    [/>[\s]*\.\.\.[\s]*</, 'three dots where a value goes'],
+  ];
+  const found = [];
+  let read = 0;
+  for (const [where, markup] of Object.entries(drawn)) {
+    if (CHAT.test(where)) continue;
+    read++;
+    // Attributes are not words on a screen — `placeholder="Search…"` is the
+    // field saying what it is for — so the tags are dropped and only what is
+    // between them is read.
+    const words = markup
+      .replace(/<button[\s\S]*?<\/button>/g, '<span></span>')
+      .replace(/<[a-zA-Z][^>]*>/g, '><');
+    for (const [re, what] of HOLDING) {
+      const hit = re.exec(words);
+      if (hit) found.push(`${where}: ${what} — ${hit[0].trim().slice(0, 40)}`);
+    }
+  }
+  ok('no screen, panel or part draws a placeholder where a value belongs',
+    found.length === 0, [...new Set(found)].slice(0, 8).join('\n    '));
+  ok('…over every tree drawn in this file that is not the chat',
+    read >= 50, `${read} trees`);
+}
+
 // ── the gallery, written out ────────────────────────────────────────────────
 // Something to hold up against the frames: both themes, every part, no daemon.
 
