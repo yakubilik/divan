@@ -114,6 +114,11 @@ export default function RootLayout() {
         <Stack.Screen name="chat/index" />
         <Stack.Screen name="machine" />
         <Stack.Screen name="chat/[id]" />
+        {/* The Needs-you counter, opened up: everything waiting on a person
+            across every project and every machine. Pushed over the Dashboard
+            rather than being a fourth place — it is one of the Dashboard's own
+            numbers with the things behind it shown. */}
+        <Stack.Screen name="waiting" />
         {/* Every conversation on this computer. Not a place: the Chat tab
             enters the conversation itself, and this is the side door off the
             Dashboard — where a second one is started and where one that was

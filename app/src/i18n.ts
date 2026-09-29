@@ -343,6 +343,22 @@ const en = {
   pfLastSeen: 'last seen {time}', pfResume: 'resume {time}',
   dashEmpty: 'No projects yet',
   dashEmptyBody: 'Nothing has answered with a board. A computer shows its projects here once its daemon is new enough and it is reachable.',
+  // Waiting on you (src/waiting.ts): everything that needs a person, across
+  // every project and every computer, grouped by the kind of answer it needs.
+  waitTitle: 'Waiting on you',
+  waitAcross: 'Across {n} projects. Oldest first within each kind.',
+  waitAcrossOne: 'All in one project. Oldest first.',
+  wkQuestions: 'questions', wkDecisions: 'decisions', wkStuck: 'stuck', wkYours: 'yours',
+  waitFrom: '{project} · {title} · on {machine}',
+  // What a tap on a card does. `waitAnswer` is the one string here that is
+  // never shown: an answer wears the question's own words, and this is the
+  // name the button is known by rather than the words on it.
+  waitAnswer: 'Answer', waitReply: 'Reply…', waitLook: 'Open live view', waitDone: 'Mark it done',
+  waitSending: 'sending…', waitSent: 'sent',
+  waitNotSent: "Couldn't reach {machine}",
+  waitCalm: 'Nothing is waiting on you',
+  waitCalmBody: 'Every agent is either working or finished. A question, something that fell over, or a card that is yours to do lands here the moment it happens.',
+  waitStale: '{machine} is not answering. This is the last thing it said.',
   branchNoSource: 'no source connected yet',
   branchOpen: '{n} open',
   chatPlacePick: 'Pick a folder and a model for this conversation.',
