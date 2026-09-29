@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C, outline, R, toneFace, type ToneFace } from '../lib/theme';
-import { Dot, Empty, Icon, P, Spinner, mono } from '../ui/kit';
+import { T, STATE_MARK, toneFace, type State, type ToneFace } from '../lib/theme';
+import { Spinner, mono } from '../ui/kit';
+import {
+  Card, EmptyState, Pill, SectionHeader, StateMark, StatusDot, Tag,
+} from '../ui/divan';
 import { TicketChat } from '../components/TicketChat';
 import { useFleet } from '../lib/fleet';
 import { duration } from '../lib/format';
@@ -26,6 +29,12 @@ import {
  *  percentage: nothing in the queue knows how far along a ticket is, so a bar
  *  would be a drawing of a guess.
  *
+ *  A tile is a `Card` wearing its state as a ring, which is the design system's
+ *  whole vocabulary for a card that wants something — the same ring the board
+ *  draws around a ticket that is asking. The head is washed in that state's own
+ *  tone, because a wall is read by hue from across the room before it is read
+ *  at all.
+ *
  *  Nothing here is a second source of truth. The daemon reads the queue's own
  *  database, and the one write — answering a ticket — is that queue's CLI run
  *  by the daemon, so a note from this screen and a note from a terminal are
@@ -46,13 +55,26 @@ const STATUS: Record<Status, ToneFace> = {
   cancelled: toneFace('cancelled', 'ink3'),
 };
 
-const FILTERS: { key: Status | 'all'; label: string; color: string }[] = [
-  { key: 'all', label: 'All', color: C.text2 },
-  { key: 'blocked', label: 'Needs an answer', color: STATUS.blocked.color },
-  { key: 'failed', label: 'Failed', color: STATUS.failed.color },
-  { key: 'running', label: 'Running', color: STATUS.running.color },
-  { key: 'queued', label: 'Queued', color: STATUS.queued.color },
-  { key: 'done', label: 'Done', color: STATUS.done.color },
+/** …and the state each one is, in the six the design names: colour is never
+ *  the only carrier, so a tile says its state with a character too. */
+const MARK: Record<Status, State> = {
+  running: 'running', blocked: 'asking', failed: 'stuck',
+  done: 'done', queued: 'quiet', cancelled: 'quiet',
+};
+
+/** The ring a tile wears. `Card` takes four, and three of them are states. */
+const RING: Record<Status, 'line' | 'amber' | 'red' | 'run'> = {
+  running: 'run', blocked: 'amber', failed: 'red',
+  done: 'line', queued: 'line', cancelled: 'line',
+};
+
+const FILTERS: { key: Status | 'all'; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'blocked', label: 'Needs an answer' },
+  { key: 'failed', label: 'Failed' },
+  { key: 'running', label: 'Running' },
+  { key: 'queued', label: 'Queued' },
+  { key: 'done', label: 'Done' },
 ];
 
 interface Snapshot {
@@ -79,59 +101,49 @@ function first(text: string, n: number): string {
 // ── one tile ─────────────────────────────────────────────────────────────────
 
 function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }) {
-  const [hot, setHot] = useState(false);
   const ph = STATUS[t.status] || STATUS.queued;
+  const state = MARK[t.status] ?? 'quiet';
   const round = roundAge(t, now);
   const commits = commitCount(t);
   const wants = answerable(t.status);
 
   return (
-    <div
-      onClick={onOpen}
-      onMouseEnter={() => setHot(true)}
-      onMouseLeave={() => setHot(false)}
-      style={{
-        display: 'flex', flexDirection: 'column', minWidth: 0, cursor: 'pointer',
-        borderRadius: R.card, overflow: 'hidden', background: C.surface,
-        border: `1px solid ${wants ? ph.edge : hot ? C.borderStrong : C.border}`,
-        boxShadow: wants ? outline(ph.edge) : 'none',
-        transition: 'border-color 120ms, box-shadow 120ms',
-      }}
-    >
+    <Card inset={false} ring={RING[t.status] ?? 'line'} onClick={onOpen} title={t.title}>
       {/* The title bar of the window this ticket would be, washed in its
           colour — the wall is read by hue from across the room. */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px',
+        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px',
         background: ph.wash, borderBottom: `1px solid ${ph.edge}`,
       }}>
-        <Dot color={ph.color} live={t.status === 'running'} size={7} />
-        <span style={{ ...mono, fontSize: 12, color: ph.color, fontWeight: 600 }}>#{t.id}</span>
+        <StatusDot state={state} hollow={state === 'asking'} />
+        <span style={{ ...mono, fontSize: 12, fontWeight: 600, color: ph.color }}>#{t.id}</span>
         <span style={{
-          flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: C.text,
+          flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{t.title}</span>
-        <span style={{ ...mono, fontSize: 11, color: C.mute, flexShrink: 0 }}>{ph.label}</span>
+        <StateMark state={state} label={ph.label} size={11} />
       </div>
 
-      <div style={{ padding: '11px 12px 12px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-        {wants && t.escalation ? (
-          <div style={{
-            fontSize: 12.5, lineHeight: '18px', color: C.text2, whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}>{first(t.escalation, 260)}</div>
-        ) : (
-          <div style={{ fontSize: 12.5, lineHeight: '18px', color: C.mute, wordBreak: 'break-word' }}>
-            {first(cardLine(t), 200) || 'no events yet'}
-          </div>
-        )}
+      <div style={{
+        padding: '12px 13px 13px', display: 'flex', flexDirection: 'column', gap: 9, minWidth: 0,
+      }}>
+        <div style={{
+          fontSize: 12.5, lineHeight: 1.45, wordBreak: 'break-word',
+          color: wants && t.escalation ? T.ink2 : T.ink3,
+          whiteSpace: wants && t.escalation ? 'pre-wrap' : undefined,
+        }}>
+          {wants && t.escalation
+            ? first(t.escalation, 260)
+            : first(cardLine(t), 200) || 'no events yet'}
+        </div>
 
         {/* How long it has been a ticket, first and on its own: it is the
             figure anybody means by "how long has this been going", and the
             smaller one under it was being read as that. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-          <div style={{ ...mono, fontSize: 12, color: C.text2 }}>{totalAge(t, now)}</div>
+          <div style={{ ...mono, fontSize: 12, color: T.ink2 }}>{totalAge(t, now)}</div>
           <div style={{
-            ...mono, fontSize: 11, color: C.faint, display: 'flex', gap: 6,
+            ...mono, fontSize: 11, color: T.ink3, display: 'flex', gap: 6,
             flexWrap: 'wrap', alignItems: 'center',
           }}>
             <span>{stageLine(t)}</span>
@@ -141,9 +153,9 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
           </div>
           {t.git?.subject && (
             <div style={{ display: 'flex', gap: 6, minWidth: 0, alignItems: 'baseline' }}>
-              <span style={{ ...mono, fontSize: 11, color: C.faint, flexShrink: 0 }}>last</span>
+              <span style={{ ...mono, fontSize: 11, color: T.ink3, flexShrink: 0 }}>last</span>
               <span style={{
-                fontSize: 12, color: C.mute, minWidth: 0,
+                fontSize: 12, color: T.ink3, minWidth: 0,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>{t.git.subject}</span>
             </div>
@@ -151,17 +163,12 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
         </div>
 
         {wants && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
-            height: 24, padding: '0 10px', borderRadius: R.chip, fontSize: 12, fontWeight: 600,
-            background: ph.wash, color: ph.color,
-          }}>
-            <Icon path={P.chevronRight} size={13} color={ph.color} />
-            Answer it
-          </div>
+          <span style={{ alignSelf: 'flex-start' }}>
+            <Tag mark={STATE_MARK[state]} label="answer it" tone={t.status === 'failed' ? 'red' : 'amber'} />
+          </span>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -188,18 +195,10 @@ export function Wall({ groups, now, onOpen }: {
         <section key={g.project} style={{
           display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0,
         }}>
-          <div style={{
-            display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0,
-            paddingBottom: 7, borderBottom: `1px solid ${C.border}`,
-          }}>
-            <span style={{
-              fontSize: 13.5, fontWeight: 600, color: C.text, minWidth: 0,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{g.project}</span>
-            <span style={{ ...mono, fontSize: 11, color: C.faint, flexShrink: 0 }}>
-              {g.tickets.length}
-            </span>
-          </div>
+          <SectionHeader
+            title={g.project} count={g.tickets.length}
+            style={{ paddingBottom: 7, borderBottom: `1px solid ${T.line}` }}
+          />
           {g.tickets.map((t) => (
             <Tile key={t.id} t={t} now={now} onOpen={() => onOpen(t.id)} />
           ))}
@@ -274,59 +273,48 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
   }, [focus, call, load]);
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
-      <div style={{ flexShrink: 0, borderBottom: `1px solid ${C.border}`, background: C.bg }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '14px 24px 10px', flexWrap: 'wrap',
-        }}>
+    <div style={{
+      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+      background: T.bg, overflow: 'hidden',
+    }}>
+      <div style={{
+        flexShrink: 0, borderBottom: `1px solid ${T.line}`,
+        padding: '18px 24px 12px', display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {header}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexShrink: 0 }}>
-            <span style={{ fontSize: 17, fontWeight: 600 }}>Ustabasi</span>
-            <span style={{ ...mono, fontSize: 12, color: C.faint }}>
-              {counts.running || 0} running · {(counts.blocked || 0) + (counts.failed || 0)} red
-            </span>
-          </div>
-
+          <SectionHeader
+            kind="page" title="Ustabasi"
+            note={`${counts.running || 0} running · `
+              + `${(counts.blocked || 0) + (counts.failed || 0)} want a person`}
+          />
           {/* Whether the queue is alive at all. Tiles cannot tell you this:
               a supervisor that died leaves every tile exactly as it was. */}
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 7, height: 26, padding: '0 11px',
-            borderRadius: R.chip, fontSize: 12.5, whiteSpace: 'nowrap',
-            background: C.surface, border: `1px solid ${stale ? C.danger : C.border}`,
-            color: stale ? C.danger : C.mute,
-          }}>
-            <Dot color={stale ? C.danger : C.ok} live={!stale} size={6} />
-            {tickAge == null ? 'never ticked'
+          <Pill
+            dot={stale ? 'stuck' : 'running'}
+            label={tickAge == null ? 'never ticked'
               : stale ? `silent for ${duration(tickAge * 1000)}`
               : `ticked ${duration(tickAge * 1000)} ago`}
-          </span>
-
+          />
           {paused && (
-            <span style={{ ...mono, fontSize: 12, color: C.warn }}>
-              paused until {paused.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            <Tag
+              mark={STATE_MARK.asking} tone="amber"
+              label={`paused until ${paused.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+            />
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 6, padding: '0 24px 12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {FILTERS.map((f) => {
             const on = filter === f.key;
             const n = f.key === 'all' ? (snap?.tickets || []).length : (counts[f.key] || 0);
             return (
-              <button
-                key={f.key} type="button" onClick={() => setFilter(f.key)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7, height: 26, padding: '0 11px',
-                  borderRadius: R.chip, cursor: 'pointer', fontSize: 12.5, fontWeight: 500,
-                  background: on ? C.text : 'transparent',
-                  border: `1px solid ${on ? C.text : C.border}`,
-                  color: on ? C.bg : C.mute,
-                }}
-              >
-                {f.key !== 'all' && <Dot color={on ? C.bg : f.color} size={6} />}
-                {f.label}
-                <span style={{ ...mono, fontSize: 11 }}>{n}</span>
-              </button>
+              <Pill
+                key={f.key} face={on ? 'ink' : 'surface'}
+                dot={f.key === 'all' ? null : MARK[f.key]}
+                onClick={() => setFilter(f.key)}
+                label={<>{f.label}<span style={{ ...mono, marginLeft: 6 }}>{n}</span></>}
+              />
             );
           })}
         </div>
@@ -334,15 +322,31 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 24 }}>
         {!online ? (
-          <Empty title="That computer is not connected" hint="The queue lives on the Mac, not in this browser." />
+          <EmptyState
+            title="That computer is not connected."
+            body="The queue lives on the Mac and not in this browser: the wall is a reading of
+                  its database, so it arrives when the computer does."
+          />
         ) : error ? (
-          <Empty title="The queue did not answer" hint={error} />
+          <EmptyState title="The queue did not answer." body={error} />
         ) : !snap ? (
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40 }}><Spinner /></div>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            paddingTop: 40, ...mono, fontSize: 12.5, color: T.ink3,
+          }}>
+            <Spinner size={14} color={T.ink3} /> reading the queue…
+          </div>
         ) : !snap.available ? (
-          <Empty title="No ustabasi queue here" hint="This computer does not run the ticket queue." />
+          <EmptyState
+            title="No ticket queue on this computer."
+            body="Ustabasi is a queue that runs on the machine itself. This one does not run it,
+                  so there is nothing to watch."
+          />
         ) : shown === 0 ? (
-          <Empty title="Nothing to show" hint="No ticket has that status right now." />
+          <EmptyState
+            title="Nothing has that state right now."
+            body="Every ticket in the queue is somewhere else on the filter above."
+          />
         ) : (
           <Wall groups={groups} now={now} onOpen={setOpenId} />
         )}

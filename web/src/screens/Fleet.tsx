@@ -1,46 +1,44 @@
+/** Sessions and plan limits: what is running on every computer right now, and
+ *  how much of each sign-in's plan is gone.
+ *
+ *  One level under Machines — the table up there says how much of today's quota
+ *  a machine has spent; this says which window that number came out of, and
+ *  which chat is spending it. No frame of its own, so it is built out of what
+ *  Web15 draws for the pages that do have one: the page head, W12's table for
+ *  the computers and for the sessions, W11's track for a plan window (stated
+ *  rather than set, which is what a read-only `Slider` is), and W17's rows for
+ *  everything that is a fact with a word at the end.
+ *
+ *  TODO(daemon): the artboard asks for numbers the protocol does not carry yet.
+ *  Each of these is a daemon change, not a screen change — until then the panel
+ *  stays quiet rather than drawing a guess.
+ *   - CPU / RAM load: host.info reports no measurements.
+ *   - A "last 7 days" cost chart: there is no historical spend query, only a
+ *     per-chat lifetime total.
+ *   - A queue panel for the phone: queue depth is not in the protocol.
+ *   - Daemon restart count and last error: the daemon keeps neither.
+ *   - "N sessions closed in the last 24h": there is no closed-session history.
+ */
 import { useEffect, useMemo, useState } from 'react';
-import { C, R, statusColor } from '../lib/theme';
-import { Btn, Dot, Empty, Icon, P, Pulse, Spinner, mono } from '../ui/kit';
+import { T, type Tone } from '../lib/theme';
+import { Icon, P, Pulse, Spinner, mono } from '../ui/kit';
+import {
+  Button, Card, Cell, EmptyState, NameCell, Quoted, Row, SectionHeader, Slider, StatusDot,
+  Table, Tag, Well, type Column,
+} from '../ui/divan';
 import { ago, clock, cost, tilde, toolSummary, until, uptime, windowName } from '../lib/format';
 import { onAnyEvent, selectRunning, useFleet, type HostSlot, type Running } from '../lib/fleet';
 import { interrupt } from '../lib/actions';
 import type { LimitWindow } from '../lib/protocol';
-
-// TODO(daemon): the artboard asks for numbers the protocol does not carry yet.
-// Each of these is a daemon change, not a screen change — until then the panel
-// stays quiet rather than drawing a guess.
-// - CPU / RAM load: host.info reports no measurements.
-// - A "last 7 days" cost chart: there is no historical spend query, only a per-chat lifetime total.
-// - A queue panel for the phone: queue depth is not in the protocol.
-// - Daemon restart count and last error: the daemon keeps neither.
-// - "N sessions closed in the last 24h": there is no closed-session history query.
-
-/** The washes and lines behind a badge. Every one of them is now a token: the
- *  design gives each tone a wash and an outline of its own, so nothing here
- *  thins a colour by hand. */
-const TINT = {
-  warnBg: C.warnBg,
-  warnBd: C.warnLine,
-  infoBg: C.infoBg,
-  infoBd: C.infoLine,
-  dangerBg: C.dangerBg,
-  dangerBd: C.dangerLine,
-  plain: C.surface2,
-  track: C.borderStrong,
-};
-
-const IC = {
-  refresh: 'M20 11a8 8 0 1 0-2.3 5.6M20 5v6h-6',
-  laptop: 'M5.5 6.5a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5V15h-13zM2.5 15h19l-1.2 2.6a1.5 1.5 0 0 1-1.4.9H5.1a1.5 1.5 0 0 1-1.4-.9z',
-  lock: 'M6 11h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2zM8 11V7a4 4 0 0 1 8 0v4',
-};
 
 export interface FleetProps {
   onOpenChat: (hostKey: string, chatId: string) => void;
   onNewChat: () => void;
 }
 
-/* ─────────────────────────── small helpers ─────────────────────────── */
+const IC = {
+  refresh: 'M20 11a8 8 0 1 0-2.3 5.6M20 5v6h-6',
+};
 
 function isLocal(host: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1';
@@ -58,9 +56,9 @@ function maskHost(host: string): string {
   return rest.length ? `${head}.${rest.join('.')}` : head;
 }
 
-/** Clock-style elapsed time — the table reads as a stopwatch, not as prose. */
+/** Clock-style elapsed time — the column reads as a stopwatch, not as prose. */
 function elapsed(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '—';
+  if (!Number.isFinite(seconds) || seconds < 0) return 'just now';
   const s = Math.floor(seconds);
   const pad = (n: number) => String(n).padStart(2, '0');
   const h = Math.floor(s / 3600);
@@ -68,225 +66,36 @@ function elapsed(seconds: number): string {
   return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`;
 }
 
-function connLabel(slot: HostSlot): { text: string; color: string; live: boolean } {
-  if (slot.status === 'online') return { text: 'online', color: C.ok, live: true };
-  if (slot.status === 'connecting') return { text: 'connecting…', color: C.warn, live: false };
-  if (slot.status === 'unauthorized') return { text: 'no access', color: C.danger, live: false };
-  return { text: 'offline', color: C.faint, live: false };
+/** A connection, in the design's own six states and its own words. */
+function connOf(slot: HostSlot): { says: string; state: 'running' | 'asking' | 'stuck' | 'quiet'; tone: Tone } {
+  if (slot.status === 'online') return { says: 'online', state: 'running', tone: 'run' };
+  if (slot.status === 'connecting') return { says: 'connecting…', state: 'asking', tone: 'amber' };
+  if (slot.status === 'unauthorized') return { says: 'no access', state: 'stuck', tone: 'red' };
+  return { says: 'offline', state: 'quiet', tone: 'ink3' };
 }
 
-function limitTone(u: number): string {
-  if (u >= 0.9) return C.danger;
-  if (u >= 0.6) return C.warn;
-  return C.info;
-}
+/** How full a plan window is, in the three tones the design gives a reading:
+ *  green while there is room, amber where it is worth knowing, red at the end. */
+const limitTone = (u: number): Tone => (u >= 0.9 ? 'red' : u >= 0.6 ? 'amber' : 'run');
 
-function permTone(mode: string): { fg: string; bg: string; bd: string } {
+/** What a permission mode is, as a state rather than as a word: a chat that may
+ *  do anything without asking is the one worth seeing across a table. */
+const permTone = (mode: string): Tone => {
   const m = (mode || '').toLowerCase();
-  if (m.includes('bypass') || m.includes('danger') || m.includes('full')) {
-    return { fg: C.warn, bg: TINT.warnBg, bd: TINT.warnBd };
-  }
-  if (m.includes('edit')) return { fg: C.info, bg: TINT.infoBg, bd: TINT.infoBd };
-  return { fg: C.mute, bg: TINT.plain, bd: C.borderStrong };
-}
-
-const EVENT_TONE: Record<string, string> = {
-  'tool.use': C.info,
-  'tool.result': C.info,
-  'approval.request': C.warn,
-  'approval.resolved': C.ok,
-  'turn.started': C.mute,
-  'turn.done': C.ok,
-  'turn.error': C.danger,
-  'message.user': C.accentSoft,
+  if (m.includes('bypass') || m.includes('danger') || m.includes('full')) return 'amber';
+  if (m.includes('edit')) return 'run';
+  return 'ink3';
 };
 
-/* ─────────────────────────── shared bits ─────────────────────────── */
-
-function Panel({ title, hint, right, children, pad = true }: {
-  title: string;
-  hint?: string;
-  right?: React.ReactNode;
-  children: React.ReactNode;
-  pad?: boolean;
-}) {
-  return (
-    <div style={{
-      borderRadius: R.card, background: C.surface, border: `1px solid ${C.border}`,
-      display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
-    }}>
-      <div style={{
-        height: 44, flexShrink: 0, padding: '0 14px', display: 'flex',
-        alignItems: 'center', gap: 10,
-      }}>
-        <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>{title}</div>
-        {hint && (
-          <div style={{
-            ...mono, fontSize: 11, color: C.mute, minWidth: 0,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{hint}</div>
-        )}
-        <div style={{ flex: 1 }} />
-        {right}
-      </div>
-      <div style={pad ? { padding: '0 14px 14px' } : undefined}>{children}</div>
-    </div>
-  );
-}
-
-function Badge({ text, fg, bg, bd, small }: {
-  text: string; fg: string; bg: string; bd: string; small?: boolean;
-}) {
-  return (
-    <span style={{
-      height: 20, borderRadius: R.badge, padding: small ? '0 6px' : '0 7px',
-      display: 'inline-flex', alignItems: 'center', background: bg,
-      border: `1px solid ${bd}`, color: fg, whiteSpace: 'nowrap',
-      fontSize: small ? 10 : 11, fontWeight: 500,
-      maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
-      ...(small ? mono : {}),
-    }}>{text}</span>
-  );
-}
-
-function ProviderBadge({ provider }: { provider: string }) {
-  const claude = provider === 'claude';
-  return (
-    <Badge
-      text={claude ? 'Claude' : 'Codex'}
-      fg={claude ? C.accentSoft : C.info}
-      bg={claude ? C.accentTint : TINT.infoBg}
-      bd={claude ? C.accentRing : TINT.infoBd}
-    />
-  );
-}
-
-function Bar({ value, color }: { value: number; color: string }) {
-  return (
-    <div style={{
-      height: 5, borderRadius: 3, background: TINT.track, overflow: 'hidden', marginTop: 6,
-    }}>
-      <div style={{ width: `${Math.round(value * 100)}%`, height: 5, borderRadius: 3, background: color }} />
-    </div>
-  );
-}
-
-/* ─────────────────────────── computer cards ─────────────────────────── */
-
-function HostCard({ slot, known }: { slot: HostSlot; known: number }) {
-  const conn = connLabel(slot);
-  const online = slot.status === 'online';
-  const info = slot.info;
-  const dim = !online;
-  const masked = maskHost(slot.cfg.host);
-
-  return (
-    <div style={{
-      minHeight: 156, boxSizing: 'border-box', borderRadius: R.card,
-      background: online ? C.surface : C.inset,
-      border: `1px solid ${online ? C.borderStrong : C.border}`,
-      padding: '14px 16px', display: 'flex', flexDirection: 'column', minWidth: 0,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        <Icon path={IC.laptop} size={18} color={dim ? C.faint : C.text2} />
-        <div style={{
-          fontSize: 15, fontWeight: 600, lineHeight: '20px', color: dim ? C.mute : C.text,
-          minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{info?.name || slot.cfg.name}</div>
-        {isLocal(slot.cfg.host) && (
-          <Badge text="this computer" fg={C.accentSoft} bg={C.accentTint} bd={C.accentRing} />
-        )}
-        <div style={{ flex: 1 }} />
-        <Dot color={conn.color} live={conn.live} size={8} />
-        <div style={{ fontSize: 12, color: conn.color, whiteSpace: 'nowrap' }}>{conn.text}</div>
-      </div>
-
-      <div style={{
-        ...mono, fontSize: 11, lineHeight: '15px', color: dim ? C.faint : C.mute,
-        marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-      }}>
-        {info
-          ? `${info.os}${info.os_version ? ` ${info.os_version}` : ''} · daemon ${info.daemon_version}`
-          : 'no daemon information'}
-      </div>
-
-      {online && info ? (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
-          <Stat label="Uptime" value={uptime(info.uptime_s)} />
-          <Stat label="Sessions" value={String(info.active_sessions)} />
-          <Stat label="Devices" value={String(info.connected_devices)} />
-        </div>
-      ) : (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 13, lineHeight: '17px', color: C.mute }}>
-            {slot.lastOnline
-              ? `Last seen ${ago(slot.lastOnline / 1000)} ago`
-              : 'Never reached in this session'}
-          </div>
-          <div style={{ fontSize: 13, lineHeight: '17px', color: C.mute }}>
-            {known ? `${known} chats, last known` : 'No chat information'}
-          </div>
-        </div>
-      )}
-
-      <div style={{ flex: 1, minHeight: 10 }} />
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <div style={{
-          ...mono, fontSize: 11, color: dim ? C.faint : C.mute, minWidth: 0,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
-          {info
-            ? `claude ${info.versions?.claude ?? '—'} · codex ${info.versions?.codex ?? '—'}`
-            : '—'}
-        </div>
-        <div style={{ flex: 1 }} />
-        <Icon path={IC.lock} size={12} color={online ? C.ok : C.faint} width={2.4} />
-        <div style={{ ...mono, fontSize: 11, color: dim ? C.faint : C.mute, whiteSpace: 'nowrap' }}>
-          {masked}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ fontSize: 12, color: C.mute, flex: 1, minWidth: 0 }}>{label}</div>
-      <div style={{ ...mono, fontSize: 11, color: C.text2, whiteSpace: 'nowrap' }}>{value}</div>
-    </div>
-  );
-}
-
-/* ─────────────────────────── running sessions ─────────────────────────── */
-
-/** Fixed columns, declared once so the header and the rows cannot drift apart.
- *  Only the two text columns stretch; every number keeps its own lane. */
-const COL = {
-  chat: { flexGrow: 2, flexBasis: 0, minWidth: 150 },
-  host: 80,
-  model: 116,
-  effort: 52,
-  perm: 88,
-  now: { flexGrow: 1, flexBasis: 0, minWidth: 110 },
-  dur: 52,
-  cost: 60,
-  act: 62,
-} as const;
-
-function cell(w: number | { flexGrow: number; flexBasis: number; minWidth: number }, right = false): React.CSSProperties {
-  const base: React.CSSProperties = {
-    boxSizing: 'border-box', paddingRight: 10, minWidth: 0,
-    textAlign: right ? 'right' : 'left',
-  };
-  return typeof w === 'number' ? { ...base, width: w, flexShrink: 0 } : { ...base, ...w };
-}
-
-const headText: React.CSSProperties = {
-  fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase', color: C.mute,
-  whiteSpace: 'nowrap', overflow: 'hidden',
+/** Which tone an event in the stream is read in. */
+const EVENT_TONE: Record<string, Tone> = {
+  'tool.use': 'run', 'tool.result': 'run',
+  'approval.request': 'amber', 'approval.resolved': 'run',
+  'turn.started': 'ink3', 'turn.done': 'run', 'turn.error': 'red',
+  'message.user': 'ink2',
 };
+
+const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 /** What a chat is doing this very second. The chat row itself only knows its
  *  status, so the tool in flight and the moment the turn started are folded out
@@ -301,259 +110,90 @@ interface Live {
 
 const EMPTY_LIVE: Live = { tool: null, detail: '', approval: null, since: null, done: false };
 
-function SessionRow({ r, live, now, onOpen, onStop }: {
-  r: Running; live: Live; now: number;
-  onOpen: () => void; onStop: () => void;
-}) {
+/** W12's tracks, with the columns a session has that a machine does not. */
+const COMPUTERS: Column[] = [
+  { width: '34px' },
+  { label: 'machine', width: 'minmax(0, 1.3fr)' },
+  { label: 'state', width: '120px' },
+  { label: 'uptime', width: '110px' },
+  { label: 'running', width: '130px' },
+  { label: 'tools', width: 'minmax(0, 150px)' },
+  { label: 'address', width: '120px' },
+];
+
+const SESSIONS: Column[] = [
+  { width: '24px' },
+  { label: 'chat', width: 'minmax(0, 1.6fr)' },
+  { label: 'machine', width: '100px' },
+  { label: 'model', width: 'minmax(0, 150px)' },
+  { label: 'may do', width: '110px' },
+  { label: 'doing now', width: 'minmax(0, 1.3fr)' },
+  { label: 'time', width: '72px' },
+  { label: 'cost', width: '72px' },
+  { width: '104px' },
+];
+
+function sessionRow(r: Running, live: Live, now: number,
+                    onOpen: () => void, onStop: () => void) {
   const chat = r.chat;
   const awaiting = chat.status === 'awaiting_approval';
-  const perm = permTone(chat.perm_mode);
   const since = live.since ?? chat.updated_at;
-  const dur = elapsed(now / 1000 - since);
-
-  return (
-    <div
-      onClick={onOpen}
-      style={{
-        height: 68, flexShrink: 0, boxSizing: 'border-box', padding: '0 14px 0 12px',
-        display: 'flex', alignItems: 'center', cursor: 'pointer',
-        borderTop: `1px solid ${C.border}`,
-        background: awaiting ? C.surface3 : 'transparent',
-        borderLeft: `2px solid ${awaiting ? C.warn : 'transparent'}`,
-      }}
-    >
-      <div style={{ ...cell(COL.chat), display: 'flex', alignItems: 'center', gap: 8 }}>
+  const doing = live.tool ? `${live.tool} ${live.detail}`.trim() : 'running…';
+  return {
+    key: `${r.hostKey}/${chat.id}`,
+    tone: 'amber' as Tone,
+    wash: awaiting,
+    onClick: onOpen,
+    title: chat.title || 'New chat',
+    cells: [
+      <StatusDot state={awaiting ? 'asking' : 'running'} hollow={awaiting} />,
+      <NameCell title={chat.title || 'New chat'} note={tilde(chat.cwd)} />,
+      <Cell text={r.hostName} style={{ color: T.ink2 }} />,
+      <>
+        <Tag label={chat.provider === 'claude' ? 'Claude' : 'Codex'} />
+        <Cell text={chat.effort ? `${chat.model} · ${chat.effort}` : chat.model} />
+      </>,
+      <Tag label={chat.perm_mode || 'asks first'} tone={permTone(chat.perm_mode)} />,
+      awaiting
+        ? <Cell text={live.approval || 'waiting for you to allow something'} tone="amber" />
+        : <>
+            <Pulse color={T.run} />
+            <Cell text={doing} tone={live.done ? 'ink3' : undefined} />
+          </>,
+      <Cell text={elapsed(now / 1000 - since)} tone={awaiting ? 'amber' : undefined} />,
+      <Cell text={cost(chat.total_cost_usd)} />,
+      <span style={{ marginLeft: 'auto' }}>
         {awaiting
-          ? <Icon path={P.warn} size={12} color={C.warn} width={2.4} />
-          : <Dot color={statusColor(chat.status)} live size={8} />}
-        <div style={{ minWidth: 0 }}>
-          <div style={{
-            fontSize: 13, fontWeight: 500, lineHeight: '17px', color: C.text,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }} title={chat.title || 'New chat'}>{chat.title || 'New chat'}</div>
-          <div style={{
-            ...mono, fontSize: 11, lineHeight: '15px', color: C.mute, marginTop: 2,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }} title={tilde(chat.cwd)}>{tilde(chat.cwd)}</div>
-        </div>
-      </div>
-
-      <div style={{
-        ...cell(COL.host), fontSize: 12, lineHeight: '15px', color: C.text2,
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-      }} title={r.hostName}>{r.hostName}</div>
-
-      <div style={cell(COL.model)}>
-        <ProviderBadge provider={chat.provider} />
-        <div style={{
-          ...mono, fontSize: 11, lineHeight: '15px', color: C.text2, marginTop: 3,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }} title={chat.model}>{chat.model}</div>
-      </div>
-
-      <div style={{ ...cell(COL.effort), ...mono, fontSize: 11, color: chat.effort ? C.text2 : C.faint }}>
-        {chat.effort || '—'}
-      </div>
-
-      <div style={cell(COL.perm)}>
-        <Badge text={chat.perm_mode || '—'} fg={perm.fg} bg={perm.bg} bd={perm.bd} small />
-      </div>
-
-      <div style={cell(COL.now)}>
-        {awaiting ? (
-          <>
-            <Badge text="awaiting approval" fg={C.warn} bg={TINT.warnBg} bd={TINT.warnBd} />
-            {live.approval && (
-              <div style={{
-                ...mono, fontSize: 11, lineHeight: '15px', color: C.mute, marginTop: 3,
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }} title={live.approval}>{live.approval}</div>
-            )}
-          </>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-            <Pulse />
-            <div style={{
-              ...mono, fontSize: 11, minWidth: 0,
-              color: live.tool ? (live.done ? C.mute : C.text2) : C.mute,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }} title={live.tool ? `${live.tool} ${live.detail}`.trim() : undefined}>
-              {live.tool ? `${live.tool} ${live.detail}`.trim() : 'running…'}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div style={{
-        ...cell(COL.dur, true), ...mono, fontSize: 11,
-        color: awaiting ? C.warn : C.text2,
-      }}>{dur}</div>
-
-      <div style={{ ...cell(COL.cost, true), ...mono, fontSize: 11, color: C.text2 }}>
-        {cost(chat.total_cost_usd)}
-      </div>
-
-      <div style={{ ...cell(COL.act), paddingRight: 0, display: 'flex', justifyContent: 'flex-end' }}>
-        {awaiting ? (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onOpen(); }}
-            style={{
-              height: 26, borderRadius: R.btn, background: TINT.warnBg,
-              border: `1px solid ${TINT.warnBd}`, padding: '0 9px', cursor: 'pointer',
-              fontSize: 12, fontWeight: 600, color: C.warn,
-            }}
-          >Answer</button>
-        ) : (
-          <button
-            type="button" title="Stop"
-            onClick={(e) => { e.stopPropagation(); onStop(); }}
-            style={{
-              width: 26, height: 26, borderRadius: R.btn, background: 'transparent',
-              border: `1px solid ${C.borderStrong}`, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Icon path={P.stop} size={12} color={C.mute} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
+          ? <Button small face="amber" label="Answer" onClick={onOpen} />
+          : <Button small face="outline" label="Stop" title="Stop this turn" onClick={onStop} />}
+      </span>,
+    ],
+  };
 }
 
-/* ─────────────────────────── plan limits ─────────────────────────── */
-
-function WindowRow({ w }: { w: LimitWindow }) {
-  const u = Math.max(0, Math.min(1, w.utilization ?? 0));
-  const tone = limitTone(u);
-  const note = w.status === 'rejected' ? 'used up' : w.status === 'allowed_warning' ? 'warning' : null;
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Dot color={tone} live={u >= 0.6} size={6} />
-        <div style={{
-          fontSize: 12, color: C.text2, flex: 1, minWidth: 0,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{windowName(w.window)}</div>
-        <div style={{ ...mono, fontSize: 11, color: tone }}>{Math.round(u * 100)}%</div>
-      </div>
-      <Bar value={u} color={tone} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-        <div style={{ ...mono, fontSize: 10, color: C.faint, flex: 1, minWidth: 0, whiteSpace: 'nowrap' }}>
-          {w.resets_at ? `resets · ${until(w.resets_at)}` : 'reset time unknown'}
-        </div>
-        {note && <span style={{ ...mono, fontSize: 10, color: tone }}>{note}</span>}
-        {w.overage_status && (
-          <span style={{ ...mono, fontSize: 10, color: C.mute }}>overage · {w.overage_status}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LimitsPanel({ hosts, order }: { hosts: Record<string, HostSlot>; order: string[] }) {
-  const blocks = useMemo(() => {
-    const out: { key: string; host: string; label: string; id: string; windows: LimitWindow[] }[] = [];
-    for (const k of order) {
-      const slot = hosts[k];
-      if (!slot) continue;
-      for (const [id, windows] of Object.entries(slot.limits ?? {})) {
-        const live = (windows ?? [])
-          .filter((w) => typeof w.utilization === 'number')
-          .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0));
-        if (!live.length) continue;
-        out.push({
-          key: `${k}/${id}`,
-          host: slot.info?.name || slot.cfg.name,
-          label: slot.accounts.find((a) => a.id === id)?.label || id,
-          id,
-          windows: live,
-        });
-      }
+/** Every sign-in that has reported a window, grouped the way it is spent: one
+ *  account on one machine. */
+function limitBlocks(hosts: Record<string, HostSlot>, order: string[]) {
+  const out: { key: string; host: string; label: string; id: string; windows: LimitWindow[] }[] = [];
+  for (const k of order) {
+    const slot = hosts[k];
+    if (!slot) continue;
+    for (const [id, windows] of Object.entries(slot.limits ?? {})) {
+      const live = (windows ?? [])
+        .filter((w) => typeof w.utilization === 'number')
+        .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0));
+      if (!live.length) continue;
+      out.push({
+        key: `${k}/${id}`,
+        host: slot.info?.name || slot.cfg.name,
+        label: slot.accounts.find((a) => a.id === id)?.label || id,
+        id,
+        windows: live,
+      });
     }
-    return out;
-  }, [hosts, order]);
-
-  return (
-    <Panel title="Plan limits" hint={blocks.length ? 'as the tools report them' : undefined}>
-      {blocks.length ? blocks.map((b, i) => (
-        <div key={b.key} style={{
-          paddingTop: i ? 12 : 0,
-          borderTop: i ? `1px solid ${C.border}` : undefined,
-          marginTop: i ? 12 : 0,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <div style={{
-              fontSize: 13, fontWeight: 600, minWidth: 0,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>{b.label}</div>
-            <div style={{ flex: 1 }} />
-            <div style={{ ...mono, fontSize: 10, color: C.faint, whiteSpace: 'nowrap' }}>{b.host}</div>
-          </div>
-          {b.label !== b.id && (
-            <div style={{ ...mono, fontSize: 10, color: C.faint, marginTop: 2 }}>{b.id}</div>
-          )}
-          {b.windows.map((w) => <WindowRow key={w.window} w={w} />)}
-        </div>
-      )) : (
-        <div style={{ fontSize: 12, lineHeight: '17px', color: C.mute }}>
-          No tool has reported plan usage yet. It lands here after the first turn.
-        </div>
-      )}
-    </Panel>
-  );
+  }
+  return out;
 }
-
-/* ─────────────────────────── daemon health ─────────────────────────── */
-
-function HealthPanel({ hosts, order }: { hosts: Record<string, HostSlot>; order: string[] }) {
-  const online = order.filter((k) => hosts[k]?.status === 'online').length;
-  const tone = online === order.length ? C.ok : online ? C.warn : C.faint;
-  const word = online === order.length ? 'healthy' : online ? 'partial' : 'offline';
-
-  return (
-    <Panel
-      title="Daemon health"
-      right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <Dot color={tone} live={online > 0} size={7} />
-          <span style={{ fontSize: 12, color: tone }}>{word}</span>
-        </div>
-      }
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {order.map((k) => {
-          const slot = hosts[k];
-          if (!slot) return null;
-          const conn = connLabel(slot);
-          const info = slot.info;
-          return (
-            <div key={k}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <Dot color={conn.color} live={conn.live} size={6} />
-                <div style={{
-                  fontSize: 12, color: C.text2, flex: 1, minWidth: 0,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>{info?.name || slot.cfg.name}</div>
-                <div style={{ ...mono, fontSize: 11, color: C.text2, whiteSpace: 'nowrap' }}>
-                  {info && slot.status === 'online' ? uptime(info.uptime_s) : conn.text}
-                </div>
-              </div>
-              <div style={{ ...mono, fontSize: 10, color: C.faint, marginTop: 3, whiteSpace: 'nowrap' }}>
-                {info
-                  ? `daemon ${info.daemon_version} · ${info.connected_devices} devices · ${info.active_sessions} sessions`
-                  : slot.lastOnline ? `last seen ${ago(slot.lastOnline / 1000)}` : 'never reached'}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Panel>
-  );
-}
-
-/* ─────────────────────────── screen ─────────────────────────── */
 
 export function Fleet({ onOpenChat, onNewChat }: FleetProps) {
   const fleet = useFleet();
@@ -566,7 +206,7 @@ export function Fleet({ onOpenChat, onNewChat }: FleetProps) {
   const ticking = running.length > 0;
 
   // Only the running rows need a second hand; when nothing runs the clock in
-  // the title strip is the only thing left to keep fresh.
+  // the page head is the only thing left to keep fresh.
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), ticking ? 1000 : 30000);
     return () => clearInterval(id);
@@ -611,182 +251,176 @@ export function Fleet({ onOpenChat, onNewChat }: FleetProps) {
 
   const awaiting = running.filter((r) => r.chat.status === 'awaiting_approval').length;
   const openCost = running.reduce((n, r) => n + (Number(r.chat.total_cost_usd) || 0), 0);
-  const anyOnline = order.some((k) => hosts[k]?.status === 'online');
+  const onlineCount = order.filter((k) => hosts[k]?.status === 'online').length;
+  const anyOnline = onlineCount > 0;
+  const blocks = useMemo(() => limitBlocks(hosts, order), [hosts, order]);
   const stamp = new Date(now);
 
+  if (!order.length) {
+    return (
+      <EmptyState
+        title="No computer is paired yet."
+        body="This page is the live half of the machines table: every session running anywhere,
+              and the plan window each sign-in is spending. Both arrive with the first computer."
+        foot="nothing is running · no plan has been read"
+      />
+    );
+  }
+
   return (
-    <div style={{
-      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-      background: C.bg, overflow: 'hidden',
-    }}>
-      <div style={{
-        height: 60, flexShrink: 0, boxSizing: 'border-box', padding: '0 28px',
-        borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12,
-      }}>
-        <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.2 }}>Panel</div>
-        <div style={{ ...mono, fontSize: 11, color: C.mute }}>
-          {stamp.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-          {' · '}
-          {stamp.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-        </div>
-        <div style={{ flex: 1 }} />
-        <Btn onClick={doRefresh} disabled={busy}>
-          {busy ? <Spinner size={13} color={C.mute} /> : <Icon path={IC.refresh} size={14} color={C.mute} />}
-          Refresh
-        </Btn>
-        <Btn kind="primary" onClick={onNewChat}>
-          <Icon path={P.plus} size={14} color={C.onAccent} width={2.4} />
-          New chat
-        </Btn>
+    <>
+      <SectionHeader
+        kind="page" title="Sessions and plan limits"
+        note={`${onlineCount} of ${order.length} answering`}
+        right={`${stamp.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} `
+          + stamp.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+      >
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <Button small face="outline" label={busy ? 'Reading…' : 'Refresh'}
+            disabled={busy} onClick={doRefresh} />
+          <Button small icon={P.plus} label="New chat" onClick={onNewChat} />
+        </span>
+      </SectionHeader>
+
+      <Table
+        columns={COMPUTERS}
+        rows={order.filter((k) => hosts[k]).map((k) => {
+          const slot = hosts[k];
+          const conn = connOf(slot);
+          const info = slot.info;
+          const known = slot.chats.filter((c) => !c.archived).length;
+          return {
+            key: k,
+            tone: conn.tone,
+            wash: slot.status === 'unauthorized',
+            cells: [
+              <Well icon={P.cpu} />,
+              <NameCell
+                mark title={info?.name || slot.cfg.name}
+                note={info
+                  ? `${info.os}${info.os_version ? ` ${info.os_version}` : ''} · daemon ${info.daemon_version}`
+                    + (isLocal(slot.cfg.host) ? ' · this computer' : '')
+                  : 'no daemon information'}
+              />,
+              <>
+                <StatusDot state={conn.state} hollow={slot.status !== 'online'} />
+                <Cell text={conn.says} tone={conn.tone} />
+              </>,
+              <Cell
+                text={info && slot.status === 'online' ? uptime(info.uptime_s)
+                  : slot.lastOnline ? `seen ${ago(slot.lastOnline / 1000)}` : 'never reached'}
+                tone={slot.status === 'online' ? undefined : 'ink3'}
+              />,
+              <Cell
+                text={info && slot.status === 'online'
+                  ? `${info.active_sessions} sessions · ${info.connected_devices} devices`
+                  : `${known} chats, last known`}
+                tone={slot.status === 'online' ? undefined : 'ink3'}
+              />,
+              <Cell
+                text={info?.versions
+                  ? `claude ${info.versions.claude ?? 'absent'} · codex ${info.versions.codex ?? 'absent'}`
+                  : 'not reported'}
+                tone={info?.versions ? undefined : 'ink3'}
+              />,
+              <Cell text={maskHost(slot.cfg.host)} tone="ink3" />,
+            ],
+          };
+        })}
+      />
+
+      <SectionHeader
+        title="Running now" count={running.length}
+        note={awaiting ? `${awaiting} waiting for you` : undefined}
+        right={running.length ? `${cost(openCost)} across the open chats` : undefined}
+        tone={awaiting ? 'amber' : undefined}
+      >
+        {!!running.length && (
+          <span style={{ marginLeft: 'auto' }}>
+            <Button
+              small face="outline" label="Stop every one"
+              onClick={() => { for (const r of running) interrupt(r.hostKey, r.chat.id).catch(() => {}); }}
+            />
+          </span>
+        )}
+      </SectionHeader>
+
+      <Table
+        columns={SESSIONS}
+        rows={running.map((r) => sessionRow(
+          r, live[`${r.hostKey}/${r.chat.id}`] ?? EMPTY_LIVE, now,
+          () => onOpenChat(r.hostKey, r.chat.id),
+          () => interrupt(r.hostKey, r.chat.id).catch(() => {}),
+        ))}
+        empty={anyOnline
+          ? 'Nothing is running anywhere. The moment a chat starts working, or asks to be '
+            + 'allowed to do something, its row appears here.'
+          : 'No computer is answering. When they come back, their running sessions gather here.'}
+      />
+
+      <SectionHeader title="Plan limits" count={blocks.length} note="as the tools report them" />
+
+      {blocks.length ? blocks.map((b) => (
+        <Card key={b.key}>
+          <SectionHeader title={b.label} note={b.label === b.id ? undefined : b.id} right={b.host} />
+          {b.windows.map((w) => {
+            const u = Math.max(0, Math.min(1, w.utilization ?? 0));
+            return (
+              <Slider
+                key={w.window} value={u} format={pct}
+                label={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    {windowName(w.window)}
+                    {w.status === 'rejected' && <Tag label="used up" tone="red" />}
+                    {w.status === 'allowed_warning' && <Tag label="warning" tone="amber" />}
+                    {!!w.overage_status && <Tag label={`overage · ${w.overage_status}`} />}
+                  </span>
+                }
+                note={
+                  <span style={{ color: limitTone(u) === 'run' ? T.ink3 : undefined }}>
+                    {w.resets_at ? `resets ${until(w.resets_at)}` : 'no reset time reported'}
+                  </span>
+                }
+              />
+            );
+          })}
+        </Card>
+      )) : (
+        <Card>
+          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+            No tool has reported plan usage yet. A window lands here after the first turn a
+            sign-in takes.
+          </div>
+        </Card>
+      )}
+
+      <SectionHeader
+        title="Live events" count={activity.length || undefined}
+        note={anyOnline ? 'the stream is open' : 'the stream is closed'}
+        tone={anyOnline ? 'run' : 'ink3'}
+      />
+
+      <Card inset={false} style={{ maxHeight: 340, overflowY: 'auto' }}>
+        {activity.length ? activity.slice(0, 40).map((a, i) => (
+          <Row
+            key={a.id} first={i === 0}
+            lead={<Cell text={clock(a.ts)} tone="ink3" style={{ width: 58, flex: 'none' }} />}
+            title={<Cell text={a.event} tone={EVENT_TONE[a.event] ?? 'ink3'} style={{ width: 130 }} />}
+            note={order.length > 1 ? `${a.hostName} · ${a.text}` : a.text}
+            onClick={a.chatId ? () => onOpenChat(a.hostKey, a.chatId!) : undefined}
+            style={{ padding: '7px 18px' }}
+          />
+        )) : (
+          <div style={{ padding: '14px 18px' }}>
+            <Quoted>no events yet — rows stream in here once a turn begins</Quoted>
+          </div>
+        )}
+      </Card>
+
+      <div style={{ ...mono, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: T.ink3 }}>
+        {busy ? <Spinner size={12} color={T.ink3} /> : <Icon path={IC.refresh} size={12} color={T.ink3} />}
+        every figure here was read from the computer it belongs to
       </div>
-
-      <div style={{
-        flex: 1, overflowY: 'auto', boxSizing: 'border-box', padding: '20px 28px',
-        display: 'flex', flexDirection: 'column', gap: 16,
-      }}>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-          {/* left column */}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{
-              display: 'grid', gap: 16,
-              // capped rather than stretched: one paired computer should not
-              // produce a card as wide as the table under it
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 420px))',
-            }}>
-              {order.map((k) => hosts[k] && (
-                <HostCard
-                  key={k} slot={hosts[k]}
-                  known={hosts[k].chats.filter((c) => !c.archived).length}
-                />
-              ))}
-            </div>
-
-            <Panel
-              title="Active sessions"
-              hint={running.length
-                ? `${running.length} sessions · ${running.length - awaiting} running · ${awaiting} awaiting approval`
-                : 'across every computer'}
-              pad={false}
-              right={running.length ? (
-                <Btn onClick={() => { for (const r of running) interrupt(r.hostKey, r.chat.id).catch(() => {}); }}>
-                  <Icon path={P.stop} size={12} color={C.mute} />
-                  Stop all
-                </Btn>
-              ) : undefined}
-            >
-              {running.length ? (
-                <>
-                  <div style={{
-                    height: 32, boxSizing: 'border-box', padding: '0 14px 0 12px',
-                    display: 'flex', alignItems: 'center', background: C.inset,
-                    borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
-                  }}>
-                    <div style={{ ...cell(COL.chat), ...headText }}>Chat</div>
-                    <div style={{ ...cell(COL.host), ...headText }}>Device</div>
-                    <div style={{ ...cell(COL.model), ...headText }}>Model</div>
-                    <div style={{ ...cell(COL.effort), ...headText }}>Effort</div>
-                    <div style={{ ...cell(COL.perm), ...headText }}>Perm</div>
-                    <div style={{ ...cell(COL.now), ...headText }}>Now</div>
-                    <div style={{ ...cell(COL.dur, true), ...headText }}>Time</div>
-                    <div style={{ ...cell(COL.cost, true), ...headText }}>Cost</div>
-                    <div style={{ ...cell(COL.act), paddingRight: 0 }} />
-                  </div>
-                  {running.map((r) => (
-                    <SessionRow
-                      key={`${r.hostKey}/${r.chat.id}`}
-                      r={r}
-                      live={live[`${r.hostKey}/${r.chat.id}`] ?? EMPTY_LIVE}
-                      now={now}
-                      onOpen={() => onOpenChat(r.hostKey, r.chat.id)}
-                      onStop={() => interrupt(r.hostKey, r.chat.id).catch(() => {})}
-                    />
-                  ))}
-                  <div style={{
-                    height: 38, boxSizing: 'border-box', padding: '0 14px',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    borderTop: `1px solid ${C.border}`, background: C.inset,
-                  }}>
-                    <div style={{ fontSize: 12, color: C.mute }}>
-                      Lifetime total across open chats
-                    </div>
-                    <div style={{ flex: 1 }} />
-                    <div style={{ ...mono, fontSize: 12, color: C.text2 }}>{cost(openCost)}</div>
-                  </div>
-                </>
-              ) : (
-                <div style={{
-                  minHeight: 220, display: 'flex', borderTop: `1px solid ${C.border}`,
-                }}>
-                  <Empty
-                    icon={<Icon path={P.bolt} size={22} color={C.faint} />}
-                    title={anyOnline ? 'Nothing is running anywhere right now' : 'No computer connected'}
-                    hint={anyOnline
-                      ? 'The moment a chat starts working or asks for approval, its row appears here.'
-                      : 'When the computers come online, their running sessions gather here.'}
-                  />
-                </div>
-              )}
-            </Panel>
-          </div>
-
-          {/* right, narrow column */}
-          <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <LimitsPanel hosts={hosts} order={order} />
-            <HealthPanel hosts={hosts} order={order} />
-          </div>
-        </div>
-
-        {/* live event stream */}
-        <div style={{
-          borderRadius: R.card, background: C.inset, border: `1px solid ${C.border}`,
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}>
-          <div style={{
-            height: 36, flexShrink: 0, boxSizing: 'border-box', padding: '0 14px',
-            display: 'flex', alignItems: 'center', gap: 8,
-            borderBottom: `1px solid ${C.border}`,
-          }}>
-            <Dot color={anyOnline ? C.ok : C.faint} live={anyOnline} size={7} />
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Live events</div>
-            <div style={{ ...mono, fontSize: 11, color: C.mute }}>
-              {anyOnline ? 'stream open' : 'stream closed'}
-              {activity.length ? ` · ${activity.length} olay` : ''}
-            </div>
-          </div>
-
-          <div style={{ padding: '6px 14px 10px', maxHeight: 300, overflowY: 'auto' }}>
-            {activity.length ? activity.slice(0, 40).map((a) => (
-              <div
-                key={a.id}
-                onClick={() => a.chatId && onOpenChat(a.hostKey, a.chatId)}
-                style={{
-                  minHeight: 20, display: 'flex', alignItems: 'center', gap: 10,
-                  cursor: a.chatId ? 'pointer' : 'default',
-                }}
-              >
-                <div style={{ ...mono, fontSize: 11, color: C.faint, width: 62, flexShrink: 0 }}>
-                  {clock(a.ts)}
-                </div>
-                <div style={{
-                  ...mono, fontSize: 11, width: 122, flexShrink: 0,
-                  color: EVENT_TONE[a.event] ?? C.mute,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>{a.event}</div>
-                <div style={{
-                  ...mono, fontSize: 11, color: C.text2, minWidth: 0,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }} title={a.text}>
-                  {order.length > 1 ? `${a.hostName} · ${a.text}` : a.text}
-                </div>
-              </div>
-            )) : (
-              <div style={{ ...mono, fontSize: 11, color: C.faint, padding: '10px 0' }}>
-                No events yet — rows stream in here once a turn begins.
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
