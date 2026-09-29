@@ -98,6 +98,12 @@ if (!globalThis.ResizeObserver) {
   globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   w.ResizeObserver = globalThis.ResizeObserver;
 }
+// …and the third: jsdom has no layout, so nothing can be scrolled into view. The
+// palette asks for it on every keystroke, and a missing method would take the
+// process down rather than fail a check.
+if (!w.Element.prototype.scrollIntoView) {
+  w.Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
 if (!globalThis.IntersectionObserver) {
   globalThis.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
   w.IntersectionObserver = globalThis.IntersectionObserver;
@@ -120,6 +126,7 @@ const { useDivanStore, answered } = await load('src/lib/divan.js');
 const { themeScheme, setThemeChoice } = await load('src/lib/theme.js');
 const { MACHINE_ROWS } = await load('src/lib/shell.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
+const { boards } = await import(pathToFileURL(join(web, 'scripts', 'overview-fixture.js')).href);
 const { host: fakeHost } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
 
 const React = await import('react');
@@ -134,8 +141,21 @@ const seed = (store, patch) => {
   store.setState(patch);
 };
 
+/** Everything the panel asked a computer for, and nothing answered by a socket:
+ *  what a pressed answer actually sends is the one thing about a session that a
+ *  render cannot say. */
+const asked = [];
 seed(useFleet, {
   hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true,
+  call: async (key, type, data) => {
+    asked.push({ key, type, data });
+    // The board is the one thing not answered from here: the snapshots are
+    // seeded below, and a socket that answered `{}` would replace a fixture with
+    // an empty board. A poll that fails is one of the states the panel has to
+    // survive anyway, and it is the state the groups above are read in.
+    if (type === 'divan.snapshot') throw new Error('That computer did not answer');
+    return {};
+  },
 });
 seed(useDivanStore, { snaps: { studio: answered(fixture.studio(), Date.now() / 1000) } });
 setThemeChoice('dark');
@@ -266,6 +286,69 @@ group('the switch, in a document');
   ok('and back again', doc.documentElement.dataset.theme === 'dark' && body() === before);
   ok('nothing reloaded: the bar is the same element it was before the switch',
     doc.querySelector('header') === bar && bar.isConnected);
+}
+
+group('what needs a person opens itself as a conversation');
+{
+  // The board of `overview-fixture.js` rather than the one the groups above
+  // used: a question with a choice in it, a ticket that was turned down, and a
+  // card that is nobody's but yours — which is what a session is made of, and
+  // what the other fixture deliberately does not carry.
+  const now = Math.floor(Date.now() / 1000);
+  const board = boards(now);
+  /** A button the words are somewhere inside, rather than all of it: a tab
+   *  carries the square of whoever is in it as well as the card's name. */
+  const inside = (label) => [...doc.querySelectorAll('button')]
+    .find((b) => (b.textContent ?? '').includes(label)) ?? null;
+  /** What the open windows say, and not what the page under them says — a
+   *  project card carries the worst card's own line, which is this very
+   *  question, so "the window is gone" has to be asked of the windows. */
+  const windows = () => [...doc.querySelectorAll('section')]
+    .map((e) => e.textContent ?? '').join(' · ');
+  await act(async () => {
+    seed(useDivanStore, { snaps: { studio: answered(board.busy[0].snap, now) } });
+  });
+
+  ok('a question that is waiting opens by itself, with nobody pressing anything',
+    windows().includes('asks you') && windows().includes('Use the live ones now'),
+    windows().slice(0, 300));
+  ok('…in the words the worker used, over the product and the card it is about',
+    windows().includes('Use the live ones now, or wait for the review?')
+    && windows().includes('Quire · Stripe keys'));
+  ok('…and the second thing waiting opens beside it rather than in a queue',
+    windows().includes('App Review reply') && windows().includes('your call'));
+
+  const pill = find('Use the live ones now');
+  ok('the answers the worker proposed are pressable', !!pill);
+  asked.length = 0;
+  await click(pill);
+  ok('pressing one sends it as a note on that ticket, to the machine that asked',
+    asked.some((a) => a.key === 'studio' && a.type === 'ustabasi.note'
+      && a.data.id === 42 && a.data.text === 'Use the live ones now'),
+    JSON.stringify(asked.slice(0, 3)));
+  ok('…and the window says what was sent, because the board will not for a minute',
+    windows().includes('sent · Use the live ones now'));
+
+  const away = [...doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Put this away');
+  ok('a window can be put away', !!away);
+  await click(away);
+  ok('…and what is left of it is a tab, while the other window stays where it was',
+    !windows().includes('Use the live ones now') && !!inside('Stripe keys')
+    && windows().includes('App Review reply'), windows().slice(0, 300));
+  await click(inside('Stripe keys'));
+  ok('…which brings it back', windows().includes('Use the live ones now'));
+
+  const shut = [...doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Close');
+  await click(shut);
+  ok('closing one takes it off the page, tab and all',
+    !windows().includes('Use the live ones now') && !inside('Stripe keys'), windows().slice(0, 300));
+
+  // The bar across the bottom of every desktop frame, and what it opens.
+  ok('the command bar is on the page', text().includes('Tell Divan anything…'));
+  await click(inside('Tell Divan anything'));
+  ok('…and pressing it opens what ⌘K opens', !!doc.querySelector('input[name="palette-query"]'));
+  await press('k');
+  ok('…which closes again', !doc.querySelector('input[name="palette-query"]'));
 }
 
 group('nothing was lost on the way');
