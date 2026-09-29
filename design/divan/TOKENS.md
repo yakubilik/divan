@@ -363,8 +363,8 @@ Geist; the panel does not ship it.
 - `web/scripts/test-divan.mjs` — folded into `cd web && npm test`. The two blocks
   quoted, the table held to them, every part rendered and every screen with it —
   twice, once with nothing paired and once with a computer on the other end, plus
-  the panels a screen opens over itself, the chat with a chat open in it, and the
-  Appearance section — and the colours read back off the markup; the switch
+  the panels a screen opens over itself, the chat with a chat open in it, the two
+  walls with cards on them, and the Appearance section — and the colours read back off the markup; the switch
   driven through the states a browser can put it in; and this document held to
   the code's own lists. It also holds the one rule a palette cannot enforce by
   itself: `onAccent` and `onWarn` are the two "text on a filled colour" values
