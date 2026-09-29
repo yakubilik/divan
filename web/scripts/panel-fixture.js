@@ -106,8 +106,12 @@ export const host = () => ({
   accounts: [
     { id: 'default-claude', provider: 'claude', label: 'this computer’s own', logged_in: true,
       detail: 'Claude Code', is_default: true },
+    // The one that is about to stop working, which is Web15 W16's own state:
+    // a sign-in has to be seen expiring before it expires, so the fixture every
+    // screen is drawn from has one.
     { id: 'a2', provider: 'claude', label: 'yakup@…', logged_in: true,
-      detail: 'subscription', is_default: false },
+      detail: 'subscription', is_default: false, plan: 'max',
+      expires_at: NOW + 12 * 86_400 },
     { id: 'a3', provider: 'codex', label: 'not signed in', logged_in: false,
       detail: 'codex app-server', is_default: false },
   ],

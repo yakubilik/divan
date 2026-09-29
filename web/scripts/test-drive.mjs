@@ -126,6 +126,7 @@ const { useDivanStore, answered, silent } = await load('src/lib/divan.js');
 const { useDock } = await load('src/lib/sessions.js');
 const { themeScheme, setThemeChoice } = await load('src/lib/theme.js');
 const { MACHINE_ROWS } = await load('src/lib/shell.js');
+const { useThresholds, DEFAULT_THRESHOLDS } = await load('src/lib/machine.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
 const { boards } = await import(pathToFileURL(join(web, 'scripts', 'overview-fixture.js')).href);
 const { host: fakeHost } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
@@ -450,6 +451,34 @@ group('the board, with the asking agent’s chat beside it');
     (column('Queued').textContent ?? '').includes('CSV export')
     && !(column('Ice Box').textContent ?? '').includes('CSV export'),
     `${column('Ice Box').textContent} → ${column('Queued').textContent}`);
+
+  // The threshold on Machine › Quota thresholds, kept where work is actually
+  // started: the studio has 64% of its window left, and dropping a card into In
+  // Progress is what starts a worker on it. Its board is put back in hand first
+  // — the poll the last drop set off found no socket, and a machine whose
+  // answer is a memory is never refused on the strength of it.
+  await act(async () => {
+    seed(useDivanStore, { snaps: { studio: answered(back, now) } });
+    useThresholds.setState({ thresholds: { warn: 0.8, stop: 0.7 } });
+  });
+  asked.length = 0;
+  const held = new Transfer();
+  await drag(ticket('CSV export'), 'dragstart', held);
+  await drag(column('In Progress'), 'drop', held);
+  ok('a card dropped where a worker would start is not started under the threshold you set',
+    !asked.some((a) => a.type === 'divan.card.move')
+    && !(column('In Progress').textContent ?? '').includes('CSV export')
+    && (doc.body.textContent ?? '').includes('under the 70% you set'),
+    `${JSON.stringify(asked.slice(0, 2))} · ${(doc.body.textContent ?? '').slice(-160)}`);
+
+  await act(async () => { useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS }); });
+  asked.length = 0;
+  const free = new Transfer();
+  await drag(ticket('CSV export'), 'dragstart', free);
+  await drag(column('In Progress'), 'drop', free);
+  ok('…and started as soon as that number is back under what the machine has left',
+    asked.some((a) => a.type === 'divan.card.move' && a.data.column === 'in_progress'),
+    JSON.stringify(asked.slice(0, 2)));
 }
 
 group('a new ticket, written at the top of Ice Box');

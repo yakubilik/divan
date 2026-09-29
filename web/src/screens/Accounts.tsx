@@ -22,16 +22,23 @@
  *  button goes there with the computer already chosen.
  */
 import { useEffect } from 'react';
-import { ago } from '../lib/format';
+import { ago, uptime } from '../lib/format';
 import { signIns, signInsWanting, type SignInSource } from '../lib/machine';
 import { useFleet } from '../lib/fleet';
-import { uptime } from '../lib/format';
 import { T } from '../lib/theme';
 import type { View } from '../lib/shell';
 import {
   Button, Card, Cell, EmptyState, NameCell, SectionHeader, Table, Tag, type Column,
 } from '../ui/divan';
 import { mono } from '../ui/kit';
+
+/** How long a sign-in has left, said the way W16 says it — `12 days` — and in
+ *  the panel's own `2h 14m` once there are hours rather than days left, which
+ *  is the point at which the hours are what you want to know. */
+function left(seconds: number | null): string {
+  const days = seconds == null ? 0 : Math.floor(seconds / 86_400);
+  return days ? `${days} day${days === 1 ? '' : 's'}` : uptime(seconds);
+}
 
 const COLUMNS: Column[] = [
   { width: '36px' },
@@ -77,7 +84,7 @@ export function Accounts({ now, onView, onFocus }: {
   }, [online, refreshAccounts]);
 
   const list = sources(hosts, order);
-  const rows = signIns(list, now, uptime, ago);
+  const rows = signIns(list, now, left, ago);
   const wanting = signInsWanting(rows);
   const loading = order.some((k) => hosts[k]?.loading.accounts);
 
