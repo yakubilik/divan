@@ -156,8 +156,16 @@ export const OVER_TIME: Gap = { key: 'bpOverTime', body: 'bpOverTimeBody' };
 
 /** …and the code host's block, which Engineering has and nothing fills either:
  *  open pull requests, and which of their checks are failing. The repositories
- *  under it are real and so is what has landed in them — those are read here, on
- *  the machine that holds the checkout. A pull request is not. */
+ *  under it are real and so is what has landed in them — those are read on the
+ *  machine that holds the checkout. A pull request is not: it is GitHub's, and
+ *  the phone has no way to it.
+ *
+ *  So the block says that, and then says where the part of it this computer
+ *  *does* know is: a run that fell over and a run in flight are on the cards
+ *  below, with the queue's own mark on them. That is not the same fact as a
+ *  failing check, and the page must not let the two be read as one — but a
+ *  person looking for "what is broken on Engineering" is looking at the right
+ *  page, and it would be perverse not to point at the list. */
 export const PULLS: Gap = { key: 'bpPulls', body: 'bpPullsBody' };
 
 // ── 3 · what the agent did, and when ────────────────────────────────────────

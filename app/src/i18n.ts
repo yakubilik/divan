@@ -412,7 +412,7 @@ const en = {
   bpCommitsNone: 'Git could not be read on any of these repositories, so nothing is said about what landed.',
   bpLanded: '{n} · 7d', bpLandedToday: '{today} today · {n} · 7d', bpLandedNone: 'nothing in 7 days',
   bpPulls: 'Pull requests',
-  bpPullsBody: 'Open pull requests and the checks that are failing on them come from the code host. Nothing is connected to it yet, so none are shown.',
+  bpPullsBody: 'Open pull requests and the checks failing on them come from the code host, and nothing is connected to it yet. What this computer does know about work in flight and work that fell over is on the cards below.',
   bpTickets: 'Tickets', bpNoTickets: 'No cards on this branch yet.',
   bpBareTitle: 'Nothing on this branch yet.',
   bpBare: 'No card has been filed here, and no source writes to it. It keeps its place so that work has somewhere to go.',
