@@ -184,6 +184,7 @@ uv --no-config pip install --python .venv312/bin/python -e . "mlx-whisper>=0.4"
 .venv312/bin/remote-ai-chat serve                # ws://<tailscale-ip>:8790/ws
 .venv312/bin/remote-ai-chat web                  # open the desktop panel, paired
 .venv312/bin/remote-ai-chat devices | revoke <id> | status | install | uninstall
+.venv312/bin/remote-ai-chat project list | create | update   # the board's products
 ```
 
 Python 3.11–3.13, and 3.12 is what this is actually run on — the constraint

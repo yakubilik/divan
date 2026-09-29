@@ -51,6 +51,7 @@ imported.
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import logging
@@ -367,7 +368,7 @@ holds("and when it actually began, which is not when the row was written",
       full_p["started_at"] and full_p["started_at"] < full_p["created_at"] - 86400,
       repr((full_p["started_at"], full_p["created_at"])))
 check("the kind is an open set, not five choices",
-      board.create_project("A client", kind="müşteri işi")["kind"], "m-teri-i-i")
+      board.create_project("A client", kind="newsletter")["kind"], "newsletter")
 check("…and is a word however it was typed",
       board.create_project("Research", kind="  Client Work  ")["kind"], "client-work")
 
@@ -809,6 +810,17 @@ async def wire() -> None:
     # out of it — which is how this machine came to have seventeen projects
     # nobody had decided on and one called "unfiled". A poll now writes cards and
     # the marks on them, and nothing else at all.
+
+    # Said once at the source, because it is the rule and not an outcome: two
+    # places in that module put a row in `projects`, and a third one appearing is
+    # this whole behaviour coming back by a different route.
+    tree = ast.parse(Path(divan.__file__).read_text())
+    writers = sorted({n.name for n in ast.walk(tree)
+                      if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                      and "INSERT INTO projects" in ast.unparse(n)})
+    check("only two things in the module write a project row: the create, and the"
+          " migration that seeds the holding place", writers,
+          ["_seed_unfiled", "create_project"])
 
     bare = fresh_db("bare")
     bare_host = Host(bare)

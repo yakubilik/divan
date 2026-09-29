@@ -36,9 +36,19 @@ remote-ai-chat serve                # ws://<tailscale-ip>:8790/ws and 127.0.0.1
 remote-ai-chat web                  # open the desktop panel, paired
 remote-ai-chat devices              # every paired device
 remote-ai-chat revoke <id>          # cut one off
+remote-ai-chat project list         # the board's products, and what is unclaimed
+remote-ai-chat project create NAME --repo PATH --kind app --purpose "..." --started 2026-03-01
+remote-ai-chat project update NAME --purpose "..." --repo PATH   # or an id, or a slug
 remote-ai-chat status
 remote-ai-chat install | uninstall  # the login service
 ```
+
+`project` is the entrance to the board's products: the Divan clients have no form
+for making one and are not getting one, so a product is created and edited by
+saying so in a chat, and the agent in that chat has this shell. It talks to the
+running daemon over its own socket — the same `divan.project.create` and
+`divan.project.update` the phone would call — rather than writing to the database
+behind it, so a repository path goes through the allowed roots either way.
 
 `RAC_HOME` and `RAC_PORT` give one machine a second, fully separate daemon —
 its own config, database, uploads and port. That is what the tests run against.
