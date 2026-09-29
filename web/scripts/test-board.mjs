@@ -235,13 +235,51 @@ group('Web12 W2, and Web13 W4 which is the same board in the light');
     /from '\.\.\/ui\/divan'/.test(src('src/screens/Board.tsx'))
     && !COLOUR.test(src('src/screens/Board.tsx').replace(/\/\*[\s\S]*?\*\//g, '')));
   ok('…and the board is a tab of the product’s page rather than a place of its own',
-    /<Board view=\{view\} project=\{project\} \/>/.test(src('src/screens/Overview.tsx'))
+    /<Board\s+view=\{view\} project=\{project\}/.test(src('src/screens/Overview.tsx'))
     && /<Tabs tabs=/.test(src('src/screens/Overview.tsx')));
   ok('none of it reaches the chat',
     !/from '[^']*(ChatView|Bubble|Timeline|ChatDetails|TicketChat)'/.test(src('src/screens/Board.tsx')));
 }
 
-// ── 3 · every state of a board ─────────────────────────────────────────────
+// ── 3 · a new ticket, written where it lands ───────────────────────────────
+
+group('Web14 W9: the new ticket is the first card of Ice Box');
+{
+  const quire = productOf('busy', 'quire');
+  const drafting = renderToStaticMarkup(h(BoardUI.Board, {
+    view: view('busy'), project: quire, drafting: true, onDraft() {},
+  }));
+  const columns = drafting.split('role="tab"');
+
+  // The card being written is drawn where it will be: inside the first column,
+  // above the card that was at the top of it. Not a modal, not a page — the
+  // board is still under it, which is the whole point of writing it here.
+  const ice = columns[1];
+  ok('the card being written is inside Ice Box, above the cards that were there',
+    ice.includes('aria-label="Title"')
+    && ice.indexOf('aria-label="Title"') < ice.indexOf('CSV export'),
+    ice.slice(0, 200));
+  ok('…and it is the only one: the other three columns are drawn as they were',
+    (drafting.match(/aria-label="Title"/g) ?? []).length === 1
+    && drafting.includes('Stripe keys') && drafting.includes('Out-of-order deliveries'));
+  ok('…with the amber ring and the long fall the frame draws it under',
+    anyStyle(drafting, (d) => (d['box-shadow'] ?? '').startsWith(`0 0 0 1.5px ${v('amberRing')}`)
+      && (d['box-shadow'] ?? '').includes('12px 30px')));
+  ok('…the two keys under it, and the count against the limit the ticket page uses',
+    /Add · ↵/.test(drafting) && /Esc/.test(drafting) && /0\/220/.test(drafting));
+  ok('the board has no page of its own for it, and the panel has no place for one',
+    !/screens\/NewTicket/.test(src('src/App.tsx'))
+    && /drafting && col.key === 'ice_box'/.test(src('src/screens/Board.tsx'))
+    && !/'newTicket'/.test(src('src/lib/shell.ts')));
+  ok('…and a board with nothing on it draws the columns while one is being written',
+    renderToStaticMarkup(h(BoardUI.Board, {
+      view: view('slow'), project: productOf('slow', 'pebble'), drafting: true, onDraft() {},
+    })).includes('aria-label="Title"'));
+  ok('…where without one it is the sentence that says so, with a way in',
+    board('slow', 'pebble').includes('Nothing on this board yet'));
+}
+
+// ── 4 · every state of a board ─────────────────────────────────────────────
 
 group('a board with nothing on it, one that is old, and one nobody can reach');
 {

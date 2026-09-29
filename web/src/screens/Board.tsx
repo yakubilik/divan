@@ -28,23 +28,34 @@
  *  pressing and the dragging are driven in one by `scripts/test-drive.mjs`.
  *  What is left here is the arrangement.
  */
-import { useState } from 'react';
-import { moveCard } from '../lib/actions';
+import { useEffect, useState } from 'react';
+import { createCard, moveCard } from '../lib/actions';
 import { columns, settled, takes, type Moves, type Ticket } from '../lib/board';
 import { useDivanStore, type DivanView, type MergedProject } from '../lib/divan';
 import { hasCardDrag, setCardDrag } from '../lib/dnd';
 import { uptime } from '../lib/format';
 import { useDock } from '../lib/sessions';
-import { STATE_MARK, T } from '../lib/theme';
+import { SUMMARY_MAX } from '../lib/ticket';
+import { RADIUS, STATE_MARK, T } from '../lib/theme';
 import type { DivanColumn } from '../lib/protocol';
-import { Card, ColumnTab, EmptyState, ExecutorBadge, Tag } from '../ui/divan';
+import { Button, Card, ColumnTab, EmptyState, ExecutorBadge, Tag, Write } from '../ui/divan';
 import { mono } from '../ui/kit';
 
 /** The card in the air, as the columns need to know it: which one it came out
  *  of, so that the one it is already in does not offer to take it. */
 interface Lift { id: string; host: string; from: DivanColumn }
 
-export function Board({ view, project }: { view: DivanView; project: MergedProject }) {
+export function Board({ view, project, drafting, onDraft, onCard }: {
+  view: DivanView;
+  project: MergedProject;
+  /** A new ticket is being written at the top of Ice Box. Held above this screen
+   *  because the button that opens one is in the page head, and because leaving
+   *  the board must not leave a half-written card behind it. */
+  drafting?: boolean;
+  onDraft?: (open: boolean) => void;
+  /** A card that is not being answered opens its own page (Web14 W8). */
+  onCard?: (ticket: Ticket) => void;
+}) {
   const raise = useDock((s) => s.raise);
   const [lift, setLift] = useState<Lift | null>(null);
   const [over, setOver] = useState<DivanColumn | null>(null);
@@ -57,6 +68,21 @@ export function Board({ view, project }: { view: DivanView; project: MergedProje
   const pending = settled(moved, project.cards);
   const cols = columns(project, view.now, uptime, pending);
   const empty = cols.every((c) => !c.count);
+
+  // `press N anywhere on the board`, which is the frame's own hint, and Escape
+  // to put the card down again. Not while something is being typed into: N is a
+  // letter first.
+  useEffect(() => {
+    if (!onDraft) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const into = (e.target as HTMLElement | null)?.tagName;
+      if (into === 'INPUT' || into === 'TEXTAREA') return;
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); onDraft(true); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onDraft]);
 
   const pick = (t: Ticket, from: DivanColumn) => ({
     draggable: true,
@@ -86,12 +112,14 @@ export function Board({ view, project }: { view: DivanView; project: MergedProje
     }
   };
 
-  if (empty) {
+  if (empty && !drafting) {
     return (
       <EmptyState
         title="Nothing on this board yet"
-        body="A card is a line you wrote down or a brief an agent can pick up. Tell Divan
-              about one in the chat and it appears in the Ice Box, which starts nothing."
+        body="A card is a line you wrote down or a brief an agent can pick up. Write one here, or
+              tell Divan about it in the chat — either way it lands in the Ice Box, which starts
+              nothing."
+        actions={onDraft ? <Button label="New ticket" onClick={() => onDraft(true)} /> : undefined}
         foot={project.machines.join(' · ') || 'no machine'}
       />
     );
@@ -127,10 +155,17 @@ export function Board({ view, project }: { view: DivanView; project: MergedProje
               flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex',
               flexDirection: 'column', gap: 10,
             }}>
+              {/* Web14 W9: a new ticket is written in place, as the first card of
+                  Ice Box. No modal and no page of its own — the board stays
+                  under it, which is the whole point of writing it here. */}
+              {drafting && col.key === 'ice_box' && (
+                <Draft view={view} project={project} onClose={() => onDraft?.(false)} />
+              )}
               {col.tickets.map((t) => (
                 <TicketCard
                   key={t.card.id} ticket={t} carried={lift?.id === t.card.id}
                   drag={pick(t, col.key)}
+                  onOpen={onCard && (() => onCard(t))}
                   onAsk={t.waiting ? () => raise(t.session) : undefined}
                 />
               ))}
@@ -155,17 +190,22 @@ export function Board({ view, project }: { view: DivanView; project: MergedProje
 /** One ticket (Web12 W2): the square of whoever is on it over what that kind of
  *  worker does, the mark the mirror last wrote in the corner, the card's own
  *  line, and the two sentences it was written as. */
-function TicketCard({ ticket: t, carried, drag, onAsk }: {
+function TicketCard({ ticket: t, carried, drag, onAsk, onOpen }: {
   ticket: Ticket;
   carried: boolean;
   drag: React.ComponentProps<typeof Card>['drag'];
   onAsk?: () => void;
+  /** …and a card that needs nobody opens its own page instead: the three faces
+   *  of it, which is Web14 W8. */
+  onOpen?: () => void;
 }) {
   const desc = t.card.summary.trim();
+  const press = onAsk ?? onOpen;
   return (
     <Card
-      tight hollow={t.hollow} lifted={carried} drag={drag} onClick={onAsk}
-      title={onAsk ? `Answer ${t.who} on ${t.card.title}` : undefined}
+      tight hollow={t.hollow} lifted={carried} drag={drag} onClick={press}
+      title={onAsk ? `Answer ${t.who} on ${t.card.title}`
+        : onOpen ? `Open ${t.card.title}` : undefined}
       style={{ flex: 'none' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, minHeight: 28 }}>
@@ -188,6 +228,97 @@ function TicketCard({ ticket: t, carried, drag, onAsk }: {
           WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxHeight: 39,
         }}>{desc}</div>
       )}
+    </Card>
+  );
+}
+
+/** The card being written (Web14 W9): the title, up to three sentences, and the
+ *  two keys under them.
+ *
+ *  It is a card in the column and not a form over it — `ring="amber"` and
+ *  `raised`, which is how the frame draws the one being typed into — so the board
+ *  it is landing on stays readable behind it. What it needs is a title; the
+ *  executor and the brief are filled in later or never, which is what the footer
+ *  says.
+ *
+ *  A card is created on **one** machine, and the merged product carries each
+ *  machine's own id for itself (`project.ids`): the one it is written on is a
+ *  machine that is answering, because a card filed against a computer that is not
+ *  there would be a card nobody has. With none answering the card says so and
+ *  keeps what was typed.
+ */
+function Draft({ view, project, onClose }: {
+  view: DivanView;
+  project: MergedProject;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
+  const [failed, setFailed] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Whichever of its computers is answering, and its own id for this product.
+  const host = view.hosts.find((h) => h.reachable && !h.stale && project.ids[h.key])
+    ?? view.hosts.find((h) => h.reachable && project.ids[h.key])
+    ?? null;
+
+  const add = async () => {
+    const line = title.trim();
+    if (!line || busy) return;
+    if (!host) {
+      setFailed('No computer of this product is answering, so there is nowhere to put it.');
+      return;
+    }
+    setBusy(true);
+    setFailed(null);
+    try {
+      await createCard(host.key, {
+        project_id: project.ids[host.key],
+        title: line,
+        summary: summary.trim(),
+        column: 'ice_box',
+      });
+      void useDivanStore.getState().load(host.key);
+      onClose();
+    } catch (e: any) {
+      setFailed(e?.message ?? 'That did not reach the computer');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const keys = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void add(); }
+  };
+
+  return (
+    <Card ring="amber" raised radius={RADIUS.tile} style={{ flex: 'none', padding: 14, gap: 10 }}>
+      <div style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.3 }}>
+        <Write
+          autoFocus value={title} onChange={setTitle} onKeyDown={keys}
+          label="Title" placeholder="What is it?"
+        />
+      </div>
+      <div style={{ fontSize: 13.5, lineHeight: '20px', color: T.ink2 }}>
+        <Write
+          lines={3} value={summary} onChange={setSummary} onKeyDown={keys}
+          label="What to do" placeholder="Two or three sentences, or none."
+          style={{ height: 60, color: T.ink2 }}
+        />
+      </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', ...mono, fontSize: 10.5, color: T.ink3,
+        borderTop: `1px solid ${T.line}`, paddingTop: 8,
+      }}>
+        <span>executor &amp; brief later</span>
+        <span style={{ marginLeft: 'auto' }}>{summary.trim().length}/{SUMMARY_MAX}</span>
+      </div>
+      {!!failed && <div style={{ ...mono, fontSize: 10.5, color: T.red }}>{failed}</div>}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Button label="Add · ↵" wide onClick={() => void add()} />
+        <Button label="Esc" face="outline" wide onClick={onClose} />
+      </div>
     </Card>
   );
 }

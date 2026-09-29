@@ -20,6 +20,15 @@
  *  never answered.
  */
 
+/** A face of a product, as the wire carries one. `summary` is empty until a
+ *  source is connected behind it, which is every branch but engineering today —
+ *  the state the branch pages have to say out loud. */
+const branch = (kind, over = {}) => ({
+  id: `b-${kind.toLowerCase().replace(/\s+/g, '-')}`, kind, name: kind,
+  summary: '', summary_at: null, cards: {}, open: 0,
+  ...over,
+});
+
 const project = (over = {}) => ({
   id: 'p-quire', name: 'Quire', slug: 'quire', summary: 'client portals for studios',
   kind: 'SaaS', repos: ['/w/quire'], sort: 1, archived: false,
@@ -61,10 +70,23 @@ export function boards(NOW) {
     machine: 'studio', os: 'Darwin', daemon_version: '0.9.0', at: NOW,
     projects: [
       project({ running: 1, waiting: 2, counts: { ice_box: 1, in_progress: 2, done: 3 },
-                updated_at: t(300) }),
+                updated_at: t(300),
+                branches: [
+                  // The one face with something behind it, refreshed this
+                  // morning…
+                  branch('Engineering', { summary: 'Bulk invite is three checks in.',
+                                          summary_at: t(600),
+                                          cards: { ice_box: 1, in_progress: 2, done: 3 }, open: 3 }),
+                  // …one nothing is connected to and nothing has been put on…
+                  branch('SEO'),
+                  // …and one whose source last spoke three days ago.
+                  branch('Analytics', { summary: 'Trial-to-paid up since the pricing test.',
+                                        summary_at: t(3 * 86400) }),
+                ] }),
       project({ id: 'p-hush', name: 'Hush', slug: 'hush', summary: 'a quieter phone',
                 kind: 'app', repos: ['/w/hush'], sort: 2, running: 0, waiting: 1,
-                counts: { in_progress: 1, done: 2 }, updated_at: t(900) }),
+                counts: { in_progress: 1, done: 2 }, updated_at: t(900),
+                branches: [branch('App Review', { cards: { in_progress: 1, done: 2 }, open: 1 })] }),
     ],
     cards: [
       card({ agent_status_at: t(300), updated_at: t(300), moved_at: t(600) }),
@@ -90,7 +112,14 @@ export function boards(NOW) {
   const mini = () => ({
     machine: 'mini', os: 'Darwin', daemon_version: '0.9.0', at: NOW,
     projects: [project({ id: 'q-1', repos: ['/w/quire-api'], running: 1, waiting: 1,
-                         counts: { in_progress: 1 }, updated_at: t(120) })],
+                         counts: { in_progress: 1 }, updated_at: t(120),
+                         branches: [
+                           // The same face on the second machine, with nothing
+                           // written on it: the summary the studio wrote has to
+                           // survive the merge.
+                           branch('Engineering', { id: 'mb-eng' }),
+                           branch('API', { cards: { in_progress: 1 }, open: 1 }),
+                         ] })],
     cards: [card({ id: 'm1', project_id: 'q-1', branch: 'API', machine: 'mini',
                    title: 'Out-of-order deliveries', agent_status: 'blocked',
                    agent_status_at: t(5400), ustabasi_id: 44,
@@ -106,7 +135,9 @@ export function boards(NOW) {
    *  every machine is answering. */
   const calm = () => ({
     machine: 'studio', os: 'Darwin', daemon_version: '0.9.0', at: NOW,
-    projects: [project({ running: 0, waiting: 0, counts: { ice_box: 2, done: 9 }, updated_at: t(60) })],
+    projects: [project({ running: 0, waiting: 0, counts: { ice_box: 2, done: 9 }, updated_at: t(60),
+                         branches: [branch('Engineering', { cards: { ice_box: 2, done: 9 },
+                                                           open: 2 })] })],
     cards: [card({ id: 'c1', title: 'CSV export', column: 'ice_box', executor: null,
                    agent_status: null, agent_status_at: null, ustabasi_id: null })],
     agents: [],
@@ -122,9 +153,13 @@ export function boards(NOW) {
     projects: [
       project({ id: 'p-walk', name: 'The Long Walk', slug: 'the-long-walk', kind: 'app',
                 summary: '', repos: ['/w/walk'], running: 0, waiting: 0,
-                counts: { ice_box: 3 }, updated_at: t(30 * 86400) }),
+                counts: { ice_box: 3 }, updated_at: t(30 * 86400),
+                branches: [branch('Engineering', { cards: { ice_box: 3 }, open: 3 })] }),
+      // A product created and never touched: its faces are made and its board is
+      // empty, which is a designed page and not an absence.
       project({ id: 'p-pebble', name: 'Pebble', slug: 'pebble', kind: '', summary: '',
-                repos: [], running: 0, waiting: 0, counts: {}, updated_at: t(86400) }),
+                repos: [], running: 0, waiting: 0, counts: {}, updated_at: t(86400),
+                branches: [branch('Engineering'), branch('SEO')] }),
     ],
     cards: [],
     agents: [],

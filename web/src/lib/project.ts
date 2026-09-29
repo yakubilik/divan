@@ -42,11 +42,6 @@ export const SLOTS = 3;
  *  (`07:02 overnight`): a source that refreshed this morning is ordinary. */
 export const BRANCH_OLD_AFTER_S = DAY;
 
-/** …and one that has not been refreshed in a week is drawn faintly as well. A
- *  fortnight is the product's own dormancy; a week is a branch's, because a
- *  branch is meant to be refreshed daily. */
-export const BRANCH_DIM_AFTER_S = 7 * DAY;
-
 // ── the two lines at the top ────────────────────────────────────────────────
 
 /** One of the two rows — `now` or `waiting` — as the sentence it is made of and
@@ -260,10 +255,14 @@ export interface BranchCard {
   /** Two or three numbers, left to right, in three fixed slots. */
   figures: Figure[];
   /** When its source last refreshed, and whether that is long enough ago to be
-   *  worth an amber word. Null where nothing has ever refreshed it. */
+   *  worth an amber word. Null where nothing has ever refreshed it.
+   *
+   *  The phone draws a card whose source has been silent for a week at four
+   *  fifths as well (Mobile7 S5); no desktop frame draws a faded card, and the
+   *  panel's own rule is grey rather than faint — a fade is the one thing the
+   *  palette cannot make legible — so the age is said in the amber word and
+   *  nowhere else. */
   refreshed: { text: string; tone: Tone | null } | null;
-  /** …and long enough to draw the whole card faintly. */
-  dim: boolean;
 }
 
 /** The branches of a product, in the order the computer keeps them, each as a
@@ -284,7 +283,6 @@ export function branchCards(p: MergedProject, now: number): BranchCard[] {
       sourceless: !wrote && !said,
       figures: figures(b),
       refreshed: refreshed(b, now),
-      dim: dim(b, now),
     };
   });
 }
@@ -347,11 +345,6 @@ export function refreshed(b: MergedBranch, now: number): { text: string; tone: T
   return { text: days <= 1 ? 'yesterday' : `${days} days old`, tone: 'amber' };
 }
 
-/** …and whether the card is drawn faintly with it. */
-export function dim(b: MergedBranch, now: number): boolean {
-  return b.summary_at != null && now - b.summary_at > BRANCH_DIM_AFTER_S;
-}
-
 // ── a branch's own page ─────────────────────────────────────────────────────
 
 /** The repositories a branch's work happens in (Web14 W7's first block).
@@ -384,15 +377,16 @@ export function repoRows(p: MergedProject, kind: string): RepoRow[] {
 /** What has been said on a branch lately, newest first: the line the mirror
  *  wrote on each of its cards, with the moment it wrote it. A card nothing has
  *  been said about is not a line — the point of the list is what happened, not
- *  which cards exist. */
+ *  which cards exist. `kind` null is the whole product, which is the same
+ *  question asked of every face at once. */
 export interface Happened {
   at: number | null;
   text: string;
   card: MergedCard;
 }
 
-export function happened(p: MergedProject, kind: string): Happened[] {
-  return cardsOn(p, kind)
+export function happened(p: MergedProject, kind: string | null): Happened[] {
+  return (kind == null ? p.cards : cardsOn(p, kind))
     .filter((c) => (c.agent_detail || '').trim())
     .sort((a, b) => (b.agent_status_at ?? 0) - (a.agent_status_at ?? 0))
     .map((c) => ({ at: c.agent_status_at, text: (c.agent_detail || '').trim(), card: c }));

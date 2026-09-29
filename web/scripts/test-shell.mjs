@@ -501,9 +501,13 @@ group('the page is scoped, not a second screen');
     one.includes('Quire') && one.includes('studio · mini') && !one.includes('Hush'));
   ok('…and it is the same screen rather than a second one',
     all !== one && one.length > 200 && all.length > 200);
-  ok('a product says what its board holds, the finished ones included',
-    one.includes('In Progress 3') && one.includes('Ice Box 1') && one.includes('Done 3'),
-    one.slice(one.indexOf('Ice Box'), one.indexOf('Ice Box') + 80));
+  // The page under the head is Web14 W6 now: the branches and their own
+  // numbers, and `done` in them is the machines' count rather than the cards in
+  // hand — the daemon leaves finished cards out of a snapshot.
+  ok('a product says what each of its faces holds, the finished ones included',
+    one.includes('Engineering') && one.includes('open') && one.includes('done')
+    && one.includes('>3<'),
+    one.slice(one.indexOf('Branches'), one.indexOf('Branches') + 300));
   ok('…and which states it is in, as characters and not only as colour',
     ['■', '?', '●'].every((c) => one.includes(c)));
   ok('a page built partly out of a quiet machine says how old it is',
