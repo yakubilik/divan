@@ -199,6 +199,11 @@ export interface MergedProject {
   name: string;
   slug: string;
   summary: string;
+  /** What sort of thing it is — `app`, `web`, `content`, `client-work` — as
+   *  somebody wrote it. Empty where nobody said, which is every product that
+   *  predates the field; the project page then draws what it is *for* alone
+   *  rather than a guessed word. */
+  kind: string;
   repos: string[];
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
@@ -364,9 +369,20 @@ function hostView(e: HostEntry, now: number): HostView {
 /** A machine is out of quota: its agents are stopped where they were and pick
  *  up again on their own. Only a machine that is answering can be said to be
  *  out — a quota reading from a computer that has been quiet for two hours says
- *  nothing about now. */
-function outOfQuota(h: HostView): boolean {
+ *  nothing about now.
+ *
+ *  Exported because every screen that says anything about an agent has to ask
+ *  it: the merge's own `paused` count, the Dashboard's agent roster and a
+ *  product's `now` line are three readings of one fact, and a second spelling of
+ *  it is how one of them came to call a stopped agent a running one. */
+export function outOfQuota(h: HostView): boolean {
   return !!h.quota?.spent && !h.stale;
+}
+
+/** …and the machines that are, by id, out of a whole view. The set a screen
+ *  actually wants: an agent is stopped if its host is in here. */
+export function spent(view: { hosts: HostView[] }): Set<string> {
+  return new Set(view.hosts.filter(outOfQuota).map((h) => h.id));
 }
 
 /** Everything the phone has, as one view. `now` is a clock in seconds — the
@@ -414,6 +430,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           name: p.name,
           slug: p.slug,
           summary: p.summary || '',
+          kind: p.kind || '',
           repos: [...(p.repos || [])],
           hosts: [h.id],
           machines: [h.machine],
@@ -441,6 +458,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
       const newer = (p.updated_at || 0) > found.updated_at;
       found.name = newer ? p.name : found.name;
       found.summary = newer && p.summary ? p.summary : (found.summary || p.summary || '');
+      found.kind = newer && p.kind ? p.kind : (found.kind || p.kind || '');
       found.updated_at = Math.max(found.updated_at, p.updated_at || 0);
       found.repos = [...new Set([...found.repos, ...(p.repos || [])])].sort();
       found.hosts = [...new Set([...found.hosts, h.id])];

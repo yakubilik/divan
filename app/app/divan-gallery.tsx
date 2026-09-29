@@ -151,7 +151,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
           </View>
         </Part>
 
-        <Part name="Card" frame="Mobile6 S3 · Mobile1 V1 · Mobile3 Drag frame">
+        <Part name="Card" frame="Mobile6 S3 · Mobile1 V1 · Mobile3 Drag frame · Mobile7 S5">
           <View style={{ gap: 8, paddingHorizontal: 4 }}>
             <Card ring="amber">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -182,6 +182,12 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
             </Card>
             <Card lifted ring="none">
               <Text style={{ fontSize: 15, fontWeight: '600' }}>Custom domains for client portals</Text>
+            </Card>
+            <Card hollow>
+              <Text style={{ fontSize: 20, fontWeight: '600' }}>Quiet for 23 days.</Text>
+              <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2 }}>
+                No agents are running, nothing is queued, and the last commit was 23d ago.
+              </Text>
             </Card>
           </View>
         </Part>
