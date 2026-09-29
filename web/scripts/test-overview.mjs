@@ -613,7 +613,8 @@ group('Web14 W6, W7 and W8');
     view: busy, project: quire, onProject() {}, ...props,
   }));
   const product = scoped({});
-  const engineering = scoped({ branch: 'Engineering' });
+  const engineeringNow = () => scoped({ branch: 'Engineering' });
+  const engineering = engineeringNow();
   const seo = scoped({ branch: 'SEO' });
 
   ok('the product page is the two lines, the branches, and their own numbers',
@@ -707,6 +708,26 @@ group('Web14 W6, W7 and W8');
       .includes('did not hand the brief over')
     && draw({ opened: { full: null, ticket: null, error: 'connection refused' } })
       .includes(card.title));
+  // The whole of the difference between a frame and its light twin, which is
+  // the claim "in both themes" makes: one attribute on <html>, and not a line
+  // of any of these four pages.
+  const twins = {
+    'W6 · the product': () => scoped({}),
+    'W7 · a branch': () => engineeringNow(),
+    'W8 · a ticket': () => draw(),
+    'W9 · the board': () => scoped({ tab: 'board' }),
+  };
+  const differ = Object.entries(twins).filter(([, of]) => {
+    K.setThemeChoice('dark');
+    const dark = of();
+    K.setThemeChoice('light');
+    const light = of();
+    return dark !== light;
+  }).map(([what]) => what);
+  K.setThemeChoice('dark');
+  ok('each of the four is the same page in the light: the same markup, one attribute apart',
+    differ.length === 0, differ.join(', '));
+
   ok('…and a card with no ticket behind it offers no box to answer one',
     !draw({ card: quire.cards.find((c) => c.id === 'k3'), opened: { full: null, ticket: null, error: null } })
       .includes('Say one sentence'));
