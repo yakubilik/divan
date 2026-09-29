@@ -64,6 +64,18 @@ checks.push(
   ['…registered in the stack like every other full screen',
     S.PLACES.every((p) => new RegExp(`<Stack\\.Screen\\s+name="${S.PLACE_ROUTE[p].slice(1)}(/index)?"`)
       .test(layout))],
+  // Every screen in the stack is a file and every file is in the stack. The
+  // places are three of them, and a name that is not a route is a screen
+  // nobody reaches — which is how `chat/index` had to be spelt out rather
+  // than guessed at (expo-router names an index file after its folder and the
+  // word, and `/chat` is the path it answers on).
+  ['what the stack declares and what the app folder holds are the same set',
+    (() => {
+      const declared = [...layout.matchAll(/<Stack\.Screen\s+name="([^"]+)"/g)].map((m) => m[1]).sort();
+      const routes = files('app').filter((f) => !/\/_layout\.tsx$/.test(f))
+        .map((f) => f.replace(/^app\//, '').replace(/\.tsx?$/, '')).sort();
+      return eq(declared, routes);
+    })()],
   ['…and standing in the shell rather than each drawing its own tab bar',
     S.PLACES.every((p) => new RegExp(`<Shell place="${p}"`).test(src(SCREEN[S.PLACE_ROUTE[p]])))
     && !/TabBar/.test(dash) && !/TabBar/.test(chatPlace) && !/TabBar/.test(machine)],
