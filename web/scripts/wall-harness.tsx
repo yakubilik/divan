@@ -12,6 +12,13 @@ import { createRoot } from 'react-dom/client';
 import { Wall } from '../src/screens/Ustabasi';
 import { groupByProject } from '../src/lib/ustabasi';
 import { NOW, wall } from './ticket-fixture.js';
+import { themeCss } from '../src/lib/theme';
+
+// No App behind it, so the palette is written into the page here.
+document.documentElement.dataset.theme = 'dark';
+const sheet = document.createElement('style');
+sheet.textContent = themeCss();
+document.head.appendChild(sheet);
 
 createRoot(document.getElementById('root')!).render(
   <Wall groups={groupByProject(wall() as any)} now={NOW} onOpen={() => {}} />,

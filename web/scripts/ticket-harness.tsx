@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TicketChat } from '../src/components/TicketChat';
+import { themeCss, toneFace } from '../src/lib/theme';
 import { ticket } from './ticket-fixture.js';
 
 declare global {
@@ -46,7 +47,7 @@ function Harness() {
   return (
     <TicketChat
       t={t}
-      tone={{ label: 'needs an answer', color: '#D8A657', rgb: '216,166,87' }}
+      tone={toneFace('needs an answer', 'amber')}
       onClose={() => {}}
       onNote={async (text: string) => {
         window.sent.push(text);
@@ -57,5 +58,12 @@ function Harness() {
     />
   );
 }
+
+// The harness is the view with nothing behind it, which includes no App: the
+// palette has to be written into the page by somebody, so it is written here.
+document.documentElement.dataset.theme = 'dark';
+const sheet = document.createElement('style');
+sheet.textContent = themeCss();
+document.head.appendChild(sheet);
 
 createRoot(document.getElementById('root')!).render(<Harness />);

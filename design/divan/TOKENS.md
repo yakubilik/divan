@@ -1,9 +1,14 @@
-# Divan — the mobile design system
+# Divan — the design system
 
-Divan is the interface the phone app grows into: a dashboard over several
-projects, a board per project, a ticket, a branch page, a machine tab. Eleven
-screens are built out of the parts recorded here, and none of them decides again
-what a card is or which grey a timestamp takes.
+Divan is the interface the app grows into: a dashboard over several projects, a
+board per project, a ticket, a branch page, a machine tab. Eleven screens on the
+phone and seven on the desktop are built out of the parts recorded here, and
+none of them decides again what a card is or which grey a timestamp takes.
+
+The phone came first and is the first half of this document; **the web side is
+the second half**, under "The desktop". There is one palette and it is in the
+table below: both clients read the same sixteen values, because the frames
+declare the same sixteen on a 390 pt phone and on a 1440 pt desktop.
 
 This is not a re-skin. The palette changed, both themes are first-class, and the
 chat screens keep the shape they have.
@@ -195,5 +200,158 @@ without a person moving something.
   Settings.
 - `app/scripts/test-divan.cjs` — the block above, quoted, and checked both ways:
   the table is the frames', and nothing outside the table is a colour.
+
+# The desktop
+
+The panel in `web/` is the same design at 1440 pt. Four frame groups draw it:
+Web12 W1 and W2 are the desktop dark, Web13 W3 and W4 the same two screens light,
+Web14 W6 to W10 the screens that follow, and Web15 W11 to W18 the machine pages.
+
+## The palette is the one above
+
+Those frames open with the same block of sixteen custom properties the phone's
+do, by the same names, and `web/src/lib/theme.ts` holds exactly the table at the
+top of this document. Two clients, one palette; a colour that moved on the phone
+moved on the desktop.
+
+Two decimals are worth writing down. The desktop was drawn before the block
+settled, so Web12 W1 and W2 carry `--line2` at `.22` and the three washes a
+hundredth heavier — the same five-frame difference recorded above. The value
+taken is the majority's, which on the dark side is Web14 W6's block and on the
+light side Web15 W12's, and both are quoted verbatim in
+`web/scripts/test-divan.mjs`.
+
+### The three values beside the sixteen
+
+| in code | value | read off |
+|---|---|---|
+| `amberRing` | `rgba(234,182,90,.3)` · `rgba(156,98,16,.35)` | Web12 W1 and W2 · Web13 W3 and W4 |
+| `sLift` | `#2A2822` · `#E9E6DE` | borrowed from the phone — see below |
+| `scrim` | `rgba(0,0,0,.5)` · `rgba(27,26,23,.35)` | derived — see below |
+
+`amberRing` is the amber drawn as a ring rather than a fill, around the panel of
+an agent that is asking: `inset 0 0 0 1px` in that colour. It is a hundredth
+heavier than the phone's ring, and the value in the web table is the desktop
+frames' own, because that is the artboard the file is extracted from.
+
+**`sLift` is borrowed.** Nothing is drawn in the air on a desktop artboard —
+there is no lifted card and no popover surface in the four groups — so the
+surface a card takes while it is being carried is the phone's: the `--s2` of
+Mobile3's drag frame, and on the light side the `--s2` of Mobile4 C1. The panel
+needs it in four places that predate Divan (a details panel held open, a hovered
+menu row), which is why it is in the table at all.
+
+**`scrim` is derived.** The desktop frames draw no dim: the machine drawer of
+Web15 W12 is a whole page, not a panel over one. The dark side is `--sh` itself
+and the light side is the same ink at `.35`, the weight the panel already dimmed
+with. There is one derived value on the web side and one borrowed one, and a
+check holds this claim and the code's own `DERIVED` and `BORROWED` to each other.
+
+### Colours that are not the theme's
+
+A photo brings its own background and does not follow the page, so the lightbox
+and the remote screen are drawn in `MEDIA` — a black backdrop, white chrome over
+it — and that is the whole of the exception. Project monograms and executor
+squares bring their own colour the same way, out of the ramp above; white sits on
+every one of them.
+
+## How a colour reaches the screen
+
+Nothing in the panel reads a value out of the table. Both themes are written into
+the document as custom properties, and what a component holds is a reference:
+`T.ink3` is the string `var(--dv-ink3)`. `[data-theme="dark"]` and
+`[data-theme="light"]` are the two rules; the switch writes that attribute on
+`<html>`, and a gallery holding both themes up against the frames writes it on a
+`<div>`.
+
+This is what makes the desktop's two themes free. One render is correct in
+either, a theme change is one attribute and no React render at all, and there is
+no second copy of the palette to drift from this document.
+
+**The switch** follows the computer by default, can be set by hand, and is
+remembered in `localStorage` under `rac.theme`. While it is following, the
+computer changing its mind at sunset is followed too; once a person has chosen,
+it is not. The resolved theme is on the document before the first paint, so the
+panel never opens in the wrong one and flashes. It is offered in
+Settings › Appearance and in the command palette.
+
+## Where the older palette's names landed
+
+Twenty-three files speak a vocabulary that predates Divan — `surface`, `mute`,
+`accent`, `hair` — and this ticket did not rewrite them. `C` is that vocabulary
+with every name now pointing at one of the tokens, which is why those screens
+follow both themes without a line of theirs changing. Most are a rename
+(`surface` is `--s1`, `border` is `--line`, `warn`/`ok`/`danger` are
+`--amber`/`--run`/`--red`). Six needed a decision:
+
+- **`mute` and `faint` are both `--ink3`**, the same collapse the phone made and
+  for the same reason: the frames draw three tiers of text and put mono meta,
+  timestamps and placeholders in one of them.
+- **`accent` is `--red`.** The frames give a primary button `--ink` and keep red
+  for trouble; the panel's accent is the colour of Allow, of the recording dot
+  and of delete, which is that red.
+- **`accentSoft` — the panel's "this one is selected" — is `--ink`.** The frames
+  draw a selected nav item, chip or tab in the primary ink and the rest in
+  `--ink3`; nothing in them is a lighter accent.
+- **`info` is `--run`.** The frames draw no blue at all. What the panel painted
+  blue is work in progress, and in Divan that is the green — which also keeps the
+  two warm colours the only warm things on a wall of twenty tiles, which is why
+  the blue was there.
+- **`hair` is `--line`.** It was a near-black used as a separator in eleven
+  places, which is what a hairline is. The four places that used it as a fill now
+  say `bg`, the tone the frames put inside a card.
+- **`surface3` is `--sLift`**, the surface of something being held open.
+
+Each tone also has a wash and an outline (`warnBg`, `warnLine`), because the
+frames draw all three: Web14 W10's roster has a green chip on `--runBg`, a red
+chip outlined in `inset 0 0 0 1px var(--red)`, and a grey one on `--s2`. That is
+what replaced the sixty colours the screens used to thin by hand.
+
+## Form on the desktop
+
+The desktop repeats its own numbers, and they are not the phone's. Radii: **7** a
+status chip · **8** an executor's square · **9** a row's icon well, a small
+button, the selected tab inside its track · **10** a top-bar item, a side-panel
+row · **11** the button a card ends on · **12** a tab strip's track · **14** a
+counter tile, a ticket card · **16** a card, a board column, a pill, the drawer ·
+**20** the composer inside a panel · **26** the command bar.
+
+Heights: top bar **58** · a nav item **34** · a pill **32** · a button **34**, or
+**32** where it is a row's own action · an executor's square **28** · a
+monogram **34** on a card and **46** in a page head · a row's well **32** with a
+**17** glyph · a status dot **7** · the side panel **260** with **40** pt rows.
+
+Shadows, as the frames write them: `0 0 0 1px var(--line)` is the ring a card
+wears instead of a border — 56 times across the four groups — then
+`0 1px 2px var(--sh)` for a lift, `0 0 0 1px var(--line2), 0 10px 24px var(--sh)`
+for a popover and the same at `14px 36px` for the drawer.
+
+Type is the panel's own faces at the frames' sizes and weights, mono for numbers,
+times, counts and identifiers and never for sentences. The frames are drawn in
+Geist; the panel does not ship it.
+
+## Where it lives
+
+- `web/src/lib/theme.ts` — the sixteen in both themes, the three beside them, the
+  `--dv-*` rules, the switch, the marks, the radii, the heights, the shadows, and
+  `C`, the older vocabulary pointed at the same table.
+- `web/src/ui/divan.tsx` — the parts: card, row, pill, tab, column tab, status
+  dot, executor badge, counter, section header, empty state, side panel, and the
+  button and state mark the frames draw beside them. Each names the frame it was
+  measured off. The desktop frames draw no empty screen, so that one part is the
+  phone's Mobile7 S6 at desktop sizes, and says so where it is defined.
+- `web/src/ui/kit.tsx` — the older set the existing screens are built from. Not
+  being replaced in this ticket, and not to be mixed with the parts above in one
+  file.
+- `web/scripts/divan-gallery.tsx` — every part in both themes, each beside the
+  name of its frame. Rendered to `.test-build/divan/gallery.html` by the check
+  below, which opens in a browser with no daemon and no pairing.
+- `web/scripts/test-divan.mjs` — folded into `cd web && npm test`. The two blocks
+  quoted, the table held to them, every part and every existing screen rendered
+  and its colours read back off the markup, the switch driven through the states
+  a browser can put it in, and this document held to the code's own lists.
+
+The chat keeps the shape it has. It follows the new palette because everything
+does, but nothing in it was restyled and it is not built out of the parts above.
 
 A disagreement about any value in this document is settled by the artboard.

@@ -52,7 +52,7 @@ writeFileSync(join(out, 'wall.html'),
   '<!doctype html><html lang="en"><head><meta charset="utf-8">'
   + '<meta name="viewport" content="width=device-width, initial-scale=1">'
   + '<title>Wall harness</title><style>'
-  + 'html,body{margin:0;background:#0F0E0C;color:#F1ECE3;'
+  + 'html,body{margin:0;'
   + 'font-family:-apple-system,system-ui,sans-serif}#root{padding:24px}'
   + '</style></head><body><div id="root"></div>'
   + '<script src="./wall.js"></script></body></html>');

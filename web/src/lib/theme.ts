@@ -147,7 +147,10 @@ export function themeCss(): string {
   const rule = (scheme: Scheme) => {
     const t = tokensFor(scheme);
     const vars = NAMES.map((n) => `${cssName(n)}:${t[n]}`).join(';');
-    return `:root[data-theme="${scheme}"]{color-scheme:${scheme};${vars}}`;
+    // Any element, not only `:root`: the switch writes the attribute on
+    // `<html>`, and a gallery holding both themes up against the frames writes
+    // it on a `<div>`.
+    return `[data-theme="${scheme}"]{color-scheme:${scheme};${vars}}`;
   };
   return [
     rule('dark'),
@@ -403,6 +406,8 @@ export const RADIUS = {
   well: 9,
   /** A top-bar item and a side-panel row: `height:34px;border-radius:10px`. */
   nav: 10,
+  /** A button that ends a card: `height:34px;border-radius:11px` (Web14 W9). */
+  button: 11,
   /** The tab strip's track, and a card in the chat panel. */
   tab: 12,
   /** A counter tile, a ticket card on the board. */
@@ -423,8 +428,10 @@ export const SIZE = {
   topBar: 58,
   /** An item in it, and a row of the side panel's list. */
   navItem: 34,
-  /** A pill, and a small button. */
+  /** A pill, and a small button — a row's own actions in Web15 W12. */
   pill: 32,
+  /** The button a card or an empty state ends on. */
+  button: 34,
   /** A status dot; the hollow one is the same circle at 1.5px. */
   dot: 7,
   /** An executor's square on a card or a panel head. */
