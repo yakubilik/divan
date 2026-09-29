@@ -17,8 +17,9 @@ import { T, themeCss, type Scheme } from '../src/lib/theme';
 import { P, mono } from '../src/ui/kit';
 import {
   BarChip, BarDivider, BarStamp, Button, Card, ColumnTab, CommandBar, Composer, Counter,
-  DockMore, DockTab, EmptyState, ExecutorBadge, Monogram, NavItem, Note, Panel, PanelHead,
-  Pill, Quoted, Row, RosterRow, SectionHeader, SidePanel, StateMark, StatusDot, Tabs, Tag, TopBar,
+  DockMore, DockTab, EmptyState, ExecutorBadge, FieldRow, Figures, Monogram, NavItem, Note, Panel,
+  PanelHead, Pill, Quoted, Row, RosterRow, SectionHeader, SidePanel, StampRow, StateMark, StatusDot,
+  Tabs, Tag, TopBar, Write,
 } from '../src/ui/divan';
 
 export interface Specimen {
@@ -351,6 +352,67 @@ export const SPECIMENS: Specimen[] = [
   {
     name: 'CommandBar', frame: 'Web12 W1 · every desktop frame', width: 420,
     node: <CommandBar placeholder="Tell Divan anything…" />,
+  },
+  {
+    name: 'Figures', frame: 'Web14 W6 · a branch card', width: 380,
+    node: (
+      <Card>
+        <SectionHeader title="Engineering" right="live" tone="run" />
+        <Figures figures={[
+          { value: 4, label: 'open' },
+          { value: 2, label: 'in progress' },
+          { value: 48, label: 'done' },
+        ]} />
+      </Card>
+    ),
+  },
+  {
+    name: 'FiguresShort', frame: 'Web14 W6 · two of the three slots', width: 380,
+    node: <Figures figures={[{ value: 3, label: 'open' }, { value: '212/214', label: 'tests', tone: 'red' }]} />,
+  },
+  {
+    name: 'StampRow', frame: 'Web14 W6 · conversations filed here', width: 380,
+    node: (
+      <Card>
+        <StampRow at="Tonight" text="Newsletter cut to 250 words, scheduled Thu 09:00" />
+        <StampRow at="26 Sep" text="Created QUI-142 Bulk invite from your idea" />
+      </Card>
+    ),
+  },
+  {
+    name: 'StampRowCode', frame: 'Web14 W8 · the live log', width: 380,
+    node: (
+      <Card>
+        <StampRow code at="23:12" text="pnpm test → 11 passed" tone="run" />
+        <StampRow code at="23:13" text="e2e timeout at 501 rows" tone="red" />
+        <StampRow code at="23:13" text={'you: “batch the commit, 100 at a time”'} tone="amber" />
+      </Card>
+    ),
+  },
+  {
+    name: 'FieldRow', frame: 'Web14 W8 · the details panel', width: 380,
+    node: (
+      <Card inset={false} style={{ padding: '4px 16px' }}>
+        <FieldRow first label="Executor" value="Coder" lead={<ExecutorBadge executor="coder" size={22} />}
+          note="studio" />
+        <FieldRow label="Created by" value="Divan" note="from your chat" />
+        <FieldRow label="Branch" value="Engineering" />
+      </Card>
+    ),
+  },
+  {
+    name: 'Write', frame: 'Web14 W9 · the card being written', width: 380,
+    node: (
+      <Card ring="amber" raised radius={14}>
+        <div style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.3 }}>
+          <Write value="Export client list as CSV" onChange={() => {}} label="Title" />
+        </div>
+        <div style={{ fontSize: 13.5, lineHeight: '20px' }}>
+          <Write lines={3} value="Studios keep asking to download their client list."
+            onChange={() => {}} label="What to do" style={{ height: 60 }} />
+        </div>
+      </Card>
+    ),
   },
 ];
 
