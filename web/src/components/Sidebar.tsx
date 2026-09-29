@@ -433,7 +433,7 @@ export function Sidebar({ view, onView, selected, selectedHost, onSelect, onNewC
             >
               <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
               New chat
-              <span style={{ ...mono, fontSize: 11, opacity: 0.75 }}>⌘N</span>
+              <span style={{ ...mono, fontSize: 11 }}>⌘N</span>
             </button>
           </div>
           <div style={{ padding: '0 8px 8px' }}>

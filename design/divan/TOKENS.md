@@ -228,6 +228,8 @@ light side Web15 W12's, and both are quoted verbatim in
 | `amberRing` | `rgba(234,182,90,.3)` · `rgba(156,98,16,.35)` | Web12 W1 and W2 · Web13 W3 and W4 |
 | `sLift` | `#2A2822` · `#E9E6DE` | borrowed from the phone — see below |
 | `scrim` | `rgba(0,0,0,.5)` · `rgba(27,26,23,.35)` | derived — see below |
+| `execLine` | `#6F7BBC` · `rgba(27,26,23,.18)` | Mobile3's drag frame · derived — see below |
+| `execInk` | `#92A0E3` · `#7A756C` | Mobile3's drag frame · derived — see below |
 
 `amberRing` is the amber drawn as a ring rather than a fill, around the panel of
 an agent that is asking: `inset 0 0 0 1px` in that colour. It is a hundredth
@@ -244,8 +246,20 @@ menu row), which is why it is in the table at all.
 **`scrim` is derived.** The desktop frames draw no dim: the machine drawer of
 Web15 W12 is a whole page, not a panel over one. The dark side is `--sh` itself
 and the light side is the same ink at `.35`, the weight the panel already dimmed
-with. There is one derived value on the web side and one borrowed one, and a
-check holds this claim and the code's own `DERIVED` and `BORROWED` to each other.
+with.
+
+**`execLine` and `execInk` are derived on the light side only.** They are the
+dashed square and the mark of a ticket nobody has taken, and their dark side is
+the artboard's: Mobile3's drag frame draws `1.5px dashed oklch(0.6 0.1 275)`
+around `oklch(0.72 0.1 275)`, converted to sRGB the way the monograms were.
+Nothing is dragged on a light artboard, so the light side has no frame — and a
+dark-theme indigo left on a light page reads at 2.3:1, which is how this pair
+was found at all. The light side is therefore the placeholder the desktop frames
+*do* draw, in both themes: Web12 W2's "+ Add branch" card, `1.5px dashed
+var(--line2)` with `var(--ink3)` on it.
+
+Three derived values on the web side, then, and one borrowed one, and a check
+holds this claim and the code's own `DERIVED` and `BORROWED` to each other.
 
 ### Colours that are not the theme's
 
@@ -347,9 +361,20 @@ Geist; the panel does not ship it.
   name of its frame. Rendered to `.test-build/divan/gallery.html` by the check
   below, which opens in a browser with no daemon and no pairing.
 - `web/scripts/test-divan.mjs` — folded into `cd web && npm test`. The two blocks
-  quoted, the table held to them, every part and every existing screen rendered
-  and its colours read back off the markup, the switch driven through the states
-  a browser can put it in, and this document held to the code's own lists.
+  quoted, the table held to them, every part rendered and every screen with it —
+  including the eight panels a screen opens over itself, and the chat with a
+  chat open in it — and the colours read back off the markup; the switch driven
+  through the states a browser can put it in; and this document held to the
+  code's own lists. It also holds the one rule a palette cannot enforce by
+  itself: `onAccent` and `onWarn` are the two "text on a filled colour" values
+  and may only be drawn on a filled colour. White on `--s2` is legal in every
+  other check and is an empty-looking button on a light page.
+- `web/scripts/test-divan-ui.mjs` — the same page in a real browser, not in
+  `npm test` because it needs Chrome. It reads back every colour the browser
+  actually resolved, and then measures every pair it painted: each piece of text
+  and each glyph against what is behind it, composited through whatever
+  translucency and opacity is in the way, held to 3:1. Membership in the palette
+  says a colour is the design's; only this says the pair can be read.
 
 The chat keeps the shape it has. It follows the new palette because everything
 does, but nothing in it was restyled and it is not built out of the parts above.

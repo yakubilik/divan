@@ -17,6 +17,9 @@ function Tool({ icon, title, onClick, href }: {
     width: 34, height: 34, borderRadius: R.btn, flexShrink: 0, cursor: 'pointer',
     background: MEDIA.chrome, border: `1px solid ${MEDIA.chromeLine}`,
     display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none',
+    // One of these two is an <a>, and an <a> that names no colour is the
+    // browser's own blue — which is in no palette and sits over a photograph.
+    color: MEDIA.ink,
   };
   const glyph = <Icon path={icon} size={16} color={MEDIA.ink} />;
   return href

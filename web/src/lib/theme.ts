@@ -80,6 +80,18 @@ export interface Tokens {
    *  the same ink at the weight the panel already dimmed with. Recorded as
    *  derived in `design/divan/TOKENS.md`. */
   scrim: string;
+  /** A ticket nobody has taken yet: the dashed square, and the mark inside it.
+   *
+   *  The dark side is the artboard's own — Mobile3's drag frame draws
+   *  `1.5px dashed oklch(0.6 0.1 275)` around `oklch(0.72 0.1 275)`, converted
+   *  to sRGB the way the monograms were. Nothing is dragged on a light
+   *  artboard, so the light side is derived, and it is derived from the
+   *  placeholder the desktop frames do draw in both themes: Web12 W2's
+   *  "+ Add branch" card, `1.5px dashed var(--line2)` with `var(--ink3)` on it.
+   *  A dark-theme indigo on a light page reads at 2.3:1, which is how this one
+   *  was found. Recorded as derived in `design/divan/TOKENS.md`. */
+  execLine: string;
+  execInk: string;
 }
 
 /** Web14 W6 · Project · Quire · Overview tab — one of the dark frames that
@@ -98,6 +110,7 @@ export const DARK: Tokens = {
   run: '#7CC6A6', runBg: 'rgba(124,198,166,.1)',
   sh: 'rgba(0,0,0,.5)',
   scrim: 'rgba(0,0,0,.5)',
+  execLine: '#6F7BBC', execInk: '#92A0E3',
 };
 
 /** Web15 W12 · Machine drawer · Machines — one of the eight light frames of
@@ -114,15 +127,17 @@ export const LIGHT: Tokens = {
   run: '#2F8067', runBg: 'rgba(47,128,103,.1)',
   sh: 'rgba(27,26,23,.12)',
   scrim: 'rgba(27,26,23,.35)',
+  execLine: 'rgba(27,26,23,.18)', execInk: '#7A756C',
 };
 
 export const tokensFor = (scheme: Scheme): Tokens => (scheme === 'dark' ? DARK : LIGHT);
 
-/** The one value in the table that is not in a frame at all, and the one whose
- *  value is in a frame but whose role is not. Named here so that a third of
+/** The values in the table that are not in a frame at all, and the one whose
+ *  value is in a frame but whose role is not. Named here so that another of
  *  either cannot appear without `design/divan/TOKENS.md` gaining a line about
- *  it — a check holds the two lists together. */
-export const DERIVED = ['scrim'] as const;
+ *  it — a check holds the two lists together. `execLine` and `execInk` are
+ *  derived on the light side only: the dark side of both is an artboard's. */
+export const DERIVED = ['scrim', 'execLine', 'execInk'] as const;
 export const BORROWED = ['sLift'] as const;
 
 export type TokenName = Exclude<keyof Tokens, 'scheme'>;
@@ -314,12 +329,6 @@ export interface ExecutorFace {
   /** The grey line under the name, in the frames' words. */
   kind: string;
 }
-
-/** The dashed Coder, which only Mobile3's drag frame and Web12's own card table
- *  draw: `1.5px dashed oklch(0.6 0.1 275)` around `oklch(0.72 0.1 275)`,
- *  converted the same way as the monograms. */
-export const EXEC_PENDING_LINE = '#6F7BBC';
-export const EXEC_PENDING_INK = '#92A0E3';
 
 export const EXECUTORS: Record<string, ExecutorFace> = {
   coder: { mark: '</>', fill: '#48528F', round: false, dashed: false, kind: 'writes code · opens PRs' },

@@ -24,16 +24,19 @@ import { Ustabasi } from './Ustabasi';
 
 type Phase = 'working' | 'approval' | 'error' | 'done' | 'stopped' | 'idle';
 
-/** The artboard gives every phase a hue and then washes the whole tile in it —
- *  a wall is read by colour from across a room, long before any of the words
- *  on it are legible. The `rgb` is that wash: the same token at low opacity,
- *  which is the only way a colour may be varied here (TOKENS.md).
+/** Every phase is one of Divan's tones, and a tone comes with the wash behind
+ *  it and the line round it (`toneFace`): the tile's head is washed in its
+ *  phase and the tile is outlined in it, because a wall is read by colour from
+ *  across a room, long before any of the words on it are legible. Nothing here
+ *  thins a colour of its own — the two weights a tone has are the design's
+ *  (TOKENS.md).
  *
- *  Working is `info` and not `accent` on purpose. The artboard puts a cool blue
- *  there so that the two hot colours — the amber that wants an answer and the
- *  red that went wrong — are the only warm things on the wall, and the eye goes
- *  to them. Painting "busy" in the brand clay put a third warm hue next to the
- *  two that matter and buried them. */
+ *  Working is the green and not the red on purpose. The two warm colours — the
+ *  amber that wants an answer and the red that went wrong — are the only warm
+ *  things on a wall of twenty tiles, and the eye goes to them; painting "busy"
+ *  in the red would put a third warm hue beside the two that matter and bury
+ *  them. The frames draw no blue at all, so what the panel used to paint blue
+ *  is the green that means work is happening. */
 const PHASE: Record<Phase, ToneFace> = {
   working: toneFace('working', 'run'),
   approval: toneFace('needs approval', 'amber'),
@@ -738,7 +741,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
               >
                 <span style={{ width: 7, height: 7, borderRadius: 4, background: f.color }} />
                 {f.label}
-                <span style={{ ...mono, fontSize: 11, opacity: 0.7 }}>{counts[f.key] ?? 0}</span>
+                <span style={{ ...mono, fontSize: 11 }}>{counts[f.key] ?? 0}</span>
               </button>
             );
           })}

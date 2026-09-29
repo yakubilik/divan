@@ -56,12 +56,15 @@ npm test                          # the palette, the parts, the switch, every sc
 node scripts/test-divan-ui.mjs    # the same in a real browser, with screenshots
 ```
 
-The second one needs Chrome (`CHROME=…` if it is somewhere unusual) and is not
-in `npm test`. It leaves `.test-build/divan/` behind: `gallery.html` — every
-part in both themes, no daemon, no pairing — and a screenshot of the parts and
-of three screens in each theme. `design/divan/TOKENS.md` is where the values
-come from and what was decided; the artboards it quotes are private and not in
-this repository.
+`npm test` renders every part, every screen and every panel a screen opens over
+itself, and holds the colours to the table. The browser one opens the same page
+in Chrome (`CHROME=…` if it is somewhere unusual, and it is not in `npm test`
+for that reason), reads back what the browser actually resolved, and measures
+every pair it painted — text and glyphs against what is behind them — at 3:1.
+It leaves `.test-build/divan/` behind: `gallery.html`, every part in both themes
+with no daemon and no pairing, and screenshots of the parts and of five screens
+in each theme. `design/divan/TOKENS.md` is where the values come from and what
+was decided; the artboards it quotes are private and not in this repository.
 
 ## Language
 

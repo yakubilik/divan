@@ -35,8 +35,8 @@ import {
 /** The phase colours are terminal mode's, deliberately: the two warm ones mean
  *  the same thing on both walls. Amber wants an answer from you — an approval
  *  there, a blocked ticket here. Red went wrong on its own. Everything working
- *  is the cool blue, so that on a wall of twenty tiles the eye still goes to
- *  the two that need a person. */
+ *  is the green, so that on a wall of twenty tiles the eye still goes to the
+ *  two that need a person. */
 const STATUS: Record<Status, ToneFace> = {
   running: toneFace('running', 'run'),
   blocked: toneFace('needs an answer', 'amber'),
@@ -325,7 +325,7 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
               >
                 {f.key !== 'all' && <Dot color={on ? C.bg : f.color} size={6} />}
                 {f.label}
-                <span style={{ ...mono, fontSize: 11, opacity: 0.7 }}>{n}</span>
+                <span style={{ ...mono, fontSize: 11 }}>{n}</span>
               </button>
             );
           })}

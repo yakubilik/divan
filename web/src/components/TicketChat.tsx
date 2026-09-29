@@ -194,6 +194,10 @@ function Composer({ t, busy, error, onSend }: {
   };
 
   const ready = !!text.trim();
+  // Armed while there is something to send and while it is being sent. The
+  // white `onAccent` glyph belongs on the red disc; a resting disc is a quiet
+  // fill and takes an ink, or it is white on off-white in the light theme.
+  const armed = ready || busy;
   return (
     <div style={{ padding: '8px 16px 14px', flexShrink: 0 }}>
       {error && <div style={{ fontSize: 12.5, color: C.danger, marginBottom: 6 }}>{error}</div>}
@@ -218,13 +222,13 @@ function Composer({ t, busy, error, onSend }: {
           style={{
             width: 36, height: 36, borderRadius: 18, flexShrink: 0,
             cursor: ready && !busy ? 'pointer' : 'default',
-            background: ready ? C.accent : C.surface2, border: 'none',
+            background: armed ? C.accent : C.surface2, border: 'none',
+            color: armed ? C.onAccent : C.mute,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: ready ? 1 : 0.5,
           }}
         >
-          {busy ? <Spinner size={14} color={C.onAccent} />
-            : <Icon path={P.send} size={16} color={C.onAccent} width={2.4} />}
+          {busy ? <Spinner size={14} color={armed ? C.onAccent : C.mute} />
+            : <Icon path={P.send} size={16} color={armed ? C.onAccent : C.mute} width={2.4} />}
         </button>
       </div>
       <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 6 }}>

@@ -233,9 +233,15 @@ group('the palette is the artboards’');
     K.DARK.sLift === PHONE_DRAG_S2 && K.LIGHT.sLift === PHONE_CHAT_S2
     && eq([...K.BORROWED], ['sLift']));
   ok('the dim behind a sheet is derived, and says so',
-    eq([...K.DERIVED], ['scrim'])
+    K.DERIVED.includes('scrim')
     && K.DARK.scrim === K.DARK.sh && K.LIGHT.scrim !== K.LIGHT.sh);
-  ok('…and there is no third of either', K.DERIVED.length + K.BORROWED.length === 2);
+  ok('the ticket nobody has taken keeps the artboard’s indigo in the dark',
+    K.DARK.execLine === '#6F7BBC' && K.DARK.execInk === '#92A0E3');
+  ok('…and on a light page takes the placeholder the desktop frames do draw',
+    K.LIGHT.execLine === K.LIGHT.line2 && K.LIGHT.execInk === K.LIGHT.ink3
+    && K.DERIVED.includes('execLine') && K.DERIVED.includes('execInk'));
+  ok('…and the derived and the borrowed are those three and that one, and no more',
+    eq([...K.DERIVED].sort(), ['execInk', 'execLine', 'scrim']) && K.BORROWED.length === 1);
 }
 
 // ── 2 · nothing else in the panel is a colour ──────────────────────────────
@@ -244,7 +250,7 @@ group('one table, and nothing beside it');
 {
   const TOKEN_VALUES = new Set([
     ...Object.values(K.DARK), ...Object.values(K.LIGHT),
-    K.ON_COLOUR, ...K.MONOGRAM, K.EXEC_PENDING_LINE, K.EXEC_PENDING_INK,
+    K.ON_COLOUR, ...K.MONOGRAM,
     ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
     ...Object.values(K.MEDIA),
   ]);
@@ -462,11 +468,48 @@ function paint(markup) {
   return { vars, literal };
 }
 
+/** A rendered markup string, walked as the tree it is: every element, with the
+ *  backgrounds of everything above it, nearest first. React's output is
+ *  well-formed, so a stack of open tags is the whole of the parsing needed —
+ *  and what a check wants to know about a colour is almost always what is
+ *  behind it. */
+const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link', 'path', 'circle',
+                      'rect', 'line', 'polyline', 'polygon', 'use', 'source']);
+
+function* elements(markup) {
+  const stack = [];
+  const re = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g;
+  let m;
+  while ((m = re.exec(markup))) {
+    const [, closing, tag, attrs, selfClose] = m;
+    if (closing) { stack.pop(); continue; }
+    const decl = {};
+    for (const pair of (/style="([^"]*)"/.exec(attrs)?.[1] ?? '').split(';')) {
+      const cut = pair.indexOf(':');
+      if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
+    }
+    const paint = decl.background ?? decl['background-color'] ?? null;
+    yield {
+      tag,
+      style: decl,
+      stroke: /stroke="([^"]*)"/.exec(attrs)?.[1] ?? null,
+      fill: /fill="([^"]*)"/.exec(attrs)?.[1] ?? null,
+      /** What it paints itself, if anything. */
+      paint: paint && paint !== 'transparent' && paint !== 'none' ? paint : null,
+      /** And what is above it, nearest first — its own not included, because
+       *  an element's own fill is what is behind its text and not behind
+       *  itself. */
+      behind: stack.map((f) => f.paint).reverse()
+        .filter((v) => v && v !== 'transparent' && v !== 'none'),
+    };
+    if (!VOID.has(tag) && !selfClose) stack.push({ paint });
+  }
+}
+
 /** A colour an element brings with it — the white on a coloured square, the
  *  black behind a photo — does not follow the page and never came from the
  *  palette. Everything else has to be a variable. */
-const OWN = new Set([K.ON_COLOUR, K.EXEC_PENDING_LINE, K.EXEC_PENDING_INK,
-                     ...K.MONOGRAM, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
+const OWN = new Set([K.ON_COLOUR, ...K.MONOGRAM, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                      ...Object.values(K.MEDIA)]);
 
 const drawn = {};
@@ -615,6 +658,119 @@ group('the screens the panel already had');
   ok('every screen still stands up', broken.length === 0, broken.join('\n    '));
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
   ok('…so every colour on every screen exists in both themes', undeclared.length === 0, undeclared.join(', '));
+}
+
+group('the panels the screens open over themselves');
+{
+  // A modal, a sheet, a popover and a menu are screens too — the panel spends
+  // half its time in one — and none of them needs a daemon to stand up. They
+  // were the half of "every screen in both themes" that neither check drew.
+  const { chat: makeChat, pending: makePending, items: makeItems, shots, groups } =
+    await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
+  const chat = makeChat();
+  const pending = makePending();
+  const items = makeItems();
+  const { ticket } = await import(pathToFileURL(join(web, 'scripts', 'ticket-fixture.js')).href);
+
+  const overlays = {
+    Modal: ['src/components/Modal.js', 'Modal', { onClose() {}, children: 'anything' }],
+    ApprovalModal: ['src/components/ApprovalModal.js', 'ApprovalModal', {
+      pending, chat, queued: 2, onRespond() {}, onOpenChat() {}, onClose() {},
+    }],
+    NewChat: ['src/components/NewChat.js', 'NewChat', {
+      hostKey: 'studio', initialCwd: undefined, initialAgent: null, onDone() {}, onClose() {},
+    }],
+    ChatMenu: ['src/components/ChatMenu.js', 'ChatMenu', {
+      chat, groups: groups(), onUpdate() {}, onDelete() {}, onClose() {},
+    }],
+    ChatDetails: ['src/components/ChatDetails.js', 'ChatDetails', {
+      chat, items, busy: true, liveTokens: 1240, accountLabel: 'yakup@…',
+      accountUsage: 0.64, onEdit() {}, onInterrupt() {}, onPopOut() {}, onClose() {},
+    }],
+    Lightbox: ['src/components/Lightbox.js', 'Lightbox', {
+      shots: shots(), start: 0, onClose() {},
+    }],
+    FieldSheet: ['src/components/FieldSheet.js', 'FieldSheet', {
+      field: 'model', chat, catalog: null, projects: [], accounts: [], limits: {},
+      busy: false, onPick() {}, onClose() {},
+    }],
+    TicketChat: ['src/components/TicketChat.js', 'TicketChat', {
+      t: ticket(), tone: K.toneFace('needs an answer', 'amber'), onClose() {}, onNote: async () => 'ok',
+    }],
+    // The chat with a chat in it, which is the only way the composer is drawn
+    // at all — and the composer at rest is where a white glyph on a neutral
+    // disc hid through a whole round. Both of its states, because the resting
+    // one and the running one are different buttons.
+    ChatOpen: ['src/components/ChatView.js', 'ChatView', {
+      chat, hostKey: 'studio', log: { items, busy: false, pending: [] }, sending: false,
+      groups: [], groupName: null, accountLabel: 'yakup@…', accountUsage: 0.64, liveTokens: null,
+      onSend: async () => {}, onUpload: async () => ({}), onInterrupt() {}, onRespond() {},
+      onEdit() {}, onUpdate() {}, onDelete() {}, onPopOut() {},
+    }],
+    ChatBusy: ['src/components/ChatView.js', 'ChatView', {
+      chat: { ...chat, status: 'running' }, hostKey: 'studio',
+      log: { items, busy: true, pending: [] }, sending: true,
+      groups: [], groupName: null, accountLabel: 'yakup@…', accountUsage: 0.64, liveTokens: 1240,
+      onSend: async () => {}, onUpload: async () => ({}), onInterrupt() {}, onRespond() {},
+      onEdit() {}, onUpdate() {}, onDelete() {}, onPopOut() {},
+    }],
+  };
+  const broken = [];
+  const strayed = [];
+  const undeclared = [];
+  for (const [name, [path, exp, props]] of Object.entries(overlays)) {
+    let markup;
+    try {
+      const mod = await load(path);
+      markup = renderToStaticMarkup(createElement(mod[exp], props));
+    } catch (e) { broken.push(`${name}: ${e.message.slice(0, 120)}`); continue; }
+    drawn[`overlay:${name}`] = markup;
+    if (markup.length < 200) broken.push(`${name}: drew almost nothing (${markup.length})`);
+    const { vars, literal } = paint(markup);
+    for (const c of literal) if (!OWN.has(c)) strayed.push(`${name}: ${c}`);
+    for (const v of vars) if (K.DARK[v] === undefined) undeclared.push(`${name}: ${v}`);
+  }
+  ok('every panel the screens open stands up', broken.length === 0, broken.join('\n    '));
+  ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
+  ok('…so they are drawn in either theme like everything else',
+    undeclared.length === 0, undeclared.join(', '));
+  ok('…and there are ten of them, the chat among them with a chat open in it',
+    Object.keys(overlays).length === 10 && (drawn['overlay:ChatOpen'] ?? '').includes('<textarea'));
+}
+
+group('white belongs on a filled colour and nowhere else');
+{
+  // The one pair a palette cannot make safe by itself: `onAccent` and
+  // `onWarn` are the two "text on a filled colour" values, and on a neutral
+  // surface they are invisible in one theme and merely odd in the other. This
+  // is what a white send glyph on `surface2` looked like: legal in both
+  // checks, 1.03:1 on a light page.
+  const FILLED = new Set([K.T.red, K.T.amber, K.T.run, K.T.ink,
+                          ...K.MONOGRAM, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
+                          K.MEDIA.backdrop, K.MEDIA.stage, K.MEDIA.chrome]);
+  const WHITE = new Set([K.ON_COLOUR, K.T.onAmber]);
+  const misplaced = [];
+  let placed = 0;
+  for (const [where, markup] of Object.entries(drawn)) {
+    for (const el of elements(markup)) {
+      // A value drawn *on* the element sits on the element's own fill where it
+      // has one; a fill sits on whatever is behind the element itself.
+      const front = [el.style.color, el.style['border'], el.style['border-color'],
+                     el.style['box-shadow'], el.stroke, el.fill].filter(Boolean);
+      const isFront = front.some((v) => [...WHITE].some((w) => v.includes(w)));
+      const isFill = WHITE.has(el.paint ?? '');
+      if (!isFront && !isFill) continue;
+      placed++;
+      const on = (isFront ? el.paint ?? el.behind[0] : el.behind[0]) ?? '(nothing)';
+      // `onAmber` is the one pair the frames spell out, so it is stricter: it
+      // is the amber's own text colour and belongs on the amber.
+      const wanted = front.some((v) => v.includes(K.T.onAmber)) ? new Set([K.T.amber]) : FILLED;
+      if (!wanted.has(on)) misplaced.push(`${where}: ${el.tag} on ${on}`);
+    }
+  }
+  ok('nothing drawn in the two "on a filled colour" values sits on a neutral surface',
+    misplaced.length === 0, [...new Set(misplaced)].slice(0, 8).join('\n    '));
+  ok('…and there are enough of them for that to mean something', placed >= 10, String(placed));
 }
 
 group('the chat was left alone');

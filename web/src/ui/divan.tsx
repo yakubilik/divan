@@ -21,7 +21,7 @@
  */
 import React from 'react';
 import {
-  EXEC_PENDING_INK, EXEC_PENDING_LINE, EXECUTORS, monogram, ON_COLOUR, outline, RADIUS,
+  EXECUTORS, monogram, ON_COLOUR, outline, RADIUS,
   SHADOW, SIZE, STATE_MARK, stateColour, T, toneColours,
   type ExecutorFace, type State, type Tone,
 } from '../lib/theme';
@@ -434,9 +434,10 @@ export function StateMark({ state, label, size = 12, style }: {
  *  Web12 W2 puts it on every card and Web14 W10 draws the roster: a Coder is
  *  `</>` on indigo, a branch agent its initial on its own colour, the research
  *  assistant and the two members of the household are circles. A ticket nobody
- *  has picked up yet is the same square as a dashed outline. The mark is always
- *  mono, 700, tightened by `letter-spacing:-.06em` so that `</>` fits — all
- *  three numbers are the frames' own. */
+ *  has picked up yet is the same square as a dashed outline, in the one pair
+ *  whose light side is derived rather than drawn (`execLine`/`execInk`). The
+ *  mark is always mono, 700, tightened by `letter-spacing:-.06em` so that
+ *  `</>` fits — all three numbers are the frames' own. */
 export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
   executor: string;
   size?: number;
@@ -444,7 +445,7 @@ export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
 }) {
   const face: ExecutorFace = EXECUTORS[executor] ?? EXECUTORS.unassigned;
   const fill = face.fill ?? (executor === 'you' ? T.ink : T.s2);
-  const ink = face.dashed ? EXEC_PENDING_INK
+  const ink = face.dashed ? T.execInk
     : face.fill ? ON_COLOUR
     : executor === 'you' ? T.bg : T.ink;
   return (
@@ -452,7 +453,7 @@ export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
       ...mono, flex: 'none', width: size, height: size, boxSizing: 'border-box',
       borderRadius: face.round ? size / 2 : RADIUS.mark,
       background: face.dashed ? 'transparent' : fill,
-      border: face.dashed ? `1.5px dashed ${EXEC_PENDING_LINE}`
+      border: face.dashed ? `1.5px dashed ${T.execLine}`
         : !face.fill && executor !== 'you' ? `1.5px solid ${T.line2}` : undefined,
       color: ink, display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.39, fontWeight: 700, letterSpacing: '-.06em',

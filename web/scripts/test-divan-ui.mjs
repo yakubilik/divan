@@ -43,7 +43,7 @@ if (!chrome) {
 // Read out of the panel's own module, not transcribed again: what this check is
 // about is whether the browser resolved them, and `npm test` is what holds them
 // to the artboards.
-const { DARK, LIGHT, MEDIA, MONOGRAM, ON_COLOUR, EXECUTORS, EXEC_PENDING_INK, EXEC_PENDING_LINE } =
+const { DARK, LIGHT, MEDIA, MONOGRAM, ON_COLOUR, EXECUTORS } =
   await (async () => {
     mkdirSync(out, { recursive: true });
     execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
@@ -147,7 +147,7 @@ function asRgb(value) {
 
 /** Every colour a theme is allowed to have resolved to, as Chrome spells it. */
 function allowed(tokens) {
-  const own = [ON_COLOUR, EXEC_PENDING_INK, EXEC_PENDING_LINE, ...MONOGRAM,
+  const own = [ON_COLOUR, ...MONOGRAM,
                ...Object.values(EXECUTORS).map((e) => e.fill).filter(Boolean),
                ...Object.values(MEDIA)];
   const set = new Set([...Object.entries(tokens).filter(([k]) => k !== 'scheme').map(([, v]) => asRgb(v)),
@@ -219,7 +219,8 @@ try {
       strayed.length === 0, strayed.slice(0, 8).map((v) => `${v} — ${resolved.where[v]}`).join('\n    '));
     ok('…and there were enough of them for that to mean something',
       resolved.painted > 2000, String(resolved.painted));
-    ok('every screen is on the page', resolved.screens.length === 11, resolved.screens.join(', '));
+    ok('every screen and every panel it opens is on the page',
+      resolved.screens.length === 20, resolved.screens.join(', '));
     ok('the page itself is the theme’s own background',
       resolved.body === asRgb(tokens.bg), resolved.body);
     const shadowStray = resolved.shadows
@@ -228,12 +229,101 @@ try {
     ok('the shadows and the rings are made of it too', shadowStray.length === 0,
       shadowStray.slice(0, 6).join(', '));
 
+    // ── is any of it legible? ────────────────────────────────────────────
+    // Membership in the palette says a colour is the design's. It does not say
+    // the pair is readable: white is in the table, `s2` is in the table, and
+    // white on `s2` is an empty-looking button. So every pair a browser
+    // actually painted is measured — text against what is behind it, and a
+    // glyph against what is behind it — and held to 3:1, which is WCAG's floor
+    // for large text and for a graphic that carries meaning.
+    const legible = await evaluate(`
+      const parse = (c) => {
+        const n = (c.match(/[\\d.]+/g) || []).map(Number);
+        return n.length ? { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 } : null;
+      };
+      const over = (fg, bg) => ({
+        r: fg.r * fg.a + bg.r * (1 - fg.a),
+        g: fg.g * fg.a + bg.g * (1 - fg.a),
+        b: fg.b * fg.a + bg.b * (1 - fg.a),
+        a: 1,
+      });
+      const lum = ({ r, g, b }) => {
+        const ch = [r, g, b].map((v) => {
+          const x = v / 255;
+          return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+      };
+      const contrast = (a, b) => {
+        const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+        return (hi + 0.05) / (lo + 0.05);
+      };
+      /** What is behind an element, composited: its own fill first, then every
+       *  translucent layer above the page, then the page. */
+      const behind = (el) => {
+        const layers = [];
+        for (let n = el; n; n = n.parentElement) {
+          const bg = parse(getComputedStyle(n).backgroundColor);
+          if (!bg || bg.a === 0) continue;
+          layers.push(bg);
+          if (bg.a >= 0.999) break;
+        }
+        let out = { r: 255, g: 255, b: 255, a: 1 };
+        for (let i = layers.length - 1; i >= 0; i--) out = over(layers[i], out);
+        return out;
+      };
+      const faded = (el) => {
+        let o = 1;
+        for (let n = el; n; n = n.parentElement) o *= Number(getComputedStyle(n).opacity || 1);
+        return o;
+      };
+      const shows = (el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 1 && r.height > 1 && getComputedStyle(el).visibility !== 'hidden';
+      };
+      const ownText = (el) => [...el.childNodes]
+        .some((n) => n.nodeType === 3 && n.textContent.trim().length);
+
+      const thin = [];
+      let pairs = 0;
+      for (const el of document.querySelectorAll('[data-screen] *, #root > [data-theme] *')) {
+        if (!shows(el)) continue;
+        const cs = getComputedStyle(el);
+        const bg = behind(el);
+        const o = faded(el);
+        const check = (raw, what) => {
+          const fg = parse(raw);
+          if (!fg || fg.a === 0) return;
+          const ratio = contrast(over({ ...fg, a: fg.a * o }, bg), bg);
+          pairs++;
+          if (ratio >= 3) return;
+          const where = el.closest('[data-screen]')?.dataset.screen ?? 'the parts';
+          const label = (el.textContent || '').trim().slice(0, 24) || el.tagName.toLowerCase();
+          thin.push(where + ' · ' + label + ' · ' + what + ' ' + raw
+            + ' on rgb(' + [bg.r, bg.g, bg.b].map(Math.round).join(',') + ')'
+            + (o < 1 ? ' at ' + o.toFixed(2) + ' opacity' : '')
+            + ' = ' + ratio.toFixed(2) + ':1');
+        };
+        if (ownText(el) && Number(cs.fontSize.replace('px', '')) > 0) check(cs.color, 'text');
+        if (el.tagName.toLowerCase() === 'svg') {
+          // The computed value, not the attribute: an icon is handed
+          // \`var(--dv-ink3)\` and it is the browser that turns that into a colour.
+          if (cs.stroke && cs.stroke !== 'none') check(cs.stroke, 'glyph');
+          if (cs.fill && cs.fill !== 'none') check(cs.fill, 'glyph');
+        }
+      }
+      return { thin: [...new Set(thin)], pairs };
+    `);
+    ok('every pair the browser painted is legible — 3:1 or better',
+      legible.thin.length === 0, legible.thin.slice(0, 12).join('\n    '));
+    ok('…and it measured a page-worth of them', legible.pairs > 400, String(legible.pairs));
+
     const shot = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     writeFileSync(join(out, `parts-${scheme}.png`), Buffer.from(shot.data, 'base64'));
 
     // …and one of the screens, which is the half of this that is about what was
     // already here rather than about what is being added.
-    for (const screen of ['Dashboard', 'Settings', 'Terminal']) {
+    for (const screen of ['Dashboard', 'Settings', 'Terminal', 'ChatOpen', 'ApprovalModal']) {
       await evaluate(`
         document.querySelector('[data-screen="${screen}"]').scrollIntoView();
         await new Promise((r) => setTimeout(r, 120));

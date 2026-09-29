@@ -58,13 +58,22 @@ export function Btn({ children, onClick, kind = 'ghost', disabled, wide, title, 
   const style: React.CSSProperties = {
     height: 34, padding: '0 14px', borderRadius: R.btn, fontSize: 13, fontWeight: 600,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-    cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1,
+    cursor: disabled ? 'default' : 'pointer',
     width: wide ? '100%' : undefined, whiteSpace: 'nowrap',
     border: `1px solid ${C.border}`, background: C.surface2, color: C.text,
   };
   if (kind === 'primary') { style.background = C.accent; style.borderColor = C.accent; style.color = C.onAccent; }
   if (kind === 'danger') { style.background = C.dangerBg; style.borderColor = C.dangerLine; style.color = C.danger; }
   if (kind === 'quiet') { style.background = 'transparent'; style.color = C.mute; }
+  // A button that cannot be pressed drops its colour rather than fading behind
+  // it: "zero is grey" is the design's own way of saying nothing-to-do, and a
+  // white label at 0.45 over the accent read at 1.7:1 — an empty-looking
+  // button in either theme.
+  if (disabled) {
+    style.background = C.surface2;
+    style.borderColor = C.border;
+    style.color = C.mute;
+  }
   return (
     <button type={type ?? 'button'} onClick={onClick} disabled={disabled} title={title} style={style}>
       {children}
