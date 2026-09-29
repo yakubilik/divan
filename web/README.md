@@ -56,9 +56,11 @@ npm test                          # the palette, the parts, the switch, every sc
 node scripts/test-divan-ui.mjs    # the same in a real browser, with screenshots
 ```
 
-`npm test` renders every part, every screen and every panel a screen opens over
-itself, holds the colours to the table, and measures every pair of tokens that
-meets — this ink on that surface — in both themes at 3:1. The browser one opens the same page
+`npm test` renders every part, every screen — with a computer paired and
+without one — and every panel a screen opens over itself, holds the colours to
+the table, and measures every pair of tokens that meets, this ink on that
+surface, in both themes at 3:1. `scripts/panel-fixture.js` is the computer, the
+chat and the approvals it is all drawn from. The browser one opens the same page
 in Chrome (`CHROME=…` if it is somewhere unusual, and it is not in `npm test`
 for that reason), reads back what the browser actually resolved, and measures
 every pair it painted — text and glyphs against what is behind them — at 3:1.

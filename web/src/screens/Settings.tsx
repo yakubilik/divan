@@ -1065,7 +1065,7 @@ function AboutSection({ slot }: { slot: HostSlot }) {
  *  desktop screens dark and light) and which one is on screen is the reader's,
  *  not the daemon's. It follows the computer until it is told not to, and then
  *  it is remembered — a theme that resets every morning is not a setting. */
-function AppearanceSection() {
+export function AppearanceSection() {
   const { choice, scheme, set } = useTheme();
   return (
     <>

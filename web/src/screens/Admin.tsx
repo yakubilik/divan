@@ -269,9 +269,8 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
           disabled={!online || busy || checking || !st?.repo || current || held}
           title={held ? (st?.blockers ?? []).join(' · ') : undefined}
         >
-          {busy ? <Spinner size={13} color={C.text} />
-            : <Icon path={current ? P.check : P.download} size={14}
-                    color={current || held ? C.mute : C.onAccent} />}
+          {busy ? <Spinner size={13} color="currentColor" />
+            : <Icon path={current ? P.check : P.download} size={14} color="currentColor" />}
           {busy ? 'Updating…' : current ? 'Up to date' : 'Update'}
         </Btn>
       </div>

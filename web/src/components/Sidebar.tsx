@@ -16,15 +16,19 @@ export type View = 'chats' | 'terminal' | 'screen' | 'dashboard' | 'projects' | 
 
 export function ProviderMark({ provider, dim }: { provider: string; dim?: boolean }) {
   const claude = provider === 'claude';
+  // `dim` is "this one is not there": an account not signed in, a tool not
+  // installed. It goes grey rather than faint — fading the whole tile toward
+  // the page put its mark at 2.2:1 on a light one, and whether the tool is
+  // there is the one thing the tile has to say.
+  const live = !dim;
   return (
     <div style={{
       width: 30, height: 30, borderRadius: R.btn, flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: claude ? C.accentTint : C.surface2,
-      border: `1px solid ${claude ? C.accentRing : C.border}`,
-      color: claude ? C.accentSoft : C.mute,
+      background: claude && live ? C.accentTint : C.surface2,
+      border: `1px solid ${claude && live ? C.accentRing : C.border}`,
+      color: claude && live ? C.accentSoft : C.mute,
       fontSize: claude ? 13 : 11, fontWeight: 600,
-      opacity: dim ? 0.6 : 1,
       ...(claude ? {} : mono),
     }}>
       {claude ? 'A' : '<>'}

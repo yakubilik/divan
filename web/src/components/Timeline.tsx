@@ -337,11 +337,18 @@ function Approval({ item, onRespond }: {
     <div style={{
       marginRight: 32, borderRadius: R.card, background: C.surface,
       border: `1px solid ${settled ? C.border : C.warnLine}`, padding: 12,
-      opacity: settled ? 0.7 : 1,
     }}>
+      {/* An answered approval drops its colour rather than fading behind it:
+          the same "zero is grey" the counters follow, and at 0.7 opacity its
+          own labels read at 2.6:1 on a light page. What is left saying it
+          happened is the word at the end of the line. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <Icon path={item.danger ? P.warn : P.shield} size={14} color={item.danger ? C.danger : C.warn} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: item.danger ? C.danger : C.warn }}>
+        <Icon path={item.danger ? P.warn : P.shield} size={14}
+          color={settled ? C.mute : item.danger ? C.danger : C.warn} />
+        <span style={{
+          fontSize: 13, fontWeight: 600,
+          color: settled ? C.mute : item.danger ? C.danger : C.warn,
+        }}>
           {item.danger ? 'Dangerous command' : 'Permission needed'}
         </span>
         <span style={{ ...mono, fontSize: 12, color: C.mute }}>{item.tool}</span>

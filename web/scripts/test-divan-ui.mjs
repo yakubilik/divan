@@ -236,7 +236,8 @@ try {
     // actually painted is measured — text against what is behind it, and a
     // glyph against what is behind it — and held to 3:1, which is WCAG's floor
     // for large text and for a graphic that carries meaning.
-    const legible = await evaluate(`
+    await evaluate(`
+      window.__audit = () => {
       const parse = (c) => {
         const n = (c.match(/[\\d.]+/g) || []).map(Number);
         return n.length ? { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 } : null;
@@ -313,10 +314,36 @@ try {
         }
       }
       return { thin: [...new Set(thin)], pairs };
+      };
     `);
+    const legible = await evaluate('return window.__audit();');
     ok('every pair the browser painted is legible — 3:1 or better',
       legible.thin.length === 0, legible.thin.slice(0, 12).join('\n    '));
-    ok('…and it measured a page-worth of them', legible.pairs > 400, String(legible.pairs));
+    ok('…and it measured a page-worth of them', legible.pairs > 600, String(legible.pairs));
+
+    // Settings opens on Accounts, and the section this ticket adds is behind a
+    // click on the rail. A source regex is not a render, so it is clicked.
+    const appearance = await evaluate(`
+      const rail = [...document.querySelectorAll('[data-screen="Settings"] button')];
+      const tab = rail.find((b) => b.textContent.trim().startsWith('Appearance'));
+      if (!tab) return { found: false };
+      tab.click();
+      await new Promise((r) => setTimeout(r, 120));
+      const pane = document.querySelector('[data-screen="Settings"]');
+      return {
+        found: true,
+        text: pane.innerText,
+        segments: [...pane.querySelectorAll('button')].map((b) => b.textContent.trim()),
+      };
+    `);
+    ok('Settings has the Appearance section this ticket adds', appearance.found);
+    ok('…and it offers the three answers, with the one in force spelled out',
+      ['system', 'light', 'dark'].every((w) => appearance.segments.includes(w))
+      && /Following this computer|Set by hand/.test(appearance.text ?? ''),
+      (appearance.text ?? '').slice(0, 120));
+    const afterClick = await evaluate('return window.__audit();');
+    ok('…and it is legible too, which a regex could not have said',
+      afterClick.thin.length === 0, afterClick.thin.slice(0, 8).join('\n    '));
 
     const shot = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     writeFileSync(join(out, `parts-${scheme}.png`), Buffer.from(shot.data, 'base64'));

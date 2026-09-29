@@ -316,12 +316,16 @@ export function ChatDetails({ chat, items, busy, liveTokens, accountLabel, accou
           type="button" onClick={onPopOut} disabled={!chat}
           style={{
             height: 36, borderRadius: R.btn, fontSize: 13, fontWeight: 600,
-            cursor: chat ? 'pointer' : 'default', opacity: chat ? 1 : 0.45,
+            cursor: chat ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            border: `1px solid ${C.border}`, background: C.surface2, color: C.text,
+            border: `1px solid ${C.border}`, background: C.surface2,
+            // Grey rather than faded, like every other button that cannot be
+            // pressed: a label at 0.45 over this fill is under 3:1 in either
+            // theme.
+            color: chat ? C.text : C.mute,
           }}
         >
-          <Icon path={P.external} size={13} color={C.text} />
+          <Icon path={P.external} size={13} color={chat ? C.text : C.mute} />
           Open in a new window
         </button>
       </div>

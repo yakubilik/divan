@@ -35,11 +35,22 @@ import { Lightbox } from '../src/components/Lightbox';
 import { FieldSheet } from '../src/components/FieldSheet';
 import { TicketChat } from '../src/components/TicketChat';
 import { toneFace } from '../src/lib/theme';
-import { chat, groups, items, pending, shots } from './panel-fixture.js';
+import { useFleet } from '../src/lib/fleet';
+import { chat, groups, host, items, pending, shots } from './panel-fixture.js';
 import { ticket } from './ticket-fixture.js';
 
 const q = new URLSearchParams(location.search);
 const scheme = (q.get('theme') === 'light' ? 'light' : 'dark') as Scheme;
+
+// A computer on the other end, made up. Every screen here is drawn from a
+// daemon and there is none, so without this they all draw the one state that
+// cannot be wrong — their empty one. Seeded before the first render, so the
+// screens come up with rows, accounts, quota bars and the two marks the panel
+// dims. Nothing reaches the network: there is no socket for this host, and the
+// calls a screen makes on mount are all caught.
+useFleet.setState({
+  hosts: { studio: host() as any }, order: ['studio'], focus: 'studio', ready: true,
+});
 
 const noop = () => {};
 

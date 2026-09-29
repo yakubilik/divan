@@ -497,20 +497,33 @@ function* elements(markup) {
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
     const paint = decl.background ?? decl['background-color'] ?? null;
+    const own = decl.opacity == null ? 1 : Number(decl.opacity);
+    const fade = stack.reduce((n, f) => n * f.fade, 1) * (Number.isFinite(own) ? own : 1);
+    // `currentColor` is a glyph saying "whatever this button is drawn in",
+    // which is the safe way to put an icon inside a button that changes colour
+    // when it cannot be pressed. It means the nearest colour above it.
+    const ink = decl.color ?? (stack.length ? stack[stack.length - 1].ink : null);
     yield {
       tag,
       style: decl,
+      /** Its own opacity times every opacity above it, which is what a browser
+       *  paints it at. */
+      fade,
+      /** What `currentColor` resolves to here. */
+      ink,
       stroke: /stroke="([^"]*)"/.exec(attrs)?.[1] ?? null,
       fill: /fill="([^"]*)"/.exec(attrs)?.[1] ?? null,
       /** What it paints itself, if anything. */
       paint: paint && paint !== 'transparent' && paint !== 'none' ? paint : null,
       /** And what is above it, nearest first — its own not included, because
        *  an element's own fill is what is behind its text and not behind
-       *  itself. */
-      behind: stack.map((f) => f.paint).reverse()
-        .filter((v) => v && v !== 'transparent' && v !== 'none'),
+       *  itself — each with the opacity it is painted at. */
+      behind: stack.filter((f) => f.paint && f.paint !== 'transparent' && f.paint !== 'none')
+        .map((f) => f.paint).reverse(),
+      behindFade: stack.filter((f) => f.paint && f.paint !== 'transparent' && f.paint !== 'none')
+        .map((f) => f.fade).reverse(),
     };
-    if (!VOID.has(tag) && !selfClose) stack.push({ tag, paint });
+    if (!VOID.has(tag) && !selfClose) stack.push({ tag, paint, fade, ink });
   }
 }
 
@@ -653,22 +666,52 @@ group('the screens the panel already had');
   const broken = [];
   const strayed = [];
   const undeclared = [];
-  for (const [name, [path, exp, props]] of Object.entries(screens)) {
-    let markup;
-    try {
-      const mod = await load(path);
-      markup = renderToStaticMarkup(createElement(mod[exp], props));
-    } catch (e) { broken.push(`${name}: ${e.message.slice(0, 120)}`); continue; }
-    // Kept, because the two checks that measure pairs read every tree drawn in
-    // this file and a screen is the biggest of them.
-    drawn[`screen:${name}`] = markup;
-    const { vars, literal } = paint(markup);
-    for (const c of literal) if (!OWN.has(c)) strayed.push(`${name}: ${c}`);
-    for (const v of vars) if (K.DARK[v] === undefined) undeclared.push(`${name}: ${v}`);
+  // Twice: with nothing paired, which is the state every screen opens in and
+  // the only one it could draw until now, and with a computer on the other end
+  // — which is where the rows, the accounts, the quota bars and the two marks
+  // the panel dims actually are. `useFleet` is a store, so seeding it is what a
+  // check does instead of pairing.
+  const { useFleet } = await load('src/lib/fleet.js');
+  const { host } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
+  const paired = { hosts: { studio: host() }, order: ['studio'], focus: 'studio', ready: true };
+  const nothing = { hosts: {}, order: [], focus: null, ready: true };
+
+  /** A render on a server is handed the store's *initial* state — zustand
+   *  reads `getServerState || getInitialState` — so a store seeded with
+   *  `setState` alone is invisible to `renderToStaticMarkup`, which is why
+   *  every screen in this file drew its empty state and nothing noticed. The
+   *  initial state is the object the store was made with, so seeding it means
+   *  writing into that object too. */
+  const seed = (patch) => {
+    Object.assign(useFleet.getInitialState(), patch);
+    useFleet.setState(patch);
+  };
+
+  for (const [world, state] of [['alone', nothing], ['paired', paired]]) {
+    seed(state);
+    for (const [name, [path, exp, props]] of Object.entries(screens)) {
+      let markup;
+      try {
+        const mod = await load(path);
+        markup = renderToStaticMarkup(createElement(mod[exp], props));
+      } catch (e) { broken.push(`${world} ${name}: ${e.message.slice(0, 120)}`); continue; }
+      // Kept, because the two checks that measure pairs read every tree drawn
+      // in this file and a screen is the biggest of them.
+      drawn[`screen:${name} ${world}`] = markup;
+      const { vars, literal } = paint(markup);
+      for (const c of literal) if (!OWN.has(c)) strayed.push(`${world} ${name}: ${c}`);
+      for (const v of vars) if (K.DARK[v] === undefined) undeclared.push(`${world} ${name}: ${v}`);
+    }
   }
-  ok('every screen still stands up', broken.length === 0, broken.join('\n    '));
+  ok('every screen still stands up, paired and alone', broken.length === 0, broken.join('\n    '));
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
   ok('…so every colour on every screen exists in both themes', undeclared.length === 0, undeclared.join(', '));
+  ok('…and a paired screen is a fuller screen than an empty one',
+    (drawn['screen:Settings paired'] ?? '').length > (drawn['screen:Settings alone'] ?? '').length * 1.5,
+    `${(drawn['screen:Settings paired'] ?? '').length} vs ${(drawn['screen:Settings alone'] ?? '').length}`);
+  // The panels that open over a screen are drawn against a paired computer
+  // too: New chat reads the catalog off one.
+  seed(paired);
 }
 
 group('the panels the screens open over themselves');
@@ -725,6 +768,13 @@ group('the panels the screens open over themselves');
       onSend: async () => {}, onUpload: async () => ({}), onInterrupt() {}, onRespond() {},
       onEdit() {}, onUpdate() {}, onDelete() {}, onPopOut() {},
     }],
+    // The two pieces of a screen that only appear in a state a whole-screen
+    // render does not reach on its own: the section this ticket adds, which is
+    // behind a click on the rail, and the mark the panel dims for a tool that
+    // is not installed or an account not signed in.
+    AppearanceSection: ['src/screens/Settings.js', 'AppearanceSection', {}],
+    ProviderMarkDim: ['src/components/Sidebar.js', 'ProviderMark', { provider: 'codex', dim: true }],
+    ProviderMarkLive: ['src/components/Sidebar.js', 'ProviderMark', { provider: 'claude' }],
   };
   const broken = [];
   const strayed = [];
@@ -745,8 +795,16 @@ group('the panels the screens open over themselves');
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
   ok('…so they are drawn in either theme like everything else',
     undeclared.length === 0, undeclared.join(', '));
-  ok('…and there are ten of them, the chat among them with a chat open in it',
-    Object.keys(overlays).length === 10 && (drawn['overlay:ChatOpen'] ?? '').includes('<textarea'));
+  ok('…and there are thirteen of them, the chat among them with a chat open in it',
+    Object.keys(overlays).length === 13 && (drawn['overlay:ChatOpen'] ?? '').includes('<textarea'));
+  ok('the switch this ticket adds is drawn rather than grepped for',
+    (drawn['overlay:AppearanceSection'] ?? '').includes('system')
+    && (drawn['overlay:AppearanceSection'] ?? '').includes('theme'));
+  ok('…and the mark the panel dims is drawn in both of its states',
+    (drawn['overlay:ProviderMarkDim'] ?? '').includes('&lt;&gt;')
+    && (drawn['overlay:ProviderMarkDim'] ?? '') !== (drawn['overlay:ProviderMarkLive'] ?? ''));
+  ok('…and a paired Settings draws that dim mark itself, where the real one is',
+    (drawn['screen:Settings paired'] ?? '').includes('&lt;&gt;'));
 }
 
 group('white belongs on a filled colour and nowhere else');
@@ -767,7 +825,8 @@ group('white belongs on a filled colour and nowhere else');
       // A value drawn *on* the element sits on the element's own fill where it
       // has one; a fill sits on whatever is behind the element itself.
       const front = [el.style.color, el.style['border'], el.style['border-color'],
-                     el.style['box-shadow'], el.stroke, el.fill].filter(Boolean);
+                     el.style['box-shadow'], el.stroke, el.fill]
+        .map((v) => (v === 'currentColor' ? el.ink : v)).filter(Boolean);
       const isFront = front.some((v) => [...WHITE].some((w) => v.includes(w)));
       const isFill = WHITE.has(el.paint ?? '');
       if (!isFront && !isFill) continue;
@@ -792,9 +851,14 @@ group('every pair of tokens that meets can be read');
   // whole truth and needs Chrome. This is the half of it that can be had
   // without one, and it is the half that regresses: a pair of tokens put
   // together in the source — this ink on that surface — in every component
-  // above, in both themes. Anything the flat markup cannot resolve with
-  // certainty (a faded ancestor, a colour that is not a token) is left to the
-  // browser rather than guessed at here.
+  // above, in both themes.
+  //
+  // Opacity is resolved rather than stepped over: an element is painted at its
+  // own opacity times every opacity above it, which is a product this walk
+  // already has the ancestors for. Skipping a faded element instead is how the
+  // round-one send glyph stayed invisible to a check that ran over it, so the
+  // count of what was skipped is asserted to be zero — a colour this cannot
+  // work out has to become a failure, not a silence.
   const rgba = (value) => {
     if (value.startsWith('#')) {
       const h = value.slice(1);
@@ -832,25 +896,32 @@ group('every pair of tokens that meets can be read');
     const t = K.tokensFor(scheme);
     for (const [where, markup] of Object.entries(drawn)) {
       for (const el of elements(markup)) {
-        // A faded thing is the browser's to measure: opacity multiplies down a
-        // tree and this walk does not model that.
-        if (el.style.opacity && Number(el.style.opacity) < 1) { skipped++; continue; }
         const fronts = [el.style.color, el.stroke, el.fill].filter((v) => v && v !== 'none');
         if (!fronts.length) continue;
+        // Nothing is painted at all at zero: a diff's blank gutter and the
+        // frames of a screen share that are there to hold a size, and an
+        // invisible thing has no pair to read.
+        if (el.fade === 0) continue;
         // The stack under it, its own fill first, composited down to the page.
+        // A faded ancestor's fill is faded too, which is what the browser does.
         let bg = rgba(t.bg);
-        const layers = [...(el.paint ? [el.paint] : []), ...el.behind]
-          .map((v) => resolve(v, t));
-        if (layers.some((c) => c === null)) { skipped++; continue; }
+        const layers = [...(el.paint ? [{ v: el.paint, fade: el.fade }] : []),
+                        ...el.behind.map((v, i) => ({ v, fade: el.behindFade[i] }))]
+          .map(({ v, fade }) => {
+            const c = resolve(v, t);
+            return c && [c[0], c[1], c[2], c[3] * fade];
+          });
+        if (layers.some((c) => !c)) { skipped++; continue; }
         for (const c of [...layers].reverse()) bg = over(c, bg);
         for (const front of fronts) {
-          const fg = resolve(front, t);
+          const fg = resolve(front === 'currentColor' ? el.ink : front, t);
           if (!fg) { skipped++; continue; }
           pairs++;
-          const ratio = contrast(over(fg, bg), bg);
+          const ratio = contrast(over([fg[0], fg[1], fg[2], fg[3] * el.fade], bg), bg);
           if (ratio < 3) {
-            thin.push(`${scheme} · ${where} · ${el.tag} · ${front} on `
-              + `rgb(${bg.slice(0, 3).map(Math.round).join(',')}) = ${ratio.toFixed(2)}:1`);
+            thin.push(`${scheme} · ${where} · ${el.tag} · ${front}`
+              + (el.fade < 1 ? ` at ${el.fade.toFixed(2)} opacity` : '')
+              + ` on rgb(${bg.slice(0, 3).map(Math.round).join(',')}) = ${ratio.toFixed(2)}:1`);
           }
         }
       }
@@ -859,7 +930,8 @@ group('every pair of tokens that meets can be read');
   ok('every ink a component puts on a surface separates from it, in both themes',
     thin.length === 0, [...new Set(thin)].slice(0, 10).join('\n    '));
   ok('…measured over both themes and every component rendered above',
-    pairs > 800, `${pairs} pairs, ${skipped} left to the browser`);
+    pairs > 1500, `${pairs} pairs`);
+  ok('…and nothing was left unmeasured', skipped === 0, `${skipped} skipped`);
 }
 
 group('the chat was left alone');

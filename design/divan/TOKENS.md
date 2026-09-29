@@ -362,17 +362,20 @@ Geist; the panel does not ship it.
   below, which opens in a browser with no daemon and no pairing.
 - `web/scripts/test-divan.mjs` — folded into `cd web && npm test`. The two blocks
   quoted, the table held to them, every part rendered and every screen with it —
-  including the eight panels a screen opens over itself, and the chat with a
-  chat open in it — and the colours read back off the markup; the switch driven
-  through the states a browser can put it in; and this document held to the
-  code's own lists. It also holds the one rule a palette cannot enforce by
+  twice, once with nothing paired and once with a computer on the other end, plus
+  the panels a screen opens over itself, the chat with a chat open in it, and the
+  Appearance section — and the colours read back off the markup; the switch
+  driven through the states a browser can put it in; and this document held to
+  the code's own lists. It also holds the one rule a palette cannot enforce by
   itself: `onAccent` and `onWarn` are the two "text on a filled colour" values
   and may only be drawn on a filled colour. White on `--s2` is legal in every
   other check and is an empty-looking button on a light page. And it measures
   every pair of tokens a component puts together — this ink on that surface,
   composited through whatever wash is between them — in both themes, at 3:1.
-  What it cannot resolve without a browser (anything faded by `opacity`) it
-  leaves to the one below rather than guessing.
+  Opacity is resolved rather than stepped over — an element is painted at its
+  own times every one above it — and what it cannot work out at all is counted
+  and asserted to be nothing, because a colour a check quietly skips is a colour
+  nobody is checking.
 - `web/scripts/test-divan-ui.mjs` — the same page in a real browser, not in
   `npm test` because it needs Chrome. It reads back every colour the browser
   actually resolved, and then measures every pair it painted: each piece of text
