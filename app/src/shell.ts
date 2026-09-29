@@ -6,19 +6,18 @@
 // was a button in the corner. Seven entry points, all of them about a computer.
 //
 // Divan has three: the **Dashboard** is every project on every machine, the
-// **Chat** is one conversation, and **Machine** is the infrastructure —
-// "findable, forgettable", as Mobile11 S16 puts it. Everything that was about a
-// computer rather than about work lives under the third one, and nothing but
-// those three is at the top level.
+// **Chat** is this computer's conversations — the list, and the one you opened
+// off it — and **Machine** is the infrastructure — "findable, forgettable", as
+// Mobile11 S16 puts it. Everything that was about a computer rather than about
+// work lives under the third one, and nothing but those three is at the top
+// level.
 //
 // What is in here is everything about that shell that has one right answer:
-// which place a route belongs to, what the project bar says, which conversation
-// the Chat place opens, and what the Machine list is made of. No React, no
-// store, no palette — so `scripts/test-shell.cjs` can hold the shell to it
-// without a phone.
+// which place a route belongs to, what the project bar says, and what the
+// Machine list is made of. No React, no store, no palette — so
+// `scripts/test-shell.cjs` can hold the shell to it without a phone.
 import { stuck, type DivanView, type MergedProject } from './divan';
 import type { Key } from './i18n';
-import type { Chat } from './protocol';
 import type { State, Tone } from './tokens';
 
 /** The three. */
@@ -56,7 +55,7 @@ export const PLACE_LABEL: Record<Place, Key> = {
  *  — a pushed page like the ticket wall or Settings, which draws no tab bar.
  *
  *  `/chat/<id>` is the Chat place: a notification opens one conversation by
- *  name, and that is the same place as the one the tab enters. */
+ *  name, and that is the conversation a row of the tab's own list opens. */
 export function placeOf(pathname: string | null | undefined): Place | null {
   const path = (pathname || '').split('?')[0].replace(/\/+$/, '') || '/';
   for (const place of PLACES) {
@@ -113,27 +112,6 @@ export function chips(view: DivanView, selected: string | null, allLabel: string
       key: p.key, label: p.name, state: projectState(p), selected: p.key === selected,
     })),
   ];
-}
-
-// ── the one conversation ────────────────────────────────────────────────────
-
-/** Which chat the Chat place opens.
- *
- *  There is one conversation and no list in front of it: the newest one that
- *  has not been archived. `held` is the one the place is already showing, and
- *  it wins while it is still there — a reply arriving in another chat (from the
- *  computer itself, or from a notification opened earlier) must not swap the
- *  conversation out from under a half-typed message.
- *
- *  Null means there is nothing to open, which is the one case the place has to
- *  act on: it starts a conversation rather than showing an empty list. */
-export function theChat(chats: Record<string, Chat>, held?: string | null): string | null {
-  if (held && chats[held] && !chats[held].archived) return held;
-  const open = Object.values(chats).filter((ch) => !ch.archived);
-  if (!open.length) return null;
-  // Ties broken by id so that two chats saved in the same second do not take
-  // turns being "the" conversation on every render.
-  return open.sort((a, b) => (b.updated_at - a.updated_at) || a.id.localeCompare(b.id))[0].id;
 }
 
 // ── the machine list ────────────────────────────────────────────────────────
