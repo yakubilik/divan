@@ -412,7 +412,7 @@ const en = {
   bpCommitsNone: 'Git could not be read on any of these repositories, so nothing is said about what landed.',
   bpLanded: '{n} · 7d', bpLandedToday: '{today} today · {n} · 7d', bpLandedNone: 'nothing in 7 days',
   bpPulls: 'Pull requests',
-  bpPullsBody: 'Nobody could be asked. The code host is read through the gh signed in on the computer that holds the checkout, and only for a repository whose origin is on GitHub — so this is a gap rather than an empty list.',
+  bpPullsBody: 'Nothing has answered about these repositories yet. The code host is read through the gh signed in on the computer that holds the checkout, and only where the origin is on GitHub — so this is a gap and not an empty list.',
   bpPullsNone: 'Nothing is open on the repositories of this branch.',
   bpChecksFailing: '× {n} checks', bpChecksPassing: '✓ checks', bpChecksPending: '◐ checks',
   bpDraft: 'draft',

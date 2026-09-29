@@ -156,14 +156,16 @@ export interface Gap {
  *  time, and only one of them is true. */
 export const OVER_TIME: Gap = { key: 'bpOverTime', body: 'bpOverTimeBody' };
 
-/** …and the same for Engineering's pull requests, on a product whose
- *  repositories nobody could be asked about: not a GitHub checkout, or a
- *  machine with no `gh` signed in.
+/** …and the same for Engineering's pull requests, on a product none of whose
+ *  repositories has been answered about: not a GitHub checkout, a machine with
+ *  no `gh` signed in, or a reading the daemon has not had time to make yet.
  *
  *  It is the block's *unanswered* state and not its empty one. A repository with
- *  nothing open is an answer and is drawn as an empty list (`bpPullsNone`);
- *  this is the sentence for nobody having asked, and the two must not look the
- *  same on a page whose whole promise is that no figure on it is invented. */
+ *  nothing open is an answer and is drawn as an empty list (`bpPullsNone`); this
+ *  is the sentence for not having been told, and the two must not look the same
+ *  on a page whose whole promise is that no figure on it is invented. The words
+ *  cover all three cases, because the wire does not say which: a path is in the
+ *  map or it is not (`docs/PROTOCOL.md`, "What the code host says"). */
 export const PULLS: Gap = { key: 'bpPulls', body: 'bpPullsBody' };
 
 // ── 3 · what the agent did, and when ────────────────────────────────────────
