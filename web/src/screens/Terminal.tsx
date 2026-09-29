@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { C, MONO, R, SHADOW, toneFace, type ToneFace } from '../lib/theme';
-import { Dot, Icon, P, mono } from '../ui/kit';
+import {
+  MONO, ON_COLOUR, RADIUS, SHADOW, T, toneFace, type State, type ToneFace,
+} from '../lib/theme';
+import { Icon, P, mono } from '../ui/kit';
 import { ago, cost, duration, shortPath, tildeAll, tokens, toolSummary } from '../lib/format';
 import { useFleet } from '../lib/fleet';
 import { emptyLog, logKey, useLogs, type ChatLog, type Item } from '../lib/timeline';
 import { deleteChat, respond, updateChat } from '../lib/actions';
 import { hasChatDrag, readChatDrag, setChatDrag } from '../lib/dnd';
-import { SectionHeader } from '../ui/divan';
+import {
+  Button, Card, Choice, EmptyState, Pill, Quoted, SectionHeader, StatusDot, Write,
+} from '../ui/divan';
 import type { Chat } from '../lib/protocol';
 import { Ustabasi } from './Ustabasi';
 
@@ -55,13 +59,26 @@ const PHASE: Record<Phase, ToneFace> = {
   idle: toneFace('idle', 'ink3'),
 };
 
-const FILTERS: { key: Phase | 'all'; label: string; color: string }[] = [
-  { key: 'all', label: 'All', color: C.text2 },
-  { key: 'working', label: 'Working', color: PHASE.working.color },
-  { key: 'approval', label: 'Needs approval', color: PHASE.approval.color },
-  { key: 'error', label: 'Error', color: PHASE.error.color },
-  { key: 'done', label: 'Done', color: PHASE.done.color },
-  { key: 'stopped', label: 'Stopped', color: PHASE.stopped.color },
+/** …and the state each phase is, in the six the design names: colour is never
+ *  the only carrier, so a chip and a tile both say it with a character too. */
+const MARK: Record<Phase, State> = {
+  working: 'running', approval: 'asking', error: 'stuck',
+  done: 'done', stopped: 'quiet', idle: 'quiet',
+};
+
+/** The ring a tile wears. `Card` takes four, and three of them are states. */
+const RING: Record<Phase, 'line' | 'amber' | 'red' | 'run'> = {
+  working: 'run', approval: 'amber', error: 'red',
+  done: 'line', stopped: 'line', idle: 'line',
+};
+
+const FILTERS: { key: Phase | 'all'; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'working', label: 'Working' },
+  { key: 'approval', label: 'Needs approval' },
+  { key: 'error', label: 'Error' },
+  { key: 'done', label: 'Done' },
+  { key: 'stopped', label: 'Stopped' },
 ];
 
 /** The tail of a log, read once and handed to everything that needs a piece of
@@ -200,7 +217,7 @@ function conversation(chat: Chat, t: Tail, log: ChatLog): Line[] {
   // that is running is worth a line, because it is the thing that is moving.
   if (t.phase === 'working') {
     const live = t.running ?? t.thinking;
-    if (live) out.push({ side: 'note', text: live, color: C.mute, code: !!t.running });
+    if (live) out.push({ side: 'note', text: live, color: T.ink3, code: !!t.running });
   }
   if (t.approval) {
     out.push({
@@ -209,12 +226,12 @@ function conversation(chat: Chat, t: Tail, log: ChatLog): Line[] {
     });
   }
   if (t.phase === 'error' && t.error) {
-    out.push({ side: 'note', text: t.error, color: C.danger, code: true });
+    out.push({ side: 'note', text: t.error, color: T.red, code: true });
   }
   // Nothing folded in yet — either the chat is empty, or its log is on the way.
   if (!out.length) {
     out.push({
-      side: 'note', color: C.faint,
+      side: 'note', color: T.ink3,
       text: log.loading ? 'reading the conversation…'
         : log.error ? log.error
         : chat.last_preview || 'Nothing has been said here yet.',
@@ -236,13 +253,13 @@ function TileButton({ icon, title, tone, onClick }: {
       type="button" title={title} onClick={onClick}
       onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)}
       style={{
-        width: 24, height: 24, borderRadius: R.badge, flexShrink: 0, padding: 0,
+        width: 24, height: 24, borderRadius: RADIUS.mark, flexShrink: 0, padding: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
         border: 'none',
-        background: !hot ? 'transparent' : tone === 'danger' ? C.dangerBg : C.surface2,
+        background: !hot ? 'transparent' : tone === 'danger' ? T.redBg : T.s2,
       }}
     >
-      <Icon path={icon} size={13} color={hot ? (tone === 'danger' ? C.danger : C.text) : C.faint} width={2} />
+      <Icon path={icon} size={13} color={hot ? (tone === 'danger' ? T.red : T.ink) : T.ink3} width={2} />
     </button>
   );
 }
@@ -274,29 +291,31 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
   };
 
   return (
-    <div
+    // A tile is a card wearing its phase as a ring, which is the design
+    // system's whole vocabulary for a card that wants something.
+    <Card
+      inset={false} ring={RING[t.phase]} lifted={lifted}
       onClick={onPeek}
-      onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)}
       // A draggable ancestor swallows text selection inside the input, so the
       // tile stops being draggable for as long as the title is being typed.
-      draggable={draft === null}
-      onDragStart={(e) => { setLifted(true); onDragStart(e); }}
-      onDragEnd={() => setLifted(false)}
+      drag={{
+        draggable: draft === null,
+        onDragStart: (e) => { setLifted(true); onDragStart(e as React.DragEvent); },
+        onDragEnd: () => setLifted(false),
+      }}
       style={{
-        display: 'flex', flexDirection: 'column', minHeight: 270, cursor: 'pointer',
-        borderRadius: R.media, overflow: 'hidden',
-        // A tile is a card on the page, and its phase is the line round it —
-        // Web14 W10 draws exactly this: `s1` behind, the tone as the outline.
-        background: C.surface,
-        border: `1px solid ${ph.edge}`,
+        minHeight: 270,
         transform: hot && !lifted ? 'translateY(-2px)' : 'none',
-        boxShadow: hot && !lifted ? SHADOW.pop : 'none',
+        boxShadow: hot && !lifted ? SHADOW.pop : undefined,
         // The tile being carried stays faintly in place, so the gap it will
         // leave is visible while the drop target is being chosen.
         opacity: lifted ? 0.4 : 1,
         transition: 'transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease',
       }}
     >
+      <span onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)} style={{
+        display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0,
+      }}>
       {/* Title bar. The three dots are not buttons — they are what makes a
           rectangle read as a window at a glance across a wall of them. */}
       <div style={{
@@ -306,13 +325,13 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
       }}>
         <span style={{ display: 'flex', gap: 5, flexShrink: 0, paddingRight: 4 }}>
           {[0, 1, 2].map((i) => (
-            <span key={i} style={{ width: 9, height: 9, borderRadius: 5, background: C.surface2 }} />
+            <span key={i} style={{ width: 9, height: 9, borderRadius: 5, background: T.s2 }} />
           ))}
         </span>
-        <span style={{
-          width: 7, height: 7, borderRadius: 4, flexShrink: 0, background: ph.color,
-          animation: t.phase === 'working' ? 'rac-breathe 1.4s ease-in-out infinite' : undefined,
-        }} />
+        <StatusDot
+          state={MARK[t.phase]} hollow={t.phase === 'approval'}
+          style={{ animation: t.phase === 'working' ? 'rac-breathe 1.4s ease-in-out infinite' : undefined }}
+        />
         {draft === null ? (
           <span
             // Double-click is the shortcut everyone already tries on a title;
@@ -320,7 +339,7 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
             onDoubleClick={(e) => { e.stopPropagation(); setDraft(chat.title); }}
             title={chat.title || 'New chat'}
             style={{
-              flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: C.text,
+              flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: T.ink,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}
           >{chat.title || 'New chat'}</span>
@@ -336,13 +355,13 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
               if (e.key === 'Escape') { e.preventDefault(); setDraft(null); }
             }}
             style={{
-              flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: C.text,
-              background: C.bg, border: `1px solid ${C.accentRing}`, borderRadius: R.badge,
-              outline: 'none', padding: '2px 6px', font: 'inherit',
+              flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: T.ink,
+              background: T.bg, border: `1px solid ${T.amber}`, borderRadius: RADIUS.mark,
+              outline: 'none', padding: '2px 6px', font: 'inherit', caretColor: T.amber,
             }}
           />
         )}
-        <span style={{ ...mono, fontSize: 11, color: C.faint, flexShrink: 0 }}>{ago(chat.updated_at)}</span>
+        <span style={{ ...mono, fontSize: 11, color: T.ink3, flexShrink: 0 }}>{ago(chat.updated_at)}</span>
         <div style={{ display: 'flex', gap: 1, flexShrink: 0, marginRight: -4 }}>
           <TileButton icon={P.pencil} title="Rename this chat"
             onClick={(e) => { e.stopPropagation(); setDraft(chat.title); }} />
@@ -355,9 +374,9 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
 
       <div style={{
         ...mono, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px 0',
-        fontSize: 11, color: C.faint, minWidth: 0,
+        fontSize: 11, color: T.ink3, minWidth: 0,
       }}>
-        <span style={{ flexShrink: 0, color: C.mute }}>{chat.provider}</span>
+        <span style={{ flexShrink: 0, color: T.ink2 }}>{chat.provider}</span>
         <span>·</span>
         <span style={{ flexShrink: 0 }}>{chat.model}</span>
         <span>·</span>
@@ -379,7 +398,7 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
           if (l.side === 'note') {
             return (
               <div key={i} style={{
-                minWidth: 0, color: l.color ?? C.mute, lineHeight: 1.4,
+                minWidth: 0, color: l.color ?? T.ink3, lineHeight: 1.4,
                 fontSize: l.code ? 11.5 : 12.5, fontFamily: l.code ? MONO : undefined,
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
               }}>{l.text}</div>
@@ -394,8 +413,8 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
                 // the same shape the chat screen uses, so a tile reads as the
                 // conversation it is a window onto.
                 borderRadius: you ? '14px 14px 5px 14px' : '14px 14px 14px 5px',
-                background: you ? C.accent : C.surface2,
-                color: you ? C.onAccent : C.text,
+                background: you ? T.red : T.s2,
+                color: you ? ON_COLOUR : T.ink,
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 wordBreak: 'break-word',
               }}>{l.text}</span>
@@ -413,33 +432,20 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
           textTransform: 'uppercase', color: ph.color, flexShrink: 0,
         }}>{ph.label}</span>
         <span style={{
-          ...mono, flex: 1, minWidth: 0, fontSize: 11, color: C.mute,
+          ...mono, flex: 1, minWidth: 0, fontSize: 11, color: T.ink3,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{metaLine(chat, t, now)}</span>
         {/* Answering from the tile is the point of the mode: the thing worth
             crossing the room for is a chat that stopped to ask. */}
         {t.approval && (
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            <button
-              type="button" onClick={answer('deny')}
-              style={{
-                height: 26, padding: '0 10px', borderRadius: R.btn, cursor: 'pointer',
-                fontSize: 12, fontWeight: 600, color: C.text2,
-                background: 'transparent', border: `1px solid ${C.borderStrong}`,
-              }}
-            >Deny</button>
-            <button
-              type="button" onClick={answer('allow')}
-              style={{
-                height: 26, padding: '0 10px', borderRadius: R.btn, cursor: 'pointer',
-                fontSize: 12, fontWeight: 600, color: C.onWarn,
-                background: C.warn, border: `1px solid ${C.warn}`,
-              }}
-            >Allow</button>
-          </div>
+          <span style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <Button small face="outline" label="Deny" onClick={() => answer('deny')} />
+            <Button small face="amber" label="Allow" onClick={() => answer('allow')} />
+          </span>
         )}
       </div>
-    </div>
+      </span>
+    </Card>
   );
 }
 
@@ -488,29 +494,12 @@ function loadSource(): Source {
 /** The switch between the two walls. Lives in the header of both, so it reads
  *  as one screen with two subjects rather than two screens. */
 function SourceToggle({ value, onChange }: { value: Source; onChange: (s: Source) => void }) {
-  const opts: { key: Source; label: string }[] = [
-    { key: 'chats', label: 'Chats' },
-    { key: 'ustabasi', label: 'Ustabasi' },
-  ];
   return (
-    <div style={{
-      display: 'inline-flex', padding: 2, borderRadius: R.chip, gap: 2,
-      background: C.surface, border: `1px solid ${C.border}`, flexShrink: 0,
-    }}>
-      {opts.map((o) => {
-        const on = value === o.key;
-        return (
-          <button
-            key={o.key} type="button" onClick={() => onChange(o.key)}
-            style={{
-              height: 24, padding: '0 12px', borderRadius: R.chip, cursor: 'pointer',
-              fontSize: 12.5, fontWeight: 600, border: 'none',
-              background: on ? C.text : 'transparent', color: on ? C.bg : C.mute,
-            }}
-          >{o.label}</button>
-        );
-      })}
-    </div>
+    <Choice
+      label="What the wall shows" value={value} onChange={onChange}
+      options={[{ key: 'chats' as Source, label: 'Chats' },
+                { key: 'ustabasi' as Source, label: 'Ustabasi' }]}
+    />
   );
 }
 
@@ -665,19 +654,21 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
   if (source === 'ustabasi') return <Ustabasi header={toggle} />;
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg, position: 'relative' }}>
+    <div style={{
+      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+      background: T.bg, position: 'relative',
+    }}>
       {/* Header: which computers are answering, then the way to narrow the wall
           down. Sticky, because the grid below it is the part that scrolls. */}
-      <div style={{ flexShrink: 0, borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+      <div style={{ flexShrink: 0, borderBottom: `1px solid ${T.line}`, background: T.bg }}>
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '14px 24px 10px', flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', gap: 12, padding: '16px 24px 10px', flexWrap: 'wrap',
         }}>
           {toggle}
           {/* The page head Web15 W14 draws over this, under the name the drawer
               gives the row: `600 26px` at `-.02em` with one plain aside, which
               is the design system's own `page` head and not a size invented
-              here. Everything below it is the older set, until the wall itself
-              is rebuilt. */}
+              here. */}
           <SectionHeader
             kind="page" title="Terminals"
             note={`${onlineCount} of ${order.length} online`}
@@ -691,118 +682,76 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
               const online = slot.status === 'online';
               const busy = slot.chats.filter((c) => c.status !== 'idle').length;
               return (
-                <span key={k} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7, height: 26, padding: '0 11px',
-                  borderRadius: R.chip, fontSize: 12.5, whiteSpace: 'nowrap',
-                  background: online ? C.surface : 'transparent',
-                  border: `1px solid ${online ? C.borderStrong : C.border}`,
-                  color: online ? C.text : C.faint,
-                }}>
-                  <Dot color={online ? (busy ? C.accent : C.ok) : C.faint} live={online} size={6} />
-                  <span style={{ fontWeight: 600 }}>{slot.info?.name || slot.cfg.name}</span>
-                  <span style={{ color: C.mute }}>
-                    {online ? (busy ? `${busy} active` : 'idle') : 'offline'}
-                  </span>
-                </span>
+                <Pill
+                  key={k}
+                  dot={online ? (busy ? 'running' : 'done') : 'quiet'}
+                  label={
+                    <>
+                      <span style={{ fontWeight: 600 }}>{slot.info?.name || slot.cfg.name}</span>
+                      <span style={{ color: T.ink3, marginLeft: 6 }}>
+                        {online ? (busy ? `${busy} active` : 'idle') : 'offline'}
+                      </span>
+                    </>
+                  }
+                />
               );
             })}
           </div>
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, height: 32, width: 220, maxWidth: '40vw',
-              padding: '0 12px', borderRadius: R.chip, background: C.surface,
-              border: `1px solid ${C.border}`, boxSizing: 'border-box',
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Quoted style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: 240, maxWidth: '40vw',
+              boxSizing: 'border-box', padding: '0 12px', height: 32, fontSize: 13,
             }}>
-              <Icon path={P.search} size={14} color={C.mute} />
-              <input
-                name="terminal-search" value={query} onChange={(e) => setQuery(e.target.value)}
+              <Icon path={P.search} size={15} color={T.ink3} />
+              <Write
+                value={query} onChange={setQuery} label="Search chats"
                 placeholder="Search chats"
-                style={{
-                  flex: 1, minWidth: 0, background: 'transparent', border: 'none',
-                  outline: 'none', fontSize: 13, color: C.text,
-                }}
               />
-            </div>
-            <button
-              type="button" onClick={onNewChat}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 14px',
-                borderRadius: R.chip, cursor: 'pointer', background: C.accent,
-                border: `1px solid ${C.accent}`, color: C.onAccent, fontSize: 13, fontWeight: 600,
-              }}
-            >
-              <Icon path={P.plus} size={15} color={C.onAccent} width={2.6} />
-              New chat
-            </button>
-          </div>
+            </Quoted>
+            <Button small icon={P.plus} label="New chat" onClick={onNewChat} />
+          </span>
         </div>
 
         <div style={{ display: 'flex', gap: 6, padding: '0 24px 12px', flexWrap: 'wrap' }}>
-          {FILTERS.map((f) => {
-            const on = filter === f.key;
-            return (
-              <button
-                key={f.key} type="button" onClick={() => setFilter(f.key)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7, height: 26, padding: '0 11px',
-                  borderRadius: R.chip, cursor: 'pointer', fontSize: 12.5, fontWeight: 500,
-                  background: on ? C.text : 'transparent',
-                  color: on ? C.bg : C.text2,
-                  border: `1px solid ${on ? C.text : C.borderStrong}`,
-                }}
-              >
-                <span style={{ width: 7, height: 7, borderRadius: 4, background: f.color }} />
-                {f.label}
-                <span style={{ ...mono, fontSize: 11 }}>{counts[f.key] ?? 0}</span>
-              </button>
-            );
-          })}
+          {FILTERS.map((f) => (
+            <Pill
+              key={f.key} face={filter === f.key ? 'ink' : 'surface'}
+              dot={f.key === 'all' ? null : MARK[f.key]}
+              onClick={() => setFilter(f.key)}
+              label={<>{f.label}<span style={{ ...mono, marginLeft: 6 }}>{counts[f.key] ?? 0}</span></>}
+            />
+          ))}
 
           {/* Dragging nine chats up one at a time is a chore nobody asked for,
               and an empty wall with no way to fill it but dragging reads as a
               broken screen. This is the shortcut; taking one back down is one
               click on the tile. */}
           {!!missing.length && (
-            <button
-              type="button"
-              onClick={() => {
-                const add = missing.map(tileKey);
-                setWall((cur) => [...cur, ...add]);
-                flash(`${add.length} put up`, () => setWall((cur) => cur.filter((k) => !add.includes(k))));
-              }}
-              title="Put every chat that is not already up on the wall"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto',
-                borderRadius: R.chip, padding: '5px 11px', cursor: 'pointer',
-                fontSize: 13, fontWeight: 500, color: C.mute,
-                background: 'transparent', border: `1px solid ${C.border}`,
-              }}
-            >
-              <Icon path={P.plus} size={13} color={C.mute} width={2.6} />
-              Add {missing.length}
-            </button>
+            <span style={{ marginLeft: 'auto' }}>
+              <Button
+                small face="outline" icon={P.plus} label={`Add ${missing.length}`}
+                title="Put every chat that is not already up on the wall"
+                onClick={() => {
+                  const add = missing.map(tileKey);
+                  setWall((cur) => [...cur, ...add]);
+                  flash(`${add.length} put up`, () => setWall((cur) => cur.filter((k) => !add.includes(k))));
+                }}
+              />
+            </span>
           )}
           {!!wall.length && (
-            <button
-              type="button"
-              onClick={() => {
-                const was = wall;
-                setWall([]);
-                flash('Wall cleared', () => setWall(was));
-              }}
-              title="Take everything off the wall"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                marginLeft: missing.length ? 0 : 'auto',
-                borderRadius: R.chip, padding: '5px 11px', cursor: 'pointer',
-                fontSize: 13, fontWeight: 500, color: C.mute,
-                background: 'transparent', border: `1px solid ${C.border}`,
-              }}
-            >
-              <Icon path={P.eyeOff} size={13} color={C.mute} />
-              Clear
-            </button>
+            <span style={{ marginLeft: missing.length ? 0 : 'auto' }}>
+              <Button
+                small face="outline" icon={P.eyeOff} label="Clear"
+                title="Take everything off the wall"
+                onClick={() => {
+                  const was = wall;
+                  setWall([]);
+                  flash('Wall cleared', () => setWall(was));
+                }}
+              />
+            </span>
           )}
         </div>
       </div>
@@ -862,7 +811,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
                   {mark && (
                     <span style={{
                       position: 'absolute', top: -4, bottom: -4, width: 3, borderRadius: 2,
-                      background: C.accent, zIndex: 2,
+                      background: T.amber, zIndex: 2,
                       left: dropAt.before ? -8 : undefined,
                       right: dropAt.before ? undefined : -8,
                     }} />
@@ -883,14 +832,23 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
           </div>
         ) : (
           <div style={{
-            padding: '80px 0', textAlign: 'center', color: C.mute, fontSize: 14,
-            border: dropAt ? `1px dashed ${C.accentRing}` : '1px dashed transparent',
-            borderRadius: R.media,
+            display: 'flex',
+            border: dropAt ? `1.5px dashed ${T.line2}` : '1.5px dashed transparent',
+            borderRadius: RADIUS.card,
           }}>
-            {!order.length ? 'No computer paired yet.'
-              : !entries.length ? 'No chats yet.'
-              : wall.length ? 'No chat on the wall matches.'
-              : 'The wall is empty. Add puts the chats up; a tile can then be dragged into any order.'}
+            <EmptyState
+              title={!order.length ? 'No computer is paired yet.'
+                : !entries.length ? 'No chat has been started anywhere.'
+                : wall.length ? 'No chat on the wall matches.'
+                : 'The wall is empty.'}
+              body={!order.length
+                ? 'A wall is every chat on every paired computer at once. Pair one under Machines.'
+                : !entries.length
+                  ? 'The first chat you start on any of these computers goes up here.'
+                  : wall.length
+                    ? 'Every tile on the wall is somewhere else on the filter above.'
+                    : 'Add puts the chats up; a tile can then be dragged into any order.'}
+            />
           </div>
         )}
       </div>
@@ -900,55 +858,37 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
           onClick={() => setConfirm(null)}
           style={{
             position: 'fixed', inset: 0, zIndex: 40, padding: 24,
-            background: C.scrim, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: T.scrim, display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%', maxWidth: 400, padding: 22, borderRadius: R.media,
-              background: C.surface, border: `1px solid ${C.borderStrong}`,
-              display: 'flex', flexDirection: 'column', gap: 10,
-              boxShadow: SHADOW.drawer,
-            }}
-          >
-            <div style={{
-              width: 38, height: 38, borderRadius: R.card, background: C.dangerBg,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Icon path={P.trash} size={19} color={C.danger} />
-            </div>
-            <div style={{ fontSize: 17, fontWeight: 600, paddingTop: 4 }}>Delete this chat?</div>
-            <div style={{ fontSize: 13.5, lineHeight: '20px', color: C.mute }}>
-              “{confirm.chat.title || 'New chat'}” and its history are removed from {confirm.hostName}.
-              This cannot be undone.
-            </div>
-            <div style={{ display: 'flex', gap: 8, paddingTop: 10 }}>
-              <button
-                type="button" onClick={() => setConfirm(null)}
-                style={{
-                  flex: 1, height: 38, borderRadius: R.btn, cursor: 'pointer', fontSize: 13.5,
-                  fontWeight: 600, color: C.text, background: 'transparent',
-                  border: `1px solid ${C.borderStrong}`,
-                }}
-              >Cancel</button>
-              <button
-                type="button"
-                onClick={() => {
-                  const { hostKey, chat } = confirm;
-                  setConfirm(null);
-                  deleteChat(hostKey, chat.id)
-                    .then(() => flash('Chat deleted'))
-                    .catch((e) => flash(e?.message ?? 'That did not work'));
-                }}
-                style={{
-                  flex: 1, height: 38, borderRadius: R.btn, cursor: 'pointer', fontSize: 13.5,
-                  fontWeight: 600, color: C.onAccent, background: C.danger,
-                  border: `1px solid ${C.danger}`,
-                }}
-              >Delete</button>
-            </div>
-          </div>
+          <span onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400 }}>
+            <Card raised ring="red">
+              <span style={{
+                width: 38, height: 38, borderRadius: RADIUS.well, background: T.redBg,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Icon path={P.trash} size={19} color={T.red} />
+              </span>
+              <SectionHeader kind="page" title="Delete this chat?" style={{ fontSize: 22 }} />
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+                “{confirm.chat.title || 'New chat'}” and its history are removed from {confirm.hostName}.
+                This cannot be undone.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button wide face="outline" label="Cancel" onClick={() => setConfirm(null)} />
+                <Button
+                  wide label="Delete"
+                  onClick={() => {
+                    const { hostKey, chat } = confirm;
+                    setConfirm(null);
+                    deleteChat(hostKey, chat.id)
+                      .then(() => flash('Chat deleted'))
+                      .catch((e) => flash(e?.message ?? 'That did not work'));
+                  }}
+                />
+              </div>
+            </Card>
+          </span>
         </div>
       )}
 
@@ -956,7 +896,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
         <div style={{
           position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 30,
           display: 'flex', alignItems: 'center', gap: 14, padding: '9px 12px 9px 18px',
-          borderRadius: R.chip, background: C.text, color: C.bg, fontSize: 13.5,
+          borderRadius: RADIUS.pill, background: T.ink, color: T.bg, fontSize: 13.5,
           boxShadow: SHADOW.pop,
         }}>
           <span>{toast.text}</span>
@@ -969,8 +909,8 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
                 setToast(null);
               }}
               style={{
-                padding: '4px 10px', borderRadius: R.chip, cursor: 'pointer', border: 'none',
-                fontSize: 13, fontWeight: 600, background: C.bg, color: C.text,
+                padding: '4px 10px', borderRadius: RADIUS.chip, cursor: 'pointer', border: 'none',
+                fontSize: 13, fontWeight: 600, background: T.bg, color: T.ink,
               }}
             >Undo</button>
           )}

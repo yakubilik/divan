@@ -687,6 +687,26 @@ group('the screens the panel already had');
   const { host } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
   const paired = { hosts: { studio: host() }, order: ['studio'], focus: 'studio', ready: true };
   const nothing = { hosts: {}, order: [], focus: null, ready: true };
+  /** The same computer answering eight minutes ago and not since: every figure
+   *  on the page is what it last said, and a screen that reads `info` as if it
+   *  were fresh has to survive it. */
+  const stale = () => {
+    const slot = host();
+    slot.lastOnline = (Date.now() / 1000 - 8 * 60) * 1000;
+    return { hosts: { studio: slot }, order: ['studio'], focus: 'studio', ready: true };
+  };
+  /** …and the same computer refusing the connection with its last answer still
+   *  in hand, which is where a screen that assumes `info` is there falls over. */
+  const gone = () => {
+    const slot = host();
+    slot.status = 'offline';
+    slot.info = null;
+    slot.catalog = null;
+    slot.accounts = [];
+    slot.limits = {};
+    slot.lastOnline = (Date.now() / 1000 - 600) * 1000;
+    return { hosts: { studio: slot }, order: ['studio'], focus: 'studio', ready: true };
+  };
 
   /** A render on a server is handed the store's *initial* state — zustand
    *  reads `getServerState || getInitialState` — so a store seeded with
@@ -715,7 +735,11 @@ group('the screens the panel already had');
   globalThis.localStorage.setItem('rac.terminal.wall',
     JSON.stringify(['studio/c1', 'studio/c2', 'studio/c3']));
 
-  for (const [world, state] of [['alone', nothing], ['paired', paired]]) {
+  // Four worlds, because that is what the screens have to survive: nothing
+  // paired, a computer answering, one whose answer is eight minutes old, and
+  // one that has stopped answering with its last answer still on screen.
+  for (const [world, state] of [['alone', nothing], ['paired', paired],
+                               ['stale', stale()], ['unreachable', gone()]]) {
     seed(state);
     for (const [name, [path, exp, props]] of Object.entries(screens)) {
       let markup;
@@ -731,7 +755,8 @@ group('the screens the panel already had');
       for (const v of vars) if (K.DARK[v] === undefined) undeclared.push(`${world} ${name}: ${v}`);
     }
   }
-  ok('every screen still stands up, paired and alone', broken.length === 0, broken.join('\n    '));
+  ok('every screen still stands up: alone, paired, stale and unreachable',
+    broken.length === 0, broken.join('\n    '));
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
   ok('…so every colour on every screen exists in both themes', undeclared.length === 0, undeclared.join(', '));
   ok('the wall draws its tiles, which is the only place the phase colours are',
