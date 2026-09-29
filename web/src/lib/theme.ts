@@ -413,8 +413,10 @@ export const RADIUS = {
   /** A list row's icon well, a small button, the selected tab inside its
    *  track: `height:32px;border-radius:9px`, 33 times in Web15. */
   well: 9,
-  /** A top-bar item and a side-panel row: `height:34px;border-radius:10px`. */
+  /** A top-bar item and a side-panel row: `height:34px;border-radius:10px`, and
+   *  the inset block a worker quotes its figures in (Web12 W1). */
   nav: 10,
+  quote: 10,
   /** A button that ends a card: `height:34px;border-radius:11px` (Web14 W9). */
   button: 11,
   /** The tab strip's track, and a card in the chat panel. */
@@ -458,6 +460,24 @@ export const SIZE = {
   sidePanel: 260,
   /** Its rows. */
   sideRow: 40,
+  /** The chat session Web12 W1 opens at the bottom right: `width:350px;
+   *  height:500px`. The second one, to the left of it, is drawn a size down —
+   *  `320 × 440` — which is the frame saying which one is being read; the panel
+   *  opens both at the first size, because on this end either of the two can be
+   *  the one you answer. */
+  panel: 350,
+  panelTall: 500,
+  /** A minimised session in the dock: `width:136px; height:44px`, and the
+   *  `+1` beside them at `44 × 44`. */
+  tab: 136,
+  tabTall: 44,
+  /** The composer inside a panel: `height:40px`. */
+  field: 40,
+  /** The command bar across the bottom: `width:420px; height:52px`, with a
+   *  36 pt send button in it. */
+  bar: 420,
+  barTall: 52,
+  send: 36,
 } as const;
 
 /** The shadows, as the frames write them. There are four, and a card wearing
@@ -472,6 +492,11 @@ export const SHADOW = {
   pop: `0 0 0 1px ${T.line2}, 0 10px 24px ${T.sh}`,
   /** The drawer, which falls further. */
   drawer: `0 0 0 1px ${T.line2}, 0 14px 36px ${T.sh}`,
+  /** A window standing over the page: the chat session of Web12 W1, `0 24px
+   *  60px rgba(0,0,0,.55)` in the dark and the same fall in the light frame's
+   *  own shadow colour. Its ring is not in here, because which colour that ring
+   *  is, is what the window is *saying*. */
+  float: `0 24px 60px ${T.sh}`,
 } as const;
 
 /** An outline, which the frames draw inside the shape rather than on it. */

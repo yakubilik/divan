@@ -54,14 +54,15 @@ Machine list, and the old list is read out of git rather than typed out again.
 | `lib/protocol.ts`, `lib/ws.ts`, `lib/i18n.ts` | **Copied verbatim** from the iOS app. Do not edit here; if the originals under `app/src/` change, copy them again. |
 | `lib/fleet.ts` | The computers. `useFleet()` → `{hosts, order, focus, activity}`. Each `hosts[key]`: `{cfg, status, info, catalog, chats, groups, projects, accounts, limits}`. `onAnyEvent(cb)` gives you every event from every computer. `selectRunning(state)` dumps everything that is running. |
 | `lib/timeline.ts` | A chat's timeline. `useLogs().open(hostKey, chatId)` loads it and events stream in on their own. `logs[logKey(h,c)]` → `{items, busy, pending}`. |
-| `lib/actions.ts` | `send`, `interrupt`, `respond`, `createChat`, `updateChat`, `deleteChat`, `listAgents`, `agentStore`, `installAgent`, `removeAgent`, `toolStatus`, `upload`, `fileUrl`, `parsePairing`. |
+| `lib/actions.ts` | `send`, `interrupt`, `respond`, `ticketNote`, `createChat`, `updateChat`, `deleteChat`, `listAgents`, `agentStore`, `installAgent`, `removeAgent`, `toolStatus`, `upload`, `fileUrl`, `parsePairing`. |
 | `lib/format.ts` | `tilde`, `tildeAll`, `shortPath`, `cost`, `tokens`, `duration`, `uptime`, `ago`, `until`, `clock`, `windowName`, `toolSummary`. |
 | `lib/ustabasi.ts` | A ticket, twice: as a card on the wall (`groupByProject`, `sortTickets`, `projectName`, and the card's own lines `cardLine`, `totalAge`, `roundAge`, `stageLine`, `commitCount`) and as a conversation when it is opened (`conversation`, `question`, `stateLine`, `bullets`). No progress percentage on a card, and there will not be one: nothing in the queue knows how far along a ticket is. `npm test` checks all of it. |
-| `lib/divan.ts` | The board of every paired computer, merged: `useDivanView()` → `{hosts, projects, cards, totals, now}`. One product however many machines it is checked out on, a silent machine's snapshot kept and marked old rather than dropped, and totals that say when they are incomplete. The phone's `app/src/divan.ts` by the same rules and the same names. |
+| `lib/divan.ts` | The board of every paired computer, merged: `useDivanView()` → `{hosts, projects, cards, agents, totals, quota, now}`. One product however many machines it is checked out on, a silent machine's snapshot kept and marked old rather than dropped, what git said folded per product, and counters counted off the cards and the agents — including the two that only a fleet in trouble has, agents nobody has heard from and agents a spent quota stopped. The phone's `app/src/divan.ts` by the same rules, the same names and the same numbers; `scripts/test-overview.mjs` compiles both and compares them. |
 | `lib/shell.ts` | The three places, the Machine list, the project chips and where the chosen product is kept. No React, no store, no palette. |
-| `lib/overview.ts` | What the Dashboard says about a product: how old the page is, which states it is in, what its board adds up to, and what it says when nobody wrote a description. |
+| `lib/overview.ts` | What the Dashboard says: how old the page is, which four counters are across the top, what a project card says about itself (its corner, the line under its name, how fresh it is, what git says, the board's marks, the worst card's line), who is at work, and whether this is a morning where nothing needs anybody. Every sentence is the phone's string table's entry for the same key. |
+| `lib/sessions.ts` | What needs a person, as the conversations the desktop opens by itself: which cards are sessions and of which kind, who is asking, the answers quoted out of the question itself, and how many windows open before the rest are tabs. The phone's `app/src/waiting.ts` rules, drawn as windows instead of a list. |
 | `lib/theme.ts` | Divan's palette in **both themes**, the `--dv-*` rules, the switch, the marks, the radii and the shadows — and `C`, the older vocabulary the screens speak, pointed at the same table. No colour exists outside this file. `T.ink3` is a reference (`var(--dv-ink3)`), not a value, so one render is correct in either theme. |
-| `ui/divan.tsx` | The parts the new desktop screens are made of: `Card`, `Row`, `Pill`, `Button`, `Tabs`, `ColumnTab`, `StatusDot`, `StateMark`, `ExecutorBadge`, `Monogram`, `Counter`, `SectionHeader`, `EmptyState`, `SidePanel`, and the top bar — `TopBar`, `NavItem`, `BarDivider`, `BarChip`, `BarStamp`. Each names the frame it was measured off. |
+| `ui/divan.tsx` | The parts the new desktop screens are made of: `Card`, `Row`, `Pill`, `Button`, `Tabs`, `ColumnTab`, `StatusDot`, `StateMark`, `ExecutorBadge`, `Monogram`, `Counter`, `SectionHeader`, `EmptyState`, `SidePanel`, `Note`, `Tag`, `RosterRow`, the window a question opens in — `Panel`, `PanelHead`, `Quoted`, `Composer` — the dock (`DockTab`, `DockMore`), the `CommandBar`, and the top bar: `TopBar`, `NavItem`, `BarDivider`, `BarChip`, `BarStamp`. Each names the frame it was measured off. |
 | `ui/kit.tsx` | The older set the existing screens are built from: `Chip`, `Btn`, `Dot`, `Pulse`, `Spinner`, `Segment`, `Label`, `Empty`, `Icon`+`P` (icon paths). |
 
 ## The two themes
@@ -99,14 +100,32 @@ in five states of the fleet: nothing paired, two machines answering, one gone
 quiet, one refusing with its board still in hand, and one that has never
 answered. `scripts/divan-fixture.js` is the board it is all drawn from.
 
-`scripts/test-drive.mjs` is the fourth, and it is the only one that presses
+`scripts/test-overview.mjs` is the fourth, and it is the one that holds the two
+clients to each other. It compiles the panel's Dashboard **and the phone's**
+(`app/src/divan.ts`, `app/src/dashboard.ts`) into one tree and hands them the same
+boards, then compares every figure and every sentence on the counters, the project
+cards and the agent roster: two clients that disagreed about how many things need
+you would be two products. Beside that it measures the page against Web12 W1 and
+Web13 W3 — the head, the four counters, the two-abreast products, the 380 pt
+roster, the bar across the bottom, the window in the corner — proves the two
+themes are one markup, drives the sessions' own rules (which cards are questions,
+which answers a question offers in its own words, two windows and then tabs with a
+count), and draws all eight boards of `scripts/overview-fixture.js` in both
+themes: nothing paired, nothing answered, a daemon too old, an empty board, a
+machine quiet, a machine refusing, a dormant product and a product with no
+repository.
+
+`scripts/test-drive.mjs` is the fifth, and it is the only one that presses
 anything. It mounts the whole panel into a document (jsdom, the one dependency
 these checks add) with the renderer the panel actually ships with, and then uses
 it: ⌘0 and the six keys the panel already had are dispatched at the window and
 the page that comes up is read off the Machine list's own selected row; a place
 and a project chip are clicked and the place, the address and the scoped page are
 read back; the switch is clicked and the document's theme moves while the markup
-under the bar does not. A render cannot say whether an effect ran or a handler is
+under the bar does not; and a question that opened itself in the corner is
+answered — the proposed answer is pressed and what goes out is a note on that
+ticket, to the machine that asked, after which the window is put away, brought
+back and closed. A render cannot say whether an effect ran or a handler is
 wired — this can, and it is where "the switch changes the theme without a reload"
 and "the bar scopes the page" are actually settled. `design/divan/TOKENS.md` is where the values come from and what
 was decided; the artboards it quotes are private and not in this repository.

@@ -16,6 +16,12 @@ export const send = (key: string, chatId: string, text: string, attachments: any
     chat_id: chatId, text, ...(attachments.length ? { attachments } : {}),
   });
 
+/** An answer to a ticket in one computer's queue. The queue re-opens a stopped
+ *  ticket the moment a note lands, which is why this is the whole of answering a
+ *  question a worker asked: nothing else has to be moved or restarted. */
+export const ticketNote = (key: string, id: number, text: string) =>
+  call<{ message?: string }>(key, 'ustabasi.note', { id, text });
+
 export const interrupt = (key: string, chatId: string) =>
   call(key, 'chat.interrupt', { chat_id: chatId });
 

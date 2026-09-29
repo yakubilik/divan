@@ -388,9 +388,21 @@ group('one product, however many machines it is on');
     fresh.projects.every((p) => p.stuck <= p.waiting));
   ok('the worst product is first',
     fresh.projects[0].key === 'quire');
+  // Counted off the cards and the agents, the way the phone counts them — not
+  // added up out of the daemons' own per-project figures, which is what this
+  // check used to assert. Two cards need a person (a question on the studio and
+  // a ticket the mini was turned down on); two agents are at work, and the
+  // mini's is *paused* rather than running, because that machine's quota is
+  // spent. `scripts/test-overview.mjs` holds every one of these to the phone's
+  // answer for the same board.
   ok('the totals are counted, not guessed',
-    fresh.totals.needsYou === 3 && fresh.totals.running === 2 && fresh.totals.stuck === 1
-    && fresh.totals.machines === 2 && fresh.totals.reachable === 2 && fresh.totals.complete);
+    fresh.totals.needsYou === 2 && fresh.totals.running === 1 && fresh.totals.paused === 1
+    && fresh.totals.stuck === 1 && fresh.totals.unknown === 0
+    && fresh.totals.machines === 2 && fresh.totals.reachable === 2 && fresh.totals.complete,
+    JSON.stringify(fresh.totals));
+  ok('…and a product carries the same three figures about itself',
+    D.project(fresh, 'quire').paused === 1 && D.project(fresh, 'quire').unknown === 0
+    && D.project(fresh, 'quire').stuck === 1);
 
   const quiet = view('stale');
   const q2 = D.project(quiet, 'quire');
@@ -434,10 +446,16 @@ group('the project bar scopes the page');
     shell.chips(fresh, 'gone')[0].selected);
   ok('the All chip is amber the moment anything needs a person',
     shell.allState(fresh) === 'asking');
+  // An agent in the list and not only a number on a project: what is running is
+  // counted off the agents, so a daemon that says `running: 2` and sends none is
+  // a machine with nothing to show for it.
   ok('…green when work is running and nothing is waiting',
     shell.allState(D.merge([entry('s', 's', D.answered({
-      machine: 's', at: NOW, projects: [{ id: 'p', name: 'P', slug: 'p', repos: [], running: 2, waiting: 0 }],
-      cards: [], agents: [], queue: {},
+      machine: 's', at: NOW, projects: [{ id: 'p', name: 'P', slug: 'p', repos: [], running: 1, waiting: 0 }],
+      cards: [], queue: {},
+      agents: [{ card_id: 'c', project_id: 'p', project: 'P', branch: '', title: 'x',
+                 executor: 'coding_agent', machine: 's', status: 'running', detail: '',
+                 since: NOW - 60, ustabasi_id: null }],
     }, NOW))], NOW)) === 'running');
   ok('…and grey on a morning where nothing is happening',
     shell.allState(view('alone')) === 'quiet');
