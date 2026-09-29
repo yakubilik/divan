@@ -405,7 +405,14 @@ export function App() {
         onProject={chooseProject}
       >
         {place === 'dashboard' && (
-          <Overview view={divan} project={projectIn(divan, project)} onProject={chooseProject} />
+          <Overview
+            view={divan} project={projectIn(divan, project)} onProject={chooseProject}
+            // The bar across the bottom of every desktop frame. What it opens is
+            // the palette — the panel's own ⌘K, which is the key the frame
+            // writes on it — rather than a composer for a conversation that does
+            // not exist yet.
+            onAsk={() => setPalette(true)}
+          />
         )}
 
         {/* The chat, untouched: the list it is picked from and the chat itself,

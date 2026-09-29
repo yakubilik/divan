@@ -39,7 +39,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { useFleet, type HostSlot } from './fleet';
-import type { DivanCard, DivanColumn, DivanProject, DivanSnapshot } from './protocol';
+import type {
+  DivanAgent, DivanCard, DivanColumn, DivanProject, DivanQuota, DivanSnapshot, RepoActivity,
+} from './protocol';
 
 /** How often a screen that is open re-asks every machine. The board moves when
  *  a worker does — a stage boundary is minutes apart, not seconds — and this is
@@ -145,6 +147,9 @@ export interface HostView {
   cards: number;
   running: number;
   waiting: number;
+  /** What it has left to start an agent on, as it last said. Null on a daemon
+   *  that does not measure one. */
+  quota: DivanQuota | null;
 }
 
 /** A card, with the machine it runs on and whether that machine is still
@@ -159,6 +164,28 @@ export interface MergedCard extends DivanCard {
    *  were folded under. */
   projectKey: string;
   stale: boolean;
+}
+
+/** An agent at work, with the computer it is working on. */
+export interface MergedAgent extends DivanAgent {
+  host: string;
+  hostName: string;
+  projectKey: string;
+  /** Its machine has gone quiet: this agent was running when we last heard, and
+   *  nobody can say what it is doing now. The fourth counter. */
+  unknown: boolean;
+  /** …and when that was. */
+  since_contact: number | null;
+}
+
+/** A product's own history, folded out of every repository it owns on every
+ *  machine it is on. `at` is the newest commit any of them has seen; the two
+ *  counts add up across repositories, which is what makes a product with its
+ *  site on one machine and its API on another one figure. */
+export interface ProjectActivity {
+  at: number | null;
+  week: number;
+  today: number;
 }
 
 /** One product, however many machines it is checked out on. */
@@ -190,11 +217,28 @@ export interface MergedProject {
    *  was turned down. Counted here, off the open cards, because it is the one
    *  of the three the daemon does not send. */
   stuck: number;
+  /** How many of `running` are on a machine that has gone quiet — the frame's
+   *  "2 agents, state unknown". The figure above is what was last known and is
+   *  drawn as such; this is how much of it is a memory. */
+  unknown: number;
+  /** …and how many are stopped where they were because their machine has no
+   *  quota left. They pick up again on their own, so this is a clock rather
+   *  than a fault. */
+  paused: number;
+  /** …and that clock: the first moment any of *those* agents can start again,
+   *  read off the machines they are stopped on and nowhere else. Null where
+   *  none of them said when. */
+  pausedUntil: number | null;
+  /** What git says about the repositories it owns: when the product last moved
+   *  and how much landed in the last seven days. Null where no repository of it
+   *  could be read — absent, never zero: nobody measured it. */
+  activity: ProjectActivity | null;
   updated_at: number;
   /** One of the machines it lives on has gone quiet, so these numbers are not
    *  all current. */
   stale: boolean;
-  /** Which ones, and when the newest answer behind this product arrived. */
+  /** Which ones, and when the oldest of them last answered. Null while
+   *  everything about the product is current: there is no age to print. */
   staleMachines: string[];
   lastSeen: number | null;
 }
@@ -206,6 +250,12 @@ export interface Totals {
   needsYou: number;
   stuck: number;
   running: number;
+  /** Agents that were running on a machine that has since gone quiet. */
+  unknown: number;
+  queued: number;
+  /** Agents on a machine that has run out of quota: stopped where they were,
+   *  and they pick up again on their own. */
+  paused: number;
   machines: number;
   reachable: number;
   /** Every paired machine answered, and recently enough to be believed. */
@@ -213,18 +263,47 @@ export interface Totals {
   /** The oldest answer any of this is built out of — "partly as of 21:02".
    *  Null when nothing has answered at all. */
   asOf: number | null;
+  /** What was finished today, across every repository every product owns. Null
+   *  where no machine could read one: the fourth counter is then a figure with
+   *  no source and the page puts something it does count in its place. */
+  doneToday: number | null;
+}
+
+/** What the whole fleet has left to run an agent on. */
+export interface MergedQuota {
+  /** The roomiest machine's share, which is where the next agent would start. */
+  left: number | null;
+  resets_at: number | null;
+  /** No machine has a sign-in left that could take a turn. */
+  spent: boolean;
+  /** The ones that are out, by name. */
+  spentMachines: string[];
+  /** Nothing has ever been measured anywhere. */
+  unknown: boolean;
 }
 
 export interface DivanView {
   hosts: HostView[];
   projects: MergedProject[];
   cards: MergedCard[];
+  agents: MergedAgent[];
   totals: Totals;
+  quota: MergedQuota;
   /** The moment this was worked out, in seconds. The one thing in the view that
    *  is not read off a snapshot — staleness is measured against it — so it
    *  travels with the answer rather than each screen fetching a clock of its
    *  own and ageing the same machine to two different numbers on one page. */
   now: number;
+}
+
+/** A card that needs a person before anything else happens to it. The same rule
+ *  the daemon counts `waiting` by (divan.py `_waiting`), applied to one card so
+ *  that a screen can mark it as well as count it — and so that the panel and
+ *  the phone (`app/src/divan.ts`) answer "what needs you" with the same set. */
+export function waiting(card: { column: string; agent_status: string | null; executor: string | null }): boolean {
+  if (card.column === 'done') return false;
+  if (card.agent_status === 'asking' || card.agent_status === 'blocked' || card.agent_status === 'failed') return true;
+  return card.executor === 'human' && card.column === 'in_progress';
 }
 
 /** A card an agent gave up on or was turned down on. Red, and a subset of what
@@ -267,7 +346,16 @@ function hostView(e: HostEntry, now: number): HostView {
     cards: snap?.cards.length ?? 0,
     running: snap?.agents.length ?? 0,
     waiting: (snap?.projects ?? []).reduce((n, p) => n + (p.waiting || 0), 0),
+    quota: snap?.quota ?? null,
   };
+}
+
+/** A machine is out of quota: its agents are stopped where they were and pick
+ *  up again on their own. Only a machine that is answering can be said to be
+ *  out — a quota reading from a computer that has been quiet for two hours says
+ *  nothing about now. */
+function outOfQuota(h: HostView): boolean {
+  return !!h.quota?.spent && !h.stale;
 }
 
 /** Everything the panel has, as one view. `now` is a clock in seconds — the
@@ -286,14 +374,25 @@ export function merge(list: HostEntry[], now: number): DivanView {
   }
 
   const cards: MergedCard[] = [];
+  const agents: MergedAgent[] = [];
   for (const e of list) {
     const h = byKey.get(e.key)!;
-    for (const c of e.state.snapshot?.cards ?? []) {
+    const snap = e.state.snapshot;
+    if (!snap) continue;
+    for (const c of snap.cards) {
       cards.push({
         ...c, host: h.key, hostName: h.name,
         machine: (c.machine || '').trim() || h.machine,
         projectKey: keyOf.get(`${h.key}:${c.project_id}`) ?? '',
         stale: h.stale,
+      });
+    }
+    for (const a of snap.agents) {
+      agents.push({
+        ...a, host: h.key, hostName: h.name,
+        machine: (a.machine || '').trim() || h.machine,
+        projectKey: keyOf.get(`${h.key}:${a.project_id}`) ?? '',
+        unknown: h.stale, since_contact: h.at,
       });
     }
   }
@@ -323,21 +422,27 @@ export function merge(list: HostEntry[], now: number): DivanView {
           running: p.running || 0,
           waiting: p.waiting || 0,
           stuck: 0,
+          unknown: 0,
+          paused: 0,
+          pausedUntil: null,
+          activity: null,
           updated_at: p.updated_at || 0,
           stale: h.stale,
           staleMachines: h.stale ? [h.machine] : [],
-          lastSeen: h.at,
+          lastSeen: h.stale ? h.at : null,
         });
         continue;
       }
       // The same product on a second machine: the numbers add up, the words are
-      // whichever copy said anything, and one quiet machine makes the product
+      // whichever copy was edited last, and one quiet machine makes the product
       // stale without hiding what the other one is doing.
-      found.hosts.push(h.key);
-      if (!found.machines.includes(h.machine)) found.machines.push(h.machine);
-      for (const repo of p.repos || []) if (!found.repos.includes(repo)) found.repos.push(repo);
-      found.summary = found.summary || p.summary || '';
+      const newer = (p.updated_at || 0) > found.updated_at;
+      found.name = newer ? p.name : found.name;
+      found.summary = newer && p.summary ? p.summary : (found.summary || p.summary || '');
       found.kind = found.kind || p.kind || '';
+      found.hosts = [...new Set([...found.hosts, h.key])];
+      found.machines = [...new Set([...found.machines, h.machine])];
+      found.repos = [...new Set([...found.repos, ...(p.repos || [])])];
       found.running += p.running || 0;
       found.waiting += p.waiting || 0;
       for (const [column, n] of Object.entries(p.counts || {})) {
@@ -347,42 +452,128 @@ export function merge(list: HostEntry[], now: number): DivanView {
       found.updated_at = Math.max(found.updated_at, p.updated_at || 0);
       if (h.stale) {
         found.stale = true;
-        if (!found.staleMachines.includes(h.machine)) found.staleMachines.push(h.machine);
+        found.staleMachines = [...new Set([...found.staleMachines, h.machine])];
+        // The oldest of them: a product half of whose numbers are from 21:02
+        // and half from 22:40 is as old as the older half.
+        found.lastSeen = found.lastSeen == null ? h.at
+          : h.at == null ? found.lastSeen : Math.min(found.lastSeen, h.at);
       }
-      found.lastSeen = Math.max(found.lastSeen ?? 0, h.at ?? 0) || null;
     }
   }
 
-  for (const c of cards) {
-    const p = products.get(c.projectKey);
-    if (!p) continue;
-    p.cards.push(c);
-    if (stuck(c)) p.stuck += 1;
+  // ── what git said, by path ───────────────────────────────────────────────
+  // Keyed by path on the wire for exactly this: the same checkout reported by
+  // two machines is one entry here, not two, so a product on both of them is
+  // not counted twice. Where they disagree the newer reading wins — a machine
+  // that has been asleep for two hours read its own `git log` two hours ago.
+  const history = new Map<string, RepoActivity>();
+  for (const e of list) {
+    for (const [path, a] of Object.entries(e.state.snapshot?.activity ?? {})) {
+      const had = history.get(path);
+      if (!had || (a.at ?? 0) > (had.at ?? 0)) history.set(path, a);
+    }
   }
 
-  // Worst first, which is the order every screen reads them in: something
-  // stopped, then something waiting on a person, then work running, then the
-  // most recently touched.
-  const projects = [...products.values()].sort((a, b) => (
-    (b.stuck > 0 ? 1 : 0) - (a.stuck > 0 ? 1 : 0)
-    || b.waiting - a.waiting
-    || b.running - a.running
-    || b.updated_at - a.updated_at
-    || a.name.localeCompare(b.name)
-  ));
+  // A machine with no quota left has stopped its agents where they were; that is
+  // a different thing from a machine that is not answering, and a project card
+  // has to be able to say which.
+  const stopped = new Set(hosts.filter(outOfQuota).map((h) => h.key));
 
-  const answeredHosts = hosts.filter((h) => h.at != null);
+  const projects = [...products.values()].sort(order);
+  for (const p of projects) {
+    p.cards = cards.filter((c) => c.projectKey === p.key);
+    p.stuck = p.cards.filter(stuck).length;
+    p.unknown = agents.filter((a) => a.projectKey === p.key && a.unknown).length;
+    const held = agents.filter((a) => a.projectKey === p.key && !a.unknown && stopped.has(a.host));
+    p.paused = held.length;
+    // The earliest of the machines its own agents are stopped on: the first
+    // moment any of this product's work moves again.
+    p.pausedUntil = held
+      .map((a) => byKey.get(a.host)?.quota?.resets_at ?? null)
+      .filter((at): at is number => at != null)
+      .sort((x, y) => x - y)[0] ?? null;
+    p.activity = fold(p.repos.map((path) => history.get(path)));
+  }
+
+  // ── the counters ─────────────────────────────────────────────────────────
+  // A machine that has gone quiet still counts for what a person has to do: a
+  // ticket that stopped to ask a question does not answer itself while the
+  // machine is unreachable, and nothing but a person changes it. What cannot be
+  // carried over is what an agent is *doing*, which is why running and unknown
+  // are two counters and not one. Counted off the cards and the agents, the way
+  // `app/src/divan.ts` counts them — the two clients say the same number about
+  // the same board or one of them is wrong.
   const totals: Totals = {
-    needsYou: projects.reduce((n, p) => n + p.waiting, 0),
-    stuck: projects.reduce((n, p) => n + p.stuck, 0),
-    running: projects.reduce((n, p) => n + p.running, 0),
+    needsYou: cards.filter(waiting).length,
+    stuck: cards.filter(stuck).length,
+    running: agents.filter((a) => !a.unknown && !stopped.has(a.host)).length,
+    unknown: agents.filter((a) => a.unknown).length,
+    queued: cards.filter((c) => c.column === 'queued').length,
+    paused: agents.filter((a) => !a.unknown && stopped.has(a.host)).length,
     machines: hosts.length,
     reachable: hosts.filter((h) => h.reachable).length,
-    complete: hosts.length > 0 && hosts.every((h) => h.reachable),
-    asOf: answeredHosts.length ? Math.min(...answeredHosts.map((h) => h.at as number)) : null,
+    complete: hosts.length > 0 && hosts.every((h) => h.reachable && !h.missing),
+    asOf: hosts.reduce<number | null>((oldest, h) => (
+      h.at == null ? oldest : oldest == null ? h.at : Math.min(oldest, h.at)), null),
+    // Every repository once, whatever product claims it: the counter is "what
+    // was finished today", and a repository two products share is one history.
+    doneToday: history.size === 0 ? null
+      : [...history.values()].reduce((n, a) => n + (a.today || 0), 0),
   };
 
-  return { hosts, projects, cards, totals, now };
+  return { hosts, projects, cards, agents, totals, quota: fleetQuota(hosts), now };
+}
+
+/** Several repositories' histories as one product's. The counts add up and the
+ *  clock is the newest of them; nothing measured at all stays nothing measured,
+ *  because a product with no repository attached has no figure rather than a
+ *  zero one. */
+function fold(list: (RepoActivity | undefined)[]): ProjectActivity | null {
+  const found = list.filter((a): a is RepoActivity => !!a);
+  if (!found.length) return null;
+  return {
+    at: found.reduce<number | null>((newest, a) => (
+      a.at == null ? newest : newest == null ? a.at : Math.max(newest, a.at)), null),
+    week: found.reduce((n, a) => n + (a.week || 0), 0),
+    today: found.reduce((n, a) => n + (a.today || 0), 0),
+  };
+}
+
+/** Worst first. A project with something waiting on a person comes before one
+ *  whose numbers cannot be trusted, which comes before one that is merely busy
+ *  — that is the order the question "what needs me" is asked in at three in the
+ *  morning, and it is the order the phone reads the same list in. Ties go to
+ *  whatever moved most recently, and then to the name so that the list does not
+ *  shuffle under a cursor. */
+function order(a: MergedProject, b: MergedProject): number {
+  const rank = (p: MergedProject) => (p.waiting ? 0 : p.stale ? 1 : p.running ? 2 : 3);
+  const r = rank(a) - rank(b);
+  if (r !== 0) return r;
+  const moved = b.updated_at - a.updated_at;
+  return moved !== 0 ? moved : a.name.localeCompare(b.name);
+}
+
+/** What the fleet has left. The next agent starts on the roomiest machine, so
+ *  that machine's figure is the one that matters; a machine that is not
+ *  answering has no figure worth reading, whatever its last one said. */
+function fleetQuota(hosts: HostView[]): MergedQuota {
+  const live = hosts.filter((h) => h.quota && !h.stale);
+  const room = live.filter((h) => h.quota!.left != null && !h.quota!.spent)
+    .sort((x, y) => y.quota!.left! - x.quota!.left!);
+  const best = room[0];
+  const spentMachines = live.filter((h) => h.quota!.spent).map((h) => h.machine);
+  const spent = live.length > 0 && live.every((h) => h.quota!.spent);
+  const backs = live.filter((h) => h.quota!.spent && h.quota!.resets_at != null)
+    .map((h) => h.quota!.resets_at!).sort((x, y) => x - y);
+  return {
+    left: best ? best.quota!.left : (spent ? 0 : null),
+    // Spent everywhere: when the first machine comes back. Otherwise the clock
+    // belongs to the figure above it, which is the roomiest machine's window.
+    resets_at: spent ? (backs[0] ?? null) : (best?.quota!.resets_at ?? null),
+    spent,
+    spentMachines,
+    unknown: live.length > 0 && !best && !spent,
+  };
 }
 
 /** One product by the key a chip carries, or null where the key is no longer in
