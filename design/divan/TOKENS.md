@@ -390,7 +390,7 @@ Geist; the panel does not ship it.
   button and state mark the frames draw beside them; the three-slot block of
   numbers under a name, the line with a clock in front of it, a field of a
   details panel and the field of a card being typed into rather than read, which
-  are the four Web14's own screens repeat; the table the Machine drawer is made
+  are the four Web14 W6 to W10 repeat; the table the Machine drawer is made
   of — the card with a grid in it, the mono cell a figure stands in, the
   name-over-a-line that opens a row and the square in front of it — which Web15 W12, W13 and W16 draw three
   times as one construction, with the slider a threshold is set on (W11) and the

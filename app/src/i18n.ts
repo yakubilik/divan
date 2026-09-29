@@ -396,6 +396,31 @@ const en = {
   prNewFoot: 'Nothing starts by itself: a card runs when it is moved into In Progress.',
   bnOpen: 'open', bnProgress: 'in progress', bnDone: 'done',
   bnAt: '{time}', bnYesterday: 'yesterday', bnDaysOld: '{n} days old',
+  // One branch's page (src/branch.ts): the same layout for every face of a
+  // product, with three more blocks on the one that owns the code. Every figure
+  // in here is a count off the board or something git said; the blocks whose
+  // source is not connected have a string that says so, and no string for a
+  // number.
+  bpLog: 'What the agent did', bpLogMany: 'What the agents did',
+  bpLogNothing: 'Nothing has run on this branch yet, so there is nothing to log.',
+  bpDid: '{who}: {what}',
+  bpSeen: 'as of {time}',
+  bpOverTime: 'over time · 30 days',
+  bpOverTimeBody: 'A figure a day needs a source that measures this branch daily. None is connected yet, so there is no chart — the numbers above are the board’s own.',
+  bpRepos: 'Repositories', bpReposNone: 'No repository is attached to this product.',
+  bpCommits: 'Recent commits',
+  bpCommitsNone: 'Git could not be read on any of these repositories, so nothing is said about what landed.',
+  bpLanded: '{n} · 7d', bpLandedToday: '{today} today · {n} · 7d', bpLandedNone: 'nothing in 7 days',
+  bpPulls: 'Pull requests',
+  bpPullsBody: 'Nothing has answered about these repositories yet. The code host is read through the gh signed in on the computer that holds the checkout, and only where the origin is on GitHub — so this is a gap and not an empty list.',
+  bpPullsNone: 'Nothing is open on the repositories of this branch.',
+  bpChecksFailing: '× {n} checks', bpChecksPassing: '✓ checks', bpChecksPending: '◐ checks',
+  bpDraft: 'draft',
+  bpTickets: 'Tickets', bpNoTickets: 'No cards on this branch yet.',
+  bpBareTitle: 'Nothing on this branch yet.',
+  bpBare: 'No card has been filed here, and no source writes to it. It keeps its place so that work has somewhere to go.',
+  bpGone: 'That branch is not on this phone.',
+  bpGoneBody: 'Nothing that has answered has a branch by this name on this product. It may be on a computer that is not paired.',
   // …and its board (src/board.ts): the four columns, and the mark on a card.
   // The column is where a person put the card; the mark is what the agent on it
   // is actually doing, which is why "Stuck" carries how long and "Done" says
@@ -460,7 +485,20 @@ const en = {
   caLiveQuietBody: 'No worker is printing anything on this card right now.',
   caGone: 'That card is not on any board any more',
   caGoneBody: 'It may have been deleted, or the computer it was on has not answered yet.',
-  chatPlacePick: 'Pick a folder and a model for this conversation.',
+  // the fastest screen (src/compose.ts): a title, two or three sentences, and
+  // two buttons. There is no string here for an executor or a brief, because
+  // there is no field for one.
+  ntAdd: '+ ticket', ntNew: 'New ticket',
+  ntTitleHint: 'What is it?',
+  ntSummaryHint: 'Two or three sentences, or none.',
+  ntLater: 'executor & agent brief: later, or drafted by Divan',
+  ntCount: '{n} / {max}',
+  ntIceBox: 'Add to Ice Box', ntQueued: 'Queue it',
+  ntOn: 'on {machine}',
+  ntQuiet: '{machine} has not answered lately. Filing it will say whether that stuck.',
+  ntNotFiled: "Couldn't write it down on {machine}",
+  ntNowhere: 'Nowhere to put a card yet',
+  ntNowhereBody: 'No paired computer has answered with a product on it, so there is no board for this to land on.',
   mTitle: 'Machine', mSubtitle: 'Infrastructure. Nothing here needs you.',
   mMachines: 'Machines', mMachinesNote: '{n} paired',
   mAllReachable: 'all reachable', mUnreachable: '{n} unreachable',
@@ -470,6 +508,32 @@ const en = {
   mPool: 'Sign-in pool', mPoolNote: 'several sign-ins driven as one',
   mCall: 'Call', mCallNote: 'talk to this computer out loud',
   mSettings: 'Settings', mSettingsNote: 'appearance, security, notifications',
+  mExecutors: 'Executors', mExecutorsNote: '{n} who can do work',
+  // Machine › Machines (Mobile11 S15): one card per computer, and the quota
+  // that belongs to the account rather than to any of them over the top.
+  maTitle: 'Machines', maPair: '+ Pair',
+  maQuota: 'Agent quota', maQuotaLeft: '{p}% left', maQuotaNone: 'none left',
+  maResets: 'resets {time} · in {d}',
+  maReachable: 'reachable', maUnreachable: 'unreachable', maNever: 'never answered',
+  maAgo: '{d} ago', maLastContact: 'last contact',
+  maTasks: '{n} tasks', maOneTask: '1 task', maIdleTasks: 'idle',
+  maOneTaskUnknown: '1 task · unknown', maUnknownTasks: '{n} tasks · unknown',
+  maRunning: 'running',
+  maScreen: 'Screen', maRetry: 'Try again',
+  maPicker: 'Computer picker', maPickerNote: 'which one this phone is holding, and where it answers',
+  maNone: 'No computer is paired', maNoneBody: 'Nothing has been paired with this phone yet, so there is no machine to show.',
+  // Machine › Executors (Mobile11 S14): everyone who can do work, grouped by
+  // kind, each saying what it is on and whether it can be.
+  exTitle: 'Executors',
+  exgCoders: 'Coders', exgCodersNote: 'write code, run tests, open PRs',
+  exgBranch: 'Branch agents', exgBranchNote: 'one per branch, often overnight',
+  exgHouse: 'Assistant and you', exgYou: 'You',
+  exBusy: 'busy', exIdle: 'idle', exUnavailable: 'unavailable', exNWaiting: '{n} waiting',
+  exSilent: '{what} · {machine} not reachable', exNoQuota: '{what} · no quota left',
+  exNoQuotaBare: 'no quota left', exMachineSilent: 'machine silent',
+  exNothing: 'Nothing assigned', exNothingWaiting: 'Nothing waiting', exNoMachine: 'no machine',
+  exNone: 'Nobody can do any work yet',
+  exNoneBody: 'No computer is paired, so there is no worker to hand a ticket to.',
   // the ustabasi wall: the queue that works while nobody is watching
   ustabasi: 'Ustabasi',
   queueRunning: '{n} running', queueRed: '{n} waiting on you', queueNothingRed: 'nothing waiting on you',

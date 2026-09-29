@@ -34,7 +34,7 @@
 // snapshots are the whole input.
 import type {
   DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanProject, DivanQuota, DivanSnapshot,
-  RepoActivity,
+  RepoActivity, RepoPulls,
 } from './protocol';
 
 /** How often a screen that is open re-asks every machine. The board moves when
@@ -115,6 +115,56 @@ export function silent(prev: HostDivan | null | undefined,
                        error: string | null, old = false): HostDivan {
   const was = prev ?? NO_DIVAN;
   return { snapshot: was.snapshot, at: was.at, reachable: false, error, old };
+}
+
+/** Which machines have a Divan poll out, and whose answer is still worth
+ *  keeping when it comes back. Two rules, and the second is the one that costs
+ *  something to get wrong:
+ *
+ *    * **a machine with a poll out is not asked again.** A foreground while a
+ *      timer's requests are in flight would otherwise be two requests per
+ *      machine, and a machine that always times out would never stop being
+ *      asked.
+ *    * **an answer from before a write is not an answer about now.** A poll
+ *      that went out before a card was written to that board comes back
+ *      without the card on it, and a card that blinks off the board a moment
+ *      after somebody wrote it is worse than a board that is a minute behind.
+ *      So a write marks the machine and every answer older than the mark is
+ *      dropped.
+ *
+ *  Plain state with nothing under it, so that both rules can be driven without
+ *  a phone — the store that holds one cannot be stood up outside the app
+ *  (`scripts/test-new-ticket.cjs`). */
+export class Polls {
+  /** Which machines have a poll out, and which era it went out in. */
+  private out = new Map<string, number>();
+  private era = new Map<string, number>();
+
+  /** Begin a poll for this machine: the token to hand back, or null because
+   *  one is already out and that one is this one's answer.
+   *
+   *  "Already out" means out about the board as it is now. A poll from before
+   *  a write is not that — its answer is spoken for — so a read straight after
+   *  a card was filed goes out alongside it rather than being swallowed. */
+  start(host: string): number | null {
+    const era = this.era.get(host) ?? 0;
+    if (this.out.get(host) === era) return null;
+    this.out.set(host, era);
+    return era;
+  }
+
+  /** Whether what came back is still news about that machine. */
+  keep(host: string, token: number): boolean {
+    return (this.era.get(host) ?? 0) === token;
+  }
+
+  /** …and it came back. Where a write let a second poll out alongside an older
+   *  one, the first of the two to finish clears the mark and a third could go
+   *  out early; one request is a cheaper answer than counting them. */
+  done(host: string): void { this.out.delete(host); }
+
+  /** Something was written to that machine's board from here. */
+  wrote(host: string): void { this.era.set(host, (this.era.get(host) ?? 0) + 1); }
 }
 
 /** A paired computer and what the phone has of it. */
@@ -208,6 +258,11 @@ export interface MergedProject {
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
   machines: string[];
+  /** Each machine's own id for this product, by host id. Two computers are two
+   *  databases and give the same product two ids, so this is the only way to
+   *  write to one of them — a card is created on one machine (`src/compose.ts`)
+   *  and `project_id` there means nothing on the other. */
+  ids: Record<string, string>;
   branches: MergedBranch[];
   counts: Partial<Record<DivanColumn, number>>;
   running: number;
@@ -243,6 +298,23 @@ export interface MergedProject {
    *  What a product *earns* is the third figure and has no source yet, so there
    *  is no field for it here at all. */
   activity: ProjectActivity | null;
+  /** …and the same readings unfolded, by repository path: what git said about
+   *  each of the repositories this product owns.
+   *
+   *  The fold above is what a project card draws — one product, one history. A
+   *  branch page draws the repositories themselves (Mobile9 S11), and a sum
+   *  cannot be taken apart again. A path git would not answer about is absent
+   *  rather than zero, which is the same rule the wire is keyed by. */
+  repoActivity: Record<string, RepoActivity>;
+  /** …and what the code host says about them: the pull requests open on each,
+   *  and how the checks on those stand.
+   *
+   *  A path with no entry is a repository nobody could be asked about — not a
+   *  GitHub checkout, or a machine with no `gh` — and one whose entry has an
+   *  empty `open` is a repository with nothing open. The branch page draws the
+   *  two differently, so the difference has to survive the merge: this map holds
+   *  only the paths that were actually answered for. */
+  repoPulls: Record<string, RepoPulls>;
   /** One of the machines it lives on has gone quiet, so these numbers are not
    *  all current. */
   stale: boolean;
@@ -434,6 +506,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           repos: [...(p.repos || [])],
           hosts: [h.id],
           machines: [h.machine],
+          ids: { [h.id]: p.id },
           branches: (p.branches || []).map((b) => ({
             ...b, cards: { ...(b.cards || {}) }, machines: work(b) ? [h.machine] : [] })),
           counts: { ...(p.counts || {}) },
@@ -444,6 +517,8 @@ export function merge(list: HostEntry[], now: number): DivanView {
           paused: 0,
           pausedUntil: null,
           activity: null,
+          repoActivity: {},
+          repoPulls: {},
           updated_at: p.updated_at || 0,
           stale: h.stale,
           staleMachines: h.stale ? [h.machine] : [],
@@ -463,6 +538,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
       found.repos = [...new Set([...found.repos, ...(p.repos || [])])].sort();
       found.hosts = [...new Set([...found.hosts, h.id])];
       found.machines = [...new Set([...found.machines, h.machine])];
+      found.ids[h.id] = p.id;
       found.running += p.running || 0;
       found.waiting += p.waiting || 0;
       for (const col of COLUMNS) {
@@ -494,6 +570,18 @@ export function merge(list: HostEntry[], now: number): DivanView {
     }
   }
 
+  // …and what the code host said about them, by the same rule: two machines
+  // holding one checkout asked one code host, and the later answer is the one
+  // worth keeping. A machine that has been asleep for two hours asked two hours
+  // ago, and the pull request it saw open may be merged.
+  const reviews = new Map<string, RepoPulls>();
+  for (const e of list) {
+    for (const [path, a] of Object.entries(e.state.snapshot?.pulls ?? {})) {
+      const had = reviews.get(path);
+      if (!had || (a.at ?? 0) > (had.at ?? 0)) reviews.set(path, a);
+    }
+  }
+
   // A machine with no quota left has stopped its agents where they were; that is
   // a different thing from a machine that is not answering, and a project card
   // has to be able to say which (Mobile5 S1 against S2).
@@ -513,6 +601,10 @@ export function merge(list: HostEntry[], now: number): DivanView {
       .filter((at): at is number => at != null)
       .sort((x, y) => x - y)[0] ?? null;
     p.activity = fold(p.repos.map((path) => history.get(path)));
+    p.repoActivity = Object.fromEntries(
+      p.repos.map((path) => [path, history.get(path)]).filter((pair): pair is [string, RepoActivity] => !!pair[1]));
+    p.repoPulls = Object.fromEntries(
+      p.repos.map((path) => [path, reviews.get(path)]).filter((pair): pair is [string, RepoPulls] => !!pair[1]));
   }
 
   // ── the counters ─────────────────────────────────────────────────────────

@@ -119,20 +119,31 @@ export default function RootLayout() {
             rather than being a fourth place — it is one of the Dashboard's own
             numbers with the things behind it shown. */}
         <Stack.Screen name="waiting" />
+        {/* One branch of a product, opened: its status, its numbers, what its
+            agent did and the cards that belong to it (Mobile9 S10, S11).
+            Addressed by kind rather than by id — two computers give the same
+            branch two ids, and the kind is what the merge folds them by. */}
+        <Stack.Screen name="branch/[id]" />
         {/* One card of a board, opened: what it is, what the machine was told,
             and what the worker on it is doing right now. Pushed over the
             Dashboard the way the Waiting screen is — it is a card of one of its
             boards opened up, and Back leads to the board it came from. */}
         <Stack.Screen name="card/[id]" />
-        {/* Every conversation on this computer. Not a place: the Chat tab
-            enters the conversation itself, and this is the side door off the
-            Dashboard — where a second one is started and where one that was
-            put away is found again. */}
-        <Stack.Screen name="chats" />
+        {/* Writing one down (Mobile8 S9). A modal over the board rather than a
+            page pushed onto it: it is a thing you do mid-thought, and Cancel
+            has to leave the board exactly where it was. */}
+        <Stack.Screen name="new-ticket" options={{ presentation: 'modal' }} />
         <Stack.Screen name="new-chat" options={SHEET} />
         <Stack.Screen name="chat-settings" options={SHEET} />
         <Stack.Screen name="model-sheet" options={SHEET} />
         <Stack.Screen name="host-sheet" options={SHEET} />
+        {/* The two pages of the Machine drawer that are made of what the
+            computers answered (Mobile11 S15, S14): the machines themselves,
+            with the one that stopped answering said out loud, and everyone who
+            can be handed a ticket. Pushed over the Machine tab, which stays
+            lit under them. */}
+        <Stack.Screen name="machines" />
+        <Stack.Screen name="executors" />
         {/* A call is a mode, not a place: it comes up over whatever you were
             reading and leaves it exactly where it was. */}
         <Stack.Screen name="call" options={{ presentation: 'modal' }} />

@@ -6,7 +6,7 @@ import { useNavGuard } from '../src/nav';
 import { LOCALE, type Key } from '../src/i18n';
 import { useDivanView, useQueueBadge } from '../src/queue';
 import { COLUMNS, project as projectIn, type DivanView, type MergedCard, type MergedProject } from '../src/divan';
-import { chips } from '../src/shell';
+import { chips, PLACE_ROUTE } from '../src/shell';
 import type { DivanColumn } from '../src/protocol';
 import { since } from '../src/tickets';
 import {
@@ -22,7 +22,7 @@ import {
 import {
   SETTLE_MS, back, carry, foot as dropFoot, hint, says, type Carried, type Landed,
 } from '../src/drag';
-import { ColumnTabs, EmptyState, ListRow, SectionHeader, Segments } from '../src/components/divan';
+import { Button, ColumnTabs, EmptyState, ListRow, SectionHeader, Segments, Tap } from '../src/components/divan';
 import {
   AgentLine, AgentRoster, AskCard, Counters, Note, NoteFoot, ProjectCard, SystemLine,
 } from '../src/components/dashboard';
@@ -156,9 +156,9 @@ export default function Dashboard() {
             {/* The two things on this screen that are not a project. Both are
                 work rather than infrastructure, which is why neither is in the
                 Machine list: the queue this computer is working through, and
-                every conversation it has — the Chat place is one conversation
-                and has no list in front of it, so this is where a second one
-                is started and where one that was put away is found again. */}
+                every conversation it has. The second is the Chat place itself,
+                so this row is a shortcut into that tab rather than a screen of
+                its own — which is why it moves sideways instead of pushing. */}
             <View>
               {queue.available && (
                 <ListRow first icon="terminal" title={T('ustabasi')} note={T('dashQueueNote')}
@@ -166,7 +166,7 @@ export default function Dashboard() {
                   onPress={() => go(() => router.push('/ustabasi'))} />
               )}
               <ListRow first={!queue.available} icon="chat_bubble" title={T('conversations')}
-                note={T('dashChatsNote')} onPress={() => go(() => router.push('/chats'))} />
+                note={T('dashChatsNote')} onPress={() => go(() => router.replace(PLACE_ROUTE.chat))} />
             </View>
           </>
         )}
@@ -333,7 +333,8 @@ function Project({ project: p, index, view, now, ago, face, column, onFace, onCo
   const stale = oldWords(p, now, ago);
   const head = (
     <>
-      <ProjectHead name={p.name} index={index} note={subtitle(p)} />
+      <ProjectHead name={p.name} index={index} note={subtitle(p)}
+        right={face === 'board' ? <AddTicket project={p.key} /> : undefined} />
       {!!stale && (
         <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
           {T(stale.key, stale.params)}
@@ -367,6 +368,24 @@ function Project({ project: p, index, view, now, ago, face, column, onFace, onCo
   );
 }
 
+/** `+ ticket` at the far end of the board's head (Mobile2 V5, Mobile8 S7): mono
+ *  12 in `ink3`, which is the quietest way in this design has. It is the right
+ *  weight for it — writing a card down is the thing done most often here and the
+ *  one that needs the least ceremony, and the screen it opens is the fastest in
+ *  the product (Mobile8 S9). */
+function AddTicket({ project }: { project: string }) {
+  const T = useT();
+  const t = useTokens();
+  const router = useRouter();
+  const go = useNavGuard();
+  return (
+    <Tap onPress={() => go(() => router.push(`/new-ticket?project=${project}`))}
+      style={{ paddingVertical: 6, paddingLeft: 10 }}>
+      <Text mono style={{ fontSize: 12, color: t.ink3 }}>{T('ntAdd')}</Text>
+    </Tap>
+  );
+}
+
 /** The Overview face (Mobile2 V4, Mobile7 S4): what is happening and what it is
  *  waiting for, over its branches as cards.
  *
@@ -392,6 +411,8 @@ function Overview({ project: p, view, now, ago }: {
   project: MergedProject; view: DivanView; now: number; ago: Ago;
 }) {
   const T = useT();
+  const router = useRouter();
+  const go = useNavGuard();
   const asleep = quiet(p, now, ago);
   const body = blankBody(p);
   const happening = nowWords(view, p);
@@ -423,7 +444,10 @@ function Overview({ project: p, view, now, ago }: {
             line={b.said ? T(b.said.key, b.said.params) : b.text}
             figures={b.figures.map((f) => ({ value: f.value, label: T(f.label) }))}
             refreshed={b.refreshed ? T(b.refreshed.said.key, b.refreshed.said.params) : null}
-            tone={b.refreshed?.tone ?? null} />
+            tone={b.refreshed?.tone ?? null}
+            /* Each card opens that branch's own page (Mobile9 S10, S11), by the
+               kind the merge folded it under rather than by one machine's id. */
+            onPress={() => go(() => router.push(`/branch/${b.kind}?project=${p.key}`))} />
         ))}
       </View>
     </View>
@@ -465,6 +489,8 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
 }) {
   const T = useT();
   const t = useTokens();
+  const router = useRouter();
+  const go = useNavGuard();
   const moveCard = useStore((s) => s.moveCard);
   const list = items(view, p, column, ago);
   const said = foot(p, column, view.now);
@@ -570,7 +596,11 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
         contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingTop: 6,
                                  paddingBottom: 24, gap: 6 }}>
         {blank(p) ? (
-          <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')} />
+          /* Mobile7 S6's own state, with its own button on it: a board with
+             nothing on it is a board asking for the first card. */
+          <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')}
+            actions={<Button label={T('ntNew')} icon="add" tall
+              onPress={() => go(() => router.push(`/new-ticket?project=${p.key}`))} />} />
         ) : (
           <>
             {air ? <DragHint tone={air.tone} text={words(T, air)} />

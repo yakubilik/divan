@@ -82,7 +82,7 @@ checks.push(
     S.PLACES.every((p) => new RegExp(`<Shell place="${p}"`).test(src(SCREEN[S.PLACE_ROUTE[p]])))
     && !/TabBar/.test(dash) && !/TabBar/.test(chatPlace) && !/TabBar/.test(machine)],
   ['every glyph the shell names is one the app has generated',
-    [...Object.values(S.PLACE_ICON), ...S.machineRows({ machines: 1, unreachable: 0 }).map((r) => r.icon)]
+    [...Object.values(S.PLACE_ICON), ...S.machineRows({ machines: 1, unreachable: 0, executors: 1 }).map((r) => r.icon)]
       .every((name) => Object.keys(icons.ICON_PATHS).some((k) => k.split(':')[0] === name))],
 );
 
@@ -310,19 +310,19 @@ checks.push(
 
 // ── 4 · everything about a computer is under Machine ────────────────────────
 
-const rows = S.machineRows({ machines: 3, unreachable: 0 });
+const rows = S.machineRows({ machines: 3, unreachable: 0, executors: 9 });
 const routes = rows.map((r) => r.route);
 
 checks.push(
   ['the Machine list holds the screens that were about a computer',
-    eq(routes, ['/host-sheet', '/agents', '/screen', '/accounts', '/pool', '/call', '/settings'])],
+    eq(routes, ['/machines', '/executors', '/agents', '/screen', '/accounts', '/pool', '/call', '/settings'])],
   ['…in the frame’s shape: a name, a grey line, and a chevron one level deeper',
     rows.every((r) => r.title && r.note) && /ListRow/.test(machine)],
   ['…and the machines row says how many answered',
     rows[0].meta === 'mAllReachable' && rows[0].tone === 'run'
-    && S.machineRows({ machines: 3, unreachable: 1 })[0].meta === 'mUnreachable'],
+    && S.machineRows({ machines: 3, unreachable: 1, executors: 9 })[0].meta === 'mUnreachable'],
   ['nothing is coloured unless a machine is actually unreachable',
-    S.machineRows({ machines: 3, unreachable: 1 })[0].tone === 'red'
+    S.machineRows({ machines: 3, unreachable: 1, executors: 9 })[0].tone === 'red'
     && rows.slice(1).every((r) => !r.tone)],
   ['the Machine screen opens exactly those rows',
     /machineRows\(/.test(machine) && /router\.push\(row\.route\)/.test(machine)],
@@ -348,49 +348,53 @@ checks.push(
     !files().some((f) => /HomeTop/.test(src(f)))],
 );
 
-// ── 5 · the chat is one place, entered directly ─────────────────────────────
-
-const chat = (id, o = {}) => ({ id, title: id, updated_at: o.updated_at ?? 0, archived: o.archived ?? 0 });
-const store = (...list) => Object.fromEntries(list.map((c) => [c.id, c]));
+// ── 5 · the chat place is the conversations, and the list is back in front ──
+//
+// It was briefly one conversation with no list: the newest chat, opened
+// directly. A phone that holds a dozen of them could then reach exactly one, so
+// the tab opens the list again and a row opens the conversation. What the
+// redesign took off the top of it stays off.
 
 checks.push(
-  ['the conversation is the newest one', S.theChat(store(chat('a', { updated_at: 10 }), chat('b', { updated_at: 20 }))) === 'b'],
-  ['an archived one is not it', S.theChat(store(chat('a', { updated_at: 10 }), chat('b', { updated_at: 20, archived: 1 }))) === 'a'],
-  ['a phone with none has none to open', S.theChat({}) === null],
-  ['the one being read stays the one being read, whatever arrives elsewhere',
-    S.theChat(store(chat('a', { updated_at: 10 }), chat('b', { updated_at: 99 })), 'a') === 'a'],
-  ['…until it is archived or deleted, and then it is the newest again',
-    S.theChat(store(chat('a', { updated_at: 10, archived: 1 }), chat('b', { updated_at: 20 })), 'a') === 'b'
-    && S.theChat(store(chat('b', { updated_at: 20 })), 'gone') === 'b'],
-  ['two chats saved in the same second do not take turns being the one',
-    S.theChat(store(chat('b', { updated_at: 20 }), chat('a', { updated_at: 20 }))) === 'a'],
-
-  ['the Chat place is the conversation itself', /<Conversation id=\{id\}/.test(chatPlace)],
-  ['…and a notification about a chat opens the same screen',
+  ['the Chat place is the list of every conversation',
+    /SectionList/.test(chatPlace) && /searchChats/.test(chatPlace)],
+  ['…and a row of it opens one conversation',
+    /router\.push\(`\/chat\/\$\{chat\.id\}`\)/.test(chatPlace)],
+  ['…which is the same screen a notification about a chat opens',
     /export function Conversation\(\{ id \}/.test(conversation)
     && /<Conversation id=\{id!\} \/>/.test(conversation)],
-  ['…with no thread list in front of it',
-    !/SectionList|FlatList|searchChats/.test(chatPlace) && !/\/chat\/\$\{/.test(chatPlace)],
-  ['…and no computer picker over it',
-    !/host-sheet|HomeTop/.test(chatPlace) && !/host-sheet|HomeTop/.test(conversation)],
-  ['a phone with no conversation is given one rather than an empty list',
-    /createChat\(/.test(chatPlace)],
+  ['the list stands in the shell, so the three places are still under it',
+    /<Shell place="chat">/.test(chatPlace)],
+  ['…and it is the tab that lands on it, not a push off the Dashboard',
+    S.placeOf('/chat') === 'chat' && !/BackBar/.test(chatPlace)],
+  ['no computer picker over it, and Agents is not beside it any more',
+    !/host-sheet|HomeTop/.test(chatPlace) && !/host-sheet|HomeTop/.test(conversation)
+    && !/'\/agents'/.test(chatPlace)],
+  ['a second conversation is started from the list itself',
+    /quickNew/.test(chatPlace) && /createChat\(/.test(chatPlace)
+    && /router\.push\('\/new-chat'\)/.test(chatPlace)],
+  ['a conversation that was put away can be found again',
+    /setShowArchived\(/.test(chatPlace) && /T\('unarchive'\)/.test(chatPlace)],
   ['the chat screen itself is untouched: it still draws its own everything',
     /KeyboardAvoidingView/.test(conversation) && /LimitsRing/.test(conversation)
     && !/components\/divan/.test(conversation) && !/components\/shell/.test(conversation)],
-  ['…and the place gives it back the room the tab bar took, so it is drawn where it was',
-    /SafeAreaInsetsContext\.Provider value=\{\{ \.\.\.insets, bottom: 0 \}\}/.test(chatPlace)],
   ['Back out of the conversation leaves for the Dashboard when nothing is under it',
     /if \(router\.canGoBack\(\)\) router\.back\(\); else router\.replace\(HOME\);/.test(conversation)],
 );
 
-// ── 5b · the two places that are made of data, standing up ─────────────────
+// ── 5b · the three places that are made of data, standing up ───────────────
 //
-// Both of them are drawn out of what the machines answered, and the first state
-// either will ever be in is "nothing has answered yet" — which is exactly the
+// Each is drawn out of what the machines answered, and the first state any of
+// them will ever be in is "nothing has answered yet" — which is exactly the
 // state that throws if a screen assumes a project, a machine or a queue. So
 // they are rendered for real, twice: once against a phone that has heard
 // nothing and once against the fixture above.
+//
+// The Chat place is here for a different reason. Reading its source says it
+// contains a list; it cannot say that the list came out with anything in it,
+// and "one chat and eleven you cannot reach" is precisely a claim about what
+// came out. So it is stood up against a phone holding two conversations, and
+// one of them is pressed.
 
 {
   R.store.reset();
@@ -429,6 +433,37 @@ checks.push(
       full.includes('pcStale') && full.includes('dashPartly')],
     ['the Machine list counts the machines it is a list of',
       machineFull.includes('mMachinesNote')],
+  );
+  R.store.reset();
+}
+
+{
+  const conversation = (id, title, updated_at) => ({
+    id, title, updated_at, archived: 0, pinned: 0, last_preview: 'hello', status: 'idle',
+    provider: 'claude', group_id: null, cwd: '/Users/x/projects/a',
+    model: 'opus', effort: 'high', perm_mode: 'safe',
+  });
+  R.store.reset();
+  R.store.set({
+    chats: { a: conversation('a', 'Babysee build', 1000), b: conversation('b', 'isghocam SEO', 900) },
+    groups: [], conn: 'online', chatsLoaded: true, switching: false, showArchived: false,
+    prefs: { chatView: 'flat' }, hostInfo: { name: 'studio' }, host: { name: 'studio' },
+    defaults: { provider: 'claude', cwd: '/Users/x/projects/a', byProvider: {} }, projects: [],
+    refresh: async () => {}, loadProjects: async () => {}, createChat: async () => ({ id: 'n' }),
+    updateChat: async () => {}, deleteChat: async () => {}, renameGroup: async () => {},
+    deleteGroup: async () => {}, createGroup: async () => ({ id: 'g' }),
+    setShowArchived: () => {}, setPrefs: async () => {},
+  });
+  const ChatPlace = require(path.join(root, 'app/chat/index.tsx')).default;
+  const list = R.render('dark', h(ChatPlace));
+  R.nav.reset();
+  const row = R.presses().find((press) => press.text.includes('Babysee build'));
+  if (row) row.press();
+  checks.push(
+    ['the Chat place comes out with every conversation on it, not just the newest',
+      list.includes('Babysee build') && list.includes('isghocam SEO')],
+    ['…a row of it opens that conversation', eq(R.nav.pushed(), ['/chat/a'])],
+    ['…and the three places are still under it', list.includes('tabChat') && list.includes('tabMachine')],
   );
   R.store.reset();
 }
@@ -485,7 +520,6 @@ function reachable(from) {
 const fromDashboard = reachable(S.PLACE_ROUTE.dashboard);
 const fromChat = reachable(S.PLACE_ROUTE.chat);
 const fromMachine = reachable(S.PLACE_ROUTE.machine);
-const chatsList = src('app/chats.tsx');
 
 checks.push(
   ['every screen about a computer is reachable from Machine',
@@ -495,27 +529,20 @@ checks.push(
   ['…and from neither of the other two places',
     routes.every((route) => !fromDashboard.has(route) && !fromChat.has(route))],
 
-  // The two the verifier caught: with the chat list gone from the top level,
-  // a second conversation could only be started by deleting the one you were
-  // in, and a conversation you put away could never be found again.
+  // Everything a conversation needs is inside its own place: the list, the
+  // ones put away, and the form that starts a new one. None of it is a screen
+  // you have to come back to the Dashboard for.
   ['a second conversation can be started without deleting the one you are in',
-    files().some((f) => f !== 'app/chat/index.tsx' && /router\.push\('\/new-chat'\)/.test(src(f)))
-    && fromDashboard.has('/new-chat')],
-  ['…and the pen on that screen makes one outright, so it is not only a form',
-    /quickNew/.test(chatsList) && /createChat\(/.test(chatsList)],
+    fromChat.has('/new-chat')],
+  ['…and the pen on the list makes one outright, so it is not only a form',
+    /quickNew/.test(chatPlace) && /createChat\(/.test(chatPlace)],
   ['a conversation that was put away can be found again',
-    fromDashboard.has('/chats') && /setShowArchived\(/.test(chatsList)
-    && /unarchive/.test(chatsList) && fromDashboard.has('/chat/[id]')],
-  ['…which is what makes the Chat place skipping an archived one safe',
-    S.theChat({ a: { id: 'a', updated_at: 5, archived: 1 } }) === null
-    && /router\.push\(`\/chat\/\$\{chat\.id\}`\)/.test(chatsList)],
-  ['…and unarchiving is offered where the archived ones are, not only inside one',
-    /showArchived/.test(chatsList) && /T\('unarchive'\)/.test(chatsList)],
+    /setShowArchived\(/.test(chatPlace) && /unarchive/.test(chatPlace)
+    && fromChat.has('/chat/[id]')],
 
-  // …without the list becoming a fourth place, or standing in front of the chat.
-  ['the list of conversations is not a place', S.placeOf('/chats') === null],
-  ['…and nothing lands on it: the Chat tab enters the conversation itself',
-    !fromChat.has('/chats') && !PLACES_SRC.some((f) => /replace\(['"`]\/chats['"`]\)/.test(src(f)))],
+  // …and the list is that place rather than a fourth one beside it.
+  ['there is no second list off the Dashboard', !has('app/chats.tsx')
+    && !files().some((f) => /['"`]\/chats['"`]/.test(src(f)))],
   ['the ticket queue is reachable from the Dashboard', fromDashboard.has('/ustabasi')],
 );
 

@@ -1262,11 +1262,24 @@ checks.push(...require('./test-drag.cjs').checks);
 // do with it, and what the worker on it is printing right now — three faces over
 // one head, with the rule that nothing an agent wrote reaches the first of them.
 checks.push(...require('./test-card.cjs').checks);
+// …and the third place opened up: the drawer, the machines with one of them
+// unreachable and the executors (Mobile11 S16, S15, S14) — the staleness worn
+// rather than inferred, and nothing that used to be reachable from there lost.
+checks.push(...require('./test-machine.cjs').checks);
+// …and the screen a card is written on: a title, two or three sentences and
+// nothing else — no executor, no brief, no approval. Its own checks are pushed
+// after its `ready`, because filing is a request and the page it lands on is
+// chosen when that request comes back.
+const newTicket = require('./test-new-ticket.cjs');
 
-let bad = 0;
-for (const [name, ok] of checks) {
-  console.log((ok ? '  ok    ' : '  FAIL  ') + name);
-  if (!ok) bad++;
-}
-console.log(bad ? `${bad} failed` : `all ${checks.length} checks passed`);
-process.exit(bad ? 1 : 0);
+void newTicket.ready.then(() => {
+  checks.push(...newTicket.checks);
+
+  let bad = 0;
+  for (const [name, ok] of checks) {
+    console.log((ok ? '  ok    ' : '  FAIL  ') + name);
+    if (!ok) bad++;
+  }
+  console.log(bad ? `${bad} failed` : `all ${checks.length} checks passed`);
+  process.exit(bad ? 1 : 0);
+});

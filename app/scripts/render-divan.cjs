@@ -109,8 +109,31 @@ const Animated = {
   delay: () => ({ start: () => {} }),
 };
 
+/** A list that really walks what it was handed. The other stubs can afford to
+ *  be boxes, because what is asked of them is a colour; "every conversation is
+ *  on the screen" is a question about the rows, so this one renders them. */
+const SectionList = React.forwardRef(function SectionList(props, _ref) {
+  const { sections = [], renderItem, renderSectionHeader, ListHeaderComponent,
+          contentContainerStyle, keyExtractor } = props;
+  const kids = [];
+  const at = (node, key) => kids.push(React.createElement(React.Fragment, { key }, node));
+  if (ListHeaderComponent) {
+    at(React.isValidElement(ListHeaderComponent) ? ListHeaderComponent
+       : React.createElement(ListHeaderComponent), 'head');
+  }
+  sections.forEach((section, si) => {
+    if (renderSectionHeader) at(renderSectionHeader({ section }), `h${si}`);
+    (section.data ?? []).forEach((item, index) => {
+      at(renderItem({ item, index, section }), keyExtractor ? keyExtractor(item, index) : `${si}.${index}`);
+    });
+  });
+  return React.createElement('div',
+    { 'data-rn': 'SectionList', 'data-style': JSON.stringify(flatten(contentContainerStyle)) }, kids);
+});
+
 const ReactNative = {
   View: host('div', 'View'),
+  SectionList,
   Text: host('span', 'Text'),
   TextInput: host('span', 'TextInput'),
   Pressable: host('div', 'Pressable'),
@@ -134,6 +157,8 @@ const ReactNative = {
   useColorScheme: () => 'light',
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   AppState: { addEventListener: () => ({ remove() {} }) },
+  // The app's own dialog closes the keyboard before it comes up.
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove() {} }) },
   Platform: { OS: 'ios', select: (o) => o.ios ?? o.default },
 };
 
@@ -145,7 +170,12 @@ const STUBS = {
     SafeAreaProvider: host('div', 'SafeAreaProvider'),
   },
   'expo-router': {
-    useRouter: () => ({ back() {}, replace() {}, canGoBack: () => false,
+    useRouter: () => ({ back() {}, canGoBack: () => false,
+                        // A screen that files something does not push the page
+                        // it lands on, it replaces itself with it — so where
+                        // that went is recorded the same way a push is, and
+                        // kept apart from it.
+                        replace: (to) => { REPLACED.push(typeof to === 'string' ? to : to); },
                         // Where a press went. A tap that leaves the screen
                         // cannot be seen in the markup it left, and "tapping an
                         // agent opens the run it is printing" is a claim about a
@@ -164,11 +194,21 @@ const STUBS = {
     useFocusEffect: () => {},
     Stack: Object.assign(host('div', 'Stack'), { Screen: () => null }),
   },
+  // A menu or a dialog goes straight onto the window rather than into the view
+  // controller it was asked for from (`components/overlay`), which is a native
+  // view and here is just a box.
+  'react-native-screens': { FullWindowOverlay: host('div', 'FullWindowOverlay'), enableFreeze: () => {} },
   'expo-haptics': {
     ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
     selectionAsync: () => { BUZZES.push('selection'); return Promise.resolve(); },
     impactAsync: (style) => { BUZZES.push(String(style)); return Promise.resolve(); },
   },
+  // The one native import the menus and dialogs reach for: the layer they are
+  // drawn on, above everything the navigator owns. Here it is just a box.
+  'react-native-screens': { FullWindowOverlay: host('div', 'FullWindowOverlay') },
+  // Zustand's shallow compare. A screen that pulls its actions out in one slice
+  // goes through it, and nothing here re-renders, so it is the identity.
+  'zustand/react/shallow': { useShallow: (fn) => fn },
 };
 
 /** The app's own store reaches the keychain, the socket and the notification
@@ -179,6 +219,7 @@ const STUBS = {
 const STATE = {};
 const PARAMS = {};
 const PUSHED = [];
+const REPLACED = [];
 const STORE = {
   useT: () => (key) => key,
   useStore: Object.assign((selector) => (typeof selector === 'function' ? selector(STATE) : undefined),
@@ -198,7 +239,8 @@ const params = {
  *  happens when a handler is called, which is after the render that offered it. */
 const nav = {
   pushed() { return PUSHED.slice(); },
-  reset() { PUSHED.length = 0; },
+  replaced() { return REPLACED.slice(); },
+  reset() { PUSHED.length = 0; REPLACED.length = 0; },
 };
 
 const realLoad = Module._load;
