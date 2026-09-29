@@ -307,6 +307,11 @@ export interface Figure {
 /** One card of the branch grid (Mobile2 V4, Mobile7 S4 and S5). */
 export interface BranchCard {
   key: string;
+  /** What it is a face of — `engineering`, `seo` — which is how its own page is
+   *  addressed (`/branch/seo?project=quire`). Two computers give the same branch
+   *  two ids and the kind is what the merge folds them by, so it is the only
+   *  name a link can be written with (`src/branch.ts find`). */
+  kind: string;
   name: string;
   /** The 7 pt dot in front of the name: the worst thing true of its cards. */
   state: State;
@@ -335,6 +340,7 @@ export function branchCards(p: MergedProject, now: number): BranchCard[] {
     const said = wrote ? '' : latest(mine);
     return {
       key: b.id || b.kind,
+      kind: b.kind,
       name: b.name || b.kind,
       state: branchState(mine),
       said: wrote || said ? null : { key: 'branchNoSource' as Key },
@@ -387,9 +393,19 @@ export function figures(b: MergedBranch): Figure[] {
  *  connected yet" on its status line, and an invented `live` in the corner would
  *  contradict it. */
 export function refreshed(b: MergedBranch, now: number): { said: Said; tone: Tone | null } | null {
-  if (b.summary_at == null) return null;
-  const since = Math.max(0, now - b.summary_at);
-  if (since < BRANCH_OLD_AFTER_S) return { said: { key: 'bnAt', params: { time: clock(b.summary_at) } }, tone: null };
+  return when(b.summary_at, now);
+}
+
+/** …and the rule under it, which is about a moment and not about a branch: the
+ *  clock while it is today's, the age in amber once it is older than a day.
+ *
+ *  Apart from `refreshed` because a branch's page ages a second kind of moment
+ *  by it — when a repository of the product last moved (`src/branch.ts`) — and
+ *  two spellings of "how old is too old" would drift apart on one screen. */
+export function when(at: number | null | undefined, now: number): { said: Said; tone: Tone | null } | null {
+  if (at == null) return null;
+  const since = Math.max(0, now - at);
+  if (since < BRANCH_OLD_AFTER_S) return { said: { key: 'bnAt', params: { time: clock(at) } }, tone: null };
   const days = Math.floor(since / DAY);
   return {
     said: days <= 1 ? { key: 'bnYesterday' } : { key: 'bnDaysOld', params: { n: days } },

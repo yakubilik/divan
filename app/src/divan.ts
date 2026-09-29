@@ -298,6 +298,14 @@ export interface MergedProject {
    *  What a product *earns* is the third figure and has no source yet, so there
    *  is no field for it here at all. */
   activity: ProjectActivity | null;
+  /** …and the same readings unfolded, by repository path: what git said about
+   *  each of the repositories this product owns.
+   *
+   *  The fold above is what a project card draws — one product, one history. A
+   *  branch page draws the repositories themselves (Mobile9 S11), and a sum
+   *  cannot be taken apart again. A path git would not answer about is absent
+   *  rather than zero, which is the same rule the wire is keyed by. */
+  repoActivity: Record<string, RepoActivity>;
   /** One of the machines it lives on has gone quiet, so these numbers are not
    *  all current. */
   stale: boolean;
@@ -500,6 +508,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           paused: 0,
           pausedUntil: null,
           activity: null,
+          repoActivity: {},
           updated_at: p.updated_at || 0,
           stale: h.stale,
           staleMachines: h.stale ? [h.machine] : [],
@@ -570,6 +579,8 @@ export function merge(list: HostEntry[], now: number): DivanView {
       .filter((at): at is number => at != null)
       .sort((x, y) => x - y)[0] ?? null;
     p.activity = fold(p.repos.map((path) => history.get(path)));
+    p.repoActivity = Object.fromEntries(
+      p.repos.map((path) => [path, history.get(path)]).filter((pair): pair is [string, RepoActivity] => !!pair[1]));
   }
 
   // ── the counters ─────────────────────────────────────────────────────────

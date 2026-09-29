@@ -122,10 +122,9 @@ export function QuietNote({ title, body, style }: {
  *  for a week is drawn at four fifths (S5), which is the frame's own way of
  *  saying "this is still here and it is not news".
  *
- *  The card is not a way in: a branch has a page of its own in the design
- *  (Mobile9 S10 and S11) and that screen does not exist yet, so nothing here
- *  offers a press that would do nothing. */
-export function BranchCard({ name, state, line, figures, refreshed, tone, dim, style }: {
+ *  The card is the way in: a branch has a page of its own (Mobile9 S10 and
+ *  S11), and this is what opens it. */
+export function BranchCard({ name, state, line, figures, refreshed, tone, dim, onPress, style }: {
   name: string;
   state: State;
   /** The line of status, already in the reader's language. */
@@ -137,11 +136,13 @@ export function BranchCard({ name, state, line, figures, refreshed, tone, dim, s
   /** …and what colour that is. Grey unless it is old enough to matter. */
   tone?: Tone | null;
   dim?: boolean;
+  /** Opens the branch's own page. */
+  onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
   return (
-    <Card radius={RADIUS.tile} inset={false} style={[dim ? { opacity: 0.8 } : null, style]}>
+    <Card radius={RADIUS.tile} inset={false} onPress={onPress} style={[dim ? { opacity: 0.8 } : null, style]}>
       <View style={{ padding: 11, paddingHorizontal: 14, paddingBottom: 12, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {/* A branch with nothing on it is the frame's unfilled dot: `line2`,
@@ -155,26 +156,42 @@ export function BranchCard({ name, state, line, figures, refreshed, tone, dim, s
           )}
         </View>
         <Text numberOfLines={2} style={{ fontSize: 13.5, lineHeight: 13.5 * 1.35, color: t.ink2 }}>{line}</Text>
-        {figures.length > 0 && (
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {Array.from({ length: SLOTS }, (_, i) => figures[i]).map((figure, i) => (
-              <View key={i} style={{ flex: 1, minWidth: 0 }}>
-                {!!figure && (
-                  <>
-                    <Text mono numberOfLines={1}
-                      style={{ fontSize: 17, fontWeight: '500', letterSpacing: em(17, -0.01) }}>
-                      {figure.value}
-                    </Text>
-                    <Text mono numberOfLines={1} style={{ fontSize: 10.5, color: t.ink3, marginTop: 2 }}>
-                      {figure.label}
-                    </Text>
-                  </>
-                )}
-              </View>
-            ))}
-          </View>
-        )}
+        <Figures figures={figures} />
       </View>
     </Card>
+  );
+}
+
+/** The row of numbers itself, which is a block of its own: the branch's page
+ *  draws the same three slots at the same sizes under its title (Mobile9 S10),
+ *  and a second spelling of "three slots, whatever is in them" would be two
+ *  screens that stop lining up the first time one of them changes.
+ *
+ *  A 17 pt mono number over a 10.5 pt mono label, three slots wide, and an
+ *  empty slot stays empty — nothing stands in for a figure that is not there. */
+export function Figures({ figures, style }: {
+  figures: { value: number | string; label: string }[];
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTokens();
+  if (!figures.length) return null;
+  return (
+    <View style={[{ flexDirection: 'row', gap: 8 }, style]}>
+      {Array.from({ length: SLOTS }, (_, i) => figures[i]).map((figure, i) => (
+        <View key={i} style={{ flex: 1, minWidth: 0 }}>
+          {!!figure && (
+            <>
+              <Text mono numberOfLines={1}
+                style={{ fontSize: 17, fontWeight: '500', letterSpacing: em(17, -0.01) }}>
+                {figure.value}
+              </Text>
+              <Text mono numberOfLines={1} style={{ fontSize: 10.5, color: t.ink3, marginTop: 2 }}>
+                {figure.label}
+              </Text>
+            </>
+          )}
+        </View>
+      ))}
+    </View>
   );
 }
