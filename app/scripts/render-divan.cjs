@@ -84,6 +84,9 @@ function host(tag, kind) {
     const attrs = { 'data-rn': kind, 'data-style': JSON.stringify(flatten(style)) };
     if (rest.accessibilityLabel) attrs['data-label'] = rest.accessibilityLabel;
     if (rest.numberOfLines) attrs['data-lines'] = String(rest.numberOfLines);
+    // An empty box's only words. They are a prop rather than a child, so without
+    // this a check cannot tell a composer from an empty view.
+    if (rest.placeholder) attrs['data-placeholder'] = String(rest.placeholder);
     if (typeof rest.onPress === 'function') PRESSES.push({ text: textOf(children), press: rest.onPress });
     if (typeof rest.onLongPress === 'function') {
       HOLDS.push({ text: textOf(children), hold: rest.onLongPress, out: rest.onPressOut,
@@ -112,6 +115,9 @@ const ReactNative = {
   TextInput: host('span', 'TextInput'),
   Pressable: host('div', 'Pressable'),
   ScrollView: host('div', 'ScrollView'),
+  // A page with a box at the foot of it: the card's live face raises it over the
+  // keyboard, and without this the whole screen renders as `undefined`.
+  KeyboardAvoidingView: host('div', 'KeyboardAvoidingView'),
   Image: host('div', 'Image'),
   Modal: host('div', 'Modal'),
   Animated,

@@ -5,7 +5,8 @@ import { useStore } from './store';
 import { BADGE_POLL_MS, oldHost, POLL_MS, redCount, RUN_POLL_MS, wall, type Wall } from './tickets';
 import { attach, silence, trim, turns, type RunSilence, type Turn } from './transcript';
 import { DIVAN_POLL_MS, entries, merge, type DivanView } from './divan';
-import type { DivanCardDetail, Ticket, UstabasiSnapshot } from './protocol';
+import { opening, type Open } from './card';
+import type { Ticket, UstabasiSnapshot } from './protocol';
 
 /** The ustabasi queue, kept fresh for as long as a screen is looking at it.
  *
@@ -188,108 +189,40 @@ export function useRun(ticketId: number): {
  *
  *  `useRun` above does the same job for a ticket on the computer this phone
  *  holds a socket to. A Divan card is not that: it is on whichever machine it is
- *  on, so everything here is asked of that machine by name (`store.readCard`),
- *  and the answer carries the card's two faces as well as the page of the run.
+ *  on, so it is asked of that machine by name and the answer carries the card's
+ *  two faces as well as the page of the run (`store.loadCard`, `src/card.ts`).
  *
- *  The cursor and the appending are `useRun`'s, because it is the same file
- *  being read — a page at a time, appended to what is on screen, the reader
- *  moved to the end where it has fallen more than a page behind.
+ *  What is kept, and the folding of one page of a run into the last, is in the
+ *  store and in `src/card.ts` — a screen that held a log would lose it on the
+ *  way to another page and back. What is here is the asking: on opening, on the
+ *  way back to the foreground, and on a timer that knows the difference between
+ *  a worker being watched and a card nobody is working on.
  *
- *  Two things are its own. It slows down when nothing is running: three seconds
- *  is for a worker being watched, and a card nobody is working on is a minute's
- *  worth of gentle, like the dashboard. And it stamps every turn with the moment
- *  this phone first saw it — the run's log has no clock in it, so that stamp is
- *  the only honest time the live face can put beside a line, and the page that
- *  was already in the file when the screen opened gets none.
- *
- *  Nothing of it reaches the store: a brief belongs to the page reading it. */
-export function useCard(card: string, host: string | null | undefined): {
-  detail: DivanCardDetail | null; turns: Turn[]; stamps: Record<string, number>;
-  live: boolean; loading: boolean; silence: RunSilence; jumped: boolean; error: string | null;
-} {
-  // The connection is a dependency rather than a gate: which socket carries the
-  // request is the store's business (`onHost`), and this screen is about a card
-  // on a named machine, not about the one the phone happens to hold. What `conn`
-  // is for is the poll being made again the moment a connection comes back.
+ *  A card that is not the one the store holds answers as a card nothing has been
+ *  read about yet, which is what it is: the first page is on its way. */
+export function useCard(card: string, host: string | null | undefined): Open {
+  const loadCard = useStore((s) => s.loadCard);
+  const held = useStore((s) => s.openCard);
+  // Not a gate, a dependency: which socket carries the request is the store's
+  // business, and what this is for is the ask being made again the moment a
+  // connection comes back.
   const conn = useStore((s) => s.conn);
-  const readCard = useStore((s) => s.readCard);
+  const open = held && held.id === card && held.host === host ? held : null;
+  const live = !!open?.live;
+  const mine = useMemo(() => open ?? opening(card, host || ''), [open, card, host]);
 
-  const [detail, setDetail] = useState<DivanCardDetail | null>(null);
-  const [list, setList] = useState<Turn[]>([]);
-  const [stamps, setStamps] = useState<Record<string, number>>({});
-  const [live, setLive] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [quiet, setQuiet] = useState<RunSilence>(null);
-  const [jumped, setJumped] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const cursor = useRef<string | null>(null);
-  const numbered = useRef(0);
-  const busy = useRef(false);
-  const opened = useRef(false);
-
-  // A different card is a different run and a different brief.
-  useEffect(() => {
-    cursor.current = null;
-    numbered.current = 0;
-    opened.current = false;
-    setDetail(null);
-    setList([]);
-    setStamps({});
-    setJumped(false);
-    setLoading(true);
-  }, [card, host]);
-
-  const poll = useCallback(async () => {
-    if (busy.current || !card || !host) return;
-    busy.current = true;
-    try {
-      const got = await readCard({ card, host, cursor: cursor.current });
-      setDetail(got);
-      setError(null);
-      const page = got.run;
-      setLive(!!page?.live);
-      // No ticket on the card is not a silent queue: there is nothing running on
-      // it and nothing to read, which is what `never_run` says.
-      setQuiet(page ? (page.available ? silence(page.reason) : 'noQueue') : 'neverRun');
-      if (page) {
-        cursor.current = page.cursor;
-        const fresh = !!page.reset;
-        if (fresh) numbered.current = 0;
-        const { turns: more, answers, next } = turns(page.events || [], numbered.current);
-        numbered.current = next;
-        // The first page is the tail of a file nobody was watching being
-        // written; everything after it arrived while somebody was.
-        if (opened.current && more.length) {
-          const now = Date.now() / 1000;
-          setStamps((had) => ({ ...had, ...Object.fromEntries(more.map((t) => [t.id, now])) }));
-        }
-        setList((had) => trim(attach([...(fresh ? [] : had), ...more], answers)));
-        if (fresh && opened.current) setJumped(true);
-      }
-      opened.current = true;
-    } catch (e: any) {
-      // A poll that failed against a card already on screen changes nothing but
-      // the line that says the machine is not answering: the brief is still the
-      // brief and the run is still what was read of it.
-      setError(e?.message ?? '');
-      if (!opened.current) setQuiet(oldHost(e) ? 'oldHost' : 'offline');
-    } finally {
-      busy.current = false;
-      setLoading(false);
-    }
-  }, [conn, readCard, card, host]);
-
-  // A worker being watched is worth three seconds; a card nobody is working on
-  // is worth a minute, which is what the boards themselves cost.
-  const every = live ? RUN_POLL_MS : DIVAN_POLL_MS;
   useFocusEffect(useCallback(() => {
-    void poll();
-    const timer = setInterval(() => { void poll(); }, every);
-    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void poll(); });
+    if (!card || !host) return;
+    const ask = () => { void loadCard({ card, host }); };
+    ask();
+    // Three seconds is for a worker being watched; a card nobody is working on
+    // is a minute's worth of gentle, which is what a board itself costs.
+    const timer = setInterval(ask, live ? RUN_POLL_MS : DIVAN_POLL_MS);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') ask(); });
     return () => { clearInterval(timer); sub.remove(); };
-  }, [poll, every]));
+  }, [card, host, live, conn, loadCard]));
 
-  return { detail, turns: list, stamps, live, loading, silence: quiet, jumped, error };
+  return mine;
 }
 
 /** The Divan view of every paired computer, kept fresh while a screen is looking

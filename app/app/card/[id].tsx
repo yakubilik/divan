@@ -54,7 +54,7 @@ export default function CardScreen() {
   const T = useT();
   const t = useTokens();
   const view = useDivanView();
-  const answerCard = useStore((s) => s.answerCard);
+  const sayCard = useStore((s) => s.sayCard);
   const params = useLocalSearchParams<{ id?: string; host?: string; face?: string }>();
   const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v) || null;
   const id = one(params.id) ?? '';
@@ -68,36 +68,29 @@ export default function CardScreen() {
   const got = useCard(id, one(params.host) ?? card?.host ?? null);
   const ago: Ago = (seconds) => since(seconds, T);
 
-  /** What has been said into the run from here, and where in the log it was
-   *  said. Held on this screen and nowhere else: the run's file has no clock in
-   *  it, so a sentence's place among its steps is something only the screen that
-   *  sent it knows. */
-  const [said, setSaid] = React.useState<Say[]>([]);
   const [draft, setDraft] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
+  /** The one write this screen makes. Where the sentence goes and where it lands
+   *  in the log is the store's (`sayCard`); what is here is the box emptying,
+   *  and filling itself again where the machine would not take it. */
   const to = card ? saying(card) : null;
   const send = React.useCallback(async () => {
     const text = draft.trim();
     if (!text || busy || !to || !card) return;
-    const mine: Say = { id: `say-${Date.now()}`, at: Date.now() / 1000, text, after: got.turns.length };
-    setSaid((list) => [...list, mine]);
     setDraft('');
     setBusy(true);
     setErr(null);
     try {
-      await answerCard(to, text);
+      await sayCard(to, text);
     } catch (e: any) {
-      // A sentence the machine never took is not in the log, whatever this
-      // screen said for a second.
-      setSaid((list) => list.filter((x) => x.id !== mine.id));
       setDraft(text);
       setErr(e?.message || T('waitNotSent', { machine: card.machine }));
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, to, card, got.turns.length, answerCard, T]);
+  }, [draft, busy, to, card, sayCard, T]);
 
   const back = () => {
     if (router.canGoBack()) router.back();
@@ -145,7 +138,7 @@ export default function CardScreen() {
          : face === 'agent' ? <Agent detail={got.detail} card={card} seen={seen}
                                 loading={got.loading} error={got.error} />
          : <Live card={card} ago={ago} now={view.now} turns={got.turns} stamps={got.stamps}
-             said={said} running={got.live} silence={got.silence} seen={seen}
+             said={got.said} running={got.live} silence={got.silence} seen={seen}
              draft={draft} onDraft={setDraft} onSend={() => void send()} busy={busy} error={err}
              offered={!!to} />}
       </KeyboardAvoidingView>

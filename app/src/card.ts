@@ -34,7 +34,7 @@ import { mark, type Mark } from './board';
 import { marks } from './tickets';
 import { LOCALE, type Key } from './i18n';
 import type { DivanBrief, DivanCardDetail, DivanColumn, Ticket } from './protocol';
-import type { RunSilence, Turn } from './transcript';
+import { attach, silence as silenceOf, trim, turns, type RunSilence, type Turn } from './transcript';
 import type { Tone } from './tokens';
 
 /** The three faces, left to right (Mobile4 T1, T2, T3). */
@@ -344,6 +344,97 @@ export function agentWords(detail: DivanCardDetail | null | undefined, turns: Tu
 }
 
 // ── the live face ───────────────────────────────────────────────────────────
+
+/** A card being read, and everything the machine it is on has said about it.
+ *
+ *  It is kept in the store rather than in the screen, for the reason a board is:
+ *  a page of a run arrives while somebody is reading it, and a screen that held
+ *  it would lose the whole log — and every sentence said into it — the moment
+ *  the reader stepped off the page and came back. One card, because one is open
+ *  at a time.
+ *
+ *  `cursor` and `numbered` are the bookkeeping of reading a file a page at a
+ *  time: where to carry on from, and where the turn numbering got to (which is
+ *  not how many turns are on screen — `src/transcript.ts turns` says why). */
+export interface Open {
+  id: string;
+  host: string;
+  /** Both faces and the ticket, as that machine last answered. Null until it
+   *  has answered at all. */
+  detail: DivanCardDetail | null;
+  turns: Turn[];
+  /** When this phone first saw each turn, by turn id. Empty for the page that
+   *  was already in the file when the card was opened. */
+  stamps: Record<string, number>;
+  /** What has been said into the run from here, and where in the log. */
+  said: Say[];
+  /** The run is still being written. */
+  live: boolean;
+  silence: RunSilence;
+  /** The last ask failed, in words. Beside the answer rather than instead of
+   *  it: a brief eight seconds stale beats an error where a brief was. */
+  error: string | null;
+  /** Nothing has come back yet. */
+  loading: boolean;
+  /** The reader had fallen more than a page behind and was moved to the end. */
+  jumped: boolean;
+  cursor: string | null;
+  numbered: number;
+}
+
+/** A card just opened: nothing read yet. */
+export function opening(id: string, host: string): Open {
+  return { id, host, detail: null, turns: [], stamps: {}, said: [], live: false,
+           silence: null, error: null, loading: true, jumped: false, cursor: null, numbered: 0 };
+}
+
+/** …and what it becomes when the machine answers.
+ *
+ *  The page of the run is folded in the way the ticket chat folds one: appended
+ *  to what is on screen, or replacing it where the page is not continuous with
+ *  the last one, and trimmed from the front so that a three-hour run stays
+ *  cheap. `at` is this phone's clock, and it stamps the turns that arrived with
+ *  this page — never the first one, which is a file nobody was watching being
+ *  written. */
+export function took(prev: Open, got: DivanCardDetail, at: number): Open {
+  const page = got.run;
+  // No ticket on the card is not a silent queue: there is nothing running on it
+  // and nothing to read, which is what `never_run` says.
+  const quiet: RunSilence = page ? (page.available ? silenceOf(page.reason) : 'noQueue') : 'neverRun';
+  if (!page) {
+    return { ...prev, detail: got, live: false, silence: quiet, error: null, loading: false };
+  }
+  const fresh = !!page.reset;
+  const from = fresh ? 0 : prev.numbered;
+  const { turns: more, answers, next } = turns(page.events || [], from);
+  const stamped = prev.loading || !more.length ? prev.stamps
+    : { ...prev.stamps, ...Object.fromEntries(more.map((t) => [t.id, at])) };
+  return {
+    ...prev,
+    detail: got,
+    turns: trim(attach([...(fresh ? [] : prev.turns), ...more], answers)),
+    stamps: fresh ? {} : stamped,
+    live: !!page.live,
+    silence: quiet,
+    error: null,
+    loading: false,
+    jumped: fresh && !prev.loading,
+    cursor: page.cursor,
+    numbered: next,
+  };
+}
+
+/** …and when it does not answer: exactly what it was, plus the reason. Only a
+ *  card nothing has ever been read about says the silence out loud; everything
+ *  else keeps what it had, with a line saying the machine is not answering. */
+export function missed(prev: Open, error: string | null, old: boolean): Open {
+  return {
+    ...prev,
+    error: error ?? '',
+    loading: false,
+    silence: prev.loading ? (old ? 'oldHost' : 'offline') : prev.silence,
+  };
+}
 
 /** A sentence said into a running worker from this screen: what it was, when it
  *  was said, and how much of the run was on screen at the time.
