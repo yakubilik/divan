@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DEFAULT_PERM, useStore, useT } from '../src/store';
+import { PLACE_ROUTE } from '../src/shell';
 import { useColors } from '../src/theme';
 import { Button, Card, Icon, Label, Segmented, Text, TextInput, Toggle } from '../src/components/ui';
 import { alert, measure, openMenu, prompt } from '../src/components/overlay';
@@ -87,7 +88,7 @@ function Body() {
   function remove() {
     alert(T('deleteChat'), T('deleteChatBody'), [
       { text: T('cancel'), style: 'cancel' },
-      { text: T('delete'), style: 'destructive', onPress: async () => { await deleteChat(chat!.id); router.dismissAll(); router.replace('/chats'); } },
+      { text: T('delete'), style: 'destructive', onPress: async () => { await deleteChat(chat!.id); router.dismissAll(); router.replace(PLACE_ROUTE.chat); } },
     ]);
   }
 

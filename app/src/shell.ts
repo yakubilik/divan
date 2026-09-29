@@ -1,0 +1,191 @@
+// Divan's three places, decided away from the screens that draw them.
+//
+// The app used to be shaped like the computer it was holding a socket to: a
+// picker at the top said which machine you were looking at, the two tabs under
+// it were that machine's chats and that machine's agents, and its ticket wall
+// was a button in the corner. Seven entry points, all of them about a computer.
+//
+// Divan has three: the **Dashboard** is every project on every machine, the
+// **Chat** is one conversation, and **Machine** is the infrastructure —
+// "findable, forgettable", as Mobile11 S16 puts it. Everything that was about a
+// computer rather than about work lives under the third one, and nothing but
+// those three is at the top level.
+//
+// What is in here is everything about that shell that has one right answer:
+// which place a route belongs to, what the project bar says, which conversation
+// the Chat place opens, and what the Machine list is made of. No React, no
+// store, no palette — so `scripts/test-shell.cjs` can hold the shell to it
+// without a phone.
+import { stuck, type DivanView, type MergedProject } from './divan';
+import type { Key } from './i18n';
+import type { Chat } from './protocol';
+import type { State, Tone } from './tokens';
+
+/** The three. */
+export type Place = 'dashboard' | 'chat' | 'machine';
+
+/** Left to right, and the order the tab bar draws them in (Mobile1 V1). */
+export const PLACES: Place[] = ['dashboard', 'chat', 'machine'];
+
+/** Where each of them lives. A place is a route and not a tab in a navigator:
+ *  the app is one stack, and the three swap each other out at its root — which
+ *  is the same thing the two old home screens did to each other. */
+export const PLACE_ROUTE: Record<Place, string> = {
+  dashboard: '/dashboard',
+  chat: '/chat',
+  machine: '/machine',
+};
+
+/** The place the app opens on, and the one a notification pops the stack back
+ *  to before opening what it is about. It used to be the chat list. */
+export const HOME = PLACE_ROUTE.dashboard;
+
+/** What each place is drawn with. The frames use Lucide's `layout-grid`,
+ *  `message-circle` and `server`; these are the Material Symbols the app
+ *  generates that draw the same three things (`src/icons.gen.ts`). */
+export const PLACE_ICON: Record<Place, string> = {
+  dashboard: 'grid_view', chat: 'chat_bubble', machine: 'dns',
+};
+
+/** …and the name under it. */
+export const PLACE_LABEL: Record<Place, Key> = {
+  dashboard: 'tabDashboard', chat: 'tabChat', machine: 'tabMachine',
+};
+
+/** Which place a route is in, or null for a screen that is not one of the three
+ *  — a pushed page like the ticket wall or Settings, which draws no tab bar.
+ *
+ *  `/chat/<id>` is the Chat place: a notification opens one conversation by
+ *  name, and that is the same place as the one the tab enters. */
+export function placeOf(pathname: string | null | undefined): Place | null {
+  const path = (pathname || '').split('?')[0].replace(/\/+$/, '') || '/';
+  for (const place of PLACES) {
+    const route = PLACE_ROUTE[place];
+    if (path === route || path.startsWith(`${route}/`)) return place;
+  }
+  return null;
+}
+
+// ── the project bar ─────────────────────────────────────────────────────────
+
+/** One chip in the bar across the top of the Dashboard (Mobile1 V1): a
+ *  project, or the "All" that stands for every one of them. `key` is the key
+ *  the merge folded the product under, and null on the All chip. */
+export interface Chip {
+  key: string | null;
+  label: string;
+  /** The 7 pt dot in front of the name. */
+  state: State;
+  selected: boolean;
+}
+
+/** How a project's chip is coloured. Red where an agent stopped or was turned
+ *  down, amber where something is waiting for a person, grey where the numbers
+ *  are stale or nothing has happened in weeks, green while work is running.
+ *  The order is the order the question is asked in, worst first — the same one
+ *  the merge sorts the list by. */
+export function projectState(p: MergedProject): State {
+  if (p.cards.some(stuck)) return 'stuck';
+  if (p.waiting > 0) return 'asking';
+  if (p.stale) return 'quiet';
+  if (p.running > 0) return 'running';
+  return 'quiet';
+}
+
+/** …and how the All chip is. It is amber the moment anything needs a person —
+ *  Mobile1 V1 draws it amber beside two red projects, because "two of these
+ *  need you" is what the chip is for, not "one of them fell over". */
+export function allState(view: DivanView): State {
+  if (view.totals.needsYou > 0) return 'asking';
+  if (view.totals.running > 0) return 'running';
+  return 'quiet';
+}
+
+/** The bar itself: All, then every product, in the order the merge put them
+ *  in. `selected` is the key of the project being read, or null for all of
+ *  them. A key that is no longer in the view — a project on a machine that has
+ *  been unpaired — leaves the All chip selected rather than nothing. */
+export function chips(view: DivanView, selected: string | null, allLabel: string): Chip[] {
+  const known = selected != null && view.projects.some((p) => p.key === selected);
+  return [
+    { key: null, label: allLabel, state: allState(view), selected: !known },
+    ...view.projects.map((p) => ({
+      key: p.key, label: p.name, state: projectState(p), selected: p.key === selected,
+    })),
+  ];
+}
+
+// ── the one conversation ────────────────────────────────────────────────────
+
+/** Which chat the Chat place opens.
+ *
+ *  There is one conversation and no list in front of it: the newest one that
+ *  has not been archived. `held` is the one the place is already showing, and
+ *  it wins while it is still there — a reply arriving in another chat (from the
+ *  computer itself, or from a notification opened earlier) must not swap the
+ *  conversation out from under a half-typed message.
+ *
+ *  Null means there is nothing to open, which is the one case the place has to
+ *  act on: it starts a conversation rather than showing an empty list. */
+export function theChat(chats: Record<string, Chat>, held?: string | null): string | null {
+  if (held && chats[held] && !chats[held].archived) return held;
+  const open = Object.values(chats).filter((ch) => !ch.archived);
+  if (!open.length) return null;
+  // Ties broken by id so that two chats saved in the same second do not take
+  // turns being "the" conversation on every render.
+  return open.sort((a, b) => (b.updated_at - a.updated_at) || a.id.localeCompare(b.id))[0].id;
+}
+
+// ── the machine list ────────────────────────────────────────────────────────
+
+/** A row of Mobile11 S16: a name, one grey line under it, and — only where
+ *  there is something to say — a mono word at the end in a state's colour.
+ *  Every row goes one level deeper and no further. */
+export interface MachineRow {
+  key: string;
+  icon: string;
+  /** What the row opens. Every one of these is a screen that already existed
+   *  and moved here unchanged. */
+  route: string;
+  title: Key;
+  note: Key;
+  noteParams?: Record<string, string | number>;
+  meta?: Key;
+  metaParams?: Record<string, string | number>;
+  tone?: Tone;
+}
+
+/** The list, in the frame's order.
+ *
+ *  Four of Mobile11 S16's rows have nothing on this phone to stand behind
+ *  them: Terminals and Admin are screens the desktop panel has and the app
+ *  never had, Executors is the registry the board tickets get their faces from
+ *  (the app's own agents are the nearest thing, and they are here under their
+ *  own name), and quota thresholds are not settable from anywhere yet. They
+ *  arrive with the screens that own them rather than as rows that lead
+ *  nowhere. What is here instead is what the app already had and what was
+ *  about a computer: the paired machines, the agents, the computer's screen,
+ *  its sign-ins, the pool that drives them, the voice line to it, and
+ *  Settings. */
+export function machineRows(m: { machines: number; unreachable: number }): MachineRow[] {
+  return [
+    {
+      key: 'machines', icon: 'monitor', route: '/host-sheet',
+      title: 'mMachines', note: 'mMachinesNote', noteParams: { n: m.machines },
+      ...(m.machines === 0 ? {} : m.unreachable > 0
+        ? { meta: 'mUnreachable' as Key, metaParams: { n: m.unreachable }, tone: 'red' as Tone }
+        : { meta: 'mAllReachable' as Key, tone: 'run' as Tone }),
+    },
+    { key: 'agents', icon: 'group', route: '/agents', title: 'mAgents', note: 'mAgentsNote' },
+    { key: 'screen', icon: 'screen_share', route: '/screen', title: 'mScreen', note: 'mScreenNote' },
+    { key: 'accounts', icon: 'key', route: '/accounts', title: 'mAccounts', note: 'mAccountsNote' },
+    { key: 'pool', icon: 'swap_horiz', route: '/pool', title: 'mPool', note: 'mPoolNote' },
+    { key: 'call', icon: 'call', route: '/call', title: 'mCall', note: 'mCallNote' },
+    { key: 'settings', icon: 'settings', route: '/settings', title: 'mSettings', note: 'mSettingsNote' },
+  ];
+}
+
+/** Every route the Machine list leads to. Nothing outside that place may link
+ *  to one of them — that is the whole point of the move, and it is what
+ *  `scripts/test-shell.cjs` holds the three screens to. */
+export const MACHINE_ROUTES: string[] = machineRows({ machines: 0, unreachable: 0 }).map((r) => r.route);

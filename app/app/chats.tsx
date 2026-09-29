@@ -1,3 +1,10 @@
+// Every conversation on this computer: searched, grouped, archived and
+// unarchived again. It used to be the top of the app, with a computer picker
+// over it and Agents beside it. Divan's Chat place is one conversation and has
+// no list in front of it, so this is the side door off the Dashboard: where a
+// second conversation is started, and where one that was put away is found
+// again. Everything it could do, it still does; only the two things above it
+// are gone.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, SectionList, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -7,9 +14,8 @@ import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { LOCALE } from '../src/i18n';
 import { em, useColors } from '../src/theme';
-import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Tabs, Text, TextInput } from '../src/components/ui';
+import { BackBar, Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../src/components/ui';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../src/components/overlay';
-import { HomeTop } from '../src/components/home';
 import type { Chat } from '../src/protocol';
 
 /** The one section the flat view draws. It is never shown as a heading, so it
@@ -354,8 +360,11 @@ export default function Chats() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
-      <HomeTop tab="chats" />
-      <Tabs value={0} labels={[T('chatsTab'), T('agentsTab')]} onChange={() => go(() => router.replace('/agents'))} />
+      {/* Not a place any more, and not in front of the chat: the Chat tab
+          enters the conversation itself. This is the side door — search, the
+          groups, the ones that were put away, and the only way to start a
+          second conversation — opened from the Dashboard. */}
+      <BackBar onPress={() => router.back()} />
       <Animated.View style={{ flex: 1, opacity: switching ? 1 : fade }}>{body}</Animated.View>
     </View>
   );

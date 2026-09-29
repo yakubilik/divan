@@ -107,8 +107,18 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="welcome" />
         <Stack.Screen name="pair" />
-        <Stack.Screen name="chats" />
+        {/* Divan's three places. They replace each other at the root of the
+            stack rather than stacking up, so Back leaves the app from any of
+            them and everything else is pushed over whichever one is up. */}
+        <Stack.Screen name="dashboard" />
+        <Stack.Screen name="chat/index" />
+        <Stack.Screen name="machine" />
         <Stack.Screen name="chat/[id]" />
+        {/* Every conversation on this computer. Not a place: the Chat tab
+            enters the conversation itself, and this is the side door off the
+            Dashboard — where a second one is started and where one that was
+            put away is found again. */}
+        <Stack.Screen name="chats" />
         <Stack.Screen name="new-chat" options={SHEET} />
         <Stack.Screen name="chat-settings" options={SHEET} />
         <Stack.Screen name="model-sheet" options={SHEET} />

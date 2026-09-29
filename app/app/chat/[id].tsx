@@ -12,6 +12,7 @@ import type { CliAccount } from '../../src/protocol';
 import { useNavGuard } from '../../src/nav';
 import { useFileDrop, type DroppedFile } from '../../modules/drop-target';
 import { getOpenChat, isProtectedChat, setChatOnScreen, setOpenChat } from '../../src/push';
+import { HOME, PLACE_ROUTE } from '../../src/shell';
 import { LimitsRing } from '../../src/components/limits';
 import { em, useColors } from '../../src/theme';
 import { Icon, SmallButton, Spinner, Text, TextInput } from '../../src/components/ui';
@@ -68,13 +69,19 @@ function useTypewriter(target: string, segment: number | null): string {
   return target.slice(0, Math.min(shown, target.length));
 }
 
-export default function ChatScreen() {
+/** One conversation by name.
+ *
+ *  Reached two ways, and it is the same screen both times: the Chat place
+ *  (`app/chat/index.tsx`) draws it as Divan's second place, and a notification
+ *  about a chat — or an agent being opened from the Machine list — pushes
+ *  `/chat/<id>` over whatever was on screen. Which is why the id is a prop
+ *  rather than something this screen reads out of the address itself. */
+export function Conversation({ id }: { id: string }) {
   const router = useRouter();
   const go = useNavGuard();
   const insets = useSafeAreaInsets();
   const T = useT();
   const c = useColors();
-  const { id } = useLocalSearchParams<{ id: string }>();
   const chat = useStore((s) => s.chats[id!]);
   const events = useStore((s) => s.events[id!]);
   const live = useStore((s) => s.live[id!]);
@@ -153,8 +160,10 @@ export default function ChatScreen() {
       (e: any) => {
         if (!alive) return;
         console.warn('openChat failed', e?.message);
-        // Nothing to come back for: the list is where this belongs.
-        if (e?.code === 'no_chat') { if (router.canGoBack()) router.back(); else router.replace('/chats'); return; }
+        // The chat is not there any more. Back where there is something to go
+        // back to, and otherwise to the place this one was entered from, which
+        // picks up whichever conversation is now the one.
+        if (e?.code === 'no_chat') { if (router.canGoBack()) router.back(); else router.replace(PLACE_ROUTE.chat); return; }
         setOpenError(e?.message || T('error'));
       });
     return () => { alive = false; };
@@ -390,14 +399,17 @@ export default function ChatScreen() {
       { label: chat.pinned ? T('unpin') : T('pin'), icon: chat.pinned ? 'keep_off' : 'keep', onPress: () => void updateChat(chat.id, { pinned: chat.pinned ? 0 : 1 } as any).catch(err) },
       { label: chat.archived ? T('unarchive') : T('archiveAction'), icon: chat.archived ? 'unarchive' : 'inventory_2', onPress: () => {
           updateChat(chat.id, { archived: chat.archived ? 0 : 1 } as any)
-            .then(() => { if (!chat.archived) { showToast(T('archived')); setTimeout(() => router.back(), 400); } })
+            .then(() => { if (!chat.archived) { showToast(T('archived')); setTimeout(() => { if (router.canGoBack()) router.back(); else router.replace(PLACE_ROUTE.chat); }, 400); } })
             .catch(err);
         } },
       { label: T('chatSettingsItem'), icon: 'tune', onPress: () => go(() => router.push({ pathname: '/chat-settings', params: { id } })) },
       { kind: 'divider' },
       { label: T('deleteChat'), icon: 'delete', danger: true, onPress: () => alert(T('deleteChat'), T('deleteChatBody'), [
           { text: T('cancel'), style: 'cancel' },
-          { text: T('delete'), style: 'destructive', onPress: () => { router.back(); deleteChat(chat.id).catch(err); } }]) },
+          { text: T('delete'), style: 'destructive', onPress: () => {
+              if (router.canGoBack()) router.back(); else router.replace(PLACE_ROUTE.chat);
+              deleteChat(chat.id).catch(err);
+            } }]) },
     ];
   }
   async function chatMenu() {
@@ -475,7 +487,7 @@ export default function ChatScreen() {
           The model moved down into the composer, where it is chosen. */}
       <View style={{ paddingTop: insets.top + 2, paddingHorizontal: 10, paddingBottom: 10, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
                      borderBottomWidth: 1, borderBottomColor: dim === 2 ? 'transparent' : c.line }}>
-        <Pressable accessibilityLabel={T('back')} onPress={() => go(() => router.back())} hitSlop={6} style={({ pressed }) => [sq40, pressed && { opacity: 0.5 }]}>
+        <Pressable accessibilityLabel={T('back')} onPress={() => go(() => { if (router.canGoBack()) router.back(); else router.replace(HOME); })} hitSlop={6} style={({ pressed }) => [sq40, pressed && { opacity: 0.5 }]}>
           <Icon name="chevron_left" size={26} />
         </Pressable>
         {/* The meta line may run a little under the two buttons: their glyphs
@@ -713,3 +725,9 @@ function fmtSize(n?: number): string {
 }
 
 const sq40 = { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' } as const;
+
+/** `/chat/<id>`: the conversation the address names. */
+export default function ChatRoute() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return <Conversation id={id!} />;
+}
