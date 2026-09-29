@@ -30,6 +30,7 @@ import { Executors } from './Executors';
 import { Quota } from './Quota';
 import { Admin } from './Admin';
 import { Settings } from './Settings';
+import { Fleet } from './Fleet';
 import { Terminal } from './Terminal';
 import { Projects } from './Projects';
 import { Agents } from './Agents';
@@ -151,6 +152,7 @@ function Page(props: MachineProps) {
   if (view === 'quota') return <Quota view={fleet} />;
   if (view === 'admin') return <Admin now={fleet.now} onView={onView} />;
   if (view === 'settings') return <Settings onView={onView} />;
+  if (view === 'fleet') return <Fleet onOpenChat={onOpenChat} onNewChat={onNewChat} />;
   if (view === 'projects') return <Projects onNewChatIn={onNewChatIn} onOpenChat={onOpenChat} />;
   if (view === 'agents') return <Agents onStartChat={onStartChat} />;
   if (view === 'update') return <Update />;

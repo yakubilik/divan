@@ -38,8 +38,8 @@ export type View =
   | 'chats'
   // the eight rows of the Machine drawer, in the order Web15 draws them
   | 'machines' | 'executors' | 'terminal' | 'screen' | 'accounts' | 'quota' | 'admin' | 'settings'
-  // …and the four pages that are one level under one of those rows
-  | 'projects' | 'agents' | 'update' | 'preferences';
+  // …and the five pages that are one level under one of those rows
+  | 'fleet' | 'projects' | 'agents' | 'update' | 'preferences';
 
 /** What each place is drawn with. The frames use Lucide's `layout-grid`,
  *  `message-circle` and `server`; these are the three paths out of the panel's
@@ -114,8 +114,11 @@ export const MACHINE_ROWS: MachineRow[] = [
  *  opened from the page above it and is drawn with that row still selected,
  *  because it is one level deeper and not somewhere else.
  *
- *  Four of them, and each is a screen the panel already had. Folders and the
- *  agents installed on a computer are what the drawer's eight have no row for;
+ *  Five of them, and each is a screen the panel already had. The fleet's live
+ *  detail — what is running on every computer right now, and the plan windows
+ *  each sign-in reports — is one level under the machines table it belongs to;
+ *  folders and the agents installed on a computer are what the eight have no
+ *  row for;
  *  the update and this computer's preferences are the two the frames draw as
  *  rows of Admin and of Settings rather than as pages — and they are pages
  *  here, because what they hold (a pull, a restart, every default a new chat
@@ -123,6 +126,7 @@ export const MACHINE_ROWS: MachineRow[] = [
 export interface MachineAside { view: View; under: View; label: string }
 
 export const MACHINE_ASIDE: MachineAside[] = [
+  { view: 'fleet', under: 'machines', label: 'Sessions and plan limits' },
   { view: 'projects', under: 'machines', label: 'Folders' },
   { view: 'agents', under: 'executors', label: 'Agents on this computer' },
   { view: 'update', under: 'admin', label: 'Update' },
@@ -156,7 +160,7 @@ export const OLD_PANEL: { view: View; was: string }[] = [
   { view: 'chats', was: 'Chats' },
   { view: 'terminal', was: 'Terminal' },
   { view: 'screen', was: 'Screen' },
-  { view: 'machines', was: 'Panel' },
+  { view: 'fleet', was: 'Panel' },
   { view: 'projects', was: 'Projects' },
   { view: 'agents', was: 'Agents' },
   // The two the drawer took the names of: the frames' Admin and Settings are

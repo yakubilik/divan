@@ -147,6 +147,8 @@ export function Machines({ view, onView, onFocus }: {
             <Tag label={`warn ${Math.round(thresholds.warn * 100)}%`} tone="ink3" />
             <Tag label={`stop ${Math.round(thresholds.stop * 100)}%`} tone="ink3" />
             <Button small face="outline" label="Change" onClick={() => onView('quota')} />
+            <Button small face="outline" label="Plan limits" onClick={() => onView('fleet')}
+              title="Every session running anywhere, and the windows each sign-in reports" />
           </div>
         </Card>
 

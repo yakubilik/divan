@@ -15,13 +15,13 @@
 import { createRoot } from 'react-dom/client';
 import { themeCss, type Scheme } from '../src/lib/theme';
 import { Gallery } from './divan-gallery';
-import { Dashboard } from '../src/screens/Dashboard';
+import { Fleet } from '../src/screens/Fleet';
 import { Projects } from '../src/screens/Projects';
 import { Agents } from '../src/screens/Agents';
 import { Terminal } from '../src/screens/Terminal';
 import { Screen } from '../src/screens/Screen';
-import { Admin } from '../src/screens/Admin';
-import { Settings } from '../src/screens/Settings';
+import { Update } from '../src/screens/Update';
+import { Preferences } from '../src/screens/Preferences';
 import { Onboarding } from '../src/screens/Onboarding';
 import { Ustabasi } from '../src/screens/Ustabasi';
 import { Sidebar } from '../src/components/Sidebar';
@@ -103,13 +103,13 @@ const board = merge(boards(NOW).busy.map((host) => ({
 })), NOW);
 
 const SCREENS: [string, React.ReactNode][] = [
-  ['Dashboard', <Dashboard onOpenChat={noop} onNewChat={noop} />],
+  ['Fleet', <Fleet onOpenChat={noop} onNewChat={noop} />],
   ['Projects', <Projects onNewChatIn={noop} onOpenChat={noop} />],
   ['Agents', <Agents onStartChat={noop} />],
   ['Terminal', <Terminal onPeek={noop} onNewChat={noop} />],
   ['Screen', <Screen />],
-  ['Admin', <Admin />],
-  ['Settings', <Settings />],
+  ['Update', <Update />],
+  ['Preferences', <Preferences />],
   ['Onboarding', <Onboarding onPaired={noop} />],
   ['Ustabasi', <Ustabasi />],
   ['Sidebar', <Sidebar

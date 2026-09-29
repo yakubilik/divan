@@ -401,12 +401,12 @@ group('the switch');
   }
   env = browser({ system: 'dark' });
 
-  ok('the switch is offered on a screen', /AppearanceSection/.test(src('src/screens/Settings.tsx'))
-    && /'appearance'/.test(src('src/screens/Settings.tsx')));
+  ok('the switch is offered on a screen', /AppearanceSection/.test(src('src/screens/Preferences.tsx'))
+    && /'appearance'/.test(src('src/screens/Preferences.tsx')));
   ok('…and in the command palette', /id: 'theme'/.test(src('src/App.tsx')));
   ok('…and the screen that offers it works with no computer paired',
-    /section === 'appearance' && <AppearanceSection \/>/.test(src('src/screens/Settings.tsx'))
-    && /section !== 'hosts' && section !== 'appearance' && !slot/.test(src('src/screens/Settings.tsx')));
+    /section === 'appearance' && <AppearanceSection \/>/.test(src('src/screens/Preferences.tsx'))
+    && /section !== 'hosts' && section !== 'appearance' && !slot/.test(src('src/screens/Preferences.tsx')));
 }
 
 // ── 5 · the parts ──────────────────────────────────────────────────────────
@@ -639,13 +639,13 @@ const drawn = {};
 group('the screens the panel already had');
 {
   const screens = {
-    Dashboard: ['src/screens/Dashboard.js', 'Dashboard', { onOpenChat() {}, onNewChat() {} }],
+    Fleet: ['src/screens/Fleet.js', 'Fleet', { onOpenChat() {}, onNewChat() {} }],
     Projects: ['src/screens/Projects.js', 'Projects', { onNewChatIn() {}, onOpenChat() {} }],
     Agents: ['src/screens/Agents.js', 'Agents', { onStartChat() {} }],
     Terminal: ['src/screens/Terminal.js', 'Terminal', { onPeek() {}, onNewChat() {} }],
     Screen: ['src/screens/Screen.js', 'Screen', {}],
-    Admin: ['src/screens/Admin.js', 'Admin', {}],
-    Settings: ['src/screens/Settings.js', 'Settings', {}],
+    Update: ['src/screens/Update.js', 'Update', {}],
+    Preferences: ['src/screens/Preferences.js', 'Preferences', {}],
     Onboarding: ['src/screens/Onboarding.js', 'Onboarding', { onPaired() {} }],
     Ustabasi: ['src/screens/Ustabasi.js', 'Ustabasi', {}],
     Sidebar: ['src/components/Sidebar.js', 'Sidebar', {
@@ -727,8 +727,8 @@ group('the screens the panel already had');
     && (drawn['screen:Terminal paired'] ?? '').includes('Invoice PDF'),
     (drawn['screen:Terminal paired'] ?? '').length.toString());
   ok('…and a paired screen is a fuller screen than an empty one',
-    (drawn['screen:Settings paired'] ?? '').length > (drawn['screen:Settings alone'] ?? '').length * 1.5,
-    `${(drawn['screen:Settings paired'] ?? '').length} vs ${(drawn['screen:Settings alone'] ?? '').length}`);
+    (drawn['screen:Preferences paired'] ?? '').length > (drawn['screen:Preferences alone'] ?? '').length * 1.5,
+    `${(drawn['screen:Preferences paired'] ?? '').length} vs ${(drawn['screen:Preferences alone'] ?? '').length}`);
   // The panels that open over a screen are drawn against a paired computer
   // too: New chat reads the catalog off one.
   seed(paired);
@@ -796,7 +796,7 @@ group('the panels the screens open over themselves');
     // render does not reach on its own: the section this ticket adds, which is
     // behind a click on the rail, and the mark the panel dims for a tool that
     // is not installed or an account not signed in.
-    AppearanceSection: ['src/screens/Settings.js', 'AppearanceSection', {}],
+    AppearanceSection: ['src/screens/Preferences.js', 'AppearanceSection', {}],
     // The ticket queue's wall, whose cards carry the other copy of the phase
     // table. The screen itself reads the queue over the socket and draws
     // nothing without one; its wall takes the tickets as a prop, which is what
@@ -838,8 +838,8 @@ group('the panels the screens open over themselves');
   ok('…and the mark the panel dims is drawn in both of its states',
     (drawn['overlay:ProviderMarkDim'] ?? '').includes('&lt;&gt;')
     && (drawn['overlay:ProviderMarkDim'] ?? '') !== (drawn['overlay:ProviderMarkLive'] ?? ''));
-  ok('…and a paired Settings draws that dim mark itself, where the real one is',
-    (drawn['screen:Settings paired'] ?? '').includes('&lt;&gt;'));
+  ok('…and a paired preferences page draws that dim mark itself, where the real one is',
+    (drawn['screen:Preferences paired'] ?? '').includes('&lt;&gt;'));
 }
 
 group('white belongs on a filled colour and nowhere else');

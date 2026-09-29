@@ -241,7 +241,15 @@ group('three places, and nothing beside them');
     && /useState<View>\('overview'\)/.test(src('src/App.tsx')));
   ok('…and everything that is about a computer is under the third one',
     shell.MACHINE_ROWS.every((r) => shell.placeOf(r.view) === 'machine')
-    && shell.MACHINE_ROWS.length === 7);
+    && shell.MACHINE_ROWS.length === 8);
+  ok('…the eight rows being the frame’s eight, in the frame’s order',
+    eq(shell.MACHINE_ROWS.map((r) => r.label),
+      ['Machines', 'Executors', 'Terminals', 'Remote screen', 'Accounts & sign-ins',
+       'Quota thresholds', 'Admin', 'Settings']),
+    shell.MACHINE_ROWS.map((r) => r.label).join(', '));
+  ok('…and a page with no row of its own is drawn under the row it was opened from',
+    shell.MACHINE_ASIDE.every((a) => shell.MACHINE_ROWS.some((r) => r.view === a.under))
+    && shell.machineRow('projects') === 'machines' && shell.machineRow('quota') === 'quota');
   ok('the Machine list opens on the machines themselves, as the frame does',
     shell.PLACE_VIEW.machine === shell.MACHINE_ROWS[0].view
     && shell.MACHINE_ROWS[0].view === 'machines');
@@ -285,9 +293,11 @@ group('nothing was dropped in the move');
   ));
   ok('…and every one of those pages is dispatched to a screen',
     dispatched.length === shell.MACHINE_ROWS.length);
-  for (const name of ['Dashboard', 'Terminal', 'Projects', 'Agents', 'Screen', 'Admin', 'Settings']) {
+  for (const name of ['Machines', 'Executors', 'Terminal', 'Screen', 'Accounts', 'Quota',
+                      'Admin', 'Settings', 'Fleet', 'Projects', 'Agents', 'Update',
+                      'Preferences']) {
     ok(`${name} is still drawn, from the place it moved to`,
-      new RegExp(`import \\{ ${name} \\} from './${name}'`).test(machine));
+      new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from './${name}'`).test(machine));
   }
 
   const app = src('src/App.tsx');
@@ -677,7 +687,7 @@ group('the switch changes the theme and nothing else');
   ok('…and it is a page with colours in it, so that is worth something',
     paint(drawnDark).vars.size >= 6, [...paint(drawnDark).vars].join(', '));
   ok('the switch is still offered where it was explained as well',
-    /AppearanceSection/.test(src('src/screens/Settings.tsx'))
+    /AppearanceSection/.test(src('src/screens/Preferences.tsx'))
     && /id: 'theme'/.test(src('src/App.tsx')));
 }
 
@@ -711,6 +721,9 @@ group('every screen renders with nothing, with something stale and with a machin
       ...Object.fromEntries(shell.MACHINE_ROWS.map((row) => (
         [`Machine › ${row.label}`, [MachineUI.Machine, machineProps(row.view, fleet)]]
       ))),
+      ...Object.fromEntries(shell.MACHINE_ASIDE.map((aside) => (
+        [`Machine › ${aside.label}`, [MachineUI.Machine, machineProps(aside.view, fleet)]]
+      ))),
     };
     for (const scheme of ['dark', 'light']) {
       K.setThemeChoice(scheme);
@@ -729,7 +742,7 @@ group('every screen renders with nothing, with something stale and with a machin
   ok('every screen of the shell stands up in all five states of the fleet',
     broken.length === 0, [...new Set(broken)].slice(0, 6).join('\n    '));
   ok('…and there were enough of them for that to mean something',
-    Object.keys(drawn).length === 5 * 2 * (4 + 7), `${Object.keys(drawn).length} renders`);
+    Object.keys(drawn).length === 5 * 2 * (4 + 8 + 5), `${Object.keys(drawn).length} renders`);
   ok('…none of them painting a value of its own', strayed.length === 0,
     [...new Set(strayed)].slice(0, 6).join(', '));
   ok('…so every colour on every one of them exists in both themes',
