@@ -195,8 +195,9 @@ without a person moving something.
 - `app/src/tokens.ts` — the sixteen, the ramps, the radii, the heights, and the
   `Palette` derived from them.
 - `app/src/components/divan.tsx` — the parts: card, list row, pill, button, tab
-  bar, column tabs, segments, status dot, executor badge, monogram, counter,
-  section header, empty state, sheet. Each names the frame it was measured off.
+  bar, column tabs, segments, face tabs, status dot, executor badge, monogram,
+  counter, section header, empty state, sheet. Each names the frame it was
+  measured off.
 - `app/app/divan-gallery.tsx` — all of them on one screen, in either theme,
   each beside the name of its frame. Development builds only, reachable from
   Settings.
