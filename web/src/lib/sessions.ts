@@ -184,6 +184,11 @@ export function stamp(card: MergedCard): number | null {
   return card.agent_status_at ?? card.moved_at ?? null;
 }
 
+/** A session's id, from the card it is drawn out of. One spelling, because the
+ *  board raises a window by it: a card pressed there and the window it opens
+ *  have to be the same thing. */
+export const idOf = (card: { host: string; id: string }): string => `${card.host}:${card.id}`;
+
 /** Everything waiting on a person, across every paired computer, worst first.
  *
  *  Within a kind the oldest comes first — the thing that has been waiting since
@@ -200,7 +205,7 @@ export function sessions(view: DivanView): Session[] {
     const said = (card.agent_detail || '').trim() || card.title;
     const when = stamp(card);
     out.push({
-      id: `${card.host}:${card.id}`,
+      id: idOf(card),
       card,
       kind,
       face: executorFace(card),
@@ -251,9 +256,15 @@ export const TABS = 3;
 export interface DockState {
   minimised: string[];
   closed: Record<string, number>;
+  /** …and the ones asked for by name: a card pressed on the board. Newest
+   *  first. The desktop opens two windows by itself and picks them off the top
+   *  of the list, so pressing the fourth thing waiting has to be able to put it
+   *  in one of the two — otherwise the press does nothing and the reader is
+   *  told to go and find a tab. */
+  raised?: string[];
 }
 
-export const NO_DOCK: DockState = { minimised: [], closed: {} };
+export const NO_DOCK: DockState = { minimised: [], closed: {}, raised: [] };
 
 /** A session's stamp as the dock remembers it. `0` for a card nothing ever
  *  stamped: it is still one value per card, and a card that gains a stamp later
@@ -293,26 +304,34 @@ export interface Dock {
 export function arrange(list: Session[], dock: DockState = NO_DOCK): Dock {
   const live = list.filter((s) => !dismissed(s, dock));
   const away = new Set(dock.minimised);
-  const panels = live.filter((s) => !away.has(s.id)).slice(0, PANELS);
-  const open = new Set(panels.map((s) => s.id));
+  const up = (dock.raised ?? []).filter((id) => live.some((s) => s.id === id) && !away.has(id));
+  const open = live.filter((s) => !away.has(s.id));
+  const panels = [...up.map((id) => open.find((s) => s.id === id)!).filter(Boolean),
+                  ...open.filter((s) => !up.includes(s.id))].slice(0, PANELS);
+  const shown = new Set(panels.map((s) => s.id));
   // Room for the ones that are not on screen, after the windows have their own.
   const room = Math.max(0, TABS - panels.length);
-  const also = new Set(live.filter((s) => !open.has(s.id)).slice(0, room).map((s) => s.id));
+  const also = new Set(live.filter((s) => !shown.has(s.id)).slice(0, room).map((s) => s.id));
   // Drawn in the order the list is in and not windows-first: the tabs are the
   // queue of what is waiting, and a tab that moved when its window opened would
   // be a row that reshuffles itself under a cursor.
-  const tabs = live.filter((s) => open.has(s.id) || also.has(s.id))
-    .map((s) => ({ session: s, open: open.has(s.id) }));
+  const tabs = live.filter((s) => shown.has(s.id) || also.has(s.id))
+    .map((s) => ({ session: s, open: shown.has(s.id) }));
   return { panels, tabs, more: Math.max(0, live.length - tabs.length), live };
 }
 
 // ── what the reader has done with them ──────────────────────────────────────
 
 interface DockStore extends DockState {
+  raised: string[];
   /** Put a window away: it stays in the dock, and stays waiting. */
   minimise: (id: string) => void;
   /** …and take it out again. */
   restore: (id: string) => void;
+  /** Open this one, wherever it sits in the queue: a card pressed on the board
+   *  takes a window even when two others already have one, and one that had
+   *  been put away or closed comes back. */
+  raise: (id: string) => void;
   /** Close one: it does not open itself again until the card changes, which is
    *  what makes "I have dealt with this" different from "I have not looked". */
   close: (id: string, at: number) => void;
@@ -324,11 +343,20 @@ interface DockStore extends DockState {
 export const useDock = create<DockStore>((set) => ({
   minimised: [],
   closed: {},
+  raised: [],
   minimise: (id) => set((s) => (
     s.minimised.includes(id) ? s : { minimised: [...s.minimised, id] })),
   restore: (id) => set((s) => ({ minimised: s.minimised.filter((x) => x !== id) })),
+  raise: (id) => set((s) => ({
+    raised: [id, ...s.raised.filter((x) => x !== id)],
+    minimised: s.minimised.filter((x) => x !== id),
+    // A question that was closed and is then gone looking for is a question
+    // again: "I have dealt with this" is undone by the asking, not by a clock.
+    closed: Object.fromEntries(Object.entries(s.closed).filter(([k]) => k !== id)),
+  })),
   close: (id, at) => set((s) => ({
     closed: { ...s.closed, [id]: at },
     minimised: s.minimised.filter((x) => x !== id),
+    raised: s.raised.filter((x) => x !== id),
   })),
 }));

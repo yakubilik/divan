@@ -28,7 +28,7 @@ import { Sidebar } from '../src/components/Sidebar';
 import { Machine } from '../src/screens/Machine';
 import { Overview } from '../src/screens/Overview';
 import { Shell } from '../src/components/Shell';
-import { merge } from '../src/lib/divan';
+import { merge, project as productIn } from '../src/lib/divan';
 import { chips } from '../src/lib/shell';
 import { boards } from './overview-fixture.js';
 import { ChatView } from '../src/components/ChatView';
@@ -136,6 +136,17 @@ const SCREENS: [string, React.ReactNode][] = [
       onRespond={noop} onEdit={noop} onUpdate={noop} onDelete={noop} onPopOut={noop} />
   </Shell>],
   ['Overview', <Overview view={emptyView} project={null} onProject={noop} />],
+  // One product's board, which is the page to hold up against Web12 W2 and
+  // Web13 W4: the shell, the product's head with the tabs over it, and the four
+  // columns under them. `height` because the gallery is one long page and the
+  // board is the one screen that fills the window it is in.
+  ['ShellBoard', <div style={{ height: 620, display: 'flex' }}>
+    <Shell view="overview" onView={noop} now={board.now}
+      chips={chips(board, 'quire')} onProject={noop}>
+      <Overview view={board} project={productIn(board, 'quire')} onProject={noop}
+        onAsk={noop} tab="board" onTab={noop} />
+    </Shell>
+  </div>],
   // …and the calm morning, which is a designed state rather than the busy page
   // with its numbers at zero.
   ['OverviewCalm', <Overview view={merge(boards(NOW).calm.map((host) => ({
