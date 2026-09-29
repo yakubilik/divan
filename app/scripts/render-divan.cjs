@@ -55,6 +55,16 @@ function flatten(style) {
  *  is a claim about a tap, not about a source line. */
 const PRESSES = [];
 
+/** …and everything that could be pressed and held, which is the same thing for
+ *  the board's drag: "a card can be picked up" is a claim about a handler being
+ *  on it, and holding one is how a check asks. */
+const HOLDS = [];
+
+/** Every buzz the phone was asked for, in order. A haptic leaves no mark on a
+ *  screen, so the only way to hold "the drop is felt" to anything is to record
+ *  what reached this module. */
+const BUZZES = [];
+
 /** The words inside an element, however deep. A chip is a dot and a label; the
  *  label is what a check is looking for. */
 function textOf(node) {
@@ -75,6 +85,10 @@ function host(tag, kind) {
     if (rest.accessibilityLabel) attrs['data-label'] = rest.accessibilityLabel;
     if (rest.numberOfLines) attrs['data-lines'] = String(rest.numberOfLines);
     if (typeof rest.onPress === 'function') PRESSES.push({ text: textOf(children), press: rest.onPress });
+    if (typeof rest.onLongPress === 'function') {
+      HOLDS.push({ text: textOf(children), hold: rest.onLongPress, out: rest.onPressOut,
+                   delay: rest.delayLongPress ?? null });
+    }
     return React.createElement(tag, attrs, children);
   });
   H.displayName = kind;
@@ -144,7 +158,11 @@ const STUBS = {
     useFocusEffect: () => {},
     Stack: Object.assign(host('div', 'Stack'), { Screen: () => null }),
   },
-  'expo-haptics': { selectionAsync: () => Promise.resolve(), impactAsync: () => Promise.resolve() },
+  'expo-haptics': {
+    ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+    selectionAsync: () => { BUZZES.push('selection'); return Promise.resolve(); },
+    impactAsync: (style) => { BUZZES.push(String(style)); return Promise.resolve(); },
+  },
 };
 
 /** The app's own store reaches the keychain, the socket and the notification
@@ -201,11 +219,20 @@ const gallery = require(path.join(root, 'app/divan-gallery.tsx'));
  *  one of them. */
 function render(scheme, element) {
   PRESSES.length = 0;
+  HOLDS.length = 0;
+  BUZZES.length = 0;
   return renderToStaticMarkup(React.createElement(theme.ForceScheme, { scheme }, element));
 }
 
 /** What the last render left pressable. */
 function presses() { return PRESSES.slice(); }
+
+/** …and what it left holdable, which is the board's drag. */
+function holds() { return HOLDS.slice(); }
+
+/** Every buzz asked for since the last render. A gesture is felt before anything
+ *  about it is drawn, so this is the only record of that half of it. */
+function buzzes() { return BUZZES.slice(); }
 
 /** …and the one whose words are exactly this. */
 function pressOn(text) {
@@ -231,4 +258,5 @@ function paint(markup) {
   return out;
 }
 
-module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten, store, params, nav, presses, pressOn };
+module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten,
+                   store, params, nav, presses, pressOn, holds, buzzes };

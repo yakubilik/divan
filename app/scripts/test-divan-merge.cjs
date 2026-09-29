@@ -510,7 +510,7 @@ checks.push(
     /async function onHost<T>\(hostId: string, type: string/.test(store)
     && /callOnce<T>\(h\.host, h\.port, h\.token, type, data, DIVAN_TIMEOUT_MS\)/.test(store)
     && /onHost\(what\.host, 'ustabasi\.note'/.test(store)
-    && /onHost\(what\.host, 'divan\.card\.move'/.test(store)],
+    && /onHost(<[^>]+>)?\(what\.host, 'divan\.card\.move'/.test(store)],
   ['…and only that machine is re-read afterwards',
     (store.match(/await get\(\)\.loadDivan\(what\.host\);/g) || []).length === 2],
 );

@@ -86,7 +86,14 @@ const FRAME_CHAT =
 const FRAMES = {
   V1: ['Mobile1', 'dark', 14], V2: ['Mobile1', 'dark', 14], V3: ['Mobile1', 'light', 14],
   V4: ['Mobile2', 'dark', 14], V5: ['Mobile2', 'dark', 14],
+  // Mobile3 D1-D4: one artboard with four states of one gesture on it, and until the
+  // drag was built nothing needed to tell them apart: `Drag frame` is how the
+  // rest of this repository cites it and stays. D1–D4 are its own labels — held,
+  // over a tab, the column opened, released — and `src/drag.ts` is written
+  // against them one at a time.
   'Drag frame': ['Mobile3', 'dark', 14],
+  D1: ['Mobile3', 'dark', 14], D2: ['Mobile3', 'dark', 14],
+  D3: ['Mobile3', 'dark', 14], D4: ['Mobile3', 'dark', 14],
   T1: ['Mobile4', 'light', 16], T2: ['Mobile4', 'light', 16], T3: ['Mobile4', 'dark', 16],
   C1: ['Mobile4', 'light', 9],
   S1: ['Mobile5', 'dark', 16], S2: ['Mobile5', 'dark', 16],
@@ -610,6 +617,10 @@ const CITING = {
   'src/tokens.ts': src('src/tokens.ts'),
   'src/theme.ts': src('src/theme.ts'),
   'src/components/divan.tsx': divan,
+  // The drag is written frame by frame against Mobile3 D1-D4, so it is the
+  // heaviest citer in the app and the one most worth holding to the key.
+  'src/drag.ts': src('src/drag.ts'),
+  'src/components/drag.tsx': src('src/components/drag.tsx'),
   'app/divan-gallery.tsx': gallery,
   'scripts/test-divan.cjs': src('scripts/test-divan.cjs').replace(/const FRAMES = \{[\s\S]*?\n\};/, ''),
 };
@@ -619,7 +630,7 @@ const CITING = {
  *  citation ever reaches in this codebase. */
 /** The frame ids named in a piece of text, however they are spelled. */
 function frameIds(text) {
-  return [...text.matchAll(/\b([VTCSW]\d{1,2})\b|'?([Dd]rag[\s*]+frame)'?/g)]
+  return [...text.matchAll(/\b([DVTCSW]\d{1,2})\b|'?([Dd]rag[\s*]+frame)'?/g)]
     .map((m) => (m[1] || (m[2] && 'Drag frame')));
 }
 
@@ -651,10 +662,10 @@ for (const [file, text] of Object.entries(CITING)) {
   checks.push([`every frame ${file} cites is a frame of the group it names${bad.length ? ` (${bad.join('; ')})` : ''}`,
     bad.length === 0]);
 }
-checks.push(['…and the six files between them make enough citations for that to mean something',
+checks.push(['…and the eight files between them make enough citations for that to mean something',
   Object.values(CITING).reduce((n, t) => n + citations(t).length, 0) >= 80]);
 checks.push(['…and the set it is checked against is the whole set, with its gaps',
-  Object.keys(FRAMES).length === 42 && GROUPS.size === 15
+  Object.keys(FRAMES).length === 46 && GROUPS.size === 15
   && !FRAMES.S8 && !FRAMES.W5 && FRAMES['Drag frame'] !== undefined]);
 
 // The error round one made was subtler than a bad id: a light value cited to a

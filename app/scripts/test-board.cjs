@@ -292,7 +292,9 @@ R.store.reset();
 R.params.reset();
 R.nav.reset();
 
-module.exports = { checks };
+/** The fixture, for the drag that is checked against the same board
+ *  (`scripts/test-drag.cjs`): the studio, and the laptop with the lid shut. */
+module.exports = { checks, HOSTS: [STUDIO, MINI] };
 
 if (require.main === module) {
   let bad = 0;
