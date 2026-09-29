@@ -22,17 +22,22 @@ import { em, RADIUS, SIZE, toneColours, useTokens, type State, type Tone } from 
 /** S15 and S14 open the same way: the page's name at 28 pt semibold, and beside
  *  it either a mono count of what is below (`Executors 9`) or the one thing you
  *  can do from here (`+ Pair`), pushed to the far end. */
-export function PageHead({ title, count, right, style }: {
+export function PageHead({ title, count, right, lines = 1, style }: {
   title: string;
   /** The mono number after the name. Absent where the page is not a list. */
   count?: number | null;
   right?: React.ReactNode;
+  /** How many lines the name may take. One, because a page's name is a word or
+   *  two — except where the page's name is its whole sentence, which is what
+   *  Welcome's two steps are. */
+  lines?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
   return (
     <View style={[{ flexDirection: 'row', alignItems: 'baseline', gap: 10, paddingHorizontal: 4 }, style]}>
-      <Text numberOfLines={1} style={{ fontSize: 28, fontWeight: '600', letterSpacing: em(28, -0.02) }}>
+      <Text numberOfLines={lines} style={{ flexShrink: 1, fontSize: 28, lineHeight: 28 * 1.15,
+                                           fontWeight: '600', letterSpacing: em(28, -0.02) }}>
         {title}
       </Text>
       {count != null && <Text mono style={{ fontSize: 12, color: t.ink3 }}>{count}</Text>}

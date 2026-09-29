@@ -6,8 +6,8 @@ import { ForceScheme, useTokens, type Scheme } from '../src/theme';
 import { Text } from '../src/components/text';
 import { Icon } from '../src/components/icon';
 import {
-  Button, Card, ColumnTabs, Counter, EmptyState, ExecutorBadge, FaceTabs, ListRow, Monogram,
-  Pill, SectionHeader, Segments, Sheet, StateMark, StatusDot, TabBar,
+  Button, Card, ColumnTabs, Counter, EmptyState, ExecutorBadge, FaceTabs, FieldRow, Group, ListRow,
+  Monogram, Pill, RowButton, SectionHeader, Segments, Sheet, StateMark, StatusDot, Switch, TabBar,
 } from '../src/components/divan';
 
 /** Every part of the Divan design system, on one screen, in whichever theme you
@@ -52,6 +52,12 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
   const [read, setRead] = useState('human');
   const [dragging, setDragging] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [notify, setNotify] = useState(true);
+  const [quiet, setQuiet] = useState(false);
+  const [effort, setEffort] = useState('high');
+  const [host, setHost] = useState('');
+  const [token, setToken] = useState('');
+  const [shown, setShown] = useState(false);
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg, paddingTop: top }}>
@@ -211,6 +217,51 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
           </View>
         </Part>
 
+        <Part name="Group · boxed row" frame="Web15 W18 · W16">
+          <View style={{ paddingHorizontal: 16, gap: 10 }}>
+            <Group label="reaching you">
+              <ListRow first boxed chevron={false} title="Notifications"
+                note="Push only when something needs you"
+                right={<Switch value={notify} onChange={setNotify} />} />
+              <ListRow boxed chevron={false} title="Quiet hours"
+                note="00:30 – 07:00 · questions wait, fires still come through"
+                right={<Switch value={quiet} onChange={setQuiet} />} />
+              <ListRow boxed chevron={false} title="Language and time"
+                note="English · Europe/Amsterdam · 24-hour"
+                right={<RowButton label="Change" onPress={() => {}} />} />
+              <ListRow boxed title="Theme" note="Follows the system; night falls at sunset"
+                meta="Auto" monoMeta={false} onPress={() => {}} />
+            </Group>
+            {/* W16's own washed row: the one thing on the page that is asking,
+                with what it needs on it and the rest of the page left alone. */}
+            <Group label="accounts & sign-ins">
+              <ListRow first boxed chevron={false} title="GitHub" note="quire-dev · 6 repos"
+                meta="connected" tone="run"
+                right={<RowButton label="Manage" onPress={() => {}} />} />
+              <ListRow boxed chevron={false} wash="amber" title="App Store Connect"
+                note="API key · Hush, Kanji Daily" meta="expires in 12 days" tone="amber"
+                right={<RowButton face="ink" label="Renew" onPress={() => {}} />} />
+            </Group>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <RowButton face="danger" label="Revoke this phone" onPress={() => {}} />
+              <Text style={{ flex: 1, fontSize: 12, color: t.ink3 }}>
+                Keys are stored on your machines, never in Divan's cloud.
+              </Text>
+            </View>
+          </View>
+        </Part>
+
+        <Part name="Field row" frame="no frame · W18's row, typed into">
+          <View style={{ paddingHorizontal: 16 }}>
+            <Group label="the computer to pair with">
+              <FieldRow first label="Host" value={host} onChange={setHost} placeholder="100.x.x.x"
+                keyboard="numbers-and-punctuation" />
+              <FieldRow label="Token" value={token} onChange={setToken} placeholder="token"
+                secret shown={shown} onShow={() => setShown((v) => !v)} />
+            </Group>
+          </View>
+        </Part>
+
         <Part name="Segments" frame="Mobile2 V4">
           <View style={{ paddingHorizontal: 16, gap: 6 }}>
             <Segments value={face} onChange={setFace}
@@ -218,6 +269,15 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
                          { key: 'board', label: 'Board', mark: '■', tone: 'red' }]} />
             <Segments value="overview" onChange={() => {}}
               segments={[{ key: 'overview', label: 'Overview' }, { key: 'board', label: 'Board' }]} />
+            {/* …and the other way round, which is the one inside a card
+                (Web15 W18): an s2 track and the selected segment lifted off it. */}
+            <Group label="how hard it should think">
+              <View style={{ paddingVertical: 12, paddingHorizontal: 20 }}>
+                <Segments on="s2" value={effort} onChange={setEffort}
+                  segments={[{ key: 'low', label: 'low' }, { key: 'medium', label: 'med' },
+                             { key: 'high', label: 'high' }]} />
+              </View>
+            </Group>
           </View>
         </Part>
 

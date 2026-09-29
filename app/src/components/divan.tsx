@@ -9,6 +9,14 @@
  *  Colour never comes from here: every value is a token (`src/tokens.ts`), so
  *  a screen built out of these parts cannot introduce one of its own.
  *
+ *  Six of them were measured off a *web* frame instead, and say which: the
+ *  drawer's own Settings and Accounts pages (Web15 W16 and W18) are the only
+ *  place the design draws a card of settings, a switch, a small button at the
+ *  end of a row or a row washed because it is the one asking for something. The
+ *  phone has all four and no artboard of its own for them, and a desktop frame
+ *  in the same palette is a better reference than a guess. One part — the field
+ *  — has no frame at all anywhere, and says so where it is.
+ *
  *  The names are plain — `Card`, `Pill`, `EmptyState` — because a screen built
  *  from Divan imports this module and nothing else of the same shape. Where a
  *  screen needs one of the older parts (`components/ui`), it imports it under
@@ -19,7 +27,7 @@
 import React from 'react';
 import { Pressable, View, type GestureResponderEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { Icon } from './icon';
-import { Text } from './text';
+import { Text, TextInput } from './text';
 import { Sheet as SheetShell, SheetBar as _SheetBar, useSheet } from './sheet';
 import {
   em, EXECUTORS, EXEC_PENDING_INK, EXEC_PENDING_LINE, monogram, ON_COLOUR, RADIUS, shadows, SIZE,
@@ -144,43 +152,172 @@ export function Card({ ring = 'line', lifted, hollow, dashed, wash, bar, radius 
  *  Mobile11 S16, the Machine tab: `padding:13px 4px; border-top:1px solid
  *  var(--line); gap:12`, a 32 pt well in `s2` holding a 17 pt glyph, a 15 pt
  *  medium title over a 12 pt grey line, and — only when there is something to
- *  say — a mono note in a state's colour before the chevron. */
-export function ListRow({ icon, title, note, meta, tone, onPress, first, chevron = true, style }: {
+ *  say — a mono note in a state's colour before the chevron.
+ *
+ *  `boxed` is the same row inside a card rather than on the page (Web15 W16 and
+ *  W18), which is where every setting and every sign-in is. The slots are what
+ *  those two frames put in a row and S16 does not: a mark of the thing's own in
+ *  the well's place, and a control at the end of it. One part rather than two,
+ *  because a row is a row and there is one place its type and its spacing are
+ *  decided. */
+export function ListRow({ icon, lead, title, note, noteMono, noteLines, meta, monoMeta = true, tone, right,
+                          onPress, onLongPress, first, boxed, wash, chevron = true, style }: {
   icon?: string;
+  /** …or a mark of its own in the well's place: a tool's badge, a status dot,
+   *  an agent's glyph. Web15 W16 draws its rows this way, with a 34 pt marked
+   *  square where this page has an icon. */
+  lead?: React.ReactNode;
   title: string;
   /** The grey summary line under it. */
   note?: string | null;
-  /** The mono word at the end: `all reachable`, `2h 14m`. */
+  /** …in mono, where it is data rather than a sentence: an address, a version,
+   *  a commit. W16's own second lines are prose and are not. */
+  noteMono?: boolean;
+  /** How many lines that summary may take. One, unless the row is the only
+   *  place a sentence has to go. */
+  noteLines?: number;
+  /** The word at the end: `all reachable`, `2h 14m`. */
   meta?: string | null;
+  /** …set in mono, which is what a number or a timestamp is. A word that is
+   *  neither — a tool's name, a mode — takes the page's own face. */
+  monoMeta?: boolean;
   /** What colour that word is. Grey unless something is wrong. */
   tone?: Tone;
+  /** A control in the chevron's place: a switch, a small button, a check.
+   *  Web15 W18's rows all end on one. */
+  right?: React.ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   /** The first row of a list has no line above it. */
   first?: boolean;
+  /** Inside a card rather than on the page: Web15 W18's `padding:14px 20px;
+   *  gap:16`, and the summary a step larger because a card gives it the room.
+   *  Mobile11 S16's rows are the other case, laid straight on the page at
+   *  `13px 4px`, which is what this is without it. */
+  boxed?: boolean;
+  /** The one row on a page that is asking for something, washed in its tone —
+   *  W16's key that expires in twelve days. */
+  wash?: Tone | null;
   chevron?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
   return (
-    <Tap onPress={onPress}
-      style={[{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 4 },
-              !first && { borderTopWidth: 1, borderTopColor: t.line }, style]}>
-      {!!icon && (
+    <Tap onPress={onPress} onLongPress={onLongPress}
+      style={[{ flexDirection: 'row', alignItems: 'center' },
+              boxed ? { gap: 16, paddingVertical: 14, paddingHorizontal: 20 }
+                    : { gap: 12, paddingVertical: 13, paddingHorizontal: 4 },
+              !first && { borderTopWidth: 1, borderTopColor: t.line },
+              wash ? { backgroundColor: toneColours(t, wash).bg } : null, style]}>
+      {lead ?? (!!icon && (
         <View style={{ width: SIZE.rowWell, height: SIZE.rowWell, borderRadius: RADIUS.well,
                        backgroundColor: t.s2, alignItems: 'center', justifyContent: 'center' }}>
           <Icon name={icon} size={SIZE.rowIcon} color={t.ink2} />
         </View>
-      )}
+      ))}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '500' }}>{title}</Text>
-        {!!note && <Text numberOfLines={1} style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}>{note}</Text>}
+        {!!note && (
+          <Text mono={noteMono} numberOfLines={noteLines ?? 1}
+            style={{ fontSize: boxed ? (noteMono ? 12 : 13) : 12,
+                     lineHeight: boxed && !noteMono ? 13 * 1.4 : undefined,
+                     color: t.ink3, marginTop: 2 }}>{note}</Text>
+        )}
       </View>
       {!!meta && (
-        <Text mono numberOfLines={1}
-          style={{ fontSize: 11.5, fontWeight: '500', color: tone ? toneColours(t, tone).fg : t.ink3 }}>{meta}</Text>
+        <Text mono={monoMeta} numberOfLines={1}
+          style={{ fontSize: monoMeta ? 11.5 : 13, fontWeight: '500', flexShrink: 1,
+                   color: tone ? toneColours(t, tone).fg : t.ink3 }}>{meta}</Text>
       )}
+      {right}
       {chevron && <Icon name="chevron_right" size={16} color={t.ink3} />}
     </Tap>
+  );
+}
+
+/** A run of those rows under a mono lowercase word, in a card of their own.
+ *
+ *  Web15 W18, the drawer's Settings: `background:s1; border-radius:16px;
+ *  box-shadow:inset 0 0 0 1px var(--line)`, the group's name at `padding:12px
+ *  20px 6px` in `500 11.5px` mono `ink3`, and every row under a hairline —
+ *  including the first, because the name is above it.
+ *
+ *  Three short groups rather than one long list is the frame's own arrangement,
+ *  and the lowercase name is what keeps a group from reading as a heading. */
+export function Group({ label, children, style }: {
+  label?: string;
+  children?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTokens();
+  return (
+    <Card inset={false} style={style}>
+      {!!label && (
+        <Text mono style={{ fontSize: 11.5, fontWeight: '500', color: t.ink3,
+                            paddingTop: 12, paddingHorizontal: 20, paddingBottom: 6 }}>{label}</Text>
+      )}
+      {children}
+    </Card>
+  );
+}
+
+/** The small button that lives at the end of a row, or in a line of them under
+ *  a card. Web15 W16's `Manage` and `Renew`, W18's `Change`: `height:32px;
+ *  padding:0 12px; border-radius:9px`, `500 13px` inside a `line2` ring or
+ *  `600 13px` on `ink`.
+ *
+ *  `danger` is the app's own third face and no frame's: sign out, revoke this
+ *  phone. The frames never draw a destructive button, and the page's red is
+ *  what the app has always said that in. */
+export function RowButton({ label, face = 'outline', icon, busy, disabled, onPress, style }: {
+  label: string;
+  face?: 'ink' | 'outline' | 'danger';
+  icon?: string;
+  /** Working on it: the button stays where it is and stops answering. */
+  busy?: boolean;
+  disabled?: boolean;
+  onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTokens();
+  const off = disabled || busy;
+  const fg = face === 'ink' ? t.bg : face === 'danger' ? t.red : t.ink;
+  return (
+    <Tap onPress={off ? undefined : onPress}
+      style={[{ height: 32, borderRadius: RADIUS.well, paddingHorizontal: 12, flexDirection: 'row',
+                alignItems: 'center', justifyContent: 'center', gap: 6,
+                backgroundColor: face === 'ink' ? t.ink : 'transparent' },
+              face !== 'ink' && { borderWidth: 1, borderColor: face === 'danger' ? t.red : t.line2 },
+              off && { opacity: 0.45 }, style]}>
+      {!!icon && <Icon name={icon} size={15} color={fg} />}
+      <Text numberOfLines={1}
+        style={{ fontSize: 13, fontWeight: face === 'ink' ? '600' : '500', color: fg }}>{label}</Text>
+    </Tap>
+  );
+}
+
+/** On or off, at the end of a row. Web15 W18: `width:40px; height:24px;
+ *  border-radius:12px` in `ink`, and the knob `18px` in `bg` 3 pt in from the
+ *  end it is at. Off is the same shape in `line2`, which is the frame's own
+ *  unfilled fill. */
+export function Switch({ value, onChange, label, disabled }: {
+  value: boolean;
+  onChange: (next: boolean) => void;
+  /** What it is a switch for. The row beside it carries the words on screen, so
+   *  without this the control itself is unnamed to anything that cannot see. */
+  label?: string;
+  disabled?: boolean;
+}) {
+  const t = useTokens();
+  return (
+    <Pressable accessibilityRole="switch" accessibilityLabel={label}
+      accessibilityState={{ checked: value }} hitSlop={8}
+      disabled={disabled} onPress={() => onChange(!value)}
+      style={{ width: 40, height: 24, borderRadius: 12, opacity: disabled ? 0.5 : 1,
+               backgroundColor: value ? t.ink : t.line2 }}>
+      <View style={{ position: 'absolute', top: 3, left: value ? 19 : 3, width: 18, height: 18,
+                     borderRadius: 9, backgroundColor: t.bg }} />
+    </Pressable>
   );
 }
 
@@ -381,24 +518,35 @@ export interface Segment {
  *  The frame has a third segment, Chats, with a count on it. The chats a product
  *  owns are not filed yet, so it is not drawn: a segment that dims under a thumb
  *  and does nothing is worse than a segment that is not there. */
-export function Segments({ segments, value, onChange, style }: {
+export function Segments({ segments, value, onChange, on = 's1', disabled, style }: {
   segments: Segment[];
-  value: string;
+  value: string | null | undefined;
   onChange: (key: string) => void;
+  /** What it is sitting on, which decides which way round the two surfaces go.
+   *  On the page (`s1`, Mobile2 V4) the track is the card and the selected
+   *  segment is the well cut into it. In a card (`s2`, Web15 W18) it is the
+   *  other way about: an `s2` track at `border-radius:10px; padding:3px` and the
+   *  selected segment a 30 pt `s1` card lifted off it. */
+  on?: 's1' | 's2';
+  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
+  const boxed = on === 's2';
   return (
-    <View style={[{ flexDirection: 'row', backgroundColor: t.s1, borderRadius: RADIUS.tab, padding: 3 }, style]}>
+    <View style={[{ flexDirection: 'row', backgroundColor: boxed ? t.s2 : t.s1,
+                    borderRadius: boxed ? 10 : RADIUS.tab, padding: 3,
+                    opacity: disabled ? 0.5 : 1 }, style]}>
       {segments.map((seg) => {
-        const on = seg.key === value;
+        const sel = seg.key === value;
         return (
-          <Pressable key={seg.key} accessibilityRole="tab" accessibilityState={{ selected: on }}
-            onPress={() => onChange(seg.key)}
+          <Pressable key={seg.key} accessibilityRole="tab" accessibilityState={{ selected: sel }}
+            disabled={disabled} onPress={() => onChange(seg.key)}
             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-                     paddingVertical: 8, borderRadius: RADIUS.well,
-                     backgroundColor: on ? t.s2 : 'transparent' }}>
-            <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500', color: on ? t.ink : t.ink2 }}>
+                     paddingVertical: 8, borderRadius: boxed ? 8 : RADIUS.well,
+                     backgroundColor: sel ? (boxed ? t.s1 : t.s2) : 'transparent',
+                     ...(sel && boxed ? { boxShadow: shadows(t).lift } : null) }}>
+            <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500', color: sel ? t.ink : t.ink2 }}>
               {seg.label}
             </Text>
             {!!seg.mark && (
@@ -700,16 +848,23 @@ export function EmptyState({ title, body, actions, foot, style }: {
  *
  *  Presented as a route (`presentation: 'transparentModal'`), the way the
  *  app's other sheets are. */
-export function Sheet({ title, note, onClose, children, kind = 'fit', style }: {
+export function Sheet({ title, note, onClose, children, kind = 'fit', top, style }: {
   title?: string;
   note?: string;
   onClose: () => void;
   kind?: 'fit' | 'page';
+  /** A `fit` sheet held at a fixed height below the status bar, the way a
+   *  detent works: the model picker for one chat stands nearly full height, the
+   *  same picker for the defaults stops over the Settings it came from. */
+  top?: number;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <SheetShell kind={kind} onClose={onClose} style={style}>
+    // A titled sheet is dragged down by its head (`SheetTitle` carries the
+    // responder), so the grab handle over it would be a second one for the same
+    // gesture.
+    <SheetShell kind={kind} top={top} handle={!title && kind === 'fit'} onClose={onClose} style={style}>
       {!!title && <SheetTitle title={title} note={note} />}
       {children}
     </SheetShell>
@@ -741,6 +896,53 @@ export function SheetTitle({ title, note }: { title: string; note?: string }) {
 /** Re-exported so a screen that wants the app's plainer sheet bar does not have
  *  to reach past this module for it. */
 export const SheetBar = _SheetBar;
+
+// ── 12 · a row you type into ────────────────────────────────────────────────
+
+/** The one shape no frame draws: a field.
+ *
+ *  Nothing in Divan is typed into except the card being written (`components/
+ *  compose`), and the drawer's rows all end on a control rather than on a box.
+ *  So this is W18's row with the control's place given to the value itself —
+ *  the same `padding:14px 20px`, the label where a row's title goes at 13 pt in
+ *  `ink3`, and the value in mono under it at 15 pt, which is what a host and a
+ *  token are. It is a row, so a run of them stacks in a `Group` like any other.
+ *
+ *  `secret` is a token: the app has always hidden one behind an eye rather than
+ *  printing it on a screen somebody is holding up to a camera. */
+export function FieldRow({ label, value, onChange, placeholder, keyboard, secret, shown, onShow,
+                          first, style }: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  keyboard?: 'numbers-and-punctuation' | 'number-pad' | 'default';
+  secret?: boolean;
+  /** …and whether it is being shown right now. */
+  shown?: boolean;
+  onShow?: () => void;
+  first?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTokens();
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 14, paddingHorizontal: 20 },
+                  !first && { borderTopWidth: 1, borderTopColor: t.line }, style]}>
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+        <Text style={{ fontSize: 13, color: t.ink3 }}>{label}</Text>
+        <TextInput mono value={value} onChangeText={onChange} placeholder={placeholder}
+          placeholderTextColor={t.ink3} autoCapitalize="none" autoCorrect={false}
+          keyboardType={keyboard ?? 'default'} secureTextEntry={!!secret && !shown}
+          style={{ fontSize: 15, color: t.ink, letterSpacing: secret && !shown ? 2 : 0 }} />
+      </View>
+      {!!secret && (
+        <Pressable accessibilityLabel={label} onPress={onShow} hitSlop={10} style={dim}>
+          <Icon name={shown ? 'visibility_off' : 'visibility'} size={20} color={t.ink3} />
+        </Pressable>
+      )}
+    </View>
+  );
+}
 
 /** The tokens themselves, for the rare place that needs one directly. Anything
  *  that reaches for this and is not a one-off belongs in this file instead. */

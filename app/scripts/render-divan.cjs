@@ -87,7 +87,11 @@ function host(tag, kind) {
     // An empty box's only words. They are a prop rather than a child, so without
     // this a check cannot tell a composer from an empty view.
     if (rest.placeholder) attrs['data-placeholder'] = String(rest.placeholder);
-    if (typeof rest.onPress === 'function') PRESSES.push({ text: textOf(children), press: rest.onPress });
+    // `label` beside `text`: a control with no words in it — a switch, a
+    // chevron — is findable by what it is called and by nothing else.
+    if (typeof rest.onPress === 'function') {
+      PRESSES.push({ text: textOf(children), label: rest.accessibilityLabel ?? null, press: rest.onPress });
+    }
     if (typeof rest.onLongPress === 'function') {
       HOLDS.push({ text: textOf(children), hold: rest.onLongPress, out: rest.onPressOut,
                    delay: rest.delayLongPress ?? null });
@@ -209,6 +213,33 @@ const STUBS = {
   // Zustand's shallow compare. A screen that pulls its actions out in one slice
   // goes through it, and nothing here re-renders, so it is the identity.
   'zustand/react/shallow': { useShallow: (fn) => fn },
+  // The three native modules the pre-pairing screens reach for. Each of them
+  // pulls in `expo-modules-core`, whose own source is TypeScript inside
+  // node_modules, which is where a plain `require` of Welcome or Pair stopped.
+  // What they do is not a question a render can answer, so they are the
+  // smallest things that answer at all.
+  'expo-clipboard': { setStringAsync: () => Promise.resolve(true) },
+  'expo-linking': { openURL: () => Promise.resolve(true), createURL: (p) => `remoteaichat://${p}` },
+  // …and the camera, whose permission is not a stub but a state a check sets:
+  // the pairing screen has three faces — the viewfinder, the form it falls back
+  // to when the camera was refused, and the wait while the phone is deciding —
+  // and which one it draws is this object.
+  'expo-camera': {
+    CameraView: host('div', 'CameraView'),
+    useCameraPermissions: () => [CAMERA, () => Promise.resolve(CAMERA)],
+  },
+};
+
+/** What `useCameraPermissions` answers. `null` is the moment before the phone
+ *  has said anything, which is what it answers on a cold launch. */
+let CAMERA = null;
+const camera = {
+  /** The camera is ours: the viewfinder is drawn. */
+  granted() { CAMERA = { granted: true, canAskAgain: false }; },
+  /** Refused for good: the screen falls back to the typed-in form. */
+  denied() { CAMERA = { granted: false, canAskAgain: false }; },
+  /** Nothing asked yet. */
+  reset() { CAMERA = null; },
 };
 
 /** The app's own store reaches the keychain, the socket and the notification
@@ -222,7 +253,18 @@ const PUSHED = [];
 const REPLACED = [];
 const STORE = {
   useT: () => (key) => key,
-  useStore: Object.assign((selector) => (typeof selector === 'function' ? selector(STATE) : undefined),
+  // The two things screens import from the store that are not the store: the
+  // permission mode a new chat starts on, and the reading of which account an
+  // agent is installed under. Both are the real ones (`src/store.ts`) — they
+  // decide something, and a stub that answered differently would be checking
+  // the stub.
+  DEFAULT_PERM: 'bypass',
+  agentAccountOf: (d) => (d.agentAccountId !== undefined ? d.agentAccountId
+    : (d.byProvider?.claude?.account_id ?? null)),
+  // A screen that takes a slice asks with a selector; one that takes half the
+  // store at once (`const { a, b } = useStore()`) asks with nothing, and used to
+  // be handed `undefined` to destructure.
+  useStore: Object.assign((selector) => (typeof selector === 'function' ? selector(STATE) : STATE),
     { getState: () => STATE, setState: (patch) => Object.assign(STATE, patch) }),
 };
 
@@ -307,4 +349,4 @@ function paint(markup) {
 }
 
 module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten,
-                   store, params, nav, presses, pressOn, holds, buzzes };
+                   store, params, nav, camera, presses, pressOn, holds, buzzes };

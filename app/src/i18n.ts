@@ -606,6 +606,27 @@ const en = {
   ticketMore: 'The rest of this report', ticketLess: 'Less',
   // redesign
   loginNewLink: 'New link',
+  // The screens Divan never drew a frame for, carried into its language: the
+  // words the new arrangement needs and the old one did not. The group names
+  // are lowercase because Web15 W18's are — a group is a label on a run of
+  // rows, not a heading over a section.
+  hostRemoving: 'removing…',
+  pairScanBack: 'Scan instead', pairConnecting: 'Connecting…',
+  asLoading: 'asking the computer…',
+  asNone: 'Nothing to add yet',
+  asNoneBody: 'This computer lists no agent anywhere it can reach, so there is nothing here to install.',
+  asSourceFailed: 'This source did not answer', asUnreachable: 'unreachable',
+  aiUnknown: 'That agent is not in the store',
+  aiUnknownBody: 'Nothing this computer can reach lists it, so there is nothing here to install. It may have been taken out of the source it came from.',
+  acSignedIn: '{n}/{of} signed in', acSignedInOne: 'signed in', acLoading: 'asking the computer…',
+  sgComputers: 'computers', sgSoftware: 'software', sgAccounts: 'accounts and sign-ins',
+  sgDefaults: 'what a new chat starts as', sgSecurity: 'security', sgNotifications: 'reaching you',
+  sgDev: 'development', sgHost: 'the computer itself',
+  sgDefaultsNote: 'used by the pen button, and by nothing already running',
+  sgBypassNote: 'asked for before a chat is allowed to skip approvals',
+  sgRevokeNote: "This phone's token is dropped on the computer. Pairing again is the only way back.",
+  sgCheckout: 'This checkout', sgAuto: 'Follows main by itself',
+  sgBlocked: 'Cannot update', sgWaiting: 'Waiting to be pulled',
   // the design gallery, which only a development build can reach
   devSection: 'Development', divanParts: 'Divan parts', divanPartsNote: 'design system',
 };

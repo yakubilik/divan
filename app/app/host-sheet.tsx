@@ -1,21 +1,26 @@
 import React, { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useStore, useT } from '../src/store';
-import { useColors } from '../src/theme';
-import { Card, Dot, Icon, Spinner, Text } from '../src/components/ui';
+import { useTokens } from '../src/theme';
+import { Group, ListRow, Sheet, StatusDot, useSheet } from '../src/components/divan';
+import { Icon } from '../src/components/icon';
 import { alert } from '../src/components/overlay';
-import { Sheet, useSheet } from '../src/components/sheet';
 
 /** The computer picker behind the name in the top-left of the home screens.
  *  Picking one closes the sheet straight away — the switch itself plays out on
- *  the screen underneath, which keeps its list up until the new one lands. */
+ *  the screen underneath, which keeps its list up until the new one lands.
+ *
+ *  Drawn out of the design system's parts (`components/divan`): the drawer's
+ *  head from Web15 W12, and W18's rows in their card under it. The dot is the
+ *  only colour on it, and it is on one row at most. */
 export default function HostSheet() {
   const router = useRouter();
+  const T = useT();
   return (
-    <Sheet onClose={() => router.back()}>
+    <Sheet title={T('computersTitle')} note={T('hostHint')} onClose={() => router.back()}>
       <Body />
     </Sheet>
   );
@@ -25,7 +30,7 @@ function Body() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const T = useT();
-  const c = useColors();
+  const t = useTokens();
   const { close } = useSheet();
   const hosts = useStore((s) => s.hosts);
   const activeHostId = useStore((s) => s.activeHostId);
@@ -60,41 +65,36 @@ function Body() {
   }
 
   return (
-    <View style={{ paddingTop: 12, paddingHorizontal: 16, paddingBottom: insets.bottom + 10, gap: 12 }}>
-      <Text style={{ fontSize: 18, fontWeight: '600', paddingHorizontal: 4 }}>{T('computersTitle')}</Text>
-      <Card>
+    <View style={{ paddingTop: 12, paddingHorizontal: 16, paddingBottom: insets.bottom + 10, gap: 10 }}>
+      <Group>
         {hosts.map((h, i) => {
           const active = h.id === activeHostId;
-          // Only the live computer can claim a colour; the rest are just names.
-          const dot = active ? (conn === 'online' ? c.ok : conn === 'connecting' ? c.warn : c.lineStrong) : c.lineStrong;
+          // Only the live computer can claim a state; the rest are just names.
+          const live = active && !switching && conn === 'online';
+          const state = !active || switching ? 'quiet' : conn === 'online' ? 'running'
+            : conn === 'connecting' ? 'asking' : 'quiet';
+          // What is happening to this row, in a word rather than in a spinner:
+          // the only animation Divan repeats is the running dot (Web15 W18).
+          const meta = busy === h.id ? T('hostRemoving')
+            : active && (switching || conn === 'connecting') ? T('connecting')
+            : live ? T('online') : active ? T('offline') : null;
           return (
-            <Pressable key={h.id} onPress={() => pick(h.id)} onLongPress={() => confirmRemove(h.id, h.name)}
-              style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
-                i < hosts.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.line }, pressed && { backgroundColor: c.fill }]}>
-              <Dot color={dot} />
-              <View style={{ flex: 1, gap: 2 }}>
-                {/* Every computer reads at full strength; the dot and the check say which one is live. */}
-                <Text style={{ fontSize: 15, fontWeight: active ? '600' : '400' }}>
-                  {(active && hostInfo?.name?.replace('.local', '')) || h.name}
-                </Text>
-                <Text mono style={{ fontSize: 11, color: c.muted }}>{h.host}:{h.port}</Text>
-              </View>
-              {busy === h.id || (active && switching) ? <Spinner /> : active ? <Icon name="check" size={20} /> : <Icon name="chevron_right" size={18} color={c.faint} />}
-            </Pressable>
+            <ListRow key={h.id} first={i === 0} boxed chevron={!active} onPress={() => pick(h.id)}
+              onLongPress={() => confirmRemove(h.id, h.name)}
+              lead={<StatusDot state={state} hollow={!active} />}
+              title={(active && hostInfo?.name?.replace('.local', '')) || h.name}
+              note={`${h.host}:${h.port}`} noteMono
+              meta={meta} tone={live ? 'run' : meta === T('connecting') ? 'amber' : 'ink3'}
+              right={active && !switching ? <Icon name="check" size={18} color={t.ink} /> : undefined} />
           );
         })}
-      </Card>
-      <Pressable onPress={() => close(() => router.push('/screen'))}
-        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 4 }, pressed && { opacity: 0.6 }]}>
-        <Icon name="visibility" size={18} />
-        <Text style={{ fontSize: 15, fontWeight: '500' }}>{T('viewScreen')}</Text>
-      </Pressable>
-      <Pressable onPress={() => close(() => router.push({ pathname: '/pair', params: { add: '1' } }))}
-        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 4 }, pressed && { opacity: 0.6 }]}>
-        <Icon name="add" size={18} />
-        <Text style={{ fontSize: 15, fontWeight: '500' }}>{T('addComputer')}</Text>
-      </Pressable>
-      <Text style={{ fontSize: 12, color: c.faint, paddingHorizontal: 4 }}>{T('hostHint')}</Text>
+      </Group>
+      <View>
+        <ListRow first icon="visibility" title={T('viewScreen')}
+          onPress={() => close(() => router.push('/screen'))} />
+        <ListRow icon="add" title={T('addComputer')}
+          onPress={() => close(() => router.push({ pathname: '/pair', params: { add: '1' } }))} />
+      </View>
     </View>
   );
 }

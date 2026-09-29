@@ -1,19 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DEFAULT_PERM, useStore, useT } from '../src/store';
-import { useColors } from '../src/theme';
-import { Icon, Label, Segmented, SmallButton, Text } from '../src/components/ui';
+import { useTokens } from '../src/theme';
+import { Group, ListRow, RowButton, SectionHeader, Segments, Sheet, useSheet } from '../src/components/divan';
+import { Icon } from '../src/components/icon';
+import { Text } from '../src/components/text';
 import { alert } from '../src/components/overlay';
-import { OptionCard, ProviderCards } from '../src/components/pickers';
-import { Sheet, useSheet } from '../src/components/sheet';
+import { cliVersion } from '../src/components/pickers';
 import type { Provider, ProviderDefaults } from '../src/protocol';
 
-/** With `id` it edits that chat and applies immediately; without it
- *  (`defaults=1`) it edits the defaults used by the pen button. */
+/** Which tool runs a turn, under which model, at what effort and with what it
+ *  is allowed to do. With `id` it edits that chat and applies immediately;
+ *  without it (`defaults=1`) it edits the defaults used by the pen button.
+ *
+ *  Drawn out of the design system's parts: the drawer's head from Web15 W12 over
+ *  a page of W18's cards, and the two settings that are a choice between three
+ *  words — effort, permission mode — as the segmented control W18 draws for
+ *  exactly that. */
 export default function ModelSheet() {
   const router = useRouter();
+  const T = useT();
   const { id, defaults } = useLocalSearchParams<{ id?: string; defaults?: string }>();
   // For a chat it stands tall, with room for the account list; for the
   // defaults it stops lower down, over the settings it came from.
@@ -23,20 +31,26 @@ export default function ModelSheet() {
   // read, nothing to tap, and a scrim reduced to one hairline at the top, so
   // the only way out was to know to drag it. Say what happened, at the size of
   // saying it.
-  if (!forDefaults && !chat) return <Sheet onClose={() => router.back()}><Gone /></Sheet>;
-  return <Sheet onClose={() => router.back()} top={forDefaults ? 128 : 8}><Body /></Sheet>;
+  if (!forDefaults && !chat) {
+    return <Sheet title={T('modelTitle')} note={T('modelNoChat')} onClose={() => router.back()}><Gone /></Sheet>;
+  }
+  return (
+    <Sheet title={T(forDefaults ? 'defaultsShort' : 'modelTitle')}
+      note={T(forDefaults ? 'forNewChats' : 'appliesNowShort')}
+      top={forDefaults ? 128 : 8} onClose={() => router.back()}>
+      <Body />
+    </Sheet>
+  );
 }
 
 function Gone() {
   const insets = useSafeAreaInsets();
   const T = useT();
-  const c = useColors();
   const { close } = useSheet();
   return (
-    <View style={{ paddingTop: 20, paddingHorizontal: 24, paddingBottom: insets.bottom + 18, alignItems: 'center', gap: 12 }}>
-      <Text style={{ fontSize: 17, fontWeight: '600' }}>{T('modelTitle')}</Text>
-      <Text style={{ fontSize: 14, color: c.muted, textAlign: 'center' }}>{T('modelNoChat')}</Text>
-      <SmallButton title={T('close')} onPress={() => close()} />
+    <View style={{ paddingTop: 16, paddingHorizontal: 20, paddingBottom: insets.bottom + 18,
+                   alignItems: 'flex-start' }}>
+      <RowButton label={T('close')} onPress={() => close()} />
     </View>
   );
 }
@@ -47,13 +61,14 @@ function Body() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const T = useT();
-  const c = useColors();
+  const t = useTokens();
   const { close } = useSheet();
   const { id, defaults: defaultsMode } = useLocalSearchParams<{ id?: string; defaults?: string }>();
   const editingDefaults = defaultsMode === '1' || !id;
   const chat = useStore((s) => (id ? s.chats[id] : undefined));
   const catalog = useStore((s) => s.catalog);
   const defaults = useStore((s) => s.defaults);
+  const hostInfo = useStore((s) => s.hostInfo);
   const updateChat = useStore((s) => s.updateChat);
   const setDefaults = useStore((s) => s.setDefaults);
   const prefs = useStore((s) => s.prefs);
@@ -129,57 +144,61 @@ function Body() {
   useEffect(() => { if (!editingDefaults && !chat) close(); }, [editingDefaults, chat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const accountValue = (editingDefaults ? defaults.byProvider?.[provider]?.account_id : chat?.account_id) ?? '';
+  const mark = (on: boolean) => (on ? <Icon name="check" size={18} color={t.ink} /> : undefined);
   return (
-    <ScrollView bounces={false} contentContainerStyle={{ paddingTop: 14, paddingHorizontal: 16, paddingBottom: insets.bottom + 10, gap: 14 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-        <Text style={{ fontSize: 20, fontWeight: '600' }}>{editingDefaults ? T('defaultsShort') : T('modelTitle')}</Text>
-        <Text mono style={{ fontSize: 11, color: c.muted }}>{editingDefaults ? T('forNewChats') : T('appliesNowShort')}</Text>
-      </View>
-      <ProviderCards value={provider} onChange={onProvider} />
+    <ScrollView bounces={false} contentContainerStyle={{ paddingTop: 14, paddingHorizontal: 16,
+                                                         paddingBottom: insets.bottom + 10, gap: 14 }}>
+      <Segments value={provider} onChange={(v) => onProvider(v as Provider)}
+        segments={[{ key: 'claude', label: 'Claude', mark: cliVersion(hostInfo?.versions.claude) },
+                   { key: 'codex', label: 'Codex', mark: cliVersion(hostInfo?.versions.codex) }]} />
       {cat && (
         <>
-          <OptionCard mono options={cat.models.map((m) => ({ id: m.id, label: m.label, hint: capital(m.hint) }))} value={model} onChange={onModel} />
+          <Group label={T('model')}>
+            {cat.models.map((m, i) => (
+              <ListRow key={m.id} first={i === 0} boxed chevron={false} title={m.label}
+                note={m.hint ? capital(m.hint) : null} onPress={() => onModel(m.id)}
+                right={mark(m.id === model)} />
+            ))}
+          </Group>
           {efforts.length > 0 && (
             <View style={{ gap: 6 }}>
-              <Label>{T('effort')}</Label>
-              <Segmented options={efforts} value={effort} onChange={onEffort} labels={{ medium: 'med' }} />
+              <SectionHeader kind="mark" title={T('effort')} style={{ paddingHorizontal: 4 }} />
+              <Segments value={effort} onChange={onEffort}
+                segments={efforts.map((e) => ({ key: e, label: e === 'medium' ? 'med' : e }))} />
             </View>
           )}
           {/* The default account is chosen on the Accounts screen, where the
               check mark is; here it is only asked for one chat. */}
           {!editingDefaults && accountsFor.length > 1 && (
-            <View style={{ gap: 6 }}>
-              <Label>{T('accountFor')}</Label>
-              <OptionCard
-                options={accountsFor.map((a) => ({ id: a.is_default ? '' : a.id,
-                  label: a.is_default ? T('useDefaultAccount') : a.label,
-                  hint: a.logged_in ? a.detail : T('notSignedIn'), muted: !a.logged_in }))}
-                value={accountValue}
-                onChange={(v) => {
-                  const a = accountsFor.find((x) => (x.is_default ? '' : x.id) === v);
-                  if (a && !a.logged_in && !a.is_default) return;
-                  onAccount(v || null);
-                }} />
-            </View>
+            <Group label={T('accountFor')}>
+              {accountsFor.map((a, i) => {
+                const key = a.is_default ? '' : a.id;
+                return (
+                  <ListRow key={a.id} first={i === 0} boxed chevron={false}
+                    title={a.is_default ? T('useDefaultAccount') : a.label}
+                    note={a.logged_in ? a.detail : T('notSignedIn')}
+                    onPress={a.logged_in || a.is_default ? () => onAccount(key || null) : undefined}
+                    right={mark(key === accountValue)} />
+                );
+              })}
+            </Group>
           )}
           <View style={{ gap: 6 }}>
-            <Label>{T('permMode')}</Label>
-            <Segmented options={cat.perm_modes} value={perm} onChange={(p) => void onPerm(p)} />
+            <SectionHeader kind="mark" title={T('permMode')} style={{ paddingHorizontal: 4 }} />
+            <Segments value={perm} onChange={(p) => void onPerm(p)}
+              segments={cat.perm_modes.map((p) => ({ key: p, label: p }))} />
             {prefs.faceIdBypass && cat.perm_modes.includes('bypass') && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2, paddingHorizontal: 4 }}>
-                <Icon name="face" size={15} color={c.muted} />
-                <Text style={{ fontSize: 12, color: c.muted }}>{T('faceIdForBypass')}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
+                <Icon name="face" size={15} color={t.ink3} />
+                <Text style={{ fontSize: 12, color: t.ink3 }}>{T('faceIdForBypass')}</Text>
               </View>
             )}
           </View>
         </>
       )}
       {!editingDefaults && (
-        <Pressable onPress={() => close(() => router.push({ pathname: '/chat-settings', params: { id } }))}
-          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, paddingHorizontal: 4 }, pressed && { opacity: 0.6 }]}>
-          <Text style={{ fontSize: 15, fontWeight: '500' }}>{T('moreSettings')}</Text>
-          <Icon name="chevron_right" size={18} color={c.faint} />
-        </Pressable>
+        <ListRow first title={T('moreSettings')}
+          onPress={() => close(() => router.push({ pathname: '/chat-settings', params: { id } }))} />
       )}
     </ScrollView>
   );
