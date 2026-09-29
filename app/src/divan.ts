@@ -216,6 +216,19 @@ export interface MergedProject {
    *  quota left (Mobile5 S2). They pick up again on their own, so this is a
    *  clock rather than a fault. */
   paused: number;
+  /** …and that clock: the first moment any of *those* agents can start again,
+   *  read off the machines they are stopped on and nowhere else.
+   *
+   *  It is on the project rather than being looked up from the fleet's figure
+   *  because the two are not the same number. `MergedQuota.resets_at` is when
+   *  the roomiest machine's window rolls over, which on a fleet where one
+   *  computer is spent and another is not belongs to the computer that is
+   *  *still running* — printing it beside "3 paused" would put a live machine's
+   *  hour on a card whose work stopped somewhere else.
+   *
+   *  Null where none of the stopped machines said when, which is a card that
+   *  says its agents are paused and does not say until when. */
+  pausedUntil: number | null;
   updated_at: number;
   /** What git says about the repositories it owns: when the product last moved
    *  and how much landed in the last seven days. Null where no repository of it
@@ -412,6 +425,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           cards: [],
           unknown: 0,
           paused: 0,
+          pausedUntil: null,
           activity: null,
           updated_at: p.updated_at || 0,
           stale: h.stale,
@@ -471,7 +485,15 @@ export function merge(list: HostEntry[], now: number): DivanView {
   for (const p of projects) {
     p.cards = cards.filter((c) => c.projectKey === p.key);
     p.unknown = agents.filter((a) => a.projectKey === p.key && a.unknown).length;
-    p.paused = agents.filter((a) => a.projectKey === p.key && !a.unknown && stopped.has(a.host)).length;
+    const held = agents.filter((a) => a.projectKey === p.key && !a.unknown && stopped.has(a.host));
+    p.paused = held.length;
+    // The earliest of the machines its own agents are stopped on: the first
+    // moment any of this product's work moves again. A machine that is spent and
+    // cannot say when it comes back contributes nothing rather than a guess.
+    p.pausedUntil = held
+      .map((a) => byId.get(a.host)?.quota?.resets_at ?? null)
+      .filter((at): at is number => at != null)
+      .sort((x, y) => x - y)[0] ?? null;
     p.activity = fold(p.repos.map((path) => history.get(path)));
   }
 

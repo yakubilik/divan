@@ -221,7 +221,7 @@ function Product({ project: p, index, view, now, ago, onPress }: {
   const T = useT();
   const mark = chip(p, now, ago);
   const said = line(p, now);
-  const fresh = freshness(p, view.quota.resets_at);
+  const fresh = freshness(p);
   return (
     <ProjectCard index={index} name={p.name} onPress={onPress}
       line={T(said.key, said.params)}

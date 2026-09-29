@@ -263,16 +263,24 @@ export function counters(view: DivanView): CounterSpec[] {
 /** Is this the calm morning of Mobile1 V3?
  *
  *  Nothing needs a person, and nothing is being kept from them: a screen that
- *  said "all clear" over two agents whose machine has gone quiet, or over a
- *  fleet whose quota ran out an hour ago, would be the one sentence on it that
- *  was not true. Those two have their own block and it is the one that speaks.
+ *  said "all clear" over two agents whose machine has gone quiet, or over work
+ *  that stopped mid-task when a window closed, would be the one sentence on it
+ *  that was not true. Each of those has its own way of saying so — the amber
+ *  sentence, the outlined counter, a card's own corner — and that is what the
+ *  reader should meet.
+ *
+ *  Paused counts as well as spent, and it has to: on a fleet where one computer
+ *  is out of quota and another still has room the fleet is *not* spent, no red
+ *  block is drawn, and without this clause the screen would print "All clear"
+ *  directly above a card reading `⏸ 1 paused`.
  *
  *  A phone paired with nothing is not calm either — it has nothing to be calm
  *  about, and the empty state says so instead. */
 export function calm(view: DivanView): boolean {
   return view.hosts.length > 0
     && view.totals.needsYou === 0 && view.totals.stuck === 0
-    && view.totals.unknown === 0 && !view.quota.spent;
+    && view.totals.unknown === 0 && view.totals.paused === 0
+    && !view.quota.spent;
 }
 
 // ── what needs a person ─────────────────────────────────────────────────────
@@ -382,7 +390,12 @@ export function line(p: MergedProject, now: number): { key: Key; params?: Record
 
 /** The small mono line under a project card's corner, where there is one: when
  *  the machine its numbers came from last answered (Mobile5 S1's `last seen
- *  21:02`), or when its stopped agents pick up again (S2's `resume 04:00`).
+ *  21:02`), or when its own stopped agents pick up again (S2's `resume 04:00`).
+ *
+ *  Both clocks are the product's — `lastSeen` is the oldest machine it lives on
+ *  and `pausedUntil` the first its stopped agents wait on — and neither is
+ *  passed in, so there is no clock this can be handed that does not belong to
+ *  the card being drawn.
  *
  *  Null while everything about the product is current — the frames draw `live`
  *  there and this does not, because a line that says so on every card on every
@@ -391,12 +404,17 @@ export function line(p: MergedProject, now: number): { key: Key; params?: Record
  *
  *  A quiet machine that has never answered at all has no clock to print and gets
  *  nothing rather than a guess; the corner still says it is stale. */
-export function freshness(p: MergedProject, resets_at: number | null):
-  { key: Key; params: { time: string } } | null {
+export function freshness(p: MergedProject): Said | null {
   if (p.stale) {
     return p.lastSeen == null ? null : { key: 'pfLastSeen', params: { time: clock(p.lastSeen) } };
   }
-  if (p.paused > 0 && resets_at != null) return { key: 'pfResume', params: { time: clock(resets_at) } };
+  // The product's own clock and not the fleet's. On a fleet where one computer
+  // is spent and another still has room, the fleet's figure is the *live*
+  // machine's window: printing it here would tell somebody their stopped work
+  // resumes at an hour measured on the computer that never stopped.
+  if (p.paused > 0 && p.pausedUntil != null) {
+    return { key: 'pfResume', params: { time: clock(p.pausedUntil) } };
+  }
   return null;
 }
 

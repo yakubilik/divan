@@ -127,6 +127,31 @@ const BUSY = view([studio()]);
 const STALE = view([studio(), MINI]);
 const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
 
+/** One computer out of quota and another with room — the fleet nothing in this
+ *  file had, and the one where every figure about quota has two possible
+ *  sources. Quire's agent is stopped on the studio, which comes back at 04:00;
+ *  Pebble's is running on the cloud, whose own window rolls over two hours
+ *  later. The fleet is not spent: work can still start, just not Quire's.
+ *
+ *  `PAUSED_AT` is the hour a card about Quire may print. `LIVE_AT` is the one it
+ *  may not, and is deliberately the figure the fleet's own quota carries. */
+const PAUSED_AT = NOW + 4 * HOUR;
+const LIVE_AT = NOW + 6 * HOUR;
+const MIXED = [
+  paired('h1', 'studio', { reachable: true, at: NOW - 10, snapshot: snapshot('studio', { at: NOW - 10,
+    quota: quota({ spent: true, left: 0, resets_at: PAUSED_AT, blocked: 2 }),
+    projects: [project('Quire', { running: 1, repos: ['/r/quire'] })],
+    cards: [card('c3', { project: 'Quire-id', status: 'running', title: 'Bulk CSV invite' })],
+    agents: [agent('c3', { project: 'Quire-id', projectName: 'Quire', title: 'Bulk CSV invite' })],
+    activity: { '/r/quire': { at: NOW - 3 * HOUR, week: 14, today: 3 } } }) }),
+  paired('h2', 'cloud', { reachable: true, at: NOW - 10, snapshot: snapshot('cloud', { at: NOW - 10,
+    quota: quota({ left: 0.55, resets_at: LIVE_AT }),
+    projects: [project('Pebble', { running: 1, repos: ['/r/pebble'] })],
+    cards: [card('p1', { project: 'Pebble-id', status: 'running', title: 'Rebuild the index' })],
+    agents: [agent('p1', { project: 'Pebble-id', projectName: 'Pebble', title: 'Rebuild the index' })],
+    activity: { '/r/pebble': { at: NOW - HOUR, week: 4, today: 1 } } }) }),
+];
+
 // ── 1 · the system line, in each of its three states ────────────────────────
 
 {
@@ -289,6 +314,58 @@ const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
   );
 }
 
+// ── 2c · one machine out of quota, one with room ────────────────────
+//
+// The fleet has two clocks in it and only one of them belongs to a card whose
+// agents stopped. Nothing in this file mixed the two states before, and a resume
+// time taken from the fleet's figure is the live machine's window — a number
+// nothing measured for that product, printed in its corner as a fact.
+
+{
+  const mixed = view(MIXED);
+  const quire = mixed.projects.find((p) => p.name === 'Quire');
+  const pebble = mixed.projects.find((p) => p.name === 'Pebble');
+  checks.push(
+    ['a fleet with one machine spent and one with room is not a spent fleet',
+      mixed.quota.spent === false && mixed.quota.spentMachines.join() === 'studio'],
+    ['\u2026so the figure it carries belongs to the machine that is still running',
+      mixed.quota.resets_at === LIVE_AT],
+    ['a product\u2019s stopped agents wait on their own machine\u2019s clock, not the fleet\u2019s',
+      quire.paused === 1 && quire.pausedUntil === PAUSED_AT && PAUSED_AT !== mixed.quota.resets_at],
+    ['\u2026and that is the hour its card prints',
+      eq(D.freshness(quire), { key: 'pfResume', params: { time: D.clock(PAUSED_AT) } })],
+    ['a product on the machine that still has room is not paused at all',
+      pebble.paused === 0 && pebble.pausedUntil === null && D.freshness(pebble) === null],
+    ['a machine that is spent and cannot say when it comes back gives its products no hour',
+      (() => {
+        const dumb = view([paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
+          quota: quota({ spent: true, left: 0 }),
+          projects: [project('Quire', { running: 1 })],
+          cards: [card('c3', { project: 'Quire-id', status: 'running' })],
+          agents: [agent('c3', { project: 'Quire-id', projectName: 'Quire' })] }) })]);
+        const one = dumb.projects[0];
+        return one.paused === 1 && one.pausedUntil === null && D.freshness(one) === null;
+      })()],
+    ['\u2026and the earliest of them, where a product is stopped on two machines at once',
+      (() => {
+        const both = view([
+          paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
+            quota: quota({ spent: true, left: 0, resets_at: LIVE_AT }),
+            projects: [project('Quire', { running: 1, repos: ['/r/quire'] })],
+            cards: [card('c3', { project: 'Quire-id', status: 'running' })],
+            agents: [agent('c3', { project: 'Quire-id', projectName: 'Quire' })] }) }),
+          paired('h2', 'cloud', { reachable: true, at: NOW, snapshot: snapshot('cloud', {
+            quota: quota({ spent: true, left: 0, resets_at: PAUSED_AT }),
+            projects: [project('Quire', { running: 1, repos: ['/r/quire'] })],
+            cards: [card('c4', { project: 'Quire-id', status: 'running' })],
+            agents: [agent('c4', { project: 'Quire-id', projectName: 'Quire' })] }) })]);
+        return both.projects[0].paused === 2 && both.projects[0].pausedUntil === PAUSED_AT;
+      })()],
+    ['there is no red block at all while any machine still has quota',
+      D.pausedWords(mixed, ago) === null],
+  );
+}
+
 // ── 3 · what needs a person ─────────────────────────────────────────────────
 
 {
@@ -393,14 +470,16 @@ const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
         return c.key === 'pcPaused' && c.mark === '⏸' && c.tone === 'red' && c.params.n === 3;
       })()],
     ['a card off a quiet machine says when that machine last answered',
-      eq(D.freshness(kanji, null), { key: 'pfLastSeen', params: { time: D.clock(kanji.lastSeen) } })],
+      eq(D.freshness(kanji), { key: 'pfLastSeen', params: { time: D.clock(kanji.lastSeen) } })],
     ['…one whose agents the quota stopped says when they pick up again',
-      eq(D.freshness({ ...quire, stale: false, paused: 3 }, NOW + 4 * HOUR),
+      eq(D.freshness({ ...quire, stale: false, paused: 3, pausedUntil: NOW + 4 * HOUR }),
          { key: 'pfResume', params: { time: D.clock(NOW + 4 * HOUR) } })],
+    ['…and one whose stopped machines could not say when says nothing rather than an hour',
+      D.freshness({ ...quire, stale: false, paused: 3, pausedUntil: null }) === null],
     ['…and one with nothing to say says nothing, rather than "live" on every card every morning',
-      D.freshness(quire, NOW + 4 * HOUR) === null],
+      D.freshness(quire) === null],
     ['a machine that has never answered at all has no clock to print, and prints none',
-      D.freshness({ ...kanji, lastSeen: null }, null) === null],
+      D.freshness({ ...kanji, lastSeen: null }) === null],
     ['the line worth reading on a card is the worst card’s own',
       D.latest(quire) === 'Coder stuck on Safari login' && D.latest(walk) === ''],
   );
@@ -421,6 +500,8 @@ const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
     ['…and something needing somebody is not', D.calm(still) === false],
     ['"all clear" is not said over agents nobody can vouch for', D.calm(STALE) === false],
     ['…nor over a fleet that ran out of quota an hour ago', D.calm(out) === false],
+    ['…nor over work that stopped mid-task on one machine while another still has room',
+      D.calm(view(MIXED)) === false && view(MIXED).quota.spent === false],
     ['…nor by a phone that is not paired with anything, which has its own words',
       D.calm(view([])) === false],
   );
@@ -512,6 +593,7 @@ const FLEETS = {
   'quiet, and nothing waiting on a person': QUIET_CALM,
   'out of quota': SPENT,
   'out of quota, and nothing waiting on a person': SPENT_ONLY,
+  'one machine out of quota and one with room': MIXED,
   calm: CALM,
   'nothing paired at all': [],
 };
@@ -589,6 +671,18 @@ for (const scheme of ['dark', 'light']) {
       })()],
     [`${scheme}: an agent that has said nothing yet is timed instead, rather than reading as a bare title`,
       /Bulk CSV invite · \d/.test(draw(scheme, QUIET_CALM))],
+    // …and the two halves of "out of quota" cannot disagree: the block is about
+    // the fleet and the corner is about the product, so on a fleet where one
+    // computer is spent and one is not there is no block, and the corner of the
+    // product that stopped still says so, with its own machine's hour under it.
+    [`${scheme}: one machine out of quota and one with room draws no red block, and still says which product stopped`,
+      (() => {
+        const m = draw(scheme, MIXED);
+        return !m.includes('pausedTitle') && m.includes('pcPaused') && m.includes('pfResume')
+          && !m.includes('calmTitle');
+      })()],
+    [`${scheme}: \u2026and the counter still counts the agents that stopped`,
+      draw(scheme, MIXED).includes('cPaused')],
     [`${scheme}: \u2026nor over a fleet that has run out of quota`,
       (() => {
         const m = draw(scheme, SPENT_ONLY);
