@@ -148,26 +148,26 @@ export default function Dashboard() {
  *  empty track would be a number nobody read. */
 function Line({ view, ago }: { view: DivanView; ago: Ago }) {
   const T = useT();
-  const line = systemLine(view);
-  const say = line.state === 'none' ? T('sysNoMachines')
-    : line.state === 'unreachable' && line.unreachable > 1 ? T('sysUnreachableMany', { n: line.unreachable })
-    : line.state === 'unreachable' && line.quiet
-      ? (line.quiet.age == null
-          ? T('sysUnreachableNever', { name: line.quiet.name })
-          : T('sysUnreachable', { name: line.quiet.name, d: ago(line.quiet.age) }))
-    : line.machines === 1 ? T('sysOneMachine') : T('sysMachines', { n: line.machines });
-  const q = line.quota;
+  const sys = systemLine(view);
+  const say = sys.state === 'none' ? T('sysNoMachines')
+    : sys.state === 'unreachable' && sys.unreachable > 1 ? T('sysUnreachableMany', { n: sys.unreachable })
+    : sys.state === 'unreachable' && sys.quiet
+      ? (sys.quiet.age == null
+          ? T('sysUnreachableNever', { name: sys.quiet.name })
+          : T('sysUnreachable', { name: sys.quiet.name, d: ago(sys.quiet.age) }))
+    : sys.machines === 1 ? T('sysOneMachine') : T('sysMachines', { n: sys.machines });
+  const q = sys.quota;
   const quota = !q ? null
     : q.spent
       ? (q.resets_at ? T('sysQuotaSpent', { time: clock(q.resets_at) }) : T('sysQuotaOut'))
-      : line.state === 'unreachable'
+      : sys.state === 'unreachable'
         ? T('sysQuotaShort', { p: q.pct })
         : q.resets_at ? T('sysQuotaLeft', { p: q.pct, time: clock(q.resets_at) })
         : T('sysQuotaBare', { p: q.pct });
   // The healthy line labels its track; the other two have spent their left half
   // on a sentence and say "quota" inside the figure instead.
-  return <SystemLine line={line} say={say} quota={quota}
-    label={q && !q.spent && line.state === 'healthy' ? T('sysQuota') : null} />;
+  return <SystemLine line={sys} say={say} quota={quota}
+    label={q && !q.spent && sys.state === 'healthy' ? T('sysQuota') : null} />;
 }
 
 /** Out of quota (Mobile5 S2). Red, and not an alarm: what stopped, that nothing
