@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
-import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
+import { SHADOW, T } from '../lib/theme';
+import { Icon, P, Pulse, mono } from '../ui/kit';
+import { Card, Row, SectionHeader, StatusDot, Tag, Write } from '../ui/divan';
 import { tilde } from '../lib/format';
 import { useFleet } from '../lib/fleet';
 import { ProviderMark } from './Sidebar';
@@ -78,7 +79,7 @@ export function Palette({ commands, onOpenChat, onNewChatIn, onClose }: {
     for (const c of commands) {
       if (!hit(c.label)) continue;
       out.push({
-        key: `cmd:${c.id}`, group: 'Komutlar', label: c.label, hint: c.hint,
+        key: `cmd:${c.id}`, group: 'Commands', label: c.label, hint: c.hint,
         shortcut: c.shortcut, danger: c.danger, mark: 'command',
         run: () => { c.run(); onClose(); },
       });
@@ -107,110 +108,99 @@ export function Palette({ commands, onOpenChat, onNewChatIn, onClose }: {
     <div
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
-        position: 'fixed', inset: 0, background: C.scrim, zIndex: 60,
+        position: 'fixed', inset: 0, background: T.scrim, zIndex: 60,
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 110,
       }}
     >
-      <div style={{
-        width: 640, maxWidth: 'calc(100vw - 48px)', background: C.surface,
-        border: `1px solid ${C.borderStrong}`, borderRadius: R.media,
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
+      {/* What ⌘K opens is the bar Web12 W1 draws across the bottom, unrolled:
+          the same field, the same key at the end of it, and under it the
+          things it can reach as the rows they are on every other page. */}
+      <Card
+        raised inset={false}
+        style={{ width: 640, maxWidth: 'calc(100vw - 48px)', boxShadow: SHADOW.pop }}
+      >
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', height: 52,
-          borderBottom: `1px solid ${C.border}`,
+          display: 'flex', alignItems: 'center', gap: 10, padding: '0 18px', height: 52,
+          borderBottom: `1px solid ${T.line}`, fontSize: 16,
         }}>
-          <Icon path={P.search} size={16} color={C.mute} />
-          <input
-            autoFocus name="palette-query"
-            value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKey}
+          <Icon path={P.search} size={17} color={T.ink3} />
+          <Write
+            value={query} onChange={setQuery} onKeyDown={onKey} autoFocus
+            label="Search folders, chats and commands"
             placeholder="folder, chat, command…"
-            style={{
-              flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              fontSize: 16, color: C.text,
-            }}
           />
-          <span style={{
-            ...mono, fontSize: 11, color: C.faint, border: `1px solid ${C.border}`,
-            borderRadius: R.badge, padding: '2px 6px',
-          }}>esc</span>
+          <Tag label="esc" />
         </div>
 
-        <div ref={listRef} style={{ maxHeight: 420, overflowY: 'auto', padding: '8px 0' }}>
+        <div ref={listRef} style={{ maxHeight: 420, overflowY: 'auto', padding: '6px 0' }}>
           {rows.map((r, i) => {
             const head = r.group !== lastGroup ? (lastGroup = r.group) : null;
             const on = i === cursor;
             return (
               <div key={r.key}>
                 {head && (
-                  <div style={{
-                    fontSize: 11, fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase',
-                    color: C.mute, padding: '10px 16px 6px',
-                  }}>{head}</div>
+                  <SectionHeader
+                    kind="mark" title={head.toLocaleLowerCase('en')}
+                    style={{ padding: '10px 18px 4px' }}
+                  />
                 )}
-                <button
-                  type="button" data-i={i}
-                  onMouseEnter={() => setCursor(i)}
-                  onClick={r.run}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 40,
-                    padding: '0 16px', cursor: 'pointer', textAlign: 'left', border: 'none',
-                    background: on ? C.accentTint : 'transparent',
-                    borderLeft: `2px solid ${on ? C.accent : 'transparent'}`,
-                  }}
-                >
-                  {r.mark === 'chat-claude' || r.mark === 'chat-codex'
-                    ? <div style={{ transform: 'scale(0.8)', marginLeft: -3 }}>
-                        <ProviderMark provider={r.mark === 'chat-claude' ? 'claude' : 'codex'} />
-                      </div>
-                    : <Icon
-                        path={r.mark === 'folder' ? P.folder : r.danger ? P.stop : P.bolt}
-                        size={15} color={r.danger ? C.danger : C.mute}
-                      />}
-                  <span style={{
-                    flex: 1, fontSize: 14, minWidth: 0, whiteSpace: 'nowrap',
-                    overflow: 'hidden', textOverflow: 'ellipsis',
-                    color: r.danger ? C.danger : C.text,
-                    ...(r.mark === 'folder' ? mono : {}),
-                  }}>{r.label}</span>
-                  {r.running && <Pulse />}
-                  {r.hint && (
-                    <span style={{
-                      fontSize: 12, color: C.faint, flexShrink: 0, maxWidth: 220,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>{r.hint}</span>
-                  )}
-                  {r.shortcut && (
-                    <span style={{
-                      ...mono, fontSize: 11, color: C.faint, border: `1px solid ${C.border}`,
-                      borderRadius: R.badge, padding: '2px 6px', flexShrink: 0,
-                    }}>{r.shortcut}</span>
-                  )}
-                </button>
+                <span data-i={i} onMouseEnter={() => setCursor(i)} style={{ display: 'block' }}>
+                  <Row
+                    first
+                    // `Row` colours its meta in the tone, not its title, and a
+                    // command that stops every session has to read as one.
+                    title={r.danger ? <span style={{ color: T.red }}>{r.label}</span> : r.label}
+                    mark={r.mark === 'folder'}
+                    tone={on ? 'ink2' : undefined} wash={on}
+                    meta={r.hint ?? null}
+                    lead={r.mark === 'chat-claude' || r.mark === 'chat-codex'
+                      ? <ProviderMark provider={r.mark === 'chat-claude' ? 'claude' : 'codex'} />
+                      : <Icon
+                          path={r.mark === 'folder' ? P.folder : r.danger ? P.stop : P.bolt}
+                          size={17} color={r.danger ? T.red : T.ink3}
+                        />}
+                    right={
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {r.running && <Pulse color={T.run} />}
+                        {r.shortcut && <Tag label={r.shortcut} />}
+                      </span>
+                    }
+                    onClick={r.run}
+                    style={{ padding: '8px 18px', gap: 10 }}
+                  />
+                </span>
               </div>
             );
           })}
           {!rows.length && (
-            <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: C.mute }}>
-              Nothing matches
+            <div style={{
+              padding: '28px 18px', fontSize: 13.5, lineHeight: 1.5, color: T.ink2,
+            }}>
+              Nothing here matches those words — a chat, a folder on the computer you are on,
+              or one of the panel’s own commands.
             </div>
           )}
         </div>
 
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 14, padding: '0 16px', height: 36,
-          borderTop: `1px solid ${C.border}`, ...mono, fontSize: 11, color: C.faint,
+          display: 'flex', alignItems: 'center', gap: 14, padding: '0 18px', height: 36,
+          borderTop: `1px solid ${T.line}`, ...mono, fontSize: 11, color: T.ink3,
         }}>
           <span>↑↓ move</span>
           <span>⏎ open</span>
           <span>⌘K close</span>
           <span style={{ flex: 1 }} />
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Dot color={focused?.status === 'online' ? C.ok : C.faint} live={focused?.status === 'online'} size={5} />
-            {focused ? `${focused.info?.name ?? focused.cfg.name} ${focused.status === 'online' ? 'online' : 'offline'}` : '—'}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <StatusDot
+              state={focused?.status === 'online' ? 'running' : 'quiet'}
+              hollow={focused?.status !== 'online'} size={6}
+            />
+            {focused
+              ? `${focused.info?.name ?? focused.cfg.name} ${focused.status === 'online' ? 'online' : 'offline'}`
+              : 'no computer paired'}
           </span>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

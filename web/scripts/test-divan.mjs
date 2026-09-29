@@ -404,9 +404,21 @@ group('the switch');
   ok('the switch is offered on a screen', /AppearanceSection/.test(src('src/screens/Preferences.tsx'))
     && /'appearance'/.test(src('src/screens/Preferences.tsx')));
   ok('…and in the command palette', /id: 'theme'/.test(src('src/App.tsx')));
-  ok('…and the screen that offers it works with no computer paired',
-    /section === 'appearance' && <AppearanceSection \/>/.test(src('src/screens/Preferences.tsx'))
-    && /section !== 'hosts' && section !== 'appearance' && !slot/.test(src('src/screens/Preferences.tsx')));
+  // Rendered rather than grepped: what this is about is that the one setting
+  // which is this browser's own is reachable on a panel with no computer
+  // behind it, and a regular expression over the source says nothing about
+  // that — it only says the source has not been reworded.
+  {
+    const { useFleet } = await load('src/lib/fleet.js');
+    Object.assign(useFleet.getInitialState(), { hosts: {}, order: [], focus: null, ready: true });
+    useFleet.setState({ hosts: {}, order: [], focus: null, ready: true });
+    const { Preferences } = await load('src/screens/Preferences.js');
+    let alone = '';
+    try { alone = renderToStaticMarkup(createElement(Preferences, {})); } catch (e) { alone = `threw: ${e.message}`; }
+    ok('…and the screen that offers it stands up with no computer paired',
+      alone.includes('Appearance') && alone.includes('Computers')
+      && !alone.startsWith('threw:'), alone.slice(0, 160));
+  }
 }
 
 // ── 5 · the parts ──────────────────────────────────────────────────────────
@@ -638,6 +650,10 @@ const drawn = {};
 
 group('the screens the panel already had');
 {
+  // Every section of this computer's page, because five of the seven are
+  // behind a press and a static render cannot press one — and it is the screen
+  // this ticket rewrote hardest.
+  const SECTIONS = ['hosts', 'accounts', 'defaults', 'tools', 'appearance', 'security', 'about'];
   const screens = {
     Fleet: ['src/screens/Fleet.js', 'Fleet', { onOpenChat() {}, onNewChat() {} }],
     Projects: ['src/screens/Projects.js', 'Projects', { onNewChatIn() {}, onOpenChat() {} }],
@@ -645,7 +661,9 @@ group('the screens the panel already had');
     Terminal: ['src/screens/Terminal.js', 'Terminal', { onPeek() {}, onNewChat() {} }],
     Screen: ['src/screens/Screen.js', 'Screen', {}],
     Update: ['src/screens/Update.js', 'Update', {}],
-    Preferences: ['src/screens/Preferences.js', 'Preferences', {}],
+    ...Object.fromEntries(SECTIONS.map((x) => (
+      [`Preferences·${x}`, ['src/screens/Preferences.js', 'Preferences', { section: x }]]
+    ))),
     Onboarding: ['src/screens/Onboarding.js', 'Onboarding', { onPaired() {} }],
     Ustabasi: ['src/screens/Ustabasi.js', 'Ustabasi', {}],
     Sidebar: ['src/components/Sidebar.js', 'Sidebar', {
@@ -675,6 +693,26 @@ group('the screens the panel already had');
   const { host } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
   const paired = { hosts: { studio: host() }, order: ['studio'], focus: 'studio', ready: true };
   const nothing = { hosts: {}, order: [], focus: null, ready: true };
+  /** The same computer answering eight minutes ago and not since: every figure
+   *  on the page is what it last said, and a screen that reads `info` as if it
+   *  were fresh has to survive it. */
+  const stale = () => {
+    const slot = host();
+    slot.lastOnline = (Date.now() / 1000 - 8 * 60) * 1000;
+    return { hosts: { studio: slot }, order: ['studio'], focus: 'studio', ready: true };
+  };
+  /** …and the same computer refusing the connection with its last answer still
+   *  in hand, which is where a screen that assumes `info` is there falls over. */
+  const gone = () => {
+    const slot = host();
+    slot.status = 'offline';
+    slot.info = null;
+    slot.catalog = null;
+    slot.accounts = [];
+    slot.limits = {};
+    slot.lastOnline = (Date.now() / 1000 - 600) * 1000;
+    return { hosts: { studio: slot }, order: ['studio'], focus: 'studio', ready: true };
+  };
 
   /** A render on a server is handed the store's *initial* state — zustand
    *  reads `getServerState || getInitialState` — so a store seeded with
@@ -703,9 +741,46 @@ group('the screens the panel already had');
   globalThis.localStorage.setItem('rac.terminal.wall',
     JSON.stringify(['studio/c1', 'studio/c2', 'studio/c3']));
 
-  for (const [world, state] of [['alone', nothing], ['paired', paired]]) {
+  // The Machine place and its thirteen pages. Six of them — the machines
+  // table, the executors, the sign-ins, the thresholds, Admin and Settings —
+  // are drawn by no other tree in this file, so until now nothing here read a
+  // colour, a white or a placeholder off them. The drawer takes a merged view
+  // as well as the store, so the two move together: a world where the store
+  // has no computer is a world where the view has none either.
+  const D = await load('src/lib/divan.js');
+  const { studio: studioSnap, mini: miniSnap } =
+    await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
+  const NOW_S = Math.floor(Date.now() / 1000);
+  const FLEET = {
+    alone: D.merge([], NOW_S),
+    paired: D.merge([{ key: 'studio', name: 'studio', state: D.answered(studioSnap(), NOW_S) }], NOW_S),
+    stale: D.merge([{ key: 'studio', name: 'studio', state: D.answered(studioSnap(), NOW_S - 8 * 60) }], NOW_S),
+    // Two machines the drawer has to draw and one of them has never answered:
+    // that is where a table has nothing to put in a cell, which is the state
+    // criterion 4 is about.
+    unreachable: D.merge([
+      { key: 'studio', name: 'studio', state: D.silent(null, 'not connected') },
+      { key: 'mini', name: 'mini',
+        state: D.silent(D.answered(miniSnap(), NOW_S - 600), 'connection refused') },
+    ], NOW_S),
+  };
+  const shell = await load('src/lib/shell.js');
+  const DRAWER = [...shell.MACHINE_ROWS.map((r) => r.view),
+                  ...shell.MACHINE_ASIDE.map((a) => a.view)];
+  const drawerPages = (world) => Object.fromEntries(DRAWER.map((v) => (
+    [`Machine·${v}`, ['src/screens/Machine.js', 'Machine', {
+      view: v, fleet: FLEET[world], onView() {}, onOpenChat() {}, onNewChat() {},
+      onNewChatIn() {}, onStartChat() {}, onPeek() {},
+    }]]
+  )));
+
+  // Four worlds, because that is what the screens have to survive: nothing
+  // paired, a computer answering, one whose answer is eight minutes old, and
+  // one that has stopped answering with its last answer still on screen.
+  for (const [world, state] of [['alone', nothing], ['paired', paired],
+                               ['stale', stale()], ['unreachable', gone()]]) {
     seed(state);
-    for (const [name, [path, exp, props]] of Object.entries(screens)) {
+    for (const [name, [path, exp, props]] of Object.entries({ ...screens, ...drawerPages(world) })) {
       let markup;
       try {
         const mod = await load(path);
@@ -719,7 +794,12 @@ group('the screens the panel already had');
       for (const v of vars) if (K.DARK[v] === undefined) undeclared.push(`${world} ${name}: ${v}`);
     }
   }
-  ok('every screen still stands up, paired and alone', broken.length === 0, broken.join('\n    '));
+  ok('every screen still stands up: alone, paired, stale and unreachable',
+    broken.length === 0, broken.join('\n    '));
+  ok('…and that is every page of the Machine place as well as every screen',
+    DRAWER.length === 13
+    && DRAWER.every((v) => (drawn[`screen:Machine·${v} unreachable`] ?? '').length > 400),
+    DRAWER.map((v) => `${v} ${(drawn[`screen:Machine·${v} unreachable`] ?? '').length}`).join(' · '));
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
   ok('…so every colour on every screen exists in both themes', undeclared.length === 0, undeclared.join(', '));
   ok('the wall draws its tiles, which is the only place the phase colours are',
@@ -727,8 +807,14 @@ group('the screens the panel already had');
     && (drawn['screen:Terminal paired'] ?? '').includes('Invoice PDF'),
     (drawn['screen:Terminal paired'] ?? '').length.toString());
   ok('…and a paired screen is a fuller screen than an empty one',
-    (drawn['screen:Preferences paired'] ?? '').length > (drawn['screen:Preferences alone'] ?? '').length * 1.5,
-    `${(drawn['screen:Preferences paired'] ?? '').length} vs ${(drawn['screen:Preferences alone'] ?? '').length}`);
+    (drawn['screen:Preferences·accounts paired'] ?? '').length
+      > (drawn['screen:Preferences·accounts alone'] ?? '').length * 1.5,
+    `${(drawn['screen:Preferences·accounts paired'] ?? '').length} vs `
+      + `${(drawn['screen:Preferences·accounts alone'] ?? '').length}`);
+  ok('…and all seven sections of this computer’s page drew in all four worlds',
+    SECTIONS.every((x) => ['alone', 'paired', 'stale', 'unreachable']
+      .every((w) => (drawn[`screen:Preferences·${x} ${w}`] ?? '').length > 400)),
+    SECTIONS.map((x) => `${x} ${(drawn[`screen:Preferences·${x} unreachable`] ?? '').length}`).join(' · '));
   // The panels that open over a screen are drawn against a paired computer
   // too: New chat reads the catalog off one.
   seed(paired);
@@ -839,7 +925,7 @@ group('the panels the screens open over themselves');
     (drawn['overlay:ProviderMarkDim'] ?? '').includes('&lt;&gt;')
     && (drawn['overlay:ProviderMarkDim'] ?? '') !== (drawn['overlay:ProviderMarkLive'] ?? ''));
   ok('…and a paired preferences page draws that dim mark itself, where the real one is',
-    (drawn['screen:Preferences paired'] ?? '').includes('&lt;&gt;'));
+    (drawn['screen:Preferences·accounts paired'] ?? '').includes('&lt;&gt;'));
 }
 
 group('white belongs on a filled colour and nowhere else');
@@ -1111,6 +1197,169 @@ group('design/divan/TOKENS.md');
   ok('…and the one derived and the one borrowed value are recorded as such',
     K.DERIVED.every((n) => new RegExp(`\`${n}\``).test(doc))
     && K.BORROWED.every((n) => new RegExp(`\`${n}\``).test(doc)));
+}
+
+// ── the screens that were carried over last ────────────────────────────────
+
+/** Everything under `web/src` this branch touched, asked of git rather than
+ *  written down: a list kept by hand is a list that goes stale the first time
+ *  a file is added to the work, and then the check quietly stops covering it.
+ *  The merge base is the comparison, so it says the same thing on the branch
+ *  and after a merge. */
+function carried() {
+  try {
+    const out = execFileSync('git', ['diff', '--name-only', 'main...HEAD', '--', 'web/src'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const list = out.split('\n').filter(Boolean).map((f) => f.replace(/^web\//, ''));
+    if (list.length) return list;
+  } catch { /* no git, no main, or nothing between them */ }
+  return null;
+}
+
+group('no page is still drawn in the older vocabulary');
+{
+  // The palette that predates Divan is the same table under other names
+  // (`C` in `lib/theme.ts`), so a page built out of it follows both themes and
+  // no colour check can see it. What is visible is the *shape*: `Btn` is not
+  // `Button`, `R.card` is 12 where a Divan card is 16, and a page made of them
+  // is a page from before the frames. So this is the one criterion that is
+  // answered by what a screen is written with rather than by what it paints.
+  const OLD = ['Btn', 'Chip', 'Dot', 'Label', 'Segment', 'Radio', 'Empty'];
+  const pages = [];
+  for (const e of readdirSync(join(web, 'src/screens'), { withFileTypes: true })) {
+    if (e.isFile() && e.name.endsWith('.tsx')) pages.push(`src/screens/${e.name}`);
+  }
+  pages.push('src/components/Palette.tsx', 'src/App.tsx');
+
+  const speaking = [];
+  for (const f of pages) {
+    const text = src(f);
+    const kit = /import\s*\{([^}]*)\}\s*from\s*'[^']*ui\/kit'/.exec(text)?.[1] ?? '';
+    const took = kit.split(',').map((n) => n.trim()).filter((n) => OLD.includes(n));
+    const palette = [...new Set([...text.matchAll(/\b([CR])\.[a-zA-Z0-9]+/g)].map((m) => m[1]))];
+    if (took.length || palette.length) speaking.push(`${f}: ${[...took, ...palette].join(', ')}`);
+  }
+  ok('every page of the panel is built out of the design system and nothing older',
+    speaking.length === 0, speaking.join('\n    '));
+  ok('…and there were enough pages for that to mean something',
+    pages.length >= 20, `${pages.length} pages`);
+  // The two that still hold the older set are the reason it is still there:
+  // the chat is not being rebuilt, and the icon vocabulary is shared.
+  ok('…while the chat, which is not being rebuilt, still speaks it',
+    /\bC\./.test(src('src/components/ChatView.tsx')));
+}
+
+group('every carried screen asks its computer for exactly what it did');
+{
+  // A carry is a change of language, not of behaviour, and the half of that
+  // which a render cannot see is the half that leaves this browser: which
+  // requests a screen makes, and which events it drives with. Both are read
+  // off the source and held to `main` — a screen that quietly dropped a
+  // handler or gained a call would show up here as a difference.
+  const REQUEST = /'((?:screen|chat|ustabasi|host|divan|account|agent|tool|approval|group|limits|update|daemon)\.[a-z_.]+)'/g;
+  const DRIVE = /\bon(MouseDown|MouseUp|MouseMove|MouseEnter|MouseLeave|Wheel|ContextMenu|DoubleClick|KeyDown|DragStart|DragEnd|DragOver|DragLeave|Drop|Click|Change|Blur|Paste|Load|Error)\s*[=:]/g;
+  const surface = (text) => JSON.stringify([
+    [...new Set([...text.matchAll(REQUEST)].map((m) => m[1]))].sort(),
+    [...new Set([...text.matchAll(DRIVE)].map((m) => m[1]))].sort(),
+  ]);
+  /** The one difference that is on purpose, with the reason. The frames draw
+   *  no hovered state at all — a card says what it is with its ring — so the
+   *  wall's tiles stopped lighting up under the pointer when they became
+   *  `Card`s. Nothing a person can do changed; a colour that appeared under
+   *  the mouse did not. */
+  const ON_PURPOSE = { 'src/screens/Ustabasi.tsx': ['MouseEnter', 'MouseLeave'] };
+  const allow = (f, before) => {
+    const [reqs, drives] = JSON.parse(before);
+    const dropped = ON_PURPOSE[f] ?? [];
+    return JSON.stringify([reqs, drives.filter((d) => !dropped.includes(d))]);
+  };
+  const CARRIED = carried();
+  let was = null;
+  try {
+    const git = (args) => execFileSync('git', args,
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const base = git(['merge-base', 'main', 'HEAD']).trim();
+    was = CARRIED.map((f) => git(['show', `${base}:web/${f}`]));
+  } catch { /* no git, no main, or a file this branch added has no `before` */ }
+  if (was === null) console.log('  · no git to read the merge base from: nothing to compare against');
+  else {
+    const changed = CARRIED
+      .map((f, i) => [f, allow(f, surface(was[i])), surface(src(f))])
+      .filter(([, before, after]) => before !== after);
+    ok('none of them gained a request, lost one, or dropped an event it drove with',
+      changed.length === 0,
+      changed.map(([f, before, after]) => `${f}:\n      was ${before}\n      now ${after}`).join('\n    '));
+    ok('…over every file under src this branch touched, which git named rather than a list',
+      CARRIED.length >= 11 && was.every((t) => t.length > 200), CARRIED.join(', '));
+  }
+}
+
+group('nothing on a screen is standing in for something');
+{
+  // Read off the rendered markup, over every tree in this file except the
+  // chat, which is not being rebuilt. A dash counts wherever it ends a run of
+  // text, not only where it is the whole of one, so `up —` is caught as well
+  // as `—`. The one exemption is a button whose whole label is a glyph.
+  const CHAT = /Chat|Sidebar|FieldSheet|Lightbox|Approval|Timeline|Bubble|NewChat/;
+  const HOLDING = [
+    [/\blorem\b|\bipsum\b/i, 'lorem ipsum'],
+    [/\bTODO\b|\bTBD\b|\bFIXME\b/, 'a note to the author'],
+    [/coming soon|not implemented|under construction/i, 'a promise'],
+    [/\bfoo\b|\bbar\b|\bbaz\b/i, 'a stand-in name'],
+    [/[—–]\s*</, 'a dash where a value goes'],
+    [/>\s*(?:\.\.\.|…)\s*</, 'an ellipsis where a value goes'],
+  ];
+
+  /** A button that is one glyph and nothing else: the minimise and close marks
+   *  at the end of a panel's head. Anything else a button holds is words on a
+   *  screen — most rows on these pages are buttons, because most rows go
+   *  somewhere — so only this shape is dropped, and the inner match cannot
+   *  cross another `<button`. The em dash is deliberately not in the set: no
+   *  control on these screens is labelled with one, so exempting it would only
+   *  ever hide a missing value. */
+  const GLYPH = /^(?:[–×✓✕]|&times;|&#\d+;)$/;
+  const BUTTON = /<button\b[^>]*>((?:(?!<\/?button)[\s\S])*)<\/button>/g;
+
+  /** The words, with the tags out of the way. An opening tag becomes `<>`, not
+   *  `><`: the latter puts a `<` in front of an element's own text, and every
+   *  value on these screens is the sole child of a tag. */
+  const standingIn = (markup) => {
+    const words = markup
+      .replace(BUTTON, (whole, inner) => (
+        GLYPH.test(inner.replace(/<[^>]*>/g, '').trim()) ? ' ' : whole))
+      .replace(/<[a-zA-Z][^>]*>/g, '<>');
+    return HOLDING.filter(([re]) => re.test(words)).map(([, what]) => what);
+  };
+
+  const DASH = 'a dash where a value goes';
+  ok('a value that is only a dash is reported',
+    standingIn(renderToStaticMarkup(createElement(parts.Cell, { text: '—' }))).includes(DASH));
+  ok('…inside a row that goes somewhere, which is most rows on these pages',
+    standingIn(renderToStaticMarkup(createElement(parts.Table, {
+      columns: [{ label: 'chat', width: '1fr' }, { label: 'cost', width: '80px' }],
+      rows: [{ key: 'r', onClick() {}, cells: [
+        createElement(parts.NameCell, { title: 'Webhook retry policy' }),
+        createElement(parts.Cell, { text: '—' }),
+      ] }],
+    }))).includes(DASH));
+  ok('…and where the dash ends a line rather than being the whole of it',
+    standingIn(renderToStaticMarkup(createElement(parts.Cell, { text: 'up —' }))).includes(DASH));
+  ok('…while the glyph a panel is put away with is not a missing value',
+    standingIn(renderToStaticMarkup(createElement(parts.PanelHead, {
+      title: 'Coder', onMinimise() {}, onClose() {},
+    }))).length === 0);
+
+  const found = [];
+  let read = 0;
+  for (const [where, markup] of Object.entries(drawn)) {
+    if (CHAT.test(where)) continue;
+    read++;
+    for (const what of standingIn(markup)) found.push(`${where}: ${what}`);
+  }
+  ok('no screen, panel or part draws a placeholder where a value belongs',
+    found.length === 0, [...new Set(found)].slice(0, 10).join('\n    '));
+  ok('…over every tree drawn in this file that is not the chat',
+    read >= 70, `${read} trees`);
 }
 
 // ── the gallery, written out ────────────────────────────────────────────────

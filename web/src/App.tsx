@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C, SHADOW, setThemeChoice, themeCss, useTheme } from './lib/theme';
-import { Btn, Icon, KEYFRAMES, P, mono } from './ui/kit';
+import { RADIUS, SHADOW, T, setThemeChoice, themeCss, useTheme } from './lib/theme';
+import { KEYFRAMES, P, mono } from './ui/kit';
+import { Button } from './ui/divan';
 import { Sidebar } from './components/Sidebar';
 import { Shell } from './components/Shell';
 import { ChatView } from './components/ChatView';
@@ -480,7 +481,7 @@ export function App() {
           onClick={() => setPeek(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 25, padding: 24,
-            background: C.scrim, display: 'flex',
+            background: T.scrim, display: 'flex',
             alignItems: 'center', justifyContent: 'center',
           }}
         >
@@ -489,27 +490,28 @@ export function App() {
             style={{
               width: '100%', maxWidth: 1040, height: 'min(880px, 100%)',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              background: C.bg, border: `1px solid ${C.borderStrong}`, borderRadius: 18,
+              background: T.bg, border: `1px solid ${T.line2}`, borderRadius: RADIUS.card,
               boxShadow: SHADOW.drawer,
             }}
           >
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
-              padding: '9px 10px 9px 16px', background: C.surface,
-              borderBottom: `1px solid ${C.border}`,
+              padding: '9px 10px 9px 18px', background: T.s1,
+              borderBottom: `1px solid ${T.line}`,
             }}>
               <span style={{
-                ...mono, flex: 1, minWidth: 0, fontSize: 12, color: C.mute,
+                ...mono, flex: 1, minWidth: 0, fontSize: 12.5, color: T.ink3,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>{slot?.info?.name ?? slot?.cfg.name ?? sel.hostKey}</span>
-              <Btn onClick={() => open(sel.hostKey, sel.chatId)} title="Open in the chat screen">
-                <Icon path={P.external} size={13} color={C.text} />
-                Open
-              </Btn>
-              <Btn onClick={() => setPeek(false)} title="Back to the wall (Esc)">
-                <Icon path={P.x} size={13} color={C.text} />
-                Close
-              </Btn>
+              <Button
+                small face="outline" icon={P.external} label="Open"
+                title="Open in the chat screen"
+                onClick={() => open(sel.hostKey, sel.chatId)}
+              />
+              <Button
+                small face="outline" icon={P.x} label="Close"
+                title="Back to the wall (Esc)" onClick={() => setPeek(false)}
+              />
             </div>
             <ChatView {...chatProps} />
           </div>

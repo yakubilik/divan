@@ -39,9 +39,11 @@ import { EXECUTORS, type State, type Tone } from './theme';
 export type Ago = (seconds: number | null) => string;
 export type Stamp = (at: number | null) => string;
 
-/** A percentage the frames' way: `41%`, and nothing where nobody measured. */
+/** A percentage the frames' way: `41%`, and a word where nobody measured — a
+ *  dash in a column of numbers is a number you cannot read, not an absence you
+ *  can. */
 export function pct(share: number | null | undefined): string {
-  return share == null || !Number.isFinite(share) ? '—' : `${Math.round(share * 100)}%`;
+  return share == null || !Number.isFinite(share) ? 'not measured' : `${Math.round(share * 100)}%`;
 }
 
 // ── 1 · the machines table (Web15 W12, Web14 W10) ───────────────────────────
@@ -75,8 +77,9 @@ export interface MachineLine {
   contact: string;
   /** `3 tasks`, `1 · unknown`, `idle`. */
   running: string;
-  /** How much of its plan today is gone — the frame's `quota use today`. `—`
-   *  on a machine that measures none. */
+  /** How much of its plan today is gone — the frame's `quota use today`.
+   *  `not measured` on a machine that measures none: a table with nothing to
+   *  put in a cell says so in words, it does not draw a dash. */
   quota: string;
   quotaTone: Tone;
   actions: MachineAction[];
@@ -101,7 +104,7 @@ export function machineLines(view: DivanView, ago: Ago, t: Thresholds): MachineL
       running: runningWords(h),
       // Spent is not 100% used: a machine with nothing left says so in words.
       quota: outOfQuota(h) ? 'none left'
-        : h.quota?.left == null ? '—' : pct(1 - h.quota.left),
+        : h.quota?.left == null ? 'not measured' : pct(1 - h.quota.left),
       quotaTone: hostQuotaTone(h, t),
       actions: h.reachable ? ['terminal', 'screen', 'folders'] : ['retry', 'remove'],
       wash: !h.reachable && !never,
@@ -113,7 +116,7 @@ export function machineLines(view: DivanView, ago: Ago, t: Thresholds): MachineL
  *  has gone quiet was running something when it was last heard and nobody can
  *  say what it is doing now, which is the frame's `1 · unknown`. */
 function runningWords(h: HostView): string {
-  if (h.missing) return '—';
+  if (h.missing) return 'unknown';
   if (!h.running) return h.reachable ? 'idle' : '0 · unknown';
   const tasks = `${h.running} task${h.running === 1 ? '' : 's'}`;
   return h.reachable ? tasks : `${h.running} · unknown`;

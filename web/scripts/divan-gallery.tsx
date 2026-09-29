@@ -120,6 +120,7 @@ export const SPECIMENS: Specimen[] = [
         <Button label="Later" face="outline" />
         <Button label="Allow" face="amber" />
         <Button label="Screen" face="outline" small />
+        <Button label="Up to date" disabled />
       </div>
     ),
   },

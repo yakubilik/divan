@@ -1,6 +1,20 @@
+/** The first screen: a panel with no computer behind it yet.
+ *
+ *  Three steps, and the flow is the whole page — there is no shell around it,
+ *  because the shell is about a fleet and there is none. The desktop frames
+ *  draw no pairing flow (every artboard opens on a day's work already in
+ *  progress), so the shape is the one Web15 W12's pairing card uses for the
+ *  same job one page in: a command in a `Quoted` block, a field to paste what
+ *  it printed, and one button. Three of those, each a card that wears its own
+ *  state as a ring — grey while it is waiting, amber while it is the one to do,
+ *  green once it is done.
+ */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
-import { Btn, Dot, Icon, Label, P, Spinner, mono } from '../ui/kit';
+import { T } from '../lib/theme';
+import { Icon, P, Spinner, mono } from '../ui/kit';
+import {
+  Button, Card, Quoted, SectionHeader, Slider, StatusDot, Tag, Well, Write,
+} from '../ui/divan';
 import { parsePairing } from '../lib/actions';
 import { hostKey, useFleet } from '../lib/fleet';
 import type { HostConfig } from '../lib/protocol';
@@ -46,72 +60,33 @@ function mask(token: string): string {
   return `${t.slice(0, 4)}${'•'.repeat(Math.min(16, t.length - 8))}${t.slice(-4)}`;
 }
 
-function Chip({ tone, children }: { tone: 'ok' | 'accent'; children: React.ReactNode }) {
-  const ok = tone === 'ok';
-  return (
-    <span style={{
-      ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 0.4, padding: '3px 7px',
-      borderRadius: R.badge, flexShrink: 0,
-      color: ok ? C.ok : C.accentSoft,
-      background: ok ? C.okBg : C.accentTint,
-      border: `1px solid ${ok ? C.okLine : C.accentRing}`,
-    }}>{children}</span>
-  );
-}
+/** The ring a step wears, which is the design's own way of saying where you
+ *  are in a set of them: green behind you, amber under your hand, grey ahead. */
+const RING: Record<StepState, 'run' | 'amber' | 'line'> = {
+  done: 'run', active: 'amber', todo: 'line',
+};
 
-function Marker({ state, n }: { state: StepState; n: number }) {
-  const bg = state === 'done' ? C.okBg : state === 'active' ? C.accentTint : C.surface;
-  const bd = state === 'done' ? C.okLine : state === 'active' ? C.accentRing : C.border;
-  return (
-    <div style={{
-      width: 26, height: 26, borderRadius: 13, flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: bg, border: `1px solid ${bd}`,
-    }}>
-      {state === 'done'
-        ? <Icon path={P.check} size={13} color={C.ok} width={2.6} />
-        : <span style={{
-          ...mono, fontSize: 12, fontWeight: 600,
-          color: state === 'active' ? C.accentSoft : C.faint,
-        }}>{n}</span>}
-    </div>
-  );
-}
-
-function Step({ n, state, title, chip, last, children }: {
+function Step({ n, state, title, aside, children }: {
   n: number;
   state: StepState;
   title: string;
-  chip?: React.ReactNode;
-  last?: boolean;
+  aside?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 26 }}>
-        <Marker state={state} n={n} />
-        {!last && (
-          <div style={{
-            flex: 1, width: 1, minHeight: 16,
-            background: state === 'done' ? C.okLine : C.border,
-          }} />
-        )}
+    <Card ring={RING[state]} raised={state === 'active'}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        {state === 'done'
+          ? <Well icon={P.check} />
+          : <Well mark={String(n)} />}
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600,
+          color: state === 'todo' ? T.ink3 : T.ink,
+        }}>{title}</span>
+        {aside}
       </div>
-      <div style={{
-        flex: 1, minWidth: 0, marginBottom: last ? 0 : 16, padding: 16,
-        borderRadius: R.card, background: C.surface,
-        border: `1px solid ${state === 'active' ? C.accentRing : C.border}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 22 }}>
-          <span style={{
-            fontSize: 15, fontWeight: 600,
-            color: state === 'todo' ? C.mute : C.text,
-          }}>{title}</span>
-          {chip}
-        </div>
-        {children}
-      </div>
-    </div>
+      {children}
+    </Card>
   );
 }
 
@@ -131,22 +106,23 @@ function CodeBox({ text }: { text: string }) {
       .catch(() => {});
   };
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 4px 0 12px',
-      background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
-    }}>
-      <code style={{
-        ...mono, flex: 1, minWidth: 0, fontSize: 13, color: C.text2,
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', userSelect: 'text',
-      }}>{text}</code>
-      <Btn kind="quiet" onClick={copy}>
-        <Icon path={copied ? P.check : P.copy} size={13} color={copied ? C.ok : C.mute} />
-        {copied ? 'Copied' : 'Copy'}
-      </Btn>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Quoted style={{ flex: 1, minWidth: 0 }}>
+        <span style={{
+          userSelect: 'text', display: 'block',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{text}</span>
+      </Quoted>
+      <Button
+        small face="outline" icon={copied ? P.check : P.copy}
+        label={copied ? 'Copied' : 'Copy'} onClick={copy}
+      />
     </div>
   );
 }
 
+/** One of the four things a pairing is made of. The label is the mono line the
+ *  frames put over a value, and the box is the card's own inset block. */
 function Field({ label, value, onChange, placeholder, secret, width }: {
   label: string;
   value: string;
@@ -157,18 +133,13 @@ function Field({ label, value, onChange, placeholder, secret, width }: {
 }) {
   return (
     <div style={{ width, flex: width ? undefined : 1, minWidth: 0 }}>
-      <div style={{ ...mono, fontSize: 11, color: C.faint, paddingBottom: 4 }}>{label}</div>
-      <input
-        value={value} onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        type={secret ? 'password' : 'text'}
-        autoComplete="off" spellCheck={false}
-        style={{
-          ...mono, width: '100%', boxSizing: 'border-box', height: 34, padding: '0 10px',
-          fontSize: 13, color: C.text, background: C.bg,
-          border: `1px solid ${C.border}`, borderRadius: R.input, outline: 'none',
-        }}
-      />
+      <div style={{ ...mono, fontSize: 11, color: T.ink3, paddingBottom: 5 }}>{label}</div>
+      <Quoted>
+        <Write
+          value={value} onChange={onChange} placeholder={placeholder}
+          secret={secret} label={label}
+        />
+      </Quoted>
     </div>
   );
 }
@@ -271,38 +242,37 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
     : null), [host, port, token]);
 
   return (
-    <div style={{
-      height: '100%', width: '100%', overflowY: 'auto',
-      background: C.bg, color: C.text,
-    }}>
-      <div style={{ maxWidth: 620, margin: '0 auto', padding: '56px 24px 64px' }}>
-        <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: -0.2 }}>Let’s finish setting up</div>
-        <div style={{ fontSize: 14, color: C.mute, marginTop: 6 }}>
-          Three steps. Once the panel reaches the daemon, that computer’s chats open here.
-        </div>
+    <div style={{ height: '100%', width: '100%', overflowY: 'auto', background: T.bg, color: T.ink }}>
+      <div style={{
+        maxWidth: 640, margin: '0 auto', padding: '56px 24px 64px',
+        display: 'flex', flexDirection: 'column', gap: 16,
+      }}>
+        <SectionHeader
+          kind="page" title="Let’s finish setting up"
+          note="Three steps. Once the panel reaches the daemon, that computer’s chats open here."
+        />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 28px' }}>
-          <div style={{ flex: 1, height: 4, borderRadius: 2, background: C.surface2, overflow: 'hidden' }}>
-            <div style={{
-              width: `${(done / 3) * 100}%`, height: '100%', borderRadius: 2,
-              background: C.ok, transition: 'width 240ms ease',
-            }} />
-          </div>
-          <span style={{ ...mono, fontSize: 12, color: C.mute }}>{done} / 3</span>
-        </div>
+        <Card>
+          <Slider
+            label="Setting up" value={done / 3} format={() => `${done} of 3`}
+            note={done === 3 ? 'All three done — the panel is opening.'
+              : 'Each step is answered by the computer, not by this browser.'}
+          />
+        </Card>
 
         <Step
           n={1} state={s1} title="The daemon is running"
-          chip={probe.state === 'up' ? <Chip tone="ok">ok</Chip>
-            : probe.state === 'checking' ? <Spinner size={12} /> : null}
+          aside={probe.state === 'up' ? <Tag label="answering" tone="run" />
+            : probe.state === 'checking' ? <Spinner size={13} color={T.ink3} />
+            : <Tag label="nothing there" tone="amber" />}
         >
           {probe.state === 'up' ? (
-            <div style={{ ...mono, fontSize: 12, color: C.mute, marginTop: 6 }}>
+            <div style={{ ...mono, fontSize: 12.5, color: T.ink3 }}>
               {host.trim()}:{port}{probe.version ? ` · v${probe.version}` : ''}
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 13, color: C.text2, lineHeight: '19px', margin: '8px 0 10px' }}>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
                 {probe.state === 'checking'
                   ? 'Probing the address…'
                   : 'Nothing answers at this address. Install it from the repo on that computer:'}
@@ -310,8 +280,8 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
               {probe.state === 'down' && (
                 <>
                   <CodeBox text={INSTALL} />
-                  <div style={{ display: 'flex', marginTop: 10 }}>
-                    <Btn onClick={recheck}>Check again</Btn>
+                  <div style={{ display: 'flex' }}>
+                    <Button face="outline" label="Check again" onClick={recheck} />
                   </div>
                 </>
               )}
@@ -321,88 +291,85 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
 
         <Step
           n={2} state={s2} title="Pair the computer"
-          chip={pairedKey ? <Chip tone="ok">ok</Chip>
-            : s2 === 'active' ? <Chip tone="accent">now</Chip> : null}
+          aside={pairedKey ? <Tag label="paired" tone="run" />
+            : s2 === 'active' ? <Tag label="now" tone="amber" /> : null}
         >
-          <div style={{ fontSize: 13, color: C.text2, lineHeight: '19px', margin: '8px 0 10px' }}>
+          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
             Run this on the computer, then paste the link it prints below.
           </div>
           <CodeBox text={PAIR} />
 
-          <div style={{ marginTop: 14 }}>
-            <Label>Pairing link</Label>
-            <textarea
-              key={pasteNonce}
-              value={paste} onChange={(e) => onPaste(e.target.value)}
-              placeholder="remoteaichat://pair?host=…&port=8790&token=…"
-              spellCheck={false} rows={3}
-              style={{
-                ...mono, width: '100%', boxSizing: 'border-box', padding: '10px 12px',
-                fontSize: 12, lineHeight: '18px', color: C.text, background: C.bg,
-                border: `1px solid ${fromLink ? C.accentRing : C.border}`,
-                borderRadius: R.input, outline: 'none', resize: 'vertical',
-              }}
-            />
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
-              color: fromLink ? C.ok : C.faint, marginTop: 6, lineHeight: '17px',
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <div style={{ ...mono, fontSize: 11, color: T.ink3 }}>pairing link</div>
+            <Quoted key={pasteNonce} style={{
+              boxShadow: fromLink ? `0 0 0 1px ${T.run}` : undefined,
             }}>
-              {fromLink && <Icon path={P.check} size={12} color={C.ok} />}
+              <Write
+                value={paste} onChange={onPaste} lines={3} label="Pairing link"
+                placeholder="remoteaichat://pair?host=…&port=8790&token=…"
+              />
+            </Quoted>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, lineHeight: 1.4,
+              color: fromLink ? T.run : T.ink3,
+            }}>
+              {fromLink && <Icon path={P.check} size={13} color={T.run} />}
               {fromLink
                 ? 'Link read — the token stays masked below.'
-                : "The QR’s JSON works too. A pasted token is never left on screen."}
+                : 'The QR’s JSON works too. A pasted token is never left on screen.'}
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
+          <div style={{ display: 'flex', gap: 12 }}>
             <Field label="host" value={host} onChange={(v) => { setHost(v); setFromLink(false); }} />
-            <Field label="port" value={port} width={88}
+            <Field label="port" value={port} width={96}
               onChange={(v) => { setPort(v.replace(/[^0-9]/g, '')); setFromLink(false); }} />
           </div>
-          <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 12 }}>
             <Field label="token" value={token} secret placeholder="device token"
               onChange={(v) => { setToken(v); setFromLink(false); }} />
-            <Field label="name" value={name} onChange={setName} placeholder="This computer" width={160} />
+            <Field label="name" value={name} onChange={setName} placeholder="This computer" width={170} />
           </div>
 
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, marginTop: 16,
-            paddingTop: 12, borderTop: `1px solid ${C.hair}`,
+            display: 'flex', alignItems: 'center', gap: 12,
+            paddingTop: 12, borderTop: `1px solid ${T.line}`,
           }}>
             <span style={{
               ...mono, flex: 1, minWidth: 0, fontSize: 12,
-              color: error ? C.danger : C.mute,
+              color: error ? T.red : T.ink3,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }} title={error ?? preview ?? ''}>
               {error ?? preview ?? 'waiting for a token'}
             </span>
-            <Btn kind="primary" onClick={connect} disabled={!token.trim() || !validAddr || !!pairedKey}>
-              Connect
-            </Btn>
+            <Button
+              label="Connect" onClick={connect}
+              disabled={!token.trim() || !validAddr || !!pairedKey}
+            />
           </div>
         </Step>
 
         <Step
-          n={3} state={s3} last title="Ready"
-          chip={status === 'online' ? <Chip tone="ok">connected</Chip>
-            : s3 === 'active' ? <Spinner size={12} /> : null}
+          n={3} state={s3} title="Ready"
+          aside={status === 'online' ? <Tag label="connected" tone="run" />
+            : s3 === 'active' ? <Spinner size={13} color={T.ink3} /> : null}
         >
           {!pairedKey ? (
-            <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: '19px' }}>
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink3 }}>
               Once pairing is done this computer’s chats, projects and agents open in the panel.
             </div>
           ) : status === 'online' ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <Dot color={C.ok} live size={6} />
-              <span style={{ ...mono, fontSize: 12, color: C.mute }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <StatusDot state="running" />
+              <span style={{ ...mono, fontSize: 12.5, color: T.ink3 }}>
                 {info?.name ?? name ?? host}
                 {info?.daemon_version ? ` · daemon ${info.daemon_version}` : ''}
               </span>
             </div>
           ) : (
             <div style={{
-              fontSize: 13, marginTop: 8, lineHeight: '19px',
-              color: status === 'unauthorized' ? C.danger : C.mute,
+              fontSize: 13.5, lineHeight: 1.5,
+              color: status === 'unauthorized' ? T.red : T.ink3,
             }}>
               {status === 'unauthorized'
                 ? 'The token was refused — run pair again on the computer.'

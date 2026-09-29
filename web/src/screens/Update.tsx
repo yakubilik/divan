@@ -1,22 +1,27 @@
+/** Update: what each computer is running, and whether it matches origin/main.
+ *
+ *  Two things ship from this repository and they come apart on their own. The
+ *  daemon is an editable install, so a pull is the update. The panel is build
+ *  output that is not in git, so a pull does nothing to it and the browser goes
+ *  on being served whatever was built here last. On a computer nobody sits in
+ *  front of, the gap is invisible and grows.
+ *
+ *  So a computer is one card: a head that says which machine and what it is
+ *  running, five rows of where it stands, and the notes it has to raise. The
+ *  shape is Web15 W17's — a list of rows, each a thing, a grey line saying what
+ *  it is, a word for where it stands and one button — one level under Admin,
+ *  which is the row that opens it.
+ */
 import { useCallback, useEffect, useState } from 'react';
-import { C, R } from '../lib/theme';
-import { Btn, Dot, Empty, Icon, P, Spinner, mono } from '../ui/kit';
+import { T } from '../lib/theme';
+import { Icon, P, Spinner, mono } from '../ui/kit';
+import { Button, Card, EmptyState, Note, Row, SectionHeader, StatusDot } from '../ui/divan';
+import type { Tone } from '../lib/theme';
 import { ago, uptime } from '../lib/format';
 import { onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
 import type {
   LastUpdate, PanelBuild, Release, Restarting, RestartResult, UpdateResult, UpdateStatus,
 } from '../lib/protocol';
-
-/* Two things ship from this repository and they come apart on their own. The
- * daemon is an editable install, so a pull is the update. The panel is build
- * output that is not in git, so a pull does nothing to it and the browser goes
- * on being served whatever was built here last. On a computer nobody sits in
- * front of, the gap is invisible and grows.
- *
- * So this screen is two rows and one button. The rows are what is actually
- * running — the commit, not the version constant, which has said 0.1.0 on both
- * machines for months. The button does both halves, because to whoever pressed
- * it they were never two things. */
 
 const IC = {
   refresh: 'M20 11a8 8 0 1 0-2.3 5.6M20 5v6h-6',
@@ -41,82 +46,40 @@ function stamp(ts: number | null | undefined): string {
 function versionLabel(rel: Release | null | undefined, packaged: string | undefined): string {
   if (rel?.version) return rel.version + (rel.dirty ? ' · dirty' : '');
   if (rel && rel.commit) return 'untagged';
-  return packaged ? `v${packaged} (packaged)` : '—';
+  return packaged ? `v${packaged} (packaged)` : 'no version reported';
 }
 
-type Tone = 'ok' | 'warn' | 'danger' | 'idle';
-
-const TONE: Record<Tone, string> = {
-  ok: C.ok, warn: C.warn, danger: C.danger, idle: C.faint,
-};
-
-/** Where one computer stands, as the three sentences worth reading. */
+/** Where one computer stands, as the three sentences worth reading. The tone is
+ *  the design's own: green for running, amber for something held, red for
+ *  something broken, grey for nothing to say. */
 interface Verdict { tone: Tone; text: string }
 
 function daemonVerdict(st: UpdateStatus | null, slot: HostSlot): Verdict {
-  if (slot.status !== 'online') return { tone: 'idle', text: 'offline' };
-  if (!st) return { tone: 'idle', text: 'not checked yet' };
-  if (!st.repo) return { tone: 'idle', text: 'not a git checkout — nothing to update' };
+  if (slot.status !== 'online') return { tone: 'ink3', text: 'offline' };
+  if (!st) return { tone: 'ink3', text: 'not checked yet' };
+  if (!st.repo) return { tone: 'ink3', text: 'not a git checkout — nothing to update' };
   if (st.local?.dirty) {
     const n = st.local.dirty_files ?? 0;
-    return { tone: 'warn', text: `${n} uncommitted file${n === 1 ? '' : 's'} — held` };
+    return { tone: 'amber', text: `${n} uncommitted file${n === 1 ? '' : 's'} — held` };
   }
-  if (st.ahead > 0) return { tone: 'warn', text: `${st.ahead} unpushed commit${st.ahead === 1 ? '' : 's'} — held` };
-  if (st.behind > 0) return { tone: 'warn', text: `${st.behind} commit${st.behind === 1 ? '' : 's'} behind origin/main` };
-  return { tone: 'ok', text: 'on origin/main' };
+  if (st.ahead > 0) return { tone: 'amber', text: `${st.ahead} unpushed commit${st.ahead === 1 ? '' : 's'} — held` };
+  if (st.behind > 0) return { tone: 'amber', text: `${st.behind} commit${st.behind === 1 ? '' : 's'} behind origin/main` };
+  return { tone: 'run', text: 'on origin/main' };
 }
 
 function panelVerdict(web: PanelBuild | null | undefined): Verdict {
-  if (!web) return { tone: 'idle', text: 'not reported' };
-  if (!web.built) return { tone: 'danger', text: 'never built on this computer' };
-  if (!web.npm) return { tone: 'idle', text: 'no npm here — cannot be rebuilt' };
-  if (web.stale === true) return { tone: 'warn', text: web.reason || 'behind the daemon' };
-  if (web.stale === null) return { tone: 'warn', text: web.reason || 'built by hand — cannot be placed' };
-  return { tone: 'ok', text: 'built from this commit' };
+  if (!web) return { tone: 'ink3', text: 'not reported' };
+  if (!web.built) return { tone: 'red', text: 'never built on this computer' };
+  if (!web.npm) return { tone: 'ink3', text: 'no npm here — cannot be rebuilt' };
+  if (web.stale === true) return { tone: 'amber', text: web.reason || 'behind the daemon' };
+  if (web.stale === null) return { tone: 'amber', text: web.reason || 'built by hand — cannot be placed' };
+  return { tone: 'run', text: 'built from this commit' };
 }
 
-/* ───────────────────────────── pieces ───────────────────────────── */
-
-function Row({ icon, title, verdict, detail, action }: {
-  icon: string; title: string; verdict: Verdict; detail: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
-      borderTop: `1px solid ${C.border}`,
-    }}>
-      <Icon path={icon} size={16} color={C.mute} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{title}</span>
-          <Dot color={TONE[verdict.tone]} size={5} />
-          <span style={{ fontSize: 12, color: TONE[verdict.tone] }}>{verdict.text}</span>
-        </div>
-        <div style={{
-          ...mono, fontSize: 11, color: C.faint, marginTop: 4,
-          display: 'flex', flexWrap: 'wrap', gap: '2px 10px',
-        }}>{detail}</div>
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function Note({ tone, children }: { tone: Tone; children: React.ReactNode }) {
-  const color = TONE[tone];
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 8, margin: '0 16px 14px',
-      padding: '9px 11px', borderRadius: R.btn, fontSize: 12, color,
-      background: tone === 'danger' ? C.dangerBg : C.warnBg,
-      border: `1px solid ${tone === 'danger' ? C.dangerLine : C.warnLine}`,
-    }}>
-      <Icon path={P.warn} size={13} color={color} />
-      <span style={{ flex: 1, minWidth: 0 }}>{children}</span>
-    </div>
-  );
-}
+/** The mono line under a row's title: the facts behind the verdict, in the
+ *  order they are worth reading, with nothing standing in for what is missing. */
+const detail = (...parts: (string | number | null | undefined | false)[]): string =>
+  parts.filter(Boolean).join(' · ');
 
 /** One computer. Each card owns its own status and its own button: they update
  *  one at a time, and a machine that is offline or mid-restart must not be able
@@ -237,191 +200,157 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
   const held = (st?.blockers ?? []).some((b) => b !== 'already up to date');
   const current = !!st && st.repo && st.behind <= 0 && web?.stale === false;
   const busy = applying || !!st?.busy;
+  const version = versionLabel(st?.release ?? slot.info?.release, slot.info?.daemon_version);
+
+  const origin: Verdict = !online ? { tone: 'ink3', text: 'not asked while offline' }
+    : st?.error ? { tone: 'red', text: 'unreachable' }
+      : st?.remote ? { tone: 'run', text: 'reachable' }
+        : { tone: 'ink3', text: 'not checked yet' };
 
   return (
-    <div style={{
-      border: `1px solid ${C.border}`, borderRadius: R.card, background: C.surface,
-      overflow: 'hidden', marginBottom: 12,
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
-      }}>
-        <Dot color={online ? C.ok : C.faint} live={online} size={6} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: 14, fontWeight: 600, color: C.text,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{name}</div>
-          <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 2 }}>
-            {versionLabel(st?.release ?? slot.info?.release, slot.info?.daemon_version)}
-            {online ? ` · up ${uptime(slot.info?.uptime_s)}` : ' · offline'}
-            {st?.checked_at ? ` · checked ${ago(st.checked_at)}` : ''}
-            {st?.auto === false ? ' · auto-update off' : ''}
-          </div>
-        </div>
-        <Btn kind="quiet" onClick={() => void check(true)} disabled={!online || checking || busy}>
-          {checking ? <Spinner size={13} color={C.mute} /> : <Icon path={IC.refresh} size={14} color={C.mute} />}
-          Check
-        </Btn>
-        <Btn
-          kind={current || held ? 'ghost' : 'primary'}
-          onClick={apply}
-          disabled={!online || busy || checking || !st?.repo || current || held}
-          title={held ? (st?.blockers ?? []).join(' · ') : undefined}
-        >
-          {busy ? <Spinner size={13} color="currentColor" />
-            : <Icon path={current ? P.check : P.download} size={14} color="currentColor" />}
-          {busy ? 'Updating…' : current ? 'Up to date' : 'Update'}
-        </Btn>
-      </div>
+    <Card inset={false}>
+      <Row
+        first
+        lead={<StatusDot state={online ? 'running' : 'quiet'} hollow={!online} />}
+        title={name} mark
+        note={detail(version, !online ? 'offline'
+          : slot.info ? `up ${uptime(slot.info.uptime_s)}` : 'no uptime reported',
+          st?.checked_at && `checked ${ago(st.checked_at)}`,
+          st?.auto === false && 'auto-update off')}
+        right={
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Button
+              small face="outline" label={checking ? 'Checking…' : 'Check'}
+              disabled={!online || checking || busy}
+              onClick={() => void check(true)}
+            />
+            <Button
+              small face={current || held ? 'outline' : 'ink'}
+              label={busy ? 'Updating…' : current ? 'Up to date' : 'Update'}
+              disabled={!online || busy || checking || !st?.repo || current || held}
+              title={held ? (st?.blockers ?? []).join(' · ') : undefined}
+              onClick={apply}
+            />
+          </span>
+        }
+      />
 
       <Row
-        icon={P.cpu} title="Daemon" verdict={dv}
-        detail={<>
-          <span>{versionLabel(st?.release ?? slot.info?.release, slot.info?.daemon_version)}</span>
-          <span>{local?.commit ?? '—'}</span>
-          <span>{local?.branch ?? ''}</span>
-          {local?.subject && (
-            <span style={{
-              color: C.mute, maxWidth: 420, overflow: 'hidden',
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{local.subject}</span>
+        icon={P.cpu} title="Daemon" meta={dv.text} tone={dv.tone}
+        note={detail(version, local?.commit, local?.branch, local?.subject)}
+      />
+
+      <Row
+        icon={P.layout} title="Web panel" meta={pv.text} tone={pv.tone}
+        note={detail(web?.sha ?? (web?.built ? 'unstamped' : null),
+          web?.built_at && `built ${ago(web.built_at)}`,
+          web && !web.npm && 'npm missing') || 'this computer has not reported a build'}
+      />
+
+      <Row
+        icon={IC.cloud} title="origin/main" meta={origin.text} tone={origin.tone}
+        note={detail(st?.remote?.commit, st?.latest && `latest ${st.latest}`, st?.remote?.subject)
+          || 'nothing has been read from origin yet'}
+      />
+
+      <Row
+        icon={IC.history} title="Last update"
+        meta={!last ? 'never on this computer' : last.error ? 'finished with a problem' : ago(last.at)}
+        tone={!last ? 'ink3' : last.error ? 'amber' : 'run'}
+        note={last
+          ? detail(stamp(last.at), last.pulled && last.from && `${last.from} → ${last.to}`,
+            [last.pulled ? 'daemon' : null, last.web ? 'panel' : null].filter(Boolean).join(' + ')
+              || 'nothing moved',
+            last.version, last.error)
+          : 'nothing has been pulled here yet'}
+      />
+
+      <Row
+        icon={IC.power} title="Last restart"
+        meta={slot.info?.started_at ? ago(slot.info.started_at)
+          : online ? 'not reported' : 'offline'}
+        tone={slot.info?.started_at ? 'run' : 'ink3'}
+        note={detail(stamp(slot.info?.started_at),
+          slot.info ? `up ${uptime(slot.info.uptime_s)}` : 'no uptime reported',
+          // Counted on the way back in, so it is every start this database has
+          // ever seen — including the ones an update asked for.
+          slot.info?.restarts && `start #${slot.info.restarts}`)}
+        right={draining
+          ? <Button small face="outline" label="Cancel" onClick={cancelRestart} />
+          : <Button
+              small face="outline" label={stopping ? 'Stopping…' : 'Restart'}
+              disabled={!online || asking || stopping || busy}
+              onClick={() => void ask(false)}
+            />}
+      />
+
+      {(draining || stopping || restart?.state === 'cancelled' || st?.error || failed
+        || (!!blockers.length && !busy) || result) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 18px' }}>
+          {draining && (
+            <Note tone="amber" icon={P.warn} title="Waiting for work to finish"
+              body={`${restart!.pending.length} chat${restart!.pending.length === 1 ? '' : 's'} `
+                + 'still running. New messages are refused until they are done.'} />
           )}
-        </>}
-      />
-
-      <Row
-        icon={P.layout} title="Web panel" verdict={pv}
-        detail={<>
-          <span>{web?.sha ?? (web?.built ? 'unstamped' : '—')}</span>
-          {web?.built_at ? <span>built {ago(web.built_at)}</span> : null}
-          {web && !web.npm ? <span>npm missing</span> : null}
-        </>}
-      />
-
-      <Row
-        icon={IC.cloud} title="origin/main" verdict={
-          !online ? { tone: 'idle', text: '—' }
-            : st?.error ? { tone: 'danger', text: 'unreachable' }
-              : st?.remote ? { tone: 'ok', text: 'reachable' }
-                : { tone: 'idle', text: 'not checked yet' }
-        }
-        detail={<>
-          <span>{st?.remote?.commit ?? '—'}</span>
-          {st?.latest ? <span>latest {st.latest}</span> : null}
-          {st?.remote?.subject && (
-            <span style={{
-              color: C.mute, maxWidth: 420, overflow: 'hidden',
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{st.remote.subject}</span>
+          {stopping && (
+            <Note tone="amber" icon={P.warn} title="Stopping"
+              body={(restart?.forced ? 'Turns in flight were interrupted. ' : '')
+                + 'The supervisor brings it back in a few seconds.'} />
           )}
-        </>}
-      />
-
-      <Row
-        icon={IC.history} title="Last update" verdict={
-          !last ? { tone: 'idle', text: 'never on this computer' }
-            : last.error ? { tone: 'warn', text: 'finished with a problem' }
-              : { tone: 'ok', text: ago(last.at) }
-        }
-        detail={last ? <>
-          <span>{stamp(last.at)}</span>
-          {last.pulled && last.from ? <span>{last.from} → {last.to}</span> : null}
-          <span>{[last.pulled ? 'daemon' : null, last.web ? 'panel' : null]
-            .filter(Boolean).join(' + ') || 'nothing moved'}</span>
-          {last.version ? <span>{last.version}</span> : null}
-          {last.error ? <span style={{ color: C.warn }}>{last.error}</span> : null}
-        </> : <span>nothing has been pulled here yet</span>}
-      />
-
-      <Row
-        icon={IC.power} title="Last restart" action={
-          draining ? (
-            <Btn kind="ghost" onClick={cancelRestart}>
-              <Spinner size={13} color={C.warn} />
-              Cancel
-            </Btn>
-          ) : (
-            <Btn kind="ghost" onClick={() => void ask(false)}
-                 disabled={!online || asking || stopping || busy}>
-              <Icon path={IC.power} size={14} color={C.mute} />
-              {stopping ? 'Stopping…' : 'Restart'}
-            </Btn>
-          )
-        } verdict={
-          slot.info?.started_at
-            ? { tone: 'ok', text: ago(slot.info.started_at) }
-            : { tone: 'idle', text: online ? 'not reported' : 'offline' }
-        }
-        detail={<>
-          <span>{stamp(slot.info?.started_at) || '—'}</span>
-          <span>up {uptime(slot.info?.uptime_s)}</span>
-          {/* Counted on the way back in, so it is every start this database has
-              ever seen — including the ones an update asked for. */}
-          {slot.info?.restarts ? <span>start #{slot.info.restarts}</span> : null}
-        </>}
-      />
-
-      <div style={{ paddingTop: 14 }}>
-        {draining && (
-          <Note tone="warn">
-            Waiting for {restart!.pending.length} chat
-            {restart!.pending.length === 1 ? '' : 's'} to finish before stopping.
-            New messages are refused until it does.
-          </Note>
-        )}
-        {stopping && (
-          <Note tone="warn">
-            Stopping{restart?.forced ? ' — turns in flight were interrupted' : ''}. The
-            supervisor brings it back in a few seconds.
-          </Note>
-        )}
-        {restart?.state === 'cancelled' && (
-          <Note tone="warn">
-            Restart abandoned — a chat was still working. Nothing was interrupted.
-          </Note>
-        )}
-        {st?.error && <Note tone="danger">Could not reach origin: {st.error}</Note>}
-        {failed && <Note tone="danger">{failed}</Note>}
-        {!!blockers.length && !busy && <Note tone="warn">Held: {blockers.join(' · ')}</Note>}
-        {result && (
-          result.ok ? (
-            <div style={{
-              margin: '0 16px 14px', padding: '9px 11px', borderRadius: R.btn,
-              fontSize: 12, color: C.ok, background: C.okBg,
-              border: `1px solid ${C.okLine}`,
-            }}>
-              {[
+          {restart?.state === 'cancelled' && (
+            <Note tone="amber" icon={P.warn} title="Restart abandoned"
+              body="A chat was still working. Nothing was interrupted." />
+          )}
+          {st?.error && <Note tone="red" icon={P.warn} title="Could not reach origin" body={st.error} />}
+          {failed && <Note tone="red" icon={P.warn} title="That did not work" body={failed} />}
+          {!!blockers.length && !busy && (
+            <Note tone="amber" icon={P.warn} title="Held" body={blockers.join(' · ')} />
+          )}
+          {result && (result.ok
+            ? <Note tone="run" icon={P.check} title={[
                 result.pulled ? `pulled to ${result.revision?.commit ?? 'origin/main'}` : null,
                 result.web?.rebuilt ? `panel rebuilt at ${result.web.commit}` : null,
               ].filter(Boolean).join(' · ') || 'nothing to do'}
-              {result.restarting ? ' · restarting, it will come back on its own' : ''}
-            </div>
-          ) : <Note tone="danger">{result.error}</Note>
-        )}
-      </div>
-    </div>
+              body={result.restarting ? 'Restarting — it will come back on its own.' : undefined} />
+            : <Note tone="red" icon={P.warn} title="The update stopped" body={result.error} />)}
+        </div>
+      )}
+    </Card>
   );
 }
 
-/* ───────────────────────────── screen ───────────────────────────── */
-
 export function Update() {
   const { hosts, order } = useFleet();
+  const working = order.some((k) => hosts[k]?.status === 'connecting');
+
+  if (!order.length) {
+    return (
+      <EmptyState
+        title="No computer is paired yet."
+        body="An update is a pull on a computer: the daemon it runs and the panel it serves,
+              moved together. Pair one under Machines and it appears here with what it is
+              running."
+        foot="nothing updates by itself · the button on each card is the whole of it"
+      />
+    );
+  }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: C.bg }}>
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '20px 20px 40px' }}>
-        <div style={{ marginBottom: 6, fontSize: 18, fontWeight: 600, color: C.text }}>Update</div>
-        <div style={{ fontSize: 13, color: C.mute, marginBottom: 18, lineHeight: 1.5 }}>
-          What each computer is running, and whether it matches origin/main. The
-          daemon and the panel are updated together — the panel is build output
-          and would otherwise sit behind the daemon serving it.
-        </div>
-        {order.length
-          ? order.map((k) => hosts[k] && <HostCard key={k} hostKey={k} slot={hosts[k]} />)
-          : <Empty title="No computer paired yet" hint="Pair one under Machines first." />}
+    <>
+      <SectionHeader
+        kind="page" title="Update"
+        right={`${order.length} computer${order.length === 1 ? '' : 's'}`}
+      />
+      <div style={{ fontSize: 14.5, lineHeight: 1.5, color: T.ink2, maxWidth: 620 }}>
+        What each computer is running, and whether it matches origin/main. The daemon and the
+        panel are updated together — the panel is build output and would otherwise sit behind
+        the daemon serving it.
       </div>
-    </div>
+      {order.map((k) => hosts[k] && <HostCard key={k} hostKey={k} slot={hosts[k]} />)}
+      <div style={{ ...mono, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: T.ink3 }}>
+        {working ? <Spinner size={12} color={T.ink3} /> : <Icon path={IC.refresh} size={12} color={T.ink3} />}
+        each card was read from its own computer, one at a time
+      </div>
+    </>
   );
 }

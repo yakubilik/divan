@@ -1,19 +1,33 @@
-// TODO(daemon): the Settings artboard draws several things the protocol does
-// not carry. They are left off this screen rather than faked:
-//  - "Restart the daemon" — there is no restart request.
-//  - "Open the file" / a config.toml path in the header — no config.path request.
-//  - Depolama (2.2 GB) — nothing reports disk usage.
-//  - Bildirimler — push is per device and the panel has no push registration.
-//  - Security: the dangerous-command list and the denied-path list. host.info
-//    carries `roots` and nothing else, so only roots are shown.
-//  - Accounts: "Move a sign-in" (account.export/import exist, but moving a sign-in
-//    between two computers is its own flow and is not built here).
-//  - "make default" — is_default is derived from the account having no home
-//    folder; there is no request that sets it.
-
+/** This computer: everything one paired machine keeps, and the one setting
+ *  that is this browser's.
+ *
+ *  One level under Settings, and no frame of its own — Web15's drawer has eight
+ *  rows and this is the page behind four of them. So the shape is W15's own:
+ *  the `260px` column of rows on the left (`SidePanel`, the same part the
+ *  drawer itself is navigated by), the page beside it, and every section a run
+ *  of cards with W17's rows in them — a thing, a grey line saying what it is,
+ *  and one button.
+ *
+ *  TODO(daemon): the Settings artboard draws several things the protocol does
+ *  not carry. They are left off this screen rather than faked:
+ *   - "Restart the daemon" — there is no restart request here (Update has one).
+ *   - "Open the file" / a config.toml path in the header — no config.path request.
+ *   - Storage (2.2 GB) — nothing reports disk usage.
+ *   - Notifications — push is per device and the panel has no push registration.
+ *   - Security: the dangerous-command list and the denied-path list. host.info
+ *     carries `roots` and nothing else, so only roots are shown.
+ *   - Accounts: "Move a sign-in" (account.export/import exist, but moving a
+ *     sign-in between two computers is its own flow and is not built here).
+ *   - "make default" — is_default is derived from the account having no home
+ *     folder; there is no request that sets it.
+ */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { C, R, useTheme } from '../lib/theme';
-import { Btn, Dot, Icon, Label, P, Radio, Segment, Spinner, mono } from '../ui/kit';
+import { SIZE, T, useTheme, type Tone } from '../lib/theme';
+import { Icon, P, Spinner, mono } from '../ui/kit';
+import {
+  Button, Card, Cell, Choice, FieldRow, Note, Quoted, Row, SectionHeader, SidePanel,
+  StatusDot, Slider, Tag, Well, Write, type PanelItem,
+} from '../ui/divan';
 import { Modal, ModalHead } from '../components/Modal';
 import { ProviderMark } from '../components/Sidebar';
 import { onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
@@ -22,6 +36,9 @@ import { parsePairing, toolStatus } from '../lib/actions';
 import { errText, t } from '../lib/i18n';
 import { ago, tilde, until, uptime, windowName } from '../lib/format';
 import { copyText } from '../lib/clipboard';
+import type {
+  CliAccount, LimitWindow, LoginMethod, LoginPrompt, Provider, ToolStatus,
+} from '../lib/protocol';
 
 /** The daemon labels the machine's own account in English ("This computer's
  *  account") because it has no idea who is asking. i18n already carries the
@@ -29,11 +46,6 @@ import { copyText } from '../lib/clipboard';
 function accountName(a: { is_default: boolean; label: string }): string {
   return a.is_default ? t('useDefaultAccount') : a.label;
 }
-import type {
-  CliAccount, LimitWindow, LoginMethod, LoginPrompt, Provider, ToolStatus,
-} from '../lib/protocol';
-
-const RAIL_W = 232;
 
 type SectionId = 'hosts' | 'accounts' | 'defaults' | 'tools' | 'appearance' | 'security' | 'about';
 
@@ -69,6 +81,14 @@ function hostDetail(slot: HostSlot): string {
   return slot.lastOnline ? `offline · ${ago(slot.lastOnline / 1000)}` : 'offline';
 }
 
+/** A connection as one of the six states the design colours. */
+function hostState(slot: HostSlot): { state: 'running' | 'asking' | 'stuck' | 'quiet'; tone: Tone } {
+  if (slot.status === 'online') return { state: 'running', tone: 'run' };
+  if (slot.status === 'connecting') return { state: 'asking', tone: 'amber' };
+  if (slot.status === 'unauthorized') return { state: 'stuck', tone: 'red' };
+  return { state: 'quiet', tone: 'ink3' };
+}
+
 /** A sign-in URL carries a one-time code in its query. The host is what the
  *  user needs to recognise; the rest never goes on screen. */
 function maskUrl(url: string): string {
@@ -82,131 +102,136 @@ function maskUrl(url: string): string {
 
 /* ── small pieces ─────────────────────────────────────────────────────── */
 
+/** A destructive step never happens on the click that asked for it. The shell
+ *  is the panel's own dialog; what is inside it is the design system's. */
 function Confirm({ title, body, action, onConfirm, onClose }: {
   title: string; body: string; action: string; onConfirm: () => void; onClose: () => void;
 }) {
   return (
     <Modal onClose={onClose} width={440}>
       <ModalHead title={title} onClose={onClose} />
-      <div style={{ padding: '16px 20px', fontSize: 13, color: C.text2, lineHeight: '19px' }}>{body}</div>
-      <div style={{
-        display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 20px',
-        borderTop: `1px solid ${C.border}`,
-      }}>
-        <Btn kind="quiet" onClick={onClose}>Cancel</Btn>
-        <Btn kind="danger" onClick={() => { onConfirm(); onClose(); }}>{action}</Btn>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 20px 18px' }}>
+        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>{body}</div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button face="outline" label="Cancel" onClick={onClose} />
+          <Button label={action} onClick={() => { onConfirm(); onClose(); }} />
+        </div>
       </div>
     </Modal>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: R.card,
-      marginBottom: 10, overflow: 'hidden',
-    }}>{children}</div>
-  );
-}
-
+/** One fact about a computer: what it is, and what it says. W14 W8's panel row,
+ *  which is the shape the whole of this screen's detail is written in. */
 function KV({ k, v, code }: { k: string; v: React.ReactNode; code?: boolean }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'baseline', gap: 12, padding: '7px 14px',
-      borderTop: `1px solid ${C.hair}`,
-    }}>
-      <span style={{ width: 150, flexShrink: 0, fontSize: 12, color: C.mute }}>{k}</span>
-      <span style={{
-        flex: 1, minWidth: 0, fontSize: 12.5, color: C.text2,
-        wordBreak: 'break-word', ...(code ? mono : {}),
-      }}>{v}</span>
-    </div>
-  );
-}
-
-function Head({ title, hint, right }: { title: string; hint?: string; right?: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 17, fontWeight: 600 }}>{title}</div>
-        {hint && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4, lineHeight: '18px' }}>{hint}</div>}
-      </div>
-      {right}
-    </div>
-  );
-}
-
-function Note({ children, tone = 'mute' }: { children: React.ReactNode; tone?: 'mute' | 'warn' }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px',
-      borderRadius: R.btn, background: tone === 'warn' ? C.warnBg : C.surface,
-      border: `1px solid ${tone === 'warn' ? C.warnLine : C.border}`,
-      fontSize: 12.5, lineHeight: '18px', color: tone === 'warn' ? C.warn : C.mute,
-      marginBottom: 10,
-    }}>
-      {tone === 'warn' && <Icon path={P.warn} size={13} color={C.warn} />}
-      <span style={{ flex: 1 }}>{children}</span>
-    </div>
-  );
-}
-
-function Field({ value, onChange, placeholder, type = 'text', autoFocus, onEnter }: {
-  value: string; onChange: (v: string) => void; placeholder?: string;
-  type?: string; autoFocus?: boolean; onEnter?: () => void;
-}) {
-  return (
-    <input
-      value={value} type={type} autoFocus={autoFocus} placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => { if (e.key === 'Enter' && onEnter) { e.preventDefault(); onEnter(); } }}
-      style={{
-        width: '100%', height: 34, padding: '0 10px', boxSizing: 'border-box',
-        background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
-        outline: 'none', fontSize: 13, color: C.text,
-      }}
+    <FieldRow
+      label={k}
+      value={code ? <span style={mono}>{v}</span> : v}
+      style={{ padding: '9px 18px' }}
     />
   );
 }
 
-function limitTone(u: number): string {
-  if (u >= 0.9) return C.danger;
-  if (u >= 0.6) return C.warn;
-  return C.info;
+/** What stands over a section of this page: its name, a sentence saying what
+ *  the section is for, and whatever button belongs to the whole of it. */
+function Head({ title, hint, right }: { title: string; hint?: string; right?: React.ReactNode }) {
+  return (
+    <>
+      <SectionHeader kind="page" title={title}>
+        {!!right && <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>{right}</span>}
+      </SectionHeader>
+      {!!hint && (
+        <div style={{ fontSize: 14, lineHeight: 1.5, color: T.ink2, maxWidth: 620 }}>{hint}</div>
+      )}
+    </>
+  );
 }
 
+/** A sentence about the whole of a section rather than about one card. The
+ *  quiet one is a card of `ink2`; the one that wants reading twice is the
+ *  design's own washed note. */
+function Aside({ children, tone = 'mute' }: {
+  children: React.ReactNode; tone?: 'mute' | 'warn';
+}) {
+  if (tone === 'warn') return <Note tone="amber" icon={P.warn} title={children} />;
+  return (
+    <Card>
+      <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>{children}</div>
+    </Card>
+  );
+}
+
+/** The mono heading over a group of rows: Web15 W18's own, and `SectionHeader`
+ *  already draws it. */
+function Mark({ children }: { children: React.ReactNode }) {
+  return <SectionHeader kind="mark" title={children} />;
+}
+
+/** A value being typed: the card's own inset block with nothing but a field in
+ *  it, which is what Web14 W9 writes a ticket into. */
+function Field({ value, onChange, placeholder, secret, autoFocus, onEnter, lines }: {
+  value: string; onChange: (v: string) => void; placeholder?: string;
+  secret?: boolean; autoFocus?: boolean; onEnter?: () => void; lines?: number;
+}) {
+  return (
+    <Quoted>
+      <Write
+        value={value} onChange={onChange} placeholder={placeholder}
+        secret={secret} autoFocus={autoFocus} lines={lines} label={placeholder}
+        onKeyDown={(e) => { if (e.key === 'Enter' && onEnter && !lines) { e.preventDefault(); onEnter(); } }}
+      />
+    </Quoted>
+  );
+}
+
+/** One of a set of answers, as a row rather than as a dot: the chosen one is
+ *  the row filled with `s2`, which is how Web15 draws the one you are on. */
+function Pick({ label, hint, right, on, first, onPick }: {
+  label: string; hint?: string; right?: string; on: boolean; first?: boolean; onPick: () => void;
+}) {
+  return (
+    <Row
+      first={first} title={label} note={hint} meta={right ?? null}
+      tone={on ? 'ink2' : undefined} wash={on}
+      right={on ? <Icon path={P.check} size={16} color={T.ink} /> : undefined}
+      onClick={onPick}
+      style={{ padding: '11px 18px' }}
+    />
+  );
+}
+
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+/** How full a plan window is, in the three tones a reading takes. */
+const limitTone = (u: number): Tone => (u >= 0.9 ? 'red' : u >= 0.6 ? 'amber' : 'run');
+
 /** Plan usage is only drawn for a window the tool actually reported. An empty
- *  bar would be a claim the daemon never made. */
+ *  track would be a claim the daemon never made. */
 function Limits({ windows }: { windows: LimitWindow[] }) {
   const shown = windows
     .filter((w) => typeof w.utilization === 'number')
     .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0));
   if (!shown.length) return null;
   return (
-    <div style={{ padding: '8px 14px 10px', borderTop: `1px solid ${C.hair}` }}>
-      <Label>plan usage</Label>
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 12,
+      padding: '14px 18px', borderTop: `1px solid ${T.line}`,
+    }}>
+      <Mark>plan usage</Mark>
       {shown.map((w) => {
-        const p = Math.max(0, Math.min(1, w.utilization ?? 0));
+        const u = Math.max(0, Math.min(1, w.utilization ?? 0));
         return (
-          <div key={w.window} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <span style={{ width: 110, flexShrink: 0, fontSize: 12, color: C.text2 }}>
-              {windowName(w.window)}
-            </span>
-            <span style={{
-              flex: 1, height: 5, borderRadius: 3, background: C.surface2, overflow: 'hidden', minWidth: 40,
-            }}>
-              <span style={{
-                display: 'block', height: '100%', width: `${p * 100}%`,
-                background: limitTone(p), borderRadius: 3,
-              }} />
-            </span>
-            <span style={{ ...mono, width: 40, textAlign: 'right', fontSize: 11, color: C.faint }}>
-              %{Math.round(p * 100)}
-            </span>
-            <span style={{ ...mono, width: 76, textAlign: 'right', fontSize: 11, color: C.faint }}>
-              {w.resets_at ? until(w.resets_at) : ''}
-            </span>
-          </div>
+          <Slider
+            key={w.window} value={u} format={pct}
+            label={
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                {windowName(w.window)}
+                {u >= 0.6 && <Tag label={u >= 0.9 ? 'nearly gone' : 'getting low'} tone={limitTone(u)} />}
+              </span>
+            }
+            note={w.resets_at ? `resets ${until(w.resets_at)}` : 'no reset time reported'}
+          />
         );
       })}
     </div>
@@ -304,48 +329,39 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
         subtitle={<span style={mono}>{account.provider}</span>}
         onClose={onClose}
       />
-      <div style={{ padding: 20, overflowY: 'auto' }}>
+      <div style={{
+        padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14,
+      }}>
         {stage === 'method' && (
           <>
-            <Label>how should this account sign in</Label>
-            {options.map((m) => {
-              const on = m.id === method.id;
-              return (
-                <button
-                  key={m.id} type="button" onClick={() => setMethod(m)}
-                  style={{
-                    display: 'block', width: '100%', textAlign: 'left', marginBottom: 6,
-                    padding: '10px 12px', borderRadius: R.btn, cursor: 'pointer',
-                    background: on ? C.accentTint : C.bg,
-                    border: `1px solid ${on ? C.accentRing : C.border}`,
-                  }}
-                >
-                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.text }}>
-                    {methodName(m.id)}
-                  </span>
-                  <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 3 }}>
-                    {METHOD[m.id]?.body ?? ''}
-                  </span>
-                </button>
-              );
-            })}
+            <Mark>how should this account sign in</Mark>
+            <Card inset={false}>
+              {options.map((m, i) => (
+                <Pick
+                  key={m.id} first={i === 0}
+                  label={methodName(m.id)} hint={METHOD[m.id]?.body ?? ''}
+                  on={m.id === method.id} onPick={() => setMethod(m)}
+                />
+              ))}
+            </Card>
 
             {method.wants_email && (
-              <div style={{ marginTop: 12 }}>
-                <Label>the account’s email</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <Mark>the account’s email</Mark>
                 <Field value={email} onChange={setEmail} placeholder="you@example.com" onEnter={start} />
-                <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5 }}>
+                <div style={{ fontSize: 12, color: T.ink3, lineHeight: 1.45 }}>
                   The computer starts the sign-in with this address; the page opens on that account.
                 </div>
               </div>
             )}
 
             {method.needs_key && (
-              <div style={{ marginTop: 12 }}>
-                <Label>api key</Label>
-                <Field value={apiKey} onChange={setApiKey} type="password" placeholder="Paste the key" />
-                <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5 }}>
-                  The key is stored on that computer, not in the panel. It spends your API bill, not your subscription.
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <Mark>api key</Mark>
+                <Field value={apiKey} onChange={setApiKey} secret placeholder="Paste the key" />
+                <div style={{ fontSize: 12, color: T.ink3, lineHeight: 1.45 }}>
+                  The key is stored on that computer, not in the panel. It spends your API bill,
+                  not your subscription.
                 </div>
               </div>
             )}
@@ -355,117 +371,103 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
         {(stage === 'waiting' || stage === 'code') && (
           <>
             {prompt?.url ? (
-              <>
-                <Label>1 · open this link in a browser</Label>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px 0 10px', height: 36,
-                  background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
-                }}>
-                  <span style={{
-                    ...mono, flex: 1, minWidth: 0, fontSize: 12, color: C.text2,
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>{maskUrl(prompt.url)}</span>
-                  <Btn onClick={() => void copyText(prompt.url!)}>
-                    <Icon path={P.copy} size={13} color={C.text} /> Copy
-                  </Btn>
-                  <Btn onClick={() => window.open(prompt.url!, '_blank', 'noopener')}>
-                    <Icon path={P.external} size={13} color={C.text} /> Open
-                  </Btn>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <Mark>1 · open this link in a browser</Mark>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Quoted style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{
+                      display: 'block', whiteSpace: 'nowrap', overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>{maskUrl(prompt.url)}</span>
+                  </Quoted>
+                  <Button small face="outline" icon={P.copy} label="Copy"
+                    onClick={() => void copyText(prompt.url!)} />
+                  <Button small face="outline" icon={P.external} label="Open"
+                    onClick={() => window.open(prompt.url!, '_blank', 'noopener')} />
                 </div>
-                <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6 }}>
+                <div style={{ fontSize: 12, color: T.ink3, lineHeight: 1.45 }}>
                   The one-time code in the URL is masked — copying takes the whole thing.
                 </div>
-              </>
+              </div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.mute }}>
-                <Spinner /> Preparing the sign-in page…
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: T.ink2,
+              }}>
+                <Spinner size={14} color={T.ink3} /> Preparing the sign-in page…
               </div>
             )}
 
             {prompt?.code && (
-              <div style={{ marginTop: 14 }}>
-                <Label>enter this code on the page</Label>
-                <div style={{
-                  ...mono, fontSize: 20, letterSpacing: 3, color: C.text, padding: '10px 12px',
-                  background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
-                }}>{prompt.code}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <Mark>enter this code on the page</Mark>
+                <Quoted style={{ fontSize: 20, letterSpacing: 3 }}>{prompt.code}</Quoted>
               </div>
             )}
 
             {stage === 'code' && (
-              <div style={{ marginTop: 14 }}>
-                <Label>2 · paste the code the page gives you at the end</Label>
-                <Field value={code} onChange={setCode} autoFocus onEnter={submit} placeholder="…" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <Mark>2 · paste the code the page gives you at the end</Mark>
+                <Field value={code} onChange={setCode} autoFocus onEnter={submit}
+                  placeholder="the code from the page" />
               </div>
             )}
 
             {stage === 'waiting' && prompt && !prompt.needs_code && (
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, marginTop: 14,
-                fontSize: 13, color: C.mute,
+                display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: T.ink2,
               }}>
-                <Spinner /> Waiting for approval…
+                <Spinner size={14} color={T.ink3} /> Waiting for approval…
               </div>
             )}
 
             {prompt?.expires_at && (
-              <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 10 }}>
-                expires in {until(prompt.expires_at)}
-              </div>
+              <Cell text={`expires in ${until(prompt.expires_at)}`} tone="ink3" />
             )}
           </>
         )}
 
         {stage === 'done' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
-            <Dot color={ok ? C.ok : C.danger} live size={8} />
-            <span style={{ color: ok ? C.text : C.danger }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14.5 }}>
+            <StatusDot state={ok ? 'running' : 'stuck'} />
+            <span style={{ color: ok ? T.ink : T.red, fontWeight: 600 }}>
               {ok ? 'Signed in' : 'Sign-in failed'}
             </span>
           </div>
         )}
 
-        {problem && (
-          <div style={{
-            marginTop: 12, padding: '10px 12px', borderRadius: R.btn, fontSize: 12.5,
-            color: C.danger, background: C.dangerBg,
-            border: `1px solid ${C.dangerLine}`, lineHeight: '18px',
-          }}>{problem}</div>
-        )}
+        {problem && <Note tone="red" icon={P.warn} title="That did not work" body={problem} />}
       </div>
 
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px',
-        borderTop: `1px solid ${C.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8,
+        padding: '12px 20px', borderTop: `1px solid ${T.line}`,
       }}>
-        <div style={{ flex: 1 }} />
         {stage === 'method' && (
           <>
-            <Btn kind="quiet" onClick={onClose}>Cancel</Btn>
-            <Btn
-              kind="primary" onClick={start}
+            <Button face="outline" label="Cancel" onClick={onClose} />
+            <Button
+              label={busy ? 'Starting…' : 'Start'} onClick={start}
               disabled={busy || (!!method.needs_key && !apiKey.trim())}
-            >{busy ? 'Starting…' : 'Start'}</Btn>
+            />
           </>
         )}
         {(stage === 'waiting' || stage === 'code') && (
           <>
-            <Btn kind="quiet" onClick={onClose}>Cancel</Btn>
+            <Button face="outline" label="Cancel" onClick={onClose} />
             {stage === 'code' && (
-              <Btn kind="primary" onClick={submit} disabled={busy || code.trim().length < 10}>
-                Verify
-              </Btn>
+              <Button label="Verify" onClick={submit} disabled={busy || code.trim().length < 10} />
             )}
           </>
         )}
         {stage === 'done' && (
           ok
-            ? <Btn kind="primary" onClick={onClose}>Done</Btn>
+            ? <Button label="Done" onClick={onClose} />
             : <>
-                <Btn kind="quiet" onClick={onClose}>Close</Btn>
-                <Btn onClick={() => { setStage('method'); setPrompt(null); setCode(''); setProblem(null); }}>
-                  Try again
-                </Btn>
+                <Button face="outline" label="Close" onClick={onClose} />
+                <Button
+                  label="Try again"
+                  onClick={() => { setStage('method'); setPrompt(null); setCode(''); setProblem(null); }}
+                />
               </>
         )}
       </div>
@@ -499,62 +501,49 @@ function HostsSection() {
       {order.map((k) => {
         const slot = hosts[k];
         if (!slot) return null;
-        const online = slot.status === 'online';
         const info = slot.info;
+        const st = hostState(slot);
         return (
-          <Card key={k}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
-              <Icon path={P.cpu} size={16} color={online ? C.accentSoft : C.mute} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{info?.name || slot.cfg.name}</div>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
-                  color: slot.status === 'unauthorized' ? C.danger : C.mute, marginTop: 3,
-                }}>
-                  <Dot color={online ? C.ok : slot.status === 'unauthorized' ? C.danger : C.faint} live={online} size={5} />
-                  {hostDetail(slot)}
-                </div>
-              </div>
-              <Btn kind="danger" onClick={() => setDoomed(k)}>Remove</Btn>
-            </div>
+          <Card key={k} inset={false}>
+            <Row
+              first icon={P.cpu} mark title={info?.name || slot.cfg.name}
+              meta={hostDetail(slot)} tone={st.tone}
+              lead={<Well icon={P.cpu} />}
+              right={
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <StatusDot state={st.state} hollow={slot.status !== 'online'} />
+                  <Button small face="outline" label="Remove" onClick={() => setDoomed(k)} />
+                </span>
+              }
+            />
             <KV k="address" v={`${slot.cfg.host}:${slot.cfg.port}`} code />
             <KV k="token" v="•••••••••• · kept in the panel, never shown" code />
-            <KV k="daemon" v={info?.daemon_version ?? '—'} code />
-            <KV k="system" v={info ? `${info.os} ${info.os_version}` : '—'} code />
-            <KV k="uptime" v={info ? uptime(info.uptime_s) : '—'} code />
-            <KV k="open sessions" v={info ? String(info.active_sessions) : '—'} code />
-            <KV k="devices" v={info ? String(info.connected_devices) : '—'} code />
+            <KV k="daemon" v={info?.daemon_version ?? 'not reported'} code />
+            <KV k="system" v={info ? `${info.os} ${info.os_version}` : 'not reported'} code />
+            <KV k="uptime" v={info ? uptime(info.uptime_s) : 'not reported'} code />
+            <KV k="open sessions" v={info ? String(info.active_sessions) : 'not reported'} code />
+            <KV k="devices" v={info ? String(info.connected_devices) : 'not reported'} code />
           </Card>
         );
       })}
 
-      <div style={{ marginTop: 18 }}>
-        <Head
-          title="Add a computer"
-          hint="Run `remote-ai-chat pair` on that computer, then paste the link it prints here."
+      <Head
+        title="Add a computer"
+        hint="Run `remote-ai-chat pair` on that computer, then paste the link it prints here."
+      />
+      <Card>
+        <Field
+          value={text} lines={3}
+          onChange={(v) => { setText(v); setProblem(null); }}
+          placeholder="remoteaichat://pair?host=…&port=8790&token=…"
         />
-        <Card>
-          <div style={{ padding: 14 }}>
-            <textarea
-              value={text}
-              onChange={(e) => { setText(e.target.value); setProblem(null); }}
-              placeholder="remoteaichat://pair?host=…&port=8790&token=…"
-              rows={3}
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: 10, resize: 'vertical',
-                background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
-                outline: 'none', color: C.text, ...mono, fontSize: 12, lineHeight: '18px',
-              }}
-            />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
-              <span style={{ flex: 1, fontSize: 12, color: problem ? C.danger : C.faint }}>
-                {problem ?? 'The token in that link is kept in the panel and never shown on screen.'}
-              </span>
-              <Btn kind="primary" onClick={add} disabled={!text.trim()}>Add</Btn>
-            </div>
-          </div>
-        </Card>
-      </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ flex: 1, fontSize: 12.5, color: problem ? T.red : T.ink3 }}>
+            {problem ?? 'The token in that link is kept in the panel and never shown on screen.'}
+          </span>
+          <Button label="Add" onClick={add} disabled={!text.trim()} />
+        </div>
+      </Card>
 
       {doomed && (
         <Confirm
@@ -579,47 +568,32 @@ function AccountCard({ slot, account, onLogin, onLogout, onRename, onDelete }: {
 }) {
   const windows = slot.limits[account.id] ?? [];
   return (
-    <Card>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
-        <ProviderMark provider={account.provider} dim={!account.logged_in} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              fontSize: 14, fontWeight: 600,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>{accountName(account)}</span>
-            {account.is_default && (
-              <span style={{
-                ...mono, fontSize: 10, fontWeight: 600, color: C.mute, padding: '2px 6px',
-                borderRadius: R.badge, background: C.surface2, border: `1px solid ${C.border}`,
-                whiteSpace: 'nowrap',
-              }}>the computer’s own account</span>
-            )}
-            {account.has_key && (
-              <span style={{
-                ...mono, fontSize: 10, fontWeight: 600, color: C.mute, padding: '2px 6px',
-                borderRadius: R.badge, background: C.surface2, border: `1px solid ${C.border}`,
-              }}>api key</span>
-            )}
-          </div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6, marginTop: 4,
-            fontSize: 12, color: account.logged_in ? C.mute : C.faint,
-          }}>
-            <Dot color={account.logged_in ? C.ok : C.faint} live={account.logged_in} size={5} />
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {account.logged_in ? (account.detail || 'signed in') : 'not signed in'}
+    <Card inset={false}>
+      <Row
+        first
+        lead={<ProviderMark provider={account.provider} dim={!account.logged_in} />}
+        title={
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {accountName(account)}
             </span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {!account.is_default && <Btn onClick={onRename}>Rename</Btn>}
-          {account.logged_in
-            ? <Btn onClick={onLogout}>Sign out</Btn>
-            : <Btn kind="primary" onClick={onLogin}>Sign in</Btn>}
-          {!account.is_default && <Btn kind="danger" onClick={onDelete}>Delete</Btn>}
-        </div>
-      </div>
+            {account.is_default && <Tag label="the computer’s own account" />}
+            {account.has_key && <Tag label="api key" />}
+          </span>
+        }
+        note={account.logged_in ? (account.detail || 'signed in') : 'not signed in'}
+        meta={account.logged_in ? 'signed in' : 'signed out'}
+        tone={account.logged_in ? 'run' : 'ink3'}
+        right={
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {!account.is_default && <Button small face="outline" label="Rename" onClick={onRename} />}
+            {account.logged_in
+              ? <Button small face="outline" label="Sign out" onClick={onLogout} />
+              : <Button small label="Sign in" onClick={onLogin} />}
+            {!account.is_default && <Button small face="outline" label="Delete" onClick={onDelete} />}
+          </span>
+        }
+      />
       <KV k="id" v={account.id} code />
       <Limits windows={windows} />
     </Card>
@@ -667,20 +641,20 @@ function AccountsSection({ hostKey, slot, tools }: {
         title="Accounts"
         hint="Each account runs in its own folder on that computer; you pick which one a chat spends when you open it."
         right={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {slot.loading.accounts && <Spinner size={13} />}
-            <Btn onClick={reload} disabled={!online}>Refresh</Btn>
-          </div>
+          <>
+            {slot.loading.accounts && <Spinner size={13} color={T.ink3} />}
+            <Button small face="outline" label="Refresh" onClick={reload} disabled={!online} />
+          </>
         }
       />
 
-      {problem && <Note tone="warn">{problem}</Note>}
-      {!online && <Note>This computer is offline — accounts cannot be read.</Note>}
+      {problem && <Aside tone="warn">{problem}</Aside>}
+      {!online && <Aside>This computer is offline — accounts cannot be read.</Aside>}
 
       {(['claude', 'codex'] as Provider[]).map((p) => (
         byProvider[p].length ? (
-          <div key={p} style={{ marginBottom: 16 }}>
-            <Label>{p}</Label>
+          <div key={p} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Mark>{p}</Mark>
             {byProvider[p].map((a) => (
               <AccountCard
                 key={a.id} slot={slot} account={a}
@@ -695,42 +669,40 @@ function AccountsSection({ hostKey, slot, tools }: {
       ))}
 
       {online && !slot.accounts.length && !slot.loading.accounts && (
-        <Note>No accounts on this computer.</Note>
+        <Aside>No accounts on this computer.</Aside>
       )}
 
-      <div style={{ marginTop: 18 }}>
-        <Head title="Add an account" hint="A new account starts with an empty folder; you sign in separately." />
-        <Card>
-          <div style={{ padding: 14, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-            <div style={{ width: 180 }}>
-              <Label>tool</Label>
-              <Segment
-                value={newProvider}
-                options={['claude', 'codex'] as const}
-                onChange={setNewProvider}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <Label>account name</Label>
-              <Field
-                value={newLabel} onChange={setNewLabel} placeholder="e.g. Work, Second subscription"
-                onEnter={() => newLabel.trim() && run(async () => {
-                  await call(hostKey, 'account.create', { provider: newProvider, label: newLabel.trim() });
-                  setNewLabel('');
-                })}
-              />
-            </div>
-            <Btn
-              kind="primary"
-              disabled={!online || !newLabel.trim()}
-              onClick={() => run(async () => {
+      <Head title="Add an account" hint="A new account starts with an empty folder; you sign in separately." />
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <Mark>tool</Mark>
+            <Choice
+              label="Tool" value={newProvider}
+              options={[{ key: 'claude' as Provider, label: 'claude' },
+                        { key: 'codex' as Provider, label: 'codex' }]}
+              onChange={setNewProvider}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <Mark>account name</Mark>
+            <Field
+              value={newLabel} onChange={setNewLabel} placeholder="e.g. Work, Second subscription"
+              onEnter={() => newLabel.trim() && run(async () => {
                 await call(hostKey, 'account.create', { provider: newProvider, label: newLabel.trim() });
                 setNewLabel('');
               })}
-            >Add</Btn>
+            />
           </div>
-        </Card>
-      </div>
+          <Button
+            label="Add" disabled={!online || !newLabel.trim()}
+            onClick={() => run(async () => {
+              await call(hostKey, 'account.create', { provider: newProvider, label: newLabel.trim() });
+              setNewLabel('');
+            })}
+          />
+        </div>
+      </Card>
 
       {login && (
         <LoginSheet
@@ -742,23 +714,21 @@ function AccountsSection({ hostKey, slot, tools }: {
 
       {renaming && (
         <Modal onClose={() => setRenaming(null)} width={440}>
-          <ModalHead title="Account name" subtitle={<span style={mono}>{renaming.id}</span>} onClose={() => setRenaming(null)} />
-          <div style={{ padding: 20 }}>
-            <Field value={renameText} onChange={setRenameText} autoFocus />
-          </div>
-          <div style={{
-            display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 20px',
-            borderTop: `1px solid ${C.border}`,
-          }}>
-            <Btn kind="quiet" onClick={() => setRenaming(null)}>Cancel</Btn>
-            <Btn
-              kind="primary" disabled={!renameText.trim()}
-              onClick={() => {
-                const a = renaming;
-                setRenaming(null);
-                run(() => call(hostKey, 'account.rename', { account_id: a.id, label: renameText.trim() }));
-              }}
-            >Save</Btn>
+          <ModalHead title="Account name" subtitle={<span style={mono}>{renaming.id}</span>}
+            onClose={() => setRenaming(null)} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 20px 18px' }}>
+            <Field value={renameText} onChange={setRenameText} autoFocus placeholder="Account name" />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button face="outline" label="Cancel" onClick={() => setRenaming(null)} />
+              <Button
+                label="Save" disabled={!renameText.trim()}
+                onClick={() => {
+                  const a = renaming;
+                  setRenaming(null);
+                  run(() => call(hostKey, 'account.rename', { account_id: a.id, label: renameText.trim() }));
+                }}
+              />
+            </div>
           </div>
         </Modal>
       )}
@@ -801,26 +771,23 @@ function ToolsSection({ tools, npm, loading, problem, onReload }: {
       <Head
         title="Tools"
         hint="The command-line tools that run the chats — versions are re-read from that computer."
-        right={<Btn onClick={onReload} disabled={loading}>{loading ? 'Reading…' : 'Refresh'}</Btn>}
+        right={<Button small face="outline" label={loading ? 'Reading…' : 'Refresh'}
+          onClick={onReload} disabled={loading} />}
       />
 
-      {problem && <Note tone="warn">{problem}</Note>}
+      {problem && <Aside tone="warn">{problem}</Aside>}
 
       {tools.map((tool) => (
-        <Card key={tool.provider}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
-            <ProviderMark provider={tool.provider} dim={!tool.version} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{tool.provider}</div>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 6, marginTop: 3,
-                fontSize: 12, color: C.mute,
-              }}>
-                <Dot color={tool.version ? C.ok : C.faint} live={!!tool.version} size={5} />
-                {tool.version ? `version ${tool.version}` : 'not installed on this computer'}
-              </div>
-            </div>
-          </div>
+        <Card key={tool.provider} inset={false}>
+          <Row
+            first
+            lead={<ProviderMark provider={tool.provider} dim={!tool.version} />}
+            title={tool.provider}
+            note={tool.version ? `version ${tool.version}` : 'not installed on this computer'}
+            meta={tool.version ? 'installed' : 'absent'}
+            tone={tool.version ? 'run' : 'ink3'}
+            right={<StatusDot state={tool.version ? 'running' : 'quiet'} hollow={!tool.version} />}
+          />
           {tool.path && <KV k="path" v={tilde(tool.path)} code />}
           {!!tool.login_methods?.length && (
             <KV
@@ -828,10 +795,7 @@ function ToolsSection({ tools, npm, loading, problem, onReload }: {
               v={
                 <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {tool.login_methods.map((m) => (
-                    <span key={m.id} style={{
-                      ...mono, fontSize: 11, color: C.mute, padding: '2px 7px',
-                      borderRadius: R.badge, background: C.surface2, border: `1px solid ${C.border}`,
-                    }} title={METHOD[m.id]?.body ?? ''}>{methodName(m.id)}</span>
+                    <Tag key={m.id} label={methodName(m.id)} />
                   ))}
                 </span>
               }
@@ -840,18 +804,17 @@ function ToolsSection({ tools, npm, loading, problem, onReload }: {
         </Card>
       ))}
 
-      {!tools.length && !loading && !problem && <Note>No tool information.</Note>}
+      {!tools.length && !loading && !problem && <Aside>No tool information.</Aside>}
 
-      <Card>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
-          <Icon path={P.bolt} size={16} color={C.mute} />
-          <div style={{ flex: 1, fontSize: 13.5 }}>npm</div>
-          <span style={{ ...mono, fontSize: 12, color: npm ? C.text2 : C.faint }}>
-            {npm == null ? '—' : npm ? 'present' : 'missing'}
-          </span>
-        </div>
+      <Card inset={false}>
+        <Row
+          first icon={P.bolt} title="npm"
+          note="needed to install a tool from this panel"
+          meta={npm == null ? 'not reported' : npm ? 'present' : 'missing'}
+          tone={npm ? 'run' : 'ink3'}
+        />
       </Card>
-      {npm === false && <Note>Without npm the tools cannot be installed from this panel.</Note>}
+      {npm === false && <Aside>Without npm the tools cannot be installed from this panel.</Aside>}
     </>
   );
 }
@@ -891,103 +854,108 @@ function DefaultsSection({ hostKey, slot }: { hostKey: string; slot: HostSlot })
         hint="What the New chat dialog opens with on this computer. Nothing here is a lock — starting a chat with something else changes these to match."
       />
 
-      <Label>tool</Label>
-      <div style={{ marginBottom: 10 }}>
-        <Segment
-          value={provider} options={installed.length ? installed : (['claude'] as Provider[])}
-          onChange={(p) => setDefaults(hostKey, { provider: p })}
-        />
-      </div>
-      <Note>
-        New chats open with this tool, and everything below belongs to it.
-        To set the other one’s defaults, switch to it here first.
-      </Note>
-
-      <Label>account</Label>
       <Card>
-        {accounts.map((a, i, arr) => {
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <Mark>tool</Mark>
+          <Choice
+            label="Tool" value={provider}
+            options={(installed.length ? installed : (['claude'] as Provider[]))
+              .map((x) => ({ key: x, label: x }))}
+            onChange={(x) => setDefaults(hostKey, { provider: x })}
+          />
+        </div>
+        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+          New chats open with this tool, and everything below belongs to it. To set the other
+          one’s defaults, switch to it here first.
+        </div>
+      </Card>
+
+      <Mark>account</Mark>
+      <Card inset={false}>
+        {accounts.map((a, i) => {
           const value = a.is_default ? '' : a.id;
           return (
-            <Radio
-              key={a.id} label={accountName(a)}
+            <Pick
+              key={a.id} first={i === 0} label={accountName(a)}
               hint={a.logged_in ? a.detail : 'not signed in'}
-              on={now.account_id === value} last={i === arr.length - 1}
+              on={now.account_id === value}
               onPick={() => setProviderDefaults(hostKey, provider, { account_id: value })}
             />
           );
         })}
         {!accounts.length && (
-          <div style={{ padding: 14, fontSize: 12.5, color: C.mute }}>
+          <div style={{ padding: '14px 18px', fontSize: 13, color: T.ink2 }}>
             {online ? 'No account of this tool is signed in on that computer.' : 'The computer is offline.'}
           </div>
         )}
       </Card>
 
-      <Label>model</Label>
-      <Card>
-        {(pc?.models ?? []).map((m, i, arr) => (
-          <Radio
-            key={m.id} label={m.label || m.id} hint={m.hint} right={m.id}
-            on={now.model === m.id} last={i === arr.length - 1}
+      <Mark>model</Mark>
+      <Card inset={false}>
+        {(pc?.models ?? []).map((m, i) => (
+          <Pick
+            key={m.id} first={i === 0} label={m.label || m.id} hint={m.hint} right={m.id}
+            on={now.model === m.id}
             onPick={() => setProviderDefaults(hostKey, provider, { model: m.id })}
           />
         ))}
         {!pc?.models.length && (
-          <div style={{ padding: 14, fontSize: 12.5, color: C.mute }}>
+          <div style={{ padding: '14px 18px', fontSize: 13, color: T.ink2 }}>
             {online ? 'That computer listed no models for this tool.' : 'The computer is offline.'}
           </div>
         )}
       </Card>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-        <div style={{ flex: 1 }}>
-          <Label>effort</Label>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <Card style={{ flex: 1, minWidth: 260 }}>
+          <Mark>effort</Mark>
           {pc?.efforts?.length
-            ? <Segment
-                value={now.effort} options={pc.efforts}
+            ? <Choice
+                label="Effort" value={now.effort ?? ''}
+                options={pc.efforts.map((e) => ({ key: e, label: e }))}
                 onChange={(e) => setProviderDefaults(hostKey, provider, { effort: e })}
               />
-            : <div style={{ fontSize: 12.5, color: C.mute }}>this tool has no effort setting</div>}
-        </div>
-        <div style={{ flex: 1 }}>
-          <Label>permission mode</Label>
-          <Segment
-            value={now.perm_mode} options={pc?.perm_modes ?? []}
+            : <div style={{ fontSize: 13, color: T.ink3 }}>this tool has no effort setting</div>}
+        </Card>
+        <Card style={{ flex: 1, minWidth: 260 }}>
+          <Mark>permission mode</Mark>
+          <Choice
+            label="Permission mode" value={now.perm_mode ?? ''}
+            options={(pc?.perm_modes ?? []).map((m) => ({ key: m, label: m }))}
             onChange={(m) => setProviderDefaults(hostKey, provider, { perm_mode: m })}
-            tone={(v) => (v === 'bypass' ? 'warn' : 'plain')}
           />
-        </div>
+        </Card>
       </div>
       {now.perm_mode === 'bypass' && (
-        <Note tone="warn">
+        <Aside tone="warn">
           Every new chat will start in bypass — no permission questions.
           The dangerous-command list still asks, even there.
-        </Note>
+        </Aside>
       )}
 
-      <Label>project folder</Label>
-      <Card>
+      <Mark>project folder</Mark>
+      <Card inset={false}>
         {/* A computer can have a hundred folders; the list scrolls rather than
             pushing everything else off the screen. */}
-        <div style={{ maxHeight: 240, overflowY: 'auto' }}>
-          <Radio
-            label="Ask each time" hint="New chat opens with no folder picked"
-            on={!defaults.cwd} last={!slot.projects.length}
+        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+          <Pick
+            first label="Ask each time" hint="New chat opens with no folder picked"
+            on={!defaults.cwd}
             onPick={() => setDefaults(hostKey, { cwd: null })}
           />
-          {slot.projects.map((pr, i, arr) => (
-            <Radio
+          {slot.projects.map((pr) => (
+            <Pick
               key={pr.path} label={pr.name} right={tilde(pr.path)}
-              on={defaults.cwd === pr.path} last={i === arr.length - 1}
+              on={defaults.cwd === pr.path}
               onPick={() => setDefaults(hostKey, { cwd: pr.path })}
             />
           ))}
         </div>
       </Card>
 
-      <Note>
+      <Aside>
         Remembered in this browser, for this computer — the phone app keeps its own.
-      </Note>
+      </Aside>
     </>
   );
 }
@@ -1001,52 +969,42 @@ function SecuritySection({ slot }: { slot: HostSlot }) {
         hint="Chats can only open under the roots below. That limit is enforced on the computer, and holds even in bypass permission mode."
       />
 
-      <Label>allowed roots</Label>
-      <Card>
+      <Mark>allowed roots</Mark>
+      <Card inset={false}>
         {roots.length ? roots.map((root, i) => (
-          <div
-            key={root}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-              borderTop: i ? `1px solid ${C.hair}` : 'none',
-            }}
-          >
-            <Icon path={P.folder} size={14} color={C.mute} />
-            <span style={{ ...mono, flex: 1, minWidth: 0, fontSize: 12.5, color: C.text2, wordBreak: 'break-all' }}>
-              {tilde(root)}
-            </span>
-          </div>
+          <Row key={root} first={i === 0} icon={P.folder} mark title={tilde(root)} />
         )) : (
-          <div style={{ padding: 14, fontSize: 12.5, color: C.mute }}>
+          <div style={{ padding: '14px 18px', fontSize: 13, color: T.ink2 }}>
             {slot.status === 'online' ? 'This computer reported no roots.' : 'The computer is offline.'}
           </div>
         )}
       </Card>
 
-      <Note>
+      <Aside>
         The roots come from that computer’s own config and cannot be changed from the panel.
         Edit the config file on the computer instead.
-      </Note>
+      </Aside>
     </>
   );
 }
 
 function AboutSection({ slot }: { slot: HostSlot }) {
   const info = slot.info;
+  const st = hostState(slot);
   return (
     <>
       <Head title="About" hint="The daemon running on this computer." />
-      <Card>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
-          <Icon path={P.cpu} size={16} color={C.mute} />
-          <div style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{info?.name || slot.cfg.name}</div>
-          <Dot color={slot.status === 'online' ? C.ok : C.faint} live={slot.status === 'online'} size={6} />
-        </div>
-        <KV k="daemon version" v={info?.daemon_version ?? '—'} code />
-        <KV k="system" v={info ? `${info.os} ${info.os_version}` : '—'} code />
-        <KV k="uptime" v={info ? uptime(info.uptime_s) : '—'} code />
-        <KV k="devices" v={info ? String(info.connected_devices) : '—'} code />
-        <KV k="open sessions" v={info ? String(info.active_sessions) : '—'} code />
+      <Card inset={false}>
+        <Row
+          first icon={P.cpu} mark title={info?.name || slot.cfg.name}
+          meta={hostDetail(slot)} tone={st.tone}
+          right={<StatusDot state={st.state} hollow={slot.status !== 'online'} />}
+        />
+        <KV k="daemon version" v={info?.daemon_version ?? 'not reported'} code />
+        <KV k="system" v={info ? `${info.os} ${info.os_version}` : 'not reported'} code />
+        <KV k="uptime" v={info ? uptime(info.uptime_s) : 'not reported'} code />
+        <KV k="devices" v={info ? String(info.connected_devices) : 'not reported'} code />
+        <KV k="open sessions" v={info ? String(info.active_sessions) : 'not reported'} code />
         <KV k="address" v={`${slot.cfg.host}:${slot.cfg.port}`} code />
         <KV k="claude" v={info?.versions?.claude ?? 'not installed'} code />
         <KV k="codex" v={info?.versions?.codex ?? 'not installed'} code />
@@ -1069,13 +1027,15 @@ export function AppearanceSection() {
   const { choice, scheme, set } = useTheme();
   return (
     <>
-      <Label>theme</Label>
-      <Segment
-        value={choice}
-        options={['system', 'light', 'dark'] as const}
+      <Mark>theme</Mark>
+      <Choice
+        label="Theme" value={choice}
+        options={[{ key: 'system' as const, label: 'system' },
+                  { key: 'light' as const, label: 'light' },
+                  { key: 'dark' as const, label: 'dark' }]}
         onChange={(v) => set(v)}
       />
-      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: '18px', padding: '10px 0 0' }}>
+      <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
         {choice === 'system'
           ? `Following this computer, which is ${scheme} right now. It changes with it.`
           : `Set by hand. This browser will open ${choice} until you change it back.`}
@@ -1086,9 +1046,14 @@ export function AppearanceSection() {
 
 /* ── screen ───────────────────────────────────────────────────────────── */
 
-export function Preferences() {
+/** `section` is which row of the column this page opens on. It is a prop and
+ *  not only local state because five of the seven sections are otherwise
+ *  reachable by pressing something, and a static render cannot press. Nothing
+ *  passes it in the panel — the drawer opens this page on Accounts, which is
+ *  the one that is usually the reason for coming. */
+export function Preferences({ section: opening = 'accounts' }: { section?: SectionId }) {
   const { hosts, order, focus } = useFleet();
-  const [section, setSection] = useState<SectionId>('accounts');
+  const [section, setSection] = useState<SectionId>(opening);
   const slot = focus ? hosts[focus] : null;
   const online = slot?.status === 'online';
 
@@ -1123,81 +1088,71 @@ export function Preferences() {
     security: slot?.info?.roots?.length,
   };
 
+  const items: PanelItem[] = SECTIONS.map((x) => ({
+    key: x.id, label: x.label, icon: x.icon,
+    count: counts[x.id] != null ? counts[x.id] : undefined,
+  }));
+
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
+    <div style={{
+      flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch',
+      overflow: 'hidden', background: T.bg,
+    }}>
+      {/* Web15's own column, the same part the drawer one level up is
+          navigated by — this page is a drawer inside a drawer, and drawing it
+          with a second kind of list would say it was something else. */}
+      {/* As wide as the column itself and no wider: the sentence under the
+          rows is what a `flex: none` box would otherwise be measured by, and
+          one long line of it pushed this column to three hundred and eighty. */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px',
-        borderBottom: `1px solid ${C.border}`, flexShrink: 0,
+        flex: 'none', width: SIZE.sidePanel, padding: '28px 12px 28px 20px', overflowY: 'auto',
       }}>
-        <div style={{ fontSize: 17, fontWeight: 600 }}>This computer</div>
-        {slot && (
-          <div style={{ ...mono, fontSize: 12, color: C.faint }}>
-            {slot.info?.name || slot.cfg.name}
-          </div>
-        )}
+        <SidePanel
+          title="This computer"
+          note={slot ? (slot.info?.name || slot.cfg.name) : 'Nothing is paired yet.'}
+          items={items} value={section} onChange={(k) => setSection(k as SectionId)}
+        />
+        <div style={{ fontSize: 12.5, lineHeight: 1.5, color: T.ink3, margin: '14px 12px 0' }}>
+          Every setting under these rows lives on that computer. The panel only reads and
+          changes it; Appearance is the one that is this browser's own.
+        </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '28px 32px 40px 28px' }}>
         <div style={{
-          width: RAIL_W, flexShrink: 0, borderRight: `1px solid ${C.border}`,
-          background: C.surface, padding: 10, display: 'flex', flexDirection: 'column', gap: 2,
+          display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, maxWidth: 860,
         }}>
-          {SECTIONS.map((s) => {
-            const on = s.id === section;
-            const n = counts[s.id];
-            return (
-              <button
-                key={s.id} type="button" onClick={() => setSection(s.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 36,
-                  padding: '0 10px', borderRadius: R.btn, cursor: 'pointer', textAlign: 'left',
-                  background: on ? C.accentTint : 'transparent',
-                  border: `1px solid ${on ? C.accentRing : 'transparent'}`,
-                }}
-              >
-                <Icon path={s.icon} size={15} color={on ? C.accentSoft : C.mute} />
-                <span style={{
-                  flex: 1, fontSize: 13.5, fontWeight: on ? 600 : 400, color: on ? C.text : C.text2,
-                }}>{s.label}</span>
-                {n != null && <span style={{ fontSize: 11, color: C.faint }}>{n}</span>}
-              </button>
-            );
-          })}
+          {section === 'hosts' && <HostsSection />}
 
-          <div style={{ flex: 1 }} />
-          <div style={{
-            padding: 10, borderRadius: R.btn, background: C.bg, border: `1px solid ${C.border}`,
-            fontSize: 11.5, color: C.mute, lineHeight: '16px',
-          }}>
-            Every setting lives on that computer. The panel only reads and changes it.
-          </div>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 24px 40px' }}>
-          <div style={{ maxWidth: 820 }}>
-            {section === 'hosts' && <HostsSection />}
-
-            {section === 'appearance' && <AppearanceSection />}
-
-            {section !== 'hosts' && section !== 'appearance' && !slot && (
-              <Note>No computer paired yet. Add one from “Computers” on the left.</Note>
-            )}
-
-            {section === 'accounts' && slot && focus && (
-              <AccountsSection hostKey={focus} slot={slot} tools={tools} />
-            )}
-            {section === 'defaults' && slot && focus && (
-              <DefaultsSection hostKey={focus} slot={slot} />
-            )}
-            {section === 'tools' && slot && (
-              <ToolsSection
-                tools={tools} npm={npm} loading={toolsLoading}
-                problem={toolsProblem} onReload={loadTools}
+          {section === 'appearance' && (
+            <>
+              <Head
+                title="Appearance"
+                hint="Divan is drawn in two themes and which one is on screen is yours, not the
+                      daemon's. It follows this computer until you say otherwise."
               />
-            )}
-            {section === 'security' && slot && <SecuritySection slot={slot} />}
-            {section === 'about' && slot && <AboutSection slot={slot} />}
-          </div>
+              <Card><AppearanceSection /></Card>
+            </>
+          )}
+
+          {section !== 'hosts' && section !== 'appearance' && !slot && (
+            <Aside>No computer paired yet. Add one from “Computers” on the left.</Aside>
+          )}
+
+          {section === 'accounts' && slot && focus && (
+            <AccountsSection hostKey={focus} slot={slot} tools={tools} />
+          )}
+          {section === 'defaults' && slot && focus && (
+            <DefaultsSection hostKey={focus} slot={slot} />
+          )}
+          {section === 'tools' && slot && (
+            <ToolsSection
+              tools={tools} npm={npm} loading={toolsLoading}
+              problem={toolsProblem} onReload={loadTools}
+            />
+          )}
+          {section === 'security' && slot && <SecuritySection slot={slot} />}
+          {section === 'about' && slot && <AboutSection slot={slot} />}
         </div>
       </div>
     </div>

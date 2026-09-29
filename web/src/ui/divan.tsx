@@ -286,21 +286,34 @@ export function Pill({ label, face = 'surface', dot, onClick, title, style }: {
  *  border-radius:11px`, the filled one `background:var(--ink); color:var(--bg)`
  *  at 600 14, the outlined one `1px solid var(--line2)` at 500 14. Web15 W12's
  *  row actions are the same button one step smaller (`height:32px;
- *  border-radius:9px`), which is `small`. */
-export function Button({ label, face = 'ink', icon, small, wide, onClick, title, style }: {
+ *  border-radius:9px`), which is `small`.
+ *
+ *  A button there is nothing to press is drawn the way `Counter` draws a count
+ *  of zero: it drops its fill and goes grey on `s2`, rather than fading behind
+ *  its own colour. The frames never draw one — every button on an artboard is
+ *  live — but the pages a computer answers are full of them (nothing to update,
+ *  no pty to stop, no account to sign out of), and a white label at 0.45 over
+ *  the ink reads at 1.7:1 in one theme, which is the reason it is a tone here
+ *  and not an opacity. */
+export function Button({ label, face = 'ink', icon, small, wide, disabled, onClick, title, style }: {
   label: React.ReactNode;
   face?: 'ink' | 'amber' | 'outline';
   icon?: string;
   small?: boolean;
   wide?: boolean;
+  /** Nothing to press: the fill goes, the label goes grey, the handler is not
+   *  offered at all, so it is inert to a keyboard as well as to a mouse. */
+  disabled?: boolean;
   onClick?: () => void;
   title?: string;
   style?: React.CSSProperties;
 }) {
-  const background = face === 'ink' ? T.ink : face === 'amber' ? T.amber : 'transparent';
-  const colour = face === 'ink' ? T.bg : face === 'amber' ? T.onAmber : T.ink;
+  const background = disabled ? T.s2
+    : face === 'ink' ? T.ink : face === 'amber' ? T.amber : 'transparent';
+  const colour = disabled ? T.ink3
+    : face === 'ink' ? T.bg : face === 'amber' ? T.onAmber : T.ink;
   return (
-    <Tap onClick={onClick} title={title} style={{
+    <Tap onClick={disabled ? undefined : onClick} title={title} style={{
       flex: wide ? 1 : 'none',
       height: small ? SIZE.pill : SIZE.button,
       padding: small ? '0 12px' : '0 14px',
@@ -308,7 +321,7 @@ export function Button({ label, face = 'ink', icon, small, wide, onClick, title,
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
       fontSize: small ? 13 : 14, fontWeight: face === 'outline' ? 500 : 600, whiteSpace: 'nowrap',
       background, color: colour,
-      boxShadow: face === 'outline' ? outline(T.line2) : undefined,
+      boxShadow: face === 'outline' && !disabled ? outline(T.line2) : undefined,
       ...style,
     }}>
       {!!icon && <Icon path={icon} size={16} color={colour} />}
@@ -1331,7 +1344,7 @@ export function FieldRow({ label, value, lead, note, first, style }: {
  *  the frame gives that block (`height:60px`) so the card does not grow under the
  *  cursor. */
 export function Write({
-  value, onChange, onKeyDown, placeholder, lines = 1, autoFocus, label, style,
+  value, onChange, onKeyDown, placeholder, lines = 1, autoFocus, secret, label, style,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1339,6 +1352,9 @@ export function Write({
   placeholder?: string;
   lines?: number;
   autoFocus?: boolean;
+  /** A value that must not be readable over a shoulder — a device token. The
+   *  field is the same field; the browser is the one that draws the dots. */
+  secret?: boolean;
   /** What it is, for a reader who cannot see the card it is in. */
   label?: string;
   style?: React.CSSProperties;
@@ -1357,7 +1373,9 @@ export function Write({
       ...style,
     },
   };
-  return lines > 1 ? <textarea {...common} rows={lines} /> : <input {...common} type="text" />;
+  return lines > 1
+    ? <textarea {...common} rows={lines} spellCheck={false} />
+    : <input {...common} type={secret ? 'password' : 'text'} autoComplete="off" spellCheck={false} />;
 }
 
 // ── 23 · a table ────────────────────────────────────────────────────────────

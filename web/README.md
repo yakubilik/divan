@@ -80,17 +80,18 @@ which is why a theme change costs no render.
 
 ```
 npm test                          # the palette, the parts, the switch, the shell, every screen
-node scripts/test-divan-ui.mjs    # the same in a real browser, with screenshots
+npm run test:ui                   # the same in a real browser, with screenshots
 ```
 
 `npm test` renders every part, every screen — with a computer paired and
 without one — and every panel a screen opens over itself, holds the colours to
 the table, and measures every pair of tokens that meets, this ink on that
 surface, in both themes at 3:1. `scripts/panel-fixture.js` is the computer, the
-chat and the approvals it is all drawn from. The browser one opens the same page
-in Chrome (`CHROME=…` if it is somewhere unusual, and it is not in `npm test`
-for that reason), reads back what the browser actually resolved, and measures
-every pair it painted — text and glyphs against what is behind them — at 3:1.
+chat and the approvals it is all drawn from. `npm run test:ui` opens the same page
+in Chrome (`CHROME=…` if it is somewhere unusual; it needs a browser on the
+machine, which is why it is a command of its own and not part of `npm test`),
+reads back what the browser actually resolved, and measures every pair it
+painted — text and glyphs against what is behind them — at 3:1.
 It leaves `.test-build/divan/` behind: `gallery.html`, every part in both themes
 with no daemon and no pairing, and screenshots of the parts and of nine screens
 in each theme — the shell among them, and the board of one product, which are

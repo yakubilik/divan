@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { C, MEDIA } from '../lib/theme';
-import { Btn, Chip, Empty, Icon, P, Spinner } from '../ui/kit';
-import { Cell, Pill, SectionHeader } from '../ui/divan';
+import { MEDIA, T } from '../lib/theme';
+import { Icon, P, Spinner } from '../ui/kit';
+import { Button, Cell, EmptyState, Pill, SectionHeader } from '../ui/divan';
 import { useFleet } from '../lib/fleet';
 
 /* The computer's own screen, in the panel.
@@ -319,13 +319,21 @@ export function Screen() {
       : { w: box.w, h: Math.round(box.w / aspect) };
   }, [box, aspect]);
 
-  if (!slot) return <Empty title="No computer" hint="Pair one first." />;
+  if (!slot) {
+    return (
+      <EmptyState
+        title="No computer to watch."
+        body="The remote screen is one machine's own display, read a frame at a time. Pair a
+              computer under Machines and its screen can be opened from here."
+      />
+    );
+  }
 
   const blocked = caps && !caps.view;
 
   return (
     <div ref={rootRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-                                height: '100%', minHeight: 0, background: C.bg }}>
+                                height: '100%', minHeight: 0, background: T.bg }}>
       {/* Web15 W15's head and its machines: the page says what it is at the size
           every Divan page head is set at, and the computers are the frame's own
           chips — a run of them with the one being watched filled — rather than
@@ -346,7 +354,7 @@ export function Screen() {
           ))}
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px 10px', borderBottom: `1px solid ${C.hair}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px 10px', borderBottom: `1px solid ${T.line}` }}>
         {(caps?.displays?.length ?? 0) > 1 && caps!.displays!.map((d) => {
           const on = (display || caps!.displays!.find((x) => x.primary)?.id
             || caps!.displays![0].id) === d.id;
@@ -357,22 +365,28 @@ export function Screen() {
             />
           );
         })}
-        {zoom > 1.01 && <Chip onClick={() => setZoom(1)} title="Back to actual size">{zoom.toFixed(1)}×</Chip>}
+        {zoom > 1.01 && (
+          <Pill label={`${zoom.toFixed(1)}×`} onClick={() => setZoom(1)} title="Back to actual size" />
+        )}
         <div style={{ flex: 1 }} />
         {caps?.view && (
-          <Btn kind={live ? 'ghost' : 'primary'} onClick={live ? stop : start}>
-            {live ? 'Disconnect' : 'Connect'}
-          </Btn>
+          <Button
+            small face={live ? 'outline' : 'ink'} label={live ? 'Disconnect' : 'Connect'}
+            onClick={live ? stop : start}
+          />
         )}
         {caps && caps.control && (
-          <Btn kind={caps.enabled ? 'danger' : 'primary'} onClick={enable} disabled={busy}>
-            {busy ? <Spinner size={12} /> : caps.enabled ? 'Stop controlling' : 'Take control'}
-          </Btn>
+          <Button
+            small face={caps.enabled ? 'outline' : 'amber'} disabled={busy}
+            label={busy ? 'Asking…' : caps.enabled ? 'Stop controlling' : 'Take control'}
+            onClick={enable}
+          />
         )}
-        <Btn kind="ghost" onClick={toggleFs} title={fs ? 'Leave full screen' : 'Full screen'}>
-          <Icon path={fs ? P.shrink : P.expand} size={15} />
-        </Btn>
-        <span style={{ fontSize: 12, color: controllable && live ? C.warn : C.mute }}>
+        <Button
+          small face="outline" icon={fs ? P.shrink : P.expand}
+          label={fs ? 'Leave full screen' : 'Full screen'} onClick={toggleFs}
+        />
+        <span style={{ fontSize: 12.5, color: controllable && live ? T.amber : T.ink3 }}>
           {blocked ? (caps?.reason ?? 'no screen here')
             : !live ? 'not connected'
             : controllable ? 'control is on'
@@ -422,18 +436,21 @@ export function Screen() {
           </div>
         )}
         {live && !slots[front] && !error && (
-          <div style={{ position: 'absolute' }}><Spinner size={18} /></div>
+          <div style={{ position: 'absolute' }}><Spinner size={18} color={MEDIA.inkDim} /></div>
         )}
         {!live && (
           <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column',
                         alignItems: 'center', gap: 14, padding: 24, textAlign: 'center' }}>
-            <Icon path={P.monitor} size={26} />
-            <div style={{ fontSize: 13, color: C.mute, maxWidth: 340, lineHeight: 1.5 }}>
+            {/* On the stage rather than on the page: what is behind this is
+                the black a picture sits on, which does not follow the theme,
+                so the words on it are the media's own ink and not `ink2`. */}
+            <Icon path={P.monitor} size={26} color={MEDIA.inkDim} />
+            <div style={{ fontSize: 13.5, color: MEDIA.inkDim, maxWidth: 340, lineHeight: 1.5 }}>
               {blocked ? (caps?.reason ?? 'There is no screen to show on this computer.')
                 : caps ? 'Nothing is being watched. The picture starts when you ask for it, and stops when you leave.'
                 : 'Asking this computer about its screen…'}
             </div>
-            {caps?.view && <Btn kind="primary" onClick={start}>Connect</Btn>}
+            {caps?.view && <Button label="Connect" onClick={start} />}
           </div>
         )}
       </div>
@@ -446,7 +463,7 @@ export function Screen() {
       {live && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-          padding: '7px 14px', borderTop: `1px solid ${C.hair}`,
+          padding: '7px 14px', borderTop: `1px solid ${T.line}`,
         }}>
           <Cell text={`live screen · ${machineName}`} />
           {!!size && <Cell text={`${size.w} × ${size.h}`} />}
@@ -456,10 +473,14 @@ export function Screen() {
         </div>
       )}
       {!!error && (
-        <div style={{ padding: '8px 14px', fontSize: 12, color: C.danger, borderTop: `1px solid ${C.hair}` }}>{error}</div>
+        <div style={{
+          padding: '8px 14px', fontSize: 12.5, color: T.red, borderTop: `1px solid ${T.line}`,
+        }}>{error}</div>
       )}
       {controllable && live && (
-        <div style={{ padding: '7px 14px', fontSize: 12, color: C.mute, borderTop: `1px solid ${C.hair}` }}>
+        <div style={{
+          padding: '7px 14px', fontSize: 12.5, color: T.ink3, borderTop: `1px solid ${T.line}`,
+        }}>
           Click, drag and type as if you were sitting at it. Right-click works; ⌃/⌘ shortcuts are passed
           through; hold ⌃ and scroll to zoom this view rather than the computer.
         </div>
