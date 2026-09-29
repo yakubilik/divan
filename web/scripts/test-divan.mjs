@@ -404,9 +404,21 @@ group('the switch');
   ok('the switch is offered on a screen', /AppearanceSection/.test(src('src/screens/Preferences.tsx'))
     && /'appearance'/.test(src('src/screens/Preferences.tsx')));
   ok('…and in the command palette', /id: 'theme'/.test(src('src/App.tsx')));
-  ok('…and the screen that offers it works with no computer paired',
-    /section === 'appearance' && <AppearanceSection \/>/.test(src('src/screens/Preferences.tsx'))
-    && /section !== 'hosts' && section !== 'appearance' && !slot/.test(src('src/screens/Preferences.tsx')));
+  // Rendered rather than grepped: what this is about is that the one setting
+  // which is this browser's own is reachable on a panel with no computer
+  // behind it, and a regular expression over the source says nothing about
+  // that — it only says the source has not been reworded.
+  {
+    const { useFleet } = await load('src/lib/fleet.js');
+    Object.assign(useFleet.getInitialState(), { hosts: {}, order: [], focus: null, ready: true });
+    useFleet.setState({ hosts: {}, order: [], focus: null, ready: true });
+    const { Preferences } = await load('src/screens/Preferences.js');
+    let alone = '';
+    try { alone = renderToStaticMarkup(createElement(Preferences, {})); } catch (e) { alone = `threw: ${e.message}`; }
+    ok('…and the screen that offers it stands up with no computer paired',
+      alone.includes('Appearance') && alone.includes('Computers')
+      && !alone.startsWith('threw:'), alone.slice(0, 160));
+  }
 }
 
 // ── 5 · the parts ──────────────────────────────────────────────────────────

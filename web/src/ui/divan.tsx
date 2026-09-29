@@ -1344,7 +1344,7 @@ export function FieldRow({ label, value, lead, note, first, style }: {
  *  the frame gives that block (`height:60px`) so the card does not grow under the
  *  cursor. */
 export function Write({
-  value, onChange, onKeyDown, placeholder, lines = 1, autoFocus, label, style,
+  value, onChange, onKeyDown, placeholder, lines = 1, autoFocus, secret, label, style,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1352,6 +1352,9 @@ export function Write({
   placeholder?: string;
   lines?: number;
   autoFocus?: boolean;
+  /** A value that must not be readable over a shoulder — a device token. The
+   *  field is the same field; the browser is the one that draws the dots. */
+  secret?: boolean;
   /** What it is, for a reader who cannot see the card it is in. */
   label?: string;
   style?: React.CSSProperties;
@@ -1370,7 +1373,9 @@ export function Write({
       ...style,
     },
   };
-  return lines > 1 ? <textarea {...common} rows={lines} /> : <input {...common} type="text" />;
+  return lines > 1
+    ? <textarea {...common} rows={lines} spellCheck={false} />
+    : <input {...common} type={secret ? 'password' : 'text'} autoComplete="off" spellCheck={false} />;
 }
 
 // ── 23 · a table ────────────────────────────────────────────────────────────
