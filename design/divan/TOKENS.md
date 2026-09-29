@@ -13,35 +13,66 @@ chat screens keep the shape they have.
 The drawings live outside this repository — they are private and this repository
 is public — as one HTML file per screen group, `frames/INDEX.json` listing them.
 Every frame opens its phone with the same block of CSS custom properties, and
-**those sixteen declarations are the palette**. Nothing here was chosen; each
-value was read out of a frame, and the frame is named beside it.
+**those sixteen declarations are the palette**. Nothing here was chosen.
 
-| in code | dark | light | from | used for |
-|---|---|---|---|---|
-| `bg` | `#131210` | `#F5F3EE` | Mobile1 V1 / V3 | the screen, and the tab bar under it |
-| `s1` | `#1C1B18` | `#FFFFFF` | Mobile1 V1 / V3 | a card, a row, a chip, the machine line |
-| `s2` | `#26241F` | `#ECE9E2` | Mobile1 V1 / V3 | a selected tab, an icon well, the reader's own bubble |
-| `sLift` | `#2A2822` | `#E9E6DE` | Mobile3 · Mobile11 | a card held in the air over the board |
-| `line` | `rgba(236,232,225,.08)` | `rgba(27,26,23,.09)` | Mobile1 V1 / V3 | a separator, the rule under a tab strip |
-| `line2` | `rgba(236,232,225,.2)` | `rgba(27,26,23,.18)` | Mobile1 V1 / V3 | an emphasised line, an outline button, an unfilled track |
-| `ink` | `#EDE9E2` | `#1B1A17` | Mobile1 V1 / V3 | primary text, and the button drawn in it |
-| `ink2` | `#A9A499` | `#5C5850` | Mobile1 V1 / V3 | a description, a body line under a title |
-| `ink3` | `#8C877E` | `#7A756C` | Mobile1 V1 / V3 | mono meta, a timestamp, a placeholder, a chevron |
-| `amber` | `#EAB65A` | `#9C6210` | Mobile1 V1 / V3 | needs you |
-| `amberBg` | `rgba(234,182,90,.11)` | `rgba(214,150,40,.14)` | Mobile1 V1 / V3 | behind it |
-| `amberRing` | `rgba(234,182,90,.28)` | `rgba(156,98,16,.35)` | Mobile1 V1 · Web14 | around a card that is asking |
-| `onAmber` | `#1A1609` | `#FFFFFF` | Mobile6 S3 | text on top of amber |
-| `red` | `#EE6D55` | `#C2412B` | Mobile1 V1 / V3 | stuck, failed |
-| `redBg` | `rgba(238,109,85,.12)` | `rgba(194,65,43,.1)` | Mobile1 V1 / V3 | behind it |
-| `run` | `#7CC6A6` | `#2F8067` | Mobile1 V1 / V3 | running, healthy, done |
-| `runBg` | `rgba(124,198,166,.1)` | `rgba(47,128,103,.1)` | Mobile1 V1 / V3 | behind it, and behind a drop target |
-| `sh` | `rgba(0,0,0,.5)` | `rgba(27,26,23,.12)` | Mobile7 S6 | what a shadow is made of |
+The whole block is carried by **Mobile6 S3** ('Waiting on you') on the dark side
+and **Mobile11 S16** ('Machine drawer · findable, forgettable · light') on the
+light one; open either and every row of the table below is in its `style`
+attribute, by that name. Twenty-nine more frames carry the same block — the
+count is under the table — so any of those would do as well.
 
-Thirteen dark frames and six light ones declare the first block character for
-character; the three that differ do so by a hundredth (`--line2` at `.22`,
-`--runBg` at `.13`) inside a frame about dragging, and the majority value is the
-one that was taken. `sLift` is the second surface of that same dragging frame,
-which is a real, separate tone: the card you are holding.
+| in code | dark | light | used for |
+|---|---|---|---|
+| `bg` | `#131210` | `#F5F3EE` | the screen, and the tab bar under it |
+| `s1` | `#1C1B18` | `#FFFFFF` | a card, a row, a chip, the machine line |
+| `s2` | `#26241F` | `#ECE9E2` | a selected tab, an icon well, the reader's own bubble |
+| `line` | `rgba(236,232,225,.08)` | `rgba(27,26,23,.09)` | a separator, the rule under a tab strip |
+| `line2` | `rgba(236,232,225,.2)` | `rgba(27,26,23,.18)` | an emphasised line, an outline button, an unfilled track |
+| `ink` | `#EDE9E2` | `#1B1A17` | primary text, and the button drawn in it |
+| `ink2` | `#A9A499` | `#5C5850` | a description, a body line under a title |
+| `ink3` | `#8C877E` | `#7A756C` | mono meta, a timestamp, a placeholder, a chevron |
+| `amber` | `#EAB65A` | `#9C6210` | needs you |
+| `amberBg` | `rgba(234,182,90,.11)` | `rgba(214,150,40,.14)` | behind it |
+| `onAmber` | `#1A1609` | `#FFFFFF` | text on top of amber |
+| `red` | `#EE6D55` | `#C2412B` | stuck, failed |
+| `redBg` | `rgba(238,109,85,.12)` | `rgba(194,65,43,.1)` | behind it |
+| `run` | `#7CC6A6` | `#2F8067` | running, healthy, done |
+| `runBg` | `rgba(124,198,166,.1)` | `rgba(47,128,103,.1)` | behind it, and behind a drop target |
+| `sh` | `rgba(0,0,0,.5)` | `rgba(27,26,23,.12)` | what a shadow is made of |
+
+Seventeen dark frames and fourteen light ones declare all sixteen, and on each
+side they are one block, character for character. Six more declare only the
+first fourteen — `--onAmber` and `--sh` enter the set later — and agree with
+every one of them: Mobile1 V1 and V2 and Mobile2 V4 on the dark side, Mobile1 V3
+and Web13 W3 and W4 on the light.
+
+Five frames differ, and only in the last decimal of a wash or a line: Mobile2
+V5, Mobile3's drag frame and Web12 W1 and W2 carry `--line2` at `.22` and the
+three washes a hundredth heavier, and Mobile4 C1 carries its own `--s2` and
+`--line2`. The majority value is the one that was taken; the two `--s2` that are
+not the majority turn out to be a tone of their own, which is the next table.
+
+### Three values taken from elsewhere in the frames
+
+Not everything the parts need is one of the sixteen. These three are read off a
+frame all the same — a different frame's `--s2`, or the ring on a card — and
+they are listed apart because a reviewer looking for them in the block above
+will not find them.
+
+| in code | value | read off |
+|---|---|---|
+| `sLift` dark | `#2A2822` | Mobile3 'Drag frame', `--s2` — the card being dragged, which is the role exactly |
+| `sLift` light | `#E9E6DE` | Mobile4 C1, `--s2` — see below |
+| `amberRing` dark | `rgba(234,182,90,.28)` | Mobile1 V1 and Mobile2 V4, `box-shadow:inset 0 0 0 1px …` around a card that is asking |
+| `amberRing` light | `rgba(156,98,16,.35)` | Web13 W3 and W4, the same ring around the asking agent's panel |
+
+**The light `sLift` borrows its role.** Nothing is dragged on a light artboard —
+there is no light drag frame — so there is no light counterpart to Mobile3's
+`--s2` to extract. `#E9E6DE` is a real value of the design: it is the `--s2` of
+Mobile4 C1, the light chat, and the only raised light surface the frames draw.
+It is used here for the card you are holding, which is a role the artboard does
+not itself assign to it. That is the one provenance claim in this document that
+is a judgement rather than a reading, and it is why it is written down.
 
 `app/src/tokens.ts` is that table, once. `app/src/theme.ts` no longer writes a
 palette of its own — the `Palette` the older screens speak is derived from these
@@ -57,6 +88,9 @@ derived, and both say so where they are defined:
   the same ink at `.35`, the weight the app already dimmed with.
 - **`veil`**, the page showing faintly through a drop target — the page's own
   colour at `.92`.
+
+There are two, and a check holds this list and the code's own to each other, so
+a third cannot appear in one without the other.
 
 ### The marks
 

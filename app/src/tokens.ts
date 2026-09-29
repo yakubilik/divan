@@ -24,8 +24,12 @@ export interface Tokens {
    *  bubble, a code block. Above `s1` in the dark, below `bg` in the light —
    *  in both it is the tone a selected thing takes. `--s2` */
   s2: string;
-  /** The same surface while a card is held in the air over the board, one step
-   *  further from the page. `--s2` of Mobile3, where a ticket is dragged. */
+  /** The same surface, one step further from the page: the card you are
+   *  holding. The dark side is the `--s2` of Mobile3's drag frame, which is
+   *  that role exactly. The light side has no such frame — nothing is dragged
+   *  on a light artboard — so it borrows the `--s2` of Mobile4 C1, the light
+   *  chat, which is the only place the design draws a raised light surface.
+   *  Recorded as borrowed in `design/divan/TOKENS.md`. */
   sLift: string;
   /** Hairline: a separator, the border under a tab strip. `--line` */
   line: string;
@@ -58,8 +62,11 @@ export interface Tokens {
   sh: string;
 }
 
-/** Mobile1 V1 · Overview, top (and every other dark frame: the block is
- *  repeated verbatim on all thirteen of them). */
+/** Mobile6 S3 · Waiting on you — one of the seventeen dark frames that declare
+ *  the whole block, character for character. (Three more, Mobile1 V1 and V2 and
+ *  Mobile2 V4, declare fourteen of the sixteen and agree with every one of
+ *  them; `--onAmber` and `--sh` arrive later in the set.) `sLift` and
+ *  `amberRing` are not in that block and say above where they come from. */
 export const DARK: Tokens = {
   scheme: 'dark',
   bg: '#131210', s1: '#1C1B18', s2: '#26241F', sLift: '#2A2822',
@@ -72,8 +79,9 @@ export const DARK: Tokens = {
   sh: 'rgba(0,0,0,.5)',
 };
 
-/** Mobile1 V3 · Overview: nothing needs you, 07:31 (and the five other light
- *  frames, which repeat it). */
+/** Mobile11 S16 · Machine drawer, light — one of the fourteen light frames
+ *  that declare the whole block, character for character. (Mobile1 V3 and
+ *  Web13 W3/W4 declare fourteen of the sixteen and agree with every one.) */
 export const LIGHT: Tokens = {
   scheme: 'light',
   bg: '#F5F3EE', s1: '#FFFFFF', s2: '#ECE9E2', sLift: '#E9E6DE',
@@ -249,14 +257,22 @@ export function shadows(t: Tokens) {
   };
 }
 
+/** The two values in this file that are in no frame at all, and the one whose
+ *  value is in a frame but whose role is not. Named here so that a third of
+ *  either cannot appear without `design/divan/TOKENS.md` gaining a line about
+ *  it — a check holds the two lists together. */
+export const DERIVED = ['scrim', 'veil'] as const;
+export const BORROWED = ['sLift'] as const;
+
 /** Behind a sheet. The mobile frames never draw one — the phone screens are
- *  all full pages — so this is the one derived value in the file: the dark side
- *  is `--sh` itself, and the light side is the same ink at the weight the app
- *  already dimmed with. Recorded as derived in `design/divan/TOKENS.md`. */
+ *  all full pages — so this is a derived value: the dark side is `--sh`
+ *  itself, and the light side is the same ink at the weight the app already
+ *  dimmed with. Recorded as derived in `design/divan/TOKENS.md`. */
 export const scrim = (t: Tokens) => (t.scheme === 'dark' ? t.sh : 'rgba(27,26,23,.35)');
 
 /** The page showing faintly through whatever is laid over it — behind the
- *  board's drop target. The page's own colour at the weight the app used. */
+ *  board's drop target. Derived too: the page's own colour at the weight the
+ *  app used. */
 export const veil = (t: Tokens) => (t.scheme === 'dark' ? 'rgba(19,18,16,.92)' : 'rgba(245,243,238,.92)');
 
 /** The whole palette, twice, under the names the screens already use. Every

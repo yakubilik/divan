@@ -1,14 +1,16 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import { dark, useColors } from '../theme';
+import { useColors } from '../theme';
 import { useT } from '../store';
 import { Text } from './ui';
 import type { Agent } from '../protocol';
 
-/** #rgb / #rrggbb -> #rrggbb; anything else falls back to the accent. It is
- *  the one colour in the app that is the same in both themes, so either side of
- *  the palette can be asked for it. */
-export function hex6(color: string | null | undefined, fallback = dark.accent): string {
+/** #rgb / #rrggbb -> #rrggbb; anything else falls back to the colour the caller
+ *  hands it. The fallback has to come from the caller because the accent it
+ *  falls back to is a pair — the design's red is lighter in the dark theme and
+ *  darker in the light one — and a fixed one would draw an agent with no colour
+ *  of its own in the wrong theme's red. */
+export function hex6(color: string | null | undefined, fallback: string): string {
   let h = (color || '').replace('#', '');
   if (h.length === 3) h = h.split('').map((ch) => ch + ch).join('');
   return h.length === 6 && !/[^0-9a-f]/i.test(h) ? `#${h}` : fallback;
@@ -16,7 +18,8 @@ export function hex6(color: string | null | undefined, fallback = dark.accent): 
 
 /** An agent's mark: its initial, in its own colour, on a tint of that colour. */
 export function AgentGlyph({ label, color, size = 40, radius = 12, font = 18 }: { label: string; color: string; size?: number; radius?: number; font?: number }) {
-  const col = hex6(color);
+  const c = useColors();
+  const col = hex6(color, c.accent);
   return (
     <View style={{ width: size, height: size, borderRadius: radius, backgroundColor: col + '22', alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ fontSize: font, fontWeight: '600', color: col }}>{(label.trim()[0] || '?').toUpperCase()}</Text>

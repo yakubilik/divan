@@ -41,24 +41,70 @@ function load(file, exports) {
 
 const K = load('src/tokens.ts', ['DARK', 'LIGHT', 'light', 'dark', 'tokensFor', 'monogram', 'MONOGRAM',
                                  'EXECUTORS', 'STATE_MARK', 'STATE_TONE', 'toneColours', 'stateColour',
-                                 'shadows', 'scrim', 'veil', 'RADIUS', 'SIZE', 'ON_COLOUR']);
+                                 'shadows', 'scrim', 'veil', 'DERIVED', 'BORROWED', 'RADIUS', 'SIZE', 'ON_COLOUR']);
 
 // ── the artboards, quoted ───────────────────────────────────────────────────
-// The `style` attribute that opens every dark phone in design/divan/frames —
-// thirteen of them declare it character for character, starting with
-// Mobile1 V1 "Overview, top: counters and what needs you · dark".
+// The frames are not in this repository, so the only way a check can hold the
+// table to them is to carry a transcription of one. These are whole `style`
+// attributes, copied off a named frame — not a value at a time, which would be
+// the same transcription twice and could never disagree with itself.
+//
+// Seventeen dark frames carry the sixteen names as one block, character for
+// character. This is Mobile6 S3, "Waiting on you · everything that needs a
+// human", which is the whole of Mobile6 and so the easiest one to find.
 const FRAME_DARK =
   '--bg:#131210;--s1:#1C1B18;--s2:#26241F;--line:rgba(236,232,225,.08);--line2:rgba(236,232,225,.2);' +
   '--ink:#EDE9E2;--ink2:#A9A499;--ink3:#8C877E;--amber:#EAB65A;--amberBg:rgba(234,182,90,.11);' +
   '--red:#EE6D55;--redBg:rgba(238,109,85,.12);--run:#7CC6A6;--runBg:rgba(124,198,166,.1);' +
   '--onAmber:#1A1609;--sh:rgba(0,0,0,.5)';
-// …and the six light ones, from Mobile1 V3 "Overview: nothing needs you ·
-// light, 07:31".
+// …and fourteen light ones. This is Mobile11 S16, "Machine drawer · findable,
+// forgettable · light".
 const FRAME_LIGHT =
   '--bg:#F5F3EE;--s1:#FFFFFF;--s2:#ECE9E2;--line:rgba(27,26,23,.09);--line2:rgba(27,26,23,.18);' +
   '--ink:#1B1A17;--ink2:#5C5850;--ink3:#7A756C;--amber:#9C6210;--amberBg:rgba(214,150,40,.14);' +
   '--red:#C2412B;--redBg:rgba(194,65,43,.1);--run:#2F8067;--runBg:rgba(47,128,103,.1);' +
   '--onAmber:#fff;--sh:rgba(27,26,23,.12)';
+// The two frames `sLift` is read off, quoted the same way and for the same
+// reason. Mobile3's is the only frame in which a card is held in the air, and
+// its `--s2` is that card; Mobile4 C1 is the light chat, whose `--s2` is the
+// only raised light surface the design draws. Both blocks are fourteen names
+// or fewer and differ from the majority — which is precisely what makes them
+// worth quoting: `sLift` is the tone they differ *by*.
+const FRAME_DRAG =
+  '--bg:#131210;--s1:#1C1B18;--s2:#2A2822;--line:rgba(236,232,225,.08);--line2:rgba(236,232,225,.22);' +
+  '--ink:#EDE9E2;--ink2:#A9A499;--ink3:#8C877E;--amber:#EAB65A;--amberBg:rgba(234,182,90,.12);' +
+  '--red:#EE6D55;--redBg:rgba(238,109,85,.13);--run:#7CC6A6;--runBg:rgba(124,198,166,.13)';
+const FRAME_CHAT =
+  '--bg:#F5F3EE;--s1:#FFFFFF;--s2:#E9E6DE;--line:rgba(27,26,23,.09);--line2:rgba(27,26,23,.2);' +
+  '--ink:#1B1A17;--ink2:#5C5850;--ink3:#7A756C;--run:#2F8067';
+
+/** Every frame in the set, by the id the artboard labels it with: which group
+ *  it belongs to, which theme it is drawn in, and how many of the sixteen names
+ *  it declares. Nothing in this repository can look at the frames, so a
+ *  citation is only as good as this list — it is what turns "Web14" in a
+ *  document into a claim that can be wrong. */
+const FRAMES = {
+  V1: ['Mobile1', 'dark', 14], V2: ['Mobile1', 'dark', 14], V3: ['Mobile1', 'light', 14],
+  V4: ['Mobile2', 'dark', 14], V5: ['Mobile2', 'dark', 14],
+  'Drag frame': ['Mobile3', 'dark', 14],
+  T1: ['Mobile4', 'light', 16], T2: ['Mobile4', 'light', 16], T3: ['Mobile4', 'dark', 16],
+  C1: ['Mobile4', 'light', 9],
+  S1: ['Mobile5', 'dark', 16], S2: ['Mobile5', 'dark', 16],
+  S3: ['Mobile6', 'dark', 16],
+  S4: ['Mobile7', 'light', 16], S5: ['Mobile7', 'dark', 16], S6: ['Mobile7', 'dark', 16],
+  S7: ['Mobile8', 'dark', 16], S9: ['Mobile8', 'light', 16],
+  S10: ['Mobile9', 'dark', 16], S11: ['Mobile9', 'dark', 16],
+  S12: ['Mobile10', 'dark', 16], S13: ['Mobile10', 'dark', 16],
+  S14: ['Mobile11', 'dark', 16], S15: ['Mobile11', 'dark', 16], S16: ['Mobile11', 'light', 16],
+  W1: ['Web12', 'dark', 14], W2: ['Web12', 'dark', 14],
+  W3: ['Web13', 'light', 14], W4: ['Web13', 'light', 14],
+  W6: ['Web14', 'dark', 16], W7: ['Web14', 'dark', 16], W8: ['Web14', 'light', 16],
+  W9: ['Web14', 'dark', 16], W10: ['Web14', 'dark', 16],
+  W11: ['Web15', 'light', 16], W12: ['Web15', 'light', 16], W13: ['Web15', 'light', 16],
+  W14: ['Web15', 'light', 16], W15: ['Web15', 'light', 16], W16: ['Web15', 'light', 16],
+  W17: ['Web15', 'light', 16], W18: ['Web15', 'light', 16],
+};
+const GROUPS = new Set(Object.values(FRAMES).map(([g]) => g));
 
 /** `--bg:#131210;--s1:…` -> `{ bg: '#131210', s1: … }`, with `#fff` spelled
  *  out: CSS's shorthand and the app's six digits are the same colour. */
@@ -101,10 +147,34 @@ checks.push(['the two sides declare the same names — none without its counterp
 checks.push(['…and every one of them is a colour, not a name or an empty string',
   keys(K.DARK).filter((k) => k !== 'scheme').every((k) =>
     [K.DARK[k], K.LIGHT[k]].every((v) => typeof v === 'string' && colours(v).length === 1))]);
-checks.push(['the two lifted surfaces are the pair Mobile3 and Mobile11 draw a held card in',
-  K.DARK.sLift === '#2A2822' && K.LIGHT.sLift === '#E9E6DE']);
-checks.push(['the amber ring is the amber, at the weight Mobile1 V1 draws it',
+// `sLift` is not one of the sixteen: it is the `--s2` of two frames that differ
+// from the majority, so it is derived here from those frames' whole blocks
+// rather than compared with a second copy of itself.
+{
+  const drag = declared(FRAME_DRAG);
+  const chat = declared(FRAME_CHAT);
+  checks.push(['the quoted drag frame is a dark frame of this design, differing only where it should',
+    drag.bg === K.DARK.bg && drag.s1 === K.DARK.s1 && drag.ink === K.DARK.ink && drag.s2 !== K.DARK.s2]);
+  checks.push(['…and the quoted light chat frame likewise',
+    chat.bg === K.LIGHT.bg && chat.s1 === K.LIGHT.s1 && chat.ink === K.LIGHT.ink && chat.s2 !== K.LIGHT.s2]);
+  checks.push(['the card you are holding is drawn in the surface those two frames raise to',
+    K.DARK.sLift === drag.s2 && K.LIGHT.sLift === chat.s2]);
+  checks.push(['…and the light one is written down as a borrowed role rather than an extracted one',
+    eq([...K.BORROWED], ['sLift'])]);
+}
+checks.push(['the amber ring is the amber, at the weight Mobile1 V1 and Web13 W3 draw it',
   K.DARK.amberRing === 'rgba(234,182,90,.28)' && K.LIGHT.amberRing === 'rgba(156,98,16,.35)']);
+checks.push(['…and it is the amber and nothing else: the ring is that hue, thinned',
+  ['dark', 'light'].every((sch) => {
+    const t = K.tokensFor(sch);
+    const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const ring = t.amberRing.match(/[\d.]+/g).slice(0, 3).map(Number);
+    // The frames write the ring in the amber's own channels; light's `--amber`
+    // is the darkened text colour, so the ring is allowed to be the brighter
+    // wash hue instead. Either way it must be an amber, not a new colour.
+    const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 60);
+    return near(ring, rgb(t.amber)) || near(ring, t.amberBg.match(/[\d.]+/g).slice(0, 3).map(Number));
+  })]);
 checks.push(['the two tables are told apart by their own name', K.DARK.scheme === 'dark' && K.LIGHT.scheme === 'light']);
 checks.push(['…and that is the name `tokensFor` answers to',
   K.tokensFor('dark') === K.DARK && K.tokensFor('light') === K.LIGHT]);
@@ -498,6 +568,117 @@ for (const scheme of ['dark', 'light']) {
   try { markup = R.render(null, h(R.gallery.default)); } catch (e) { threw = e.message; }
   checks.push([`the gallery comes up${threw ? ` (${threw})` : ''}`, threw === null]);
   checks.push(['…with every part on it', markup !== null && R.styles(markup).length > 200]);
+}
+
+// 11 · every frame this work cites exists, and says what it is cited for ────
+// The frames are outside the repository, so a citation cannot be followed by a
+// machine — which is exactly why round one had four of them wrong and nothing
+// noticed. FRAMES above is the set as it actually is; these checks hold every
+// citation in the document, the parts and the gallery against it.
+const DOC = fs.readFileSync(path.join(root, '..', 'design/divan/TOKENS.md'), 'utf8');
+const CITING = { 'design/divan/TOKENS.md': DOC, 'src/components/divan.tsx': divan, 'app/divan-gallery.tsx': gallery };
+
+/** `Mobile6 S3`, `Web13 W3 and W4`, `Mobile3 'Drag frame'` — a group, and the
+ *  frames named before the next group is. */
+function citations(text) {
+  const out = [];
+  const groups = [...text.matchAll(/\b(Mobile|Web)(\d+)\b/g)];
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i][0];
+    const window = text.slice(groups[i].index + g.length,
+      i + 1 < groups.length ? groups[i + 1].index : groups[i].index + g.length + 90);
+    const ids = [...window.matchAll(/\b([VTCSW]\d{1,2})\b|'(Drag frame)'/g)].map((m) => m[1] || m[2]);
+    out.push([g, ids]);
+  }
+  return out;
+}
+
+for (const [file, text] of Object.entries(CITING)) {
+  const bad = [];
+  for (const [group, ids] of citations(text)) {
+    if (!GROUPS.has(group)) { bad.push(`${group} is not a screen group`); continue; }
+    for (const id of ids) {
+      if (!FRAMES[id]) bad.push(`${group} ${id}: no such frame`);
+      else if (FRAMES[id][0] !== group) bad.push(`${group} ${id}: ${id} is in ${FRAMES[id][0]}`);
+    }
+  }
+  checks.push([`every frame ${file} cites is in the group it cites it under${bad.length ? ` (${bad.join('; ')})` : ''}`,
+    bad.length === 0]);
+}
+checks.push(['…and the set it is checked against is the whole set, with its gaps',
+  Object.keys(FRAMES).length === 42 && !FRAMES.S8 && !FRAMES.W5 && FRAMES['Drag frame'][0] === 'Mobile3']);
+
+// The error round one made was subtler than a bad id: a light value cited to a
+// frame that exists but is drawn dark. The rows that carry their own provenance
+// name a side, so the side can be checked.
+{
+  const rows = [...DOC.matchAll(/^\| `([a-zA-Z]+)` (dark|light) \| ([^|]+)\| ([^|]+)\|/gm)];
+  const wrong = [];
+  for (const [, token, side, , from] of rows) {
+    const ids = [...from.matchAll(/\b([VTCSW]\d{1,2})\b|'(Drag frame)'/g)].map((m) => m[1] || m[2]);
+    if (!ids.length) wrong.push(`${token} ${side}: names no frame`);
+    for (const id of ids) {
+      if (!FRAMES[id]) wrong.push(`${token} ${side}: no frame ${id}`);
+      else if (FRAMES[id][1] !== side) wrong.push(`${token} ${side}: ${id} is a ${FRAMES[id][1]} frame`);
+    }
+  }
+  checks.push([`a value read off a frame is read off a frame of its own theme${wrong.length ? ` (${wrong.join('; ')})` : ''}`,
+    wrong.length === 0 && rows.length === 4]);
+}
+// And the two frames the whole block is quoted from have to be able to carry it.
+checks.push(['the frames the sixteen are quoted from declare all sixteen, one of each theme',
+  FRAMES.S3[1] === 'dark' && FRAMES.S3[2] === 16 && FRAMES.S16[1] === 'light' && FRAMES.S16[2] === 16
+  && Object.keys(declared(FRAME_DARK)).length === 16 && Object.keys(declared(FRAME_LIGHT)).length === 16]);
+checks.push(['…and the document sends a reader to those two and no others',
+  /\*\*Mobile6 S3\*\*/.test(DOC) && /\*\*Mobile11 S16\*\*/.test(DOC)]);
+checks.push(['the two frames sLift is read off are the ones that raise a surface',
+  FRAMES['Drag frame'][1] === 'dark' && FRAMES.C1[1] === 'light'
+  && Object.keys(declared(FRAME_DRAG)).length === 14 && Object.keys(declared(FRAME_CHAT)).length === 9]);
+
+// 12 · what is derived is written down, and only what is ────────────────────
+// A third derived value could otherwise be added to the code and never reach
+// the document, which is where a reviewer looks.
+{
+  const WORDS = ['no', 'one', 'two', 'three', 'four'];
+  const section = (heading) => {
+    const i = DOC.indexOf(heading);
+    if (i < 0) return null;
+    const rest = DOC.slice(i + heading.length);
+    const j = rest.indexOf('\n### ');
+    return rest.slice(0, j < 0 ? undefined : j);
+  };
+  const derivedHead = `### The ${WORDS[K.DERIVED.length]} values that were not in a frame`;
+  const body = section(derivedHead);
+  const named = body ? [...body.matchAll(/\*\*`([a-zA-Z]+)`\*\*/g)].map((m) => m[1]) : [];
+  checks.push([`the document has a section for the ${WORDS[K.DERIVED.length]} derived values${body ? '' : ` (looking for "${derivedHead}")`}`,
+    body !== null]);
+  checks.push([`…naming exactly the ones the code calls derived (${named.join(', ') || 'none'})`,
+    eq(named.sort(), [...K.DERIVED].sort())]);
+  checks.push(['…and every one of them is a function of the tokens rather than a value in the table',
+    [...K.DERIVED].every((n) => typeof K[n] === 'function' && K.DARK[n] === undefined)]);
+  const borrowed = [...K.BORROWED];
+  checks.push([`the value whose role was borrowed is written down as such (${borrowed.join(', ')})`,
+    borrowed.every((n) => DOC.includes(`**The light \`${n}\` borrows its role.**`))]);
+  checks.push(['…and it is a value in the table, not a function: only its role is a judgement',
+    borrowed.every((n) => K.DARK[n] !== undefined && K.LIGHT[n] !== undefined && typeof K[n] !== 'function')]);
+}
+
+// 13 · the one mark whose colour is not the design's ────────────────────────
+// An agent brings its own colour. When it has none, or an unreadable one, it
+// falls back to the app's accent — which is now a pair, lighter in the dark
+// theme and darker in the light one. A fixed fallback would draw it in the
+// wrong theme's red on the other theme's page, which is how it read at 2.7:1.
+for (const scheme of ['dark', 'light']) {
+  const t = K.tokensFor(scheme);
+  const mark = (colour) => R.styles(R.render(scheme, h(R.agentcard.AgentGlyph, { label: 'Hermes', color: colour })));
+  for (const [what, colour] of [['no colour', null], ['a colour that is not one', 'periwinkle']]) {
+    const st = mark(colour);
+    checks.push([`an agent with ${what} is drawn in the ${scheme} theme's own red`,
+      st.some((x) => x.color === t.red) && st.some((x) => x.backgroundColor === `${t.red}22`)]);
+  }
+  const own = mark('#4A5D86');
+  checks.push([`…and an agent that has one keeps it in the ${scheme} theme`,
+    own.some((x) => x.color === '#4A5D86')]);
 }
 
 module.exports = { checks };

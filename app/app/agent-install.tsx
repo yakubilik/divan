@@ -66,7 +66,7 @@ export default function AgentInstall() {
     }
   }
 
-  const color = hex6(item?.color);
+  const color = hex6(item?.color, c.accent);
   const lines: { title: string; now: string }[] = [
     { title: T('hStep1'), now: T('hStep1Now') },
     { title: T('hStep2'), now: T('hStep2Now') },

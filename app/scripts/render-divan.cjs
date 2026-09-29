@@ -114,9 +114,20 @@ const STUBS = {
   'expo-haptics': { selectionAsync: () => Promise.resolve(), impactAsync: () => Promise.resolve() },
 };
 
+/** The app's own store reaches the keychain, the socket and the notification
+ *  centre the moment it is imported, none of which exists here. Nothing being
+ *  rendered reads from it — the parts take props — so it is answered with the
+ *  two things a component can ask it for. */
+const STORE = {
+  useT: () => (key) => key,
+  useStore: Object.assign(() => undefined, { getState: () => ({}), setState: () => {} }),
+};
+
 const realLoad = Module._load;
 Module._load = function (request, parent, isMain) {
   if (Object.prototype.hasOwnProperty.call(STUBS, request)) return STUBS[request];
+  if (request.startsWith('.') && parent
+      && path.resolve(path.dirname(parent.filename), request) === path.join(root, 'src/store')) return STORE;
   return realLoad.call(this, request, parent, isMain);
 };
 
@@ -126,6 +137,9 @@ const parts = require(path.join(root, 'src/components/divan.tsx'));
 // The parts the screens that already exist are made of. They are not Divan's,
 // but they are drawn in Divan's palette now, and that is worth standing up.
 const ui = require(path.join(root, 'src/components/ui.tsx'));
+// An agent's mark, which is the one older part whose colour is not a token: an
+// agent brings its own, and only falls back to the palette when it has none.
+const agentcard = require(path.join(root, 'src/components/agentcard.tsx'));
 const gallery = require(path.join(root, 'app/divan-gallery.tsx'));
 
 /** Render a tree in one of the two themes and hand back its markup. */
@@ -150,4 +164,4 @@ function paint(markup) {
   return out;
 }
 
-module.exports = { React, theme, parts, ui, gallery, render, styles, paint, flatten };
+module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten };

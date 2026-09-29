@@ -357,9 +357,10 @@ export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
   );
 }
 
-/** A project's letter on its own colour. Mobile1 V1: `32px` at `border-radius:
- *  9px` on a project card, `26px` at `7px` in a title bar, white on every one
- *  of the ramp's hues. */
+/** A project's letter on its own colour: `32px` at `border-radius:9px` on a
+ *  project card (Mobile1 V1), `26px` at `7px` in a title bar (Mobile2 V5),
+ *  `22px` at `6px` beside a question (Mobile1 V1) — white on every one of the
+ *  ramp's hues. */
 export function Monogram({ name, index, size = SIZE.monogram, style }: {
   name: string;
   /** The project's place in the list being drawn, where there is one: the ramp

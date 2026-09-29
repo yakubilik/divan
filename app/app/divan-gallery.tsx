@@ -85,7 +85,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
           <SectionHeader kind="mark" title="yours" count={1} />
         </Part>
 
-        <Part name="Status dot" frame="Mobile1 V1 · Web15 W12">
+        <Part name="Status dot" frame="Mobile1 V1 / V3 · Web15 W12">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 4 }}>
             <StatusDot state="running" />
             <StatusDot state="asking" />
@@ -126,7 +126,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
           </View>
         </Part>
 
-        <Part name="Executor badge" frame="Mobile11 EXS · Mobile3">
+        <Part name="Executor badge · monogram" frame="Mobile11 EXS · Mobile3 · Mobile1 V1">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 }}>
             {['coder', 'unassigned', 'seo', 'analyst', 'research', 'divan', 'you'].map((e) => (
               <ExecutorBadge key={e} executor={e} />
