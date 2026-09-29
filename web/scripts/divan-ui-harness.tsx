@@ -115,6 +115,19 @@ const SCREENS: [string, React.ReactNode][] = [
     chips={chips(board, null)} onProject={noop}>
     <Overview view={board} project={null} onProject={noop} />
   </Shell>],
+  // The chat place: the bar, the list and the chat, which is the composition
+  // the panel is in most of the time and the one place the shell has to leave
+  // exactly as it was.
+  ['ShellChat', <Shell view="chats" onView={noop} now={board.now} onProject={noop}>
+    <Sidebar selected="c1" selectedHost="studio" onSelect={noop} onNewChat={noop}
+      searchRef={{ current: null }} collapsed={false} onCollapse={noop} />
+    <ChatView
+      chat={chat() as any} hostKey="studio"
+      log={{ items: items(), busy: false, pending: [] } as any} sending={false}
+      groups={[]} groupName={null} accountLabel="yakup@…" accountUsage={0.64} liveTokens={null}
+      onSend={async () => {}} onUpload={(async () => ({})) as any} onInterrupt={noop}
+      onRespond={noop} onEdit={noop} onUpdate={noop} onDelete={noop} onPopOut={noop} />
+  </Shell>],
   ['Overview', <Overview view={emptyView} project={null} onProject={noop} />],
   ['Machine', <Machine
     view="machines" onView={noop} fleet={emptyView} onOpenChat={noop} onNewChat={noop}
