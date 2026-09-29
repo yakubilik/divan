@@ -82,7 +82,11 @@ const agent = (id, o = {}) => ({
 const quota = (o) => ({ enabled: true, accounts: 2, blocked: o.blocked || 0, spent: !!o.spent,
                         left: o.left ?? null, resets_at: o.resets_at ?? null, unknown: !!o.unknown });
 const snapshot = (machine, o) => ({ machine, os: 'Darwin', at: o.at ?? NOW, projects: o.projects || [],
-  cards: o.cards || [], agents: o.agents || [], quota: o.quota ?? null, activity: o.activity || {}, queue: {} });
+  cards: o.cards || [], agents: o.agents || [], quota: o.quota ?? null, activity: o.activity || {},
+  pulls: o.pulls || {}, queue: {} });
+/** One pull request as the daemon reads it off the code host. */
+const pull = (number, title, o = {}) => ({ number, title, branch: `pr/${number}`,
+  draft: !!o.draft, checks: o.checks ?? null, failing: o.failing || 0, at: o.at ?? NOW - 600 });
 const paired = (id, name, o) => ({ id, name, state: { snapshot: o.snapshot ?? null, at: o.at ?? null,
   reachable: !!o.reachable, error: o.error ?? null, old: false } });
 
@@ -177,6 +181,17 @@ const STUDIO = paired('h1', 'studio', {
     activity: { '/r/quire': { at: NOW - 3 * HOUR, week: 14, today: 3 },
                 '/r/kanji': { at: NOW - 2 * DAY, week: 4, today: 0 },
                 '/r/walk': { at: NOW - 23 * DAY, week: 0, today: 0 } },
+    // What the code host said about those repositories. Quire's two were both
+    // asked: three are open on the site and nothing is open on the web one,
+    // which is an answer and not a gap. Kanji Daily's is on no code host the
+    // daemon could ask, so it has no entry at all.
+    pulls: {
+      '/r/quire': { at: NOW - 200, open: [
+        pull(412, 'Bulk invite from CSV', { checks: 'pending', at: NOW - 40 * MIN }),
+        pull(410, 'GBP price localisation', { checks: 'failing', failing: 2, at: NOW - 5 * MIN }),
+        pull(409, 'Invoice PDF redesign', { checks: 'passing', draft: true, at: NOW - 90 * MIN })] },
+      '/r/quire-web': { at: NOW - 200, open: [] },
+    },
   }),
 });
 
@@ -199,6 +214,20 @@ const MINI = paired('h2', 'mini', {
 
 /** …and a computer that has never answered at all. */
 const NEVER = paired('h3', 'cloud', { reachable: false, at: null, snapshot: null });
+
+/** The studio with Quire's repositories asked and nothing open on either of
+ *  them, and the same studio where nobody could be asked: no `gh`, or no code
+ *  host. The two are the pull-request block's two empty states and the page must
+ *  not draw them alike. */
+const quireOnly = (pulls) => paired('h1', 'studio', {
+  reachable: true, at: NOW - 10,
+  snapshot: snapshot('studio', { at: NOW - 10, projects: [QUIRE],
+    cards: [card('q1', { project: 'Quire-id', status: 'asking', ustabasi: 12, at: NOW - 12 * MIN,
+                         title: 'Webhook retry policy', detail: 'Keep 3 retries, or follow Stripe?' })],
+    activity: { '/r/quire': { at: NOW - 3 * HOUR, week: 14, today: 3 } }, pulls }) });
+const NOTHING_OPEN = quireOnly({ '/r/quire': { at: NOW - 200, open: [] },
+                                 '/r/quire-web': { at: NOW - 200, open: [] } });
+const UNASKED = quireOnly({});
 
 /** The studio again, out of quota: its agents are stopped where they were and
  *  pick up again on their own (Mobile5 S2, on a product's own page). */
@@ -998,6 +1027,22 @@ for (const scheme of ['dark', 'light']) {
           && list[0].said.key === 'bnAt'
           && B.repos(quire).map((r) => r.name).join(',') === 'quire,quire-web';
       })()],
+    ['the pull requests of a branch are every repository\u2019s, newest first, with what is failing',
+      (() => {
+        const list = B.pulls(quire);
+        return list.map((x) => x.number).join(',') === '410,412,409'
+          && eq(B.checkWords(list[0]), { said: { key: 'bpChecksFailing', params: { n: 2 } }, tone: 'red' })
+          && B.checkWords(list[1]).tone === 'ink3' && B.checkWords(list[2]).tone === 'run'
+          && list[0].repo === 'quire' && list[2].draft === true;
+      })()],
+    ['\u2026a repository with none open is an answer, and one nobody could ask is not',
+      (() => {
+        const asked = { ...quire, repoPulls: { '/r/quire-web': { at: NOW, open: [] } } };
+        const neither = { ...quire, repoPulls: {} };
+        return eq(B.pulls(asked), []) && B.pulls(neither) === null
+          // …and a pull request with no checks at all is not drawn as passing.
+          && B.checkWords({ checks: null, failing: 0 }) === null;
+      })()],
     ['a branch is found by the kind two machines agree on, not by either\u2019s id for it',
       (() => {
         const two = B.find(TWO, 'kanji-daily', 'engineering');
@@ -1030,10 +1075,21 @@ for (const scheme of ['dark', 'light']) {
       [`${scheme}: \u2026over the same numbers, which are the board\u2019s own counts`,
         [['>4<', '>bnOpen<'], ['>12<', '>bnDone<']].every(([n, l]) => generic.includes(n) && generic.includes(l))
         && ['>9<', '>3<', '>31<', '>bnProgress<'].every((x) => densest.includes(x))],
-      [`${scheme}: a block with no source says so where it would have been`,
-        generic.includes('>bpOverTimeBody<') && densest.includes('>bpOverTimeBody<')
-        && densest.includes('>bpPullsBody<')
-        && !densest.includes('checks') && !densest.includes('failing')],
+      [`${scheme}: the one block with no source says so where it would have been`,
+        generic.includes('>bpOverTimeBody<') && densest.includes('>bpOverTimeBody<')],
+      [`${scheme}: Engineering lists what is open on the branch and the checks failing on it`,
+        ['>bpPulls<', '>#410<', 'GBP price localisation', '>bpChecksFailing<', '>bpChecksPassing<',
+         '>bpChecksPending<', 'bpDraft<'].every((x) => densest.includes(x))
+        && !densest.includes('>bpPullsBody<') && !densest.includes('>bpPullsNone<')
+        && !generic.includes('>bpPulls<')],
+      [`${scheme}: \u2026nothing open and nobody to ask are two different blocks`,
+        (() => {
+          const none = drawBranch(scheme, [NOTHING_OPEN], 'quire', 'engineering');
+          const gap = drawBranch(scheme, [UNASKED], 'quire', 'engineering');
+          return none.includes('>bpPullsNone<') && !none.includes('>bpPullsBody<')
+            && gap.includes('>bpPullsBody<') && !gap.includes('>bpPullsNone<')
+            && !none.includes('>#410<') && !gap.includes('>#410<');
+        })()],
       [`${scheme}: a branch nothing writes to says so, and draws no number nobody counted`,
         unused.includes('>branchNoSource<') && unused.includes('>bpBareTitle<')
         && !unused.includes('>bnOpen<') && !unused.includes('>bnDone<')

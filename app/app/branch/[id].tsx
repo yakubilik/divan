@@ -8,12 +8,14 @@ import { since } from '../../src/tickets';
 import { clock, type Ago, type Said } from '../../src/dashboard';
 import { oldWords } from '../../src/project';
 import {
-  OVER_TIME, PULLS, bare, commits, dense, find, head, landedWords, log, logTitle, numbers,
-  repos, status, tickets, type Found,
+  OVER_TIME, PULLS, bare, checkWords, commits, dense, find, head, landedWords, log, logTitle,
+  numbers, pulls, repos, status, tickets, type Found,
 } from '../../src/branch';
 import type { DivanView } from '../../src/divan';
 import { EmptyState, SectionHeader } from '../../src/components/divan';
-import { BranchHead, CommitRow, LogRow, Nothing, NoSource, RepoRow, TicketRow } from '../../src/components/branch';
+import {
+  BranchHead, CommitRow, LogRow, Nothing, NoSource, PullRow, RepoRow, TicketRow,
+} from '../../src/components/branch';
 import { Figures } from '../../src/components/project';
 import { BackRow } from '../../src/components/waiting';
 import { Text } from '../../src/components/text';
@@ -35,12 +37,14 @@ import { Shell } from '../../src/components/shell';
  *
  *  **Nothing here is invented.** The frames put a branch's own measurements at
  *  the top (`6,412 clicks 28d`, `11.3 avg position`, `212/214 tests`, `v3.18
- *  deployed`) and a thirty-day chart under them, and no source for any of that
- *  is connected yet. What is drawn instead is what exists: the board's own
+ *  deployed`) and a thirty-day chart under them, and a branch's daily figures
+ *  have no source yet. What is drawn is what something measured: the board's own
  *  counts, the repositories the product owns and what git says landed in them,
- *  and the mirror's own words about what ran. Every block whose source is
- *  missing keeps its place and says so — a page that silently dropped its chart
- *  would read as a page that never had one.
+ *  what the code host says is open on them with the checks that are failing on
+ *  it, and the mirror's own words about what ran. The chart's place keeps its
+ *  place and says why it is empty — a page that silently dropped it would read
+ *  as a page that never had one — and the pull-request block tells its two empty
+ *  states apart: nothing open is not the same as nobody could be asked.
  *
  *  **A machine that has gone quiet is said out loud.** A branch's cards can come
  *  off two computers. When one of them stops answering, the sentence under the
@@ -146,6 +150,7 @@ function Page({ view, found, ago, onOpen }: {
   const code = dense(b);
   const owned = repos(p);
   const landed = commits(p, now);
+  const review = pulls(p);
 
   return (
     <View style={{ flexGrow: 1, gap: 12 }}>
@@ -154,9 +159,9 @@ function Page({ view, found, ago, onOpen }: {
         style={{ paddingHorizontal: 4 }} />
       <NoSource label={T(OVER_TIME.key)} body={T(OVER_TIME.body)} />
 
-      {/* Engineering's three, between the chart and the log (S11). Two of them
-          have a source on the machine that holds the checkout; the third is the
-          code host's and says so. */}
+      {/* Engineering's three, between the chart and the log (S11). The first two
+          are read on the machine that holds the checkout; the third is the code
+          host's, asked through the `gh` signed in there. */}
       {code && (
         <>
           <View style={{ gap: 2 }}>
@@ -179,8 +184,22 @@ function Page({ view, found, ago, onOpen }: {
               ))}
           </View>
           <View style={{ gap: 2 }}>
-            <SectionHeader title={T(PULLS.key)} />
-            <Nothing text={T(PULLS.body)} />
+            <SectionHeader title={T(PULLS.key)} count={review?.length || null} />
+            {/* Three states, and the page must not let two of them be read as
+                one: nobody could be asked (null), everybody was asked and
+                nothing is open (empty), and what is open. */}
+            {review == null ? <Nothing text={T(PULLS.body)} />
+              : review.length === 0 ? <Nothing text={T('bpPullsNone')} />
+              : review.map((x, i) => {
+                const checks = checkWords(x);
+                return (
+                  <PullRow key={`${x.repo}#${x.number}`} first={i === 0} number={x.number}
+                    title={x.title}
+                    note={[owned.length > 1 ? x.repo : '', x.draft ? T('bpDraft') : '']
+                      .filter(Boolean).join(' · ')}
+                    checks={checks ? { text: said(checks.said), tone: checks.tone } : null} />
+                );
+              })}
           </View>
         </>
       )}

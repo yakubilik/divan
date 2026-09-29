@@ -16,12 +16,14 @@
 //
 //   * **no invented figures.** The frames put a branch's own measurements on
 //     this page (`6,412 clicks 28d`, `11.3 avg position`, `212/214 tests`,
-//     `v3.18 deployed`) and a thirty-day chart under them. None of those sources
-//     is connected — the plan puts them after the screens — so what is drawn is
-//     the board's own counts, what git says about the product's repositories,
-//     and the mirror's own words. Where a block has no source it *says so* in
-//     that block's place rather than being quietly left out: a page that dropped
-//     its chart would not tell anybody why there is no chart.
+//     `v3.18 deployed`) and a thirty-day chart under them. What is drawn is what
+//     something actually measured: the board's own counts, what git says about
+//     the product's repositories, what the code host says is open on them and
+//     how the checks on that stand, and the mirror's own words about what ran.
+//     A branch's own daily figures still have no source — the plan puts them
+//     after the screens — and the chart's place *says so* rather than being
+//     quietly left out: a page that dropped its chart would not tell anybody why
+//     there is no chart.
 //   * **a machine that has gone quiet is said out loud.** The cards of a branch
 //     can come off two computers; when one stops answering, the page says which
 //     and how old what is on it is (the project page's own `oldWords`).
@@ -134,7 +136,7 @@ export function numbers(b: MergedBranch): Figure[] {
   return figures(b);
 }
 
-// ── 2 · the blocks whose source is not connected ────────────────────────────
+// ── 2 · a block whose source cannot answer ──────────────────────────────────
 
 /** A block of this page that has a place in the layout and no source behind it
  *  yet: what it would say, and why it says nothing. */
@@ -154,18 +156,14 @@ export interface Gap {
  *  time, and only one of them is true. */
 export const OVER_TIME: Gap = { key: 'bpOverTime', body: 'bpOverTimeBody' };
 
-/** …and the code host's block, which Engineering has and nothing fills either:
- *  open pull requests, and which of their checks are failing. The repositories
- *  under it are real and so is what has landed in them — those are read on the
- *  machine that holds the checkout. A pull request is not: it is GitHub's, and
- *  the phone has no way to it.
+/** …and the same for Engineering's pull requests, on a product whose
+ *  repositories nobody could be asked about: not a GitHub checkout, or a
+ *  machine with no `gh` signed in.
  *
- *  So the block says that, and then says where the part of it this computer
- *  *does* know is: a run that fell over and a run in flight are on the cards
- *  below, with the queue's own mark on them. That is not the same fact as a
- *  failing check, and the page must not let the two be read as one — but a
- *  person looking for "what is broken on Engineering" is looking at the right
- *  page, and it would be perverse not to point at the list. */
+ *  It is the block's *unanswered* state and not its empty one. A repository with
+ *  nothing open is an answer and is drawn as an empty list (`bpPullsNone`);
+ *  this is the sentence for nobody having asked, and the two must not look the
+ *  same on a page whose whole promise is that no figure on it is invented. */
 export const PULLS: Gap = { key: 'bpPulls', body: 'bpPullsBody' };
 
 // ── 3 · what the agent did, and when ────────────────────────────────────────
@@ -265,12 +263,14 @@ export function tickets(view: DivanView, p: MergedProject, b: MergedBranch, ago:
 
 /** A repository the product owns (S11's `quire-api`, `quire-web`).
  *
- *  Real, and the only thing on this page that is: a product's repositories are
- *  on the wire because the daemon reads them to answer whether the product is
- *  alive at all. What the frame draws beside each one — `✓ checks`, `× 2
- *  failing` — is the code host's and is in `gaps` above; a green tick nobody
- *  measured would be the worst kind of invention, because it says everything is
- *  fine. */
+ *  A product's repositories are on the wire because the daemon reads them to
+ *  answer whether the product is alive at all. What the frame draws beside each
+ *  one — `✓ checks`, `× 2 failing` — is the state of that repository's *default
+ *  branch* on the code host, which is a third question nobody is asked here; the
+ *  checks this page does draw are the ones on the pull requests below, where
+ *  they were actually read. A green tick against a repository nobody measured
+ *  would be the worst invention available on this page, because it says
+ *  everything is fine. */
 export interface Repo {
   path: string;
   /** The last segment of the path, which is what a person calls it. */
@@ -331,6 +331,58 @@ export function landedWords(l: Landed): Said {
   if (l.week === 0) return { key: 'bpLandedNone' };
   if (l.today > 0) return { key: 'bpLandedToday', params: { today: l.today, n: l.week } };
   return { key: 'bpLanded', params: { n: l.week } };
+}
+
+/** One pull request open on one of the branch's repositories (S11), with the
+ *  repository it is on. */
+export interface Pull {
+  repo: string;
+  number: number;
+  title: string;
+  branch: string;
+  draft: boolean;
+  checks: 'passing' | 'failing' | 'pending' | null;
+  failing: number;
+  at: number | null;
+}
+
+/** Engineering's pull requests, across every repository the product owns.
+ *
+ *  `null` is the one thing this page must be able to say and could not before:
+ *  **nobody could be asked.** The daemon reads the code host only for a checkout
+ *  whose `origin` is on GitHub and only through a `gh` that is installed and
+ *  signed in, so a product with neither has no entry for any of its paths — and
+ *  the page then says the source is not connected, rather than drawing an empty
+ *  list and letting it be read as "nothing is open".
+ *
+ *  An empty array is the other answer, and it is a good one: every repository
+ *  was asked and nothing is open on any of them.
+ *
+ *  Newest first across repositories, because a pull request is read by what
+ *  moved last and not by which folder it is in. Failing checks are not sorted to
+ *  the top: the row says so in red, and a list that reordered itself when a
+ *  check went red would be a list nobody could keep their place in. */
+export function pulls(p: MergedProject): Pull[] | null {
+  const asked = repos(p).filter((r) => p.repoPulls[r.path]);
+  if (!asked.length) return null;
+  return asked
+    .flatMap((r) => p.repoPulls[r.path].open.map((x) => ({ ...x, repo: r.name })))
+    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+}
+
+/** What the chip at the end of a pull request's row says about its checks.
+ *
+ *  Null where the pull request has no checks at all. That is deliberately not
+ *  drawn as passing: a repository with no CI on it has not passed anything, and
+ *  a green tick nobody measured is exactly the kind of figure this page refuses
+ *  everywhere else. */
+export function checkWords(x: Pull): { said: Said; tone: Tone } | null {
+  if (x.checks === 'failing') {
+    return { said: { key: 'bpChecksFailing', params: { n: x.failing } }, tone: 'red' };
+  }
+  if (x.checks === 'pending') return { said: { key: 'bpChecksPending' }, tone: 'ink3' };
+  if (x.checks === 'passing') return { said: { key: 'bpChecksPassing' }, tone: 'run' };
+  return null;
 }
 
 /** Is there anything at all to say about this branch?

@@ -249,6 +249,42 @@ export function CommitRow({ name, said, tone, landed, first, style }: {
   );
 }
 
+/** …and one pull request open on one of them (S11's `Pull requests`): the
+ *  number in mono in a fixed 36 pt column, the title, and how its checks stand
+ *  at the far end.
+ *
+ *  The number column is fixed so that three of them line up under each other
+ *  the way the frame draws them. A pull request with no checks at all gets no
+ *  chip — not a grey one, and certainly not a green one. */
+export function PullRow({ number, title, note, checks, first, style }: {
+  number: number;
+  title: string;
+  /** The mono line under it: which repository it is on where the product owns
+   *  more than one, and whether it is a draft. Already in the reader's
+   *  language. */
+  note?: string | null;
+  /** `× 2 checks`, `✓ checks`. Absent where the pull request has no checks. */
+  checks?: { text: string; tone: Tone } | null;
+  first?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTokens();
+  return (
+    <Row first={first} style={style}>
+      <Text mono numberOfLines={1} style={{ width: 36, fontSize: 11.5, color: t.ink3 }}>
+        {`#${number}`}
+      </Text>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500' }}>{title}</Text>
+        {!!note && (
+          <Text mono numberOfLines={1} style={{ fontSize: 10.5, color: t.ink3, marginTop: 2 }}>{note}</Text>
+        )}
+      </View>
+      {!!checks && <Chip text={checks.text} tone={checks.tone} />}
+    </Row>
+  );
+}
+
 // ── 7 · a block with nothing in it ──────────────────────────────────────────
 
 /** The grey line a list draws in its own place when it is empty — an empty log,
