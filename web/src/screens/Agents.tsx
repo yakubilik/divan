@@ -1,16 +1,34 @@
-// TODO(daemon): the artboard also draws things the protocol does not carry, so
-// they are not on this screen:
-//  - per-agent on/off toggle (no agent.enable / agent.disable request)
-//  - the tool list an agent may use (Agent has no `tools` field)
-//  - a system-prompt preview and an "Edit" editor (no agent.read / agent.write)
-//  - "Write an agent" and "Import from file" (no agent.create request)
-//  - per-agent last-used time and project (agent.list returns no usage)
-//  - Skills / Commands / Plugins tabs — skills exist only as a count
-//    on a store bundle, and commands/plugins are not in the protocol at all.
-
+/** Agents: the workers installed on one computer, and the collections they can
+ *  be installed from.
+ *
+ *  One level under Executors, and no frame of its own — Web15's drawer has
+ *  eight rows and this is not one of them. So it is built out of what those
+ *  frames do draw: the page head, a card of controls, and under it the two
+ *  things this screen is about, each under its own section head. An agent is a
+ *  card (Web12 W1's project card at a smaller size); a collection is a row that
+ *  opens (Web15 W12's table row), because a collection is a list of agents and
+ *  not a thing in itself.
+ *
+ *  Which account's folder is being read is chosen with W15's chips rather than
+ *  a menu, the same way the remote screen picks a computer: the choice is the
+ *  whole meaning of the list under it, and a closed menu says nothing.
+ *
+ *  TODO(daemon): the artboard also draws things the protocol does not carry, so
+ *  they are not on this screen:
+ *   - per-agent on/off toggle (no agent.enable / agent.disable request)
+ *   - the tool list an agent may use (Agent has no `tools` field)
+ *   - a system-prompt preview and an "Edit" editor (no agent.read / agent.write)
+ *   - "Write an agent" and "Import from file" (no agent.create request)
+ *   - per-agent last-used time and project (agent.list returns no usage)
+ *   - Skills / Commands / Plugins tabs — skills exist only as a count
+ *     on a store bundle, and commands/plugins are not in the protocol at all.
+ */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { C, R } from '../lib/theme';
-import { Btn, Dot, Empty, Icon, Label, P, Segment, Spinner, mono } from '../ui/kit';
+import { T } from '../lib/theme';
+import { Icon, P, Spinner, mono } from '../ui/kit';
+import {
+  Button, Card, Choice, EmptyState, Note, Pill, Row, SectionHeader, Tag, Well, Write,
+} from '../ui/divan';
 import { Modal, ModalHead } from '../components/Modal';
 import { useFleet } from '../lib/fleet';
 import { hostDefaults, providerDefaults, usePrefs } from '../lib/prefs';
@@ -18,8 +36,6 @@ import { agentStore, installAgent, listAgents, removeAgent } from '../lib/action
 import { errText } from '../lib/i18n';
 import { shortPath, tilde } from '../lib/format';
 import type { Agent, CliAccount, StoreItem, StoreSource } from '../lib/protocol';
-
-const STORE_W = 380;
 
 /** The computer's own account has no id: agent.list falls back to it, but
  *  agent.install refuses it (needs_own_account), which is why it is offered
@@ -30,117 +46,92 @@ const SCOPE_LABEL: Record<Agent['scope'], string> = {
   project: 'project', user: 'account', builtin: 'built-in',
 };
 
-const FILTERS = ['all', 'project', 'account', 'built-in'] as const;
-type Filter = typeof FILTERS[number];
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'project', label: 'Project' },
+  { key: 'account', label: 'Account' },
+  { key: 'built-in', label: 'Built-in' },
+] as const;
+type Filter = typeof FILTERS[number]['key'];
 
 function err(e: any): string {
   return errText(e?.code, e?.message);
 }
 
-/** A destructive step never happens on the click that asked for it. */
+/** A destructive step never happens on the click that asked for it. The shell
+ *  is the panel's own dialog; what is inside it is the design system's. */
 function Confirm({ title, body, action, onConfirm, onClose }: {
   title: string; body: string; action: string; onConfirm: () => void; onClose: () => void;
 }) {
   return (
     <Modal onClose={onClose} width={440}>
       <ModalHead title={title} onClose={onClose} />
-      <div style={{ padding: '16px 20px', fontSize: 13, color: C.text2, lineHeight: '19px' }}>{body}</div>
       <div style={{
-        display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 20px',
-        borderTop: `1px solid ${C.border}`,
+        display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 20px 18px',
       }}>
-        <Btn kind="quiet" onClick={onClose}>Cancel</Btn>
-        <Btn kind="danger" onClick={() => { onConfirm(); onClose(); }}>{action}</Btn>
+        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>{body}</div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button face="outline" label="Cancel" onClick={onClose} />
+          <Button label={action} onClick={() => { onConfirm(); onClose(); }} />
+        </div>
       </div>
     </Modal>
   );
 }
 
-/** The glyph tile is deliberately not painted in the agent's own colour: the
- *  panel's palette is the one in theme.ts and nothing else. */
-function Glyph({ glyph, size = 30 }: { glyph: string; size?: number }) {
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: R.btn, flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: C.surface2, border: `1px solid ${C.border}`,
-      fontSize: size * 0.46, lineHeight: 1,
-    }}>
-      {glyph || '·'}
-    </div>
-  );
-}
-
-function Badge({ children, tone = 'plain' }: { children: React.ReactNode; tone?: 'plain' | 'accent' }) {
-  return (
-    <span style={{
-      ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 0.4, padding: '2px 6px',
-      borderRadius: R.badge, whiteSpace: 'nowrap',
-      color: tone === 'accent' ? C.accentSoft : C.mute,
-      background: tone === 'accent' ? C.accentTint : C.surface2,
-      border: `1px solid ${tone === 'accent' ? C.accentRing : C.border}`,
-    }}>{children}</span>
-  );
-}
+/** An agent's own character, in the well a row or a card opens on. It is
+ *  deliberately not painted in the agent's own colour: the panel's palette is
+ *  the one in `theme.ts` and nothing else. */
+const glyphWell = (glyph: string, size = 32) => <Well mark={glyph || '·'} size={size} />;
 
 function AgentCard({ agent, busy, onChat, onRemove }: {
   agent: Agent; busy: boolean; onChat: (() => void) | null; onRemove: (() => void) | null;
 }) {
   return (
-    <div style={{
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: R.card,
-      padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0,
-    }}>
+    <Card>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <Glyph glyph={agent.glyph} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: 14, fontWeight: 600, color: C.text,
+        {glyphWell(agent.glyph)}
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{
+            display: 'block', fontSize: 14, fontWeight: 600,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{agent.label || agent.name}</div>
-          <div style={{
-            ...mono, fontSize: 11, color: C.faint, marginTop: 2,
+          }}>{agent.label || agent.name}</span>
+          <span style={{
+            ...mono, display: 'block', fontSize: 12, color: T.ink3, marginTop: 2,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{agent.name}</div>
-        </div>
-        <Badge>{SCOPE_LABEL[agent.scope]}</Badge>
+          }}>{agent.name}</span>
+        </span>
+        <Tag label={SCOPE_LABEL[agent.scope]} />
       </div>
 
       {agent.description && (
         <div style={{
-          fontSize: 12.5, color: C.text2, lineHeight: '18px',
+          fontSize: 13, lineHeight: 1.45, color: T.ink2,
           display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>{agent.description}</div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {agent.model && <Badge>{agent.model}</Badge>}
-        {agent.family && <Badge>{agent.family}</Badge>}
-      </div>
+      {(agent.model || agent.family) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {agent.model && <Tag label={agent.model} />}
+          {agent.family && <Tag label={agent.family} />}
+        </div>
+      )}
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto',
-        paddingTop: 8, borderTop: `1px solid ${C.hair}`,
+        paddingTop: 12, borderTop: `1px solid ${T.line}`,
       }}>
         <span title={tilde(agent.path)} style={{
-          ...mono, flex: 1, minWidth: 0, fontSize: 11, color: C.faint,
+          ...mono, flex: 1, minWidth: 0, fontSize: 11.5, color: T.ink3,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{shortPath(agent.path, 3)}</span>
-        {onRemove && (
-          busy ? <Spinner size={13} /> : (
-            <button
-              type="button" onClick={onRemove} title="Remove this agent"
-              style={{
-                height: 26, padding: '0 10px', borderRadius: R.btn, cursor: 'pointer',
-                fontSize: 12, fontWeight: 600, flexShrink: 0,
-                background: 'transparent', border: `1px solid ${C.border}`, color: C.mute,
-              }}
-            >Remove</button>
-          )
-        )}
-        {onChat && <Btn kind="primary" onClick={onChat}>Start chat</Btn>}
+        {onRemove && (busy
+          ? <Spinner size={13} color={T.ink3} />
+          : <Button small face="outline" label="Remove" title="Remove this agent" onClick={onRemove} />)}
+        {onChat && <Button small label="Start chat" onClick={onChat} />}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -158,75 +149,40 @@ function StoreRow({ source, open, onToggle, busyId, installed, onInstall }: {
     .filter(Boolean).join(' · ');
 
   return (
-    <div style={{
-      background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.card,
-      marginBottom: 8, overflow: 'hidden',
-    }}>
-      <button
-        type="button" onClick={onToggle} disabled={!source.items.length}
-        style={{
-          display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%', padding: '10px 12px',
-          background: 'transparent', border: 'none', textAlign: 'left',
-          cursor: source.items.length ? 'pointer' : 'default',
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: 13, fontWeight: 600, color: C.text,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{source.label}</div>
-          <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 3 }}>{meta}</div>
-          {source.note && (
-            <div style={{ fontSize: 12, color: C.mute, marginTop: 4, lineHeight: '17px' }}>{source.note}</div>
-          )}
-        </div>
-        {!!source.items.length && (
-          <Icon path={open ? P.chevronDown : P.chevronRight} size={13} color={C.faint} />
-        )}
-      </button>
+    <Card inset={false}>
+      <Row
+        first
+        icon={open ? P.chevronDown : P.chevronRight}
+        title={source.label}
+        note={source.note || meta}
+        meta={source.note ? meta : null}
+        onClick={source.items.length ? onToggle : undefined}
+      />
 
       {source.error && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-          borderTop: `1px solid ${C.hair}`, fontSize: 12, color: C.mute,
-        }}>
-          <Dot color={C.faint} size={5} />
-          <span>Could not read this collection — {source.error}</span>
-        </div>
+        <Row title="Could not read this collection" note={source.error} tone="amber" wash
+          meta="unread" />
       )}
 
       {open && source.items.map((item) => {
         const on = installed.has(item.label.toLocaleLowerCase('tr').replace(/[^a-z0-9]/g, ''));
         return (
-          <div
+          <Row
             key={item.id}
-            style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
-              borderTop: `1px solid ${C.hair}`,
-            }}
-          >
-            <Glyph glyph={item.glyph} size={24} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: 13, color: C.text2,
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{item.label}</div>
-              {item.about && (
-                <div style={{ fontSize: 12, color: C.mute, marginTop: 3, lineHeight: '17px' }}>{item.about}</div>
-              )}
-              {!!item.skills && (
-                <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 4 }}>{item.skills} skills</div>
-              )}
-            </div>
-            {busyId === item.id ? <Spinner size={13} />
-              : on ? <Badge tone="accent">installed</Badge>
-              : <Btn kind="primary" onClick={() => onInstall(item)}>Install</Btn>}
-          </div>
+            lead={glyphWell(item.glyph, 28)}
+            title={item.label}
+            note={item.about || (item.skills ? `${item.skills} skills` : '')}
+            meta={item.about && item.skills ? `${item.skills} skills` : null}
+            right={busyId === item.id ? <Spinner size={13} color={T.ink3} />
+              : on ? <Tag label="installed" tone="run" />
+              : <Button small label="Install" onClick={() => onInstall(item)} />}
+          />
         );
       })}
-    </div>
+    </Card>
   );
 }
+
 
 export function Agents({ onStartChat }: {
   /** Handing the agent up rather than creating the chat here: a chat needs a
@@ -428,153 +384,130 @@ export function Agents({ onStartChat }: {
 
   if (!slot) {
     return (
-      <div style={{ flex: 1, display: 'flex', background: C.bg }}>
-        <Empty title="Agents" hint="Pair a computer first." />
-      </div>
+      <EmptyState
+        title="No computer is chosen."
+        body="An agent is a definition in a folder on one computer. Pair a computer under
+              Machines, and the agents installed on it — and the collections it can install
+              from — appear here."
+      />
     );
   }
 
   const accountLabel = accountId === OWN
     ? 'This computer’s account'
     : (claudeAccounts.find((a) => a.id === accountId)?.label ?? accountId);
+  const machine = slot.info?.name || slot.cfg.name;
+
+  /** The chips the folder is chosen with: the computer's own account first,
+   *  then every account somebody added to it. */
+  const chooseAccount = (id: string) => {
+    setAccountId(id);
+    // Written down, so the next visit opens where this one ended.
+    if (focus) setDefaults(focus, { agentAccountId: id === OWN ? '' : id });
+  };
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
-      {/* header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px',
-        borderBottom: `1px solid ${C.border}`, flexShrink: 0,
-      }}>
-        <div style={{ fontSize: 17, fontWeight: 600 }}>Agents</div>
-        <div style={{ ...mono, fontSize: 12, color: C.faint }}>
-          {slot.info?.name || slot.cfg.name} · {accountLabel}
-        </div>
-        <div style={{ flex: 1 }} />
-        <Btn onClick={() => { loadAgents(); loadStore(); }} disabled={!online}>Refresh</Btn>
-      </div>
+    <>
+      <SectionHeader
+        kind="page" title="Agents" note={`${machine} · ${accountLabel}`}
+        right={online ? `${agents.length} installed` : 'offline'}
+        tone={online ? undefined : 'ink3'}
+      />
 
-      {/* toolbar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px',
-        borderBottom: `1px solid ${C.border}`, flexShrink: 0, flexWrap: 'wrap',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: C.mute }}>Account</span>
-          <select
-            value={accountId}
-            onChange={(e) => {
-              setAccountId(e.target.value);
-              // Written down, so the next visit opens where this one ended.
-              if (focus) setDefaults(focus, { agentAccountId: e.target.value === OWN ? '' : e.target.value });
-            }}
-            disabled={!online}
-            style={{
-              height: 30, padding: '0 8px', borderRadius: R.btn, fontSize: 13,
-              background: C.surface2, border: `1px solid ${C.border}`, color: C.text,
-              cursor: online ? 'pointer' : 'default', maxWidth: 240,
-            }}
-          >
-            <option value={OWN}>This computer’s account</option>
-            {claudeAccounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.label}{a.logged_in ? '' : ' · not signed in'}</option>
-            ))}
-          </select>
-          {slot.loading.accounts && <Spinner size={13} />}
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12.5, color: T.ink3, marginRight: 4 }}>Account</span>
+          <Pill
+            label="This computer’s"
+            face={accountId === OWN ? 'ink' : 'surface'}
+            onClick={online ? () => chooseAccount(OWN) : undefined}
+          />
+          {claudeAccounts.map((a) => (
+            <Pill
+              key={a.id} label={a.label}
+              dot={a.logged_in ? 'running' : 'quiet'}
+              title={a.logged_in ? undefined : 'not signed in'}
+              face={accountId === a.id ? 'ink' : 'surface'}
+              onClick={online ? () => chooseAccount(a.id) : undefined}
+            />
+          ))}
+          {slot.loading.accounts && <Spinner size={13} color={T.ink3} />}
         </div>
 
-        <div style={{ width: 260 }}>
-          <Segment value={filter} options={FILTERS} onChange={setFilter} />
-        </div>
-
-        <div style={{ flex: 1 }} />
-
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px', width: 280,
-          background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
-        }}>
-          <Icon path={P.search} size={14} color={C.mute} />
-          <input
-            value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search agents and collections"
-            style={{
-              flex: 1, minWidth: 0, background: 'transparent', border: 'none',
-              outline: 'none', fontSize: 13, color: C.text,
-            }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <Choice label="Scope" value={filter} onChange={setFilter}
+            options={FILTERS.map((f) => ({ key: f.key, label: f.label }))} />
+          <span style={{
+            flex: 1, minWidth: 180, display: 'flex', alignItems: 'center', gap: 10, fontSize: 14,
+          }}>
+            <Icon path={P.search} size={16} color={T.ink3} />
+            <Write
+              value={query} onChange={setQuery} label="Search agents and collections"
+              placeholder="Search agents and collections…"
+            />
+          </span>
+          <Button
+            small face="outline" label="Refresh" disabled={!online}
+            onClick={() => { loadAgents(); loadStore(); }}
           />
         </div>
-      </div>
+      </Card>
 
       {notice && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
-          borderBottom: `1px solid ${C.border}`, background: C.surface,
-          fontSize: 12.5, color: C.warn, flexShrink: 0,
-        }}>
-          <Icon path={P.warn} size={13} color={C.warn} />
-          <span style={{ flex: 1 }}>{notice}</span>
-          <button
-            type="button" onClick={() => setNotice(null)}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex' }}
-          >
-            <Icon path={P.x} size={12} color={C.mute} />
-          </button>
-        </div>
+        <Note
+          tone="amber" icon={P.warn} title="That did not work" body={notice}
+          foot={[<Button small face="outline" label="Dismiss" onClick={() => setNotice(null)} />]}
+        />
       )}
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        {/* installed */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 16 }}>
-          {!online ? (
-            <Empty title="Computer offline" hint="Agents are read from their definitions on that computer." />
-          ) : loadingAgents ? (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: 24,
-              fontSize: 13, color: C.mute,
-            }}>
-              <Spinner /> Reading agents…
-            </div>
-          ) : agentsError ? (
-            <Empty title="Could not read agents" hint={agentsError} />
-          ) : !shown.length ? (
-            <Empty
-              title={agents.length ? 'No agent matches this filter' : 'No agents on this account'}
-              hint={agents.length ? undefined
-                : 'Install one from the store on the right, or drop a markdown file with a name and description into the tool’s agents folder on that computer.'}
-            />
-          ) : (
-            <div style={{
-              display: 'grid', gap: 12,
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-              alignItems: 'stretch',
-            }}>
-              {entries.map((e) => {
-                if (e.kind === 'family') {
-                  const open = !!openFamilies[e.name];
-                  return (
-                    <div key={`family:${e.name}`} style={{
-                      gridColumn: '1 / -1', display: 'grid', gap: 12,
-                      gridTemplateColumns: 'subgrid',
+      <SectionHeader
+        title="On this account" count={shown.length}
+        note={shown.length === agents.length ? undefined : `of ${agents.length}`}
+      />
+
+      {!online ? (
+        <Card><div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+          {machine} is not answering. Agents are read from their definitions on that computer,
+          so the list arrives when it does.
+        </div></Card>
+      ) : loadingAgents ? (
+        <Card><div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, color: T.ink2 }}>
+          <Spinner size={14} color={T.ink3} /> Reading the agents on {accountLabel}…
+        </div></Card>
+      ) : agentsError ? (
+        <Note tone="red" icon={P.warn} title="Could not read the agents" body={agentsError} />
+      ) : !shown.length ? (
+        <Card><div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+          {agents.length
+            ? 'No agent on this account matches the scope and the words above.'
+            : 'Nothing is installed on this account. Install one from a collection below, or '
+              + 'drop a markdown file with a name and a description into that tool’s agents '
+              + 'folder on the computer.'}
+        </div></Card>
+      ) : (
+        <div style={{
+          display: 'grid', gap: 14, alignItems: 'stretch',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))',
+        }}>
+          {entries.map((e) => {
+            if (e.kind === 'family') {
+              const open = !!openFamilies[e.name];
+              return (
+                <Card key={`family:${e.name}`} inset={false} style={{ gridColumn: '1 / -1' }}>
+                  <Row
+                    first
+                    icon={open ? P.chevronDown : P.chevronRight}
+                    title={e.name} meta={`${e.agents.length} workers`}
+                    note={`They arrived together — one tool’s insides, not ${e.agents.length} `
+                      + 'agents to talk to'}
+                    onClick={() => setOpenFamilies((o) => ({ ...o, [e.name]: !open }))}
+                  />
+                  {open && (
+                    <div style={{
+                      display: 'grid', gap: 14, padding: '0 18px 18px',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(268px, 1fr))',
                     }}>
-                      <button
-                        type="button"
-                        onClick={() => setOpenFamilies((o) => ({ ...o, [e.name]: !open }))}
-                        style={{
-                          gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10,
-                          padding: 14, textAlign: 'left', cursor: 'pointer',
-                          background: C.surface, border: `1px solid ${C.border}`,
-                          borderRadius: R.card, color: C.text,
-                        }}
-                      >
-                        <Icon path={open ? P.chevronDown : P.chevronRight} size={14} color={C.mute} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600 }}>{e.name}</div>
-                          <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>
-                            {e.agents.length} workers that arrived together — one tool's
-                            insides, not {e.agents.length} agents to talk to
-                          </div>
-                        </div>
-                      </button>
-                      {open && e.agents.map((a) => (
+                      {e.agents.map((a) => (
                         <AgentCard key={a.id} agent={a} busy={busyId === a.name}
                           onChat={online && onStartChat
                             ? () => onStartChat(a, argAccount) : null}
@@ -582,73 +515,59 @@ export function Agents({ onStartChat }: {
                             ? () => setDoomed(a) : null} />
                       ))}
                     </div>
-                  );
-                }
-                const a = e.agent;
-                return (
-                  <AgentCard
-                    key={a.id}
-                    agent={a}
-                    busy={busyId === a.name}
-                    onChat={online && onStartChat ? () => onStartChat(a, argAccount) : null}
-                    // The built-in agent creator has no file behind it, and an
-                    // agent this app did not write back is refused anyway
-                    // (agent_not_removable) — so no button is offered for either.
-                    onRemove={a.installed && a.scope !== 'builtin' && !!a.path
-                      ? () => setDoomed(a) : null}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* store */}
-        <div style={{
-          width: STORE_W, flexShrink: 0, borderLeft: `1px solid ${C.border}`,
-          background: C.surface, display: 'flex', flexDirection: 'column', minHeight: 0,
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px 10px', flexShrink: 0,
-          }}>
-            <div style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>Store</div>
-            {loadingStore
-              ? <Spinner size={13} />
-              : <span style={{ ...mono, fontSize: 11, color: C.faint }}>{sources.length} collection{sources.length === 1 ? '' : 's'}</span>}
-          </div>
-
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px' }}>
-            {storeError ? (
-              <div style={{ padding: 16, fontSize: 12.5, color: C.mute, lineHeight: '18px' }}>
-                Could not read the store — {storeError}
-              </div>
-            ) : !storeShown.length && !loadingStore ? (
-              <div style={{ padding: 16, fontSize: 12.5, color: C.mute }}>
-                {query ? 'No collection matches' : 'No collections'}
-              </div>
-            ) : storeShown.map((s) => (
-              <StoreRow
-                key={s.id}
-                source={s}
-                open={openSource === s.id
-                  || (openSource === null && s.items.length > 0 && s.items.length <= 3)
-                  || (!!query.trim() && s.items.length <= 12)}
-                onToggle={() => setOpenSource((k) => (k === s.id ? null : s.id))}
-                busyId={busyId}
-                installed={installedNames}
-                onInstall={doInstall}
+                  )}
+                </Card>
+              );
+            }
+            const a = e.agent;
+            return (
+              <AgentCard
+                key={a.id}
+                agent={a}
+                busy={busyId === a.name}
+                onChat={online && onStartChat ? () => onStartChat(a, argAccount) : null}
+                // The built-in agent creator has no file behind it, and an
+                // agent this app did not write back is refused anyway
+                // (agent_not_removable) — so no button is offered for either.
+                onRemove={a.installed && a.scope !== 'builtin' && !!a.path
+                  ? () => setDoomed(a) : null}
               />
-            ))}
-          </div>
-
-          <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
-            <Label>installing downloads text only — nothing is executed</Label>
-            <div style={{ fontSize: 11.5, color: C.faint, lineHeight: '16px' }}>
-              An agent definition is an instruction that runs with that computer’s tools.
-              You can only install into an account you added yourself.
-            </div>
-          </div>
+            );
+          })}
         </div>
+      )}
+
+      <SectionHeader
+        title="Collections" count={sources.length}
+        right={loadingStore ? 'reading…' : undefined}
+      />
+
+      {storeError ? (
+        <Note tone="red" icon={P.warn} title="Could not read the collections" body={storeError} />
+      ) : !storeShown.length && !loadingStore ? (
+        <Card><div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+          {query
+            ? 'No collection matches the words above.'
+            : 'This computer offers no collection to install from.'}
+        </div></Card>
+      ) : storeShown.map((s) => (
+        <StoreRow
+          key={s.id}
+          source={s}
+          open={openSource === s.id
+            || (openSource === null && s.items.length > 0 && s.items.length <= 3)
+            || (!!query.trim() && s.items.length <= 12)}
+          onToggle={() => setOpenSource((k) => (k === s.id ? null : s.id))}
+          busyId={busyId}
+          installed={installedNames}
+          onInstall={doInstall}
+        />
+      ))}
+
+      <div style={{ ...mono, fontSize: 12.5, lineHeight: 1.5, color: T.ink3, maxWidth: 620 }}>
+        installing downloads text only — nothing is executed. an agent definition is an
+        instruction that runs with that computer’s tools, and it can only be installed into an
+        account you added yourself.
       </div>
 
       {doomed && (
@@ -660,6 +579,6 @@ export function Agents({ onStartChat }: {
           onClose={() => setDoomed(null)}
         />
       )}
-    </div>
+    </>
   );
 }
