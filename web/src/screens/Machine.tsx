@@ -11,18 +11,19 @@
  *  for the computers and its line under the picture are there, and what neither
  *  of them has (a pty behind W14's tabs) says so where it would be.
  *
- *  Four pages have no row of their own (`MACHINE_ASIDE`): a computer's folders,
- *  the agents installed on it, the update, and every default a new chat takes.
- *  Each is opened from the page above it and drawn with that page's row still
- *  filled — one level deeper, not somewhere else. Those four speak the older
- *  vocabulary (`C` in `lib/theme.ts`), which is the same palette under other
- *  names, so they follow both themes without a line of theirs changing.
+ *  Five pages have no row of their own (`MACHINE_ASIDE`): what is running on
+ *  every computer right now, a computer's folders, the agents installed on it,
+ *  the update, and every default a new chat takes. Each is opened from the page
+ *  above it and drawn with that page's row still filled — one level deeper, not
+ *  somewhere else. Four of them stand in this place's own page column; the
+ *  fifth brings a column of its own, because everything a computer keeps is
+ *  seven sections and a list of seven things is a drawer.
  */
 import { useEffect, useRef } from 'react';
 import { MACHINE_ROWS, machineRow, updateWaiting, type View } from '../lib/shell';
 import { useFleet } from '../lib/fleet';
 import { signIns, signInsWanting, quotaVerdict, useThresholds } from '../lib/machine';
-import { T } from '../lib/theme';
+import { SIZE, T } from '../lib/theme';
 import type { DivanView } from '../lib/divan';
 import { glyph } from '../ui/kit';
 import { SidePanel, type PanelItem } from '../ui/divan';
@@ -67,11 +68,13 @@ export function machineNote(fleet: DivanView): string {
   return `${out.length} of ${fleet.hosts.length} computers cannot be reached.`;
 }
 
-/** The six pages this ticket built. They stand in the page column beside the
- *  drawer, which carries their scroll and their padding; the four older ones
- *  bring their own head and take the whole width, as they always did. */
+/** The pages that stand in this place's own page column, which carries their
+ *  scroll and their padding. Everything else here takes the whole width and
+ *  brings its own: the wall of terminals, the picture of a remote screen, and
+ *  the seven sections of one computer's own settings. */
 const DRAWN_HERE = new Set<View>([
   'machines', 'executors', 'accounts', 'quota', 'admin', 'settings',
+  'fleet', 'projects', 'agents', 'update',
 ]);
 
 export function Machine(props: MachineProps) {
@@ -145,7 +148,12 @@ export function Machine(props: MachineProps) {
       flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch',
       overflow: 'hidden', background: T.bg,
     }}>
-      <div style={{ flex: 'none', padding: '28px 12px 28px 20px', overflowY: 'auto' }}>
+      {/* As wide as the column itself and no wider: the sentence under the
+          rows is what a `flex: none` box would otherwise be measured by, and
+          one long line of it pushed this column to three hundred and eighty. */}
+      <div style={{
+        flex: 'none', width: SIZE.sidePanel, padding: '28px 12px 28px 20px', overflowY: 'auto',
+      }}>
         <SidePanel
           title="Machine" note={machineNote(fleet)}
           items={items} value={here} onChange={(key) => onView(key as View)}
@@ -155,10 +163,9 @@ export function Machine(props: MachineProps) {
         </div>
       </div>
       {/* The page beside it: Web15's `grid-template-columns:260px minmax(0,1fr);
-          gap:40px`, as a column of blocks `gap:18px` apart. The four older
-          screens bring their own head, their own scroll and their own padding —
-          each of them was the whole width of the panel until now — so they are
-          handed the width and left alone. */}
+          gap:40px`, as a column of blocks `gap:18px` apart. The three that are
+          not a column of blocks — the wall, the picture and this computer's own
+          settings — are handed the width and bring their own. */}
       {DRAWN_HERE.has(view) ? (
         <div style={{
           flex: 1, minWidth: 0, overflowY: 'auto', padding: '28px 32px 40px 28px',

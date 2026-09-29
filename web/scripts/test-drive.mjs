@@ -375,9 +375,13 @@ group('what needs a person opens itself as a conversation');
   // The bar across the bottom of every desktop frame, and what it opens.
   ok('the command bar is on the page', text().includes('Tell Divan anything…'));
   await click(inside('Tell Divan anything'));
-  ok('…and pressing it opens what ⌘K opens', !!doc.querySelector('input[name="palette-query"]'));
+  // Found the way a person finds it — by what the field says it is — rather
+  // than by a `name` attribute nothing on screen carries.
+  const palette = () => [...doc.querySelectorAll('input')]
+    .some((i) => (i.getAttribute('aria-label') ?? '').startsWith('Search folders'));
+  ok('…and pressing it opens what ⌘K opens', palette());
   await press('k');
-  ok('…which closes again', !doc.querySelector('input[name="palette-query"]'));
+  ok('…which closes again', !palette());
 }
 
 group('the board, with the asking agent’s chat beside it');

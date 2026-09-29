@@ -294,10 +294,14 @@ Settings › Appearance and in the command palette.
 
 ## Where the older palette's names landed
 
-Twenty-three files speak a vocabulary that predates Divan — `surface`, `mute`,
-`accent`, `hair` — and this ticket did not rewrite them. `C` is that vocabulary
-with every name now pointing at one of the tokens, which is why those screens
-follow both themes without a line of theirs changing. Most are a rename
+Eleven files speak a vocabulary that predates Divan — `surface`, `mute`,
+`accent`, `hair` — and all eleven are the chat and the panels that belong to
+it, which is the one surface not being rebuilt; `ui/kit.tsx`, the older set
+they are drawn from, is the twelfth. Every page of the panel has been carried
+off it, and what a page may not be written with is now a check
+(`scripts/test-divan.mjs`), so a new one cannot quietly go back. `C` is that
+vocabulary with every name pointing at one of the tokens, which is why the chat
+follows both themes without a line of it changing. Most are a rename
 (`surface` is `--s1`, `border` is `--line`, `warn`/`ok`/`danger` are
 `--amber`/`--run`/`--red`). Six needed a decision:
 
@@ -392,7 +396,12 @@ Geist; the panel does not ship it.
   times as one construction, with the slider a threshold is set on (W11) and the
   segmented choice a setting is answered with (W18); and the top bar — the bar
   itself, a nav item, the rule between the places and the chips, and the mono
-  chip and stamp at its far end. Each names the frame it was measured off. The
+  chip and stamp at its far end. Two of them answer a state the artboards never
+  draw, because every button on a frame is live and every field on one is
+  public: a button with nothing to press drops its fill and goes grey on
+  `--s2`, the way a counter at zero already does, rather than fading a white
+  label to 1.7:1 over the ink; and a field can be `secret`, which a device
+  token has to be. Each names the frame it was measured off. The
   bar is the one the thirteen later frames draw (`height:58px`, the third place
   an item beside the other two) rather than the 56 pt bar of Web12 W1 and Web13
   W3, which is the same bar one step earlier with that place set as a word at

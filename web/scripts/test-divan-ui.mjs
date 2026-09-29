@@ -169,9 +169,13 @@ try {
     const tokens = scheme === 'dark' ? DARK : LIGHT;
     console.log(`── the ${scheme} theme, as a browser resolves it`);
     await page('Page.navigate', { url: `file://${join(out, 'ui-harness.html')}?theme=${scheme}` });
+    // The last thing the harness renders, so that waiting for it is waiting
+    // for the whole page. It used to wait for a screen called `Dashboard`,
+    // which this harness has never had a frame of — so this check stopped at
+    // its own first gate and said nothing about either theme.
     const up = await evaluate(`
       for (let i = 0; i < 100; i++) {
-        if (document.querySelector('[data-screen="Dashboard"]')) return true;
+        if (document.querySelector('[data-screen="TicketWall"]')) return true;
         await new Promise((r) => setTimeout(r, 100));
       }
       return false;
@@ -220,7 +224,7 @@ try {
     ok('…and there were enough of them for that to mean something',
       resolved.painted > 2000, String(resolved.painted));
     ok('every screen and every panel it opens is on the page',
-      resolved.screens.length === 27, resolved.screens.join(", "));
+      resolved.screens.length === 28, resolved.screens.join(', '));
     ok('the page itself is the theme’s own background',
       resolved.body === asRgb(tokens.bg), resolved.body);
     const shadowStray = resolved.shadows
@@ -324,19 +328,20 @@ try {
     // Settings opens on Accounts, and the section this ticket adds is behind a
     // click on the rail. A source regex is not a render, so it is clicked.
     const appearance = await evaluate(`
-      const rail = [...document.querySelectorAll('[data-screen="Settings"] button')];
+      const rail = [...document.querySelectorAll('[data-screen="Preferences"] button')];
       const tab = rail.find((b) => b.textContent.trim().startsWith('Appearance'));
       if (!tab) return { found: false };
       tab.click();
       await new Promise((r) => setTimeout(r, 120));
-      const pane = document.querySelector('[data-screen="Settings"]');
+      const pane = document.querySelector('[data-screen="Preferences"]');
       return {
         found: true,
         text: pane.innerText,
         segments: [...pane.querySelectorAll('button')].map((b) => b.textContent.trim()),
       };
     `);
-    ok('Settings has the Appearance section this ticket adds', appearance.found);
+    ok('this computer’s page has an Appearance section, reached by pressing its row',
+      appearance.found);
     ok('…and it offers the three answers, with the one in force spelled out',
       ['system', 'light', 'dark'].every((w) => appearance.segments.includes(w))
       && /Following this computer|Set by hand/.test(appearance.text ?? ''),
@@ -348,7 +353,7 @@ try {
     // And the rest of the rail while we are in there: every section of the one
     // screen that has sections, each drawn and each measured.
     const sections = await evaluate(`
-      const rail = [...document.querySelectorAll('[data-screen="Settings"] button')]
+      const rail = [...document.querySelectorAll('[data-screen="Preferences"] button')]
         .filter((b) => b.style.width === '100%' && b.textContent.trim());
       const seen = [];
       for (const b of rail) {
@@ -356,12 +361,12 @@ try {
         b.click();
         await new Promise((r) => setTimeout(r, 90));
         const thin = window.__audit().thin;
-        seen.push({ name, thin, size: document.querySelector('[data-screen="Settings"]').innerText.length });
+        seen.push({ name, thin, size: document.querySelector('[data-screen="Preferences"]').innerText.length });
       }
       return seen;
     `);
     const unreadable = sections.flatMap((x) => x.thin.map((t) => `${x.name}: ${t}`));
-    ok('every section of Settings draws something and is legible',
+    ok('every section of this computer’s page draws something and is legible',
       sections.length >= 6 && sections.every((x) => x.size > 40) && unreadable.length === 0,
       unreadable.slice(0, 6).join('\n    ') || sections.map((x) => `${x.name} ${x.size}`).join(' · '));
 
@@ -370,8 +375,10 @@ try {
 
     // …and one of the screens, which is the half of this that is about what was
     // already here rather than about what is being added.
-    for (const screen of ['Shell', 'ShellChat', 'ShellBoard', 'OverviewCalm', 'Machine', 'Dashboard',
-                          'Settings', 'Terminal', 'ChatOpen', 'ApprovalModal']) {
+    for (const screen of ['Shell', 'ShellChat', 'ShellBoard', 'OverviewCalm', 'Machine',
+                          'Overview', 'Preferences', 'Terminal', 'Fleet', 'Projects', 'Agents',
+                          'Update', 'Onboarding', 'Ustabasi', 'Palette', 'ChatOpen',
+                          'ApprovalModal']) {
       await evaluate(`
         document.querySelector('[data-screen="${screen}"]').scrollIntoView();
         await new Promise((r) => setTimeout(r, 120));

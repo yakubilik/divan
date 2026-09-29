@@ -334,27 +334,21 @@ group('Terminals and Remote screen: the frames’ chrome, today’s behaviour');
     && !has(screen.body, 'live screen'),
     words(screen.body).slice(-120));
 
-  const REQUEST = /'((?:screen|chat|ustabasi|host|divan|account|agent|tool|approval|group|limits)\.[a-z_.]+)'/g;
-  const DRIVE = /\bon(MouseDown|MouseUp|MouseMove|MouseLeave|Wheel|ContextMenu|DoubleClick|KeyDown|DragStart|DragEnd|DragOver|DragLeave|Drop|Click)=/g;
-  const surface = (text) => JSON.stringify([
-    [...new Set([...text.matchAll(REQUEST)].map((m) => m[1]))].sort(),
-    [...new Set([...text.matchAll(DRIVE)].map((m) => m[1]))].sort(),
-  ]);
-  const files = ['src/screens/Terminal.tsx', 'src/screens/Screen.tsx'];
-  let was = null;
+  // What each of these two asks a computer for, and what it drives with, is
+  // held to `main` in one place for every carried screen — `test-divan.mjs`,
+  // criterion 2. What is left here is the half of "unchanged" that is only
+  // true of the remote screen: the key table it speaks and the frame it asks
+  // for.
+  let wasScreen = null;
   try {
-    was = files.map((f) => execFileSync('git', ['show', `main:web/${f}`],
-      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
-  } catch { /* no git, or no main: the dispatch below is what is left */ }
-  if (was === null) console.log('  · no git to read main from: the dispatch was read instead');
+    wasScreen = execFileSync('git', ['show', 'main:web/src/screens/Screen.tsx'],
+      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch { /* no git, or no main */ }
+  if (wasScreen === null) console.log('  · no git to read main from: the key table was not compared');
   else {
-    const changed = files.filter((f, i) => surface(was[i]) !== surface(src(f)));
-    ok('neither asks a computer for anything new, and neither dropped an event it drove with',
-      changed.length === 0,
-      changed.map((f, i) => `${f}: ${surface(was[i])} vs ${surface(src(f))}`).join('\n    '));
     const keys = (t) => t.slice(t.indexOf('const KEYS'), t.indexOf('const MAX_ZOOM'));
-    ok('…the keyboard the remote screen speaks is the same table it always was',
-      keys(was[1]) === keys(src(files[1])));
+    ok('the keyboard the remote screen speaks is the same table it always was',
+      keys(wasScreen) === keys(src('src/screens/Screen.tsx')));
   }
   ok('the picture is the same request it was, at the same quality',
     /screen\.jpg\?token=\$\{encodeURIComponent\(slot\.cfg\.token\)\}&w=\$\{w\}&q=72/.test(source));

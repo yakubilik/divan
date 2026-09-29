@@ -1,9 +1,27 @@
+/** Folders: what is on one computer's disk that an agent may be pointed at.
+ *
+ *  One level under Machines, and no frame of its own — Web15's drawer has eight
+ *  rows and this is not one of them. So it is built out of the shape those
+ *  frames do draw for a list of things about a computer: W12's table, the page
+ *  head above it, and one card of controls between the two. A folder is a row:
+ *  what it is called and where it is, what git says about it, the last commit,
+ *  how many chats are open in it, and the one button worth having at the end.
+ *
+ *  The git column is the only part of the row that can be missing. `host.git`
+ *  is a call a daemon that has not been restarted does not have; when it
+ *  answers with an error the column says so once under the table rather than
+ *  putting a dash in every row.
+ */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
-import { Btn, Dot, Empty, Icon, P, Segment, mono } from '../ui/kit';
+import { T, STATE_MARK } from '../lib/theme';
+import { P, mono } from '../ui/kit';
 import { ago, tilde } from '../lib/format';
 import { useFleet } from '../lib/fleet';
 import type { Chat } from '../lib/protocol';
+import {
+  Button, Card, Cell, Choice, EmptyState, NameCell, Note, SectionHeader, Table, Well, Write,
+  type Column,
+} from '../ui/divan';
 
 export interface ProjectsProps {
   onNewChatIn: (cwd: string) => void;
@@ -11,7 +29,7 @@ export interface ProjectsProps {
 }
 
 /** What `host.git` reports per folder. Every field is optional on purpose: a
- *  daemon that predates the call answers with an error and the cards simply do
+ *  daemon that predates the call answers with an error and the rows simply do
  *  without, rather than showing a placeholder that means nothing. */
 interface GitInfo {
   is_git?: boolean;
@@ -24,8 +42,12 @@ interface GitInfo {
   committed_at?: number | null;
 }
 
-const SORTS = ['Last changed', 'Name', 'Open chats'] as const;
-type Sort = typeof SORTS[number];
+const SORTS = [
+  { key: 'touched', label: 'Last changed' },
+  { key: 'name', label: 'Name' },
+  { key: 'chats', label: 'Open chats' },
+] as const;
+type Sort = typeof SORTS[number]['key'];
 
 interface Row {
   path: string;
@@ -38,137 +60,33 @@ interface Row {
   touched: number;
 }
 
-const ell: React.CSSProperties = {
-  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-};
+/** W12's tracks, with the two columns this page has that a machine does not. */
+const COLUMNS: Column[] = [
+  { width: '34px' },
+  { label: 'folder', width: 'minmax(0, 1.3fr)' },
+  { label: 'git', width: 'minmax(0, 1fr)' },
+  { label: 'last commit', width: 'minmax(0, 1.2fr)' },
+  { label: 'chats', width: '110px' },
+  { width: '150px' },
+];
 
-function Badge({ tone, children }: { tone: 'accent' | 'warn'; children: React.ReactNode }) {
-  const accent = tone === 'accent';
-  return (
-    <span style={{
-      ...mono, display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
-      fontSize: 10, fontWeight: 600, letterSpacing: 0.4, padding: '3px 7px',
-      borderRadius: R.badge,
-      color: accent ? C.accentSoft : C.warn,
-      background: accent ? C.accentTint : C.warnBg,
-      border: `1px solid ${accent ? C.accentRing : C.warnLine}`,
-    }}>{children}</span>
-  );
-}
-
-/** The one line of git a card can carry. Counts come straight from
+/** The one line of git a row can carry. Counts come straight from
  *  `git status --porcelain`: `dirty` is every changed file, `staged` the ones
  *  already in the index, `untracked` the ones git has never seen. */
-function GitLine({ git, isGit }: { git: GitInfo | null; isGit: boolean }) {
-  if (!git?.is_git) {
-    if (!isGit) return null;
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 20 }}>
-        <Icon path={P.branch} size={12} color={C.faint} />
-        <span style={{ ...mono, fontSize: 12, color: C.faint }}>git repository</span>
-      </div>
-    );
+function gitCell(row: Row): React.ReactNode {
+  if (!row.git?.is_git) {
+    return <Cell text={row.isGit ? 'a git repository' : 'not under git'} tone="ink3" />;
   }
-  const dirty = git.dirty ?? 0;
-  const staged = git.staged ?? 0;
-  const untracked = git.untracked ?? 0;
+  const dirty = row.git.dirty ?? 0;
+  const staged = row.git.staged ?? 0;
+  const untracked = row.git.untracked ?? 0;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 20 }}>
-      <Icon path={P.branch} size={12} color={C.mute} />
-      <span style={{ ...mono, ...ell, fontSize: 12, color: C.text2, minWidth: 0 }}>
-        {git.branch || 'HEAD'}
-      </span>
-      {staged > 0 && (
-        <span style={{ ...mono, fontSize: 12, color: C.ok, flexShrink: 0 }}>+{staged}</span>
-      )}
-      {untracked > 0 && (
-        <span style={{ ...mono, fontSize: 12, color: C.faint, flexShrink: 0 }}>?{untracked}</span>
-      )}
-      <span style={{ ...mono, fontSize: 12, color: dirty ? C.mute : C.faint, marginLeft: 'auto', flexShrink: 0 }}>
-        {dirty ? `${dirty} files` : 'clean'}
-      </span>
-    </div>
-  );
-}
-
-function Card({ row, onNew, onOpen }: {
-  row: Row;
-  onNew: () => void;
-  onOpen: (chatId: string) => void;
-}) {
-  const busy = row.running > 0 || row.awaiting > 0;
-  const newest = row.chats[0] ?? null;
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 8, padding: 16,
-      borderRadius: R.card, background: C.surface,
-      border: `1px solid ${busy ? C.accentRing : C.border}`,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ ...ell, fontSize: 15, fontWeight: 600, color: C.text }} title={row.name}>
-            {row.name}
-          </div>
-          <div style={{ ...mono, ...ell, fontSize: 12, color: C.mute, marginTop: 2 }} title={row.path}>
-            {tilde(row.path)}
-          </div>
-        </div>
-        {row.awaiting > 0 ? (
-          <Badge tone="warn"><Icon path={P.warn} size={10} color={C.warn} />approval</Badge>
-        ) : row.running > 0 ? (
-          <Badge tone="accent"><Dot color={C.accentSoft} live size={5} />running</Badge>
-        ) : null}
-      </div>
-
-      <GitLine git={row.git} isGit={row.isGit} />
-
-      {row.git?.subject ? (
-        <div style={{ minWidth: 0 }}>
-          <div style={{ ...ell, fontSize: 13, color: C.text2 }} title={row.git.subject}>
-            {row.git.subject}
-          </div>
-          <div style={{ ...ell, fontSize: 12, color: C.faint, marginTop: 2 }}>
-            {[ago(row.git.committed_at), row.git.author].filter(Boolean).join(' · ')}
-          </div>
-        </div>
-      ) : null}
-
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto',
-        paddingTop: 12, borderTop: `1px solid ${C.hair}`,
-      }}>
-        {row.chats.length > 0 && newest ? (
-          <button
-            type="button" onClick={() => onOpen(newest.id)}
-            title={newest.title || 'New chat'}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, height: 28,
-              padding: '0 8px', marginLeft: -8, borderRadius: R.btn, cursor: 'pointer',
-              background: 'transparent', border: '1px solid transparent', textAlign: 'left',
-            }}
-          >
-            <Dot
-              color={row.awaiting ? C.warn : row.running ? C.accent : C.faint}
-              live={busy} size={5}
-            />
-            <span style={{ ...ell, fontSize: 12, color: busy ? C.text2 : C.mute }}>
-              {row.chats.length} chats open
-            </span>
-            <Icon path={P.chevronRight} size={12} color={C.faint} />
-          </button>
-        ) : (
-          <span style={{
-            display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0,
-            fontSize: 12, color: C.faint,
-          }}>
-            <Dot color={C.faint} size={5} />no chats
-          </span>
-        )}
-        <Btn onClick={onNew}>
-          <Icon path={P.plus} size={13} color={C.text} />New chat
-        </Btn>
-      </div>
-    </div>
+    <>
+      <Cell text={row.git.branch || 'HEAD'} style={{ color: T.ink2 }} />
+      {staged > 0 && <Cell text={`+${staged}`} tone="run" />}
+      {untracked > 0 && <Cell text={`?${untracked}`} tone="ink3" />}
+      <Cell text={dirty ? `${dirty} changed` : 'clean'} tone={dirty ? 'ink2' : 'ink3'} />
+    </>
   );
 }
 
@@ -176,7 +94,7 @@ export function Projects({ onNewChatIn, onOpenChat }: ProjectsProps) {
   const focus = useFleet((s) => s.focus);
   const slot = useFleet((s) => (s.focus ? s.hosts[s.focus] : null));
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<Sort>('Last changed');
+  const [sort, setSort] = useState<Sort>('touched');
   const [repos, setRepos] = useState<Record<string, GitInfo>>({});
   const [gitOff, setGitOff] = useState(false);
 
@@ -185,7 +103,7 @@ export function Projects({ onNewChatIn, onOpenChat }: ProjectsProps) {
 
   // Asked once, when the screen first has a folder list to ask about. The call
   // is new; a daemon that has not been restarted answers `unknown_method` and
-  // the grid just runs without a git column.
+  // the table just runs without a git column.
   const asked = useRef<string | null>(null);
   useEffect(() => {
     if (!focus || !projects.length) return;
@@ -235,8 +153,8 @@ export function Projects({ onNewChatIn, onOpenChat }: ProjectsProps) {
         || r.path.toLocaleLowerCase('tr').includes(q))
       : out;
     const byName = (a: Row, b: Row) => a.name.localeCompare(b.name, 'tr');
-    if (sort === 'Name') return [...hit].sort(byName);
-    if (sort === 'Open chats') {
+    if (sort === 'name') return [...hit].sort(byName);
+    if (sort === 'chats') {
       return [...hit].sort((a, b) =>
         b.chats.length - a.chats.length || b.touched - a.touched || byName(a, b));
     }
@@ -250,89 +168,91 @@ export function Projects({ onNewChatIn, onOpenChat }: ProjectsProps) {
 
   if (!slot) {
     return (
-      <div style={{ flex: 1, display: 'flex', background: C.bg }}>
-        <Empty title="Projects" hint="Pick a computer first." />
-      </div>
+      <EmptyState
+        title="No computer is chosen."
+        body="Folders are one computer's own: the directories under its allowed roots that an
+              agent can be pointed at. Pick a computer under Machines and its folders appear
+              here."
+      />
     );
   }
 
   return (
-    <div style={{
-      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-      background: C.bg, overflow: 'hidden',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 16, padding: '16px 24px',
-        borderBottom: `1px solid ${C.border}`, flexShrink: 0,
-      }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 20, fontWeight: 600, color: C.text }}>Projects</div>
-          <div style={{ ...mono, ...ell, fontSize: 12, color: C.mute, marginTop: 2 }}
-            title={roots.join(' · ')}>
-            {roots.map((r) => tilde(r)).join(' · ') || (slot.info?.name ?? '')}
-          </div>
-        </div>
+    <>
+      <SectionHeader
+        kind="page" title="Folders"
+        note={roots.map((r) => tilde(r)).join(' · ') || (slot.info?.name ?? '')}
+        right={rows.length === projects.length
+          ? `${projects.length} folder${projects.length === 1 ? '' : 's'}`
+          : `${rows.length} of ${projects.length}`}
+      />
 
-        <div style={{ flex: 1 }} />
-
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, width: 240, height: 32,
-          padding: '0 10px', background: C.surface, border: `1px solid ${C.border}`,
-          borderRadius: R.input,
-        }}>
-          <Icon path={P.search} size={14} color={C.mute} />
-          <input
-            value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search projects…"
-            style={{
-              flex: 1, minWidth: 0, background: 'transparent', border: 'none',
-              outline: 'none', fontSize: 13, color: C.text,
-            }}
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Well icon={P.search} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
+          <Write
+            value={query} onChange={setQuery} label="Search folders"
+            placeholder="Search the folder list…"
           />
-        </div>
-
-        <div style={{ width: 320 }}>
-          <Segment value={sort} options={SORTS} onChange={setSort} />
-        </div>
-
-        <span style={{ ...mono, fontSize: 12, color: C.faint, flexShrink: 0 }}>
-          {rows.length === projects.length
-            ? `${projects.length} folders`
-            : `${rows.length}/${projects.length} folders`}
         </span>
-      </div>
+        <Choice label="Order" value={sort} onChange={setSort}
+          options={SORTS.map((s) => ({ key: s.key, label: s.label }))} />
+      </Card>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-        {rows.length ? (
-          <div style={{
-            display: 'grid', gap: 16,
-            gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))',
-            alignItems: 'stretch',
-          }}>
-            {rows.map((r) => (
-              <Card
-                key={r.path} row={r}
-                onNew={() => onNewChatIn(r.path)}
-                onOpen={(chatId) => focus && onOpenChat(focus, chatId)}
-              />
-            ))}
-          </div>
-        ) : (
-          <Empty
-            title={projects.length ? 'No folder matches' : 'The folder list is empty'}
-            hint={projects.length
-              ? 'Clear the search box.'
-              : 'Nothing shows up under this computer’s allowed roots.'}
-          />
-        )}
+      <Table
+        columns={COLUMNS}
+        rows={rows.map((r) => {
+          const state = r.awaiting ? 'asking' : r.running ? 'running' : 'quiet';
+          const newest = r.chats[0] ?? null;
+          return {
+            key: r.path,
+            tone: r.awaiting ? ('amber' as const) : undefined,
+            wash: r.awaiting > 0,
+            title: r.path,
+            cells: [
+              <Well mark={(r.name.trim()[0] ?? '?').toUpperCase()} />,
+              <NameCell title={r.name} note={tilde(r.path)} />,
+              gitCell(r),
+              r.git?.subject
+                ? <NameCell title={<span style={{ fontWeight: 400, fontSize: 13 }}>{r.git.subject}</span>}
+                    note={[ago(r.git.committed_at), r.git.author].filter(Boolean).join(' · ')} />
+                : <Cell text="nothing committed" tone="ink3" />,
+              <Cell
+                text={r.chats.length
+                  ? `${STATE_MARK[state]} ${r.chats.length} open`
+                  : 'none open'}
+                tone={r.awaiting ? 'amber' : r.running ? 'run' : 'ink3'}
+              />,
+              <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                {newest && (
+                  <Button small face="outline" label="Open"
+                    title={newest.title || 'the newest chat in this folder'}
+                    onClick={() => focus && onOpenChat(focus, newest.id)} />
+                )}
+                <Button small face={newest ? 'outline' : 'ink'} label="New"
+                  title={`Start a chat in ${r.name}`}
+                  onClick={() => onNewChatIn(r.path)} />
+              </span>,
+            ],
+          };
+        })}
+        empty={projects.length
+          ? 'No folder matches what is in the box above.'
+          : 'Nothing shows up under this computer’s allowed roots.'}
+      />
 
-        {gitMissing && rows.length ? (
-          <div style={{ ...ell, fontSize: 12, color: C.faint, padding: '20px 4px 4px' }}>
-            No git information came from this computer — restart the daemon and the branch,
-            dirty-file count and last commit appear on the cards.
-          </div>
-        ) : null}
+      {gitMissing && (
+        <Note
+          tone="ink3" icon={P.branch} title="No git information came from this computer"
+          body="Restart the daemon and the branch, the changed-file count and the last commit
+                appear in the two middle columns."
+        />
+      )}
+
+      <div style={{ ...mono, fontSize: 12.5, color: T.ink3 }}>
+        every folder here is on {slot.info?.name || slot.cfg.name} · the panel reads them and
+        never holds one
       </div>
-    </div>
+    </>
   );
 }

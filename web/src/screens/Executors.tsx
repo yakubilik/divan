@@ -65,7 +65,7 @@ export function Executors({ view, onView }: {
             <ExecutorBadge executor={e.face} />,
             <NameCell title={e.who} />,
             <Cell text={e.kind} style={{ fontSize: 12.5 }} />,
-            <Cell text={e.machine || '—'} />,
+            <Cell text={e.machine || 'no machine'} tone={e.machine ? undefined : 'ink3'} />,
             <Cell text={e.doing} style={{ color: T.ink2 }} />,
             <Tag label={e.says} tone={e.tone} />,
           ],
