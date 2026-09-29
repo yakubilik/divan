@@ -67,7 +67,7 @@ const COLUMNS: Column[] = [
   { label: 'git', width: 'minmax(0, 1fr)' },
   { label: 'last commit', width: 'minmax(0, 1.2fr)' },
   { label: 'chats', width: '110px' },
-  { width: '104px' },
+  { width: '150px' },
 ];
 
 /** The one line of git a row can carry. Counts come straight from

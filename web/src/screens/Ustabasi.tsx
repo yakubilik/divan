@@ -291,7 +291,7 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
           {/* Whether the queue is alive at all. Tiles cannot tell you this:
               a supervisor that died leaves every tile exactly as it was. */}
           <Pill
-            dot={stale ? 'stuck' : 'running'}
+            dot={tickAge == null ? 'quiet' : stale ? 'stuck' : 'running'}
             label={tickAge == null ? 'never ticked'
               : stale ? `silent for ${duration(tickAge * 1000)}`
               : `ticked ${duration(tickAge * 1000)} ago`}

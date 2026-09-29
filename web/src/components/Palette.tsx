@@ -147,8 +147,11 @@ export function Palette({ commands, onOpenChat, onNewChatIn, onClose }: {
                 <span data-i={i} onMouseEnter={() => setCursor(i)} style={{ display: 'block' }}>
                   <Row
                     first
-                    title={r.label} mark={r.mark === 'folder'}
-                    tone={r.danger ? 'red' : on ? 'ink2' : undefined} wash={on}
+                    // `Row` colours its meta in the tone, not its title, and a
+                    // command that stops every session has to read as one.
+                    title={r.danger ? <span style={{ color: T.red }}>{r.label}</span> : r.label}
+                    mark={r.mark === 'folder'}
+                    tone={on ? 'ink2' : undefined} wash={on}
                     meta={r.hint ?? null}
                     lead={r.mark === 'chat-claude' || r.mark === 'chat-codex'
                       ? <ProviderMark provider={r.mark === 'chat-claude' ? 'claude' : 'codex'} />

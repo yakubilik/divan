@@ -15,13 +15,6 @@
 import { createRoot } from 'react-dom/client';
 import { themeCss, type Scheme } from '../src/lib/theme';
 import { Gallery } from './divan-gallery';
-import { Fleet } from '../src/screens/Fleet';
-import { Projects } from '../src/screens/Projects';
-import { Agents } from '../src/screens/Agents';
-import { Terminal } from '../src/screens/Terminal';
-import { Screen } from '../src/screens/Screen';
-import { Update } from '../src/screens/Update';
-import { Preferences } from '../src/screens/Preferences';
 import { Onboarding } from '../src/screens/Onboarding';
 import { Ustabasi } from '../src/screens/Ustabasi';
 import { Sidebar } from '../src/components/Sidebar';
@@ -38,6 +31,7 @@ import { NewChat } from '../src/components/NewChat';
 import { ChatMenu } from '../src/components/ChatMenu';
 import { ChatDetails } from '../src/components/ChatDetails';
 import { Lightbox } from '../src/components/Lightbox';
+import { Palette } from '../src/components/Palette';
 import { FieldSheet } from '../src/components/FieldSheet';
 import { TicketChat } from '../src/components/TicketChat';
 import { toneFace } from '../src/lib/theme';
@@ -102,14 +96,26 @@ const board = merge(boards(NOW).busy.map((host) => ({
   },
 })), NOW);
 
+/** The pages of the Machine place, drawn inside it. Four of them are a column
+ *  of blocks and nothing else — the place around them is what carries their
+ *  scroll, their padding and their width — so rendering one on its own lays
+ *  its sections out side by side and measures a screen nobody will ever see.
+ *  This is the composition the panel actually draws. */
+const inDrawer = (view: string) => (
+  <Machine
+    view={view as any} onView={noop} fleet={board} onOpenChat={noop} onNewChat={noop}
+    onNewChatIn={noop} onStartChat={noop} onPeek={noop}
+  />
+);
+
 const SCREENS: [string, React.ReactNode][] = [
-  ['Fleet', <Fleet onOpenChat={noop} onNewChat={noop} />],
-  ['Projects', <Projects onNewChatIn={noop} onOpenChat={noop} />],
-  ['Agents', <Agents onStartChat={noop} />],
-  ['Terminal', <Terminal onPeek={noop} onNewChat={noop} />],
-  ['Screen', <Screen />],
-  ['Update', <Update />],
-  ['Preferences', <Preferences />],
+  ['Fleet', inDrawer('fleet')],
+  ['Projects', inDrawer('projects')],
+  ['Agents', inDrawer('agents')],
+  ['Terminal', inDrawer('terminal')],
+  ['Screen', inDrawer('screen')],
+  ['Update', inDrawer('update')],
+  ['Preferences', inDrawer('preferences')],
   ['Onboarding', <Onboarding onPaired={noop} />],
   ['Ustabasi', <Ustabasi />],
   ['Sidebar', <Sidebar
@@ -178,6 +184,12 @@ const SCREENS: [string, React.ReactNode][] = [
  *  or they would all be stacked on the same corner of the window. */
 const OVERLAYS: [string, React.ReactNode][] = [
   ['Modal', <Modal onClose={noop}>Anything at all.</Modal>],
+  // What ⌘K opens, over the same made-up computer: the chats, the folders and
+  // the panel's own commands, which is every kind of row it can draw.
+  ['Palette', <Palette
+    commands={[{ id: 'theme', label: 'Light theme', hint: 'following this computer', run: noop },
+               { id: 'stop-all', label: 'Stop every session', hint: '2 running', danger: true, run: noop }]}
+    onOpenChat={noop} onNewChatIn={noop} onClose={noop} />],
   ['ApprovalModal', <ApprovalModal
     pending={pending() as any} chat={chat() as any} queued={2}
     onRespond={noop} onOpenChat={noop} onClose={noop} />],

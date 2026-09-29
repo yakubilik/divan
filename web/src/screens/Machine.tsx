@@ -23,7 +23,7 @@ import { useEffect, useRef } from 'react';
 import { MACHINE_ROWS, machineRow, updateWaiting, type View } from '../lib/shell';
 import { useFleet } from '../lib/fleet';
 import { signIns, signInsWanting, quotaVerdict, useThresholds } from '../lib/machine';
-import { T } from '../lib/theme';
+import { SIZE, T } from '../lib/theme';
 import type { DivanView } from '../lib/divan';
 import { glyph } from '../ui/kit';
 import { SidePanel, type PanelItem } from '../ui/divan';
@@ -148,7 +148,12 @@ export function Machine(props: MachineProps) {
       flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch',
       overflow: 'hidden', background: T.bg,
     }}>
-      <div style={{ flex: 'none', padding: '28px 12px 28px 20px', overflowY: 'auto' }}>
+      {/* As wide as the column itself and no wider: the sentence under the
+          rows is what a `flex: none` box would otherwise be measured by, and
+          one long line of it pushed this column to three hundred and eighty. */}
+      <div style={{
+        flex: 'none', width: SIZE.sidePanel, padding: '28px 12px 28px 20px', overflowY: 'auto',
+      }}>
         <SidePanel
           title="Machine" note={machineNote(fleet)}
           items={items} value={here} onChange={(key) => onView(key as View)}

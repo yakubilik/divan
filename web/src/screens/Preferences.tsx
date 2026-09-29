@@ -22,7 +22,7 @@
  *     folder; there is no request that sets it.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { T, useTheme, type Tone } from '../lib/theme';
+import { SIZE, T, useTheme, type Tone } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import {
   Button, Card, Cell, Choice, FieldRow, Note, Quoted, Row, SectionHeader, SidePanel,
@@ -1096,7 +1096,12 @@ export function Preferences() {
       {/* Web15's own column, the same part the drawer one level up is
           navigated by — this page is a drawer inside a drawer, and drawing it
           with a second kind of list would say it was something else. */}
-      <div style={{ flex: 'none', padding: '28px 12px 28px 20px', overflowY: 'auto' }}>
+      {/* As wide as the column itself and no wider: the sentence under the
+          rows is what a `flex: none` box would otherwise be measured by, and
+          one long line of it pushed this column to three hundred and eighty. */}
+      <div style={{
+        flex: 'none', width: SIZE.sidePanel, padding: '28px 12px 28px 20px', overflowY: 'auto',
+      }}>
         <SidePanel
           title="This computer"
           note={slot ? (slot.info?.name || slot.cfg.name) : 'Nothing is paired yet.'}

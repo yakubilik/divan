@@ -130,7 +130,7 @@ const SESSIONS: Column[] = [
   { label: 'doing now', width: 'minmax(0, 1.3fr)' },
   { label: 'time', width: '72px' },
   { label: 'cost', width: '72px' },
-  { width: '104px' },
+  { width: '96px' },
 ];
 
 function sessionRow(r: Running, live: Live, now: number,
