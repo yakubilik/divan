@@ -145,6 +145,32 @@ _git("commit", "-qm", "three weeks ago", at=time.time() - 21 * 24 * 3600)
 (ROOT / "babysee" / "new.txt").write_text("y")
 _git("add", "-A")
 _git("commit", "-qm", "this morning", at=time.time() - 120)
+# …and it has a GitHub remote, because the one reading on the snapshot that
+# leaves this machine is the code host's and it is only ever made for a checkout
+# whose `origin` is one. isghocam has none, which is the other half of that.
+_git("remote", "add", "origin", "git@github.com:t/babysee.git")
+
+
+class GH:
+    """`gh`, stubbed. Nothing in this file talks to the network, so the one
+    function in `divan` that would is replaced here before anything can call
+    it: `GH.answer` is what `gh pr list` would have printed, and `None` is a
+    machine with no `gh`, no sign-in or no network."""
+
+    answer: str | None = None
+
+
+divan._gh = lambda path, *args: GH.answer
+
+
+def pull(number: int, title: str, rollup: list | None, *, minutes: int = 0,
+         draft: bool = False) -> dict:
+    """One row of what `gh pr list --json` prints."""
+    at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - minutes * 60))
+    return {"number": number, "title": title, "headRefName": f"pr/{number}",
+            "isDraft": draft, "updatedAt": at, "statusCheckRollup": rollup}
+
+
 # Outside every root, and therefore no place to start a coding agent: the home
 # directory of the machine running this, as far as the policy is concerned.
 OUTSIDE = tmp / "outside-every-root"
@@ -1371,6 +1397,53 @@ async def wire() -> None:
           divan.activity_of([str(tmp / "unread")], budget_s=-1), {})
     holds("…while one that was read before still travels, budget or no budget",
           str(ROOT / "babysee") in divan.activity_of([str(ROOT / "babysee")], budget_s=-1))
+
+    # What the code host says about those same repositories: the one reading on
+    # the answer that leaves this machine, and the only source for a pull
+    # request or a check.
+    divan._pulls_cache.clear()
+    GH.answer = json.dumps([
+        pull(412, "Bulk invite from CSV",
+             [{"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"},
+              {"__typename": "StatusContext", "state": "PENDING"}], minutes=40),
+        pull(410, "GBP price localisation",
+             [{"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "FAILURE"},
+              {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "TIMED_OUT"},
+              {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"}], minutes=5),
+        pull(409, "Invoice PDF redesign", [], minutes=90, draft=True)])
+    fresh = await host.h_divan_snapshot(None, {})
+    mine = fresh["pulls"].get(str(ROOT / "babysee")) or {"open": []}
+    check("a repository's open pull requests travel, newest first",
+          [p["number"] for p in mine["open"]], [410, 412, 409])
+    check("…each with its title and the branch it is on",
+          [(p["title"], p["branch"]) for p in mine["open"]][:1],
+          [("GBP price localisation", "pr/410")])
+    check("the checks failing on one are counted, and the rest are a word",
+          [(p["checks"], p["failing"]) for p in mine["open"]],
+          [("failing", 2), ("pending", 0), (None, 0)])
+    holds("…and a pull request nobody has finished is marked as a draft",
+          [p["number"] for p in mine["open"] if p["draft"]] == [409], repr(mine["open"]))
+
+    divan._pulls_cache.clear()
+    GH.answer = "[]"
+    empty = await host.h_divan_snapshot(None, {})
+    check("a repository with nothing open answers with an empty list, not with nothing",
+          empty["pulls"].get(str(ROOT / "babysee"), {}).get("open"), [])
+
+    divan._pulls_cache.clear()
+    GH.answer = None
+    none = await host.h_divan_snapshot(None, {})
+    holds("a machine with no gh, no sign-in or no network has no entry at all",
+          str(ROOT / "babysee") not in none["pulls"], repr(none["pulls"]))
+    holds("…and neither has a checkout that is not on the code host",
+          divan.github_remote(str(ROOT / "isghocam")) is None
+          and divan.read_pulls(str(ROOT / "isghocam")) is None)
+    check("the remote is read off the checkout and nowhere else",
+          divan.github_remote(str(ROOT / "babysee")), "t/babysee")
+    divan._pulls_cache.clear()
+    check("a repository there was no time to ask about is absent rather than holding up the answer",
+          divan.pulls_of([str(ROOT / "babysee")], budget_s=-1), {})
+    GH.answer = "[]"
 
     q = snapshot["quota"]
     check("the quota is this machine's, read off the pool", q["accounts"], len(ACCOUNTS))

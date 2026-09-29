@@ -55,7 +55,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import threading
@@ -1208,6 +1210,11 @@ class Board:
             "agents": [self._agent_view(c, machine, names.get(c["project_id"], ""))
                        for c in cards + unfiled if c["agent_status"] == "running"],
             "activity": activity_of([path for p in projects for path in p["repos"]]),
+            # …and what the code host says about those same repositories, which
+            # is the one reading here that leaves the machine. Absent per path
+            # where nobody could be asked, and an empty list where nothing is
+            # open: the phone draws the two differently.
+            "pulls": pulls_of([path for p in projects for path in p["repos"]]),
         }
 
     def _agent_view(self, card: dict, machine: str, project: str) -> dict:
@@ -1346,6 +1353,193 @@ def _float(text: str | None) -> float | None:
         return float((text or "").strip())
     except (TypeError, ValueError):
         return None
+
+
+# ── what the code host says about a repository ───────────────────────────────
+# The board and the git history above are both *here*: this computer's database
+# and this computer's checkouts. A pull request is neither. It lives on the code
+# host, and the only thing on this machine that can ask about one is the `gh`
+# already signed in for whoever runs this daemon — so this is the one reading on
+# the snapshot that leaves the machine, and it is fenced accordingly.
+#
+#   * **Only a repository whose `origin` is on GitHub**, read out of the local
+#     git config and nowhere else. No remote, no reading, no request.
+#   * **Only where `gh` is installed and answers.** Where it is not, the map has
+#     no entry for that path and the phone says the source is not connected —
+#     which is a different sentence from "nothing is open", and the branch page
+#     draws the two differently. An empty list is an answer; a missing entry is
+#     the absence of one.
+#   * **A refusal is remembered as long as an answer is.** A laptop with no
+#     network must not spend part of every poll finding that out again, so
+#     `None` is cached exactly like a reading.
+#   * **And the whole set runs against a budget**, as the git readings do: the
+#     phone allows a machine eight seconds for everything.
+#
+# Nothing here is written down. The cards, the board and the marks on them are
+# the daemon's; what the code host says is read on the way past and cached in
+# memory, because it is true for ten minutes and false the moment somebody
+# merges something.
+
+#: Long enough that a poll is not a request: pull requests do not change minute
+#: to minute, and every miss is a call over the network per repository.
+_PULLS_TTL = 600.0
+_pulls_cache: dict[str, tuple[float, dict | None]] = {}
+
+#: Shorter than git's, because this one can hang on DNS rather than on disk.
+_GH_TIMEOUT_S = 2.5
+
+#: …and a smaller budget than the git readings have, for the same reason. It is
+#: spent on new readings only; everything already known travels for free.
+_PULLS_BUDGET_S = 1.5
+
+#: How many of a repository's open pull requests travel. A phone draws the first
+#: few on a branch page; a repository with forty open is a repository whose
+#: fortieth is not news.
+_PULLS_LIMIT = 10
+
+#: A check run or a commit status that has finished badly. `gh` reports the two
+#: in one list and they do not use the same word for it.
+_FAILING = {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE",
+            "STALE", "ERROR"}
+
+#: …and one that has not finished at all.
+_PENDING = {"PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"}
+
+_GH_REMOTE = re.compile(
+    r"^(?:https://|git@|ssh://git@)github\.com[:/]+([^/]+)/(.+?)(?:\.git)?/?$")
+
+
+def github_remote(path: str) -> str | None:
+    """`owner/name` where this checkout's `origin` is on GitHub, else `None`.
+
+    Read off the local git config, which is the whole point: a folder that is
+    not a GitHub checkout is never the subject of a request, and working that
+    out costs one `git` call rather than one round trip.
+    """
+    try:
+        r = subprocess.run(("git", "-C", path, "remote", "get-url", "origin"),
+                           capture_output=True, text=True, timeout=_GIT_TIMEOUT_S)
+    except Exception:
+        return None
+    if r.returncode:
+        return None
+    m = _GH_REMOTE.match((r.stdout or "").strip())
+    return f"{m.group(1)}/{m.group(2)}" if m else None
+
+
+def _gh(path: str, *args: str) -> str | None:
+    """`gh` in that checkout, or `None` where it is absent, slow or said no.
+
+    The one seam in this file a test replaces: everything above it is local and
+    can be stood up in a temporary folder, and this cannot.
+    """
+    if not shutil.which("gh"):
+        return None
+    env = {**os.environ, "GH_NO_UPDATE_NOTIFIER": "1", "GH_PROMPT_DISABLED": "1",
+           "NO_COLOR": "1", "CLICOLOR": "0"}
+    try:
+        r = subprocess.run(("gh", *args), cwd=path, capture_output=True, text=True,
+                           timeout=_GH_TIMEOUT_S, env=env)
+    except Exception:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def _checks(rollup: Any) -> tuple[str | None, int]:
+    """One pull request's checks, as a word and a count of what is failing.
+
+    A word rather than the runs themselves: a phone draws `× 2 checks` and has
+    no use for forty check names, and the ones that matter are the failing ones.
+    `None` where the pull request has no checks at all, which is not the same as
+    passing — a repository with no CI must not be drawn with a green tick.
+    """
+    if not isinstance(rollup, list) or not rollup:
+        return (None, 0)
+    failing = pending = 0
+    for c in rollup:
+        if not isinstance(c, dict):
+            continue
+        state = str(c.get("conclusion") or c.get("state") or "").upper()
+        status = str(c.get("status") or "").upper()
+        if state in _FAILING:
+            failing += 1
+        elif not state or state in _PENDING or (status and status != "COMPLETED"):
+            pending += 1
+    if failing:
+        return ("failing", failing)
+    if pending:
+        return ("pending", 0)
+    return ("passing", 0)
+
+
+def _at(text: Any) -> float | None:
+    """A code host's timestamp as seconds, or `None`."""
+    try:
+        return datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def read_pulls(path: str, now: float | None = None) -> dict | None:
+    """What is open on one repository, and how the checks on it stand.
+
+    `{"at": when this was read, "open": [...]}`, newest first. `None` where
+    nobody could be asked — not a GitHub checkout, no `gh`, not signed in, no
+    network — and a repository with nothing open is the same answer with an
+    empty list in it. The phone needs both: "nothing to review" and "nobody
+    asked" are different things to see on a branch page.
+    """
+    now = now or time.time()
+    if github_remote(path) is None:
+        return None
+    out = _gh(path, "pr", "list", "--state", "open", "--limit", str(_PULLS_LIMIT),
+              "--json", "number,title,headRefName,isDraft,updatedAt,statusCheckRollup")
+    if out is None:
+        return None
+    try:
+        rows = json.loads(out or "[]")
+    except Exception:
+        return None
+    if not isinstance(rows, list):
+        return None
+    open_: list[dict] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        word, failing = _checks(r.get("statusCheckRollup"))
+        open_.append({"number": int(r.get("number") or 0),
+                      "title": str(r.get("title") or ""),
+                      "branch": str(r.get("headRefName") or ""),
+                      "draft": bool(r.get("isDraft")),
+                      "checks": word, "failing": failing,
+                      "at": _at(r.get("updatedAt"))})
+    open_.sort(key=lambda p: -(p["at"] or 0))
+    return {"at": now, "open": open_}
+
+
+def pulls_of(paths: list[str], now: float | None = None,
+             budget_s: float = _PULLS_BUDGET_S) -> dict[str, dict]:
+    """The same for every repository a machine's products own, keyed by path.
+
+    Keyed by path for the reason the git readings are: one product's answer is
+    the union of its repositories, and the same checkout on two machines must
+    not be read as two. Out of time is the same as not read yet — absent, and on
+    the next poll.
+    """
+    now = now or time.time()
+    out: dict[str, dict] = {}
+    deadline = time.monotonic() + budget_s
+    for path in dict.fromkeys(paths):
+        hit = _pulls_cache.get(path)
+        cold = hit is None or now - hit[0] >= _PULLS_TTL
+        if cold and time.monotonic() >= deadline:
+            info = hit[1] if hit else None
+        else:
+            info = read_pulls(path, now) if cold else hit[1]
+            _pulls_cache[path] = (now, info)
+        if info is not None:
+            out[path] = info
+    return out
 
 
 def _waiting(card: dict) -> bool:

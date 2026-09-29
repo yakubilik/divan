@@ -260,6 +260,39 @@ a zero. What a product earns — the MRR, the DAU, the visits the frames put at 
 top of a project card — has no source connected yet and is absent for the same
 reason.
 
+### What the code host says
+
+The board and the git history above are both *here* — this computer's database
+and this computer's checkouts. A pull request is neither, and the only thing on
+the machine that can ask about one is the `gh` already signed in for whoever runs
+the daemon. So `divan.snapshot` carries a `pulls` map beside `activity`, keyed by
+the same repository paths, and it is the one reading on the answer that leaves
+the machine.
+
+Each entry is `at` (when it was read) and `open` — the open pull requests of that
+repository, newest first, each with its `number`, `title`, `branch`, `draft`, and
+its checks as a word: `failing`, `pending`, `passing`, or `null` where the pull
+request has no checks at all. `failing` is the count of checks that are failing
+and is zero otherwise. A word rather than the runs themselves, because a phone
+draws `× 2 checks` and has no use for forty check names — and `null` is not
+`passing`: a repository with no CI on it has not passed anything, and a green
+tick nobody measured is the one figure a branch page must never show.
+
+**An empty `open` is an answer and a missing entry is not.** The daemon asks only
+about a checkout whose `origin` is a GitHub remote, read out of the local git
+config, and only through a `gh` that is installed and answers; a repository that
+is neither has no entry at all. A client has to be able to tell "nothing to
+review" from "nobody could be asked", and the branch page draws the two
+differently (`app/src/branch.ts pulls`).
+
+The reading is cached for ten minutes — pull requests do not change minute to
+minute and every miss is a request over the network — a refusal is cached exactly
+as long as an answer, so a laptop with no network does not spend part of every
+poll finding that out again, and the whole set runs against a budget of its own,
+smaller than the git readings' because this one can hang on DNS rather than on
+disk. A repository there was no time to ask about is absent and arrives on the
+next poll.
+
 ### One view across several machines
 
 Every Divan surface is every paired computer at once. A project is the context
