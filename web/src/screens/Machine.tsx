@@ -17,7 +17,7 @@
 import { MACHINE_ROWS, type View } from '../lib/shell';
 import { T } from '../lib/theme';
 import type { DivanView } from '../lib/divan';
-import { P } from '../ui/kit';
+import { glyph } from '../ui/kit';
 import { SidePanel, type PanelItem } from '../ui/divan';
 import { Dashboard } from './Dashboard';
 import { Terminal } from './Terminal';
@@ -60,7 +60,7 @@ export function Machine(props: MachineProps) {
   const items: PanelItem[] = MACHINE_ROWS.map((row) => ({
     key: row.view,
     label: row.label,
-    icon: (P as Record<string, string>)[row.icon],
+    icon: glyph(row.icon),
     // The frame puts a hollow dot on the row that has something wrong under it,
     // and the machines are the only row on this list that can.
     // …drawn in the amber of something that wants a person, which is the state

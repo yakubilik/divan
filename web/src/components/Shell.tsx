@@ -14,7 +14,7 @@
  */
 import { setThemeChoice, useTheme } from '../lib/theme';
 import { BarChip, BarDivider, BarStamp, NavItem, Pill, TopBar } from '../ui/divan';
-import { P } from '../ui/kit';
+import { P, glyph } from '../ui/kit';
 import {
   PLACES, PLACE_ICON, PLACE_LABEL, PLACE_VIEW, placeOf, type Chip, type Place, type View,
 } from '../lib/shell';
@@ -93,7 +93,7 @@ export function Shell({ view, onView, now, chips, onProject, children }: {
       <TopBar>
         {PLACES.map((place: Place) => (
           <NavItem
-            key={place} label={PLACE_LABEL[place]} icon={PLACE_ICON[place]}
+            key={place} label={PLACE_LABEL[place]} icon={glyph(PLACE_ICON[place])}
             on={place === here}
             title={place === here ? undefined : `Go to ${PLACE_LABEL[place]}`}
             // A place you are already in is not re-entered: it would drop the

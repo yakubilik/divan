@@ -272,3 +272,9 @@ export const P = {
      + 'M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4',
   moon: 'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z',
 } as const;
+
+/** A glyph by the name a table of rows or places calls it — the shell keeps its
+ *  lists away from the drawing, so what it carries is the name and this is where
+ *  that becomes a path. An unknown name draws nothing rather than a broken
+ *  shape, and `test-shell.mjs` holds every name in those lists to this. */
+export const glyph = (name: string): string => (P as Record<string, string>)[name] ?? '';

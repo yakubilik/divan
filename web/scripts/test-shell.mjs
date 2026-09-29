@@ -206,8 +206,8 @@ group('three places, and nothing beside them');
     eq(shell.PLACES, ['dashboard', 'chat', 'machine']));
   ok('…each with the frame’s own word for it',
     eq(shell.PLACES.map((p) => shell.PLACE_LABEL[p]), ['Dashboard', 'Chat', 'Machine']));
-  ok('…and a glyph out of the panel’s own vocabulary',
-    shell.PLACES.every((p) => typeof kit.P[shell.PLACE_ICON[p]] === 'string'));
+  ok('…and a glyph out of the panel’s own vocabulary, which resolves to a path',
+    shell.PLACES.every((p) => kit.glyph(shell.PLACE_ICON[p]).length > 8));
   ok('…and a page it opens on', shell.PLACES.every((p) => !!shell.PLACE_VIEW[p]));
   const everyView = ['overview', ...shell.OLD_PANEL.map((o) => o.view)];
   ok('every screen is in exactly one place',
@@ -222,7 +222,7 @@ group('three places, and nothing beside them');
     shell.PLACE_VIEW.machine === shell.MACHINE_ROWS[0].view
     && shell.MACHINE_ROWS[0].view === 'machines');
   ok('every row of it says what its page is for, and is drawn with a glyph',
-    shell.MACHINE_ROWS.every((r) => r.note.length > 12 && typeof kit.P[r.icon] === 'string'));
+    shell.MACHINE_ROWS.every((r) => r.note.length > 12 && kit.glyph(r.icon).length > 8));
 }
 
 // ── 2 · every place the old panel had is still reachable ───────────────────
@@ -459,6 +459,13 @@ group('the bar is built out of the parts');
   ok('…the one you are in filled with the second surface, the others in the meta grey',
     s.filter((d) => d.height === '34px' && d.background === v('s2')).length === 1
     && s.filter((d) => d.height === '34px' && d.color === v('ink3')).length === 2);
+  // A glyph is named in the shell's own lists and drawn from the icon table, so
+  // a name that never became a path draws an empty `<path d="grid">` and a
+  // reading of the source cannot tell. This is the drawing, measured.
+  ok('…each with its glyph actually drawn, at the frames’ 17 pt',
+    (bar.match(new RegExp(`<svg width="${K.SIZE.rowIcon}"[^>]*>\\s*<path d="[Mm][^"]{8,}"`, 'g')) ?? [])
+      .length >= 3,
+    (bar.match(/<path d="[^"]*"/g) ?? []).slice(0, 4).join(' '));
   ok('the rule between the places and the chips is the frames’ own',
     s.some((d) => d.width === '1px' && d.height === '22px' && d.background === v('line2')));
   ok('the chips are pills, the chosen one filled with the ink',

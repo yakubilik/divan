@@ -27,7 +27,10 @@ import { Ustabasi } from '../src/screens/Ustabasi';
 import { Sidebar } from '../src/components/Sidebar';
 import { Machine } from '../src/screens/Machine';
 import { Overview } from '../src/screens/Overview';
+import { Shell } from '../src/components/Shell';
 import { merge } from '../src/lib/divan';
+import { chips } from '../src/lib/shell';
+import { studio } from './divan-fixture.js';
 import { ChatView } from '../src/components/ChatView';
 import { Modal } from '../src/components/Modal';
 import { ApprovalModal } from '../src/components/ApprovalModal';
@@ -85,6 +88,13 @@ const emptyView = merge([{ key: 'studio', name: 'studio', state: {
   snapshot: null, at: null, reachable: false, error: null, old: false,
 } }], Date.now() / 1000);
 
+// …and one that has, so that the project bar has products in it. This is the
+// page to hold up against Web12 W1 and Web13 W3: the bar, its chips, the clock
+// and the switch, over the place they belong to.
+const board = merge([{ key: 'studio', name: 'studio', state: {
+  snapshot: studio(), at: Date.now() / 1000, reachable: true, error: null, old: false,
+} }], Date.now() / 1000);
+
 const SCREENS: [string, React.ReactNode][] = [
   ['Dashboard', <Dashboard onOpenChat={noop} onNewChat={noop} />],
   ['Projects', <Projects onNewChatIn={noop} onOpenChat={noop} />],
@@ -101,6 +111,10 @@ const SCREENS: [string, React.ReactNode][] = [
   // The shell and the two places this ticket draws, over the same made-up
   // computer. `Overview` is handed a merged view rather than a store, so it is
   // the one screen here that can be shown with no machine answering as well.
+  ['Shell', <Shell view="overview" onView={noop} now={board.now}
+    chips={chips(board, null)} onProject={noop}>
+    <Overview view={board} project={null} onProject={noop} />
+  </Shell>],
   ['Overview', <Overview view={emptyView} project={null} onProject={noop} />],
   ['Machine', <Machine
     view="machines" onView={noop} fleet={emptyView} onOpenChat={noop} onNewChat={noop}
