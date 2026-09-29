@@ -63,6 +63,8 @@ QUEUE.mkdir()
 os.environ["USTABASI_STATE_DIR"] = str(QUEUE)
 
 from remote_ai_chat import divan                                   # noqa: E402
+from remote_ai_chat.accounts import Account                        # noqa: E402
+from remote_ai_chat.pool import Pool, Settings as PoolSettings     # noqa: E402
 from remote_ai_chat import ustabasi as u                           # noqa: E402
 from remote_ai_chat.db import DB, SCHEMA as CHAT_SCHEMA            # noqa: E402
 from remote_ai_chat.security import PathPolicy                     # noqa: E402
@@ -113,18 +115,34 @@ def fresh_db(name: str) -> DB:
     return DB(tmp / f"{name}.sqlite")
 
 
+#: Two sign-ins, so that "what is left on this machine" has more than one
+#: account to be the best of. The limit readings themselves are written per
+#: Host, because a machine out of quota and a machine with room are the same
+#: board asked twice.
+ACCOUNTS = {
+    "default-claude": Account(id="default-claude", provider="claude", label="this computer"),
+    "acct-2": Account(id="acct-2", provider="claude", label="second", home="/tmp/a2",
+                      created_at=2),
+}
+
+
 class Host:
     """Just enough of `Server` for the board's handlers: a database, a path
-    policy and this computer's name. Constructing a real one would open the
-    daemon's own config and its own database."""
+    policy, this computer's name and an account pool. Constructing a real one
+    would open the daemon's own config and its own database."""
 
     def __init__(self, db: DB, host_name: str = "this-mac"):
         self.db = db
         self.policy = policy
         self.cfg = types.SimpleNamespace(host_name=host_name)
+        # The plan readings this machine has, keyed as the server keys them.
+        # Written by the checks that are about quota and empty for the rest.
+        self.limits: dict[str, list[dict]] = {}
+        self.pool = Pool(PoolSettings.from_dict({"enabled": True}),
+                         lambda: ACCOUNTS, lambda k: self.limits.get(k, []))
         for attr in dir(Server):
             if (attr.startswith("h_divan_") or attr == "h_ustabasi_list"
-                    or attr == "_checked_repo"):
+                    or attr in ("_checked_repo", "_mirrored_queue")):
                 setattr(self, attr, getattr(Server, attr).__get__(self))
 
 
@@ -832,6 +850,122 @@ async def wire() -> None:
     cleared = await host.h_divan_card_executor(None, {"card_id": created["id"],
                                                       "executor": None})
     check("and cleared", cleared["executor"], None)
+
+    # ── 13 · one answer per machine ──────────────────────────────────────────
+    #
+    # The phone is paired with several computers and draws all of them at once.
+    # Asked project by project that is a dozen round trips per machine, and a
+    # dozen waits on one that is asleep, so everything a Divan screen needs
+    # comes back in one request — including which computer answered, when the
+    # answer was true, and what is left of the plans the agents run on.
+
+    now = time.time()
+    # A worker picks up ticket 3 again. Ticket 1's card was dragged to the Ice
+    # Box a few checks ago to prove the mirror moves nothing, and a card nobody
+    # is working is no use to a check about agents at work.
+    queue_status(3, "running")
+    worked = board.card_by_ustabasi(3)
+    # One sign-in a third of the way through a window that comes back in four
+    # hours, and one nothing has ever been measured on.
+    host.limits["acct-2"] = [{"window": "five_hour", "status": "allowed",
+                              "utilization": 0.36, "resets_at": now + 4 * 3600,
+                              "at": now}]
+    snapshot = await host.h_divan_snapshot(None, {})
+    check("the machine that answered says which one it is", snapshot["machine"], "this-mac")
+    holds("and when the answer was true",
+          abs(snapshot["at"] - time.time()) < 5, repr(snapshot.get("at")))
+    holds("every product is in it, with its line",
+          {p["name"] for p in snapshot["projects"]} >= {"babysee", "isghocam"}
+          and all(p["summary_line"] for p in snapshot["projects"]),
+          repr([p["name"] for p in snapshot["projects"]]))
+    check("the cards are the open board and nothing that is finished with",
+          {c["column"] for c in snapshot["cards"]} & {"done"}, set())
+    holds("which is not the whole board: the counts still say what is in done",
+          any(p["counts"]["done"] for p in snapshot["projects"]),
+          repr([p["counts"] for p in snapshot["projects"]]))
+    check("a card that has been given a machine carries it",
+          {c["machine"] for c in snapshot["cards"] if c["machine"]}, {"this-mac"})
+    # And one nobody assigned stays unassigned. The answer does not invent a
+    # machine for it: the reader knows which computer answered and falls back to
+    # that, which is where such a card would be worked anyway — a guess written
+    # into the field would be indistinguishable from somebody's decision.
+    holds("and one nobody assigned is left alone rather than guessed at",
+          any(c["machine"] is None for c in snapshot["cards"]),
+          repr([(c["title"], c["machine"]) for c in snapshot["cards"]]))
+    ids = {p["id"] for p in snapshot["projects"]}
+    check("and no card belongs to a project the answer never mentioned",
+          [c["id"] for c in snapshot["cards"] if c["project_id"] not in ids], [])
+
+    running = [a for a in snapshot["agents"]]
+    holds("the agents are the ones actually running",
+          bool(running) and {a["status"] for a in running} == {"running"},
+          repr([(a["title"], a["status"]) for a in running]))
+    holds("each saying what it is on, for which product, on which machine",
+          all(a["title"] and a["project"] and a["machine"] == "this-mac" for a in running),
+          repr(running))
+    asking = [c for c in snapshot["cards"] if c["agent_status"] == "asking"]
+    holds("a card that stopped to ask is not an agent at work",
+          bool(asking) and not any(a["card_id"] == asking[0]["id"] for a in running),
+          repr([a["card_id"] for a in running]))
+
+    q = snapshot["quota"]
+    check("the quota is this machine's, read off the pool", q["accounts"], len(ACCOUNTS))
+    holds("what is left is the roomiest sign-in's share of a window",
+          abs((q["left"] or 0) - 0.64) < 0.001, repr(q))
+    holds("with the time it goes back up",
+          q["resets_at"] and abs(q["resets_at"] - (now + 4 * 3600)) < 5, repr(q))
+    check("and nothing is spent", (q["spent"], q["blocked"]), (False, 0))
+
+    # Both sign-ins full, and one of them is not coming back for four hours:
+    # the machine cannot start an agent, and the honest thing to say is when it
+    # can rather than how much of nothing is left.
+    host.limits["acct-2"] = [{"window": "five_hour", "status": "rejected",
+                              "utilization": 1.0, "resets_at": now + 4 * 3600,
+                              "at": now}]
+    host.limits["default-claude"] = [{"window": "five_hour", "status": "rejected",
+                                      "utilization": 1.0, "resets_at": now + 5 * 3600,
+                                      "at": now}]
+    spent = (await host.h_divan_snapshot(None, {}))["quota"]
+    check("a machine whose every sign-in is full says so",
+          (spent["spent"], spent["blocked"], spent["left"]), (True, 2, 0.0))
+    holds("…and when work picks up again, which is the first one back",
+          spent["resets_at"] and abs(spent["resets_at"] - (now + 4 * 3600)) < 5, repr(spent))
+    host.limits.clear()
+    empty = (await host.h_divan_snapshot(None, {}))["quota"]
+    check("a machine nobody has run anything on has not run out of anything",
+          (empty["spent"], empty["left"], empty["unknown"]), (False, None, True))
+
+    # What a poll costs. The mirror reads statuses; the commit counts are a
+    # `git log` per worktree, one subprocess each, and on a real queue of
+    # twenty-five tickets they were three and a half seconds of a four-second
+    # answer — long enough for the phone's own timeout to give up on a computer
+    # that was answering perfectly well. The wall still asks for them.
+    real_git, asked = u._git, []
+    u._git = lambda *a, **kw: asked.append(a) or None
+    try:
+        await host.h_divan_snapshot(None, {})
+        check("a board poll does not pay for a git log per worktree", asked, [])
+        await host.h_ustabasi_list(None, {})
+        holds("…and the wall, which draws them, still asks", bool(asked), repr(asked))
+    finally:
+        u._git = real_git
+
+    check("the coding executor's own state comes along",
+          snapshot["queue"]["available"], True)
+    holds("including whether it is paused", "paused_until" in snapshot["queue"],
+          repr(snapshot["queue"]))
+
+    # The mirror is what makes any of it true, and a dashboard may never open
+    # the wall: a snapshot that only read the board would draw a worker that
+    # finished in the night as still running.
+    queue_status(3, "done")
+    after = await host.h_divan_snapshot(None, {})
+    check("the snapshot mirrors the queue on its way past",
+          board.card_by_ustabasi(3)["agent_status"], "verified")
+    check("so an agent that finished is no longer running anywhere in it",
+          [a["card_id"] for a in after["agents"] if a["ustabasi_id"] == 3], [])
+    check("and its card is still exactly where it was left",
+          board.card_by_ustabasi(3)["column"], worked["column"])
 
     for name, data, code in [
         ("h_divan_board", {"project_id": "nope"}, "no_such_project"),

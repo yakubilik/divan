@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useStore } from './store';
 import { oldHost, POLL_MS, RUN_POLL_MS, wall, type Wall } from './tickets';
 import { attach, silence, trim, turns, type RunSilence, type Turn } from './transcript';
+import { DIVAN_POLL_MS, entries, merge, type DivanView } from './divan';
 import type { Ticket, UstabasiSnapshot } from './protocol';
 
 /** The ustabasi queue, kept fresh for as long as a screen is looking at it.
@@ -147,4 +148,50 @@ export function useRun(ticketId: number): {
   }, [poll]));
 
   return { turns: list, live, loading, silence: quiet, jumped };
+}
+
+/** The Divan view of every paired computer, kept fresh while a screen is looking
+ *  at it.
+ *
+ *  `useDivanView`, not `useDivan`: the design system already has one of those
+ *  (`components/divan.tsx`) and it hands out tokens. A screen that reached for
+ *  the wrong one would be asking for a palette and getting a fleet.
+ *
+ *  Same shape as `useQueue` above and for the same reason — nothing on the other
+ *  end pushes, so the only way to know is to ask — with two differences that
+ *  come out of there being several computers rather than one.
+ *
+ *  It is slower. A dashboard is a minute's worth of gentle: the board moves when
+ *  a worker crosses a stage, which is minutes apart, and every tick is one
+ *  request per machine rather than one in total. A laptop that is asleep is
+ *  woken by each of them.
+ *
+ *  And it does not care which computer is active. The socket the phone holds
+ *  decides where a terminal opens and whose screen is mirrored; a board is every
+ *  machine at once, so this reads the paired list and the snapshots and nothing
+ *  else. Switching computers leaves what is on screen exactly as it was.
+ *
+ *  `now` comes from the same slow clock the ticket screens age their lines with,
+ *  which is what makes "unreachable · 2h 14m" go on being true while nobody
+ *  asks anything. */
+export function useDivanView(): DivanView & { reload: () => void } {
+  const hosts = useStore((s) => s.hosts);
+  const divan = useStore((s) => s.divan);
+  const loadDivan = useStore((s) => s.loadDivan);
+  const now = useNow();
+
+  const reload = useCallback(() => { void loadDivan(); }, [loadDivan]);
+
+  // Tied to focus rather than to being mounted: a dashboard stays mounted under
+  // the project page opened from it, and two screens polling four machines is
+  // eight requests for one answer.
+  useFocusEffect(useCallback(() => {
+    reload();
+    const timer = setInterval(reload, DIVAN_POLL_MS);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') reload(); });
+    return () => { clearInterval(timer); sub.remove(); };
+  }, [reload]));
+
+  const view = useMemo(() => merge(entries(hosts, divan), now), [hosts, divan, now]);
+  return { ...view, reload };
 }

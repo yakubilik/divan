@@ -8,8 +8,9 @@
  *  spinner that never stops, and a push about a red ticket has to land on the
  *  ticket rather than on the chat list.
  *
- *  `scripts/test-divan.cjs` is folded in at the end: the design system's checks
- *  have their own file, and this is the command that runs everything.
+ *  `scripts/test-divan.cjs` and `scripts/test-divan-merge.cjs` are folded in at
+ *  the end — the design system and the merged view across several machines each
+ *  have their own file — and this is the command that runs everything.
  *
  *  Run: node scripts/test-ustabasi.cjs
  */
@@ -1218,10 +1219,13 @@ checks.push([`the screens ask the computer for three things and no more (${[...c
   calls.size === 3 && calls.has('ustabasi.list') && calls.has('ustabasi.note') && calls.has('ustabasi.run')]);
 
 // The Divan design system is checked next door, where its subject is — the
-// palette read off the artboards, and the parts the new screens are made of.
-// Folded in here so that one command still covers everything in the app that
-// can be checked without a phone.
+// palette read off the artboards, and the parts the new screens are made of —
+// and so is the reading behind those screens: several computers' boards merged
+// into one view, with a machine that has gone quiet still in it. Folded in here
+// so that one command still covers everything in the app that can be checked
+// without a phone.
 checks.push(...require('./test-divan.cjs').checks);
+checks.push(...require('./test-divan-merge.cjs').checks);
 
 let bad = 0;
 for (const [name, ok] of checks) {

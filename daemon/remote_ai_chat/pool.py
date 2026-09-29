@@ -406,3 +406,64 @@ class Pool:
                 out.append({"provider": a.provider, "label": a.label,
                             **self.state(a.id, a.provider, now).public()})
         return out
+
+    def quota(self, now: float | None = None) -> dict:
+        """What this machine has left to run an agent on: one figure, one clock.
+
+        Every screen that counts agents is really asking one question — can this
+        computer start work right now, and if not, when. The pool already knows;
+        it just knows it per account, and a machine with four sign-ins is not
+        four answers. So the roomiest account that could take a turn is what the
+        machine has left, and the first blocked one to come back is when it has
+        room again. That is the pool's own arithmetic (`candidates` hops to
+        exactly that account), read out as a figure instead of a decision.
+
+        `left` is a share of a window and not a number of turns: nothing here
+        knows what a turn costs. It is `None` while nothing has ever been
+        measured on any account that could take work, which is a different thing
+        from a full plan — the tool only reports while a turn is running, so a
+        machine that has been idle since it was signed in has nothing to say.
+        """
+        now = now or time.time()
+        accounts = self._accounts()
+        rows: list[tuple[State, float | None]] = []
+        for provider in sorted({a.provider for a in accounts.values()}):
+            for aid in self.order(provider):
+                a = accounts[aid]
+                st = self.state(a.id, a.provider, now)
+                # When the fullest window this account has rolls over. `until`
+                # only exists on a blocked account, and a screen showing 64%
+                # left still wants to say when that number goes back up.
+                windows = [r for r in self._limits(self.key(a.id, a.provider))
+                           if isinstance(r, dict)]
+                ahead = sorted(t for t in (_ts(r.get("resets_at")) for r in windows)
+                               if t is not None and t > now)
+                rows.append((st, ahead[0] if ahead else None))
+
+        usable = [(st, at) for st, at in rows if not st.blocked]
+        # The roomiest sign-in that could take work, and when *its* fullest
+        # window rolls over. One account's share with another's clock beside it
+        # would read as one fact and be two.
+        room = sorted(((1.0 - st.utilization, at) for st, at in usable
+                       if st.utilization is not None), key=lambda r: -r[0])
+        if usable:
+            left, resets_at = room[0] if room else (None, None)
+        else:
+            # Nothing can take work: when the first account comes back is when
+            # the agents pick up again, which is the whole of what the screen
+            # has to say.
+            back = sorted(st.until for st, _ in rows if st.until is not None)
+            left, resets_at = 0.0, (back[0] if back else None)
+        return {
+            "enabled": self.settings.enabled,
+            "accounts": len(rows),
+            "blocked": sum(1 for st, _ in rows if st.blocked),
+            # No sign-in left that could take a turn. With no accounts at all
+            # this is false rather than true: a machine nobody has signed into
+            # has not run out of anything.
+            "spent": bool(rows) and not usable,
+            "left": left if rows else None,
+            "resets_at": resets_at,
+            # Nothing measured on anything that could work — not the same as 0%.
+            "unknown": bool(usable) and not room,
+        }

@@ -65,6 +65,7 @@ other device watching it.
 | `ustabasi.note` | `{id, text}` | `{ok, message}` — answer a ticket that stopped to ask a question. The one write, and it runs the queue's own CLI rather than touching its database: a note clears the escalation and puts the ticket back in the queue, and that sequence is the other program's to define. `ustabasi_refused` carries the CLI's own words |
 | `ustabasi.run` | `{id, cursor?}` | `{available, reason, run, events, cursor, reset, live, caught_up, size}` — what the agent on that ticket has printed, a page at a time. Every run writes the model's stream-json to a file that is hundreds of kilobytes long by the time a worker is done, so a first open (no cursor, or one naming another run) answers with the **end** of it and `reset: true`; every later call with the cursor it gave back answers with what has been appended since, and a poll that finds nothing is a couple of hundred bytes and an empty `events`. A page is capped in records **and** in bytes, and a reader that has fallen further behind than one page is moved up to the end with `reset: true` rather than made to read its way there. `cursor` is `<run directory name>:<byte offset>` and carries no path. `live` is a run that is still being written — the ticket is running and the queue has not written its exit code. `reason` is the silence, where there is one: `no_queue`, `no_ticket`, `never_run` (nobody has been handed this ticket yet), `no_log`; each answers the same shape, with no events, no cursor and `caught_up: true`. Read-only |
 | `update.apply` | `{force?}` | `{ok, error, pulled, web, restarting, revision}` — fast-forward onto `origin/main` **and** rebuild the panel; either half can be the only work there is. Never anything but a fast-forward, and never on a checkout with uncommitted or unpushed work — `force` waives only *waiting* (being behind, being idle), never somebody's work. A pull ends by asking the supervisor to restart the daemon, so the answer arrives before the socket drops and there is nothing to re-read afterwards; a panel-only rebuild restarts nothing |
+| `divan.snapshot` | – | `{machine, os, os_version, daemon_version, at, projects, cards, agents, quota, queue}` — **everything this computer has to say about Divan, in one answer.** The phone is paired with several computers and the project is the context rather than the machine, so every Divan screen is every machine at once and has to ask all of them; asked project by project that is a dozen round trips per computer and a dozen waits on one that is asleep. `projects` is `divan.projects`' list, `cards` is the **open** board — every card outside `done`, since that column grows for ever and the counts already say how many are in it — and `agents` is one row per agent actually running (`{card_id, project_id, project, branch, title, executor, machine, status, detail, since, ustabasi_id}`); a card that stopped to ask is waiting on a person, not working, and is read as a card. `machine` is this computer's name, `at` is when the answer was true, and `quota` is `{enabled, accounts, blocked, spent, left, resets_at, unknown}` from the account pool: `left` is the share of a window the roomiest sign-in still has — not a number of turns, and `null` while nothing has ever been measured — and `resets_at` is when that goes back up, or when a spent machine starts work again. `queue` is `{available, last_tick, paused_until}`. The mirror runs first, as on `ustabasi.list`: a dashboard that read the board without it would draw a worker that finished at four in the morning as still running. Nothing here is merged or ranked — which machines a project lives on, and what a silent one's numbers are worth, is the client's to work out, because it is the only party that knows how long ago each machine answered |
 | `divan.projects` | – | `{projects, machine}` — every product, each with its branches and one line saying where it stands. A project carries `{id, name, slug, summary, repos, branches, counts, running, waiting, summary_line}`; `repos` is a list because a product is a product and not a folder — isghocam owns its site and its API — and `counts` is its cards per column. `summary_line` is counted, never guessed: `2 running · 1 waiting on you · 5 queued`, with everything that is zero left out, and `nothing running` when all of it is. `waiting` is the dashboard's real number — an agent that stopped to ask, one that was turned down, and every card whose executor is a person. A branch carries `{id, kind, name, summary, summary_at, cards, open}`; `summary` is empty until that branch has a source connected, and a branch with nothing to say says nothing rather than a placeholder number |
 | `divan.project.create` | `{name, repos?, branches?}` | the project, as `divan.projects` lists one. `branches` names kinds beyond the default five, so a product with a support desk gets a support branch without a migration. Every path in `repos` goes through the same fence a chat's `cwd` does — inside an allowed root, outside every denied path, and a folder that exists — because a repository is where an autonomous coding agent gets started with a shell: `cwd_outside` or `no_such_folder`. `bad_project` on an empty name or one this computer already has |
 | `divan.board` | `{project_id}` | `{project, branches, columns}` — one project's board. `columns` is keyed by `ice_box`, `queued`, `in_progress`, `done`, each an array **in the order somebody put it in**: `position` is 0..n-1 with no gaps, and the order of `queued` is the only planning this product has. The cards here carry the human face and the marks (`executor`, `machine`, `agent_status`, `ustabasi_id`) and **not** the agent face — `divan.card.get` is where that lives. `no_such_project` |
@@ -164,8 +165,9 @@ This is the rule the rest is built around, and it is why they are two fields and
 not one.
 
 `column` is written by exactly one request, `divan.card.move`, and that request
-is a finger on a screen. `agent_status` is written by the mirror, on the
-ordinary `ustabasi.list` poll, and is one of:
+is a finger on a screen. `agent_status` is written by the mirror, on the poll of
+either request that draws work — `ustabasi.list` for the wall, `divan.snapshot`
+for the boards — and is one of:
 
 | `agent_status` | the queue said |
 |---|---|
@@ -202,6 +204,34 @@ executor. A card with no agent face is still filed: the summary stands in for th
 goal and the title for the one done criterion the queue insists on, because a
 board that demanded a specification before it would accept a drag would be a
 form.
+
+### One view across several machines
+
+Every Divan surface is every paired computer at once. A project is the context
+and the machine is a detail of a running task: isghocam's site may be checked out
+on the studio and its API on the mini, and that is one project with cards on two
+machines, not two projects.
+
+The daemon cannot do the merging. Each one knows only its own board, and the one
+fact the merge turns on — how long ago each machine last answered — exists only
+where the asking happens. So `divan.snapshot` is one honest answer per computer
+and the client merges them (`app/src/divan.ts`), which is also what keeps a
+sleeping laptop from taking the view down with it:
+
+* **one snapshot per machine, per event.** On connect, when the app comes
+  forward, and on a slow timer. Every request is timed out, and a machine that
+  does not answer is one wait rather than a dozen.
+* **the last answer is kept.** A machine that has gone quiet does not disappear
+  from the view and its cards are not deleted: they are shown as they were, with
+  how long ago that was, and the counters say they are incomplete rather than
+  quietly dropping five running agents.
+* **freshness is per machine.** Reachable or not, and how long since the last
+  successful contact — carried on every project, card and agent that came from
+  it, so a screen can mark the two rows that came from the silent machine and
+  leave the rest live.
+* **the active computer is not the scope.** Which machine the phone holds a
+  socket to decides where a terminal opens and whose screen is mirrored, and
+  nothing else. Switching it does not change what a board or a dashboard shows.
 
 ## Push notifications
 

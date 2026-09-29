@@ -775,6 +775,64 @@ class Board:
                 "counts": counts, "running": running, "waiting": waiting,
                 "summary_line": _summary_line(running, waiting, queued)}
 
+    # ── the whole board, for a phone holding several machines ──────────────
+
+    def snapshot(self, machine: str) -> dict:
+        """Everything this computer has to say about its board, in one answer.
+
+        The phone is paired with several computers and the project is the
+        context, not the machine — so every screen it draws is every machine at
+        once, and it has to ask all of them. Asked project by project that is a
+        dozen round trips per computer, and a laptop that is asleep costs a
+        timeout for each one. One request per machine is the whole of the
+        difference: it is asked on connect, when the app comes forward and on a
+        slow timer, and a machine that does not answer costs one wait.
+
+        Nothing here is merged or ranked. Which of two machines a project lives
+        on, and what a stale one's numbers are worth, is the phone's to work out
+        — it is the only party that knows how long ago each machine answered
+        (`app/src/divan.ts`). This end's job is to say what is true here and to
+        say which computer "here" is.
+
+        `cards` is the open board: everything outside `done`. That column grows
+        for ever, the counts beside each project already say how many are in it,
+        and nothing on a dashboard is drawn from a card finished last March.
+        """
+        projects = self.list_projects()
+        mine = {p["id"] for p in projects}
+        # A card whose project has been archived belongs to a board nobody is
+        # looking at: the lists have to agree, or the phone holds cards of a
+        # project it was never told about.
+        cards = [c for c in self.cards()
+                 if c["project_id"] in mine and c["column"] != "done"]
+        names = {p["id"]: p["name"] for p in projects}
+        return {
+            "machine": machine,
+            "projects": [self.project_view(p) for p in projects],
+            "cards": cards,
+            "agents": [self._agent_view(c, machine, names.get(c["project_id"], ""))
+                       for c in cards if c["agent_status"] == "running"],
+        }
+
+    def _agent_view(self, card: dict, machine: str, project: str) -> dict:
+        """An agent at work right now, as a line on a dashboard: who is doing
+        what, on which machine.
+
+        Only the ones actually running. A card that stopped to ask is waiting on
+        a person rather than working, and it is read as a card — under "waiting
+        on you", where somebody will answer it — not as an agent.
+
+        `machine` falls back to the computer answering: a card that nobody
+        assigned is being worked where it is, and a row that cannot say where
+        its agent is running is no use on a screen whose whole subject is
+        several machines.
+        """
+        return {"card_id": card["id"], "project_id": card["project_id"],
+                "project": project, "branch": card["branch"], "title": card["title"],
+                "executor": card["executor"], "machine": card["machine"] or machine,
+                "status": card["agent_status"], "detail": card["agent_detail"],
+                "since": card["agent_status_at"], "ustabasi_id": card["ustabasi_id"]}
+
 
 def _waiting(card: dict) -> bool:
     """A card that needs a person before anything else happens to it."""

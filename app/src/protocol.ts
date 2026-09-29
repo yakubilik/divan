@@ -376,3 +376,107 @@ export interface UstabasiSnapshot {
   tickets: Ticket[];
   queue: { last_tick?: number | null; paused_until?: number | null };
 }
+
+// ── the Divan board ──────────────────────────────────────────────────────────
+// The daemon owns how work is arranged; the ustabasi queue above stays the thing
+// that does the coding. A project is a product and may own several repositories;
+// a card sits in one of four columns at a position somebody chose, and what the
+// agent on it is doing is a separate field the mirror writes. See
+// docs/PROTOCOL.md, "The Divan board".
+
+export type DivanColumn = 'ice_box' | 'queued' | 'in_progress' | 'done';
+
+/** Who does the work. `coding_agent` is ustabasi; `human` is a card nothing
+ *  runs on — it waits for a person and says so. */
+export type DivanExecutor = 'coding_agent' | 'branch_agent' | 'assistant' | 'human';
+
+/** Reality on a card, written by the mirror and by nothing else. `asking` is a
+ *  stopped ticket with a question on it and `blocked` one without; `verified` is
+ *  the verifier passing it, which is not the same as somebody being finished
+ *  with it — that is the `done` column. */
+export type AgentStatus = 'queued' | 'running' | 'asking' | 'blocked' | 'failed'
+                        | 'verified' | 'cancelled';
+
+export interface DivanBranch {
+  id: string; kind: string; name: string;
+  /** Empty until that branch has a source connected: a branch with nothing to
+   *  say says nothing rather than a number nobody measured. */
+  summary: string;
+  summary_at: number | null;
+  cards: Partial<Record<DivanColumn, number>>;
+  open: number;
+}
+
+export interface DivanProject {
+  id: string; name: string; slug: string; summary: string;
+  /** A product is not a folder: isghocam owns its site and its API. */
+  repos: string[];
+  sort: number; archived: boolean; created_at: number; updated_at: number;
+  branches: DivanBranch[];
+  counts: Partial<Record<DivanColumn, number>>;
+  running: number;
+  /** The dashboard's real number: an agent that stopped to ask, one that was
+   *  turned down, and every card whose executor is a person. */
+  waiting: number;
+  summary_line: string;
+}
+
+export interface DivanCard {
+  id: string; project_id: string; branch_id: string; branch: string;
+  column: DivanColumn; position: number;
+  title: string; summary: string;
+  executor: DivanExecutor | null;
+  /** Which computer the work runs on. Null where nobody said, in which case it
+   *  is the machine whose snapshot carried the card. */
+  machine: string | null;
+  repo: string | null;
+  ustabasi_id: number | null;
+  agent_status: AgentStatus | null;
+  agent_status_at: number | null;
+  agent_detail: string;
+  created_at: number; updated_at: number; moved_at: number | null;
+}
+
+/** An agent at work right now, as a line on a dashboard. Only the running ones:
+ *  a card that stopped to ask is waiting on a person rather than working. */
+export interface DivanAgent {
+  card_id: string; project_id: string; project: string; branch: string;
+  title: string;
+  executor: DivanExecutor | null;
+  machine: string;
+  status: AgentStatus | null;
+  detail: string;
+  since: number | null;
+  ustabasi_id: number | null;
+}
+
+/** What one machine has left to run an agent on. `left` is the share of a
+ *  window the roomiest sign-in still has — not a number of turns — and null
+ *  while nothing has ever been measured, which is not a full plan. */
+export interface DivanQuota {
+  enabled: boolean;
+  accounts: number;
+  blocked: number;
+  /** No sign-in left that could take a turn. */
+  spent: boolean;
+  left: number | null;
+  /** When `left` goes back up, or when a spent machine starts work again. */
+  resets_at: number | null;
+  unknown: boolean;
+}
+
+/** Everything one computer has to say about Divan. One request per machine, on
+ *  connect, on foreground and on a slow timer; `at` is when it was true, which
+ *  is what a silent machine is aged against. */
+export interface DivanSnapshot {
+  machine: string;
+  os?: string;
+  os_version?: string;
+  daemon_version?: string;
+  at: number;
+  projects: DivanProject[];
+  cards: DivanCard[];
+  agents: DivanAgent[];
+  quota: DivanQuota | null;
+  queue: { available?: boolean; last_tick?: number | null; paused_until?: number | null };
+}

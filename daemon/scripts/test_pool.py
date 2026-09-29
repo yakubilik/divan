@@ -132,6 +132,52 @@ def scenario_reading() -> None:
           "a spent overage allowance is not a rescue either")
 
 
+def scenario_quota() -> None:
+    """What the machine has left, as one figure — the question every screen that
+    counts agents is actually asking. Three sign-ins, so that "the best of them"
+    is not the same as "the only one"."""
+    print("\nthe machine's quota")
+
+    p = make_pool({"acct-2": [window("five_hour", 0.36, resets_in=4 * HOUR)],
+                   "acct-3": [window("five_hour", 0.80, resets_in=HOUR)]})
+    q = p.quota()
+    check(abs((q["left"] or 0) - 0.64) < 1e-6, "what is left is the roomiest sign-in's",
+          repr(q))
+    check(q["accounts"] == 3 and q["blocked"] == 0 and not q["spent"],
+          "with nothing blocked and nothing spent", repr(q))
+    check(q["resets_at"] is not None and abs(q["resets_at"] - (time.time() + 4 * HOUR)) < 5,
+          "and the clock beside it is that same sign-in's window, not another's",
+          repr(q))
+
+    p = make_pool({"acct-2": [window("five_hour", 1.0, status="rejected",
+                                     resets_in=4 * HOUR)],
+                   "acct-3": [window("five_hour", 1.0, status="rejected",
+                                     resets_in=2 * HOUR)],
+                   "default-claude": [window("five_hour", 1.0, status="rejected",
+                                             resets_in=3 * HOUR)]})
+    q = p.quota()
+    check(q["spent"] and q["left"] == 0.0 and q["blocked"] == 3,
+          "every sign-in full is a machine that cannot start an agent", repr(q))
+    check(q["resets_at"] is not None and abs(q["resets_at"] - (time.time() + 2 * HOUR)) < 5,
+          "…and the first one back is when it can again", repr(q))
+
+    # A machine nobody has run anything on. The tool only measures while a turn
+    # is running, so there is nothing to report — which is not a full plan and
+    # not an empty one.
+    q = make_pool({}).quota()
+    check(q["left"] is None and q["unknown"] and not q["spent"],
+          "nothing measured is not the same as nothing left", repr(q))
+
+    # One sign-in spent, one with room: the machine has room. That is the pool's
+    # own arithmetic — `candidates` would hand the next turn to exactly that
+    # account — read out as a figure instead of as a decision.
+    p = make_pool({"acct-2": [window("five_hour", 1.0, status="rejected")],
+                   "acct-3": [window("five_hour", 0.10)]})
+    q = p.quota()
+    check(not q["spent"] and q["blocked"] == 1 and abs((q["left"] or 0) - 0.9) < 1e-6,
+          "one sign-in with room is a machine with room", repr(q))
+
+
 def scenario_never_spend() -> None:
     """`use_overage = "never"` is the setting with money behind it.
 
@@ -688,6 +734,7 @@ async def scenario_nowhere_to_go(db) -> None:
 async def main() -> None:
     scenario_reading()
     scenario_never_spend()
+    scenario_quota()
     scenario_learning()
     scenario_choosing()
     with tempfile.TemporaryDirectory() as tmp:
