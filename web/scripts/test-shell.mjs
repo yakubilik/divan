@@ -330,6 +330,33 @@ group('nothing was dropped in the move');
     `${styles(column).filter((d) => d.width === '7px').length} dots`);
 }
 
+group('what the panel offers, it can still do');
+{
+  // Moving the chat list into a place of its own took a drag with it: the list
+  // and the wall it was dragged onto can no longer be on screen together. An
+  // affordance that cannot land, and an instruction that cannot be followed,
+  // are worse than neither — so both are gone, and this is what keeps them gone.
+  const files = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(join(web, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(rel);
+      else if (/\.tsx?$/.test(e.name)) files.push(rel);
+    }
+  };
+  walk('src');
+  // …where it is called, rather than where it is defined.
+  const starts = files.filter((f) => f !== 'src/lib/dnd.ts' && /setChatDrag\(/.test(src(f)));
+  ok('one place starts a chat drag, and it is the wall the drag lands on',
+    eq(starts, ['src/screens/Terminal.tsx']), starts.join(', '));
+  ok('…the chat list offers none, because nothing on screen with it could catch one',
+    !/draggable/.test(src('src/components/Sidebar.tsx')));
+  ok('…and nothing tells anyone to drag a chat out of a list that is not there',
+    !files.some((f) => /drag a chat onto it from the list/i.test(src(f))));
+  ok('the module that agrees the payload says which of the two it is now',
+    /a tile on the wall/.test(src('src/lib/dnd.ts')));
+}
+
 // ── 3 · the merge behind the bar ───────────────────────────────────────────
 
 group('one product, however many machines it is on');
