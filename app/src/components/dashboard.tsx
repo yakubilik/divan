@@ -97,16 +97,23 @@ export function SystemLine({ line, say, quota, label, style }: {
 // ── 2 · the counters ────────────────────────────────────────────────────────
 
 /** The row across the top. Three or four tiles — never a fourth with nothing
- *  behind it (Mobile1 V1, V3; Mobile5 S1's outlined `Unknown`, S2's `Paused`). */
-export function Counters({ counters, label, style }: {
+ *  behind it (Mobile1 V1, V3; Mobile5 S1's outlined `Unknown`, S2's `Paused`).
+ *
+ *  A tile is a way in where there is something behind it to open: Mobile6 S3 is
+ *  reached from Needs you. The rest are counts and nothing more, so `press`
+ *  answers for one tile and not for another rather than every tile being
+ *  pressable and three of them doing nothing. */
+export function Counters({ counters, label, press, style }: {
   counters: CounterSpec[];
   label: (c: CounterSpec) => string;
+  press?: (c: CounterSpec) => (() => void) | undefined;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View style={[{ flexDirection: 'row', gap: 6 }, style]}>
       {counters.map((c) => (
-        <Counter key={c.key} value={c.value} label={label(c)} tone={c.tone} ring={c.ring} />
+        <Counter key={c.key} value={c.value} label={label(c)} tone={c.tone} ring={c.ring}
+          onPress={press?.(c)} />
       ))}
     </View>
   );

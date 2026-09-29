@@ -100,7 +100,12 @@ export default function Dashboard() {
               </Text>
             )}
             <Paused view={view} ago={ago} />
-            <Counters counters={counters(view)} label={(c) => T(c.key)} />
+            {/* Needs you opens the list of what is behind it (Mobile6 S3);
+                with nothing behind it there is nothing to open, and the tile
+                is a number like the other three. */}
+            <Counters counters={counters(view)} label={(c) => T(c.key)}
+              press={(c) => (c.key === 'cNeedsYou' && c.value > 0
+                ? () => go(() => router.push('/waiting')) : undefined)} />
             <Calm view={view} />
             <Asks view={view} onOpen={open} />
             {view.projects.length === 0 ? <Nothing /> : (
