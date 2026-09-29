@@ -1,38 +1,67 @@
 import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useT } from '../src/store';
+import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { LOCALE } from '../src/i18n';
 import { useDivanView, useQueueBadge } from '../src/queue';
-import { project as projectIn, type MergedProject } from '../src/divan';
+import { project as projectIn, type DivanView, type MergedProject } from '../src/divan';
 import { chips } from '../src/shell';
 import { since } from '../src/tickets';
+import {
+  agentRows, asks, chip, clock, counters, latest, line, marks, staleness,
+  systemLine, target, type Ago,
+} from '../src/dashboard';
 import { EmptyState, ListRow, SectionHeader } from '../src/components/divan';
+import {
+  AgentLine, AgentRoster, AskCard, Counters, Note, NoteFoot, ProjectCard, SystemLine,
+} from '../src/components/dashboard';
+import { Text } from '../src/components/text';
+import { useTokens } from '../src/theme';
 import { ProjectBar, Shell } from '../src/components/shell';
 
-/** The first of Divan's three places, and the one the app opens on.
+/** The screen the whole product exists for: the one that is opened instead of a
+ *  question being asked.
  *
- *  This is the shell of it (Mobile1 V1, top down): the project bar, the title
- *  that says whether you are looking at everything or at one product, and a
- *  body. The counters, the questions only a person can answer, the project
- *  cards and the system line are the next ticket's — what is under the title
- *  here is the plain reading of the merged view, so that nothing in it is
- *  unreachable while that screen is being built: every product, and the ticket
- *  queue, which was a button in the corner of the old chat list.
+ *  Mobile1 V1 top down — the project bar, the system line, the title, four
+ *  counters, the questions only a person can answer — then V2's project cards
+ *  and agent roster under them, and V3 when none of that applies: a morning
+ *  where nothing needs anybody is a state this screen is designed for rather
+ *  than an empty version of the busy one.
  *
- *  Selecting a project in the bar enters it. Until the project page exists the
- *  Dashboard *is* the project page — same place, scoped — which is also how the
- *  frames read it: Mobile2 V4 is this screen with a chip lit. Which project is
- *  in the address (`/dashboard?project=quire`) rather than in a `useState`, so
- *  that it survives the screen being redrawn, can be linked to, and is the same
- *  shape the project page will want when it arrives. */
+ *  Three things are true of everything on it:
+ *
+ *  **Nothing here is invented.** Every counter is counted, every project card
+ *  carries the two figures that exist for a product today — what the board says
+ *  is running or waiting on it, and what git says has landed in its
+ *  repositories — and the third figure the frames put at the top of a card, what
+ *  the product earns, has no source connected and so is not drawn at all. A gap
+ *  is honest; a placeholder is not.
+ *
+ *  **A machine that has gone quiet is said out loud.** Its cards still count
+ *  towards what a person has to do, because a ticket that stopped to ask does
+ *  not answer itself while a laptop is shut. What its *agents* are doing cannot
+ *  be known, so that is a counter of its own, the title says how old the page
+ *  is, and the projects that live there say when they were last seen.
+ *
+ *  **The judgements are not in here.** Which counter the fourth one is, which
+ *  card needs a person first, what a project's corner says — all of it is
+ *  `src/dashboard.ts`, so that `scripts/test-dashboard.cjs` can hold this screen
+ *  to it without a phone. What is left in this file is the arrangement.
+ *
+ *  Selecting a project enters it, in the address (`/dashboard?project=quire`)
+ *  rather than in a `useState`, so that it survives a redraw and can be linked
+ *  to. Until the project page exists the Dashboard *is* the project page — same
+ *  place, scoped — which is how Mobile2 V4 reads it too. */
 export default function Dashboard() {
   const router = useRouter();
   const go = useNavGuard();
   const T = useT();
+  const t = useTokens();
   const view = useDivanView();
   const queue = useQueueBadge();
+  const now = view.now;
+  const host = useStore((s) => s.host);
   // A parameter can arrive twice; one project is being read either way.
   const param = useLocalSearchParams<{ project?: string }>().project;
   const selected = (Array.isArray(param) ? param[0] : param) || null;
@@ -40,19 +69,56 @@ export default function Dashboard() {
   // An empty string rather than nothing: `setParams` writes what it is given,
   // and "no project" has to be sayable.
   const enter = (key: string | null) => router.setParams({ project: key ?? '' });
+  const open = (what: { ustabasi_id: number | null; host: string; projectKey: string }) => {
+    const where = target(what, host?.id);
+    if ('ticket' in where) go(() => router.push(`/ticket/${where.ticket}`));
+    else enter(where.project);
+  };
+  const ago: Ago = (seconds) => since(seconds, T);
   const bar = chips(view, picked ? picked.key : null, T('allProjects'));
+  const old = staleness(view);
   const today = new Date().toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
+  const aside = old
+    ? T('dashPartly', { time: clock(old.asOf, LOCALE) })
+    : `${T('dashProjects', { n: view.projects.length })} · ${today}`;
 
   return (
     <Shell place="dashboard" badge={view.totals.needsYou}>
       <ProjectBar chips={bar} onSelect={enter} />
+      <Line view={view} ago={ago} />
       {/* `flexGrow` so that the empty state, which centres itself in what it
           is given, has the page to centre itself in. */}
-      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
-        <SectionHeader title={picked ? picked.name : T('overview')}
-          right={picked ? picked.machines.join(' · ') : `${T('dashProjects', { n: view.projects.length })} · ${today}`} />
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 14, paddingHorizontal: 16, paddingBottom: 24, gap: 14 }}>
+        <SectionHeader kind="page" title={picked ? picked.name : T('overview')}
+          right={picked ? picked.machines.join(' · ') : aside} tone={!picked && old ? 'amber' : undefined} />
         {picked ? <Project project={picked} /> : (
           <>
+            {!!old && (
+              <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
+                {old.machines.length > 1
+                  ? T('dashStaleMany', { n: old.machines.length, time: clock(old.asOf, LOCALE) })
+                  : old.projects.length
+                    ? T('dashStale', { name: old.machines[0], d: ago(old.age),
+                                       projects: old.projects.join(', '), time: clock(old.asOf, LOCALE) })
+                    : T('dashStaleBare', { name: old.machines[0], d: ago(old.age) })}
+              </Text>
+            )}
+            <Paused view={view} now={now} ago={ago} />
+            <Counters counters={counters(view)} label={(c) => T(c.key)} />
+            <Calm view={view} />
+            <Asks view={view} onOpen={open} />
+            {view.projects.length === 0 ? <Nothing /> : (
+              <>
+                <View style={{ gap: 6 }}>
+                  <SectionHeader title={T('projects')} note={T('dashSorted')} />
+                  {view.projects.map((p, i) => (
+                    <Product key={p.key} project={p} index={i} view={view} now={now} ago={ago}
+                      onPress={() => enter(p.key)} />
+                  ))}
+                </View>
+                <Agents view={view} now={now} ago={ago} onOpen={open} />
+              </>
+            )}
             {/* The two things on this screen that are not a project. Both are
                 work rather than infrastructure, which is why neither is in the
                 Machine list: the queue this computer is working through, and
@@ -68,20 +134,6 @@ export default function Dashboard() {
               <ListRow first={!queue.available} icon="chat_bubble" title={T('conversations')}
                 note={T('dashChatsNote')} onPress={() => go(() => router.push('/chats'))} />
             </View>
-            {view.projects.length === 0
-              ? <Nothing />
-              : (
-                <View style={{ gap: 8 }}>
-                  <SectionHeader title={T('projects')} note={T('dashSorted')} />
-                  <View>
-                    {view.projects.map((p, i) => (
-                      <ListRow key={p.key} first={i === 0} title={p.name}
-                        note={p.machines.join(' · ')} {...state(p, T)}
-                        onPress={() => enter(p.key)} />
-                    ))}
-                  </View>
-                </View>
-              )}
           </>
         )}
       </ScrollView>
@@ -89,14 +141,152 @@ export default function Dashboard() {
   );
 }
 
-/** What a project's row says at its end: the worst true thing about it, in that
- *  state's colour. A machine that has gone quiet says so before it says how
- *  many agents it had — the number is a memory, and the age is the fact. */
-function state(p: MergedProject, T: ReturnType<typeof useT>): { meta?: string; tone?: 'red' | 'amber' | 'run' } {
-  if (p.stale) return { meta: T('dashQuiet', { d: since(p.lastSeen == null ? null : Math.max(0, Date.now() / 1000 - p.lastSeen), T) }), tone: undefined };
-  if (p.waiting > 0) return { meta: T('queueRed', { n: p.waiting }), tone: 'amber' };
-  if (p.running > 0) return { meta: T('queueRunning', { n: p.running }), tone: 'run' };
-  return {};
+/** The system line, in whichever of its three states the fleet is in. Its words
+ *  are two halves: which computers answered, and what is left to start an agent
+ *  on. Where nothing has ever measured a quota the second half is absent — an
+ *  empty track would be a number nobody read. */
+function Line({ view, ago }: { view: DivanView; ago: Ago }) {
+  const T = useT();
+  const line = systemLine(view);
+  const say = line.state === 'none' ? T('sysNoMachines')
+    : line.state === 'unreachable' && line.unreachable > 1 ? T('sysUnreachableMany', { n: line.unreachable })
+    : line.state === 'unreachable' && line.quiet
+      ? (line.quiet.age == null
+          ? T('sysUnreachableNever', { name: line.quiet.name })
+          : T('sysUnreachable', { name: line.quiet.name, d: ago(line.quiet.age) }))
+    : line.machines === 1 ? T('sysOneMachine') : T('sysMachines', { n: line.machines });
+  const q = line.quota;
+  const quota = !q ? null
+    : q.spent
+      ? (q.resets_at ? T('sysQuotaSpent', { time: clock(q.resets_at, LOCALE) }) : T('sysQuotaOut'))
+      : line.state === 'unreachable'
+        ? T('sysQuotaShort', { p: q.pct })
+        : q.resets_at ? T('sysQuotaLeft', { p: q.pct, time: clock(q.resets_at, LOCALE) })
+        : T('sysQuotaBare', { p: q.pct });
+  // The healthy line labels its track; the other two have spent their left half
+  // on a sentence and say "quota" inside the figure instead.
+  return <SystemLine line={line} say={say} quota={quota}
+    label={q && !q.spent && line.state === 'healthy' ? T('sysQuota') : null} />;
+}
+
+/** Out of quota (Mobile5 S2). Red, and not an alarm: what stopped, that nothing
+ *  was lost, and exactly when it starts again. */
+function Paused({ view, now, ago }: { view: DivanView; now: number; ago: Ago }) {
+  const T = useT();
+  const q = view.quota;
+  if (!q.spent) return null;
+  const back = q.resets_at;
+  const n = view.totals.paused;
+  return (
+    <Note tone="red" icon="pause"
+      title={back ? T('pausedTitle', { time: clock(back, LOCALE) }) : T('pausedTitleBare')}
+      body={n === 0 ? T('pausedBodyNone')
+        : T(n === 1 ? 'pausedBodyOne' : 'pausedBody',
+            { n, d: ago(back == null ? null : Math.max(0, back - now)) })}
+      foot={back ? (
+        <>
+          <NoteFoot text={T('pausedUsed')} />
+          <NoteFoot text={T('pausedResets', { time: clock(back, LOCALE) })} />
+        </>
+      ) : null} />
+  );
+}
+
+/** Nothing needs anybody (Mobile1 V3). A designed state and not an absence: the
+ *  screen says so, and says what happened while nobody was looking — where
+ *  anything can be counted. */
+function Calm({ view }: { view: DivanView }) {
+  const T = useT();
+  const { needsYou, stuck, doneToday } = view.totals;
+  if (needsYou > 0 || stuck > 0 || view.hosts.length === 0) return null;
+  return (
+    <Note tone="run" dot title={T('calmTitle')}
+      foot={doneToday ? <NoteFoot text={T(doneToday === 1 ? 'calmDoneOne' : 'calmDone', { n: doneToday })} /> : null} />
+  );
+}
+
+/** The questions, worst first (Mobile1 V1). */
+function Asks({ view, onOpen }: {
+  view: DivanView;
+  onOpen: (what: { ustabasi_id: number | null; host: string; projectKey: string }) => void;
+}) {
+  const T = useT();
+  const host = useStore((s) => s.host);
+  const list = asks(view);
+  if (!list.length) return null;
+  const at = new Map(view.projects.map((p, i) => [p.key, i]));
+  return (
+    <View style={{ gap: 8 }}>
+      <SectionHeader title={T('needsYou')} count={list.length} />
+      {list.map((ask) => {
+        const name = view.projects[at.get(ask.card.projectKey) ?? -1]?.name ?? ask.card.branch;
+        const who = T(ask.who);
+        return (
+          <AskCard key={ask.card.id} project={name} index={at.get(ask.card.projectKey) ?? null}
+            who={ask.state === 'stuck' ? T('whoStopped', { who })
+               : ask.state === 'asking' ? T('whoAsks', { who }) : T('whoYours')}
+            question={ask.question}
+            action={'ticket' in target(ask.card, host?.id) ? T('ticketAnswer') : null}
+            onPress={() => onOpen(ask.card)} onAction={() => onOpen(ask.card)} />
+        );
+      })}
+    </View>
+  );
+}
+
+/** One product's card (Mobile1 V2, Mobile5 S1 and S2). */
+function Product({ project: p, index, view, now, ago, onPress }: {
+  project: MergedProject; index: number; view: DivanView; now: number; ago: Ago; onPress: () => void;
+}) {
+  const T = useT();
+  const mark = chip(p, now, ago);
+  const said = line(p, now);
+  const back = view.quota.resets_at;
+  return (
+    <ProjectCard index={index} name={p.name} onPress={onPress}
+      line={T(said.key, said.params)}
+      chip={{ mark: mark.mark, text: T(mark.key, mark.params), tone: mark.tone }}
+      freshness={p.stale ? (p.lastSeen == null ? null : T('pfLastSeen', { time: clock(p.lastSeen, LOCALE) }))
+        : p.paused > 0 && back ? T('pfResume', { time: clock(back, LOCALE) })
+        : null}
+      figure={p.activity ? {
+        value: p.activity.week,
+        label: T('pfFinished'),
+        moved: p.activity.at == null ? T('pfNeverMoved') : T('pfMoved', { d: ago(Math.max(0, now - p.activity.at)) }),
+      } : null}
+      marks={marks(p)} latest={latest(p)} />
+  );
+}
+
+/** Who is on what, where (Mobile1 V2). Only the agents actually at work: a card
+ *  that stopped to ask is a question and is read above, not here. */
+function Agents({ view, now, ago, onOpen }: {
+  view: DivanView; now: number; ago: Ago;
+  onOpen: (what: { ustabasi_id: number | null; host: string; projectKey: string }) => void;
+}) {
+  const T = useT();
+  const rows = agentRows(view);
+  if (!rows.length) return null;
+  return (
+    <View style={{ gap: 8 }}>
+      <SectionHeader title={T('agents')} count={rows.length} />
+      <AgentRoster>
+        {rows.map((r, i) => {
+          const name = view.projects[r.index]?.name ?? r.agent.project;
+          const detail = (r.agent.detail || '').trim();
+          const when = r.agent.unknown
+            ? T('pfLastSeen', { time: clock(r.agent.since_contact, LOCALE) })
+            : r.agent.since == null ? '' : ago(Math.max(0, now - r.agent.since));
+          return (
+            <AgentLine key={r.agent.card_id} first={i === 0} mark={r.mark} tone={r.tone}
+              who={T(r.who)} project={name} index={r.index}
+              text={[r.agent.title, detail || when].filter(Boolean).join(' · ')}
+              onPress={() => onOpen(r.agent)} />
+          );
+        })}
+      </AgentRoster>
+    </View>
+  );
 }
 
 /** One product: its branches, which is everything the merged view knows about

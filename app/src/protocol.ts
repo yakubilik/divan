@@ -465,6 +465,19 @@ export interface DivanQuota {
   unknown: boolean;
 }
 
+/** What git says about one repository: when it last moved, and how much landed
+ *  in it lately. The figure that says whether a product is alive at all, which
+ *  the board cannot — an empty board with nine commits this week is busy.
+ *
+ *  `week` is the commits of the last seven days and `today` those since
+ *  midnight on the machine that answered. A repository git would not answer
+ *  about is left out of the map rather than reported as zero. */
+export interface RepoActivity {
+  at: number | null;
+  week: number;
+  today: number;
+}
+
 /** Everything one computer has to say about Divan. One request per machine, on
  *  connect, on foreground and on a slow timer; `at` is when it was true, which
  *  is what a silent machine is aged against. */
@@ -478,5 +491,10 @@ export interface DivanSnapshot {
   cards: DivanCard[];
   agents: DivanAgent[];
   quota: DivanQuota | null;
+  /** Keyed by repository path, not by project: one product's figure is the
+   *  union of its repositories, and two machines holding the same checkout must
+   *  not have their commits counted twice. Absent on a daemon older than the
+   *  figure. */
+  activity?: Record<string, RepoActivity>;
   queue: { available?: boolean; last_tick?: number | null; paused_until?: number | null };
 }

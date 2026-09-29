@@ -67,16 +67,26 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: bottom + 24, gap: 18 }}>
-        <Part name="Counter" frame="Mobile1 V1 / V3">
+        <Part name="Counter" frame="Mobile1 V1 / V3 · Mobile5 S1">
           <View style={{ flexDirection: 'row', gap: 6 }}>
             <Counter value={2} label="Needs you" tone="amber" />
             <Counter value={2} label="Stuck" tone="red" />
             <Counter value={4} label="Running" />
             <Counter value={0} label="Done today" tone="run" />
           </View>
+          {/* Mobile5 S1's fourth tile: outlined in its tone, not washed with
+              it, because an unknown is not the same kind of fact as a demand. */}
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <Counter value={2} label="Unknown" tone="amber" ring />
+            <Counter value={5} label="Paused" tone="red" />
+            <Counter value={9} label="Done today" />
+            <Counter value={0} label="Stuck" tone="red" />
+          </View>
         </Part>
 
-        <Part name="Section header" frame="Mobile1 V1 · Mobile6 S3">
+        <Part name="Section header" frame="Mobile1 V1 · Mobile5 S1 · Mobile6 S3">
+          <SectionHeader kind="page" title="Overview" right="4 projects · Mon 28 Sep" />
+          <SectionHeader kind="page" title="Overview" right="partly as of 21:02" tone="amber" />
           <SectionHeader title="Overview" right="4 projects · Mon 28 Sep" />
           <SectionHeader title="Needs you" count={2} />
           <SectionHeader title="Projects" note="sorted by urgency" />

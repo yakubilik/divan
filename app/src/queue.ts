@@ -207,7 +207,7 @@ export function useRun(ticketId: number): {
  *  `now` comes from the same slow clock the ticket screens age their lines with,
  *  which is what makes "unreachable · 2h 14m" go on being true while nobody
  *  asks anything. */
-export function useDivanView(): DivanView & { reload: () => void } {
+export function useDivanView(): DivanView & { reload: () => void; now: number } {
   const hosts = useStore((s) => s.hosts);
   const divan = useStore((s) => s.divan);
   const loadDivan = useStore((s) => s.loadDivan);
@@ -226,5 +226,8 @@ export function useDivanView(): DivanView & { reload: () => void } {
   }, [reload]));
 
   const view = useMemo(() => merge(entries(hosts, divan), now), [hosts, divan, now]);
-  return { ...view, reload };
+  // The same clock the merge aged the machines against comes back with it: a
+  // screen that asked for its own would be a second timer ticking at a second's
+  // offset, and two answers to "how long has mini been quiet" on one page.
+  return { ...view, reload, now };
 }

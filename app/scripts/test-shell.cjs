@@ -150,7 +150,10 @@ function files(dir = '') {
 // with a worker that was turned down, one only on a machine that has gone
 // quiet, and one nobody has touched in weeks.
 
-const NOW = 1_700_000_000;
+// This moment, not a round number: the Dashboard ages a quiet machine against
+// the phone's own clock, and a fixture stamped two years ago would render as
+// three machines that have all been silent since.
+const NOW = Math.floor(Date.now() / 1000);
 const branch = (kind, o = {}) => ({ id: `${kind}-${o.on || 'x'}`, kind, name: kind,
   summary: o.summary || '', summary_at: o.summary_at ?? null, cards: o.cards || {}, open: o.open || 0 });
 const project = (name, o = {}) => ({
@@ -257,8 +260,10 @@ checks.push(
       .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")),
     text: m[2],
   }));
-  /** The 15 pt semibold at the top of the page (Mobile1 V1's section title). */
-  const title = (markup) => (texts(markup).find((t) => t.style.fontSize === 15
+  /** The 26 pt semibold at the top of the page — Mobile1 V1's `Overview`, which
+   *  becomes the product's name when one is being read. The 15 pt semibolds
+   *  under it are the section headings, and there are several. */
+  const title = (markup) => (texts(markup).find((t) => t.style.fontSize === 26
     && t.style.fontFamily === 'Inter-SemiBold') ?? {}).text;
 
   const machines = () => {
@@ -291,8 +296,11 @@ checks.push(
       title(back) === 'overview' && back.includes('dashSorted')],
   );
 
-  // A row in the body enters the same project the chip does.
-  const row = R.presses().find((press) => press.text.startsWith('Kanji Daily'));
+  // A card in the body enters the same project the chip does. Not the chip:
+  // that one's words are the name and nothing else, and a project card carries
+  // its monogram, its line and its state around the same name.
+  const row = R.presses().find((press) => press.text.includes('Kanji Daily')
+    && press.text !== 'Kanji Daily');
   row.press();
   checks.push(['a project in the body enters it too',
     title(R.render('dark', h(Dashboard))) === 'Kanji Daily']);
@@ -418,7 +426,7 @@ checks.push(
     ['\u2026and carries the queue with the count that needs a person',
       full.includes('dashQueueNote') && full.includes('queueRed')],
     ['\u2026and a machine that has gone quiet is not drawn as a machine that is working',
-      full.includes('dashQuiet')],
+      full.includes('pcStale') && full.includes('dashPartly')],
     ['the Machine list counts the machines it is a list of',
       machineFull.includes('mMachinesNote')],
   );

@@ -302,7 +302,45 @@ const en = {
   dashQueueNote: 'what this computer is working through',
   conversations: 'Conversations',
   dashChatsNote: 'every chat on this computer, including the ones put away',
-  dashQuiet: 'quiet {d}',
+  // The Dashboard itself (src/dashboard.ts): the four counters, the system line
+  // in its three states, the questions only a person can answer, and what a
+  // project card says. Every figure in here is counted somewhere; a figure with
+  // no source has no string, because it is not drawn.
+  cNeedsYou: 'Needs you', cStuck: 'Stuck', cRunning: 'Running',
+  cUnknown: 'Unknown', cPaused: 'Paused', cDoneToday: 'Done today',
+  exCoder: 'Coder', exBranch: 'Branch', exAssistant: 'Research', exYou: 'You', exNobody: 'Nobody',
+  // the thin line under the project bar: which computers answered, and whether
+  // there is any agent quota left
+  sysMachines: '{n} machines', sysOneMachine: '1 machine', sysNoMachines: 'no computers paired',
+  sysUnreachable: '{name} unreachable · {d}', sysUnreachableNever: '{name} never answered',
+  sysUnreachableMany: '{n} machines unreachable',
+  sysQuota: 'quota', sysQuotaLeft: '{p}% · resets {time}', sysQuotaBare: '{p}%',
+  sysQuotaShort: 'quota {p}%', sysQuotaSpent: 'quota 0% · until {time}', sysQuotaOut: 'quota 0%',
+  // …and what a machine going quiet costs the numbers above it
+  dashPartly: 'partly as of {time}',
+  dashStale: '{name} has not answered for {d}. {projects} runs there, so its numbers and agent states are from {time}. Everything else is live.',
+  dashStaleBare: '{name} has not answered for {d}. Nothing was running there, so everything on this screen is live.',
+  dashStaleMany: '{n} machines have not answered. What was running on them is as of {time}. Everything else is live.',
+  // out of quota, which is a clock rather than a fault
+  pausedTitle: 'Agents are paused until {time}', pausedTitleBare: 'Agents are paused',
+  pausedBody: "Today's agent quota is used up. {n} agents stopped where they were and pick up again on their own in {d}.",
+  pausedBodyOne: "Today's agent quota is used up. 1 agent stopped where it was and picks up again on its own in {d}.",
+  pausedBodyNone: "Today's agent quota is used up. Nothing was running, and nothing new starts until it comes back.",
+  pausedUsed: 'used 100%', pausedResets: 'resets {time}',
+  // what needs a person, and the morning it does not
+  needsYou: 'Needs you', agents: 'Agents',
+  whoAsks: '? {who} asks', whoStopped: '■ {who} stopped', whoYours: '○ Your call',
+  calmTitle: 'All clear. Nothing needs you.', calmDone: '{n} finished today',
+  calmDoneOne: '1 finished today',
+  // a project card: the two figures that exist, and nothing where the third
+  // one's source is not connected
+  pcStuck: '{n} stuck', pcAsking: '{n} asks', pcYours: 'yours', pcStale: 'stale {d}',
+  pcPaused: '{n} paused', pcRunning: '{n} running', pcQuiet: 'quiet', pcNoAgents: 'no agents',
+  plRunning: 'on {on} · {n} agents', plOneRunning: 'on {on} · 1 agent',
+  plUnknown: 'on {on} · {n} agents, state unknown', plOneUnknown: 'on {on} · 1 agent, state unknown',
+  plIdle: 'nothing running', plDormant: 'quiet for {d} days',
+  pfFinished: 'finished · 7d', pfMoved: 'moved {d} ago', pfNeverMoved: 'no commits yet',
+  pfLastSeen: 'last seen {time}', pfResume: 'resume {time}',
   dashEmpty: 'No projects yet',
   dashEmptyBody: 'Nothing has answered with a board. A computer shows its projects here once its daemon is new enough and it is reachable.',
   branchNoSource: 'no source connected yet',
