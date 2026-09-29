@@ -6,8 +6,8 @@ import { ForceScheme, useTokens, type Scheme } from '../src/theme';
 import { Text } from '../src/components/text';
 import { Icon } from '../src/components/icon';
 import {
-  Button, Card, ColumnTabs, Counter, EmptyState, ExecutorBadge, ListRow, Monogram, Pill,
-  SectionHeader, Segments, Sheet, StateMark, StatusDot, TabBar,
+  Button, Card, ColumnTabs, Counter, EmptyState, ExecutorBadge, FaceTabs, ListRow, Monogram,
+  Pill, SectionHeader, Segments, Sheet, StateMark, StatusDot, TabBar,
 } from '../src/components/divan';
 
 /** Every part of the Divan design system, on one screen, in whichever theme you
@@ -49,6 +49,7 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
   const [tab, setTab] = useState('dashboard');
   const [column, setColumn] = useState('progress');
   const [face, setFace] = useState('board');
+  const [read, setRead] = useState('human');
   const [dragging, setDragging] = useState(false);
   const [sheet, setSheet] = useState(false);
 
@@ -217,6 +218,15 @@ function Page({ onBack, scheme, onScheme, top, bottom }: {
                          { key: 'board', label: 'Board', mark: '■', tone: 'red' }]} />
             <Segments value="overview" onChange={() => {}}
               segments={[{ key: 'overview', label: 'Overview' }, { key: 'board', label: 'Board' }]} />
+          </View>
+        </Part>
+
+        <Part name="FaceTabs" frame="Mobile4 T1">
+          <View style={{ paddingHorizontal: 16 }}>
+            <FaceTabs value={read} onChange={setRead}
+              faces={[{ key: 'human', label: 'Human' },
+                      { key: 'agent', label: 'Agent', count: 46 },
+                      { key: 'live', label: 'Live', live: true }]} />
           </View>
         </Part>
 
