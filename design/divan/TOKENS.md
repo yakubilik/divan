@@ -368,7 +368,11 @@ Geist; the panel does not ship it.
   code's own lists. It also holds the one rule a palette cannot enforce by
   itself: `onAccent` and `onWarn` are the two "text on a filled colour" values
   and may only be drawn on a filled colour. White on `--s2` is legal in every
-  other check and is an empty-looking button on a light page.
+  other check and is an empty-looking button on a light page. And it measures
+  every pair of tokens a component puts together — this ink on that surface,
+  composited through whatever wash is between them — in both themes, at 3:1.
+  What it cannot resolve without a browser (anything faded by `opacity`) it
+  leaves to the one below rather than guessing.
 - `web/scripts/test-divan-ui.mjs` — the same page in a real browser, not in
   `npm test` because it needs Chrome. It reads back every colour the browser
   actually resolved, and then measures every pair it painted: each piece of text

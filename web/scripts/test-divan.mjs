@@ -482,7 +482,15 @@ function* elements(markup) {
   let m;
   while ((m = re.exec(markup))) {
     const [, closing, tag, attrs, selfClose] = m;
-    if (closing) { stack.pop(); continue; }
+    if (closing) {
+      // Pop to the tag that is closing rather than popping one: React writes
+      // `<path …></path>`, and a stack that pops on a tag it never pushed
+      // starts handing back the wrong ancestor — which is how a modal's
+      // contents came to look as if they were sitting straight on the page.
+      const at = stack.map((f) => f.tag).lastIndexOf(tag);
+      if (at >= 0) stack.length = at;
+      continue;
+    }
     const decl = {};
     for (const pair of (/style="([^"]*)"/.exec(attrs)?.[1] ?? '').split(';')) {
       const cut = pair.indexOf(':');
@@ -502,7 +510,7 @@ function* elements(markup) {
       behind: stack.map((f) => f.paint).reverse()
         .filter((v) => v && v !== 'transparent' && v !== 'none'),
     };
-    if (!VOID.has(tag) && !selfClose) stack.push({ paint });
+    if (!VOID.has(tag) && !selfClose) stack.push({ tag, paint });
   }
 }
 
@@ -771,6 +779,82 @@ group('white belongs on a filled colour and nowhere else');
   ok('nothing drawn in the two "on a filled colour" values sits on a neutral surface',
     misplaced.length === 0, [...new Set(misplaced)].slice(0, 8).join('\n    '));
   ok('…and there are enough of them for that to mean something', placed >= 10, String(placed));
+}
+
+group('every pair of tokens that meets can be read');
+{
+  // The browser pass measures what a browser actually painted, which is the
+  // whole truth and needs Chrome. This is the half of it that can be had
+  // without one, and it is the half that regresses: a pair of tokens put
+  // together in the source — this ink on that surface — in every component
+  // above, in both themes. Anything the flat markup cannot resolve with
+  // certainty (a faded ancestor, a colour that is not a token) is left to the
+  // browser rather than guessed at here.
+  const rgba = (value) => {
+    if (value.startsWith('#')) {
+      const h = value.slice(1);
+      const p = h.length === 3 ? [...h].map((c) => c + c) : [h.slice(0, 2), h.slice(2, 4), h.slice(4, 6)];
+      return [...p.map((x) => parseInt(x, 16)), 1];
+    }
+    const n = (value.match(/[\d.]+/g) ?? []).map(Number);
+    return n.length >= 3 ? [n[0], n[1], n[2], n.length > 3 ? n[3] : 1] : null;
+  };
+  /** A style value as a colour in one theme, or null if it is not one. */
+  const resolve = (value, t) => {
+    if (!value) return null;
+    const v = value.trim();
+    const token = /^var\(--dv-([a-zA-Z0-9]+)\)$/.exec(v);
+    if (token) return t[token[1]] ? rgba(t[token[1]]) : null;
+    return /^(#|rgba?\()/.test(v) ? rgba(v) : null;
+  };
+  const over = (fg, bg) => [0, 1, 2].map((i) => fg[i] * fg[3] + bg[i] * (1 - fg[3])).concat(1);
+  const lum = (c) => {
+    const ch = c.slice(0, 3).map((v) => {
+      const x = v / 255;
+      return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  };
+  const contrast = (a, b) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  const thin = [];
+  let pairs = 0;
+  let skipped = 0;
+  for (const scheme of ['dark', 'light']) {
+    const t = K.tokensFor(scheme);
+    for (const [where, markup] of Object.entries(drawn)) {
+      for (const el of elements(markup)) {
+        // A faded thing is the browser's to measure: opacity multiplies down a
+        // tree and this walk does not model that.
+        if (el.style.opacity && Number(el.style.opacity) < 1) { skipped++; continue; }
+        const fronts = [el.style.color, el.stroke, el.fill].filter((v) => v && v !== 'none');
+        if (!fronts.length) continue;
+        // The stack under it, its own fill first, composited down to the page.
+        let bg = rgba(t.bg);
+        const layers = [...(el.paint ? [el.paint] : []), ...el.behind]
+          .map((v) => resolve(v, t));
+        if (layers.some((c) => c === null)) { skipped++; continue; }
+        for (const c of [...layers].reverse()) bg = over(c, bg);
+        for (const front of fronts) {
+          const fg = resolve(front, t);
+          if (!fg) { skipped++; continue; }
+          pairs++;
+          const ratio = contrast(over(fg, bg), bg);
+          if (ratio < 3) {
+            thin.push(`${scheme} · ${where} · ${el.tag} · ${front} on `
+              + `rgb(${bg.slice(0, 3).map(Math.round).join(',')}) = ${ratio.toFixed(2)}:1`);
+          }
+        }
+      }
+    }
+  }
+  ok('every ink a component puts on a surface separates from it, in both themes',
+    thin.length === 0, [...new Set(thin)].slice(0, 10).join('\n    '));
+  ok('…measured over both themes and every component rendered above',
+    pairs > 600, `${pairs} pairs, ${skipped} left to the browser`);
 }
 
 group('the chat was left alone');
