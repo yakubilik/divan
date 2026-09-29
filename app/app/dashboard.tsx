@@ -5,8 +5,9 @@ import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { LOCALE } from '../src/i18n';
 import { useDivanView, useQueueBadge } from '../src/queue';
-import { project as projectIn, type DivanView, type MergedProject } from '../src/divan';
+import { COLUMNS, project as projectIn, type DivanView, type MergedProject } from '../src/divan';
 import { chips } from '../src/shell';
+import type { DivanColumn } from '../src/protocol';
 import { since } from '../src/tickets';
 import {
   agentRows, asks, calm, chip, clock, counters, freshness, latest, line, machineWords,
@@ -15,11 +16,15 @@ import {
 import {
   blank, blankBody, branchCards, nowWords, oldWords, quiet, subtitle, waitingWords, type Line,
 } from '../src/project';
-import { EmptyState, ListRow, SectionHeader } from '../src/components/divan';
+import {
+  COLUMN_LABEL, OPENS_ON, faces, foot, items, spread, tabs, tally, type Face, type Item,
+} from '../src/board';
+import { ColumnTabs, EmptyState, ListRow, SectionHeader, Segments } from '../src/components/divan';
 import {
   AgentLine, AgentRoster, AskCard, Counters, Note, NoteFoot, ProjectCard, SystemLine,
 } from '../src/components/dashboard';
 import { BranchCard, ProjectHead, QuietNote, StateLines } from '../src/components/project';
+import { BoardCard, ColumnLine } from '../src/components/board';
 import { Text } from '../src/components/text';
 import { useTokens } from '../src/theme';
 import { ProjectBar, Shell } from '../src/components/shell';
@@ -69,9 +74,15 @@ export default function Dashboard() {
   const now = view.now;
   const host = useStore((s) => s.host);
   // A parameter can arrive twice; one project is being read either way.
-  const param = useLocalSearchParams<{ project?: string }>().project;
-  const selected = (Array.isArray(param) ? param[0] : param) || null;
+  const params = useLocalSearchParams<{ project?: string; tab?: string; col?: string }>();
+  const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v) || null;
+  const selected = one(params.project);
   const picked = selected ? projectIn(view, selected) : null;
+  // Which face of the product's page is open, and which column of its board —
+  // in the address rather than in a `useState`, the way the project itself is,
+  // so that a redraw or a notification lands on the page somebody was reading.
+  const face: Face = one(params.tab) === 'board' ? 'board' : 'overview';
+  const col = COLUMNS.find((c) => c === one(params.col)) ?? OPENS_ON;
   // An empty string rather than nothing: `setParams` writes what it is given,
   // and "no project" has to be sayable.
   const enter = (key: string | null) => router.setParams({ project: key ?? '' });
@@ -98,7 +109,10 @@ export default function Dashboard() {
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
         {picked ? (
           <Project project={picked} index={view.projects.findIndex((p) => p.key === picked.key)}
-            view={view} now={now} ago={ago} />
+            view={view} now={now} ago={ago} face={face} column={col}
+            onFace={(to) => router.setParams({ tab: to })}
+            onColumn={(to) => router.setParams({ col: to })}
+            onOpen={(ticket) => go(() => router.push(`/ticket/${ticket}`))} />
         ) : (
           <>
             <SectionHeader kind="page" title={T('overview')} right={aside}
@@ -281,40 +295,72 @@ function Agents({ view, now, ago, onOpen }: {
   );
 }
 
-/** One product alone (Mobile2 V4, Mobile7 S4): who it is, a line of what is
- *  happening and a line of what it is waiting for, then its branches as cards.
+/** One product alone (Mobile2 V4, Mobile7 S4): who it is, and then whichever of
+ *  its two faces is open — the Overview below, or its board.
  *
- *  The same page carries the two states that are not that. A product nothing has
- *  touched in a fortnight gets Mobile7 S5's block where the two lines would be —
- *  "quiet for 23 days", what happened last — because "nothing running, nothing
- *  waiting" said twice over a dead product is true and useless. A product whose
- *  board is still empty gets Mobile7 S6's designed state instead of a page of
- *  zeros. Which of the three it is, is `src/project.ts`'s to decide.
+ *  The frame puts three tabs over them. Two are drawn: the chats a product owns
+ *  are not filed yet, and a tab that dims under a thumb and does nothing is worse
+ *  than a tab that is not there.
+ */
+function Project({ project: p, index, view, now, ago, face, column, onFace, onColumn, onOpen }: {
+  project: MergedProject; index: number; view: DivanView; now: number; ago: Ago;
+  face: Face;
+  column: DivanColumn;
+  onFace: (to: Face) => void;
+  onColumn: (to: DivanColumn) => void;
+  onOpen: (ticket: number) => void;
+}) {
+  const T = useT();
+  const t = useTokens();
+  const stale = oldWords(p, now, ago);
+  return (
+    // `flexGrow` so that the empty board, which centres itself in what it is
+    // given, has the page to centre itself in. Mobile7 S4's own body: `padding:
+    // 14px 16px 0; gap:12`.
+    <View style={{ flexGrow: 1, gap: 12 }}>
+      <ProjectHead name={p.name} index={index} note={subtitle(p)} />
+      {!!stale && (
+        <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
+          {T(stale.key, stale.params)}
+        </Text>
+      )}
+      {/* Mobile2 V4's segmented control: the mark on the Board tab is the worst
+          thing on the board, so the face that is not open still says whether it
+          needs anybody (`src/board.ts boardMark`). */}
+      <Segments value={face} onChange={(key) => onFace(key as Face)}
+        segments={faces(p).map((f) => ({ key: f.key, label: T(f.label), mark: f.mark, tone: f.tone }))} />
+      {face === 'board'
+        ? <Board project={p} view={view} ago={ago} column={column} onColumn={onColumn} onOpen={onOpen} />
+        : <Overview project={p} view={view} now={now} ago={ago} />}
+    </View>
+  );
+}
+
+/** The Overview face (Mobile2 V4, Mobile7 S4): what is happening and what it is
+ *  waiting for, over its branches as cards.
  *
- *  The frame's three tabs — Overview, Board, Chats — are not here: the Board is
- *  the next ticket and the chats a product owns are not filed yet, and a tab
- *  that dims under a thumb and does nothing is worse than a tab that is not
- *  there. This page is the Overview, which is the one of the three that exists.
+ *  It carries the two states that are not that. A product nothing has touched in
+ *  a fortnight gets Mobile7 S5's block where the two lines would be — "quiet for
+ *  23 days", what happened last — because "nothing running, nothing waiting"
+ *  said twice over a dead product is true and useless. A product whose board is
+ *  still empty gets Mobile7 S6's designed state instead of a page of zeros. Which
+ *  of the three it is, is `src/project.ts`'s to decide.
  *
- *  Mobile2 V4 also puts the asking agent's card on this page, with its two
- *  proposed answers as buttons. Mobile7 S4 draws the same page without it and
- *  with the `waiting` line instead, which is the later of the two and the one
- *  followed here: answering is a screen of its own (Mobile6 S3, reached from the
+ *  Mobile2 V4 also puts the asking agent's card here, with its two proposed
+ *  answers as buttons. Mobile7 S4 draws the same page without it and with the
+ *  `waiting` line instead, which is the later of the two and the one followed
+ *  here: answering is a screen of its own (Mobile6 S3, reached from the
  *  Dashboard's first counter), every question is on it, and a second place to
- *  answer the same question from would be two places to keep in step. The line
- *  says what is waiting and names it; the answering happens where it is designed
- *  to.
+ *  answer the same question from would be two places to keep in step.
  *
  *  Nor are the frame's own branch figures: `99.2% crash-free`, `6,412 clicks
  *  28d`, `€1,140 MRR`. Nothing is connected to those sources (the plan puts them
  *  after the screens), and the numbers drawn instead are the board's own — what
  *  is open on a branch, what is in progress, what is done. */
-function Project({ project: p, index, view, now, ago }: {
-  project: MergedProject; index: number; view: DivanView; now: number; ago: Ago;
+function Overview({ project: p, view, now, ago }: {
+  project: MergedProject; view: DivanView; now: number; ago: Ago;
 }) {
   const T = useT();
-  const t = useTokens();
-  const stale = oldWords(p, now, ago);
   const asleep = quiet(p, now, ago);
   const body = blankBody(p);
   const happening = nowWords(view, p);
@@ -327,41 +373,101 @@ function Project({ project: p, index, view, now, ago }: {
   const line = (x: Line) => x.clauses
     .map((c) => T(c.said.key, c.who ? { ...c.said.params, who: T(c.who) } : c.said.params))
     .join(' ');
+  if (blank(p)) {
+    return <EmptyState title={T('prNewTitle')} body={T(body.key, body.params)} foot={T('prNewFoot')} />;
+  }
   return (
-    // `flexGrow` so that the empty board, which centres itself in what it is
-    // given, has the page to centre itself in. Mobile7 S4's own body: `padding:
-    // 14px 16px 0; gap:12`.
     <View style={{ flexGrow: 1, gap: 12 }}>
-      <ProjectHead name={p.name} index={index} note={subtitle(p)} />
-      {!!stale && (
-        <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2, paddingHorizontal: 4 }}>
-          {T(stale.key, stale.params)}
-        </Text>
-      )}
+      {asleep
+        ? <QuietNote title={T(asleep.title.key, asleep.title.params)}
+            body={T(asleep.body.key, asleep.body.params)} />
+        : <StateLines rows={[
+            { label: T('prNow'), text: line(happening), tone: happening.tone },
+            { label: T('prWaiting'), text: line(pending), tone: pending.tone, quiet: true },
+          ]} />}
+      <View style={{ gap: 6 }}>
+        <SectionHeader title={T('branches')} count={p.branches.length} />
+        {branchCards(p, now).map((b) => (
+          <BranchCard key={b.key} name={b.name} state={b.state} dim={b.dim}
+            line={b.said ? T(b.said.key, b.said.params) : b.text}
+            figures={b.figures.map((f) => ({ value: f.value, label: T(f.label) }))}
+            refreshed={b.refreshed ? T(b.refreshed.said.key, b.refreshed.said.params) : null}
+            tone={b.refreshed?.tone ?? null} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** …and the board (Mobile2 V5, Mobile8 S7): four columns as four tabs, one of
+ *  them open, and the cards in it.
+ *
+ *  The column is where a person put a card and the mark on the card is what is
+ *  actually happening to it — two facts, kept apart, and `src/board.ts` decides
+ *  both. A card that failed at four in the morning is therefore still in the
+ *  column it was in, with a red mark and how long it has been like that; nothing
+ *  on this screen moves a card, and nothing on the computer does either.
+ *
+ *  Dragging a card between the columns is the next ticket. The tabs are taps
+ *  until then, which is the whole of the gesture the frames call for on a phone
+ *  minus the part that starts work.
+ *
+ *  A board with no card anywhere on it is Mobile7 S6's designed state, with the
+ *  four tabs still over it at zero — the design's own rule for an empty screen is
+ *  that the structure stays legible. */
+function Board({ project: p, view, ago, column, onColumn, onOpen }: {
+  project: MergedProject; view: DivanView; ago: Ago;
+  column: DivanColumn;
+  onColumn: (to: DivanColumn) => void;
+  onOpen: (ticket: number) => void;
+}) {
+  const T = useT();
+  const t = useTokens();
+  // The computer this phone holds a socket to: the one whose runs have a screen
+  // in this app, and so the only cards that are a way in (`src/board.ts items`).
+  const host = useStore((s) => s.host);
+  const list = items(view, p, column, ago, host?.id ?? null);
+  const said = foot(p, column, view.now);
+  const where = spread(p, list.map((i) => i.card));
+  const empty = blankBody(p);
+  return (
+    <View style={{ flexGrow: 1, gap: 6 }}>
+      {/* The tab strip is the width of the page in the frame, rule and all, and
+          the page it is on is inset by 16. */}
+      <ColumnTabs value={column} onChange={(key) => onColumn(key as DivanColumn)}
+        style={{ marginHorizontal: -16 }}
+        columns={tabs(p, view.now).map((c) => ({ key: c.key, label: T(c.label), count: c.count }))} />
       {blank(p) ? (
-        <EmptyState title={T('prNewTitle')} body={T(body.key, body.params)} foot={T('prNewFoot')} />
+        <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')} />
       ) : (
         <>
-          {asleep
-            ? <QuietNote title={T(asleep.title.key, asleep.title.params)}
-                body={T(asleep.body.key, asleep.body.params)} />
-            : <StateLines rows={[
-                { label: T('prNow'), text: line(happening), tone: happening.tone },
-                { label: T('prWaiting'), text: line(pending), tone: pending.tone, quiet: true },
-              ]} />}
-          <View style={{ gap: 6 }}>
-            <SectionHeader title={T('branches')} count={p.branches.length} />
-            {branchCards(p, now).map((b) => (
-              <BranchCard key={b.key} name={b.name} state={b.state} dim={b.dim}
-                line={b.said ? T(b.said.key, b.said.params) : b.text}
-                figures={b.figures.map((f) => ({ value: f.value, label: T(f.label) }))}
-                refreshed={b.refreshed ? T(b.refreshed.said.key, b.refreshed.said.params) : null}
-                tone={b.refreshed?.tone ?? null} />
-            ))}
-          </View>
+          <ColumnLine marks={tally(list.map((i) => i.card), view.now, ago)}
+            machines={where.map((m) => `${m.name} ${m.n}`).join(' · ')} style={{ paddingTop: 6 }} />
+          {list.map((item) => <BoardRow key={item.card.id} item={item} onOpen={onOpen} />)}
+          {!!said && (
+            <Text style={{ fontSize: 13, lineHeight: 13 * 1.45, color: t.ink2,
+                           paddingHorizontal: 4, paddingTop: 2 }}>
+              {T(said.key, said.params)}
+            </Text>
+          )}
         </>
       )}
     </View>
+  );
+}
+
+/** One card of the open column. */
+function BoardRow({ item, onOpen }: { item: Item; onOpen: (ticket: number) => void }) {
+  const T = useT();
+  return (
+    <BoardCard face={item.face} who={T(item.who)} mine={item.mine}
+      title={item.card.title} line={item.summary}
+      machine={item.machine && { name: item.machine.name,
+                                 seen: item.machine.seen == null ? null
+                                   : T('pfLastSeen', { time: clock(item.machine.seen) }) }}
+      mark={item.mark && { text: `${item.mark.mark} ${T(item.mark.key, item.mark.params)}`,
+                           tone: item.mark.tone }}
+      onPress={item.ticket == null ? undefined : () => onOpen(item.ticket!)} />
   );
 }
 

@@ -897,9 +897,10 @@ for (const scheme of ['dark', 'light']) {
     orphans.length ? ` (orphaned: ${orphans.join(', ')})` : ''}`, orphans.length === 0]);
 
   // The frames are outside the repository, so a citation cannot be followed by
-  // a machine. These three files may cite five of them, and nothing else.
+  // a machine. These three files may cite the frames of this page and its board
+  // (Mobile8 S7 since the Board tab), and nothing else.
   const FRAMES = { V4: 'Mobile2', V5: 'Mobile2', S1: 'Mobile5', S2: 'Mobile5', S4: 'Mobile7',
-                   S5: 'Mobile7', S6: 'Mobile7', S10: 'Mobile9', S11: 'Mobile9',
+                   S5: 'Mobile7', S6: 'Mobile7', S7: 'Mobile8', S10: 'Mobile9', S11: 'Mobile9',
                    V1: 'Mobile1', V2: 'Mobile1', V3: 'Mobile1', S3: 'Mobile6' };
   const bad = [];
   for (const [file, text] of [['src/project.ts', judgement], ['src/components/project.tsx', parts],

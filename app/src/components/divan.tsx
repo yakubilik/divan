@@ -75,12 +75,15 @@ export function Tap({ onPress, onLongPress, style, children }: {
  *  padding:16px; box-shadow:inset 0 0 0 1px var(--line2)` over the page itself.
  *  It is a statement rather than a thing lying on the page, and the empty middle
  *  is what says so. */
-export function Card({ ring = 'line', lifted, hollow, bar, radius = RADIUS.card, inset = true,
+export function Card({ ring = 'line', lifted, hollow, dashed, bar, radius = RADIUS.card, inset = true,
                        onPress, onLongPress, style, children }: {
   ring?: 'line' | 'amber' | 'red' | 'run' | 'none';
   lifted?: boolean;
   /** No surface, and the emphasised line around it (Mobile7 S5). */
   hollow?: boolean;
+  /** …drawn as a `1.5px` dashed outline instead: the card nothing runs on,
+   *  which on the board is the one a person owns (Mobile2 V5). */
+  dashed?: boolean;
   bar?: number | null;
   radius?: number;
   /** The card's own padding. False where its children carry it. */
@@ -98,9 +101,10 @@ export function Card({ ring = 'line', lifted, hollow, bar, radius = RADIUS.card,
     : lifted || hollow ? t.line2 : t.line;
   return (
     <Tap onPress={onPress} onLongPress={onLongPress}
-      style={[{ backgroundColor: hollow ? 'transparent' : lifted ? t.sLift : t.s1,
+      style={[{ backgroundColor: hollow || dashed ? 'transparent' : lifted ? t.sLift : t.s1,
                 borderRadius: radius, overflow: 'hidden',
                 borderWidth: 1, borderColor: border },
+              dashed && { borderWidth: 1.5, borderColor: t.line2, borderStyle: 'dashed' },
               lifted && { boxShadow: shadows(t).pop }, style]}>
       {bar != null && (
         <View style={{ height: 2, width: `${Math.max(0, Math.min(1, bar)) * 100}%`, backgroundColor: t.run }} />
@@ -311,6 +315,61 @@ export function ColumnTabs({ columns, value, onChange, dragging, target, style }
             <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '600',
                                              color: isTarget ? t.run : on ? t.ink : t.ink2 }}>{col.label}</Text>
             <Text mono style={{ fontSize: 10.5, color: isTarget ? t.run : t.ink3 }}>{col.count}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ── 5b · the two faces of one page ──────────────────────────────────────────
+
+export interface Segment {
+  key: string;
+  label: string;
+  /** The mono character after the name: the worst thing on the page behind it
+   *  (Mobile2 V4's red `■` on the Board tab). */
+  mark?: string;
+  /** …and what colour it is. */
+  tone?: Tone | null;
+}
+
+/** Overview · Board — one page with two faces, as a segmented control.
+ *
+ *  Mobile2 V4: a track of `s1` at `border-radius:12px; padding:3px`, each
+ *  segment `padding:8px 0` and centred at 13.5 pt medium, the selected one a
+ *  card of `s2` sitting in it at the corner a row's well takes. The unselected
+ *  names are `ink2`, which is the difference the frame draws between "the other
+ *  face of this page" and "the page you are on".
+ *
+ *  The frame has a third segment, Chats, with a count on it. The chats a product
+ *  owns are not filed yet, so it is not drawn: a segment that dims under a thumb
+ *  and does nothing is worse than a segment that is not there. */
+export function Segments({ segments, value, onChange, style }: {
+  segments: Segment[];
+  value: string;
+  onChange: (key: string) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTokens();
+  return (
+    <View style={[{ flexDirection: 'row', backgroundColor: t.s1, borderRadius: RADIUS.tab, padding: 3 }, style]}>
+      {segments.map((seg) => {
+        const on = seg.key === value;
+        return (
+          <Pressable key={seg.key} accessibilityRole="tab" accessibilityState={{ selected: on }}
+            onPress={() => onChange(seg.key)}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+                     paddingVertical: 8, borderRadius: RADIUS.well,
+                     backgroundColor: on ? t.s2 : 'transparent' }}>
+            <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500', color: on ? t.ink : t.ink2 }}>
+              {seg.label}
+            </Text>
+            {!!seg.mark && (
+              <Text mono style={{ fontSize: 11, color: seg.tone ? toneColours(t, seg.tone).fg : t.ink3 }}>
+                {seg.mark}
+              </Text>
+            )}
           </Pressable>
         );
       })}
