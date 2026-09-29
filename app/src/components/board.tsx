@@ -18,10 +18,10 @@
  *  nobody reads twice — and the one card that is drawn differently is the one
  *  nothing runs on, which is a fact about the card rather than an alarm. */
 import React from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon } from './icon';
 import { Text } from './text';
-import { Card, ExecutorBadge } from './divan';
+import { Card, ExecutorBadge, Tap } from './divan';
 import { RADIUS, toneColours, useTokens, type Tone } from '../theme';
 
 // ── 1 · the line above the cards ────────────────────────────────────────────
@@ -77,7 +77,8 @@ export function ColumnLine({ marks, machines, style }: {
  *  on the computer this phone holds a socket to. Everywhere else it is a card and
  *  not a press, because another machine's ticket number would open this
  *  machine's queue (`src/board.ts items`). */
-export function BoardCard({ face, who, machine, mark, title, line, mine, onPress, style }: {
+export function BoardCard({ face, who, machine, mark, title, line, mine, lifted, landed,
+                            hold, onPress, style }: {
   /** Which executor square to draw (`components/divan` `ExecutorBadge`), by the
    *  name the design gives that face. */
   face: string;
@@ -91,6 +92,19 @@ export function BoardCard({ face, who, machine, mark, title, line, mine, onPress
   /** The card's own sentence. Absent where nobody wrote one. */
   line?: string;
   mine?: boolean;
+  /** It is being held: Mobile3 D1's card, on the lifted surface and a shade
+   *  larger, where it lies. */
+  lifted?: boolean;
+  /** …and it has just been put down: Mobile3 D4, the one card on a board that is
+   *  not quiet, with a line across its foot saying what happened and — where the
+   *  move can be taken back — the way to take it back.
+   *
+   *  It is a fact about this phone rather than about the board, which is why it
+   *  arrives as a prop and not as a status: nothing on the wire says "somebody
+   *  moved me four seconds ago". */
+  landed?: { text: string; tone: Tone; action?: string; onAction?: () => void } | null;
+  /** What makes it draggable (`components/drag` `useDrag`). */
+  hold?: { holdMs: number; onLongPress: (e: GestureResponderEvent) => void; onPressOut: () => void };
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -101,7 +115,13 @@ export function BoardCard({ face, who, machine, mark, title, line, mine, onPress
   // an amber badge is how the frame says so (S7's `mini · seen 21:02`).
   const stale = !!machine?.seen;
   return (
-    <Card radius={RADIUS.tile} inset={false} dashed={mine} onPress={onPress} style={style}>
+    <Card radius={RADIUS.tile} inset={false} dashed={mine && !landed} onPress={onPress}
+      lifted={lifted} ring={landed ? 'run' : lifted ? 'none' : 'line'}
+      wash={landed ? landed.tone : null}
+      holdMs={hold?.holdMs} onLongPress={hold?.onLongPress} onPressOut={hold?.onPressOut}
+      /* D1 draws the held card at `scale(1.03)`: the one transform on this
+         board, and it is what says the card is off the page rather than on it. */
+      style={[lifted && { transform: [{ scale: 1.03 }] }, style]}>
       <View style={{ padding: 11, paddingHorizontal: 13, gap: 7 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <ExecutorBadge executor={face} size={24} />
@@ -130,6 +150,22 @@ export function BoardCard({ face, who, machine, mark, title, line, mine, onPress
           <Text numberOfLines={1} style={{ fontSize: 13, lineHeight: 13 * 1.4, color: t.ink2 }}>{line}</Text>
         )}
       </View>
+      {!!landed && (
+        /* D4's foot: `border-top`, `padding:8px 12px`, what happened at 12 pt in
+           `ink2` and the way back at the same size in `ink`. The frame draws that
+           line in a green of its own; the hairline a card already has is the one
+           this palette has a token for. */
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8,
+                       borderTopWidth: 1, borderTopColor: t.line2,
+                       paddingVertical: 8, paddingHorizontal: 12 }}>
+          <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12, color: t.ink2 }}>{landed.text}</Text>
+          {!!landed.action && (
+            <Tap onPress={landed.onAction} style={{ marginLeft: 'auto' }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: t.ink }}>{landed.action}</Text>
+            </Tap>
+          )}
+        </View>
+      )}
     </Card>
   );
 }
