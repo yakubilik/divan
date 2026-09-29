@@ -1266,6 +1266,12 @@ checks.push(...require('./test-card.cjs').checks);
 // unreachable and the executors (Mobile11 S16, S15, S14) — the staleness worn
 // rather than inferred, and nothing that used to be reachable from there lost.
 checks.push(...require('./test-machine.cjs').checks);
+// …and the eight screens Divan drew no frame for, carried into its language:
+// pairing, welcome, the sign-ins, the agent store and its install, Settings and
+// the two sheets — stood up in both themes with no data, with stale data and
+// with a machine that cannot be reached, and holding on to every way through
+// the app they had before.
+checks.push(...require('./test-divan-screens.cjs').checks);
 // …and the screen a card is written on: a title, two or three sentences and
 // nothing else — no executor, no brief, no approval. Its own checks are pushed
 // after its `ready`, because filing is a request and the page it lands on is
