@@ -421,9 +421,14 @@ group('Web12 W1, and Web13 W3 which is the same page in the light');
   ok('…and every colour it names exists in both themes',
     [...paint(dark).vars].every((n) => K.DARK[n] !== undefined && K.LIGHT[n] !== undefined));
   ok('the page is composed of the parts and spells no style of its own',
-    ['src/screens/Overview.tsx', 'src/components/Sessions.tsx']
+    ['src/screens/Overview.tsx', 'src/components/Sessions.tsx',
+     'src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
       .every((f) => /from '\.\.\/ui\/divan'/.test(src(f))
         && !COLOUR.test(src(f).replace(/\/\*[\s\S]*?\*\//g, ''))));
+  ok('…and none of the pages under a product reaches the chat',
+    ['src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
+      .every((f) => !/from '[^']*(ChatView|Bubble|Timeline|ChatDetails|TicketChat|NewChat)'/
+        .test(src(f))));
   for (const part of ['Note', 'Panel', 'PanelHead', 'Composer', 'Quoted', 'DockTab',
                       'DockMore', 'CommandBar', 'Tag', 'RosterRow']) {
     ok(`${part} is a part rather than something this screen invented`,
