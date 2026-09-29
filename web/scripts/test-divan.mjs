@@ -934,6 +934,50 @@ group('every pair of tokens that meets can be read');
   ok('…and nothing was left unmeasured', skipped === 0, `${skipped} skipped`);
 }
 
+group('the fades that are left are the ones that were decided');
+{
+  // Everything a person reads is drawn at full strength now: "grey rather than
+  // faint" replaced every fade that was standing in for "you cannot press
+  // this", because a fade is the one thing the palette cannot make legible and
+  // the one thing a check that only measures colours cannot see.
+  //
+  // Four are left and each is a decision, so they are written down here: a
+  // fade nobody decided on cannot appear without this list gaining a line.
+  const DECIDED = {
+    // The tile being carried stays faintly in place, so that the gap it will
+    // leave is visible while the drop target is chosen. The artboard draws the
+    // ghost that way itself; nothing is read off it.
+    'src/screens/Terminal.tsx': ['lifted ? 0.4 : 1'],
+    // Not a fade but an absence: a diff's gutter holds its width when there is
+    // no sign in it, and a screen share's frames are stacked and only the
+    // front one is shown.
+    'src/components/Timeline.tsx': ["sign === ' ' ? 0 : 1"],
+    'src/screens/Screen.tsx': ['i === front ? 1 : 0'],
+    // The textarea a copy goes through, which is one pixel and off screen.
+    'src/lib/clipboard.ts': ['0'],
+    // The two animations: a caret blinking and the "working" dot breathing.
+    'src/ui/kit.tsx': ['1', '0', '0.35'],
+  };
+  const undecided = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(join(web, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) { walk(rel); continue; }
+      if (!/\.tsx?$/.test(e.name)) continue;
+      for (const m of src(rel).matchAll(/opacity: ?([^,;}\n]+)/g)) {
+        const what = m[1].trim();
+        if (!(DECIDED[rel] ?? []).includes(what)) undecided.push(`${rel}: ${what}`);
+      }
+    }
+  };
+  walk('src');
+  ok('no element is faded except the four places that say why', undecided.length === 0,
+    undecided.join(', '));
+  ok('…and every one of those four is still there, so the list is not stale',
+    Object.entries(DECIDED).every(([f, list]) => list.every((v) => src(f).includes(`opacity: ${v}`)
+      || src(f).includes(`opacity:${v}`))));
+}
+
 group('the chat was left alone');
 {
   const chat = ['src/components/ChatView.tsx', 'src/components/Bubble.tsx',
