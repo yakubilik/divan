@@ -123,7 +123,9 @@ repository.
 
 `scripts/test-board.mjs` is the fifth, and it is one product's board: the four
 columns and what the merge puts in each, the mark a ticket wears, a card that was
-dropped staying dropped until the machine agrees, and the page measured against
+dropped staying dropped until the machine agrees, a question past the two the
+desktop opens by itself taking a window when a card is pressed — and one that had
+been closed opening again — and the page measured against
 Web12 W2 and Web13 W4 — the four-abreast grid, the ticket's own corner and
 padding, the square and the two lines beside it, the tag in the corner, the card
 nothing runs on drawn as an outline — with the two themes proved to be one

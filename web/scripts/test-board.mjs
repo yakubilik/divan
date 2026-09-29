@@ -69,6 +69,7 @@ const load = (p) => import(pathToFileURL(join(out, p)).href);
 const K = await load('src/lib/theme.js');
 const D = await load('src/lib/divan.js');
 const B = await load('src/lib/board.js');
+const S = await load('src/lib/sessions.js');
 const BoardUI = await load('src/screens/Board.js');
 const OverviewUI = await load('src/screens/Overview.js');
 const { createElement: h } = await import('react');
@@ -165,6 +166,27 @@ group('the four columns, and what is in them');
   ok('and a column never offers to take the card it already holds',
     B.takes('queued', 'ice_box') === true && B.takes('ice_box', 'ice_box') === false
     && B.takes('ice_box', null) === false);
+}
+
+group('a card pressed on the board takes a window');
+{
+  const live = S.sessions(view('busy'));
+  const four = [...live, { ...live[0], id: 'studio:k9' }];
+  const last = four[3];
+  const raised = S.arrange(four, { minimised: [], closed: {}, raised: [last.id] });
+
+  ok('a question past the two the desktop opens by itself has no window until it is asked for',
+    !S.arrange(four).panels.some((p) => p.id === last.id) && raised.panels[0].id === last.id,
+    `${S.arrange(four).panels.map((p) => p.id).join(', ')} → ${raised.panels.map((p) => p.id).join(', ')}`);
+
+  S.useDock.setState({ minimised: [], closed: {}, raised: [] });
+  S.useDock.getState().close(last.id, S.at(last));
+  const shut = S.arrange(four, S.useDock.getState());
+  S.useDock.getState().raise(last.id);
+  const back = S.arrange(four, S.useDock.getState());
+  ok('…and one that was closed opens again when it is, rather than staying dealt with',
+    !shut.live.some((s) => s.id === last.id) && back.panels[0].id === last.id,
+    `${shut.live.length} live while closed · ${back.panels.map((p) => p.id).join(', ')}`);
 }
 
 // ── 2 · the page is the frames’ page ───────────────────────────────────────
