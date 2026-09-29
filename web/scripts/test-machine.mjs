@@ -3,14 +3,11 @@
  *
  *     cd web && npm test
  *
- *  Covered here: that each page is the frame's page — its head, the frames' own
- *  table tracks and column names, the thresholds as sliders — with nothing
- *  paired and with a machine that cannot be reached; that a sign-in about to
- *  stop working is visible with what to do about it; and that the two
- *  thresholds are editable, are remembered, and change what the panel says and
- *  what it will start. Both themes and the five states of the fleet are
- *  `test-shell.mjs`, which draws every one of these pages in all of them; the
- *  drag a threshold refuses is `test-drive.mjs`.
+ *  Each page against its frame, with nothing paired and with a machine that
+ *  cannot be reached; a sign-in seen expiring before it expires; the two
+ *  thresholds edited, remembered and taking effect. Both themes and the five
+ *  states of the fleet are `test-shell.mjs`, which draws every one of these
+ *  pages in all of them; the drag a threshold refuses is `test-drive.mjs`.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -280,8 +277,6 @@ group('the thresholds are editable, remembered, and change what the panel does')
   refuses = false;
   ok('a browser that refuses to remember still moves it', at().warn === 0.3);
 
-  // The same fleet, read against two different thresholds: the studio has 64%
-  // of its window left and the mini has none.
   const fleet = view('fresh');
   const studio = fleet.hosts.find((x) => x.key === 'studio');
   ok('the fleet’s standing is read against the number that was set',
