@@ -108,7 +108,11 @@ const STUBS = {
     SafeAreaProvider: host('div', 'SafeAreaProvider'),
   },
   'expo-router': {
-    useRouter: () => ({ back() {}, push() {}, replace() {} }),
+    useRouter: () => ({ back() {}, push() {}, replace() {}, canGoBack: () => false }),
+    // The shell lights the tab the route is in, so a render has to be able to
+    // say where it is. Every place is rendered by name in test-shell.cjs, so
+    // the one this answers with is deliberately not one of them.
+    usePathname: () => '/',
     Redirect: () => null,
     useFocusEffect: () => {},
     Stack: Object.assign(host('div', 'Stack'), { Screen: () => null }),
