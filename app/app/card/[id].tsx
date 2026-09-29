@@ -44,6 +44,22 @@ import type { RunSilence, Turn } from '../../src/transcript';
  *  reader changes face — the breadcrumb, the title, the column and the card's
  *  place in it are the same seven lines on T1, T2 and T3.
  *
+ *  Four things the frames draw are deliberately not here, and each is the same
+ *  reason: nothing on the wire says them.
+ *
+ *    * `Created by · Divan · from your chat`, and the `by Coder` after the last
+ *      update. No card records who wrote it or who touched it last, and a
+ *      guessed author on the one face that is supposed to be a person's own
+ *      writing is the worst place in this app to invent something.
+ *    * T2's `Drafted by Divan · edited by you 26 Sep`, with its `Edit`. Same
+ *      gap, and there is no screen to edit a brief on yet.
+ *    * T1's column button with a chevron on it, which moves the card without
+ *      dragging. Moving a card is the board's gesture (`src/drag.ts`) and this
+ *      is drawn as the label it is: a chevron that opens nothing is worse than
+ *      no chevron.
+ *    * The `148 / 220` under the card's own sentences, which is a writing aid
+ *      for a screen that can write them. This one reads.
+ *
  *  The one write this screen makes is a sentence into a running worker, and it
  *  goes to the queue on the machine the card is on rather than to whichever
  *  computer this phone holds a socket to (`src/card.ts saying`). It does not

@@ -30,7 +30,7 @@
 import { column, type DivanView, type MergedCard, type MergedProject } from './divan';
 import { executorKey, type Ago, type Said } from './dashboard';
 import { executorFace } from './waiting';
-import { mark, type Mark } from './board';
+import { arranged, mark, type Mark } from './board';
 import { marks } from './tickets';
 import { LOCALE, type Key } from './i18n';
 import type { DivanBrief, DivanCardDetail, DivanColumn, Ticket } from './protocol';
@@ -86,7 +86,10 @@ export interface Head {
   /** …and how far the verifier has got through the criteria, where it has said
    *  anything at all. */
   progress: { met: number; of: number } | null;
-  /** Where it sits in its column, as the frame writes it: `#3 in column`. */
+  /** Where it sits in its column, as the frame writes it: `#3 in column`. Null
+   *  in Done, which nobody arranges — it is drawn newest-finished-first
+   *  (`src/board.ts cards`), so a place in it would be a number the board itself
+   *  disagrees with. */
   place: number | null;
   of: number;
   /** The computer the work is on, and when that computer last answered where it
@@ -97,7 +100,7 @@ export interface Head {
 
 export function head(view: DivanView, card: MergedCard, project: MergedProject | null,
                      ticket: Ticket | null, ago: Ago): Head {
-  const list = project ? column(project, card.column) : [];
+  const list = project && arranged(card.column) ? column(project, card.column) : [];
   const at = list.findIndex((c) => c.id === card.id && c.host === card.host);
   const branch = project?.branches.find((b) => b.kind === card.branch);
   const seen = view.hosts.find((h) => h.id === card.host);
