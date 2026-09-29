@@ -8,8 +8,8 @@
  *  spinner that never stops, and a push about a red ticket has to land on the
  *  ticket rather than on the chat list.
  *
- *  `scripts/test-divan.cjs`, `scripts/test-divan-merge.cjs` and
- *  `scripts/test-shell.cjs` are folded in at the end — the design system, the
+ *  `scripts/test-divan.cjs`, `scripts/test-divan-merge.cjs`,
+ *  `scripts/test-shell.cjs` and the screens' own files are folded in at the end — the design system, the
  *  merged view across several machines and Divan's three places each have their
  *  own file — and this is the command that runs everything.
  *
@@ -1243,6 +1243,11 @@ checks.push(...require('./test-dashboard.cjs').checks);
 // across every project and every machine, grouped by the kind of answer it
 // needs — and answered in one tap where the question offered the words for it.
 checks.push(...require('./test-waiting.cjs').checks);
+// …and the page behind one chip in the project bar: one product alone, what is
+// happening on it and what it is waiting for, its branches as cards — and the
+// two states that are not that, a product asleep for weeks and one whose board
+// has never had a card on it.
+checks.push(...require('./test-project.cjs').checks);
 
 let bad = 0;
 for (const [name, ok] of checks) {
