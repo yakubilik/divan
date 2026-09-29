@@ -463,17 +463,24 @@ export function foot(l: Landed): { said: Said; col?: Key; who?: Key; tone: Tone;
   return { said: { key: 'dgMoved' }, col: COLUMN_LABEL[l.column], tone: 'ink2', undo: true };
 }
 
-/** Where the sentence about a card that has just landed belongs: on the card, or
- *  on the line above the cards.
+/** Which surface says what just happened to a card: the card itself, or the line
+ *  above the cards.
  *
- *  On the card is D4 and is where it belongs — it is that card's own news, and it
- *  is what carries the way to take the move back. But the card is not always
- *  there to carry it, and announcing it nowhere is the one outcome that must not
- *  happen: a move that never reached its computer left the card in a column this
+ *  The card is D4 and is where it belongs — it is that card's own news, and it is
+ *  what carries the way to take the move back. But the card is not always there
+ *  to carry it: a move that never reached its computer left it in a column this
  *  list may not be showing, and a board that has just opened the column the card
- *  went to may not have re-read that machine yet. */
-export function announce(l: Landed, drawn: string[]): 'card' | 'line' {
-  return drawn.includes(l.carried.card) ? 'card' : 'line';
+ *  went to may not have re-read that machine yet. Announcing it nowhere is the one
+ *  outcome that must not happen, and it is what happened before this existed.
+ *
+ *  Both answers come out of one call on purpose. The screen draws two surfaces
+ *  and reads one of these fields for each, so there is no arrangement of it in
+ *  which a card that is not drawn quietly takes the sentence with it. */
+export function says(l: Landed | null, drawn: string[]): { line: boolean; card: string | null } {
+  if (!l) return { line: false, card: null };
+  return drawn.includes(l.carried.card)
+    ? { line: false, card: l.carried.card }
+    : { line: true, card: null };
 }
 
 /** …and where a card that was taken back goes: exactly the column and the place

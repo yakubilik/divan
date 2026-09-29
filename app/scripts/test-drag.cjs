@@ -170,8 +170,10 @@ checks.push(
   checks.push(
     ['a card that started a worker says which one, and offers no way to undo it',
       eq(landed({ started: true }), { said: { key: 'dgStarted' }, who: 'exCoder', tone: 'run', undo: false })],
-    ['…and it is said on the card where the card is on screen, and above them where it is not',
-      D.announce(LANDED, ['q9', 'q1']) === 'card' && D.announce(LANDED, ['q9']) === 'line'],
+    ['…and exactly one surface says it: the card where the card is drawn, the line above where it is not',
+      eq(D.says(LANDED, ['q9', 'q1']), { line: false, card: 'q1' })
+      && eq(D.says(LANDED, ['q9']), { line: true, card: null })
+      && eq(D.says(null, ['q1']), { line: false, card: null })],
     ['a release onto a tab before the column opens brings the list with it, so there is a card to say it on',
       eq(play([lift(), over(ON('in_progress'), 1000, 'in_progress'), { do: 'drop' }])
            .effects.filter((e) => e.do === 'open'), [{ do: 'open', column: 'in_progress' }])],

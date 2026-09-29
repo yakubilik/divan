@@ -20,7 +20,7 @@ import {
   COLUMN_LABEL, OPENS_ON, faces, foot, items, spread, tabs, tally, type Face, type Item,
 } from '../src/board';
 import {
-  SETTLE_MS, announce, back, carry, foot as dropFoot, hint, type Carried, type Landed,
+  SETTLE_MS, back, carry, foot as dropFoot, hint, says, type Carried, type Landed,
 } from '../src/drag';
 import { ColumnTabs, EmptyState, ListRow, SectionHeader, Segments } from '../src/components/divan';
 import {
@@ -532,8 +532,10 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
     ? hint(drag.drag, { others: list.filter((i) => i.card.id !== carried?.card).length,
                         mixed: p.machines.length > 1 })
     : null;
-  const where_ = landed ? announce(landed, list.map((i) => i.card.id)) : null;
-  const note = landed && where_ === 'line' ? dropFoot(landed) : null;
+  // Which of the two surfaces carries what just happened to a card, as one
+  // answer read twice: the line below, and the card in the loop under it.
+  const told = says(landed, list.map((i) => i.card.id));
+  const note = landed && told.line ? dropFoot(landed) : null;
   /** Where the card in the air would land, among the cards that are drawn. */
   const slot = drag.target === column ? drag.drag?.slot ?? null : null;
 
@@ -549,7 +551,7 @@ function Board({ project: p, view, ago, column, onColumn, onOpen }: {
           hold={drag.hold(carry(item.card, item.face, item.who))}
           held={carried?.card === item.card.id}
           flying={drag.flying}
-          landed={landed && where_ === 'card' && landed.carried.card === item.card.id ? landed : null}
+          landed={landed && told.card === item.card.id ? landed : null}
           onUndo={() => { if (landed) { put(null); void ask({ ...back(landed), starts: false }); } }} />
       </View>
     ));
