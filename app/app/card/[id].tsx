@@ -7,21 +7,21 @@ import { since } from '../../src/tickets';
 import { clock, executorKey, type Ago, type Said } from '../../src/dashboard';
 import { executorFace } from '../../src/waiting';
 import {
-  FACES, OPENS_ON, SILENCE, agentWords, details, find, head, live, sections, saying, stamp,
-  tabs, trail, type Face, type Say,
+  FACES, OPENS_ON, SILENCE, details, find, head, live, sections, saying, stamp,
+  tabs, trail, type Face, type Moment, type Say,
 } from '../../src/card';
 import { EmptyState, FaceTabs, SectionHeader } from '../../src/components/divan';
 import {
   Block, BriefLine, CardHead, Commands, Criterion, Crumbs, DetailRow, DetailValue, LiveRow,
-  Machine, SayBox, Sentences, TrailRow, Worker,
+  SayBox, Sentences, TrailRow, Worker,
 } from '../../src/components/card';
 import { BackRow } from '../../src/components/waiting';
 import { Text } from '../../src/components/text';
 import { useTokens } from '../../src/theme';
 import { Shell } from '../../src/components/shell';
 import type { MergedCard, MergedProject } from '../../src/divan';
-import type { DivanCardDetail } from '../../src/protocol';
-import type { Turn } from '../../src/transcript';
+import type { DivanBrief, DivanCardDetail } from '../../src/protocol';
+import type { RunSilence, Turn } from '../../src/transcript';
 
 /** One card, opened — the three faces of Mobile4: T1 what it is, T2 what the
  *  machine was told, T3 what is happening right now.
@@ -52,7 +52,6 @@ import type { Turn } from '../../src/transcript';
 export default function CardScreen() {
   const router = useRouter();
   const T = useT();
-  const t = useTokens();
   const view = useDivanView();
   const sayCard = useStore((s) => s.sayCard);
   const params = useLocalSearchParams<{ id?: string; host?: string; face?: string }>();
@@ -129,7 +128,7 @@ export default function CardScreen() {
                     + (h.progress ? ` · ${h.progress.met}/${h.progress.of}` : ''),
               tone: h.mark.tone,
             }} />
-          <FaceTabs value={face} onChange={(to) => router.setParams({ face: to })}
+          <FaceTabs value={face} onChange={(next) => router.setParams({ face: next })}
             faces={tabs(brief, got.live).map((f) => ({
               key: f.key, label: T(f.label), count: f.count, live: f.live }))} />
         </View>
@@ -157,12 +156,11 @@ function Human({ view, card, project, brief, ago, seen }: {
   view: ReturnType<typeof useDivanView>;
   card: MergedCard;
   project: MergedProject | null;
-  brief: DivanCardDetail['card']['agent'] | null;
+  brief: DivanBrief | null;
   ago: Ago;
   seen: string | null;
 }) {
   const T = useT();
-  const t = useTokens();
   const rows = details(view, card, project, brief, ago);
   const moments = trail(card);
   return (
@@ -186,15 +184,23 @@ function Human({ view, card, project, brief, ago, seen }: {
         <View>
           <SectionHeader title={T('caActivity')} style={{ paddingHorizontal: 0, marginBottom: 6 }} />
           {moments.map((m) => (
-            <TrailRow key={`${m.at}-${m.said.key}`} time={when(m.at)}
-              text={T(m.said.key, m.who ? { ...m.said.params, who: T(m.who) }
-                : m.said.params?.col ? { ...m.said.params, col: T(m.said.params.col as any) }
-                : m.said.params)} />
+            <TrailRow key={`${m.at}-${m.said.key}`} time={when(m.at)} text={words(T, m)} />
           ))}
         </View>
       )}
     </ScrollView>
   );
+}
+
+/** One line of the trail out of the reading's own words: an executor's name and
+ *  a column's name are keys themselves, and are put into the reader's language
+ *  before they are put into the sentence. */
+function words(T: ReturnType<typeof useT>, m: Moment): string {
+  return T(m.said.key, {
+    ...m.said.params,
+    ...(m.who ? { who: T(m.who) } : {}),
+    ...(m.col ? { col: T(m.col) } : {}),
+  });
 }
 
 /** A moment in the trail: the time where it is today's, the date where it is
@@ -265,7 +271,7 @@ function Live({ card, ago, now, turns, stamps, said, running, silence, seen, dra
   stamps: Record<string, number>;
   said: Say[];
   running: boolean;
-  silence: ReturnType<typeof useCard>['silence'];
+  silence: RunSilence;
   seen: string | null;
   draft: string;
   onDraft: (text: string) => void;

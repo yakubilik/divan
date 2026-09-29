@@ -362,9 +362,11 @@ function bufferDelta(cid: string, segment: number, text: string) {
  *  draws, and a re-render has no business being triggered by it. */
 const divanPolls = new Set<string>();
 
-/** …and whether the open card has one. Module-level for the same reason, and one
- *  flag rather than a set because one card is open at a time. */
-let cardPoll = false;
+/** …and which card has one out. Module-level for the same reason, and one value
+ *  rather than a set because one card is open at a time — but the card itself
+ *  rather than a flag: a read still out for the card somebody has just left must
+ *  not be the reason the card they opened waits a minute for its first page. */
+let cardPoll: string | null = null;
 
 export const useStore = create<State>((set, get) => {
   // Fast Refresh can re-evaluate this module; make sure only the newest store listens.
@@ -965,11 +967,13 @@ export const useStore = create<State>((set, get) => {
       // Another card than the one that was open is a different run and a
       // different brief; nothing of the last one is carried over.
       if (!mine(had)) set({ openCard: opening(card, host) });
-      // A read that is still out is the answer to this one. Without it, a
-      // foreground while a request is in flight is two requests for one page,
-      // and a machine that always times out never stops being asked.
-      if (cardPoll) return;
-      cardPoll = true;
+      // A read that is still out for this card is the answer to this one.
+      // Without it, a foreground while a request is in flight is two requests
+      // for one page, and a machine that always times out never stops being
+      // asked.
+      const key = `${host}:${card}`;
+      if (cardPoll === key) return;
+      cardPoll = key;
       try {
         const open = get().openCard!;
         const got = await onHost<DivanCardDetail>(host, 'divan.card.get',
@@ -979,7 +983,7 @@ export const useStore = create<State>((set, get) => {
         set((st) => (mine(st.openCard)
           ? { openCard: missed(st.openCard!, e?.message ?? null, oldHost(e)) } : {}));
       } finally {
-        cardPoll = false;
+        if (cardPoll === key) cardPoll = null;
       }
     },
 

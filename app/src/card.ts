@@ -229,9 +229,11 @@ export function stamp(at: number | null | undefined, locale = LOCALE): string {
 export interface Moment {
   at: number;
   said: Said;
-  /** The executor named in it, to be put into the reader's language first — the
-   *  same two-step every other sentence in this app takes. */
+  /** The executor named in it, and the column — both are keys themselves, and
+   *  are put into the reader's language before they are put into the sentence,
+   *  which is the two-step every other line in this app takes. */
   who?: Key;
+  col?: Key;
 }
 
 /** What has happened to this card, newest first.
@@ -256,7 +258,7 @@ export function trail(card: MergedCard): Moment[] {
     }
   }
   if (card.moved_at && card.moved_at - (card.created_at || 0) > 1) {
-    out.push({ at: card.moved_at, said: { key: 'caMoved', params: { col: COLUMN_KEY[card.column] } } });
+    out.push({ at: card.moved_at, said: { key: 'caMoved' }, col: COLUMN_KEY[card.column] });
   }
   if (card.created_at) out.push({ at: card.created_at, said: { key: 'caMade' } });
   return out.sort((a, b) => b.at - a.at);
