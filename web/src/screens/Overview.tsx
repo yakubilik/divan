@@ -165,7 +165,7 @@ function ProjectCard({ project: p, index, now, onClick }: {
   const fresh = freshness(p);
   const git = figure(p, now, uptime);
   const board = cardMarks(p);
-  const said = latest(p);
+  const said = latest(p.cards);
   return (
     <Card onClick={onClick} title={`Everything on ${p.name}`} style={{ gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>

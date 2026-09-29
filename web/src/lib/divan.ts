@@ -358,9 +358,21 @@ function hostView(e: HostEntry, now: number): HostView {
 /** A machine is out of quota: its agents are stopped where they were and pick
  *  up again on their own. Only a machine that is answering can be said to be
  *  out — a quota reading from a computer that has been quiet for two hours says
- *  nothing about now. */
-function outOfQuota(h: HostView): boolean {
+ *  nothing about now.
+ *
+ *  Exported because every screen that says anything about an agent has to ask
+ *  it: the merge's own `paused` count and the Dashboard's agent roster are two
+ *  readings of one fact, and a second spelling of it is how one of them came to
+ *  call a stopped agent a running one. */
+export function outOfQuota(h: HostView): boolean {
   return !!h.quota?.spent && !h.stale;
+}
+
+/** …and the machines that are, by the key they were paired under, out of a
+ *  whole view. The set a screen actually wants: an agent is stopped if its host
+ *  is in here. */
+export function spent(view: { hosts: HostView[] }): Set<string> {
+  return new Set(view.hosts.filter(outOfQuota).map((h) => h.key));
 }
 
 /** Everything the panel has, as one view. `now` is a clock in seconds — the
@@ -444,10 +456,10 @@ export function merge(list: HostEntry[], now: number): DivanView {
       const newer = (p.updated_at || 0) > found.updated_at;
       found.name = newer ? p.name : found.name;
       found.summary = newer && p.summary ? p.summary : (found.summary || p.summary || '');
-      found.kind = found.kind || p.kind || '';
+      found.kind = newer && p.kind ? p.kind : (found.kind || p.kind || '');
       found.hosts = [...new Set([...found.hosts, h.key])];
       found.machines = [...new Set([...found.machines, h.machine])];
-      found.repos = [...new Set([...found.repos, ...(p.repos || [])])];
+      found.repos = [...new Set([...found.repos, ...(p.repos || [])])].sort();
       found.running += p.running || 0;
       found.waiting += p.waiting || 0;
       for (const [column, n] of Object.entries(p.counts || {})) {

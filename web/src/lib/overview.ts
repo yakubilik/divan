@@ -22,8 +22,8 @@
  *  compared without either one's clock getting in the way.
  */
 import type { DivanColumn, DivanExecutor } from './protocol';
-import type { DivanView, MergedAgent, MergedProject } from './divan';
-import { stuck } from './divan';
+import type { DivanView, MergedAgent, MergedCard, MergedProject } from './divan';
+import { spent, stuck, waiting } from './divan';
 import { STATE_MARK, type State, type Tone } from './theme';
 
 /** How long ago, in whole words. The screen passes the panel's own
@@ -262,14 +262,24 @@ export function cardMarks(p: MergedProject): { mark: State; n: number }[] {
   ].filter((m) => m.n > 0);
 }
 
-/** The one thing worth saying about a product in the corner of its card: the
- *  worst card's own line. Written by the mirror, so it is what the queue said
- *  rather than a sentence composed here — and empty where nothing has been
- *  said, in which case the card says nothing there. */
-export function latest(p: MergedProject): string {
-  const worst = p.cards.filter(stuck)[0]
-    ?? p.cards.find((c) => c.agent_status === 'asking')
-    ?? p.cards.find((c) => c.agent_status === 'running')
+/** The one thing worth saying about a run of cards in the corner of whatever
+ *  they are on: the worst card's own line. Written by the mirror, so it is what
+ *  the queue said rather than a sentence composed here — and empty where nothing
+ *  has been said, in which case the corner says nothing.
+ *
+ *  The last of the four is the one that is easy to miss: a product whose only
+ *  open card is a person's own has nothing stuck, asking or running on it, and a
+ *  card that said nothing there would be a card with an empty corner on a
+ *  product that is in fact waiting on you.
+ *
+ *  Takes the cards and not the product, because a branch asks the same question
+ *  of its own share of them — which is how the phone puts it
+ *  (`app/src/dashboard.ts`) — and two spellings of "the worst card" drift. */
+export function latest(cards: MergedCard[]): string {
+  const worst = cards.filter(stuck)[0]
+    ?? cards.find((c) => c.agent_status === 'asking')
+    ?? cards.find((c) => c.agent_status === 'running')
+    ?? cards.find(waiting)
     ?? null;
   if (!worst) return '';
   return (worst.agent_detail || '').trim() || worst.title;
@@ -293,12 +303,14 @@ export interface AgentRow {
 
 export function agentRows(view: DivanView): AgentRow[] {
   const at = new Map(view.projects.map((p, i) => [p.key, i]));
-  const spent = new Set(view.hosts.filter((h) => !h.stale && h.quota?.spent).map((h) => h.key));
+  // The merge's own reading of "this machine has nothing left to run on", not a
+  // second spelling of it (`divan.ts outOfQuota`).
+  const stopped = spent(view);
   const rank = (r: AgentRow) => (r.mark === '◌' ? 0 : r.mark === '⏸' ? 1 : 2);
   return view.agents.map((agent) => ({
     agent,
-    mark: agent.unknown ? '◌' : spent.has(agent.host) ? '⏸' : STATE_MARK.running,
-    tone: (agent.unknown ? 'amber' : spent.has(agent.host) ? 'red' : 'run') as Tone,
+    mark: agent.unknown ? '◌' : stopped.has(agent.host) ? '⏸' : STATE_MARK.running,
+    tone: (agent.unknown ? 'amber' : stopped.has(agent.host) ? 'red' : 'run') as Tone,
     who: executorWord(agent.executor),
     index: at.has(agent.projectKey) ? at.get(agent.projectKey)! : -1,
   })).sort((a, b) => rank(a) - rank(b) || (b.agent.since ?? 0) - (a.agent.since ?? 0));

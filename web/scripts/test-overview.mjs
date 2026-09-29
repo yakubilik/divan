@@ -221,10 +221,10 @@ group('the panel and the phone say the same thing about the same board');
       if (!q) continue;
       const card = `the card for ${p.key}`;
       note(`${card} · what it counts`,
-        [p.name, p.machines, p.counts, p.running, p.waiting, p.unknown, p.paused,
-         p.pausedUntil, p.activity, p.stale, p.lastSeen],
-        [q.name, q.machines, q.counts, q.running, q.waiting, q.unknown, q.paused,
-         q.pausedUntil, q.activity, q.stale, q.lastSeen]);
+        [p.name, p.kind, p.machines, p.repos, p.counts, p.running, p.waiting, p.unknown,
+         p.paused, p.pausedUntil, p.activity, p.stale, p.lastSeen],
+        [q.name, q.kind, q.machines, q.repos, q.counts, q.running, q.waiting, q.unknown,
+         q.paused, q.pausedUntil, q.activity, q.stale, q.lastSeen]);
       note(`${card} · its corner`, OV.chip(p, mine.now, ago),
         (() => { const c = PH.chip(q, theirs.now, ago);
                  return { mark: c.mark, text: t(c.key, c.params), tone: c.tone }; })());
@@ -232,7 +232,7 @@ group('the panel and the phone say the same thing about the same board');
       note(`${card} · how fresh it is`, OV.freshness(p), said(PH.freshness(q)));
       note(`${card} · what git says`, OV.figure(p, mine.now, ago), phoneFigure(q, theirs.now));
       note(`${card} · the board's own marks`, OV.cardMarks(p), PH.marks(q));
-      note(`${card} · the worst card's line`, OV.latest(p), PH.latest(q));
+      note(`${card} · the worst card's line`, OV.latest(p.cards), PH.latest(q.cards));
       note(`${card} · whether it is dormant`, OV.dormant(p, mine.now), PH.dormant(q, theirs.now));
     }
 
@@ -260,6 +260,25 @@ group('the panel and the phone say the same thing about the same board');
   ok('…and a fourth counter nobody could measure is three counters',
     OV.counters(view('fresh')).length === 3
     && view('fresh').totals.doneToday === null);
+
+  // The corner of a product whose only open card is a person's own: nothing on
+  // it is stuck, asking or running, so the three states a card's line is usually
+  // read off are all empty and the fourth clause of `latest` is the only one
+  // that answers. A panel that stopped at the third would leave that corner
+  // blank while the phone named the card — one rule, two spellings, and the
+  // spelling that is wrong is on the screen nobody is holding up against the
+  // other one.
+  const hush = view('busy').projects.find((p) => p.key === 'hush');
+  const theirs = phone('busy').projects.find((p) => p.key === 'hush');
+  ok('a product waiting only on you still says what it is waiting on',
+    hush.cards.length === 1
+    && !hush.cards.some((c) => D.stuck(c) || c.agent_status === 'asking'
+      || c.agent_status === 'running')
+    && OV.latest(hush.cards) === 'App Review reply'
+    && OV.latest(hush.cards) === PH.latest(theirs.cards),
+    `${JSON.stringify(OV.latest(hush.cards))} vs ${JSON.stringify(PH.latest(theirs.cards))}`);
+  ok('…and a run of cards with nothing said on any of them says nothing',
+    OV.latest([]) === '' && OV.latest(view('calm').projects[0].cards) === '');
 
   // The one place the two lists are allowed to differ, and why: the holding
   // place for unclaimed work is not a product, and the panel drops it.
@@ -399,9 +418,27 @@ group('what needs a person arrives as a chat session');
   ok('…and every one of them has a tab, which says which are open',
     eq(dock.tabs.map((x) => [x.session.card.id, x.open]),
       [['k2', true], ['m1', true], ['h1', false]]), JSON.stringify(dock.tabs.map((x) => x.open)));
-  const many = S.arrange([...list, { ...list[0], id: 'x:1' }, { ...list[0], id: 'x:2' }]);
+  const five = [...list, { ...list[0], id: 'x:1' }, { ...list[0], id: 'x:2' }];
+  const many = S.arrange(five);
   ok('…beyond three tabs the rest are a count, not a second list',
     many.tabs.length === S.TABS && many.more === 2);
+  // …and the case that count must never be wrong about: the three at the top of
+  // the list are put away, so the two windows on screen are the fourth and the
+  // fifth. Tabs taken off the head of the list would draw three tabs for three
+  // things that are not on screen and say `+2` about the two that are.
+  const late = S.arrange(five, { minimised: five.slice(0, 3).map((x) => x.id), closed: {} });
+  ok('every open window has a tab, wherever it sits in the list',
+    eq(late.panels.map((x) => x.id), ['x:1', 'x:2'])
+    && late.panels.every((p) => late.tabs.some((t) => t.session.id === p.id && t.open)),
+    `${late.panels.map((x) => x.id).join(', ')} · tabs ${late.tabs.map((t) => `${t.session.id}${t.open ? '*' : ''}`).join(', ')}`);
+  ok('…and what is counted as "more" is only what has no tab',
+    late.more === late.live.length - late.tabs.length && late.more === 2
+    && !late.tabs.some((t) => t.open && late.more === 0),
+    `${late.tabs.length} tabs · +${late.more} of ${late.live.length}`);
+  ok('…with the tabs in the order the list is in, rather than the windows first',
+    eq(late.tabs.map((t) => t.session.id),
+      five.filter((x) => late.tabs.some((t) => t.session.id === x.id)).map((x) => x.id)),
+    late.tabs.map((t) => t.session.id).join(', '));
   const away = S.arrange(list, { minimised: ['studio:k2'], closed: {} });
   ok('one put away leaves its tab and lets the next window open',
     eq(away.panels.map((x) => x.card.id), ['m1', 'h1'])

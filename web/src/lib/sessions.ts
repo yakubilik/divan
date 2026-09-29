@@ -268,10 +268,18 @@ export function dismissed(s: Session, dock: DockState): boolean {
 
 /** The windows, the tabs and what is left over.
  *
- *  Every session that has not been dismissed has a tab; the first two that are
- *  not put away are open windows, and a tab says which of the two it is. Beyond
- *  three tabs the rest are a count — `+1` — because a row of tabs as wide as
- *  the screen is a second list, and a list is the thing this replaces. */
+ *  The first two sessions that have not been put away are open windows, and
+ *  every one of those has a tab that says so. Beyond three tabs the rest are a
+ *  count — `+1` — because a row of tabs as wide as the screen is a second list,
+ *  and a list is the thing this replaces.
+ *
+ *  **An open window is never in that count.** With five things waiting and the
+ *  first three put away, the two windows on screen are the fourth and fifth in
+ *  the list; a dock that drew the first three as tabs and said `+2` would be
+ *  counting, as "more", the two windows the reader is looking at. So the tabs
+ *  are the open ones plus as many of the rest as there is room for, and the
+ *  count is what has no tab — which means the row can run one or two past three
+ *  in exactly the case where those extra tabs are the windows themselves. */
 export interface Dock {
   /** Nearest the corner first, which is the order they are drawn in. */
   panels: Session[];
@@ -287,7 +295,14 @@ export function arrange(list: Session[], dock: DockState = NO_DOCK): Dock {
   const away = new Set(dock.minimised);
   const panels = live.filter((s) => !away.has(s.id)).slice(0, PANELS);
   const open = new Set(panels.map((s) => s.id));
-  const tabs = live.slice(0, TABS).map((s) => ({ session: s, open: open.has(s.id) }));
+  // Room for the ones that are not on screen, after the windows have their own.
+  const room = Math.max(0, TABS - panels.length);
+  const also = new Set(live.filter((s) => !open.has(s.id)).slice(0, room).map((s) => s.id));
+  // Drawn in the order the list is in and not windows-first: the tabs are the
+  // queue of what is waiting, and a tab that moved when its window opened would
+  // be a row that reshuffles itself under a cursor.
+  const tabs = live.filter((s) => open.has(s.id) || also.has(s.id))
+    .map((s) => ({ session: s, open: open.has(s.id) }));
   return { panels, tabs, more: Math.max(0, live.length - tabs.length), live };
 }
 
