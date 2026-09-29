@@ -145,7 +145,12 @@ const STUBS = {
     SafeAreaProvider: host('div', 'SafeAreaProvider'),
   },
   'expo-router': {
-    useRouter: () => ({ back() {}, replace() {}, canGoBack: () => false,
+    useRouter: () => ({ back() {}, canGoBack: () => false,
+                        // A screen that files something does not push the page
+                        // it lands on, it replaces itself with it — so where
+                        // that went is recorded the same way a push is, and
+                        // kept apart from it.
+                        replace: (to) => { REPLACED.push(typeof to === 'string' ? to : to); },
                         // Where a press went. A tap that leaves the screen
                         // cannot be seen in the markup it left, and "tapping an
                         // agent opens the run it is printing" is a claim about a
@@ -179,6 +184,7 @@ const STUBS = {
 const STATE = {};
 const PARAMS = {};
 const PUSHED = [];
+const REPLACED = [];
 const STORE = {
   useT: () => (key) => key,
   useStore: Object.assign((selector) => (typeof selector === 'function' ? selector(STATE) : undefined),
@@ -198,7 +204,8 @@ const params = {
  *  happens when a handler is called, which is after the render that offered it. */
 const nav = {
   pushed() { return PUSHED.slice(); },
-  reset() { PUSHED.length = 0; },
+  replaced() { return REPLACED.slice(); },
+  reset() { PUSHED.length = 0; REPLACED.length = 0; },
 };
 
 const realLoad = Module._load;

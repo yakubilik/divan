@@ -898,11 +898,11 @@ for (const scheme of ['dark', 'light']) {
 
   // The frames are outside the repository, so a citation cannot be followed by
   // a machine. These three files may cite the frames of this page and its board
-  // (Mobile8 S7 since the Board tab, Mobile3 D1-D4 since the drag), and nothing
-  // else.
+  // (Mobile8 S7 since the Board tab, Mobile3 D1-D4 since the drag, Mobile8 S9
+  // since the board's head has the way into it), and nothing else.
   const FRAMES = { V4: 'Mobile2', V5: 'Mobile2', S1: 'Mobile5', S2: 'Mobile5', S4: 'Mobile7',
-                   S5: 'Mobile7', S6: 'Mobile7', S7: 'Mobile8', S10: 'Mobile9', S11: 'Mobile9',
-                   V1: 'Mobile1', V2: 'Mobile1', V3: 'Mobile1', S3: 'Mobile6',
+                   S5: 'Mobile7', S6: 'Mobile7', S7: 'Mobile8', S9: 'Mobile8', S10: 'Mobile9',
+                   S11: 'Mobile9', V1: 'Mobile1', V2: 'Mobile1', V3: 'Mobile1', S3: 'Mobile6',
                    D1: 'Mobile3', D2: 'Mobile3', D3: 'Mobile3', D4: 'Mobile3' };
   const bad = [];
   for (const [file, text] of [['src/project.ts', judgement], ['src/components/project.tsx', parts],
