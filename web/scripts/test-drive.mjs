@@ -122,7 +122,7 @@ process.on('unhandledRejection', (e) => unhandled.push(String(e?.message ?? e)))
 const load = (p) => import(pathToFileURL(join(out, p)).href);
 const { App } = await load('src/App.js');
 const { useFleet } = await load('src/lib/fleet.js');
-const { useDivanStore, answered } = await load('src/lib/divan.js');
+const { useDivanStore, answered, silent } = await load('src/lib/divan.js');
 const { useDock } = await load('src/lib/sessions.js');
 const { themeScheme, setThemeChoice } = await load('src/lib/theme.js');
 const { MACHINE_ROWS } = await load('src/lib/shell.js');
@@ -467,26 +467,69 @@ group('a new ticket, written at the top of Ice Box');
     });
   };
   const field = (label) => doc.querySelector(`[aria-label="${label}"]`);
+  const enter = async (el) => {
+    await act(async () => {
+      el.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+  };
   const iceBox = () => [...doc.querySelectorAll('[role="tab"]')]
     .find((b) => (b.textContent ?? '').startsWith('Ice Box'))?.parentElement ?? null;
 
+  // The frame's word is at the end of the *product's* head, and a reader meets
+  // it on the Overview tab: it has to carry them to the board with the card
+  // already open, in one press.
+  await click(find('Overview'));
+  ok('on a product’s own page nothing is being written yet',
+    !field('Title') && head() === 'Quire' && !iceBox());
+
   await click(find('+ New ticket'));
   ok('the word at the end of a product’s head opens the board with a card being written',
-    !!field('Title') && !!iceBox()?.contains(field('Title')),
+    !!field('Title') && !!iceBox()?.contains(field('Title')) && place() === 'Dashboard',
     doc.body.textContent?.slice(0, 120));
 
   await type(field('Title'), 'Export client list as CSV');
   await type(field('What to do'), 'Studios keep asking to download their client list.');
   asked.length = 0;
-  await act(async () => {
-    field('Title').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  });
+  await enter(field('Title'));
   ok('…and pressing return files it on the machine that holds the product, in Ice Box',
     asked.some((a) => a.key === 'studio' && a.type === 'divan.card.create'
       && a.data.project_id === 'p-quire' && a.data.column === 'ice_box'
       && a.data.title === 'Export client list as CSV'
       && a.data.summary === 'Studios keep asking to download their client list.'),
     JSON.stringify(asked.slice(0, 3)));
+
+  // A machine that has gone quiet is a memory of a refusal, not a refusal: the
+  // card is still written to the machine that has the product, and what comes
+  // back from that is the answer.
+  const was = useDivanStore.getState().snaps.studio;
+  await act(async () => { seed(useDivanStore, { snaps: { studio: silent(was, 'connection refused') } }); });
+  await click(find('+ New ticket'));
+  await type(field('Title'), 'Invite by CSV');
+  asked.length = 0;
+  await enter(field('Title'));
+  ok('a product whose only machine has gone quiet is still written to',
+    asked.some((a) => a.key === 'studio' && a.type === 'divan.card.create'
+      && a.data.title === 'Invite by CSV'),
+    JSON.stringify(asked.slice(0, 3)));
+
+  // …and when the machine really is gone, the card is still on the screen with
+  // what was typed in it, and the words that came back are under it.
+  const call = useFleet.getState().call;
+  await act(async () => {
+    seed(useFleet, { call: async () => { throw new Error('That computer did not answer'); } });
+  });
+  await click(find('+ New ticket'));
+  await type(field('Title'), 'Invite by CSV');
+  await enter(field('Title'));
+  ok('…and one that cannot be reached keeps what was typed and says why',
+    field('Title')?.value === 'Invite by CSV'
+    && (iceBox()?.textContent ?? '').includes('That computer did not answer'),
+    (iceBox()?.textContent ?? '').slice(0, 200));
+  await act(async () => {
+    seed(useFleet, { call });
+    seed(useDivanStore, { snaps: { studio: was } });
+  });
+  await click(find('Esc'));
 }
 
 group('nothing was lost on the way');

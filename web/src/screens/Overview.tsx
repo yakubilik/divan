@@ -112,9 +112,12 @@ export function Overview({
   const deep = !!open || !!face;
   const board = !!project && !deep && here === 'board';
   const [drafting, setDrafting] = useState(false);
-  // A half-written card belongs to the board it was opened on: leaving the tab,
-  // the product or the board for a card's own page puts it down.
-  useEffect(() => { setDrafting(false); }, [project?.key, here, deep]);
+  // A half-written card belongs to the board it was opened on: leaving the
+  // product, or the board for a card's own page, puts it down. A *tab* is put
+  // down where the tab is pressed rather than here — the word that opens a
+  // draft moves the tab itself, and an effect watching the tab would close the
+  // card in the same commit that opened it.
+  useEffect(() => { setDrafting(false); }, [project?.key, deep]);
   const aside = project
     ? (project.machines.join(' · ') || 'no machine')
     : old
@@ -146,7 +149,8 @@ export function Overview({
       >
         {!!project && (
           <Tabs tabs={PROJECT_TABS.map((t) => ({ ...t }))} value={here}
-            onChange={(key) => onTab?.(key as ProjectTab)} style={{ marginLeft: 14 }} />
+            onChange={(key) => { setDrafting(false); onTab?.(key as ProjectTab); }}
+            style={{ marginLeft: 14 }} />
         )}
         {/* Web14 W6 puts it at the far end of this line, and W9 is what it
             opens: the card is written at the top of Ice Box, so the press lands

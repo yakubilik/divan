@@ -242,10 +242,10 @@ function TicketCard({ ticket: t, carried, drag, onAsk, onOpen }: {
  *  says.
  *
  *  A card is created on **one** machine, and the merged product carries each
- *  machine's own id for itself (`project.ids`): the one it is written on is a
- *  machine that is answering, because a card filed against a computer that is not
- *  there would be a card nobody has. With none answering the card says so and
- *  keeps what was typed.
+ *  machine's own id for itself (`project.ids`): the one it is written on is
+ *  whichever of them is answering, and failing that the one that has the
+ *  product at all. What comes back from that is the answer — until it does, the
+ *  card keeps what was typed and says why.
  */
 function Draft({ view, project, onClose }: {
   view: DivanView;
