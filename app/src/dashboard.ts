@@ -281,6 +281,26 @@ export function line(p: MergedProject, now: number): { key: Key; params?: Record
   return { key: 'plIdle' };
 }
 
+/** The small mono line under a project card's corner, where there is one: when
+ *  the machine its numbers came from last answered (Mobile5 S1's `last seen
+ *  21:02`), or when its stopped agents pick up again (S2's `resume 04:00`).
+ *
+ *  Null while everything about the product is current — the frames draw `live`
+ *  there and this does not, because a line that says so on every card on every
+ *  ordinary morning is a line nobody reads. It appears when there is something
+ *  to say, which is the only time it means anything.
+ *
+ *  A quiet machine that has never answered at all has no clock to print and gets
+ *  nothing rather than a guess; the corner still says it is stale. */
+export function freshness(p: MergedProject, resets_at: number | null):
+  { key: Key; params: { time: string } } | null {
+  if (p.stale) {
+    return p.lastSeen == null ? null : { key: 'pfLastSeen', params: { time: clock(p.lastSeen) } };
+  }
+  if (p.paused > 0 && resets_at != null) return { key: 'pfResume', params: { time: clock(resets_at) } };
+  return null;
+}
+
 /** Nothing running, and nothing committed for a fortnight. A product with no
  *  repository to read is never called dormant: not knowing is not the same as
  *  knowing nothing happened. */

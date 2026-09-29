@@ -272,6 +272,15 @@ const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
         const c = D.chip({ ...quire, cards: [], waiting: 0, running: 3, paused: 3 }, NOW, ago);
         return c.key === 'pcPaused' && c.mark === '⏸' && c.tone === 'red' && c.params.n === 3;
       })()],
+    ['a card off a quiet machine says when that machine last answered',
+      eq(D.freshness(kanji, null), { key: 'pfLastSeen', params: { time: D.clock(kanji.lastSeen) } })],
+    ['…one whose agents the quota stopped says when they pick up again',
+      eq(D.freshness({ ...quire, stale: false, paused: 3 }, NOW + 4 * HOUR),
+         { key: 'pfResume', params: { time: D.clock(NOW + 4 * HOUR) } })],
+    ['…and one with nothing to say says nothing, rather than "live" on every card every morning',
+      D.freshness(quire, NOW + 4 * HOUR) === null],
+    ['a machine that has never answered at all has no clock to print, and prints none',
+      D.freshness({ ...kanji, lastSeen: null }, null) === null],
     ['the line worth reading on a card is the worst card’s own',
       D.latest(quire) === 'Coder stuck on Safari login' && D.latest(walk) === ''],
   );
@@ -450,7 +459,9 @@ for (const scheme of ['dark', 'light']) {
     [`${scheme}: \u2026nor over a fleet that has run out of quota`,
       (() => {
         const m = draw(scheme, SPENT_ONLY);
-        return m.includes('pausedTitle') && !m.includes('calmTitle');
+        return m.includes('pausedTitle') && !m.includes('calmTitle')
+          // …and the product whose agents were stopped says when they resume.
+          && m.includes('pcPaused') && m.includes('pfResume');
       })()],
     // The screen and the rule are one thing, checked as one: `calm()` decides,
     // and this is every fleet above put through the screen to see that what it

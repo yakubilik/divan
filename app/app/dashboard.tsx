@@ -9,8 +9,8 @@ import { project as projectIn, type DivanView, type MergedProject } from '../src
 import { chips } from '../src/shell';
 import { since } from '../src/tickets';
 import {
-  agentRows, asks, calm, chip, clock, counters, latest, line, marks, staleness,
-  systemLine, target, type Ago,
+  agentRows, asks, calm, chip, clock, counters, freshness, latest, line, marks,
+  staleness, systemLine, target, type Ago,
 } from '../src/dashboard';
 import { EmptyState, ListRow, SectionHeader } from '../src/components/divan';
 import {
@@ -245,14 +245,12 @@ function Product({ project: p, index, view, now, ago, onPress }: {
   const T = useT();
   const mark = chip(p, now, ago);
   const said = line(p, now);
-  const back = view.quota.resets_at;
+  const fresh = freshness(p, view.quota.resets_at);
   return (
     <ProjectCard index={index} name={p.name} onPress={onPress}
       line={T(said.key, said.params)}
       chip={{ mark: mark.mark, text: T(mark.key, mark.params), tone: mark.tone }}
-      freshness={p.stale ? (p.lastSeen == null ? null : T('pfLastSeen', { time: clock(p.lastSeen) }))
-        : p.paused > 0 && back ? T('pfResume', { time: clock(back) })
-        : null}
+      freshness={fresh ? T(fresh.key, fresh.params) : null}
       figure={p.activity ? {
         value: p.activity.week,
         label: T('pfFinished'),
