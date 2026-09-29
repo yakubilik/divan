@@ -371,7 +371,8 @@ export function merge(list: HostEntry[], now: number): DivanView {
           repos: [...(p.repos || [])],
           hosts: [h.id],
           machines: [h.machine],
-          branches: (p.branches || []).map((b) => ({ ...b, cards: { ...(b.cards || {}) }, machines: [h.machine] })),
+          branches: (p.branches || []).map((b) => ({
+            ...b, cards: { ...(b.cards || {}) }, machines: work(b) ? [h.machine] : [] })),
           counts: { ...(p.counts || {}) },
           running: p.running || 0,
           waiting: p.waiting || 0,
@@ -453,7 +454,7 @@ function mergeBranches(into: MergedProject, p: DivanProject, machine: string): v
   for (const b of p.branches || []) {
     const found = into.branches.find((x) => x.kind === b.kind);
     if (!found) {
-      into.branches.push({ ...b, cards: { ...(b.cards || {}) }, machines: [machine] });
+      into.branches.push({ ...b, cards: { ...(b.cards || {}) }, machines: work(b) ? [machine] : [] });
       continue;
     }
     for (const col of COLUMNS) {
@@ -465,10 +466,15 @@ function mergeBranches(into: MergedProject, p: DivanProject, machine: string): v
       found.summary = b.summary;
       found.summary_at = b.summary_at;
     }
-    if (b.open || Object.keys(b.cards || {}).length) {
-      found.machines = [...new Set([...found.machines, machine])];
-    }
+    if (work(b)) found.machines = [...new Set([...found.machines, machine])];
   }
+}
+
+/** Is there any work on this branch at all? A branch every product has and
+ *  nobody has used says nothing, and naming the machines it is "on" would be
+ *  naming every machine the product is on. */
+function work(b: DivanBranch): boolean {
+  return (b.open || 0) > 0 || Object.values(b.cards || {}).some((n) => (n || 0) > 0);
 }
 
 /** Worst first. A project with something waiting on a person comes before one

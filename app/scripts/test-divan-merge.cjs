@@ -273,6 +273,13 @@ const checks = [
     const seo = isghocam.branches.find((b) => b.kind === 'seo');
     return seo.summary === 'rank 4 of 12';
   })()],
+  ['…and a branch nobody has used names no machines at all', (() => {
+    // Every product gets the same five branches on the day it is made. Saying
+    // an unused one is "on studio, mini" is naming every machine the product is
+    // on, which is not what the line is for.
+    const seo = isghocam.branches.find((b) => b.kind === 'seo');
+    return seo.machines.length === 0 && seo.open === 0;
+  })()],
   ['the product is stale because one of its machines is, and names which',
     isghocam.stale === true && isghocam.staleMachines.join(',') === 'mini'],
   ['…and says how many of its agents are a memory rather than a state',
