@@ -7,6 +7,11 @@ beri açık" diye bir kez anılır.
 
 ## Nöbet tutarken
 
+- **Merge kuyruğun son adımı, işin son adımı değil.** Bir kriter ancak merge'den sonra
+  kanıtlanabiliyorsa (CI koşusu, deploy, canlı uç) merge'den sonra dönüp bak: 30 Eyl
+  akşamı #77 "deploy otomatik olsun" diye geçti, merge commit'inin CI koşusu kırmızıydı
+  ve deploy hiç koşmadı.
+
 - **Olay kaydı bulguyu verir, repo log'u onu doğrular.** Kuyruğun event'leri olanı
   anlatır, kodun o anki hâlini anlatmaz. Bir bulguyu yazmadan önce ilgili repo'da
   (`~/projects/ustabasi` başta olmak üzere) event penceresinden sonra atılmış commit
@@ -19,9 +24,12 @@ beri açık" diye bir kez anılır.
 
 | # | Bulgu | İlk görüldü | Durum |
 |---|---|---|---|
-| A1 | Merge'den sonra worktree silinmiyor: 9.8 GB, 8.3 GB'ı `done` ticket'larda; `clean` yalnızca CLI'da, supervisor çağırmıyor | 2026-09-30 | Yakup'a soruldu |
-| A2 | Kapasite: 24 saatte 218 koşu / $1752, yakup 2 Ekim 10:02'ye kadar kapalı, kuyruk tek hesapta yedeksiz | 2026-09-30 | Yakup'a soruldu |
-| A3 | #30 stale kill (20 dk çıktısız, 29 Eyl 16:12) — tek vaka, desen değil | 2026-09-30 | izlemede |
+| A1 | Merge'den sonra worktree silinmiyor; `clean` yalnızca CLI'da, supervisor çağırmıyor. 30 Eyl 15:16–15:20'de elle süpürüldü (9.8 GB → 964 MB) ama kod aynı: #77/#78 merge'inden sonra beş saatte yine 964 MB | 2026-09-30 | cevapsız, açık |
+| A2 | Kapasite: yakup 2 Ekim 10:02'ye kadar kapalı, kuyruk tek hesapta yedeksiz (30 Eyl akşam yükü hafifti, ~$30) | 2026-09-30 | cevapsız, açık |
+| A3 | #30 stale kill (20 dk çıktısız, 29 Eyl 16:12) — tek vaka, desen değil | 2026-09-30 | kapandı: 30 Eyl akşam penceresinde hiç stale/crash/ceiling yok |
+| A4 | babysee/backend main'de CI kırmızı (`pnpm lint` OOM, exit 134); #77'nin kurduğu `deploy-beta` hiç koşmadı, beta hâlâ elle deploy | 2026-09-30 akşam | Yakup'a soruldu |
+| A5 | Verifier kartın kriterlerini kapsamadan `pass` veriyor: #71'de 5 kriterden 1'i, `summary` = "Placeholder", main'e merge (c21a34d). 10 verifier koşusunun hepsi 6–12 sn / 1–3 tool | 2026-09-30 akşam | Yakup'a soruldu |
+| A6 | "merge skipped: repo has uncommitted changes" geçici bir durum ama otomatik merge turu açmıyor, doğrudan kırmızıya düşüyor (#73, 2 commit silindi) | 2026-09-30 akşam | Yakup'a soruldu |
 
 ## Kararlar
 
