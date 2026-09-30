@@ -227,9 +227,10 @@ export interface MergedProject {
   ids: Record<string, string>;
   /** Its faces beside the code, in the order the computer keeps them. */
   branches: MergedBranch[];
-  /** Its **open** board: the daemon sends everything outside `done`, because
-   *  that column grows for ever and nothing on a dashboard is drawn from a card
-   *  finished last March. How many are in it is in `counts` and nowhere else. */
+  /** Its board: everything outside `done`, and of `done` only the last month,
+   *  because that column grows for ever and nothing on a dashboard is drawn
+   *  from a card finished last March. How many are in it altogether is in
+   *  `counts` and nowhere else. */
   cards: MergedCard[];
   /** How many cards are in each column, added up across the machines. The
    *  daemon counts these over its whole board, `done` included, which is why

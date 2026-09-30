@@ -1389,10 +1389,21 @@ async def wire() -> None:
           {p["name"] for p in snapshot["projects"]} >= {"babysee", "isghocam"}
           and all(p["summary_line"] for p in snapshot["projects"]),
           repr([p["name"] for p in snapshot["projects"]]))
-    check("the cards are the open board and nothing that is finished with",
-          {c["column"] for c in snapshot["cards"]} & {"done"}, set())
+    # Done travels only as far back as a month. Ticket 1 finished (cancelled)
+    # a moment ago and comes along; one that finished last spring does not,
+    # and the counts still say it is there.
+    old = board.card_by_ustabasi(1)
+    conn = sqlite3.connect(tmp / "wire.sqlite")
+    conn.execute("UPDATE cards SET moved_at=? WHERE id=?",
+                 (time.time() - 90 * 24 * 3600, old["id"]))
+    conn.commit(); conn.close()
+    snapshot = await host.h_divan_snapshot(None, {})
+    sent_done = [c for c in snapshot["cards"] if c["column"] == "done"]
+    holds("the cards are the open board and this month's finished work",
+          sent_done and all(c["ustabasi_id"] != 1 for c in sent_done),
+          repr([(c["ustabasi_id"], c["moved_at"]) for c in sent_done]))
     holds("which is not the whole board: the counts still say what is in done",
-          any(p["counts"]["done"] for p in snapshot["projects"]),
+          any(p["counts"]["done"] > 0 for p in snapshot["projects"]),
           repr([p["counts"] for p in snapshot["projects"]]))
     check("a card that has been given a machine carries it",
           {c["machine"] for c in snapshot["cards"] if c["machine"]}, {"this-mac"})

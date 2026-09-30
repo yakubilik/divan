@@ -81,6 +81,11 @@ from . import ustabasi as ustabasimod
 #: starts until a person drags it into `in_progress`.
 COLUMNS = ("ice_box", "queued", "in_progress", "done")
 
+#: How far back the snapshot's Done column reaches: a month, the window the
+#: web board's column head counts in ("this month 12"). Older finished cards
+#: are in the counts and nowhere else.
+DONE_WINDOW_S = 30 * 24 * 3600
+
 #: Who does the work. `coding_agent` is ustabasi and is the only one this
 #: daemon can start; `branch_agent` is the overnight SEO/marketing/customer
 #: kind; `assistant` is a one-off piece of research or writing; `human` is a
@@ -1208,9 +1213,11 @@ class Board:
         (`app/src/divan.ts`). This end's job is to say what is true here and to
         say which computer "here" is.
 
-        `cards` is the open board: everything outside `done`. That column grows
-        for ever, the counts beside each project already say how many are in it,
-        and nothing on a dashboard is drawn from a card finished last March.
+        `cards` is the open board and this month's finished work: everything
+        outside `done`, plus what landed in `done` in the last `DONE_WINDOW_S`
+        (Web12 W2 heads that column "this month"). Done grows for ever; the
+        counts beside each project say how many are in it altogether, and
+        nothing on a dashboard is drawn from a card finished last March.
 
         `unfiled` is the work no product has claimed, whole: a ticket
         out of a folder this computer's board knows nothing about is a card in
@@ -1230,8 +1237,10 @@ class Board:
         # A card whose project has been archived belongs to a board nobody is
         # looking at: the lists have to agree, or the phone holds cards of a
         # project it was never told about.
+        recent = time.time() - DONE_WINDOW_S
         cards = [c for c in self.cards()
-                 if c["project_id"] in mine and c["column"] != "done"]
+                 if c["project_id"] in mine
+                 and (c["column"] != "done" or (c["moved_at"] or 0) >= recent)]
         holder = self.unfiled_project()
         # All of them, `done` included, unlike the boards above. A card in the
         # holding place is not a card somebody has finished with — the column it

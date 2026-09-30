@@ -115,9 +115,9 @@ export function ticket(card: MergedCard, now: number, ago: Ago): Ticket {
 
 /** The mono aside at the far end of a column head. Two of the four are what
  *  the column *is* and are the frame's own words; the other two are counted,
- *  and a column with nothing to count says nothing. (Web12 W2 writes `this
- *  month 12` over Done; nothing carries when a card was finished, so that one
- *  is left empty rather than guessed at.) */
+ *  and a column with nothing to count says nothing. Web12 W2 writes `this
+ *  month 12` over Done, and that is what the daemon sends of it: the cards
+ *  finished in the last month, newest first. */
 const SUB: Partial<Record<DivanColumn, string>> = { ice_box: 'someday', queued: 'next up' };
 
 export interface BoardColumn {
@@ -139,7 +139,9 @@ export function columns(p: MergedProject, now: number, ago: Ago, moved: Moves = 
   const at = (c: MergedCard) => moved[c.id] ?? c.column;
   return COLUMN_LABEL.map(({ key, label }) => {
     const cards = p.cards.filter((c) => at(c) === key)
-      .sort((a, b) => a.position - b.position || a.title.localeCompare(b.title));
+      .sort((a, b) => key === 'done'
+        ? ((b.moved_at ?? 0) - (a.moved_at ?? 0)) || a.title.localeCompare(b.title)
+        : a.position - b.position || a.title.localeCompare(b.title));
     // What the machines say is in the column, against what they actually sent
     // of it — measured against where each card *was*, not where a cursor has
     // just put it, so that a card in the air does not leave a phantom behind
@@ -153,7 +155,9 @@ export function columns(p: MergedProject, now: number, ago: Ago, moved: Moves = 
       label,
       tickets: cards.map((c) => ticket(c, now, ago)),
       count: cards.length + hidden,
-      sub: SUB[key] ?? (running ? `${running} working` : ''),
+      sub: SUB[key] ?? (key === 'done'
+        ? (cards.length ? `this month ${cards.length}` : '')
+        : running ? `${running} working` : ''),
       live: running > 0,
       more: hidden ? `+ ${hidden} more` : '',
     };
