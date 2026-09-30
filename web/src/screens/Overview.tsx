@@ -118,8 +118,14 @@ export function Overview({
   // The two pages inside a product that have a head of their own. A key that is
   // no longer in the view — a card that has been finished, a machine that has
   // been unpaired — leaves the product's own page rather than a blank one.
+  // By the card's own id as well as by `host:id`, because those are the two
+  // things that can be in hand: a press on the board hands over the merged key,
+  // and an address hands over the id alone (`/p/babysee/c/0d2279020af7` — the
+  // card is named by what it is, not by which computer this browser reaches it
+  // through). Matching only the first is why a reload of a card's page landed
+  // on the board instead of the card.
   const open = project && card
-    ? view.cards.find((c) => idOf(c) === card) ?? null
+    ? view.cards.find((c) => idOf(c) === card || c.id === card) ?? null
     : null;
   const face = project && !open ? branchOf(project, branch ?? null) : null;
   const deep = !!open || !!face;

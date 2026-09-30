@@ -988,6 +988,12 @@ group('Web14 W6, W7 and W8');
   ok('…and a card opens its own page under the same product',
     scoped({ card: 'studio:k2' }).includes('Agent brief')
     && !scoped({ card: 'studio:k2' }).includes('Branches'));
+  // A press hands over the merged key; an address hands over the id alone
+  // (`/p/quire/c/k2`), which is what a reload and a cold link arrive with. Both
+  // have to open the card — matching only the first drew the board instead.
+  ok('…and its own address opens it too, which is what a reload arrives with',
+    scoped({ card: 'k2' }).includes('Agent brief')
+    && !scoped({ card: 'k2' }).includes('Ice Box'));
 
   // ── the ticket, and the rule its three faces are kept apart by ──
   const card = quire.cards.find((c) => c.id === 'k2');
