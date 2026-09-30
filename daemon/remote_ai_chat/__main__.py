@@ -85,6 +85,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         reaper = asyncio.create_task(srv.reaper())
         updater = asyncio.create_task(srv.updater.loop())
         resumer = asyncio.create_task(srv.resume_interrupted())
+        warmer = asyncio.create_task(srv.warm_models())
 
         async def stopper() -> None:
             """Stand down once an update has been staged.
@@ -107,6 +108,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
             reaper.cancel()
             updater.cancel()
             resumer.cancel()
+            warmer.cancel()
             stop.cancel()
             await srv.sessions.close_all()
             await srv.concierge.close()

@@ -27,6 +27,7 @@ from claude_agent_sdk import (
 
 from ..config import UPLOAD_DIR
 from ..security import destructive_reason, redact
+from . import claude_models
 from .base import Provider, ProviderConfig, TurnResult
 
 log = logging.getLogger("rac.claude")
@@ -41,6 +42,9 @@ _STREAM_BROKEN = object()
 # and a guess that turns out wrong must not wedge the chat forever.
 _CONTINUATION_IDLE_S = 180.0
 
+# What the CLI's own catalog says, when it can be read, is the truth about which
+# model an alias points at — see claude_models. This table is what is left when
+# it cannot be: the mapping as it stood in Claude Code 2.1.
 MODEL_ALIASES = {
     "fable": "claude-fable-5-1",
     "opus": "claude-opus-5",
@@ -76,25 +80,31 @@ class ClaudeProvider(Provider):
         # speaking, rather than the housekeeping a connection also emits.
         self._spoken = 0
 
+    # The list as of Claude Code 2.1, for when the CLI's catalog cannot be read.
+    # Each model carries its own effort list, because they differ: Haiku takes no
+    # effort setting at all and errors when sent one, so an inherited five-way
+    # control was offering a choice that could only break the turn. The hint is
+    # what a person needs to choose between them — how much it holds and what it
+    # costs — rather than an adjective.
+    FALLBACK_MODELS = [
+        {"id": "fable", "label": "Fable 5.1", "model_id": "claude-fable-5-1",
+         "hint": "most capable · 1M context · $10/$50 per 1M", "efforts": EFFORTS},
+        {"id": "opus", "label": "Opus 5", "model_id": "claude-opus-5",
+         "hint": "1M context · $5/$25 per 1M", "efforts": EFFORTS},
+        {"id": "sonnet", "label": "Sonnet 5", "model_id": "claude-sonnet-5",
+         "hint": "1M context · $2/$10 per 1M", "efforts": EFFORTS},
+        {"id": "haiku", "label": "Haiku 4.5", "model_id": "claude-haiku-4-5",
+         "hint": "200K context · $1/$5 per 1M · no effort setting", "efforts": []},
+    ]
+
     @staticmethod
     def catalog() -> dict:
         return {
-            # Each model carries its own effort list, because they differ: Haiku
-            # takes no effort setting at all and errors when sent one, so an
-            # inherited five-way control was offering a choice that could only
-            # break the turn. The hint is what a person needs to choose between
-            # them — how much it holds and what it costs — rather than an
-            # adjective.
-            "models": [
-                {"id": "fable", "label": "Fable 5.1", "model_id": "claude-fable-5-1",
-                 "hint": "most capable · 1M context · $10/$50 per 1M", "efforts": EFFORTS},
-                {"id": "opus", "label": "Opus 5", "model_id": "claude-opus-5",
-                 "hint": "deep work · 1M context · $5/$25 per 1M", "efforts": EFFORTS},
-                {"id": "sonnet", "label": "Sonnet 5", "model_id": "claude-sonnet-5",
-                 "hint": "balanced · 1M context · $2/$10 per 1M", "efforts": EFFORTS},
-                {"id": "haiku", "label": "Haiku 4.5", "model_id": "claude-haiku-4-5",
-                 "hint": "fast · 200K context · $1/$5 per 1M · no effort setting", "efforts": []},
-            ],
+            # Read from the binary this daemon will actually spawn, so a CLI that
+            # gained or moved a model is reflected without anybody editing a list
+            # here. Only the cached read is consulted: warming it is the server's
+            # job (catalog_async), and a picker is not worth blocking a turn for.
+            "models": claude_models.cached() or ClaudeProvider.FALLBACK_MODELS,
             # Kept for a phone older than this daemon, which reads only this one.
             "efforts": EFFORTS,
             "perm_modes": list(PERM_MODES.keys()),
@@ -206,7 +216,7 @@ class ClaudeProvider(Provider):
     # ── lifecycle ──────────────────────────────────────────────────────────
     def _options(self) -> ClaudeAgentOptions:
         c = self.cfg
-        model = MODEL_ALIASES.get(c.model, c.model)
+        model = claude_models.resolved(c.model) or MODEL_ALIASES.get(c.model, c.model)
         # The account decides the environment: its config dir, and its key when
         # it was signed in with one. Anything inherited from the daemon's own
         # shell would quietly sign in as somebody else.

@@ -33,9 +33,12 @@ PERM_MODES: dict[str, tuple[str, str]] = {
     # through the daemon, which auto-accepts everything except the destructive list.
     "bypass":    ("untrusted",  "danger-full-access"),
 }
+# Only reached when `codex` cannot be asked (missing, or too slow to answer):
+# live_models is the real list. Two models, because a fallback that guesses at
+# the whole lineup is a list of names that may not exist any more.
 FALLBACK_MODELS = [
-    {"id": "gpt-5.4", "label": "GPT-5.4", "hint": "default"},
-    {"id": "gpt-5.4-mini", "label": "GPT-5.4 mini", "hint": "fast"},
+    {"id": "gpt-6.1-sol", "label": "GPT-6.1-Sol", "hint": "default"},
+    {"id": "gpt-6-luna", "label": "GPT-6-Luna", "hint": "fast"},
 ]
 
 

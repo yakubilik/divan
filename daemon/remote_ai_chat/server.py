@@ -37,9 +37,15 @@ from . import screen as screenmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
 from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager, with_project
+from .providers.claude_models import live_models as claude_live_models
 from .providers.codex import live_models as codex_live_models
 
 log = logging.getLogger("rac.server")
+
+# How long a provider's model list is trusted before it is read again. The CLIs
+# on this machine update themselves overnight, and a daemon that runs for weeks
+# would otherwise offer the models of the week it started.
+MODELS_TTL_S = 900.0
 
 # The upload is handed to the agent as a path, so there is no allowlist: a
 # .pptx, a .zip or a .docx the agent could read perfectly well is just "file".
@@ -195,8 +201,13 @@ class Server:
         # with a card in the wrong column.
         self._mirror_lock = asyncio.Lock()
         self._versions: dict | None = None
-        self._codex_models: list[dict] | None = None
-        self._codex_models_task: asyncio.Task | None = None
+        # Live model lists per provider, the fetch in flight for each, and when
+        # each list last arrived. Both fetches are local — Codex answers over its
+        # app-server, Claude's comes out of the CLI binary — so they are cheap
+        # enough to repeat, and neither is allowed to hold up a hello.
+        self._models: dict[str, list[dict]] = {}
+        self._model_tasks: dict[str, asyncio.Task] = {}
+        self._models_at: dict[str, float] = {}
         # The voice concierge. Built here but not connected — the CLI only
         # starts when somebody actually asks it something.
         self.concierge = Concierge(self.call_snapshot, self._concierge_account,
@@ -2085,28 +2096,57 @@ class Server:
     # ── info ───────────────────────────────────────────────────────────────
     def catalog(self) -> dict:
         cat = {name: cls.catalog() for name, cls in PROVIDERS.items()}
-        if self._codex_models:
-            cat["codex"]["models"] = self._codex_models
+        for name, models in self._models.items():
+            if models and name in cat:
+                cat[name]["models"] = models
         return cat
 
     async def catalog_async(self) -> dict:
-        """Static catalog, plus Codex's live model list once it has been fetched.
-        The fetch runs at most once per daemon lifetime and never blocks hello for long."""
-        if self._codex_models is None and self._codex_models_task is None:
-            self._codex_models_task = asyncio.create_task(codex_live_models())
-        if self._codex_models_task and not self._codex_models_task.done():
+        """The catalog, with each provider's live model list once it has arrived.
+
+        Neither list is typed out anywhere: Codex reports its models over the
+        app-server, and Claude's are read from the CLI binary the chats run. A
+        fetch that fails leaves the hand-written fallback showing and is tried
+        again on a later call, rather than once per daemon."""
+        await self.warm_models()
+        return self.catalog()
+
+    async def warm_models(self) -> None:
+        """Both live model lists, fetched side by side. Called at startup as well
+        as from hello, so a chat that nobody opened a picker for still resolves
+        its model the way the picker would have shown it."""
+        await asyncio.gather(self._warm_models("codex", codex_live_models),
+                             self._warm_models("claude", claude_live_models))
+
+    async def _warm_models(self, name: str, fetch) -> None:
+        """One provider's model fetch: at most one in flight, waited on only
+        briefly, and forgotten when it comes back empty so the next call retries.
+
+        A list that arrived is kept for MODELS_TTL_S and then fetched again. The
+        CLIs on this machine update themselves on a schedule, so a list read once
+        per daemon lifetime would go stale under a daemon that runs for weeks —
+        which is the whole failure this reading-from-the-CLI was meant to end."""
+        fresh = time.time() - self._models_at.get(name, 0.0) < MODELS_TTL_S
+        if self._models.get(name) and fresh:
+            return
+        task = self._model_tasks.get(name)
+        if task is None:
+            task = self._model_tasks[name] = asyncio.create_task(fetch())
+        if not task.done():
             try:
-                await asyncio.wait_for(asyncio.shield(self._codex_models_task), timeout=3)
+                await asyncio.wait_for(asyncio.shield(task), timeout=3)
             except Exception:
                 pass
-        if self._codex_models_task and self._codex_models_task.done() and self._codex_models is None:
-            try:
-                self._codex_models = self._codex_models_task.result()
-            except Exception:
-                self._codex_models = None
-            if self._codex_models is None:
-                self._codex_models_task = None  # retry on a later call
-        return self.catalog()
+        if not task.done():
+            return
+        try:
+            models = task.result()
+        except Exception:
+            models = None
+        self._model_tasks.pop(name, None)
+        if models:
+            self._models[name] = models
+            self._models_at[name] = time.time()
 
     def host_info(self) -> dict:
         if self._versions is None:
