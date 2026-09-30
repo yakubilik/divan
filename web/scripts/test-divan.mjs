@@ -269,6 +269,11 @@ group('one table, and nothing beside it');
   const strayed = [];
   for (const f of files) {
     if (f === 'src/lib/theme.ts') continue;
+    // The one screen that must not read the palette: it is what draws when the
+    // app has thrown, and a boundary that imported the app's own modules would
+    // go down with them. It paints in the browser's `Canvas`/`CanvasText` and in
+    // a grey that is neither theme's, on purpose.
+    if (f === 'src/components/Fallback.tsx') continue;
     const found = [...new Set(coloursInCode(src(f)))];
     if (found.length) strayed.push(`${f}: ${found.join(', ')}`);
   }
@@ -1085,6 +1090,11 @@ group('the fades that are left are the ones that were decided');
     'src/lib/clipboard.ts': ['0'],
     // The two animations: a caret blinking and the "working" dot breathing.
     'src/ui/kit.tsx': ['1', '0', '0.35'],
+    // The screen that draws when the app has thrown. It cannot read the palette
+    // — a boundary that imported the app's modules would go down with them — so
+    // its second and third lines are quietened with opacity rather than with
+    // `ink2` and `ink3`.
+    'src/components/Fallback.tsx': ['0.75', '0.8'],
   };
   const undecided = [];
   const walk = (dir) => {

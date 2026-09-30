@@ -27,7 +27,16 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- What stands here until the bundle runs, and what is left if it never
+         does: a script that 404s or fails to parse used to leave the page black
+         and silent. React replaces this on its first paint. -->
+    <div id="root">
+      <div id="boot" style="position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:40px 32px;font:400 14px/1.5 -apple-system,system-ui,sans-serif">
+        <div style="font-size:24px;font-weight:600;letter-spacing:-.02em">Divan</div>
+        <div style="opacity:.7">Loading the panel…</div>
+        <div style="opacity:.55;font-size:13px">If this stays, the browser is holding an old copy of the page: reload it while holding Shift, or open it in a private window.</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
