@@ -1186,6 +1186,12 @@ SAME_LINE_OWN_FIGURES('S15', [
   /^[0-9]+s ago$/,
   /^[0-9]+ tasks? · unknown$/,
 ], 'the same line with this fleet’s own figures in it (src/machine.ts machineLines)');
+SAME_LINE_OWN_FIGURES('S1', [
+  /^◌ stale /,
+  /^○ yours$/,
+], 'the same chip, in another branch of its own precedence: the app draws ◌ stale and ○ yours too, '
+  + 'and in this run those products have a stuck card on them, which outranks both '
+  + '(src/dashboard.ts:354-364 chip)', 'frame');
 SAME_LINE_OWN_FIGURES('S14', [/^[0-9]+$/], 'a count of this run’s own roster (src/machine.ts executorCount)');
 SAME_LINE_OWN_FIGURES('S3', [
   /^[0-9]+ days?$/,
