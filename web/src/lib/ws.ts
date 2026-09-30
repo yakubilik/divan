@@ -1,6 +1,42 @@
 import type { RacEvent } from './protocol';
 import { errText, t } from './i18n';
 
+/** Whether this computer's address is the address of the page we are on, over
+ *  HTTPS — which is to say: reached through a tunnel rather than the tailnet.
+ *
+ *  Everything below spoke plain `ws://` and plain `http://`. On a tailnet that
+ *  is right: WireGuard has already encrypted the hop, and there is no
+ *  certificate for a `100.x` address to present anyway. Off it, it is not
+ *  merely weak but impossible — a page served over HTTPS may not open an
+ *  insecure socket, and the browser refuses it before the daemon hears
+ *  anything.
+ *
+ *  A panel reached through a tunnel is served over HTTPS, by the hostname the
+ *  tunnel answers on, and talks to the computer behind that same hostname. So
+ *  the one case that has to be secure is exactly the case where the computer's
+ *  address is the page's own — which is what this asks. A second computer on
+ *  the tailnet stays `ws://` and stays unreachable from such a page; that is
+ *  the tunnel's shape, not something a scheme can fix.
+ *
+ *  The phone has no `location` at all, so nothing there changes. */
+function overTunnel(host: string): boolean {
+  return typeof location !== 'undefined'
+    && location.protocol === 'https:'
+    && host === location.hostname;
+}
+
+/** The socket's address, secure when it has to be. */
+export function wsUrl(host: string, port: number, token: string): string {
+  const scheme = overTunnel(host) ? 'wss' : 'ws';
+  return `${scheme}://${host}:${port}/ws?token=${encodeURIComponent(token)}`;
+}
+
+/** Where `/upload`, `/files` and `/screen.jpg` live, by the same rule. */
+export function httpBase(host: string, port: number): string {
+  return `${overTunnel(host) ? 'https' : 'http'}://${host}:${port}`;
+}
+
+
 type Pending = { resolve: (v: any) => void; reject: (e: Error) => void };
 
 /** The daemon speaks one language (English) and tags every error with a code;
@@ -45,7 +81,7 @@ export class RacClient {
   status: ConnStatus = 'idle';
 
   connect(host: string, port: number, token: string) {
-    const url = `ws://${host}:${port}/ws?token=${encodeURIComponent(token)}`;
+    const url = wsUrl(host, port, token);
     // Same target and a live socket → nothing to do (init() can run twice under Fast Refresh).
     if (this.wanted && this.url === url && this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     this.url = url;
@@ -240,7 +276,7 @@ export function callOnce<T = any>(host: string, port: number, token: string,
   return new Promise<T>((resolve, reject) => {
     let ws: WebSocket;
     try {
-      ws = new WebSocket(`ws://${host}:${port}/ws?token=${encodeURIComponent(token)}`);
+      ws = new WebSocket(wsUrl(host, port, token));
     } catch {
       reject(connError('wsNotConnected'));
       return;

@@ -20,6 +20,8 @@ That is the product. What the design does is bound it.
 - *Anyone who is not on your tailnet.* The daemon binds the Tailscale address
   and `127.0.0.1`, nothing else. There is no relay and no account, so there is
   no server holding your sessions and nothing to breach but your own machine.
+  A tunnel is the one way past that, and it is off: see `docs/TUNNEL.md` and
+  the paragraph below.
 - *A stolen or guessed token.* Tokens are 32 random bytes, stored only as
   sha256, and handed out in plaintext exactly once — in the pairing QR for a
   phone, in the URL fragment for the panel. Every device has its own;
@@ -52,6 +54,19 @@ That is the product. What the design does is bound it.
   Read the command.
 - *`bypass` permission mode.* It is exactly what it says. The folder fence and
   the dangerous-command list are all that remain.
+- *A tunnel you put in front of it yourself.* `docs/TUNNEL.md` describes
+  reaching the panel from a browser that is not on the tailnet, through a
+  Cloudflare tunnel. It moves the boundary: `bind` no longer decides who can
+  reach the daemon, because `cloudflared` runs on the machine and every
+  request it forwards arrives from loopback. What decides instead is
+  `tunnel_allow_ips` — a request carrying `CF-Connecting-IP` is served only if
+  that address is listed. The list starts empty and empty means nobody, so
+  standing a tunnel up opens nothing by itself; but it is one line of config
+  between you and a daemon on the open internet, so read that file before you
+  write the line. What it does *not* defend is anybody sharing the address you
+  allowed — a home address is a household, not a laptop, and the device token
+  is what tells one machine there from another.
+
 - *Your tailnet itself.* If someone else is on it, they can reach port 8790 and
   start guessing tokens. Nothing throttles them: the daemon counts failed
   attempts per address over a ten-minute window but does not yet act on the

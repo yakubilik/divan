@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import hashlib
+import ipaddress
 import secrets
 import socket
 import subprocess
@@ -71,6 +72,13 @@ class Config:
     host_name: str = field(default_factory=socket.gethostname)
     port: int = DEFAULT_PORT
     bind: list[str] = field(default_factory=lambda: ["auto", "127.0.0.1"])
+    # Who may come in through a Cloudflare tunnel. `bind` is the tailnet's door
+    # and this is the tunnel's: a request that arrived through `cloudflared`
+    # carries the browser's own address in `CF-Connecting-IP`, and is served
+    # only if that address is listed here. Addresses or CIDR blocks, IPv4 or
+    # IPv6. Empty means nobody, which is the point — starting a tunnel opens
+    # nothing by itself, and a tailnet client never meets this list at all.
+    tunnel_allow_ips: list[str] = field(default_factory=list)
     allowed_roots: list[str] = field(default_factory=lambda: [str(Path.home() / "projects")])
     # Subtracted from allowed_roots. Anything that holds a credential, plus this
     # daemon's own state — a chat has no business opening in its own token store.
@@ -136,6 +144,7 @@ class Config:
             "host_name": self.host_name,
             "port": self.port,
             "bind": self.bind,
+            "tunnel_allow_ips": self.tunnel_allow_ips,
             "allowed_roots": self.allowed_roots,
             "denied_paths": self.denied_paths,
             "idle_disconnect_s": self.idle_disconnect_s,
@@ -213,6 +222,32 @@ class Config:
             del self.devices[did]
         return True
 
+    def refresh_tunnel_allow_ips(self) -> bool:
+        """Re-read `tunnel_allow_ips` if config.toml changed under us.
+
+        A home address is not a fixed one: the modem restarts, the lease
+        renews, and the list has to be edited. Everything else here is read
+        once at startup, which for a restart-and-be-done setting is fine — but
+        restarting this daemon drops every phone and every chat with it, which
+        is too much to ask of somebody whose only crime was getting a new
+        address from their provider. So this one setting is re-read, and the
+        edit takes effect on the next request.
+
+        Its own mtime, not `reload_devices`': the two are read at different
+        moments and each must be able to see a change the other consumed.
+        """
+        mtime = _mtime(CONFIG_PATH)
+        if mtime is None or mtime == getattr(self, "_tunnel_mtime", None):
+            return False
+        self._tunnel_mtime = mtime
+        try:
+            raw = tomllib.loads(CONFIG_PATH.read_text()).get("tunnel_allow_ips", [])
+        except Exception:
+            return False
+        if isinstance(raw, list):
+            self.tunnel_allow_ips = [str(x) for x in raw]
+        return True
+
     def revoke(self, device_id: str) -> bool:
         if device_id in self.devices:
             del self.devices[device_id]
@@ -221,6 +256,27 @@ class Config:
         return False
 
     # ── network ────────────────────────────────────────────────────────────
+    def tunnel_allows(self, ip: str) -> bool:
+        """Whether an address arriving through the tunnel is one of ours.
+
+        An unparseable address is refused rather than ignored: the header is
+        written by Cloudflare's edge, so anything else in it is either a bug or
+        somebody trying, and neither deserves the benefit of the doubt. A
+        malformed entry in the list is skipped instead — one typo in a config
+        file should narrow the door, never open it.
+        """
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        for entry in self.tunnel_allow_ips:
+            try:
+                if addr in ipaddress.ip_network(str(entry).strip(), strict=False):
+                    return True
+            except ValueError:
+                continue
+        return False
+
     def resolve_bind(self) -> list[str]:
         out: list[str] = []
         for b in self.bind:

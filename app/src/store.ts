@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useCallback } from 'react';
-import { callOnce, client, type ConnStatus } from './ws';
+import { callOnce, client, httpBase, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
 import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
@@ -892,7 +892,7 @@ export const useStore = create<State>((set, get) => {
       const form = new FormData();
       form.append('chat_id', chatId);
       form.append('file', { uri, name, type: guessMime(name) } as any);
-      const res = await fetch(`http://${h.host}:${h.port}/upload`, {
+      const res = await fetch(`${httpBase(h.host, h.port)}/upload`, {
         method: 'POST', headers: { Authorization: `Bearer ${h.token}` }, body: form,
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.detail || `${tt('uploadFailed')} (${res.status})`);
@@ -1276,5 +1276,5 @@ export function useT() {
 export function fileUrl(path: string): string | null {
   const h = useStore.getState().host;
   if (!h) return null;
-  return `http://${h.host}:${h.port}/files?path=${encodeURIComponent(path)}&token=${encodeURIComponent(h.token)}`;
+  return `${httpBase(h.host, h.port)}/files?path=${encodeURIComponent(path)}&token=${encodeURIComponent(h.token)}`;
 }

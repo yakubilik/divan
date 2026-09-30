@@ -32,7 +32,7 @@ from .call import Concierge, headline as call_headline, snapshot as call_snapsho
 from .push import send_push
 from .transcribe import transcribe, available as transcribe_available
 from .attachments import KINDS, normalize_image, sniff
-from .security import PathPolicy
+from .security import PathPolicy, TunnelGate
 from . import screen as screenmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
@@ -178,6 +178,9 @@ class Server:
         self.failed_auth: dict[str, list[float]] = {}
         self.app = FastAPI(title="remote-ai-chat")
         self._allow_cross_origin()
+        # Added after CORS and therefore outermost: an address that is not
+        # allowed in gets its 403 before anything here looks at the request.
+        self.app.add_middleware(TunnelGate, cfg=self.cfg)
         self.app.websocket("/ws")(self.ws_endpoint)
         self.app.get("/health")(lambda: {"ok": True, "version": __version__})
         self.app.post("/upload")(self.upload)

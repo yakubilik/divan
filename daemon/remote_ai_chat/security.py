@@ -143,3 +143,65 @@ class PathPolicy:
                     out.append({"path": str(child), "name": child.name,
                                 "is_git": (child / ".git").exists()})
         return out
+
+
+class TunnelGate:
+    """The door a Cloudflare tunnel comes in by.
+
+    `bind` decides who can reach the daemon over the network, and for a tailnet
+    that is the whole of the question. A tunnel goes around it: `cloudflared`
+    runs on this machine, so as far as the socket is concerned every request it
+    forwards is local, and the address that actually asked is in a header —
+    `CF-Connecting-IP`, written by Cloudflare's own edge and not by whoever
+    connected to it.
+
+    So that header is what tells a tunnelled request from a local one, and a
+    tunnelled request is served only when its address is in
+    `tunnel_allow_ips`. An empty list refuses all of them, which is the point:
+    starting a tunnel in front of this daemon opens nothing by itself.
+
+    Forging the header gains nobody anything. Without it a client on the
+    tailnet or on loopback is already answered, exactly as before; with it,
+    they are held to the list. The only thing it can do is narrow the door.
+
+    Pure ASGI rather than `BaseHTTPMiddleware` because the socket matters more
+    than the routes do: `/ws` is where a client asks for anything, and an HTTP
+    middleware never sees it.
+    """
+
+    HEADER = b"cf-connecting-ip"
+
+    def __init__(self, app, cfg) -> None:
+        self.app = app
+        self.cfg = cfg
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            ip = self._claimed(scope)
+            if ip is not None:
+                # Only on the tunnel's path: one stat per tunnelled request,
+                # none at all for the tailnet, and an edited list needs no
+                # restart — see Config.refresh_tunnel_allow_ips.
+                self.cfg.refresh_tunnel_allow_ips()
+            if ip is not None and not self.cfg.tunnel_allows(ip):
+                await self._refuse(scope, send)
+                return
+        await self.app(scope, receive, send)
+
+    def _claimed(self, scope) -> str | None:
+        """The address Cloudflare says asked, or None if this is not tunnelled."""
+        for name, value in scope.get("headers") or []:
+            if name.lower() == self.HEADER:
+                # A proxy chain would comma-separate; the edge's own is first.
+                return value.decode("latin-1").split(",")[0].strip()
+        return None
+
+    async def _refuse(self, scope, send) -> None:
+        if scope["type"] == "websocket":
+            # Closing before accepting is what turns the handshake into a 403,
+            # which is what a browser needs to stop retrying.
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        await send({"type": "http.response.start", "status": 403,
+                    "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body", "body": b'{"detail":"forbidden"}'})

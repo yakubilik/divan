@@ -160,12 +160,23 @@ def cmd_web(args: argparse.Namespace) -> None:
         print(f"Nothing answers on port {cfg.port}. Start it first: remote-ai-chat serve")
         return
     dev, token = cfg.add_device(args.name)
-    url = f"http://127.0.0.1:{cfg.port}/#" + urlencode({
-        "t": token, "h": "127.0.0.1", "p": cfg.port, "n": cfg.host_name, "d": dev.id,
+    # `--at` is the panel behind a tunnel (docs/TUNNEL.md): the browser is
+    # somewhere else, so the address it dials is the tunnel's hostname on 443
+    # and not this machine's loopback, and there is no browser here to open it
+    # in. Everything else about the device is the same — its own token, its own
+    # line in `devices`, revocable on its own.
+    host, port = (args.at, 443) if args.at else ("127.0.0.1", cfg.port)
+    scheme = "https" if args.at else "http"
+    url = f"{scheme}://{host}:{port}/#" + urlencode({
+        "t": token, "h": host, "p": port, "n": cfg.host_name, "d": dev.id,
     })
     print(f"Device: {dev.name} ({dev.id})")
     print(url)
-    if not args.no_open:
+    if args.at and not cfg.tunnel_allow_ips:
+        print("\nNote: tunnel_allow_ips is empty, so the tunnel will refuse this"
+              "\naddress along with every other. Add the browser's address to"
+              "\n~/.remote-ai-chat/config.toml first — see docs/TUNNEL.md.")
+    if not args.no_open and not args.at:
         import webbrowser
         webbrowser.open(url)
 
@@ -502,6 +513,8 @@ def main() -> None:
     s = sub.add_parser("pair"); s.add_argument("--name", default="iPhone"); s.set_defaults(fn=cmd_pair)
     s = sub.add_parser("web", help="open the desktop panel in a browser")
     s.add_argument("--name", default="Panel"); s.add_argument("--no-open", action="store_true")
+    s.add_argument("--at", metavar="HOSTNAME",
+                   help="a tunnel's hostname: print a link for a browser elsewhere (docs/TUNNEL.md)")
     s.set_defaults(fn=cmd_web)
     _project_parser(sub)
     s = sub.add_parser("devices"); s.set_defaults(fn=cmd_devices)

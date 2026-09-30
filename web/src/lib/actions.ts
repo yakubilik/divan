@@ -1,4 +1,5 @@
 import { hostKey, useFleet } from './fleet';
+import { httpBase } from './ws';
 import type {
   Chat, DaemonStatus, DivanCard, DivanCardGet, DivanExecutor, HostConfig, PoolView,
   Provider, RunPage,
@@ -168,7 +169,7 @@ export const removeAgent = (key: string, name: string, account_id?: string | nul
 export const toolStatus = (key: string) => call(key, 'tool.status', {});
 
 function base(cfg: HostConfig): string {
-  return `http://${cfg.host}:${cfg.port}`;
+  return httpBase(cfg.host, cfg.port);
 }
 
 /** Uploads go over plain HTTP, not the socket: the daemon shrinks images and
