@@ -34,6 +34,31 @@ The list is re-read when the file changes, so editing it costs nothing. A
 restart would drop every phone and every chat, which is too much to ask of
 somebody whose provider just handed them a new address.
 
+## Which address, exactly
+
+Not the one you think. A machine with working IPv6 will reach Cloudflare over
+IPv6, and `CF-Connecting-IP` will then be a v6 address — so a list holding only
+the v4 one refuses it, which is a confusing way to spend an afternoon. Open
+
+```
+https://www.cloudflare.com/cdn-cgi/trace
+```
+
+in the browser you are allowing and read the `ip=` line: that is the address
+this list is about. List both families if the machine has both, and give the v6
+side a prefix rather than an address — the last half of a v6 address belongs to
+the interface and changes on its own:
+
+```toml
+tunnel_allow_ips = [
+  "203.0.113.4",                 # the v4 address the router presents
+  "2001:db8:1234:5600::/56",     # the prefix the provider delegated
+]
+```
+
+A home address is a household either way. Everyone behind that router is inside
+the list; the device token is what tells one machine there from another.
+
 ## Setting it up
 
 ```bash
