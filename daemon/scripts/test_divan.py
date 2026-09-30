@@ -8,14 +8,17 @@ and a queue has no columns, no order somebody chose, no branches beside the
 code, no human/agent split and no executor. Every Divan screen needs all five,
 so they are here — and so is the rule they are arranged around:
 
-**The column is the human's intent and the status is reality.** A card moves
-because a finger moved it. What the agent on it is doing is a separate field,
-written by the mirror on the ordinary snapshot poll, and writing it never moves
-anything. Get that wrong and a worker that fails at four in the morning drags
-its own card across the board, which is exactly the behaviour that would make a
-board not worth looking at. It is checked here from both ends: every status the
-queue has, applied to a card somebody had put somewhere on purpose, and the
-card still where it was left.
+**A card the coding agent has follows its ticket; a card a person has follows
+the person.** Nobody drags tickets across a board by hand: the queue already
+knows where each one is, and the mirror, on the ordinary snapshot poll, writes
+that into the status mark *and* the column — a worker picking a ticket up puts
+its card in In Progress, a verifier passing it puts it in Done. The move
+happens on a status change, not on every poll: a card somebody dragged
+elsewhere in the meantime stays there until the ticket next goes somewhere,
+and then the status wins. It is checked here from both ends: every status the
+queue has walked past one card, the card landing where each one means; and a
+board from before the rule, whose cards had been left wherever they were
+imported, coming right on the first poll.
 
 The rest is the things that are easy to get subtly wrong and impossible to see:
 
@@ -959,33 +962,77 @@ async def wire() -> None:
     check("and the card that nobody can place is still where it was",
           board.card_by_ustabasi(5)["project_id"], holder["id"])
 
-    # ── 9 · a status change never moves a column ─────────────────────────────
+    # ── 9 · a status change moves the card to the column it means ────────────
     #
-    # The card is put somewhere on purpose first — a place no status mapping
-    # would ever choose — and then every status the queue has is walked past it.
+    # Ticket 1 was imported running, so its card is in In Progress. Somebody
+    # drags it to the Ice Box; while the ticket stays where it is the drag
+    # holds, and the moment the ticket goes somewhere else — a column the
+    # status means that is not the one it meant before — the card goes with
+    # it. Running, blocked and failed all mean In Progress, so moving between
+    # those is not going anywhere.
     card_id = by_ticket[1]["id"]
     board.move(card_id, "ice_box", 0)
     placed = board.get_card(card_id)
     check("a card is where the person put it", (placed["column"], placed["position"]),
           ("ice_box", 0))
+    await host.h_ustabasi_list(None, {})
+    now = board.get_card(card_id)
+    check("and a poll with nothing new about the ticket leaves it there",
+          (now["column"], now["position"]), ("ice_box", 0))
 
-    for status, escalation, expected in [
-        ("running", "", "running"),
-        ("blocked", "Which way should this go?", "asking"),
-        ("blocked", "", "blocked"),
-        ("failed", "", "failed"),
-        ("done", "", "verified"),
-        ("cancelled", "", "cancelled"),
-        ("queued", "", "queued"),
+    queue_status(1, "failed")
+    await host.h_ustabasi_list(None, {})
+    now = board.get_card(card_id)
+    check("running to failed is a mark, not a move: the drag still holds",
+          (now["agent_status"], now["column"]), ("failed", "ice_box"))
+
+    for status, escalation, expected, col in [
+        ("done", "", "verified", "done"),
+        ("queued", "", "queued", "queued"),
+        ("running", "", "running", "in_progress"),
+        ("blocked", "Which way should this go?", "asking", "in_progress"),
+        ("blocked", "", "blocked", "in_progress"),
+        ("failed", "", "failed", "in_progress"),
+        ("cancelled", "", "cancelled", "done"),
     ]:
         queue_status(1, status, escalation)
         await host.h_ustabasi_list(None, {})
         now = board.get_card(card_id)
         check(f"'{status}' is mirrored as '{expected}'", now["agent_status"], expected)
-        check(f"…and moves nothing: the card is still where it was put ({status})",
-              (now["column"], now["position"]), ("ice_box", 0))
+        check(f"…and puts the card in {col} ({status})", now["column"], col)
+        col_cards = board.board(now["project_id"])["columns"][col]
+        check(f"…at the bottom of it, positions contiguous ({status})",
+              ([c["position"] for c in col_cards], col_cards[-1]["id"]),
+              (list(range(len(col_cards))), card_id))
     check("the question that came with it is on the card too",
           board.get_card(card_id)["agent_detail"], "")
+    # Dragged while cancelled: stays until the status changes, then follows it.
+    board.move(card_id, "queued", 0)
+    await host.h_ustabasi_list(None, {})
+    check("a drag holds across polls that bring nothing new",
+          board.get_card(card_id)["column"], "queued")
+    queue_status(1, "queued")
+    await host.h_ustabasi_list(None, {})
+    check("and is only overruled when the ticket itself moves",
+          board.get_card(card_id)["column"], "queued")
+    check("…which is where the status put it, not the finger",
+          board.get_card(card_id)["agent_column"], "queued")
+
+    # ── 9b · a board from before the rule comes right on the first poll ──────
+    #
+    # Cards imported before `agent_column` existed were put in a column once
+    # and never moved: verified tickets sat in Queued for a week. The first
+    # poll after the upgrade puts each where its status says.
+    stale = board.card_by_ustabasi(3)     # failed, so in progress
+    conn = sqlite3.connect(tmp / "wire.sqlite")
+    conn.execute("UPDATE cards SET column='queued', position=0, agent_column=NULL WHERE id=?",
+                 (stale["id"],))
+    conn.commit()
+    conn.close()
+    await host.h_ustabasi_list(None, {})
+    fixed = board.card_by_ustabasi(3)
+    check("a card the mirror never placed is placed on the first poll",
+          (fixed["column"], fixed["agent_column"]), ("in_progress", "in_progress"))
 
     # ── 10 · dragging into In Progress files a ticket ────────────────────────
     CLI.write_text(CLI_STUB)
@@ -1324,9 +1371,9 @@ async def wire() -> None:
     # answer was true, and what is left of the plans the agents run on.
 
     now = time.time()
-    # A worker picks up ticket 3 again. Ticket 1's card was dragged to the Ice
-    # Box a few checks ago to prove the mirror moves nothing, and a card nobody
-    # is working is no use to a check about agents at work.
+    # A worker picks up ticket 3 again. Ticket 1 was walked through every
+    # status a few checks ago and ended cancelled, so it is no use to a check
+    # about agents at work.
     queue_status(3, "running")
     worked = board.card_by_ustabasi(3)
     # One sign-in a third of the way through a window that comes back in four
@@ -1501,8 +1548,8 @@ async def wire() -> None:
           board.card_by_ustabasi(3)["agent_status"], "verified")
     check("so an agent that finished is no longer running anywhere in it",
           [a["card_id"] for a in after["agents"] if a["ustabasi_id"] == 3], [])
-    check("and its card is still exactly where it was left",
-          board.card_by_ustabasi(3)["column"], worked["column"])
+    check("and its card has moved itself into Done",
+          board.card_by_ustabasi(3)["column"], "done")
 
     for name, data, code in [
         ("h_divan_board", {"project_id": "nope"}, "no_such_project"),

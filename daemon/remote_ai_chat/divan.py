@@ -28,12 +28,18 @@ agent face is a goal, done criteria, a verify command, constraints, paths and
 notes, as long as it needs to be. Text an agent produced never lands on the
 human face.
 
-And the rule everything else is built around: **the column is the human's
-intent and the status is reality.** A card moves because somebody moved it.
-What the agent on it is doing — running, stuck, asking, turned down, verified —
-is a separate field written by the mirror, and writing it never moves the card.
-A worker that fails at 3am leaves its card exactly where it was left, with a red
-mark on it, which is the only behaviour that lets a board be trusted overnight.
+And the rule everything else is built around: **a card the coding agent has
+follows its ticket; a card a person has follows the person.** Nobody drags a
+ticket across the board by hand (Yakup, 2026-09-30: "ben tek tek kaydırmayacağım").
+The queue already knows where each ticket is — queued, running, blocked, failed,
+done, cancelled — and the mirror reads that into two things at once: the small
+status mark on the card, and the column the card sits in (`STATUS_COLUMN`). A
+worker picking a ticket up moves its card into In Progress; a verifier passing
+it moves it into Done; a cancellation lands in Done too, with its mark saying
+cancelled. The move happens on a status *change*: a card somebody dragged
+somewhere in between stays there until the ticket's status next changes, and
+then the status wins. Cards with no ticket on them — a human's, or one nobody
+has started — are moved by fingers and by nothing else.
 
 The mirror is one-way. ustabasi keeps its own database and stays the coding
 executor; this side reads its snapshot and writes down what it saw. The single
@@ -119,10 +125,12 @@ AGENT_STATUS = {
 ASKING = "asking"
 BLOCKED = "blocked"
 
-#: Where a ticket that already exists lands the first time it is imported, by
-#: its status. Used **once per ticket**, on the import that makes a card out of
-#: it, and never again: after that the column is the person's.
-IMPORT_COLUMN = {
+#: Which column a ticket's status puts its card in. Read on import, and again
+#: on every poll where the status has changed since the mirror last placed the
+#: card (`agent_column` remembers what it placed by). `blocked` and `failed`
+#: stay in In Progress: they are work that stopped, not work that is finished,
+#: and a red mark in the middle column is what says so at seven in the morning.
+STATUS_COLUMN = {
     "queued": "queued",
     "running": "in_progress",
     "blocked": "in_progress",
@@ -130,6 +138,7 @@ IMPORT_COLUMN = {
     "done": "done",
     "cancelled": "done",
 }
+IMPORT_COLUMN = STATUS_COLUMN  # the older name, kept for the tests that use it
 
 #: The human face is deliberately small. A title is a line and a summary is two
 #: or three sentences; anything longer is the agent face, or it is a new card.
@@ -228,6 +237,9 @@ CREATE TABLE IF NOT EXISTS cards (
   agent_status TEXT,
   agent_status_at REAL,
   agent_detail TEXT DEFAULT '',
+  -- the column the mirror last placed the card in by its ticket's status;
+  -- NULL on a card the mirror has never placed
+  agent_column TEXT,
   created_at REAL, updated_at REAL, moved_at REAL
 );
 CREATE INDEX IF NOT EXISTS idx_cards_board ON cards(project_id, column, position);
@@ -241,7 +253,7 @@ CREATE INDEX IF NOT EXISTS idx_repos_path ON project_repos(path);
 #: IF NOT EXISTS` cannot do this — it does nothing at all to a table that is
 #: already there — and rebuilding the table would mean rewriting a board.
 ADDED_COLUMNS = {
-    "cards": (("agent_detail", "TEXT DEFAULT ''"),),
+    "cards": (("agent_detail", "TEXT DEFAULT ''"), ("agent_column", "TEXT")),
     "projects": (("summary", "TEXT DEFAULT ''"), ("kind", "TEXT DEFAULT ''"),
                  ("started_at", "REAL"), ("hidden", "INTEGER DEFAULT 0")),
 }
@@ -882,10 +894,17 @@ class Board:
             dup = self._c.execute(
                 "SELECT * FROM cards WHERE ustabasi_id=? AND id!=?",
                 (int(ticket_id), card_id)).fetchone()
-            status, detail = "queued", ""
+            # A card dragged into In Progress and filed is a queued ticket in a
+            # column the person chose. `agent_column` is set to what the status
+            # would have chosen, so the next poll sees nothing has changed and
+            # leaves the card under the thumb that put it there; the first real
+            # change — a worker picking it up — moves it, and by then that is
+            # the same column.
+            status, detail, placed = "queued", "", STATUS_COLUMN["queued"]
             if dup is not None:
                 status = dup["agent_status"] or status
                 detail = dup["agent_detail"] or ""
+                placed = dup["agent_column"] or placed
                 self._c.execute("DELETE FROM cards WHERE id=?", (dup["id"],))
                 # The gap it leaves, closed here rather than by `delete_card`:
                 # this lock is not re-entrant and the whole fold has to be one
@@ -897,8 +916,8 @@ class Board:
                     (dup["project_id"], dup["column"], dup["position"]))
             self._c.execute(
                 "UPDATE cards SET ustabasi_id=?, agent_status=?, agent_detail=?,"
-                " agent_status_at=?, updated_at=? WHERE id=?",
-                (int(ticket_id), status, detail, now, now, card_id))
+                " agent_status_at=?, agent_column=?, updated_at=? WHERE id=?",
+                (int(ticket_id), status, detail, now, placed, now, card_id))
             self._c.commit()
         return self.get_card(card_id)
 
@@ -929,10 +948,14 @@ class Board:
         and have to land somewhere honest.
 
         The second is the **mirror**, and it happens on every poll forever
-        after: the ticket's status, written onto the card as a mark. It touches
-        `agent_status` and `agent_detail`. It does not touch `column`, it does
-        not touch `position`, and a ticket that finishes, fails or is picked up
-        by a worker while nobody is watching leaves its card where it is.
+        after: the ticket's status, written onto the card as a mark — and, when
+        the status has changed since the card was last placed, the card moved
+        into the column that status means (`STATUS_COLUMN`). A ticket that is
+        picked up, finishes or is cancelled while nobody is watching moves its
+        own card, because nobody is going to drag forty of them by hand. A card
+        the mirror has never placed (`agent_column` is NULL: one from before
+        this rule) is placed on the first poll, which is the whole of the
+        repair an older board needs.
 
         Neither of them creates a product, and neither writes anything else a
         person owns: no project row, no branch, not even a repository added to
@@ -975,15 +998,16 @@ class Board:
             # that was an agent's ticket before it was a card.
             summary="",
             branch=branch["kind"],
-            column=IMPORT_COLUMN.get(ticket.get("status") or "", "queued"),
+            column=STATUS_COLUMN.get(ticket.get("status") or "", "queued"),
             executor="coding_agent", machine=machine, repo=ticket.get("repo"),
             agent={"goal": ticket.get("goal") or "",
                    "done_criteria": ticket.get("done_criteria") or []},
             ustabasi_id=ticket["id"], position=None)
         with self._lock:
             self._c.execute(
-                "UPDATE cards SET agent_status=?, agent_status_at=?, agent_detail=? WHERE id=?",
-                (status, time.time(), detail, card["id"]))
+                "UPDATE cards SET agent_status=?, agent_status_at=?, agent_detail=?,"
+                " agent_column=? WHERE id=?",
+                (status, time.time(), detail, card["column"], card["id"]))
             self._c.commit()
         return self.get_card(card["id"])
 
@@ -1039,13 +1063,32 @@ class Board:
         return True
 
     def _mirror(self, card: dict, ticket: dict) -> bool:
+        """The ticket's status onto the card: the mark, and the column.
+
+        The column moves only when the status has changed since the mirror
+        last placed the card — `agent_column` is what it placed by — so a card
+        somebody dragged in the meantime is not snapped back on the next poll
+        for no reason, and *is* moved the moment the ticket actually goes
+        somewhere. A card with no `agent_column` yet has never been placed:
+        it is placed now, wherever its status says, which is how boards from
+        before this rule come right on their first poll.
+        """
         status, detail = self._status_of(ticket)
-        if card["agent_status"] == status and card["agent_detail"] == detail:
+        target = STATUS_COLUMN.get((ticket.get("status") or "").strip(), "queued")
+        moved = False
+        if card["agent_column"] != target:
+            if card["column"] != target:
+                # `move` takes the lock itself, and it is the one writer of
+                # `column`/`position`: the mirror does not learn a second way.
+                self.move(card["id"], target)
+            moved = True
+        if not moved and card["agent_status"] == status and card["agent_detail"] == detail:
             return False
         with self._lock:
             self._c.execute(
-                "UPDATE cards SET agent_status=?, agent_detail=?, agent_status_at=? WHERE id=?",
-                (status, detail, time.time(), card["id"]))
+                "UPDATE cards SET agent_status=?, agent_detail=?, agent_status_at=?,"
+                " agent_column=? WHERE id=?",
+                (status, detail, time.time(), target, card["id"]))
             self._c.commit()
         return True
 
@@ -1086,6 +1129,7 @@ class Board:
             "ustabasi_id": r["ustabasi_id"],
             "agent_status": r["agent_status"], "agent_status_at": r["agent_status_at"],
             "agent_detail": r["agent_detail"] or "",
+            "agent_column": r["agent_column"],
             "created_at": r["created_at"], "updated_at": r["updated_at"],
             "moved_at": r["moved_at"],
         }
