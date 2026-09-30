@@ -314,6 +314,97 @@ export interface LoginDone {
   retryable: boolean;
 }
 
+/** How the computer drives several sign-ins of one tool as one. */
+export interface PoolSettings {
+  enabled: boolean;
+  /** The share of a window at which a chat is handed over, for any window
+   *  `thresholds` does not name. Deliberately short of 1 so the move happens
+   *  before the turn dies. */
+  threshold: number;
+  /** Per window, because the windows are not alike: the five-hour one refills
+   *  several times a day, a weekly one is most of a working week. */
+  thresholds: Record<string, number>;
+  /** The default for a sign-in that has not been given an answer of its own.
+   *  'account' leaves a sign-in with pay-as-you-go on in play past its plan;
+   *  'never' treats the plan's limit as the limit whatever billing allows. */
+  use_overage: 'account' | 'never';
+  /** Per sign-in, overriding the default above. One account spending past its
+   *  plan while another never touches it is the ordinary case. */
+  overage_by_account: Record<string, 'account' | 'never'>;
+  /** The reading-to-reading step to assume before a real one has been
+   *  measured. The margin is always at least this wide on a sign-in that must
+   *  not spend past its plan; once the computer has watched the account long
+   *  enough, a wider measured step takes over. */
+  reserve: number;
+  /** provider -> account ids, in the order they are tried. */
+  order: Record<string, string[]>;
+  max_hops: number;
+}
+
+/** Where one sign-in stands under the pool. */
+export interface PoolAccount {
+  account_id: string;
+  provider: Provider;
+  label: string;
+  blocked: boolean;
+  /** The window that blocked it, and when it comes back. */
+  window: string | null;
+  until: number | null;
+  utilization: number | null;
+  /** The plan is spent and pay-as-you-go is carrying the account. */
+  on_overage: boolean;
+  /** The tool says paid extra usage is covering sends right now. */
+  spending: boolean;
+  /** The widest jump seen between two readings of one window here, and the
+   *  margin actually held back below the threshold because of it. */
+  step: number | null;
+  margin: number;
+  /** This sign-in is not allowed to spend past its plan. */
+  strict: boolean;
+  /** Nothing has ever been measured for this sign-in. */
+  unknown: boolean;
+}
+
+/** What `pool.get` and `pool.set` both answer with. */
+export interface PoolView { settings: PoolSettings; accounts: PoolAccount[] }
+
+// ── what a worker is printing ────────────────────────────────────────────────
+// A run writes the model's stream-json to a file on the computer that is doing
+// the work, and `ustabasi.run` hands out the end of it a page at a time. These
+// are the phone's own shapes (`app/src/protocol.ts`): one file, two clients.
+
+export type RunEvent =
+  | { k: 'text'; text: string; clipped?: boolean }
+  | { k: 'thinking'; text: string; clipped?: boolean }
+  | { k: 'tool'; id?: string; name: string; input: Record<string, any>; clipped?: boolean }
+  | { k: 'result'; id?: string; text: string; error?: boolean; clipped?: boolean }
+  | { k: 'done'; error?: boolean; subtype?: string; duration_ms?: number | null;
+      cost?: number | null; output_tokens?: number | null }
+  | { k: 'system'; subtype: string }
+  | { k: 'other'; type: string };
+
+export interface RunPage {
+  available: boolean;
+  /** the silence, where there is one: no_queue, no_ticket, never_run, no_log */
+  reason: string;
+  /** the run directory's own name, never its path */
+  run?: string;
+  events: RunEvent[];
+  /** where to carry on from; null where there is nothing to carry on from */
+  cursor: string | null;
+  /** this page is not continuous with the last one — start again, do not append */
+  reset?: boolean;
+  /** the run is still being written */
+  live: boolean;
+  /** nothing more to read right now */
+  caught_up: boolean;
+  size?: number;
+  /** What this run left for a person to look at: the finished state of a
+   *  screen it changed, as a file on that computer. Served over `/files` like
+   *  anything else on disk. */
+  shots?: { path: string; name: string; at: number; size: number }[];
+}
+
 // ── the Divan board ──────────────────────────────────────────────────────────
 // The daemon owns how work is arranged; the ustabasi queue stays the thing that
 // does the coding. A project is a product and may own several repositories; a
@@ -322,7 +413,7 @@ export interface LoginDone {
 // docs/PROTOCOL.md, "The Divan board" — and `app/src/protocol.ts`, which is the
 // same block: the phone and the panel read the same daemon.
 
-export type DivanColumn = 'ice_box' | 'queued' | 'in_progress' | 'done';
+export type DivanColumn = 'ice_box' | 'queued' | 'in_progress' | 'review' | 'done';
 
 /** Who does the work. `coding_agent` is ustabasi; `human` is a card nothing
  *  runs on — it waits for a person and says so. */
@@ -353,6 +444,11 @@ export interface DivanProject {
   kind?: string;
   /** The day the product began, which is not `created_at`. */
   started_at?: number | null;
+  /** Where it is in its life: `idea`, `build`, `beta`, `live`, `growth`. The one
+   *  fact about a product no counter on the machine can work out — a repository
+   *  with three commits a day can be a dead experiment — so it is written by a
+   *  person and empty until somebody says. */
+  stage?: string;
   /** A product is not a folder: isghocam owns its site and its API. */
   repos: string[];
   sort: number; archived: boolean; created_at: number; updated_at: number;
@@ -366,6 +462,22 @@ export interface DivanProject {
    *  whose executor is a person. */
   waiting: number;
   summary_line: string;
+  /** What happened to it, dated, oldest first — and what is promised, which is
+   *  the same list with a date in the future. Absent from a daemon that
+   *  predates it. */
+  milestones?: DivanMilestone[];
+}
+
+/** One dated thing in a product's life. `kind` is `start`, `live`, `target` or
+ *  nothing: the three a page reads by name, and everything else is an event on
+ *  the line. `note` is usually where the date was read from — a tag, a commit —
+ *  so a line on a timeline can be checked against the thing behind it. */
+export interface DivanMilestone {
+  id: string;
+  at: number;
+  title: string;
+  note: string;
+  kind: string;
 }
 
 export interface DivanCard {

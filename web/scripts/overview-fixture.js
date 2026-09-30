@@ -32,7 +32,7 @@ const branch = (kind, over = {}) => ({
 const project = (over = {}) => ({
   id: 'p-quire', name: 'Quire', slug: 'quire', summary: 'client portals for studios',
   kind: 'SaaS', repos: ['/w/quire'], sort: 1, archived: false,
-  started_at: null, created_at: 0, updated_at: 0,
+  started_at: null, stage: '', milestones: [], created_at: 0, updated_at: 0,
   branches: [], counts: { in_progress: 1 }, running: 1, waiting: 0, summary_line: '',
   ...over,
 });
@@ -58,6 +58,23 @@ const quota = (over = {}) => ({
   ...over,
 });
 
+/** Where a product is in its life and how it got there: the one pair on a
+ *  product that nothing on the machine counts. Given to the studio's Quire and
+ *  to nothing else, so that both states are on the boards — a product somebody
+ *  has written down, and one nobody has. */
+const life = (NOW) => ({
+  stage: 'live',
+  started_at: NOW - 560 * 86_400,
+  milestones: [
+    { id: 'm1', at: NOW - 560 * 86_400, title: 'Project started', note: 'first commit',
+      kind: 'start' },
+    { id: 'm2', at: NOW - 380 * 86_400, title: 'v1.0 live', note: 'first paying studio',
+      kind: 'live' },
+    { id: 'm3', at: NOW + 30 * 86_400, title: 'v4.0 · Custom domains', note: 'target launch',
+      kind: 'target' },
+  ],
+});
+
 /** Every board, built against one clock. A host spec is what the panel and the
  *  phone are each handed: the answer, how long ago it came, and why the last
  *  attempt failed where it did. */
@@ -70,7 +87,7 @@ export function boards(NOW) {
     machine: 'studio', os: 'Darwin', daemon_version: '0.9.0', at: NOW,
     projects: [
       project({ running: 1, waiting: 2, counts: { ice_box: 1, in_progress: 2, done: 3 },
-                updated_at: t(300),
+                updated_at: t(300), ...life(NOW),
                 branches: [
                   // The one face with something behind it, refreshed this
                   // morning…

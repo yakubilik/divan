@@ -183,6 +183,10 @@ def _ticket(row: sqlite3.Row, last_event: dict | None,
         "git": _git(_col(row, "worktree"), _col(row, "base_branch")) if git else None,
         "goal": card.get("goal") or "",
         "done_criteria": card.get("done_criteria") or [],
+        # The command that proves it. Read all along and drawn nowhere until
+        # the panel could rewrite a card: an editor that cannot see this field
+        # is an editor that clears it.
+        "verify_cmd": card.get("verify_cmd") or "",
         "escalation": row["escalation"] or "",
         "verdict": verdict,
         "notes": notes[-6:],
@@ -319,6 +323,57 @@ async def note(ticket_id: int, text: str) -> dict:
     if len(text) > MAX_NOTE:
         raise ValueError("note too long")
     return {"ok": True, "message": await _cli("note", str(int(ticket_id)), text)}
+
+
+async def cancel(ticket_id: int) -> dict:
+    """Stop a ticket. A running one is killed with its process group."""
+    return {"ok": True, "message": await _cli("cancel", str(int(ticket_id)))}
+
+
+async def restart(ticket_id: int) -> dict:
+    """Put a stopped or finished ticket back in the queue."""
+    return {"ok": True, "message": await _cli("restart", str(int(ticket_id)))}
+
+
+async def delete(ticket_id: int, force: bool = False) -> dict:
+    """Take a ticket off the queue for good.
+
+    The queue keeps a branch that has work nobody merged unless `force` says
+    otherwise — commits are the one thing here that cannot be written again.
+    """
+    args = ["delete", str(int(ticket_id))] + (["--force"] if force else [])
+    return {"ok": True, "message": await _cli(*args)}
+
+
+async def edit(ticket_id: int, *, title: str | None = None, goal: str | None = None,
+               done_criteria: list[str] | None = None,
+               verify_cmd: str | None = None) -> dict:
+    """Rewrite what a ticket asks for. Refused while somebody is working on it."""
+    args = ["edit", str(int(ticket_id))]
+    if title is not None:
+        args += ["--title", title]
+    if goal is not None:
+        args += ["--goal", goal]
+    if verify_cmd is not None:
+        args += ["--verify", verify_cmd]
+    if done_criteria is not None:
+        args += ["--criteria", *done_criteria]
+    return {"ok": True, "message": await _cli(*args)}
+
+
+async def prioritise(ticket_id: int, priority: int = 1) -> dict:
+    """Put this ticket in front of the others that are waiting.
+
+    What a drag into In Progress means for a card the queue already holds. The
+    queue decides when a ticket actually starts — there are only so many slots
+    — so the honest thing a finger can do is say which one is next, and this is
+    the queue's own word for that (`priority`, picked `ORDER BY priority, id`).
+
+    A ticket that is running, finished or cancelled is refused by the CLI, and
+    the refusal comes back as the sentence it printed.
+    """
+    return {"ok": True,
+            "message": await _cli("priority", str(int(ticket_id)), str(int(priority)))}
 
 
 # ── the stage and round history a ticket has been through ────────────────────
@@ -636,6 +691,44 @@ def _page(fh, start: int, end: int, newest: bool) -> tuple[list[dict], int, bool
     return events, at, truncated
 
 
+#: What a worker leaves for a person to look at, in the run directory it left
+#: it in (`USTABASI_SHOTS`). Pictures only: this is a folder an agent writes
+#: into, and anything else in it is not something to hand a browser.
+SHOT_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+
+#: Enough of them to say what a screen looks like. A worker that wrote fifty is
+#: one whose ticket is about something else.
+MAX_SHOTS = 12
+
+
+def _shots(run_dir: str | None) -> list[dict]:
+    """The pictures this run left, oldest first.
+
+    A ticket that changes a screen is finished when the screen is right, and
+    "it is right" is a picture rather than a sentence. The queue gives every
+    run a folder for them and the prompt asks for the finished state; this is
+    the reading of it — the path, so the panel can ask for the file over the
+    same route everything else on disk comes through, and the name, which is
+    what the worker called the screen.
+    """
+    if not run_dir:
+        return []
+    folder = Path(run_dir) / "shots"
+    try:
+        found = [p for p in folder.iterdir()
+                 if p.is_file() and p.suffix.lower() in SHOT_SUFFIXES]
+    except OSError:
+        return []
+    out = []
+    for p in sorted(found, key=lambda x: x.stat().st_mtime)[:MAX_SHOTS]:
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        out.append({"path": str(p), "name": p.stem, "at": st.st_mtime, "size": st.st_size})
+    return out
+
+
 def run(ticket_id: int, cursor=None) -> dict:
     """A page of what the agent on this ticket has printed.
 
@@ -647,16 +740,16 @@ def run(ticket_id: int, cursor=None) -> dict:
     """
     if not available():
         return {"available": False, "reason": "no_queue", "events": [],
-                "cursor": None, "live": False, "caught_up": True}
+                "cursor": None, "live": False, "caught_up": True, "shots": []}
     row = _run_row(ticket_id)
     if row is None:
         return {"available": True, "reason": "no_ticket", "events": [],
-                "cursor": None, "live": False, "caught_up": True}
+                "cursor": None, "live": False, "caught_up": True, "shots": []}
 
     run_dir = _col(row, "run_dir")
     if not run_dir:
         return {"available": True, "reason": "never_run", "events": [],
-                "cursor": None, "live": False, "caught_up": True}
+                "cursor": None, "live": False, "caught_up": True, "shots": []}
     path = Path(run_dir) / "stdout.log"
     name = Path(run_dir).name
     # The run is over the moment the queue writes its exit code, whatever the
@@ -669,7 +762,7 @@ def run(ticket_id: int, cursor=None) -> dict:
         size = path.stat().st_size
     except OSError:
         return {"available": True, "reason": "no_log", "events": [], "run": name,
-                "cursor": None, "live": live, "caught_up": True}
+                "cursor": None, "live": live, "caught_up": True, "shots": _shots(run_dir)}
 
     want_run, at = _parse_cursor(cursor)
     # A cursor from another run is a cursor for another file. So is one past the
@@ -690,7 +783,7 @@ def run(ticket_id: int, cursor=None) -> dict:
             events, at, truncated = _page(fh, at, size, newest=newest)
     except OSError:
         return {"available": True, "reason": "no_log", "events": [], "run": name,
-                "cursor": None, "live": live, "caught_up": True}
+                "cursor": None, "live": live, "caught_up": True, "shots": _shots(run_dir)}
 
     return {
         "available": True,
@@ -707,4 +800,8 @@ def run(ticket_id: int, cursor=None) -> dict:
         # it dropped; a page read forwards is caught up only if it got there.
         "caught_up": at >= size - 1 and (newest or not truncated),
         "size": size,
+        # Whatever this run left for a person to look at. Sent with every page
+        # rather than once: a screenshot appears when the work that produced it
+        # is finished, which is in the middle of a run and not at the start.
+        "shots": _shots(run_dir),
     }

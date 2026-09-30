@@ -30,7 +30,10 @@ const out = join(web, '.test-build');
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 execFileSync(join(web, 'node_modules', '.bin', 'tsc'), [
-  'src/lib/ustabasi.ts', 'src/components/TicketChat.tsx',
+  'src/lib/ustabasi.ts', 'src/components/TicketChat.tsx', 'src/lib/flow.ts',
+  // The ticket window reads the run now, which is a request to a computer —
+  // so the store comes with it, and the store reads the build's own env.
+  'src/lib/transcript.ts', 'src/vite-env.d.ts',
   '--outDir', '.test-build',
   '--target', 'ES2022', '--module', 'ESNext', '--moduleResolution', 'bundler',
   '--jsx', 'react-jsx', '--strict', '--skipLibCheck',
@@ -57,6 +60,7 @@ const {
 // `theme.ts` reads the browser as it loads; a static render has none.
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 const { toneFace, themeCss } = await import(pathToFileURL(join(out, 'lib', 'theme.js')));
+const F = await import(pathToFileURL(join(out, 'lib', 'flow.js')));
 const { TicketChat } = await import(pathToFileURL(join(out, 'components', 'TicketChat.js')));
 
 let failures = 0;
@@ -66,6 +70,7 @@ function ok(name, cond, detail) {
   console.error(`  ✗ ${name}${detail ? `\n    ${detail}` : ''}`);
 }
 function group(name) { console.log(`── ${name}`); }
+const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const all = (m) => `${m.text}\n${m.more ?? ''}`;
 
@@ -241,11 +246,21 @@ group('the view');
     onNote: async () => 'note added',
   }));
 
-  ok('the goal is in it', html.includes('Make a tile open as a conversation instead of a report.'));
-  ok('the question is in it', html.includes('Can you sort that out'));
+  // The ticket opens as the steps it has to go through, not as the brief: the
+  // words an agent was handed are the one thing nobody opening a board wants
+  // to read, and they were the top half of this window until now.
+  ok('the steps are in it, in the order the queue walks them',
+    ['worker', 'check', 'verifier'].every((s) => html.includes(s)));
+  ok('…with a mark in front of each, so the state is not a colour alone',
+    ['✓', '○'].some((m) => html.includes(m)));
+  ok('the brief an agent was handed is not on screen',
+    !html.includes('Make a tile open as a conversation instead of a report.'));
+  ok('…and neither is the report it wrote back',
+    !html.includes('The rest of this report'));
+  ok('the question a stopped ticket ended on is, because it is addressed to a person',
+    html.includes('A token with') && html.includes('write'));
   ok('there is a box to type in', html.includes('<textarea'));
   ok('the box says what sending does', html.includes('back in the queue'));
-  ok('the voices are named', html.includes('Verifier') && html.includes('Triage') && html.includes('You'));
   for (const heading of ['GOAL', 'DONE WHEN', 'WHAT IT IS WAITING FOR']) {
     ok(`no "${heading}" heading on screen`, !html.includes(heading));
   }
@@ -253,7 +268,6 @@ group('the view');
   for (const c of t.done_criteria) {
     ok('the paperwork starts folded', !html.includes(c), c);
   }
-  ok('the rest of a long report starts folded', html.includes('The rest of this report'));
 
   // Something to hold a phone up to. No daemon, no pairing, no build.
   writeFileSync(join(out, 'preview.html'),
@@ -370,6 +384,78 @@ group('nothing invented on a card');
   ok('no count of criteria nobody has answered yet', !/done_criteria|findings/.test(cards));
   ok('the total is drawn above the round',
     cards.indexOf('totalAge(t, now)') < cards.indexOf('{round &&'));
+}
+
+group('a ticket is the steps it has to go through');
+{
+  /** A ticket the queue has walked, in the shape `ustabasi.list` sends one. */
+  const walked = (patch, steps) => ticket({
+    ...patch,
+    steps: steps.map((s, i) => ({
+      stage: s.stage, round: s.round ?? 1, at: 1000 + i * 100,
+      ended_at: s.ended_at === undefined ? 1000 + i * 100 + 60 : s.ended_at,
+      outcome: s.outcome ?? 'ok', model: 'claude-opus-5-5', account: 'yakup',
+    })),
+  });
+
+  const fresh = F.flow(walked({ status: 'queued', round: 1 }, []));
+  ok('a ticket nobody has started is the whole round, all of it still ahead',
+    fresh.length === 1 && fresh[0].steps.length === 3
+    && fresh[0].steps.every((s) => s.state === 'waiting')
+    && eq(fresh[0].steps.map((s) => s.stage), ['worker', 'check', 'verifier']),
+    JSON.stringify(fresh[0].steps.map((s) => [s.stage, s.state])));
+
+  const mid = F.flow(walked({ status: 'running', stage: 'check', round: 1 }, [
+    { stage: 'worker' }, { stage: 'check', ended_at: null, outcome: null },
+  ]));
+  ok('one that is being checked has its worker ticked and its verifier still to come',
+    eq(mid[0].steps.map((s) => [s.stage, s.state]),
+      [['worker', 'done'], ['check', 'running'], ['verifier', 'waiting']]),
+    JSON.stringify(mid[0].steps.map((s) => [s.stage, s.state])));
+  ok('…and the step somebody is waiting on is the one that is running',
+    F.current(mid)?.step.stage === 'check');
+
+  // A worker that crashed and was picked up again is one step that took two
+  // goes: a list that grew a row per process would be a list of processes.
+  const retried = F.flow(walked({ status: 'running', stage: 'worker', round: 1 }, [
+    { stage: 'worker', outcome: 'stopped' }, { stage: 'worker', ended_at: null, outcome: null },
+  ]));
+  ok('a stage picked up again is one step with two goes on it',
+    retried[0].steps[0].stage === 'worker' && retried[0].steps[0].tries === 2
+    && retried[0].steps.filter((s) => s.stage === 'worker').length === 1);
+
+  const twice = F.flow(walked({ status: 'running', stage: 'worker', round: 2 }, [
+    { stage: 'worker', round: 1 }, { stage: 'check', round: 1 },
+    { stage: 'verifier', round: 1, outcome: 'rejected' },
+    { stage: 'worker', round: 2, ended_at: null, outcome: null },
+  ]));
+  ok('a round the verifier turned down is a round of its own, and it is behind us',
+    twice.length === 2 && twice[0].round === 1 && twice[1].round === 2
+    && twice[0].steps.length === 3 && twice[0].steps.every((s) => s.state === 'done'),
+    JSON.stringify(twice.map((r) => [r.round, r.steps.map((s) => s.state)])));
+  ok('…and the round being worked is the one with what is left to do in it',
+    eq(twice[1].steps.map((s) => [s.stage, s.state]),
+      [['worker', 'running'], ['check', 'waiting'], ['verifier', 'waiting']]));
+
+  const finished = F.flow(walked({ status: 'done', stage: 'verifier', round: 1 }, [
+    { stage: 'worker' }, { stage: 'check' }, { stage: 'verifier' },
+  ]));
+  ok('a finished ticket has no empty rows waiting on it',
+    finished[0].steps.length === 3 && finished[0].steps.every((s) => s.state === 'done')
+    && F.current(finished) === null);
+
+  const red = F.flow(walked({ status: 'blocked', stage: 'worker', round: 1 }, [
+    { stage: 'worker', ended_at: null, outcome: null },
+  ]));
+  ok('a ticket that stopped says so on the step it stopped on',
+    red[0].steps[0].state === 'stopped' && F.current(red)?.step.stage === 'worker');
+
+  ok('a step says what it has to say and no more',
+    F.stepNote({ outcome: 'ok', tries: 1 }) === ''
+    && F.stepNote({ outcome: 'rejected', tries: 1 }) === 'rejected'
+    && F.stepNote({ outcome: 'ok', tries: 3 }) === '3 goes');
+  ok('…and every state has a character in front of it, not a colour alone',
+    ['done', 'running', 'stopped', 'waiting'].every((s) => !!F.STEP_MARK[s]));
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');

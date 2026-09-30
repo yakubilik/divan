@@ -160,6 +160,17 @@ half = ticket(5, "r1-worker-5")
     + "npm warn deprecated something\n"
     + assistant(text("second"))
     + '{"type":"assistant","message":{"content":[{"type":"text","te')
+# …and a ticket whose run left pictures behind it.
+shot_run = ticket(9, "r1-worker-9")
+(shot_run / "stdout.log").write_text(assistant(text("built the screen")))
+shots_dir = shot_run / "shots"
+shots_dir.mkdir()
+(shots_dir / "onboarding.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+time.sleep(0.01)
+(shots_dir / "empty-state.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"1" * 64)
+# Something an agent left beside them that is not for looking at.
+(shots_dir / "notes.txt").write_text("not a picture")
+
 conn.commit()
 conn.close()
 
@@ -332,6 +343,27 @@ if fixture.exists():
     holds("nobody's home directory came with it",
           not home.search(json.dumps(got)),
           (home.search(json.dumps(got)) or [""])[0] if home.search(json.dumps(got)) else "")
+
+# ── what a run left to look at ───────────────────────────────────────────────
+#
+# A ticket about a screen is finished when the screen is right, and a report
+# saying "the screen is right" is not that. The queue gives every run a folder
+# (`USTABASI_SHOTS`) and the worker leaves the finished state in it; this is the
+# reading of that folder. It travels with every page of the log because a
+# picture appears in the middle of a run, not at the start of one.
+
+page = u.run(9)
+names = [s["name"] for s in page["shots"]]
+check("the pictures a run left come back with it, oldest first",
+      names, ["onboarding", "empty-state"])
+holds("…by the path the panel can ask that computer for",
+      all(s["path"].endswith(".png") and "/shots/" in s["path"] for s in page["shots"]),
+      json.dumps(page["shots"]))
+holds("…and nothing in that folder that is not a picture",
+      "notes" not in names, json.dumps(names))
+check("a ticket nobody has started has no pictures either", u.run(2)["shots"], [])
+holds("every answer carries the field, so a client never has to guess",
+      all("shots" in u.run(t) for t in (1, 2, 9)))
 
 if fails:
     print(f"FAIL ({len(fails)})")

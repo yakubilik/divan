@@ -7,53 +7,141 @@
  *  row you have to go and open — the window is already there, with the numbers
  *  behind the question, and the answers the worker is proposing under it.
  *
- *  It is **not** the chat. The chat is a conversation with an agent you started;
- *  this is a ticket in a queue that stopped and asked something, and the whole of
- *  answering it is a note on that ticket (`ustabasi.note`), which is what re-opens
- *  it. So nothing in this file touches `ChatView` or anything under it, and the
- *  parts it is drawn out of are the design system's own (`ui/divan.tsx`).
+ *  A question is **not** a chat. The chat is a conversation with an agent you
+ *  started; a question is a ticket in a queue that stopped and asked something,
+ *  and the whole of answering it is a note on that ticket (`ustabasi.note`),
+ *  which is what re-opens it. `Ask` below is that, and only that.
  *
- *  Every judgement it makes is in `lib/sessions.ts`, where a check can reach it
- *  without a browser: which cards are sessions, what each says, which answers a
- *  question offers in its own words, and how many windows a desktop opens before
- *  the rest become tabs. What is here is the arrangement and the sending.
+ *  Both kinds of window stand in the same corner, though, so this file owns the
+ *  corner: the windows the board opens by itself, the chats the command bar
+ *  started (`ChatPanel`, `lib/tell.ts`) — those nearest the corner, because a
+ *  sentence you have just typed is the thing you are reading — and one row of
+ *  tabs under them for all of it.
+ *
+ *  Every judgement it makes is in `lib/sessions.ts` and `lib/tell.ts`, where a
+ *  check can reach it without a browser: which cards are sessions, what each
+ *  says, which answers a question offers in its own words, and how many windows
+ *  a desktop opens before the rest become tabs. What is here is the arrangement
+ *  and the sending.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ticketNote } from '../lib/actions';
 import { useDivanStore, type DivanView } from '../lib/divan';
+import { useFleet } from '../lib/fleet';
 import { clock } from '../lib/overview';
 import {
-  KIND_STATE, arrange, sessions, source, useDock, at as stampOf, type Session,
+  KIND_STATE, PANELS, arrange, sessions, source, useDock, at as stampOf, type Session,
 } from '../lib/sessions';
+import {
+  arrangeTold, freeSlot, idOfTold, liveTold, slot as slotAt, useTold, type Place,
+} from '../lib/tell';
 import { SIZE, STATE_MARK, T } from '../lib/theme';
 import { Composer, ExecutorBadge, Panel, PanelHead, Pill, Quoted, DockMore, DockTab } from '../ui/divan';
 import { mono } from '../ui/kit';
+import { ChatPanel } from './ChatPanel';
 
 /** Where the windows and the dock sit: over the page, in the corner the frames
  *  put them in. Fixed rather than absolute — the page under it scrolls, and a
  *  question that scrolled away with it would be a notification again. */
 const DOCK_RIGHT = 24;
 const DOCK_BOTTOM = 22;
-/** The windows stand on the dock, and the second one to the left of the first. */
+/** The windows stand on the dock, and the second one to the left of the first
+ *  (`lib/tell.ts`, `slot`). */
 const PANEL_BOTTOM = DOCK_BOTTOM + SIZE.tabTall + 12;
-const PANEL_GAP = 10;
 
 export function Sessions({ view }: { view: DivanView }) {
   const list = useMemo(() => sessions(view), [view]);
   const dock = useDock();
-  const { panels, tabs, more } = arrange(list, dock);
-  if (!list.length) return null;
+  /** The one window, if any, that has been opened out into the middle of the
+   *  screen. One at a time on purpose: two of them centred is a pile. */
+  const [big, setBig] = useState<string | null>(null);
+  const told = useTold();
+  const hosts = useFleet((s) => s.hosts);
+  // A window whose chat has been deleted somewhere else is a window about
+  // nothing, so what is drawn is what is still there.
+  const started = useMemo(() => liveTold(told.chats, hosts), [told.chats, hosts]);
+  const mine = arrangeTold(started, told.minimised);
+  // The chats take their windows first and the questions have what is left:
+  // one of them is a sentence typed a moment ago, the other has been waiting
+  // since last night and can wait as a tab.
+  const { panels, tabs, more } = arrange(list, dock, PANELS - mine.panels.length);
+  if (!list.length && !started.length) return null;
+
+  /** Where the nth window stands before anybody has put it anywhere: the
+   *  corner the frames draw, and each one after that to the left of the last. */
+  const slot = (i: number): Place => slotAt(i, { right: DOCK_RIGHT, bottom: PANEL_BOTTOM },
+    { width: SIZE.panel, height: SIZE.panelTall });
+
+  /** The windows. Every chat window has a place of its own from the moment it
+   *  is drawn — the first slot nothing else is standing in — and keeps it
+   *  until somebody drags it somewhere else.
+   *
+   *  That is the whole of why it is written down rather than worked out from a
+   *  position in a list: a window whose place came from its index moved every
+   *  time another one opened, was closed, or dropped out of the list for a
+   *  poll, and a window that wanders because its neighbour did is not
+   *  furniture. */
+  const windows = mine.panels.map((t, i) => {
+    const id = idOfTold(t);
+    const place = told.places[id] ?? slot(i);
+    return {
+      id,
+      place,
+      node: (
+        <ChatPanel
+          told={t} place={place} onPlace={(next) => told.place(id, next)}
+          big={big === id} onBig={(on) => setBig(on ? id : null)}
+          onMinimise={() => told.minimise(id)}
+          onClose={() => { setBig((b) => (b === id ? null : b)); told.close(id); }}
+        />
+      ),
+    };
+  }).concat(panels.map((s, i) => ({
+    id: s.id, place: slot(mine.panels.length + i), node: <Ask session={s} />,
+  })));
+
+  // …and that place is written down the first time the window is drawn, so
+  // nothing about where it stands depends on the list any more.
+  const unplaced = mine.panels.filter((t) => !told.places[idOfTold(t)]);
+  useEffect(() => {
+    if (!unplaced.length) return;
+    const taken = Object.values(useTold.getState().places);
+    for (const t of unplaced) {
+      const at = freeSlot(taken, { right: DOCK_RIGHT, bottom: PANEL_BOTTOM },
+        { width: SIZE.panel, height: SIZE.panelTall });
+      taken.push(at);
+      useTold.getState().place(idOfTold(t), at);
+    }
+  }, [unplaced.map(idOfTold).join(' ')]);
+
+  const open = windows.find((w) => w.id === big) ?? null;
+
   return (
     <>
-      {panels.map((s, i) => (
-        <div key={s.id} style={{
-          position: 'fixed', zIndex: 11,
-          right: DOCK_RIGHT + i * (SIZE.panel + PANEL_GAP), bottom: PANEL_BOTTOM,
+      {windows.filter((w) => w.id !== big).map(({ id, place, node }) => (
+        <div key={id} style={{
+          position: 'fixed', zIndex: 11, right: place.right, bottom: place.bottom,
         }}>
-          <Ask session={s} />
+          {node}
         </div>
       ))}
-      {!!tabs.length && (
+      {/* Opened out: the same window, in the middle of the screen, over a dim.
+          Pressing the dim puts it back in the corner rather than closing the
+          chat — closing is the × and is not something a stray click should
+          do. */}
+      {!!open && (
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setBig(null); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 30, background: T.scrim,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 'min(32px, 4vw)', boxSizing: 'border-box',
+          }}
+        >
+          {open.node}
+        </div>
+      )}
+      {(!!tabs.length || !!mine.tabs.length) && (
         <div style={{
           position: 'fixed', zIndex: 10, right: DOCK_RIGHT, bottom: DOCK_BOTTOM,
           display: 'flex', gap: 8,
@@ -67,6 +155,18 @@ export function Sessions({ view }: { view: DivanView }) {
             />
           ))}
           {more > 0 && <DockMore n={more} title={`${more} more waiting on you`} />}
+          {/* …and the chats, nearest the corner, in the order they were
+              started: the tab is where one goes when it is put away, and the
+              row is how the Dashboard holds more than two of them. */}
+          {mine.tabs.map(({ told: t, open }) => (
+            <DockTab
+              key={idOfTold(t)} open={open} label={t.title}
+              lead={<ExecutorBadge executor="divan" size={20} />}
+              title={open ? `Put ${t.title} away` : `Open ${t.title}`}
+              onClick={() => (open ? told.minimise(idOfTold(t)) : told.restore(idOfTold(t)))}
+            />
+          ))}
+          {mine.more > 0 && <DockMore n={mine.more} title={`${mine.more} more chats on this page`} />}
         </div>
       )}
     </>

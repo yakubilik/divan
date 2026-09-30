@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- The Divan mark, as a file: the same geometry `ui/divan.tsx DivanMark`
+       draws, with the one difference a file needs — nothing outside it sets a
+       colour, so it carries both inks and picks by the reader's own scheme. -->
+  <style>
+    :root { color-scheme: light dark; }
+    .m { fill: #1B1A17; }
+    @media (prefers-color-scheme: dark) { .m { fill: #EDE9E2; } }
+  </style>
+  <rect class="m" x="3.5" y="5" width="17" height="5.2" rx="2.6" opacity=".55"/>
+  <rect class="m" x="1.8" y="10.2" width="20.4" height="5.6" rx="2.4"/>
+  <rect class="m" x="4.2" y="16.2" width="2.6" height="3.2" rx="1.1"/>
+  <rect class="m" x="17.2" y="16.2" width="2.6" height="3.2" rx="1.1"/>
+</svg>

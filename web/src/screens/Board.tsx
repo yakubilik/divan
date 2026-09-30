@@ -140,7 +140,10 @@ export function Board({ view, project, drafting, onDraft, onCard }: {
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{
         flex: 1, minHeight: 0, display: 'grid',
-        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12,
+        // Five since the queue's own review became a column of its own: the
+        // frames draw four, and the fifth is the board saying what the four
+        // could not — that a ticket is being checked rather than written.
+        gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))`, gap: 12,
       }}>
         {cols.map((col) => (
           <ColumnTab
@@ -210,7 +213,6 @@ function TicketCard({ ticket: t, carried, drag, onAsk, onOpen }: {
    *  of it, which is Web14 W8. */
   onOpen?: () => void;
 }) {
-  const desc = t.card.summary.trim();
   const press = onAsk ?? onOpen;
   return (
     <Card
@@ -230,15 +232,13 @@ function TicketCard({ ticket: t, carried, drag, onAsk, onOpen }: {
             style={{ marginLeft: 'auto' }} />
         )}
       </div>
+      {/* The title and nothing under it. A card used to carry two lines of
+          its summary as well, and a column of those is a column you read
+          rather than scan — which is the whole of what a board is for. What
+          the card says at length is on the card's own page, one press away. */}
       <div style={{ fontSize: 15.5, fontWeight: 600, lineHeight: 1.3, letterSpacing: '-.005em' }}>
         {t.card.title}
       </div>
-      {!!desc && (
-        <div style={{
-          fontSize: 13.5, lineHeight: 1.45, color: T.ink2, display: '-webkit-box',
-          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxHeight: 39,
-        }}>{desc}</div>
-      )}
     </Card>
   );
 }

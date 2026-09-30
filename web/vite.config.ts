@@ -44,11 +44,18 @@ function stampBuild(): Plugin {
 const outDir = '../daemon/remote_ai_chat/webui';
 
 // The daemon serves the built files itself, from
-// daemon/remote_ai_chat/webui/. Relative base so it works whether the panel is
-// opened at http://127.0.0.1:8790/ or through a Tailscale name.
+// daemon/remote_ai_chat/webui/, mounted at the root — and it answers any path
+// that is not a file with index.html, so that a reload of /p/babysee/board comes
+// back as the panel rather than as a 404.
+//
+// Which is why the base is absolute and not './'. A relative base resolves the
+// bundle against the *page*, so the panel opened at /p/babysee asked for
+// /p/assets/index-….js, got the daemon's index.html back with a 404, and drew a
+// black screen. Absolute is already host-agnostic — it is a path, not an origin
+// — so it works at 127.0.0.1:8790 and behind a Tailscale name alike.
 export default defineConfig({
   plugins: [react(), stampBuild()],
-  base: './',
+  base: '/',
   build: {
     outDir,
     emptyOutDir: true,

@@ -232,6 +232,17 @@ group('a sign-in is seen expiring before it expires');
     said({ expires_at: NOW + 12 * day }));
   ok('…further out than that it is simply connected',
     M.signInState(acc({ expires_at: NOW + 15 * day }), NOW) === 'connected');
+  // The computer's own answer outranks the account's words: a tool that is not
+  // on the machine wants an installer, not a login, and the row says so.
+  ok('a sign-in to a tool the computer does not have is a tool to install',
+    M.signInState(acc({ logged_in: true }), NOW, false) === 'missing'
+    && M.signInWords(acc({ logged_in: true }), NOW, inDays, false) === 'the CLI is not installed');
+  ok('…and it is counted among the rows that want a person, because now one can fix it',
+    M.signIns([{
+      hostKey: 'studio', machine: 'studio', online: true,
+      accounts: [acc({ id: 'cx', provider: 'codex', logged_in: false })],
+      limits: {}, chats: [], versions: { claude: '1.2.3', codex: null },
+    }], NOW, inDays, (t) => String(t))[0].action === 'Install');
   ok('…past its date, and signed out, both say what to do about it',
     said({ expires_at: NOW - day }) === 'expired · sign in again'
     && said({ logged_in: false }) === 'signed out'

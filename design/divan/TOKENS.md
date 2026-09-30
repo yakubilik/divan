@@ -124,6 +124,23 @@ Divan and you take the page's own tones rather than a colour: Divan is `ink` on
 and that white belongs to the mark rather than to the theme — a coloured square
 brings its own background and does not follow the page.
 
+### The wordmark
+
+The bar opened on the word `divan` in 13 px mono — the product's own name set at
+the size of a caption, and the smallest text on its own screen. It is a mark and
+a name now, and the two are one object:
+
+| | value | where |
+|---|---|---|
+| mark | 22 px square, `currentColor` | `SIZE.logo`, top bar |
+| mark, on its own | 24 px | `SIZE.mark`, favicon and anything without a wordmark |
+| the name | `600 19px` Geist, `letter-spacing:-.02em` | beside the mark, 8 px apart |
+| narrow window | under 900 px the name goes, the mark stays | the bar needs that room for the three places and the machine chip |
+
+The mark is a divan seen from the front — a back at 55 % ink, a seat, two feet —
+drawn as geometry in one colour so that the same file is the logo in both themes
+and inside a favicon. No gradient and no shadow: at 22 px a gradient is a smudge.
+
 ### Where the older palette's names landed
 
 The app's screens speak an older vocabulary (`card`, `fill`, `muted`, `accent`).

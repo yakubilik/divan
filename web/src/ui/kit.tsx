@@ -213,6 +213,11 @@ export const KEYFRAMES = `
 @keyframes rac-pulse { 0%,100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
 @keyframes rac-caret { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
 @keyframes rac-breathe { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+/* The one thing in the panel that has to answer to the width of the window: in
+   a narrow one the top bar's three places and its machine chip need the room,
+   and a wordmark is the part of a logo you can drop — the mark on its own is
+   still the mark. */
+@media (max-width: 900px) { .dv-wordmark { display: none; } }
 `;
 
 export function Icon({ path, size = 16, color = C.mute, fill = false, width = 2.2 }: {

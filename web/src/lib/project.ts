@@ -26,6 +26,7 @@
  */
 import { COLUMNS, spent, stuck, waiting } from './divan';
 import type { DivanView, MergedBranch, MergedCard, MergedProject } from './divan';
+import type { DivanMilestone } from './protocol';
 import { age, clock, dormant, executorWord, latest, staleFor, type Ago } from './overview';
 import type { State, Tone } from './theme';
 
@@ -390,4 +391,237 @@ export function happened(p: MergedProject, kind: string | null): Happened[] {
     .filter((c) => (c.agent_detail || '').trim())
     .sort((a, b) => (b.agent_status_at ?? 0) - (a.agent_status_at ?? 0))
     .map((c) => ({ at: c.agent_status_at, text: (c.agent_detail || '').trim(), card: c }));
+}
+
+// ── where a product is in its life ──────────────────────────────────────────
+
+/** The rail across the top of a product's page, in the order it is drawn. The
+ *  five are fixed and they are the daemon's own (`divan.py STAGES`): a rail with
+ *  a sixth step would be a rail nobody could read at a glance, and a product
+ *  that is none of them is a product nobody has said, which draws no rail. */
+export const STAGES = ['idea', 'build', 'beta', 'live', 'growth'] as const;
+
+export type Stage = typeof STAGES[number];
+
+export interface Step {
+  key: Stage;
+  label: string;
+  /** Behind it, or the one it is on: the rail is filled up to here. */
+  passed: boolean;
+  here: boolean;
+}
+
+/** The rail, or null on a product whose stage nobody has written. Null and not
+ *  five empty steps: a rail with nothing filled reads as "this product has got
+ *  nowhere", which is a claim, and the honest answer is that nobody has said. */
+export function rail(p: MergedProject): Step[] | null {
+  const at = STAGES.indexOf((p.stage || '') as Stage);
+  if (at < 0) return null;
+  return STAGES.map((key, i) => ({
+    key,
+    label: key[0].toUpperCase() + key.slice(1),
+    passed: i <= at,
+    here: i === at,
+  }));
+}
+
+/** `14 Mar 2026`, the way the frame writes a date: short month, no comma. */
+export function day(at: number | null | undefined): string {
+  if (at == null || !Number.isFinite(at)) return '';
+  return new Date(at * 1000).toLocaleDateString('en-GB',
+    { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** `Mar 2026`, for the head of the timeline. */
+export function month(at: number | null | undefined): string {
+  if (at == null || !Number.isFinite(at)) return '';
+  return new Date(at * 1000).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
+
+/** How long ago, in the units a product's life is measured in: `1 yr 6 mo`,
+ *  `4 mo`, `12 days`, `today`. Not `uptime`, which counts in days and hours
+ *  because it is for machines that have been up since Tuesday. */
+export function span(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const days = Math.floor(s / DAY);
+  if (days < 1) return 'today';
+  if (days < 31) return `${days} day${days === 1 ? '' : 's'}`;
+  const months = Math.round(days / 30.44);
+  if (months < 12) return `${months} mo`;
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  return rest ? `${years} yr ${rest} mo` : `${years} yr`;
+}
+
+/** One of the three things said beside the rail: what it is, what it says, and
+ *  the small line under it. */
+export interface Fact {
+  key: string;
+  label: string;
+  value: string;
+  /** The grey line under the value — how long ago, what version, how far off.
+   *  Null where there is nothing more to say than the date. */
+  note: string | null;
+  tone: Tone | null;
+}
+
+/** `Started`, `Live since` and `Next milestone`, and only the ones that are
+ *  true. A product nobody has given a start date has no Started tile — an
+ *  invented one would be the one number on this page nobody could check — and a
+ *  product with nothing promised has no Next tile rather than an empty one.
+ *
+ *  `Live since` is read off the milestone marked `live` and off nothing else:
+ *  the stage rail says a product is live, and the *day* it became so is a fact
+ *  somebody wrote down. A product in `live` with no such milestone says so with
+ *  its stage and leaves the tile out. */
+export function facts(p: MergedProject, now: number): Fact[] {
+  const out: Fact[] = [];
+  const history = milestones(p);
+  if (p.started_at != null) {
+    out.push({
+      key: 'started', label: 'Started', value: day(p.started_at),
+      note: `${span(now - p.started_at)} ago`, tone: null,
+    });
+  }
+  const live = history.find((m) => m.kind === 'live');
+  if (live) {
+    out.push({
+      key: 'live', label: 'Live since', value: day(live.at), note: live.title, tone: null,
+    });
+  }
+  const next = history.find((m) => m.at > now);
+  if (next) {
+    const away = span(next.at - now);
+    out.push({
+      key: 'next', label: 'Next milestone', value: day(next.at),
+      note: `${next.title} · ${away === 'today' ? 'today' : `in ${away}`}`,
+      tone: next.at - now < 7 * DAY ? 'amber' : null,
+    });
+  }
+  return out;
+}
+
+/** A product's history, oldest first, as the daemon keeps it — sorted here too,
+ *  because two machines' copies of one product arrive in whichever order they
+ *  were written. */
+export function milestones(p: MergedProject): DivanMilestone[] {
+  return [...(p.milestones || [])].sort((a, b) => a.at - b.at);
+}
+
+// ── what is happening on it right now ───────────────────────────────────────
+
+/** One line of the `Right now` panel: a thing that is actually happening on
+ *  this product, with the word for what kind of happening it is. */
+export interface Process {
+  key: string;
+  /** The mono label in front: `Running`, `Waiting for you`, `Stopped`… */
+  label: string;
+  tone: Tone;
+  title: string;
+  /** The two lines under it: what the agent last said, or what the card is. */
+  body: string;
+  /** The right-hand corner: how long it has been this way. Empty where nothing
+   *  ever stamped it — a card nobody has touched has no clock. */
+  since: string;
+  /** The card it is, so a press can open it. */
+  card: MergedCard;
+}
+
+/** Everything happening on a product, worst first.
+ *
+ *  It is the board read as *events* rather than as columns, which is the whole
+ *  of the difference between this panel and the Board tab: a card sitting in
+ *  Queued is not happening and is not in here, and a card whose agent stopped
+ *  at four in the morning is, however tidy the column it sits in looks.
+ *
+ *  Three things count as happening, and nothing else does: an agent is working
+ *  on it, it is waiting for a person, or a person has it in progress. The order
+ *  is the one the Dashboard reads the same cards in — stopped, then asking, then
+ *  running, then a person's own work — so the line at the top of this panel is
+ *  the line that screen would have put at the top. */
+export function processes(p: MergedProject, now: number, ago: Ago): Process[] {
+  const rank = (c: MergedCard) => (stuck(c) ? 0
+    : c.agent_status === 'asking' ? 1
+    : c.agent_status === 'running' ? 2 : 3);
+  const mine = p.cards.filter((c) => stuck(c) || waiting(c)
+    || c.agent_status === 'running'
+    || (c.column === 'in_progress' && c.executor === 'human'));
+  return mine
+    .sort((a, b) => rank(a) - rank(b)
+      || (b.agent_status_at ?? 0) - (a.agent_status_at ?? 0)
+      || a.title.localeCompare(b.title))
+    .map((c) => {
+      const said = (c.agent_detail || '').trim();
+      const stamp = c.agent_status_at ?? c.moved_at ?? null;
+      return {
+        key: c.id,
+        ...word(c),
+        title: c.title,
+        body: said || (c.summary || '').trim() || NOTHING_SAID,
+        since: stamp == null ? '' : ago(Math.max(0, now - stamp)),
+        card: c,
+      };
+    });
+}
+
+/** What a card with nothing written on it says under its title. */
+export const NOTHING_SAID = 'nothing has been said about it yet';
+
+/** The label and its colour: what kind of happening this card is. The words are
+ *  the ones the rest of the product already uses for these states — a card that
+ *  reads `asking` on the board does not become `question` here. */
+function word(c: MergedCard): { label: string; tone: Tone } {
+  if (stuck(c)) return { label: 'Stopped', tone: 'red' };
+  if (c.agent_status === 'asking') return { label: 'Waiting for you', tone: 'amber' };
+  if (c.executor === 'human' && c.agent_status !== 'running') {
+    return { label: 'Yours to do', tone: 'amber' };
+  }
+  return { label: 'Running', tone: 'run' };
+}
+
+// ── …and what it has been through ───────────────────────────────────────────
+
+/** One line of the timeline: a date, a thing, and whether it has happened. */
+export interface Moment {
+  key: string;
+  at: number;
+  /** `30 Sep 2026`, or `Today` for the line that marks now. */
+  date: string;
+  title: string;
+  note: string;
+  kind: string;
+  /** It has not happened yet: drawn as a ring and in grey. */
+  future: boolean;
+  /** The one line that is not a milestone at all: where now sits. */
+  today: boolean;
+}
+
+/** A product's history as the page reads it: newest first, with today in its
+ *  place among the entries.
+ *
+ *  Newest first because the question the page is for is "what is going on",
+ *  and the answer to that is at the top. Today is a line of its own rather than
+ *  a marker on the nearest entry: what a person is looking for on this list is
+ *  the gap between the last thing that happened and the next thing promised,
+ *  and that gap is only visible when now has a place in the list.
+ *
+ *  Empty on a product whose history nobody has written: the panel then says so
+ *  in words rather than drawing a line with one dot on it. */
+export function timeline(p: MergedProject, now: number): Moment[] {
+  const history = milestones(p);
+  if (!history.length) return [];
+  const rows: Moment[] = history.map((m) => ({
+    key: m.id, at: m.at, date: day(m.at), title: m.title, note: m.note,
+    kind: m.kind, future: m.at > now, today: false,
+  }));
+  rows.push({ key: 'today', at: now, date: day(now), title: 'Today', note: '',
+              kind: '', future: false, today: true });
+  return rows.sort((a, b) => b.at - a.at || (a.today ? 1 : -1));
+}
+
+/** `since Mar 2026` — the head of the panel, which is the oldest thing on it.
+ *  Null where there is no history to be since. */
+export function since(p: MergedProject): string | null {
+  const first = milestones(p)[0];
+  return first ? `since ${month(first.at)}` : null;
 }

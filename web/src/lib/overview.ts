@@ -350,6 +350,10 @@ export const COLUMN_LABEL: { key: DivanColumn; label: string }[] = [
   { key: 'ice_box', label: 'Ice Box' },
   { key: 'queued', label: 'Queued' },
   { key: 'in_progress', label: 'In Progress' },
+  // Between the writing and the end: a ticket the queue has handed to its
+  // check or to the verifier is being looked at, which is not the same as
+  // being worked on and is not finished either.
+  { key: 'review', label: 'Review' },
   { key: 'done', label: 'Done' },
 ];
 
@@ -359,7 +363,9 @@ export const COLUMN_LABEL: { key: DivanColumn; label: string }[] = [
  *  counting them would say a product that shipped forty-eight things has
  *  shipped none. */
 export function columnCounts(p: MergedProject): Record<DivanColumn, number> {
-  const out: Record<DivanColumn, number> = { ice_box: 0, queued: 0, in_progress: 0, done: 0 };
+  const out: Record<DivanColumn, number> = {
+    ice_box: 0, queued: 0, in_progress: 0, review: 0, done: 0,
+  };
   for (const c of COLUMN_LABEL) out[c.key] = p.counts[c.key] ?? 0;
   return out;
 }

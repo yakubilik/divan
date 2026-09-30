@@ -29,15 +29,17 @@
  *  move a card from would be a second place to keep in step), and the link and
  *  ellipsis in the corner, which stand for nothing this end can do yet.
  */
-import { useEffect, useState } from 'react';
-import { cardGet, ticketNote } from '../lib/actions';
-import { COLUMN_LABEL } from '../lib/overview';
+import { useEffect, useRef, useState } from 'react';
+import { cardGet, setExecutor, ticketNote, updateCard } from '../lib/actions';
+import { COLUMN_LABEL, executorWord } from '../lib/overview';
 import { uptime } from '../lib/format';
 import { brief, details, human, live, liveHead, nowMark, sayTo } from '../lib/ticket';
 import { executorFace } from '../lib/sessions';
-import { RADIUS, STATE_MARK, STATE_TONE, T, stateColour } from '../lib/theme';
-import type { MergedCard, MergedProject } from '../lib/divan';
-import type { DivanCardFull } from '../lib/protocol';
+import { useRun } from '../lib/run';
+import { RunLog } from '../components/RunLog';
+import { RADIUS, SHADOW, STATE_MARK, STATE_TONE, T, stateColour } from '../lib/theme';
+import { useDivanStore, type MergedCard, type MergedProject } from '../lib/divan';
+import type { DivanCardFull, DivanExecutor } from '../lib/protocol';
 import type { Ticket as QueueTicket } from '../lib/ustabasi';
 import {
   Card, Composer, ExecutorBadge, FieldRow, Monogram, Pill, SectionHeader, StampRow, StatusDot, Tag,
@@ -97,6 +99,38 @@ export function TicketPage({
 }: TicketProps & { opened?: Opened }) {
   const [open, setOpen] = useState(true);
   const [sent, setSent] = useState<string | null>(null);
+  /** A card is written on from here now — the title, the sentences under it,
+   *  and who does it. What was typed is kept until the board comes back with
+   *  it: the boards are re-read on a slow timer, and a title that snapped back
+   *  to the old one for two seconds reads as an edit that did not take. */
+  const [wrote, setWrote] = useState<{ title?: string; summary?: string }>({});
+  const [handing, setHanding] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  /** Write one face of the card, and ask that machine for the board again so
+   *  everything else drawn from it catches up. */
+  const write = async (fields: { title?: string; summary?: string }) => {
+    setFailed(null);
+    setWrote((was) => ({ ...was, ...fields }));
+    try {
+      await updateCard(card.host, card.id, fields);
+      void useDivanStore.getState().load(card.host);
+    } catch (e: any) {
+      setWrote({});
+      setFailed(e?.message ?? 'That did not reach the computer');
+    }
+  };
+
+  const hand = async (executor: DivanExecutor | null) => {
+    setFailed(null);
+    setHanding(false);
+    try {
+      await setExecutor(card.host, card.id, executor);
+      void useDivanStore.getState().load(card.host);
+    } catch (e: any) {
+      setFailed(e?.message ?? 'That did not reach the computer');
+    }
+  };
 
   const face = human(card);
   const said = brief(got.full, got.ticket);
@@ -151,9 +185,11 @@ export function TicketPage({
           display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, minHeight: 0,
           overflowY: 'auto',
         }}>
-          <div style={{ fontSize: 30, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-.02em' }}>
-            {face.title}
-          </div>
+          <Writable
+            value={wrote.title ?? face.title} label="the card's title"
+            onSave={(text) => write({ title: text })}
+            style={{ fontSize: 30, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-.02em' }}
+          />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Pill face="ink" label={column?.label ?? card.column} />
             {!!mark && <Tag mark={STATE_MARK[mark.state]} label={mark.label}
@@ -163,11 +199,13 @@ export function TicketPage({
             </span>
           </div>
           <Card radius={RADIUS.tile} style={{ maxWidth: 720, padding: '16px 18px 12px' }}>
-            <div style={{ fontSize: 17, lineHeight: '26px', minHeight: 78, color: face.bare ? T.ink3 : T.ink }}>
-              {face.bare
-                ? 'Nobody has written the sentences for this one yet.'
-                : face.summary}
-            </div>
+            <Writable
+              value={wrote.summary ?? (face.bare ? '' : face.summary)}
+              placeholder="Nobody has written the sentences for this one yet."
+              label="what this card is about" multiline
+              onSave={(text) => write({ summary: text })}
+              style={{ fontSize: 17, lineHeight: '26px', minHeight: 78 }}
+            />
             <div style={{
               display: 'flex', ...mono, fontSize: 11, color: T.ink3,
               borderTop: `1px solid ${T.line}`, paddingTop: 8, marginTop: 6,
@@ -243,14 +281,20 @@ export function TicketPage({
 
         {/* ── the details, and the live half ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
-          <Card radius={RADIUS.tile} inset={false} style={{ padding: '4px 16px' }}>
+          <Card radius={RADIUS.tile} inset={false} style={{ padding: '4px 16px', position: 'relative' }}>
+            {handing && <Hands current={card.executor} onPick={(x) => void hand(x)} />}
             {details(card, project, now, uptime).map((d, i) => (
               <FieldRow key={d.label} label={d.label} value={d.value} note={d.note}
                 first={i === 0}
                 lead={d.label === 'Executor'
                   ? <ExecutorBadge executor={executorFace(card)} size={22} />
-                  : undefined} />
+                  : undefined}
+                onClick={d.label === 'Executor' ? () => setHanding((h) => !h) : undefined}
+                title={d.label === 'Executor' ? 'Hand this card to somebody else' : undefined} />
             ))}
+            {!!failed && (
+              <div style={{ ...mono, fontSize: 11, color: T.red, padding: '0 0 10px' }}>{failed}</div>
+            )}
           </Card>
           <Live card={card} ticket={got.ticket} now={now} placeholder={placeholder} sent={sent}
             onSay={say} />
@@ -286,11 +330,13 @@ function Block({ label, children }: { label: string; children: React.ReactNode }
 
 /** The log in the corner, and the one line you can say into it.
  *
- *  It is the conversation the wall reads (`lib/ustabasi.ts`), cut to what there
- *  is room for and stamped: the ticket is the card that opened it, what came
- *  back, and where it stands now. The whole run — everything the worker printed
- *  — is the wall's, and this page does not open it: a second reader of the same
- *  stream is a second thing to keep in step.
+ *  Two things, in the order they are read in. First the conversation the wall
+ *  reads (`lib/ustabasi.ts`), cut to what there is room for and stamped: what
+ *  was asked for, what came back, where it stands. Then, under it, what the
+ *  worker is printing *right now* — the model's own stream, the same reading
+ *  the wall's ticket window and the phone both use (`lib/run.ts`), because a
+ *  box labelled Live that said `running 1h 12m` and nothing else was a box that
+ *  told you the one thing you already knew.
  *
  *  A card with no ticket behind it has no worker listening, and the box says so
  *  instead of pretending to send. */
@@ -305,6 +351,16 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
   const head = liveHead(ticket, now, uptime);
   const lines = live(ticket);
   const [words, setWords] = useState('');
+  const run = useRun(card.host, card.ustabasi_id);
+  const foot = useRef<HTMLDivElement | null>(null);
+  // The end of a run is the part being read, and it is written to while it is
+  // being read. Only ever scrolled for somebody already at the bottom of it.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) foot.current?.scrollIntoView();
+  }, [run.turns.length, run.live]);
   return (
     <Card radius={RADIUS.tile} style={{ padding: '12px 14px', gap: 4, flex: 1, minHeight: 0 }}>
       <div style={{
@@ -319,7 +375,10 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
           whiteSpace: 'nowrap',
         }}>{head.note}</span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, overflowY: 'auto' }}>
+      <div
+        ref={scroller}
+        style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, overflowY: 'auto' }}
+      >
         {lines.length ? lines.map((l, i) => (
           <StampRow key={i} code at={l.at} text={l.text} tone={l.tone} />
         )) : (
@@ -330,6 +389,12 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
               : `Nothing has come back from ${card.machine} about this ticket yet.`}
           </div>
         )}
+        {card.ustabasi_id != null && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.line}` }}>
+            <RunLog run={run} />
+          </div>
+        )}
+        <div ref={foot} />
       </div>
       {!!sent && (
         <div style={{ ...mono, fontSize: 11, color: T.ink3, paddingTop: 6 }}>{sent}</div>
@@ -357,5 +422,138 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
           )}
       </div>
     </Card>
+  );
+}
+
+/** A card's face, written in place.
+ *
+ *  A board where a card can be dragged but not corrected is a board people keep
+ *  a second list beside. So the title and the sentences under it are fields:
+ *  press, type, Enter — or ⌘Enter where there are several lines — and Escape
+ *  puts back what was there. Nothing else about a card is writable from here;
+ *  the column is the drag and the executor is the row in the panel, each with a
+ *  request of its own.
+ *
+ *  It reads as text until it is pressed, because that is what the frames draw:
+ *  no box, no pencil, nothing that says "form". */
+function Writable({ value, placeholder, label, multiline, onSave, style }: {
+  value: string;
+  placeholder?: string;
+  /** What is being written, for a reader who cannot see which line was
+   *  pressed: "the card's title". */
+  label: string;
+  multiline?: boolean;
+  onSave: (text: string) => void;
+  style?: React.CSSProperties;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(value);
+  const field = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+
+  useEffect(() => { if (!editing) setText(value); }, [value, editing]);
+  useEffect(() => { if (editing) field.current?.focus(); }, [editing]);
+
+  const done = () => {
+    const words = text.trim();
+    setEditing(false);
+    if (words === value.trim()) return;
+    onSave(words);
+  };
+  const stop = () => { setText(value); setEditing(false); };
+
+  const shared: React.CSSProperties = {
+    ...style, width: '100%', boxSizing: 'border-box', margin: 0,
+    background: T.s2, color: T.ink, borderRadius: 10, padding: '6px 8px',
+    border: 'none', outline: 'none', font: 'inherit', resize: 'none' as const,
+  };
+
+  if (editing) {
+    return multiline ? (
+      <textarea
+        ref={field as any} value={text} aria-label={label}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={done}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { e.preventDefault(); stop(); }
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); done(); }
+        }}
+        rows={3}
+        style={shared}
+      />
+    ) : (
+      <input
+        ref={field as any} type="text" value={text} aria-label={label}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={done}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { e.preventDefault(); stop(); }
+          if (e.key === 'Enter') { e.preventDefault(); done(); }
+        }}
+        style={shared}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button" onClick={() => setEditing(true)} title={`Write ${label}`}
+      style={{
+        ...style, width: '100%', textAlign: 'left', background: 'transparent',
+        border: 'none', padding: 0, font: 'inherit', cursor: 'text',
+        color: value ? (style?.color ?? T.ink) : T.ink3,
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+      }}
+    >{value || placeholder || `Write ${label}`}</button>
+  );
+}
+
+/** Who a card can be handed to. The five the board knows, and `Nobody`, which
+ *  is a value rather than the absence of one: a card whose agent was the wrong
+ *  guess goes back to having none, not to having a person on it.
+ *
+ *  A branch agent is named by its branch, so it is not offered here — that is
+ *  what the branch page is for. */
+const HANDS: { executor: DivanExecutor | null; face: string }[] = [
+  { executor: 'coding_agent', face: 'coder' },
+  { executor: 'assistant', face: 'research' },
+  { executor: 'human', face: 'you' },
+  { executor: null, face: 'unassigned' },
+];
+
+function Hands({ current, onPick }: {
+  current: DivanExecutor | null;
+  onPick: (executor: DivanExecutor | null) => void;
+}) {
+  return (
+    <div
+      role="listbox" aria-label="Who does this one"
+      style={{
+        position: 'absolute', top: 44, left: 12, right: 12, zIndex: 5,
+        background: T.s2, borderRadius: RADIUS.tab, boxShadow: SHADOW.drawer,
+        padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
+      }}
+    >
+      {HANDS.map((h) => {
+        const on = h.executor === current;
+        return (
+          <button
+            key={h.face} type="button" role="option" aria-selected={on}
+            onClick={() => onPick(h.executor)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+              padding: '6px 8px', borderRadius: RADIUS.mark, border: 'none', font: 'inherit',
+              textAlign: 'left', cursor: 'pointer', color: T.ink,
+              background: on ? T.s1 : 'transparent',
+            }}
+          >
+            <ExecutorBadge executor={h.face} size={20} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: on ? 600 : 500 }}>
+              {executorWord(h.executor)}
+            </span>
+            {on && <span style={{ ...mono, fontSize: 11, color: T.ink3 }}>on</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }

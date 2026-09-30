@@ -208,12 +208,115 @@ class Host:
         # The plan readings this machine has, keyed as the server keys them.
         # Written by the checks that are about quota and empty for the rest.
         self.limits: dict[str, list[dict]] = {}
+        # The mirror runs one at a time on a real server, and the handler
+        # borrowed below takes that lock.
+        self._mirror_lock = asyncio.Lock()
         self.pool = Pool(PoolSettings.from_dict({"enabled": True}),
                          lambda: ACCOUNTS, lambda k: self.limits.get(k, []))
         for attr in dir(Server):
             if (attr.startswith("h_divan_") or attr == "h_ustabasi_list"
                     or attr in ("_checked_repo", "_mirrored_queue")):
                 setattr(self, attr, getattr(Server, attr).__get__(self))
+
+
+# ── 0 · two of everything at once ────────────────────────────────────────────
+# The mirror is not a thing one caller does: the panel polls the board, the
+# phone polls it, and the wall polls the queue, all every few seconds and all
+# through the same database connection. Two passes that interleave read "no
+# card has ticket 71" at the same moment and both write one — the unique index
+# refuses the second, the connection is left in a failed transaction, and the
+# pass dies where it stands having written **no statuses at all**. On a real
+# board that reads as a card that will not stay where it was dragged and a mark
+# two rounds old.
+
+def race_probe() -> None:
+    import threading
+    path = tmp / "race.sqlite"
+    if path.exists():
+        path.unlink()
+    rdb = DB(path)
+    board = rdb.divan
+    project = board.create_project("babysee", repos=[str(ROOT / "babysee")])
+    snapshot = {"available": True, "tickets": [
+        {"id": 900 + i, "title": f"ticket {900 + i}", "status": "queued", "stage": "worker",
+         "round": 1, "repo": str(ROOT / "babysee"), "goal": "", "done_criteria": [],
+         "escalation": "", "notes": [], "verdict": None, "git": None,
+         "created_at": 1.0, "updated_at": 1.0, "started_at": None,
+         "round_started_at": None, "finished_at": None, "note_count": 0,
+         "last_event": None, "project": "babysee", "branch": None}
+        for i in range(12)]}
+    errors: list[str] = []
+
+    def pass_once() -> None:
+        try:
+            board.sync_ustabasi(snapshot, "this-mac", policy.project_for)
+        except Exception as exc:                       # noqa: BLE001 — the point
+            errors.append(f"{type(exc).__name__}: {exc}")
+
+    threads = [threading.Thread(target=pass_once) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    check("six mirrors at once, and not one of them fell over", errors, [])
+    cards = {c["ustabasi_id"] for c in board.cards()}
+    check("…every ticket has a card", sorted(cards), [900 + i for i in range(12)])
+    counts = rdb._c.execute(
+        "SELECT ustabasi_id, count(*) FROM cards GROUP BY ustabasi_id HAVING count(*) > 1"
+    ).fetchall()
+    check("…and not one of them has two", counts, [])
+    check("…and the statuses were written, which is what a pass that died never did",
+          {c["agent_status"] for c in board.cards()}, {"queued"})
+    check("the product nobody touched is still the product",
+          board.get_project(project["id"])["name"], "babysee")
+
+
+race_probe()
+
+
+# ── 0b · the column between the writing and the end ──────────────────────────
+# A ticket being verified looked exactly like a ticket being written: both
+# `running`, both In Progress. The board could not answer the one question it
+# is for — what is left to do — because half of In Progress was already done
+# and waiting on a check.
+
+def review_probe() -> None:
+    ticket = {"id": 300, "title": "a ticket walking its stages", "status": "queued",
+              "stage": "worker", "round": 1, "repo": str(ROOT / "babysee"),
+              "goal": "", "done_criteria": [], "escalation": "", "notes": [],
+              "verdict": None, "git": None, "created_at": 1.0, "updated_at": 1.0,
+              "started_at": None, "round_started_at": None, "finished_at": None,
+              "note_count": 0, "last_event": None, "project": "babysee",
+              "branch": None, "steps": []}
+    walk = [
+        ({"status": "queued", "stage": "worker"}, "queued"),
+        ({"status": "running", "stage": "worker"}, "in_progress"),
+        # The queue deciding what to do about a worker that stopped is still
+        # the writing of it, not a review of it.
+        ({"status": "running", "stage": "triage"}, "in_progress"),
+        ({"status": "running", "stage": "check"}, "review"),
+        ({"status": "running", "stage": "verifier"}, "review"),
+        # A verifier that turns it down hands it back to a worker.
+        ({"status": "running", "stage": "worker"}, "in_progress"),
+        ({"status": "running", "stage": "verifier"}, "review"),
+        ({"status": "done", "stage": "verifier"}, "done"),
+    ]
+    for patch, column in walk:
+        check(f"{patch['status']} · {patch['stage']} belongs in {column}",
+              divan.column_for({**ticket, **patch}), column)
+    # …and a ticket that stopped is not in Review whatever stage it stopped on:
+    # work that stopped is work, and a red card in the middle column is what
+    # says so at seven in the morning.
+    for status in ("blocked", "failed"):
+        check(f"a {status} ticket stays where the work is",
+              divan.column_for({**ticket, "status": status, "stage": "verifier"}),
+              "in_progress")
+    check("a cancelled one is finished with, wherever it was",
+          divan.column_for({**ticket, "status": "cancelled", "stage": "check"}), "done")
+
+
+review_probe()
 
 
 # ── 1 · the migration, on a database from before the board ───────────────────
@@ -282,13 +385,17 @@ conn.execute("INSERT INTO projects (id,name,slug,summary,sort,archived,created_a
 conn.commit()
 divan.migrate(conn)
 check("the columns a project grew arrive on their own",
-      {"kind", "started_at", "hidden"}
+      {"kind", "started_at", "hidden", "stage"}
       <= {r[1] for r in conn.execute("PRAGMA table_info(projects)")}, True)
+check("…and so does the table its history lives in",
+      bool(conn.execute("SELECT name FROM sqlite_master WHERE type='table'"
+                        " AND name='milestones'").fetchone()), True)
 older_board = divan.Board(conn, threading.Lock())
 kept = older_board.find_project("remote-ai-chat")
 check("and the product that was there is word for word what it was",
       (kept["name"], kept["slug"], kept["summary"]), ("Divan", "remote-ai-chat", ""))
-check("with the new fields simply empty", (kept["kind"], kept["started_at"]), ("", None))
+check("with the new fields simply empty",
+      (kept["kind"], kept["started_at"], kept["stage"]), ("", None, ""))
 check("a product that was archived is still archived",
       older_board.find_project("tutor-v3")["archived"], True)
 check("…and the migration did not put it back on the board",
@@ -460,6 +567,57 @@ try:
 except ValueError as exc:
     holds("…and the refusal says which fields there are",
           "kind" in str(exc) and "started_at" in str(exc), str(exc))
+
+# ── 2b · where a product is in its life, and how it got there ────────────────
+#
+# The two facts on a product that nothing on this machine can count: a
+# repository with three commits a day can be a dead experiment, and one nobody
+# has touched since May can be the thing paying for the others. So both are
+# written, and both are refused rather than guessed at when the word is wrong.
+
+check("a product can be told where it is in its life",
+      board.update_project(bare["id"], stage="beta")["stage"], "beta")
+check("…and it can be cleared, which is not the same as saying idea",
+      board.update_project(bare["id"], stage="")["stage"], "")
+refuses("a stage that is not one of the five", board.update_project, bare["id"],
+        stage="shipping")
+try:
+    board.update_project(bare["id"], stage="shipping")
+except ValueError as exc:
+    holds("…and the refusal names the five", "growth" in str(exc), str(exc))
+
+check("a product with no history has none", board.milestones(bare["id"]), [])
+m = board.add_milestone(bare["id"], "2026-03-01", "Project started",
+                        note="first commit", kind="start")
+check("a milestone is a date, a line and what sort of thing it is",
+      (time.strftime("%Y-%m-%d", time.localtime(m["at"])), m["title"], m["kind"]),
+      ("2026-03-01", "Project started", "start"))
+board.add_milestone(bare["id"], "2026-01-09", "Something earlier")
+check("…and they come back oldest first, whatever order they were written in",
+      [x["title"] for x in board.milestones(bare["id"])],
+      ["Something earlier", "Project started"])
+refuses("a milestone with no date", board.add_milestone, bare["id"], None, "Nothing")
+refuses("…or no title", board.add_milestone, bare["id"], "2026-03-01", "  ")
+refuses("…or a kind nobody has", board.add_milestone, bare["id"], "2026-03-01",
+        "Launch", "", "shipped")
+refuses("a history on a product that is not there", board.add_milestone, "nope",
+        "2026-03-01", "Launch")
+check("a history is written whole, so reading a repository twice costs nothing",
+      [x["title"] for x in board.set_milestones(bare["id"], [
+          {"at": "2026-03-01", "title": "Project started", "kind": "start"},
+          {"at": "2026-06-01", "title": "Live", "kind": "live"}])],
+      ["Project started", "Live"])
+check("…and the old lines are gone rather than doubled",
+      len(board.milestones(bare["id"])), 2)
+check("a date in the future is a promise, and it is kept with the rest",
+      [x["title"] for x in board.set_milestones(bare["id"], [
+          {"at": "2026-06-01", "title": "Live", "kind": "live"},
+          {"at": "2099-01-01", "title": "v4", "kind": "target"}])][-1], "v4")
+check("a product's history travels with the product",
+      [x["title"] for x in board.project_view(board.get_project(bare["id"]))["milestones"]],
+      ["Live", "v4"])
+check("…and an empty history is a list, not a missing field",
+      board.set_milestones(bare["id"], []), [])
 
 check("a product is found by its id", board.find_project(bare["id"])["id"], bare["id"])
 check("…by its key", board.find_project("remote-ai-chat")["name"], "Divan board")

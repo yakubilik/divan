@@ -26,6 +26,19 @@ export function ticket(over = {}) {
     git: null,
     goal: 'Make a tile open as a conversation instead of a report.',
     done_criteria: ['the sequence reads as a chat', 'the box sends a note'],
+    // What the queue writes down as a ticket walks its stages: the flow the
+    // panel draws is these, and a fixture without them is a ticket nothing
+    // ever ran on.
+    steps: [
+      { stage: 'worker', round: 1, at: NOW - 9000, ended_at: NOW - 7200, outcome: 'ok',
+        model: 'claude-opus-5-5', account: 'yakup' },
+      { stage: 'check', round: 1, at: NOW - 7200, ended_at: NOW - 7000, outcome: 'ok',
+        model: 'claude-opus-5-5', account: 'yakup' },
+      { stage: 'verifier', round: 1, at: NOW - 7000, ended_at: NOW - 6800, outcome: 'rejected',
+        model: 'claude-opus-5-5', account: 'yakup' },
+      { stage: 'worker', round: 2, at: NOW - 6800, ended_at: null, outcome: null,
+        model: 'claude-opus-5-5', account: 'yakup' },
+    ],
     escalation: '- A token with **write** access is needed\n'
       + '  and nobody has one yet\n'
       + '- Once that exists the whole ticket closes',

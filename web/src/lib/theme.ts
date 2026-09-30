@@ -453,6 +453,12 @@ export const SIZE = {
   executor: 28,
   /** A project's monogram on a project card (Web12 W1), 46 in a page head. */
   monogram: 34,
+  /** The Divan mark in the top bar, and the size the mark is drawn at wherever
+   *  it stands alone. Sized to the cap height of the 19 pt wordmark beside it,
+   *  not to the 58 pt bar: a logo reads as one object or as two. */
+  logo: 22,
+  /** …and the mark at its default, for a favicon or a splash. */
+  mark: 24,
   /** A list row's icon well, and the glyph in it. */
   rowWell: 32,
   rowIcon: 17,

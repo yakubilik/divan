@@ -241,7 +241,8 @@ async def _protocol(cfg: Config, typ: str, data: dict) -> dict:
 #: the whole of this command: `--started` is `started_at`, and a flag nobody
 #: passed is not a field set to nothing.
 PROJECT_FLAGS = (("name", "name"), ("slug", "slug"), ("kind", "kind"),
-                 ("purpose", "purpose"), ("started", "started_at"), ("sort", "sort"))
+                 ("purpose", "purpose"), ("started", "started_at"),
+                 ("stage", "stage"), ("sort", "sort"))
 
 
 def _project_fields(args: argparse.Namespace) -> dict:
@@ -271,10 +272,11 @@ def _project_fields(args: argparse.Namespace) -> dict:
 def _project_line(p: dict) -> str:
     """One product, on one line: what it is called, what it is, where it stands."""
     kind = f" ({p['kind']})" if p.get("kind") else ""
+    stage = f" · {p['stage']}" if p.get("stage") else ""
     since = (" since " + time.strftime("%Y-%m-%d", time.localtime(p["started_at"]))
              if p.get("started_at") else "")
     where = p.get("summary_line") or ""
-    return (f"{p.get('name', '')}{kind}  [{p.get('slug', '')}]{since}"
+    return (f"{p.get('name', '')}{kind}{stage}  [{p.get('slug', '')}]{since}"
             + (f"  — {where}" if where else ""))
 
 
@@ -318,6 +320,8 @@ def _project_parser(sub) -> None:
         sp.add_argument("--kind", help="app, web, library, client work, research…")
         sp.add_argument("--purpose", help="what it is for, in a sentence or two")
         sp.add_argument("--started", help="when the product began: 2026-03-01")
+        sp.add_argument("--stage", help="where it is in its life: idea, build, beta,"
+                                       " live, growth")
         sp.add_argument("--json", action="store_true")
         if creating:
             sp.add_argument("--branch", action="append",

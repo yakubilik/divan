@@ -37,6 +37,7 @@ import { TicketChat } from '../src/components/TicketChat';
 import { toneFace } from '../src/lib/theme';
 import { useFleet } from '../src/lib/fleet';
 import { useLogs } from '../src/lib/timeline';
+import { useTold } from '../src/lib/tell';
 import { Wall } from '../src/screens/Ustabasi';
 import { groupByProject } from '../src/lib/ustabasi';
 import { chat, groups, host, items, pending, shots } from './panel-fixture.js';
@@ -72,6 +73,16 @@ try {
   localStorage.setItem('rac.terminal.wall',
     JSON.stringify(['studio/c1', 'studio/c2', 'studio/c3']));
 } catch { /* private mode */ }
+
+// A chat started from the command bar, so that the Dashboard's corner is drawn
+// with both kinds of window in it: the question the board is asking, and the
+// chat somebody typed a sentence into the bar to start. `c1` is the fixture's
+// own chat, which is why the log above is already behind it.
+useTold.setState({
+  chats: [{ host: 'studio', chatId: 'c1', title: 'ship the beta tonight',
+            at: Math.floor(Date.now() / 1000) }],
+  minimised: [],
+});
 
 const noop = () => {};
 

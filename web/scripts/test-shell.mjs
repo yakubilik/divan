@@ -111,6 +111,7 @@ const load = (p) => import(pathToFileURL(join(out, p)).href);
 
 const K = await load('src/lib/theme.js');
 const shell = await load('src/lib/shell.js');
+const nav = await load('src/lib/nav.js');
 const D = await load('src/lib/divan.js');
 const OV = await load('src/lib/overview.js');
 const ShellUI = await load('src/components/Shell.js');
@@ -236,9 +237,13 @@ group('three places, and nothing beside them');
   const everyView = ['overview', ...shell.OLD_PANEL.map((o) => o.view)];
   ok('every screen is in exactly one place',
     everyView.every((view) => shell.PLACES.includes(shell.placeOf(view))));
+  // The panel opens on the Dashboard — unless the address says otherwise, which
+  // is what makes a link to a board or a chat a link to that page and what
+  // makes the back button work at all (`lib/nav.ts`).
   ok('the Dashboard is the place the panel opens on, and the Chat is entered on purpose',
     shell.placeOf('overview') === 'dashboard' && shell.placeOf('chats') === 'chat'
-    && /useState<View>\('overview'\)/.test(src('src/App.tsx')));
+    && nav.HOME.view === 'overview'
+    && /useState<View>\(opened\.current\.view\)/.test(src('src/App.tsx')));
   ok('…and everything that is about a computer is under the third one',
     shell.MACHINE_ROWS.every((r) => shell.placeOf(r.view) === 'machine')
     && shell.MACHINE_ROWS.length === 8);
@@ -528,15 +533,23 @@ group('the page is scoped, not a second screen');
     one.includes('Quire') && one.includes('studio · mini') && !one.includes('Hush'));
   ok('…and it is the same screen rather than a second one',
     all !== one && one.length > 200 && all.length > 200);
-  // The page under the head is Web14 W6 now: the branches and their own
-  // numbers, and `done` in them is the machines' count rather than the cards in
-  // hand — the daemon leaves finished cards out of a snapshot.
+  // The faces of a product are their own tab now. `done` in their numbers is
+  // the machines' count rather than the cards in hand — the daemon leaves
+  // finished cards out of a snapshot.
+  const faces = renderToStaticMarkup(h(OverviewUI.Overview, {
+    view: fresh, project: D.project(fresh, 'quire'), tab: 'branches', onProject() {},
+  }));
   ok('a product says what each of its faces holds, the finished ones included',
-    one.includes('Engineering') && one.includes('open') && one.includes('done')
-    && one.includes('>3<'),
-    one.slice(one.indexOf('Branches'), one.indexOf('Branches') + 300));
+    faces.includes('Engineering') && faces.includes('open') && faces.includes('done')
+    && faces.includes('>3<'),
+    faces.slice(faces.indexOf('Branches'), faces.indexOf('Branches') + 300));
   ok('…and which states it is in, as characters and not only as colour',
-    ['■', '?', '●'].every((c) => one.includes(c)));
+    ['■', '?', '●'].every((c) => faces.includes(c)));
+  // …and the page you land on is the other question: what is happening on the
+  // product and how it got here, with no grid of faces on it.
+  ok('the product page is what is happening on it and what it has been through',
+    one.includes('Right now') && one.includes('Timeline')
+    && !one.slice(one.indexOf('Right now')).includes('Engineering'));
   ok('a page built partly out of a quiet machine says how old it is',
     renderToStaticMarkup(h(OverviewUI.Overview, { view: view('stale'), project: null, onProject() {} }))
       .includes('quiet for'));
@@ -594,9 +607,9 @@ group('the page is scoped, not a second screen');
       `${pageHead(scoped)} vs ${pageHead(whole)}`);
   }
 
-  ok('the four columns are the machines’ own counts added up, not the cards in hand',
+  ok('the columns are the machines’ own counts added up, not the cards in hand',
     eq(OV.columnCounts(D.project(view('fresh'), 'quire')),
-      { ice_box: 1, queued: 0, in_progress: 3, done: 3 }));
+      { ice_box: 1, queued: 0, in_progress: 3, review: 0, done: 3 }));
   ok('…so a product that shipped forty-eight things does not read as none',
     OV.columnCounts({ counts: { done: 48 }, cards: [] }).done === 48);
 }
@@ -612,8 +625,16 @@ group('the bar is built out of the parts');
   const s = styles(bar);
   ok('the bar is the height the frames draw, on their own hairline',
     s.some((d) => d.height === `${K.SIZE.topBar}px` && d['border-bottom'] === `1px solid ${v('line')}`));
-  ok('…and opens on the wordmark in mono', bar.includes('divan')
-    && s.some((d) => d['font-family']?.includes('mono') && d['font-size'] === '13px'));
+  // The wordmark was `divan` in 13 pt mono — the product's own name set at the
+  // size of a caption. It is a mark and a name now, and the name is set the way
+  // a name is: the page-title weight and tracking, big enough to be the thing
+  // you read first in the bar.
+  ok('…and opens on the mark with the name beside it', bar.includes('Divan')
+    && bar.includes('<svg') && !/>divan</.test(bar)
+    && s.some((d) => d['font-size'] === '19px' && d['font-weight'] === '600'
+      && d['letter-spacing'] === '-.02em'));
+  ok('…and the mark is drawn in the ink around it, so one file is both themes',
+    /<svg[^>]*fill="currentColor"/.test(bar));
   ok('the three places are nav items at the frames’ own height and corner',
     s.filter((d) => d.height === `${K.SIZE.navItem}px`
       && d['border-radius'] === `${K.RADIUS.nav}px`).length === 3);
@@ -783,7 +804,7 @@ group('every screen renders with nothing, with something stale and with a machin
   if (app) {
     ok('the panel stands up with the shell around it', app.length > 500);
     ok('…and opens on the Dashboard, with the bar over it',
-      app.includes('divan') && app.includes('Dashboard') && app.includes('Chat')
+      app.includes('Divan') && app.includes('Dashboard') && app.includes('Chat')
       && app.includes('Machine') && app.includes('Overview'));
     ok('…and paints nothing of its own', [...paint(app).literal].every((c) => OWN.has(c)),
       [...paint(app).literal].join(', '));
@@ -791,6 +812,55 @@ group('every screen renders with nothing, with something stale and with a machin
 }
 
 // ── 9 · the chat was left alone ────────────────────────────────────────────
+
+group('the address is a place, and one a person can read');
+{
+  const at = (place) => nav.pathOf({ ...nav.HOME, ...place }) + nav.searchOf({ ...nav.HOME, ...place });
+  ok('the Dashboard is the bare path, and nothing hangs off it',
+    at({}) === '/');
+  ok('a product, its board, one of its faces and one card are all paths',
+    at({ project: 'babysee' }) === '/p/babysee'
+    && at({ project: 'babysee', tab: 'board' }) === '/p/babysee/board'
+    && at({ project: 'babysee', branch: 'engineering' }) === '/p/babysee/b/engineering'
+    && at({ project: 'babysee', card: '0d2279020af7' }) === '/p/babysee/c/0d2279020af7',
+    at({ project: 'babysee', card: '0d2279020af7' }));
+  ok('…and the machine a card happens to be on is not in it',
+    !at({ project: 'babysee', card: '0d2279020af7' }).includes(':'));
+  ok('the chat and the drawer’s pages are paths too',
+    at({ view: 'chats' }) === '/chats'
+    && at({ view: 'chats', chat: 'c1' }) === '/chats/c1'
+    && at({ view: 'accounts' }) === '/machine/accounts');
+  ok('…and the one thing that is still a query is the one a link has to carry',
+    at({ view: 'chats', chat: 'c1', host: 'studio' }) === '/chats/c1?host=studio');
+
+  const round = (place) => {
+    const full = { ...nav.HOME, ...place };
+    const read = nav.readPlace(nav.pathOf(full), nav.searchOf(full));
+    return nav.samePlace(read, full);
+  };
+  ok('every one of them reads back as what it was written from',
+    [{}, { project: 'babysee' }, { project: 'babysee', tab: 'board' },
+     { project: 'babysee', branch: 'engineering' },
+     { project: 'babysee', card: '0d2279020af7', tab: 'board' },
+     { view: 'chats' }, { view: 'chats', chat: 'c1' },
+     { view: 'chats', chat: 'c1', host: 'studio' },
+     { view: 'accounts' }, { view: 'preferences' }].every(round));
+  ok('a product with a space or a slash in its name survives the trip',
+    round({ project: 'my product/2' }));
+  ok('an address nobody wrote is the Dashboard rather than a page that does not exist',
+    nav.samePlace(nav.readPlace('/nonsense/deep'), nav.HOME)
+    && nav.readPlace('/machine/nope').view === 'machines');
+
+  // The panel wrote query-string addresses for a day. A link somebody kept is
+  // still a link, so it is read — including a card named `host:id`, which is
+  // exactly the spelling this replaced.
+  const old = nav.readPlace('/', '?project=babysee&tab=board&card=100.80.178.83%3A8790%3A0d2279020af7');
+  ok('the addresses the panel used to write still open where they meant',
+    old.project === 'babysee' && old.tab === 'board' && old.card === '0d2279020af7', JSON.stringify(old));
+  ok('…and an old chat link too',
+    nav.readPlace('/', '?chat=c1&host=studio').chat === 'c1'
+    && nav.readPlace('/', '?chat=c1&host=studio').host === 'studio');
+}
 
 group('the chat is untouched');
 {
@@ -801,28 +871,29 @@ group('the chat is untouched');
     ok(`${f.split('/').pop()} knows nothing about the shell`,
       !/lib\/shell|components\/Shell|screens\/(Overview|Machine)/.test(src(f)));
   }
-  // The strongest form of it: unchanged, against the branch this work started
-  // from. Where git cannot be reached the reading above is what is left.
-  let diff = null;
-  try {
-    // Pathspecs are relative to where git is run, which is this directory —
-    // `web/src/…` from in here is `web/web/src/…`, matches nothing, and reports
-    // a clean diff about files it never looked at.
-    diff = execFileSync('git', ['diff', '--stat', 'main', '--', ...chat],
-      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch { /* no git, or no main */ }
-  // …and a pathspec that matches nothing is not an answer either: the five have
-  // to be five files git knows about.
-  let known = [];
-  try {
-    known = execFileSync('git', ['ls-files', '--', ...chat],
-      { cwd: web, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split('\n').filter(Boolean);
-  } catch { /* no git */ }
-  if (known.length) {
-    ok('the five files this is about are five files git has', known.length === 5, known.join(', '));
-  }
-  if (diff === null) console.log('  · no git to diff against: the chat files were read instead');
-  else ok('not one line of the five chat files has changed', diff === '', diff);
+  // There used to be a stronger form of this: the five files, unchanged
+  // against the branch the shell rebuild started from. It has been retired,
+  // and the reason is worth writing down rather than quietly deleting.
+  //
+  // It was the proof of one promise — *that* ticket did not touch the chat —
+  // and it did its job. What it cannot be is a rule for ever: the chat has
+  // since been asked for in two more places (the ticket window draws the
+  // worker's run, the Dashboard's window draws the whole chat), and a check
+  // that fails on any change to a file is a check against the file rather
+  // than against a behaviour. The rule this group is about is the one above,
+  // and it still holds for all five.
+  //
+  // What replaces it is narrower and says something true today: the chat is
+  // drawn the chat's own way, in one place, wherever it appears.
+  ok('the chat’s box is one box, and both windows draw it',
+    /export function ChatComposer/.test(src('src/components/ChatComposer.tsx'))
+    && /<ChatComposer/.test(src('src/components/ChatView.tsx'))
+    && /<ChatComposer/.test(src('src/components/ChatPanel.tsx')));
+  ok('…and it is still the chat’s vocabulary rather than the Dashboard’s',
+    !/ui\/divan/.test(src('src/components/ChatComposer.tsx')));
+  ok('the run the ticket window draws is the phone’s own reading of the same file',
+    /from '\.\.\/lib\/run'/.test(src('src/components/TicketChat.tsx'))
+    && /app\/src\/transcript\.ts/.test(src('src/lib/transcript.ts')));
 
   const app = src('src/App.tsx');
   ok('the chat is handed the same props it always was, in both places it is drawn',

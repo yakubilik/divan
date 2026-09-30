@@ -44,8 +44,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { useFleet, type HostSlot } from './fleet';
 import type {
-  DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanProject, DivanQuota, DivanSnapshot,
-  RepoActivity,
+  DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanMilestone, DivanProject, DivanQuota,
+  DivanSnapshot, RepoActivity,
 } from './protocol';
 
 /** How often a screen that is open re-asks every machine. The board moves when
@@ -217,6 +217,13 @@ export interface MergedProject {
   slug: string;
   summary: string;
   kind: string;
+  /** Where it is in its life (`idea`…`growth`), and the day it began. Both are
+   *  written by a person and both are empty on a product nobody has said them
+   *  about — a page draws the gap rather than a guess. */
+  stage: string;
+  started_at: number | null;
+  /** What has happened to it, dated, oldest first, promises included. */
+  milestones: DivanMilestone[];
   repos: string[];
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
@@ -455,6 +462,9 @@ export function merge(list: HostEntry[], now: number): DivanView {
           slug: p.slug,
           summary: p.summary || '',
           kind: p.kind || '',
+          stage: p.stage || '',
+          started_at: p.started_at ?? null,
+          milestones: [...(p.milestones || [])],
           repos: [...(p.repos || [])],
           hosts: [h.key],
           machines: [h.machine],
@@ -484,6 +494,15 @@ export function merge(list: HostEntry[], now: number): DivanView {
       found.name = newer ? p.name : found.name;
       found.summary = newer && p.summary ? p.summary : (found.summary || p.summary || '');
       found.kind = newer && p.kind ? p.kind : (found.kind || p.kind || '');
+      found.stage = newer && p.stage ? p.stage : (found.stage || p.stage || '');
+      found.started_at = newer && p.started_at != null
+        ? p.started_at : (found.started_at ?? p.started_at ?? null);
+      // A history is one product's, not one machine's: whichever copy was
+      // edited last is the one that has it, and a machine that has never been
+      // told does not empty the list the other one holds.
+      if ((newer && p.milestones?.length) || !found.milestones.length) {
+        found.milestones = [...(p.milestones || found.milestones)];
+      }
       found.hosts = [...new Set([...found.hosts, h.key])];
       found.machines = [...new Set([...found.machines, h.machine])];
       found.ids[h.key] = p.id;

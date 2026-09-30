@@ -290,7 +290,12 @@ export function dismissed(s: Session, dock: DockState): boolean {
  *  counting, as "more", the two windows the reader is looking at. So the tabs
  *  are the open ones plus as many of the rest as there is room for, and the
  *  count is what has no tab — which means the row can run one or two past three
- *  in exactly the case where those extra tabs are the windows themselves. */
+ *  in exactly the case where those extra tabs are the windows themselves.
+ *
+ *  `room` is how many windows are left for questions. The corner holds two, and
+ *  a chat started from the command bar (`lib/tell.ts`) takes one of them: that
+ *  is the thing the reader has just done, and a question that has been waiting
+ *  an hour can wait as a tab. */
 export interface Dock {
   /** Nearest the corner first, which is the order they are drawn in. */
   panels: Session[];
@@ -301,17 +306,17 @@ export interface Dock {
   live: Session[];
 }
 
-export function arrange(list: Session[], dock: DockState = NO_DOCK): Dock {
+export function arrange(list: Session[], dock: DockState = NO_DOCK, room = PANELS): Dock {
   const live = list.filter((s) => !dismissed(s, dock));
   const away = new Set(dock.minimised);
   const up = (dock.raised ?? []).filter((id) => live.some((s) => s.id === id) && !away.has(id));
   const open = live.filter((s) => !away.has(s.id));
   const panels = [...up.map((id) => open.find((s) => s.id === id)!).filter(Boolean),
-                  ...open.filter((s) => !up.includes(s.id))].slice(0, PANELS);
+                  ...open.filter((s) => !up.includes(s.id))].slice(0, Math.max(0, room));
   const shown = new Set(panels.map((s) => s.id));
   // Room for the ones that are not on screen, after the windows have their own.
-  const room = Math.max(0, TABS - panels.length);
-  const also = new Set(live.filter((s) => !shown.has(s.id)).slice(0, room).map((s) => s.id));
+  const space = Math.max(0, TABS - panels.length);
+  const also = new Set(live.filter((s) => !shown.has(s.id)).slice(0, space).map((s) => s.id));
   // Drawn in the order the list is in and not windows-first: the tabs are the
   // queue of what is waiting, and a tab that moved when its window opened would
   // be a row that reshuffles itself under a cursor.

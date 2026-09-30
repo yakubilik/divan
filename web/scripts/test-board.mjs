@@ -118,20 +118,20 @@ group('the four columns, and what is in them');
   const quire = productOf('busy', 'quire');
   const cols = B.columns(quire, NOW, ago);
 
-  ok('the four columns are the frames’, left to right',
-    eq(cols.map((c) => c.label), ['Ice Box', 'Queued', 'In Progress', 'Done']));
+  ok('the columns are the frames’ four, with the queue’s own review among them',
+    eq(cols.map((c) => c.label), ['Ice Box', 'Queued', 'In Progress', 'Review', 'Done']));
   ok('…each holding the cards the machines put in it, however many machines',
     eq(cols.map((c) => c.tickets.map((t) => t.card.id)),
-      [['k3'], [], ['m1', 'k2', 'k1'], []]),
+      [['k3'], [], ['m1', 'k2', 'k1'], [], []]),
     JSON.stringify(cols.map((c) => c.tickets.map((t) => t.card.id))));
   // The open board is what a merged view carries: the daemon leaves `done` out
   // of the cards and sends the number. A column that drew three cards and said
   // `3` over forty-eight finished ones would be the page lying about a figure
   // it was handed.
   ok('Done is the machines’ own number, and says how much of it is not here',
-    cols[3].count === 3 && cols[3].tickets.length === 0 && cols[3].more === '+ 3 more');
+    cols[4].count === 3 && cols[4].tickets.length === 0 && cols[4].more === '+ 3 more');
   ok('…and a column that is whole says nothing of the sort',
-    cols.slice(0, 3).every((c) => c.more === '' && c.count === c.tickets.length));
+    cols.slice(0, 4).every((c) => c.more === '' && c.count === c.tickets.length));
   ok('the column something is happening in says so, and how many',
     cols[2].live === true && cols[2].sub === '1 working'
     && cols[0].sub === 'someday' && cols[1].sub === 'next up' && cols[1].live === false);
@@ -156,7 +156,7 @@ group('the four columns, and what is in them');
   // board says so — and not one poll longer.
   const dropped = B.columns(quire, NOW, ago, { k3: 'queued' });
   ok('a card that was dropped is in the column it was dropped in',
-    eq(dropped.map((c) => c.tickets.map((t) => t.card.id)), [[], ['k3'], ['m1', 'k2', 'k1'], []])
+    eq(dropped.map((c) => c.tickets.map((t) => t.card.id)), [[], ['k3'], ['m1', 'k2', 'k1'], [], []])
     && dropped[0].count === 0 && dropped[1].count === 1,
     JSON.stringify(dropped.map((c) => [c.count, c.tickets.map((t) => t.card.id)])));
   ok('…until the machine agrees, and then the overlay is gone',
@@ -166,6 +166,40 @@ group('the four columns, and what is in them');
   ok('and a column never offers to take the card it already holds',
     B.takes('queued', 'ice_box') === true && B.takes('ice_box', 'ice_box') === false
     && B.takes('ice_box', null) === false);
+}
+
+group('a card is its title, and the rest is one press away');
+{
+  const drawn = board('busy', 'quire');
+  const quire = productOf('busy', 'quire');
+  const summaries = quire.cards.map((c) => (c.summary || '').trim()).filter(Boolean);
+  ok('the fixture has cards with something written under the title', summaries.length > 0);
+  ok('…and none of it is on the board',
+    summaries.every((line) => !drawn.includes(line)),
+    summaries.find((line) => drawn.includes(line)));
+  ok('the titles are all there, which is what a board is read by',
+    quire.cards.filter((c) => c.column !== 'done').every((c) => drawn.includes(c.title)));
+}
+
+group('a card dragged in front of the queue says so');
+{
+  const one = (patch) => ({
+    id: 'k9', project_id: 'p1', branch: 'engineering', column: 'in_progress', position: 0,
+    title: 'Klinik hesabi', summary: '', executor: 'coding_agent', machine: 'studio',
+    repo: null, ustabasi_id: 71, agent_status: 'queued', agent_status_at: NOW - 60,
+    agent_detail: '', created_at: NOW - 900, updated_at: NOW - 60, moved_at: NOW - 60,
+    host: 'studio', hostName: 'studio', projectKey: 'quire', stale: false, ...patch,
+  });
+  const ago = (s) => `${Math.round(s / 60)}m`;
+  ok('a ticket the queue has not started yet, put in In Progress, says it is next',
+    B.cardMark(one({}), NOW, ago)?.label === 'Next up',
+    JSON.stringify(B.cardMark(one({}), NOW, ago)));
+  ok('…and the moment a worker picks it up it says what it is doing instead',
+    B.cardMark(one({ agent_status: 'running' }), NOW, ago)?.label.startsWith('Running'));
+  ok('…while a card in Queued still carries no mark at all',
+    B.cardMark(one({ column: 'queued' }), NOW, ago) === null);
+  ok('…and one with no ticket behind it is not the queue’s to talk about',
+    B.cardMark(one({ ustabasi_id: null }), NOW, ago) === null);
 }
 
 group('a card pressed on the board takes a window');
@@ -195,10 +229,10 @@ group('Web12 W2, and Web13 W4 which is the same board in the light');
 {
   const drawn = board('busy', 'quire');
 
-  ok('four columns abreast, on the frame’s grid',
-    anyStyle(drawn, (d) => d['grid-template-columns'] === 'repeat(4, minmax(0, 1fr))'
+  ok('the columns are abreast on the frame’s grid, one per column',
+    anyStyle(drawn, (d) => d['grid-template-columns'] === 'repeat(5, minmax(0, 1fr))'
       && d.gap === '12px')
-    && countStyles(drawn, (d) => d['border-radius'] === `${K.RADIUS.card}px` && d.padding === '12px') === 4);
+    && countStyles(drawn, (d) => d['border-radius'] === `${K.RADIUS.card}px` && d.padding === '12px') === 5);
   ok('…each headed by its name, its count and the mono aside the frame gives it',
     /Ice Box/.test(drawn) && /In Progress/.test(drawn) && /someday/.test(drawn)
     && /1 working/.test(drawn) && /\+ 3 more/.test(drawn));
@@ -236,7 +270,7 @@ group('Web12 W2, and Web13 W4 which is the same board in the light');
     && !COLOUR.test(src('src/screens/Board.tsx').replace(/\/\*[\s\S]*?\*\//g, '')));
   ok('…and the board is a tab of the product’s page rather than a place of its own',
     /<Board\s+view=\{view\} project=\{project\}/.test(src('src/screens/Overview.tsx'))
-    && /<Tabs tabs=/.test(src('src/screens/Overview.tsx')));
+    && /<Tabs\b/.test(src('src/screens/Overview.tsx')));
   ok('none of it reaches the chat',
     !/from '[^']*(ChatView|Bubble|Timeline|ChatDetails|TicketChat)'/.test(src('src/screens/Board.tsx')));
 }

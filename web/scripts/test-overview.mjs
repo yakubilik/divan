@@ -59,7 +59,9 @@ execFileSync(join(web, 'node_modules', '.bin', 'tsc'), [
   'web/src/App.tsx', 'web/src/lib/divan.ts', 'web/src/lib/overview.ts', 'web/src/lib/sessions.ts',
   'web/src/lib/project.ts', 'web/src/lib/ticket.ts',
   'web/src/screens/Overview.tsx', 'web/src/screens/Project.tsx', 'web/src/screens/Branch.tsx',
-  'web/src/screens/Ticket.tsx', 'web/src/components/Sessions.tsx', 'web/src/vite-env.d.ts',
+  'web/src/screens/Ticket.tsx', 'web/src/components/Sessions.tsx',
+  'web/src/lib/tell.ts', 'web/src/components/ChatPanel.tsx', 'web/src/vite-env.d.ts',
+  'web/src/lib/transcript.ts', 'app/src/transcript.ts', 'web/src/lib/ustabasi.ts',
   'app/src/divan.ts', 'app/src/dashboard.ts', 'app/src/project.ts', 'app/src/waiting.ts',
   'app/src/i18n.ts',
   '--outDir', out, '--rootDir', '.',
@@ -106,6 +108,11 @@ const OV = await load('web/src/lib/overview.js');
 const PR = await load('web/src/lib/project.js');
 const TK = await load('web/src/lib/ticket.js');
 const S = await load('web/src/lib/sessions.js');
+const TL = await load('web/src/lib/tell.js');
+const RUN = await load('web/src/lib/transcript.js');
+const U = await load('web/src/lib/ustabasi.js');
+const PRUN = await load('app/src/transcript.js');
+const F = await load('web/src/lib/fleet.js');
 const OverviewUI = await load('web/src/screens/Overview.js');
 const TicketUI = await load('web/src/screens/Ticket.js');
 const SessionsUI = await load('web/src/components/Sessions.js');
@@ -118,6 +125,7 @@ const { t } = await load('app/src/i18n.js');
 const { createElement: h } = await import('react');
 const { renderToStaticMarkup } = await import('react-dom/server');
 const { boards } = await import(pathToFileURL(join(web, 'scripts', 'overview-fixture.js')).href);
+const { host: fakeHost } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
 
 /** A fixed clock: a fixture stamped "now" would put every board in a different
  *  state on a machine whose day is a different length. */
@@ -398,11 +406,13 @@ group('Web12 W1, and Web13 W3 which is the same page in the light');
     && /Agents/.test(busy) && /Coder/.test(busy));
   ok('…each line carrying the hue of the product it is work on, at 18 pt',
     countStyles(busy, (d) => d.width === '18px' && d.height === '18px') === 2);
-  ok('the bar across the bottom is the frames’ own, and it opens what ⌘K opens',
+  ok('the bar across the bottom is the frames’ own, and it is the field it looks like',
     anyStyle(busy, (d) => d.width === `${K.SIZE.bar}px` && d.height === '52px'
       && d['border-radius'] === `${K.RADIUS.bar}px` && d.background === v('s2'))
-    && /Tell Divan anything…/.test(busy) && /⌘K/.test(busy)
-    && /onAsk=\{\(\) => setPalette\(true\)\}/.test(src('src/App.tsx')));
+    && /placeholder="Tell Divan anything…"/.test(busy) && /⌘K/.test(busy));
+  ok('…and what is typed into it starts a chat rather than opening a page',
+    /onAsk=\{\(text: string\) => tell\(text, scope\)\}/.test(src('src/App.tsx'))
+    && /chat\.create/.test(src('src/lib/actions.ts')));
   ok('…and nothing of it is drawn where there is nothing to press',
     !/Tell Divan/.test(page('busy', { onAsk: undefined })));
 
@@ -565,13 +575,314 @@ group('what needs a person arrives as a chat session');
     renderToStaticMarkup(h(SessionsUI.Sessions, { view: view('calm') })) === ''
     && S.sessions(view('calm')).length === 0);
 
-  // The chat is the chat, and this is not it.
-  ok('none of this reaches the chat',
-    !/from '[^']*(ChatView|Bubble|Timeline|ChatDetails|TicketChat)'/
-      .test(src('src/components/Sessions.tsx')));
+  // A question is not a chat: the window that answers one sends a note on the
+  // ticket, and nothing about it reaches the chat screen. (The chats the
+  // command bar starts are a different window in the same corner, and those
+  // are the chat — `ChatPanel.tsx`, checked in the group below.)
+  ok('answering a question never goes near the chat',
+    !/from '[^']*(ChatView|Bubble|ChatDetails|TicketChat)'/
+      .test(src('src/components/Sessions.tsx'))
+    && !/Timeline/.test(src('src/components/Sessions.tsx').replace(/ChatPanel/g, '')));
   ok('…and what it sends is a note on the ticket that asked, to the machine that asked it',
     /ustabasi\.note/.test(src('src/lib/actions.ts'))
     && /ticketNote\(s\.host, s\.ticket, words\)/.test(src('src/components/Sessions.tsx')));
+}
+
+// ── 3b · a sentence in the bar ─────────────────────────────────────────────
+// The other half of the corner: what the command bar does with a sentence, and
+// where the chat it starts is read. Every judgement is `lib/tell.ts`, so it can
+// be held here without a browser; `test-drive.mjs` types into the bar in one.
+
+group('a sentence in the bar starts a chat on the page it was typed on');
+{
+  const busy = view('busy');
+  ok('a chat is called what was typed, not "New chat"',
+    TL.chatTitle('ship the beta tonight') === 'ship the beta tonight'
+    && TL.chatTitle('  ship   the beta\n tonight ') === 'ship the beta tonight'
+    && TL.chatTitle('') === 'New chat');
+  const long = TL.chatTitle('look at the webhook retry policy again, and tell me what Stripe does');
+  ok('…and a long one is cut on a word, with no comma left hanging',
+    long.length <= TL.TITLE_CHARS + 1 && long.endsWith('…') && !/[\s,]…$/.test(long)
+    && long.startsWith('look at the webhook retry policy again'), long);
+
+  // What it opens on: the same values New chat would have shown, resolved the
+  // same way — a bar that opened chats on a different model from the dialog
+  // would be two meanings of "a new chat" on one computer.
+  const slot = fakeHost();
+  const opens = TL.toldDefaults(slot, {}, 'studio');
+  ok('it opens on what that computer says a new chat opens on',
+    opens.provider === 'claude' && opens.model === slot.catalog.claude.models[0].id
+    && opens.perm_mode === 'default' && opens.account_id === '', JSON.stringify(opens));
+  ok('…and a computer that has not said what it has yet is not sent a chat at all',
+    TL.toldDefaults({ catalog: null }, {}, 'studio') === null
+    && TL.toldDefaults(null, {}, 'studio') === null);
+
+  // Nothing picks a sign-in for you. The bar opens the chat on the one this
+  // computer's new chats are set to, and which subscription it spends is
+  // changed in the window itself.
+  ok('the sign-in is the stored one, and no rule of the panel’s own',
+    TL.toldDefaults(fakeHost(), {}, 'studio').account_id === ''
+    && !/utilization|rejected|limits/.test(src('src/lib/tell.ts')));
+  ok('…and a stored one is taken at its word while the account list is not loaded',
+    TL.toldDefaults({ ...fakeHost(), accounts: [] },
+      { studio: { provider: 'claude', cwd: null,
+                  byProvider: { claude: { model: null, effort: null, perm_mode: null, account_id: 'a2' } } } },
+      'studio').account_id === 'a2');
+
+  // A page about one product opens its chats in that product: on a machine
+  // that has it, in a folder that machine actually has.
+  const babysee = { name: 'babysee', repos: ['/Users/x/projects/babysee'], hosts: ['studio'] };
+  const fleetOf = (over = {}) => ({ studio: { ...fakeHost(), ...over } });
+  ok('a chat started from a product’s page opens in that product’s repository',
+    eq(TL.whereFor(babysee, fleetOf({
+      projects: [{ path: '/Users/x/projects/babysee', name: 'babysee', is_git: true }],
+    }), 'studio'), { host: 'studio', cwd: '/Users/x/projects/babysee', project: 'babysee' }));
+  ok('…on a machine that has that product, not on whichever one is in focus',
+    TL.whereFor({ ...babysee, hosts: ['mini'] },
+      { studio: fakeHost(), mini: { ...fakeHost(), status: 'online' } }, 'studio').host === 'mini');
+  ok('…and never in a folder that machine does not have: a repo of one computer is a path to nothing on another',
+    TL.whereFor({ ...babysee, repos: ['/elsewhere/babysee', '/Users/x/projects/babysee'] },
+      fleetOf({ projects: [{ path: '/Users/x/projects/babysee', name: 'babysee', is_git: true }] }),
+      'studio').cwd === '/Users/x/projects/babysee');
+  ok('a product with no repository is still a product: it opens where new chats open, by name',
+    eq(TL.whereFor({ name: 'Skola', repos: [], hosts: ['studio'] }, fleetOf(), 'studio'),
+      { host: 'studio', cwd: null, project: 'Skola' }));
+  ok('…and an unscoped page is the computer in focus and nothing said about it',
+    eq(TL.whereFor(null, fleetOf(), 'studio'), { host: 'studio', cwd: null, project: null }));
+  ok('the bar says which product the chat will be about, and not how that is done',
+    TL.whereNote(TL.whereFor(babysee, fleetOf({
+      projects: [{ path: '/Users/x/projects/babysee', name: 'babysee', is_git: true }],
+    }), 'studio')) === 'babysee');
+  ok('…which it says the same way for a product with no repository to open in',
+    TL.whereNote(TL.whereFor({ name: 'Skola', repos: [], hosts: ['studio'] },
+      fleetOf(), 'studio')) === 'Skola');
+  ok('…and says nothing at all where there is no product',
+    TL.whereNote(TL.whereFor(null, fleetOf(), 'studio')) === null);
+  // A chat that could not open in the product is told which product it is
+  // about, because the agent cannot see the chat's own title.
+  ok('a product with no repository is said out loud in the first message instead',
+    /\(This is about \$\{at\.project\}\.\)/.test(src('src/lib/tell.ts'))
+    && /at\.project && !at\.cwd/.test(src('src/lib/tell.ts')));
+
+  const NOWS = Math.floor(NOW);
+  const told = (n, at = NOWS) => ({ host: 'studio', chatId: `c${n}`, title: `chat ${n}`, at });
+  const three = [told(1), told(2), told(3)];
+  ok('the chat just started has a window, and the corner still holds two',
+    eq(TL.arrangeTold([told(1)]).panels.map((t) => t.chatId), ['c1'])
+    && eq(TL.arrangeTold(three).panels.map((t) => t.chatId), ['c1', 'c2']));
+  ok('…and the rest are tabs along the bottom, side by side',
+    eq(TL.arrangeTold(three).tabs.map((t) => [t.told.chatId, t.open]),
+      [['c1', true], ['c2', true], ['c3', false]]));
+  ok('…past three of those the rest are a count, not a second list',
+    TL.arrangeTold([...three, told(4), told(5)]).more === 2);
+  ok('one put away leaves its tab and lets the next window open',
+    eq(TL.arrangeTold(three, ['studio:c1']).panels.map((t) => t.chatId), ['c2', 'c3'])
+    && TL.arrangeTold(three, ['studio:c1']).tabs[0].open === false);
+  ok('…and with no room left for a window, every chat is a tab',
+    TL.arrangeTold(three, [], 0).panels.length === 0
+    && TL.arrangeTold(three, [], 0).tabs.length === S.TABS);
+
+  // The chats take their windows first: one of them is a sentence typed a
+  // moment ago, and a question that has waited since last night can wait as a
+  // tab. So the question dock is asked for what is left rather than for two.
+  const list = S.sessions(busy);
+  ok('a question keeps its window only where a chat has not taken it',
+    S.arrange(list, S.NO_DOCK, 1).panels.length === 1
+    && S.arrange(list, S.NO_DOCK, 0).panels.length === 0
+    && S.arrange(list, S.NO_DOCK, 0).tabs.length === Math.min(S.TABS, list.length),
+    `${S.arrange(list, S.NO_DOCK, 0).tabs.length} tabs`);
+
+  // A window about a chat that is not there any more is a window about
+  // nothing; one whose computer cannot be reached is not that.
+  const hosts = { studio: { ...fakeHost(), chats: [{ id: 'c1', created_at: NOWS }] } };
+  const old = NOWS - TL.TOLD_GRACE - 1;
+  ok('a chat the computer still lists keeps its window',
+    TL.liveTold([{ ...told(1), at: old }], hosts, NOWS).length === 1);
+  ok('…one it no longer lists loses it, once it has had a moment to say so',
+    TL.liveTold([{ ...told(9), at: old }], hosts, NOWS).length === 0
+    && TL.liveTold([told(9)], hosts, NOWS).length === 1);
+  ok('…and one on a computer that cannot be reached keeps it, because "I cannot see it" is not "it is gone"',
+    TL.liveTold([{ ...told(9), at: old }],
+      { studio: { ...hosts.studio, status: 'offline' } }, NOWS).length === 1
+    && TL.liveTold([{ ...told(9), at: old }], {}, NOWS).length === 0);
+
+  // A window is furniture: where it stands is its own, and what happens to the
+  // one beside it — opening, closing, dropping out of a poll — does not move
+  // it. That is what a place written down at birth buys, and what positioning
+  // by a list index cost.
+  ok('a new window takes the first slot nothing is standing in',
+    eq(TL.freeSlot([]), TL.slot(0))
+    && eq(TL.freeSlot([TL.slot(0)]), TL.slot(1))
+    && eq(TL.freeSlot([TL.slot(1)]), TL.slot(0)),
+    JSON.stringify(TL.freeSlot([TL.slot(1)])));
+  ok('…and one dragged somewhere of its own leaves both slots free',
+    eq(TL.freeSlot([{ right: 600, bottom: 300, width: 350, height: 500 }]), TL.slot(0)));
+  ok('…with every window the dock has room for getting one of its own',
+    new Set([TL.slot(0), TL.slot(1), TL.slot(2)].map((p) => p.right)).size === 3);
+
+  // A window that has been moved or pulled bigger stays inside the screen: one
+  // dragged past an edge is one that cannot be dragged back.
+  const screen = { width: 1440, height: 900 };
+  const put = TL.inView({ right: 9999, bottom: 9999, width: 350, height: 500 }, screen);
+  ok('a window cannot be pushed off the screen',
+    put.right === screen.width - 350 && put.bottom === screen.height - 500);
+  const small = TL.inView({ right: 24, bottom: 78, width: 10, height: 10 }, screen);
+  ok('…nor made smaller than something that fits in it',
+    small.width === TL.MIN_W && small.height === TL.MIN_H
+    && small.right === 24 && small.bottom === 78, JSON.stringify(small));
+  ok('…nor larger than the screen it is on',
+    TL.inView({ right: 0, bottom: 0, width: 5000, height: 5000 }, screen).width
+      === screen.width - 16);
+
+  // …and the drawing of it, in the same corner as the questions.
+  // Both sides of each store, the way `test-drive.mjs` seeds them: `setState`
+  // for the live copy, and the initial state, because that is what a first
+  // render is handed.
+  const seed = (store, patch) => {
+    Object.assign(store.getInitialState(), patch);
+    store.setState(patch);
+  };
+  seed(F.useFleet, { hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true });
+  // Started just now, on a chat id that computer has never heard of: a window
+  // is drawn from what `chat.create` answered, before the chat list catches up.
+  seed(TL.useTold, {
+    chats: [{ host: 'studio', chatId: 'told1', title: 'ship the beta tonight',
+              at: Math.floor(Date.now() / 1000) }],
+    minimised: [],
+  });
+  const withChat = renderToStaticMarkup(h(SessionsUI.Sessions, { view: busy }));
+  ok('the chat opens as a window on the page it was typed on, nearest the corner',
+    withChat.includes('ship the beta tonight')
+    && anyStyle(withChat, (d) => d.position === 'fixed' && d.right === '24px'),
+    withChat.slice(0, 200));
+  ok('…with the two window buttons on it, and a way to open it out',
+    /aria-label="Put this away"/.test(withChat) && /aria-label="Close"/.test(withChat)
+    && /Open it in the middle of the screen/.test(withChat));
+  ok('…and a tab of its own in the row along the bottom',
+    countStyles(withChat, (d) => d.width === `${K.SIZE.tab}px` && d.height === '44px') >= 3
+    && (withChat.match(/ship the beta tonight/g) ?? []).length >= 2);
+  ok('…drawn from what chat.create answered, before that computer’s list catches up',
+    !/Webhook retry policy/.test(withChat));
+
+  // …and the same window on a chat that computer does list: the five settings
+  // the chat screen draws as chips in its head, in the room this one has.
+  seed(TL.useTold, {
+    chats: [{ host: 'studio', chatId: 'c1', title: 'ship the beta tonight',
+              at: Math.floor(Date.now() / 1000) }],
+    minimised: [],
+  });
+  const settled = renderToStaticMarkup(h(SessionsUI.Sessions, { view: busy }));
+  ok('a window on a chat the computer knows says what that chat is set to',
+    ['this computer', 'Opus 5', 'high', 'default', 'projects/quire']
+      .every((word) => settled.includes(word)),
+    ['this computer', 'Opus 5', 'high', 'default', 'projects/quire']
+      .filter((w) => !settled.includes(w)).join(', '));
+  ok('…and every one of them can be pressed for the list behind it',
+    (settled.match(/aria-expanded="false"/g) ?? []).length === 5
+    && /Account — press to change/.test(settled) && /Model — press to change/.test(settled));
+  ok('…while the question beside it is still open: one corner, both kinds',
+    withChat.includes('Use the live ones now') && withChat.includes('asks you'));
+  seed(TL.useTold, { chats: [], minimised: [] });
+  ok('a Dashboard with no chat started and nothing waiting draws neither',
+    renderToStaticMarkup(h(SessionsUI.Sessions, { view: view('calm') })) === '');
+
+  // The chat window is the chat: the panel's own timeline, the panel's own
+  // send. Nothing about it is a second, smaller chat written for this corner.
+  ok('the window in the corner is the real chat, drawn out of the real parts',
+    /from '\.\/Timeline'/.test(src('src/components/ChatPanel.tsx'))
+    && /<ChatComposer/.test(src('src/components/ChatPanel.tsx'))
+    && /send\(told\.host, told\.chatId, words, attachments\)/.test(src('src/components/ChatPanel.tsx'))
+    && !/ustabasi/.test(src('src/components/ChatPanel.tsx')));
+  ok('…and closing it closes the window, never the chat',
+    /close: \(id\) => set/.test(src('src/lib/tell.ts'))
+    && !/deleteChat/.test(src('src/lib/tell.ts'))
+    && !/deleteChat/.test(src('src/components/ChatPanel.tsx')));
+}
+
+// ── 3c · what a worker is printing ─────────────────────────────────────────
+// The run log is one file on one computer read by two clients, so the reading
+// is held to the phone's, record for record, against a real recording — the
+// same one `app/scripts/test-ustabasi.cjs` and the daemon's own check use. A
+// log written by hand agrees with its reader by construction; the shapes that
+// break a reader are the ones nobody would think to write.
+
+group('the panel reads a run exactly as the phone does');
+{
+  // Both places a ticket is opened in this panel read it, and both read it
+  // through the one module: the wall's ticket window and the card's own Live
+  // box. A second reading of the same file is a second thing to keep in step.
+  ok('every place the panel shows a run reads it the same way',
+    /from '\.\.\/lib\/run'/.test(src('src/components/TicketChat.tsx'))
+    && /from '\.\.\/lib\/run'/.test(src('src/screens/Ticket.tsx'))
+    && /RunLog/.test(src('src/screens/Ticket.tsx')));
+
+  const raw = readFileSync(join(web, '..', 'app/scripts/fixtures/run.log'), 'utf8');
+  const lines = raw.split('\n').filter((l) => l.trim());
+  // The daemon's own reading of a line, in the shape it puts on the wire.
+  const CUT = 2000;
+  const records = [];
+  for (const line of lines) {
+    let d;
+    try { d = JSON.parse(line); } catch { records.push({ k: 'other', type: 'unparsable' }); continue; }
+    if (d.type === 'assistant' || d.type === 'user') {
+      for (const b of (d.message || {}).content || []) {
+        if (b.type === 'text') records.push({ k: 'text', text: b.text });
+        else if (b.type === 'thinking') records.push({ k: 'thinking', text: b.thinking });
+        else if (b.type === 'tool_use') records.push({ k: 'tool', id: b.id, name: b.name, input: b.input });
+        else if (b.type === 'tool_result') {
+          const body = typeof b.content === 'string' ? b.content
+            : (b.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n');
+          records.push({ k: 'result', id: b.tool_use_id, text: body.slice(0, CUT),
+                         error: !!b.is_error, ...(body.length > CUT ? { clipped: true } : {}) });
+        }
+      }
+    } else if (d.type === 'system') records.push({ k: 'system', subtype: d.subtype });
+    else if (d.type === 'result') records.push({ k: 'done', error: !!d.is_error, cost: d.total_cost_usd });
+    else records.push({ k: 'other', type: d.type });
+  }
+
+  ok('the recording is a real run, not three lines',
+    lines.length > 90 && new Set(records.map((r) => r.k)).size >= 6);
+
+  const here = RUN.turns(records);
+  const phone = PRUN.turns(records);
+  ok('every turn the phone reads out of it, the panel reads the same way',
+    eq(here.turns, phone.turns) && here.next === phone.next,
+    `${here.turns.length} vs ${phone.turns.length}`);
+  ok('…including what each tool call was called on, which is the line a person reads',
+    eq(here.turns.filter((t) => t.kind === 'did').map((t) => t.summary),
+      phone.turns.filter((t) => t.kind === 'did').map((t) => t.summary)));
+  ok('…and the several hundred lines nobody opened the ticket to see are dropped by both',
+    here.turns.length < records.length
+    && !here.turns.some((t) => t.kind === 'say' && /hook_|thinking_tokens/.test(t.text)));
+
+  // Paged the way the daemon pages it: a reader that numbered the second page
+  // from the length of the first gave two turns on screen the same key.
+  const cut = Math.floor(records.length / 2);
+  const first = RUN.turns(records.slice(0, cut));
+  const second = RUN.turns(records.slice(cut), first.next);
+  const keys = [...first.turns, ...second.turns].map((t) => t.id);
+  ok('a run read a page at a time never draws two turns under one key',
+    new Set(keys).size === keys.length, `${keys.length - new Set(keys).size} shared`);
+  ok('…and an answer that arrived on a later page lands on the call it belongs to',
+    RUN.attach(first.turns, second.answers)
+      .filter((t) => t.kind === 'did' && t.output != null).length
+      >= first.turns.filter((t) => t.kind === 'did' && t.output != null).length);
+  ok('…and a long run is kept to its end rather than all of it',
+    RUN.trim(new Array(RUN.MAX_TURNS + 30).fill(0).map((_, i) => ({ kind: 'say', id: `r${i}`, text: 'x' })))
+      .length === RUN.MAX_TURNS);
+
+  // Where the log goes in the page: between what was said before the run began
+  // and what has been said since, which is where it happened.
+  const msgs = [{ id: 'a', ts: 100, from: 'you', text: 'do it' },
+                { id: 'b', ts: 300, from: 'worker', text: 'done' },
+                { id: 'c', ts: 50, from: 'worker', text: 'asking', tail: true }];
+  const split = U.around(msgs, 200);
+  ok('the run is drawn where it happened: after what was said before it',
+    eq(split.before.map((m) => m.id), ['a']) && eq(split.after.map((m) => m.id), ['b', 'c']));
+  ok('…and a ticket that has never run reads exactly as it did before there was a log',
+    eq(U.around(msgs, null).before.map((m) => m.id), ['a', 'b', 'c'])
+    && U.around(msgs, null).after.length === 0);
 }
 
 // ── 4 · the calm morning ───────────────────────────────────────────────────
@@ -618,21 +929,48 @@ group('Web14 W6, W7 and W8');
     view: busy, project: quire, onProject() {}, ...props,
   }));
   const product = scoped({});
+  const faces = scoped({ tab: 'branches' });
   const engineeringNow = () => scoped({ branch: 'Engineering' });
   const engineering = engineeringNow();
   const seo = scoped({ branch: 'SEO' });
 
-  ok('the product page is the two lines, the branches, and their own numbers',
-    /now/.test(product) && /waiting/.test(product)
-    && product.includes('Branches') && product.includes('Engineering')
-    && product.includes('SEO') && product.includes('open') && product.includes('done'));
+  // The product page answers what is going on and how it got here: the rail of
+  // five stages, the dates beside it, what is happening this minute and the
+  // history behind it. The faces are a tab of their own — how a product is
+  // organised is a thing a person looks up, not what they opened it for.
+  ok('the product page is where it stands, what is happening, and how it got here',
+    product.includes('Live') && product.includes('Started')
+    && product.includes('Right now') && product.includes('Timeline')
+    && product.includes('v1.0 live') && product.includes('Today'));
+  ok('…and the branch grid is not on it',
+    !product.includes('Branches</div>') && !/Right now[\s\S]*Engineering/.test(product));
+  ok('the faces are their own tab, with their own numbers',
+    faces.includes('Branches') && faces.includes('Engineering')
+    && faces.includes('SEO') && faces.includes('open') && faces.includes('done'));
   ok('…with the word that opens a new ticket at the end of its head',
     product.includes('+ New ticket'));
+
+  // What is promised has not happened: it is on the same line as what has, and
+  // it is drawn as a ring rather than as a fact.
+  const line = PR.timeline(quire, busy.now);
+  ok('a date that has not arrived is a promise on the same line',
+    line[0].title === 'v4.0 · Custom domains' && line[0].future === true
+    && line.some((m) => m.today) && line[line.length - 1].kind === 'start');
+  ok('…and the three dates beside the rail are read off it, never invented',
+    PR.facts(quire, busy.now).map((f) => f.label).join(' · ')
+      === 'Started · Live since · Next milestone');
+
+  // A product nobody has written a stage or a history for draws neither, and
+  // says so rather than drawing an empty rail.
+  const hush = busy.projects.find((p) => p.key === 'hush');
+  ok('a product nobody has said any of that about draws no rail and no line',
+    PR.rail(hush) === null && PR.timeline(hush, busy.now).length === 0
+    && PR.facts(hush, busy.now).length === 0);
 
   // A branch with no source connected says so — on the grid, and on the page
   // the grid opens.
   ok('a branch with nothing connected behind it says so',
-    product.includes(PR.NO_SOURCE) && seo.includes(PR.NO_SOURCE)
+    faces.includes(PR.NO_SOURCE) && seo.includes(PR.NO_SOURCE)
     && PR.branchCards(quire, busy.now).find((b) => b.kind === 'SEO').sourceless === true);
   ok('…and one that has a source says what it said instead',
     engineering.includes('Bulk invite is three checks in.')

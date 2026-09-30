@@ -17,6 +17,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
 from .supervisor import supervisor
@@ -186,6 +187,10 @@ class Server:
         # websocket frame five times a second.
         self.app.get("/screen.jpg")(self.screen_jpg)
         self._mount_panel()
+        # The board mirror runs one at a time (`_mirrored_queue`): two of them
+        # over one database connection is what left the board a poll behind
+        # with a card in the wrong column.
+        self._mirror_lock = asyncio.Lock()
         self._versions: dict | None = None
         self._codex_models: list[dict] | None = None
         self._codex_models_task: asyncio.Task | None = None
@@ -266,7 +271,35 @@ class Server:
                     r.headers["cache-control"] = "no-cache"
                 return r
 
-        self.app.mount("/", Panel(directory=str(panel), html=True), name="panel")
+        class Deep(Panel):
+            """…and every address inside the panel is the panel.
+
+            The panel has pages now — `/p/babysee/board`, `/machine/accounts`,
+            `/chats/<id>` — and they are real paths rather than a query string,
+            because a query string is not an address a person reads or a link
+            anybody sends. Nothing of them is on disk: the browser routes them
+            once the bundle is running.
+
+            So a path that is not a file is the page itself. The check is
+            deliberately narrow — a request for something under /assets/, or
+            for anything with a file extension, is a miss and stays a 404, or a
+            mistyped script tag would come back as HTML and fail three stacks
+            deeper. Everything registered before this mount (/ws, /health,
+            /upload, /files, /screen.jpg) wins on its own, as it always did.
+            """
+
+            async def get_response(self, path: str, scope):
+                try:
+                    return await super().get_response(path, scope)
+                except StarletteHTTPException as exc:
+                    if exc.status_code != 404:
+                        raise
+                    tail = path.rsplit("/", 1)[-1]
+                    if path.startswith("assets/") or "." in tail:
+                        raise
+                    return await super().get_response("index.html", scope)
+
+        self.app.mount("/", Deep(directory=str(panel), html=True), name="panel")
 
     # ── tools (CLI kurulumu) ───────────────────────────────────────────────
     async def h_tool_status(self, dev: Device, d: dict) -> dict:
@@ -1607,16 +1640,32 @@ class Server:
         has landed on each branch is a subprocess per worktree, and the mirror
         does not draw commits.
         """
-        snap = await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for, git)
-        try:
-            await asyncio.to_thread(self.db.divan.sync_ustabasi, snap,
-                                    self.cfg.host_name, self.policy.project_for)
-        except Exception as exc:
-            # The wall is older than the board and does not depend on it. A
-            # mirror that cannot write is a board that is a poll behind, not a
-            # terminal tab that has stopped showing what the workers are doing.
-            log.warning("divan mirror: %s", exc)
-        return snap
+        # One at a time, and the second caller gets the first one's answer.
+        #
+        # Every device polls this: the panel draws the board from it, the phone
+        # draws the wall from it, and both do so every few seconds. Two of them
+        # landing in the same second used to run two mirrors over one database
+        # connection, which is how the board came to sit there with a card in
+        # the wrong column and a mark two rounds old — the pass died on a
+        # unique index and wrote nothing at all. Waiting is also cheaper than
+        # running it twice: a mirror is a subprocess per worktree.
+        # One at a time, and no answer served out of a cache: a poll that waits
+        # for the one in front of it is a poll that is a second late, which is
+        # nothing; a poll answered from the last pass is a poll that never
+        # mirrored, and a ticket that changed in between stays unmirrored until
+        # somebody polls again.
+        async with self._mirror_lock:
+            snap = await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for, git)
+            try:
+                await asyncio.to_thread(self.db.divan.sync_ustabasi, snap,
+                                        self.cfg.host_name, self.policy.project_for)
+            except Exception as exc:
+                # The wall is older than the board and does not depend on it. A
+                # mirror that cannot write is a board that is a poll behind, not
+                # a terminal tab that has stopped showing what the workers are
+                # doing.
+                log.warning("divan mirror: %s", exc)
+            return snap
 
     async def h_ustabasi_run(self, dev: Device, d: dict) -> dict:
         """What the agent on a ticket has printed, a page at a time.
@@ -1632,6 +1681,76 @@ class Server:
         except (TypeError, ValueError):
             raise Err("bad_ticket", "no such ticket")
         return await asyncio.to_thread(ustabasimod.run, tid, d.get("cursor"))
+
+    def _ticket_id(self, d: dict) -> int:
+        try:
+            return int(d.get("id"))
+        except (TypeError, ValueError):
+            raise Err("bad_ticket", "no such ticket")
+
+    async def h_ustabasi_cancel(self, dev: Device, d: dict) -> dict:
+        """Stop a ticket, wherever it had got to.
+
+        The panel could watch a queue and answer a question on it and nothing
+        else: a worker going the wrong way could be read at length and not
+        stopped, which is the one thing a person watching it wants to do. The
+        queue's own CLI owns what stopping means — it kills the process group
+        and writes the status — and this only reports what it said.
+        """
+        try:
+            return await ustabasimod.cancel(self._ticket_id(d))
+        except ValueError as exc:
+            raise Err("ustabasi_refused", str(exc))
+
+    async def h_ustabasi_restart(self, dev: Device, d: dict) -> dict:
+        """…and put it back in the queue afterwards."""
+        try:
+            return await ustabasimod.restart(self._ticket_id(d))
+        except ValueError as exc:
+            raise Err("ustabasi_refused", str(exc))
+
+    async def h_ustabasi_priority(self, dev: Device, d: dict) -> dict:
+        """Which one the supervisor takes next."""
+        try:
+            n = int(d.get("priority", 1))
+        except (TypeError, ValueError):
+            raise Err("bad_priority", "a priority is a number")
+        try:
+            return await ustabasimod.prioritise(self._ticket_id(d), n)
+        except ValueError as exc:
+            raise Err("ustabasi_refused", str(exc))
+
+    async def h_ustabasi_edit(self, dev: Device, d: dict) -> dict:
+        """Rewrite a ticket's card: the goal, what done means, the test.
+
+        Refused by the queue while a worker is on it — the card is what that
+        worker was handed, and changing it underneath would be a brief nobody
+        agreed to.
+        """
+        criteria = d.get("done_criteria")
+        if criteria is not None and not isinstance(criteria, list):
+            raise Err("bad_card", "done criteria are a list of sentences")
+        try:
+            return await ustabasimod.edit(
+                self._ticket_id(d),
+                title=(str(d["title"]) if d.get("title") is not None else None),
+                goal=(str(d["goal"]) if d.get("goal") is not None else None),
+                done_criteria=([str(c) for c in criteria] if criteria is not None else None),
+                verify_cmd=(str(d["verify_cmd"]) if d.get("verify_cmd") is not None else None))
+        except ValueError as exc:
+            raise Err("ustabasi_refused", str(exc))
+
+    async def h_ustabasi_delete(self, dev: Device, d: dict) -> dict:
+        """Take a ticket off the queue for good.
+
+        A branch with work nobody merged is kept unless the caller says
+        otherwise, and the queue says which it did: commits are the one thing
+        in here that cannot be written again.
+        """
+        try:
+            return await ustabasimod.delete(self._ticket_id(d), bool(d.get("force")))
+        except ValueError as exc:
+            raise Err("ustabasi_refused", str(exc))
 
     async def h_ustabasi_note(self, dev: Device, d: dict) -> dict:
         """Answer a ticket that stopped to ask. The only write this daemon
@@ -1783,6 +1902,35 @@ class Server:
         except ValueError as exc:
             raise Err("bad_project", str(exc))
 
+    async def h_divan_project_milestones(self, dev: Device, d: dict) -> dict:
+        """What has happened to a product, dated — read it, or write the lot.
+
+        Written whole rather than one at a time, because of how a history is
+        actually made: it is read off the repositories a product owns — the first
+        commit, the first tag, the deploy that put it in front of somebody — and
+        read again whenever anything about the product changes. Appending would
+        mean a duplicate line for every re-reading, and a history nobody dared
+        run twice. `set` absent is a read; `set: []` empties it.
+
+        A date in the future is allowed and is the point of the `target` kind:
+        what is promised next is on the same line as what already happened, and
+        a page that split them would have to decide which list "next" was in.
+        """
+        board = self.db.divan
+        ref = str(d.get("project_id") or d.get("project") or "")
+        project = board.find_project(ref)
+        if project is None:
+            raise Err("no_such_project", "no such project")
+        try:
+            if "set" in d:
+                rows = [dict(x) for x in (d.get("set") or [])]
+                return {"project_id": project["id"],
+                        "milestones": board.set_milestones(project["id"], rows)}
+        except (ValueError, TypeError) as exc:
+            raise Err("bad_milestone", str(exc))
+        return {"project_id": project["id"],
+                "milestones": board.milestones(project["id"])}
+
     async def h_divan_board(self, dev: Device, d: dict) -> dict:
         """One project's board: four columns, each in the order somebody put it in."""
         try:
@@ -1832,7 +1980,22 @@ class Server:
         except ValueError as exc:
             raise Err("bad_move", str(exc))
         error = None
-        if divanmod.wants_ustabasi(card):
+        if divanmod.wants_bumping(card):
+            # The queue already holds this one, so the drag cannot start it —
+            # there are only so many slots, and what runs is the queue's
+            # decision. What it can say is *which one is next*, which is what a
+            # person dragging a card to the front of In Progress means. The
+            # card stays where the thumb put it (`agent_column`) until the
+            # ticket really moves, so the board does not spring back a second
+            # later and read as a drag that did nothing.
+            try:
+                await ustabasimod.prioritise(int(card["ustabasi_id"]))
+                self.db.divan.placed_by_hand(card_id, "in_progress")
+                card = self.db.divan.get_card(card_id) or card
+            except (ValueError, OSError, sqlite3.Error) as exc:
+                log.warning("divan: prioritising %s: %s", card_id, exc)
+                error = str(exc)
+        elif divanmod.wants_ustabasi(card):
             try:
                 card = await divanmod.file_with_ustabasi(
                     self.db.divan, card_id, is_allowed=self.policy.is_allowed_cwd)

@@ -790,9 +790,61 @@ export function TopBar({ children, style }: {
       borderBottom: `1px solid ${T.line}`, background: T.bg, color: T.ink,
       ...style,
     }}>
-      <span style={{ ...mono, flex: 'none', fontSize: 13, fontWeight: 600, marginRight: 6 }}>divan</span>
+      <Wordmark />
       {children}
     </header>
+  );
+}
+
+/** The mark: a divan seen from the front — a back, a seat and two feet, in one
+ *  ink.
+ *
+ *  Geometry and nothing else, for the reason every other mark on this panel is:
+ *  it is drawn in `currentColor`, so the same file is the logo in both themes,
+ *  on an amber chip and inside a favicon, and there is no second asset anywhere
+ *  that can fall out of step with the first. No gradient, no shadow — at 22 pt
+ *  in a 58 pt bar a gradient is a smudge.
+ *
+ *  The proportions are the bar's: a 24-unit square, the seat at two-thirds of
+ *  the height so the mark sits on the same optical line the wordmark's baseline
+ *  does rather than floating over it. */
+export function DivanMark({ size = SIZE.mark, style }: {
+  size?: number;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"
+      aria-hidden="true" focusable="false" style={{ flex: 'none', display: 'block', ...style }}>
+      {/* the back */}
+      <rect x="3.5" y="5" width="17" height="5.2" rx="2.6" opacity=".55" />
+      {/* the seat, which is the widest thing and the one the eye reads */}
+      <rect x="1.8" y="10.2" width="20.4" height="5.6" rx="2.4" />
+      {/* two feet */}
+      <rect x="4.2" y="16.2" width="2.6" height="3.2" rx="1.1" />
+      <rect x="17.2" y="16.2" width="2.6" height="3.2" rx="1.1" />
+    </svg>
+  );
+}
+
+/** …and the mark with the name beside it, which is what the bar opens on.
+ *
+ *  It used to be the word `divan` in 13 pt mono, which is the size of a caption:
+ *  the product's own name was the smallest text on its own screen. So it is set
+ *  the way a name is — 19 pt, the page-title weight, the page-title tracking —
+ *  and the mark is sized to the cap height beside it rather than to the bar, so
+ *  the two read as one object. Under 900 pt the word goes and the mark stays;
+ *  the bar needs that room for the three places and the machine chip. */
+export function Wordmark({ style }: { style?: React.CSSProperties }) {
+  return (
+    <span style={{
+      flex: 'none', display: 'flex', alignItems: 'center', gap: 8, marginRight: 8,
+      color: T.ink, ...style,
+    }}>
+      <DivanMark size={SIZE.logo} />
+      <span className="dv-wordmark" style={{
+        fontSize: 19, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1,
+      }}>Divan</span>
+    </span>
   );
 }
 
@@ -967,13 +1019,19 @@ export function Panel({ tone = 'amber', head, foot, width = SIZE.panel, height =
  *  `600 14px` with what they are doing beside it in their state's mono, the
  *  card and the clock under that at `400 10.5px` mono — and, at the far end, the
  *  two things you can do to a window without answering it. */
-export function PanelHead({ lead, title, badge, tone = 'amber', note, onMinimise, onClose }: {
+export function PanelHead({ lead, title, badge, tone = 'amber', note, grab, extra,
+                            onMinimise, onClose }: {
   lead?: React.ReactNode;
   title: React.ReactNode;
   /** `asks you`, `your call`, `stopped`. */
   badge?: React.ReactNode;
   tone?: Tone;
   note?: React.ReactNode;
+  /** The window can be picked up by its head, which is what the cursor says. */
+  grab?: boolean;
+  /** Anything else the window does to itself, drawn before the two characters
+   *  every window has. */
+  extra?: React.ReactNode;
   onMinimise?: () => void;
   onClose?: () => void;
 }) {
@@ -981,6 +1039,7 @@ export function PanelHead({ lead, title, badge, tone = 'amber', note, onMinimise
     <header style={{
       flex: 'none', display: 'flex', alignItems: 'center', gap: 10,
       padding: '12px 14px', borderBottom: `1px solid ${T.line}`,
+      cursor: grab ? 'grab' : undefined,
     }}>
       {lead}
       <div style={{ minWidth: 0, lineHeight: 1.25 }}>
@@ -1000,6 +1059,7 @@ export function PanelHead({ lead, title, badge, tone = 'amber', note, onMinimise
         )}
       </div>
       <span style={{ marginLeft: 'auto', display: 'flex', gap: 14, flex: 'none' }}>
+        {extra}
         {!!onMinimise && <HeadButton label="–" title="Put this away" onClick={onMinimise} />}
         {!!onClose && <HeadButton label="×" title="Close" onClick={onClose} />}
       </span>
@@ -1009,6 +1069,12 @@ export function PanelHead({ lead, title, badge, tone = 'amber', note, onMinimise
 
 /** The two characters at the end of a panel's head, at the frame's own
  *  `500 15px` mono in the meta grey. */
+export function HeadGlyph({ label, title, onClick }: {
+  label: string; title: string; onClick: () => void;
+}) {
+  return <HeadButton label={label} title={title} onClick={onClick} />;
+}
+
 function HeadButton({ label, title, onClick }: { label: string; title: string; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} title={title} aria-label={title} style={{
@@ -1118,38 +1184,73 @@ export function DockMore({ n, onClick, title }: { n: number; onClick?: () => voi
  *  a long fall, the placeholder at `400 15px` in the meta grey, the key that
  *  opens it in mono at the far end, and a 36 pt round button after that.
  *
- *  It is a button and not a field: what it opens is the panel's own command
- *  palette, which is the thing ⌘K has always opened here.
+ *  It is a **field**, which is what the frame draws: a placeholder, a send
+ *  button and a key that says the bar can be reached from the keyboard. What is
+ *  typed into it is said — it is the one composer on the page that is not
+ *  already in a conversation — so the return key and the arrow do the same
+ *  thing, and the arrow is a button only while there is something to send — an
+ *  empty composer's send is not faded, it is simply not a button, which is the
+ *  same thing said without a colour nobody can read. It says it in colour too,
+ *  and in the panel's own way: a send that would send is the accent disc the
+ *  chat's composer has always used — the same 36 pt circle, the same fill, a
+ *  white glyph on it — and at rest it is the hairline fill the frame draws. One
+ *  send button in the product, in two places.
  *
  *  One deviation from the frame, and it is the palette's own rule: the artboard
  *  draws the glyph in the *page* colour on that hairline fill — an empty
  *  composer whose send is not available yet — which composites to 2.2:1 in the
  *  dark and 1.6:1 in the light. Nothing in this panel is drawn at a weight that
  *  cannot be read, so the arrow takes the primary ink on the same fill. */
-export function CommandBar({ placeholder, shortcut = '⌘K', onClick, style }: {
+export function CommandBar({ placeholder, shortcut = '⌘K', value, onChange, onSend, field, style }: {
   placeholder: string;
   shortcut?: string;
-  onClick?: () => void;
+  value?: string;
+  /** Given, the bar is the field it looks like; left out — the gallery, a
+   *  frame — it is the same box with its placeholder drawn in it. */
+  onChange?: (text: string) => void;
+  onSend?: () => void;
+  field?: React.Ref<HTMLInputElement>;
   style?: React.CSSProperties;
 }) {
+  const text = value ?? '';
+  const ready = !!text.trim() && !!onSend;
   return (
-    <Tap onClick={onClick} title={placeholder} style={{
+    <div style={{
       width: SIZE.bar, height: SIZE.barTall, boxSizing: 'border-box',
       borderRadius: RADIUS.bar, background: T.s2,
       boxShadow: `0 0 0 1px ${T.line2}, 0 14px 36px ${T.sh}`,
       display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 0 20px', ...style,
     }}>
-      <span style={{
-        flex: 1, minWidth: 0, fontSize: 15, color: T.ink3,
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-      }}>{placeholder}</span>
+      {onChange ? (
+        <input
+          ref={field} type="text" value={text} placeholder={placeholder} aria-label={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || !ready) return;
+            e.preventDefault();
+            onSend!();
+          }}
+          style={{
+            flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
+            fontFamily: 'inherit', fontSize: 15, color: T.ink,
+          }}
+        />
+      ) : (
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 15, color: T.ink3,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{placeholder}</span>
+      )}
       <span style={{ ...mono, fontSize: 11, color: T.ink3, flex: 'none' }}>{shortcut}</span>
-      <span style={{
-        flex: 'none', width: SIZE.send, height: SIZE.send, borderRadius: SIZE.send / 2,
-        background: T.line2, color: T.ink,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600,
-      }}>↑</span>
-    </Tap>
+      <Tap
+        onClick={ready ? onSend : undefined} title={ready ? 'Send' : undefined}
+        style={{
+          flex: 'none', width: SIZE.send, height: SIZE.send, borderRadius: SIZE.send / 2,
+          background: ready ? T.red : T.line2, color: ready ? ON_COLOUR : T.ink,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600,
+        }}
+      >↑</Tap>
+    </div>
   );
 }
 
@@ -1302,19 +1403,32 @@ export function StampRow({ at, text, tone, code, style }: {
  *  hairline. `lead` is what the frame puts in front of a value that has a face —
  *  the executor's square, the creator's circle — and `note` the quieter half of
  *  a value: `Divan` *from your chat*, `4 min ago` *by Coder*. */
-export function FieldRow({ label, value, lead, note, first, style }: {
+export function FieldRow({ label, value, lead, note, first, onClick, title, style }: {
   label: React.ReactNode;
   value: React.ReactNode;
   lead?: React.ReactNode;
   note?: React.ReactNode;
   /** The first row of the panel has no line above it. */
   first?: boolean;
+  /** A row that is also how that field is changed. The frames draw no
+   *  difference for it — a row is a row — so what says it is pressable is the
+   *  cursor and the fact that it answers to a keyboard. */
+  onClick?: () => void;
+  title?: string;
   style?: React.CSSProperties;
 }) {
+  const Row: any = onClick ? 'button' : 'div';
   return (
-    <div style={{
+    <Row
+      {...(onClick ? { type: 'button', onClick, title } : {})}
+      style={{
       display: 'grid', gridTemplateColumns: '110px minmax(0, 1fr)', gap: 10, alignItems: 'center',
-      padding: '10px 0', borderTop: first ? undefined : `1px solid ${T.line}`, minWidth: 0, ...style,
+      padding: '10px 0', borderTop: first ? undefined : `1px solid ${T.line}`, minWidth: 0,
+      ...(onClick ? {
+        width: '100%', background: 'transparent', border: 'none', font: 'inherit',
+        textAlign: 'left' as const, cursor: 'pointer',
+      } : {}),
+      ...style,
     }}>
       <span style={{ fontSize: 12.5, color: T.ink3 }}>{label}</span>
       <span style={{
@@ -1325,7 +1439,7 @@ export function FieldRow({ label, value, lead, note, first, style }: {
         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
         {!!note && <span style={{ fontSize: 12, fontWeight: 400, color: T.ink3 }}>{note}</span>}
       </span>
-    </div>
+    </Row>
   );
 }
 

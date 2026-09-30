@@ -140,9 +140,15 @@ try {
     return {
       atEnd: Math.abs(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < 4,
       scrollable: scroller.scrollHeight > scroller.clientHeight,
+      text: document.body.innerText,
     };
   `);
-  ok('there is more conversation than fits, so the end is a choice', opened.scrollable);
+  // The window used to open on the worker's report and overflow with it. The
+  // report is behind the steps now, so what is in here is what was *said* —
+  // and the check is that the report is not, rather than that it is long.
+  ok('the report an agent wrote back is not in the conversation',
+    !opened.text.includes('The rest of this report')
+    && !opened.text.includes('This sentence is the end of the report.'));
   ok('it opens at the end, where the question is', opened.atEnd);
 
   console.log('── typing in the box');
@@ -236,18 +242,6 @@ try {
   ok('the criteria start folded away', !details.before.includes('the sequence reads as a chat'));
   ok('opening Details shows them', details.after.includes('the sequence reads as a chat'));
   ok('and what the verifier said of them', details.after.includes('the long detail nobody reads'));
-
-  console.log('── the rest of a long report');
-  const more = await evaluate(`
-    const before = document.body.innerText;
-    const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('rest of this report'));
-    b.click();
-    await new Promise((r) => setTimeout(r, 120));
-    return { before, after: document.body.innerText };
-  `);
-  ok('the tail of a report starts folded',
-    !more.before.includes('This sentence is the end of the report.'));
-  ok('it opens when asked', more.after.includes('This sentence is the end of the report.'));
 
   console.log('── in portrait, on a phone-sized window');
   const layout = await evaluate(`

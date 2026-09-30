@@ -45,11 +45,20 @@ export interface Ticket {
   git: { commits: number; subject: string } | null;
   goal: string;
   done_criteria: string[];
+  /** The command that proves the criteria. Empty where the ticket has none. */
+  verify_cmd?: string;
   escalation: string;
   verdict: Verdict | null;
   notes: Note[];
   note_count: number;
   last_event: Event | null;
+  /** Every run of every stage this ticket has been through, oldest first: what
+   *  the queue's own events add up to (`daemon/remote_ai_chat/ustabasi.py`).
+   *  What a ticket *is* on a board is this — the steps, ticking off. */
+  steps?: {
+    stage: string; round: number; at: number; ended_at?: number | null;
+    outcome?: string | null; model?: string | null; account?: string | null;
+  }[];
 }
 
 /** Who said a thing. `you` is whoever is holding the panel — the tickets are
@@ -92,7 +101,7 @@ export function noteHint(s: Status): string {
 
 /** The queue writes `user` for a note typed by a person. Everything it does not
  *  name is the worker, which is where a report would come from. */
-function voiceOf(from: string): Voice {
+export function voiceOf(from: string): Voice {
   const f = (from || '').trim().toLowerCase();
   if (f === 'user' || f === 'you') return 'you';
   if (f === 'verifier' || f === 'triage' || f === 'supervisor') return f;
@@ -249,6 +258,33 @@ export function conversation(t: Ticket): Msg[] {
 /** Whether the ticket has anything to put behind the details disclosure: the
  *  card's criteria and what the verifier made of them. Neither is part of the
  *  conversation — they are the paperwork behind it. */
+/** When the run that is being watched began.
+ *
+ *  The phone reads it off the ticket's last step (`app/src/tickets.ts`); the
+ *  wall's tickets carry the round's own clock instead, which is the same
+ *  moment said another way — a round is a run. Null on a ticket that has never
+ *  been picked up, which is what puts the whole conversation before the log.
+ */
+export function runStartedAt(t: Ticket): number | null {
+  return t.round_started_at ?? t.started_at ?? null;
+}
+
+/** The conversation, split where the run begins: what was said before it, and
+ *  what has been said since. The log goes between the two, which is where it
+ *  happened.
+ *
+ *  A ticket that has never run puts everything before, so the page reads
+ *  exactly as it did before there was a log to read. */
+export function around(msgs: Msg[], at: number | null): { before: Msg[]; after: Msg[] } {
+  if (at == null) return { before: msgs, after: [] };
+  const before: Msg[] = [];
+  const after: Msg[] = [];
+  // The last message is where the ticket stands now, whatever its clock says:
+  // it is written from the ticket's own state, not from a moment.
+  for (const m of msgs) (m.ts < at && !m.tail ? before : after).push(m);
+  return { before, after };
+}
+
 export function hasDetails(t: Ticket): boolean {
   return (t.done_criteria?.length || 0) > 0 || !!t.verdict;
 }

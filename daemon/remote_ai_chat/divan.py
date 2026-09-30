@@ -79,7 +79,7 @@ from . import ustabasi as ustabasimod
 #: Left to right, and the order a board is drawn in. `ice_box` is everything
 #: that has been thought of; `queued` is what is next, top to bottom; nothing
 #: starts until a person drags it into `in_progress`.
-COLUMNS = ("ice_box", "queued", "in_progress", "done")
+COLUMNS = ("ice_box", "queued", "in_progress", "review", "done")
 
 #: How far back the snapshot's Done column reaches: a month, the window the
 #: web board's column head counts in ("this month 12"). Older finished cards
@@ -145,6 +145,27 @@ STATUS_COLUMN = {
 }
 IMPORT_COLUMN = STATUS_COLUMN  # the older name, kept for the tests that use it
 
+#: …and the stages that are not the writing of it. A ticket the queue has
+#: handed to its mechanical check or to the independent verifier is work that
+#: is being looked at rather than work being done, which on a board is its own
+#: column and not a shade of In Progress. `worker` and `triage` are the writing
+#: — triage is the queue deciding what to do about a worker that stopped.
+REVIEW_STAGES = ("check", "verifier")
+
+
+def column_for(ticket: dict) -> str:
+    """Which column a ticket's card belongs in.
+
+    The status says most of it; the stage says the rest. A running ticket is In
+    Progress while somebody is writing it and in Review while it is being
+    checked — a board where "it is being verified" looked exactly like "it is
+    being written" could not answer the one question a board is for.
+    """
+    status = (ticket.get("status") or "").strip()
+    if status == "running" and (ticket.get("stage") or "").strip() in REVIEW_STAGES:
+        return "review"
+    return STATUS_COLUMN.get(status, "queued")
+
 #: The human face is deliberately small. A title is a line and a summary is two
 #: or three sentences; anything longer is the agent face, or it is a new card.
 MAX_TITLE = 160
@@ -163,6 +184,24 @@ UNFILED_NAME = "Unfiled"
 #: same as a card's: it is the sentence or two a screen draws under the name.
 MAX_KIND = 40
 
+#: Where a product is in its life, in the order a rail draws them. Not a status
+#: and not a guess off the board: a product with nobody using it is in `build`
+#: however many agents are running on it, and one people pay for is in `growth`
+#: on the morning nothing is running at all. It is written by hand, because it
+#: is the one fact about a product no counter can work out.
+STAGES = ("idea", "build", "beta", "live", "growth")
+
+#: What a milestone is, beyond its date. `start` is the day the work began,
+#: `live` the day somebody outside could use it, `target` something promised and
+#: not yet done — the three a project page reads by name. Everything else is an
+#: ordinary event on the line.
+MILESTONE_KINDS = ("", "start", "live", "target")
+
+#: A milestone's own title and the line under it. The same lengths a card has:
+#: this is a line on a timeline, not a document.
+MAX_MILESTONE = 160
+MAX_MILESTONE_NOTE = 240
+
 #: What `update_project` will write, and the words it answers to. `purpose` is
 #: `summary` said the other way round and is accepted as such: what a product is
 #: *for* is the line a screen draws under its name, and one field cannot
@@ -170,7 +209,7 @@ MAX_KIND = 40
 #: first is the key two machines match a product by and the second is what marks
 #: the row that is not a product at all.
 PROJECT_FIELDS = frozenset({"name", "summary", "purpose", "kind", "started_at",
-                            "sort", "archived", "repos"})
+                            "stage", "sort", "archived", "repos"})
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
@@ -190,6 +229,9 @@ CREATE TABLE IF NOT EXISTS projects (
   -- when the product actually began, which is not when this row was written:
   -- a board met on Tuesday can hold a product started last March.
   started_at REAL,
+  -- where it is in its life (`STAGES`), written by a person. Empty on a product
+  -- nobody has said, and a rail that draws nothing is the honest answer there.
+  stage TEXT DEFAULT '',
   sort INTEGER DEFAULT 0,
   archived INTEGER DEFAULT 0,
   -- a row in this table that is not a product. Exactly one, seeded by the
@@ -205,6 +247,26 @@ CREATE TABLE IF NOT EXISTS project_repos (
   path TEXT NOT NULL,
   PRIMARY KEY (project_id, path)
 );
+-- What happened to a product, dated: the day it began, the day it went live, a
+-- release, and what is promised next. It is the one history on this computer
+-- that is not the board's — a board holds this week, and a product is years —
+-- and it is written rather than counted, because no table on this machine knows
+-- which Tuesday mattered.
+CREATE TABLE IF NOT EXISTS milestones (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  -- when it happened, or is meant to: a date in the future is a promise, and
+  -- the page draws it as one.
+  at REAL NOT NULL,
+  title TEXT NOT NULL,
+  -- the small line under it. Usually where it came from — a tag, a deploy, the
+  -- first commit — so the date on the page can be checked against the thing it
+  -- was read off.
+  note TEXT DEFAULT '',
+  kind TEXT DEFAULT '',
+  created_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_milestones_project ON milestones(project_id, at);
 CREATE TABLE IF NOT EXISTS branches (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -260,7 +322,8 @@ CREATE INDEX IF NOT EXISTS idx_repos_path ON project_repos(path);
 ADDED_COLUMNS = {
     "cards": (("agent_detail", "TEXT DEFAULT ''"), ("agent_column", "TEXT")),
     "projects": (("summary", "TEXT DEFAULT ''"), ("kind", "TEXT DEFAULT ''"),
-                 ("started_at", "REAL"), ("hidden", "INTEGER DEFAULT 0")),
+                 ("started_at", "REAL"), ("hidden", "INTEGER DEFAULT 0"),
+                 ("stage", "TEXT DEFAULT ''")),
 }
 
 
@@ -285,6 +348,23 @@ def project_kind(value) -> str:
     if not text:
         return ""
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:MAX_KIND]
+
+
+def project_stage(value) -> str:
+    """A stage, as one of `STAGES`. Empty clears it.
+
+    Checked against the list rather than slugged, unlike `kind`: the rail on a
+    product's page draws five fixed steps, and a sixth word would be a step
+    nobody could draw. A wrong word comes back with the five right ones — the
+    entrance is a sentence to an agent, and a silent no-op is the one answer a
+    sentence cannot be given.
+    """
+    text = ("" if value is None else str(value)).strip().lower()
+    if not text:
+        return ""
+    if text not in STAGES:
+        raise ValueError(f"{text!r} is not a stage — try {', '.join(STAGES)}")
+    return text
 
 
 def parse_when(value) -> float | None:
@@ -436,6 +516,23 @@ class Board:
     def __init__(self, conn: sqlite3.Connection, lock: threading.Lock):
         self._c = conn
         self._lock = lock
+        # …and a second lock, held across a whole mirror pass rather than
+        # around one statement.
+        #
+        # `self._lock` makes each write atomic, which is not the same as making
+        # the mirror correct: reading "no card has ticket 71" and creating that
+        # card are two statements, and two threads that interleave between them
+        # both create it. The panel polls the board, the phone polls the board
+        # and the wall polls the queue, so "two threads in here at once" is the
+        # ordinary case rather than the rare one — and what came out of it was
+        # a unique index refusing the second card, the connection left in a
+        # failed transaction ("bad parameter or other API misuse") and, because
+        # the pass died where it stood, **no statuses written at all**. A card
+        # dragged into In Progress went back where it was, and a queued ticket
+        # went on wearing the mark it had two rounds ago.
+        #
+        # Re-entrant because a pass calls methods that take it again.
+        self._sync = threading.RLock()
 
     # ── projects and branches ──────────────────────────────────────────────
 
@@ -577,6 +674,8 @@ class Board:
                 out["summary"] = str(fields[said] or "").strip()[:MAX_SUMMARY]
         if "kind" in fields:
             out["kind"] = project_kind(fields["kind"])
+        if "stage" in fields:
+            out["stage"] = project_stage(fields["stage"])
         if "started_at" in fields:
             out["started_at"] = parse_when(fields["started_at"])
         if "sort" in fields:
@@ -657,6 +756,73 @@ class Board:
                 "INSERT OR IGNORE INTO project_repos (project_id, path) VALUES (?,?)",
                 (project_id, path))
             self._c.commit()
+
+    # ── what has happened to a product, dated ──────────────────────────────
+
+    def milestones(self, project_id: str) -> list[dict]:
+        """A product's history, oldest first, promises included.
+
+        Oldest first because that is the order it is read in on the page — the
+        timeline runs down from what is coming to what began, and reversing a
+        sorted list is cheaper than sorting it twice. A date in the future is in
+        here with everything else: what is promised and what happened are one
+        history, and a page that kept them in two lists would have to decide
+        which of them "next" belongs to.
+        """
+        rows = self._c.execute(
+            "SELECT * FROM milestones WHERE project_id=? ORDER BY at, rowid",
+            (project_id,)).fetchall()
+        return [{"id": r["id"], "at": r["at"], "title": r["title"],
+                 "note": r["note"] or "", "kind": r["kind"] or ""} for r in rows]
+
+    def add_milestone(self, project_id: str, at, title: str,
+                      note: str = "", kind: str = "") -> dict:
+        """Write one down. The date is read the way `started_at` is — a person
+        types `2026-03-01` — and a milestone with no date is refused: a line on a
+        timeline with nowhere to sit is not a milestone."""
+        if self.get_project(project_id) is None:
+            raise ValueError("no such project")
+        when = parse_when(at)
+        if when is None:
+            raise ValueError("a milestone needs a date: try 2026-03-01")
+        text = str(title or "").strip()[:MAX_MILESTONE]
+        if not text:
+            raise ValueError("a milestone needs a title")
+        word = str(kind or "").strip().lower()
+        if word not in MILESTONE_KINDS:
+            raise ValueError(f"{word!r} is not a milestone kind"
+                             f" — try {', '.join(x or 'nothing' for x in MILESTONE_KINDS)}")
+        row = {"id": new_id(), "project_id": project_id, "at": when, "title": text,
+               "note": str(note or "").strip()[:MAX_MILESTONE_NOTE], "kind": word,
+               "created_at": time.time()}
+        with self._lock:
+            self._c.execute(
+                "INSERT INTO milestones (id,project_id,at,title,note,kind,created_at)"
+                " VALUES (:id,:project_id,:at,:title,:note,:kind,:created_at)", row)
+            self._c.commit()
+        return {k: row[k] for k in ("id", "at", "title", "note", "kind")}
+
+    def delete_milestone(self, milestone_id: str) -> None:
+        with self._lock:
+            self._c.execute("DELETE FROM milestones WHERE id=?", (milestone_id,))
+            self._c.commit()
+
+    def set_milestones(self, project_id: str, rows: list[dict]) -> list[dict]:
+        """The whole history at once, replacing whatever was there.
+
+        How a history is written in practice: it is read off a repository — first
+        commit, first tag, the deploy that put it in front of somebody — and read
+        again the next time anything is asked of it. Adding them one by one would
+        mean a duplicate for every re-read, and a history nobody dared run twice.
+        """
+        if self.get_project(project_id) is None:
+            raise ValueError("no such project")
+        with self._lock:
+            self._c.execute("DELETE FROM milestones WHERE project_id=?", (project_id,))
+            self._c.commit()
+        return [self.add_milestone(project_id, r.get("at"), r.get("title", ""),
+                                   r.get("note", ""), r.get("kind", ""))
+                for r in rows]
 
     def branches(self, project_id: str) -> list[dict]:
         rows = self._c.execute(
@@ -926,6 +1092,24 @@ class Board:
             self._c.commit()
         return self.get_card(card_id)
 
+    def placed_by_hand(self, card_id: str, column: str) -> dict | None:
+        """Remember that a person put this card here.
+
+        The mirror moves a card when the ticket's status means another column,
+        and it decides that by comparing the status against `agent_column` —
+        where the mirror last placed it. Writing the column a finger chose into
+        that field is how the board is told "this is not the mirror's to undo":
+        the next poll sees nothing has changed and leaves the card alone, and
+        the first real move — a worker picking the ticket up — takes it from
+        there.
+        """
+        with self._lock:
+            self._c.execute(
+                "UPDATE cards SET agent_column=?, updated_at=? WHERE id=?",
+                (column, time.time(), card_id))
+            self._c.commit()
+        return self.get_card(card_id)
+
     def delete_card(self, card_id: str) -> None:
         card = self.get_card(card_id)
         if card is None:
@@ -972,21 +1156,32 @@ class Board:
         if not snapshot.get("available"):
             return {"imported": 0, "mirrored": 0, "filed": 0}
         imported = mirrored = filed = 0
-        for ticket in snapshot.get("tickets") or []:
-            card = self.card_by_ustabasi(ticket["id"])
-            if card is None:
-                self._import_ticket(ticket, machine, project_for)
-                imported += 1
-                continue
-            if self._refile(card, ticket, project_for):
-                filed += 1
-                card = self.get_card(card["id"]) or card
-            if self._mirror(card, ticket):
-                mirrored += 1
+        with self._sync:
+            for ticket in snapshot.get("tickets") or []:
+                card = self.card_by_ustabasi(ticket["id"])
+                if card is None:
+                    card = self._import_ticket(ticket, machine, project_for)
+                    if card is None:
+                        continue
+                    imported += 1
+                    continue
+                if self._refile(card, ticket, project_for):
+                    filed += 1
+                    card = self.get_card(card["id"]) or card
+                if self._mirror(card, ticket):
+                    mirrored += 1
         return {"imported": imported, "mirrored": mirrored, "filed": filed}
 
     def _import_ticket(self, ticket: dict, machine: str | None,
-                       project_for: Callable[[str], str | None] | None) -> dict:
+                       project_for: Callable[[str], str | None] | None) -> dict | None:
+        """A ticket this board has never seen, as a card.
+
+        Null where somebody else got there first. The lock above keeps two
+        passes of *this* process apart; a second daemon on the same database —
+        a demo instance left running, a worktree's copy — is not something a
+        lock in here can see, and the unique index is what says so. Losing that
+        race is not an error: the card exists, which is what the import wanted.
+        """
         project = self.project_for_ticket(ticket, project_for)
         branch = self._import_branch(project)
         if branch is None:
@@ -996,18 +1191,22 @@ class Board:
             project = self.unfiled_project()
             branch = self._import_branch(project)
         status, detail = self._status_of(ticket)
-        card = self.create_card(
-            project["id"],
-            title=(ticket.get("title") or f"ticket {ticket['id']}"),
-            # Nothing of the agent's goes on the human face, not even on a card
-            # that was an agent's ticket before it was a card.
-            summary="",
-            branch=branch["kind"],
-            column=STATUS_COLUMN.get(ticket.get("status") or "", "queued"),
-            executor="coding_agent", machine=machine, repo=ticket.get("repo"),
-            agent={"goal": ticket.get("goal") or "",
-                   "done_criteria": ticket.get("done_criteria") or []},
-            ustabasi_id=ticket["id"], position=None)
+        try:
+            card = self.create_card(
+                project["id"],
+                title=(ticket.get("title") or f"ticket {ticket['id']}"),
+                # Nothing of the agent's goes on the human face, not even on a
+                # card that was an agent's ticket before it was a card.
+                summary="",
+                branch=branch["kind"],
+                column=column_for(ticket),
+                executor="coding_agent", machine=machine, repo=ticket.get("repo"),
+                agent={"goal": ticket.get("goal") or "",
+                       "done_criteria": ticket.get("done_criteria") or []},
+                ustabasi_id=ticket["id"], position=None)
+        except sqlite3.IntegrityError:
+            # The index refused it: the ticket has a card already.
+            return None
         with self._lock:
             self._c.execute(
                 "UPDATE cards SET agent_status=?, agent_status_at=?, agent_detail=?,"
@@ -1079,7 +1278,7 @@ class Board:
         before this rule come right on their first poll.
         """
         status, detail = self._status_of(ticket)
-        target = STATUS_COLUMN.get((ticket.get("status") or "").strip(), "queued")
+        target = column_for(ticket)
         moved = False
         if card["agent_column"] != target:
             if card["column"] != target:
@@ -1119,7 +1318,8 @@ class Board:
             (r["id"],)).fetchall()]
         return {"id": r["id"], "name": r["name"], "slug": r["slug"],
                 "summary": r["summary"] or "", "kind": r["kind"] or "",
-                "started_at": r["started_at"], "sort": r["sort"],
+                "started_at": r["started_at"], "stage": r["stage"] or "",
+                "sort": r["sort"],
                 "archived": bool(r["archived"]), "hidden": bool(r["hidden"]),
                 "repos": repos,
                 "created_at": r["created_at"], "updated_at": r["updated_at"]}
@@ -1191,6 +1391,11 @@ class Board:
         counts = {col: sum(1 for c in cards if c["column"] == col) for col in COLUMNS}
         return {**project,
                 "branches": self._branch_views(project["id"], cards),
+                # Its own history travels with it: a page that had to ask for it
+                # separately would draw a product's life one round trip after the
+                # product, which on a phone holding four computers is the timeline
+                # arriving last on every screen.
+                "milestones": self.milestones(project["id"]),
                 "counts": counts, "running": running, "waiting": waiting,
                 "summary_line": _summary_line(running, waiting, queued)}
 
@@ -1632,6 +1837,19 @@ def wants_ustabasi(card: dict) -> bool:
     return (card["column"] == "in_progress"
             and card["executor"] == "coding_agent"
             and not card["ustabasi_id"])
+
+
+def wants_bumping(card: dict) -> bool:
+    """…and is this the drag that asks for one the queue already has?
+
+    In Progress, on the coding executor, already filed, and not yet started by
+    the queue. That last part is what tells it apart from dragging a running
+    card around, which is a move and nothing more.
+    """
+    return (card["column"] == "in_progress"
+            and card["executor"] == "coding_agent"
+            and bool(card["ustabasi_id"])
+            and (card["agent_status"] or "queued") in ("queued", "blocked", "failed"))
 
 
 def ticket_spec(card: dict, project: dict) -> dict:

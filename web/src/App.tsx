@@ -16,11 +16,12 @@ import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
 import { project as projectIn, useDivanView } from './lib/divan';
 import {
   MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, chips, placeOf,
-  projectFromSearch,
-  searchWithProject, updateWaiting, type View,
+  updateWaiting, type View,
 } from './lib/shell';
+import { HOME, pathOf, readPlace, samePlace, searchOf, type Place } from './lib/nav';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
 import { deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
+import { tell, whereFor, whereNote, type Scoped } from './lib/tell';
 import type { Agent, Chat } from './lib/protocol';
 
 interface Selection { hostKey: string; chatId: string }
@@ -38,23 +39,27 @@ export function App() {
   const divan = useDivanView();
   // The panel opens on the Dashboard: it is the screen that is looked at instead
   // of a question being asked. The chat is a place you go to on purpose.
-  const [view, setView] = useState<View>('overview');
+  /** Where the panel opens: whatever the address says. A link to a board, a
+   *  card or a chat is a link to that, and a reload puts you back where you
+   *  were rather than on the Dashboard. */
+  const opened = useRef<Place>(
+    typeof location === 'undefined' ? HOME : readPlace(location.pathname, location.search));
+  const [view, setView] = useState<View>(opened.current.view);
   // Which product is being read lives in the address, the way the phone keeps it
   // in the route — so it survives a reload and a scoped page can be sent to
   // somebody.
-  const [project, setProject] = useState<string | null>(
-    () => projectFromSearch(typeof location === 'undefined' ? '' : location.search));
+  const [project, setProject] = useState<string | null>(opened.current.project);
   // Which tab of a scoped product is open. Beside the product rather than
   // inside the page, so that choosing another product lands on its Overview:
   // "the board" is a thing about one product, not a mode the panel is in.
-  const [tab, setTab] = useState<ProjectTab>('overview');
+  const [tab, setTab] = useState<ProjectTab>(opened.current.tab as ProjectTab);
   // Which face of that product is open, and which card. Beside the product for
   // the same reason the tab is: both are places inside one product, and choosing
   // another product leaves them. Not in the address — a branch and a card are
   // reached by pressing something on the page above them, and the product is the
   // scope worth sending to somebody.
-  const [branch, setBranch] = useState<string | null>(null);
-  const [card, setCard] = useState<string | null>(null);
+  const [branch, setBranch] = useState<string | null>(opened.current.branch);
+  const [card, setCard] = useState<string | null>(opened.current.card);
   const [sel, setSel] = useState<Selection | null>(null);
   const [newChat, setNewChat] = useState<
     { cwd?: string; agent?: { agent: Agent; accountId: string | null } } | null>(null);
@@ -89,18 +94,88 @@ export function App() {
 
   useEffect(() => { fleet.boot(); }, []);
 
-  // "Open in a new window" opens ?host=&chat=. Honoured once the computer that
-  // owns the chat is connected, so a popped-out window lands on the right one.
+  /** A card, from the id an address carries to the `host:id` this panel holds
+   *  it by: the machine is whichever one has that card. A card the boards have
+   *  not been read for yet cannot be found, and null is the honest answer —
+   *  the effect below runs again when they arrive. */
+  const cardKey = useCallback((id: string | null) => {
+    if (!id) return null;
+    const found = divan.cards.find((c) => c.id === id);
+    return found ? `${found.host}:${found.id}` : null;
+  }, [divan.cards]);
+
+  /** …and the same for a chat: which computer holds it. */
+  const hostOfChat = useCallback((id: string | null) => {
+    if (!id) return null;
+    return useFleet.getState().order
+      .find((k) => useFleet.getState().hosts[k]?.chats.some((c) => c.id === id)) ?? null;
+  }, []);
+
+  // An address with a chat in it — "open in a new window", a link somebody
+  // sent, or a reload of a chat that was open — is honoured once the computer
+  // that owns it is connected. `select` rather than `open`: which page to be on
+  // is the address's business too, and it already said.
   useEffect(() => {
     if (sel || !fleet.ready) return;
-    const q = new URLSearchParams(location.search);
-    const chatId = q.get('chat');
+    const chatId = opened.current.chat;
     if (!chatId) return;
-    const wanted = q.get('host');
-    const key = wanted && fleet.hosts[wanted] ? wanted
-      : fleet.order.find((k) => fleet.hosts[k]?.chats.some((c) => c.id === chatId));
-    if (key) open(key, chatId);
-  }, [fleet.ready, fleet.hosts, sel]);
+    const wanted = opened.current.host;
+    const key = wanted && fleet.hosts[wanted] ? wanted : hostOfChat(chatId);
+    if (key) select(key, chatId);
+  }, [fleet.ready, fleet.hosts, sel, hostOfChat]);
+
+  // …and the same for a card: a link to one is a link to a card on whichever
+  // machine has it, and which machine that is cannot be known until that
+  // computer has answered with its board.
+  useEffect(() => {
+    if (card || !opened.current.card) return;
+    const key = cardKey(opened.current.card);
+    if (key) setCard(key);
+  }, [card, divan.cards, cardKey]);
+
+  /** Where the panel is, as one value: what goes in the address, and what the
+   *  back button puts back. */
+  const where: Place = useMemo(() => ({
+    view, project, tab, branch,
+    // A card is named in the address by its own id. `host:id` is how this
+    // browser reaches it and is nobody else's business — the machine is looked
+    // up on the way back in, the way anybody opening the link would.
+    card: card ? (card.split(':').pop() ?? null) : null,
+    chat: sel?.chatId ?? null,
+    // …and the computer is only in the address where a link carried one: a
+    // popped-out window is told which machine, because it may be opened before
+    // that machine has answered.
+    host: opened.current.host && opened.current.chat === sel?.chatId ? opened.current.host : null,
+  }), [view, project, tab, branch, card, sel?.chatId]);
+
+  /** The entry the browser is on. Compared rather than trusted: a render for a
+   *  board poll must not push a second copy of the page you are already on. */
+  const shown = useRef<Place>(opened.current);
+  /** Set while a `popstate` is being applied, so that putting the state back
+   *  does not push the entry we have just gone back from. */
+  const going = useRef(false);
+
+  useEffect(() => {
+    if (typeof history === 'undefined') return;
+    if (going.current) { going.current = false; shown.current = where; return; }
+    if (samePlace(shown.current, where)) return;
+    const first = shown.current === opened.current;
+    const url = pathOf(where) + searchOf(where);
+    // The first move writes over the entry the panel was opened on — that one
+    // is this page, not a step away from it — and every move after it is a
+    // step Back can undo.
+    if (first) history.replaceState(where, '', url);
+    else history.pushState(where, '', url);
+    shown.current = where;
+  }, [where]);
+
+  /** The product the Dashboard is scoped to, as much of it as a new chat needs:
+   *  which computers have it and which folders it owns. Null on the unscoped
+   *  page, which is a chat about nothing in particular. */
+  const scope: Scoped | null = useMemo(() => {
+    const p = projectIn(divan, project);
+    return p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null;
+  }, [divan, project]);
 
   /** Which of the three the panel is in, worked out from the screen rather than
    *  held beside it: a place and the page it is on cannot then disagree. */
@@ -134,6 +209,29 @@ export function App() {
     logs.open(hostKey, chatId);
   }, []);
 
+  // …and the other direction: the browser hands an entry back, and the panel
+  // is drawn where that entry says. Never a push, or Back would be a loop.
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const to: Place = (e.state && typeof e.state === 'object' && 'view' in e.state)
+        ? { ...HOME, ...(e.state as Place) }
+        : readPlace(location.pathname, location.search);
+      going.current = true;
+      shown.current = to;
+      setView(to.view);
+      setProject(to.project);
+      setTab(to.tab as ProjectTab);
+      setBranch(to.branch);
+      setCard(cardKey(to.card));
+      setPeek(false);
+      const host = to.host ?? hostOfChat(to.chat);
+      if (host && to.chat) select(host, to.chat);
+      else setSel(null);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [select]);
+
   const open = useCallback((hostKey: string, chatId: string) => {
     select(hostKey, chatId);
     setPeek(false);
@@ -142,17 +240,17 @@ export function App() {
 
   /** A chip in the project bar, or a row on the Dashboard: the same thing, and
    *  both of them scope this page rather than opening another one — which is
-   *  why neither can be pressed from anywhere else. The address is written
-   *  rather than pushed: going back through every product you have looked at is
-   *  not what the back button is for. */
+   *  why neither can be pressed from anywhere else.
+   *
+   *  It does not touch the address itself. Where the panel is is one value and
+   *  one effect writes it, which is what makes the back button work: this used
+   *  to `replaceState` a product into the URL, and that is exactly the entry
+   *  Back needed and never had. */
   const chooseProject = useCallback((key: string | null) => {
     setProject(key);
     setTab('overview');
     setBranch(null);
     setCard(null);
-    if (typeof history !== 'undefined') {
-      history.replaceState(null, '', location.pathname + searchWithProject(location.search, key));
-    }
   }, []);
 
   // The chat on screen catches itself up the moment its computer answers
@@ -438,11 +536,19 @@ export function App() {
             tab={tab} onTab={setTab}
             branch={branch} onBranch={setBranch}
             card={card} onCard={setCard}
-            // The bar across the bottom of every desktop frame. What it opens is
-            // the palette — the panel's own ⌘K, which is the key the frame
-            // writes on it — rather than a composer for a conversation that does
-            // not exist yet.
-            onAsk={() => setPalette(true)}
+            // The bar across the bottom of every desktop frame, and it is the
+            // composer it looks like: what is typed into it starts a chat and
+            // says it there, without leaving this page — the chat opens as a
+            // window on it, and is in the Chat place's list like any other.
+            // ⌘K still opens the palette.
+            //
+            // On a page about one product it opens *in* that product: on a
+            // machine that has it, in its repository. Asking Divan something
+            // while looking at babysee is asking about babysee, and a chat
+            // that opened in the last folder this computer happened to use is
+            // one you have to orient before it can do anything.
+            onAsk={(text: string) => tell(text, scope)}
+            askNote={whereNote(whereFor(scope, fleet.hosts, fleet.focus))}
           />
         )}
 

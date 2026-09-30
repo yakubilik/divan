@@ -1,5 +1,8 @@
 import { hostKey, useFleet } from './fleet';
-import type { Chat, DivanCard, DivanCardGet, HostConfig, Provider } from './protocol';
+import type {
+  Chat, DaemonStatus, DivanCard, DivanCardGet, DivanExecutor, HostConfig, PoolView,
+  Provider, RunPage,
+} from './protocol';
 
 function slot(key: string) {
   const s = useFleet.getState().hosts[key];
@@ -16,11 +19,45 @@ export const send = (key: string, chatId: string, text: string, attachments: any
     chat_id: chatId, text, ...(attachments.length ? { attachments } : {}),
   });
 
+/** What the agent on a ticket has printed, a page at a time.
+ *
+ *  The run's stream-json is hundreds of kilobytes by the time a worker is
+ *  done, so the daemon hands out the end of it and then whatever has been
+ *  appended since, keeping the place in a cursor. The phone asks the same
+ *  question of the same handler (`app/src/store.ts`, `readRun`). */
+export const readRun = (key: string, id: number, cursor: string | null) =>
+  call<RunPage>(key, 'ustabasi.run', { id, ...(cursor ? { cursor } : {}) });
+
 /** An answer to a ticket in one computer's queue. The queue re-opens a stopped
  *  ticket the moment a note lands, which is why this is the whole of answering a
  *  question a worker asked: nothing else has to be moved or restarted. */
 export const ticketNote = (key: string, id: number, text: string) =>
   call<{ message?: string }>(key, 'ustabasi.note', { id, text });
+
+/** Stop a ticket, wherever it had got to. A running one is killed with its
+ *  process group; the queue's own CLI owns what that means. */
+export const cancelTicket = (key: string, id: number) =>
+  call<{ message?: string }>(key, 'ustabasi.cancel', { id });
+
+/** …and put a stopped or finished one back in the queue. */
+export const restartTicket = (key: string, id: number) =>
+  call<{ message?: string }>(key, 'ustabasi.restart', { id });
+
+/** Which one the supervisor takes next. */
+export const prioritiseTicket = (key: string, id: number, priority = 1) =>
+  call<{ message?: string }>(key, 'ustabasi.priority', { id, priority });
+
+/** Rewrite what a ticket asks for. Refused by the queue while a worker holds
+ *  the card — a brief that changed under somebody is a brief nobody agreed
+ *  to. */
+export const editTicket = (key: string, id: number, card: {
+  title?: string; goal?: string; done_criteria?: string[]; verify_cmd?: string;
+}) => call<{ message?: string }>(key, 'ustabasi.edit', { id, ...card });
+
+/** Take a ticket off the queue for good. A branch with work nobody merged is
+ *  kept unless `force`, and the queue says which it did. */
+export const deleteTicket = (key: string, id: number, force = false) =>
+  call<{ message?: string }>(key, 'ustabasi.delete', { id, force });
 
 /** Move a card into a column of the board, at the bottom of it.
  *
@@ -50,6 +87,23 @@ export const createCard = (key: string, data: {
   project_id: string; title: string; summary?: string; branch?: string; column?: string;
 }) => call<DivanCard>(key, 'divan.card.create', data);
 
+/** A card's faces, rewritten. Only what is sent is touched, and nothing the
+ *  mirror owns can be written from here — the column has `moveCard`, the
+ *  executor has `setExecutor`, and a field writable from two places is how a
+ *  status update ends up dragging a card. */
+export const updateCard = (key: string, cardId: string, fields: {
+  title?: string; summary?: string; repo?: string; machine?: string;
+  agent?: Record<string, any>;
+}) => call<DivanCard>(key, 'divan.card.update', { card_id: cardId, ...fields });
+
+/** Who does this one, or nobody. Clearing is a value rather than an omission:
+ *  a card whose agent was the wrong guess goes back to having none, not to
+ *  having a person on it. */
+export const setExecutor = (
+  key: string, cardId: string, executor: DivanExecutor | null, machine?: string | null,
+) => call<DivanCard>(key, 'divan.card.executor',
+  { card_id: cardId, executor, ...(machine ? { machine } : {}) });
+
 export const interrupt = (key: string, chatId: string) =>
   call(key, 'chat.interrupt', { chat_id: chatId });
 
@@ -70,6 +124,32 @@ export const updateChat = (key: string, chatId: string, patch: Record<string, an
 
 export const deleteChat = (key: string, chatId: string) =>
   call(key, 'chat.delete', { chat_id: chatId });
+
+/** Install (or reinstall) a tool's CLI on that computer. The daemon streams
+ *  what the installer prints as `tool.install.output` events while it runs, and
+ *  answers with the version it ended on — `already: true` where the CLI was
+ *  there all along and nobody asked for it again. */
+export const installTool = (key: string, provider: Provider, force = false) =>
+  call<{ provider: string; version: string | null; already?: boolean; ok?: boolean }>(
+    key, 'tool.install', { provider, ...(force ? { force: true } : {}) });
+
+/** The account pool: what it is set to, and where every sign-in stands under
+ *  it. The pool is what moves a chat onto another sign-in when the one it is on
+ *  runs out, so this is the one place where "what happens at the limit" is a
+ *  setting rather than a surprise. */
+export const poolGet = (key: string, provider?: Provider) =>
+  call<PoolView>(key, 'pool.get', provider ? { provider } : {});
+
+export const poolSet = (key: string, patch: Record<string, any>) =>
+  call<PoolView>(key, 'pool.set', patch);
+
+/** What a restart would cost right now, asked before anybody presses it rather
+ *  than reported after. */
+export const daemonStatus = (key: string) => call<DaemonStatus>(key, 'daemon.status', {});
+
+/** Unpair this browser from that computer — the token this panel holds stops
+ *  working, and nothing else's does. */
+export const revokeSelf = (key: string) => call<{ ok: boolean }>(key, 'device.revoke_self', {});
 
 export const createGroup = (key: string, name: string) => call(key, 'group.create', { name });
 export const renameGroup = (key: string, group_id: string, name: string) =>

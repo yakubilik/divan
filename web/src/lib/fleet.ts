@@ -177,6 +177,14 @@ export const useFleet = create<FleetState>((set, get) => ({
   },
 
   removeHost: (key) => {
+    // Unpairing used to be local only: the panel forgot the computer and the
+    // computer went on trusting the token in it forever. So the computer is
+    // told first, while there is still a socket to tell it on — best effort,
+    // because a machine that cannot be reached must not be a machine you
+    // cannot remove.
+    // Through the store's own `call`, which is the one path a request takes.
+    try { void get().call(key, 'device.revoke_self', {}).catch(() => {}); }
+    catch { /* going anyway */ }
     detach(key);
     saveHosts(loadHosts().filter((h) => hostKey(h) !== key));
     set((s) => {

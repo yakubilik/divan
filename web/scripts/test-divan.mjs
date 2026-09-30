@@ -324,6 +324,13 @@ group('both themes are written into the document');
     }
   };
   walk('src');
+  // One send button in the product: the command bar's, the moment there is
+  // something to send, is the disc the chat's composer has always drawn — the
+  // panel's accent under the white that belongs on a filled colour.
+  ok('the bar’s send is the send the chat has, in the colour the chat sends in',
+    /background: ready \? T\.red : T\.line2, color: ready \? ON_COLOUR : T\.ink/
+      .test(src('src/ui/divan.tsx'))
+    && K.C.accent === K.T.red && K.C.onAccent === K.ON_COLOUR);
   const undeclared = [...used].filter((n) => K.DARK[n] === undefined);
   ok('every token the panel reaches for is one the table declares', undeclared.length === 0, undeclared.join(', '));
   ok('…and it does reach for them by name rather than by value', used.size >= 15, `${used.size}`);
@@ -1111,8 +1118,15 @@ group('the chat was left alone');
   // transcript and the bubble are still drawn the way they were, and the only
   // thing this ticket touched in them is which name a colour has.
   const view = src('src/components/ChatView.tsx');
+  // The composer moved out of the screen and into a part of its own — the
+  // window a chat opens in on the Dashboard draws the same one, and a chat
+  // that could do less in one window than the other was two chats. It is
+  // still the chat's own box, drawn the chat's own way, which is what this
+  // was always about.
+  const composer = src('src/components/ChatComposer.tsx');
   ok('the composer is still a textarea in a rounded field',
-    /<textarea/.test(view) && /R\.composer/.test(view));
+    /<textarea/.test(composer) && /R\.composer/.test(composer)
+    && /ChatComposer/.test(view) && !/ui\/divan/.test(composer));
   ok('the transcript still scrolls under it', /overflowY: 'auto'/.test(view));
   ok('a bubble is still squared off on the corner that points at who said it',
     /borderRadius: `\$\{R\.bubble\}px \$\{R\.bubble\}px 4px/.test(src('src/components/Bubble.tsx')));

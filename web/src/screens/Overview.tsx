@@ -48,7 +48,7 @@ import {
   agentLine, agentRows, calm, calmWords, cardMarks, chip, clock,
   count, counters, figure, freshness, latest, line, marks, staleWords, staleness, summaryOf,
 } from '../lib/overview';
-import { T } from '../lib/theme';
+import { RADIUS, SHADOW, T } from '../lib/theme';
 import { branchOf } from '../lib/project';
 import { idOf } from '../lib/sessions';
 import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
@@ -60,15 +60,21 @@ import { mono } from '../ui/kit';
 import { Sessions } from '../components/Sessions';
 import { Board } from './Board';
 import { Branch } from './Branch';
+import { Branches } from './Branches';
 import { Project } from './Project';
 import { Ticket } from './Ticket';
 
-/** The tabs over a product (Web12 W2, Web14 W6). The frame draws a third,
+/** The tabs over a product (Web12 W2, Web14 W6). The frame draws a fourth,
  *  `Chats 6`; the chat is a place of its own on this end and is reached from
- *  the bar above, so the page offers the two that are its own — what the
- *  product is, and what is on its board. */
+ *  the bar above, so the page offers the three that are its own — what is
+ *  happening on the product, the faces it has beside its code, and its board.
+ *
+ *  Branches is a tab rather than the top of the Overview because the two answer
+ *  different questions: how a product is organised is something a person looks
+ *  up, and what is going on is what they opened the product for. */
 export const PROJECT_TABS = [
-  { key: 'overview', label: 'Overview' }, { key: 'board', label: 'Board' },
+  { key: 'overview', label: 'Overview' }, { key: 'branches', label: 'Branches' },
+  { key: 'board', label: 'Board' },
 ] as const;
 
 export type ProjectTab = typeof PROJECT_TABS[number]['key'];
@@ -78,9 +84,16 @@ export interface OverviewProps {
   /** The product the bar is scoped to, or null for all of them. */
   project: MergedProject | null;
   onProject: (key: string | null) => void;
-  /** The command bar across the bottom opens the panel's own palette, which is
-   *  what ⌘K has always opened here. */
-  onAsk?: () => void;
+  /** What the command bar across the bottom does with a sentence: start a chat
+   *  on the computer in focus and say it there (`lib/tell.ts`). The page does
+   *  not move — the chat opens as a window on this one — so the bar is a
+   *  composer and not a way out of the Dashboard. */
+  onAsk?: (text: string) => Promise<unknown> | unknown;
+  /** What the bar will do that is not the obvious thing — the folder a chat
+   *  would open in on a page about one product. Said over the bar, because a
+   *  chat that opens somewhere you did not expect is worse than one you had to
+   *  point at a folder. */
+  askNote?: string | null;
   /** Which tab of a scoped product is open. Held above this screen, beside the
    *  product it belongs to, so that scoping to another product lands on its
    *  Overview rather than on whichever tab the last one was left on. */
@@ -97,7 +110,7 @@ export interface OverviewProps {
 }
 
 export function Overview({
-  view, project, onProject, onAsk, tab, onTab, branch, onBranch, card, onCard,
+  view, project, onProject, onAsk, askNote, tab, onTab, branch, onBranch, card, onCard,
 }: OverviewProps) {
   const old = staleness(view);
   const agents = agentRows(view);
@@ -148,7 +161,13 @@ export function Overview({
         tone={!project && old ? 'amber' : undefined}
       >
         {!!project && (
-          <Tabs tabs={PROJECT_TABS.map((t) => ({ ...t }))} value={here}
+          <Tabs
+            tabs={PROJECT_TABS.map((t) => (t.key === 'branches'
+              // The frame's `Chats 6`: the number belongs to the tab that has
+              // one, and a product whose faces have not arrived yet has none.
+              ? { ...t, count: project.branches.length || null }
+              : { ...t }))}
+            value={here}
             onChange={(key) => { setDrafting(false); onTab?.(key as ProjectTab); }}
             style={{ marginLeft: 14 }} />
         )}
@@ -193,18 +212,75 @@ export function Overview({
             onCard={(t) => onCard?.(idOf(t.card))}
           />
         )
-        : <Project view={view} project={project} onBranch={(kind) => onBranch?.(kind)} />)}
+        : here === 'branches'
+          ? (
+            <Branches
+              project={project} now={view.now}
+              onBranch={(kind) => onBranch?.(kind)}
+            />
+          )
+          : <Project view={view} project={project} onCard={(c) => onCard?.(idOf(c))} />)}
       {/* The bar and the windows are over the page rather than in it: the page
           scrolls, and a question that scrolled away with it would be a
           notification again. */}
-      {!!onAsk && (
-        <div style={{
-          position: 'fixed', left: '50%', bottom: 22, transform: 'translateX(-50%)', zIndex: 10,
-        }}>
-          <CommandBar placeholder="Tell Divan anything…" onClick={onAsk} />
-        </div>
-      )}
+      {!!onAsk && <Bar onAsk={onAsk} note={askNote ?? null} />}
       <Sessions view={view} />
+    </div>
+  );
+}
+
+/** The command bar, with what it is for in it.
+ *
+ *  A sentence typed here is said to a new chat on the computer in focus, and
+ *  the page it was typed on is the page it is read on: the chat opens as a
+ *  window in the corner beside the questions (`components/Sessions.tsx`). So
+ *  the bar keeps only what a composer has to keep — the words, whether they are
+ *  in flight, and what the computer said if they did not land. The words are
+ *  kept on a failure rather than cleared: a sentence a screen swallowed is a
+ *  sentence somebody has to type again.
+ *
+ *  ⌘K still opens the palette. It is written on the bar because that is where
+ *  the frame writes it, and because a bar you can reach from the keyboard is
+ *  the point of the key. */
+function Bar({ onAsk, note }: {
+  onAsk: (text: string) => Promise<unknown> | unknown;
+  note: string | null;
+}) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const say = async () => {
+    const words = text.trim();
+    if (!words || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onAsk(words);
+      setText('');
+    } catch (e: any) {
+      setError(e?.message ?? 'That did not reach the computer');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', left: '50%', bottom: 22, transform: 'translateX(-50%)', zIndex: 10,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+    }}>
+      {(busy || !!error || !!note) && (
+        <div style={{
+          ...mono, maxWidth: 420, fontSize: 11, color: error ? T.red : T.ink3,
+          background: T.s2, padding: '6px 10px', borderRadius: RADIUS.well, boxShadow: SHADOW.pop,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{error ?? (busy ? 'starting a chat…' : note)}</div>
+      )}
+      <CommandBar
+        placeholder="Tell Divan anything…" value={text} onChange={setText}
+        onSend={() => { void say(); }}
+      />
     </div>
   );
 }

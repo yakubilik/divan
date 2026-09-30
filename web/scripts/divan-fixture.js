@@ -49,6 +49,18 @@ const project = (over = {}) => ({
   summary: 'client portals for studios',
   kind: 'web',
   started_at: NOW - 400 * 86_400,
+  // Where it is in its life, and the life itself: the one pair on a product
+  // nothing counts, so a fixture that left them out would be a fixture of a
+  // product nobody had ever said anything about.
+  stage: 'live',
+  milestones: [
+    { id: 'm1', at: NOW - 400 * 86_400, title: 'Project started',
+      note: 'first commit', kind: 'start' },
+    { id: 'm2', at: NOW - 210 * 86_400, title: 'v1.0 live',
+      note: 'first paying studio', kind: 'live' },
+    { id: 'm3', at: NOW + 30 * 86_400, title: 'v4.0 · Custom domains',
+      note: 'target launch', kind: 'target' },
+  ],
   repos: ['/Users/x/projects/quire'],
   sort: 1,
   archived: false,
@@ -86,6 +98,9 @@ export function studio() {
       project({
         id: 'p-hush', name: 'Hush', slug: 'hush', summary: 'a quieter phone',
         kind: 'app', repos: ['/Users/x/projects/hush'], sort: 2,
+        // A product nobody has said either of those about, which is the state
+        // the page has to draw without a rail and without a line.
+        stage: '', started_at: null, milestones: [],
         running: 0, waiting: 0, counts: { done: 2 },
         branches: [branch('App Review', { cards: { done: 2 } })],
       }),

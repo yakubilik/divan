@@ -18,9 +18,11 @@ import { Icon, P, Spinner, mono } from '../ui/kit';
 import { Button, Card, EmptyState, Note, Row, SectionHeader, StatusDot } from '../ui/divan';
 import type { Tone } from '../lib/theme';
 import { ago, uptime } from '../lib/format';
+import { daemonStatus } from '../lib/actions';
 import { onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
 import type {
-  LastUpdate, PanelBuild, Release, Restarting, RestartResult, UpdateResult, UpdateStatus,
+  DaemonStatus, LastUpdate, PanelBuild, Release, Restarting, RestartResult, UpdateResult,
+  UpdateStatus,
 } from '../lib/protocol';
 
 const IC = {
@@ -92,6 +94,11 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
   const [result, setResult] = useState<UpdateResult | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [restart, setRestart] = useState<Restarting | null>(null);
+  /** What a restart would cost right now, asked before anybody presses it. The
+   *  daemon has always been able to say; the panel used to find out afterwards,
+   *  from the answer to the restart itself — which is a minute too late to
+   *  decide not to. */
+  const [cost, setCost] = useState<DaemonStatus | null>(null);
   const [asking, setAsking] = useState(false);
 
   const online = slot.status === 'online';
@@ -142,6 +149,18 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
       void check(false);
     }
   }, [slot.status]);
+
+  useEffect(() => {
+    if (!online) { setCost(null); return; }
+    let mine = true;
+    daemonStatus(hostKey)
+      .then((r) => { if (mine) setCost(r?.supervisor ? r : null); })
+      // An older daemon has no answer for this, which is not a restart that
+      // costs nothing — it is a question that was not answered, and the button
+      // says as much as it ever did.
+      .catch(() => { if (mine) setCost(null); });
+    return () => { mine = false; };
+  }, [hostKey, online, slot.info?.started_at, restart?.state]);
 
   const apply = async () => {
     setApplying(true);
@@ -274,7 +293,11 @@ function HostCard({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
           slot.info ? `up ${uptime(slot.info.uptime_s)}` : 'no uptime reported',
           // Counted on the way back in, so it is every start this database has
           // ever seen — including the ones an update asked for.
-          slot.info?.restarts && `start #${slot.info.restarts}`)}
+          slot.info?.restarts && `start #${slot.info.restarts}`,
+          // …and what pressing the button beside this would cost, before it is
+          // pressed: the chats with work in them, and whether anything would
+          // bring the daemon back afterwards.
+          restartCost(cost))}
         right={draining
           ? <Button small face="outline" label="Cancel" onClick={cancelRestart} />
           : <Button
@@ -353,4 +376,23 @@ export function Update() {
       </div>
     </>
   );
+}
+
+/** What a restart would cost, in the words the row has room for.
+ *
+ *  Two facts, and both of them change the answer to "shall I press this": how
+ *  much work is in flight, and whether anything would start the daemon again.
+ *  An unsupervised computer that is restarted from here comes back only if
+ *  somebody is sitting at it — that is worth knowing beforehand, and the
+ *  daemon has always been able to say it. */
+export function restartCost(status: DaemonStatus | null): string | null {
+  if (!status) return null;
+  const busy = (status.pending ?? []).filter((p) => p.busy).length;
+  const queued = (status.pending ?? []).reduce((n, p) => n + (p.queued || 0), 0);
+  const parts: string[] = [];
+  if (busy) parts.push(`${busy} chat${busy === 1 ? '' : 's'} running`);
+  if (queued) parts.push(`${queued} message${queued === 1 ? '' : 's'} queued`);
+  if (!parts.length) parts.push('nothing in flight');
+  if (status.supervisor?.supervised === false) parts.push('nothing would restart it');
+  return parts.join(' · ');
 }

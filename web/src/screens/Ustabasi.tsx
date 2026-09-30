@@ -359,6 +359,8 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
         <TicketChat
           t={open}
           tone={STATUS[open.status] || STATUS.queued}
+          hostKey={focus}
+          onChanged={load}
           onClose={() => setOpenId(null)}
           onNote={(text) => sendNote(open.id, text)}
         />

@@ -495,7 +495,7 @@ function HostsSection() {
     <>
       <Head
         title="Computers"
-        hint="The panel connects to every paired computer at once. Removing one only cuts this panel’s access."
+        hint="The panel connects to every paired computer at once. Removing one revokes this browser’s pairing on that computer and forgets it here; nothing else on it is touched."
       />
 
       {order.map((k) => {
@@ -548,7 +548,7 @@ function HostsSection() {
       {doomed && (
         <Confirm
           title="Remove this computer?"
-          body={`${hosts[doomed]?.info?.name || hosts[doomed]?.cfg.name || doomed} leaves this panel and is disconnected. Nothing on that computer is deleted — pair again to add it back.`}
+          body={`${hosts[doomed]?.info?.name || hosts[doomed]?.cfg.name || doomed} leaves this panel, and this browser's pairing is revoked on it so the token stops working. Nothing else on that computer is touched — pair again to add it back.`}
           action="Remove"
           onConfirm={() => removeHost(doomed)}
           onClose={() => setDoomed(null)}

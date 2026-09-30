@@ -2,30 +2,13 @@ import { useMemo, useState } from 'react';
 import { C, R } from '../lib/theme';
 import { Icon, P, Radio, Label } from '../ui/kit';
 import { Modal, ModalHead } from './Modal';
-import { tilde } from '../lib/format';
+import {
+  FIELD_LABEL, accountName, fieldRows, fieldValue, type Field,
+} from '../lib/fields';
 import type { Catalog, Chat, CliAccount, LimitWindow, Project } from '../lib/protocol';
 
-export type Field = 'model' | 'effort' | 'perm_mode' | 'cwd' | 'account_id';
-
-const TITLE: Record<Field, string> = {
-  model: 'Model', effort: 'Effort', perm_mode: 'Permission mode', cwd: 'Project folder',
-  account_id: 'Account',
-};
-
-/** The daemon labels the machine's own sign-in in its own words; everything
- *  else is the label it was paired under. */
-export function accountName(a: CliAccount): string {
-  return a.is_default ? "This computer's account" : a.label;
-}
-
-/** The fullest window the account last reported — what "limit reached" means
- *  in a number, next to the account it belongs to. */
-function usage(windows: LimitWindow[] | undefined): string | undefined {
-  const top = (windows ?? [])
-    .filter((w) => typeof w.utilization === 'number')
-    .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0))[0];
-  return top ? `${Math.round((top.utilization ?? 0) * 100)}% used` : undefined;
-}
+export type { Field };
+export { accountName };
 
 export function FieldSheet({ field, chat, catalog, projects, accounts, limits, busy, onPick, onClose }: {
   field: Field;
@@ -40,44 +23,13 @@ export function FieldSheet({ field, chat, catalog, projects, accounts, limits, b
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
-  const pc = catalog?.[chat.provider] ?? null;
 
-  const rows = useMemo(() => {
-    if (field === 'account_id') {
-      return accounts
-        .filter((a) => a.provider === chat.provider && (a.logged_in || a.is_default))
-        .map((a) => ({
-          // The default account is "no account id", not an id of its own.
-          value: a.is_default ? '' : a.id,
-          label: accountName(a),
-          hint: a.logged_in ? a.detail : 'not signed in',
-          right: usage(limits[a.is_default ? `default-${chat.provider}` : a.id]),
-        }));
-    }
-    if (field === 'model') {
-      return (pc?.models ?? []).map((m) => ({ value: m.id, label: m.label || m.id, hint: m.hint, right: m.id }));
-    }
-    if (field === 'effort') {
-      return (pc?.efforts ?? []).map((e) => ({ value: e, label: e, hint: undefined, right: undefined }));
-    }
-    if (field === 'perm_mode') {
-      return (pc?.perm_modes ?? []).map((m) => ({
-        value: m, label: m,
-        hint: m === 'bypass' ? 'Skips the permission questions. The dangerous-command list still asks.' : undefined,
-        right: undefined,
-      }));
-    }
-    const q = query.trim().toLocaleLowerCase('tr');
-    return projects
-      .filter((p) => !q || p.name.toLocaleLowerCase('tr').includes(q) || p.path.toLocaleLowerCase('tr').includes(q))
-      .map((p) => ({ value: p.path, label: p.name, hint: undefined, right: tilde(p.path) }));
-  }, [field, pc, projects, accounts, limits, chat.provider, query]);
+  const rows = useMemo(
+    () => fieldRows(field, { chat, catalog, projects, accounts, limits, query }),
+    [field, catalog, projects, accounts, limits, chat.provider, query],
+  );
 
-  const current = field === 'cwd' ? chat.cwd
-    : field === 'model' ? chat.model
-    : field === 'effort' ? (chat.effort ?? '')
-    : field === 'account_id' ? (chat.account_id ?? '')
-    : chat.perm_mode;
+  const current = fieldValue(field, chat);
 
   // Moving a chat to another account starts a new thread there: a resume id
   // belongs to one account's transcript store, and the daemon drops it on the
@@ -101,7 +53,7 @@ export function FieldSheet({ field, chat, catalog, projects, accounts, limits, b
   return (
     <Modal onClose={onClose} width={560}>
       <ModalHead
-        title={TITLE[field]}
+        title={FIELD_LABEL[field]}
         subtitle={<span>{chat.title || 'New chat'} · applies immediately</span>}
         onClose={onClose}
       />

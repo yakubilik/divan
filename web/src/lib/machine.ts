@@ -30,7 +30,7 @@ import { outOfQuota, spent, waiting, type DivanView, type HostView, type MergedC
   type MergedQuota } from './divan';
 import { executorWord } from './overview';
 import { executorFace } from './sessions';
-import type { Chat, CliAccount, DivanExecutor, LimitWindow } from './protocol';
+import type { Chat, CliAccount, DivanExecutor, LimitWindow, Provider } from './protocol';
 import { EXECUTORS, type State, type Tone } from './theme';
 
 /** How long ago, in whole words — the panel's own `uptime` where a duration is
@@ -252,6 +252,10 @@ export interface SignInSource {
   accounts: CliAccount[];
   /** account id → the plan windows that account last reported */
   limits: Record<string, LimitWindow[]>;
+  /** Which CLIs that computer actually has. A sign-in to a tool the machine
+   *  has not installed is not a sign-in you can renew — it is a tool to
+   *  install — and the computer says which it has (`host.info`). */
+  versions?: { claude: string | null; codex: string | null } | null;
   /** what is open on that computer, for "used by" and "last used" */
   chats: Pick<Chat, 'account_id' | 'updated_at' | 'status'>[];
 }
@@ -261,6 +265,9 @@ export interface SignIn {
   key: string;
   hostKey: string;
   accountId: string;
+  /** Which tool this sign-in is for — what an installer would be asked to
+   *  install, and which catalog it belongs to. */
+  provider: Provider;
   /** The two letters in the square: `CL`, `CX`. */
   mark: string;
   title: string;
@@ -290,7 +297,11 @@ export function expiresAt(a: CliAccount): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-export function signInState(a: CliAccount, now: number): SignInState {
+export function signInState(a: CliAccount, now: number, installed?: boolean): SignInState {
+  // The computer's own answer first: a tool that is not on the machine is
+  // `missing` whatever the account's own words say, because what that row
+  // needs is an installer and not a login.
+  if (installed === false) return 'missing';
   if (!a.logged_in) return /not installed/i.test(a.detail) ? 'missing' : 'signedOut';
   const at = expiresAt(a);
   if (at == null) return 'connected';
@@ -298,10 +309,10 @@ export function signInState(a: CliAccount, now: number): SignInState {
   return at - now <= EXPIRING_SOON_S ? 'expiring' : 'connected';
 }
 
-/** What the row says out loud, which is the state in whole words and — while
- *  it is still working — how long that is true for. */
-export function signInWords(a: CliAccount, now: number, ago: Ago): string {
-  const state = signInState(a, now);
+/** What the row says out loud: the state in whole words and, while it is still
+ *  working, how long that is true for. */
+export function signInWords(a: CliAccount, now: number, ago: Ago, installed?: boolean): string {
+  const state = signInState(a, now, installed);
   if (state === 'missing') return 'the CLI is not installed';
   if (state === 'signedOut') return 'signed out';
   if (state === 'expired') return 'expired · sign in again';
@@ -314,7 +325,10 @@ const SIGN_IN_TONE: Record<SignInState, Tone> = {
 };
 
 const SIGN_IN_ACTION: Record<SignInState, string> = {
-  connected: 'Manage', expiring: 'Renew', expired: 'Renew', signedOut: 'Sign in', missing: 'Manage',
+  connected: 'Manage', expiring: 'Renew', expired: 'Renew', signedOut: 'Sign in',
+  // A tool that is not on the computer is installed, not managed. It is the
+  // one row on that page whose button does the job itself.
+  missing: 'Install',
 };
 
 /** Every sign-in on every paired computer, worst first: the ones that have
@@ -326,7 +340,8 @@ export function signIns(sources: SignInSource[], now: number, ago: Ago, stamp: S
   const rows: SignIn[] = [];
   for (const s of sources) {
     for (const a of s.accounts) {
-      const state = signInState(a, now);
+      const has = s.versions ? !!s.versions[a.provider as 'claude' | 'codex'] : undefined;
+      const state = signInState(a, now, has);
       const used = s.chats.filter((c) => (c.account_id ?? '') === (a.is_default ? '' : a.id));
       const last = used.reduce((n, c) => Math.max(n, c.updated_at || 0), 0)
         || windowAt(s.limits[a.id]);
@@ -334,16 +349,21 @@ export function signIns(sources: SignInSource[], now: number, ago: Ago, stamp: S
         key: `${s.hostKey}:${a.id}`,
         hostKey: s.hostKey,
         accountId: a.id,
+        provider: a.provider as Provider,
         mark: PROVIDER_MARK[a.provider] ?? a.provider.slice(0, 2).toUpperCase(),
         title: a.label,
         note: [a.detail.trim(), s.machine].filter(Boolean).join(' · '),
         state,
-        says: signInWords(a, now, ago),
+        says: signInWords(a, now, ago, has),
         tone: SIGN_IN_TONE[state],
         usedBy: usedWords(used.length, a.is_default, s.machine),
         lastUsed: last ? stamp(last) : '',
         action: SIGN_IN_ACTION[state],
-        wants: state === 'expiring' || state === 'expired' || state === 'signedOut',
+        // Everything that is not working wants something doing: a renewal, a
+        // sign-in, or — now that the page can do it — an installer. A tool
+        // that is not on the computer used to be the one broken row nobody
+        // counted, because nothing here could have fixed it.
+        wants: state !== 'connected',
       });
     }
   }

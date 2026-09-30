@@ -355,6 +355,18 @@ export const SPECIMENS: Specimen[] = [
     node: <CommandBar placeholder="Tell Divan anything…" />,
   },
   {
+    // The state no artboard draws: the bar with a sentence in it. The send is
+    // a button now, and it says so in the one colour that means "this will
+    // send" and nothing else.
+    name: 'CommandBarReady', frame: 'Web12 W1 · with something to send', width: 420,
+    node: (
+      <CommandBar
+        placeholder="Tell Divan anything…" value="ship the beta tonight"
+        onChange={() => {}} onSend={() => {}}
+      />
+    ),
+  },
+  {
     name: 'Figures', frame: 'Web14 W6 · a branch card', width: 380,
     node: (
       <Card>

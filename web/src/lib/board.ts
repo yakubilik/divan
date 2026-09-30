@@ -64,6 +64,14 @@ export function cardMark(card: MergedCard, now: number, ago: Ago): CardMark | nu
   if (card.agent_status === 'running') return faced('running', `Running${since}`);
   if (card.agent_status === 'verified') return faced('done', 'Passed review');
   if (card.agent_status === 'cancelled') return faced('quiet', 'Cancelled');
+  // Dragged into In Progress, and the queue has been told to take it next —
+  // but there are only so many slots, so it is still waiting. Without this the
+  // card says nothing at all, which is what made dragging one read as a drag
+  // that did nothing.
+  if (card.column === 'in_progress' && card.ustabasi_id != null
+      && (card.agent_status ?? 'queued') === 'queued') {
+    return faced('quiet', 'Next up');
+  }
   // A person's own card, which is the fourth state the board's summary line
   // counts. Queued is the fifth and carries no mark: the frame's Queued column
   // is four plain cards.
