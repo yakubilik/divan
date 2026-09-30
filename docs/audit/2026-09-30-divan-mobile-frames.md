@@ -314,9 +314,10 @@ listed there: the date, `Conversations` and its note, `? Research asks`,
 **S3 — everything that needs a human · `farkli`** · `app/waiting.tsx`, dark ·
 frame 42, app 42 · 11 / 1 left
 
-* frame `Coder asks`, `Coder is stuck` → app `Coder`. The card names the executor
-  and the group head says which kind it is; the frame says the verb twice.
-  `src/components/waiting.tsx:54-84`, `src/waiting.ts:33-50`.
+* frame `Coder asks`, `Coder is stuck` → app `Coder`. The frame puts the verb on
+  the card as well as the executor's name; the app leaves it to the group head
+  above the card, which already says which of the four kinds this is.
+  `src/components/waiting.tsx:54-84`, `src/waiting.ts:26-58`.
 * frame `Back to Queued` on the stuck card → not offered. A stuck card offers
   `Open live view`, which is the run itself; moving a card back is the board's
   gesture. `src/waiting.ts:366-388`.
