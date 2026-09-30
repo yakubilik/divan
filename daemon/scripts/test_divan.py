@@ -991,7 +991,16 @@ async def wire() -> None:
 
     check("the ticket's title is the human face",
           by_ticket[1]["title"], "the invite mail never arrives")
-    check("and the agent's goal never lands on it", by_ticket[1]["summary"], "")
+    # The old rule was that nothing of the agent's went on the human face, and
+    # what it produced was an empty box on every card — because every card here
+    # was a ticket first. So the box opens on what the brief opens on, and it is
+    # a default: the first thing a person writes replaces it.
+    check("and the box opens on what the brief opens on, rather than empty",
+          by_ticket[1]["summary"], "Find where the mail is dropped.")
+    check("…a long brief is cut to its first sentences",
+          divan.opening("One. Two. Three. Four. Five."), "One. Two. Three.")
+    check("…and a ticket with no brief still leaves the box empty",
+          divan.opening(""), "")
     check("it lands on the agent face, where it belongs",
           board.get_card(by_ticket[1]["id"])["agent"]["goal"],
           "Find where the mail is dropped.")

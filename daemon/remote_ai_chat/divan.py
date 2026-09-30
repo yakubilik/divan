@@ -442,6 +442,41 @@ def _json(raw, default):
         return default
 
 
+#: How much of a brief stands in for the sentences nobody wrote. Three
+#: sentences is what the human face is sized for ("title + 3 sentences"), and a
+#: goal's first three are the ones that say what the work is; the rest is how.
+OPENING_SENTENCES = 3
+
+
+def opening(text: str) -> str:
+    """The first few sentences of a brief, as a card's human face.
+
+    The rule used to be that nothing of the agent's went on the human face, and
+    a card the queue made opened with an empty box saying nobody had written
+    anything. That is true and it is useless: **every** card on this computer is
+    made by the queue, so every card opened blank, and the one thing a person
+    wanted to know — what is this — was in the brief they had to unfold.
+
+    So the box is filled with what the brief opens on, which is the nearest
+    thing to what a person actually said when they filed it. It is a default and
+    not a verdict: the box is editable, and the moment somebody writes their own
+    sentences these are gone.
+    """
+    body = " ".join((text or "").split())
+    if not body:
+        return ""
+    out: list[str] = []
+    for part in re.split(r"(?<=[.!?])\s+", body):
+        part = part.strip()
+        if not part:
+            continue
+        out.append(part)
+        if len(out) >= OPENING_SENTENCES or len(" ".join(out)) > MAX_SUMMARY - 80:
+            break
+    said = " ".join(out)[:MAX_SUMMARY]
+    return said
+
+
 def _lines(value) -> list[str]:
     """A list of short strings, however it was sent: a list, or one string."""
     if value is None:
@@ -1195,9 +1230,10 @@ class Board:
             card = self.create_card(
                 project["id"],
                 title=(ticket.get("title") or f"ticket {ticket['id']}"),
-                # Nothing of the agent's goes on the human face, not even on a
-                # card that was an agent's ticket before it was a card.
-                summary="",
+                # What the brief opens on, until somebody writes their own
+                # sentences over it (`opening`). Every card here is a ticket
+                # first, so a human face that stayed empty was every card's.
+                summary=opening(ticket.get("goal") or ""),
                 branch=branch["kind"],
                 column=column_for(ticket),
                 executor="coding_agent", machine=machine, repo=ticket.get("repo"),
@@ -1279,6 +1315,17 @@ class Board:
         """
         status, detail = self._status_of(ticket)
         target = column_for(ticket)
+        # A card made before the human face had a default, or one whose sentences
+        # were cleared: it gets the brief's opening on the next pass and keeps it
+        # until somebody writes their own. Only into an empty box — the mirror
+        # never writes over a person.
+        if not (card["summary"] or "").strip():
+            said = opening(ticket.get("goal") or "")
+            if said:
+                with self._lock:
+                    self._c.execute("UPDATE cards SET summary=? WHERE id=?", (said, card["id"]))
+                    self._c.commit()
+                card = dict(card, summary=said)
         moved = False
         if card["agent_column"] != target:
             if card["column"] != target:

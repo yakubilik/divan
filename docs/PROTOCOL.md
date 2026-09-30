@@ -169,11 +169,14 @@ that moves a card closes the gap behind it and opens one where it goes.
 
 **A card has two faces.** The human face is `title` — one line — and `summary`,
 two or three sentences. The agent face is `goal`, `done_criteria`, `verify_cmd`,
-`constraints`, `paths` and `notes`, as long as it needs to be. Text an agent
-produced never lands on the human face, including on the cards made out of
-tickets that predate the board: their titles come across and their goals go to
-the agent face. The board's card list carries the human face and the marks only;
-`divan.card.get` is the one place both travel together.
+`constraints`, `paths` and `notes`, as long as it needs to be. A card made out of
+a ticket opens with the **first sentences of its brief** in `summary` — a
+default, not a verdict: the box is editable and the first thing a person writes
+replaces it. The rule was once that nothing of the agent's went on the human
+face at all, and what that produced was an empty box on every card, because
+every card on this computer is a ticket first. The board's card list carries the
+human face and the marks only; `divan.card.get` is the one place both travel
+together.
 
 **Every card has an executor, or none yet.** `coding_agent` is ustabasi and is
 the only one this daemon can start. `branch_agent` is the overnight
