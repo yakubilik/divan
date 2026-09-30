@@ -31,6 +31,12 @@ jobs:
           - { os: macos-latest, python: "3.13" }
     steps:
       - uses: actions/checkout@v4
+      # The matrix python, actually installed: without this the jobs all ran on
+      # whichever python the runner image ships, and once that python started
+      # calling itself externally managed, uv refused to install into it at all.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
