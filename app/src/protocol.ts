@@ -419,6 +419,11 @@ export interface DivanProject {
   /** The day the product began, which is not `created_at` — that is the moment
    *  its row was written. Null where nobody said. */
   started_at?: number | null;
+  /** Where it is in its life: `idea`, `build`, `beta`, `live`, `growth`. The one
+   *  fact about a product no counter on a machine can work out — a repository
+   *  with three commits a day can be a dead experiment — so it is written by a
+   *  person, and it is empty until somebody says. */
+  stage?: string;
   /** A product is not a folder: isghocam owns its site and its API. */
   repos: string[];
   sort: number; archived: boolean; created_at: number; updated_at: number;
@@ -432,6 +437,22 @@ export interface DivanProject {
    *  turned down, and every card whose executor is a person. */
   waiting: number;
   summary_line: string;
+  /** What has happened to it, dated, oldest first — and what is promised, which
+   *  is the same list with a date in the future. Absent from a daemon that
+   *  predates it. */
+  milestones?: DivanMilestone[];
+}
+
+/** One dated thing in a product's life. `kind` is `start`, `live`, `target` or
+ *  nothing: the three a screen reads by name, and everything else is an event on
+ *  the line. `note` is usually where the date was read from — a commit, a tag —
+ *  so a line on a timeline can be checked against the thing behind it. */
+export interface DivanMilestone {
+  id: string;
+  at: number;
+  title: string;
+  note: string;
+  kind: string;
 }
 
 export interface DivanCard {
