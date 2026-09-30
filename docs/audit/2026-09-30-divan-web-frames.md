@@ -39,8 +39,8 @@ somebody already wrote down in the code, and the rest is the fixture.
 | 4 | W2/W4's board head counts `○ 1 yours`; the panel's head counts stuck, asking and running and not that | `web/src/lib/overview.ts:339` |
 | 5 | W7's `Pull requests` and `Recent commits` blocks are `Cards` and `Recent activity` | `web/src/screens/Branch.tsx:129,147` |
 | 6 | W8's detail rows `Created by · Divan · from your chat` are not there; the panel has `Ticket`, `Repository` and `Product` instead | `web/src/lib/ticket.ts:211-226` |
-| 7 | W9's hint `press N anywhere on the board` is not on the page — the key works, the line was never drawn | `web/src/screens/Board.tsx:63` |
-| 8 | W10/W12's bar ends in `mini unreachable · 2h 14m · quota 64%`; the panel's bar ends in the clock, and the fleet's state is `mini cannot be reached.` under the drawer title with the quota as a card on the page | `web/src/screens/Machine.tsx:67`, `web/src/components/Shell.tsx:109-111` |
+| 7 | W9's hint `press N anywhere on the board` is not on the page — the key itself is wired, the line was never drawn | `web/src/screens/Board.tsx:74-87` |
+| 8 | W10/W12's bar ends in `mini unreachable · 2h 14m · quota 64%`; the panel's bar ends in the clock, and the fleet's state is `mini cannot be reached.` under the drawer title with the quota as a card on the page | `web/src/screens/Machine.tsx:67`, `web/src/components/Shell.tsx:110-111` |
 | 9 | W13's column head is `what it's for`, the panel's is `what it is for`; and its `Writes code, runs tests, opens PRs` is `writes code · opens PRs` | `web/src/screens/Executors.tsx:31`, `web/src/lib/theme.ts:334` |
 | 10 | W15's first button is `View only`, the panel's is `Connect` | `web/src/screens/Screen.tsx:453` |
 | 11 | W17's page note is `backups, logs, keys, data`, the panel's is `the update, the logs, the keys and the folders` | `web/src/screens/Admin.tsx:68` |
@@ -89,7 +89,7 @@ the artboard's own invented evening against the fixture's, and the script accoun
 
 - **frame:** `○ 1 yours` in the product head. **panel:** stuck, asking and running, and no count of the cards that are a person's own — `marks()` has three states where `cardMarks()` on the project card has four (`web/src/lib/overview.ts:339-346`, used at `web/src/screens/Overview.tsx:126`)
 - the bar's clock and its theme chip — *Across every page*
-- the frame's third tab, `Chats 6`, is not drawn: a chat carries a folder and nothing else on this daemon (`web/src/screens/Project.tsx:11-16`)
+- the frame's third tab, `Chats 6`, is not drawn: a chat carries a folder and nothing else on this daemon (`web/src/screens/Project.tsx:12-16`)
 - the panel's head carries `+ New ticket` where W2 does not; it is one head for both tabs and Web14 W6 draws that word on it (`web/src/screens/Overview.tsx:70-74`)
 
 The four columns, their names, their counts and their subtitles, the card faces, the
@@ -124,7 +124,7 @@ cannot see that it is in the wrong place.
 
 - the bar's clock and its theme chip — *Across every page*
 - the frame's measured figures on a product and on each branch (`MRR`, `trial→paid`, `churn`, `clicks 28d`, `avg pos`, `indexed`, `open PRs`, `212/214 tests`, `v3.18 deployed`) are not drawn: nothing carries a history, a test result or a deploy (`web/src/screens/Overview.tsx:20-28`, `web/src/screens/Branch.tsx:12-20`)
-- the frame's third column, `Conversations filed here` with its four filed items, and the `Chats 6` tab over the page: a chat carries a folder and nothing else here, and what stands in that column is the repositories and what the agents last said (`web/src/screens/Project.tsx:11-16`)
+- the frame's third column, `Conversations filed here` with its four filed items, and the `Chats 6` tab over the page: a chat carries a folder and nothing else here, and what stands in that column is the repositories and what the agents last said (`web/src/screens/Project.tsx:12-16`)
 - `+ Add branch` is not offered: nothing creates a branch from a client (`web/src/screens/Project.tsx:17-21`)
 - a branch with nothing behind it says `no source connected yet` where the frame writes a sentence about it (`web/src/screens/Branch.tsx:11-25`)
 
@@ -154,7 +154,7 @@ grid are the frame's.
 - **panel:** `Ticket #41`, `Repository`, `Product` — three rows the frame's panel does not have, and the frame's `Chat · 2 conversations` is not one of them (`web/src/lib/ticket.ts:211-226`)
 - the bar's clock and its theme chip — *Across every page*
 - the column pill has no chevron and the corner has no link or ellipsis: the column is what a board writes, and dragging a card is how it is written (`web/src/screens/Ticket.tsx:26-30`)
-- a card nobody has written sentences for says so in the box rather than borrowing the agent's goal, and a machine that cannot be reached says so where the brief would be (`web/src/screens/Ticket.tsx:12-27`)
+- a card nobody has written sentences for says so in the box rather than borrowing the agent's goal, and a machine that cannot be reached says so where the brief would be (`web/src/screens/Ticket.tsx:14-17,23-24`)
 
 Both faces and the live half are the frame's: the fixed box with its character count, the
 brief with `GOAL`, `DONE WHEN · n/m`, `TEST` and `CONSTRAINTS · FILES`, the details panel,
@@ -167,10 +167,10 @@ state.
 **farkli.** Frame 74 texts, panel 71 · 1 in the frame only · 1 on the page only · 4 gaps
 · and the bar's 2.
 
-- **frame:** `press N anywhere on the board`, at the end of the head. **panel:** nothing there. The key itself is wired and works (`web/src/screens/Board.tsx:63-70`); it is the line telling you about it that was never drawn
+- **frame:** `press N anywhere on the board`, at the end of the head. **panel:** nothing there. The key itself is wired — an effect on `window` that opens a draft on N and stands aside while something is being typed into (`web/src/screens/Board.tsx:74-87`) — and this variant is driven through it rather than through the word in the head, so a run that finished at all is the evidence that it works. It is the line telling you about the key that was never drawn
 - **panel:** a card carries `writes code · opens PRs` under the executor's square where the frame carries only `Coder` (`web/src/lib/theme.ts:334`)
 - the bar's clock and its theme chip — *Across every page*
-- the `Chats 6` tab (`web/src/screens/Project.tsx:11-16`), and `+ New ticket` where the frame put the hint (`web/src/screens/Overview.tsx:70-74`)
+- the `Chats 6` tab (`web/src/screens/Project.tsx:12-16`), and `+ New ticket` where the frame put the hint (`web/src/screens/Overview.tsx:70-74`)
 
 The draft itself is the frame's, down to the character counter, `executor & brief later`,
 `Add · ↵` and `Esc`, and the columns under it keep their names, counts and subtitles.
@@ -184,7 +184,7 @@ One artboard with two of the panel's pages side by side on it, so it is compared
 both — the Machines table and the Executors table.
 
 - **frame:** `Tell Divan anything…` and `⌘K` across the bottom of a Machine page. **panel:** the command bar is drawn on the Dashboard only (`web/src/screens/Overview.tsx:204`; the chips are the same story, `web/src/components/Shell.tsx:32-35`)
-- **frame:** `mini unreachable · 2h 14m · quota 64%` at the end of the bar. **panel:** the bar ends in the clock, and the fleet's state is `mini cannot be reached.` under the drawer's title — without the age, and with the quota as a card on the page rather than a word in the bar (`web/src/screens/Machine.tsx:61-68`, `web/src/components/Shell.tsx:109-111`)
+- **frame:** `mini unreachable · 2h 14m · quota 64%` at the end of the bar. **panel:** the bar ends in the clock, and the fleet's state is `mini cannot be reached.` under the drawer's title — without the age, and with the quota as a card on the page rather than a word in the bar (`web/src/screens/Machine.tsx:61-68`, `web/src/components/Shell.tsx:110-111`)
 - **frame:** `+ Pair a machine` as a button in the page head. **panel:** a `Pair a new machine` card under the table (`web/src/screens/Machines.tsx:166`)
 - **frame:** `write code, run tests, open PRs`. **panel:** `writes code · opens PRs` (`web/src/lib/theme.ts:334`)
 - **panel:** the Executors table's column heads (`executor`, `what it is for`, `doing now`) — W10 draws the roster as a list at this width and Web15 W13 draws the table in full (`web/src/screens/Executors.tsx:25-27`)
@@ -322,7 +322,7 @@ instead of either of them.
 
 Driving W14 with tiles on the wall makes React report
 `validateDOMNesting: <button> cannot appear as a descendant of <button>` —
-`Tile` renders a pressable `Card` (`web/src/ui/divan.tsx:40-50`, which is a `<button>`
+`Tile` renders a pressable `Card` (`web/src/ui/divan.tsx:41-56`, which renders a `<button>`
 when it has an `onClick`) and puts `TileButton`s inside it
 (`web/src/screens/Terminal.tsx:247,296`). Invalid markup, and a nested button is not
 reachable the way the outer one is. No existing check presses `Add`, which is why nothing

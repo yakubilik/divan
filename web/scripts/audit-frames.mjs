@@ -339,6 +339,14 @@ const press = async (key) => {
     w.dispatchEvent(new w.KeyboardEvent('keydown', { key, metaKey: true, bubbles: true }));
   });
 };
+/** A key with nothing held down, which is the only kind the board's own `N`
+ *  listens for — the panel's shortcuts all want ⌘, so a bare letter reaches the
+ *  page and nothing else. */
+const tap = async (key) => {
+  await act(async () => {
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { key, bubbles: true }));
+  });
+};
 const button = (label, within = doc) => [...within.querySelectorAll('button')]
   .find((b) => norm(b.textContent ?? '') === norm(label)) ?? null;
 const inside = (label, within = doc) => [...within.querySelectorAll('button')]
@@ -348,6 +356,12 @@ const click = async (el) => {
   await act(async () => { el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); });
 };
 const header = () => doc.querySelector('header');
+/** A field by what it says it is, which is how a person finds one. */
+const field = (label) => {
+  const el = doc.querySelector(`[aria-label="${label}"]`);
+  if (!el) throw new Error(`no field labelled ${label} on this page`);
+  return el;
+};
 const type = async (el, value) => {
   const proto = el.tagName === 'TEXTAREA' ? w.HTMLTextAreaElement.prototype : w.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
@@ -455,10 +469,16 @@ const VARIANTS = [
   },
   {
     id: 'W9', world: 'busy', theme: 'dark', screens: ['Board.tsx'], quiet: true,
+    // Opened the way the artboard's own hint says to open it — `press N anywhere
+    // on the board` — rather than by pressing the word in the head. That is the
+    // state W9 draws, and it makes this run the evidence that the key is wired:
+    // if N did not open a draft there would be no `Title` to type into and the
+    // run would stop here rather than report a difference.
     open: async () => {
       await click(button('Quire', header()));
-      await click(button('+ New ticket'));
-      await type(doc.querySelector('[aria-label="Title"]'), 'Export client list as CSV');
+      await click(button('Board'));
+      await tap('n');
+      await type(field('Title'), 'Export client list as CSV');
     },
   },
   {
