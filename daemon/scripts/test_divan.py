@@ -860,7 +860,7 @@ u.CLI = CLI
 
 
 def queue_ticket(tid: int, title: str, repo: str, status: str, *,
-                 escalation: str = "", goal: str = "g",
+                 escalation: str = "", goal: str = "g", summary: str = "",
                  done: list[str] | None = None, run_dir: str | None = None) -> None:
     now = time.time()
     conn = sqlite3.connect(QDB)
@@ -870,7 +870,8 @@ def queue_ticket(tid: int, title: str, repo: str, status: str, *,
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (tid, title, status, "worker", 1, repo, None, "main", None, run_dir,
          now - 100, now, now - 90, None,
-         json.dumps({"goal": goal, "done_criteria": done or ["it works"]}),
+         json.dumps({"goal": goal, "summary": summary,
+                     "done_criteria": done or ["it works"]}),
          escalation, None, "[]"))
     conn.commit()
     conn.close()
@@ -935,7 +936,11 @@ async def wire() -> None:
     ]))
     queue_ticket(1, "the invite mail never arrives", str(ROOT / "babysee"), "running",
                  goal="Find where the mail is dropped.", run_dir=str(run_dir))
-    queue_ticket(2, "rank tracking is stale", str(ROOT / "isghocam"), "queued")
+    queue_ticket(2, "rank tracking is stale", str(ROOT / "isghocam"), "queued",
+                 goal="Patch seo/rank.ts so fetchRanks() reads the cached run;"
+                      " see docs/rank-notes.md.",
+                 summary="The rank numbers on the dashboard are days old."
+                         " They should be yesterday's.")
     queue_ticket(3, "the verifier turned this down", str(ROOT / "babysee" / "app"), "failed")
     queue_ticket(4, "which account should this use?", str(ROOT / "isghocam"), "blocked",
                  escalation="Which account should the beta use?")
@@ -1001,6 +1006,13 @@ async def wire() -> None:
           divan.opening("One. Two. Three. Four. Five."), "One. Two. Three.")
     check("…and a ticket with no brief still leaves the box empty",
           divan.opening(""), "")
+    # The box is the description a person reads. A ticket filed with one shows
+    # that and not the brief: the opening of a goal is file paths and commands,
+    # which is the right text for a worker and the wrong one for this box.
+    check("a ticket filed with its own sentences shows those instead",
+          by_ticket[2]["summary"],
+          "The rank numbers on the dashboard are days old. They should be"
+          " yesterday's.")
     check("it lands on the agent face, where it belongs",
           board.get_card(by_ticket[1]["id"])["agent"]["goal"],
           "Find where the mail is dropped.")

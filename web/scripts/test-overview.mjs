@@ -1031,6 +1031,9 @@ group('Web14 W6, W7 and W8');
   // row that names itself and says how much of it there is.
   ok('the ticket page is the human face and the live half, with the agent shut',
     page.includes(card.title) && page.includes(card.summary)
+    // The box has a name on it: it is the description, and a box a person has
+    // to work out what belongs in is the box that filled up with file paths.
+    && page.includes('Description')
     && page.includes('Live') && page.includes('Executor')
     && page.includes('Agent instructions')
     && page.includes(`${TK.brief(opened.full, QUEUE).lines} lines`)

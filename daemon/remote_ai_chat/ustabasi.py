@@ -182,6 +182,14 @@ def _ticket(row: sqlite3.Row, last_event: dict | None,
         # asks for it to be left out (see `snapshot`).
         "git": _git(_col(row, "worktree"), _col(row, "base_branch")) if git else None,
         "goal": card.get("goal") or "",
+        # The description a person reads, in a person's words — three or four
+        # plain sentences saying what the work is. Separate from `goal` on
+        # purpose: a goal is written for a worker and is full of paths and
+        # commands, and a board that showed it as the card's face showed code
+        # where it had promised English. A ticket filed without one falls back
+        # to the opening of the goal, which is better than an empty box and
+        # worse than a sentence somebody wrote.
+        "summary": card.get("summary") or "",
         "done_criteria": card.get("done_criteria") or [],
         # The command that proves it. Read all along and drawn nowhere until
         # the panel could rewrite a card: an editor that cannot see this field

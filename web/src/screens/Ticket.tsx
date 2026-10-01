@@ -40,7 +40,9 @@ import { useEffect, useRef, useState } from 'react';
 import { cardGet, setExecutor, ticketNote, updateCard } from '../lib/actions';
 import { COLUMN_LABEL, executorWord } from '../lib/overview';
 import { uptime } from '../lib/format';
-import { brief, details, human, live, liveHead, nowMark, sayTo } from '../lib/ticket';
+import {
+  SUMMARY_MAX, brief, details, human, live, liveHead, nowMark, sayTo,
+} from '../lib/ticket';
 import { executorFace } from '../lib/sessions';
 import { useRun } from '../lib/run';
 import { RunLog } from '../components/RunLog';
@@ -224,32 +226,42 @@ export function TicketPage({
           {/* 660 and not 720: at seventeen point the wider box ran past eighty
               characters a line, which is past where an eye finds the next one
               without help. */}
-          <Card radius={RADIUS.tile} style={{ maxWidth: 660, padding: '16px 18px 12px' }}>
+          {/* A box with no name on it is a box a person has to work out. This
+              one has a job — it is the description, in a person's words, of
+              what the ticket is — and the heading is where that is said. The
+              budget is said next to it rather than under it, and it goes red
+              when it is broken: `600 / 220` in the same grey as everything
+              else was a number nobody read as a limit. */}
+          <div style={{ maxWidth: 860, display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-.01em' }}>Description</div>
+            <div style={{ ...mono, fontSize: 11, color: T.ink3 }}>{face.label}</div>
+            <div style={{
+              ...mono, marginLeft: 'auto', fontSize: 11,
+              color: face.summary.length > SUMMARY_MAX ? T.red : T.ink3,
+            }}>{face.count}</div>
+          </div>
+          <Card radius={RADIUS.tile} style={{ maxWidth: 860, padding: '16px 18px 12px', marginTop: -8 }}>
             <Writable
               value={wrote.summary ?? (face.bare ? '' : face.summary)}
               placeholder="Nobody has written the sentences for this one yet."
               label="what this card is about" multiline
               onSave={(text) => write({ summary: text })}
-              style={{ fontSize: 17, lineHeight: '26px', minHeight: 78 }}
+              style={{ fontSize: 16.5, lineHeight: '27px', minHeight: 54 }}
               clamp={whole ? null : SUMMARY_LINES}
               onOverflow={setLong}
             />
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, ...mono, fontSize: 11, color: T.ink3,
-              borderTop: `1px solid ${T.line}`, paddingTop: 8, marginTop: 6,
-            }}>
-              <span style={{
-                minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{face.label}</span>
-              {long && (
+            {long && (
+              <div style={{
+                display: 'flex', ...mono, fontSize: 11,
+                borderTop: `1px solid ${T.line}`, paddingTop: 8, marginTop: 8,
+              }}>
                 <button type="button" onClick={() => setWhole((w) => !w)}
                   style={{
-                    flex: 'none', background: 'transparent', border: 'none', padding: 0,
+                    background: 'transparent', border: 'none', padding: 0,
                     font: 'inherit', color: T.ink2, cursor: 'pointer',
                   }}>{whole ? 'less' : 'read all'}</button>
-              )}
-              <span style={{ marginLeft: 'auto', flex: 'none', paddingLeft: 8 }}>{face.count}</span>
-            </div>
+              </div>
+            )}
           </Card>
 
           {/* The agent's half of the card, shut. A card nobody wrote a brief for
@@ -490,6 +502,18 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
   );
 }
 
+/** Make a field exactly as tall as what is in it.
+ *
+ *  A fixed three rows is what broke pressing the box: the read view is as tall
+ *  as the text and the field under it was three lines with a scrollbar, so a
+ *  press made the page jump and the sentences being corrected went half out of
+ *  sight. A field that is the height of its own text does not move anything. */
+function fit(el: HTMLTextAreaElement | HTMLInputElement | null): void {
+  if (!el || !(el instanceof HTMLTextAreaElement)) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 /** A card's face, written in place.
  *
  *  A board where a card can be dragged but not corrected is a board people keep
@@ -523,7 +547,11 @@ function Writable({ value, placeholder, label, multiline, onSave, style, clamp, 
   const view = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => { if (!editing) setText(value); }, [value, editing]);
-  useEffect(() => { if (editing) field.current?.focus(); }, [editing]);
+  useEffect(() => {
+    if (!editing) return;
+    field.current?.focus();
+    fit(field.current);
+  }, [editing]);
   useEffect(() => {
     if (!onOverflow || !clamp) return;
     const el = view.current;
@@ -550,14 +578,14 @@ function Writable({ value, placeholder, label, multiline, onSave, style, clamp, 
     return multiline ? (
       <textarea
         ref={field as any} value={text} aria-label={label}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => { setText(e.target.value); fit(e.currentTarget); }}
         onBlur={done}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.preventDefault(); stop(); }
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); done(); }
         }}
-        rows={3}
-        style={shared}
+        rows={1}
+        style={{ ...shared, overflow: 'hidden' }}
       />
     ) : (
       <input

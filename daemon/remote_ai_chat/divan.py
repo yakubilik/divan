@@ -1230,10 +1230,14 @@ class Board:
             card = self.create_card(
                 project["id"],
                 title=(ticket.get("title") or f"ticket {ticket['id']}"),
-                # What the brief opens on, until somebody writes their own
-                # sentences over it (`opening`). Every card here is a ticket
-                # first, so a human face that stayed empty was every card's.
-                summary=opening(ticket.get("goal") or ""),
+                # The sentences the ticket was filed with, where it was filed
+                # with any: `card.summary` is the plain-language description a
+                # person reads, and it is the whole point of the box. A ticket
+                # written without one falls back to what the brief opens on
+                # (`opening`) — better than an empty box, and the reason that
+                # box used to be full of file paths.
+                summary=((ticket.get("summary") or "").strip()
+                         or opening(ticket.get("goal") or "")),
                 branch=branch["kind"],
                 column=column_for(ticket),
                 executor="coding_agent", machine=machine, repo=ticket.get("repo"),
