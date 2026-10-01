@@ -4,7 +4,7 @@ import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
 import { ago, uptime } from '../lib/format';
 import { useFleet, type HostSlot } from '../lib/fleet';
 import { createGroup, deleteGroup, renameGroup, updateChat } from '../lib/actions';
-import { hasChatDrag, readChatDrag, setChatDrag } from '../lib/dnd';
+import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag, setSectionDrag } from '../lib/dnd';
 import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
 import type { Chat, Group } from '../lib/protocol';
 
@@ -234,6 +234,29 @@ function sections(chats: Chat[], groups: Group[], hostKey: string, searching: bo
   return out;
 }
 
+/** The order somebody dragged the sections into, per computer. Kept in this
+ *  browser: the sections are this list's way of reading the chats — half of
+ *  them are products nobody made a group for — so there is no row on the
+ *  computer for an order to be written on. */
+const ORDER_KEY = 'rac.chatSections';
+
+function savedOrders(): Record<string, string[]> {
+  try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '{}') ?? {}; } catch { return {}; }
+}
+
+/** The sections as they were arranged. One nobody has placed keeps the place
+ *  it would have had, after the ones somebody did; the archive is last
+ *  whatever anybody dragged. */
+function arrange(list: Section[], saved: string[]): Section[] {
+  const at = (s: Section) => {
+    if (s.kind === 'archive') return saved.length + 1;
+    const i = saved.indexOf(s.key);
+    return i < 0 ? saved.length : i;
+  };
+  return list.map((s, i) => [s, i] as const)
+    .sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([s]) => s);
+}
+
 function ChatRow({ chat, selected, onPick, onDrag }: {
   chat: Chat; selected: boolean; onPick: () => void;
   /** Set where the row can be picked up and filed under another heading. */
@@ -317,6 +340,9 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
     return () => clearInterval(tick);
   }, []);
 
+  const [orders, setOrders] = useState(savedOrders);
+  const saved = (focus && orders[focus]) || [];
+
   const slot = focus ? hosts[focus] : null;
   // One computer paired means there is nothing to merge: the fleet list and
   // that computer's list would be the same list, minus its groups.
@@ -325,8 +351,8 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
     const q = query.trim().toLocaleLowerCase('tr');
     if (fleetWide) return fleetSections(hosts, order, q);
     if (!slot) return [] as Section[];
-    return sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!, !!q, now);
-  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now]);
+    return arrange(sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!, !!q, now), saved);
+  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now, saved.join('\n')]);
   // Groups belong to one computer, so there is one to make only while the list
   // is one computer's.
   const canGroup = !!slot && !!focus && !fleetWide;
@@ -342,6 +368,19 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
     const to = s.kind === 'group' ? s.key : null;
     const from = hosts[s.hostKey]?.chats.find((c) => c.id === drag.chatId)?.group_id ?? null;
     if (from !== to) updateChat(s.hostKey, drag.chatId, { group_id: to }).catch(() => {});
+  };
+
+  /** Where a dragged heading would land: this side of that section. */
+  const [line, setLine] = useState<{ key: string; after: boolean } | null>(null);
+  const move = (key: string | null, to: string, after: boolean) => {
+    setLine(null);
+    if (!focus || !key || key === to) return;
+    const keys = list.filter((s) => s.kind !== 'archive' && s.key !== key).map((s) => s.key);
+    keys.splice(keys.indexOf(to) + (after ? 1 : 0), 0, key);
+    // What is not on screen today keeps its place behind what is.
+    const next = { ...orders, [focus]: [...keys, ...saved.filter((k) => !keys.includes(k))] };
+    setOrders(next);
+    try { localStorage.setItem(ORDER_KEY, JSON.stringify(next)); } catch { /* private mode: until reload */ }
   };
 
   // Collapsed: the chat list is gone. It exists because the wall of tiles under
@@ -470,30 +509,48 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
           const shut = collapsed[s.key] ?? (s.kind === 'archive' && !query.trim());
           return (
             <div
-              key={s.key}
+              key={s.key} data-section={s.key}
               // The whole section catches, not only its heading: a group with
-              // forty chats in it is a tall target and a 30px line is not.
+              // forty chats in it is a tall target and a 30px line is not. It
+              // catches two things — a chat, which goes into it, and another
+              // heading, which goes above or below it by the half it is over.
               {...(canGroup && s.kind !== 'archive' ? {
                 onDragOver: (e: React.DragEvent) => {
-                  if (!hasChatDrag(e.dataTransfer)) return;
+                  const chat = hasChatDrag(e.dataTransfer);
+                  if (!chat && !hasSectionDrag(e.dataTransfer)) return;
                   e.preventDefault();
                   e.dataTransfer.dropEffect = 'move';
-                  if (over !== s.key) setOver(s.key);
+                  if (chat) { if (over !== s.key) setOver(s.key); return; }
+                  const box = e.currentTarget.getBoundingClientRect();
+                  const after = e.clientY > box.top + box.height / 2;
+                  if (line?.key !== s.key || line.after !== after) setLine({ key: s.key, after });
                 },
                 onDragLeave: (e: React.DragEvent) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver((o) => (o === s.key ? null : o));
+                  if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                  setOver((o) => (o === s.key ? null : o));
+                  setLine((l) => (l?.key === s.key ? null : l));
                 },
-                onDrop: (e: React.DragEvent) => { e.preventDefault(); drop(s, e.dataTransfer); },
+                onDrop: (e: React.DragEvent) => {
+                  e.preventDefault();
+                  if (!hasSectionDrag(e.dataTransfer)) { drop(s, e.dataTransfer); return; }
+                  const box = e.currentTarget.getBoundingClientRect();
+                  move(readSectionDrag(e.dataTransfer), s.key, e.clientY > box.top + box.height / 2);
+                },
               } : {})}
               style={{
                 marginBottom: 4, position: 'relative', borderRadius: R.card,
                 ...(over === s.key ? { background: C.accentTint, boxShadow: `inset 0 0 0 1px ${C.accentRing}` } : {}),
+                ...(line?.key === s.key ? { boxShadow: `inset 0 ${line.after ? -2 : 2}px 0 ${C.accent}` } : {}),
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center' }}>
               <button
                 type="button"
                 onClick={() => setCollapsed((c) => ({ ...c, [s.key]: !shut }))}
+                // A heading is picked up and put down above or below another.
+                draggable={canGroup && s.kind !== 'archive'}
+                onDragStart={(e) => setSectionDrag(e.dataTransfer, s.key)}
+                onDragEnd={() => setLine(null)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, height: 30,
                   padding: '0 4px', background: 'transparent', border: 'none', cursor: 'pointer',

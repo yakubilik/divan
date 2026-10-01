@@ -37,6 +37,28 @@ export function hasChatDrag(dt: DataTransfer | null): boolean {
   return !!dt && Array.from(dt.types).includes(CHAT_DND);
 }
 
+// ── a section of the chat list ──────────────────────────────────────────────
+
+/** Dragging a heading of the chat list above or below another. A type of its
+ *  own, and for the reason above: a section catches chats being filed into it,
+ *  and has to tell one of those from a heading being moved past it. */
+export const SECTION_DND = 'application/x-rac-section';
+
+export function setSectionDrag(dt: DataTransfer, key: string): void {
+  dt.setData(SECTION_DND, key);
+  // As above: Firefox will not start a drag that carries nothing it knows.
+  dt.setData('text/plain', key);
+  dt.effectAllowed = 'move';
+}
+
+export function readSectionDrag(dt: DataTransfer | null): string | null {
+  return dt?.getData(SECTION_DND) || null;
+}
+
+export function hasSectionDrag(dt: DataTransfer | null): boolean {
+  return !!dt && Array.from(dt.types).includes(SECTION_DND);
+}
+
 // ── a card on the board ─────────────────────────────────────────────────────
 
 /** Dragging a ticket from one column of the board into another (Web12 W2). The

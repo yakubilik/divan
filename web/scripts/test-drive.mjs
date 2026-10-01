@@ -1221,6 +1221,22 @@ group('chats are filed into groups from the panel');
     !!find('Archive1') && !shown('Old thread'));
   await click(find('Archive1'));
   ok('…and is one press away', shown('Old thread'));
+
+  // A heading is dragged above another, and the list is still in that order
+  // after it has been taken off the screen and put back.
+  const order = () => [...doc.querySelectorAll('[data-section]')].map((e) => e.dataset.section);
+  const was = order();
+  const held = new Transfer();
+  await drag(find('Hush1'), 'dragstart', held);
+  await drag(doc.querySelector('[data-section="g1"]'), 'dragover', held);
+  await drag(doc.querySelector('[data-section="g1"]'), 'drop', held);
+  const now = order();
+  await click(find('Machine', doc.querySelector('header')));
+  await click(find('Chat', doc.querySelector('header')));
+  ok('a heading dragged above another stays there, and the archive stays last',
+    was[0] === 'g1' && now[0] === 'project:Hush' && now[1] === 'g1'
+      && now.at(-1) === '__archive' && order().join() === now.join(),
+    `${was.join()} → ${now.join()} → ${order().join()}`);
   const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
   const menuOf = (name) => doc.querySelector(`button[aria-label="Group menu: ${name}"]`);
   /** The count on a group's heading, which is the last thing in it. */
