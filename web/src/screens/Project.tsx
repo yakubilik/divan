@@ -108,6 +108,11 @@ function Life({ project: p, now }: { project: MergedProject; now: number }) {
   return (
     <Card radius={RADIUS.tile} style={{
       flexDirection: 'row', alignItems: 'stretch', gap: 28, padding: '14px 18px',
+      // The page is a column, and a card clips what overflows it — so the
+      // moment the page grew taller than the window, this was the item a
+      // column could squeeze: the rail kept its bars and lost every word under
+      // them. It is as tall as what is in it and no shorter.
+      flexShrink: 0,
     }}>
       {!!steps && (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9 }}>
