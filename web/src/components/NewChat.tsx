@@ -44,6 +44,9 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
     initialAgent ? (initialAgent.accountId ?? '') : null);
   /** Null is a plain chat; anything else is the `agent_id` chat.create carries. */
   const [agentId, setAgentId] = useState<string | null>(initialAgent?.agent.id ?? null);
+  /** Whether anyone has picked an agent in this dialog. Until then the one the
+   *  last chat used (Hermes the first time) is what the list opens on. */
+  const [agentTouched, setAgentTouched] = useState(!!initialAgent);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [cwd, setCwd] = useState<string | null>(initialCwd ?? defaults.cwd ?? null);
@@ -123,6 +126,16 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
 
   const agent = agentList.find((a) => a.id === agentId) ?? null;
 
+  // The list arrives after the dialog opens, so the remembered agent is applied
+  // when it does — and only while nobody has chosen, so a click on "No agent"
+  // is never undone by a list that finishes loading a moment later.
+  useEffect(() => {
+    if (agentTouched || agentsLoading || !agentList.length) return;
+    const want = defaults.agentId === undefined ? 'hermes' : defaults.agentId;
+    const hit = want ? agentList.find((a) => a.id === want || a.name === want) : null;
+    if (hit) setAgentId(hit.id);
+  }, [agentList, agentsLoading, agentTouched]);
+
   const projects = slot?.projects ?? [];
   const recent = useMemo(() => {
     const seen = new Map<string, number>();
@@ -157,8 +170,12 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
       });
       // Starting a chat is where these are chosen, so what was chosen here is
       // what the next one opens with. Settings shows and edits the same values.
-      // The agent is deliberately not among them: it belongs to this one chat.
-      setDefaults(hostKey, { provider, cwd });
+      // An agent opened from its own card is not remembered: it belongs to
+      // that one chat. One picked here is, so the next chat opens on it.
+      setDefaults(hostKey, {
+        provider, cwd,
+        ...(provider === 'claude' && !initialAgent ? { agentId: agent ? agent.id : null } : {}),
+      });
       setProviderDefaults(hostKey, provider, {
         model, effort, perm_mode: perm, account_id: accountId,
       });
@@ -267,7 +284,7 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
                 label="No agent"
                 hint="a plain chat, with this computer's usual instructions"
                 on={!agentId} last={!agentList.length && !agentsLoading}
-                onPick={() => setAgentId(null)}
+                onPick={() => { setAgentTouched(true); setAgentId(null); }}
               />
               {agentList.map((a, i, arr) => (
                 <Radio
@@ -276,7 +293,7 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
                   hint={a.description || a.name}
                   right={a.scope === 'project' ? 'project' : undefined}
                   on={agentId === a.id} last={i === arr.length - 1}
-                  onPick={() => setAgentId(a.id)}
+                  onPick={() => { setAgentTouched(true); setAgentId(a.id); }}
                 />
               ))}
               {agentsLoading && !agentList.length && (

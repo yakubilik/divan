@@ -224,7 +224,7 @@ try {
     ok('…and there were enough of them for that to mean something',
       resolved.painted > 2000, String(resolved.painted));
     ok('every screen and every panel it opens is on the page',
-      resolved.screens.length === 28, resolved.screens.join(', '));
+      resolved.screens.length === 29, resolved.screens.join(', '));
     ok('the page itself is the theme’s own background',
       resolved.body === asRgb(tokens.bg), resolved.body);
     const shadowStray = resolved.shadows
@@ -375,7 +375,7 @@ try {
 
     // …and one of the screens, which is the half of this that is about what was
     // already here rather than about what is being added.
-    for (const screen of ['Shell', 'ShellChat', 'ShellBoard', 'OverviewCalm', 'Machine',
+    for (const screen of ['Shell', 'ShellChat', 'ShellBoard', 'ShellProjectChat', 'OverviewCalm', 'Machine',
                           'Overview', 'Preferences', 'Terminal', 'Fleet', 'Projects', 'Agents',
                           'Update', 'Onboarding', 'Ustabasi', 'Palette', 'ChatOpen',
                           'ApprovalModal']) {

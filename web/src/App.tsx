@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RADIUS, SHADOW, T, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { KEYFRAMES, P, mono } from './ui/kit';
 import { Button } from './ui/divan';
-import { Sidebar } from './components/Sidebar';
+import { Sidebar, currentIn } from './components/Sidebar';
 import { Shell } from './components/Shell';
 import { ChatView } from './components/ChatView';
 import { NewChat } from './components/NewChat';
@@ -61,8 +61,12 @@ export function App() {
   const [branch, setBranch] = useState<string | null>(opened.current.branch);
   const [card, setCard] = useState<string | null>(opened.current.card);
   const [sel, setSel] = useState<Selection | null>(null);
-  const [newChat, setNewChat] = useState<
-    { cwd?: string; agent?: { agent: Agent; accountId: string | null } } | null>(null);
+  const [newChat, setNewChat] = useState<{
+    cwd?: string; agent?: { agent: Agent; accountId: string | null };
+    /** Started from a product's own page: on the computer that product is on,
+     *  and read where it was started rather than in the Chat place. */
+    host?: string | null; stay?: boolean;
+  } | null>(null);
   const [palette, setPalette] = useState(false);
   const [field, setField] = useState<Field | null>(null);
   const [sending, setSending] = useState(false);
@@ -232,6 +236,26 @@ export function App() {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [select]);
+
+  // A product's Chat tab is about that product's chats, so arriving on it
+  // puts the newest of them on screen — or none, rather than whichever chat
+  // was last open somewhere else. Once per arrival: a chat that is open is not
+  // taken away because a turn filed it under another product.
+  const scopedTo = projectIn(divan, project);
+  const arrived = useRef<string | null>(null);
+  useEffect(() => {
+    if (view !== 'overview' || tab !== 'chat' || !scopedTo || !fleet.ready) { arrived.current = null; return; }
+    if (arrived.current === scopedTo.key) return;
+    arrived.current = scopedTo.key;
+    const mine = (k: string, c: Chat) => !!scopedTo.ids[k] && c.project_id === scopedTo.ids[k];
+    if (chat && sel && mine(sel.hostKey, chat)) return;
+    // An address that names a chat is honoured by the effect above.
+    if (!sel && opened.current.chat) return;
+    const newest = Object.keys(scopedTo.ids)
+      .flatMap((k) => (fleet.hosts[k]?.chats ?? []).filter((c) => !c.archived && mine(k, c)).map((c) => ({ k, c })))
+      .sort((a, b) => b.c.updated_at - a.c.updated_at)[0];
+    if (newest) select(newest.k, newest.c.id); else setSel(null);
+  }, [view, tab, scopedTo?.key, fleet.ready]);
 
   const open = useCallback((hostKey: string, chatId: string) => {
     select(hostKey, chatId);
@@ -569,6 +593,26 @@ export function App() {
             // one you have to orient before it can do anything.
             onAsk={(text: string) => tell(text, scope)}
             askNote={whereNote(whereFor(scope, fleet.hosts, fleet.focus))}
+            // The product's own chats, as the chat screen: the list is only
+            // the ones filed under it, and a chat started here starts in its
+            // repository, on a computer that has it — which is what files it
+            // under the product from its first line.
+            chats={scopedTo ? {
+              count: currentIn(fleet.hosts, scopedTo.ids),
+              pane: (
+                <>
+                  <Sidebar
+                    project={scopedTo}
+                    selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={select}
+                    onNewChat={() => {
+                      const at = whereFor(scope, fleet.hosts, fleet.focus);
+                      setNewChat({ cwd: at.cwd ?? undefined, host: at.host, stay: true });
+                    }}
+                  />
+                  <ChatView {...chatProps} />
+                </>
+              ),
+            } : null}
           />
         )}
 
@@ -580,6 +624,7 @@ export function App() {
             <Sidebar
               selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
               onNewChat={() => setNewChat({})}
+              onNewChatIn={(host, cwd) => setNewChat({ host, cwd })}
               searchRef={searchRef}
               collapsed={rail} onCollapse={setRailTo}
             />
@@ -644,12 +689,16 @@ export function App() {
         </div>
       )}
 
-      {newChat && fleet.focus && (
+      {newChat && (newChat.host ?? fleet.focus) && (
         <NewChat
-          hostKey={fleet.focus}
+          hostKey={(newChat.host ?? fleet.focus)!}
           initialCwd={newChat.cwd}
           initialAgent={newChat.agent ?? null}
-          onDone={(c) => { setNewChat(null); open(fleet.focus!, c.id); }}
+          onDone={(c) => {
+            const host = (newChat.host ?? fleet.focus)!;
+            setNewChat(null);
+            if (newChat.stay) select(host, c.id); else open(host, c.id);
+          }}
           onClose={() => setNewChat(null)}
         />
       )}

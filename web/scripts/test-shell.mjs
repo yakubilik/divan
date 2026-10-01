@@ -896,8 +896,9 @@ group('the chat is untouched');
     && /app\/src\/transcript\.ts/.test(src('src/lib/transcript.ts')));
 
   const app = src('src/App.tsx');
-  ok('the chat is handed the same props it always was, in both places it is drawn',
-    (app.match(/<ChatView \{\.\.\.chatProps\} \/>/g) ?? []).length === 2);
+  // The chat place, the chat held over the wall, and a product's own Chat tab.
+  ok('the chat is handed the same props it always was, in the three places it is drawn',
+    (app.match(/<ChatView \{\.\.\.chatProps\} \/>/g) ?? []).length === 3);
   ok('…and the chat place is the chat and the list it is picked from',
     /place === 'chat' && \(/.test(app) && /<Sidebar/.test(app));
 }

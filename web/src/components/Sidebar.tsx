@@ -180,6 +180,33 @@ function fleetSections(hosts: Record<string, HostSlot>, order: string[], q: stri
   return out;
 }
 
+/** A product's own chats: the ones each computer filed under it and nothing
+ *  else, today's first and the rest under an archive. A computer at a time,
+ *  because a chat is opened on the computer that holds it — and with one
+ *  computer, which is nearly always, that is one list and one archive. */
+function projectSections(
+  hosts: Record<string, HostSlot>, ids: Record<string, string>, q: string, now: number,
+): Section[] {
+  const keys = Object.keys(ids).filter((k) => hosts[k] && ids[k]);
+  const today: Section[] = [];
+  const quiet: Section[] = [];
+  for (const k of keys) {
+    const name = hosts[k].info?.name || hosts[k].cfg.name;
+    const mine = byRecency(hosts[k].chats.filter((c) => c.project_id === ids[k] && matches(c, q)));
+    const cur = mine.filter((c) => isCurrent(c, now));
+    const old = mine.filter((c) => !isCurrent(c, now));
+    if (cur.length) today.push({ key: `chats:${k}`, title: keys.length > 1 ? name : 'Chats', hostKey: k, chats: cur, kind: 'loose' });
+    if (old.length) quiet.push({ key: `__archive:${k}`, title: keys.length > 1 ? `Archive · ${name}` : 'Archive', hostKey: k, chats: old, kind: 'archive' });
+  }
+  return [...today, ...quiet];
+}
+
+/** How many of a product's chats are part of today: the number on its tab. */
+export function currentIn(hosts: Record<string, HostSlot>, ids: Record<string, string>): number {
+  return projectSections(hosts, ids, '', Date.now() / 1000)
+    .filter((s) => s.kind !== 'archive').reduce((n, s) => n + s.chats.length, 0);
+}
+
 const home = (path: string) => path
   .replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/');
 
@@ -312,12 +339,18 @@ function ChatRow({ chat, selected, onPick, onDrag }: {
 // `collapsed` arrives renamed: the section headers in the list below already
 // own that word, and two different things called collapsed in one component is
 // how you end up hiding the wrong one.
-export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef,
-                          collapsed: railed = false, onCollapse }: {
+export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChatIn, searchRef,
+                          collapsed: railed = false, onCollapse, project }: {
+  /** On a product's own page: the list is that product's chats, on whichever
+   *  computers have it, and the things that are about one computer's whole
+   *  list — which computer, its groups, their order — are not offered. */
+  project?: { ids: Record<string, string> } | null;
   selected: string | null;
   selectedHost: string | null;
   onSelect: (hostKey: string, chatId: string) => void;
   onNewChat: () => void;
+  /** A chat that opens already in this folder, from a heading's own + . */
+  onNewChatIn?: (hostKey: string, cwd: string) => void;
   searchRef?: React.RefObject<HTMLInputElement>;
   collapsed?: boolean;
   onCollapse?: (next: boolean) => void;
@@ -346,16 +379,17 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
   const slot = focus ? hosts[focus] : null;
   // One computer paired means there is nothing to merge: the fleet list and
   // that computer's list would be the same list, minus its groups.
-  const fleetWide = allHosts && order.length > 1;
+  const fleetWide = !project && allHosts && order.length > 1;
   const list = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr');
+    if (project) return projectSections(hosts, project.ids, q, now);
     if (fleetWide) return fleetSections(hosts, order, q);
     if (!slot) return [] as Section[];
     return arrange(sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!, !!q, now), saved);
-  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now, saved.join('\n')]);
+  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now, saved.join('\n'), project?.ids]);
   // Groups belong to one computer, so there is one to make only while the list
   // is one computer's.
-  const canGroup = !!slot && !!focus && !fleetWide;
+  const canGroup = !!slot && !!focus && !fleetWide && !project;
   /** The heading a dragged chat is over. */
   const [over, setOver] = useState<string | null>(null);
   // A chat dropped on a group goes into it; dropped on anything that is not a
@@ -427,6 +461,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
       width: W, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`,
       display: 'flex', flexDirection: 'column', height: '100%',
     }}>
+      {project ? <div style={{ height: 8, flexShrink: 0 }} /> : (
       <div style={{ padding: '8px 8px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <HostCard
@@ -448,6 +483,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
           </button>
         )}
       </div>
+      )}
 
       {/* The list, which is now all there is: a chat is picked here, and the
           wall under the Machine place drags its tiles out of here.
@@ -590,6 +626,24 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
                   <Icon path={P.more} size={14} color={C.mute} width={2.8} />
                 </button>
               )}
+              {onNewChatIn && !project && s.kind !== 'archive' && (() => {
+                const cwd = s.kind === 'folder' ? s.key.slice(4)
+                  : s.chats.find((c) => c.cwd)?.cwd
+                    ?? hosts[s.hostKey]?.projects.find((p) => p.name === s.title)?.path;
+                return cwd ? (
+                  <button
+                    type="button" title={`New chat in ${s.title}`} aria-label={`New chat in ${s.title}`}
+                    onClick={() => onNewChatIn(s.hostKey, cwd)}
+                    style={{
+                      width: 24, height: 24, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
+                      background: 'transparent', border: 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <Icon path={P.plus} size={14} color={C.mute} />
+                  </button>
+                ) : null;
+              })()}
               </div>
               {menuFor === s.key && (
                 <GroupMenu
@@ -609,20 +663,20 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
             </div>
           );
         })}
-        {(slot || fleetWide) && !list.length && (
+        {(slot || fleetWide || project) && !list.length && (
           <div style={{ padding: '24px 12px', fontSize: 13, color: C.mute, textAlign: 'center' }}>
             {query ? 'No chat matches' : 'No chats yet'}
           </div>
         )}
       </div>
 
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: '10px 12px' }}>
+      {!project && <div style={{ borderTop: `1px solid ${C.border}`, padding: '10px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.mute }}>
           <Dot color={slot?.status === 'online' ? C.ok : C.faint} live={slot?.status === 'online'} size={5} />
           <span style={mono}>daemon {slot?.info?.daemon_version ?? '—'}</span>
           {slot?.info && <span style={mono}>· {uptime(slot.info.uptime_s)}</span>}
         </div>
-      </div>
+      </div>}
 
       {asking?.what === 'new' && focus && (
         <GroupNameDialog
