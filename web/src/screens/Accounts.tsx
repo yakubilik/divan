@@ -154,7 +154,8 @@ export function Accounts({ now, onView, onFocus }: {
               <Ring share={s.used} size={22} stroke={3}
                 colour={s.spent ? T.red : undefined} />
               <span style={{ ...mono, fontSize: 12, color: s.used == null ? T.ink3 : T.ink2 }}>
-                {s.used == null ? 'not measured' : `${Math.round(s.used * 100)}%`}
+                {s.used != null ? `${Math.round(s.used * 100)}%`
+                  : s.lapsed ? 'reset since' : 'not measured'}
               </span>
             </span>,
             <Cell text={s.usedBy} style={{ color: T.ink2 }} />,

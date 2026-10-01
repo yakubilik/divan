@@ -67,6 +67,7 @@ export function App() {
   const [field, setField] = useState<Field | null>(null);
   const [sending, setSending] = useState(false);
   const [liveTokens, setLiveTokens] = useState<number | null>(null);
+  const [liveContext, setLiveContext] = useState<number | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
   // Terminal mode opens a chat over the wall rather than leaving it: the point
   // of the wall is that you can answer one thing and still be looking at the
@@ -283,10 +284,18 @@ export function App() {
     if (!sel) return;
     return onAnyEvent((k, ev) => {
       if (k !== sel.hostKey || ev.chat_id !== sel.chatId) return;
-      if (ev.event === 'turn.progress') setLiveTokens(ev.data?.output_tokens ?? null);
+      if (ev.event === 'turn.progress') {
+        setLiveTokens(ev.data?.output_tokens ?? null);
+        if (ev.data?.context_tokens) setLiveContext(ev.data.context_tokens);
+      }
       if (ev.event === 'turn.done' || ev.event === 'turn.error' || ev.event === 'turn.started') setLiveTokens(null);
+      // The finished turn carries the figure itself; the one in flight is only
+      // worth holding while there is one.
+      if (ev.event === 'turn.done' || ev.event === 'turn.error') setLiveContext(null);
     });
   }, [sel?.hostKey, sel?.chatId]);
+  // …and it belongs to the chat it was measured in.
+  useEffect(() => { setLiveContext(null); }, [sel?.hostKey, sel?.chatId]);
 
   // Approvals from every paired computer, not just the chat on screen. A
   // destructive command sitting on a chat nobody has open is the exact thing
@@ -408,6 +417,7 @@ export function App() {
     accountUsage,
     accountLimits,
     now: divan.now,
+    liveContext,
     liveTokens,
     onPopOut: popOut,
     groups: slot?.groups ?? [],

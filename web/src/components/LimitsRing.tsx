@@ -20,7 +20,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { C, R, SHADOW } from '../lib/theme';
-import { limitTone, planUse, type LimitTone } from '../lib/machine';
+import { limitTone, planUse, type ContextUse, type LimitTone } from '../lib/machine';
 import type { LimitWindow } from '../lib/protocol';
 import { mono } from '../ui/kit';
 
@@ -68,11 +68,14 @@ export function Ring({ share, size = 30, stroke = 3.5, colour, children }: {
   );
 }
 
-export function LimitsRing({ windows, now, accountLabel }: {
+export function LimitsRing({ windows, now, accountLabel, context }: {
   windows: LimitWindow[] | undefined;
   now: number;
   /** Whose plan this is, for the head of the card the press opens. */
   accountLabel: string | null;
+  /** How full this conversation's own window is. Null where nothing has
+   *  measured it yet. */
+  context?: ContextUse | null;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -133,10 +136,43 @@ export function LimitsRing({ windows, now, accountLabel }: {
             }}>{use.measured || accountLabel || ''}</span>
           </div>
 
+          {/* The conversation before the plan: it is the one that changes
+              while you are looking at it, and the one a person can do
+              something about from this chat. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 12.5 }}>Context window</span>
+              <span style={{
+                ...mono, marginLeft: 'auto', fontSize: 12.5,
+                color: context ? TONE[context.tone] : C.mute,
+              }}>
+                {!context ? '–' : context.share == null ? context.says
+                  : `${Math.round(context.share * 100)}%`}
+              </span>
+            </div>
+            <div style={{ height: 5, borderRadius: 3, background: C.borderStrong }}>
+              {context?.share != null && (
+                <div style={{
+                  width: `${context.share * 100}%`, height: '100%', borderRadius: 3,
+                  background: TONE[context.tone],
+                }} />
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: C.mute }}>
+              {!context ? 'Not measured yet — it is read off the next turn.'
+                : context.share == null ? 'The size of the window arrives when this turn ends.'
+                : `${context.says} tokens in this conversation`}
+            </div>
+          </div>
+          <div style={{ height: 1, background: C.border }} />
+
           {use.unknown ? (
             <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.text2 }}>
-              No reading yet — the plan reports itself while a turn runs, so send a message
-              and this fills in.
+              {use.lapsed
+                ? 'The plan has refilled since it was last measured, so what is left now is '
+                  + 'not known. It reports itself on the next turn.'
+                : 'No reading yet — the plan reports itself while a turn runs, so send a '
+                  + 'message and this fills in.'}
             </div>
           ) : use.windows.map((w) => (
             <div key={w.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>

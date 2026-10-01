@@ -473,6 +473,7 @@ class ClaudeProvider(Provider):
         segment = 0
         tokens_done = 0      # output tokens from assistant messages already finished
         tokens_cur = 0       # ...and the one being generated
+        ctx_tokens = 0       # how much of the window the last request filled
         open_tools = 0       # tool calls started but not yet answered
         last_progress = 0.0
         seg_text: list[str] = []
@@ -537,6 +538,9 @@ class ClaudeProvider(Provider):
             await self.emit("turn.progress", {
                 "output_tokens": tokens_done + tokens_cur,
                 "open_tools": open_tools,
+                # How full the conversation is, as of the request in flight.
+                # Absent until the first message of the turn has started.
+                **({"context_tokens": ctx_tokens} if ctx_tokens else {}),
             }, False)
 
         result: ResultMessage | None = None
@@ -561,6 +565,19 @@ class ClaudeProvider(Provider):
                         tokens_done += tokens_cur
                         tokens_cur = 0
                         msg_streamed = False
+                        # What this request was sent with is how full the
+                        # conversation is: the new input, plus everything read
+                        # from or written to the cache, which is the rest of
+                        # the transcript. The turn's own `usage` cannot say
+                        # this — it adds every request of the turn together,
+                        # and a turn of forty tool calls reads as forty
+                        # conversations' worth.
+                        u = (ev.get("message") or {}).get("usage") or {}
+                        seen = sum(int(u.get(k) or 0) for k in (
+                            "input_tokens", "cache_read_input_tokens",
+                            "cache_creation_input_tokens"))
+                        if seen:
+                            ctx_tokens = seen
                         await progress(force=True)
                     elif et == "message_delta":
                         u = ev.get("usage") or {}
@@ -687,13 +704,44 @@ class ClaudeProvider(Provider):
         return TurnResult(
             session_id=self._session_id,
             cost_usd=result.total_cost_usd,
-            usage=result.usage,
+            usage=_with_context(result.usage, ctx_tokens,
+                                getattr(result, "model_usage", None)),
             duration_ms=result.duration_ms,
             num_turns=result.num_turns,
             is_error=bool(result.is_error),
             error=err,
             stop_reason=result.stop_reason,
         )
+
+
+def _with_context(usage: dict | None, ctx_tokens: int, model_usage) -> dict | None:
+    """The turn's usage, with how full the conversation is written into it.
+
+    Two numbers ride along: `context_tokens`, the size of the last request the
+    turn made, and `context_window`, what the model that answered can hold. The
+    window is read off the tool's own per-model report rather than a table kept
+    here — the same model has had two windows, and which one a session got is
+    the tool's to say. Where several models answered (a helper on a smaller
+    one) the largest window is the main thread's.
+
+    Carried inside `usage` because that is what every client already stores
+    with the turn: a field of its own would be one an older app drops.
+    """
+    if not ctx_tokens:
+        return usage
+    out = dict(usage or {})
+    out["context_tokens"] = int(ctx_tokens)
+    windows = []
+    for row in (model_usage or {}).values():
+        try:
+            win = int((row or {}).get("contextWindow") or 0)
+        except (TypeError, ValueError, AttributeError):
+            win = 0
+        if win:
+            windows.append(win)
+    if windows:
+        out["context_window"] = max(windows)
+    return out
 
 
 def describe_attachments(attachments: list[dict]) -> str:

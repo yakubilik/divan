@@ -25,7 +25,7 @@ import { useState } from 'react';
 import { uptime } from '../lib/format';
 import { addOpenItem, commentOpenItem, setOpenItem } from '../lib/actions';
 import { NOTHING_OPEN, openLine, openRows, type OpenRow } from '../lib/project';
-import { RADIUS, T, toneColours } from '../lib/theme';
+import { RADIUS, T } from '../lib/theme';
 import { useDivanStore, type MergedProject } from '../lib/divan';
 import type { DivanOpenState } from '../lib/protocol';
 import { Button, Card, Composer, EmptyState, SectionHeader, Tag } from '../ui/divan';
@@ -138,19 +138,37 @@ function Item({ row: r, onWrite, host, projectId }: {
 }) {
   const [open, setOpen] = useState(false);
   const [said, setSaid] = useState('');
-  const c = toneColours(r.tone);
   const can = !!host && !!projectId;
+  const toggle = () => setOpen((o) => !o);
 
   return (
+    // The whole card is the press, not a word at the bottom of it. A post is
+    // opened by pressing the post; a small `say something` under each one was a
+    // second thing to aim at and read as a button that did something else.
+    //
+    // A div with a role rather than the card's own `onClick`, which draws a
+    // <button>: this one has buttons inside it, and a button inside a button
+    // is not a thing a browser will let either of them be.
+    <div
+      role="button" tabIndex={0} aria-expanded={open}
+      title={open ? 'Close the thread' : 'Open the thread'}
+      onClick={toggle}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      }}
+      style={{ cursor: 'pointer', borderRadius: RADIUS.tile, outline: 'none' }}
+    >
     <Card
       radius={RADIUS.tile}
+      // The ring carries the state so a blocked item is findable without
+      // reading a word of it. Settled ones give it up: the page is about what
+      // is left.
+      ring={r.done ? 'line' : r.state === 'blocked' ? 'red' : r.state === 'waiting' ? 'amber' : 'line'}
       style={{
         gap: 10, padding: '12px 14px',
-        // The ring carries the state so a blocked item is findable without
-        // reading a word of it. Settled ones give it up: the page is about
-        // what is left. Grey rather than faint — a fade is the one thing the
-        // palette cannot make legible, which is why this frame has none.
-        borderColor: r.done ? T.line : c.line,
+        // Grey rather than faint — a fade is the one thing the palette cannot
+        // make legible, which is why this frame has none.
         color: r.done ? T.ink2 : undefined,
       }}
     >
@@ -171,38 +189,46 @@ function Item({ row: r, onWrite, host, projectId }: {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ ...mono, fontSize: 11, color: T.ink3 }}>{r.since}</span>
-        <button
-          type="button" onClick={() => setOpen((o) => !o)}
-          style={{
-            background: 'transparent', border: 'none', padding: 0, font: 'inherit',
-            ...mono, fontSize: 11, color: r.thread ? T.ink2 : T.ink3, cursor: 'pointer',
-          }}
-        >{r.thread || 'say something'}</button>
-        {can && !r.done && (
-          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            {MOVES.filter((m) => m.state !== r.state).map((m) => (
+        {/* How much has been said, as a fact and not as a control: the thread
+            is shut until the card is pressed, and this is what says there is
+            one to open. */}
+        {!!r.thread && (
+          <span style={{ ...mono, fontSize: 11, color: T.ink2 }}>{r.thread}</span>
+        )}
+        {/* The buttons are their own presses. Without this a press on `Done`
+            would settle the item and flap the thread open in the same click. */}
+        {can && (
+          <span
+            onClick={(e) => e.stopPropagation()}
+            style={{ marginLeft: 'auto', display: 'flex', gap: 6, cursor: 'default' }}
+          >
+            {!r.done && MOVES.filter((m) => m.state !== r.state).map((m) => (
               <Button
                 key={m.state} small face="outline" label={m.word}
                 onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: m.state }))}
               />
             ))}
-            <Button small face="ink" label="Done"
-              onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: 'done' }))} />
-          </span>
-        )}
-        {can && r.done && (
-          <span style={{ marginLeft: 'auto' }}>
-            <Button small face="outline" label="Reopen"
-              onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: 'todo' }))} />
+            {!r.done && (
+              <Button small face="ink" label="Done"
+                onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: 'done' }))} />
+            )}
+            {r.done && (
+              <Button small face="outline" label="Reopen"
+                onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: 'todo' }))} />
+            )}
           </span>
         )}
       </div>
 
       {open && (
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: 8,
-          borderTop: `1px solid ${T.line}`, paddingTop: 10,
-        }}>
+        // Reading and typing in the thread are not presses on the card.
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 8, cursor: 'default',
+            borderTop: `1px solid ${T.line}`, paddingTop: 10,
+          }}
+        >
           {!r.comments.length && (
             <div style={{ fontSize: 12.5, color: T.ink3 }}>Nothing said about this one yet.</div>
           )}
@@ -231,6 +257,7 @@ function Item({ row: r, onWrite, host, projectId }: {
         </div>
       )}
     </Card>
+    </div>
   );
 }
 

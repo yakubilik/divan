@@ -285,6 +285,8 @@ export interface SignIn {
   used: number | null;
   /** A window refused a send and has not reset. */
   spent: boolean;
+  /** The only readings are from before the plan refilled. */
+  lapsed: boolean;
   /** When it last did. */
   lastUsed: string;
   /** `Renew`, `Sign in`, `Manage` — and pressing it opens the sign-in itself,
@@ -368,6 +370,7 @@ export function signIns(sources: SignInSource[], now: number, ago: Ago, stamp: S
         usedBy: usedWords(used.length, a.is_default, s.machine),
         used: use.top ? use.top.share : null,
         spent: use.spent,
+        lapsed: use.lapsed,
         lastUsed: last ? stamp(last) : '',
         action: SIGN_IN_ACTION[state],
         // Everything that is not working wants something doing: a renewal, a
@@ -646,6 +649,7 @@ const WINDOW_ORDER = ['five_hour', 'seven_day', 'seven_day_opus', 'seven_day_son
 export const WINDOW_NAME: Record<string, string> = {
   five_hour: '5-hour', seven_day: 'Weekly', seven_day_opus: 'Weekly · Opus',
   seven_day_sonnet: 'Weekly · Sonnet', overage: 'Extra usage',
+  seven_day_overage_included: 'Weekly · with extra usage',
 };
 
 /** Amber from 60 %, red from 90 %, and the plain colour under that — the same
@@ -688,10 +692,21 @@ export interface PlanUse {
   unknown: boolean;
   /** A window refused a send and has not reset. The plan is spent. */
   spent: boolean;
+  /** There were readings, and every one of them is from before its window
+   *  refilled. Not the same as never measured: this sign-in has been used, and
+   *  what it has left now is simply not known until it is used again. */
+  lapsed: boolean;
 }
 
 export function planUse(windows: LimitWindow[] | undefined, now: number): PlanUse {
-  const all = (windows ?? []).filter((w) => typeof w.utilization === 'number');
+  const measured = (windows ?? []).filter((w) => typeof w.utilization === 'number');
+  // A window whose reset time has passed has refilled, and the number written
+  // down for it describes a window that no longer exists. The tool only
+  // reports during a turn, so a sign-in nobody has used for a week still held
+  // the last figure anybody saw — `35% used` on a plan that reset ten days ago,
+  // and `100%` on one that came back yesterday. Those are dropped rather than
+  // drawn: the truthful thing to say about them is that nobody knows.
+  const all = measured.filter((w) => w.resets_at == null || w.resets_at > now);
   // Every window of one report is measured at the same instant, so a window
   // behind the newest reading is one the tool has stopped reporting.
   const newest = all.reduce((n, w) => Math.max(n, w.at ?? 0), 0);
@@ -720,6 +735,7 @@ export function planUse(windows: LimitWindow[] | undefined, now: number): PlanUs
     unknown: drawn.length === 0,
     spent: (windows ?? []).some((w) => w.status === 'rejected'
       && (w.resets_at == null || w.resets_at > now)),
+    lapsed: drawn.length === 0 && measured.length > 0,
   };
 }
 
@@ -743,4 +759,61 @@ export function measuredWords(at: number | null | undefined, now: number): strin
   if (m < 2) return 'measured just now';
   if (m < 60) return `measured ${m} min ago`;
   return `measured ${Math.floor(m / 60)} h ago`;
+}
+
+// ── 7 · how full the conversation is ────────────────────────────────────────
+
+/** How much of the model's window this chat has filled.
+ *
+ *  A different question from the plan's windows above, and it is on the same
+ *  card because it is asked at the same moment: "can I keep going". The plan
+ *  says whether the *account* can; this says whether the *conversation* can
+ *  before it is compacted. */
+export interface ContextUse {
+  tokens: number;
+  /** What the model can hold. Null until a turn has finished on a computer new
+   *  enough to report it — the size of the window is the tool's to say, and a
+   *  number assumed here would be right for one model and wrong for the next. */
+  window: number | null;
+  /** 0–1, or null where the window is not known. */
+  share: number | null;
+  tone: LimitTone;
+  /** `181K of 1M`, or `181K` alone. */
+  says: string;
+}
+
+/** Thousands and millions the way the model list says them: `200K`, `1M`. */
+export function tokenWords(n: number): string {
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+  }
+  return n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
+}
+
+/** Read off the turns: the newest one that says how full it left the window.
+ *  `live` is the request in flight, which is newer than any finished turn and
+ *  wins while there is one. Null where nothing has been measured. */
+export function contextUse(
+  turns: { usage?: any }[], live: number | null | undefined,
+): ContextUse | null {
+  let tokens = 0;
+  let window: number | null = null;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const u = turns[i]?.usage;
+    if (!u) continue;
+    if (!tokens && Number(u.context_tokens) > 0) tokens = Number(u.context_tokens);
+    if (!window && Number(u.context_window) > 0) window = Number(u.context_window);
+    if (tokens && window) break;
+  }
+  if (live && live > 0) tokens = live;
+  if (!tokens) return null;
+  const share = window ? Math.max(0, Math.min(1, tokens / window)) : null;
+  return {
+    tokens,
+    window,
+    share,
+    tone: share == null ? 'plain' : limitTone(share),
+    says: window ? `${tokenWords(tokens)} of ${tokenWords(window)}` : tokenWords(tokens),
+  };
 }

@@ -6,6 +6,7 @@ import inspect
 import json
 import logging
 import platform
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -952,7 +953,8 @@ class Server:
     MAX_DICTATION_BYTES = 16000 * 2 * 600
 
     async def dictate(self, request: Request, authorization: str = Header(default=""),
-                      x_dictate_prompt: str = Header(default="")) -> dict:
+                      x_dictate_prompt: str = Header(default=""),
+                      x_dictate_lang: str = Header(default="")) -> dict:
         self._device(authorization)
         if not transcribe_available():
             raise HTTPException(status_code=503, detail="no transcriber on this computer")
@@ -965,7 +967,11 @@ class Server:
         # also come back *as* the answer when the audio turns out to be silence,
         # so a result that is only the prompt again is thrown away.
         prompt = unquote(x_dictate_prompt).strip()[:800] or None
-        t = await dictate(data, prompt)
+        # `tr-TR` is what a browser calls it and `tr` is what whisper does. A
+        # tag that is not a language at all is dropped rather than refused:
+        # detection is a worse answer than being told, not a wrong one.
+        lang = x_dictate_lang.strip().lower().split("-")[0]
+        t = await dictate(data, prompt, lang if re.fullmatch(r"[a-z]{2,3}", lang) else None)
         text = (t or {}).get("text", "").strip()
         if prompt and text and text.rstrip(".") in prompt:
             text = ""

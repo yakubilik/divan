@@ -32,7 +32,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 execFileSync(join(web, 'node_modules', '.bin', 'tsc'), [
-  'src/lib/machine.ts', 'src/screens/Machine.tsx', 'src/vite-env.d.ts',
+  'src/lib/machine.ts', 'src/lib/drafts.ts', 'src/screens/Machine.tsx', 'src/vite-env.d.ts',
   '--outDir', out, '--rootDir', '.',
   '--target', 'ES2022', '--module', 'ESNext', '--moduleResolution', 'bundler',
   '--jsx', 'react-jsx', '--strict', '--skipLibCheck',
@@ -399,11 +399,61 @@ group('what is left of a plan');
       === true
     && M.planUse([w('five_hour', 1, { status: 'rejected', resets_at: NOW_S - 60 })], NOW_S).spent
       === false);
+  // The tool only reports during a turn, so a sign-in nobody has used for a
+  // week still holds the last figure anybody saw. A window past its reset has
+  // refilled: `35%` on a plan that reset ten days ago is a number about a
+  // window that no longer exists.
+  const old = M.planUse([w('seven_day', 0.35, { resets_at: NOW_S - 86_400 })], NOW_S);
+  ok('a reading from before the window refilled is not drawn as current',
+    old.top === null && old.unknown === true && old.lapsed === true
+    && M.planUse([], NOW_S).lapsed === false);
   // Every window of one report is measured at the same instant, so one behind
   // the newest reading is a leftover the tool has stopped reporting.
   ok('a window the newest report left out is marked stale',
     M.planUse([w('five_hour', 0.2), w('seven_day', 0.3, { at: NOW_S - 600 })], NOW_S)
       .windows.map((x) => x.stale).join() === 'false,true');
+}
+
+group('how full the conversation is');
+{
+  const turns = [
+    { usage: { context_tokens: 120_000, context_window: 1_000_000 } },
+    { usage: { input_tokens: 5 } },
+  ];
+  // The newest turn that says: an older daemon's turns say nothing, and one of
+  // those at the end of the list must not blank a figure an earlier turn gave.
+  ok('the window is read off the newest turn that reports it',
+    M.contextUse(turns, null).says === '120K of 1M' && M.contextUse(turns, null).share === 0.12);
+  // The request in flight is newer than any finished turn.
+  ok('…and what is in flight wins while there is one',
+    M.contextUse(turns, 950_000).tone === 'danger'
+    && M.contextUse(turns, 950_000).says === '950K of 1M');
+  ok('nothing measured is nothing drawn, and a size nobody reported is not guessed',
+    M.contextUse([{ usage: { input_tokens: 5 } }], null) === null
+    && M.contextUse([], 42_000).window === null && M.contextUse([], 42_000).share === null);
+}
+
+group('a draft stays with the chat it was typed in');
+{
+  const DR = await load('src/lib/drafts.js');
+  const d = DR.useDrafts.getState();
+  const a = DR.draftKey('studio', 'c1');
+  const b = DR.draftKey('studio', 'c2');
+  d.setText(a, 'half a thought');
+  // The composer is one component that stays mounted while the chat under it
+  // changes: held there, this sentence was in the next chat's box, one Enter
+  // from being sent to the wrong agent.
+  ok('what is typed in one chat is not in the next one opened',
+    DR.draftText(DR.useDrafts.getState(), a) === 'half a thought'
+    && DR.draftText(DR.useDrafts.getState(), b) === '');
+  ok('…and it is still there after a reload',
+    JSON.parse(localStorage.getItem('rac.drafts.v1'))[a] === 'half a thought');
+  DR.useDrafts.getState().setAttached(a, [{ path: '/tmp/x.png' }]);
+  DR.useDrafts.getState().clear(a);
+  ok('sending it leaves nothing behind',
+    DR.draftText(DR.useDrafts.getState(), a) === ''
+    && DR.draftAttached(DR.useDrafts.getState(), a).length === 0
+    && !(a in JSON.parse(localStorage.getItem('rac.drafts.v1'))));
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');

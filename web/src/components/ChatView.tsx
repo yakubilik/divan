@@ -6,16 +6,19 @@ import { ChatComposer } from './ChatComposer';
 import { ChatMenu } from './ChatMenu';
 import { ChatDetails } from './ChatDetails';
 import { LimitsRing } from './LimitsRing';
+import { contextUse, type ContextUse } from '../lib/machine';
 import { duration, shortPath, toolSummary } from '../lib/format';
 import type { Field } from './FieldSheet';
 import type { Chat, Group, LimitWindow } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
 
-function Header({ chat, groupName, count, accountLabel, accountLimits, now,
+function Header({ chat, groupName, count, accountLabel, accountLimits, context, now,
                  onEdit, onMenu, onDetails, detailsOpen }: {
   chat: Chat; groupName: string | null; count: number; accountLabel: string | null;
   /** Every window this chat's sign-in last reported, for the ring. */
   accountLimits: LimitWindow[] | undefined;
+  /** …and how full the conversation itself is. */
+  context: ContextUse | null;
   now: number;
   onEdit: (f: Field) => void;
   onMenu: () => void;
@@ -70,7 +73,8 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, now,
         {/* Next to the model and the effort, because those three are one
             question: what is running this, how hard, and how much of the plan
             is left to run it with. */}
-        <LimitsRing windows={accountLimits} now={now} accountLabel={accountLabel} />
+        <LimitsRing windows={accountLimits} now={now} accountLabel={accountLabel}
+          context={context} />
         <Chip onClick={() => onEdit('perm_mode')} tone={chat.perm_mode === 'bypass' ? 'warn' : 'plain'}>
           <Icon path={P.shield} size={12} color={chat.perm_mode === 'bypass' ? C.warn : C.mute} />
           {chat.perm_mode}
@@ -166,7 +170,7 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
 /** What is attached but not sent yet. A picture is shown as the picture, at the
  *  size a thumbnail wants to be — a file name is not a preview, and the whole
  *  point of attaching a screenshot is to see that it is the right one. */
-export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onUpload, onPopOut, sending }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onUpload, onPopOut, sending }: {
   chat: Chat | null;
   hostKey: string | null;
   log: ChatLog;
@@ -179,6 +183,8 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   accountLimits: LimitWindow[] | undefined;
   now: number;
   liveTokens: number | null;
+  /** What the request in flight was sent with: the window as it is filling. */
+  liveContext: number | null;
   sending: boolean;
   onPopOut: () => void;
   onSend: (text: string, attachments: any[]) => void;
@@ -233,6 +239,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
         <Header
           chat={chat} groupName={groupName} count={msgCount} accountLabel={accountLabel}
           accountLimits={accountLimits} now={now}
+          context={contextUse(log.items.filter((i) => i.kind === 'turn') as any[], liveContext)}
           onEdit={onEdit} onMenu={() => { setDetails(false); setMenu(true); }}
           onDetails={() => setDetails((v) => !v)} detailsOpen={details}
         />

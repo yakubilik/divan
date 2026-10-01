@@ -147,7 +147,7 @@ export function Overview({
   return (
     <div style={{
       flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20,
-      padding: '24px 32px 96px', background: T.bg,
+      padding: `24px 32px ${BAR_ROW + 12}px`, background: T.bg,
       // The board fills the page and its columns scroll; everything else is a
       // page that scrolls under a bar fixed over it.
       overflowY: board ? 'hidden' : 'auto',
@@ -272,6 +272,18 @@ function Bar({ onAsk, note }: {
   };
 
   return (
+    <>
+    {/* The bar's own row, held. The bar floats so that it does not scroll away
+        with the page, and floating over the page it sat on top of whatever
+        card had scrolled under it — a button half behind a text field. So the
+        row it is in is the page's colour all the way across, with the hairline
+        a docked thing has: cards stop at it rather than passing under. The
+        page ends that much early for the same row (`padding` above), so
+        nothing is ever hidden behind this for good. */}
+    <div aria-hidden style={{
+      position: 'fixed', left: 0, right: 0, bottom: 0, height: BAR_ROW, zIndex: 9,
+      background: T.bg, borderTop: `1px solid ${T.line}`, pointerEvents: 'none',
+    }} />
     <div style={{
       position: 'fixed', left: '50%', bottom: 22, transform: 'translateX(-50%)', zIndex: 10,
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
@@ -288,8 +300,15 @@ function Bar({ onAsk, note }: {
         onSend={() => { void say(); }}
       />
     </div>
+    </>
   );
 }
+
+/** How tall the row the command bar sits in is: the 22 pt it floats off the
+ *  bottom edge, the bar, and the one-line note that stands over it (which
+ *  product a sentence will be said about). It is also what the page leaves
+ *  empty at its foot, so the two are one number. */
+const BAR_ROW = 118;
 
 /** Everything, which is the page the frames draw: the counters, the products and
  *  the roster. */

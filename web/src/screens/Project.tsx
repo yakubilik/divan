@@ -64,25 +64,30 @@ export function Project({ view, project: p, onCard }: {
       <div style={{
         display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 420px', gap: 24, alignItems: 'start',
       }}>
-        {blank(p)
-          // A board nobody has put a card on yet. It used to replace the whole
-          // page, which is how a product with eight months of history behind it
-          // came out reading as something nobody had started: the board is
-          // empty, the *product* is not, and the two are different sentences.
-          ? (
-            <EmptyState
-              title="A new board."
-              body={blankBody(p)}
-              foot="Nothing starts by itself: a card runs when it is moved into In Progress."
-              style={{ padding: '8px 0 24px' }}
-            />
-          )
-          : <RightNow view={view} project={p} onCard={onCard} />}
+        {/* One column for both, and not two rows of a grid. As rows, the
+            first was as tall as the taller of its two cells — the timeline —
+            so a product with one thing running and a long history drew a hole
+            the height of that history between Right now and what is still
+            open. What is happening and what is not are the same question
+            asked twice, and a reader goes down one column for both. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
+          {blank(p)
+            // A board nobody has put a card on yet. It used to replace the whole
+            // page, which is how a product with eight months of history behind it
+            // came out reading as something nobody had started: the board is
+            // empty, the *product* is not, and the two are different sentences.
+            ? (
+              <EmptyState
+                title="A new board."
+                body={blankBody(p)}
+                foot="Nothing starts by itself: a card runs when it is moved into In Progress."
+                style={{ padding: '8px 0 24px' }}
+              />
+            )
+            : <RightNow view={view} project={p} onCard={onCard} />}
+          <StillOpen project={p} now={view.now} />
+        </div>
         <Timeline project={p} now={view.now} />
-        {/* Under Right now, in the same column: what is happening and what is
-            not happening are the same question asked twice, and a reader goes
-            down one column for both. */}
-        <StillOpen project={p} now={view.now} />
       </div>
     </div>
   );

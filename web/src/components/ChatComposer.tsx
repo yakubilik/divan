@@ -19,6 +19,7 @@
  *  land.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { draftAttached, draftKey, draftText, useDrafts } from '../lib/drafts';
 import { C, R } from '../lib/theme';
 import { Icon, P, Pulse, Spinner, mono } from '../ui/kit';
 import { dictate, fileUrl, warmDictation } from '../lib/actions';
@@ -88,8 +89,15 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
   onInterrupt: () => void;
   onUpload: (file: File) => Promise<any>;
 }) {
-  const [text, setText] = useState('');
-  const [pending, setPending] = useState<any[]>([]);
+  // What is typed and what is attached belong to the chat, not to this box:
+  // the box stays mounted while the chat under it changes (`lib/drafts.ts`).
+  const key = draftKey(hostKey, chat.id);
+  const text = useDrafts((s) => draftText(s, key));
+  const pending = useDrafts((s) => draftAttached(s, key));
+  const setText = (next: string | ((was: string) => string)) =>
+    useDrafts.getState().setText(key, next);
+  const setPending = (next: any[] | ((was: any[]) => any[])) =>
+    useDrafts.getState().setAttached(key, next);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -197,8 +205,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
       || pending.map((a) => a.transcript).filter(Boolean).join('\n')
       || 'Have a look at this.';
     onSend(caption, pending);
-    setText('');
-    setPending([]);
+    useDrafts.getState().clear(key);
   };
 
   const folder = chat.cwd.split(/[/\\]/).pop();
