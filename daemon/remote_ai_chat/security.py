@@ -1,9 +1,17 @@
 """Dangerous-command detection, path allowlist, secret redaction."""
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 import time
+from contextvars import ContextVar
 from pathlib import Path
+
+import httpx
+import jwt
+
+log = logging.getLogger("rac.security")
 
 DESTRUCTIVE_PATTERNS = [
     re.compile(r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f?[a-zA-Z]*\s+(/|~|\$HOME|\*)(\s|$)"),
@@ -146,6 +154,141 @@ class PathPolicy:
         return out
 
 
+class AccessRefused(Exception):
+    """A tunnelled request whose Access token did not verify. The message is why."""
+
+
+async def fetch_jwks(url: str) -> dict:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        return r.json()
+
+
+# The mail Access signed the current request in as: None off the tunnel and
+# where Access is not configured. Set by `TunnelGate` around the request, so
+# whatever answers it can say who it was without every route passing it along.
+ACCESS_EMAIL: ContextVar[str | None] = ContextVar("tunnel_access_email", default=None)
+
+
+class TunnelAccess:
+    """Cloudflare Access's word for who is asking, checked rather than taken.
+
+    With Access in front of the hostname, the edge signs somebody in and then
+    puts a token on every request it lets through — `Cf-Access-Jwt-Assertion`,
+    and the `CF_Authorization` cookie the browser carries back, the WebSocket
+    handshake included. It is an RS256 JWT signed by the team's own keys, and
+    it is the only thing here that names a person rather than an address or a
+    machine.
+
+    The edge refusing the unsigned is not enough to lean on: a hostname that
+    is taken out of the Access application, or a second route to the same
+    tunnel, forwards requests nobody signed in for and nothing would say so.
+    So the token is verified here — signature, `aud`, `iss`, `exp` — and a
+    request without a good one is refused before a device token is looked at.
+
+    The keys are fetched once and kept. Access rotates them, so a `kid` that
+    is not among them fetches again — at most once a minute, whatever the
+    answer was, or anybody could make this daemon fetch on every request by
+    inventing one. A fetch that fails keeps the keys already held.
+
+    The fetcher and the clock are passed in so a test can replace both.
+    """
+
+    HEADER = b"cf-access-jwt-assertion"
+    COOKIE = "CF_Authorization"
+    REFETCH_S = 60.0
+    # Between the edge's clock and this machine's. Without it somebody who
+    # signed in a second ago is refused for a token from the future.
+    LEEWAY_S = 60
+    TEAM = re.compile(r"[a-z0-9][a-z0-9-]*")
+
+    def __init__(self, fetch=fetch_jwks, clock=time.monotonic) -> None:
+        self.fetch = fetch
+        self.clock = clock
+        self.team: str | None = None      # whose keys these are
+        self.keys: dict[str, jwt.PyJWK] = {}
+        self.fetched_at: float | None = None
+        self._fetching = asyncio.Lock()
+
+    @classmethod
+    def token(cls, scope) -> str:
+        """The token on a request: the edge's header, or else the browser's cookie."""
+        cookies = ""
+        for name, value in scope.get("headers") or []:
+            name = name.lower()
+            if name == cls.HEADER:
+                return value.decode("latin-1").strip()
+            if name == b"cookie":
+                cookies = value.decode("latin-1")
+        for part in cookies.split(";"):
+            name, _, value = part.strip().partition("=")
+            if name == cls.COOKIE:
+                return value
+        return ""
+
+    async def email(self, token: str, team: str, aud: str, emails: set[str]) -> str:
+        """The mail a token was issued to, or `AccessRefused`.
+
+        Empty for a token that verifies and has no mail in it — a service
+        token — which only passes when there is no list to be on.
+        """
+        if not aud or not self.TEAM.fullmatch(team):
+            raise AccessRefused("tunnel_access_team and tunnel_access_aud are not both set")
+        if not token:
+            raise AccessRefused("no Access token")
+        try:
+            kid = jwt.get_unverified_header(token).get("kid")
+        except jwt.PyJWTError as exc:
+            raise AccessRefused(f"not a token: {exc}") from None
+        key = await self._key(team, kid) if isinstance(kid, str) else None
+        if key is None:
+            raise AccessRefused("signed by a key the team does not publish")
+        try:
+            claims = jwt.decode(
+                token, key.key, algorithms=["RS256"], audience=aud,
+                issuer=f"https://{team}.cloudflareaccess.com", leeway=self.LEEWAY_S,
+                options={"require": ["exp", "aud", "iss"]})
+        except jwt.PyJWTError as exc:
+            raise AccessRefused(str(exc)) from None
+        email = str(claims.get("email") or "").strip().lower()
+        if emails and email not in emails:
+            raise AccessRefused(f"{email or 'a token with no mail'} is not in tunnel_access_emails")
+        return email
+
+    async def _key(self, team: str, kid: str) -> jwt.PyJWK | None:
+        if team != self.team:
+            self.team, self.keys, self.fetched_at = team, {}, None
+        if kid in self.keys:
+            return self.keys[kid]
+        # One fetch at a time: the requests that arrive while it is out wait
+        # for its answer instead of each sending their own.
+        async with self._fetching:
+            now = self.clock()
+            due = self.fetched_at is None or now - self.fetched_at >= self.REFETCH_S
+            if kid not in self.keys and due and team == self.team:
+                self.fetched_at = now
+                try:
+                    keys = self._parse(await self.fetch(
+                        f"https://{team}.cloudflareaccess.com/cdn-cgi/access/certs"))
+                except Exception as exc:
+                    log.warning("could not fetch the Access keys of %s: %s", team, exc)
+                else:
+                    if team == self.team:
+                        self.keys = keys
+        return self.keys.get(kid) if team == self.team else None
+
+    @staticmethod
+    def _parse(jwks: dict) -> dict[str, jwt.PyJWK]:
+        keys = {}
+        for raw in jwks.get("keys") or []:
+            try:
+                keys[raw["kid"]] = jwt.PyJWK.from_dict(raw)
+            except Exception:
+                continue
+        return keys
+
+
 class TunnelGate:
     """The door a Cloudflare tunnel comes in by.
 
@@ -165,6 +308,10 @@ class TunnelGate:
     tailnet or on loopback is already answered, exactly as before; with it,
     they are held to the list. The only thing it can do is narrow the door.
 
+    With `tunnel_access_*` set, an address in the list is not enough: the
+    request must also carry a Cloudflare Access token that verifies — see
+    `TunnelAccess`. Both are settled here, before a device token is looked at.
+
     Pure ASGI rather than `BaseHTTPMiddleware` because the socket matters more
     than the routes do: `/ws` is where a client asks for anything, and an HTTP
     middleware never sees it.
@@ -172,9 +319,10 @@ class TunnelGate:
 
     HEADER = b"cf-connecting-ip"
 
-    def __init__(self, app, cfg) -> None:
+    def __init__(self, app, cfg, access: TunnelAccess | None = None) -> None:
         self.app = app
         self.cfg = cfg
+        self.access = access or TunnelAccess()
 
     @staticmethod
     def address(value: str | None) -> str | None:
@@ -187,17 +335,31 @@ class TunnelGate:
         return value.split(",")[0].strip()
 
     async def __call__(self, scope, receive, send) -> None:
-        if scope["type"] in ("http", "websocket"):
-            ip = self._claimed(scope)
-            if ip is not None:
-                # Only on the tunnel's path: one stat per tunnelled request,
-                # none at all for the tailnet, and an edited list needs no
-                # restart — see Config.refresh_tunnel_allow_ips.
-                self.cfg.refresh_tunnel_allow_ips()
-            if ip is not None and not self.cfg.tunnel_allows(ip):
+        ip = self._claimed(scope) if scope["type"] in ("http", "websocket") else None
+        if ip is None:
+            await self.app(scope, receive, send)
+            return
+        # Only on the tunnel's path: one stat per tunnelled request, none at
+        # all for the tailnet, and an edited setting needs no restart — see
+        # Config.refresh_tunnel.
+        self.cfg.refresh_tunnel()
+        if not self.cfg.tunnel_allows(ip):
+            await self._refuse(scope, send)
+            return
+        email = None
+        want = self.cfg.tunnel_access()
+        if want is not None:
+            try:
+                email = await self.access.email(self.access.token(scope), *want)
+            except AccessRefused as exc:
+                log.warning("tunnel request from %s refused by Access: %s", ip, exc)
                 await self._refuse(scope, send)
                 return
-        await self.app(scope, receive, send)
+        signed_in = ACCESS_EMAIL.set(email)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            ACCESS_EMAIL.reset(signed_in)
 
     def _claimed(self, scope) -> str | None:
         """The address Cloudflare says asked, or None if this is not tunnelled."""
