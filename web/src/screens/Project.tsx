@@ -52,7 +52,12 @@ export function Project({ view, project: p, onCard }: {
   const old = oldLine(p, view.now, uptime);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
+    // As tall as what is in it and no shorter. The page that holds this is a
+    // column that scrolls, and a column squeezes whatever lets it: left free to
+    // shrink, this stopped at the height of the window and everything in it
+    // spilled out underneath — past the room the page keeps clear for the bar,
+    // so the last thing still open sat behind it and no scroll reached it.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flexShrink: 0 }}>
       {!!old && <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>{old}</div>}
       <Life project={p} now={view.now} />
       {!!asleep && (
@@ -108,11 +113,6 @@ function Life({ project: p, now }: { project: MergedProject; now: number }) {
   return (
     <Card radius={RADIUS.tile} style={{
       flexDirection: 'row', alignItems: 'stretch', gap: 28, padding: '14px 18px',
-      // The page is a column, and a card clips what overflows it — so the
-      // moment the page grew taller than the window, this was the item a
-      // column could squeeze: the rail kept its bars and lost every word under
-      // them. It is as tall as what is in it and no shorter.
-      flexShrink: 0,
     }}>
       {!!steps && (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9 }}>

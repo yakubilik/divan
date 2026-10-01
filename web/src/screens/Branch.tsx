@@ -56,7 +56,8 @@ export function Branch({ project: p, branch: b, index, now, onProject, onCard }:
   const card = branchCards(p, now).find((x) => x.kind === b.kind);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minHeight: 0 }}>
+    // No shorter than what is in it, for the reason the product's page gives.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 500, color: T.ink2,
       }}>
