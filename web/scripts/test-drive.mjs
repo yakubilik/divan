@@ -1233,6 +1233,27 @@ group('chats are filed into groups from the panel');
     made >= 0 && moved > made && countOf('Later') === '1',
     JSON.stringify(asked.map((a) => [a.type, a.data])));
 
+  // …and so does dropping it on a heading. `Safari login` is picked up and
+  // put down on the group, then on the list of what nobody has filed.
+  const row = (words) => [...doc.querySelectorAll('button[draggable="true"]')]
+    .find((b) => (b.textContent ?? '').includes(words));
+  const carry = async (words, onto) => {
+    const held = new Transfer();
+    await drag(row(words), 'dragstart', held);
+    await drag(onto, 'dragover', held);
+    await drag(onto, 'drop', held);
+    await settle();
+  };
+  asked.length = 0;
+  await carry('Safari login', menuOf('Invoices'));
+  const filed = asked.find((a) => a.type === 'chat.update')?.data;
+  await carry('Safari login', row('Webhook retry policy'));
+  const unfiled = asked.filter((a) => a.type === 'chat.update')[1]?.data;
+  ok('a chat dragged onto a group is filed in it, and dragged back out is unfiled',
+    filed?.chat_id === 'c2' && String(filed?.group_id).startsWith('g-made')
+      && unfiled?.chat_id === 'c2' && unfiled?.group_id === null && countOf('Invoices') === '0',
+    JSON.stringify(asked.map((a) => [a.type, a.data])));
+
   asked.length = 0;
   await click(menuOf('Later'));
   await click(find('Delete group'));

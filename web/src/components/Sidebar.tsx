@@ -3,7 +3,8 @@ import { C, R, SHADOW } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
 import { ago, uptime } from '../lib/format';
 import { useFleet, type HostSlot } from '../lib/fleet';
-import { createGroup, deleteGroup, renameGroup } from '../lib/actions';
+import { createGroup, deleteGroup, renameGroup, updateChat } from '../lib/actions';
+import { hasChatDrag, readChatDrag, setChatDrag } from '../lib/dnd';
 import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
 import type { Chat, Group } from '../lib/protocol';
 
@@ -207,14 +208,17 @@ function sections(chats: Chat[], groups: Group[], hostKey: string, searching: bo
   return out;
 }
 
-function ChatRow({ chat, selected, onPick }: {
+function ChatRow({ chat, selected, onPick, onDrag }: {
   chat: Chat; selected: boolean; onPick: () => void;
+  /** Set where the row can be picked up and filed under another heading. */
+  onDrag?: (dt: DataTransfer) => void;
 }) {
   const awaiting = chat.status === 'awaiting_approval';
   const running = chat.status === 'running';
   return (
     <button
       type="button" onClick={onPick}
+      draggable={!!onDrag} onDragStart={onDrag && ((e) => onDrag(e.dataTransfer))}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56,
         padding: '8px 10px', borderRadius: R.card, cursor: 'pointer', textAlign: 'left',
@@ -292,6 +296,18 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
   // Groups belong to one computer, so there is one to make only while the list
   // is one computer's.
   const canGroup = !!slot && !!focus && !fleetWide;
+  /** The heading a dragged chat is over. */
+  const [over, setOver] = useState<string | null>(null);
+  // A chat dropped on a group goes into it; dropped on anything that is not a
+  // group — a folder, the unfiled list — it comes out of the one it was in.
+  const drop = (s: Section, dt: DataTransfer) => {
+    setOver(null);
+    const drag = readChatDrag(dt);
+    if (!drag || drag.hostKey !== s.hostKey) return;
+    const to = s.kind === 'group' ? s.key : null;
+    const from = hosts[s.hostKey]?.chats.find((c) => c.id === drag.chatId)?.group_id ?? null;
+    if (from !== to) updateChat(s.hostKey, drag.chatId, { group_id: to }).catch(() => {});
+  };
 
   // Collapsed: the chat list is gone. It exists because the wall of tiles under
   // the Machine place wants the width, and it can give the whole list up without
@@ -416,7 +432,27 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
         {list.map((s) => {
           const shut = collapsed[s.key];
           return (
-            <div key={s.key} style={{ marginBottom: 4, position: 'relative' }}>
+            <div
+              key={s.key}
+              // The whole section catches, not only its heading: a group with
+              // forty chats in it is a tall target and a 30px line is not.
+              {...(canGroup ? {
+                onDragOver: (e: React.DragEvent) => {
+                  if (!hasChatDrag(e.dataTransfer)) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (over !== s.key) setOver(s.key);
+                },
+                onDragLeave: (e: React.DragEvent) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver((o) => (o === s.key ? null : o));
+                },
+                onDrop: (e: React.DragEvent) => { e.preventDefault(); drop(s, e.dataTransfer); },
+              } : {})}
+              style={{
+                marginBottom: 4, position: 'relative', borderRadius: R.card,
+                ...(over === s.key ? { background: C.accentTint, boxShadow: `inset 0 0 0 1px ${C.accentRing}` } : {}),
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center' }}>
               <button
                 type="button"
@@ -473,6 +509,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
                   key={`${s.hostKey}/${c.id}`} chat={c}
                   selected={selected === c.id && selectedHost === s.hostKey}
                   onPick={() => onSelect(s.hostKey, c.id)}
+                  onDrag={canGroup ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}
                 />
               ))}
             </div>

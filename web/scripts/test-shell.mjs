@@ -368,6 +368,8 @@ group('what the panel offers, it can still do');
   // and the wall it was dragged onto can no longer be on screen together. An
   // affordance that cannot land, and an instruction that cannot be followed,
   // are worse than neither — so both are gone, and this is what keeps them gone.
+  // The list has a drag of its own since: a chat onto a group's heading, which
+  // starts and lands in the list (`test-drive.mjs` drops one).
   const files = [];
   const walk = (dir) => {
     for (const e of readdirSync(join(web, dir), { withFileTypes: true })) {
@@ -379,10 +381,8 @@ group('what the panel offers, it can still do');
   walk('src');
   // …where it is called, rather than where it is defined.
   const starts = files.filter((f) => f !== 'src/lib/dnd.ts' && /setChatDrag\(/.test(src(f)));
-  ok('one place starts a chat drag, and it is the wall the drag lands on',
-    eq(starts, ['src/screens/Terminal.tsx']), starts.join(', '));
-  ok('…the chat list offers none, because nothing on screen with it could catch one',
-    !/draggable/.test(src('src/components/Sidebar.tsx')));
+  ok('a chat drag starts in the two places that also catch one: the list and the wall',
+    eq(starts.sort(), ['src/components/Sidebar.tsx', 'src/screens/Terminal.tsx']), starts.join(', '));
   ok('…and nothing tells anyone to drag a chat out of a list that is not there',
     !files.some((f) => /drag a chat onto it from the list/i.test(src(f))));
   ok('the module that agrees the payload says which of the two it is now',

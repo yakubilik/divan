@@ -1,11 +1,11 @@
-/** Dragging a chat around the wall. One place starts a drag and one catches it
- *  — a tile on the wall, picked up and put down in a different order — so the
- *  payload is agreed here rather than guessed at each end.
+/** Dragging a chat. Two things are picked up, and each is put down where it
+ *  was picked up from: a tile on the wall, into a different order, and a row
+ *  in the chat list, under a different group's heading. The payload is agreed
+ *  here rather than guessed at each end.
  *
- *  The chat list used to start one too, back when it and the wall shared a
- *  screen. They cannot be on screen together now: the list is the Chat place and
- *  the wall is a page of the Machine place, so a drag out of the list could only
- *  ever end where it began, and the list no longer offers one.
+ *  The list and the wall cannot be on screen together — the list is the Chat
+ *  place and the wall is a page of the Machine place — so neither can be
+ *  dropped on the other, and nothing offers to.
  *
  *  A private MIME type is what makes the catch safe: a file dragged in from the
  *  desktop, or a selection dragged out of a bubble, must not read as a chat
