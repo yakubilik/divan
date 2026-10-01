@@ -73,6 +73,30 @@ const life = (NOW) => ({
     { id: 'm3', at: NOW + 30 * 86_400, title: 'v4.0 · Custom domains', note: 'target launch',
       kind: 'target' },
   ],
+  // …and what it has not done. The three states that are not `done`, so the
+  // panel's ordering has something to order, plus one settled with a thread on
+  // it in both voices.
+  open_items: [
+    { id: 'o1', project_id: 'p-quire', title: 'Payment provider keys',
+      body: 'The production parameter is still a placeholder, so nothing can be charged.',
+      state: 'blocked', owner: '', area: 'payments', sort: 1, comments: [],
+      created_at: NOW - 9 * 86_400, updated_at: NOW - 9 * 86_400, closed_at: null },
+    { id: 'o2', project_id: 'p-quire', title: 'Custom domain approval',
+      body: 'The registrar has had the transfer for a week.',
+      state: 'waiting', owner: 'the registrar', area: 'infra', sort: 2,
+      comments: [
+        { at: NOW - 3 * 86_400, who: 'hermes', text: 'Still pending as of this morning.' },
+        { at: NOW - 2 * 86_400, who: 'you', text: 'Bedirhan has the registrar login.' },
+      ],
+      created_at: NOW - 7 * 86_400, updated_at: NOW - 2 * 86_400, closed_at: null },
+    { id: 'o3', project_id: 'p-quire', title: 'Write the onboarding mail',
+      body: '', state: 'todo', owner: '', area: '', sort: 3, comments: [],
+      created_at: NOW - 2 * 86_400, updated_at: NOW - 2 * 86_400, closed_at: null },
+    { id: 'o4', project_id: 'p-quire', title: 'Pick a hosting region',
+      body: '', state: 'done', owner: '', area: 'infra', sort: 4, comments: [],
+      created_at: NOW - 30 * 86_400, updated_at: NOW - 20 * 86_400,
+      closed_at: NOW - 20 * 86_400 },
+  ],
 });
 
 /** Every board, built against one clock. A host spec is what the panel and the

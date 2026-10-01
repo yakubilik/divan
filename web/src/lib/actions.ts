@@ -1,7 +1,8 @@
 import { hostKey, useFleet } from './fleet';
 import { httpBase } from './ws';
 import type {
-  Chat, DaemonStatus, DivanCard, DivanCardGet, DivanExecutor, HostConfig, PoolView,
+  Chat, DaemonStatus, DivanCard, DivanCardGet, DivanExecutor, DivanOpenItem, HostConfig,
+  PoolView,
   Provider, RunPage,
 } from './protocol';
 
@@ -104,6 +105,30 @@ export const setExecutor = (
   key: string, cardId: string, executor: DivanExecutor | null, machine?: string | null,
 ) => call<DivanCard>(key, 'divan.card.executor',
   { card_id: cardId, executor, ...(machine ? { machine } : {}) });
+
+/** What a product is still waiting on. Every one of these answers with the
+ *  whole list in the board's own order, so nothing here has to work out what a
+ *  change did to it — the caller replaces what it holds. */
+export const openItems = (key: string, projectId: string, d: Record<string, any> = {}) =>
+  call<{ project_id: string; open_items: DivanOpenItem[] }>(
+    key, 'divan.project.open', { project_id: projectId, ...d });
+
+export const addOpenItem = (key: string, projectId: string, add: {
+  title: string; body?: string; state?: string; owner?: string; area?: string;
+}) => openItems(key, projectId, { add });
+
+export const setOpenItem = (
+  key: string, projectId: string, itemId: string, set: Record<string, any>,
+) => openItems(key, projectId, { item_id: itemId, set });
+
+/** `who` is passed rather than guessed: a line from Yakup is a decision and a
+ *  line from the assistant is a finding, and the card says which it is. */
+export const commentOpenItem = (
+  key: string, projectId: string, itemId: string, comment: string, who = 'you',
+) => openItems(key, projectId, { item_id: itemId, comment, who });
+
+export const removeOpenItem = (key: string, projectId: string, itemId: string) =>
+  openItems(key, projectId, { item_id: itemId, remove: true });
 
 export const interrupt = (key: string, chatId: string) =>
   call(key, 'chat.interrupt', { chat_id: chatId });

@@ -39,6 +39,7 @@ import {
 import { RADIUS, T, toneColours } from '../lib/theme';
 import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
 import { Card, EmptyState, SectionHeader } from '../ui/divan';
+import { StillOpen } from '../components/StillOpen';
 import { mono } from '../ui/kit';
 
 export function Project({ view, project: p, onCard }: {
@@ -78,6 +79,10 @@ export function Project({ view, project: p, onCard }: {
           )
           : <RightNow view={view} project={p} onCard={onCard} />}
         <Timeline project={p} now={view.now} />
+        {/* Under Right now, in the same column: what is happening and what is
+            not happening are the same question asked twice, and a reader goes
+            down one column for both. */}
+        <StillOpen project={p} now={view.now} />
       </div>
     </div>
   );

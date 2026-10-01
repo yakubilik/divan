@@ -33,6 +33,10 @@ import { ProviderMark } from '../components/Sidebar';
 import { onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
 import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
 import { parsePairing, toolStatus } from '../lib/actions';
+import {
+  availability, dictateLang, forgetWhisperPreference, install, langChoices, langName,
+  setDictateLang, support, type Availability,
+} from '../lib/dictate';
 import { errText, t } from '../lib/i18n';
 import { ago, tilde, until, uptime, windowName } from '../lib/format';
 import { copyText } from '../lib/clipboard';
@@ -1023,6 +1027,74 @@ function AboutSection({ slot }: { slot: HostSlot }) {
  *  desktop screens dark and light) and which one is on screen is the reader's,
  *  not the daemon's. It follows the computer until it is told not to, and then
  *  it is remembered — a theme that resets every morning is not a setting. */
+/** Dictation is this browser's, like the theme: the microphone is its, the
+ *  speech model is its, and the language somebody speaks is not a fact about
+ *  any of the computers in the list. The reason it is a setting at all rather
+ *  than a guess is that the panel's own copy is English and pinned, so the
+ *  buttons say nothing about what is spoken into them — and a model fetched for
+ *  the wrong language is a few hundred megabytes of nothing.
+ *
+ *  The line under it is the honest state of the three engines
+ *  (`lib/dictate.ts`), because they are not interchangeable: one runs here, one
+ *  sends audio to the browser's maker, and one gives up live words for the
+ *  daemon's whisper. Which one you get is worth being told before you talk, not
+ *  after.
+ */
+function DictationSection() {
+  const [lang, setLang] = useState(dictateLang);
+  const [state, setState] = useState<Availability | null>(null);
+  const [busy, setBusy] = useState(false);
+  const canWhisper = useFleet((s) => Object.values(s.hosts).some((h) => h.info?.transcription));
+  const s = support();
+
+  const read = useCallback(() => {
+    availability(lang, canWhisper).then(setState);
+  }, [lang, canWhisper]);
+  useEffect(read, [read]);
+
+  const pick = (tag: string) => {
+    setDictateLang(tag);
+    setLang(tag);
+    // A browser that failed at one language is given the next one fresh.
+    forgetWhisperPreference();
+  };
+
+  const line = !s.secure
+    ? 'A microphone needs a secure page. The panel is one when it is opened on the computer itself, or over https behind a tunnel.'
+    : state === 'local'
+      ? `${langName(lang)} is on this computer. Nothing is sent anywhere and the words appear while you talk.`
+      : state === 'downloadable'
+        ? `This browser can fetch a ${langName(lang)} model and then run it here. A few hundred megabytes, once.`
+        : state === 'cloud'
+          ? `This browser has no ${langName(lang)} model of its own, so it will send the audio to its maker's speech service.`
+          : state === 'whisper'
+            ? 'This browser cannot do speech at all, so the computer will: whisper runs on it, which means the words arrive when you stop rather than while you talk.'
+            : 'Nothing here can turn speech into text, so the composer draws no microphone.';
+
+  return (
+    <>
+      <Mark>dictation</Mark>
+      {langChoices(lang).map((tag, i) => (
+        <Pick
+          key={tag} first={i === 0} label={langName(tag)} right={tag}
+          on={tag === lang} onPick={() => pick(tag)}
+        />
+      ))}
+      <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>{line}</div>
+      {state === 'downloadable' && (
+        <Button
+          label={busy ? 'Fetching…' : `Fetch the ${langName(lang)} model`}
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            install(lang).finally(() => { setBusy(false); read(); });
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 export function AppearanceSection() {
   const { choice, scheme, set } = useTheme();
   return (
@@ -1040,6 +1112,7 @@ export function AppearanceSection() {
           ? `Following this computer, which is ${scheme} right now. It changes with it.`
           : `Set by hand. This browser will open ${choice} until you change it back.`}
       </div>
+      <DictationSection />
     </>
   );
 }

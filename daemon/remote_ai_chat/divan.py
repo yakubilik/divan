@@ -191,6 +191,24 @@ MAX_KIND = 40
 #: is the one fact about a product no counter can work out.
 STAGES = ("idea", "build", "beta", "live", "growth")
 
+#: Where an open item stands. `blocked` is the one that stops other work and is
+#: drawn first; `waiting` is on somebody who is not us and cannot be hurried by
+#: working harder; `todo` is ours and nobody has started it. `done` stays on the
+#: product rather than being deleted — what a beta was waiting for is part of
+#: how it got out of beta.
+OPEN_STATES = ("blocked", "waiting", "todo", "done")
+
+#: An open item's line and the paragraph under it. The title is a card's title;
+#: the body is allowed more room than a card's summary because it is the whole
+#: of what somebody has to be told to do the thing.
+MAX_OPEN_TITLE = 120
+MAX_OPEN_BODY = 600
+MAX_COMMENT = 600
+
+#: How many comments one item keeps. A thread this long is a conversation that
+#: should have become a decision.
+MAX_COMMENTS = 50
+
 #: What a milestone is, beyond its date. `start` is the day the work began,
 #: `live` the day somebody outside could use it, `target` something promised and
 #: not yet done — the three a project page reads by name. Everything else is an
@@ -313,6 +331,35 @@ CREATE INDEX IF NOT EXISTS idx_cards_board ON cards(project_id, column, position
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_ustabasi ON cards(ustabasi_id)
   WHERE ustabasi_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_repos_path ON project_repos(path);
+-- What a product is still waiting on, and what somebody has to go and do about
+-- it. Not the board: a card is work an agent can be handed, and most of these
+-- cannot be handed to anybody on this computer — a token somebody has to make
+-- in a browser, a domain waiting on a registrar, a decision that has not been
+-- taken. They were the half of a product nothing on this machine wrote down,
+-- which is why a product could read "closed beta" with nobody able to say what
+-- the beta was waiting for.
+CREATE TABLE IF NOT EXISTS open_items (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  -- the one line: "Payment provider token"
+  title TEXT NOT NULL,
+  -- what is actually needed, in a person's words
+  body TEXT DEFAULT '',
+  -- 'blocked' (nothing can move until it is done), 'waiting' (somebody else
+  -- has it), 'todo' (ours to do, nobody has), 'done'
+  state TEXT DEFAULT 'todo',
+  -- who it is on, where that is a person rather than this computer: 'Bedirhan',
+  -- 'the registrar'. Empty where it is simply ours.
+  owner TEXT DEFAULT '',
+  -- what it is about, for the small word on the card: 'payments', 'content'
+  area TEXT DEFAULT '',
+  sort INTEGER DEFAULT 0,
+  -- [{at, who, text}] — the thread under it. A list and not a table because it
+  -- is read and written whole, always, and never queried across items.
+  comments TEXT DEFAULT '[]',
+  created_at REAL, updated_at REAL, closed_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_open_project ON open_items(project_id, sort);
 """
 
 #: Columns a database may predate. Same shape as `db.DB._migrate`: the table is
@@ -858,6 +905,132 @@ class Board:
         return [self.add_milestone(project_id, r.get("at"), r.get("title", ""),
                                    r.get("note", ""), r.get("kind", ""))
                 for r in rows]
+
+    # ── what a product is still waiting on ─────────────────────────────────
+
+    def open_items(self, project_id: str, include_done: bool = True) -> list[dict]:
+        """Everything still open on a product, worst first.
+
+        Blocked before waiting before to-do, because that is the order somebody
+        scanning the page needs them in: the first is stopping other work, the
+        second is a reminder to chase, the third is a list. Done sinks to the
+        bottom and stays — a beta is partly described by what it was waiting for.
+        """
+        rows = self._c.execute(
+            "SELECT * FROM open_items WHERE project_id=? ORDER BY sort, created_at, rowid",
+            (project_id,)).fetchall()
+        out = [self._open_view(r) for r in rows]
+        if not include_done:
+            out = [o for o in out if o["state"] != "done"]
+        rank = {state: i for i, state in enumerate(OPEN_STATES)}
+        return sorted(out, key=lambda o: (rank.get(o["state"], 9), o["sort"]))
+
+    @staticmethod
+    def _open_view(r) -> dict:
+        return {"id": r["id"], "project_id": r["project_id"], "title": r["title"],
+                "body": r["body"] or "", "state": r["state"] or "todo",
+                "owner": r["owner"] or "", "area": r["area"] or "",
+                "sort": r["sort"] or 0, "comments": _json(r["comments"], []),
+                "created_at": r["created_at"], "updated_at": r["updated_at"],
+                "closed_at": r["closed_at"]}
+
+    def get_open_item(self, item_id: str) -> dict | None:
+        r = self._c.execute("SELECT * FROM open_items WHERE id=?", (item_id,)).fetchone()
+        return self._open_view(r) if r else None
+
+    def add_open_item(self, project_id: str, title: str, body: str = "",
+                      state: str = "todo", owner: str = "", area: str = "") -> dict:
+        if self.get_project(project_id) is None:
+            raise ValueError("no such project")
+        text = " ".join(str(title or "").split())[:MAX_OPEN_TITLE]
+        if not text:
+            raise ValueError("an open item needs a title")
+        word = str(state or "todo").strip().lower()
+        if word not in OPEN_STATES:
+            raise ValueError(f"{word!r} is not a state — try {', '.join(OPEN_STATES)}")
+        now = time.time()
+        row = {"id": new_id(), "project_id": project_id, "title": text,
+               "body": str(body or "").strip()[:MAX_OPEN_BODY], "state": word,
+               "owner": " ".join(str(owner or "").split())[:60],
+               "area": " ".join(str(area or "").split())[:40],
+               # New things go to the end of their own state's run; the state is
+               # what orders the page, and arrival orders what is inside it.
+               "sort": int(now), "comments": "[]",
+               "created_at": now, "updated_at": now,
+               "closed_at": now if word == "done" else None}
+        with self._lock:
+            self._c.execute(
+                "INSERT INTO open_items"
+                " (id,project_id,title,body,state,owner,area,sort,comments,"
+                "  created_at,updated_at,closed_at)"
+                " VALUES (:id,:project_id,:title,:body,:state,:owner,:area,:sort,"
+                " :comments,:created_at,:updated_at,:closed_at)", row)
+            self._c.commit()
+        return self.get_open_item(row["id"])
+
+    OPEN_FIELDS = ("title", "body", "state", "owner", "area")
+
+    def update_open_item(self, item_id: str, **fields) -> dict:
+        was = self.get_open_item(item_id)
+        if was is None:
+            raise ValueError("no such item")
+        sets, args = [], []
+        for key in self.OPEN_FIELDS:
+            if key not in fields:
+                continue
+            value = fields[key]
+            if key == "state":
+                value = str(value or "").strip().lower()
+                if value not in OPEN_STATES:
+                    raise ValueError(f"{value!r} is not a state"
+                                     f" — try {', '.join(OPEN_STATES)}")
+            elif key == "title":
+                value = " ".join(str(value or "").split())[:MAX_OPEN_TITLE]
+                if not value:
+                    raise ValueError("an open item needs a title")
+            elif key == "body":
+                value = str(value or "").strip()[:MAX_OPEN_BODY]
+            else:
+                value = " ".join(str(value or "").split())[:60]
+            sets.append(f"{key}=?")
+            args.append(value)
+        if not sets:
+            return was
+        sets.append("updated_at=?")
+        args.append(time.time())
+        if "state" in fields:
+            # Closed when it closed, and cleared when it opens again: a date on
+            # an item somebody reopened is a date that lies.
+            sets.append("closed_at=?")
+            args.append(time.time() if fields["state"] == "done" else None)
+        args.append(item_id)
+        with self._lock:
+            self._c.execute(f"UPDATE open_items SET {', '.join(sets)} WHERE id=?", args)
+            self._c.commit()
+        return self.get_open_item(item_id)
+
+    def comment_open_item(self, item_id: str, text: str, who: str = "you") -> dict:
+        """One line under an item. `who` is said out loud because the two
+        writers here are not the same voice: a note from Yakup is a decision and
+        a note from the assistant is a finding."""
+        item = self.get_open_item(item_id)
+        if item is None:
+            raise ValueError("no such item")
+        said = str(text or "").strip()[:MAX_COMMENT]
+        if not said:
+            raise ValueError("a comment needs something in it")
+        thread = [*item["comments"],
+                  {"at": time.time(), "who": (who or "you").strip()[:40], "text": said}]
+        with self._lock:
+            self._c.execute("UPDATE open_items SET comments=?, updated_at=? WHERE id=?",
+                            (json.dumps(thread[-MAX_COMMENTS:]), time.time(), item_id))
+            self._c.commit()
+        return self.get_open_item(item_id)
+
+    def delete_open_item(self, item_id: str) -> None:
+        with self._lock:
+            self._c.execute("DELETE FROM open_items WHERE id=?", (item_id,))
+            self._c.commit()
 
     def branches(self, project_id: str) -> list[dict]:
         rows = self._c.execute(
@@ -1447,6 +1620,10 @@ class Board:
                 # product, which on a phone holding four computers is the timeline
                 # arriving last on every screen.
                 "milestones": self.milestones(project["id"]),
+                # …and so does what it is still waiting on. Same reason: a panel
+                # that asked for this separately would draw every product's
+                # blockers one round trip after the product.
+                "open_items": self.open_items(project["id"]),
                 "counts": counts, "running": running, "waiting": waiting,
                 "summary_line": _summary_line(running, waiting, queued)}
 

@@ -11,11 +11,19 @@
  *  So: one composer. `compact` is the only thing the window asks for, and it
  *  is a size rather than a feature — the same buttons, the same keys, the same
  *  drag-and-drop, drawn for 350 pt instead of 900.
+ *
+ *  The microphone is the panel's own, not the phone's. A voice note is a file
+ *  the agent is handed; this is dictation — the words go in the box, you read
+ *  them, and you press send yourself. `lib/dictate.ts` is the engine and the
+ *  reasoning; what is here is the button, the counter and where the live words
+ *  land.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
-import { Icon, P, Spinner, mono } from '../ui/kit';
-import { fileUrl } from '../lib/actions';
+import { Icon, P, Pulse, Spinner, mono } from '../ui/kit';
+import { dictate, fileUrl, warmDictation } from '../lib/actions';
+import { appendSpeech, dictateLang, langName, useDictation } from '../lib/dictate';
+import { useFleet } from '../lib/fleet';
 import type { Chat } from '../lib/protocol';
 
 export function Tray({ items, hostKey, busy, onRemove }: {
@@ -66,6 +74,9 @@ export function Tray({ items, hostKey, busy, onRemove }: {
   );
 }
 
+/** Seconds as `0:07`. A dictation is never long enough to need an hour in it. */
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
 export function ChatComposer({ chat, hostKey, busy, sending, compact,
                                onSend, onInterrupt, onUpload }: {
   chat: Chat; hostKey: string; busy: boolean; sending: boolean;
@@ -84,6 +95,50 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
   const [dragging, setDragging] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const file = useRef<HTMLInputElement>(null);
+
+  // What the engines are told to expect: the products and the machines this
+  // browser can see, and the folder this chat is in. See `phrasesFor`.
+  const hosts = useFleet((s) => s.hosts);
+  const names = useMemo(() => {
+    const out = new Set<string>();
+    for (const slot of Object.values(hosts)) {
+      out.add(slot.cfg.name);
+      for (const pr of slot.projects) out.add(pr.name);
+    }
+    const folder = chat.cwd.split(/[/\\]/).pop();
+    if (folder) out.add(folder);
+    return [...out];
+  }, [hosts, chat.cwd]);
+
+  const canWhisper = hosts[hostKey]?.info?.transcription === true;
+  const mic = useDictation({
+    names,
+    onCommit: (chunk) => setText((prev) => appendSpeech(prev, chunk)),
+    whisper: canWhisper
+      ? { warm: () => warmDictation(hostKey), send: (pcm, prompt) => dictate(hostKey, pcm, prompt) }
+      : undefined,
+  });
+  const listening = mic.state === 'listening';
+  // The words the engine has not committed yet are shown where they are going
+  // to land rather than beside it, so there is one place to read. Typing takes
+  // them over: `onChange` writes whatever is in the box, interim included.
+  const shown = mic.interim ? appendSpeech(text, mic.interim) : text;
+
+  // Esc gives up on a dictation — the mouse pressed the button, so the key
+  // cannot be the textarea's. Only bound while it is running.
+  useEffect(() => {
+    if (mic.state === 'idle') return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') mic.cancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mic.state, mic.cancel]);
+
+  // Dictation appends, so the end of the box is the part worth looking at.
+  useEffect(() => {
+    if (!listening) return;
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [listening, shown]);
   // dragenter/dragleave also fire crossing between children, so the highlight
   // follows a depth count rather than the first leave it sees.
   const depth = useRef(0);
@@ -128,9 +183,12 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
     if (!el) return;
     el.style.height = '0px';
     el.style.height = `${Math.max(36, Math.min(200, el.scrollHeight))}px`;
-  }, [text]);
+  }, [shown]);
 
   const submit = () => {
+    // Pressing send with the microphone open means "that was the message":
+    // stop it and let the last words land rather than sending without them.
+    if (mic.state !== 'idle') { mic.stop(); return; }
     const t = text.trim();
     if (!t && !pending.length) return;
     // A voice note carries its own words; anything else gets a line that says
@@ -151,7 +209,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
   // so a resting button gets an ink instead. (It used to be white at half
   // opacity on `surface2`, which in the light theme is white on off-white: the
   // send button looked empty until you typed.)
-  const armed = busy || ready || sending;
+  const armed = busy || ready || sending || mic.state !== 'idle';
   /** The two discs at either end of the box. The frames draw them at 36; a
    *  window 350 wide has room for 30 and not for 36. */
   const disc = compact ? 30 : 36;
@@ -175,8 +233,14 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           onRemove={(p) => setPending((list) => list.filter((a) => a.path !== p))}
         />
       )}
-      {error && (
-        <div style={{ fontSize: 12, color: C.danger, marginBottom: 6 }}>{error}</div>
+      {(error || mic.error) && (
+        <div style={{ fontSize: 12, color: C.danger, marginBottom: 6 }}>{error || mic.error}</div>
+      )}
+      {mic.state === 'installing' && (
+        <div style={{ fontSize: 12, color: C.text2, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Spinner size={12} />
+          {`Fetching the ${langName(dictateLang())} speech model. This happens once, and then it runs on this computer.`}
+        </div>
       )}
       <div style={{
         display: 'flex', alignItems: 'flex-end', gap: 8, padding: 6,
@@ -198,13 +262,21 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           <Icon path={P.plus} size={compact ? 15 : 18} color={C.text} />
         </button>
         <textarea
-          ref={ref} name="composer" value={text} rows={1}
+          ref={ref} name="composer" value={shown} rows={1}
           onChange={(e) => setText(e.target.value)}
           onPaste={onPaste}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); return; }
+            // ⌥Space, which in a text field types a space nothing can break a
+            // line at — so there is nothing to lose by taking it, and it is
+            // the one chord neither the browser nor the panel already has.
+            if (e.code === 'Space' && e.altKey && !e.metaKey && !e.ctrlKey) {
+              e.preventDefault();
+              mic.state === 'idle' ? mic.start() : mic.stop();
+            }
           }}
-          placeholder={busy ? 'You can already type the next message…' : `Message ${folder}…`}
+          placeholder={listening ? 'Listening…'
+            : busy ? 'You can already type the next message…' : `Message ${folder}…`}
           style={{
             flex: 1, boxSizing: 'border-box', maxHeight: compact ? 120 : 200, resize: 'none',
             background: 'transparent', border: 'none', outline: 'none',
@@ -212,9 +284,32 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
             padding: compact ? '6px 4px' : '7px 6px', color: C.text, overflowY: 'auto',
           }}
         />
+        {mic.availability && mic.availability !== 'none' && (
+          <button
+            type="button"
+            onClick={listening || mic.state === 'opening' ? mic.stop : mic.start}
+            disabled={mic.state === 'installing' || mic.state === 'thinking'}
+            title={listening ? 'Stop dictating (Esc to discard)'
+              : `Dictate in ${langName(dictateLang())}`}
+            aria-label={listening ? 'Stop dictating' : 'Dictate'}
+            aria-pressed={listening}
+            style={{
+              width: disc, height: disc, borderRadius: disc / 2, flexShrink: 0,
+              cursor: mic.state === 'installing' || mic.state === 'thinking' ? 'default' : 'pointer',
+              background: listening ? C.accent : C.surface2,
+              border: `1px solid ${listening ? C.accent : C.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            {mic.state === 'thinking' || mic.state === 'installing' || mic.state === 'opening'
+              ? <Spinner size={compact ? 12 : 14} />
+              : listening ? <Pulse color={C.onAccent} />
+              : <Icon path={P.mic} size={compact ? 14 : 16} color={C.text} />}
+          </button>
+        )}
         <button
           type="button" onClick={busy && !ready ? onInterrupt : submit}
-          disabled={!busy && !ready}
+          disabled={!busy && !ready && mic.state === 'idle'}
           title={busy && !ready ? 'Stop' : 'Send'}
           style={{
             width: disc, height: disc, borderRadius: disc / 2, flexShrink: 0,
@@ -230,9 +325,25 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
       </div>
       {!compact && (
         <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 6, display: 'flex', gap: 16 }}>
-          <span>⏎ {busy ? 'queue' : 'send'}</span>
-          <span>⇧⏎ newline</span>
-          <span>⌘K command palette</span>
+          {listening ? (
+            <>
+              {/* Not a hint any more: while it is listening this line is the one
+                  place that says it still is, and for how long. */}
+              <span style={{ color: C.accent }}>
+                {`recording ${clock(mic.seconds)}`}
+                {mic.engine === 'whisper' ? ' · on the computer' : ''}
+              </span>
+              <span>⏎ or ⌥Space to stop</span>
+              <span>esc discards</span>
+            </>
+          ) : (
+            <>
+              <span>⏎ {busy ? 'queue' : 'send'}</span>
+              <span>⇧⏎ newline</span>
+              {mic.availability && mic.availability !== 'none' && <span>⌥Space dictate</span>}
+              <span>⌘K command palette</span>
+            </>
+          )}
         </div>
       )}
     </div>

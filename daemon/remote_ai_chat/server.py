@@ -1995,6 +1995,41 @@ class Server:
         return {"project_id": project["id"],
                 "milestones": board.milestones(project["id"])}
 
+    async def h_divan_project_open(self, dev: Device, d: dict) -> dict:
+        """What a product is still waiting on: read it, add one, write one, say
+        something under one, or drop one.
+
+        One handler and not five because they are one thing from the panel's
+        side — a card that is read, pressed and typed into — and every one of
+        them answers with the whole list, so a panel never has to work out what
+        a change did to the order. The order is the board's (`open_items`), not
+        the caller's.
+
+        `who` on a comment is passed through rather than guessed: the two
+        writers are a person and the assistant, and a note from the assistant
+        read as the person's is how a finding becomes an instruction.
+        """
+        board = self.db.divan
+        ref = str(d.get("project_id") or d.get("project") or "")
+        project = board.find_project(ref)
+        if project is None:
+            raise Err("no_such_project", "no such project")
+        item_id = str(d.get("item_id") or "")
+        try:
+            if d.get("add"):
+                fields = dict(d["add"])
+                board.add_open_item(project["id"], str(fields.pop("title", "")), **fields)
+            elif d.get("set") and item_id:
+                board.update_open_item(item_id, **dict(d["set"]))
+            elif d.get("comment") and item_id:
+                board.comment_open_item(item_id, str(d["comment"]),
+                                        str(d.get("who") or "you"))
+            elif d.get("remove") and item_id:
+                board.delete_open_item(item_id)
+        except (ValueError, TypeError) as exc:
+            raise Err("bad_open_item", str(exc))
+        return {"project_id": project["id"], "open_items": board.open_items(project["id"])}
+
     async def h_divan_board(self, dev: Device, d: dict) -> dict:
         """One project's board: four columns, each in the order somebody put it in."""
         try:

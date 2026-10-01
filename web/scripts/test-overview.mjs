@@ -950,6 +950,26 @@ group('Web14 W6, W7 and W8');
   ok('…with the word that opens a new ticket at the end of its head',
     product.includes('+ New ticket'));
 
+  // The third panel: what the product is waiting for. The board holds work an
+  // agent can be handed and these are the other kind — a key somebody has to
+  // make, a registrar sitting on a transfer — so a product could read `live`
+  // with nothing on the page saying what it could not do yet.
+  ok('the product page says what it is still waiting on',
+    product.includes('Still open') && product.includes('Payment provider keys')
+    && product.includes('Custom domain approval'));
+  // Blocked first, then waiting, then to-do: the first is stopping other work,
+  // the second is a reminder to chase, the third is a list.
+  const open = PR.openRows(quire, busy.now, (s) => `${Math.round(s / 86_400)}d`);
+  ok('…worst first, with whose it is in the label rather than beside it',
+    open.map((o) => o.state).join() === 'blocked,waiting,todo,done'
+    && open[1].label === 'Waiting on the registrar');
+  ok('…and the line beside the heading counts the three that are not settled',
+    PR.openLine(open) === '1 blocked · 1 waiting · 1 to do');
+  // A thread with two voices in it, and the card says which is which: a finding
+  // from the assistant read as a decision is how the wrong thing gets done.
+  ok('a settled one stays on the page, and a thread keeps its voices',
+    product.includes('1 settled') && open[1].comments.map((m) => m.who).join() === 'hermes,you');
+
   // What is promised has not happened: it is on the same line as what has, and
   // it is drawn as a ring rather than as a fact.
   const line = PR.timeline(quire, busy.now);

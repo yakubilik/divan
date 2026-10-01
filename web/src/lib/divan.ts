@@ -44,7 +44,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { useFleet, type HostSlot } from './fleet';
 import type {
-  DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanMilestone, DivanProject, DivanQuota,
+  DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanMilestone, DivanOpenItem, DivanProject, DivanQuota,
   DivanSnapshot, RepoActivity,
 } from './protocol';
 
@@ -224,6 +224,8 @@ export interface MergedProject {
   started_at: number | null;
   /** What has happened to it, dated, oldest first, promises included. */
   milestones: DivanMilestone[];
+  /** …and what it has not done yet, worst first. */
+  open: DivanOpenItem[];
   repos: string[];
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
@@ -465,6 +467,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           stage: p.stage || '',
           started_at: p.started_at ?? null,
           milestones: [...(p.milestones || [])],
+          open: [...(p.open_items || [])],
           repos: [...(p.repos || [])],
           hosts: [h.key],
           machines: [h.machine],
@@ -502,6 +505,9 @@ export function merge(list: HostEntry[], now: number): DivanView {
       // told does not empty the list the other one holds.
       if ((newer && p.milestones?.length) || !found.milestones.length) {
         found.milestones = [...(p.milestones || found.milestones)];
+      }
+      if ((newer && p.open_items?.length) || !found.open.length) {
+        found.open = [...(p.open_items || found.open)];
       }
       found.hosts = [...new Set([...found.hosts, h.key])];
       found.machines = [...new Set([...found.machines, h.machine])];

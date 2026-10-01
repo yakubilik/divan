@@ -466,6 +466,42 @@ export interface DivanProject {
    *  the same list with a date in the future. Absent from a daemon that
    *  predates it. */
   milestones?: DivanMilestone[];
+  /** What it is still waiting on, worst first. Absent from a daemon that
+   *  predates it. */
+  open_items?: DivanOpenItem[];
+}
+
+/** One thing a product is still waiting on, and the thread under it.
+ *
+ *  Not a card: a card is work an agent can be handed, and most of these cannot
+ *  be handed to anything on the computer — a token somebody has to make in a
+ *  browser, a registrar sitting on a domain, a decision nobody has taken. */
+export interface DivanOpenItem {
+  id: string;
+  project_id: string;
+  title: string;
+  /** What is actually needed, in a person's words. */
+  body: string;
+  state: DivanOpenState;
+  /** Whose it is, where that is a person rather than this computer. */
+  owner: string;
+  /** What it is about: `payments`, `content`. */
+  area: string;
+  sort: number;
+  comments: DivanComment[];
+  created_at: number;
+  updated_at: number;
+  closed_at: number | null;
+}
+
+export type DivanOpenState = 'blocked' | 'waiting' | 'todo' | 'done';
+
+export interface DivanComment {
+  at: number;
+  /** Who said it. The two voices are a person and the assistant, and they are
+   *  not the same kind of sentence. */
+  who: string;
+  text: string;
 }
 
 /** One dated thing in a product's life. `kind` is `start`, `live`, `target` or

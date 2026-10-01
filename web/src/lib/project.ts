@@ -26,7 +26,7 @@
  */
 import { COLUMNS, spent, stuck, waiting } from './divan';
 import type { DivanView, MergedBranch, MergedCard, MergedProject } from './divan';
-import type { DivanMilestone } from './protocol';
+import type { DivanComment, DivanMilestone, DivanOpenState } from './protocol';
 import { age, clock, dormant, executorWord, latest, staleFor, type Ago } from './overview';
 import type { State, Tone } from './theme';
 
@@ -625,3 +625,96 @@ export function since(p: MergedProject): string | null {
   const first = milestones(p)[0];
   return first ? `since ${month(first.at)}` : null;
 }
+
+// ── …and what it has not done yet ───────────────────────────────────────────
+
+/** What a product is still waiting on, as the page draws it.
+ *
+ *  This is the half of a product nothing on this computer used to write down.
+ *  The board holds work an agent can be handed; these are the things that
+ *  cannot be — a token somebody has to make in a browser, a registrar sitting
+ *  on a domain, a decision nobody has taken — and without them a product could
+ *  read `closed beta` with nobody able to say what the beta was waiting for.
+ */
+export interface OpenRow {
+  key: string;
+  id: string;
+  title: string;
+  body: string;
+  state: DivanOpenState;
+  /** `Blocked`, `Waiting on Bedirhan`, `To do`, `Done`. */
+  label: string;
+  tone: Tone;
+  /** The small word for what it is about: `payments`. Empty where none. */
+  area: string;
+  comments: DivanComment[];
+  /** `3 notes`, or empty where nobody has said anything. */
+  thread: string;
+  /** How long it has been open, or when it closed. */
+  since: string;
+  done: boolean;
+}
+
+const OPEN_LABEL: Record<DivanOpenState, string> = {
+  blocked: 'Blocked', waiting: 'Waiting', todo: 'To do', done: 'Done',
+};
+
+const OPEN_TONE: Record<DivanOpenState, Tone> = {
+  blocked: 'red', waiting: 'amber', todo: 'ink2', done: 'run',
+};
+
+export function openRows(p: MergedProject, now: number, ago: Ago): OpenRow[] {
+  return (p.open ?? []).map((o) => {
+    const state = (OPEN_LABEL[o.state] ? o.state : 'todo') as DivanOpenState;
+    // Who it is on belongs in the label rather than beside it: "Waiting" alone
+    // is the fact nobody can act on, and "Waiting on Bedirhan" is the one that
+    // tells you whether to go and ask.
+    const label = state === 'waiting' && o.owner ? `Waiting on ${o.owner}`
+      : state === 'todo' && o.owner ? `${o.owner} to do`
+      : OPEN_LABEL[state];
+    const at = state === 'done' ? (o.closed_at ?? o.updated_at) : o.created_at;
+    return {
+      key: o.id,
+      id: o.id,
+      title: o.title,
+      body: o.body,
+      state,
+      label,
+      tone: OPEN_TONE[state],
+      area: o.area,
+      comments: o.comments ?? [],
+      thread: o.comments?.length
+        ? `${o.comments.length} note${o.comments.length === 1 ? '' : 's'}` : '',
+      since: at ? `${state === 'done' ? 'closed' : 'open'} ${forDays(now - at, ago)}` : '',
+      done: state === 'done',
+    };
+  });
+}
+
+/** How long, in the unit that matters. These are measured in days and weeks —
+ *  a key nobody has made is a fortnight, not `9d 0h` — and the hours are only
+ *  worth saying on the first day. */
+function forDays(seconds: number, ago: Ago): string {
+  const days = Math.floor(Math.max(0, seconds) / 86_400);
+  return days ? `${days} day${days === 1 ? '' : 's'}` : ago(Math.max(0, seconds));
+}
+
+/** The line beside the heading: what is stopping work, and what is merely
+ *  waiting. Nothing where a product has none of either — a count of zero is a
+ *  number nobody wanted. */
+export function openLine(rows: OpenRow[]): string {
+  const n = (state: DivanOpenState) => rows.filter((r) => r.state === state).length;
+  const parts = [
+    n('blocked') ? `${n('blocked')} blocked` : '',
+    n('waiting') ? `${n('waiting')} waiting` : '',
+    n('todo') ? `${n('todo')} to do` : '',
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+/** What a product with an empty list says. Not "nothing to do": nobody has
+ *  written anything down, which on a product with eight months behind it is
+ *  almost certainly not the same thing. */
+export const NOTHING_OPEN =
+  'Nothing is written down here yet. This is where the things an agent cannot do go —'
+  + ' a token to make, an approval to chase, a decision nobody has taken.';

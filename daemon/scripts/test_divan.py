@@ -434,6 +434,52 @@ check("one row per project per branch",
 refuses("two products of one name", board.create_project, "babysee")
 refuses("a product with no name", board.create_project, "  ")
 
+# ── what a product is still waiting on ──────────────────────────────────────
+# Not the board: a card is work an agent can be handed, and these are the other
+# kind — a key somebody has to make, a registrar sitting on a transfer. A
+# product could read "closed beta" with nothing on this computer able to say
+# what the beta was waiting for.
+keys = board.add_open_item(bs["id"], "Payment provider keys",
+                           body="The production parameter is still a placeholder.",
+                           state="blocked", area="payments")
+domain = board.add_open_item(bs["id"], "Custom domain approval",
+                             state="waiting", owner="the registrar")
+mail = board.add_open_item(bs["id"], "Write the onboarding mail")
+check("an item needs only a line, and starts as nobody's to-do",
+      (mail["state"], mail["owner"], mail["body"]), ("todo", "", ""))
+refuses("an item with no title", board.add_open_item, bs["id"], "   ")
+refuses("a state nothing can be in", board.add_open_item, bs["id"], "x", state="soon")
+check("worst first: blocked, then waiting, then to-do",
+      [o["title"] for o in board.open_items(bs["id"])],
+      ["Payment provider keys", "Custom domain approval", "Write the onboarding mail"])
+
+# The thread says who. A finding from the assistant read as the person's
+# decision is how the wrong thing gets done.
+board.comment_open_item(domain["id"], "Still pending as of this morning.", who="hermes")
+board.comment_open_item(domain["id"], "Bedirhan has the registrar login.", who="you")
+check("a comment keeps the voice that wrote it",
+      [(c["who"], c["text"][:8]) for c in board.get_open_item(domain["id"])["comments"]],
+      [("hermes", "Still pe"), ("you", "Bedirhan")])
+refuses("an empty comment", board.comment_open_item, domain["id"], "  ")
+
+# Settled items stay on the product: a beta is partly described by the list it
+# got through. They sink, and the date is the day it closed.
+done = board.update_open_item(keys["id"], state="done")
+check("settling one stamps it and sinks it",
+      (done["closed_at"] is not None,
+       [o["title"] for o in board.open_items(bs["id"])][-1]),
+      (True, "Payment provider keys"))
+check("…and reopening clears the date rather than leaving one that lies",
+      board.update_open_item(keys["id"], state="todo")["closed_at"], None)
+check("a product's own answer carries them, so no page asks twice",
+      [o["title"] for o in board.project_view(board.get_project(bs["id"]))["open_items"]][:1],
+      ["Custom domain approval"])
+board.delete_open_item(keys["id"])
+board.delete_open_item(domain["id"])
+board.delete_open_item(mail["id"])
+check("and dropping one leaves the product with none",
+      board.open_items(bs["id"]), [])
+
 # A card from the human face alone: a title, and nothing else required.
 line = board.create_card(bs["id"], title="the invite mail never arrives")
 check("a card needs a title and nothing else", line["title"],
