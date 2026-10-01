@@ -39,6 +39,7 @@ import {
   Button, Card, Cell, Choice, EmptyState, NameCell, SectionHeader, Table, Tag, Well, type Column,
 } from '../ui/divan';
 import { mono } from '../ui/kit';
+import { Ring } from '../components/LimitsRing';
 
 /** How long a sign-in has left, said the way W16 says it — `12 days` — and in
  *  the panel's own `2h 14m` once there are hours rather than days left, which
@@ -53,6 +54,10 @@ const COLUMNS: Column[] = [
   { width: '36px' },
   { label: 'account', width: 'minmax(0, 1.2fr)' },
   { label: 'state', width: '150px' },
+  // The plan's own figure, which this page could not say at all: a sign-in
+  // that is connected and nine-tenths spent used to read exactly like one
+  // nobody had touched.
+  { label: 'plan used', width: '96px' },
   { label: 'used by', width: 'minmax(0, 1fr)' },
   { label: 'last used', width: '120px' },
   { width: '150px' },
@@ -145,6 +150,13 @@ export function Accounts({ now, onView, onFocus }: {
             <Well mark={s.mark} size={34} />,
             <NameCell title={s.title} note={s.note} />,
             <Tag label={s.says} tone={s.tone} />,
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Ring share={s.used} size={22} stroke={3}
+                colour={s.spent ? T.red : undefined} />
+              <span style={{ ...mono, fontSize: 12, color: s.used == null ? T.ink3 : T.ink2 }}>
+                {s.used == null ? 'not measured' : `${Math.round(s.used * 100)}%`}
+              </span>
+            </span>,
             <Cell text={s.usedBy} style={{ color: T.ink2 }} />,
             <Cell text={s.lastUsed || 'never'} tone={s.lastUsed ? undefined : 'ink3'} />,
             <span style={{ marginLeft: 'auto' }}>

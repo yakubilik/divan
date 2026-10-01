@@ -159,10 +159,13 @@ group('each page is the frame’s page');
     words(executors.body).slice(0, 240));
 
   const accounts = page('accounts');
-  ok('Accounts & sign-ins is W16’s table, on W16’s tracks',
+  // W16's tracks, with one track W16 did not have. The frame says whether a
+  // sign-in *works*; it cannot say how much of the plan behind it is left, and
+  // a connected account nine-tenths spent read exactly like an untouched one.
+  ok('Accounts & sign-ins is W16’s table, with the plan’s own figure added to it',
     anyStyle(accounts.body, (d) => d['grid-template-columns']
-      === '36px minmax(0, 1.2fr) 150px minmax(0, 1fr) 120px 150px')
-    && has(accounts.body, 'account', 'state', 'used by', 'last used'),
+      === '36px minmax(0, 1.2fr) 150px 96px minmax(0, 1fr) 120px 150px')
+    && has(accounts.body, 'account', 'state', 'plan used', 'used by', 'last used'),
     words(accounts.body).slice(0, 200));
 
   const quota = page('quota');
@@ -368,6 +371,39 @@ group('Terminals and Remote screen: the frames’ chrome, today’s behaviour');
   ok('and both are still what those two rows open',
     /view === 'terminal'\) return <Terminal onPeek=\{onPeek\} onNewChat=\{onNewChat\} \/>/.test(machine)
     && /view === 'screen'\) return <Screen \/>/.test(machine));
+}
+
+group('what is left of a plan');
+{
+  const NOW_S = 1_700_000_000;
+  const w = (window, utilization, over = {}) => ({
+    window, utilization, status: 'allowed', resets_at: null, at: NOW_S, ...over,
+  });
+  // The ring draws the fullest window; the card lists them in the plan's own
+  // order. Those are two different answers to one report, and reading the ring
+  // off the top of the card's list is how they used to be the same wrong one.
+  const use = M.planUse([w('seven_day', 0.81), w('five_hour', 0.12)], NOW_S);
+  ok('the ring draws the fullest window, not the first',
+    use.top.key === 'seven_day' && use.top.share === 0.81);
+  ok('…and the card lists them in the order the plan names them',
+    use.windows.map((x) => x.key).join() === 'five_hour,seven_day');
+  ok('amber from 60, red from 90',
+    [M.limitTone(0.59), M.limitTone(0.6), M.limitTone(0.89), M.limitTone(0.9)].join()
+      === 'plain,warn,warn,danger');
+  // A sign-in nobody has spent has no reading at all. Drawn as a dash, not as
+  // a ring at zero: the second is a measurement, and nobody took one.
+  ok('nothing measured is not nothing used',
+    M.planUse([], NOW_S).unknown === true && M.planUse([], NOW_S).top === null);
+  ok('a window that refused a send and has not reset says the plan is spent',
+    M.planUse([w('five_hour', 1, { status: 'rejected', resets_at: NOW_S + 60 })], NOW_S).spent
+      === true
+    && M.planUse([w('five_hour', 1, { status: 'rejected', resets_at: NOW_S - 60 })], NOW_S).spent
+      === false);
+  // Every window of one report is measured at the same instant, so one behind
+  // the newest reading is a leftover the tool has stopped reporting.
+  ok('a window the newest report left out is marked stale',
+    M.planUse([w('five_hour', 0.2), w('seven_day', 0.3, { at: NOW_S - 600 })], NOW_S)
+      .windows.map((x) => x.stale).join() === 'false,true');
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');

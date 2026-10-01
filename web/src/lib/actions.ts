@@ -193,6 +193,45 @@ export async function upload(key: string, chatId: string, file: File): Promise<a
   return r.json();
 }
 
+/** Dictation, for a browser that cannot hear by itself.
+ *
+ *  Not an upload: nothing is kept and nothing is attached. What goes up is the
+ *  audio whisper wants — 16 kHz mono signed 16-bit PCM, made in the panel
+ *  (`lib/dictate.ts`) — and what comes back is the words. The vocabulary rides
+ *  as a header rather than in the body, because the body is the audio;
+ *  percent-encoded, because a header is Latin-1 and the names on a board are
+ *  not.
+ */
+export async function dictate(key: string, pcm: Int16Array, prompt: string): Promise<string> {
+  const { cfg } = slot(key);
+  const r = await fetch(`${base(cfg)}/dictate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cfg.token}`,
+      'Content-Type': 'application/octet-stream',
+      ...(prompt ? { 'X-Dictate-Prompt': encodeURIComponent(prompt) } : {}),
+    },
+    body: pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength) as ArrayBuffer,
+  });
+  if (!r.ok) {
+    if (r.status === 503) throw new Error('That computer has no transcriber installed.');
+    if (r.status === 413) throw new Error('That is more than ten minutes of audio.');
+    if (r.status === 401) throw new Error('No access to that computer');
+    throw new Error(`Dictation failed (${r.status})`);
+  }
+  return String((await r.json()).text ?? '');
+}
+
+/** Load the model while the microphone is still opening. Fire and forget: a
+ *  computer that will not warm up will say so when the audio arrives. */
+export function warmDictation(key: string): void {
+  let cfg: HostConfig;
+  try { cfg = slot(key).cfg; } catch { return; }
+  void fetch(`${base(cfg)}/dictate/warm`, {
+    method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` },
+  }).catch(() => { /* it is a courtesy, not a step */ });
+}
+
 /** An uploaded file read back for a bubble. The token is a query parameter
  *  because an <img> tag cannot carry a header. `download` asks the daemon for
  *  a Content-Disposition — the <a download> attribute is ignored when the file

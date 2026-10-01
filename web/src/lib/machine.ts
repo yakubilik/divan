@@ -279,6 +279,12 @@ export interface SignIn {
   tone: Tone;
   /** What works through it: `4 chats · studio`. */
   usedBy: string;
+  /** How much of the plan is gone, 0–1, for the ring in its own column. Null
+   *  where nothing has ever been measured — which is not the same as a plan
+   *  with everything left, so the ring is drawn hollow rather than empty. */
+  used: number | null;
+  /** A window refused a send and has not reset. */
+  spent: boolean;
   /** When it last did. */
   lastUsed: string;
   /** `Renew`, `Sign in`, `Manage` — and pressing it opens the sign-in itself,
@@ -343,6 +349,9 @@ export function signIns(sources: SignInSource[], now: number, ago: Ago, stamp: S
       const has = s.versions ? !!s.versions[a.provider as 'claude' | 'codex'] : undefined;
       const state = signInState(a, now, has);
       const used = s.chats.filter((c) => (c.account_id ?? '') === (a.is_default ? '' : a.id));
+      // The default sign-in reports its windows under `default-<tool>`, which
+      // is what "no account id" is called on the wire.
+      const use = planUse(s.limits[a.is_default ? `default-${a.provider}` : a.id], now);
       const last = used.reduce((n, c) => Math.max(n, c.updated_at || 0), 0)
         || windowAt(s.limits[a.id]);
       rows.push({
@@ -357,6 +366,8 @@ export function signIns(sources: SignInSource[], now: number, ago: Ago, stamp: S
         says: signInWords(a, now, ago, has),
         tone: SIGN_IN_TONE[state],
         usedBy: usedWords(used.length, a.is_default, s.machine),
+        used: use.top ? use.top.share : null,
+        spent: use.spent,
         lastUsed: last ? stamp(last) : '',
         action: SIGN_IN_ACTION[state],
         // Everything that is not working wants something doing: a renewal, a
@@ -620,4 +631,116 @@ export function adminLines(s: AdminSource, cost: (n: number) => string): AdminLi
       goes: 'terminal',
     },
   ];
+}
+
+// ── 6 · what is left of a plan (the ring on the chat head) ──────────────────
+
+/** A plan's windows, in the order the plan names them rather than by how full
+ *  they are. A reader looking for the weekly figure looks in the same place
+ *  every time; sorting by fullness moves it. */
+const WINDOW_ORDER = ['five_hour', 'seven_day', 'seven_day_opus', 'seven_day_sonnet', 'overage'];
+
+/** …and what each is called. The phone's words (`app/src/i18n.ts`), because a
+ *  window that reads `5-hour` on the phone and `Session` here is two things to
+ *  anybody holding both. */
+export const WINDOW_NAME: Record<string, string> = {
+  five_hour: '5-hour', seven_day: 'Weekly', seven_day_opus: 'Weekly · Opus',
+  seven_day_sonnet: 'Weekly · Sonnet', overage: 'Extra usage',
+};
+
+/** Amber from 60 %, red from 90 %, and the plain colour under that — the same
+ *  three the phone's ring uses. */
+export type LimitTone = 'plain' | 'warn' | 'danger';
+
+export function limitTone(share: number): LimitTone {
+  if (share >= 0.9) return 'danger';
+  if (share >= 0.6) return 'warn';
+  return 'plain';
+}
+
+/** One window, ready to draw. */
+export interface PlanWindow {
+  key: string;
+  label: string;
+  /** 0–1, clamped: a reading over its own limit is still a full ring. */
+  share: number;
+  tone: LimitTone;
+  /** When it refills, in words. Empty where the tool did not say. */
+  resets: string;
+  /** How old this reading is, in words. */
+  measured: string;
+  /** A newer report has stopped mentioning this window, so it is a leftover
+   *  rather than a current reading. */
+  stale: boolean;
+}
+
+/** Everything the ring and the card under it need from one account's report. */
+export interface PlanUse {
+  windows: PlanWindow[];
+  /** The fullest window — what the ring draws, and the only number on the
+   *  head. Null where nothing has been measured. */
+  top: PlanWindow | null;
+  /** The newest reading's age, in words, for the head of the card. */
+  measured: string;
+  /** Nobody has measured anything yet. Different from "nothing is used": the
+   *  tool only reports during a turn, so a fresh sign-in has no reading at
+   *  all, and a ring drawn at zero would be a claim nobody made. */
+  unknown: boolean;
+  /** A window refused a send and has not reset. The plan is spent. */
+  spent: boolean;
+}
+
+export function planUse(windows: LimitWindow[] | undefined, now: number): PlanUse {
+  const all = (windows ?? []).filter((w) => typeof w.utilization === 'number');
+  // Every window of one report is measured at the same instant, so a window
+  // behind the newest reading is one the tool has stopped reporting.
+  const newest = all.reduce((n, w) => Math.max(n, w.at ?? 0), 0);
+  const drawn: PlanWindow[] = all
+    .slice()
+    .sort((a, b) => (WINDOW_ORDER.indexOf(a.window) + 1 || 99)
+      - (WINDOW_ORDER.indexOf(b.window) + 1 || 99))
+    .map((w) => {
+      const share = Math.max(0, Math.min(1, w.utilization ?? 0));
+      return {
+        key: w.window,
+        label: WINDOW_NAME[w.window] ?? w.window,
+        share,
+        tone: limitTone(share),
+        resets: resetsWords(w.resets_at, now),
+        measured: measuredWords(w.at, now),
+        stale: newest - (w.at ?? 0) > 60,
+      };
+    });
+  const top = drawn.reduce<PlanWindow | null>(
+    (best, w) => (best && best.share >= w.share ? best : w), null);
+  return {
+    windows: drawn,
+    top,
+    measured: measuredWords(newest || undefined, now),
+    unknown: drawn.length === 0,
+    spent: (windows ?? []).some((w) => w.status === 'rejected'
+      && (w.resets_at == null || w.resets_at > now)),
+  };
+}
+
+/** When a window refills. */
+export function resetsWords(at: number | null | undefined, now: number): string {
+  if (!at) return '';
+  const left = at - now;
+  if (left <= 0) return 'Resetting now';
+  const h = Math.floor(left / 3600);
+  if (h < 24) return `Resets in ${h}h ${Math.floor((left % 3600) / 60)}m`;
+  const d = new Date(at * 1000);
+  return `Resets ${d.toLocaleDateString(undefined, { weekday: 'short' })} `
+    + `${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+}
+
+/** How old a reading is. Said out loud because these numbers only move while a
+ *  turn runs: after an idle hour the ring is a memory, not a measurement. */
+export function measuredWords(at: number | null | undefined, now: number): string {
+  if (!at) return '';
+  const m = Math.floor((now - at) / 60);
+  if (m < 2) return 'measured just now';
+  if (m < 60) return `measured ${m} min ago`;
+  return `measured ${Math.floor(m / 60)} h ago`;
 }

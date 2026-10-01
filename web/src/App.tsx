@@ -376,12 +376,13 @@ export function App() {
     ? slot.accounts.find((a) => a.id === accountKey) ?? null
     : null;
   const accountLabel = account ? accountName(account) : null;
+  const accountLimits = accountKey && slot ? slot.limits[accountKey] : undefined;
   const accountUsage = useMemo(() => {
-    const top = (accountKey && slot ? slot.limits[accountKey] ?? [] : [])
+    const top = (accountLimits ?? [])
       .filter((w) => typeof w.utilization === 'number')
       .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0))[0];
     return top ? (top.utilization ?? 0) : null;
-  }, [accountKey, slot?.limits]);
+  }, [accountLimits]);
 
   useEffect(() => {
     if (view !== 'chats' || !fleet.focus) return;
@@ -405,6 +406,8 @@ export function App() {
       : null,
     accountLabel,
     accountUsage,
+    accountLimits,
+    now: divan.now,
     liveTokens,
     onPopOut: popOut,
     groups: slot?.groups ?? [],

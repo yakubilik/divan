@@ -5,13 +5,18 @@ import { Timeline } from './Timeline';
 import { ChatComposer } from './ChatComposer';
 import { ChatMenu } from './ChatMenu';
 import { ChatDetails } from './ChatDetails';
+import { LimitsRing } from './LimitsRing';
 import { duration, shortPath, toolSummary } from '../lib/format';
 import type { Field } from './FieldSheet';
-import type { Chat, Group } from '../lib/protocol';
+import type { Chat, Group, LimitWindow } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
 
-function Header({ chat, groupName, count, accountLabel, onEdit, onMenu, onDetails, detailsOpen }: {
+function Header({ chat, groupName, count, accountLabel, accountLimits, now,
+                 onEdit, onMenu, onDetails, detailsOpen }: {
   chat: Chat; groupName: string | null; count: number; accountLabel: string | null;
+  /** Every window this chat's sign-in last reported, for the ring. */
+  accountLimits: LimitWindow[] | undefined;
+  now: number;
   onEdit: (f: Field) => void;
   onMenu: () => void;
   onDetails: () => void;
@@ -62,6 +67,10 @@ function Header({ chat, groupName, count, accountLabel, onEdit, onMenu, onDetail
             <Icon path={P.bolt} size={12} color={C.mute} /> {chat.effort}
           </Chip>
         )}
+        {/* Next to the model and the effort, because those three are one
+            question: what is running this, how hard, and how much of the plan
+            is left to run it with. */}
+        <LimitsRing windows={accountLimits} now={now} accountLabel={accountLabel} />
         <Chip onClick={() => onEdit('perm_mode')} tone={chat.perm_mode === 'bypass' ? 'warn' : 'plain'}>
           <Icon path={P.shield} size={12} color={chat.perm_mode === 'bypass' ? C.warn : C.mute} />
           {chat.perm_mode}
@@ -157,7 +166,7 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
 /** What is attached but not sent yet. A picture is shown as the picture, at the
  *  size a thumbnail wants to be — a file name is not a preview, and the whole
  *  point of attaching a screenshot is to see that it is the right one. */
-export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, liveTokens, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onUpload, onPopOut, sending }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onUpload, onPopOut, sending }: {
   chat: Chat | null;
   hostKey: string | null;
   log: ChatLog;
@@ -166,6 +175,9 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   accountLabel: string | null;
   /** 0–1 of the fullest window that account last reported. Details only. */
   accountUsage: number | null;
+  /** …and all of its windows, which is what the head's ring opens on. */
+  accountLimits: LimitWindow[] | undefined;
+  now: number;
   liveTokens: number | null;
   sending: boolean;
   onPopOut: () => void;
@@ -220,6 +232,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Header
           chat={chat} groupName={groupName} count={msgCount} accountLabel={accountLabel}
+          accountLimits={accountLimits} now={now}
           onEdit={onEdit} onMenu={() => { setDetails(false); setMenu(true); }}
           onDetails={() => setDetails((v) => !v)} detailsOpen={details}
         />
