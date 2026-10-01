@@ -71,13 +71,17 @@ function speechClass(): SRClass | null {
   return (w.SpeechRecognition || w.webkitSpeechRecognition || null) as SRClass | null;
 }
 
+/** The page is also drawn where there is no browser at all — the checks render
+ *  every screen in Node, and Node before 21 has no `navigator`. */
+const nav = (): Navigator | undefined => (typeof navigator === 'undefined' ? undefined : navigator);
+
 export function support(): Support {
   const SR = speechClass();
   return {
     secure: typeof isSecureContext === 'undefined' ? true : isSecureContext,
     speech: !!SR,
     onDevice: !!(SR && SR.available && SR.install),
-    capture: !!(navigator.mediaDevices?.getUserMedia) && typeof AudioWorkletNode !== 'undefined',
+    capture: !!(nav()?.mediaDevices?.getUserMedia) && typeof AudioWorkletNode !== 'undefined',
   };
 }
 
@@ -250,7 +254,7 @@ const LANG_KEY = 'rac.dictate.lang';
  *  *says* is a different question, and the browser's first language is a much
  *  better guess at it than the language the buttons are written in. */
 export function defaultLang(): string {
-  const first = (navigator.languages?.[0] || navigator.language || 'en-US').trim();
+  const first = (nav()?.languages?.[0] || nav()?.language || 'en-US').trim();
   return first.includes('-') ? first : `${first}-${first.toUpperCase()}`;
 }
 
@@ -276,7 +280,7 @@ export function langName(tag: string): string {
  *  picker nobody can find their language in is worse than a field. */
 export function langChoices(current = dictateLang()): string[] {
   const out: string[] = [];
-  for (const raw of [current, ...(navigator.languages ?? []), navigator.language, 'en-US']) {
+  for (const raw of [current, ...(nav()?.languages ?? []), nav()?.language, 'en-US']) {
     if (!raw) continue;
     const tag = raw.includes('-') ? raw : `${raw}-${raw.toUpperCase()}`;
     if (!out.includes(tag)) out.push(tag);
