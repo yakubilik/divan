@@ -24,12 +24,15 @@ beri açık" diye bir kez anılır.
 
 | # | Bulgu | İlk görüldü | Durum |
 |---|---|---|---|
-| A1 | Merge'den sonra worktree silinmiyor; `clean` yalnızca CLI'da, supervisor çağırmıyor. 30 Eyl 15:16–15:20'de elle süpürüldü (9.8 GB → 964 MB) ama kod aynı: #77/#78 merge'inden sonra beş saatte yine 964 MB | 2026-09-30 | cevapsız, açık |
-| A2 | Kapasite: yakup 2 Ekim 10:02'ye kadar kapalı, kuyruk tek hesapta yedeksiz (30 Eyl akşam yükü hafifti, ~$30) | 2026-09-30 | cevapsız, açık |
-| A3 | #30 stale kill (20 dk çıktısız, 29 Eyl 16:12) — tek vaka, desen değil | 2026-09-30 | kapandı: 30 Eyl akşam penceresinde hiç stale/crash/ceiling yok |
-| A4 | babysee/backend main'de CI kırmızı (`pnpm lint` OOM, exit 134); #77'nin kurduğu `deploy-beta` hiç koşmadı, beta hâlâ elle deploy | 2026-09-30 akşam | Yakup'a soruldu |
-| A5 | Verifier kartın kriterlerini kapsamadan `pass` veriyor: #71'de 5 kriterden 1'i, `summary` = "Placeholder", main'e merge (c21a34d). 10 verifier koşusunun hepsi 6–12 sn / 1–3 tool | 2026-09-30 akşam | Yakup'a soruldu |
-| A6 | "merge skipped: repo has uncommitted changes" geçici bir durum ama otomatik merge turu açmıyor, doğrudan kırmızıya düşüyor (#73, 2 commit silindi) | 2026-09-30 akşam | Yakup'a soruldu |
+| A2 | Kapasite: kuyruk tek hesapta yedeksiz. 1 Eki'de bedriyan haftalık limite değdi, kuyruk 12:49–15:02 durdu; yakup 2 Ekim 10:02'de açılıyor | 2026-09-30 | cevapsız, açık |
+| A4 | babysee backend main'de CI kırmızı (`pnpm lint` OOM); monorepo'da `Backend` workflow'unun son koşusu hâlâ failure (1 Eki 00:18), `deploy-beta` koşmuyor | 2026-09-30 akşam | soruldu, cevapsız |
+| A5 | Verifier kriter kapısı kodda yok (#71 "Placeholder"). 1 Eki'de tekrarlamadı: 19/19 verdict her kriteri kapsıyor. Not: verifier'a diff prompt'ta gömülü gidiyor, az tool çağrısı "okumadı" demek değil | 2026-09-30 akşam | soruldu, cevapsız |
+| A6 | "merge skipped: repo has uncommitted changes" otomatik yeniden denenmiyor, doğrudan kırmızı. 30 Eyl #73; 1 Eki #81, #98, #104. Kaynaklar: `isghocam-seo`'da 21:17 nightly'si `ranks.csv` + `gunluk/` dosyasını commit etmiyor; Divan'da yarım kalmış sohbet işi | 2026-09-30 akşam | 1 Eki'de yeniden soruldu |
+| A7 | Ağ kesintisi crash sayılıyor: 1 Eki 05:09–~09:25, #88/#90/#91 üçer crash ile FAILED; 12 bildirimin hiçbiri gitmedi ve ağ dönünce yeniden gönderilmedi | 2026-10-01 | soruldu |
+| A8 | `_merge` main'i dala aldıktan sonra `verify_cmd`'yi yeniden koşmuyor: #83 main'i kırdı (`dd3e9a6`, Lint + Deploy kırmızı) ve ✅ aldı. Aynı repoda paralel lane'lerin sonucu | 2026-10-01 | soruldu |
+| A9 | Disk %97, 7,3 GB boş; 1 Eki 01:04'te #80 `ENOSPC` yedi. Kuyruk worker başlatmadan boş yere bakmıyor (`min_free_gb` yok) | 2026-10-01 | soruldu |
+| A10 | Kart kalıbı: "merge + push + CI + canlı kontrol" `done_criteria`'da; 17 ticket'ın 12'si bu yüzden geri döndü ve merge'den sonra kimse bakmıyor (#83 CI, #79 `/yazar` canlıda 200). Öneri: `after_merge` alanı + merge sonrası CI kontrolü (30 Eyl akşam notundaki 1b ile aynı) | 2026-10-01 | soruldu |
+| A11 | ustabasi reposunun remote'u yok; #94'te push "origin does not appear to be a git repository" ile döndü | 2026-10-01 | soruldu |
 
 ## Kararlar
 
@@ -37,6 +40,15 @@ beri açık" diye bir kez anılır.
   Merge otomatik, push Yakup'ta. "N commit push bekliyor" bir bulgu değil.
 
 ## Kapanmış bulgular
+
+1 Eki 2026:
+
+| Bulgu | Commit |
+|---|---|
+| A1 — merge'den sonra worktree silinmiyor | #94, `26c324b` / `cf6b823` 1 Eki 11:29 |
+| A3 — #30 stale kill, tek vaka | 30 Eyl akşam penceresinde tekrar yok. 1 Eki'deki tek stale kill (#80, 01:26) dolu diskten, bkz. A9 |
+| Kartta koşamayan `verify_cmd` Yakup'a gidiyor (#94, `npm test` Python repoda) | `426c001` 1 Eki 12:03 |
+| Hermes'in disk bekçisi çalışan ticket'ın worktree'sini siliyor (#86, #93) | karar: Hermes worktree silmez, yalnızca cache |
 
 30 Eyl 2026 sabahı, hepsi `~/projects/ustabasi`'de. Bir daha açılmaz:
 
