@@ -65,7 +65,6 @@ export function Sessions({ view }: { view: DivanView }) {
   // one of them is a sentence typed a moment ago, the other has been waiting
   // since last night and can wait as a tab.
   const { panels, tabs, more } = arrange(list, dock, PANELS - mine.panels.length);
-  if (!list.length && !started.length) return null;
 
   /** Where the nth window stands before anybody has put it anywhere: the
    *  corner the frames draw, and each one after that to the left of the last. */
@@ -114,7 +113,11 @@ export function Sessions({ view }: { view: DivanView }) {
     }
   }, [unplaced.map(idOfTold).join(' ')]);
 
-  const open = windows.find((w) => w.id === big) ?? null;
+  // After the effect, not before it: the first chat opened on an empty corner
+  // would otherwise run one more hook than the render before it did.
+  if (!list.length && !started.length) return null;
+
+  const open =windows.find((w) => w.id === big) ?? null;
 
   return (
     <>

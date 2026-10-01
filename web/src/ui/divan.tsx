@@ -1006,10 +1006,16 @@ export function Panel({ tone = 'amber', head, foot, width = SIZE.panel, height =
       display: 'flex', flexDirection: 'column', overflow: 'hidden', ...style,
     }}>
       {head}
+      {/* Pushed down by a margin rather than `justify-content: flex-end`: what
+          that overflows goes off the top, where no scrollbar reaches it. */}
       <div style={{
         flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
-        justifyContent: 'flex-end', gap: 10, padding: 14, overflowY: 'auto',
-      }}>{children}</div>
+        padding: 14, overflowY: 'auto',
+      }}>
+        <div style={{
+          flex: 'none', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10,
+        }}>{children}</div>
+      </div>
       {foot}
     </section>
   );
@@ -1043,11 +1049,16 @@ export function PanelHead({ lead, title, badge, tone = 'amber', note, grab, extr
     }}>
       {lead}
       <div style={{ minWidth: 0, lineHeight: 1.25 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
-          {title}
+        {/* The name gives way, not the badge and not the buttons: a long one
+            used to run on under the two characters at the far end. */}
+        <div style={{
+          display: 'flex', alignItems: 'baseline', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
+        }}>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
           {!!badge && (
             <span style={{
-              ...mono, marginLeft: 6, fontSize: 11, fontWeight: 500, color: toneColours(tone).fg,
+              ...mono, flex: 'none', marginLeft: 6, fontSize: 11, fontWeight: 500,
+              color: toneColours(tone).fg,
             }}>{badge}</span>
           )}
         </div>

@@ -212,6 +212,24 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
               cursor: 'nwse-resize', zIndex: 5,
             }}
           />}
+          {/* What the chat is about, in a box of its own over the head: a
+              title is a sentence somebody typed, and beside the window's
+              buttons it had a third of a line to be read in. */}
+          <div
+            title={chat?.title || told.title}
+            style={{
+              margin: '10px 12px 0', padding: '7px 10px', borderRadius: RADIUS.quote,
+              background: T.s2, fontSize: 13, fontWeight: 600, lineHeight: 1.3,
+              cursor: big ? undefined : 'grab',
+            }}
+          >
+            {/* Clamped inside the padding: a clamp on the padded box itself
+                lets the top of the line it cut show through underneath. */}
+            <div style={{
+              overflow: 'hidden', overflowWrap: 'anywhere',
+              display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: big ? 1 : 2,
+            }}>{chat?.title || told.title}</div>
+          </div>
           <PanelHead
             lead={<ExecutorBadge executor="divan" />}
             extra={!!onBig && (
@@ -221,8 +239,8 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
                 onClick={() => onBig(!big)}
               />
             )}
-            title={chat?.title || told.title} badge={badge} tone={tone}
-            note={[machine, stamp ? clock(stamp) : ''].filter(Boolean).join(' · ')}
+            title={machine} badge={badge} tone={tone}
+            note={stamp ? clock(stamp) : ''}
             grab={!big}
             onMinimise={onMinimise}
             onClose={onClose}
