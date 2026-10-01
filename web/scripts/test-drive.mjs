@@ -237,6 +237,9 @@ seed(useFleet, {
                   name: 'onboarding', at: Date.now() / 1000, size: 40_000 }],
       };
     }
+    if (type === 'agent.list') {
+      return { agents: [{ id: 'hermes', name: 'hermes', label: 'Hermes', installed: true, scope: 'account' }] };
+    }
     if (type === 'chat.create') {
       // A new id every time, the way the daemon hands one out: two chats
       // started from the bar are two chats, and a fake that answered with one
@@ -1307,6 +1310,17 @@ group('chats are filed into groups from the panel');
     asked.some((a) => a.type === 'group.delete') && !menuOf('Later')
       && [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('Invoice PDF')),
     JSON.stringify(asked.map((a) => [a.type, a.data])));
+
+  // A heading's own + starts a chat in that folder, and the dialog opens on
+  // the agent — Hermes, until somebody has chosen otherwise.
+  asked.length = 0;
+  await click(doc.querySelector('button[aria-label="New chat in Hush"]'));
+  await settle();
+  await click(find('Start chat'));
+  await settle();
+  const started = asked.find((a) => a.type === 'chat.create')?.data;
+  ok('a heading’s + opens a chat in that folder, already on Hermes',
+    started?.agent_id === 'hermes' && !!started?.cwd, JSON.stringify(started));
 }
 
 group('a product has its own chats');

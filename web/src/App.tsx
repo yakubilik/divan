@@ -624,6 +624,7 @@ export function App() {
             <Sidebar
               selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
               onNewChat={() => setNewChat({})}
+              onNewChatIn={(host, cwd) => setNewChat({ host, cwd })}
               searchRef={searchRef}
               collapsed={rail} onCollapse={setRailTo}
             />

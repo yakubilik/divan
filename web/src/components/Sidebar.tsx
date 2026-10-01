@@ -339,7 +339,7 @@ function ChatRow({ chat, selected, onPick, onDrag }: {
 // `collapsed` arrives renamed: the section headers in the list below already
 // own that word, and two different things called collapsed in one component is
 // how you end up hiding the wrong one.
-export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef,
+export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChatIn, searchRef,
                           collapsed: railed = false, onCollapse, project }: {
   /** On a product's own page: the list is that product's chats, on whichever
    *  computers have it, and the things that are about one computer's whole
@@ -349,6 +349,8 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
   selectedHost: string | null;
   onSelect: (hostKey: string, chatId: string) => void;
   onNewChat: () => void;
+  /** A chat that opens already in this folder, from a heading's own + . */
+  onNewChatIn?: (hostKey: string, cwd: string) => void;
   searchRef?: React.RefObject<HTMLInputElement>;
   collapsed?: boolean;
   onCollapse?: (next: boolean) => void;
@@ -624,6 +626,24 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
                   <Icon path={P.more} size={14} color={C.mute} width={2.8} />
                 </button>
               )}
+              {onNewChatIn && !project && s.kind !== 'archive' && (() => {
+                const cwd = s.kind === 'folder' ? s.key.slice(4)
+                  : s.chats.find((c) => c.cwd)?.cwd
+                    ?? hosts[s.hostKey]?.projects.find((p) => p.name === s.title)?.path;
+                return cwd ? (
+                  <button
+                    type="button" title={`New chat in ${s.title}`} aria-label={`New chat in ${s.title}`}
+                    onClick={() => onNewChatIn(s.hostKey, cwd)}
+                    style={{
+                      width: 24, height: 24, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
+                      background: 'transparent', border: 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <Icon path={P.plus} size={14} color={C.mute} />
+                  </button>
+                ) : null;
+              })()}
               </div>
               {menuFor === s.key && (
                 <GroupMenu
