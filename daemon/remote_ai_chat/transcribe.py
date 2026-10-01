@@ -156,6 +156,30 @@ async def transcribe(path: Path, prompt: str | None = None) -> dict | None:
 
 SAMPLE_RATE = 16000
 
+# What whisper writes when nobody said anything. It was trained on subtitled
+# video, where silence is the end of the film, so a second of fan noise or of
+# somebody typing comes back as the credit line of whoever subtitled it — in
+# the language it was told to expect, with full confidence (`no_speech_prob`
+# is 0.0 for every one of these). The panel does not send silence, but it
+# cannot tell a keyboard from a voice, and dictation writes straight into the
+# box somebody is about to send. So a phrase that is exactly one of these is
+# nothing. Compared whole, after dropping punctuation: "altyazı metnini düzelt"
+# is a thing a person says.
+_NOTHING = {
+    "altyazı m", "altyazı mk", "izlediğiniz için teşekkür ederim", "izlediğiniz için teşekkürler",
+    "thanks for watching", "thank you for watching",
+    "ondertiteld door de amaraorg gemeenschap", "ondertitels ingediend door de amaraorg gemeenschap",
+    "untertitel der amaraorg community", "untertitel im auftrag des zdf für funk 2017",
+    "sous titres réalisés par la communauté d amaraorg",
+    "subtítulos realizados por la comunidad de amaraorg", "sottotitoli creati dalla comunità amaraorg",
+}
+
+
+def said(text: str) -> bool:
+    """Whether a phrase whisper returned is something a person said."""
+    words = "".join(c if c.isalnum() else " " if c in " -'’" else "" for c in text.lower()).split()
+    return bool(words) and " ".join(words) not in _NOTHING
+
 
 def pcm(data: bytes, prompt: str | None = None, language: str | None = None) -> dict | None:
     """One stretch of 16 kHz mono s16le PCM, as words. Runs on a thread.
@@ -170,12 +194,18 @@ def pcm(data: bytes, prompt: str | None = None, language: str | None = None) -> 
         return None
     audio = np.frombuffer(data[:len(data) // 2 * 2], dtype=np.int16).astype(np.float32) / 32768.0
     backend = _backend()
+    run = _mlx if backend == "mlx" else _transcribe_faster_array if backend == "faster" else None
+    if run is None:
+        return None
     with _run_lock:
-        if backend == "mlx":
-            return _mlx(audio, prompt, language)
-        if backend == "faster":
-            return _transcribe_faster_array(audio, prompt, language)
-    return None
+        try:
+            out = run(audio, prompt, language)
+        except ValueError:
+            # A language whisper has never heard of. Let it listen for itself.
+            if not language:
+                raise
+            out = run(audio, prompt, None)
+    return out if out and said(out["text"]) else None
 
 
 def _transcribe_faster_array(audio, prompt: str | None, language: str | None = None) -> dict | None:

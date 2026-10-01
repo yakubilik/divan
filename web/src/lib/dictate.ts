@@ -3,34 +3,38 @@
  *  The phone has had this since there were voice notes: you hold a button, you
  *  talk, the daemon runs whisper over the recording and the words arrive. On a
  *  computer that arrangement is the wrong shape. You are sitting at a keyboard
- *  with a cursor blinking, and the thing that makes dictation feel like typing
- *  rather than like sending a file is that the words appear *while you are
- *  still talking*. A second of silence after you stop is a second you spend
- *  wondering whether it heard you.
+ *  with a cursor blinking, and what makes dictation feel like typing rather
+ *  than like sending a file is that the words land while you are still
+ *  talking — and that they are the words you said.
  *
- *  So the panel prefers the browser's own ear. Chromium ships a speech model
- *  it will download and run on the machine — `SpeechRecognition.available()`
- *  says whether a language is there, `install()` fetches it, `processLocally`
- *  pins it to the local one — and it streams results as you speak. Nothing
- *  leaves the computer and the daemon does no work at all.
+ *  The second half is what decides the order of the engines. Measured on one
+ *  sentence of Turkish with the work's own English in it ("yeni bir branch aç,
+ *  commit at, deploy et"): whisper on the computer wrote it down right in a
+ *  sixth of the time it took to say. The browser's own recogniser, given the
+ *  same recording as a microphone in Chrome 154, heard sound and returned
+ *  nothing — on-device and cloud alike, no words and no error. A recogniser
+ *  that can fail silently in one browser, answers `network` in Brave and does
+ *  not exist in Firefox is not something to build the default on.
  *
- *  Three engines, in the order they are tried:
+ *  So, two engines:
  *
- *  · **local** — the browser's on-device model. The one we want. Works in
- *    Chrome and in Brave, which matters: Brave ships no key for Google's
- *    speech service, so the cloud path below fails there with `network` and
- *    the on-device model is the only one it has.
- *  · **cloud** — the same API without `processLocally`. Safari's
- *    `webkitSpeechRecognition` and Chrome's default. Audio goes to the browser
- *    vendor, which is worth knowing and is why it is second.
- *  · **whisper** — the daemon, over `POST /dictate`. No live words: the audio
- *    is captured as the 16 kHz mono PCM whisper wants and sent in one go when
- *    you stop. This is Firefox, which has no speech API at all, and it is the
- *    answer when a browser that should have one cannot reach it.
+ *  · **computer** — the daemon's whisper, over `POST /dictate`. The default
+ *    wherever the chat's computer has a transcriber. The audio is captured as
+ *    the 16 kHz mono PCM whisper wants and cut at the pauses (`Phrases`), so a
+ *    phrase is sent as it ends and its words land about a second later — the
+ *    same way, in every browser. Nothing leaves the person's own machines.
+ *  · **browser** — `SpeechRecognition`. On-device where Chromium has a model
+ *    for the language (`available()`, `install()`, `processLocally`), the
+ *    browser maker's cloud service otherwise. Its words appear as they are
+ *    spoken, which is the one thing whisper cannot do, so it is a choice in
+ *    Preferences and the answer for a computer with no transcriber. When it
+ *    fails in a way that is permanent for the browser, the engine moves to the
+ *    computer and stays there.
  *
  *  Everything above the engines — how a chunk of speech is joined onto what is
- *  already in the box, which words the engine is told to expect, what an error
- *  code means in a sentence — is plain functions at the top of this file, and
+ *  already in the box, which words the engine is told to expect, where a
+ *  stream of samples is cut into phrases, what an error code means in a
+ *  sentence — is plain functions at the top of this file, and
  *  `scripts/test-dictate.mjs` is about those.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -38,8 +42,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export type Engine = 'local' | 'cloud' | 'whisper';
 
 /** `opening` is permission and a microphone starting; `installing` is the
- *  one-time model download; `thinking` is whisper, which has the audio and is
- *  working on it. `listening` is the only one of the four that is the point. */
+ *  browser's one-time model download; `thinking` is whisper after the stop,
+ *  still working on the last phrase. `listening` is the only one of the four
+ *  that is the point. */
 export type DictateState = 'idle' | 'opening' | 'installing' | 'listening' | 'thinking';
 
 export interface Support {
@@ -170,9 +175,9 @@ export function errorText(code: string): string {
  *  Brave answers `network` to every cloud attempt because it ships no key for
  *  one, and a browser that will not recognise a page's audio says
  *  `service-not-allowed`. Both are permanent for this browser and both are
- *  exactly what the daemon is for, so they move the engine rather than show a
- *  line of red. A microphone the person has blocked is not: whisper would need
- *  the same microphone. */
+ *  exactly what the computer is for, so they move the engine rather than show
+ *  a line of red. A microphone the person has blocked is not: whisper would
+ *  need the same microphone. */
 export function fallsBackToWhisper(code: string): boolean {
   return code === 'network' || code === 'service-not-allowed' || code === 'language-not-supported';
 }
@@ -181,16 +186,36 @@ export function fallsBackToWhisper(code: string): boolean {
 
 export type Availability = 'local' | 'downloadable' | 'cloud' | 'whisper' | 'none';
 
+/** Which of the two engines this browser asks for first. The computer, unless
+ *  somebody chose the browser's live words over it. */
+export type EnginePref = 'computer' | 'browser';
+
+const ENGINE_KEY = 'rac.dictate.engine';
+
+export function dictateEngine(): EnginePref {
+  try { return localStorage.getItem(ENGINE_KEY) === 'browser' ? 'browser' : 'computer'; }
+  catch { return 'computer'; }
+}
+
+export function setDictateEngine(engine: EnginePref): void {
+  try { localStorage.setItem(ENGINE_KEY, engine); } catch { /* private mode */ }
+}
+
 /** Which engine a language would get, asked before anybody presses anything.
  *
- *  `available()` answers `available` when the model is on the machine,
- *  `downloadable` when it can be fetched, `unavailable` when this browser has
- *  no on-device model for that language. A browser with no on-device half at
- *  all falls to its cloud service if it has one — and a browser with neither
- *  gets the daemon, if the daemon has a transcriber. */
-export async function availability(lang: string, hostCanWhisper: boolean): Promise<Availability> {
+ *  The computer's whisper when it has one and it is the preference. Otherwise
+ *  the browser: `available()` answers `available` when its model is on the
+ *  machine, `downloadable` when it can be fetched, `unavailable` when it has
+ *  none for that language, and a browser with no on-device half at all falls
+ *  to its cloud service. A browser with no speech API gets the computer
+ *  whatever the preference says. */
+export async function availability(
+  lang: string, hostCanWhisper: boolean, pref: EnginePref = dictateEngine(),
+): Promise<Availability> {
   const s = support();
   if (!s.secure) return 'none';
+  const whisper = hostCanWhisper && s.capture;
+  if (whisper && pref === 'computer') return 'whisper';
   if (s.onDevice) {
     const SR = speechClass()!;
     try {
@@ -200,8 +225,7 @@ export async function availability(lang: string, hostCanWhisper: boolean): Promi
     } catch { /* an older shape of the API; treat it as absent */ }
   }
   if (s.speech) return 'cloud';
-  if (hostCanWhisper && s.capture) return 'whisper';
-  return 'none';
+  return whisper ? 'whisper' : 'none';
 }
 
 /** Fetch the on-device model for a language. Resolves true when the browser
@@ -260,17 +284,117 @@ export function langChoices(current = dictateLang()): string[] {
   return out.slice(0, 6);
 }
 
+/* ── cutting speech into phrases ──────────────────────────────────────────── */
+
+/** What whisper wants, and so what everything below is counted in. */
+export const RATE = 16000;
+
+const PAUSE = 0.7 * RATE;       // silence that ends a phrase
+const MIN_VOICED = 0.2 * RATE;  // less speech than this is a click, not a phrase
+const LEAD = 0.3 * RATE;        // silence kept in front of the first word
+const TAIL = 0.2 * RATE;        // …and behind the last
+const LONG = 20 * RATE;         // past this, a breath is pause enough
+const MAX = 28 * RATE;          // whisper listens thirty seconds at a time
+
+/** A stream of samples in, one phrase out each time the speaker pauses.
+ *
+ *  This is what stands in for live words. Whisper cannot answer until it has
+ *  the audio, so the audio is handed over in the pieces a person already
+ *  speaks in: when 0.7 s goes by without a voice, what came before it is a
+ *  phrase and is sent while they draw breath for the next one. Shorter and it
+ *  cuts in the middle of a thought — and whisper ends every piece with a full
+ *  stop; longer and the words are late.
+ *
+ *  Speech is told from silence by loudness against a floor that follows the
+ *  room down: a fan is quiet and a voice over it is three times that. Silence
+ *  is never sent at all, which matters beyond the bytes — whisper given a
+ *  second of nothing does not answer nothing, it answers with a sentence it
+ *  remembers from somebody's subtitles.
+ */
+export class Phrases {
+  private blocks: Float32Array[] = [];
+  private length = 0;
+  private voiced = 0;
+  private quiet = 0;
+  private floor = 0.004;
+
+  push(block: Float32Array): Int16Array | null {
+    if (!block.length) return null;
+    let sum = 0;
+    for (let i = 0; i < block.length; i++) sum += block[i] * block[i];
+    const rms = Math.sqrt(sum / block.length);
+    const loud = rms > Math.max(0.01, this.floor * 3);
+    // Only quiet moves the floor. If speech could, a long sentence would raise
+    // it to its own level and be heard as a pause.
+    if (!loud) this.floor = Math.min(0.03, this.floor * 0.95 + rms * 0.05);
+
+    this.blocks.push(block);
+    this.length += block.length;
+    if (loud) { this.voiced += block.length; this.quiet = 0; }
+    else this.quiet += block.length;
+
+    if (this.voiced >= MIN_VOICED) {
+      if (this.quiet >= PAUSE || this.length >= MAX
+          || (this.length >= LONG && this.quiet >= TAIL)) return this.take();
+    } else if (this.quiet >= PAUSE || !this.voiced) {
+      // Nothing said yet, or a click and then nothing. Keep only what would be
+      // the run-up to a first word.
+      this.voiced = 0;
+      while (this.blocks.length > 1 && this.length - this.blocks[0].length >= LEAD) {
+        this.length -= this.blocks.shift()!.length;
+      }
+    }
+    return null;
+  }
+
+  /** Whatever is held when the microphone closes — if anybody spoke in it. */
+  flush(): Int16Array | null {
+    return this.voiced >= MIN_VOICED ? this.take() : null;
+  }
+
+  private take(): Int16Array {
+    const n = this.length - Math.max(0, this.quiet - TAIL);
+    const out = new Int16Array(n);
+    let i = 0;
+    for (const b of this.blocks) {
+      for (let k = 0; k < b.length && i < n; k++, i++) {
+        const v = Math.max(-1, Math.min(1, b[k]));
+        out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+      }
+    }
+    this.blocks = [];
+    this.length = this.voiced = this.quiet = 0;
+    return out;
+  }
+}
+
+/** Samples at the microphone's rate, as samples at whisper's.
+ *
+ *  Only for the browser that will not do it itself — see `capture`. Each
+ *  output sample is the mean of the input samples it covers, which is both the
+ *  resampling and the low-pass a voice needs before it is thinned. */
+export function resampler(from: number, to = RATE): (block: Float32Array) => Float32Array {
+  if (from === to) return (block) => block;
+  const step = from / to;
+  let acc = 0, n = 0, pos = 0;
+  return (block) => {
+    const out = new Float32Array(Math.ceil(block.length / step) + 1);
+    let o = 0;
+    for (let i = 0; i < block.length; i++) {
+      acc += block[i]; n++; pos++;
+      if (pos >= step) { out[o++] = acc / n; acc = 0; n = 0; pos -= step; }
+    }
+    return out.subarray(0, o);
+  };
+}
+
 /* ── capture, for the engine that cannot hear by itself ───────────────────── */
 
 /** An AudioWorklet that does nothing but hand every block of samples over.
  *
  *  Inline, as a blob, rather than a file in `public/`: it is fifteen lines, it
  *  belongs to this module, and a separate asset is one more thing that can be
- *  missing from a build.
- *
- *  The resampling is the `AudioContext`'s, asked for by opening it at 16 kHz —
- *  which is both what whisper wants and a thirtieth of the bytes a stereo
- *  48 kHz recording would have sent over the network. */
+ *  missing from a build. */
 const WORKLET = `
 class Tap extends AudioWorkletProcessor {
   process(inputs) {
@@ -282,9 +406,13 @@ class Tap extends AudioWorkletProcessor {
 registerProcessor('rac-tap', Tap);
 `;
 
-interface Capture { stop: () => Promise<Int16Array>; cancel: () => void }
+interface Capture {
+  /** Close the microphone and hand back the phrase that was still open. */
+  stop: () => Int16Array | null;
+  cancel: () => void;
+}
 
-async function capture(): Promise<Capture> {
+async function capture(onPhrase: (pcm: Int16Array) => void): Promise<Capture> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       channelCount: 1,
@@ -292,44 +420,51 @@ async function capture(): Promise<Capture> {
       echoCancellation: true, noiseSuppression: true, autoGainControl: true,
     },
   });
-  const ctx = new AudioContext({ sampleRate: 16000 });
-  const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
+  // The resampling is the `AudioContext`'s where it will do it, asked for by
+  // opening it at 16 kHz. Firefox opens one and then refuses to connect a
+  // microphone running at another rate to it, so there the context is the
+  // microphone's and `resampler` does the work.
+  let ctx = new AudioContext({ sampleRate: RATE });
+  let source: MediaStreamAudioSourceNode;
   try {
-    await ctx.audioWorklet.addModule(url);
-  } finally {
-    URL.revokeObjectURL(url);
+    source = ctx.createMediaStreamSource(stream);
+  } catch {
+    void ctx.close();
+    ctx = new AudioContext();
+    source = ctx.createMediaStreamSource(stream);
   }
-  const node = new AudioWorkletNode(ctx, 'rac-tap');
-  const blocks: Float32Array[] = [];
-  let n = 0;
-  node.port.onmessage = (e) => { blocks.push(e.data); n += e.data.length; };
-  ctx.createMediaStreamSource(stream).connect(node);
-  // Connected to nothing: a worklet that is not in the graph is not pulled, and
-  // one connected to the speakers is a howl. `destination` with a zero gain is
-  // the usual trick; a node with no output at all is enough in both engines
-  // the panel runs in, and `process` returning true keeps it alive.
-
   const close = () => {
-    node.port.onmessage = null;
-    node.disconnect();
     stream.getTracks().forEach((t) => t.stop());
     void ctx.close();
   };
-  return {
-    cancel: close,
-    stop: async () => {
-      close();
-      const out = new Int16Array(n);
-      let i = 0;
-      for (const b of blocks) {
-        for (let k = 0; k < b.length; k++, i++) {
-          const v = Math.max(-1, Math.min(1, b[k]));
-          out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
-        }
-      }
-      return out;
-    },
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
+  try {
+    await ctx.audioWorklet.addModule(url);
+  } catch (e) {
+    close();
+    throw e;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  void ctx.resume();
+  const node = new AudioWorkletNode(ctx, 'rac-tap');
+  const down = resampler(ctx.sampleRate);
+  const phrases = new Phrases();
+  node.port.onmessage = (e) => {
+    const phrase = phrases.push(down(e.data));
+    if (phrase) onPhrase(phrase);
   };
+  // Connected to nothing: a node with no output is still pulled in both engines
+  // the panel runs in, `process` returning true keeps it alive, and one
+  // connected to the speakers is a howl.
+  source.connect(node);
+
+  const end = () => {
+    node.port.onmessage = null;
+    node.disconnect();
+    close();
+  };
+  return { cancel: end, stop: () => { end(); return phrases.flush(); } };
 }
 
 /* ── the hook the composer uses ───────────────────────────────────────────── */
@@ -340,8 +475,11 @@ export interface Dictation {
   engine: Engine | null;
   /** Seconds since the microphone opened, for the counter beside it. */
   seconds: number;
-  /** Words the engine has not committed yet: the live half, drawn pale. */
+  /** Words the browser's engine has not committed yet: the live half. */
   interim: string;
+  /** The computer has a phrase and is writing it down. The only sign whisper
+   *  can give that it heard, for the second its words take. */
+  writing: boolean;
   error: string | null;
   /** `none` means there is nothing to press, and the composer draws no
    *  microphone at all rather than one that cannot work. */
@@ -357,8 +495,11 @@ export interface DictationOptions {
   /** The names to bias towards: this person's products and machines. */
   names?: Iterable<string>;
   /** Whether the computer the chat is on can run whisper, and how to ask it.
-   *  Absent means there is no third engine. */
-  whisper?: { warm: () => void; send: (pcm: Int16Array, prompt: string) => Promise<string> };
+   *  Absent means the browser is the only engine. */
+  whisper?: {
+    warm: () => void;
+    send: (pcm: Int16Array, prompt: string, lang: string) => Promise<string>;
+  };
 }
 
 export function useDictation({ onCommit, names = [], whisper }: DictationOptions): Dictation {
@@ -366,6 +507,7 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
   const [engine, setEngine] = useState<Engine | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [interim, setInterim] = useState('');
+  const [writing, setWriting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avail, setAvail] = useState<Availability | null>(null);
 
@@ -383,6 +525,12 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
    *  middle of it survive. */
   const wanted = useRef(false);
   const restarts = useRef<number[]>([]);
+  /** Whisper's phrases, answered one at a time and in the order they were
+   *  said. `run` is which dictation they belong to: an answer that comes back
+   *  after Esc belongs to none and is dropped. */
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const waiting = useRef(0);
+  const run = useRef(0);
 
   useEffect(() => {
     let alive = true;
@@ -401,21 +549,47 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
     rec.current = null;
     cap.current = null;
     restarts.current = [];
+    run.current += 1;
+    waiting.current = 0;
+    queue.current = Promise.resolve();
+    setWriting(false);
     setInterim('');
     setSeconds(0);
     setState('idle');
   }, []);
 
-  /** The daemon's engine: record it all, send it when they stop. No live
-   *  words — that is the whole reason it is third — so there is nothing to
-   *  draw between pressing and the answer but "thinking". */
+  /** One phrase to the computer, behind the ones already on their way. */
+  const sendPhrase = useCallback((pcm: Int16Array) => {
+    const w = latest.current.whisper;
+    if (!w) return;
+    const mine = run.current;
+    waiting.current += 1;
+    setWriting(true);
+    queue.current = queue.current
+      .then(() => (mine === run.current ? w.send(pcm, promptFor(latest.current.phrases), lang) : ''))
+      .then((text) => {
+        if (mine !== run.current) return;
+        waiting.current -= 1;
+        if (!waiting.current) setWriting(false);
+        if (text) latest.current.onCommit(text);
+      })
+      .catch((e: any) => {
+        if (mine !== run.current) return;
+        setError(e?.message ?? 'The computer could not transcribe that.');
+        cap.current?.cancel();
+        finish();
+      });
+  }, [lang, finish]);
+
+  /** The computer's engine: a phrase goes up each time the speaker pauses and
+   *  its words come back while they are saying the next one. */
   const startWhisper = useCallback(async () => {
     const w = latest.current.whisper;
     if (!w) { setError('No way to turn speech into text here.'); finish(); return; }
     setEngine('whisper');
     w.warm();
     try {
-      cap.current = await capture();
+      cap.current = await capture(sendPhrase);
     } catch (e: any) {
       setError(e?.name === 'NotAllowedError'
         ? errorText('not-allowed')
@@ -425,7 +599,7 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
     }
     if (!wanted.current) { cap.current.cancel(); finish(); return; }
     setState('listening');
-  }, [finish]);
+  }, [finish, sendPhrase]);
 
   const startSpeech = useCallback(async (local: boolean) => {
     const SR = speechClass();
@@ -479,7 +653,7 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
       if (fallsBackToWhisper(code) && latest.current.whisper) {
         // Permanent for this browser, so remember it: Brave would otherwise
         // spend a second failing at the cloud every single time.
-        rememberWhisper();
+        setDictateEngine('computer');
         rec.current = null;
         void startWhisper();
         return;
@@ -523,8 +697,9 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
     }
     wanted.current = true;
     setState('opening');
-    if (preferWhisper() && latest.current.whisper) { void startWhisper(); return; }
-    if (s.speech) void startSpeech(s.onDevice);
+    const computer = !!latest.current.whisper && s.capture;
+    if (computer && (dictateEngine() === 'computer' || !s.speech)) void startWhisper();
+    else if (s.speech) void startSpeech(s.onDevice);
     else void startWhisper();
   }, [state, startSpeech, startWhisper]);
 
@@ -542,16 +717,17 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
       return;
     }
     const c = cap.current;
-    const w = latest.current.whisper;
-    if (!c || !w) { finish(); return; }
+    if (!c) { finish(); return; }
     cap.current = null;
+    // The phrase they stopped in the middle of goes up like the others, and
+    // the microphone is not `idle` until every one of them has answered.
+    const rest = c.stop();
+    if (rest) sendPhrase(rest);
+    if (!waiting.current) { finish(); return; }
     setState('thinking');
-    c.stop()
-      .then((pcm) => w.send(pcm, promptFor(latest.current.phrases)))
-      .then((text) => { if (text) latest.current.onCommit(text); })
-      .catch((e: any) => setError(e?.message ?? 'The computer could not transcribe that.'))
-      .finally(finish);
-  }, [finish]);
+    const mine = run.current;
+    void queue.current.then(() => { if (mine === run.current) finish(); });
+  }, [finish, sendPhrase]);
 
   const cancel = useCallback(() => {
     wanted.current = false;
@@ -562,23 +738,5 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
 
   useEffect(() => cancel, [cancel]);
 
-  return { state, engine, seconds, interim, error, availability: avail, start, stop, cancel };
-}
-
-/* ── remembering that this browser has no cloud ───────────────────────────── */
-
-const WHISPER_KEY = 'rac.dictate.whisper';
-
-function preferWhisper(): boolean {
-  try { return localStorage.getItem(WHISPER_KEY) === '1'; } catch { return false; }
-}
-
-function rememberWhisper(): void {
-  try { localStorage.setItem(WHISPER_KEY, '1'); } catch { /* private mode */ }
-}
-
-/** Forget it, so a browser that has since been given a model or a key is tried
- *  again. Settings does this when the language changes. */
-export function forgetWhisperPreference(): void {
-  try { localStorage.removeItem(WHISPER_KEY); } catch { /* private mode */ }
+  return { state, engine, seconds, interim, writing, error, availability: avail, start, stop, cancel };
 }

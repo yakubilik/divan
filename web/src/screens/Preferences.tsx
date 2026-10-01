@@ -34,8 +34,8 @@ import { onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
 import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
 import { parsePairing, toolStatus } from '../lib/actions';
 import {
-  availability, dictateLang, forgetWhisperPreference, install, langChoices, langName,
-  setDictateLang, support, type Availability,
+  availability, dictateEngine, dictateLang, install, langChoices, langName,
+  setDictateEngine, setDictateLang, support, type Availability, type EnginePref,
 } from '../lib/dictate';
 import { errText, t } from '../lib/i18n';
 import { ago, tilde, until, uptime, windowName } from '../lib/format';
@@ -1034,29 +1034,34 @@ function AboutSection({ slot }: { slot: HostSlot }) {
  *  buttons say nothing about what is spoken into them — and a model fetched for
  *  the wrong language is a few hundred megabytes of nothing.
  *
- *  The line under it is the honest state of the three engines
- *  (`lib/dictate.ts`), because they are not interchangeable: one runs here, one
- *  sends audio to the browser's maker, and one gives up live words for the
- *  daemon's whisper. Which one you get is worth being told before you talk, not
- *  after.
+ *  The line under it is the honest state of the engines (`lib/dictate.ts`),
+ *  because they are not interchangeable: the computer's whisper gets the words
+ *  right and hands them over a phrase at a time, the browser's own model shows
+ *  them as they are spoken, and the browser's cloud service sends the audio to
+ *  its maker. Which one you get is worth being told before you talk, not
+ *  after — and where there is a choice between the first and the rest, it is
+ *  offered.
  */
 function DictationSection() {
   const [lang, setLang] = useState(dictateLang);
+  const [engine, setEngine] = useState(dictateEngine);
   const [state, setState] = useState<Availability | null>(null);
   const [busy, setBusy] = useState(false);
   const canWhisper = useFleet((s) => Object.values(s.hosts).some((h) => h.info?.transcription));
   const s = support();
 
   const read = useCallback(() => {
-    availability(lang, canWhisper).then(setState);
-  }, [lang, canWhisper]);
+    availability(lang, canWhisper, engine).then(setState);
+  }, [lang, canWhisper, engine]);
   useEffect(read, [read]);
 
   const pick = (tag: string) => {
     setDictateLang(tag);
     setLang(tag);
-    // A browser that failed at one language is given the next one fresh.
-    forgetWhisperPreference();
+  };
+  const pickEngine = (e: EnginePref) => {
+    setDictateEngine(e);
+    setEngine(e);
   };
 
   const line = !s.secure
@@ -1068,7 +1073,7 @@ function DictationSection() {
         : state === 'cloud'
           ? `This browser has no ${langName(lang)} model of its own, so it will send the audio to its maker's speech service.`
           : state === 'whisper'
-            ? 'This browser cannot do speech at all, so the computer will: whisper runs on it, which means the words arrive when you stop rather than while you talk.'
+            ? 'Whisper runs on the computer the chat is on. Nothing is sent anywhere else, and the words arrive a phrase at a time, each time you pause.'
             : 'Nothing here can turn speech into text, so the composer draws no microphone.';
 
   return (
@@ -1080,6 +1085,15 @@ function DictationSection() {
           on={tag === lang} onPick={() => pick(tag)}
         />
       ))}
+      {/* A choice only where there are two things to choose between. */}
+      {s.secure && canWhisper && s.capture && s.speech && (
+        <Choice
+          label="Engine" value={engine}
+          options={[{ key: 'computer' as const, label: 'computer' },
+                    { key: 'browser' as const, label: 'browser' }]}
+          onChange={pickEngine}
+        />
+      )}
       <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>{line}</div>
       {state === 'downloadable' && (
         <Button

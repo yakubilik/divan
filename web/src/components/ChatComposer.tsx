@@ -123,7 +123,10 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
     names,
     onCommit: (chunk) => setText((prev) => appendSpeech(prev, chunk)),
     whisper: canWhisper
-      ? { warm: () => warmDictation(hostKey), send: (pcm, prompt) => dictate(hostKey, pcm, prompt) }
+      ? {
+        warm: () => warmDictation(hostKey),
+        send: (pcm, prompt, lang) => dictate(hostKey, pcm, prompt, lang),
+      }
       : undefined,
   });
   const listening = mic.state === 'listening';
@@ -338,7 +341,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
                   place that says it still is, and for how long. */}
               <span style={{ color: C.accent }}>
                 {`recording ${clock(mic.seconds)}`}
-                {mic.engine === 'whisper' ? ' · on the computer' : ''}
+                {mic.writing ? ' · writing…' : mic.engine === 'whisper' ? ' · on the computer' : ''}
               </span>
               <span>⏎ or ⌥Space to stop</span>
               <span>esc discards</span>

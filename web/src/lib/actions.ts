@@ -218,23 +218,24 @@ export async function upload(key: string, chatId: string, file: File): Promise<a
   return r.json();
 }
 
-/** Dictation, for a browser that cannot hear by itself.
+/** Dictation: one phrase of speech up, its words back.
  *
  *  Not an upload: nothing is kept and nothing is attached. What goes up is the
  *  audio whisper wants — 16 kHz mono signed 16-bit PCM, made in the panel
- *  (`lib/dictate.ts`) — and what comes back is the words. The vocabulary rides
- *  as a header rather than in the body, because the body is the audio;
- *  percent-encoded, because a header is Latin-1 and the names on a board are
- *  not.
+ *  (`lib/dictate.ts`) — and what comes back is the words. The vocabulary and
+ *  the language ride in the query rather than in the body, because the body is
+ *  the audio, and not in headers of their own, because a chat on another
+ *  paired computer is another origin and the daemon's CORS answer names only
+ *  the two headers below.
  */
-export async function dictate(key: string, pcm: Int16Array, prompt: string): Promise<string> {
+export async function dictate(key: string, pcm: Int16Array, prompt: string, lang: string): Promise<string> {
   const { cfg } = slot(key);
-  const r = await fetch(`${base(cfg)}/dictate`, {
+  const q = new URLSearchParams({ lang, ...(prompt ? { prompt } : {}) });
+  const r = await fetch(`${base(cfg)}/dictate?${q}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${cfg.token}`,
       'Content-Type': 'application/octet-stream',
-      ...(prompt ? { 'X-Dictate-Prompt': encodeURIComponent(prompt) } : {}),
     },
     body: pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength) as ArrayBuffer,
   });
