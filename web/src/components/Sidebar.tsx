@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { C, R, SHADOW } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
 import { ago, uptime } from '../lib/format';
 import { useFleet, type HostSlot } from '../lib/fleet';
+import { createGroup, deleteGroup, renameGroup } from '../lib/actions';
+import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
 import type { Chat, Group } from '../lib/protocol';
 
 const W = 260;
@@ -135,7 +137,12 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
   );
 }
 
-interface Section { key: string; title: string; hostKey: string; chats: Chat[] }
+/** `group` is the only kind somebody made, and so the only one with a name to
+ *  change or a heading to take away. */
+interface Section {
+  key: string; title: string; hostKey: string; chats: Chat[];
+  kind: 'group' | 'folder' | 'loose' | 'host';
+}
 
 const rank = (c: Chat) => (c.pinned ? 0 : 1);
 const byRecency = (a: Chat[]) => a.sort((x, y) => rank(x) - rank(y) || y.updated_at - x.updated_at);
@@ -157,12 +164,22 @@ function fleetSections(hosts: Record<string, HostSlot>, order: string[], q: stri
     if (!slot) continue;
     const chats = byRecency(slot.chats.filter((c) => !c.archived && matches(c, q)));
     if (!chats.length) continue;
-    out.push({ key: k, title: slot.info?.name || slot.cfg.name, hostKey: k, chats });
+    out.push({ key: k, title: slot.info?.name || slot.cfg.name, hostKey: k, chats, kind: 'host' });
   }
   return out;
 }
 
-function sections(chats: Chat[], groups: Group[], hostKey: string): Section[] {
+const home = (path: string) => path
+  .replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/');
+
+/** One computer's list. A group is drawn even with nothing in it — an empty
+ *  group is where the next chats go, and one that vanished the moment it was
+ *  made would read as the button having done nothing. A search is the
+ *  exception: it is asking where a chat is, and an empty heading is not an
+ *  answer. The chats nobody has filed fall into sections by the folder they
+ *  work in, the way the phone lists them; a single folder is not a grouping,
+ *  so it stays one plain list. */
+function sections(chats: Chat[], groups: Group[], hostKey: string, searching: boolean): Section[] {
   const byGroup = new Map<string, Chat[]>();
   const loose: Chat[] = [];
   for (const c of chats) {
@@ -175,10 +192,18 @@ function sections(chats: Chat[], groups: Group[], hostKey: string): Section[] {
   }
   const out: Section[] = [];
   for (const g of [...groups].sort((a, b) => a.sort - b.sort)) {
-    const arr = byGroup.get(g.id);
-    if (arr?.length) out.push({ key: g.id, title: g.name, hostKey, chats: byRecency(arr) });
+    const arr = byGroup.get(g.id) ?? [];
+    if (arr.length || !searching) out.push({ key: g.id, title: g.name, hostKey, chats: byRecency(arr), kind: 'group' });
   }
-  if (loose.length) out.push({ key: '__loose', title: 'Ungrouped', hostKey, chats: byRecency(loose) });
+  const byCwd = new Map<string, Chat[]>();
+  for (const c of byRecency(loose)) byCwd.set(c.cwd || '', [...(byCwd.get(c.cwd || '') ?? []), c]);
+  if (byCwd.size > 1) {
+    for (const [path, arr] of byCwd) {
+      out.push({ key: `cwd:${path}`, title: home(path) || 'Ungrouped', hostKey, chats: arr, kind: 'folder' });
+    }
+  } else if (loose.length) {
+    out.push({ key: '__loose', title: groups.length ? 'Ungrouped' : 'Chats', hostKey, chats: loose, kind: 'loose' });
+  }
   return out;
 }
 
@@ -247,6 +272,12 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
   const { hosts, order, focus, allHosts, setFocus, setAllHosts } = useFleet();
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  /** The group whose heading has its menu open, and what is being asked about
+   *  a group in a dialog. */
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [asking, setAsking] = useState<
+    { what: 'new' } | { what: 'rename' | 'delete'; hostKey: string; id: string; name: string } | null
+  >(null);
 
   const slot = focus ? hosts[focus] : null;
   // One computer paired means there is nothing to merge: the fleet list and
@@ -256,8 +287,11 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
     const q = query.trim().toLocaleLowerCase('tr');
     if (fleetWide) return fleetSections(hosts, order, q);
     if (!slot) return [] as Section[];
-    return sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!);
+    return sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!, !!q);
   }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query]);
+  // Groups belong to one computer, so there is one to make only while the list
+  // is one computer's.
+  const canGroup = !!slot && !!focus && !fleetWide;
 
   // Collapsed: the chat list is gone. It exists because the wall of tiles under
   // the Machine place wants the width, and it can give the whole list up without
@@ -345,8 +379,9 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
           <span style={{ ...mono, fontSize: 11 }}>⌘N</span>
         </button>
       </div>
-      <div style={{ padding: '0 8px 8px' }}>
+      <div style={{ padding: '0 8px 8px', display: 'flex', gap: 6 }}>
         <div style={{
+          flex: 1, minWidth: 0,
           display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 10px',
           background: C.bg, border: `1px solid ${C.border}`, borderRadius: R.input,
         }}>
@@ -362,18 +397,32 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
           />
           <span style={{ ...mono, fontSize: 11, color: C.faint }}>⌘F</span>
         </div>
+        {canGroup && (
+          <button
+            type="button" onClick={() => setAsking({ what: 'new' })}
+            title="New group" aria-label="New group"
+            style={{
+              width: 32, height: 32, flexShrink: 0, borderRadius: R.input, cursor: 'pointer',
+              background: 'transparent', border: `1px solid ${C.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Icon path={P.folderPlus} size={15} color={C.mute} width={1.8} />
+          </button>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
         {list.map((s) => {
           const shut = collapsed[s.key];
           return (
-            <div key={s.key} style={{ marginBottom: 4 }}>
+            <div key={s.key} style={{ marginBottom: 4, position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
               <button
                 type="button"
                 onClick={() => setCollapsed((c) => ({ ...c, [s.key]: !shut }))}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 30,
+                  display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, height: 30,
                   padding: '0 4px', background: 'transparent', border: 'none', cursor: 'pointer',
                 }}
               >
@@ -388,13 +437,37 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
                     live={hosts[s.hostKey]?.status === 'online'} size={5}
                   />
                 )}
+                {/* A folder is a path, and a path shouted in capitals is not the
+                    path any more. */}
                 <span style={{
-                  flex: 1, textAlign: 'left', fontSize: 11, fontWeight: 600,
-                  letterSpacing: 0.6, textTransform: 'uppercase', color: C.mute,
+                  flex: 1, textAlign: 'left', fontSize: 11, color: C.mute,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  ...(s.kind === 'folder' ? mono
+                    : { fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase' as const }),
                 }}>{s.title}</span>
                 <span style={{ fontSize: 11, color: C.faint }}>{s.chats.length}</span>
               </button>
+              {s.kind === 'group' && (
+                <button
+                  type="button" data-group-menu title="Group menu" aria-label={`Group menu: ${s.title}`}
+                  onClick={() => setMenuFor(menuFor === s.key ? null : s.key)}
+                  style={{
+                    width: 24, height: 24, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
+                    background: menuFor === s.key ? C.surface3 : 'transparent', border: 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Icon path={P.more} size={14} color={C.mute} width={2.8} />
+                </button>
+              )}
+              </div>
+              {menuFor === s.key && (
+                <GroupMenu
+                  onRename={() => setAsking({ what: 'rename', hostKey: s.hostKey, id: s.key, name: s.title })}
+                  onDelete={() => setAsking({ what: 'delete', hostKey: s.hostKey, id: s.key, name: s.title })}
+                  onClose={() => setMenuFor(null)}
+                />
+              )}
               {!shut && s.chats.map((c) => (
                 <ChatRow
                   key={`${s.hostKey}/${c.id}`} chat={c}
@@ -419,6 +492,81 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
           {slot?.info && <span style={mono}>· {uptime(slot.info.uptime_s)}</span>}
         </div>
       </div>
+
+      {asking?.what === 'new' && focus && (
+        <GroupNameDialog
+          title="New group" confirm="Create"
+          onSubmit={(name) => createGroup(focus, name)}
+          onClose={() => setAsking(null)}
+        />
+      )}
+      {asking?.what === 'rename' && (
+        <GroupNameDialog
+          title="Rename group" confirm="Save" initial={asking.name}
+          onSubmit={(name) => renameGroup(asking.hostKey, asking.id, name)}
+          onClose={() => setAsking(null)}
+        />
+      )}
+      {asking?.what === 'delete' && (
+        <DeleteGroupDialog
+          name={asking.name}
+          onDelete={() => { deleteGroup(asking.hostKey, asking.id).catch(() => {}); }}
+          onClose={() => setAsking(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** What can be done to a group, under its heading. Outside it and Escape both
+ *  put it away, the way a chat's own menu goes. */
+function GroupMenu({ onRename, onDelete, onClose }: {
+  onRename: () => void; onDelete: () => void; onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      // The button that opened it closes it by itself; putting it away here as
+      // well would have that same click open it again.
+      if ((e.target as Element).closest?.('[data-group-menu]')) return;
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  const row = (label: string, icon: string, onPick: () => void, danger?: boolean) => (
+    <button
+      type="button" onClick={() => { onPick(); onClose(); }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 34,
+        padding: '0 12px', background: 'transparent', border: 'none', cursor: 'pointer',
+        textAlign: 'left', color: danger ? C.danger : C.text,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = C.surface3; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <Icon path={icon} size={14} color={danger ? C.danger : C.mute} />
+      <span style={{ flex: 1, fontSize: 13 }}>{label}</span>
+    </button>
+  );
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'absolute', top: 30, right: 0, width: 180, zIndex: 40,
+        background: C.surface, border: `1px solid ${C.borderStrong}`, borderRadius: R.card,
+        padding: '6px 0', boxShadow: SHADOW.pop,
+      }}
+    >
+      {row('Rename', P.pencil, onRename)}
+      {row('Delete group', P.trash, onDelete, true)}
     </div>
   );
 }

@@ -245,6 +245,23 @@ seed(useFleet, {
                                    [key]: { ...slot, chats: [made, ...slot.chats] } } });
       return made;
     }
+    // Groups, answered the way the daemon answers them: the making of one with
+    // the group, and all three with a new list broadcast beside the answer.
+    // There is no socket, so the list is moved by hand — as it is for a chat.
+    if (type.startsWith('group.') || (type === 'chat.update' && 'group_id' in data)) {
+      const slot = useFleet.getState().hosts[key];
+      const made = { id: `g-made${++made_n}`, name: data.name, sort: 99, created_at: 0 };
+      const groups = type === 'group.create' ? [...slot.groups, made]
+        : type === 'group.rename' ? slot.groups.map((g) => (g.id === data.group_id ? { ...g, name: data.name } : g))
+        : type === 'group.delete' ? slot.groups.filter((g) => g.id !== data.group_id)
+        : slot.groups;
+      const chats = slot.chats.map((c) => (
+        type === 'chat.update' && c.id === data.chat_id ? { ...c, group_id: data.group_id }
+        : type === 'group.delete' && c.group_id === data.group_id ? { ...c, group_id: null }
+        : c));
+      useFleet.setState({ hosts: { ...useFleet.getState().hosts, [key]: { ...slot, groups, chats } } });
+      return type === 'group.create' ? made : {};
+    }
     return {};
   },
 });
@@ -1170,6 +1187,61 @@ group('a ticket shows what the worker is doing right now');
   ok('…and stopping it goes to the queue that holds it',
     queueAsks.some((a) => a.type === 'ustabasi.cancel' && a.data.id === 1),
     JSON.stringify(queueAsks));
+}
+
+group('chats are filed into groups from the panel');
+{
+  await act(async () => { seed(useFleet, { hosts: { studio: fakeHost() } }); });
+  await click(find('Chat', doc.querySelector('header')));
+  const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
+  const menuOf = (name) => doc.querySelector(`button[aria-label="Group menu: ${name}"]`);
+  /** The count on a group's heading, which is the last thing in it. */
+  const countOf = (name) => menuOf(name)?.previousElementSibling?.lastElementChild?.textContent ?? null;
+  const name = async (value, confirm) => {
+    await type(doc.querySelector('input[name="group-name"]'), value);
+    await click(find(confirm));
+    await settle();
+  };
+
+  asked.length = 0;
+  await click(doc.querySelector('button[aria-label="New group"]'));
+  await name('Billing', 'Create');
+  ok('the list makes a group on that computer',
+    asked.some((a) => a.key === 'studio' && a.type === 'group.create' && a.data.name === 'Billing'),
+    JSON.stringify(asked.map((a) => [a.type, a.data])));
+  ok('…and shows it while it is still empty', countOf('Billing') === '0', `${countOf('Billing')}`);
+
+  await click(menuOf('Billing'));
+  await click(find('Rename'));
+  await name('Invoices', 'Save');
+  const renamed = asked.find((a) => a.type === 'group.rename');
+  ok('a group is renamed from its heading',
+    renamed?.data.name === 'Invoices' && !!menuOf('Invoices') && !menuOf('Billing'),
+    JSON.stringify(renamed?.data));
+
+  // From a chat's own menu the group is made for that chat.
+  await click([...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Invoice PDF')));
+  asked.length = 0;
+  await click(doc.querySelector('button[title="Chat menu"]'));
+  await click(find('Move to group…'));
+  await click(find('New group…'));
+  await name('Later', 'Create');
+  const made = asked.findIndex((a) => a.type === 'group.create' && a.data.name === 'Later');
+  const moved = asked.findIndex((a) => a.type === 'chat.update' && a.data.chat_id === 'c3'
+    && String(a.data.group_id).startsWith('g-made'));
+  ok('a chat’s menu makes a group and moves the chat into it',
+    made >= 0 && moved > made && countOf('Later') === '1',
+    JSON.stringify(asked.map((a) => [a.type, a.data])));
+
+  asked.length = 0;
+  await click(menuOf('Later'));
+  await click(find('Delete group'));
+  await click(find('Delete'));
+  await settle();
+  ok('deleting a group takes the heading and leaves its chat in the list',
+    asked.some((a) => a.type === 'group.delete') && !menuOf('Later')
+      && [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('Invoice PDF')),
+    JSON.stringify(asked.map((a) => [a.type, a.data])));
 }
 
 group('the four things the panel could not do to a computer');

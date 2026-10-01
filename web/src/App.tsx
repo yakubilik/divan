@@ -20,7 +20,7 @@ import {
 } from './lib/shell';
 import { HOME, pathOf, readPlace, samePlace, searchOf, type Place } from './lib/nav';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
-import { deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
+import { createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
 import { tell, whereFor, whereNote, type Scoped } from './lib/tell';
 import type { Agent, Chat } from './lib/protocol';
 
@@ -430,6 +430,13 @@ export function App() {
     onEdit: setField,
     onUpdate: (patch: Record<string, any>) => {
       if (sel) updateChat(sel.hostKey, sel.chatId, patch).catch(() => {});
+    },
+    // A group made from a chat's own menu is made for that chat, so the two
+    // go out together: the name, and then the chat into what it named.
+    onNewGroup: async (name: string) => {
+      if (!sel) return;
+      const made = await createGroup(sel.hostKey, name);
+      await updateChat(sel.hostKey, sel.chatId, { group_id: made.id });
     },
     onDelete: () => {
       if (!sel) return;

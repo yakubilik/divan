@@ -170,7 +170,7 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
 /** What is attached but not sent yet. A picture is shown as the picture, at the
  *  size a thumbnail wants to be — a file name is not a preview, and the whole
  *  point of attaching a screenshot is to see that it is the right one. */
-export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onDelete, onUpload, onPopOut, sending }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending }: {
   chat: Chat | null;
   hostKey: string | null;
   log: ChatLog;
@@ -192,6 +192,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   onRespond: (requestId: string, d: 'allow' | 'allow_session' | 'deny') => void;
   onEdit: (f: Field) => void;
   onUpdate: (patch: Record<string, any>) => void;
+  onNewGroup: (name: string) => Promise<unknown>;
   onDelete: () => void;
   onUpload: (file: File) => Promise<any>;
 }) {
@@ -246,7 +247,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
         {menu && (
           <ChatMenu
             chat={chat} groups={groups}
-            onUpdate={onUpdate} onDelete={onDelete}
+            onUpdate={onUpdate} onNewGroup={onNewGroup} onDelete={onDelete}
             onClose={() => setMenu(false)}
           />
         )}

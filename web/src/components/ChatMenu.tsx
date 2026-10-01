@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { C, R, SHADOW } from '../lib/theme';
 import { Icon, P } from '../ui/kit';
 import { Modal } from './Modal';
+import { GroupNameDialog } from './GroupDialogs';
 import { Btn } from '../ui/kit';
 import type { Chat, Group } from '../lib/protocol';
 
@@ -15,11 +16,12 @@ interface Entry {
   onPick: () => void;
 }
 
-function Sheet({ entries, groups, chat, onMove, onClose }: {
+function Sheet({ entries, groups, chat, onMove, onNewGroup, onClose }: {
   entries: Entry[];
   groups: Group[];
   chat: Chat;
   onMove: (groupId: string | null) => void;
+  onNewGroup: () => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -69,6 +71,9 @@ function Sheet({ entries, groups, chat, onMove, onClose }: {
           <div style={{ fontSize: 11, color: C.mute, padding: '4px 12px 6px' }}>Move to group</div>
           {row('Ungrouped', P.folder, () => { onMove(null); onClose(); }, false, !chat.group_id)}
           {groups.map((g) => row(g.name, P.folder, () => { onMove(g.id); onClose(); }, false, chat.group_id === g.id))}
+          {/* The group this chat belongs in may not exist yet, and this is
+              where somebody finds that out. */}
+          {row('New group…', P.plus, onNewGroup)}
           <div style={{ height: 1, background: C.border, margin: '6px 0' }} />
           {row('Back', P.chevronLeft, () => setMoving(false))}
         </>
@@ -83,16 +88,19 @@ function Sheet({ entries, groups, chat, onMove, onClose }: {
   );
 }
 
-export function ChatMenu({ chat, groups, onUpdate, onDelete, onClose }: {
+export function ChatMenu({ chat, groups, onUpdate, onNewGroup, onDelete, onClose }: {
   chat: Chat;
   groups: Group[];
   onUpdate: (patch: Record<string, any>) => void;
+  /** Make a group by this name and put this chat in it. */
+  onNewGroup: (name: string) => Promise<unknown>;
   onDelete: () => void;
   onClose: () => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(chat.title);
   const [confirming, setConfirming] = useState(false);
+  const [grouping, setGrouping] = useState(false);
 
   const entries: Entry[] = [
     { label: 'Rename', icon: P.gear, keepOpen: true, onPick: () => setRenaming(true) },
@@ -152,10 +160,15 @@ export function ChatMenu({ chat, groups, onUpdate, onDelete, onClose }: {
     );
   }
 
+  if (grouping) {
+    return <GroupNameDialog title="New group" confirm="Create" onSubmit={onNewGroup} onClose={onClose} />;
+  }
+
   return (
     <Sheet
       entries={entries} groups={groups} chat={chat}
       onMove={(groupId) => onUpdate({ group_id: groupId })}
+      onNewGroup={() => setGrouping(true)}
       onClose={onClose}
     />
   );

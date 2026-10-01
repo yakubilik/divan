@@ -244,6 +244,8 @@ export const P = {
   plus: 'M12 5v14M5 12h14',
   search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zM20 20l-4-4',
   folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10.5v5M9.5 13h5',
+  more: 'M5 12v.1M12 12v.1M19 12v.1',
   stop: 'M8 8h8v8H8z',
   send: 'M12 19V5M5 12l7-7 7 7',
   warn: 'M12 3l9 16H3zM12 9v5M12 17.2v.1',
