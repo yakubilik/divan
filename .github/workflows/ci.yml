@@ -154,5 +154,7 @@ jobs:
             echo "dev-host.json shipped in the panel build" >&2
             exit 1
           fi
+        working-directory: web
       - name: The build says which commit it came from
         run: test -s ../daemon/remote_ai_chat/webui/build.json
+        working-directory: web
