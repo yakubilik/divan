@@ -14,7 +14,7 @@ import time
 from urllib.parse import unquote
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Response, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -30,7 +30,7 @@ from .errors import Err
 from . import agents, tools
 from .call import Concierge, headline as call_headline, snapshot as call_snapshot
 from .push import send_push
-from .transcribe import transcribe, available as transcribe_available
+from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .attachments import KINDS, normalize_image, sniff
 from .security import PathPolicy, TunnelGate
 from . import screen as screenmod
@@ -190,6 +190,9 @@ class Server:
         self.app.websocket("/ws")(self.ws_endpoint)
         self.app.get("/health")(lambda: {"ok": True, "version": __version__})
         self.app.post("/upload")(self.upload)
+        # Dictation, which is an upload with nothing to upload: see `dictate`.
+        self.app.post("/dictate")(self.dictate)
+        self.app.post("/dictate/warm")(self.dictate_warm)
         self.app.get("/files")(self.files)
         # Frames go over HTTP rather than the socket: a phone draws one with
         # <Image> and a browser with <img>, and neither wants base64 in a
@@ -891,10 +894,7 @@ class Server:
 
     # ── uploads (attachments) ──────────────────────────────────────────────
     async def upload(self, file: UploadFile = File(...), chat_id: str = Form(""), authorization: str = Header(default="")) -> dict:
-        token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
-        dev = self.cfg.find_device_by_token(token) if token else None
-        if dev is None:
-            raise HTTPException(status_code=401, detail="unauthorized")
+        self._device(authorization)
         safe_chat = "".join(c for c in (chat_id or "misc") if c.isalnum())[:32] or "misc"
         # The name arrives percent-encoded. Without decoding it the `%` was then
         # dropped by the filter below and "Screen Shot" reached disk as
@@ -929,6 +929,56 @@ class Server:
             if t:
                 out["transcript"] = t["text"]
         return out
+
+    # ── dictation ──────────────────────────────────────────────────────────
+    #
+    # A browser that can hear you itself does not come here: Chromium has an
+    # on-device speech model and the panel uses it, because words that appear
+    # while you are still talking beat words that appear a second after you
+    # stop. This is the other browsers — and the answer to "what if the model
+    # will not install" — so what arrives is not a recording but the audio
+    # whisper wants, 16 kHz mono signed 16-bit PCM, made by the panel on its
+    # way out. Nothing is written to disk and nothing is attached to anything:
+    # the words go straight back and the bytes are forgotten.
+
+    def _device(self, authorization: str) -> Device:
+        token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
+        dev = self.cfg.find_device_by_token(token) if token else None
+        if dev is None:
+            raise HTTPException(status_code=401, detail="unauthorized")
+        return dev
+
+    # Ten minutes of 16 kHz PCM. Past that it is not dictation.
+    MAX_DICTATION_BYTES = 16000 * 2 * 600
+
+    async def dictate(self, request: Request, authorization: str = Header(default=""),
+                      x_dictate_prompt: str = Header(default="")) -> dict:
+        self._device(authorization)
+        if not transcribe_available():
+            raise HTTPException(status_code=503, detail="no transcriber on this computer")
+        data = await request.body()
+        if len(data) > self.MAX_DICTATION_BYTES:
+            raise HTTPException(status_code=413, detail="that is more than ten minutes of audio")
+        # The names on your own board, sent by the panel as the text whisper
+        # should imagine came before the audio — it is how "ustabaşı" and a
+        # repository nobody has heard of come back spelled right. A prompt can
+        # also come back *as* the answer when the audio turns out to be silence,
+        # so a result that is only the prompt again is thrown away.
+        prompt = unquote(x_dictate_prompt).strip()[:800] or None
+        t = await dictate(data, prompt)
+        text = (t or {}).get("text", "").strip()
+        if prompt and text and text.rstrip(".") in prompt:
+            text = ""
+        return {"text": text, "language": (t or {}).get("language")}
+
+    async def dictate_warm(self, authorization: str = Header(default="")) -> dict:
+        """Load the model while the microphone is opening, not while somebody
+        waits for words. Answers immediately either way."""
+        self._device(authorization)
+        if not transcribe_available():
+            raise HTTPException(status_code=503, detail="no transcriber on this computer")
+        transcribe_warm()
+        return {"warming": True}
 
     # ── the screen ─────────────────────────────────────────────────────────
     async def screen_jpg(self, authorization: str = Header(default=""), token: str = Query(default=""),

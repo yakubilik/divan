@@ -429,15 +429,23 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
   const lines = live(ticket);
   const [words, setWords] = useState('');
   const run = useRun(card.host, card.ustabasi_id);
-  const foot = useRef<HTMLDivElement | null>(null);
-  // The end of a run is the part being read, and it is written to while it is
-  // being read. Only ever scrolled for somebody already at the bottom of it.
   const scroller = useRef<HTMLDivElement | null>(null);
+  /** Whether the reader is at the end of the log.
+   *
+   *  True to begin with, because a log opens on its last line: what is
+   *  happening *now* is the bottom of it, and a box that opened on the first
+   *  thing the worker said an hour ago was a box nobody could use without
+   *  scrolling it first. False the moment somebody scrolls up — a line
+   *  arriving must not drag them away from what they went up to read. */
+  const pinned = useRef(true);
+  useEffect(() => { pinned.current = true; }, [card.id]);
+  // Every render and not a list of dependencies: the log grows by a turn, by a
+  // line of a turn, and by the model's own stream mid-sentence, and the last of
+  // those changes nothing this component could name.
   useEffect(() => {
     const el = scroller.current;
-    if (!el) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) foot.current?.scrollIntoView();
-  }, [run.turns.length, run.live]);
+    if (el && pinned.current) el.scrollTop = el.scrollHeight;
+  });
   return (
     <Card radius={RADIUS.tile} style={{ padding: '12px 14px', gap: 4, flex: 1, minHeight: 0 }}>
       <div style={{
@@ -454,6 +462,10 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
       </div>
       <div
         ref={scroller}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        }}
         style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, overflowY: 'auto' }}
       >
         {lines.length ? lines.map((l, i) => (
@@ -471,7 +483,6 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
             <RunLog run={run} />
           </div>
         )}
-        <div ref={foot} />
       </div>
       {!!sent && (
         <div style={{ ...mono, fontSize: 11, color: T.ink3, paddingTop: 6 }}>{sent}</div>
