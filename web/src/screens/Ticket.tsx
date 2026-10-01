@@ -1,11 +1,18 @@
-/** One card, with all three of its faces on screen at once.
+/** One card: what a person wrote, what is happening to it, and — a press away —
+ *  what the agent was told.
  *
  *  Web14 W8 is this page, and the desktop is why it is one page: on a phone the
  *  human face, the agent brief and the live log are three screens you swipe
- *  between, and here they are the left column, the block under it and the right
- *  column. Left: what a person wrote, in the fixed box the frame draws, with the
- *  brief open below it. Right: the details panel and the live log with its
- *  one-line input.
+ *  between, and here they are the left column, a shut row under it and the right
+ *  column. Left: what a person wrote, in the fixed box the frame draws, cut to a
+ *  paragraph with the rest on a press. Right: the details panel and the live log
+ *  with its one-line input.
+ *
+ *  **The agent's half is shut.** It used to be open, and the page that made was
+ *  the same paragraph three times down one screen: the sentences a person wrote,
+ *  the goal the worker was given, and the log repeating it back. The brief is
+ *  written for the worker, so it is a detail of the card rather than the subject
+ *  of the page, and it is behind `Agent instructions`.
  *
  *  **No agent text on the human face.** The daemon keeps the two apart on the
  *  wire — the board's cards carry `title` and `summary` and the marks, and
@@ -42,7 +49,7 @@ import { useDivanStore, type MergedCard, type MergedProject } from '../lib/divan
 import type { DivanCardFull, DivanExecutor } from '../lib/protocol';
 import type { Ticket as QueueTicket } from '../lib/ustabasi';
 import {
-  Card, Composer, ExecutorBadge, FieldRow, Monogram, Pill, SectionHeader, StampRow, StatusDot, Tag,
+  Card, Composer, ExecutorBadge, FieldRow, Monogram, Pill, StampRow, StatusDot, Tag,
 } from '../ui/divan';
 import { mono } from '../ui/kit';
 
@@ -55,6 +62,11 @@ export interface Opened {
 }
 
 const NOTHING: Opened = { full: null, ticket: null, error: null };
+
+/** How much of the sentences under the title a page opens on. Seven lines is a
+ *  paragraph — enough to be the subject of the page, short enough that what is
+ *  under it is still on the screen. */
+const SUMMARY_LINES = 7;
 
 export interface TicketProps {
   card: MergedCard;
@@ -97,7 +109,11 @@ export function Ticket(props: TicketProps) {
 export function TicketPage({
   card, project, index, now, onProject, onBranch, opened: got = NOTHING,
 }: TicketProps & { opened?: Opened }) {
-  const [open, setOpen] = useState(true);
+  /** The brief starts shut. It is six blocks of mono written for the worker,
+   *  and open by default it was the loudest thing on a page whose subject is
+   *  the sentence a person wrote at the top: three copies of the same text
+   *  down one screen. It is a detail of the card, so it is behind a press. */
+  const [open, setOpen] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
   /** A card is written on from here now — the title, the sentences under it,
    *  and who does it. What was typed is kept until the board comes back with
@@ -106,6 +122,13 @@ export function TicketPage({
   const [wrote, setWrote] = useState<{ title?: string; summary?: string }>({});
   const [handing, setHanding] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  /** The sentences under the title are what the page is *about*, and on a
+   *  well-written ticket they run to a screenful. Cut to a paragraph with the
+   *  rest a press away: a page that opens on six hundred characters of grey is
+   *  one nobody reads the first line of. `long` is what the box measured, so
+   *  the press is only there on a card that actually has more. */
+  const [whole, setWhole] = useState(false);
+  const [long, setLong] = useState(false);
 
   /** Write one face of the card, and ask that machine for the board again so
    *  everything else drawn from it catches up. */
@@ -198,49 +221,57 @@ export function TicketPage({
               #{card.position + 1} in column
             </span>
           </div>
-          <Card radius={RADIUS.tile} style={{ maxWidth: 720, padding: '16px 18px 12px' }}>
+          {/* 660 and not 720: at seventeen point the wider box ran past eighty
+              characters a line, which is past where an eye finds the next one
+              without help. */}
+          <Card radius={RADIUS.tile} style={{ maxWidth: 660, padding: '16px 18px 12px' }}>
             <Writable
               value={wrote.summary ?? (face.bare ? '' : face.summary)}
               placeholder="Nobody has written the sentences for this one yet."
               label="what this card is about" multiline
               onSave={(text) => write({ summary: text })}
               style={{ fontSize: 17, lineHeight: '26px', minHeight: 78 }}
+              clamp={whole ? null : SUMMARY_LINES}
+              onOverflow={setLong}
             />
             <div style={{
-              display: 'flex', ...mono, fontSize: 11, color: T.ink3,
+              display: 'flex', alignItems: 'center', gap: 10, ...mono, fontSize: 11, color: T.ink3,
               borderTop: `1px solid ${T.line}`, paddingTop: 8, marginTop: 6,
             }}>
               <span style={{
                 minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>{face.label}</span>
+              {long && (
+                <button type="button" onClick={() => setWhole((w) => !w)}
+                  style={{
+                    flex: 'none', background: 'transparent', border: 'none', padding: 0,
+                    font: 'inherit', color: T.ink2, cursor: 'pointer',
+                  }}>{whole ? 'less' : 'read all'}</button>
+              )}
               <span style={{ marginLeft: 'auto', flex: 'none', paddingLeft: 8 }}>{face.count}</span>
             </div>
           </Card>
 
-          <SectionHeader
-            title="Agent brief"
-            note={got.error ? card.machine
-              : said.empty ? 'nothing written on this face'
-              : `${said.lines} line${said.lines === 1 ? '' : 's'}`}
-          >
-            {!said.empty && !got.error && (
-              <button type="button" onClick={() => setOpen((o) => !o)}
-                style={{
-                  marginLeft: 'auto', background: 'transparent', border: 'none', padding: 0,
-                  font: 'inherit', fontSize: 13, fontWeight: 500, color: T.ink, cursor: 'pointer',
-                }}>{open ? 'Collapse' : 'Open'}</button>
-            )}
-          </SectionHeader>
+          {/* The agent's half of the card, shut. A card nobody wrote a brief for
+              and a machine that would not hand one over are both a quiet line
+              rather than a heading over an explanation: neither is something
+              the reader of this page has to do anything about. */}
           {got.error ? (
-            <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>
-              {card.machine} did not hand the brief over: {got.error}
+            <div style={{ ...mono, fontSize: 11.5, lineHeight: 1.5, color: T.ink3 }}>
+              {card.machine} did not hand the agent instructions over: {got.error}
             </div>
           ) : said.empty ? (
-            <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>
-              This card is a line somebody wrote down. A goal, what done means and a test are
-              written on it when there is an agent to hand it to.
+            <div style={{ ...mono, fontSize: 11.5, lineHeight: 1.5, color: T.ink3 }}>
+              no agent instructions on this one yet
             </div>
-          ) : open && (
+          ) : (
+            <Disclosure
+              label="Agent instructions"
+              note={`${said.lines} line${said.lines === 1 ? '' : 's'}`}
+              open={open} onToggle={() => setOpen((o) => !o)}
+            />
+          )}
+          {open && !got.error && !said.empty && (
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16,
               ...mono, fontSize: 12.5, lineHeight: 1.6,
@@ -313,6 +344,40 @@ function Crumb({ label, onClick }: { label: string; onClick: () => void }) {
         color: T.ink2, cursor: 'pointer', maxWidth: 240, overflow: 'hidden',
         textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{label}</button>
+  );
+}
+
+/** A shut thing, and the press that opens it.
+ *
+ *  Not a section heading with a button on the end: a heading is a claim that
+ *  what follows is part of the page, and this is a part of the *card* that most
+ *  readings of the page do not want. So it is one quiet row the width of its
+ *  own words — a caret, what it is, and how much of it there is — and the page
+ *  under it stays the sentence somebody wrote. */
+function Disclosure({ label, note, open, onToggle }: {
+  label: string;
+  note?: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button" onClick={onToggle} aria-expanded={open}
+      title={open ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start',
+        padding: '6px 12px 6px 10px', borderRadius: RADIUS.chip,
+        background: 'transparent', border: `1px solid ${T.line}`,
+        font: 'inherit', fontSize: 13, fontWeight: 500, color: T.ink2, cursor: 'pointer',
+      }}
+    >
+      <span style={{
+        ...mono, flex: 'none', fontSize: 9, color: T.ink3,
+        transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .12s',
+      }}>▶</span>
+      {label}
+      {!!note && <span style={{ ...mono, fontSize: 11, color: T.ink3 }}>{note}</span>}
+    </button>
   );
 }
 
@@ -436,7 +501,7 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
  *
  *  It reads as text until it is pressed, because that is what the frames draw:
  *  no box, no pencil, nothing that says "form". */
-function Writable({ value, placeholder, label, multiline, onSave, style }: {
+function Writable({ value, placeholder, label, multiline, onSave, style, clamp, onOverflow }: {
   value: string;
   placeholder?: string;
   /** What is being written, for a reader who cannot see which line was
@@ -445,13 +510,27 @@ function Writable({ value, placeholder, label, multiline, onSave, style }: {
   multiline?: boolean;
   onSave: (text: string) => void;
   style?: React.CSSProperties;
+  /** How many lines of it to draw before cutting it off. Only ever the read
+   *  view — what is being typed is never hidden from the person typing it. */
+  clamp?: number | null;
+  /** Said when there is more text than `clamp` lines will hold, so whatever
+   *  drew this can offer the press that opens it. */
+  onOverflow?: (over: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value);
   const field = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  const view = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => { if (!editing) setText(value); }, [value, editing]);
   useEffect(() => { if (editing) field.current?.focus(); }, [editing]);
+  useEffect(() => {
+    if (!onOverflow || !clamp) return;
+    const el = view.current;
+    // Measured rather than counted: where the cut lands depends on the width
+    // the column ended up at, which no length of string knows.
+    onOverflow(!!el && el.scrollHeight - el.clientHeight > 1);
+  }, [value, clamp, editing, onOverflow]);
 
   const done = () => {
     const words = text.trim();
@@ -496,12 +575,19 @@ function Writable({ value, placeholder, label, multiline, onSave, style }: {
 
   return (
     <button
+      ref={view}
       type="button" onClick={() => setEditing(true)} title={`Write ${label}`}
       style={{
         ...style, width: '100%', textAlign: 'left', background: 'transparent',
         border: 'none', padding: 0, font: 'inherit', cursor: 'text',
         color: value ? (style?.color ?? T.ink) : T.ink3,
         whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        ...(clamp
+          ? {
+              display: '-webkit-box', WebkitLineClamp: clamp, WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }
+          : null),
       }}
     >{value || placeholder || `Write ${label}`}</button>
   );

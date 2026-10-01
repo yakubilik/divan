@@ -199,7 +199,7 @@ function Happening({ row, onCard }: { row: Process; onCard?: (card: MergedCard) 
     <Card radius={RADIUS.tile} onClick={onCard && (() => onCard(row.card))}
       title={onCard ? `Open ${row.title}` : undefined}
       style={{
-        flexDirection: 'row', alignItems: 'flex-start', gap: 14, padding: '12px 14px',
+        flexDirection: 'row', alignItems: 'center', gap: 14, padding: '10px 14px',
       }}>
       <span style={{
         flex: 'none', ...mono, fontSize: 10.5, fontWeight: 600, padding: '5px 8px',
@@ -210,9 +210,14 @@ function Happening({ row, onCard }: { row: Process; onCard?: (card: MergedCard) 
           fontSize: 14.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}>{row.title}</div>
+        {/* One line, not two. What an agent last said is a paragraph, and two
+            lines of it per row turned the panel into a wall of prose that had
+            to be read to be skimmed — which is the opposite of what a panel
+            called Right now is for. The rest of the sentence is on the card's
+            own page, one press away. */}
         <div style={{
           fontSize: 13, lineHeight: 1.4, color: T.ink2,
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{row.body}</div>
       </div>
       {!!row.since && (

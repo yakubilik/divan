@@ -986,13 +986,13 @@ group('Web14 W6, W7 and W8');
     // …and it is the branch's page rather than the product's with a name on it.
     && !engineering.includes('Branches'));
   ok('…and a card opens its own page under the same product',
-    scoped({ card: 'studio:k2' }).includes('Agent brief')
+    scoped({ card: 'studio:k2' }).includes('in column')
     && !scoped({ card: 'studio:k2' }).includes('Branches'));
   // A press hands over the merged key; an address hands over the id alone
   // (`/p/quire/c/k2`), which is what a reload and a cold link arrive with. Both
   // have to open the card — matching only the first drew the board instead.
   ok('…and its own address opens it too, which is what a reload arrives with',
-    scoped({ card: 'k2' }).includes('Agent brief')
+    scoped({ card: 'k2' }).includes('in column')
     && !scoped({ card: 'k2' }).includes('Ice Box'));
 
   // ── the ticket, and the rule its three faces are kept apart by ──
@@ -1023,10 +1023,18 @@ group('Web14 W6, W7 and W8');
   const LABEL = 'What to do · title + 3 sentences';
   const above = page.slice(0, page.indexOf(LABEL));
 
-  ok('the ticket page is all three faces at once',
+  // Web14 W8 used to draw all three faces at once. It no longer does, and the
+  // reason is the page it made: the brief is six blocks of mono written for a
+  // worker, and open by default it repeated the sentences above it and the log
+  // beside it — three copies of the same paragraph down one screen. So the
+  // human face and the live half are the page, and the agent's half is a shut
+  // row that names itself and says how much of it there is.
+  ok('the ticket page is the human face and the live half, with the agent shut',
     page.includes(card.title) && page.includes(card.summary)
-    && page.includes(AGENT.goal) && page.includes(AGENT.verify_cmd)
-    && page.includes('Live') && page.includes('Executor'));
+    && page.includes('Live') && page.includes('Executor')
+    && page.includes('Agent instructions')
+    && page.includes(`${TK.brief(opened.full, QUEUE).lines} lines`)
+    && !page.includes(AGENT.goal) && !page.includes(AGENT.verify_cmd));
   // The one failure this page could have that nobody would notice: the box
   // reads perfectly well with the agent's goal in it, and it is the wrong text.
   ok('nothing an agent wrote is on the human face',
@@ -1054,7 +1062,7 @@ group('Web14 W6, W7 and W8');
     && TK.brief(opened.full, QUEUE).passed === null);
   ok('a machine that has not handed the brief over says so, and the card is still readable',
     draw({ opened: { full: null, ticket: null, error: 'connection refused' } })
-      .includes('did not hand the brief over')
+      .includes('did not hand the agent instructions over')
     && draw({ opened: { full: null, ticket: null, error: 'connection refused' } })
       .includes(card.title));
   // The whole of the difference between a frame and its light twin, which is
