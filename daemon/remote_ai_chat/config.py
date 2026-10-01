@@ -54,6 +54,21 @@ class Device:
     # The phone's UI language, sent at pairing and on every reconnect. Push
     # text is written in it; a device from before this field spoke English.
     lang: str = "en"
+    # Made by `web --at` for a browser behind the tunnel (docs/TUNNEL.md). The
+    # two kinds of token do not cross: this one is answered only through the
+    # tunnel, and every other one only off it. A row from before the field is
+    # a device that was never the tunnel's.
+    tunnel: bool = False
+    # Where a tunnel device last connected from, and every address it has
+    # connected from before — a new one is worth telling the phone about, and
+    # only once. The second is a list of `tunnel_key`s: a v6 address is its /64.
+    last_addr: str | None = None
+    seen_addrs: list[str] = field(default_factory=list)
+
+
+# How many addresses a tunnel device is remembered at. A browser that has been
+# in more places than this is told about the oldest of them again.
+SEEN_ADDRS_MAX = 32
 
 
 def _device(did: str, d: dict) -> "Device":
@@ -160,8 +175,12 @@ class Config:
             "apns_team_id": self.apns_team_id,
             "apns_bundle_id": self.apns_bundle_id,
             "apns_sandbox": self.apns_sandbox,
+            # A field a device does not have is left out rather than written
+            # empty: TOML has no null, and `tunnel = false` on every phone is a
+            # line somebody will one day flip to see what happens.
             "devices": {
-                d.id: {k: v for k, v in d.__dict__.items() if k != "id" and v is not None}
+                d.id: {k: v for k, v in d.__dict__.items()
+                       if k != "id" and v is not None and v != [] and (k != "tunnel" or v)}
                 for d in self.devices.values()
             },
             "accounts": self.accounts,
@@ -178,11 +197,11 @@ class Config:
     def hash_token(token: str) -> str:
         return hashlib.sha256(token.encode()).hexdigest()
 
-    def add_device(self, name: str) -> tuple[Device, str]:
+    def add_device(self, name: str, tunnel: bool = False) -> tuple[Device, str]:
         token = secrets.token_urlsafe(32)
         dev = Device(
             id=secrets.token_hex(6), name=name,
-            token_hash=self.hash_token(token), created_at=time.time(),
+            token_hash=self.hash_token(token), created_at=time.time(), tunnel=tunnel,
         )
         self.devices[dev.id] = dev
         self.save()
@@ -248,6 +267,18 @@ class Config:
             self.tunnel_allow_ips = [str(x) for x in raw]
         return True
 
+    def record(self) -> None:
+        """Write the devices' live fields down, on top of whatever the CLI wrote.
+
+        `save()` writes this process's whole picture of the file, and a `pair`
+        or an edited `tunnel_allow_ips` since the last read is not in it. Fine
+        for a write that follows a token lookup, which has just re-read; this
+        one runs whenever a socket opens or closes, so it reads first.
+        """
+        self.reload_devices()
+        self.refresh_tunnel_allow_ips()
+        self.save()
+
     def revoke(self, device_id: str) -> bool:
         if device_id in self.devices:
             del self.devices[device_id]
@@ -276,6 +307,23 @@ class Config:
             except ValueError:
                 continue
         return False
+
+    @staticmethod
+    def tunnel_key(ip: str) -> str:
+        """The name an address is counted and remembered under.
+
+        A v4 address is itself. A v6 one is its /64: the second half belongs to
+        the interface and changes on its own, so by the whole address one
+        laptop would be a new place every morning and a guesser a new stranger
+        every request.
+        """
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return ip
+        if addr.version == 6:
+            return str(ipaddress.ip_network(f"{addr}/64", strict=False))
+        return str(addr)
 
     def resolve_bind(self) -> list[str]:
         out: list[str] = []

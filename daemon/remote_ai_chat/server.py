@@ -23,7 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import __version__
 from .supervisor import supervisor
 from .updater import Updater
-from .config import Config, DB_PATH, UPLOAD_DIR, Device
+from .config import Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
 from .db import DB
 from . import accounts as acct
 from . import pool as poolmod
@@ -33,7 +33,7 @@ from .call import Concierge, headline as call_headline, snapshot as call_snapsho
 from .push import send_push
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .attachments import KINDS, normalize_image, sniff
-from .security import PathPolicy, TunnelGate
+from .security import PathPolicy, TunnelGate, TunnelLock
 from . import screen as screenmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
@@ -57,6 +57,17 @@ MODELS_TTL_S = 900.0
 # does not carry is answered in English rather than refused.
 PUSH_TEXT = {
     "en": {"approval": "Approval pending", "done": "Task finished"},
+}
+
+# What the tunnel has to say for itself, in the same languages `hello` accepts.
+# These are the one kind of push that is about the door rather than a chat, and
+# the person reading it is deciding whether that was them — so it is written in
+# the language they read fastest, and falls back to English the same way.
+TUNNEL_PUSH_TEXT = {
+    "en": {"new_address": "Tunnel: {name} connected from a new address, {addr}",
+           "locked": "Tunnel: {addr} is locked out after {n} failed sign-ins"},
+    "tr": {"new_address": "Tunnel: {name} yeni bir adresten bağlandı, {addr}",
+           "locked": "Tunnel: {addr} {n} başarısız denemeden sonra kilitlendi"},
 }
 
 # How far a client may fall behind before it is cut loose, and how long one
@@ -183,6 +194,10 @@ class Server:
         )
         self._load_accounts()
         self.failed_auth: dict[str, list[float]] = {}
+        self.tunnel_lock = TunnelLock()
+        # Pushes about the tunnel, in flight. Not awaited where they are raised:
+        # a handshake must not wait on Expo to be told it was refused.
+        self._alerts: set[asyncio.Task] = set()
         self.app = FastAPI(title="remote-ai-chat")
         self._allow_cross_origin()
         # Added after CORS and therefore outermost: an address that is not
@@ -893,9 +908,25 @@ class Server:
                 "device_id": d.id, "host_name": self.cfg.host_name,
             })
 
+    def _alert(self, kind: str, **words) -> None:
+        """Tell every phone something happened at the tunnel, without waiting."""
+        task = asyncio.create_task(self._tunnel_push(kind, **words))
+        self._alerts.add(task)
+        task.add_done_callback(self._alerts.discard)
+
+    async def _tunnel_push(self, kind: str, **words) -> None:
+        for d in list(self.cfg.devices.values()):
+            if not d.push_token:
+                continue
+            text = TUNNEL_PUSH_TEXT.get(d.lang, TUNNEL_PUSH_TEXT["en"])[kind]
+            await send_push([d.push_token], self.cfg.host_name, text.format(**words), {
+                "kind": "tunnel_" + kind, "device_id": d.id, "host_name": self.cfg.host_name,
+            })
+
     # ── uploads (attachments) ──────────────────────────────────────────────
-    async def upload(self, file: UploadFile = File(...), chat_id: str = Form(""), authorization: str = Header(default="")) -> dict:
-        self._device(authorization)
+    async def upload(self, file: UploadFile = File(...), chat_id: str = Form(""), authorization: str = Header(default=""),
+                     cf_connecting_ip: str | None = Header(default=None)) -> dict:
+        self._device(authorization, cf_connecting_ip)
         safe_chat = "".join(c for c in (chat_id or "misc") if c.isalnum())[:32] or "misc"
         # The name arrives percent-encoded. Without decoding it the `%` was then
         # dropped by the filter below and "Screen Shot" reached disk as
@@ -942,9 +973,17 @@ class Server:
     # way out. Nothing is written to disk and nothing is attached to anything:
     # the words go straight back and the bytes are forgotten.
 
-    def _device(self, authorization: str) -> Device:
-        token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
-        dev = self.cfg.find_device_by_token(token) if token else None
+    def _device(self, authorization: str, cf_connecting_ip: str | None = None,
+                token: str = "") -> Device:
+        """The device behind an HTTP request, or a 401.
+
+        `token` is the query parameter the routes an <img> draws from accept in
+        place of the header. `cf_connecting_ip` is the header itself, which is
+        how a route says which door the request came in by — see `_admit`.
+        """
+        if authorization.lower().startswith("bearer "):
+            token = authorization[7:].strip()
+        dev = self._admit(token, TunnelGate.address(cf_connecting_ip))
         if dev is None:
             raise HTTPException(status_code=401, detail="unauthorized")
         return dev
@@ -954,8 +993,9 @@ class Server:
 
     async def dictate(self, request: Request, authorization: str = Header(default=""),
                       x_dictate_prompt: str = Header(default=""),
-                      x_dictate_lang: str = Header(default="")) -> dict:
-        self._device(authorization)
+                      x_dictate_lang: str = Header(default=""),
+                      cf_connecting_ip: str | None = Header(default=None)) -> dict:
+        self._device(authorization, cf_connecting_ip)
         if not transcribe_available():
             raise HTTPException(status_code=503, detail="no transcriber on this computer")
         data = await request.body()
@@ -977,10 +1017,11 @@ class Server:
             text = ""
         return {"text": text, "language": (t or {}).get("language")}
 
-    async def dictate_warm(self, authorization: str = Header(default="")) -> dict:
+    async def dictate_warm(self, authorization: str = Header(default=""),
+                           cf_connecting_ip: str | None = Header(default=None)) -> dict:
         """Load the model while the microphone is opening, not while somebody
         waits for words. Answers immediately either way."""
-        self._device(authorization)
+        self._device(authorization, cf_connecting_ip)
         if not transcribe_available():
             raise HTTPException(status_code=503, detail="no transcriber on this computer")
         transcribe_warm()
@@ -989,12 +1030,11 @@ class Server:
     # ── the screen ─────────────────────────────────────────────────────────
     async def screen_jpg(self, authorization: str = Header(default=""), token: str = Query(default=""),
                          w: int = Query(default=screenmod.MAX_W), q: int = Query(default=screenmod.QUALITY),
-                         display: str = Query(default="")):
+                         display: str = Query(default=""),
+                         cf_connecting_ip: str | None = Header(default=None)):
         """One frame. The token rides as a query parameter for the same reason
         it does on /files: an <img> tag cannot carry a header."""
-        tok = authorization[7:].strip() if authorization.lower().startswith("bearer ") else token
-        if not tok or self.cfg.find_device_by_token(tok) is None:
-            raise HTTPException(status_code=401, detail="unauthorized")
+        self._device(authorization, cf_connecting_ip, token)
         try:
             data, meta = await screenmod.grab(max(320, min(3840, w)), max(20, min(90, q)),
                                               display or None)
@@ -1059,7 +1099,8 @@ class Server:
         return {"ok": True}
 
     async def files(self, path: str = Query(...), authorization: str = Header(default=""), token: str = Query(default=""),
-                    download: int = Query(default=0)) -> FileResponse:
+                    download: int = Query(default=0),
+                    cf_connecting_ip: str | None = Header(default=None)) -> FileResponse:
         """Serve a file to the phone.
 
         Two kinds of file come through here: something the phone uploaded
@@ -1069,9 +1110,7 @@ class Server:
         rule is the path policy's: inside an allowed root and not a secret.
         `download=1` asks the browser to save rather than display.
         """
-        tok = authorization[7:].strip() if authorization.lower().startswith("bearer ") else token
-        if not tok or self.cfg.find_device_by_token(tok) is None:
-            raise HTTPException(status_code=401, detail="unauthorized")
+        self._device(authorization, cf_connecting_ip, token)
         p = Path(path).expanduser().resolve()
         uploaded = UPLOAD_DIR.resolve() in p.parents and p.is_file()
         if not uploaded and not self.policy.is_servable(p):
@@ -1082,28 +1121,64 @@ class Server:
     def _rate_limited(self, ip: str) -> bool:
         """Whether this address has already failed five times in ten minutes.
 
-        Nothing acts on the answer: the caller only uses it to stop the history
-        growing, so this is a count, not a throttle. SECURITY.md says as much
-        under "What it does not" — the size of the token is what stands in the
-        way of a guesser, and acting on the count is still to be done.
+        Off the tunnel nothing acts on the answer: the caller only uses it to
+        stop the history growing, so this is a count, not a throttle. The
+        address is the socket's, and a phone that roams or a daemon behind
+        `tailscale serve` shares one with everybody — locking it would lock
+        them. The tunnel's count is `TunnelLock`, which does act.
         """
         now = time.time()
         hist = [t for t in self.failed_auth.get(ip, []) if now - t < 600]
         self.failed_auth[ip] = hist
         return len(hist) >= 5
 
+    def _admit(self, token: str, via: str | None, peer: str | None = None) -> Device | None:
+        """The device a token belongs to, if it may come in by this door.
+
+        `via` is the address in `CF-Connecting-IP`, or None for a request that
+        did not come through the tunnel. The two doors have their own keys: a
+        token made by `web --at` opens the tunnel and nothing else, and a phone's
+        token — which never needed to leave the tailnet — does not open the
+        tunnel at all. So a link that leaks is worth what the address list lets
+        it be worth, and a tunnel that is misconfigured exposes no device that
+        was not made for it.
+        """
+        dev = self.cfg.find_device_by_token(token) if token else None
+        if via is None:
+            if dev is not None and not dev.tunnel:
+                return dev
+            if peer is not None and not self._rate_limited(peer):
+                self.failed_auth.setdefault(peer, []).append(time.time())
+            return None
+        key = self.cfg.tunnel_key(via)
+        if self.tunnel_lock.locked(key):
+            return None
+        if dev is None or not dev.tunnel:
+            # No token at all is a page that has not been paired yet, not a
+            # guess, and is refused without being counted.
+            if token and self.tunnel_lock.fail(key):
+                log.warning("tunnel address %s locked out for %ds after %d failed sign-ins",
+                            via, int(TunnelLock.WINDOW_S), TunnelLock.LIMIT)
+                self._alert("locked", addr=via, n=TunnelLock.LIMIT)
+            return None
+        dev.last_addr = via
+        if key not in dev.seen_addrs:
+            dev.seen_addrs = [*dev.seen_addrs, key][-SEEN_ADDRS_MAX:]
+            # Written down before anybody is told: a restart between the two
+            # must not turn one arrival into two notifications.
+            self.cfg.record()
+            log.warning("tunnel device %s (%s) connected from a new address: %s",
+                        dev.name, dev.id, via)
+            self._alert("new_address", name=dev.name, addr=via)
+        return dev
+
     def _auth(self, ws: WebSocket) -> Device | None:
-        ip = ws.client.host if ws.client else "?"
         token = ws.query_params.get("token") or ""
         auth = ws.headers.get("authorization", "")
         if auth.lower().startswith("bearer "):
             token = auth[7:].strip()
-        dev = self.cfg.find_device_by_token(token) if token else None
-        if dev is not None:
-            return dev  # a valid token is always accepted; only failures are counted
-        if not self._rate_limited(ip):
-            self.failed_auth.setdefault(ip, []).append(time.time())
-        return None
+        return self._admit(token, TunnelGate.address(ws.headers.get("cf-connecting-ip")),
+                           ws.client.host if ws.client else "?")
 
     # ── websocket ──────────────────────────────────────────────────────────
     async def ws_endpoint(self, ws: WebSocket) -> None:
@@ -1116,7 +1191,11 @@ class Server:
         self.clients[ws] = dev
         self.outbox[ws] = asyncio.Queue()
         self.writers[ws] = asyncio.create_task(self._writer(ws, self.outbox[ws]))
+        # Written to disk here and when the socket closes, which is what lets
+        # `devices` answer "when was this last used" from another process and
+        # after a restart. The heartbeat in between only moves the one in memory.
         dev.last_seen = time.time()
+        self.cfg.record()
         log.info("device connected: %s (%s)", dev.name, dev.id)
         await self.send_to(ws, {"type": "event", "event": "host.status", "chat_id": None,
                                 "seq": None, "data": self.host_info(), "ts": time.time()})
@@ -1134,6 +1213,8 @@ class Server:
             log.warning("ws loop error: %s", exc)
         finally:
             self._drop(ws)
+            dev.last_seen = time.time()
+            self.cfg.record()
             log.info("device disconnected: %s", dev.name)
 
     async def _dispatch(self, ws: WebSocket, dev: Device, req: dict) -> None:

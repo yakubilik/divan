@@ -65,12 +65,20 @@ That is the product. What the design does is bound it.
   between you and a daemon on the open internet, so read that file before you
   write the line. What it does *not* defend is anybody sharing the address you
   allowed — a home address is a household, not a laptop, and the device token
-  is what tells one machine there from another.
+  is what tells one machine there from another. Three things narrow that:
+  the tunnel answers only a device made for it (`remote-ai-chat web --at`,
+  `tunnel = true` in `config.toml`) and such a device is answered nowhere
+  else, so a phone's token is worth nothing through the tunnel; five failed
+  sign-ins from one `CF-Connecting-IP` address inside ten minutes lock that
+  address out for the next ten, the right token included; and every paired
+  device with notifications is told when a tunnel device connects from an
+  address it has not used before, and when an address is locked out.
 
 - *Your tailnet itself.* If someone else is on it, they can reach port 8790 and
   start guessing tokens. Nothing throttles them: the daemon counts failed
-  attempts per address over a ten-minute window but does not yet act on the
-  count, so the only thing standing in the way is the size of the token.
+  attempts per address over a ten-minute window but does not act on the count
+  off the tunnel, so the only thing standing in the way is the size of the
+  token.
 - *The CLIs it drives.* `claude` and `codex` are installed from npm and run with
   your sign-in. Their security is theirs.
 - *Agent definitions you install.* The agent store downloads markdown from

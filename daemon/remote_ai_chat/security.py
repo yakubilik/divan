@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 DESTRUCTIVE_PATTERNS = [
@@ -175,6 +176,16 @@ class TunnelGate:
         self.app = app
         self.cfg = cfg
 
+    @staticmethod
+    def address(value: str | None) -> str | None:
+        """The address in a `CF-Connecting-IP` value, or None if there is none.
+
+        A proxy chain would comma-separate; the edge's own is first.
+        """
+        if value is None:
+            return None
+        return value.split(",")[0].strip()
+
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] in ("http", "websocket"):
             ip = self._claimed(scope)
@@ -192,8 +203,7 @@ class TunnelGate:
         """The address Cloudflare says asked, or None if this is not tunnelled."""
         for name, value in scope.get("headers") or []:
             if name.lower() == self.HEADER:
-                # A proxy chain would comma-separate; the edge's own is first.
-                return value.decode("latin-1").split(",")[0].strip()
+                return self.address(value.decode("latin-1"))
         return None
 
     async def _refuse(self, scope, send) -> None:
@@ -205,3 +215,51 @@ class TunnelGate:
         await send({"type": "http.response.start", "status": 403,
                     "headers": [(b"content-type", b"application/json")]})
         await send({"type": "http.response.body", "body": b'{"detail":"forbidden"}'})
+
+
+class TunnelLock:
+    """Failed sign-ins through the tunnel, counted per address and acted on.
+
+    An address in `tunnel_allow_ips` is a household, and the token is all that
+    tells one machine in it from another — so somebody inside the list can sit
+    and guess. Five wrong tokens inside ten minutes and the address is refused
+    for the next ten, the right token included: a guesser must not be able to
+    tell a lock from a miss.
+
+    Only the tunnel's addresses are ever in here. `CF-Connecting-IP` is written
+    by Cloudflare's edge, so it is the one address a request cannot choose; a
+    tailnet client has no such header and never meets this.
+
+    The clock is passed in so a test can move it.
+    """
+
+    LIMIT = 5
+    WINDOW_S = 600.0
+
+    def __init__(self, clock=time.time) -> None:
+        self.clock = clock
+        self.failed: dict[str, list[float]] = {}
+        self.until: dict[str, float] = {}
+
+    def locked(self, key: str) -> bool:
+        until = self.until.get(key)
+        if until is None:
+            return False
+        if self.clock() < until:
+            return True
+        del self.until[key]
+        return False
+
+    def fail(self, key: str) -> bool:
+        """Count one failure. True if it is the one that locked the address."""
+        now = self.clock()
+        hist = [t for t in self.failed.get(key, []) if now - t < self.WINDOW_S]
+        hist.append(now)
+        if len(hist) < self.LIMIT:
+            self.failed[key] = hist
+            return False
+        # The count starts again when the lock lifts, so one window is one lock
+        # and one notification.
+        self.failed.pop(key, None)
+        self.until[key] = now + self.WINDOW_S
+        return True
