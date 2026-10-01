@@ -94,6 +94,15 @@ class Config:
     # IPv6. Empty means nobody, which is the point — starting a tunnel opens
     # nothing by itself, and a tailnet client never meets this list at all.
     tunnel_allow_ips: list[str] = field(default_factory=list)
+    # Cloudflare Access in front of the tunnel's hostname: a sign-in at the
+    # edge, which then puts a signed token on every request it lets through.
+    # The team is the name in `<team>.cloudflareaccess.com` and the aud is the
+    # application's Audience tag; with either set, a tunnelled request has to
+    # carry a token that verifies against both. The mail list, if there is
+    # one, is who the token may belong to. All empty is no Access at all.
+    tunnel_access_team: str = ""
+    tunnel_access_aud: str = ""
+    tunnel_access_emails: list[str] = field(default_factory=list)
     allowed_roots: list[str] = field(default_factory=lambda: [str(Path.home() / "projects")])
     # Subtracted from allowed_roots. Anything that holds a credential, plus this
     # daemon's own state — a chat has no business opening in its own token store.
@@ -155,11 +164,19 @@ class Config:
     def save(self) -> None:
         CONFIG_DIR.mkdir(mode=0o700, exist_ok=True)
         LOG_DIR.mkdir(exist_ok=True)
+        # The tunnel's settings are only ever written by hand, so the file is
+        # right and this process's copy may be stale. Written back unread, a
+        # push token arriving would undo an edit nobody had asked the tunnel
+        # about yet — and an undone `tunnel_access_*` is a sign-in turned off.
+        self.refresh_tunnel()
         data = {
             "host_name": self.host_name,
             "port": self.port,
             "bind": self.bind,
             "tunnel_allow_ips": self.tunnel_allow_ips,
+            "tunnel_access_team": self.tunnel_access_team,
+            "tunnel_access_aud": self.tunnel_access_aud,
+            "tunnel_access_emails": self.tunnel_access_emails,
             "allowed_roots": self.allowed_roots,
             "denied_paths": self.denied_paths,
             "idle_disconnect_s": self.idle_disconnect_s,
@@ -241,16 +258,18 @@ class Config:
             del self.devices[did]
         return True
 
-    def refresh_tunnel_allow_ips(self) -> bool:
-        """Re-read `tunnel_allow_ips` if config.toml changed under us.
+    def refresh_tunnel(self) -> bool:
+        """Re-read the tunnel's settings if config.toml changed under us.
 
         A home address is not a fixed one: the modem restarts, the lease
         renews, and the list has to be edited. Everything else here is read
         once at startup, which for a restart-and-be-done setting is fine — but
         restarting this daemon drops every phone and every chat with it, which
         is too much to ask of somebody whose only crime was getting a new
-        address from their provider. So this one setting is re-read, and the
-        edit takes effect on the next request.
+        address from their provider. So `tunnel_allow_ips` is re-read, and the
+        three `tunnel_access_*` settings with it — turning Access on, or
+        letting one more person in, is the same kind of edit — and the change
+        takes effect on the next request.
 
         Its own mtime, not `reload_devices`': the two are read at different
         moments and each must be able to see a change the other consumed.
@@ -260,23 +279,28 @@ class Config:
             return False
         self._tunnel_mtime = mtime
         try:
-            raw = tomllib.loads(CONFIG_PATH.read_text()).get("tunnel_allow_ips", [])
+            raw = tomllib.loads(CONFIG_PATH.read_text())
         except Exception:
             return False
-        if isinstance(raw, list):
-            self.tunnel_allow_ips = [str(x) for x in raw]
+        ips = raw.get("tunnel_allow_ips", [])
+        if isinstance(ips, list):
+            self.tunnel_allow_ips = [str(x) for x in ips]
+        self.tunnel_access_team = str(raw.get("tunnel_access_team", ""))
+        self.tunnel_access_aud = str(raw.get("tunnel_access_aud", ""))
+        emails = raw.get("tunnel_access_emails", [])
+        if isinstance(emails, list):
+            self.tunnel_access_emails = [str(x) for x in emails]
         return True
 
     def record(self) -> None:
         """Write the devices' live fields down, on top of whatever the CLI wrote.
 
         `save()` writes this process's whole picture of the file, and a `pair`
-        or an edited `tunnel_allow_ips` since the last read is not in it. Fine
-        for a write that follows a token lookup, which has just re-read; this
-        one runs whenever a socket opens or closes, so it reads first.
+        since the last read is not in it. Fine for a write that follows a
+        token lookup, which has just re-read; this one runs whenever a socket
+        opens or closes, so it reads first.
         """
         self.reload_devices()
-        self.refresh_tunnel_allow_ips()
         self.save()
 
     def revoke(self, device_id: str) -> bool:
@@ -307,6 +331,24 @@ class Config:
             except ValueError:
                 continue
         return False
+
+    def tunnel_access(self) -> tuple[str, str, set[str]] | None:
+        """What a tunnelled request's Access token is held to, or None for no Access.
+
+        The team as the bare name, whichever way it was written down; the aud;
+        and the mails allowed, lowercased, where an empty set is anybody the
+        Access policy let through. Half a configuration is not None: a team
+        without an aud, or a mail list with neither, comes back with the
+        missing part empty and verifies nothing, so every tunnelled request is
+        refused. Somebody who wrote one of the three meant Access to be on.
+        """
+        team = self.tunnel_access_team.strip().lower()
+        team = team.removeprefix("https://").rstrip("/").removesuffix(".cloudflareaccess.com")
+        aud = self.tunnel_access_aud.strip()
+        emails = {e.strip().lower() for e in self.tunnel_access_emails if e.strip()}
+        if not (team or aud or emails):
+            return None
+        return team, aud, emails
 
     @staticmethod
     def tunnel_key(ip: str) -> str:

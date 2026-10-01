@@ -74,6 +74,20 @@ That is the product. What the design does is bound it.
   device with notifications is told when a tunnel device connects from an
   address it has not used before, and when an address is locked out.
 
+  A person is the one thing that list cannot name, and Cloudflare Access can:
+  a sign-in at the edge, by a one-time code to a mail address. It is optional
+  and set up outside this repository, but the daemon does not take the edge's
+  word for it. With `tunnel_access_team` and `tunnel_access_aud` set, every
+  tunnelled request — the WebSocket handshake included — must carry the token
+  Access signs (`Cf-Access-Jwt-Assertion`, or the `CF_Authorization` cookie),
+  and the daemon verifies it itself: RS256 against the team's published keys,
+  `iss`, `aud`, `exp`, and the `email` claim against `tunnel_access_emails`
+  if that is set. A request that fails is refused before its device token is
+  looked at, and so is every tunnelled request while the team's keys cannot
+  be fetched. What that leaves undefended is the mailbox: whoever can read
+  the code is the person, as far as Access is concerned — which is why the
+  address list, the device token and the lock all still apply behind it.
+
 - *Your tailnet itself.* If someone else is on it, they can reach port 8790 and
   start guessing tokens. Nothing throttles them: the daemon counts failed
   attempts per address over a ten-minute window but does not act on the count
@@ -112,6 +126,11 @@ Three credentials exist, and only the first two let anything in.
   cannot open the folder it is in. Ordinary notifications do not use it at all;
   those go through Expo's push service, which sees a title and a body and no
   message text.
+
+The Cloudflare Access token of `docs/TUNNEL.md` is not a fourth: it is issued
+and held by Cloudflare and the browser, never stored by the daemon, and it lets
+nothing in by itself — a tunnelled request needs it *and* a tunnel device's
+token. The mail address in it is written to the log when that device connects.
 
 No credential is logged, and the daemon has nothing else to authenticate
 against — there is no account, no relay and no server of ours.

@@ -33,7 +33,7 @@ from .call import Concierge, headline as call_headline, snapshot as call_snapsho
 from .push import send_push
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .attachments import KINDS, normalize_image, sniff
-from .security import PathPolicy, TunnelGate, TunnelLock
+from .security import ACCESS_EMAIL, PathPolicy, TunnelAccess, TunnelGate, TunnelLock
 from . import screen as screenmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
@@ -65,8 +65,10 @@ PUSH_TEXT = {
 # the language they read fastest, and falls back to English the same way.
 TUNNEL_PUSH_TEXT = {
     "en": {"new_address": "Tunnel: {name} connected from a new address, {addr}",
+           "new_address_as": "Tunnel: {name} ({email}) connected from a new address, {addr}",
            "locked": "Tunnel: {addr} is locked out after {n} failed sign-ins"},
     "tr": {"new_address": "Tunnel: {name} yeni bir adresten bağlandı, {addr}",
+           "new_address_as": "Tunnel: {name} ({email}) yeni bir adresten bağlandı, {addr}",
            "locked": "Tunnel: {addr} {n} başarısız denemeden sonra kilitlendi"},
 }
 
@@ -195,6 +197,7 @@ class Server:
         self._load_accounts()
         self.failed_auth: dict[str, list[float]] = {}
         self.tunnel_lock = TunnelLock()
+        self.tunnel_access = TunnelAccess()
         # Pushes about the tunnel, in flight. Not awaited where they are raised:
         # a handshake must not wait on Expo to be told it was refused.
         self._alerts: set[asyncio.Task] = set()
@@ -202,7 +205,7 @@ class Server:
         self._allow_cross_origin()
         # Added after CORS and therefore outermost: an address that is not
         # allowed in gets its 403 before anything here looks at the request.
-        self.app.add_middleware(TunnelGate, cfg=self.cfg)
+        self.app.add_middleware(TunnelGate, cfg=self.cfg, access=self.tunnel_access)
         self.app.websocket("/ws")(self.ws_endpoint)
         self.app.get("/health")(lambda: {"ok": True, "version": __version__})
         self.app.post("/upload")(self.upload)
@@ -918,7 +921,10 @@ class Server:
         for d in list(self.cfg.devices.values()):
             if not d.push_token:
                 continue
-            text = TUNNEL_PUSH_TEXT.get(d.lang, TUNNEL_PUSH_TEXT["en"])[kind]
+            text = TUNNEL_PUSH_TEXT.get(d.lang, TUNNEL_PUSH_TEXT["en"])
+            # The same event either way, so the same kind; only the sentence
+            # has a name more in it when Access said who signed in.
+            text = text[kind + "_as" if words.get("email") else kind]
             await send_push([d.push_token], self.cfg.host_name, text.format(**words), {
                 "kind": "tunnel_" + kind, "device_id": d.id, "host_name": self.cfg.host_name,
             })
@@ -1171,9 +1177,11 @@ class Server:
             # Written down before anybody is told: a restart between the two
             # must not turn one arrival into two notifications.
             self.cfg.record()
-            log.warning("tunnel device %s (%s) connected from a new address: %s",
-                        dev.name, dev.id, via)
-            self._alert("new_address", name=dev.name, addr=via)
+            # Who Access signed in, where there is an Access to have asked.
+            email = ACCESS_EMAIL.get()
+            log.warning("tunnel device %s (%s) connected from a new address: %s%s",
+                        dev.name, dev.id, via, f", signed in as {email}" if email else "")
+            self._alert("new_address", name=dev.name, addr=via, email=email)
         return dev
 
     def _auth(self, ws: WebSocket) -> Device | None:
@@ -1200,7 +1208,9 @@ class Server:
         # after a restart. The heartbeat in between only moves the one in memory.
         dev.last_seen = time.time()
         self.cfg.record()
-        log.info("device connected: %s (%s)", dev.name, dev.id)
+        email = ACCESS_EMAIL.get()
+        log.info("device connected: %s (%s)%s", dev.name, dev.id,
+                 f", signed in as {email}" if email else "")
         await self.send_to(ws, {"type": "event", "event": "host.status", "chat_id": None,
                                 "seq": None, "data": self.host_info(), "ts": time.time()})
         try:

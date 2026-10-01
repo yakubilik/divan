@@ -32,7 +32,8 @@ never send that header and never meet the list.
 
 The list is re-read when the file changes, so editing it costs nothing. A
 restart would drop every phone and every chat, which is too much to ask of
-somebody whose provider just handed them a new address.
+somebody whose provider just handed them a new address. The three
+`tunnel_access_*` settings further down are read the same way.
 
 ## Which address, exactly
 
@@ -146,6 +147,86 @@ Neither is behind a switch. If the first one arrives and it was not you,
 a1b2c3d4e5f6  laptop                push=no   tunnel  seen=2026-10-01 21:40  from=203.0.113.4
 ```
 
+## A sign-in in front of it: Cloudflare Access
+
+Everything above knows addresses and machines. None of it knows a person, and
+an address is a household. Cloudflare Access puts a sign-in at the edge — here
+a one-time code sent to a mail address — and only requests that passed it are
+forwarded to the tunnel at all. It needs a Zero Trust team on the Cloudflare
+account; the free plan is enough.
+
+In the Zero Trust dashboard (the menu names move around; these are the ones at
+the time of writing):
+
+1. **The team.** The first visit asks for a team name. It becomes
+   `<team>.cloudflareaccess.com`, the *team domain*, and is shown afterwards
+   under Settings. One-time PIN is a login method that is on by default; leave
+   it on.
+2. **The application.** Access → Applications → Add an application →
+   *Self-hosted*. The public hostname is the tunnel's, `divan.example.com`,
+   with no path, so that `/ws`, `/upload` and `/files` are behind it too.
+3. **How long a sign-in lasts.** *Session duration* on the application, which
+   starts at 24 hours. Set it to **1 month**: when it runs out the panel's next
+   request is answered with Cloudflare's sign-in page instead of the daemon, and
+   once a day is more often than a panel you leave open deserves.
+4. **Who may sign in.** One policy, action *Allow*, with a single *Include*
+   rule: *Emails*, and the addresses themselves. Not *Everyone*, and not
+   *Emails ending in* unless the whole domain is yours. Anybody may type a mail
+   address into the sign-in page; a code is only ever sent to one the policy
+   names.
+5. **The two values the daemon needs.** The team name from step 1, and the
+   application's *Application Audience (AUD) Tag* — a long hex string on the
+   application's overview page.
+
+Then `~/.remote-ai-chat/config.toml`:
+
+```toml
+tunnel_access_team = "your-team"                  # of your-team.cloudflareaccess.com
+tunnel_access_aud = "4714c1358e65fe4b408ad6d4…"   # the application's AUD tag
+tunnel_access_emails = ["you@example.com"]        # optional
+```
+
+Why the daemon needs telling: Access refusing the unsigned at the edge is a
+setting in somebody's dashboard, and the day the hostname is edited out of the
+application — or a second hostname is routed to the same tunnel — requests
+arrive that nobody signed in for and nothing says so. So Access signs what it
+lets through, and the daemon checks the signature. Every request Access
+forwards carries a token, in the `Cf-Access-Jwt-Assertion` header and in the
+`CF_Authorization` cookie the browser sends back, the WebSocket handshake
+included. With the team and the aud set, a tunnelled request is served only if
+that token
+
+- is signed (RS256) by one of the keys the team publishes at
+  `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`,
+- was issued by that team (`iss`) for this application (`aud`), and has not
+  expired (`exp`),
+- and, if `tunnel_access_emails` is not empty, was issued to one of those
+  addresses. The policy already says who may sign in; this is the same list
+  kept where a mistake in the dashboard cannot widen it.
+
+Anything else is refused the way an unlisted address is — 403, and the socket
+closed with 1008 before it is accepted — without the device token being looked
+at. The address list still applies, and so does everything after it: Access
+is one more thing a request has to pass, not a replacement for the others.
+
+- **All three empty** is no Access: nothing looks for a token, and the tunnel
+  behaves exactly as described above. **Some but not all of team and aud** is
+  a refusal of every tunnelled request, not a silent off: whoever wrote one of
+  them meant the check to be on.
+- The tailnet and the machine itself never meet any of this. A request without
+  `CF-Connecting-IP` is not the tunnel's and is not asked for a token.
+- The keys are fetched once and kept in memory. Access rotates them, so a token
+  signed by a key the daemon has not seen makes it fetch again — at most once a
+  minute. If the keys cannot be fetched, tunnelled requests are refused until
+  they can; the tailnet carries on.
+- The token is checked when a socket opens and not afterwards, like the device
+  token. A panel that is already connected stays connected past the end of its
+  Access session, until the socket drops.
+
+The mail Access signed in is written to the daemon's log when the device
+connects, and is in the notification about a new address:
+`Tunnel: laptop (you@example.com) connected from a new address, 203.0.113.4`.
+
 ## Why HTTPS is not optional here
 
 The panel is served over HTTPS by the tunnel's hostname, and a page served over
@@ -162,20 +243,20 @@ every machine at once is the one on the tailnet.
 
 ## What is left standing
 
-Four things, in order:
+In order:
 
 1. **Cloudflare's edge.** TLS, and the hostname is the only way in.
-2. **`tunnel_allow_ips`.** An address you named. It is a household, not a
+2. **Cloudflare Access**, if you set it up: a person, by a code sent to their
+   mail, and a signed token the daemon verifies for itself on every request.
+3. **`tunnel_allow_ips`.** An address you named. It is a household, not a
    laptop — everyone behind that router shares it.
-3. **The device token.** 32 random bytes, this machine only, `revoke` cuts it
+4. **The device token.** 32 random bytes, this machine only, `revoke` cuts it
    off. This is what tells one computer in that house from another, and it has
    to be one made with `--at`: no other device's token is answered here.
-4. **The lock.** Five wrong tokens from one address in ten minutes and that
+5. **The lock.** Five wrong tokens from one address in ten minutes and that
    address is refused for ten more — and your phone is told.
 
-What is *not* standing is any notion of a person. If you want a sign-in — a
-name and a password, or a one-time code to your mail — put Cloudflare Access in
-front of the hostname; it sets a cookie the WebSocket handshake carries, and
-only requests that passed it ever reach the tunnel. That needs a Zero Trust
-team on the account and an API token that can write Access policies, neither of
-which this setup requires. The address list is the cheap version.
+Without Access, what is *not* standing is any notion of a person: the address
+list is the cheap version, and it is the one that needs nothing but a tunnel.
+With it, a request has to come from an address you named, from somebody who
+can read your mail, holding a token made for that browser.
