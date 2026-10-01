@@ -62,6 +62,7 @@ useFleet.setState({
   hosts: { studio: { ...studio, chats: studio.chats.map((c, i) => ({
     ...c, updated_at: i === 2 ? at - 3 * 86400 : at - 60,
     ...(i === 1 ? { project_id: 'p-hush', project: 'Hush' } : {}),
+    ...(i === 0 ? { project_id: 'p-quire', project: 'Quire' } : {}),
   })) } as any }, order: ['studio'], focus: 'studio', ready: true,
 });
 
@@ -171,6 +172,26 @@ const SCREENS: [string, React.ReactNode][] = [
       chips={chips(board, 'quire')} onProject={noop}>
       <Overview view={board} project={productIn(board, 'quire')} onProject={noop}
         onAsk={noop} tab="board" onTab={noop} />
+    </Shell>
+  </div>],
+  // A product's own chats: the same head and tabs, and under them the list of
+  // what is filed under it beside the chat itself.
+  ['ShellProjectChat', <div style={{ height: 620, display: 'flex' }}>
+    <Shell view="overview" onView={noop} now={board.now}
+      chips={chips(board, 'quire')} onProject={noop}>
+      <Overview view={board} project={productIn(board, 'quire')} onProject={noop}
+        onAsk={noop} tab="chat" onTab={noop}
+        chats={{ count: 1, pane: <>
+          <Sidebar project={{ ids: { studio: 'p-quire' } }} selected="c1" selectedHost="studio"
+            onSelect={noop} onNewChat={noop} />
+          <ChatView
+            chat={chat() as any} hostKey="studio"
+            log={{ items: items(), busy: false, pending: [] } as any} sending={false}
+            groups={[]} groupName={null} accountLabel="yakup@…" accountUsage={0.64} liveTokens={null}
+            onSend={async () => {}} onUpload={(async () => ({})) as any} onInterrupt={noop}
+            onRespond={noop} onEdit={noop} onUpdate={noop} onNewGroup={async () => {}} onDelete={noop}
+            onPopOut={noop} />
+        </> }} />
     </Shell>
   </div>],
   // …and the calm morning, which is a designed state rather than the busy page

@@ -1309,6 +1309,41 @@ group('chats are filed into groups from the panel');
     JSON.stringify(asked.map((a) => [a.type, a.data])));
 }
 
+group('a product has its own chats');
+{
+  const header = doc.querySelector('header');
+  const at = Date.now() / 1000;
+  const host = fakeHost();
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...host, chats: [...host.chats,
+      fakeChat({ id: 'q1', title: 'Quire invoices', project_id: 'p-quire', project: 'Quire', updated_at: at - 30 }),
+      fakeChat({ id: 'h1', title: 'Hush pricing', project_id: 'p-hush', project: 'Hush', updated_at: at - 20 }),
+    ] } } });
+  });
+  await click(find('Dashboard', header));
+  await click(find('Quire', header));
+  const tab = [...doc.querySelectorAll('button')]
+    .find((b) => !header.contains(b) && /^Chat\s*1$/.test((b.textContent ?? '').trim()));
+  await click(tab);
+  const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
+  ok('the product’s Chat tab lists the chats filed under it and no others, with the newest open',
+    shown('Quire invoices') && !shown('Hush pricing') && !shown('Safari login')
+      && w.location.pathname === '/p/quire/chat/q1',
+    `${w.location.pathname} · tab ${!!tab}`);
+
+  asked.length = 0;
+  await click([...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim().startsWith('New chat')));
+  await click(find('Start chat'));
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const made = asked.find((a) => a.type === 'chat.create');
+  ok('a chat started there starts in the product’s repository, and is read on the product’s page',
+    // Whichever folder the board seeded above says Quire is checked out in.
+    made?.key === 'studio' && /\/quire$/.test(made?.data.cwd ?? '')
+      && place() === 'Dashboard' && w.location.pathname.startsWith('/p/quire/chat/told'),
+    `${JSON.stringify(made?.data?.cwd)} · ${place()} · ${w.location.pathname}`);
+  await click(find('All', header));
+}
+
 group('the four things the panel could not do to a computer');
 {
   const header = doc.querySelector('header');

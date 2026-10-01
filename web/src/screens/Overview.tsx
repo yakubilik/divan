@@ -64,17 +64,18 @@ import { Branches } from './Branches';
 import { Project } from './Project';
 import { Ticket } from './Ticket';
 
-/** The tabs over a product (Web12 W2, Web14 W6). The frame draws a fourth,
- *  `Chats 6`; the chat is a place of its own on this end and is reached from
- *  the bar above, so the page offers the three that are its own — what is
- *  happening on the product, the faces it has beside its code, and its board.
+/** The tabs over a product (Web12 W2, Web14 W6): what is happening on it, the
+ *  faces it has beside its code, its board, and — the frame's own fourth,
+ *  `Chats 6` — the chats that are work on it. The Chat place in the bar above
+ *  is every chat on a computer; this is the ones about one product, read and
+ *  answered without leaving the product.
  *
  *  Branches is a tab rather than the top of the Overview because the two answer
  *  different questions: how a product is organised is something a person looks
  *  up, and what is going on is what they opened the product for. */
 export const PROJECT_TABS = [
   { key: 'overview', label: 'Overview' }, { key: 'branches', label: 'Branches' },
-  { key: 'board', label: 'Board' },
+  { key: 'board', label: 'Board' }, { key: 'chat', label: 'Chat' },
 ] as const;
 
 export type ProjectTab = typeof PROJECT_TABS[number]['key'];
@@ -107,10 +108,14 @@ export interface OverviewProps {
   onBranch?: (kind: string | null) => void;
   card?: string | null;
   onCard?: (id: string | null) => void;
+  /** The product's chats: how many are part of today, and the list and the
+   *  chat themselves. Handed in whole, because the chat is the Chat place's own
+   *  surface and its handlers live above both. */
+  chats?: { count: number; pane: React.ReactNode } | null;
 }
 
 export function Overview({
-  view, project, onProject, onAsk, askNote, tab, onTab, branch, onBranch, card, onCard,
+  view, project, onProject, onAsk, askNote, tab, onTab, branch, onBranch, card, onCard, chats,
 }: OverviewProps) {
   const old = staleness(view);
   const agents = agentRows(view);
@@ -130,6 +135,7 @@ export function Overview({
   const face = project && !open ? branchOf(project, branch ?? null) : null;
   const deep = !!open || !!face;
   const board = !!project && !deep && here === 'board';
+  const chatting = !!project && !deep && here === 'chat';
   const [drafting, setDrafting] = useState(false);
   // A half-written card belongs to the board it was opened on: leaving the
   // product, or the board for a card's own page, puts it down. A *tab* is put
@@ -147,10 +153,12 @@ export function Overview({
   return (
     <div style={{
       flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20,
-      padding: `24px 32px ${BAR_ROW + 12}px`, background: T.bg,
-      // The board fills the page and its columns scroll; everything else is a
-      // page that scrolls under a bar fixed over it.
-      overflowY: board ? 'hidden' : 'auto',
+      // The chat has a composer of its own, so the command bar is not drawn
+      // over it and the page does not keep room for one.
+      padding: `24px 32px ${chatting ? 20 : BAR_ROW + 12}px`, background: T.bg,
+      // The board fills the page and its columns scroll, and so does the chat;
+      // everything else is a page that scrolls under a bar fixed over it.
+      overflowY: board || chatting ? 'hidden' : 'auto',
     }}>
       {!deep && (
       <SectionHeader
@@ -172,7 +180,7 @@ export function Overview({
               // The frame's `Chats 6`: the number belongs to the tab that has
               // one, and a product whose faces have not arrived yet has none.
               ? { ...t, count: project.branches.length || null }
-              : { ...t }))}
+              : t.key === 'chat' ? { ...t, count: chats?.count || null } : { ...t }))}
             value={here}
             onChange={(key) => { setDrafting(false); onTab?.(key as ProjectTab); }}
             style={{ marginLeft: 14 }} />
@@ -210,7 +218,13 @@ export function Overview({
           onCard={(c: MergedCard) => onCard?.(idOf(c))}
         />
       )}
-      {!!project && !deep && (board
+      {chatting && (
+        <div style={{
+          flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden',
+          border: `1px solid ${T.line}`, borderRadius: RADIUS.card,
+        }}>{chats?.pane}</div>
+      )}
+      {!!project && !deep && !chatting && (board
         ? (
           <Board
             view={view} project={project}
@@ -229,7 +243,7 @@ export function Overview({
       {/* The bar and the windows are over the page rather than in it: the page
           scrolls, and a question that scrolled away with it would be a
           notification again. */}
-      {!!onAsk && <Bar onAsk={onAsk} note={askNote ?? null} />}
+      {!!onAsk && !chatting && <Bar onAsk={onAsk} note={askNote ?? null} />}
       <Sessions view={view} />
     </div>
   );
