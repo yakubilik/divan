@@ -273,17 +273,11 @@ function Bar({ onAsk, note }: {
 
   return (
     <>
-    {/* The bar's own row, held. The bar floats so that it does not scroll away
-        with the page, and floating over the page it sat on top of whatever
-        card had scrolled under it — a button half behind a text field. So the
-        row it is in is the page's colour all the way across, with the hairline
-        a docked thing has: cards stop at it rather than passing under. The
-        page ends that much early for the same row (`padding` above), so
-        nothing is ever hidden behind this for good. */}
-    <div aria-hidden style={{
-      position: 'fixed', left: 0, right: 0, bottom: 0, height: BAR_ROW, zIndex: 9,
-      background: T.bg, borderTop: `1px solid ${T.line}`, pointerEvents: 'none',
-    }} />
+    {/* The bar floats, and nothing is drawn for the row it floats in. A strip
+        of the page's colour with a hairline over it kept cards from passing
+        under the bar, and cut the page in two to do it. The page is open on
+        both sides of the bar instead, and ends a row early (`padding` above):
+        scrolled to its end, nothing is left behind the bar. */}
     <div style={{
       position: 'fixed', left: '50%', bottom: 22, transform: 'translateX(-50%)', zIndex: 10,
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
