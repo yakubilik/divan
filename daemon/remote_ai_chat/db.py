@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import divan as divanmod
+from . import filing
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS groups (
@@ -93,6 +94,7 @@ class DB:
         # than by the server so that anything holding a DB — a test, a script —
         # has the board too, and so that there is only ever one of it.
         self.divan = divanmod.Board(self._c, self._lock)
+        self._file_unfiled()
         self._expire_orphan_approvals()
         # What the last process was doing when it stopped, and whether this one
         # can carry on with it. Decided here, before anything else runs: the
@@ -194,7 +196,7 @@ class DB:
         """Additive column migrations for databases created by older versions."""
         have = {r[1] for r in self._c.execute("PRAGMA table_info(chats)")}
         for col, decl in (("account_id", "TEXT"), ("agent_id", "TEXT"),
-                          ("pool_pinned", "INTEGER DEFAULT 0")):
+                          ("pool_pinned", "INTEGER DEFAULT 0"), ("project_id", "TEXT")):
             if col not in have:
                 self._c.execute(f"ALTER TABLE chats ADD COLUMN {col} {decl}")
         self._c.commit()
@@ -225,14 +227,47 @@ class DB:
             self._c.commit()
 
     # ── chats ──────────────────────────────────────────────────────────────
+    # A chat carries the product it is filed under by id, and is handed out
+    # with that product's name beside it: the name is what a list draws, and a
+    # product renamed on the board is renamed in every list without a write.
+    _CHATS = ("SELECT chats.*, projects.name AS project FROM chats "
+              "LEFT JOIN projects ON projects.id = chats.project_id")
+
     def list_chats(self, include_archived: bool = False) -> list[dict]:
-        q = "SELECT * FROM chats" + ("" if include_archived else " WHERE archived=0")
-        q += " ORDER BY pinned DESC, updated_at DESC"
+        q = self._CHATS + ("" if include_archived else " WHERE chats.archived=0")
+        q += " ORDER BY chats.pinned DESC, chats.updated_at DESC"
         return [dict(r) for r in self._c.execute(q).fetchall()]
 
     def get_chat(self, cid: str) -> dict | None:
-        r = self._c.execute("SELECT * FROM chats WHERE id=?", (cid,)).fetchone()
+        r = self._c.execute(self._CHATS + " WHERE chats.id=?", (cid,)).fetchone()
         return dict(r) if r else None
+
+    def file_chat(self, cid: str) -> None:
+        """Put a chat under the product it is work on (`filing`).
+
+        Written without touching `updated_at`: that is when the chat last
+        moved, lists sort and age by it, and being looked at is not moving.
+        `''` is "looked, and nothing claims it", which is not the same as
+        never having been looked at.
+        """
+        chat = self._c.execute("SELECT cwd FROM chats WHERE id=?", (cid,)).fetchone()
+        if not chat:
+            return
+        repos = [(r["path"], r["project_id"])
+                 for r in self._c.execute("SELECT project_id, path FROM project_repos")]
+        inputs = (r["payload"] for r in self._c.execute(
+            "SELECT payload FROM events WHERE chat_id=? AND type='tool.use' "
+            "ORDER BY seq DESC LIMIT ?", (cid, filing.WINDOW)))
+        pid = filing.pick(inputs, chat["cwd"], filing.matcher(repos))
+        with self._lock:
+            self._c.execute("UPDATE chats SET project_id=? WHERE id=?", (pid, cid))
+            self._c.commit()
+
+    def _file_unfiled(self) -> None:
+        """File every chat nobody has looked at yet: the ones from before chats
+        were filed at all. Once each, at start."""
+        for r in self._c.execute("SELECT id FROM chats WHERE project_id IS NULL").fetchall():
+            self.file_chat(r["id"])
 
     def create_chat(self, **kw: Any) -> dict:
         now = time.time()
@@ -251,7 +286,9 @@ class DB:
         with self._lock:
             self._c.execute(f"INSERT INTO chats ({cols}) VALUES ({vals})", chat)
             self._c.commit()
-        return chat
+        # It has run nothing yet, so it is filed by the folder it was opened in.
+        self.file_chat(chat["id"])
+        return {**chat, **(self.get_chat(chat["id"]) or {})}
 
     def update_chat(self, cid: str, **fields: Any) -> dict | None:
         allowed = {"group_id", "title", "provider", "model", "effort", "perm_mode", "cwd",

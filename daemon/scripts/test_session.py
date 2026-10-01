@@ -105,8 +105,14 @@ async def scenario_idle(db):
     chat = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
                           perm_mode="ask", cwd="/tmp")
     s, built = make_session(db, chat)
+    # What the agent touched during a turn is what the chat is filed under at
+    # the end of it; the folder it was opened in claimed nothing.
+    ledger = db.divan.create_project("Ledger", repos=["/srv/ledger"])
+    db.append_event(chat["id"], "tool.use", {"tool": "Read", "input": {"file_path": "/srv/ledger/a.py"}})
     await turn(s)
     check(len(built) == 1 and built[0].cfg.perm_mode == "ask", "first turn uses the saved mode")
+    check(db.get_chat(chat["id"])["project"] == "Ledger", "the end of a turn files the chat under its product",
+          f"{db.get_chat(chat['id'])['project']!r}")
 
     db.update_chat(chat["id"], perm_mode="bypass")
     await s.reconfigure()

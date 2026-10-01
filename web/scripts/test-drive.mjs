@@ -130,7 +130,15 @@ const { useThresholds, DEFAULT_THRESHOLDS } = await load('src/lib/machine.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
 const { boards } = await import(pathToFileURL(join(web, 'scripts', 'overview-fixture.js')).href);
 const { wall: tickets } = await import(pathToFileURL(join(web, 'scripts', 'ticket-fixture.js')).href);
-const { host: fakeHost, chat: fakeChat } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
+const { host: fixtureHost, chat: fakeChat } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
+/** The fixture's computer, with its chats a minute old by this machine's clock.
+ *  The fixture is set at one fixed moment and the chat list keeps only the last
+ *  day, so read as it stands every chat on it would be in the archive. */
+const fakeHost = () => {
+  const host = fixtureHost();
+  const at = Date.now() / 1000 - 60;
+  return { ...host, chats: host.chats.map((c) => ({ ...c, updated_at: at })) };
+};
 
 const React = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -1191,8 +1199,28 @@ group('a ticket shows what the worker is doing right now');
 
 group('chats are filed into groups from the panel');
 {
-  await act(async () => { seed(useFleet, { hosts: { studio: fakeHost() } }); });
+  // Three more chats than the fixture has: two the computer filed under a
+  // product — one of them a product a group is already named after — and one
+  // that last moved two days ago.
+  const at = Date.now() / 1000;
+  const host = fakeHost();
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...host, chats: [...host.chats,
+      fakeChat({ id: 'c4', title: 'Hush pricing', project_id: 'p-hush', project: 'Hush', updated_at: at - 90 }),
+      fakeChat({ id: 'c5', title: 'Quire audit', project_id: 'p-quire', project: 'Quire', updated_at: at - 90 }),
+      fakeChat({ id: 'c6', title: 'Old thread', project_id: 'p-hush', project: 'Hush', updated_at: at - 2 * 86400 }),
+    ] } } });
+  });
   await click(find('Chat', doc.querySelector('header')));
+  const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
+  ok('a chat is under the product the computer filed it as, or the group of that name',
+    !!find('Hush1') && doc.querySelector('button[aria-label="Group menu: Quire"]')
+      ?.previousElementSibling?.lastElementChild?.textContent === '1',
+    [...doc.querySelectorAll('button')].map((b) => b.textContent).join(' | ').slice(0, 400));
+  ok('a chat that has not moved for a day is out of the list, in an archive that starts shut',
+    !!find('Archive1') && !shown('Old thread'));
+  await click(find('Archive1'));
+  ok('…and is one press away', shown('Old thread'));
   const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
   const menuOf = (name) => doc.querySelector(`button[aria-label="Group menu: ${name}"]`);
   /** The count on a group's heading, which is the last thing in it. */

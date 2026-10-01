@@ -27,6 +27,12 @@ export interface Chat {
   created_at: number;
   updated_at: number;
   session_ids?: string;
+  /** The product this chat is work on, as that computer filed it from what
+   *  its agent touched — its id on the board, and the name a list draws.
+   *  Absent from a daemon older than the filing; `null` when nothing claims
+   *  the chat. */
+  project_id?: string | null;
+  project?: string | null;
 }
 
 export interface Group { id: string; name: string; sort: number; created_at: number }

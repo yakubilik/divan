@@ -52,8 +52,17 @@ const scheme = (q.get('theme') === 'light' ? 'light' : 'dark') as Scheme;
 // screens come up with rows, accounts, quota bars and the two marks the panel
 // dims. Nothing reaches the network: there is no socket for this host, and the
 // calls a screen makes on mount are all caught.
+// The chat list keeps only the last day, and the fixture is set at one fixed
+// moment: left as it stands its chats would all be under a shut Archive, and
+// there would be no row to look at. One of each — two today, one gone quiet,
+// one the computer filed under a product.
+const at = Date.now() / 1000;
+const studio = host();
 useFleet.setState({
-  hosts: { studio: host() as any }, order: ['studio'], focus: 'studio', ready: true,
+  hosts: { studio: { ...studio, chats: studio.chats.map((c, i) => ({
+    ...c, updated_at: i === 2 ? at - 3 * 86400 : at - 60,
+    ...(i === 1 ? { project_id: 'p-hush', project: 'Hush' } : {}),
+  })) } as any }, order: ['studio'], focus: 'studio', ready: true,
 });
 
 // The wall is a list this browser keeps, and a tile's transcript comes from the

@@ -139,11 +139,21 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
 }
 
 /** `group` is the only kind somebody made, and so the only one with a name to
- *  change or a heading to take away. */
+ *  change or a heading to take away. `project` is the computer's own filing,
+ *  and `archive` is where everything that has gone quiet ends up. */
 interface Section {
   key: string; title: string; hostKey: string; chats: Chat[];
-  kind: 'group' | 'folder' | 'loose' | 'host';
+  kind: 'group' | 'project' | 'folder' | 'loose' | 'archive' | 'host';
 }
+
+/** How long a chat stays in the list after it last moved. */
+const CURRENT_S = 24 * 3600;
+
+/** Whether a chat is still part of today. One that is pinned was put there to
+ *  stay, and one that is working or waiting on an answer is the opposite of
+ *  gone quiet, however long ago its last line was. */
+const isCurrent = (c: Chat, now: number) =>
+  !c.archived && (!!c.pinned || c.status !== 'idle' || c.updated_at > now - CURRENT_S);
 
 const rank = (c: Chat) => (c.pinned ? 0 : 1);
 const byRecency = (a: Chat[]) => a.sort((x, y) => rank(x) - rank(y) || y.updated_at - x.updated_at);
@@ -173,38 +183,54 @@ function fleetSections(hosts: Record<string, HostSlot>, order: string[], q: stri
 const home = (path: string) => path
   .replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/');
 
-/** One computer's list. A group is drawn even with nothing in it — an empty
- *  group is where the next chats go, and one that vanished the moment it was
- *  made would read as the button having done nothing. A search is the
- *  exception: it is asking where a chat is, and an empty heading is not an
- *  answer. The chats nobody has filed fall into sections by the folder they
- *  work in, the way the phone lists them; a single folder is not a grouping,
- *  so it stays one plain list. */
-function sections(chats: Chat[], groups: Group[], hostKey: string, searching: boolean): Section[] {
+/** One computer's list, which is the chats of the last day and nothing else:
+ *  what has gone quiet falls out of its section into one `Archive` at the
+ *  bottom, and comes back by itself the moment it moves again.
+ *
+ *  A current chat is under the group somebody put it in; failing that, under
+ *  the product the computer filed it as — and where a group already carries
+ *  that product's name, the two are one section rather than two with the same
+ *  heading. What neither claims falls into sections by folder, the way the
+ *  phone lists them; a single folder is not a grouping, so it stays one list.
+ *
+ *  A group is drawn even with nothing in it — it is where the next chats go,
+ *  and one that vanished the moment it was made would read as the button
+ *  having done nothing. A search is the exception: it is asking where a chat
+ *  is, and an empty heading is not an answer. */
+function sections(chats: Chat[], groups: Group[], hostKey: string, searching: boolean, now: number): Section[] {
+  const named = new Map(groups.map((g) => [g.name.toLocaleLowerCase(), g.id]));
+  const made = new Set(groups.map((g) => g.id));
   const byGroup = new Map<string, Chat[]>();
-  const loose: Chat[] = [];
-  for (const c of chats) {
-    if (c.archived) continue;
-    if (c.group_id) {
-      const arr = byGroup.get(c.group_id) ?? [];
-      arr.push(c);
-      byGroup.set(c.group_id, arr);
-    } else loose.push(c);
+  const byProject = new Map<string, Chat[]>();
+  const byCwd = new Map<string, Chat[]>();
+  const quiet: Chat[] = [];
+  const put = (m: Map<string, Chat[]>, k: string, c: Chat) => { m.set(k, [...(m.get(k) ?? []), c]); };
+  for (const c of byRecency([...chats])) {
+    const group = c.group_id && made.has(c.group_id) ? c.group_id
+      : c.project ? named.get(c.project.toLocaleLowerCase()) : undefined;
+    if (!isCurrent(c, now)) quiet.push(c);
+    else if (group) put(byGroup, group, c);
+    else if (c.project) put(byProject, c.project, c);
+    else put(byCwd, c.cwd || '', c);
   }
   const out: Section[] = [];
   for (const g of [...groups].sort((a, b) => a.sort - b.sort)) {
     const arr = byGroup.get(g.id) ?? [];
-    if (arr.length || !searching) out.push({ key: g.id, title: g.name, hostKey, chats: byRecency(arr), kind: 'group' });
+    if (arr.length || !searching) out.push({ key: g.id, title: g.name, hostKey, chats: arr, kind: 'group' });
   }
-  const byCwd = new Map<string, Chat[]>();
-  for (const c of byRecency(loose)) byCwd.set(c.cwd || '', [...(byCwd.get(c.cwd || '') ?? []), c]);
+  for (const [name, arr] of byProject) {
+    out.push({ key: `project:${name}`, title: name, hostKey, chats: arr, kind: 'project' });
+  }
   if (byCwd.size > 1) {
     for (const [path, arr] of byCwd) {
       out.push({ key: `cwd:${path}`, title: home(path) || 'Ungrouped', hostKey, chats: arr, kind: 'folder' });
     }
-  } else if (loose.length) {
-    out.push({ key: '__loose', title: groups.length ? 'Ungrouped' : 'Chats', hostKey, chats: loose, kind: 'loose' });
+  } else {
+    for (const arr of byCwd.values()) {
+      out.push({ key: '__loose', title: out.length ? 'Ungrouped' : 'Chats', hostKey, chats: arr, kind: 'loose' });
+    }
   }
+  if (quiet.length) out.push({ key: '__archive', title: 'Archive', hostKey, chats: quiet, kind: 'archive' });
   return out;
 }
 
@@ -283,6 +309,14 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
     { what: 'new' } | { what: 'rename' | 'delete'; hostKey: string; id: string; name: string } | null
   >(null);
 
+  // Which chats are a day old is a question about the clock, and a list left
+  // open overnight has to notice the answer changing.
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now() / 1000), 60_000);
+    return () => clearInterval(tick);
+  }, []);
+
   const slot = focus ? hosts[focus] : null;
   // One computer paired means there is nothing to merge: the fleet list and
   // that computer's list would be the same list, minus its groups.
@@ -291,15 +325,16 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
     const q = query.trim().toLocaleLowerCase('tr');
     if (fleetWide) return fleetSections(hosts, order, q);
     if (!slot) return [] as Section[];
-    return sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!, !!q);
-  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query]);
+    return sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!, !!q, now);
+  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now]);
   // Groups belong to one computer, so there is one to make only while the list
   // is one computer's.
   const canGroup = !!slot && !!focus && !fleetWide;
   /** The heading a dragged chat is over. */
   const [over, setOver] = useState<string | null>(null);
   // A chat dropped on a group goes into it; dropped on anything that is not a
-  // group — a folder, the unfiled list — it comes out of the one it was in.
+  // group — a product, a folder, the unfiled list — it comes out of the one it
+  // was in, and is the computer's to file again.
   const drop = (s: Section, dt: DataTransfer) => {
     setOver(null);
     const drag = readChatDrag(dt);
@@ -430,13 +465,15 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, searchRef
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
         {list.map((s) => {
-          const shut = collapsed[s.key];
+          // The archive is everything that is not today, so it starts shut —
+          // except under a search, which is looking through it.
+          const shut = collapsed[s.key] ?? (s.kind === 'archive' && !query.trim());
           return (
             <div
               key={s.key}
               // The whole section catches, not only its heading: a group with
               // forty chats in it is a tall target and a 30px line is not.
-              {...(canGroup ? {
+              {...(canGroup && s.kind !== 'archive' ? {
                 onDragOver: (e: React.DragEvent) => {
                   if (!hasChatDrag(e.dataTransfer)) return;
                   e.preventDefault();
