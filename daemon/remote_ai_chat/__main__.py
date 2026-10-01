@@ -34,6 +34,10 @@ def _already_serving(port: int) -> bool:
         return False
 
 
+def _panel_built() -> bool:
+    return (Path(__file__).parent / "webui" / "index.html").exists()
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
     _sanitize_env()
@@ -154,19 +158,19 @@ def cmd_web(args: argparse.Namespace) -> None:
     """
     from urllib.parse import urlencode
     cfg = Config.load()
-    panel = Path(__file__).parent / "webui" / "index.html"
-    if not panel.exists():
+    if not _panel_built():
         print("The panel is not built. Run: cd web && npm install && npm run build")
         return
     if not _already_serving(cfg.port):
         print(f"Nothing answers on port {cfg.port}. Start it first: remote-ai-chat serve")
         return
-    dev, token = cfg.add_device(args.name)
     # `--at` is the panel behind a tunnel (docs/TUNNEL.md): the browser is
     # somewhere else, so the address it dials is the tunnel's hostname on 443
     # and not this machine's loopback, and there is no browser here to open it
-    # in. Everything else about the device is the same — its own token, its own
-    # line in `devices`, revocable on its own.
+    # in. The device is marked as the tunnel's, which is the only door its
+    # token opens; otherwise it is a device like any other — its own line in
+    # `devices`, revocable on its own.
+    dev, token = cfg.add_device(args.name, tunnel=bool(args.at))
     host, port = (args.at, 443) if args.at else ("127.0.0.1", cfg.port)
     scheme = "https" if args.at else "http"
     url = f"{scheme}://{host}:{port}/#" + urlencode({
@@ -183,12 +187,23 @@ def cmd_web(args: argparse.Namespace) -> None:
         webbrowser.open(url)
 
 
+def _device_line(d) -> str:
+    """One device, on one line: which door it uses, and when and where it last did."""
+    seen = (time.strftime("%Y-%m-%d %H:%M", time.localtime(d.last_seen))
+            if d.last_seen else "never")
+    line = (f"{d.id}  {d.name:20s}  push={'yes' if d.push_token else 'no'}"
+            f"  {'tunnel' if d.tunnel else '      '}  seen={seen}")
+    if d.tunnel and d.last_addr:
+        line += f"  from={d.last_addr}"
+    return line.rstrip()
+
+
 def cmd_devices(args: argparse.Namespace) -> None:
     cfg = Config.load()
     if not cfg.devices:
         print("(no devices)")
     for d in cfg.devices.values():
-        print(f"{d.id}  {d.name:20s}  push={'yes' if d.push_token else 'no'}")
+        print(_device_line(d))
 
 
 def cmd_revoke(args: argparse.Namespace) -> None:

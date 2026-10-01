@@ -98,6 +98,54 @@ device is its own — its own line in `devices`, `revoke <id>` cuts off that
 browser and nothing else. Send the link over something you trust, and mind
 that anybody who reads it in transit has the token.
 
+## A tunnel device, and only a tunnel device
+
+`--at` is what makes the device the tunnel's: it is written to `config.toml`
+with `tunnel = true`, and the two kinds of token do not cross.
+
+- A request that carries `CF-Connecting-IP` is answered only for a tunnel
+  device's token. A phone's token, or the token of a panel opened with plain
+  `remote-ai-chat web`, is refused there — the socket closes with 4401 and
+  `/upload`, `/files` and `/screen.jpg` answer 401 — exactly as a wrong token
+  would be.
+- A request without the header is answered only for a token that is *not* a
+  tunnel device's. The link you sent to the laptop opens the tunnel and
+  nothing on the tailnet.
+
+So what the tunnel exposes is the devices you made for it and no others: a
+phone's token that leaks is still worth nothing to anybody who is not on the
+tailnet. Nothing changes for a device that was already paired — no phone has
+to pair again. A browser that was given a `web --at` link by a daemon older
+than this has no `tunnel = true` on its row and is now refused through the
+tunnel: `revoke` it and run `web --at` once more.
+
+## Guessing, and being told
+
+An address in the list is a household, so somebody in it can sit and try
+tokens. Failed sign-ins through the tunnel are counted against the address in
+`CF-Connecting-IP` — the one address a request cannot choose — and **five
+inside ten minutes lock that address out for the next ten**, the right token
+included. A v6 address is counted as its /64, for the reason given above. The
+tailnet is never locked this way: a connection without the header has no
+address of its own to hold to account, only the socket's.
+
+Two things send a notification to every paired device that takes them:
+
+- a tunnel device connecting from an address it has not connected from before
+  — the device's name and the address, once per address, remembered across
+  restarts;
+- an address being locked out — once per lock.
+
+Neither is behind a switch. If the first one arrives and it was not you,
+`revoke` the device it names.
+
+`remote-ai-chat devices` shows the same thing at rest:
+
+```
+3f9c2a81d0b4  iPhone                push=yes          seen=2026-10-01 09:12
+a1b2c3d4e5f6  laptop                push=no   tunnel  seen=2026-10-01 21:40  from=203.0.113.4
+```
+
 ## Why HTTPS is not optional here
 
 The panel is served over HTTPS by the tunnel's hostname, and a page served over
@@ -114,13 +162,16 @@ every machine at once is the one on the tailnet.
 
 ## What is left standing
 
-Three things, in order:
+Four things, in order:
 
 1. **Cloudflare's edge.** TLS, and the hostname is the only way in.
 2. **`tunnel_allow_ips`.** An address you named. It is a household, not a
    laptop — everyone behind that router shares it.
 3. **The device token.** 32 random bytes, this machine only, `revoke` cuts it
-   off. This is what tells one computer in that house from another.
+   off. This is what tells one computer in that house from another, and it has
+   to be one made with `--at`: no other device's token is answered here.
+4. **The lock.** Five wrong tokens from one address in ten minutes and that
+   address is refused for ten more — and your phone is told.
 
 What is *not* standing is any notion of a person. If you want a sign-in — a
 name and a password, or a one-time code to your mail — put Cloudflare Access in

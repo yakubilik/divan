@@ -1,8 +1,11 @@
 # WebSocket protocol (v1)
 
 Endpoint: `ws://<host>:8790/ws?token=<token>` (or `Authorization: Bearer`).
-A wrong token closes with 4401. Five failed attempts from one IP within ten
-minutes earns a temporary lockout.
+A wrong token closes with 4401. So does a token used at the wrong door: a
+device made by `web --at` is answered only through the tunnel, and every other
+device only off it. Through the tunnel, five failed attempts from one
+`CF-Connecting-IP` address within ten minutes lock that address out for ten
+more (`docs/TUNNEL.md`); off it, failures are counted and nothing more.
 
 ## Envelope
 
@@ -335,8 +338,9 @@ says what it is *about*, and the phone routes on that:
 | `chat_id` (with `kind` `approval` or `done`) | that chat |
 | `ticket_id`, or `ticket` | that ustabasi ticket |
 | `device_id` | which pairing it was sent to — a phone paired to two computers switches to the one that actually has the chat rather than opening it against whichever one it happens to be connected to |
+| `kind` `tunnel_new_address` or `tunnel_locked` | nothing — it is about the tunnel's door, not a chat, and the body says which device or which address (`docs/TUNNEL.md`) |
 
-This daemon sends the `chat_id` ones and no others. A ticket push comes from the
+This daemon sends the `chat_id` ones and the tunnel's two. A ticket push comes from the
 ticket queue itself, which is a separate program: it builds the notification out
 of the ticket's number, its title and what happened, never out of the message —
 an escalation quotes the worker and the worker quotes the repository, and none
