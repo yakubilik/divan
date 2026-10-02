@@ -59,6 +59,15 @@ function connError(key: 'wsNotConnected' | 'wsDropped' | 'wsTimeout'): Error & {
   return e;
 }
 
+/** A call that cannot be made because the computer refused this token: the
+ *  message is the refusal's own sentence, so a screen that shows the error
+ *  says why rather than "connection lost". */
+function refusedError(r: Refusal): Error & { code?: string | null } {
+  const e: Error & { code?: string | null } = new Error(refusalText(r).long);
+  e.code = 'unauthorized';
+  return e;
+}
+
 export type ConnStatus = 'idle' | 'connecting' | 'online' | 'offline' | 'unauthorized';
 
 /** How often to prove the socket is still there, and how long to wait for the
@@ -146,9 +155,10 @@ export class RacClient {
       if (this.ws !== ws) return;
       this.ws = null;
       this.stopHeartbeat();
-      for (const p of this.pending.values()) p.reject(connError('wsDropped'));
+      const refusal = e.code === 4401 || e.code === 1008 ? parseRefusal(e.code, e.reason) : null;
+      for (const p of this.pending.values()) p.reject(refusal ? refusedError(refusal) : connError('wsDropped'));
       this.pending.clear();
-      if (e.code === 4401 || e.code === 1008) { this.refused(parseRefusal(e.code, e.reason)); return; }
+      if (refusal) { this.refused(refusal); return; }
       this.setStatus('offline');
       this.scheduleRetry();
     };
@@ -239,6 +249,7 @@ export class RacClient {
    *  computer that is right there. */
   private ready(ms = 6000): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
+    if (this.refusal) return Promise.reject(refusedError(this.refusal));
     if (!this.wanted) return Promise.reject(connError('wsNotConnected'));
     this.poke();
     return new Promise<void>((resolve, reject) => {
@@ -246,6 +257,7 @@ export class RacClient {
       const timer = setTimeout(() => done(() => reject(connError('wsNotConnected'))), ms);
       const off = this.onStatus((s) => {
         if (s === 'online') done(resolve);
+        else if (s === 'unauthorized' && this.refusal) done(() => reject(refusedError(this.refusal!)));
         else if (s === 'unauthorized' || s === 'idle') done(() => reject(connError('wsNotConnected')));
       });
     });
@@ -295,7 +307,7 @@ export const client = new RacClient();
 export function callOnce<T = any>(host: string, port: number, token: string,
                                   type: string, data: Record<string, any> = {}): Promise<T> {
   const known = refusedFor(token);
-  if (known) return Promise.reject(new Error(refusalText(known).long));
+  if (known) return Promise.reject(refusedError(known));
   return new Promise<T>((resolve, reject) => {
     let ws: WebSocket;
     try {
