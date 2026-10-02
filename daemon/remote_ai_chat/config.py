@@ -70,6 +70,11 @@ class Device:
 # in more places than this is told about the oldest of them again.
 SEEN_ADDRS_MAX = 32
 
+# How many revoked tokens are remembered, by hash. Only so that a refusal can
+# say "revoked" to a browser that still holds one, rather than "unknown"; the
+# oldest are forgotten and then simply read as unknown.
+REVOKED_MAX = 64
+
 
 def _device(did: str, d: dict) -> "Device":
     """A device row from disk, minus anything this version does not know about.
@@ -136,6 +141,9 @@ class Config:
     # production push to one comes back BadDeviceToken.
     apns_sandbox: bool = False
     devices: dict[str, Device] = field(default_factory=dict)
+    # The token hashes of removed devices — see REVOKED_MAX. Not a key to
+    # anything: a hash in here opens no door, it only names the refusal.
+    revoked_tokens: list[str] = field(default_factory=list)
     accounts: dict[str, dict] = field(default_factory=dict)   # id -> stored fields
     # Several sign-ins of one tool, driven as one: see pool.Settings. Off until
     # somebody turns it on — a machine with one account has nothing to pool.
@@ -200,6 +208,7 @@ class Config:
                        if k != "id" and v is not None and v != [] and (k != "tunnel" or v)}
                 for d in self.devices.values()
             },
+            "revoked_tokens": self.revoked_tokens,
             "accounts": self.accounts,
             "pool": self.pool,
         }
@@ -248,14 +257,18 @@ class Config:
             return False
         self._devices_mtime = mtime
         try:
-            raw = tomllib.loads(CONFIG_PATH.read_text()).get("devices", {})
+            whole = tomllib.loads(CONFIG_PATH.read_text())
         except Exception:
             return False
+        raw = whole.get("devices", {})
         for did, d in raw.items():
             if did not in self.devices:
                 self.devices[did] = _device(did, d)
         for did in [d for d in self.devices if d not in raw]:
             del self.devices[did]
+        revoked = whole.get("revoked_tokens", [])
+        if isinstance(revoked, list):
+            self.revoked_tokens = [str(h) for h in revoked][-REVOKED_MAX:]
         return True
 
     def refresh_tunnel(self) -> bool:
@@ -303,9 +316,16 @@ class Config:
         self.reload_devices()
         self.save()
 
-    def revoke(self, device_id: str) -> bool:
+    def was_revoked(self, token: str) -> bool:
+        """Whether this token belonged to a device that has since been removed."""
+        self.reload_devices()
+        return self.hash_token(token) in self.revoked_tokens
+
+    def revoke(self, device_id: str, remember: bool = True) -> bool:
         if device_id in self.devices:
-            del self.devices[device_id]
+            gone = self.devices.pop(device_id)
+            if remember:
+                self.revoked_tokens = [*self.revoked_tokens, gone.token_hash][-REVOKED_MAX:]
             self.save()
             return True
         return False

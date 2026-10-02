@@ -1,4 +1,4 @@
-"""CLI: serve | pair | web | project | devices | revoke | status"""
+"""CLI: serve | pair | web | project | devices | revoke | unlock | status"""
 from __future__ import annotations
 
 import argparse
@@ -211,6 +211,21 @@ def cmd_revoke(args: argparse.Namespace) -> None:
     print("revoked" if cfg.revoke(args.device_id) else "no such device")
 
 
+def cmd_unlock(args: argparse.Namespace) -> None:
+    """Lift a tunnel lock on the running daemon (docs/TUNNEL.md).
+
+    The lock lives only in the daemon's memory, so this asks the daemon — over
+    loopback, as a device minted for the call — rather than editing a file.
+    """
+    cfg = Config.load()
+    if not _already_serving(cfg.port):
+        print(f"Nothing answers on port {cfg.port}, so nothing is locked.", file=sys.stderr)
+        sys.exit(2)
+    out = asyncio.run(_protocol(cfg, "tunnel.unlock", {"addr": args.addr}))
+    print(f"unlocked {out.get('addr')}" if out.get("was_locked")
+          else f"{out.get('addr')} was not locked")
+
+
 # ── products, from a shell on the computer they are run from ─────────────────
 #
 # Divan has no form for making a project and is not getting one. A product is
@@ -262,7 +277,7 @@ async def _protocol(cfg: Config, typ: str, data: dict) -> dict:
                     raise SystemExit(f"{d.get('code') or 'refused'}: {d.get('message')}")
                 return msg.get("data") or {}
     finally:
-        cfg.revoke(dev.id)
+        cfg.revoke(dev.id, remember=False)
 
 
 #: The flags, and the fields they are. Kept as a table because the mapping is
@@ -536,6 +551,8 @@ def main() -> None:
     _project_parser(sub)
     s = sub.add_parser("devices"); s.set_defaults(fn=cmd_devices)
     s = sub.add_parser("revoke"); s.add_argument("device_id"); s.set_defaults(fn=cmd_revoke)
+    s = sub.add_parser("unlock", help="lift a tunnel lock on an address, without a restart")
+    s.add_argument("addr"); s.set_defaults(fn=cmd_unlock)
     s = sub.add_parser("status"); s.set_defaults(fn=cmd_status)
     s = sub.add_parser("install", help="start automatically at login"); s.set_defaults(fn=cmd_install)
     s = sub.add_parser("uninstall"); s.set_defaults(fn=cmd_uninstall)

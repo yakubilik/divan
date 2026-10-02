@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import time
@@ -384,13 +385,22 @@ class TunnelLock:
 
     An address in `tunnel_allow_ips` is a household, and the token is all that
     tells one machine in it from another — so somebody inside the list can sit
-    and guess. Five wrong tokens inside ten minutes and the address is refused
-    for the next ten, the right token included: a guesser must not be able to
-    tell a lock from a miss.
+    and guess. Five different wrong tokens inside ten minutes and the address
+    is refused for the next ten, the right token included.
+
+    What is counted is a guess, and a guess is a token nobody has seen before.
+    The same wrong token again is not a second guess: it is a browser that
+    stored a stale token and keeps reconnecting, and counting every retry is
+    how the panel locked its own household out (2 Oct 2026). So a token is
+    counted once per window, by its hash. A token the daemon knows but that
+    does not open the tunnel is not counted at all — see `Server._admit`.
 
     Only the tunnel's addresses are ever in here. `CF-Connecting-IP` is written
     by Cloudflare's edge, so it is the one address a request cannot choose; a
     tailnet client has no such header and never meets this.
+
+    The lock lives in memory, and `unlock` lifts it on the running daemon —
+    `remote-ai-chat unlock <ip>`, or the same request from a paired phone.
 
     The clock is passed in so a test can move it.
     """
@@ -400,28 +410,47 @@ class TunnelLock:
 
     def __init__(self, clock=time.time) -> None:
         self.clock = clock
-        self.failed: dict[str, list[float]] = {}
+        # Per address: when each distinct wrong token was first seen, by hash.
+        self.failed: dict[str, dict[str, float]] = {}
         self.until: dict[str, float] = {}
 
     def locked(self, key: str) -> bool:
+        return self.locked_until(key) is not None
+
+    def locked_until(self, key: str) -> float | None:
+        """When the lock on this address lifts, or None if it is not locked."""
         until = self.until.get(key)
         if until is None:
-            return False
+            return None
         if self.clock() < until:
-            return True
+            return until
         del self.until[key]
-        return False
+        return None
 
-    def fail(self, key: str) -> bool:
-        """Count one failure. True if it is the one that locked the address."""
+    def fail(self, key: str, token: str = "") -> bool:
+        """Count one wrong token. True if it is the one that locked the address.
+
+        A token already counted inside the window is not counted again.
+        """
         now = self.clock()
-        hist = [t for t in self.failed.get(key, []) if now - t < self.WINDOW_S]
-        hist.append(now)
-        if len(hist) < self.LIMIT:
-            self.failed[key] = hist
+        seen = {h: t for h, t in self.failed.get(key, {}).items() if now - t < self.WINDOW_S}
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        if digest in seen:
+            self.failed[key] = seen
+            return False
+        seen[digest] = now
+        if len(seen) < self.LIMIT:
+            self.failed[key] = seen
             return False
         # The count starts again when the lock lifts, so one window is one lock
         # and one notification.
         self.failed.pop(key, None)
         self.until[key] = now + self.WINDOW_S
         return True
+
+    def unlock(self, key: str) -> bool:
+        """Lift the lock on an address and forget its count. True if it was locked."""
+        was = self.locked(key)
+        self.failed.pop(key, None)
+        self.until.pop(key, None)
+        return was
