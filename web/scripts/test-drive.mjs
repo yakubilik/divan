@@ -273,6 +273,12 @@ seed(useFleet, {
       useFleet.setState({ hosts: { ...useFleet.getState().hosts, [key]: { ...slot, groups, chats } } });
       return type === 'group.create' ? made : {};
     }
+    // …and `chat.deleted` is broadcast beside this one's answer.
+    if (type === 'chat.delete') {
+      const slot = useFleet.getState().hosts[key];
+      useFleet.setState({ hosts: { ...useFleet.getState().hosts,
+        [key]: { ...slot, chats: slot.chats.filter((c) => c.id !== data.chat_id) } } });
+    }
     return {};
   },
 });
@@ -1321,6 +1327,19 @@ group('chats are filed into groups from the panel');
   const started = asked.find((a) => a.type === 'chat.create')?.data;
   ok('a heading’s + opens a chat in that folder, already on Hermes',
     started?.agent_id === 'hermes' && !!started?.cwd, JSON.stringify(started));
+
+  // A chat's row has its own bin, and the bin asks before it deletes.
+  asked.length = 0;
+  await act(async () => {
+    row('Safari login').dispatchEvent(new w.MouseEvent('mouseover', { bubbles: true }));
+  });
+  await click(doc.querySelector('button[aria-label="Delete chat: Safari login"]'));
+  const asksFirst = !asked.some((a) => a.type === 'chat.delete') && text().includes('whole history');
+  await click(find('Delete'));
+  await settle();
+  ok('a chat’s row deletes it, after asking',
+    asksFirst && asked.find((a) => a.type === 'chat.delete')?.data.chat_id === 'c2' && !row('Safari login'),
+    JSON.stringify(asked.map((a) => [a.type, a.data])));
 }
 
 group('a product has its own chats');

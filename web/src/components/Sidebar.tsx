@@ -3,8 +3,9 @@ import { C, R, SHADOW } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
 import { ago, uptime } from '../lib/format';
 import { useFleet, type HostSlot } from '../lib/fleet';
-import { createGroup, deleteGroup, renameGroup, updateChat } from '../lib/actions';
+import { createGroup, deleteChat, deleteGroup, renameGroup, updateChat } from '../lib/actions';
 import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag, setSectionDrag } from '../lib/dnd';
+import { DeleteChatDialog } from './ChatMenu';
 import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
 import type { Chat, Group } from '../lib/protocol';
 
@@ -284,20 +285,36 @@ function arrange(list: Section[], saved: string[]): Section[] {
     .sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([s]) => s);
 }
 
-function ChatRow({ chat, selected, onPick, onDrag }: {
+/** A screen with nothing to hover with shows the row's bin all the time. */
+const NO_HOVER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches;
+const BIN = 28;
+
+function ChatRow({ chat, selected, onPick, onDrag, onDelete }: {
   chat: Chat; selected: boolean; onPick: () => void;
   /** Set where the row can be picked up and filed under another heading. */
   onDrag?: (dt: DataTransfer) => void;
+  /** Asks before it deletes: the row only says which chat was meant. */
+  onDelete: () => void;
 }) {
   const awaiting = chat.status === 'awaiting_approval';
   const running = chat.status === 'running';
+  const [over, setOver] = useState(false);
+  // The bin is beside the row and not inside it — a button inside a button is
+  // not one — and stands where the row's clock is, which gives way to it.
+  const bin = over || NO_HOVER;
   return (
+    <div
+      style={{ position: 'relative' }}
+      onMouseEnter={() => setOver(true)} onMouseLeave={() => setOver(false)}
+      onFocus={() => setOver(true)} onBlur={() => setOver(false)}
+    >
     <button
       type="button" onClick={onPick}
       draggable={!!onDrag} onDragStart={onDrag && ((e) => onDrag(e.dataTransfer))}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56,
-        padding: '8px 10px', borderRadius: R.card, cursor: 'pointer', textAlign: 'left',
+        padding: NO_HOVER ? `8px ${BIN + 12}px 8px 10px` : '8px 10px',
+        borderRadius: R.card, cursor: 'pointer', textAlign: 'left',
         background: selected ? C.accentTint : 'transparent',
         border: `1px solid ${selected ? C.accentRing : 'transparent'}`,
       }}
@@ -321,7 +338,10 @@ function ChatRow({ chat, selected, onPick, onDrag }: {
           </span>
         </div>
       </div>
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+      <div style={{
+        flexShrink: 0, display: 'flex', alignItems: 'center',
+        visibility: over && !NO_HOVER ? 'hidden' : undefined,
+      }}>
         {awaiting ? (
           <span style={{
             ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 0.4,
@@ -333,6 +353,21 @@ function ChatRow({ chat, selected, onPick, onDrag }: {
         )}
       </div>
     </button>
+    {bin && (
+      <button
+        type="button" onClick={onDelete}
+        title="Delete chat" aria-label={`Delete chat: ${chat.title || 'New chat'}`}
+        style={{
+          position: 'absolute', right: 8, top: '50%', marginTop: -BIN / 2,
+          width: BIN, height: BIN, borderRadius: R.btn, cursor: 'pointer',
+          background: C.surface3, border: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <Icon path={P.trash} size={14} color={C.danger} />
+      </button>
+    )}
+    </div>
   );
 }
 
@@ -362,7 +397,8 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
    *  a group in a dialog. */
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [asking, setAsking] = useState<
-    { what: 'new' } | { what: 'rename' | 'delete'; hostKey: string; id: string; name: string } | null
+    { what: 'new' }
+    | { what: 'rename' | 'delete' | 'delete-chat'; hostKey: string; id: string; name: string } | null
   >(null);
 
   // Which chats are a day old is a question about the clock, and a list left
@@ -658,6 +694,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                   selected={selected === c.id && selectedHost === s.hostKey}
                   onPick={() => onSelect(s.hostKey, c.id)}
                   onDrag={canGroup ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}
+                  onDelete={() => setAsking({ what: 'delete-chat', hostKey: s.hostKey, id: c.id, name: c.title })}
                 />
               ))}
             </div>
@@ -696,6 +733,13 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         <DeleteGroupDialog
           name={asking.name}
           onDelete={() => { deleteGroup(asking.hostKey, asking.id).catch(() => {}); }}
+          onClose={() => setAsking(null)}
+        />
+      )}
+      {asking?.what === 'delete-chat' && (
+        <DeleteChatDialog
+          title={asking.name}
+          onDelete={() => { deleteChat(asking.hostKey, asking.id).catch(() => {}); }}
           onClose={() => setAsking(null)}
         />
       )}

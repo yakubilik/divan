@@ -88,6 +88,30 @@ function Sheet({ entries, groups, chat, onMove, onNewGroup, onClose }: {
   );
 }
 
+/** Deleting a chat takes its history off the computer, which is said before it
+ *  happens. The chat's own menu and its row in the list both ask it, so it is
+ *  one dialog rather than two that drift. */
+export function DeleteChatDialog({ title, onDelete, onClose }: {
+  title: string;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal onClose={onClose} width={440}>
+      <div style={{ padding: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Delete chat</div>
+        <div style={{ fontSize: 13, color: C.mute, lineHeight: '19px', marginBottom: 16 }}>
+          “{title || 'New chat'}” and its whole history are deleted from the computer. This cannot be undone.
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn kind="danger" onClick={() => { onDelete(); onClose(); }}>Delete</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function ChatMenu({ chat, groups, onUpdate, onNewGroup, onDelete, onClose }: {
   chat: Chat;
   groups: Group[];
@@ -144,20 +168,7 @@ export function ChatMenu({ chat, groups, onUpdate, onNewGroup, onDelete, onClose
   }
 
   if (confirming) {
-    return (
-      <Modal onClose={onClose} width={440}>
-        <div style={{ padding: 20 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Delete chat</div>
-          <div style={{ fontSize: 13, color: C.mute, lineHeight: '19px', marginBottom: 16 }}>
-            “{chat.title || 'New chat'}” and its whole history are deleted from the computer. This cannot be undone.
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <Btn onClick={onClose}>Cancel</Btn>
-            <Btn kind="danger" onClick={() => { onDelete(); onClose(); }}>Delete</Btn>
-          </div>
-        </div>
-      </Modal>
-    );
+    return <DeleteChatDialog title={chat.title} onDelete={onDelete} onClose={onClose} />;
   }
 
   if (grouping) {
