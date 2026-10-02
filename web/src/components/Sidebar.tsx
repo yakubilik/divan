@@ -8,6 +8,7 @@ import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag
 import { DeleteChatDialog } from './ChatMenu';
 import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
 import type { Chat, Group } from '../lib/protocol';
+import { refusalText } from '../lib/refusal';
 
 const W = 260;
 /** Collapsed, the sidebar is a strip with the way back to the list on it and
@@ -40,7 +41,7 @@ export function ProviderMark({ provider, dim }: { provider: string; dim?: boolea
 function hostDetail(slot: HostSlot): string {
   if (slot.status === 'online') return `online · :${slot.cfg.port}`;
   if (slot.status === 'connecting') return 'connecting…';
-  if (slot.status === 'unauthorized') return 'no access · token revoked';
+  if (slot.status === 'unauthorized') return refusalText(slot.refusal).short;
   return slot.lastOnline ? `offline · ${ago(slot.lastOnline / 1000)}` : 'offline';
 }
 
@@ -90,7 +91,10 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
                 : online ? C.ok : slot.status === 'unauthorized' ? C.danger : C.faint}
               live={allHosts ? onlineCount > 0 : online} size={5}
             />
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span
+              title={!allHosts && slot.status === 'unauthorized' ? refusalText(slot.refusal).long : undefined}
+              style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
               {allHosts ? `${order.length} computers · ${onlineCount} online` : hostDetail(slot)}
             </span>
           </div>

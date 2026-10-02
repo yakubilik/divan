@@ -43,6 +43,7 @@ import { copyText } from '../lib/clipboard';
 import type {
   CliAccount, LimitWindow, LoginMethod, LoginPrompt, Provider, ToolStatus,
 } from '../lib/protocol';
+import { refusalText } from '../lib/refusal';
 
 /** The daemon labels the machine's own account in English ("This computer's
  *  account") because it has no idea who is asking. i18n already carries the
@@ -81,7 +82,7 @@ function err(e: any): string { return errText(e?.code, e?.message); }
 function hostDetail(slot: HostSlot): string {
   if (slot.status === 'online') return 'online';
   if (slot.status === 'connecting') return 'connecting…';
-  if (slot.status === 'unauthorized') return 'no access · token revoked';
+  if (slot.status === 'unauthorized') return refusalText(slot.refusal).short;
   return slot.lastOnline ? `offline · ${ago(slot.lastOnline / 1000)}` : 'offline';
 }
 

@@ -3,6 +3,8 @@ import { MEDIA, T } from '../lib/theme';
 import { Icon, P, Spinner } from '../ui/kit';
 import { Button, Cell, EmptyState, Pill, SectionHeader } from '../ui/divan';
 import { useFleet } from '../lib/fleet';
+import { screenUrl } from '../lib/actions';
+import { refusedFor, refusalText } from '../lib/refusal';
 
 /* The computer's own screen, in the panel.
  *
@@ -94,8 +96,15 @@ export function Screen() {
     // when zoomed in. Anything less and a 3440-wide desktop arrives as mush.
     const wide = Math.round((box.w || 1280) * (window.devicePixelRatio || 1) * Math.min(zoom, 2));
     const w = Math.max(640, Math.min(3840, wide));
-    const uri = `${base}/screen.jpg?token=${encodeURIComponent(slot.cfg.token)}&w=${w}&q=72`
-      + `&display=${encodeURIComponent(displayRef.current)}&t=${tick.current}`;
+    const uri = screenUrl(slot.cfg, w, displayRef.current, tick.current);
+    if (!uri) {
+      // The computer has refused this token; asking for frames would only be
+      // refused again (lib/refusal.ts).
+      liveRef.current = false;
+      setLive(false);
+      setError(refusalText(refusedFor(slot.cfg.token)).long);
+      return;
+    }
     askedAt.current = Date.now();
     const backSlot = frontRef.current === 0 ? 1 : 0;
     setSlots((s) => (backSlot === 1 ? [s[0], uri] : [uri, s[1]]));

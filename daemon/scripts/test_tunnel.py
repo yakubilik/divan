@@ -274,7 +274,7 @@ def main() -> None:
               and lock.locked(key), "four more different ones make five, and lock the address", repr(got))
         got = [ws_close(client, panel, RETRIER), ws_close(client, local, RETRIER),
                http_why(client, "/files", panel, RETRIER, **files)]
-        check(got == [(4401, f"locked:{until}")] * 2 + [(401, f"locked:{until}")],
+        check(got == [(4401, f"locked:{until}:{RETRIER}")] * 2 + [(401, f"locked:{until}:{RETRIER}")],
               "a locked address is told so, and when it lifts", repr(got))
         settle(srv, client)
         check(sent and all("remote-ai-chat unlock " + RETRIER in s["body"] for s in sent),

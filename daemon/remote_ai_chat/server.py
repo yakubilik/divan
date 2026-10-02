@@ -1185,7 +1185,7 @@ class Server:
         key = self.cfg.tunnel_key(via)
         until = self.tunnel_lock.locked_until(key)
         if until is not None:
-            return None, f"locked:{int(until)}"
+            return None, f"locked:{int(until)}:{key}"
         if dev is not None and not dev.tunnel:
             # One of our own tokens at the wrong door: a browser that was paired
             # on the tailnet and then opened through the tunnel. It is refused —
@@ -1220,7 +1220,8 @@ class Server:
 
         `tunnel_only` is a tunnel device off the tunnel; `revoked` a device
         somebody removed; `no_token` a page that has none; `unknown_token`
-        anything else. The panel words each its own way (web/src/lib/refusal.ts).
+        anything else. A lock is `locked:<until>:<address>`, said only by
+        `_admit`. The panel words each its own way (web/src/lib/refusal.ts).
         """
         if dev is not None:
             return "tunnel_only"
