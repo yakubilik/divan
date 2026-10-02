@@ -68,11 +68,24 @@ That is the product. What the design does is bound it.
   is what tells one machine there from another. Three things narrow that:
   the tunnel answers only a device made for it (`remote-ai-chat web --at`,
   `tunnel = true` in `config.toml`) and such a device is answered nowhere
-  else, so a phone's token is worth nothing through the tunnel; five failed
-  sign-ins from one `CF-Connecting-IP` address inside ten minutes lock that
-  address out for the next ten, the right token included; and every paired
-  device with notifications is told when a tunnel device connects from an
-  address it has not used before, and when an address is locked out.
+  else, so a phone's token is worth nothing through the tunnel; five
+  *different* wrong tokens from one `CF-Connecting-IP` address inside ten
+  minutes lock that address out for the next ten, the right token included;
+  and every paired device with notifications is told when a tunnel device
+  connects from an address it has not used before, and when an address is
+  locked out.
+
+  Only guesses count. One of your own tokens at the wrong door (a phone's or a
+  tailnet panel's, through the tunnel) is refused but not counted, and the
+  same wrong token repeated inside the window counts once — a browser
+  retrying a stale token cannot lock its own household out. The lock lives in
+  the daemon's memory; `remote-ai-chat unlock <ip>` on the computer (or the
+  `tunnel.unlock` request from a paired phone, never from a tunnel device)
+  lifts it without a restart. A refusal names its reason to the client
+  (wrong door, unknown, revoked, locked and until when) — see
+  [docs/TUNNEL.md](docs/TUNNEL.md). Telling a guesser that the address is
+  locked gives them nothing they could use: the count and the window are in
+  this file, and nothing is accepted while it lasts.
 
   A person is the one thing that list cannot name, and Cloudflare Access can:
   a sign-in at the edge, by a one-time code to a mail address. It is optional
