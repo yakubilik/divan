@@ -999,6 +999,7 @@ class Server:
 
     async def dictate(self, request: Request, authorization: str = Header(default=""),
                       prompt: str = Query(default=""), lang: str = Query(default=""),
+                      context: str = Query(default=""),
                       cf_connecting_ip: str | None = Header(default=None)) -> dict:
         self._device(authorization, cf_connecting_ip)
         if not transcribe_available():
@@ -1016,14 +1017,29 @@ class Server:
         # dictates into chats on other paired computers, which is another
         # origin, and a header this daemon's CORS answer does not name fails
         # the preflight before the audio is ever sent.
-        prompt = prompt.strip()[:800] or None
+        prompt = prompt.strip()[:600] or None
+        # `context` is what this same dictation has already said. The panel
+        # cuts speech at every pause, and a phrase heard without the sentence
+        # before it is two seconds of sound with no idea what it is about —
+        # given the lead-in, whisper carries the topic, the language and the
+        # spelling across the cut. It goes last, nearest the audio, and only its
+        # tail: whisper reads a couple of hundred tokens of prompt at most.
+        #
+        # It is kept out of the echo check below. Somebody saying "tamam" twice
+        # in one dictation is not whisper repeating its prompt back.
+        context = context.strip()[-300:]
+        lead = " ".join(p for p in (prompt, context) if p) or None
         # `tr-TR` is what a browser calls it and `tr` is what whisper does. A
         # tag that is not a language at all is dropped rather than refused:
         # detection is a worse answer than being told, not a wrong one.
         lang = lang.strip().lower().split("-")[0]
-        t = await dictate(data, prompt, lang if re.fullmatch(r"[a-z]{2,3}", lang) else None)
+        t = await dictate(data, lead, lang if re.fullmatch(r"[a-z]{2,3}", lang) else None)
         text = (t or {}).get("text", "").strip()
         if prompt and text and text.rstrip(".") in prompt:
+            text = ""
+        # A whole sentence of the lead-in coming back is the same failure as the
+        # vocabulary coming back; a short word coming back is a person.
+        if context and len(text) >= 20 and text.rstrip(".") in context:
             text = ""
         return {"text": text, "language": (t or {}).get("language")}
 

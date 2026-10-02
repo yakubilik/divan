@@ -14,12 +14,13 @@ microphone warms the model while the person is still drawing breath.
 
 ``RAC_WHISPER_MODEL`` overrides which model that is — an ``mlx-community`` repo
 on Apple silicon, a faster-whisper size or path everywhere else. On Apple
-silicon the default is ``whisper-large-v3-turbo-q4``: it is the same half
-gigabyte on disk as the small model it replaced, six times real time on an M1
-instead of eleven, and the difference in what comes back is not subtle — a
-Turkish sentence with "branch" and "commit at" in it came back from the small
-one as "brand charge" and "John Mitat". Dictation is read by the person who
-said it, so the words being right is the whole feature. faster-whisper stays on
+silicon the default is ``whisper-large-v3-turbo``: the difference from the small
+model it replaced is not subtle — a Turkish sentence with "branch" and "commit
+at" in it came back from the small one as "brand charge" and "John Mitat". It
+was the 4-bit quantised turbo for a while, to save a gigabyte of disk; on an M1
+the full one transcribes a twelve-second Turkish phrase in the same two seconds,
+and the quantisation is where the near-misses on names came from. Dictation is
+read by the person who said it, so the words being right is the whole feature. faster-whisper stays on
 ``small``, because there the model runs on a CPU and turbo is not fast on one."""
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ from pathlib import Path
 
 log = logging.getLogger("rac.transcribe")
 _OVERRIDE = os.environ.get("RAC_WHISPER_MODEL", "").strip()
-MODEL = _OVERRIDE or "mlx-community/whisper-large-v3-turbo-q4"   # mlx backend
+MODEL = _OVERRIDE or "mlx-community/whisper-large-v3-turbo"   # mlx backend
 FW_MODEL = _OVERRIDE or "small"                 # faster-whisper backend (Systran/faster-whisper-small)
 
 _fw_model = None

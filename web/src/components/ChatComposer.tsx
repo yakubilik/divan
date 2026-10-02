@@ -125,7 +125,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
     whisper: canWhisper
       ? {
         warm: () => warmDictation(hostKey),
-        send: (pcm, prompt, lang) => dictate(hostKey, pcm, prompt, lang),
+        send: (pcm, prompt, lang, context) => dictate(hostKey, pcm, prompt, lang, context),
       }
       : undefined,
   });

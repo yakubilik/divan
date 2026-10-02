@@ -228,9 +228,10 @@ export async function upload(key: string, chatId: string, file: File): Promise<a
  *  paired computer is another origin and the daemon's CORS answer names only
  *  the two headers below.
  */
-export async function dictate(key: string, pcm: Int16Array, prompt: string, lang: string): Promise<string> {
+export async function dictate(key: string, pcm: Int16Array, prompt: string, lang: string,
+                              context = ''): Promise<string> {
   const { cfg } = slot(key);
-  const q = new URLSearchParams({ lang, ...(prompt ? { prompt } : {}) });
+  const q = new URLSearchParams({ lang, ...(prompt ? { prompt } : {}), ...(context ? { context } : {}) });
   const r = await fetch(`${base(cfg)}/dictate?${q}`, {
     method: 'POST',
     headers: {

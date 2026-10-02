@@ -293,7 +293,7 @@ export function langChoices(current = dictateLang()): string[] {
 /** What whisper wants, and so what everything below is counted in. */
 export const RATE = 16000;
 
-const PAUSE = 0.7 * RATE;       // silence that ends a phrase
+const PAUSE = 1.0 * RATE;       // silence that ends a phrase
 const MIN_VOICED = 0.2 * RATE;  // less speech than this is a click, not a phrase
 const LEAD = 0.3 * RATE;        // silence kept in front of the first word
 const TAIL = 0.2 * RATE;        // …and behind the last
@@ -307,7 +307,10 @@ const MAX = 28 * RATE;          // whisper listens thirty seconds at a time
  *  speaks in: when 0.7 s goes by without a voice, what came before it is a
  *  phrase and is sent while they draw breath for the next one. Shorter and it
  *  cuts in the middle of a thought — and whisper ends every piece with a full
- *  stop; longer and the words are late.
+ *  stop; longer and the words are late. It was 0.7 s, and at 0.7 s a Turkish
+ *  speaker looking for the next word was cut mid-sentence often enough that
+ *  the pieces read as fragments; a second is still under the time the last
+ *  piece takes to come back.
  *
  *  Speech is told from silence by loudness against a floor that follows the
  *  room down: a fan is quiet and a voice over it is three times that. Silence
@@ -502,7 +505,9 @@ export interface DictationOptions {
    *  Absent means the browser is the only engine. */
   whisper?: {
     warm: () => void;
-    send: (pcm: Int16Array, prompt: string, lang: string) => Promise<string>;
+    /** `context` is what this dictation has said so far, so a phrase is
+     *  heard as the next part of a sentence rather than on its own. */
+    send: (pcm: Int16Array, prompt: string, lang: string, context: string) => Promise<string>;
   };
 }
 
@@ -533,6 +538,9 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
    *  said. `run` is which dictation they belong to: an answer that comes back
    *  after Esc belongs to none and is dropped. */
   const queue = useRef<Promise<void>>(Promise.resolve());
+  /** What whisper has written down in this dictation so far, sent with each
+   *  next phrase as its lead-in. */
+  const heard = useRef('');
   const waiting = useRef(0);
   const run = useRef(0);
 
@@ -554,6 +562,7 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
     cap.current = null;
     restarts.current = [];
     run.current += 1;
+    heard.current = '';
     waiting.current = 0;
     queue.current = Promise.resolve();
     setWriting(false);
@@ -570,12 +579,19 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
     waiting.current += 1;
     setWriting(true);
     queue.current = queue.current
-      .then(() => (mine === run.current ? w.send(pcm, promptFor(latest.current.phrases), lang) : ''))
+      // Queued, so by the time a phrase is sent every phrase before it has
+      // answered and `heard` holds them all.
+      .then(() => (mine === run.current
+        ? w.send(pcm, promptFor(latest.current.phrases), lang, heard.current.slice(-300))
+        : ''))
       .then((text) => {
         if (mine !== run.current) return;
         waiting.current -= 1;
         if (!waiting.current) setWriting(false);
-        if (text) latest.current.onCommit(text);
+        if (text) {
+          heard.current = appendSpeech(heard.current, text);
+          latest.current.onCommit(text);
+        }
       })
       .catch((e: any) => {
         if (mine !== run.current) return;
