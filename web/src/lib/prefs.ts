@@ -26,10 +26,12 @@ export interface Defaults {
    *  Remembered per host, like everything else here: a choice that resets
    *  every time the screen is opened is not a choice. */
   agentAccountId?: string;
-  /** The agent the New chat dialog last started with. `undefined` is never
-   *  chosen — the dialog then opens on Hermes — and `null` is a real answer,
-   *  "No agent", which must not be turned back into Hermes. */
-  agentId?: string | null;
+  /** The agent somebody last picked in the New chat dialog. `undefined` is
+   *  never picked — the dialog then opens on Hermes — and `null` is a real
+   *  answer, "No agent", which must not be turned back into Hermes. Only a
+   *  click writes it: a computer or account that simply has no such agent
+   *  must not leave "No agent" behind as if it had been chosen. */
+  lastAgent?: string | null;
 }
 
 const KEY = 'rac.defaults';

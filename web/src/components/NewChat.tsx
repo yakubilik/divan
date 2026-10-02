@@ -131,8 +131,12 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
   // is never undone by a list that finishes loading a moment later.
   useEffect(() => {
     if (agentTouched || agentsLoading || !agentList.length) return;
-    const want = defaults.agentId === undefined ? 'hermes' : defaults.agentId;
-    const hit = want ? agentList.find((a) => a.id === want || a.name === want) : null;
+    const named = (w: string | null | undefined) =>
+      w ? agentList.find((a) => a.id === w || a.name === w) : undefined;
+    // What was picked last, or Hermes where that agent is not on this account.
+    // An explicit "No agent" stays one.
+    if (defaults.lastAgent === null) return;
+    const hit = named(defaults.lastAgent) ?? named('hermes');
     if (hit) setAgentId(hit.id);
   }, [agentList, agentsLoading, agentTouched]);
 
@@ -174,7 +178,7 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
       // that one chat. One picked here is, so the next chat opens on it.
       setDefaults(hostKey, {
         provider, cwd,
-        ...(provider === 'claude' && !initialAgent ? { agentId: agent ? agent.id : null } : {}),
+        ...(provider === 'claude' && agentTouched && !initialAgent ? { lastAgent: agent ? agent.id : null } : {}),
       });
       setProviderDefaults(hostKey, provider, {
         model, effort, perm_mode: perm, account_id: accountId,
