@@ -66,10 +66,12 @@ PUSH_TEXT = {
 TUNNEL_PUSH_TEXT = {
     "en": {"new_address": "Tunnel: {name} connected from a new address, {addr}",
            "new_address_as": "Tunnel: {name} ({email}) connected from a new address, {addr}",
-           "locked": "Tunnel: {addr} is locked out after {n} failed sign-ins"},
+           "locked": "Tunnel: {addr} is locked out for 10 minutes after {n} wrong tokens."
+                     " To lift it now, on the computer: remote-ai-chat unlock {addr}"},
     "tr": {"new_address": "Tunnel: {name} yeni bir adresten bağlandı, {addr}",
            "new_address_as": "Tunnel: {name} ({email}) yeni bir adresten bağlandı, {addr}",
-           "locked": "Tunnel: {addr} {n} başarısız denemeden sonra kilitlendi"},
+           "locked": "Tunnel: {addr} {n} yanlış token'dan sonra 10 dakikalığına kilitlendi."
+                     " Hemen açmak için bilgisayarda: remote-ai-chat unlock {addr}"},
 }
 
 # How far a client may fall behind before it is cut loose, and how long one
@@ -989,9 +991,9 @@ class Server:
         """
         if authorization.lower().startswith("bearer "):
             token = authorization[7:].strip()
-        dev = self._admit(token, TunnelGate.address(cf_connecting_ip))
+        dev, why = self._admit(token, TunnelGate.address(cf_connecting_ip))
         if dev is None:
-            raise HTTPException(status_code=401, detail="unauthorized")
+            raise HTTPException(status_code=401, detail=why)
         return dev
 
     # Ten minutes of 16 kHz PCM. Past that it is not dictation.
@@ -1158,7 +1160,7 @@ class Server:
         self.failed_auth[ip] = hist
         return len(hist) >= 5
 
-    def _admit(self, token: str, via: str | None, peer: str | None = None) -> Device | None:
+    def _admit(self, token: str, via: str | None, peer: str | None = None) -> tuple[Device | None, str]:
         """The device a token belongs to, if it may come in by this door.
 
         `via` is the address in `CF-Connecting-IP`, or None for a request that
@@ -1168,25 +1170,38 @@ class Server:
         tunnel at all. So a link that leaks is worth what the address list lets
         it be worth, and a tunnel that is misconfigured exposes no device that
         was not made for it.
+
+        The second value is why a refusal is one — see `refusal` — and is what
+        the panel is told, so that it can say which of these it ran into
+        instead of calling every one of them "revoked".
         """
         dev = self.cfg.find_device_by_token(token) if token else None
         if via is None:
             if dev is not None and not dev.tunnel:
-                return dev
+                return dev, ""
             if peer is not None and not self._rate_limited(peer):
                 self.failed_auth.setdefault(peer, []).append(time.time())
-            return None
+            return None, self.refusal(token, dev)
         key = self.cfg.tunnel_key(via)
-        if self.tunnel_lock.locked(key):
-            return None
-        if dev is None or not dev.tunnel:
+        until = self.tunnel_lock.locked_until(key)
+        if until is not None:
+            return None, f"locked:{int(until)}:{key}"
+        if dev is not None and not dev.tunnel:
+            # One of our own tokens at the wrong door: a browser that was paired
+            # on the tailnet and then opened through the tunnel. It is refused —
+            # it does not open this door, and is not made to — but it is not a
+            # guess, and counting its every reconnect is how the panel locked
+            # its own household out.
+            return None, "not_tunnel_device"
+        if dev is None:
             # No token at all is a page that has not been paired yet, not a
-            # guess, and is refused without being counted.
-            if token and self.tunnel_lock.fail(key):
+            # guess, and is refused without being counted. The same wrong token
+            # is counted once however often it comes back — see TunnelLock.
+            if token and self.tunnel_lock.fail(key, token):
                 log.warning("tunnel address %s locked out for %ds after %d failed sign-ins",
                             via, int(TunnelLock.WINDOW_S), TunnelLock.LIMIT)
                 self._alert("locked", addr=via, n=TunnelLock.LIMIT)
-            return None
+            return None, self.refusal(token, None)
         dev.last_addr = via
         if key not in dev.seen_addrs:
             dev.seen_addrs = [*dev.seen_addrs, key][-SEEN_ADDRS_MAX:]
@@ -1198,9 +1213,23 @@ class Server:
             log.warning("tunnel device %s (%s) connected from a new address: %s%s",
                         dev.name, dev.id, via, f", signed in as {email}" if email else "")
             self._alert("new_address", name=dev.name, addr=via, email=email)
-        return dev
+        return dev, ""
 
-    def _auth(self, ws: WebSocket) -> Device | None:
+    def refusal(self, token: str, dev: Device | None) -> str:
+        """Why a token that is not a lock's or a wrong door's was refused.
+
+        `tunnel_only` is a tunnel device off the tunnel; `revoked` a device
+        somebody removed; `no_token` a page that has none; `unknown_token`
+        anything else. A lock is `locked:<until>:<address>`, said only by
+        `_admit`. The panel words each its own way (web/src/lib/refusal.ts).
+        """
+        if dev is not None:
+            return "tunnel_only"
+        if not token:
+            return "no_token"
+        return "revoked" if self.cfg.was_revoked(token) else "unknown_token"
+
+    def _auth(self, ws: WebSocket) -> tuple[Device | None, str]:
         token = ws.query_params.get("token") or ""
         auth = ws.headers.get("authorization", "")
         if auth.lower().startswith("bearer "):
@@ -1208,13 +1237,43 @@ class Server:
         return self._admit(token, TunnelGate.address(ws.headers.get("cf-connecting-ip")),
                            ws.client.host if ws.client else "?")
 
+    async def h_tunnel_unlock(self, dev: Device, d: dict) -> dict:
+        """Lift a tunnel lock on the running daemon. `remote-ai-chat unlock <ip>`
+        sends this, and so can a paired phone.
+
+        Not from the tunnel: the one door a lock is about is not the one that
+        may open it, so a browser behind it cannot clear its own count.
+        """
+        if dev.tunnel:
+            raise Err("forbidden", "a tunnel device cannot lift a tunnel lock")
+        addr = str(d.get("addr") or "").strip()
+        if not addr:
+            raise Err("bad_request", "addr is required")
+        key = self.cfg.tunnel_key(addr)
+        was = self.tunnel_lock.unlock(key)
+        log.warning("tunnel address %s unlocked by device %s (%s)%s",
+                    key, dev.name, dev.id, "" if was else " — it was not locked")
+        return {"addr": key, "was_locked": was}
+
+    async def h_tunnel_locks(self, dev: Device, d: dict) -> dict:
+        """The addresses locked right now, and when each lifts."""
+        if dev.tunnel:
+            raise Err("forbidden", "a tunnel device cannot read the tunnel's locks")
+        out = []
+        for key in list(self.tunnel_lock.until):
+            until = self.tunnel_lock.locked_until(key)
+            if until is not None:
+                out.append({"addr": key, "until": until})
+        return {"locks": out}
+
     # ── websocket ──────────────────────────────────────────────────────────
     async def ws_endpoint(self, ws: WebSocket) -> None:
-        dev = self._auth(ws)
+        dev, why = self._auth(ws)
         # Accept first so the client receives a real close frame (4401) instead of HTTP 403.
+        # The reason says which refusal it was — see `_admit`.
         await ws.accept()
         if dev is None:
-            await ws.close(code=4401, reason="unauthorized")
+            await ws.close(code=4401, reason=why)
             return
         self.clients[ws] = dev
         self.outbox[ws] = asyncio.Queue()

@@ -3,6 +3,7 @@ import { RacClient, type ConnStatus } from './ws';
 import type {
   Catalog, Chat, CliAccount, Group, HostConfig, HostInfo, LimitWindow, Project, RacEvent,
 } from './protocol';
+import type { Refusal } from './refusal';
 
 /** A computer is identified by where it answers, not by the name it was paired
  *  under: two entries pointing at the same daemon are the same computer. */
@@ -24,6 +25,8 @@ export interface HostSlot {
   /** set while a slow refresh (account.list shells out to the CLIs) is in flight */
   loading: Record<string, boolean>;
   lastOnline: number | null;
+  /** Why the computer refused this panel's token, while status is unauthorized. */
+  refusal?: Refusal | null;
 }
 
 export interface Activity {
@@ -305,7 +308,7 @@ function attach(cfg: HostConfig, set: Setter, get: () => FleetState) {
 
   const offStatus = c.onStatus((status: ConnStatus) => {
     patch(set, key, (slot) => ({
-      ...slot, status,
+      ...slot, status, refusal: c.refusal,
       lastOnline: status === 'online' ? Date.now() : slot.lastOnline,
     }));
     if (status === 'online') {

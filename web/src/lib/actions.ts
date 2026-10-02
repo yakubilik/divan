@@ -1,5 +1,6 @@
 import { hostKey, useFleet } from './fleet';
 import { httpBase } from './ws';
+import { noteRefusal, refusedFor, refusalText } from './refusal';
 import type {
   Chat, DaemonStatus, DivanCard, DivanCardGet, DivanExecutor, DivanOpenItem, HostConfig,
   PoolView,
@@ -197,10 +198,18 @@ function base(cfg: HostConfig): string {
   return httpBase(cfg.host, cfg.port);
 }
 
+/** Refuse locally what the computer has already refused: a token it said no to
+ *  is not sent again from this tab (lib/refusal.ts). */
+function stillWelcome(cfg: HostConfig): void {
+  const r = refusedFor(cfg.token);
+  if (r) throw new Error(refusalText(r).long);
+}
+
 /** Uploads go over plain HTTP, not the socket: the daemon shrinks images and
  *  transcribes audio on the way in, and hands back the path to attach. */
 export async function upload(key: string, chatId: string, file: File): Promise<any> {
   const { cfg } = slot(key);
+  stillWelcome(cfg);
   const body = new FormData();
   body.append('file', file);
   body.append('chat_id', chatId);
@@ -212,7 +221,7 @@ export async function upload(key: string, chatId: string, file: File): Promise<a
   if (!r.ok) {
     if (r.status === 413) throw new Error('File is too large (100 MB max)');
     if (r.status === 415) throw new Error('That file type is not supported');
-    if (r.status === 401) throw new Error('No access to that computer');
+    if (r.status === 401) throw new Error(refusalText(await noteRefusal(cfg.token, r)).long);
     throw new Error(`Upload failed (${r.status})`);
   }
   return r.json();
@@ -231,6 +240,7 @@ export async function upload(key: string, chatId: string, file: File): Promise<a
 export async function dictate(key: string, pcm: Int16Array, prompt: string, lang: string,
                               context = ''): Promise<string> {
   const { cfg } = slot(key);
+  stillWelcome(cfg);
   const q = new URLSearchParams({ lang, ...(prompt ? { prompt } : {}), ...(context ? { context } : {}) });
   const r = await fetch(`${base(cfg)}/dictate?${q}`, {
     method: 'POST',
@@ -243,7 +253,7 @@ export async function dictate(key: string, pcm: Int16Array, prompt: string, lang
   if (!r.ok) {
     if (r.status === 503) throw new Error('That computer has no transcriber installed.');
     if (r.status === 413) throw new Error('That is more than ten minutes of audio.');
-    if (r.status === 401) throw new Error('No access to that computer');
+    if (r.status === 401) throw new Error(refusalText(await noteRefusal(cfg.token, r)).long);
     throw new Error(`Dictation failed (${r.status})`);
   }
   return String((await r.json()).text ?? '');
@@ -254,6 +264,7 @@ export async function dictate(key: string, pcm: Int16Array, prompt: string, lang
 export function warmDictation(key: string): void {
   let cfg: HostConfig;
   try { cfg = slot(key).cfg; } catch { return; }
+  if (refusedFor(cfg.token)) return;
   void fetch(`${base(cfg)}/dictate/warm`, {
     method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` },
   }).catch(() => { /* it is a courtesy, not a step */ });
@@ -265,9 +276,20 @@ export function warmDictation(key: string): void {
  *  comes from another computer, and every computer but this one is another. */
 export function fileUrl(key: string, path: string, download = false): string {
   const { cfg } = slot(key);
+  // An empty source draws nothing and asks nothing, which is right for a
+  // computer that has refused this token.
+  if (refusedFor(cfg.token)) return '';
   const q = new URLSearchParams({ path, token: cfg.token });
   if (download) q.set('download', '1');
   return `${base(cfg)}/files?${q}`;
+}
+
+/** One frame of a computer's screen, or '' once it has refused this token.
+ *  The token rides in the query for the reason `fileUrl`'s does. */
+export function screenUrl(cfg: HostConfig, w: number, display: string, tick: number): string {
+  if (refusedFor(cfg.token)) return '';
+  return `${base(cfg)}/screen.jpg?token=${encodeURIComponent(cfg.token)}&w=${w}&q=72`
+    + `&display=${encodeURIComponent(display)}&t=${tick}`;
 }
 
 /** Pair this panel with another computer from a link the `pair` command printed

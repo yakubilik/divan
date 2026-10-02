@@ -36,6 +36,7 @@ remote-ai-chat serve                # ws://<tailscale-ip>:8790/ws and 127.0.0.1
 remote-ai-chat web                  # open the desktop panel, paired
 remote-ai-chat devices              # every paired device: tunnel or not, last seen, last address
 remote-ai-chat revoke <id>          # cut one off
+remote-ai-chat unlock <ip>          # lift a tunnel lock on an address, no restart (docs/TUNNEL.md)
 remote-ai-chat project list         # the board's products, and what is unclaimed
 remote-ai-chat project create NAME --repo PATH --kind app --purpose "..." --started 2026-03-01
 remote-ai-chat project update NAME --purpose "..." --repo PATH   # or an id, or a slug

@@ -107,8 +107,9 @@ with `tunnel = true`, and the two kinds of token do not cross.
 - A request that carries `CF-Connecting-IP` is answered only for a tunnel
   device's token. A phone's token, or the token of a panel opened with plain
   `remote-ai-chat web`, is refused there — the socket closes with 4401 and
-  `/upload`, `/files` and `/screen.jpg` answer 401 — exactly as a wrong token
-  would be.
+  `/upload`, `/files` and `/screen.jpg` answer 401. It is refused but not
+  counted towards the lock below: it is one of your own tokens at the wrong
+  door, not a guess.
 - A request without the header is answered only for a token that is *not* a
   tunnel device's. The link you sent to the laptop opens the tunnel and
   nothing on the tailnet.
@@ -123,19 +124,61 @@ tunnel: `revoke` it and run `web --at` once more.
 ## Guessing, and being told
 
 An address in the list is a household, so somebody in it can sit and try
-tokens. Failed sign-ins through the tunnel are counted against the address in
+tokens. Wrong tokens through the tunnel are counted against the address in
 `CF-Connecting-IP` — the one address a request cannot choose — and **five
-inside ten minutes lock that address out for the next ten**, the right token
-included. A v6 address is counted as its /64, for the reason given above. The
-tailnet is never locked this way: a connection without the header has no
-address of its own to hold to account, only the socket's.
+different ones inside ten minutes lock that address out for the next ten**,
+the right token included. A v6 address is counted as its /64, for the reason
+given above. The tailnet is never locked this way: a connection without the
+header has no address of its own to hold to account, only the socket's.
+
+What counts is a guess, and a browser retrying is not one:
+
+- **A token the daemon knows but that does not open the tunnel** — a phone's,
+  or a panel's from plain `remote-ai-chat web` — is refused and not counted.
+- **The same unknown token again** inside the window is counted once. A tab
+  holding a stale token and reconnecting every few seconds is one strike, not
+  five; it takes five *different* wrong tokens to lock.
+- **No token at all** is a page not yet paired, and is not counted.
+
+The lock is in the daemon's memory and lifts by itself after ten minutes. To
+lift it now, without a restart, on the computer:
+
+```sh
+remote-ai-chat unlock 203.0.113.4     # a v6 address may be given whole; its /64 is unlocked
+```
+
+It asks the running daemon over loopback, as a device minted for the call and
+removed after it. A paired phone can send the same request (`tunnel.unlock`
+with `{"addr": …}`); a tunnel device cannot, so a browser behind the tunnel
+cannot clear its own count. `tunnel.locks` lists what is locked and until when.
+
+### What the panel is told
+
+A refused socket closes with 4401 and a reason, and a refused `/upload`,
+`/files` or `/screen.jpg` answers 401 with the same reason as its `detail`:
+
+| reason | meaning |
+|---|---|
+| `not_tunnel_device` | a tailnet token at the tunnel — pair this browser with `web --at` |
+| `tunnel_only` | a tunnel token off the tunnel |
+| `unknown_token` | a token this daemon never made, or has forgotten |
+| `revoked` | a token whose device was removed with `revoke` |
+| `no_token` | no token at all |
+| `locked:<until>:<address>` | the address is locked; `until` is epoch seconds |
+
+The panel says each in its own words (English or Turkish, by the browser's
+language) — "access revoked" only for the one that was — and once a token is
+refused it stops sending it from that tab: no reconnect, no frame of the
+screen, no file, no upload. Reload the page after `unlock` or after pairing
+again.
 
 Two things send a notification to every paired device that takes them:
 
 - a tunnel device connecting from an address it has not connected from before
   — the device's name and the address, once per address, remembered across
   restarts;
-- an address being locked out — once per lock.
+- an address being locked out — once per lock, with the `unlock` command
+  that lifts it.
 
 Neither is behind a switch. If the first one arrives and it was not you,
 `revoke` the device it names.
@@ -253,8 +296,9 @@ In order:
 4. **The device token.** 32 random bytes, this machine only, `revoke` cuts it
    off. This is what tells one computer in that house from another, and it has
    to be one made with `--at`: no other device's token is answered here.
-5. **The lock.** Five wrong tokens from one address in ten minutes and that
-   address is refused for ten more — and your phone is told.
+5. **The lock.** Five different wrong tokens from one address in ten minutes
+   and that address is refused for ten more — and your phone is told, with
+   the `remote-ai-chat unlock <ip>` that lifts it early.
 
 Without Access, what is *not* standing is any notion of a person: the address
 list is the cheap version, and it is the one that needs nothing but a tunnel.

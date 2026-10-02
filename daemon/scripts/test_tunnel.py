@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The tunnel's door: its own devices, a lock, a sign-in, and a word to the phone.
+"""The tunnel's door: its own devices, a lock and its key, a sign-in, and a word to the phone.
 
     python scripts/test_tunnel.py
 
@@ -16,7 +16,9 @@ import io
 import logging
 import os
 import shutil
+import socket
 import sys
+import threading
 import tempfile
 import time
 import tomllib
@@ -27,7 +29,9 @@ os.environ["RAC_HOME"] = HOME
 atexit.register(shutil.rmtree, HOME, ignore_errors=True)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import httpx                                                     # noqa: E402
 import jwt                                                       # noqa: E402
+import uvicorn                                                   # noqa: E402
 import tomli_w                                                   # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import rsa        # noqa: E402
 from fastapi.testclient import TestClient                        # noqa: E402
@@ -37,9 +41,12 @@ import remote_ai_chat.__main__ as cli                            # noqa: E402
 import remote_ai_chat.config as config_mod                       # noqa: E402
 import remote_ai_chat.server as server_mod                       # noqa: E402
 from remote_ai_chat.config import CONFIG_PATH, UPLOAD_DIR, Config  # noqa: E402
+from remote_ai_chat.security import TunnelLock                   # noqa: E402
 from remote_ai_chat.server import Server                         # noqa: E402
 
 HOUSE, ELSEWHERE, GUESSER = "203.0.113.4", "203.0.113.9", "198.51.100.7"
+# A household whose browser holds a token that does not open the tunnel.
+RETRIER = "203.0.113.5"
 TEAM, AUD, ME = "divan-test", "0123abcd", "me@example.com"
 ISS = f"https://{TEAM}.cloudflareaccess.com"
 KEYS = {kid: rsa.generate_private_key(public_exponent=65537, key_size=2048) for kid in ("k1", "k2")}
@@ -114,16 +121,38 @@ def carrying(via: str | None, access: str | None, cookie: str | None) -> dict:
     return headers
 
 
-def ws_code(client: TestClient, token: str, via: str | None = None,
-            access: str | None = None, cookie: str | None = None) -> int:
-    """0 if the socket was served, else the code it was closed with."""
+def ws_close(client: TestClient, token: str, via: str | None = None,
+             access: str | None = None, cookie: str | None = None) -> tuple[int, str]:
+    """(0, "") if the socket was served, else the code and reason it was closed with."""
     headers = carrying(via, access, cookie)
     try:
         with client.websocket_connect(f"/ws?token={token}", headers=headers) as ws:
             ws.receive_json()
-            return 0
+            return 0, ""
     except WebSocketDisconnect as exc:
-        return exc.code
+        return exc.code, exc.reason or ""
+
+
+def ws_code(client: TestClient, token: str, via: str | None = None,
+            access: str | None = None, cookie: str | None = None) -> int:
+    """0 if the socket was served, else the code it was closed with."""
+    return ws_close(client, token, via, access, cookie)[0]
+
+
+def ws_call(client: TestClient, token: str, typ: str, data: dict, via: str | None = None) -> dict:
+    """One request on a socket; the reply's type and data."""
+    with client.websocket_connect(f"/ws?token={token}", headers=carrying(via, None, None)) as ws:
+        ws.receive_json()
+        ws.send_json({"id": 1, "type": typ, "data": data})
+        while True:
+            msg = ws.receive_json()
+            if msg.get("id") == 1:
+                return msg
+
+
+def http_why(client: TestClient, path: str, token: str, via: str | None = None, **kw) -> tuple[int, str]:
+    r = client.get(path, headers={"Authorization": f"Bearer {token}", **carrying(via, None, None)}, **kw)
+    return r.status_code, (r.json().get("detail") if r.status_code == 401 else "")
 
 
 def http(client: TestClient, method: str, path: str, token: str, via: str | None = None,
@@ -152,7 +181,7 @@ def main() -> None:
 
     print("1. which device is the tunnel's")
     CONFIG_PATH.write_text(
-        'tunnel_allow_ips = ["203.0.113.4", "203.0.113.9", "198.51.100.7"]\n'
+        'tunnel_allow_ips = ["203.0.113.4", "203.0.113.9", "198.51.100.7", "203.0.113.5"]\n'
         '[devices.old]\nname = "old phone"\ntoken_hash = "x"\ncreated_at = 1.0\n')
     panel = token_in(run_cli(cli.cmd_web, name="laptop", at="divan.example.com", no_open=True))
     local = token_in(run_cli(cli.cmd_web, name="here", at=None, no_open=True))
@@ -211,8 +240,8 @@ def main() -> None:
 
         print("\n3. five wrong tokens lock the address")
         sent.clear()
-        tries = [ws_code(client, "wrong", GUESSER) for _ in range(4)]
-        tries.append(http(client, "GET", "/files", "wrong", GUESSER, **files))
+        tries = [ws_code(client, f"wrong-{i}", GUESSER) for i in range(4)]
+        tries.append(http(client, "GET", "/files", "wrong-4", GUESSER, **files))
         locked = [ws_code(client, panel, GUESSER), ws_code(client, "wrong", GUESSER),
                   http(client, "GET", "/files", panel, GUESSER, **files)]
         check(tries == [4401] * 4 + [401] and locked == [4401, 4401, 401],
@@ -226,9 +255,55 @@ def main() -> None:
         now[0] += srv.tunnel_lock.WINDOW_S + 1
         check(ws_code(client, panel, GUESSER) == 0, "and when the window ends the right token is served")
 
+        print("\n3b. our own browser's retries never lock it")
+        lock, key = srv.tunnel_lock, srv.cfg.tunnel_key(RETRIER)
+        got = {ws_close(client, local, RETRIER) for _ in range(12)}
+        got |= {http_why(client, "/files", local, RETRIER, **files) for _ in range(4)}
+        got |= {http_why(client, "/screen.jpg", local, RETRIER) for _ in range(4)}
+        check(got == {(4401, "not_tunnel_device"), (401, "not_tunnel_device")},
+              "a tailnet token at the tunnel is refused, and says it is the wrong door", repr(got))
+        check(key not in lock.failed and not lock.locked(key),
+              "and twenty of those count for nothing", repr(lock.failed.get(key)))
+        got = {ws_close(client, "stale", RETRIER) for _ in range(15)}
+        check(got == {(4401, "unknown_token")} and len(lock.failed[key]) == 1 and not lock.locked(key),
+              "the same unknown token fifteen times is counted once", repr((got, lock.failed.get(key))))
+        sent.clear()
+        got = [ws_close(client, f"guess-{i}", RETRIER) for i in range(4)]
+        until = int(now[0] + TunnelLock.WINDOW_S)
+        check(got[:3] == [(4401, "unknown_token")] * 3 and got[3] == (4401, "unknown_token")
+              and lock.locked(key), "four more different ones make five, and lock the address", repr(got))
+        got = [ws_close(client, panel, RETRIER), ws_close(client, local, RETRIER),
+               http_why(client, "/files", panel, RETRIER, **files)]
+        check(got == [(4401, f"locked:{until}:{RETRIER}")] * 2 + [(401, f"locked:{until}:{RETRIER}")],
+              "a locked address is told so, and when it lifts", repr(got))
+        settle(srv, client)
+        check(sent and all("remote-ai-chat unlock " + RETRIER in s["body"] for s in sent),
+              "the lock's push says how to lift it", repr([s["body"] for s in sent]))
+
+        print("\n3c. a lock lifted without a restart")
+        refused = ws_close(client, panel, None)
+        check(refused == (4401, "tunnel_only"), "a tunnel token off the tunnel says so", repr(refused))
+        got = ws_call(client, panel, "tunnel.unlock", {"addr": RETRIER}, HOUSE)
+        check(got["type"] == "error" and got["data"]["code"] == "forbidden" and lock.locked(key),
+              "a tunnel device may not lift a tunnel lock", repr(got))
+        got = ws_call(client, local, "tunnel.unlock", {"addr": RETRIER})
+        check(got["type"] == "ok" and got["data"] == {"addr": RETRIER, "was_locked": True},
+              "a tailnet device asks the running daemon to unlock it", repr(got))
+        check(ws_code(client, panel, RETRIER) == 0 and not lock.locked(key) and key not in lock.failed,
+              "and the right token is served from it at once, with the count forgotten")
+        sent.clear()
+
+        print("\n3d. a revoked device is the only one called revoked")
+        gone, gone_token = srv.cfg.add_device("old tab")
+        srv.cfg.revoke(gone.id)
+        got = [ws_close(client, gone_token), ws_close(client, "never-issued"), ws_close(client, ""),
+               http_why(client, "/files", gone_token, **files)]
+        check(got == [(4401, "revoked"), (4401, "unknown_token"), (4401, "no_token"), (401, "revoked")],
+              "revoked, unknown and no token are three different answers", repr(got))
+
         print("\n5. `devices`")
         lines = {ln.split()[1]: ln for ln in run_cli(cli.cmd_devices).splitlines()}
-        check("tunnel" in lines["laptop"] and f"from={GUESSER}" in lines["laptop"]
+        check("tunnel" in lines["laptop"] and f"from={RETRIER}" in lines["laptop"]
               and "tunnel" not in lines["here"] and "from=" not in lines["here"],
               "marks the tunnel device and says where it last connected from", repr(lines))
 
@@ -301,6 +376,38 @@ def main() -> None:
         check(down == [[1008, 403], 0, 200] and both(access=signed()) == [0, 200],
               "keys that cannot be fetched refuse the tunnel, not the tailnet, and are asked for again later",
               repr(down))
+
+    print("\n8. `remote-ai-chat unlock`, against a daemon that is running")
+    srv, _ = start()
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    cfg = Config.load()
+    cfg.port = port
+    cfg.save()
+    daemon = uvicorn.Server(uvicorn.Config(srv.app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=daemon.run, daemon=True)
+    thread.start()
+    while not daemon.started:
+        time.sleep(0.05)
+    try:
+        def get(token: str) -> int:
+            return httpx.get(f"http://127.0.0.1:{port}/files", params=files["params"], headers={
+                "Authorization": f"Bearer {token}", "CF-Connecting-IP": ELSEWHERE,
+                "Cf-Access-Jwt-Assertion": signed()}).status_code
+        got = [get(f"cli-guess-{i}") for i in range(5)] + [get(panel)]
+        printed = run_cli(cli.cmd_unlock, addr=ELSEWHERE)
+        after = get(panel)
+        again = run_cli(cli.cmd_unlock, addr=ELSEWHERE)
+    finally:
+        daemon.should_exit = True
+        thread.join(10)
+    check(got == [401] * 6 and printed.strip() == f"unlocked {ELSEWHERE}" and after == 200,
+          "five guesses lock it, `unlock` lifts it in the running daemon, the right token is served",
+          repr((got, printed, after)))
+    check(again.strip() == f"{ELSEWHERE} was not locked", "and a second unlock says there was nothing", again)
+    check(not any(d.name == "cli" for d in Config.load().devices.values()),
+          "the device minted for the call is gone again")
 
     print(f"\n{'all good' if not failures else str(len(failures)) + ' failed'}")
     sys.exit(1 if failures else 0)

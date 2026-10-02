@@ -1,5 +1,6 @@
 import type { RacEvent } from './protocol';
 import { errText, t } from './i18n';
+import { parseRefusal, refuse, refusedFor, refusalText, type Refusal } from './refusal';
 
 /** Whether this computer's address is the address of the page we are on, over
  *  HTTPS — which is to say: reached through a tunnel rather than the tailnet.
@@ -58,6 +59,15 @@ function connError(key: 'wsNotConnected' | 'wsDropped' | 'wsTimeout'): Error & {
   return e;
 }
 
+/** A call that cannot be made because the computer refused this token: the
+ *  message is the refusal's own sentence, so a screen that shows the error
+ *  says why rather than "connection lost". */
+function refusedError(r: Refusal): Error & { code?: string | null } {
+  const e: Error & { code?: string | null } = new Error(refusalText(r).long);
+  e.code = 'unauthorized';
+  return e;
+}
+
 export type ConnStatus = 'idle' | 'connecting' | 'online' | 'offline' | 'unauthorized';
 
 /** How often to prove the socket is still there, and how long to wait for the
@@ -78,18 +88,35 @@ export class RacClient {
   private wanted = false;
   private hb: ReturnType<typeof setInterval> | null = null;
   private beating = false;
+  private token = '';
   status: ConnStatus = 'idle';
+  /** Why the computer said no, once it has. See lib/refusal.ts. */
+  refusal: Refusal | null = null;
 
   connect(host: string, port: number, token: string) {
     const url = wsUrl(host, port, token);
     // Same target and a live socket → nothing to do (init() can run twice under Fast Refresh).
     if (this.wanted && this.url === url && this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     this.url = url;
-    this.wanted = true;
+    this.token = token;
     this.retry = 0;
     if (this.timer) clearTimeout(this.timer);
     this.closeSocket();
+    // A token this tab has already been refused with is not offered again:
+    // the answer will not change, and through the tunnel asking again is what
+    // counts towards a lock.
+    const known = refusedFor(token);
+    if (known) { this.refused(known); return; }
+    this.refusal = null;
+    this.wanted = true;
     this.open();
+  }
+
+  private refused(r: Refusal) {
+    this.wanted = false;
+    this.refusal = r;
+    refuse(this.token, r);
+    this.setStatus('unauthorized');
   }
 
   private closeSocket() {
@@ -108,6 +135,9 @@ export class RacClient {
 
   private open() {
     if (!this.wanted) return;
+    // Refused over HTTP since the last socket — /upload, say — is refused here too.
+    const known = refusedFor(this.token);
+    if (known) { this.refused(known); return; }
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     this.setStatus('connecting');
     let ws: WebSocket;
@@ -125,9 +155,10 @@ export class RacClient {
       if (this.ws !== ws) return;
       this.ws = null;
       this.stopHeartbeat();
-      for (const p of this.pending.values()) p.reject(connError('wsDropped'));
+      const refusal = e.code === 4401 || e.code === 1008 ? parseRefusal(e.code, e.reason) : null;
+      for (const p of this.pending.values()) p.reject(refusal ? refusedError(refusal) : connError('wsDropped'));
       this.pending.clear();
-      if (e.code === 4401 || e.code === 1008) { this.setStatus('unauthorized'); this.wanted = false; return; }
+      if (refusal) { this.refused(refusal); return; }
       this.setStatus('offline');
       this.scheduleRetry();
     };
@@ -218,6 +249,7 @@ export class RacClient {
    *  computer that is right there. */
   private ready(ms = 6000): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
+    if (this.refusal) return Promise.reject(refusedError(this.refusal));
     if (!this.wanted) return Promise.reject(connError('wsNotConnected'));
     this.poke();
     return new Promise<void>((resolve, reject) => {
@@ -225,6 +257,7 @@ export class RacClient {
       const timer = setTimeout(() => done(() => reject(connError('wsNotConnected'))), ms);
       const off = this.onStatus((s) => {
         if (s === 'online') done(resolve);
+        else if (s === 'unauthorized' && this.refusal) done(() => reject(refusedError(this.refusal!)));
         else if (s === 'unauthorized' || s === 'idle') done(() => reject(connError('wsNotConnected')));
       });
     });
@@ -273,6 +306,8 @@ export const client = new RacClient();
  *  connection. The socket is closed as soon as the reply lands. */
 export function callOnce<T = any>(host: string, port: number, token: string,
                                   type: string, data: Record<string, any> = {}): Promise<T> {
+  const known = refusedFor(token);
+  if (known) return Promise.reject(refusedError(known));
   return new Promise<T>((resolve, reject) => {
     let ws: WebSocket;
     try {
@@ -292,8 +327,12 @@ export function callOnce<T = any>(host: string, port: number, token: string,
     const timer = setTimeout(() => finish(() => reject(connError('wsTimeout'))), 30000);
     ws.onopen = () => { try { ws.send(JSON.stringify({ id: 1, type, data })); } catch {} };
     ws.onerror = () => {};
-    ws.onclose = (e: any) => finish(() => reject(
-      e?.code === 4401 ? new Error(t('copyUnauthorized')) : connError('wsNotConnected')));
+    ws.onclose = (e: any) => finish(() => {
+      if (e?.code !== 4401) { reject(connError('wsNotConnected')); return; }
+      const why = parseRefusal(e.code, e.reason);
+      refuse(token, why);
+      reject(new Error(why.kind === 'unauthorized' ? t('copyUnauthorized') : refusalText(why).long));
+    });
     ws.onmessage = (m) => {
       let msg: any;
       try { msg = JSON.parse(String(m.data)); } catch { return; }

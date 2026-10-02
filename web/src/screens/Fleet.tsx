@@ -30,6 +30,7 @@ import { ago, clock, cost, tilde, toolSummary, until, uptime, windowName } from 
 import { onAnyEvent, selectRunning, useFleet, type HostSlot, type Running } from '../lib/fleet';
 import { interrupt } from '../lib/actions';
 import type { LimitWindow } from '../lib/protocol';
+import { refusalText } from '../lib/refusal';
 
 export interface FleetProps {
   onOpenChat: (hostKey: string, chatId: string) => void;
@@ -70,7 +71,7 @@ function elapsed(seconds: number): string {
 function connOf(slot: HostSlot): { says: string; state: 'running' | 'asking' | 'stuck' | 'quiet'; tone: Tone } {
   if (slot.status === 'online') return { says: 'online', state: 'running', tone: 'run' };
   if (slot.status === 'connecting') return { says: 'connecting…', state: 'asking', tone: 'amber' };
-  if (slot.status === 'unauthorized') return { says: 'no access', state: 'stuck', tone: 'red' };
+  if (slot.status === 'unauthorized') return { says: refusalText(slot.refusal).short, state: 'stuck', tone: 'red' };
   return { says: 'offline', state: 'quiet', tone: 'ink3' };
 }
 

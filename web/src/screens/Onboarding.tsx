@@ -19,6 +19,7 @@ import { parsePairing } from '../lib/actions';
 import { hostKey, useFleet } from '../lib/fleet';
 import type { HostConfig } from '../lib/protocol';
 import { copyText } from '../lib/clipboard';
+import { refusalText } from '../lib/refusal';
 
 type StepState = 'done' | 'active' | 'todo';
 
@@ -372,7 +373,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
               color: status === 'unauthorized' ? T.red : T.ink3,
             }}>
               {status === 'unauthorized'
-                ? 'The token was refused — run pair again on the computer.'
+                ? refusalText(pairedKey ? hosts[pairedKey]?.refusal : null).long
                 : 'Connecting…'}
             </div>
           )}

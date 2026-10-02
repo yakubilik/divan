@@ -364,8 +364,11 @@ group('Terminals and Remote screen: the frames’ chrome, today’s behaviour');
     ok('the keyboard the remote screen speaks is the same table it always was',
       keys(wasScreen) === keys(src('src/screens/Screen.tsx')));
   }
+  // The URL is built by `screenUrl` in lib/actions.ts, which also refuses to
+  // build one for a token the computer has refused (lib/refusal.ts).
   ok('the picture is the same request it was, at the same quality',
-    /screen\.jpg\?token=\$\{encodeURIComponent\(slot\.cfg\.token\)\}&w=\$\{w\}&q=72/.test(source));
+    /screen\.jpg\?token=\$\{encodeURIComponent\(cfg\.token\)\}&w=\$\{w\}&q=72/.test(src('src/lib/actions.ts'))
+    && /screenUrl\(slot\.cfg, w, displayRef\.current, tick\.current\)/.test(source));
 
   const machine = src('src/screens/Machine.tsx');
   ok('and both are still what those two rows open',
