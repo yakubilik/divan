@@ -27,15 +27,17 @@ beri açık" diye bir kez anılır.
 | A2 | Kapasite: kuyruk tek hesapta yedeksiz. 1 Eki'de bedriyan haftalık limite değdi, kuyruk 12:49–15:02 durdu; yakup 2 Ekim 10:02'de açılıyor | 2026-09-30 | cevapsız, açık |
 | A4 | babysee backend main'de CI kırmızı (`pnpm lint` OOM); monorepo'da `Backend` workflow'unun son koşusu hâlâ failure (1 Eki 00:18), `deploy-beta` koşmuyor | 2026-09-30 akşam | soruldu, cevapsız |
 | A5 | Verifier kriter kapısı kodda yok (#71 "Placeholder"). 1 Eki'de tekrarlamadı: 19/19 verdict her kriteri kapsıyor. Not: verifier'a diff prompt'ta gömülü gidiyor, az tool çağrısı "okumadı" demek değil | 2026-09-30 akşam | soruldu, cevapsız |
-| A6 | "merge skipped: repo has uncommitted changes" otomatik yeniden denenmiyor, doğrudan kırmızı. 30 Eyl #73; 1 Eki #81, #98, #104. Kaynaklar: `isghocam-seo`'da 21:17 nightly'si `ranks.csv` + `gunluk/` dosyasını commit etmiyor; Divan'da yarım kalmış sohbet işi; kontrol komutunun kendisi (`uv run` bayat `uv.lock`'u yeniden yazıyordu, `75e18e7` ile kapandı). 1 Eki gecesi #98 ve #104 elle merge edildi; kod tarafı (yeniden deneme, nightly'nin commit'i) duruyor | 2026-09-30 akşam | 2 Eki: #105 Divan'da canlı sohbetin ana klonda commit'leri yüzünden 18 dk kırmızı. 5 Eki: isghocam-seo dört gündür kirli (2–5 Eki günlükleri), (a) yapılmadı; kod fix'i cevapsız |
 | A7 | Ağ kesintisi crash sayılıyor: 1 Eki 05:09–~09:25, #88/#90/#91 üçer crash ile FAILED; 12 bildirimin hiçbiri gitmedi ve ağ dönünce yeniden gönderilmedi | 2026-10-01 | soruldu |
 | A8 | `_merge` main'i dala aldıktan sonra `verify_cmd`'yi yeniden koşmuyor: #83 main'i kırdı (`dd3e9a6`, Lint + Deploy kırmızı) ve ✅ aldı. Aynı repoda paralel lane'lerin sonucu | 2026-10-01 | soruldu |
 | A9 | Disk %97, 7,3 GB boş; 1 Eki 01:04'te #80 `ENOSPC` yedi. Kuyruk worker başlatmadan boş yere bakmıyor (`min_free_gb` yok) | 2026-10-01 | soruldu |
 | A10 | Kart kalıbı: "merge + push + CI + canlı kontrol" `done_criteria`'da; 17 ticket'ın 12'si bu yüzden geri döndü ve merge'den sonra kimse bakmıyor (#83 CI, #79 `/yazar` canlıda 200). Öneri: `after_merge` alanı + merge sonrası CI kontrolü (30 Eyl akşam notundaki 1b ile aynı) | 2026-10-01 | 2 Eki: #99–#103 yine döndü ama kartları bulgudan önce yazılmıştı; bugün yazılan #106 dönmedi. Kod tarafı cevapsız |
 | A11 | ustabasi reposunun remote'u yok; #94'te push "origin does not appear to be a git repository" ile döndü | 2026-10-01 | soruldu |
-| A12 | Hesap girişi düşünce (OAuth expired) kuyruk bunu ticket crash'i sayıyor, yedek hesaba geçmiyor: 4 Eki #107/#108/#109 90 sn'de FAILED, bedriyan açıktı. 3 ve 4 Eki gece nöbetleri de aynı hatayla öldü (Divan nöbet hesabı sabit). Giriş 5 Eki 21:30'da geri geldi. A7 ile aynı kök | 2026-10-05 | soruldu; #108/#109 yeniden kuyruğa alınsın mı cevap bekliyor |
 
 ## Kararlar
+
+- **2026-10-06** — 5 Eki nöbetinin iki önerisine "olur, fixle": yapıldı, yukarıda kapanmışlarda.
+  Gece nöbeti bundan sonra kuyruğa giriş hatasıyla düşen koşuyu bulgu diye değil,
+  `auth` event'i olarak görür.
 
 - **2026-10-01** — Divan reposu public ve CI'da "nothing not-English" taraması var; bu klasör o taramayı kırmızı tutuyor (537 bulgunun ~350'si). Notların nerede duracağı Yakup'a soruldu, cevap bekliyor.
 
@@ -43,6 +45,13 @@ beri açık" diye bir kez anılır.
   Merge otomatik, push Yakup'ta. "N commit push bekliyor" bir bulgu değil.
 
 ## Kapanmış bulgular
+
+6 Eki 2026 (5 Eki nöbetine Yakup "olur, fixle" dedi):
+
+| Bulgu | Commit |
+|---|---|
+| A12 — giriş düşen hesap ticket crash'i sayılıyordu | ustabasi `95cf83d`: hesap 30 dk kenara, sıradaki hesap, kesinti başına tek bildirim. Gece nöbeti başlatıcısı (`~/server/divan-nightly/open-chat.py`, git dışı) sohbet giriş hatasıyla ölürse ikinci hesapla yeniden açıyor, hiçbiri yoksa push atıyor. #108/#109 yeniden kuyruğa alındı |
+| A6 — kirli klasör merge'i durduruyordu | ustabasi `95cf83d`: ana klasör kirli/başka daldaysa 30 dk her tick'te yeniden dene, sonra Yakup. isghocam-seo `cbfa20d`: nightly kendi `ranks.csv` + `gunluk/`'unu main'deyken commit'liyor; 2–5 Eki birikimi `4eb1b1a` |
 
 1 Eki 2026:
 
