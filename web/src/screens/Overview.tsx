@@ -48,7 +48,7 @@ import {
   agentLine, agentRows, calm, calmWords, cardMarks, chip, clock,
   count, counters, figure, freshness, latest, line, marks, staleWords, staleness, summaryOf,
 } from '../lib/overview';
-import { RADIUS, SHADOW, T } from '../lib/theme';
+import { RADIUS, SHADOW, SIZE, T } from '../lib/theme';
 import { branchOf } from '../lib/project';
 import { idOf } from '../lib/sessions';
 import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
@@ -58,6 +58,9 @@ import {
 } from '../ui/divan';
 import { mono } from '../ui/kit';
 import { Sessions } from '../components/Sessions';
+import { MicButton, useMic } from '../components/Mic';
+import { appendSpeech } from '../lib/dictate';
+import { useFleet } from '../lib/fleet';
 import { Board } from './Board';
 import { Branch } from './Branch';
 import { Branches } from './Branches';
@@ -269,8 +272,13 @@ function Bar({ onAsk, note }: {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The computer in focus listens, the one the chat is going to open on.
+  const focus = useFleet((s) => s.focus);
+  const mic = useMic({ hostKey: focus, onCommit: (chunk) => setText((prev) => appendSpeech(prev, chunk)) });
 
   const say = async () => {
+    // Send with the microphone open means "that was it": stop first, then send.
+    if (mic.state !== 'idle') { mic.stop(); return; }
     const words = text.trim();
     if (!words || busy) return;
     setBusy(true);
@@ -296,16 +304,19 @@ function Bar({ onAsk, note }: {
       position: 'fixed', left: '50%', bottom: 22, transform: 'translateX(-50%)', zIndex: 10,
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
     }}>
-      {(busy || !!error || !!note) && (
+      {(busy || !!error || !!note || !!mic.error || mic.state === 'installing') && (
         <div style={{
           ...mono, maxWidth: 420, fontSize: 11, color: error ? T.red : T.ink3,
           background: T.s2, padding: '6px 10px', borderRadius: RADIUS.well, boxShadow: SHADOW.pop,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{error ?? (busy ? 'starting a chat…' : note)}</div>
+        }}>{error ?? mic.error ?? (busy ? 'starting a chat…'
+          : mic.state === 'installing' ? 'fetching the speech model, once' : note)}</div>
       )}
       <CommandBar
-        placeholder="Tell Divan anything…" value={text} onChange={setText}
+        placeholder={mic.state === 'listening' ? 'Listening…' : 'Tell Divan anything…'}
+        value={mic.interim ? appendSpeech(text, mic.interim) : text} onChange={setText}
         onSend={() => { void say(); }}
+        after={<MicButton mic={mic} size={SIZE.send} />}
       />
     </div>
     </>

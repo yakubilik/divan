@@ -1225,7 +1225,7 @@ export function DockMore({ n, onClick, title }: { n: number; onClick?: () => voi
  *  composer whose send is not available yet — which composites to 2.2:1 in the
  *  dark and 1.6:1 in the light. Nothing in this panel is drawn at a weight that
  *  cannot be read, so the arrow takes the primary ink on the same fill. */
-export function CommandBar({ placeholder, shortcut = '⌘K', value, onChange, onSend, field, style }: {
+export function CommandBar({ placeholder, shortcut = '⌘K', value, onChange, onSend, field, style, after }: {
   placeholder: string;
   shortcut?: string;
   value?: string;
@@ -1235,6 +1235,8 @@ export function CommandBar({ placeholder, shortcut = '⌘K', value, onChange, on
   onSend?: () => void;
   field?: React.Ref<HTMLInputElement>;
   style?: React.CSSProperties;
+  /** Drawn just before the send disc: the microphone (`components/Mic.tsx`). */
+  after?: React.ReactNode;
 }) {
   const text = value ?? '';
   const ready = !!text.trim() && !!onSend;
@@ -1266,6 +1268,7 @@ export function CommandBar({ placeholder, shortcut = '⌘K', value, onChange, on
         }}>{placeholder}</span>
       )}
       <span style={{ ...mono, fontSize: 11, color: T.ink3, flex: 'none' }}>{shortcut}</span>
+      {after}
       <Tap
         onClick={ready ? onSend : undefined} title={ready ? 'Send' : undefined}
         style={{

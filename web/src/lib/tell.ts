@@ -20,7 +20,8 @@
  *  `scripts/test-drive.mjs` types into the bar in one.
  */
 import { create } from 'zustand';
-import { createChat, send } from './actions';
+import { createChat, listAgents, send } from './actions';
+import type { Provider } from './protocol';
 import { useFleet } from './fleet';
 import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from './prefs';
 import { PANELS, TABS } from './sessions';
@@ -83,9 +84,12 @@ export function toldDefaults(
   slot: { catalog: any; accounts?: any[] } | null | undefined,
   defaults: Record<string, any>,
   host: string,
+  /** Asked for by name rather than the computer's usual tool: the bar's chats
+   *  are Hermes', and an agent is a Claude idea. */
+  want?: Provider,
 ) {
   const d = hostDefaults(defaults as any, host);
-  const provider = d.provider;
+  const provider = want ?? d.provider;
   const pc = slot?.catalog?.[provider] ?? null;
   // The same filter New chat uses: this tool's sign-ins that are actually
   // signed in, plus the computer's own, which always counts.
@@ -178,12 +182,20 @@ export async function tell(text: string, scope?: Scoped | null): Promise<Told> {
   const host = at.host;
   const slot = host ? fleet.hosts[host] : null;
   if (!host || !slot) throw new Error('No computer is paired');
-  const open = toldDefaults(slot, usePrefs.getState().defaults, host);
+  // Every chat the bar starts is Hermes': the one agent that reads the skills
+  // and knows this person's work, which is what a sentence typed at the whole
+  // of Divan is asking for. Claude because an agent is a Claude idea; a
+  // computer that cannot open a Claude chat opens its usual one, plain.
+  const prefs = usePrefs.getState().defaults;
+  const open = toldDefaults(slot, prefs, host, 'claude') ?? toldDefaults(slot, prefs, host);
   if (!open) {
     const name = slot.info?.name ?? slot.cfg?.name ?? host;
     throw new Error(`${name} has not said what it can open a chat on yet`);
   }
   const cwd = at.cwd ?? open.cwd;
+  const agent = open.provider === 'claude'
+    ? await hermesOn(host, open.account_id || null, cwd)
+    : null;
   // The computer names a chat after the folder it is in (`with_project`), so a
   // chat that opened in the product's repository already says which product it
   // is about. One with no repository to open in says it here instead.
@@ -198,6 +210,7 @@ export async function tell(text: string, scope?: Scoped | null): Promise<Told> {
     account_id: open.account_id || undefined,
     cwd: cwd ?? undefined,
     title,
+    ...(agent ? { agent_id: agent } : {}),
   });
   const told: Told = {
     host, chatId: chat.id, title: chat.title || title,
@@ -217,6 +230,20 @@ export async function tell(text: string, scope?: Scoped | null): Promise<Told> {
     ? `${words}\n\n(This is about ${at.project}.)`
     : words);
   return told;
+}
+
+/** Hermes' id on that computer, under that sign-in and in that folder, the
+ *  way New chat finds it. Null when it is not installed there or the computer
+ *  will not say: the chat still opens, without the agent, rather than not at
+ *  all. */
+async function hermesOn(host: string, accountId: string | null, cwd: string | null): Promise<string | null> {
+  try {
+    const r: any = await listAgents(host, accountId, cwd ?? undefined);
+    const hit = (r?.agents ?? []).find((a: any) => a.installed && (a.name === 'hermes' || a.id === 'hermes'));
+    return hit?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** How long a chat is believed in before its computer has mentioned it.
