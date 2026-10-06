@@ -4,7 +4,7 @@
 model: 5.6M acoustic + 3.0M decoder parameters, 48 kHz mono out. This folder turns its published weights
 ([canberkkkkkk/ema-lightning](https://huggingface.co/canberkkkkkk/ema-lightning), revision `7a6ba1a`) into
 ONNX files that onnxruntime runs on the iPhone, and keeps the test vectors later work checks against.
-Nothing here is used by `app/` or `daemon/` yet.
+The ONNX files are not used by `app/` or `daemon/` yet.
 
 ## Regenerate
 
@@ -57,6 +57,19 @@ one piece at a time, so there is no padding and no mask input.
 7. **decoder.onnx**, window by window as EMA does it (`common.decode`): windows of 100 frames (4 s), each
    decoded with 8 frames of context on both sides and cut back to itself. The first window can be made
    shorter for streaming; the decoder does not care.
+
+## The frontend on the phone
+
+`app/src/tts/` is the frontend and chunker in TypeScript, with no native dependency: `frontend(text)` is
+`Frontend(vocab)(text)`, `ids(spoken)` the letter ids, `chunk(spoken, speed)` the pieces. It ports
+normalizer-tr 0.4.0 (the Rust core behind `normalizer_tr`) rule by rule, without caller hints, the
+preserve/reject policies or cancellation, which the frontend never uses.
+
+`frontend_fixture.py` runs EMA's own Python frontend and chunker over 198 inputs (numbers, dates, times
+with case suffixes, money, percentages, units, abbreviations, symbols, prose) and 13 chunker inputs, and
+writes `app/scripts/fixtures/tts-frontend.json`; `npm test` (`app/scripts/test-tts.cjs`) checks the port
+against it and against every sentence's `ids` here. The fixture is committed; regenerate it in the venv
+above with `.venv/bin/python frontend_fixture.py` after changing its inputs or upgrading ema-lightning.
 
 ## Operators and opset
 
