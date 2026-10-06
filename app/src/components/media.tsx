@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, FlatList, Image, Linking, Modal, PanResponder, Platform, Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { File, Paths } from 'expo-file-system';
@@ -263,8 +263,10 @@ function FullVideo({ uri, onClose }: { uri: string; onClose: () => void }) {
   );
 }
 
-/** Voice note: play/pause, waveform, duration, transcript below. */
-export function VoiceBubble({ item }: { item: Attachment }) {
+/** Voice note: play/pause, waveform, duration, transcript below. `sent` is a
+ *  sound the agent made rather than one the person spoke: it sits on the left
+ *  under its file name, and nobody looked for speech in it. */
+export function VoiceBubble({ item, sent }: { item: Attachment; sent?: boolean }) {
   const T = useT();
   const c = useColors();
   const transcriptionOn = useStore((s) => s.hostInfo?.transcription ?? true);
@@ -277,16 +279,22 @@ export function VoiceBubble({ item }: { item: Attachment }) {
   const playing = status.playing;
   const toggle = () => {
     if (!uri) return;
-    if (playing) player.pause();
-    else { if (progress >= 0.999) player.seekTo(0); player.play(); }
+    if (playing) { player.pause(); return; }
+    if (progress >= 0.999) player.seekTo(0);
+    // A mode left unset is the ambient one, which the silent switch mutes: the
+    // counter ran and nothing was heard.
+    void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {}).then(() => player.play());
   };
   const spoke = !!item.transcript;
   return (
-    <View style={{ alignItems: 'flex-end', gap: 4 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.bubble, borderRadius: 18, borderBottomRightRadius: 6, paddingVertical: 9, paddingHorizontal: 12 }}>
-        <Pressable onPress={toggle} hitSlop={8} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name={playing ? 'pause' : 'play_arrow'} size={18} weight={400} color={c.onInk} />
+    <View style={{ alignItems: sent ? 'flex-start' : 'flex-end', gap: 4 }}>
+      <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 18, paddingVertical: 9, paddingHorizontal: 12 },
+                    sent ? { backgroundColor: c.card, borderWidth: 1, borderColor: c.line, minWidth: 220 }
+                         : { backgroundColor: c.bubble, borderBottomRightRadius: 6 }]}>
+        <Pressable onPress={toggle} hitSlop={8} style={{ width: sent ? 34 : 26, height: sent ? 34 : 26, borderRadius: 17, backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={playing ? 'pause' : 'play_arrow'} size={sent ? 22 : 18} weight={400} color={c.onInk} />
         </Pressable>
+        {sent && <Text numberOfLines={1} style={{ fontSize: 13, color: c.text2, flex: 1 }}>{item.name}</Text>}
         {spoke && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, height: 20 }}>
             {wave.map((h, i) => (
@@ -296,7 +304,7 @@ export function VoiceBubble({ item }: { item: Attachment }) {
         )}
         <Text mono style={{ fontSize: 11, color: c.faint }}>{fmt(playing ? status.currentTime : total)}</Text>
       </View>
-      {spoke ? (
+      {sent ? null : spoke ? (
         <Text style={{ fontSize: 13, color: c.muted, fontStyle: 'italic', textAlign: 'right' }}>“{item.transcript}”</Text>
       ) : (
         <Text style={{ fontSize: 12, color: c.faint, fontStyle: 'italic' }}>{transcriptionOn ? T('noSpeech') : T('noTranscript')}</Text>
