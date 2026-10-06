@@ -12,6 +12,8 @@ from pathlib import Path
 import httpx
 import jwt
 
+from .secrets import FAMILIES, find as find_secrets
+
 log = logging.getLogger("rac.security")
 
 DESTRUCTIVE_PATTERNS = [
@@ -44,27 +46,21 @@ def destructive_reason(cmd: str) -> str | None:
     return None
 
 
-SECRET_PATTERNS = [
-    re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"),
-    re.compile(r"sk-[A-Za-z0-9]{20,}"),
-    re.compile(r"ghp_[A-Za-z0-9]{20,}"),
-    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
-    re.compile(r"AKIA[0-9A-Z]{16}"),
-    re.compile(r"xox[baprs]-[A-Za-z0-9\-]{10,}"),
-    re.compile(r"\b\d{9,10}:[A-Za-z0-9_\-]{35}\b"),   # telegram bot token
-    re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[=:]\s*['\"]?([A-Za-z0-9_\-/+=]{16,})"),
-]
+# The families live in secrets.py, which also keeps what a user pastes; here
+# they only blank out what the agent says and what its tools print.
+SECRET_PATTERNS = [f.pattern for f in FAMILIES]
 
 
 def redact(text: str) -> str:
     if not text:
         return text
-    for pat in SECRET_PATTERNS:
-        if pat.groups:
-            text = pat.sub(lambda m: m.group(0).replace(m.group(m.lastindex), "••••••"), text)
-        else:
-            text = pat.sub("••••••", text)
-    return text
+    out, pos = [], 0
+    for h in find_secrets(text):
+        out.append(text[pos:h.start])
+        out.append("••••••")
+        pos = h.end
+    out.append(text[pos:])
+    return "".join(out)
 
 
 # Files the phone must never be handed even when they sit inside an allowed
