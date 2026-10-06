@@ -46,12 +46,13 @@ import {
 import { executorFace } from '../lib/sessions';
 import { useRun } from '../lib/run';
 import { RunLog } from '../components/RunLog';
+import { DictatingComposer } from '../components/Mic';
 import { RADIUS, SHADOW, STATE_MARK, STATE_TONE, T, stateColour } from '../lib/theme';
 import { useDivanStore, type MergedCard, type MergedProject } from '../lib/divan';
 import type { DivanCardFull, DivanExecutor } from '../lib/protocol';
 import type { Ticket as QueueTicket } from '../lib/ustabasi';
 import {
-  Card, Composer, ExecutorBadge, FieldRow, Monogram, Pill, StampRow, StatusDot, Tag,
+  Card, ExecutorBadge, FieldRow, Monogram, Pill, StampRow, StatusDot, Tag,
 } from '../ui/divan';
 import { mono } from '../ui/kit';
 
@@ -490,7 +491,8 @@ function Live({ card, ticket, now, placeholder, sent, onSay }: {
       <div style={{ marginTop: 'auto', paddingTop: 8 }}>
         {placeholder
           ? (
-            <Composer
+            <DictatingComposer
+              hostKey={card.host}
               placeholder={placeholder} value={words} onChange={setWords}
               // The box is inside the card the log is in, so it carries the
               // card's padding rather than the panel's own margin.

@@ -18,13 +18,13 @@
  *  reasoning; what is here is the button, the counter and where the live words
  *  land.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { draftAttached, draftKey, draftText, useDrafts } from '../lib/drafts';
 import { C, R } from '../lib/theme';
-import { Icon, P, Pulse, Spinner, mono } from '../ui/kit';
-import { dictate, fileUrl, warmDictation } from '../lib/actions';
-import { appendSpeech, dictateLang, langName, useDictation } from '../lib/dictate';
-import { useFleet } from '../lib/fleet';
+import { Icon, P, Spinner, mono } from '../ui/kit';
+import { fileUrl } from '../lib/actions';
+import { appendSpeech, dictateLang, langName } from '../lib/dictate';
+import { MicButton, useMic } from './Mic';
 import type { Chat } from '../lib/protocol';
 
 export function Tray({ items, hostKey, busy, onRemove }: {
@@ -104,45 +104,15 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
   const ref = useRef<HTMLTextAreaElement>(null);
   const file = useRef<HTMLInputElement>(null);
 
-  // What the engines are told to expect: the products and the machines this
-  // browser can see, and the folder this chat is in. See `phrasesFor`.
-  const hosts = useFleet((s) => s.hosts);
-  const names = useMemo(() => {
-    const out = new Set<string>();
-    for (const slot of Object.values(hosts)) {
-      out.add(slot.cfg.name);
-      for (const pr of slot.projects) out.add(pr.name);
-    }
-    const folder = chat.cwd.split(/[/\\]/).pop();
-    if (folder) out.add(folder);
-    return [...out];
-  }, [hosts, chat.cwd]);
-
-  const canWhisper = hosts[hostKey]?.info?.transcription === true;
-  const mic = useDictation({
-    names,
+  const mic = useMic({
+    hostKey, folder: chat.cwd.split(/[/\\]/).pop(),
     onCommit: (chunk) => setText((prev) => appendSpeech(prev, chunk)),
-    whisper: canWhisper
-      ? {
-        warm: () => warmDictation(hostKey),
-        send: (pcm, prompt, lang, context) => dictate(hostKey, pcm, prompt, lang, context),
-      }
-      : undefined,
   });
   const listening = mic.state === 'listening';
   // The words the engine has not committed yet are shown where they are going
   // to land rather than beside it, so there is one place to read. Typing takes
   // them over: `onChange` writes whatever is in the box, interim included.
   const shown = mic.interim ? appendSpeech(text, mic.interim) : text;
-
-  // Esc gives up on a dictation — the mouse pressed the button, so the key
-  // cannot be the textarea's. Only bound while it is running.
-  useEffect(() => {
-    if (mic.state === 'idle') return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') mic.cancel(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [mic.state, mic.cancel]);
 
   // Dictation appends, so the end of the box is the part worth looking at.
   useEffect(() => {
@@ -294,29 +264,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
             padding: compact ? '6px 4px' : '7px 6px', color: C.text, overflowY: 'auto',
           }}
         />
-        {mic.availability && mic.availability !== 'none' && (
-          <button
-            type="button"
-            onClick={listening || mic.state === 'opening' ? mic.stop : mic.start}
-            disabled={mic.state === 'installing' || mic.state === 'thinking'}
-            title={listening ? 'Stop dictating (Esc to discard)'
-              : `Dictate in ${langName(dictateLang())}`}
-            aria-label={listening ? 'Stop dictating' : 'Dictate'}
-            aria-pressed={listening}
-            style={{
-              width: disc, height: disc, borderRadius: disc / 2, flexShrink: 0,
-              cursor: mic.state === 'installing' || mic.state === 'thinking' ? 'default' : 'pointer',
-              background: listening ? C.accent : C.surface2,
-              border: `1px solid ${listening ? C.accent : C.border}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            {mic.state === 'thinking' || mic.state === 'installing' || mic.state === 'opening'
-              ? <Spinner size={compact ? 12 : 14} />
-              : listening ? <Pulse color={C.onAccent} />
-              : <Icon path={P.mic} size={compact ? 14 : 16} color={C.text} />}
-          </button>
-        )}
+        <MicButton mic={mic} size={disc} />
         <button
           type="button" onClick={busy && !ready ? onInterrupt : submit}
           disabled={!busy && !ready && mic.state === 'idle'}

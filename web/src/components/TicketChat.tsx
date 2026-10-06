@@ -9,6 +9,8 @@ import {
 import { current as currentStep, flow, STEP_MARK, stepNote, type Round, type Step } from '../lib/flow';
 import { useRun } from '../lib/run';
 import { RunLog } from './RunLog';
+import { MicButton, MicNote, useMic } from './Mic';
+import { appendSpeech } from '../lib/dictate';
 import { cancelTicket, deleteTicket, editTicket, prioritiseTicket, restartTicket } from '../lib/actions';
 
 /** One ticket, opened.
@@ -112,11 +114,14 @@ function Details({ t }: { t: Ticket }) {
 }
 
 /** The box at the bottom, and the one line saying what sending it will do. */
-function Composer({ t, busy, error, onSend }: {
-  t: Ticket; busy: boolean; error: string | null; onSend: (text: string) => void;
+function Composer({ t, hostKey, busy, error, onSend }: {
+  t: Ticket; hostKey: string | null; busy: boolean; error: string | null; onSend: (text: string) => void;
 }) {
   const [text, setText] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
+  const mic = useMic({ hostKey, onCommit: (chunk) => setText((prev) => appendSpeech(prev, chunk)) });
+  // Words not yet committed are shown where they will land; typing takes them over.
+  const shown = mic.interim ? appendSpeech(text, mic.interim) : text;
 
   // Grow with the text, up to a point. Measured from 0 rather than 'auto' so a
   // second pass cannot read back the height the first pass just set.
@@ -125,9 +130,11 @@ function Composer({ t, busy, error, onSend }: {
     if (!el) return;
     el.style.height = '0px';
     el.style.height = `${Math.max(36, Math.min(160, el.scrollHeight))}px`;
-  }, [text]);
+  }, [shown]);
 
   const submit = () => {
+    // Send with the microphone open means "that was it": stop first, then send.
+    if (mic.state !== 'idle') { mic.stop(); return; }
     const body = text.trim();
     if (!body || busy) return;
     onSend(body);
@@ -138,7 +145,7 @@ function Composer({ t, busy, error, onSend }: {
   // Armed while there is something to send and while it is being sent. The
   // white `onAccent` glyph belongs on the red disc; a resting disc is a quiet
   // fill and takes an ink, or it is white on off-white in the light theme.
-  const armed = ready || busy;
+  const armed = ready || busy || mic.state !== 'idle';
   return (
     <div style={{ padding: '8px 16px 14px', flexShrink: 0 }}>
       {error && <div style={{ fontSize: 12.5, color: C.danger, marginBottom: 6 }}>{error}</div>}
@@ -147,10 +154,10 @@ function Composer({ t, busy, error, onSend }: {
         borderRadius: R.composer, background: C.surface, border: `1px solid ${C.border}`,
       }}>
         <textarea
-          ref={ref} name={`ustabasi-note-${t.id}`} value={text} rows={1}
+          ref={ref} name={`ustabasi-note-${t.id}`} value={shown} rows={1}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
-          placeholder={`Answer #${t.id}…`}
+          placeholder={mic.state === 'listening' ? 'Listening…' : `Answer #${t.id}…`}
           style={{
             flex: 1, minWidth: 0, boxSizing: 'border-box', maxHeight: 160, resize: 'none',
             background: 'transparent', border: 'none', outline: 'none',
@@ -158,8 +165,9 @@ function Composer({ t, busy, error, onSend }: {
             overflowY: 'auto',
           }}
         />
+        <MicButton mic={mic} />
         <button
-          type="button" onClick={submit} disabled={!ready || busy} title="Send"
+          type="button" onClick={submit} disabled={busy || (!ready && mic.state === 'idle')} title="Send"
           style={{
             width: 36, height: 36, borderRadius: 18, flexShrink: 0,
             cursor: ready && !busy ? 'pointer' : 'default',
@@ -172,6 +180,7 @@ function Composer({ t, busy, error, onSend }: {
             : <Icon path={P.send} size={16} color={armed ? C.onAccent : C.mute} width={2.4} />}
         </button>
       </div>
+      <MicNote mic={mic} />
       <div style={{ ...mono, fontSize: 11, color: C.faint, marginTop: 6 }}>
         {noteHint(t.status)}
       </div>
@@ -618,7 +627,7 @@ export function TicketChat({ t, tone, hostKey, onClose, onNote, onChanged }: {
           </div>
         </div>
 
-        <Composer t={t} busy={busy} error={error} onSend={send} />
+        <Composer t={t} hostKey={hostKey} busy={busy} error={error} onSend={send} />
       </div>
     </div>
   );

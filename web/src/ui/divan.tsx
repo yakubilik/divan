@@ -1121,14 +1121,18 @@ export function Quoted({ children, style }: {
  *  a box that greyed itself for it would be a screen saying "you cannot type"
  *  about the one thing it is for. Whether a press lands while the last one is
  *  still out is the screen's business, and it says so in words. */
-export function Composer({ placeholder, value, onChange, onSend, style }: {
+export function Composer({ placeholder, value, onChange, onSend, style, after }: {
   placeholder: string;
   value: string;
   onChange: (text: string) => void;
   onSend?: () => void;
   style?: React.CSSProperties;
+  /** Drawn on the right of the box, inside its margin: the microphone
+   *  (`components/Mic.tsx`). A box with nothing beside it is the bare field. */
+  after?: React.ReactNode;
 }) {
-  return (
+  const margin = '0 12px 12px';
+  const field = (
     <input
       type="text" value={value} placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
@@ -1138,12 +1142,21 @@ export function Composer({ placeholder, value, onChange, onSend, style }: {
         onSend();
       }}
       style={{
-        flex: 'none', margin: '0 12px 12px', height: SIZE.field, boxSizing: 'border-box',
+        flex: after ? 1 : 'none', minWidth: 0, margin: after ? 0 : margin,
+        height: SIZE.field, boxSizing: 'border-box',
         borderRadius: RADIUS.field, background: T.bg, border: 'none',
         boxShadow: `0 0 0 1px ${T.line}`, padding: '0 14px',
-        fontFamily: 'inherit', fontSize: 13.5, color: T.ink, outline: 'none', ...style,
+        fontFamily: 'inherit', fontSize: 13.5, color: T.ink, outline: 'none',
+        ...(after ? null : style),
       }}
     />
+  );
+  if (!after) return field;
+  return (
+    <div style={{ flex: 'none', margin, display: 'flex', alignItems: 'center', gap: 8, ...style }}>
+      {field}
+      {after}
+    </div>
   );
 }
 

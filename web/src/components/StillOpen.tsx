@@ -28,7 +28,8 @@ import { NOTHING_OPEN, openLine, openRows, type OpenRow } from '../lib/project';
 import { RADIUS, T } from '../lib/theme';
 import { useDivanStore, type MergedProject } from '../lib/divan';
 import type { DivanOpenState } from '../lib/protocol';
-import { Button, Card, Composer, EmptyState, SectionHeader, Tag } from '../ui/divan';
+import { Button, Card, EmptyState, SectionHeader, Tag } from '../ui/divan';
+import { DictatingComposer } from './Mic';
 import { mono } from '../ui/kit';
 
 /** The states a person can move an item between from here, in the order a
@@ -242,7 +243,8 @@ function Item({ row: r, onWrite, host, projectId }: {
             </div>
           ))}
           {can && (
-            <Composer
+            <DictatingComposer
+              hostKey={host}
               placeholder="Say something about this one…"
               value={said} onChange={setSaid}
               style={{ margin: 0 }}

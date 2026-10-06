@@ -36,9 +36,10 @@ import {
   arrangeTold, freeSlot, idOfTold, liveTold, slot as slotAt, useTold, type Place,
 } from '../lib/tell';
 import { SIZE, STATE_MARK, T } from '../lib/theme';
-import { Composer, ExecutorBadge, Panel, PanelHead, Pill, Quoted, DockMore, DockTab } from '../ui/divan';
+import { ExecutorBadge, Panel, PanelHead, Pill, Quoted, DockMore, DockTab } from '../ui/divan';
 import { mono } from '../ui/kit';
 import { ChatPanel } from './ChatPanel';
+import { DictatingComposer } from './Mic';
 
 /** Where the windows and the dock sit: over the page, in the corner the frames
  *  put them in. Fixed rather than absolute — the page under it scrolls, and a
@@ -225,7 +226,8 @@ function Ask({ session: s }: { session: Session }) {
           no queue behind this card on {s.machine} — nothing to send an answer to
         </div>
       ) : (
-        <Composer
+        <DictatingComposer
+          hostKey={s.host}
           placeholder={busy ? 'Sending…' : `Reply to ${s.who}…`} value={text}
           onChange={setText}
           onSend={() => { const words = text.trim(); if (words) void answer(words); }}
