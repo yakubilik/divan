@@ -60,13 +60,15 @@ FAMILIES: list[Family] = [
     # `OPENAI_API_KEY=...`, `password: "..."`, `"client_secret": "..."`. Only
     # the value is taken; the name stays, so the reader still sees what it was.
     Family("secret", re.compile(
-        r"(?i)(?<![A-Za-z0-9])[A-Za-z0-9_\-]*(?:api[_\-]?key|secret|token|passw(?:or)?d|pwd|access[_\-]?key)"
-        r"[A-Za-z0-9_\-]*['\"]?\s*[=:]\s*['\"]?(?P<v>[A-Za-z0-9_\-/+=.]{12,})"), mixed=True),
+        r"(?i)(?<![A-Za-z0-9])(?P<n>[A-Za-z0-9_\-]*(?:api[_\-]?key|secret|token|passw(?:or)?d|pwd|access[_\-]?key)"
+        r"[A-Za-z0-9_\-]*)['\"]?\s*[=:]\s*['\"]?(?P<v>[A-Za-z0-9_\-/+=.]{12,})"), mixed=True),
 ]
 
 # Spans nothing is looked for in: an inline image is long, random, and not a
 # key, and a placeholder already written must not be caught a second time.
 _DATA_URL = re.compile(r"data:[\w.+\-]+/[\w.+\-]+;base64,[A-Za-z0-9+/=]+")
+# `API_KEY_PATH=/Users/me/AuthKey.p8` names where a key lives, not the key.
+_WHERE = re.compile(r"(?i)(?:path|file|dir)$")
 _PLACEHOLDER = re.compile(r"\[secret [a-z]+ " + re.escape(SERVICE_PREFIX) + r"[^\]]*\]")
 
 
@@ -113,6 +115,8 @@ def find(text: str) -> list[Hit]:
             start, end = m.span(group)
             value = m.group(group)
             if fam.mixed and not _mixed(value):
+                continue
+            if "n" in fam.pattern.groupindex and _WHERE.search(m.group("n")):
                 continue
             if any(start < e and s < end for s, e in taken):
                 continue

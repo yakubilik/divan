@@ -96,7 +96,8 @@ _LITERALS = ("sk-", "_live_", "_test_", "AKIA", "ASIA", "ghp_", "gho_", "ghu_", 
 _NAMES = ("apikey", "api_key", "api-key", "secret", "token", "passw", "pwd",
           "accesskey", "access_key", "access-key")
 _TELEGRAM = re.compile(r":[A-Za-z0-9_\-]{35}")
-_LONG = 8192
+_LONG = 512
+_BLOB = re.compile(r"[A-Za-z0-9+/=_\-]+")     # base64 with no data: in front: a screenshot, a file
 # Values that are long and random by nature and never a key in plain text.
 _OPAQUE_KEYS = {"encrypted_content", "signature"}
 
@@ -152,6 +153,7 @@ class Run:
     changed: list[str] = field(default_factory=list)
     scanned: int = 0
     db_seq: int = 0           # the last event read; events are never rewritten by the daemon
+    wal_pending: bool = False   # masked rows whose old pages may still be in the WAL
     errors: list[str] = field(default_factory=list)
 
     def hit(self, h: secrets.Hit, where: str, at: float) -> str | None:
@@ -202,7 +204,8 @@ class _Cursor:
 
     def json(self, v, key: str | None = None):
         if isinstance(v, str):
-            if v.startswith("data:") and secrets._DATA_URL.fullmatch(v):
+            if (v.startswith("data:") and secrets._DATA_URL.fullmatch(v)) or (
+                    len(v) > 1024 and _BLOB.fullmatch(v)):
                 return v
             if key is None:
                 return self.text(v)
@@ -251,7 +254,7 @@ def _scrub_jsonl(run: Run, where: str, text: str, mtime: float) -> tuple[str, bo
         else:
             c = _Cursor(run, where, _when(obj, mtime))
             masked = c.json(obj)
-            new = json.dumps(masked, ensure_ascii=False, separators=(",", ":")) if c.changed else line
+            new = _dumps(masked, separators=(",", ":")) if c.changed else line
         if c.changed:
             lines[i] = new
             changed = True
@@ -307,7 +310,23 @@ def scrub_file(run: Run, path: Path, now: float) -> os.stat_result | None:
 
 # ── the database ──────────────────────────────────────────────────────────────
 
-def scrub_db(run: Run, path: Path, after_seq: int = 0) -> None:
+def _dumps(obj, **kw) -> str:
+    """JSON as the CLIs write it; a lone surrogate, which UTF-8 cannot hold, escaped."""
+    out = json.dumps(obj, ensure_ascii=False, **kw)
+    try:
+        out.encode("utf-8", errors="surrogateescape")
+    except UnicodeEncodeError:
+        out = json.dumps(obj, **kw)
+    return out
+
+
+def scrub_db(run: Run, path: Path, after_seq: int = 0, wal_pending: bool = False) -> None:
+    """The daemon's events and chat previews.
+
+    Read without a lock, written in one short transaction: the daemon's own
+    connection waits five seconds for a lock before it gives up, so the
+    minutes a full read takes must not be spent holding one.
+    """
     run.db_seq = after_seq
     if not path.exists():
         return
@@ -317,12 +336,7 @@ def scrub_db(run: Run, path: Path, after_seq: int = 0) -> None:
     else:
         con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30, isolation_level=None)
     try:
-        con.execute("PRAGMA busy_timeout=30000")
-        if run.apply:
-            # Overwritten payloads are zeroed, not left in free space.
-            con.execute("PRAGMA secure_delete=ON")
-            con.execute("BEGIN IMMEDIATE")
-        updates: list[tuple[str, str, str, object]] = []   # table, column, new, key
+        updates: list[tuple[str, str, str, str, object]] = []   # table, column, old, new, key
         refused = set(run.refused)
         if con.execute("SELECT COALESCE(MAX(seq), 0) FROM events").fetchone()[0] < after_seq:
             after_seq = run.db_seq = 0      # a new database: start over
@@ -332,49 +346,59 @@ def scrub_db(run: Run, path: Path, after_seq: int = 0) -> None:
             run.db_seq = seq
             if not _maybe(payload):
                 continue
+            c = _Cursor(run, where, ts)
             try:
                 obj = json.loads(payload)
             except ValueError:
-                c = _Cursor(run, where, ts)
                 new = c.text(payload)
             else:
-                c = _Cursor(run, where, ts)
                 masked = c.json(obj)
-                new = json.dumps(masked, ensure_ascii=False) if c.changed else payload
+                new = _dumps(masked) if c.changed else payload
             if c.changed:
-                updates.append(("events", "payload", new, seq))
+                updates.append(("events", "payload", payload, new, seq))
         for cid, title, preview, at in con.execute(
-                "SELECT id, title, last_preview, updated_at FROM chats"):
+                "SELECT id, title, last_preview, updated_at FROM chats").fetchall():
             for column, value in (("title", title), ("last_preview", preview)):
                 c = _Cursor(run, where, at or 0.0)
                 new = c.text(value or "")
                 if c.changed:
-                    updates.append(("chats", column, new, cid))
+                    updates.append(("chats", column, value, new, cid))
         if not run.apply:
             return
-        key = {"events": "seq", "chats": "id"}
-        for table, column, new, k in updates:
-            con.execute(f"UPDATE {table} SET {column} = ? WHERE {key[table]} = ?", (new, k))
-        con.execute("COMMIT")
+        if updates:
+            key = {"events": "seq", "chats": "id"}
+            # Overwritten payloads are zeroed, not left in free space.
+            con.execute("PRAGMA secure_delete=ON")
+            con.execute("BEGIN IMMEDIATE")
+            for table, column, old, new, k in updates:
+                # Only if it is still what was read; a preview the daemon has
+                # moved on from is read again next time.
+                con.execute(f"UPDATE {table} SET {column} = ? WHERE {key[table]} = ? AND {column} IS ?",
+                            (new, k, old))
+            con.execute("COMMIT")
+            run.changed.append(where)
         if run.refused - refused:
             run.db_seq = after_seq      # a key still in there: read it all again next time
-        if updates:
-            run.changed.append(where)
-            # Move the new pages into the file and empty the WAL that still
-            # holds the old ones. A reader in the daemon can hold it up; then
-            # the next run finishes it.
-            for _ in range(10):
-                busy, _log, _done = con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-                if not busy:
-                    break
-                time.sleep(1)
-            else:
-                run.errors.append(f"{where}: the WAL could not be emptied yet; the next run retries")
+        # Move the new pages into the file and empty the WAL that still holds
+        # the old ones. Each try waits a second at most, so the daemon is never
+        # kept from writing for long; one it cannot finish, the next run does.
+        if not (updates or wal_pending):
+            return
+        con.execute("PRAGMA busy_timeout=1000")
+        for _ in range(10):
+            busy, _log, _done = con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if not busy:
+                break
+            time.sleep(2)
+        else:
+            run.wal_pending = True
+            run.errors.append(f"{where}: the WAL could not be emptied yet; the next run retries")
     except sqlite3.Error as exc:
         run.db_seq = after_seq
+        run.wal_pending = wal_pending
         if con.in_transaction:
             con.execute("ROLLBACK")
-        run.errors.append(f"{where}: {type(exc).__name__}: {exc}")
+        run.errors.append(f"{where}: {type(exc).__name__}")
     finally:
         con.close()
 
@@ -449,7 +473,7 @@ def run(home: Path, apply: bool, keychain=None, now: float | None = None) -> Run
     r = Run(apply, keychain or (secrets.default_keychain() if apply else None))
     now = time.time() if now is None else now
 
-    scrub_db(r, rac / "db.sqlite", state.get("db_seq", 0))
+    scrub_db(r, rac / "db.sqlite", state.get("db_seq", 0), state.get("wal_pending", False))
     for path in targets(home):
         key = str(path)
         try:
@@ -457,7 +481,7 @@ def run(home: Path, apply: bool, keychain=None, now: float | None = None) -> Run
             if done.get(key) == [st.st_size, st.st_mtime_ns]:
                 continue
             after = scrub_file(r, path, now)
-        except OSError as exc:
+        except Exception as exc:
             r.errors.append(f"{key}: {type(exc).__name__}")
             continue
         # A file is clean once every key in it is masked; one the keychain
@@ -475,6 +499,7 @@ def run(home: Path, apply: bool, keychain=None, now: float | None = None) -> Run
         state = {
             "files": done,
             "db_seq": r.db_seq,
+            "wal_pending": r.wal_pending,
             "secrets": {s: {"kind": f.kind, "fingerprint": f.fingerprint, "files": sorted(f.files),
                             "first": f.first, "last": f.last, "status": f.status}
                         for s, f in all_found.items()},
