@@ -151,7 +151,26 @@ would want caught — a session stuck on the same tool for an hour, a cost that
 has run away. One. Never a suggestion about what to do, since you cannot do it."""
 
 
-def manner() -> str:
+# When the account has Hermes installed, the call is Hermes: the same agent the
+# person talks to in chats, on the phone. The house's register, said out loud —
+# the chat preamble's style guide (house_style.md) cut down to what survives a
+# speech synthesizer. The rules in SYSTEM still hold; only the voice changes.
+MANNER_HERMES = """\
+Manner: you are Hermes, the same agent he talks to in his chats, now on the \
+phone. A colleague who already has the context and has somewhere else to be — \
+not a butler, not customer service.
+
+- No "sir", no "efendim", no title of any kind. Talk to him the way he talks \
+to you.
+- Mirror his language and register. If he speaks casual Turkish ("kanka", \
+"naber"), answer in casual Turkish; if he is brief, be brief. Developer words \
+like commit, branch, build and deploy stay English inside a Turkish sentence.
+- Lead with the answer. If it is no, the first word is no.
+- Bad news first, plainly. Say a thing once.
+- No enthusiasm, no praise, no restating the question, no offer of more help."""
+
+
+def manner(hermes: bool = False) -> str:
     try:
         text = MANNER_FILE.read_text(encoding="utf-8").strip()
         if text:
@@ -160,11 +179,88 @@ def manner() -> str:
         pass
     except Exception as exc:
         log.warning("could not read %s: %s", MANNER_FILE, exc)
-    return MANNER_DEFAULT
+    return MANNER_HERMES if hermes else MANNER_DEFAULT
 
 
-def system_prompt() -> str:
-    return f"{SYSTEM}\n\n{manner()}"
+def _agents_dir(account_home: str | None) -> Path:
+    from .agents import DEFAULT_AGENTS
+    return Path(account_home) / "agents" if account_home else DEFAULT_AGENTS
+
+
+def hermes_installed(account_home: str | None) -> bool:
+    """Whether the account the call speaks as has the Hermes agent."""
+    try:
+        return (_agents_dir(account_home) / "hermes.md").is_file()
+    except OSError:
+        return False
+
+
+def system_prompt(hermes: bool = False, profile: str = "") -> str:
+    if not hermes:
+        out = f"{SYSTEM}\n\n{manner()}"
+    else:
+        # The rules are the same rules; only the two lines that put the house
+        # in the first person and a "sir" in the example are said as Hermes.
+        rules = SYSTEM.replace("You are the phone concierge for this computer.",
+                               "You are Hermes, answering the phone for this computer.")
+        rules = rules.replace('"Started it in focus, sir."', '"Started it in focus."')
+        out = f"{rules}\n\n{manner(hermes=True)}"
+    return f"{out}\n\n{profile}" if profile else out
+
+
+# ── who is calling ────────────────────────────────────────────────────────────
+# A short note on the person, read once per concierge session — never per turn
+# and never anything else out of memory. The account's memory folder already
+# has it on a machine that has been used for a while: one file on who they are
+# and one on how they like to work. A plain caller.md next to concierge.md is
+# the same thing for a machine without one.
+PROFILE_FILE = CONFIG_DIR / "caller.md"
+PROFILE_CHARS = 1500
+PROFILE_PATTERNS = ("who-is-*.md", "*working-style*.md")
+PROFILE_HEAD = "About the person calling (background from their own notes; use it, never recite it):"
+
+
+def _profile_files(account_home: str | None) -> list[Path]:
+    root = Path(account_home) if account_home else Path.home() / ".claude"
+    out: list[Path] = []
+    seen: set[str] = set()
+    if PROFILE_FILE.is_file():
+        out.append(PROFILE_FILE)
+    for pattern in PROFILE_PATTERNS:
+        # Every project's memory folder can hold the same file (they are often
+        # one folder linked into each), so one copy per name is plenty.
+        for f in sorted(root.glob(f"projects/*/memory/{pattern}")):
+            if f.name not in seen and f.is_file():
+                seen.add(f.name)
+                out.append(f)
+    return out
+
+
+def _without_header(text: str) -> str:
+    m = re.match(r"^---\s*\n.*?\n---\s*\n", text, re.S)
+    return (text[m.end():] if m else text).strip()
+
+
+def profile(account_home: str | None) -> str:
+    """The note on the caller, at most PROFILE_CHARS long, or "" if none."""
+    try:
+        files = _profile_files(account_home)
+    except OSError:
+        return ""
+    parts: list[str] = []
+    for f in files:
+        try:
+            text = _without_header(f.read_text(encoding="utf-8", errors="replace")[:8000])
+        except OSError:
+            continue
+        if text:
+            parts.append(text)
+    if not parts:
+        return ""
+    out = PROFILE_HEAD + "\n" + "\n\n".join(parts)
+    if len(out) > PROFILE_CHARS:
+        out = out[: PROFILE_CHARS - 1].rstrip() + "…"
+    return out
 
 
 # ── the snapshot ──────────────────────────────────────────────────────────────
@@ -338,6 +434,20 @@ def fix_address(text: str) -> str:
     return _EFENDIM.sub("sir", text)
 
 
+def speakable(text: str, hermes: bool = False) -> str:
+    """The output filters, as the manner in force wants them.
+
+    The house strips slang and makes its honorific match the language. Hermes
+    has no honorific to fix, and the caller's own register is the register it
+    is asked to answer in, so a Turkish "kanka" stays. Slang that turns up in
+    an English sentence is still the snapshot talking, not the caller, and is
+    still dropped.
+    """
+    if not hermes:
+        return fix_address(strip_slang(text))
+    return text if _is_turkish(text) else strip_slang(text)
+
+
 def headline(db, sessions) -> dict:
     """Who is busy, as three numbers.
 
@@ -363,7 +473,71 @@ def headline(db, sessions) -> dict:
     return counts
 
 
-def snapshot(db, sessions, host_name: str = "this computer") -> tuple[str, list[str]]:
+# ── the ticket queue ──────────────────────────────────────────────────────────
+# What the background workers are on, for "how is the queue doing". Short on
+# purpose: the person cannot act on a ticket from here, only hear about it, so
+# it is what is running, what is stuck on them, and how much is waiting.
+QUEUE_LINES = 6
+QUEUE_TITLE = 70
+_URL = re.compile(r"\S*://\S+")
+_PATHISH = re.compile(r"[`'\"]?[~.]?[\w.@-]*/[\w./@-]+[`'\"]?")
+_LONG_ID = re.compile(r"#?\b\d{4,}\b")
+_TICKET_ID = re.compile(r"^\s*#?\d+\s*[:·-]\s*")
+
+
+def _words(text: str | None, limit: int) -> str:
+    """A title or a question, with nothing in it a voice should spell out."""
+    out = _URL.sub("", text or "")
+    out = _PATHISH.sub("", out)
+    out = _TICKET_ID.sub("", out)
+    out = _LONG_ID.sub("", out)
+    out = re.sub(r"[`*_#]", "", out)
+    out = re.sub(r"\s+([.,;:!?])", r"\1", re.sub(r"\s+", " ", out)).strip(" -:·")
+    return _trim(out, limit)
+
+
+def _rough(seconds: float) -> str:
+    """How long a worker has been at it, already rounded the way it is said."""
+    minutes = max(0.0, seconds) / 60
+    if minutes < 2:
+        return "just started"
+    if minutes < 50:
+        return f"about {int(round(minutes / 5) * 5) or int(minutes)} minutes in"
+    hours = round(minutes / 60)
+    return "about an hour in" if hours <= 1 else f"about {hours} hours in"
+
+
+def queue_section(queue: dict | None, now: float | None = None) -> str | None:
+    """The ustabasi queue in at most QUEUE_LINES lines, or None without one."""
+    if not queue or not queue.get("available"):
+        return None
+    now = now or time.time()
+    tickets = queue.get("tickets") or []
+    running = [t for t in tickets if t.get("status") == "running"]
+    waiting = [t for t in tickets if t.get("status") == "blocked"]
+    queued = [t for t in tickets if t.get("status") == "queued"]
+
+    lines: list[str] = []
+    for t in waiting:
+        ask = _words(t.get("ask"), 100)
+        lines.append(f'- Waiting on the user: "{_words(t.get("title"), QUEUE_TITLE)}"'
+                     + (f", it asks: {ask}" if ask else "."))
+    for t in running:
+        began = t.get("round_started_at") or t.get("started_at")
+        been = f", {_rough(now - float(began))}" if began else ""
+        where = f" in {t['project']}" if t.get("project") else ""
+        lines.append(f'- Running: "{_words(t.get("title"), QUEUE_TITLE)}"{where}{been}.')
+    # Room for the header and the count, whatever else there is to say.
+    room = QUEUE_LINES - 2
+    if len(lines) > room:
+        rest = len(lines) - (room - 1)
+        lines = lines[: room - 1] + [f"- And {rest} more running or waiting."]
+    lines.append(f"- {len(queued)} ticket(s) queued, not started yet.")
+    return "TICKET QUEUE (background workers, by title)\n" + "\n".join(lines)
+
+
+def snapshot(db, sessions, host_name: str = "this computer",
+             queue: dict | None = None) -> tuple[str, list[str]]:
     """The whole computer, as something you could read aloud.
 
     Returns the text and the chat ids behind the numbers in it. The concierge
@@ -447,6 +621,9 @@ def snapshot(db, sessions, host_name: str = "this computer") -> tuple[str, list[
     if stale:
         parts.append(f"There are also {stale} older session(s), untouched for a day or more, "
                      "not described here.")
+    tickets = queue_section(queue, now)
+    if tickets:
+        parts.append(tickets)
     if spent >= 0.005:
         parts.append(f"Lifetime spend of the sessions above, all of them added together: "
                      f"${spent:.2f}. This is not a figure for today.")
@@ -560,6 +737,7 @@ class Concierge:
         self._lock = asyncio.Lock()
         self._turns = 0
         self._last = 0.0
+        self._hermes = False                    # set per session in _options
 
     def _options(self) -> ClaudeAgentOptions:
         # Same rule as a chat: the account decides the environment, and nothing
@@ -572,11 +750,14 @@ class Concierge:
                     if k in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")})
         if home:
             env["CLAUDE_CONFIG_DIR"] = home
+        # Who is speaking and who to, decided once per session: the agent file
+        # and the profile are read here, at connect, and never per question.
+        self._hermes = hermes_installed(home)
         return ClaudeAgentOptions(
             env=env,
             cwd=str(Path.home()),
             model=MODEL_ALIASES.get(MODEL, MODEL),
-            system_prompt=system_prompt(),
+            system_prompt=system_prompt(self._hermes, profile(home)),
             # No tools, and no settings to load: the concierge answers from the
             # snapshot or not at all. This is what keeps it fast *and* what keeps
             # it from wandering off into the filesystem mid-call.
@@ -664,7 +845,7 @@ class Concierge:
             from .session import plain
             # Markdown is not a sound. Strip it even though the prompt forbids
             # it — a stray asterisk read out loud is worse than a lost emphasis.
-            text = fix_address(strip_slang(clip(plain("".join(chunks)).strip())))
+            text = speakable(clip(plain("".join(chunks)).strip()), self._hermes)
             return {
                 "text": text,
                 "ms": int((time.monotonic() - t0) * 1000),
