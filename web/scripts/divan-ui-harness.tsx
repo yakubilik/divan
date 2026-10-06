@@ -13,6 +13,8 @@
  *  state every one of them has to survive anyway.
  */
 import { createRoot } from 'react-dom/client';
+import '../src/styles/divan-tokens.css';
+import '../src/styles/divan-components.css';
 import { themeCss, type Scheme } from '../src/lib/theme';
 import { Gallery } from './divan-gallery';
 import { Onboarding } from '../src/screens/Onboarding';
@@ -277,4 +279,7 @@ function Page() {
 }
 
 document.documentElement.dataset.theme = scheme;
+// The theme module also marks the panel's app root; this page has one theme,
+// held on <html> alone, so that one attribute is the whole switch below.
+document.getElementById('root')!.removeAttribute('data-theme');
 createRoot(document.getElementById('root')!).render(<Page />);

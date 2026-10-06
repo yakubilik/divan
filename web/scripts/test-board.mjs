@@ -92,7 +92,7 @@ const productOf = (name, key) => view(name).projects.find((p) => p.key === key) 
 function styles(markup) {
   return [...markup.matchAll(/style="([^"]*)"/g)].map((m) => {
     const decl = {};
-    for (const pair of m[1].split(';')) {
+    for (const pair of m[1].replace(/&quot;/g, '"').split(';')) {
       const cut = pair.indexOf(':');
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
@@ -103,7 +103,7 @@ const anyStyle = (markup, pred) => styles(markup).some(pred);
 const countStyles = (markup, pred) => styles(markup).filter(pred).length;
 const COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|oklch\([^)]*\)|hsla?\([^)]*\)/g;
 const v = (n) => `var(--dv-${n})`;
-const OWN = new Set([K.ON_COLOUR, ...K.MONOGRAM,
+const OWN = new Set([K.ON_COLOUR,
                      ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                      ...Object.values(K.MEDIA)]);
 

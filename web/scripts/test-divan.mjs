@@ -119,38 +119,6 @@ const gallery = await load('scripts/divan-gallery.js');
 const { createElement } = await import('react');
 const { renderToStaticMarkup } = await import('react-dom/server');
 
-// ── the artboards, quoted ───────────────────────────────────────────────────
-// Whole `style` attributes, copied off a named frame — not a value at a time,
-// which would be the same transcription twice and could never disagree with
-// itself. Web14's four dark frames declare the sixteen as one block, character
-// for character; this is W6, 'Project · Quire · Overview tab'.
-const FRAME_DARK =
-  '--bg:#131210;--s1:#1C1B18;--s2:#26241F;--line:rgba(236,232,225,.08);--line2:rgba(236,232,225,.2);'
-  + '--ink:#EDE9E2;--ink2:#A9A499;--ink3:#8C877E;--amber:#EAB65A;--amberBg:rgba(234,182,90,.11);'
-  + '--red:#EE6D55;--redBg:rgba(238,109,85,.12);--run:#7CC6A6;--runBg:rgba(124,198,166,.1);'
-  + '--onAmber:#1A1609;--sh:rgba(0,0,0,.5)';
-// …and Web15's eight light ones, all of them the same block. This is W12,
-// 'Machine drawer · Machines'.
-const FRAME_LIGHT =
-  '--bg:#F5F3EE;--s1:#FFFFFF;--s2:#ECE9E2;--line:rgba(27,26,23,.09);--line2:rgba(27,26,23,.18);'
-  + '--ink:#1B1A17;--ink2:#5C5850;--ink3:#7A756C;--amber:#9C6210;--amberBg:rgba(214,150,40,.14);'
-  + '--red:#C2412B;--redBg:rgba(194,65,43,.1);--run:#2F8067;--runBg:rgba(47,128,103,.1);'
-  + '--onAmber:#fff;--sh:rgba(27,26,23,.12)';
-// The fourteen-name block of Web12 W1, which is the same design a hundredth
-// heavier in four places — the difference `design/divan/TOKENS.md` records.
-const FRAME_W1 =
-  '--bg:#131210;--s1:#1C1B18;--s2:#26241F;--line:rgba(236,232,225,.08);--line2:rgba(236,232,225,.22);'
-  + '--ink:#EDE9E2;--ink2:#A9A499;--ink3:#8C877E;--amber:#EAB65A;--amberBg:rgba(234,182,90,.12);'
-  + '--red:#EE6D55;--redBg:rgba(238,109,85,.13);--run:#7CC6A6;--runBg:rgba(124,198,166,.12)';
-/** The amber ring, which is not one of the sixteen: it is a `box-shadow` on the
- *  panel of an agent that is asking. Both frames are quoted whole. */
-const RING_DARK = 'inset 0 0 0 1px rgba(234,182,90,.3)';        // Web12 W1 and W2
-const RING_LIGHT = 'inset 0 0 0 1px rgba(156,98,16,.35)';       // Web13 W3 and W4
-/** And the two surfaces `sLift` is borrowed from, which are phone frames: the
- *  desktop draws nothing in the air. */
-const PHONE_DRAG_S2 = '#2A2822';                                // Mobile3 Drag frame
-const PHONE_CHAT_S2 = '#E9E6DE';                                // Mobile4 C1
-
 /** Every frame of the desktop set, by the id the artboard labels it with: the
  *  group it belongs to, the theme it is drawn in, and how many of the sixteen
  *  names it declares. Nothing here can look at the frames, so a citation is
@@ -169,18 +137,6 @@ const FRAMES = {
  *  state, which the desktop frames do not draw at all. */
 const PHONE_FRAMES = { 'Mobile3 Drag frame': 'dark', 'Mobile4 C1': 'light', 'Mobile7 S6': 'dark' };
 
-/** `--bg:#131210;--s1:…` -> `{ bg: '#131210', … }`, with `#fff` spelled out. */
-function declared(block) {
-  const out = {};
-  for (const pair of block.split(';')) {
-    const [name, value] = pair.split(':');
-    out[name.replace(/^--/, '')] = value.length === 4 && value[0] === '#'
-      ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`.toUpperCase()
-      : value;
-  }
-  return out;
-}
-
 const COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|oklch\([^)]*\)|hsla?\([^)]*\)/g;
 const colours = (text) => text.match(COLOUR) ?? [];
 /** …minus the ones inside a comment, which is where the frames are quoted. */
@@ -191,58 +147,48 @@ function coloursInCode(text) {
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const keys = (o) => Object.keys(o).sort();
 
-// ── 1 · the palette is the design's, and the design's is all of it ──────────
+// ── 1 · the palette is divan-tokens.css ─────────────────────────────────────
 
-group('the palette is the artboards’');
-{
-  for (const [name, table, block] of [['dark', K.DARK, FRAME_DARK], ['light', K.LIGHT, FRAME_LIGHT]]) {
-    const frame = declared(block);
-    const missing = Object.keys(frame).filter((k) => table[k] === undefined);
-    const wrong = Object.keys(frame).filter((k) => table[k] !== undefined
-      && table[k].toUpperCase() !== frame[k].toUpperCase());
-    ok(`every name the ${name} frames declare is in the table`, missing.length === 0, missing.join(', '));
-    ok(`…with the frame's own value (${name})`, wrong.length === 0, wrong.join(', '));
-    ok(`…all sixteen of them (${name})`, Object.keys(frame).length === 16);
-  }
-  ok('the two sides declare the same names — none without its counterpart',
-    eq(keys(K.DARK), keys(K.LIGHT)));
-  ok('…and every one of them is a colour, not a name or an empty string',
-    keys(K.DARK).filter((k) => k !== 'scheme').every((k) =>
-      [K.DARK[k], K.LIGHT[k]].every((v) => typeof v === 'string' && colours(v).length === 1)));
-  ok('the tables are told apart by their own name and that is what `tokensFor` answers to',
-    K.DARK.scheme === 'dark' && K.LIGHT.scheme === 'light'
-    && K.tokensFor('dark') === K.DARK && K.tokensFor('light') === K.LIGHT);
-
-  // Web12's own block is the same design at the last decimal, which is worth
-  // holding onto: it is the frame the amber ring and the counters come off.
-  const w1 = declared(FRAME_W1);
-  const differs = Object.keys(w1).filter((k) => w1[k] !== K.DARK[k]);
-  ok('Web12 W1 is a dark frame of this design, differing only in the last decimal of a wash or a line',
-    eq(differs.sort(), ['amberBg', 'line2', 'redBg', 'runBg']), differs.join(', '));
-
-  ok('the amber ring is the ring the desktop frames draw, in both themes',
-    RING_DARK.includes(K.DARK.amberRing) && RING_LIGHT.includes(K.LIGHT.amberRing));
-  ok('…and it is the amber and nothing else: that hue, thinned',
-    [['dark', K.DARK], ['light', K.LIGHT]].every(([, t]) => {
-      const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-      const ring = t.amberRing.match(/[\d.]+/g).slice(0, 3).map(Number);
-      const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 60);
-      return near(ring, rgb(t.amber)) || near(ring, t.amberBg.match(/[\d.]+/g).slice(0, 3).map(Number));
-    }));
-  ok('the surface of a card in the air is borrowed from the phone, and says so',
-    K.DARK.sLift === PHONE_DRAG_S2 && K.LIGHT.sLift === PHONE_CHAT_S2
-    && eq([...K.BORROWED], ['sLift']));
-  ok('the dim behind a sheet is derived, and says so',
-    K.DERIVED.includes('scrim')
-    && K.DARK.scrim === K.DARK.sh && K.LIGHT.scrim !== K.LIGHT.sh);
-  ok('the ticket nobody has taken keeps the artboard’s indigo in the dark',
-    K.DARK.execLine === '#6F7BBC' && K.DARK.execInk === '#92A0E3');
-  ok('…and on a light page takes the placeholder the desktop frames do draw',
-    K.LIGHT.execLine === K.LIGHT.line2 && K.LIGHT.execInk === K.LIGHT.ink3
-    && K.DERIVED.includes('execLine') && K.DERIVED.includes('execInk'));
-  ok('…and the derived and the borrowed are those three and that one, and no more',
-    eq([...K.DERIVED].sort(), ['execInk', 'execLine', 'scrim']) && K.BORROWED.length === 1);
+const SHEET = src('src/styles/divan-tokens.css');
+function sheet(scheme) {
+  const body = SHEET.match(new RegExp(`\\.dv-root\\[data-theme="${scheme}"\\]\\s*\\{([^}]*)\\}`))[1]
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  return Object.fromEntries([...body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
 }
+const colourOf = (value) => colours(value ?? '').at(-1);
+
+group('the palette is divan-tokens.css');
+{
+  for (const [name, table] of [['dark', K.DARK], ['light', K.LIGHT]]) {
+    const css = sheet(name);
+    const wrong = keys(table).filter((k) => k !== 'scheme' && table[k] !== colourOf(css[K.SOURCE[k]]));
+    ok(`every ${name} colour is the sheet’s own value`, wrong.length === 0,
+      wrong.map((k) => `${k}: ${table[k]} vs ${K.SOURCE[k]} ${css[K.SOURCE[k]]}`).join(', '));
+  }
+  ok('every token names its property, and both sides hold the same names',
+    eq(keys(K.DARK), keys(K.LIGHT)) && eq(keys(K.SOURCE), keys(K.DARK).filter((k) => k !== 'scheme')));
+  ok('`tokensFor` answers with the table of that name',
+    K.tokensFor('dark') === K.DARK && K.tokensFor('light') === K.LIGHT);
+}
+
+group('flat surfaces');
+{
+  const files = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(join(web, dir), { withFileTypes: true })) {
+      if (e.isDirectory()) walk(`${dir}/${e.name}`);
+      else files.push(`${dir}/${e.name}`);
+    }
+  };
+  walk('src');
+  const blurred = files.filter((f) => /backdrop-filter\s*:|backdropFilter/.test(src(f)));
+  ok('nothing under web/src declares a backdrop filter', blurred.length === 0, blurred.join(', '));
+}
+
+group('monograms');
+ok('a monogram is the neutral surface for every name, and the ramp is gone',
+  ['Quire', 'Hush', '', 'babysee'].every((n, i) => K.monogram(n) === K.T.s2 && K.monogram(n, i) === K.T.s2)
+  && K.MONOGRAM === undefined);
 
 // ── 2 · nothing else in the panel is a colour ──────────────────────────────
 
@@ -250,7 +196,7 @@ group('one table, and nothing beside it');
 {
   const TOKEN_VALUES = new Set([
     ...Object.values(K.DARK), ...Object.values(K.LIGHT),
-    K.ON_COLOUR, ...K.MONOGRAM,
+    K.ON_COLOUR,
     ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
     ...Object.values(K.MEDIA),
   ]);
@@ -313,7 +259,7 @@ group('both themes are written into the document');
     ok(`…and tells the browser which controls to draw`, rules[scheme].includes(`color-scheme:${scheme}`));
   }
   ok('the page itself is painted out of the table, not out of the shell',
-    css.includes(`html,body{background:${K.T.bg};color:${K.T.ink}}`));
+    css.includes(`html,body{background:${K.T.bg};color:${K.T.ink};font-family:${K.SANS}}`));
 
   // Everything the panel can ask for has to exist on both sides, or one theme
   // is missing a colour and only one of them shows it. What a file holds is a
@@ -331,11 +277,11 @@ group('both themes are written into the document');
   walk('src');
   // One send button in the product: the command bar's, the moment there is
   // something to send, is the disc the chat's composer has always drawn — the
-  // panel's accent under the white that belongs on a filled colour.
+  // panel's accent, the ink fill, under the ink that belongs on it.
   ok('the bar’s send is the send the chat has, in the colour the chat sends in',
-    /background: ready \? T\.red : T\.line2, color: ready \? ON_COLOUR : T\.ink/
+    /background: ready \? T\.ink : T\.line2, color: ready \? T\.onInk : T\.ink/
       .test(src('src/ui/divan.tsx'))
-    && K.C.accent === K.T.red && K.C.onAccent === K.ON_COLOUR);
+    && K.C.accent === K.T.ink && K.C.onAccent === K.T.onInk);
   const undeclared = [...used].filter((n) => K.DARK[n] === undefined);
   ok('every token the panel reaches for is one the table declares', undeclared.length === 0, undeclared.join(', '));
   ok('…and it does reach for them by name rather than by value', used.size >= 15, `${used.size}`);
@@ -359,12 +305,13 @@ group('the switch');
 
   {
     const { e, m } = await fresh({ system: 'light' });
-    ok('with nothing stored it follows the computer', m.themeScheme() === 'light' && m.themeChoice() === 'system');
-    ok('…and says so on the document before anything is drawn', e.html.dataset.theme === 'light');
+    ok('with nothing stored it opens in Night, whatever the computer says',
+      m.themeScheme() === 'dark' && m.themeChoice() === 'dark');
+    ok('…and says so on the document before anything is drawn', e.html.dataset.theme === 'dark');
   }
   {
-    const { m } = await fresh({ system: 'dark' });
-    ok('…the other way too', m.themeScheme() === 'dark');
+    const { m } = await fresh({ system: 'light', stored: 'system' });
+    ok('following the computer is still a choice', m.themeScheme() === 'light');
   }
   {
     const { m } = await fresh({});
@@ -378,7 +325,7 @@ group('the switch');
   }
   {
     const { e, m } = await fresh({ system: 'dark', stored: 'nonsense' });
-    ok('nonsense in storage is not a theme', m.themeChoice() === 'system' && e.html.dataset.theme === 'dark');
+    ok('nonsense in storage is not a theme', m.themeChoice() === 'dark' && e.html.dataset.theme === 'dark');
   }
   {
     const { e, m } = await fresh({ system: 'dark' });
@@ -390,7 +337,7 @@ group('the switch');
       m.themeChoice() === 'system' && m.themeScheme() === 'dark' && e.html.dataset.theme === 'dark');
   }
   {
-    const { e, m } = await fresh({ system: 'dark' });
+    const { e, m } = await fresh({ system: 'dark', stored: 'system' });
     e.sunset('light');
     ok('the computer changing its mind at sunset is followed', m.themeScheme() === 'light'
       && e.html.dataset.theme === 'light');
@@ -461,14 +408,14 @@ const PARTS = ['Card', 'Row', 'Pill', 'Tabs', 'ColumnTab', 'StatusDot', 'Executo
     phone.every((f) => PHONE_FRAMES[f] !== undefined) && phone.length > 0, phone.join(', '));
   ok('the parts sit on the design’s own corners and heights, not on numbers of their own',
     /borderRadius: RADIUS\./.test(divan) && /SIZE\.pill/.test(divan)
-    && K.RADIUS.card === 16 && K.RADIUS.pill === 16 && K.SIZE.pill === 32 && K.SIZE.sidePanel === 260);
+    && K.RADIUS.card === 16 && K.RADIUS.pill === 999 && K.SIZE.pill === 32 && K.SIZE.sidePanel === 260);
 }
 
 /** Every style attribute of a render, flattened. */
 function styles(markup) {
   return [...markup.matchAll(/style="([^"]*)"/g)].map((m) => {
     const decl = {};
-    for (const pair of m[1].split(';')) {
+    for (const pair of m[1].replace(/&quot;/g, '"').split(';')) {
       const cut = pair.indexOf(':');
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
@@ -516,7 +463,7 @@ function* elements(markup) {
       continue;
     }
     const decl = {};
-    for (const pair of (/style="([^"]*)"/.exec(attrs)?.[1] ?? '').split(';')) {
+    for (const pair of (/style="([^"]*)"/.exec(attrs)?.[1] ?? '').replace(/&quot;/g, '"').split(';')) {
       const cut = pair.indexOf(':');
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
@@ -554,7 +501,7 @@ function* elements(markup) {
 /** A colour an element brings with it — the white on a coloured square, the
  *  black behind a photo — does not follow the page and never came from the
  *  palette. Everything else has to be a variable. */
-const OWN = new Set([K.ON_COLOUR, ...K.MONOGRAM, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
+const OWN = new Set([K.ON_COLOUR, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                      ...Object.values(K.MEDIA)]);
 
 const drawn = {};
@@ -593,12 +540,12 @@ const drawn = {};
   ok('the running rule across it is green, and as wide as the work is done',
     anyStyle(drawn.CardLifted, (s) => s.background === v('run') && s.width === '38%' && s.height === '2px'));
   ok('a row is a 32 pt well, a title and a grey line, over a hairline',
-    anyStyle(drawn.Row, (s) => s.width === '32px' && s['border-radius'] === '9px' && s.background === v('s2'))
+    anyStyle(drawn.Row, (s) => s.width === '32px' && s['border-radius'] === '10px' && s.background === v('s2'))
     && anyStyle(drawn.Row, (s) => s['border-top'] === `1px solid ${v('line')}`));
   ok('…and the row that wants a person is washed in its state',
     anyStyle(drawn.Row, (s) => s.background === v('amberBg')));
-  ok('a pill stands 32 high on a 16 corner, filled or outlined',
-    anyStyle(drawn.Pill, (s) => s.height === '32px' && s['border-radius'] === '16px')
+  ok('a pill stands 32 high on the pill corner, filled or outlined',
+    anyStyle(drawn.Pill, (s) => s.height === '32px' && s['border-radius'] === '999px')
     && anyStyle(drawn.PillAnswers, (s) => s['box-shadow'] === `inset 0 0 0 1px ${v('line2')}`
       && s.background === 'transparent'));
   ok('the selected chip is filled with the ink and labelled in the page colour',
@@ -607,7 +554,7 @@ const drawn = {};
     anyStyle(drawn.PillAnswers, (s) => s.background === v('amber') && s.color === v('onAmber')));
   ok('a tab strip is a well with a card in it',
     styles(drawn.Tabs)[0].background === v('s1')
-    && countStyles(drawn.Tabs, (s) => s.background === v('s2') && s['border-radius'] === '9px') === 1);
+    && countStyles(drawn.Tabs, (s) => s.background === v('s2') && s['border-radius'] === '10px') === 1);
   ok('a column with work in it carries the green wash',
     countStyles(drawn.ColumnTab, (s) => s.background === v('runBg')) === 1);
   ok('while a card is in the air every column says it would take it',
@@ -627,8 +574,8 @@ const drawn = {};
     anyStyle(drawn.ExecutorBadge, (s) => s.background === v('ink') && s.color === v('bg')));
   ok('the mark is mono, tightened so that `</>` fits',
     anyStyle(drawn.ExecutorBadge, (s) => s['letter-spacing'] === '-.06em'));
-  ok('no two projects on one screen share a hue',
-    new Set(styles(drawn.Monogram).map((s) => s.background).filter(Boolean)).size === 4);
+  ok('every project on one screen wears the same neutral monogram',
+    eq([...new Set(styles(drawn.Monogram).map((s) => s.background).filter(Boolean))], [v('s2')]));
   ok('a counter with something to say is tinted and coloured',
     anyStyle(drawn.Counter, (s) => s.background === v('amberBg'))
     && anyStyle(drawn.Counter, (s) => s.color === v('amber')));
@@ -647,7 +594,7 @@ const drawn = {};
     anyStyle(drawn.SectionHeader, (s) => s['font-size'] === '15px' && s['font-weight'] === '600'));
   ok('an empty screen is a sentence and not a mark in a circle',
     anyStyle(drawn.EmptyState, (s) => s['font-size'] === '28px')
-    && !anyStyle(drawn.EmptyState, (s) => parseFloat(s['border-radius'] ?? '0') >= 30));
+    && !anyStyle(drawn.EmptyState, (s) => parseFloat(s['border-radius'] ?? '0') >= 30 && !!s.width && s.width === s.height));
   ok('…and it says in mono what will not happen without a person',
     anyStyle(drawn.EmptyState, (s) => s.color === v('ink3') && s['font-family']?.includes('mono')));
   ok('the side panel is the 260 pt column of Web15, its selected row a card in a well',
@@ -948,7 +895,7 @@ group('white belongs on a filled colour and nowhere else');
   // is what a white send glyph on `surface2` looked like: legal in both
   // checks, 1.03:1 on a light page.
   const FILLED = new Set([K.T.red, K.T.amber, K.T.run, K.T.ink,
-                          ...K.MONOGRAM, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
+                          ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                           K.MEDIA.backdrop, K.MEDIA.stage, K.MEDIA.chrome]);
   const WHITE = new Set([K.ON_COLOUR, K.T.onAmber]);
   const misplaced = [];
@@ -1218,9 +1165,9 @@ group('design/divan/TOKENS.md');
     }
   }
   ok('every value in the table is in the document too', missing.length === 0, missing.join(', '));
-  ok('…and the one derived and the one borrowed value are recorded as such',
-    K.DERIVED.every((n) => new RegExp(`\`${n}\``).test(doc))
-    && K.BORROWED.every((n) => new RegExp(`\`${n}\``).test(doc)));
+  const unmapped = Object.entries(K.SOURCE).filter(([n, prop]) => !doc.includes(`| \`${n}\` | \`${prop}\` |`));
+  ok('…and every token’s property is written down beside it', unmapped.length === 0,
+    unmapped.map(([n]) => n).join(', '));
 }
 
 // ── the screens that were carried over last ────────────────────────────────

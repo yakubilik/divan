@@ -134,7 +134,7 @@ const NOW = fixture.NOW;
 function styles(markup) {
   return [...markup.matchAll(/style="([^"]*)"/g)].map((m) => {
     const decl = {};
-    for (const pair of m[1].split(';')) {
+    for (const pair of m[1].replace(/&quot;/g, '"').split(';')) {
       const cut = pair.indexOf(':');
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
@@ -159,7 +159,7 @@ function paint(markup) {
 
 /** A colour that belongs to what it is drawn on rather than to the page: white
  *  on a coloured square, a monogram's own hue. */
-const OWN = new Set([K.ON_COLOUR, ...K.MONOGRAM,
+const OWN = new Set([K.ON_COLOUR,
                      ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                      ...Object.values(K.MEDIA)]);
 
@@ -651,13 +651,13 @@ group('the bar is built out of the parts');
   ok('the rule between the places and the chips is the frames’ own',
     s.some((d) => d.width === '1px' && d.height === '22px' && d.background === v('line2')));
   ok('the chips are pills, the chosen one filled with the ink',
-    s.filter((d) => d.height === `${K.SIZE.pill}px` && d['border-radius'] === '16px').length === 3
+    s.filter((d) => d.height === `${K.SIZE.pill}px` && d['border-radius'] === `${K.RADIUS.pill}px`).length === 3
     && s.some((d) => d.background === v('ink') && d.color === v('bg')));
   ok('…and each carries the dot that says how its product is doing',
     s.filter((d) => d.width === '7px' && d.height === '7px').length === 3);
   ok('the far end is the clock and the switch, and the clock is to the minute',
     /[A-Z][a-z]{2} \d+ [A-Z][a-z]{2,4} · \d\d:\d\d/.test(bar)
-    && s.some((d) => d.height === `${K.SIZE.barChip}px` && d['border-radius'] === '9px'));
+    && s.some((d) => d.height === `${K.SIZE.barChip}px` && d['border-radius'] === `${K.RADIUS.well}px`));
 
   ok('nothing in the bar is a colour of its own',
     [...paint(bar).literal].every((c) => OWN.has(c)), [...paint(bar).literal].join(', '));

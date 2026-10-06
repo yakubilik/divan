@@ -17,7 +17,7 @@
     <style>
       html, body, #root { height: 100%; margin: 0; background: Canvas; }
       body {
-        font-family: -apple-system, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+        font-family: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
         color: CanvasText;
         -webkit-font-smoothing: antialiased;
         overflow: hidden;
@@ -30,7 +30,7 @@
     <!-- What stands here until the bundle runs, and what is left if it never
          does: a script that 404s or fails to parse used to leave the page black
          and silent. React replaces this on its first paint. -->
-    <div id="root">
+    <div id="root" class="dv-root dv-ambient" data-theme="dark">
       <div id="boot" style="position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:40px 32px;font:400 14px/1.5 -apple-system,system-ui,sans-serif">
         <div style="font-size:24px;font-weight:600;letter-spacing:-.02em">Divan</div>
         <div style="opacity:.7">Loading the panel…</div>

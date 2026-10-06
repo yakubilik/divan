@@ -363,7 +363,7 @@ function Approval({ item, onRespond }: {
         <div style={{ fontSize: 12, color: C.mute, marginTop: 6 }}>{item.reason}</div>
       )}
       {!settled && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
           <button type="button" onClick={() => onRespond('deny')} style={btn('ghost')}>Deny</button>
           <button type="button" onClick={() => onRespond('allow')} style={btn('primary')}>Allow</button>
           <button type="button" onClick={() => onRespond('allow_session')} style={btn('ghost')}>
@@ -378,7 +378,7 @@ function Approval({ item, onRespond }: {
 function btn(kind: 'ghost' | 'primary') {
   return {
     height: 32, padding: '0 14px', borderRadius: R.btn, fontSize: 13, fontWeight: 600,
-    cursor: 'pointer',
+    cursor: 'pointer', whiteSpace: 'nowrap',
     border: `1px solid ${kind === 'primary' ? C.accent : C.border}`,
     background: kind === 'primary' ? C.accent : C.surface2,
     color: kind === 'primary' ? C.onAccent : C.text,

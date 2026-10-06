@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  MONO, ON_COLOUR, RADIUS, SHADOW, T, toneFace, type State, type ToneFace,
+  MONO, RADIUS, SHADOW, T, toneFace, type State, type ToneFace,
 } from '../lib/theme';
 import { Icon, P, mono } from '../ui/kit';
 import { ago, cost, duration, shortPath, tildeAll, tokens, toolSummary } from '../lib/format';
@@ -413,8 +413,8 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
                 // the same shape the chat screen uses, so a tile reads as the
                 // conversation it is a window onto.
                 borderRadius: you ? '14px 14px 5px 14px' : '14px 14px 14px 5px',
-                background: you ? T.red : T.s2,
-                color: you ? ON_COLOUR : T.ink,
+                background: you ? T.ink : T.s2,
+                color: you ? T.onInk : T.ink,
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 wordBreak: 'break-word',
               }}>{l.text}</span>
