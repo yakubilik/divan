@@ -460,8 +460,11 @@ export function Timeline({ items, hostKey, onRespond }: {
   latest.current = onRespond;
   const respond = useCallback<Respond>((rid, d) => latest.current(rid, d), []);
 
+  // `anywhere`, not `break-word`: a link or a path with no space in it has to
+  // be allowed to break, or it is the width of the whole conversation and the
+  // chat scrolls sideways under it.
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0, overflowWrap: 'anywhere' }}>
       {items.map((item, i) => (
         <Row
           key={item.id} item={item} hostKey={hostKey} onRespond={respond}
