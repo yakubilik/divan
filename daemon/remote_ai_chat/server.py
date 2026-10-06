@@ -28,7 +28,7 @@ from .db import DB
 from . import accounts as acct
 from . import pool as poolmod
 from .errors import Err
-from . import agents, tools
+from . import agents, secrets, tools
 from .call import Concierge, headline as call_headline, snapshot as call_snapshot
 from .push import send_push
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
@@ -1605,7 +1605,7 @@ class Server:
             if not hits:
                 raise Err("no_project", f"there is no project called {project}")
             cwd = hits[0]["path"]
-            chat = await self.h_chat_create(None, {"cwd": cwd, "title": instruction[:60]})
+            chat = await self.h_chat_create(None, {"cwd": cwd, "title": secrets.mask(instruction)[:60]})
             await self.sessions.get(chat["id"]).send(instruction.strip(), None)
             return hits[0]["name"]
 

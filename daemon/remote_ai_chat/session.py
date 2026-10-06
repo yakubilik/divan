@@ -11,7 +11,7 @@ from typing import Awaitable, Callable
 from .config import Config
 from .db import DB, new_id
 from .errors import Err
-from . import attachments, preamble
+from . import attachments, preamble, secrets
 from .security import PathPolicy
 from .providers.base import Provider, ProviderConfig
 from .providers.claude import ClaudeProvider
@@ -134,6 +134,9 @@ class ChatSession:
         # the interrupt has come back, rather than tearing the provider down
         # underneath a coroutine that is still draining it.
         self._handover: tuple[str | None, str] | None = None
+        # Where a key pasted into a message is kept; None is the login keychain.
+        # A test hands in its own so it never writes to the real one.
+        self.keychain = None
 
     # ── events ─────────────────────────────────────────────────────────────
     async def emit(self, type_: str, payload: dict, persist: bool) -> None:
@@ -415,6 +418,10 @@ class ChatSession:
         the agent to be free is the agent's job, not the phone's: nobody should
         have to stop a turn just to add a thought to it.
         """
+        # A key pasted into the message is taken out before anything else sees
+        # it: the timeline, the queue, the title and the prompt all get the
+        # placeholder, and the value is only in the keychain.
+        text = await self._capture_secrets(text)
         # The queue check and the turn's own drain share this lock, so a message
         # can never land after the running turn decided the queue was empty.
         async with self.lock:
@@ -440,6 +447,15 @@ class ChatSession:
             await self._prepare(text, attachments, announce=True)
             self.running = asyncio.create_task(self._run(text, attachments))
         return False
+
+    async def _capture_secrets(self, text: str) -> str:
+        if not secrets.find(text):
+            return text
+        # `security` is a subprocess; it does not get to hold up the loop.
+        got = await asyncio.to_thread(secrets.capture, text, self.keychain)
+        log.info("chat %s: %d key(s) moved to the keychain%s", self.chat_id, len(got.hits),
+                 f", {len(got.failed)} refused" if got.failed else "")
+        return got.text
 
     async def resume(self, msgs: list[tuple[str, list[dict]]]) -> None:
         """Run again a turn the process before this one did not finish.
