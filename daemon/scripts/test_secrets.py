@@ -74,6 +74,7 @@ ORDINARY = {
     "turkish prose": "Kanka şu token sayısı neden arttı, şifre ekranını da düzelt: ödeme sayfası açılmıyor.",
     "identifier": "use re_compile_everything_here and sk-learn-style naming",
     "env reference": "password: process.env.DB_PASSWORD",
+    "key path": "EXPO_ASC_API_KEY_PATH=/Users/me/keys/AuthKey_AB12CD34EF.p8",
 }
 
 

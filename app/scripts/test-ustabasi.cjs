@@ -1281,6 +1281,9 @@ const newTicket = require('./test-new-ticket.cjs');
 // seeks, the speed chip goes round and is remembered. Its bubble is pressed
 // for real, and play waits on the audio mode, so it too has a `ready`.
 const voicenote = require('./test-voicenote.cjs');
+// …and the text side of the voice that runs on the phone: EMA Lightning's
+// frontend and chunker in TypeScript, held to what the Python says.
+checks.push(...require('./test-tts.cjs').checks);
 
 void Promise.all([newTicket.ready, voicenote.ready]).then(() => {
   checks.push(...newTicket.checks, ...voicenote.checks);
