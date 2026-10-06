@@ -8,7 +8,9 @@ import { useStore, useT } from '../src/store';
 import { client } from '../src/ws';
 import { useColors, type Palette } from '../src/theme';
 import { Text } from '../src/components/ui';
-import { abortListening, ensureMic, label as voiceLabel, listVoices, locale as voiceLocale, pickVoice, pickup, ring, setVoicePrefs, speak, startListening, stopListening, stopSpeaking, voiceName } from '../src/voice';
+import { abortListening, EMA_SAMPLE, emaAvailable, emaStats, ensureMic, label as voiceLabel, listVoices, locale as voiceLocale, pickVoice, pickup, ring, setEmaEnabled, setVoicePrefs, speak, startListening, stopListening, stopSpeaking, voiceName, warmEma } from '../src/voice';
+import { isTurkish } from '../src/tts/speaker';
+import { Switch } from '../src/components/divan';
 import type * as Speech from 'expo-speech';
 
 type Phase = 'idle' | 'dialling' | 'listening' | 'thinking' | 'speaking';
@@ -154,17 +156,45 @@ export default function Call() {
   // The stored choice has to reach the voice module before anything is spoken.
   useEffect(() => { setVoicePrefs(prefs.voiceIds ?? {}); }, [prefs.voiceIds]);
 
+  useEffect(() => { setEmaEnabled(!prefs.emaOff); setVoice(voiceName(lang)); }, [prefs.emaOff, lang]);
+
   useEffect(() => { void pickVoice(lang).then(() => setVoice(voiceName(lang))); }, [lang]);
 
+  // EMA, the Turkish voice made on the phone, loads when the call screen opens
+  // rather than at app start: it is some 35 MB of model and only a call needs it.
+  // Until it is ready, and in a build without it, the system voice reads.
+  const [emaState, setEmaState] = useState<'loading' | 'ready' | 'off'>(
+    isTurkish(lang) && emaAvailable() ? 'loading' : 'off');
+  useEffect(() => {
+    if (!isTurkish(lang) || !emaAvailable()) return;
+    let gone = false;
+    void warmEma().then((ok) => {
+      if (gone) return;
+      setEmaState(ok ? 'ready' : 'off');
+      setVoice(voiceName(lang));
+    });
+    return () => { gone = true; };
+  }, [lang]);
+
+  const pickEma = useCallback(async (on: boolean) => {
+    await setPrefs({ emaOff: !on });
+    setEmaEnabled(on);
+    setVoice(voiceName(lang));
+    if (on) { setVoices(null); speak(EMA_SAMPLE, lang, () => {}); }
+  }, [lang, setPrefs]);
+
   const chooseVoice = useCallback(async (v: Speech.Voice) => {
-    await setPrefs({ voiceIds: { ...(prefs.voiceIds ?? {}), [lang]: v.identifier } });
+    // Picking a system voice for Turkish is choosing it over EMA.
+    const emaOff = isTurkish(lang) ? true : prefs.emaOff;
+    await setPrefs({ voiceIds: { ...(prefs.voiceIds ?? {}), [lang]: v.identifier }, emaOff });
+    setEmaEnabled(!emaOff);
     setVoicePrefs({ ...(prefs.voiceIds ?? {}), [lang]: v.identifier });
     await pickVoice(lang);
     setVoice(voiceName(lang));
     setVoices(null);
     // Say something in it, so the choice is made by ear and not by name.
     speak(T('callVoiceTry'), lang, () => {});
-  }, [lang, prefs.voiceIds, setPrefs, T]);
+  }, [lang, prefs.voiceIds, prefs.emaOff, setPrefs, T]);
 
   const setPhaseBoth = useCallback((p: Phase) => { phaseRef.current = p; setPhase(p); }, []);
 
@@ -541,9 +571,20 @@ export default function Call() {
               <Text style={[{ fontSize: 15, lineHeight: 20 }, { color: c.accent }]}>{T('close')}</Text>
             </Pressable>
           </View>
+          {isTurkish(lang) && emaAvailable() && (
+            <View style={styles.voiceRow}>
+              <View style={styles.emaRow}>
+                <Pressable onPress={() => void pickEma(true)} style={{ flex: 1 }}>
+                  <Text style={[{ fontSize: 15, lineHeight: 20 }, { color: !prefs.emaOff ? c.accent : c.ink }]}>{T('callVoiceEma')}</Text>
+                </Pressable>
+                <Switch label={T('callVoiceEmaSwitch')} value={!prefs.emaOff} onChange={(on) => void pickEma(on)} />
+              </View>
+              <Text style={[{ fontSize: 13, lineHeight: 18 }, { color: c.muted }]}>{emaLine(emaState, T)}</Text>
+            </View>
+          )}
           <ScrollView style={{ maxHeight: 220 }}>
             {voices.map((v) => {
-              const on = (prefs.voiceIds ?? {})[lang] === v.identifier;
+              const on = (!isTurkish(lang) || !!prefs.emaOff || !emaAvailable()) && (prefs.voiceIds ?? {})[lang] === v.identifier;
               return (
                 <Pressable key={v.identifier} onPress={() => void chooseVoice(v)} style={styles.voiceRow}>
                   <Text style={[{ fontSize: 15, lineHeight: 20 }, { color: on ? c.accent : c.ink }]}>{voiceLabel(v)}</Text>
@@ -585,6 +626,20 @@ export default function Call() {
   );
 }
 
+/** What the EMA row says under its name: loading, why it is not there, or the
+ *  numbers of the last answer — the only place the phone's own speed shows. */
+function emaLine(state: 'loading' | 'ready' | 'off', T: ReturnType<typeof useT>): string {
+  const s = emaStats();
+  if (s.failure) return T('callVoiceEmaFailed', { e: s.failure.slice(0, 80) });
+  if (state === 'loading' && !s.ready) return T('callVoiceEmaLoading');
+  const sec = (ms: number | null | undefined) => (ms == null ? '–' : `${(ms / 1000).toFixed(1)} s`);
+  return T('callVoiceEmaStats', {
+    load: sec(s.timings ? s.timings.loadMs + s.timings.warmMs : null),
+    first: sec(s.firstChunkMs),
+    rtf: s.rtf == null ? '–' : s.rtf.toFixed(2),
+  });
+}
+
 const mkStyles = (c: Palette) => StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 8 },
   bubble: { padding: 12, borderRadius: 14, marginBottom: 10, maxWidth: '86%' },
@@ -596,4 +651,5 @@ const mkStyles = (c: Palette) => StyleSheet.create({
   voiceBox: { marginHorizontal: 20, marginBottom: 10, backgroundColor: c.card, borderRadius: 14, borderWidth: 1, borderColor: c.line },
   voiceHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6 },
   voiceRow: { paddingHorizontal: 14, paddingVertical: 11, borderTopWidth: 1, borderTopColor: c.line },
+  emaRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 2 },
 });
