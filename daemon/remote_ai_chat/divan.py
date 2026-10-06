@@ -1529,7 +1529,7 @@ class Board:
         nobody has said why yet.
         """
         raw = (ticket.get("status") or "").strip()
-        question = (ticket.get("escalation") or "").strip()
+        question = (ticket.get("ask") or ticket.get("escalation") or "").strip()
         if raw == "blocked":
             return (ASKING if question else BLOCKED), question
         return AGENT_STATUS.get(raw, raw or "queued"), question

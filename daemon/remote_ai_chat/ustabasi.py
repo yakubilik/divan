@@ -196,6 +196,11 @@ def _ticket(row: sqlite3.Row, last_event: dict | None,
         # is an editor that clears it.
         "verify_cmd": card.get("verify_cmd") or "",
         "escalation": row["escalation"] or "",
+        # The question as the owner reads it: plain words, no paths or commands.
+        # When the queue kept one apart (`ask`, from 6 Oct 2026) the escalation
+        # is the technical record behind it; a queue too old to have the column
+        # leaves this empty and the escalation is the question, as before.
+        "ask": (row["ask"] if "ask" in row.keys() else None) or "",
         "verdict": verdict,
         "notes": notes[-6:],
         "note_count": len(notes),

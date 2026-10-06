@@ -321,6 +321,10 @@ export interface Ticket {
   /** What the worker stopped to ask, when it stopped. Empty otherwise — and on
    *  a finished ticket this is its closing report instead. */
   escalation: string;
+  /** The question in plain words, when the queue kept it apart from the
+   *  escalation; the escalation is then the technical record behind it. Empty
+   *  (or absent, from an older daemon) means the escalation is the question. */
+  ask?: string;
   verdict: TicketVerdict | null;
   /** The last few only; `note_count` is how many there are in all. */
   notes: TicketNote[];

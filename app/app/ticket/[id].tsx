@@ -7,10 +7,10 @@ import { useNavGuard } from '../../src/nav';
 import { useQueue, useRun } from '../../src/queue';
 import { LOCALE, type Key } from '../../src/i18n';
 import { em, useColors } from '../../src/theme';
-import { BackBar, Dot, EmptyState, Icon, Spinner, Text, TextInput } from '../../src/components/ui';
+import { BackBar, Dot, EmptyState, Icon, SelectableText, Spinner, Text, TextInput } from '../../src/components/ui';
 import { AssistantText, ToolCard, UserBubble } from '../../src/components/chat';
 import { tone } from '../../src/components/ticket';
-import { answerable, around, conversation, hasDetails, marks, noteHint, runStartedAt,
+import { answerable, around, conversation, hasDetails, marks, noteHint, record, runStartedAt,
          STATUS_KEY, VOICE_KEY, type Msg, type Voice } from '../../src/tickets';
 import type { RunSilence, Turn } from '../../src/transcript';
 import type { Ticket } from '../../src/protocol';
@@ -320,6 +320,9 @@ function Details({ t }: { t: Ticket }) {
       </Pressable>
       {open && (
         <View style={{ borderTopWidth: 1, borderTopColor: c.line, padding: 12, gap: 9 }}>
+          {!!record(t) && (
+            <SelectableText mono style={{ fontSize: 11.5, lineHeight: 11.5 * 1.5, color: c.muted }}>{record(t)}</SelectableText>
+          )}
           {t.done_criteria.map((crit, i) => {
             const m = judged[i];
             return (

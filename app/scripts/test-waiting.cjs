@@ -256,6 +256,10 @@ const CALM = view([EASY]);
       eq(A('We use one retry or two today. Keep three, or follow Stripe?'),
          ['Keep three', 'Follow Stripe'])],
     ['a report is not a question and offers nothing', eq(A(SAFARI), [])],
+    ['a Turkish "A mı, B mi?" offers its two halves', eq(A('Postgres mi, SQLite mı?'), ['Postgres', 'SQLite'])],
+    ['…and a Turkish yes-or-no only Evet, since a no needs saying in words',
+      eq(A('Bu iş bitti ama ana koda eklenemedi. Ben ekleyeyim mi?'), ['Evet'])
+      && eq(A('Postgres mi yoksa SQLite mı?'), [])],
     ['…nor is a question with nothing to choose between',
       eq(A('Which Stripe account should the beta use?'), [])],
     ['a question that opens on an auxiliary is not split: half of it would be a button',

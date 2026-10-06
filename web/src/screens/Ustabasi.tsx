@@ -129,11 +129,11 @@ function Tile({ t, now, onOpen }: { t: Ticket; now: number; onOpen: () => void }
       }}>
         <div style={{
           fontSize: 12.5, lineHeight: 1.45, wordBreak: 'break-word',
-          color: wants && t.escalation ? T.ink2 : T.ink3,
-          whiteSpace: wants && t.escalation ? 'pre-wrap' : undefined,
+          color: wants && (t.ask || t.escalation) ? T.ink2 : T.ink3,
+          whiteSpace: wants && (t.ask || t.escalation) ? 'pre-wrap' : undefined,
         }}>
-          {wants && t.escalation
-            ? first(t.escalation, 260)
+          {wants && (t.ask || t.escalation)
+            ? first(t.ask || t.escalation, 260)
             : first(cardLine(t), 200) || 'no events yet'}
         </div>
 

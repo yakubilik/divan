@@ -483,6 +483,11 @@ group('what needs a person arrives as a chat session');
     && eq(S.answers('Should we keep three attempts, or follow Stripe?'), [])
     && eq(S.answers('Postgres, or MySQL, or SQLite?'), [])
     && eq(S.answers(`${'x'.repeat(220)}, or the other one?`), []));
+  ok('a Turkish "A mı, B mi?" offers its two halves',
+    eq(S.answers('Postgres mi, SQLite mı?'), ['Postgres', 'SQLite']));
+  ok('…a Turkish yes-or-no offers only Evet, since a no needs saying in words',
+    eq(S.answers('Bu iş bitti ama ana koda eklenemedi. Ben ekleyeyim mi?'), ['Evet'])
+    && eq(S.answers('Postgres mi yoksa SQLite mı?'), []));
   ok('a card with a ticket behind it can be answered, and one without can only be read',
     q.ticket === 42 && list[2].ticket === null);
 

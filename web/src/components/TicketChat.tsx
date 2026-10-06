@@ -367,7 +367,10 @@ export function TicketChat({ t, tone, hostKey, onClose, onNote, onChanged }: {
   const run = useRun(hostKey, t.id);
   /** The question a stopped ticket ended on, which is the only thing here
    *  addressed to a person. */
-  const asked = (t.escalation || '').trim();
+  const asked = (t.ask || t.escalation || '').trim();
+  /** …and the record behind it, when the question was written apart from it:
+   *  the branch, the path, the command. Shut, because it is for whoever wants it. */
+  const record = (t.ask || '').trim() ? (t.escalation || '').trim() : '';
   const sent = useMemo(() => new Set((t.notes || []).map((n) => (n.text || '').trim())), [t.notes]);
   const mine = pending.filter((p) => !sent.has(p.text));
   /** What was *said to* the ticket, oldest first: the notes a person typed and
@@ -570,6 +573,12 @@ export function TicketChat({ t, tone, hostKey, onClose, onNote, onChanged }: {
                 color: C.text, background: tone.wash, border: `1px solid ${tone.edge}`,
               }}>
                 <Prose text={asked} />
+                {!!record && (
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ ...mono, fontSize: 11, color: C.mute, cursor: 'pointer' }}>Details</summary>
+                    <div style={{ marginTop: 6, fontSize: 13, color: C.text2 }}><Prose text={record} /></div>
+                  </details>
+                )}
               </div>
             )}
             {notes.map((n) => (

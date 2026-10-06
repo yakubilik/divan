@@ -441,6 +441,7 @@ async def the_wire() -> None:
     check("a ticket with no events is still a ticket", by[1]["last_event"], None)
     check("the question comes through", by[2]["escalation"], "Which way should this go?")
     check("and is empty, not null, where there is none", by[1]["escalation"], "")
+    check("a queue older than the plain question has none apart from it", by[2]["ask"], "")
     check("the card is unpacked into a goal", by[3]["goal"], "pass")
     check("and into criteria", by[3]["done_criteria"], ["the first thing", "the second thing"])
     check("no verdict where there is none", by[1]["verdict"], None)

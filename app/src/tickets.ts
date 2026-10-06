@@ -331,6 +331,8 @@ function eventLine(ev: { kind: string; msg: string } | null | undefined): string
  *  list is a form to fill in; the same points run together and pointed at
  *  somebody are a question, and a question is answerable in a sentence. */
 export function question(t: Ticket, T: Translate): string {
+  // Written for a person already: said as it was written.
+  if ((t.ask || '').trim()) return (t.ask || '').trim();
   const failed = t.status === 'failed';
   const items = bullets(t.escalation);
   if (!items.length) return T(failed ? 'askSilentFailed' : 'askSilentStopped');
@@ -425,7 +427,14 @@ export function conversation(t: Ticket, T: Translate): Msg[] {
  *  card's criteria and what the verifier made of them. Neither is part of the
  *  conversation — they are the paperwork behind it. */
 export function hasDetails(t: Ticket): boolean {
-  return (t.done_criteria?.length || 0) > 0 || !!t.verdict;
+  return (t.done_criteria?.length || 0) > 0 || !!t.verdict || !!record(t);
+}
+
+/** The technical record behind a question that was written apart from it —
+ *  the branch, the path, the command. Empty when the escalation is the question
+ *  itself, because then it is already on the screen. */
+export function record(t: Ticket): string {
+  return (t.ask || '').trim() ? (t.escalation || '').trim() : '';
 }
 
 // ── the wall, grouped by project ─────────────────────────────────────────────

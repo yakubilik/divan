@@ -69,7 +69,8 @@ export function TicketCard({ t, now, onPress, onAbout }: {
   const wants = answerable(t.status);
   const round = roundAge(t, now, T);
   const commits = commitCount(t, T);
-  const line = wants && t.escalation ? first(t.escalation, 180)
+  const asked = t.ask || t.escalation;
+  const line = wants && asked ? first(asked, 180)
                                      : first(cardLine(t), 140) || T('ticketNoEvents');
 
   return (

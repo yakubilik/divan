@@ -48,6 +48,10 @@ export interface Ticket {
   /** The command that proves the criteria. Empty where the ticket has none. */
   verify_cmd?: string;
   escalation: string;
+  /** The question in plain words, when the queue kept it apart from the
+   *  escalation; the escalation is then the technical record behind it. Empty
+   *  (or absent, from an older daemon) means the escalation is the question. */
+  ask?: string;
   verdict: Verdict | null;
   notes: Note[];
   note_count: number;
@@ -157,6 +161,8 @@ function eventLine(ev: Event | null): string {
  *  A list is a form to fill in; the same points run together and pointed at
  *  somebody are a question, and a question is answerable in a sentence. */
 export function question(t: Ticket): string {
+  // Written for a person already: said as it was written.
+  if ((t.ask || '').trim()) return (t.ask || '').trim();
   const failed = t.status === 'failed';
   const items = bullets(t.escalation);
   if (!items.length) {
