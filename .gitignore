@@ -60,3 +60,7 @@ daemon/remote_ai_chat/webui.bak-*/
 # design/divan/TOKENS.md, which is tracked.
 design/divan/*
 !design/divan/TOKENS.md
+
+# tts: the ONNX files and reference audio are rebuilt by tts/export.py, never committed
+tts/models/
+tts/reference/
