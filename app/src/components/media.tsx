@@ -367,7 +367,7 @@ export function VoiceBubble({ item, sent }: { item: Attachment; sent?: boolean }
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 18 }}>
             <Text mono style={{ fontSize: 11, color: c.faint }}>{timeLabel(status.playing, position, total)}</Text>
             {now !== 'idle' && (
-              <Pressable onPress={speed} hitSlop={8} style={{ backgroundColor: c.fill, borderRadius: 9, paddingHorizontal: 7, paddingVertical: 1 }}>
+              <Pressable onPress={speed} hitSlop={8} style={{ backgroundColor: sent ? c.fill : c.card, borderRadius: 9, paddingHorizontal: 7, paddingVertical: 1 }}>
                 <Text mono style={{ fontSize: 11, color: c.text2 }}>{speedLabel(rate)}</Text>
               </Pressable>
             )}
