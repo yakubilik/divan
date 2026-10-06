@@ -32,7 +32,7 @@ from . import agents, secrets, tools
 from .call import Concierge, headline as call_headline, snapshot as call_snapshot
 from .push import send_push
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
-from .attachments import KINDS, normalize_image, sniff
+from .attachments import KINDS, normalize_image, peaks, sniff
 from .security import ACCESS_EMAIL, PathPolicy, TunnelAccess, TunnelGate, TunnelLock
 from . import screen as screenmod
 from . import ustabasi as ustabasimod
@@ -965,6 +965,9 @@ class Server:
         out = {"path": str(target), "name": target.name, "size": target.stat().st_size, "kind": kind,
                "url": f"/files?path={target}"}
         if kind == "audio":
+            shape = await asyncio.to_thread(peaks, target)
+            if shape:
+                out["peaks"] = shape
             t = await transcribe(target)
             if t:
                 out["transcript"] = t["text"]

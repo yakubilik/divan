@@ -29,6 +29,7 @@ import logging
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from .config import UPLOAD_DIR
@@ -244,3 +245,75 @@ def _pillow_resize(src: Path, dst: Path) -> bool:
     except Exception as exc:
         log.warning("pillow convert failed: %s", exc)
         return False
+
+
+# ── the shape a voice bubble is drawn with ───────────────────────────────────
+
+PEAKS = 40
+
+
+def with_peaks(atts: list[dict]) -> list[dict]:
+    """Give every sound a `peaks` list, so its bubble draws how loud it was
+    rather than a made-up shape. One that cannot be read is left without; the
+    phone falls back to the made-up shape, which is what it always drew."""
+    out = []
+    for a in atts:
+        if a.get("kind") != "audio" or a.get("peaks"):
+            out.append(a)
+            continue
+        p = peaks(Path(a["path"]))
+        out.append({**a, "peaks": p} if p else a)
+    return out
+
+
+def peaks(src: Path, n: int = PEAKS) -> list[int] | None:
+    """`n` loudness values, 0-100, the loudest part of the sound at 100. None
+    when the file cannot be decoded — this never raises."""
+    try:
+        samples = _pcm(src)
+        if not samples:
+            return None
+        step = max(1, len(samples) // n)
+        buckets = [samples[i * step:(i + 1) * step] for i in range(n)]
+        levels = [max((abs(s) for s in b), default=0) for b in buckets]
+        top = max(levels)
+        if not top:
+            return [0] * n
+        return [round(100 * v / top) for v in levels]
+    except Exception as exc:
+        log.warning("reading the loudness of %s failed: %s", src.name, exc)
+        return None
+
+
+def _pcm(src: Path) -> list[int] | None:
+    """The sound as 8 kHz mono signed 16-bit samples. ffmpeg reads everything;
+    without it macOS's afconvert does, and a plain WAV needs neither."""
+    import array
+    import tempfile
+    import wave
+
+    def unpack(raw: bytes) -> list[int]:
+        a = array.array("h")
+        a.frombytes(raw[: len(raw) // 2 * 2])
+        if sys.byteorder == "big":
+            a.byteswap()
+        return a.tolist()
+
+    if shutil.which("ffmpeg"):
+        r = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src),
+                            "-ac", "1", "-ar", "8000", "-f", "s16le", "-"], capture_output=True, timeout=30)
+        return unpack(r.stdout) if r.returncode == 0 else None
+    if shutil.which("afconvert"):
+        with tempfile.TemporaryDirectory() as d:
+            wav = Path(d) / "peaks.wav"
+            r = subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@8000", "-c", "1", str(src), str(wav)],
+                               capture_output=True, timeout=30)
+            if r.returncode != 0:
+                return None
+            with wave.open(str(wav), "rb") as w:
+                return unpack(w.readframes(w.getnframes()))
+    with wave.open(str(src), "rb") as w:
+        if w.getsampwidth() != 2:
+            return None
+        frames = w.readframes(w.getnframes())
+        return unpack(frames)[:: w.getnchannels()]
