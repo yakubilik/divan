@@ -252,7 +252,7 @@ function AssistantAttachments({ items }: { items: Attachment[] }) {
     <View style={{ alignItems: 'flex-start', gap: 6, marginBottom: 9 }}>
       {images.length > 0 && <ImageGroup items={images} align="left" />}
       {videos.map((v) => <VideoBubble key={v.path} item={v} />)}
-      {voices.map((v) => <VoiceBubble key={v.path} item={v} />)}
+      {voices.map((v) => <VoiceBubble key={v.path} item={v} sent />)}
       {files.map((f) => <FileChip key={f.path} item={f} openable />)}
     </View>
   );

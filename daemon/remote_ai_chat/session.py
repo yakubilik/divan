@@ -146,7 +146,7 @@ class ChatSession:
         if type_ == "message.assistant" and payload.get("text"):
             found = attachments.extract(payload["text"], self.policy)
             if found:
-                payload = {**payload, "attachments": attachments.keep_views(found)}
+                payload = {**payload, "attachments": attachments.with_peaks(attachments.keep_views(found))}
         if persist:
             ev = self.db.append_event(self.chat_id, type_, payload)
         else:

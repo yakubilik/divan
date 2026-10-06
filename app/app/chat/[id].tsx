@@ -356,7 +356,7 @@ export function Conversation({ id }: { id: string }) {
     const seconds = Math.max(rec.durationMillis, recorder.currentTime * 1000) / 1000;
     try { await recorder.stop(); } catch {}
     setRecording(false);
-    await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
     const uri = recorder.uri;
     if (!sendIt || !uri || seconds < 0.5) return;
     setUploading((n) => n + 1);

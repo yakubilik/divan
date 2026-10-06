@@ -36,6 +36,11 @@ const en = {
   // new chat / settings sheet
   newChat: 'New chat', tool: 'Tool', model: 'Model', effort: 'Effort', permMode: 'Permission mode', folder: 'Folder', group: 'Group',
   startChat: 'Start chat', couldNotStart: "Couldn't start", noFolders: 'No folders under the allowed roots.',
+  ncAgent: 'Agent', ncNoAgent: 'No agent', ncNoAgentHint: "A plain chat, with this computer's usual instructions",
+  ncReadingAgents: 'Reading agents…', ncChatWith: 'Chat with {name}', ncProjectAgent: 'project',
+  ncSearchFolders: 'Search folders…', ncRecent: 'Recent', ncAdvanced: 'Advanced', ncCapsPerChat: 'caps are per chat',
+  ncUnlimited: 'unlimited', ncBypassWarn: 'bypass skips the permission questions. The dangerous-command list still asks, even here.',
+  ncNoModels: 'Could not fetch the model list — the computer may be offline',
   bypassAuth: 'Authenticate for bypass mode',
   chatSettings: 'Chat settings', titleLabel: 'Title', limits: 'Limits', maxTurns: 'Max turns', maxBudget: 'Max budget',
   budgetClaudeOnly: 'Budget applies to Claude only.', sessionInfo: 'session {id} · total ${cost}',
