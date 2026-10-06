@@ -103,7 +103,8 @@
           "microphonePermission": "To record a voice message, and to talk to the concierge.",
           "speechRecognitionPermission": "To turn what you ask the concierge into text, on the phone."
         }
-      ]
+      ],
+      "./plugins/with-tts-models.js"
     ],
     "experiments": {
       "typedRoutes": false

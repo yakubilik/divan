@@ -30,6 +30,9 @@ export interface Prefs {
   // screen; empty means "whatever the phone has that sounds best".
   /** Keyed by language tag, e.g. 'tr-TR'. */
   voiceIds?: Record<string, string>;
+  /** Turkish is read by the system voice even where EMA, the voice made on the
+   *  phone, could read it. Off (EMA) by default. */
+  emaOff?: boolean;
 }
 export interface DeviceInfo { id: string; name: string; push_approval: boolean; push_done: boolean; has_push_token: boolean }
 /** `path` is the file the message names — what a link opens, and what the text

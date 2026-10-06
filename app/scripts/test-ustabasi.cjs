@@ -1284,9 +1284,12 @@ const voicenote = require('./test-voicenote.cjs');
 // …and the text side of the voice that runs on the phone: EMA Lightning's
 // frontend and chunker in TypeScript, held to what the Python says.
 checks.push(...require('./test-tts.cjs').checks);
+// …and that voice running: the ONNX pipeline against the PyTorch reference,
+// who reads an answer, a stop in the middle of one, and a build without it.
+const ema = require('./test-ema.cjs');
 
-void Promise.all([newTicket.ready, voicenote.ready]).then(() => {
-  checks.push(...newTicket.checks, ...voicenote.checks);
+void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(() => {
+  checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {
