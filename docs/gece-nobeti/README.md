@@ -29,9 +29,12 @@ beri açık" diye bir kez anılır.
 | A5 | Verifier kriter kapısı kodda yok (#71 "Placeholder"). 1 Eki'de tekrarlamadı: 19/19 verdict her kriteri kapsıyor. Not: verifier'a diff prompt'ta gömülü gidiyor, az tool çağrısı "okumadı" demek değil | 2026-09-30 akşam | soruldu, cevapsız |
 | A7 | Ağ kesintisi crash sayılıyor: 1 Eki 05:09–~09:25, #88/#90/#91 üçer crash ile FAILED; 12 bildirimin hiçbiri gitmedi ve ağ dönünce yeniden gönderilmedi | 2026-10-01 | soruldu |
 | A8 | `_merge` main'i dala aldıktan sonra `verify_cmd`'yi yeniden koşmuyor: #83 main'i kırdı (`dd3e9a6`, Lint + Deploy kırmızı) ve ✅ aldı. Aynı repoda paralel lane'lerin sonucu | 2026-10-01 | soruldu |
-| A9 | Disk %97, 7,3 GB boş; 1 Eki 01:04'te #80 `ENOSPC` yedi. Kuyruk worker başlatmadan boş yere bakmıyor (`min_free_gb` yok) | 2026-10-01 | soruldu |
+| A9 | Disk %97, 7,3 GB boş (6 Eki yine 7,0 GB); 1 Eki 01:04'te #80 `ENOSPC` yedi. Kuyruk worker başlatmadan boş yere bakmıyor (`min_free_gb` yok) | 2026-10-01 | soruldu |
 | A10 | Kart kalıbı: "merge + push + CI + canlı kontrol" `done_criteria`'da; 17 ticket'ın 12'si bu yüzden geri döndü ve merge'den sonra kimse bakmıyor (#83 CI, #79 `/yazar` canlıda 200). Öneri: `after_merge` alanı + merge sonrası CI kontrolü (30 Eyl akşam notundaki 1b ile aynı) | 2026-10-01 | 2 Eki: #99–#103 yine döndü ama kartları bulgudan önce yazılmıştı; bugün yazılan #106 dönmedi. Kod tarafı cevapsız |
 | A11 | ustabasi reposunun remote'u yok; #94'te push "origin does not appear to be a git repository" ile döndü | 2026-10-01 | soruldu |
+| A13 | isghocam'da push'suz merge yayın ajanını durduruyor: #109 kartı `allowed=["merge"]`, ana klon 5 commit önde, `publish-next.sh` 6 Eki'nin üç yayınını da atladı. Öneri: şimdi push + isghocam kartlarında `allowed` hep merge+push | 2026-10-06 | soruldu |
+| A14 | Elle merge edilen blocked ticket kapanmıyor: #110 21:58'de elle main'e girdi, ticket blocked kaldı, #111/#112 ona bağlı bekliyor. Öneri: tick'te `branch_merged()` ile bak, done yap | 2026-10-06 | soruldu |
+| A15 | Verifier diff'i `git diff <base>` (iki nokta); main ilerleyince başkasının commit'leri ters diff olarak giriyor (#109). Öneri: `<base>...HEAD` | 2026-10-06 | soruldu |
 
 ## Kararlar
 
