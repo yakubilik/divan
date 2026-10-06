@@ -72,7 +72,7 @@ export default function ChatPlace() {
 
   useEffect(() => { if (conn === 'online') { void refresh().catch(() => {}); void loadProjects().catch(() => {}); } }, [conn, refresh, loadProjects]);
 
-  // Tap: open a chat immediately with the defaults. Long-press: full picker sheet.
+  // Long-press: open a chat immediately with the defaults. Tap: the picker sheet.
   const creating = useRef(false);
   const quickNew = useCallback(async () => {
     const cwd = defaults.cwd || projects[0]?.path;
@@ -267,10 +267,11 @@ export default function ChatPlace() {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 18, paddingHorizontal: 16, paddingBottom: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
           <Text style={{ fontSize: 30, fontWeight: '600', letterSpacing: em(30, -0.025) }}>{T('chats')}</Text>
-          {/* Tap: a chat on the defaults. Long-press: the picker. */}
+          {/* Tap: the picker, with every choice the panel's dialog has. Long-press:
+              a chat on the defaults, for when nothing needs choosing. */}
           {withControls && (
             <Pressable accessibilityLabel={T('newChat')} hitSlop={6}
-              onPress={() => void quickNew()} onLongPress={() => go(() => router.push('/new-chat'))}
+              onPress={() => go(() => router.push('/new-chat'))} onLongPress={() => void quickNew()}
               style={({ pressed }) => [{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
               <Icon name="edit_square" size={22} />
             </Pressable>
@@ -328,7 +329,7 @@ export default function ChatPlace() {
   } else if (empty) {
     body = online ? (
       <EmptyState icon="chat_bubble" title={T('noChats')} body={T('hintNew')}
-        action={<SmallButton title={T('newChat')} onPress={() => void quickNew()} />} />
+        action={<SmallButton title={T('newChat')} onPress={() => go(() => router.push('/new-chat'))} />} />
     ) : conn === 'unauthorized' ? (
       <EmptyState icon="key_off" title={T('noAccess')} body={T('noAccessHint', { host: hostName })}
         action={<SmallButton title={T('pairAgain')} onPress={() => go(() => router.push({ pathname: '/pair', params: { add: '1' } }))} />} />

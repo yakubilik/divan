@@ -71,6 +71,9 @@ interface State {
   installAgent: (id: string, accountId?: string | null) => Promise<void>;
   removeAgent: (name: string, accountId?: string | null) => Promise<void>;
   loadAgents: (accountId?: string | null, cwd?: string | null) => Promise<void>;
+  /** The same list, handed back rather than stored: the new-chat sheet asks for
+   *  the account and folder it is about without moving the Agents tab's list. */
+  listAgents: (accountId?: string | null, cwd?: string | null) => Promise<Agent[]>;
   // account id -> the windows that account's plan reports
   limits: Record<string, LimitWindow[]>;
   // Several sign-ins of one tool, driven as one. Null until the computer has
@@ -898,6 +901,12 @@ export const useStore = create<State>((set, get) => {
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.detail || `${tt('uploadFailed')} (${res.status})`);
       const att = (await res.json()) as Attachment;
       return { ...att, localUri: uri };
+    },
+
+    listAgents: async (accountId, cwd) => {
+      const r = await client.call<{ agents: Agent[] }>('agent.list',
+        { account_id: accountId ?? null, cwd: cwd ?? null });
+      return r.agents ?? [];
     },
 
     loadAgents: async (accountId, cwd) => {

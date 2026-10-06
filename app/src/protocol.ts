@@ -101,6 +101,10 @@ export interface Defaults {
    *  it follows the account new chats use; setting it here does not drag the
    *  chat default along, which is the point of it being its own value. */
   agentAccountId?: string | null;
+  /** The agent the last new chat opened with, so the next one opens on it.
+   *  Unset means never chosen (Hermes, where there is one); null is an
+   *  explicit "No agent", which stays one. The panel keeps the same value. */
+  lastAgent?: string | null;
 }
 
 export interface StoreItem {
