@@ -9,21 +9,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useColors } from '../theme';
 import { fileUrl, useStore, useT, type Attachment } from '../store';
 import { Icon, Text } from './ui';
+import { claim, fmt, nextSpeed, phase, playedBars, release, rememberSpeed, rememberedSpeed, seekFor, speedLabel, timeLabel, waveform } from '../voicenote';
 
 function srcOf(a: Attachment): string | null {
   const remote = a.view || a.path;
   return a.localUri || (remote ? fileUrl(remote) : null);
-}
-
-function fmt(sec: number) {
-  const s = Math.max(0, Math.round(sec));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-// deterministic pseudo-waveform so a bubble looks the same every render
-function bars(seed: string, n = 14): number[] {
-  let h = 0; for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return Array.from({ length: n }, () => { h = (h * 1103515245 + 12345) >>> 0; return 4 + ((h >>> 8) % 15); });
 }
 
 // ── gallery ─────────────────────────────────────────────────────────────────
@@ -263,46 +253,126 @@ function FullVideo({ uri, onClose }: { uri: string; onClose: () => void }) {
   );
 }
 
-/** Voice note: play/pause, waveform, duration, transcript below. `sent` is a
- *  sound the agent made rather than one the person spoke: it sits on the left
- *  under its file name, and nobody looked for speech in it. */
+/** Voice note, drawn the way a messenger draws one: play/pause on the left, a
+ *  waveform across the rest that a finger can scrub, the time under it and a
+ *  speed chip once it has started. `sent` is a sound the agent made rather
+ *  than one the person spoke: it sits on the left under its file name, and
+ *  nobody looked for speech in it. What a touch seeks to, which bubble keeps
+ *  playing and what the time says are decided in `voicenote.ts`. */
 export function VoiceBubble({ item, sent }: { item: Attachment; sent?: boolean }) {
   const T = useT();
   const c = useColors();
+  const { width: screen } = useWindowDimensions();
   const transcriptionOn = useStore((s) => s.hostInfo?.transcription ?? true);
   const uri = srcOf(item);
   const player = useAudioPlayer(uri ? { uri } : null);
   const status = useAudioPlayerStatus(player);
-  const wave = useMemo(() => bars(item.path), [item.path]);
+  const wave = useMemo(() => waveform(item.peaks, item.path), [item.peaks, item.path]);
+  const [rate, setRate] = useState(rememberedSpeed);
+  // Where the finger holds the playhead while it is down; the player is only
+  // told on release, so a drag does not stutter the sound under it.
+  const [scrub, setScrub] = useState<number | null>(null);
+  const width = Math.round(screen * 0.72);
+  // Measured once laid out; until then, what the bubble's own sizes leave for
+  // it (paddings, the button and the gap beside it).
+  const [waveW, setWaveW] = useState(width - 10 - 14 - 38 - 10);
   const total = status.duration || item.duration || 0;
-  const progress = total ? Math.min(1, (status.currentTime || 0) / total) : 0;
-  const playing = status.playing;
+  const position = scrub ?? (status.currentTime || 0);
+  const now = phase(status.playing, position, total);
+  const lit = playedBars(position, total, wave.length);
+
+  useEffect(() => () => release(player), [player]);
+  // The end is the start again: play, and the whole length under it.
+  useEffect(() => {
+    if (!status.didJustFinish) return;
+    player.pause();
+    void player.seekTo(0).catch(() => {});
+    release(player);
+  }, [status.didJustFinish, player]);
+
   const toggle = () => {
     if (!uri) return;
-    if (playing) { player.pause(); return; }
-    if (progress >= 0.999) player.seekTo(0);
+    if (status.playing) { player.pause(); release(player); return; }
+    if (total && position >= total - 0.05) void player.seekTo(0).catch(() => {});
+    claim(player);
+    const r = rememberedSpeed();
+    setRate(r);
     // A mode left unset is the ambient one, which the silent switch mutes: the
     // counter ran and nothing was heard.
-    void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {}).then(() => player.play());
+    void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {}).then(() => {
+      player.setPlaybackRate(r);
+      player.play();
+    });
   };
+  const speed = () => {
+    const r = nextSpeed(rate);
+    setRate(r);
+    rememberSpeed(r);
+    player.setPlaybackRate(r);
+  };
+
+  // A tap or a sideways drag on the waveform moves the playhead. A drag that
+  // turns out to be vertical is handed back to the chat list's scroll.
+  const live = useRef({ x0: 0, width: 0, total: 0, sideways: false });
+  live.current.width = waveW;
+  live.current.total = total;
+  const pan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => !!uri,
+    onMoveShouldSetPanResponder: (_e, g) => !!uri && Math.abs(g.dx) > 4 && Math.abs(g.dx) > Math.abs(g.dy),
+    onPanResponderTerminationRequest: () => !live.current.sideways,
+    onPanResponderGrant: (e) => {
+      const l = live.current;
+      l.x0 = e.nativeEvent.locationX;
+      l.sideways = false;
+      setScrub(seekFor(l.x0, l.width, l.total));
+    },
+    onPanResponderMove: (_e, g) => {
+      const l = live.current;
+      if (!l.sideways && Math.abs(g.dx) > 4 && Math.abs(g.dx) > Math.abs(g.dy)) l.sideways = true;
+      if (l.sideways) setScrub(seekFor(l.x0 + g.dx, l.width, l.total));
+    },
+    onPanResponderRelease: (_e, g) => {
+      const l = live.current;
+      const tap = Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6;
+      if (l.sideways || tap) void player.seekTo(seekFor(l.x0 + (l.sideways ? g.dx : 0), l.width, l.total)).catch(() => {});
+      l.sideways = false;
+      setScrub(null);
+    },
+    onPanResponderTerminate: () => { live.current.sideways = false; setScrub(null); },
+  }), [player, uri]);
+
   const spoke = !!item.transcript;
+  const knob = total ? Math.min(1, position / total) * waveW : 0;
   return (
     <View style={{ alignItems: sent ? 'flex-start' : 'flex-end', gap: 4 }}>
-      <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 18, paddingVertical: 9, paddingHorizontal: 12 },
-                    sent ? { backgroundColor: c.card, borderWidth: 1, borderColor: c.line, minWidth: 220 }
+      <View style={[{ width, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 18, paddingVertical: 9, paddingLeft: 10, paddingRight: 14 },
+                    sent ? { backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderBottomLeftRadius: 6 }
                          : { backgroundColor: c.bubble, borderBottomRightRadius: 6 }]}>
-        <Pressable onPress={toggle} hitSlop={8} style={{ width: sent ? 34 : 26, height: sent ? 34 : 26, borderRadius: 17, backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name={playing ? 'pause' : 'play_arrow'} size={sent ? 22 : 18} weight={400} color={c.onInk} />
+        <Pressable onPress={toggle} hitSlop={8} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={status.playing ? 'pause' : 'play_arrow'} size={24} weight={400} color={c.onInk} />
         </Pressable>
-        {sent && <Text numberOfLines={1} style={{ fontSize: 13, color: c.text2, flex: 1 }}>{item.name}</Text>}
-        {spoke && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, height: 20 }}>
-            {wave.map((h, i) => (
-              <View key={i} style={{ width: 2, height: h, borderRadius: 1, backgroundColor: playing && i / wave.length <= progress ? c.ink : c.faint }} />
-            ))}
+        <View style={{ flex: 1, gap: 3 }}>
+          {sent && <Text numberOfLines={1} style={{ fontSize: 12, color: c.text2 }}>{item.name}</Text>}
+          <View {...pan.panHandlers} onLayout={(e) => setWaveW(e.nativeEvent.layout.width)}
+            style={{ height: 28, justifyContent: 'center' }}>
+            <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 28 }}>
+              {wave.map((h, i) => (
+                <View key={i} style={{ width: 2.5, height: h, borderRadius: 1.25, backgroundColor: i < lit ? c.ink : c.faint }} />
+              ))}
+            </View>
+            {now !== 'idle' && waveW > 0 && (
+              <View pointerEvents="none" style={{ position: 'absolute', left: knob - 6, top: 8, width: 12, height: 12, borderRadius: 6, backgroundColor: c.ink }} />
+            )}
           </View>
-        )}
-        <Text mono style={{ fontSize: 11, color: c.faint }}>{fmt(playing ? status.currentTime : total)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 18 }}>
+            <Text mono style={{ fontSize: 11, color: c.faint }}>{timeLabel(status.playing, position, total)}</Text>
+            {now !== 'idle' && (
+              <Pressable onPress={speed} hitSlop={8} style={{ backgroundColor: sent ? c.fill : c.card, borderRadius: 9, paddingHorizontal: 7, paddingVertical: 1 }}>
+                <Text mono style={{ fontSize: 11, color: c.text2 }}>{speedLabel(rate)}</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
       </View>
       {sent ? null : spoke ? (
         <Text style={{ fontSize: 13, color: c.muted, fontStyle: 'italic', textAlign: 'right' }}>“{item.transcript}”</Text>

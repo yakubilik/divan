@@ -1277,9 +1277,13 @@ checks.push(...require('./test-divan-screens.cjs').checks);
 // after its `ready`, because filing is a request and the page it lands on is
 // chosen when that request comes back.
 const newTicket = require('./test-new-ticket.cjs');
+// …and a voice note in a chat: one plays at a time, a finger on its waveform
+// seeks, the speed chip goes round and is remembered. Its bubble is pressed
+// for real, and play waits on the audio mode, so it too has a `ready`.
+const voicenote = require('./test-voicenote.cjs');
 
-void newTicket.ready.then(() => {
-  checks.push(...newTicket.checks);
+void Promise.all([newTicket.ready, voicenote.ready]).then(() => {
+  checks.push(...newTicket.checks, ...voicenote.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

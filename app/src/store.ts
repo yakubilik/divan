@@ -35,7 +35,9 @@ export interface DeviceInfo { id: string; name: string; push_approval: boolean; 
 /** `path` is the file the message names — what a link opens, and what the text
  *  is matched against. `view` is the copy the computer kept for the bubble to
  *  draw, which outlives the original being deleted (see attachments.py). */
-export interface Attachment { path: string; view?: string; name: string; size?: number; kind?: 'image' | 'video' | 'audio' | 'file'; url?: string; transcript?: string; duration?: number; localUri?: string }
+export interface Attachment { path: string; view?: string; name: string; size?: number; kind?: 'image' | 'video' | 'audio' | 'file'; url?: string; transcript?: string; duration?: number; localUri?: string;
+  /** How loud the sound is across its length, 0-100, measured by the daemon (absent on older messages). */
+  peaks?: number[] }
 
 /** What a computer answers a move with. The move itself always happened; this
  *  is about the worker it may also have asked for — empty where nothing was
