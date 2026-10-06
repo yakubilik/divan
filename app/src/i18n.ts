@@ -191,8 +191,6 @@ const en = {
   callVoiceEma: 'EMA · Turkish, made on this phone', callVoiceEmaSwitch: 'Read Turkish with EMA',
   callVoiceEmaLoading: 'Loading…', callVoiceEmaFailed: 'Could not load: {e}',
   callVoiceEmaStats: 'load {load} · first sound {first} · RTF {rtf}', callDialling: 'Calling…', callHintDialling: 'Ringing your computer.',
-  callGreeting: 'At your service.', callQuiet: 'All quiet here.',
-  callHeadWorking: '{n} running.', callHeadBlocked: '{n} waiting on you.',
   callTitle: 'Concierge', callStart: 'Call', callListening: 'Listening', callThinking: 'Asking…',
   callSpeaking: 'Speaking', callHangUp: 'End call', close: 'Close',
   callHintIdle: 'Ask what your computer is doing. Tap to start.',

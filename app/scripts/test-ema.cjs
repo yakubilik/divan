@@ -135,7 +135,9 @@ function loadWith(file, mocks, loaded = new Map()) {
     }
     return require(request);
   };
-  new Function('exports', 'require', 'module', '__filename', '__dirname', code)(mod.exports, req, mod, file, path.dirname(file));
+  // their own console too: what voice.ts logs about timings is for a phone's log, not this one's
+  const quiet = { ...console, log() {}, warn() {} };
+  new Function('exports', 'require', 'module', '__filename', '__dirname', 'console', code)(mod.exports, req, mod, file, path.dirname(file), quiet);
   return mod.exports;
 }
 
@@ -239,6 +241,21 @@ async function pipeline() {
 // ── the rest ────────────────────────────────────────────────────────────────
 
 async function run() {
+  // what the phone says itself on a call: the call's language, never a butler
+  {
+    const L = require(path.join(root, 'src/call-lines.ts'));
+    const all = (lang) => {
+      const l = L.callLines(lang);
+      return [l.greeting, l.quiet, l.working(2), l.blocked(1), L.headline(lang, { working: 2, blocked: 1 }), L.headline(lang, { working: 0, blocked: 0 })];
+    };
+    check('call lines: tr-TR answers Alo and says the headline in Turkish', JSON.stringify(all('tr-TR')) === JSON.stringify(
+      ['Alo.', 'Her şey sakin.', '2 iş çalışıyor.', '1 iş seni bekliyor.', '1 iş seni bekliyor. 2 iş çalışıyor.', 'Her şey sakin.']));
+    check('call lines: en-US answers Hello and says the headline in English', JSON.stringify(all('en-US')) === JSON.stringify(
+      ['Hello.', 'All quiet here.', '2 running.', '1 waiting on you.', '1 waiting on you. 2 running.', 'All quiet here.']));
+    check('call lines: no line in any language is a butler\'s (service, sir, efendim)',
+      ['tr-TR', 'en-US', 'en-GB', 'de-DE'].flatMap(all).every((t) => !/service|\bsir\b|efendim/i.test(t)));
+  }
+
   // host steps against the Python, exactly
   {
     const vectors = JSON.parse(fs.readFileSync(path.join(repo, 'tts/vectors.json'), 'utf8'));

@@ -10,6 +10,7 @@ import { useColors, type Palette } from '../src/theme';
 import { Text } from '../src/components/ui';
 import { abortListening, EMA_SAMPLE, emaAvailable, emaStats, ensureMic, label as voiceLabel, listVoices, locale as voiceLocale, pickVoice, pickup, ring, setEmaEnabled, setVoicePrefs, speak, startListening, stopListening, stopSpeaking, voiceName, warmEma } from '../src/voice';
 import { isTurkish } from '../src/tts/speaker';
+import { callLines, headline } from '../src/call-lines';
 import { Switch } from '../src/components/divan';
 import type * as Speech from 'expo-speech';
 
@@ -432,15 +433,8 @@ export default function Call() {
     // ringing is what it warms behind.
     let rest: string | null = null;
     void client.call<{ working: number; blocked: number; idle: number }>('call.hello', {})
-      .then((h) => {
-        const bits: string[] = [];
-        // Whatever is blocked is said first — it is the only thing on the
-        // computer that is actually waiting on the person holding the phone.
-        if (h.blocked > 0) bits.push(T('callHeadBlocked', { n: h.blocked }));
-        if (h.working > 0) bits.push(T('callHeadWorking', { n: h.working }));
-        if (!bits.length) bits.push(T('callQuiet'));
-        rest = bits.join(' ');
-      })
+      // Spoken, so in the call's language rather than the interface's.
+      .then((h) => { rest = headline(lang, h); })
       .catch(() => {});
 
     // Ringing, then the click of the other end picking up, then the voice. The
@@ -451,7 +445,7 @@ export default function Call() {
     await pickup();
     if (!live.current) return;
 
-    const greeting = T('callGreeting');
+    const greeting = callLines(lang).greeting;
     setPhaseBoth('speaking');
     say('them', greeting);
     if (BARGE_IN) { startListening(lang); micOn.current = true; }
