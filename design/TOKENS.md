@@ -9,14 +9,13 @@ is not written down.
 ## Phone app
 
 The phone app's palette is Divan's, and it is written down in
-[divan/TOKENS.md](divan/TOKENS.md) — sixteen values, light and dark, each read
-out of the artboard it came from, plus the ramps the project monograms and the
-executor badges are drawn with. `app/src/tokens.ts` is that table and
-`app/src/theme.ts` derives everything else from it, so there is exactly one
-place a colour can come from.
+[divan/TOKENS.md](divan/TOKENS.md) — each token read out of the design system's
+token sheet, `web/src/styles/divan-tokens.css`, Night and Day.
+`app/src/tokens.ts` is that table and `app/src/theme.ts` derives everything else
+from it, so there is exactly one place a colour can come from.
 
-- UI type is Inter (400/500/600, 700 unused), machine data is JetBrains Mono.
-  Both ship in `app/assets/fonts`.
+- UI type is Geist (400/500/600/700), machine data is Geist Mono. Both ship in
+  `app/assets/fonts`.
 - Icons are Material Symbols Rounded, weight 300 unless a design says
   otherwise, cut out of the font at the optical size they are drawn at
   (`app/scripts/gen-icons.py`).
