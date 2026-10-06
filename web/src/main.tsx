@@ -1,5 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+// The design system's sheets, tokens first: the app root in index.html carries
+// `dv-root dv-ambient` and `data-theme`, which is what they style.
+import './styles/divan-tokens.css';
+import './styles/divan-components.css';
 import { App } from './App';
 import { Fallback } from './components/Fallback';
 

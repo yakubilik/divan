@@ -583,7 +583,7 @@ group('what needs a person opens itself as a conversation');
   await type(bar(), 'ship the beta tonight');
   ok('…and is one the moment there is', !!arrow());
   ok('…which is also what the colour says: the chat’s own send disc, filled',
-    arrow().style.background.includes('--dv-red'), arrow().style.background);
+    arrow().style.background.includes('--dv-ink'), arrow().style.background);
   asked.length = 0;
   await click(arrow());
   ok('pressing it opens a chat on the computer in focus, named after the words',

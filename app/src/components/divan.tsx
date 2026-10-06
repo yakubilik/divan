@@ -679,22 +679,23 @@ export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
   );
 }
 
-/** A project's letter on its own colour: `32px` at `border-radius:9px` on a
- *  project card (Mobile1 V1), `26px` at `7px` in a title bar (Mobile2 V5),
- *  `22px` at `6px` beside a question (Mobile1 V1) — white on every one of the
- *  ramp's hues. */
+/** A project's letter: the design's `.dv-mono` — the letter in ink on the
+ *  second surface, inside the 1px edge every surface wears. No colour:
+ *  projects are told apart by name. */
 export function Monogram({ name, index, size = SIZE.monogram, style }: {
   name: string;
-  /** The project's place in the list being drawn, where there is one: the ramp
-   *  is walked in order so that no two projects on a screen share a hue. */
+  /** The project's place in the list being drawn. Kept for the callers; the
+   *  monogram no longer changes with it. */
   index?: number | null;
   size?: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  const t = useTokens();
   return (
-    <View style={[{ width: size, height: size, borderRadius: Math.round(size * 0.28),
-                    backgroundColor: monogram(name, index), alignItems: 'center', justifyContent: 'center' }, style]}>
-      <Text style={{ fontSize: size * 0.47, fontWeight: '600', color: ON_COLOUR }}>
+    <View style={[{ width: size, height: size, borderRadius: Math.min(RADIUS.sm, Math.round(size * 0.3)),
+                    backgroundColor: monogram(t, name, index), borderWidth: 1, borderColor: t.line,
+                    alignItems: 'center', justifyContent: 'center' }, style]}>
+      <Text style={{ fontSize: size * 0.47, fontWeight: '600', color: t.ink }}>
         {(name.trim()[0] ?? '?').toUpperCase()}
       </Text>
     </View>

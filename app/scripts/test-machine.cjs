@@ -102,7 +102,7 @@ const drawn = {};
   for (const scheme of ['dark', 'light']) {
     const tok = K.tokensFor(scheme);
     const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR, 'transparent',
-                         ...K.MONOGRAM, K.EXEC_PENDING_INK, K.EXEC_PENDING_LINE,
+                         K.EXEC_PENDING_INK, K.EXEC_PENDING_LINE,
                          ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean)]);
     const strayed = new Set();
     let threw = null;

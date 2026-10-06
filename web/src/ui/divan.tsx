@@ -522,21 +522,22 @@ export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
   );
 }
 
-/** A project's letter on its own colour: `34px` at `border-radius:9px` on a
- *  project card (Web12 W1), `46px` at `13px` in a page head (Web14 W6), `18px`
- *  at `5px` in the agent roster — white on every one of the ramp's hues. */
+/** A project's letter: `.dv-mono` — the letter in ink on the second surface,
+ *  inside the 1px edge every surface wears. No colour: projects are told apart
+ *  by name. */
 export function Monogram({ name, index, size = SIZE.monogram, style }: {
   name: string;
-  /** The project's place in the list being drawn, where there is one: the ramp
-   *  is walked in order, so no two projects on a screen share a hue. */
+  /** The project's place in the list being drawn. Kept for the callers; the
+   *  monogram no longer changes with it. */
   index?: number | null;
   size?: number;
   style?: React.CSSProperties;
 }) {
   return (
     <span style={{
-      flex: 'none', width: size, height: size, borderRadius: Math.round(size * 0.27),
-      background: monogram(name, index), color: ON_COLOUR,
+      flex: 'none', width: size, height: size, borderRadius: Math.min(RADIUS.sm, Math.round(size * 0.3)),
+      background: monogram(name, index), color: T.ink, border: `1px solid ${T.line}`,
+      boxSizing: 'border-box',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: Math.round(size * 0.45), fontWeight: 600,
       ...style,
@@ -1273,7 +1274,7 @@ export function CommandBar({ placeholder, shortcut = '⌘K', value, onChange, on
         onClick={ready ? onSend : undefined} title={ready ? 'Send' : undefined}
         style={{
           flex: 'none', width: SIZE.send, height: SIZE.send, borderRadius: SIZE.send / 2,
-          background: ready ? T.red : T.line2, color: ready ? ON_COLOUR : T.ink,
+          background: ready ? T.ink : T.line2, color: ready ? T.onInk : T.ink,
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600,
         }}
       >↑</Tap>

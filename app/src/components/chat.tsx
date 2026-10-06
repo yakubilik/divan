@@ -159,9 +159,9 @@ function buildStyles(custom: Record<string, any>) {
 }
 
 function mdStyles(c: Palette) {
-  const inter = family(400, false);
+  const sans = family(400, false);
   return {
-    body: { color: c.text2, fontSize: 17, lineHeight: 24, fontFamily: inter },
+    body: { color: c.text2, fontSize: 17, lineHeight: 24, fontFamily: sans },
     paragraph: { marginTop: 0, marginBottom: 9, flexWrap: 'wrap', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-start', width: '100%' },
     heading1: { color: c.ink, fontSize: 22, lineHeight: 28, fontFamily: family(600, false), marginBottom: 9 },
     heading2: { color: c.ink, fontSize: 19, lineHeight: 25, fontFamily: family(600, false), marginBottom: 9 },

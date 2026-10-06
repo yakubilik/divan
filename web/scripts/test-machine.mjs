@@ -122,7 +122,7 @@ function page(name, world = 'fresh', fleet = paired) {
 function styles(markup) {
   return [...markup.matchAll(/style="([^"]*)"/g)].map((m) => {
     const decl = {};
-    for (const pair of m[1].split(';')) {
+    for (const pair of m[1].replace(/&quot;/g, '"').split(';')) {
       const cut = pair.indexOf(':');
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
@@ -338,7 +338,7 @@ group('Terminals and Remote screen: the frames’ chrome, today’s behaviour');
   const screen = page('screen');
   ok('Remote screen does too, and its computers are W15’s chips rather than a menu',
     has(screen.body, 'Remote screen', 'studio')
-    && anyStyle(screen.body, (d) => d['border-radius'] === '16px' && d.height === '32px')
+    && anyStyle(screen.body, (d) => d['border-radius'] === '999px' && d.height === '32px')
     && !/<select/.test(screen.body),
     words(screen.body).slice(0, 160));
 

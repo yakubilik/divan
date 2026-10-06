@@ -156,7 +156,7 @@ const NAMES = Object.keys(BOARDS);
 function styles(markup) {
   return [...markup.matchAll(/style="([^"]*)"/g)].map((m) => {
     const decl = {};
-    for (const pair of m[1].split(';')) {
+    for (const pair of m[1].replace(/&quot;/g, '"').split(';')) {
       const cut = pair.indexOf(':');
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
@@ -181,7 +181,7 @@ function paint(markup) {
 }
 
 /** A colour that belongs to what it is drawn on rather than to the page. */
-const OWN = new Set([K.ON_COLOUR, ...K.MONOGRAM,
+const OWN = new Set([K.ON_COLOUR,
                      ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                      ...Object.values(K.MEDIA)]);
 
@@ -545,7 +545,7 @@ group('what needs a person arrives as a chat session');
     && drawn.includes('Wait for the review'));
   ok('…the proposed answer filled amber and the rest outlined, as pills',
     countStyles(drawn, (d) => d.height === `${K.SIZE.pill}px`
-      && d['border-radius'] === '16px' && d.background === v('amber')) === 1);
+      && d['border-radius'] === `${K.RADIUS.pill}px` && d.background === v('amber')) === 1);
   ok('…a box to say something else in, addressed to whoever is asking',
     /placeholder="Reply to Coder…"/.test(drawn)
     && anyStyle(drawn, (d) => d.height === `${K.SIZE.field}px`

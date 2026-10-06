@@ -255,7 +255,7 @@ function NumberPill({ value, onChange, placeholder, decimal, editable = true }: 
   return (
     <TextInput value={value} onChangeText={onChange} placeholder={placeholder} mono keyboardType={decimal ? 'decimal-pad' : 'number-pad'} editable={editable}
       style={{ fontSize: 14, backgroundColor: c.fill, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, textAlign: 'right',
-               // sized to what it holds: JetBrains Mono is 0.6 em a glyph
+               // sized to what it holds: Geist Mono is 0.6 em a glyph
                width: 20 + Math.max(2, (value || placeholder).length) * 8.4 }} />
   );
 }

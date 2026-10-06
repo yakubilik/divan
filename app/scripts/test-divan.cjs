@@ -39,114 +39,10 @@ function load(file, exports) {
   return require(out);
 }
 
-const K = load('src/tokens.ts', ['DARK', 'LIGHT', 'light', 'dark', 'tokensFor', 'monogram', 'MONOGRAM',
+const K = load('src/tokens.ts', ['DARK', 'LIGHT', 'light', 'dark', 'tokensFor', 'monogram', 'SOURCE',
                                  'EXECUTORS', 'STATE_MARK', 'STATE_TONE', 'toneColours', 'stateColour',
-                                 'shadows', 'scrim', 'veil', 'DERIVED', 'BORROWED', 'RADIUS', 'SIZE', 'ON_COLOUR']);
+                                 'shadows', 'scrim', 'veil', 'DERIVED', 'RADIUS', 'SIZE', 'ON_COLOUR']);
 
-// ── the artboards, quoted ───────────────────────────────────────────────────
-// The frames are not in this repository, so the only way a check can hold the
-// table to them is to carry a transcription of one. These are whole `style`
-// attributes, copied off a named frame — not a value at a time, which would be
-// the same transcription twice and could never disagree with itself.
-//
-// Seventeen dark frames carry the sixteen names as one block, character for
-// character. This is Mobile6 S3, "Waiting on you · everything that needs a
-// human", which is the whole of that group and so the easiest one to find.
-const FRAME_DARK =
-  '--bg:#131210;--s1:#1C1B18;--s2:#26241F;--line:rgba(236,232,225,.08);--line2:rgba(236,232,225,.2);' +
-  '--ink:#EDE9E2;--ink2:#A9A499;--ink3:#8C877E;--amber:#EAB65A;--amberBg:rgba(234,182,90,.11);' +
-  '--red:#EE6D55;--redBg:rgba(238,109,85,.12);--run:#7CC6A6;--runBg:rgba(124,198,166,.1);' +
-  '--onAmber:#1A1609;--sh:rgba(0,0,0,.5)';
-// …and fourteen light ones. This is Mobile11 S16, "Machine drawer · findable,
-// forgettable · light".
-const FRAME_LIGHT =
-  '--bg:#F5F3EE;--s1:#FFFFFF;--s2:#ECE9E2;--line:rgba(27,26,23,.09);--line2:rgba(27,26,23,.18);' +
-  '--ink:#1B1A17;--ink2:#5C5850;--ink3:#7A756C;--amber:#9C6210;--amberBg:rgba(214,150,40,.14);' +
-  '--red:#C2412B;--redBg:rgba(194,65,43,.1);--run:#2F8067;--runBg:rgba(47,128,103,.1);' +
-  '--onAmber:#fff;--sh:rgba(27,26,23,.12)';
-// The two frames `sLift` is read off, quoted the same way and for the same
-// reason. Mobile3's drag frame is the only one in which a card is held in the
-// air, and its `--s2` is that card; Mobile4 C1 is the light chat, whose `--s2` is the
-// only raised light surface the design draws. Both blocks are fourteen names
-// or fewer and differ from the majority — which is precisely what makes them
-// worth quoting: `sLift` is the tone they differ *by*.
-const FRAME_DRAG =
-  '--bg:#131210;--s1:#1C1B18;--s2:#2A2822;--line:rgba(236,232,225,.08);--line2:rgba(236,232,225,.22);' +
-  '--ink:#EDE9E2;--ink2:#A9A499;--ink3:#8C877E;--amber:#EAB65A;--amberBg:rgba(234,182,90,.12);' +
-  '--red:#EE6D55;--redBg:rgba(238,109,85,.13);--run:#7CC6A6;--runBg:rgba(124,198,166,.13)';
-const FRAME_CHAT =
-  '--bg:#F5F3EE;--s1:#FFFFFF;--s2:#E9E6DE;--line:rgba(27,26,23,.09);--line2:rgba(27,26,23,.2);' +
-  '--ink:#1B1A17;--ink2:#5C5850;--ink3:#7A756C;--run:#2F8067';
-
-/** Every frame in the set, by the id the artboard labels it with: which group
- *  it belongs to, which theme it is drawn in, and how many of the sixteen names
- *  it declares. Nothing in this repository can look at the frames, so a
- *  citation is only as good as this list — it is what turns a group's name in
- *  a document into a claim that can be wrong. */
-const FRAMES = {
-  V1: ['Mobile1', 'dark', 14], V2: ['Mobile1', 'dark', 14], V3: ['Mobile1', 'light', 14],
-  V4: ['Mobile2', 'dark', 14], V5: ['Mobile2', 'dark', 14],
-  // Mobile3 D1-D4: one artboard with four states of one gesture on it, and until the
-  // drag was built nothing needed to tell them apart: `Drag frame` is how the
-  // rest of this repository cites it and stays. D1–D4 are its own labels — held,
-  // over a tab, the column opened, released — and `src/drag.ts` is written
-  // against them one at a time.
-  'Drag frame': ['Mobile3', 'dark', 14],
-  D1: ['Mobile3', 'dark', 14], D2: ['Mobile3', 'dark', 14],
-  D3: ['Mobile3', 'dark', 14], D4: ['Mobile3', 'dark', 14],
-  T1: ['Mobile4', 'light', 16], T2: ['Mobile4', 'light', 16], T3: ['Mobile4', 'dark', 16],
-  C1: ['Mobile4', 'light', 9],
-  S1: ['Mobile5', 'dark', 16], S2: ['Mobile5', 'dark', 16],
-  S3: ['Mobile6', 'dark', 16],
-  S4: ['Mobile7', 'light', 16], S5: ['Mobile7', 'dark', 16], S6: ['Mobile7', 'dark', 16],
-  S7: ['Mobile8', 'dark', 16], S9: ['Mobile8', 'light', 16],
-  S10: ['Mobile9', 'dark', 16], S11: ['Mobile9', 'dark', 16],
-  S12: ['Mobile10', 'dark', 16], S13: ['Mobile10', 'dark', 16],
-  S14: ['Mobile11', 'dark', 16], S15: ['Mobile11', 'dark', 16], S16: ['Mobile11', 'light', 16],
-  W1: ['Web12', 'dark', 14], W2: ['Web12', 'dark', 14],
-  W3: ['Web13', 'light', 14], W4: ['Web13', 'light', 14],
-  W6: ['Web14', 'dark', 16], W7: ['Web14', 'dark', 16], W8: ['Web14', 'light', 16],
-  W9: ['Web14', 'dark', 16], W10: ['Web14', 'dark', 16],
-  W11: ['Web15', 'light', 16], W12: ['Web15', 'light', 16], W13: ['Web15', 'light', 16],
-  W14: ['Web15', 'light', 16], W15: ['Web15', 'light', 16], W16: ['Web15', 'light', 16],
-  W17: ['Web15', 'light', 16], W18: ['Web15', 'light', 16],
-};
-const GROUPS = new Set(Object.values(FRAMES).map(([g]) => g));
-
-/** And which frames each value that is *not* one of the sixteen was read off.
- *
- *  FRAMES alone catches a citation that names a frame of the wrong group or the
- *  wrong theme. It cannot catch one that names a frame which exists, is the
- *  right theme, and simply does not contain the value — which is the shape a
- *  wrong attribution takes once the obvious ones are gone. This is the answer
- *  key for that: every value below was searched for across all forty-two
- *  frames, and these are the ones it is in. Anything citing one of these values
- *  has to name a frame on its line. */
-const READ_OFF = {
-  'sLift dark': ['Drag frame'],
-  'sLift light': ['C1'],
-  'amberRing dark': ['V1', 'V4'],
-  'amberRing light': ['W3', 'W4'],
-  'project ramp': ['S1', 'S6'],
-  Coder: ['S14'],
-  SEO: ['S14'],
-  Analyst: ['S14'],
-  Research: ['S14'],
-  'a ticket nobody has taken': ['Drag frame'],
-};
-
-/** `--bg:#131210;--s1:…` -> `{ bg: '#131210', s1: … }`, with `#fff` spelled
- *  out: CSS's shorthand and the app's six digits are the same colour. */
-function declared(block) {
-  const out = {};
-  for (const pair of block.split(';')) {
-    const [name, value] = pair.split(':');
-    out[name.replace(/^--/, '')] = value.length === 4 && value[0] === '#'
-      ? ('#' + value[1] + value[1] + value[2] + value[2] + value[3] + value[3]).toUpperCase()
-      : value;
-  }
-  return out;
-}
 
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const keys = (o) => Object.keys(o).sort();
@@ -162,50 +58,25 @@ function coloursInCode(text) {
 
 const checks = [];
 
-// 1 · the palette is the design's, and the design's is all of it ────────────
-for (const [name, table, block] of [['dark', K.DARK, FRAME_DARK], ['light', K.LIGHT, FRAME_LIGHT]]) {
-  const frame = declared(block);
-  const missing = Object.keys(frame).filter((k) => table[k] === undefined);
-  const wrong = Object.keys(frame).filter((k) => table[k] !== undefined
-    && table[k].toUpperCase() !== frame[k].toUpperCase());
-  checks.push([`every name the ${name} frames declare is in the table`, missing.length === 0]);
-  checks.push([`…with the frame's own value (${wrong.length ? wrong.join(', ') : 'all sixteen'})`, wrong.length === 0]);
+// 1 · the palette is divan-tokens.css ─────────────────────────────────────
+const SHEET = fs.readFileSync(path.join(root, '..', 'web/src/styles/divan-tokens.css'), 'utf8');
+const M = {
+  sheet(scheme) {
+    const body = SHEET.match(new RegExp(`\\.dv-root\\[data-theme="${scheme}"\\]\\s*\\{([^}]*)\\}`))[1]
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    return Object.fromEntries([...body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+  },
+  colourOf: (value) => colours(value ?? '').at(-1),
+};
+for (const [name, table] of [['dark', K.DARK], ['light', K.LIGHT]]) {
+  const css = M.sheet(name);
+  const wrong = keys(table).filter((k) => k !== 'scheme' && table[k] !== M.colourOf(css[K.SOURCE[k]]));
+  checks.push([`every ${name} colour is the value web/src/styles/divan-tokens.css holds${wrong.length ? ` (${wrong.join(', ')})` : ''}`,
+    wrong.length === 0]);
 }
-checks.push(['the two sides declare the same names — none without its counterpart',
-  eq(keys(K.DARK), keys(K.LIGHT))]);
-checks.push(['…and every one of them is a colour, not a name or an empty string',
-  keys(K.DARK).filter((k) => k !== 'scheme').every((k) =>
-    [K.DARK[k], K.LIGHT[k]].every((v) => typeof v === 'string' && colours(v).length === 1))]);
-// `sLift` is not one of the sixteen: it is the `--s2` of two frames that differ
-// from the majority, so it is derived here from those frames' whole blocks
-// rather than compared with a second copy of itself.
-{
-  const drag = declared(FRAME_DRAG);
-  const chat = declared(FRAME_CHAT);
-  checks.push(['the quoted drag frame is a dark frame of this design, differing only where it should',
-    drag.bg === K.DARK.bg && drag.s1 === K.DARK.s1 && drag.ink === K.DARK.ink && drag.s2 !== K.DARK.s2]);
-  checks.push(['…and the quoted light chat frame likewise',
-    chat.bg === K.LIGHT.bg && chat.s1 === K.LIGHT.s1 && chat.ink === K.LIGHT.ink && chat.s2 !== K.LIGHT.s2]);
-  checks.push(['the card you are holding is drawn in the surface those two frames raise to',
-    K.DARK.sLift === drag.s2 && K.LIGHT.sLift === chat.s2]);
-  checks.push(['…and the light one is written down as a borrowed role rather than an extracted one',
-    eq([...K.BORROWED], ['sLift'])]);
-}
-checks.push(['the amber ring is the amber, at the weight Mobile1 V1 and Web13 W3 draw it',
-  K.DARK.amberRing === 'rgba(234,182,90,.28)' && K.LIGHT.amberRing === 'rgba(156,98,16,.35)']);
-checks.push(['…and it is the amber and nothing else: the ring is that hue, thinned',
-  ['dark', 'light'].every((sch) => {
-    const t = K.tokensFor(sch);
-    const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-    const ring = t.amberRing.match(/[\d.]+/g).slice(0, 3).map(Number);
-    // The frames write the ring in the amber's own channels; light's `--amber`
-    // is the darkened text colour, so the ring is allowed to be the brighter
-    // wash hue instead. Either way it must be an amber, not a new colour.
-    const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 60);
-    return near(ring, rgb(t.amber)) || near(ring, t.amberBg.match(/[\d.]+/g).slice(0, 3).map(Number));
-  })]);
-checks.push(['the two tables are told apart by their own name', K.DARK.scheme === 'dark' && K.LIGHT.scheme === 'light']);
-checks.push(['…and that is the name `tokensFor` answers to',
+checks.push(['every token names its property, and both sides hold the same names',
+  eq(keys(K.DARK), keys(K.LIGHT)) && eq(keys(K.SOURCE), keys(K.DARK).filter((k) => k !== 'scheme'))]);
+checks.push(['`tokensFor` answers with the table of that name',
   K.tokensFor('dark') === K.DARK && K.tokensFor('light') === K.LIGHT]);
 
 // 2 · nothing else is a colour ──────────────────────────────────────────────
@@ -214,7 +85,7 @@ checks.push(['…and that is the name `tokensFor` answers to',
 // out of the table. None of the three may spell a colour out.
 const DERIVED = new Set([K.scrim(K.DARK), K.scrim(K.LIGHT), K.veil(K.DARK), K.veil(K.LIGHT)]);
 const TOKEN_VALUES = new Set([...Object.values(K.DARK), ...Object.values(K.LIGHT),
-                              K.ON_COLOUR, ...K.MONOGRAM,
+                              K.ON_COLOUR,
                               ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean)]);
 for (const file of ['src/theme.ts', 'src/components/divan.tsx', 'app/divan-gallery.tsx']) {
   const found = coloursInCode(src(file));
@@ -263,16 +134,11 @@ checks.push(['the accent is the design’s red, in both themes',
   K.light.accent === K.LIGHT.red && K.dark.accent === K.DARK.red]);
 
 // 4 · the marks ─────────────────────────────────────────────────────────────
-checks.push(['a project keeps its colour for as long as it keeps its name',
-  K.monogram('Quire') === K.monogram('Quire')]);
-checks.push(['…and a screen holding the whole list gives no two projects the same hue',
-  new Set([0, 1, 2, 3, 4].map((i) => K.monogram('x', i))).size === 5]);
-checks.push(['a place past the end of the ramp comes back round rather than off it',
-  K.monogram('x', 5) === K.monogram('x', 0) && K.MONOGRAM.includes(K.monogram('x', -1))]);
-checks.push(['every colour a monogram can take is in the ramp',
-  ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].every((n) => K.MONOGRAM.includes(K.monogram(n)))]);
-checks.push(['a project with no name still gets one rather than nothing',
-  typeof K.monogram('') === 'string' && K.MONOGRAM.includes(K.monogram(''))]);
+checks.push(['a monogram is the neutral surface for every name, and the ramp is gone',
+  ['dark', 'light'].every((sch) => ['Quire', 'Hush', '', 'babysee'].every((n, i) => {
+    const t = K.tokensFor(sch);
+    return K.monogram(t, n) === t.s2 && K.monogram(t, n, i) === t.s2;
+  })) && !/MONOGRAM/.test(src('src/tokens.ts'))]);
 checks.push(['the seven executors of Mobile11 S14 are all there',
   eq(keys(K.EXECUTORS), ['analyst', 'coder', 'divan', 'research', 'seo', 'unassigned', 'you'])]);
 checks.push(['a Coder is `</>` and a ticket nobody has taken is the same mark, unfilled',
@@ -470,7 +336,7 @@ const drawn = {};
 for (const scheme of ['dark', 'light']) {
   const tok = K.tokensFor(scheme);
   const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR,
-                       ...K.MONOGRAM, '#6F7BBC', '#92A0E3',
+                       '#6F7BBC', '#92A0E3',
                        ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean)]);
   const strayed = [];
   let threw = null;
@@ -531,7 +397,7 @@ checks.push(['you are drawn in the page\u2019s own ink, in either theme',
 checks.push(['a section mark is set in the colour of the state it groups',
   anyStyle('dark:SectionMark', (s) => s.color === K.DARK.red)]);
 checks.push(['an empty state is a sentence and not a mark in a circle',
-  anyStyle('dark:EmptyState', (s) => s.fontSize === 24 && s.fontFamily === 'Inter-SemiBold')
+  anyStyle('dark:EmptyState', (s) => s.fontSize === 24 && s.fontFamily === 'Geist-SemiBold')
   && !anyStyle('dark:EmptyState', (s) => s.borderRadius >= 30)]);
 checks.push(['a sheet comes up in the page\u2019s colour, on the design\u2019s corner',
   anyStyle('dark:Sheet', (s) => s.backgroundColor === K.DARK.bg && s.borderTopLeftRadius === K.RADIUS.sheet)]);
@@ -600,167 +466,54 @@ for (const scheme of ['dark', 'light']) {
   checks.push(['…with every part on it', markup !== null && R.styles(markup).length > 200]);
 }
 
-// 11 · every frame this work cites exists, and says what it is cited for ────
-// The frames are outside the repository, so a citation cannot be followed by a
-// machine — which is exactly why round one had four of them wrong and nothing
-// noticed. FRAMES above is the set as it actually is; these checks hold every
-// citation in the document, the parts and the gallery against it.
-const DOC = fs.readFileSync(path.join(root, '..', 'design/divan/TOKENS.md'), 'utf8');
-/** Every file that says where something came from. `tokens.ts` is on this list
- *  because it is the file a screen author actually opens: a wrong group in a
- *  doc comment misleads exactly as far as a wrong group in the document does,
- *  and round two had one there after round one had four here. This file is on
- *  it too, minus its own FRAMES table, which is the answer key rather than a
- *  citation. */
-const CITING = {
-  'design/divan/TOKENS.md': DOC,
-  'src/tokens.ts': src('src/tokens.ts'),
-  'src/theme.ts': src('src/theme.ts'),
-  'src/components/divan.tsx': divan,
-  // The drag is written frame by frame against Mobile3 D1-D4, so it is the
-  // heaviest citer in the app and the one most worth holding to the key.
-  'src/drag.ts': src('src/drag.ts'),
-  'src/components/drag.tsx': src('src/components/drag.tsx'),
-  'app/divan-gallery.tsx': gallery,
-  'scripts/test-divan.cjs': src('scripts/test-divan.cjs').replace(/const FRAMES = \{[\s\S]*?\n\};/, ''),
-};
-
-/** `Mobile6 S3`, `Web13 W3 and W4`, `Mobile3's drag frame` — a group, and the
- *  frames named in the ninety characters after it, which is as far as a
- *  citation ever reaches in this codebase. */
-/** The frame ids named in a piece of text, however they are spelled. */
-function frameIds(text) {
-  return [...text.matchAll(/\b([DVTCSW]\d{1,2})\b|'?([Dd]rag[\s*]+frame)'?/g)]
-    .map((m) => (m[1] || (m[2] && 'Drag frame')));
-}
-
-function citations(text) {
-  const out = [];
-  const groups = [...text.matchAll(/\b(Mobile|Web)(\d+)\b/g)];
-  for (let i = 0; i < groups.length; i++) {
-    const g = groups[i][0];
-    const from = groups[i].index + g.length;
-    const until = Math.min(from + 90, i + 1 < groups.length ? groups[i + 1].index : text.length);
-    out.push([g, frameIds(text.slice(from, until))]);
-  }
-  return out;
-}
-
-for (const [file, text] of Object.entries(CITING)) {
-  const bad = [];
-  for (const [group, ids] of citations(text)) {
-    if (!GROUPS.has(group)) { bad.push(`${group} is not a screen group`); continue; }
-    // A group with no frame named after it is the shape the wrong attribution
-    // took in round one: naming only the group is unfalsifiable until it has to
-    // say which of that group's frames, at which point it plainly is not there.
-    if (!ids.length) { bad.push(`${group} names no frame`); continue; }
-    for (const id of ids) {
-      if (!FRAMES[id]) bad.push(`${group} ${id}: no such frame`);
-      else if (FRAMES[id][0] !== group) bad.push(`${group} ${id}: ${id} is in ${FRAMES[id][0]}`);
-    }
-  }
-  checks.push([`every frame ${file} cites is a frame of the group it names${bad.length ? ` (${bad.join('; ')})` : ''}`,
-    bad.length === 0]);
-}
-checks.push(['…and the eight files between them make enough citations for that to mean something',
-  Object.values(CITING).reduce((n, t) => n + citations(t).length, 0) >= 80]);
-checks.push(['…and the set it is checked against is the whole set, with its gaps',
-  Object.keys(FRAMES).length === 46 && GROUPS.size === 15
-  && !FRAMES.S8 && !FRAMES.W5 && FRAMES['Drag frame'] !== undefined]);
-
-// The error round one made was subtler than a bad id: a light value cited to a
-// frame that exists but is drawn dark. The rows that carry their own provenance
-// name a side, so the side can be checked.
-{
-  const rows = [...DOC.matchAll(/^\| `([a-zA-Z]+)` (dark|light) \| ([^|]+)\| ([^|]+)\|/gm)];
-  const wrong = [];
-  for (const [, token, side, , from] of rows) {
-    const ids = frameIds(from);
-    if (!ids.length) wrong.push(`${token} ${side}: names no frame`);
-    for (const id of ids) {
-      if (!FRAMES[id]) wrong.push(`${token} ${side}: no frame ${id}`);
-      else if (FRAMES[id][1] !== side) wrong.push(`${token} ${side}: ${id} is a ${FRAMES[id][1]} frame`);
-    }
-  }
-  checks.push([`a value read off a frame is read off a frame of its own theme${wrong.length ? ` (${wrong.join('; ')})` : ''}`,
-    wrong.length === 0 && rows.length === 4]);
-
-  // …and off a frame that actually contains it.
-  const astray = [];
-  for (const [, token, side, , from] of rows) {
-    const key = `${token} ${side}`;
-    const ids = frameIds(from);
-    const allowed = READ_OFF[key];
-    if (!allowed) { astray.push(`${key}: nothing recorded`); continue; }
-    for (const id of ids) if (!allowed.includes(id)) astray.push(`${key}: ${id} does not carry it`);
-  }
-  checks.push([`…and off one it is actually in${astray.length ? ` (${astray.join('; ')})` : ''}`, astray.length === 0]);
-
-  // The marks — the ramp and the executor faces — are cited the same way and
-  // checked the same way.
-  const marks = [...DOC.matchAll(/^\| ([a-zA-Z][^|`]*?) \| `oklch[^|]*\| [^|]*\| ([^|]+)\|/gm)];
-  const lost = [];
-  for (const [, label, from] of marks) {
-    const allowed = READ_OFF[label.trim()];
-    if (!allowed) { lost.push(`${label.trim()}: nothing recorded`); continue; }
-    const ids = frameIds(from);
-    if (!ids.length) lost.push(`${label.trim()}: names no frame`);
-    for (const id of ids) if (!allowed.includes(id)) lost.push(`${label.trim()}: ${id} does not draw it`);
-  }
-  checks.push([`every mark is cited to a frame that draws it${lost.length ? ` (${lost.join('; ')})` : ''}`,
-    lost.length === 0 && marks.length === 6]);
-
-  // The same claims live a second time in the token module's doc comments, and
-  // round two is what happens when only one copy is checked.
-  const tokens = src('src/tokens.ts');
-  const drifted = [];
-  for (const name of ['sLift', 'amberRing']) {
-    const at = tokens.indexOf(`\n  ${name}: string;`);
-    const doc = tokens.slice(tokens.lastIndexOf('/**', at), at);
-    const allowed = [...READ_OFF[`${name} dark`], ...READ_OFF[`${name} light`]];
-    const ids = frameIds(doc);
-    if (!ids.length) drifted.push(`${name}: its comment names no frame`);
-    for (const id of ids) if (!allowed.includes(id)) drifted.push(`${name}: ${id} does not carry it`);
-  }
-  checks.push([`the token module says the same thing the document does${drifted.length ? ` (${drifted.join('; ')})` : ''}`,
-    drifted.length === 0]);
-}
-// And the two frames the whole block is quoted from have to be able to carry it.
-checks.push(['the frames the sixteen are quoted from declare all sixteen, one of each theme',
-  FRAMES.S3[1] === 'dark' && FRAMES.S3[2] === 16 && FRAMES.S16[1] === 'light' && FRAMES.S16[2] === 16
-  && Object.keys(declared(FRAME_DARK)).length === 16 && Object.keys(declared(FRAME_LIGHT)).length === 16]);
-checks.push(['…and the document sends a reader to those two and no others',
-  /\*\*Mobile6 S3\*\*/.test(DOC) && /\*\*Mobile11 S16\*\*/.test(DOC)]);
-checks.push(['the two frames sLift is read off are the ones that raise a surface',
-  FRAMES['Drag frame'][1] === 'dark' && FRAMES.C1[1] === 'light'
-  && Object.keys(declared(FRAME_DRAG)).length === 14 && Object.keys(declared(FRAME_CHAT)).length === 9]);
-
 // 12 · what is derived is written down, and only what is ────────────────────
-// A third derived value could otherwise be added to the code and never reach
-// the document, which is where a reviewer looks.
 {
-  const WORDS = ['no', 'one', 'two', 'three', 'four'];
-  const section = (heading) => {
-    const i = DOC.indexOf(heading);
-    if (i < 0) return null;
-    const rest = DOC.slice(i + heading.length);
-    const j = rest.indexOf('\n### ');
-    return rest.slice(0, j < 0 ? undefined : j);
+  const DOC = fs.readFileSync(path.join(root, '..', 'design/divan/TOKENS.md'), 'utf8');
+  const unmapped = Object.entries(K.SOURCE).filter(([n, prop]) => !DOC.includes(`| \`${n}\` | \`${prop}\` |`));
+  checks.push([`design/divan/TOKENS.md writes down every token's property${unmapped.length ? ` (${unmapped.map(([n]) => n).join(', ')})` : ''}`,
+    unmapped.length === 0]);
+  const derived = (DOC.match(/^\| `([a-zA-Z]+)` \| derived \|/gm) ?? []).map((l) => l.split('`')[1]);
+  checks.push([`…and records exactly the values the code calls derived (${derived.join(', ') || 'none'})`,
+    eq(derived.sort(), [...K.DERIVED].sort())
+    && [...K.DERIVED].every((n) => typeof K[n] === 'function' && K.DARK[n] === undefined)]);
+}
+
+// 12b · flat surfaces, and the two typefaces ────────────────────────────────
+{
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      if (e.isDirectory()) walk(`${dir}/${e.name}`);
+      else if (/\.(tsx?|jsx?)$/.test(e.name)) files.push(`${dir}/${e.name}`);
+    }
   };
-  const derivedHead = `### The ${WORDS[K.DERIVED.length]} values that were not in a frame`;
-  const body = section(derivedHead);
-  const named = body ? [...body.matchAll(/\*\*`([a-zA-Z]+)`\*\*/g)].map((m) => m[1]) : [];
-  checks.push([`the document has a section for the ${WORDS[K.DERIVED.length]} derived values${body ? '' : ` (looking for "${derivedHead}")`}`,
-    body !== null]);
-  checks.push([`…naming exactly the ones the code calls derived (${named.join(', ') || 'none'})`,
-    eq(named.sort(), [...K.DERIVED].sort())]);
-  checks.push(['…and every one of them is a function of the tokens rather than a value in the table',
-    [...K.DERIVED].every((n) => typeof K[n] === 'function' && K.DARK[n] === undefined)]);
-  const borrowed = [...K.BORROWED];
-  checks.push([`the value whose role was borrowed is written down as such (${borrowed.join(', ')})`,
-    borrowed.every((n) => DOC.includes(`**The light \`${n}\` borrows its role.**`))]);
-  checks.push(['…and it is a value in the table, not a function: only its role is a judgement',
-    borrowed.every((n) => K.DARK[n] !== undefined && K.LIGHT[n] !== undefined && typeof K[n] !== 'function')]);
+  walk('src'); walk('app');
+  const blurred = files.filter((f) => /\bBlurView\b|expo-blur|from ['"][^'"]*blur[^'"]*['"]/i.test(src(f)));
+  checks.push([`nothing in app/src or app/app imports a blur${blurred.length ? ` (${blurred.join(', ')})` : ''}`,
+    blurred.length === 0]);
+}
+{
+  const fonts = Object.keys(R.theme.FONTS);
+  const required = [...src('src/theme.ts').matchAll(/require\('\.\.\/assets\/fonts\/([^']+)'\)/g)].map((m) => m[1]);
+  const named = [400, 500, 600, 700].flatMap((w) => [R.theme.family(w, false), R.theme.family(w, true)]);
+  checks.push(['the app bundles Geist and Geist Mono, and family() answers with their names',
+    fonts.length === 7 && fonts.every((f) => /^Geist(Mono)?-/.test(f))
+    && required.length === 7 && required.every((f) => /^Geist(Mono)?-[A-Za-z]+\.ttf$/.test(f)
+      && fs.existsSync(path.join(root, 'assets/fonts', f)))
+    && named.every((f) => fonts.includes(f))
+    && fs.existsSync(path.join(root, 'assets/fonts/OFL-Geist.txt'))]);
+  const leftover = [...fs.readdirSync(path.join(root, 'assets/fonts')), ...['src', 'app'].flatMap((d) => {
+    const out = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+        if (e.isDirectory()) walk(`${dir}/${e.name}`);
+        else if (/\.(tsx?|jsx?)$/.test(e.name)) out.push(src(`${dir}/${e.name}`));
+      }
+    };
+    walk(d);
+    return out;
+  })].filter((t) => /\bInter\b|Inter-|JetBrains/.test(t));
+  checks.push(['…and nothing in the app names Inter or JetBrains Mono any more', leftover.length === 0]);
 }
 
 // 13 · the one mark whose colour is not the design's ────────────────────────
