@@ -29,9 +29,10 @@ the user asks for them.
 
 ## Fonts and icons the app ships
 
-- **Inter** and **JetBrains Mono** (`app/assets/fonts/*.ttf`) are licensed
-  under the SIL Open Font License 1.1; their licence texts sit next to them
-  (`OFL-Inter.txt`, `OFL-JetBrainsMono.txt`).
+- **Geist** and **Geist Mono** (`app/assets/fonts/*.ttf`) are licensed under
+  the SIL Open Font License 1.1; their licence texts sit next to them
+  (`OFL-Geist.txt`, `OFL-GeistMono.txt`). The web panel loads the same two
+  families from Google Fonts.
 - **Material Symbols Rounded** by Google is licensed under the Apache License
   2.0. The app does not ship the font: `app/scripts/gen-icons.py` cuts the
   glyphs it uses out of it and `app/src/icons.gen.ts` holds them as SVG paths.

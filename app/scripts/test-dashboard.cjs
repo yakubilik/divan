@@ -722,7 +722,7 @@ for (const scheme of ['dark', 'light']) {
   for (const scheme of ['dark', 'light']) {
     const tok = K.tokensFor(scheme);
     const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR,
-                         ...K.MONOGRAM, 'transparent']);
+                         'transparent']);
     const strayed = new Set();
     for (const markup of [draw(scheme, [studio()]), draw(scheme, [studio(), MINI]),
                           draw(scheme, CALM), draw(scheme, SPENT), draw(scheme, [])]) {
@@ -750,7 +750,7 @@ for (const scheme of ['dark', 'light']) {
     text: m[2],
   }));
   const title = (markup) => (texts(markup).find((x) => x.style.fontSize === 26
-    && x.style.fontFamily === 'Inter-SemiBold') ?? {}).text;
+    && x.style.fontFamily === 'Geist-SemiBold') ?? {}).text;
 
   draw('dark', [studio(), MINI]);
   const cardPress = R.presses().find((p) => p.text.includes('Quire') && p.text !== 'Quire'

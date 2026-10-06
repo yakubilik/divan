@@ -15,7 +15,7 @@ import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 // Both boxes go through the app's own input rather than React Native's, the
 // way every other field in the app does (`components/card` `SayBox`): it is
-// what turns a weight into the Inter file that has it, and what brings the
+// what turns a weight into the Geist file that has it, and what brings the
 // caret colour, the keyboard's own theme and the padding the design draws.
 import { Text, TextInput } from './text';
 import { Icon } from './icon';

@@ -264,7 +264,7 @@ checks.push(
    *  becomes the product's name when one is being read. The 15 pt semibolds
    *  under it are the section headings, and there are several. */
   const title = (markup) => (texts(markup).find((t) => t.style.fontSize === 26
-    && t.style.fontFamily === 'Inter-SemiBold') ?? {}).text;
+    && t.style.fontFamily === 'Geist-SemiBold') ?? {}).text;
 
   const machines = () => {
     R.store.reset();

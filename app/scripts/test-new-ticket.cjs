@@ -274,7 +274,7 @@ for (const scheme of ['dark', 'light']) {
       && boxes(page).length === 2
       && page.includes('>ntIceBox<') && page.includes('>ntQueued<')],
     [`${scheme}: …and the boxes are set in the app's own type, not the phone's`,
-      eq(boxes(page).map((s) => s.fontFamily), ['Inter-SemiBold', 'Inter-Regular'])
+      eq(boxes(page).map((s) => s.fontFamily), ['Geist-SemiBold', 'Geist-Regular'])
       && !boxes(page).some((s) => s.fontWeight)],
     [`${scheme}: the line under the box says what is not being asked for, and counts`,
       styleOf(page, 'ntLater').color === t.ink3 && styleOf(page, 'ntLater').fontFamily.includes('Mono')

@@ -203,7 +203,7 @@ function draw(scheme, hosts, params) {
  *  The chip inside one wears its state's wash, and that is the point — this is
  *  about what the card does. */
 const surfaces = (markup) => R.styles(markup)
-  .filter((s) => s.borderRadius === K.RADIUS.tile && s.borderWidth != null);
+  .filter((s) => s.borderRadius === K.RADIUS.tile && s.borderWidth != null && s.height !== K.SIZE.columnTab);
 
 const styleOf = (markup, word) => [...markup.matchAll(/<span data-rn="Text"([^>]*)>([^<]*)<\/span>/g)]
   .filter((m) => m[2] === word)

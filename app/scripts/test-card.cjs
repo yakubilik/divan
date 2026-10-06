@@ -191,7 +191,7 @@ for (const scheme of ['dark', 'light']) {
       && R.styles(live).some((s) => s.backgroundColor === t.runBg)],
     [`${scheme}: nothing on any of the three is painted in a colour that is not this theme's`,
       (() => {
-        const own = new Set([...Object.values(t), K.ON_COLOUR, ...K.MONOGRAM,
+        const own = new Set([...Object.values(t), K.ON_COLOUR,
                              K.EXEC_PENDING_LINE, K.EXEC_PENDING_INK,
                              ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean)]);
         const stray = [human, agent, live].flatMap((m) => [...paintOf(m)].filter((c) => !own.has(c)));

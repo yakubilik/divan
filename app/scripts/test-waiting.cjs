@@ -441,7 +441,7 @@ for (const scheme of ['dark', 'light']) {
   for (const scheme of ['dark', 'light']) {
     const tok = K.tokensFor(scheme);
     const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR,
-                         ...K.MONOGRAM, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
+                         ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                          K.EXEC_PENDING_INK, K.EXEC_PENDING_LINE, 'transparent']);
     const strayed = new Set();
     for (const [, hosts] of Object.entries(FLEETS)) {
