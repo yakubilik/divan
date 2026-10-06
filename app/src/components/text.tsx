@@ -1,5 +1,5 @@
 import React, { createContext, forwardRef, useContext } from 'react';
-import { StyleSheet, Text as RNText, TextInput as RNTextInput, type TextInputProps, type TextProps, type TextStyle } from 'react-native';
+import { Platform, StyleSheet, Text as RNText, TextInput as RNTextInput, type TextInputProps, type TextProps, type TextStyle } from 'react-native';
 import { family, MONO, useColors } from '../theme';
 
 /** What a nested run of text inherits from the one around it. React Native
@@ -41,3 +41,46 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps & { mono?: boole
           { fontFamily: family(flat.fontWeight as any, isMono), fontWeight: undefined }]} />
     );
   });
+
+/** What a selection is drawn in: orange, on both themes. The tint iOS used
+ *  before was the system grey, which on the chat's surfaces barely showed. */
+export const SELECTION = '#FF8C00';
+
+/** Text a person can take part of.
+ *
+ *  A `selectable` <Text> on iOS cannot be dragged through: a long press offers
+ *  Copy for the whole node and nothing else, so one sentence or one path out of
+ *  an answer could not be had. A UITextView can, and a TextInput that is not
+ *  editable is one — with the selection handles, the orange tint, and the
+ *  links found and made tappable by iOS itself, since a nested run with an
+ *  `onPress` does nothing inside it. Nested <Text> children keep their styles:
+ *  the field draws them as one attributed string.
+ *
+ *  Android's <Text selectable> already selects a range, so it stays. */
+export function SelectableText({ style, mono, children }: {
+  style?: TextProps['style'];
+  mono?: boolean;
+  children?: React.ReactNode;
+}) {
+  const c = useColors();
+  const flat = (StyleSheet.flatten(style) || {}) as TextStyle;
+  if (Platform.OS !== 'ios') {
+    return <Text selectable selectionColor={SELECTION} mono={mono} style={style}>{children}</Text>;
+  }
+  const isMono = mono ?? flat.fontFamily === MONO;
+  const explicit = flat.fontFamily && flat.fontFamily !== MONO ? flat.fontFamily : null;
+  return (
+    <Inherit.Provider value={{ weight: flat.fontWeight, mono: isMono }}>
+      <RNTextInput
+        editable={false} multiline scrollEnabled={false}
+        dataDetectorTypes="link" selectionColor={SELECTION}
+        style={[{ color: c.ink, fontSize: 15 }, flat, {
+          fontFamily: explicit ?? family(flat.fontWeight as any, isMono), fontWeight: undefined,
+          padding: 0, paddingTop: 0, paddingBottom: 0, margin: 0,
+        }]}
+      >
+        {children}
+      </RNTextInput>
+    </Inherit.Provider>
+  );
+}

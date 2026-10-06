@@ -16,7 +16,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { em, family, useColors, type Palette } from '../theme';
 import { useStore, useT } from '../store';
-import { Icon, Spinner, Text } from './ui';
+import { Icon, SelectableText, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
 import type { Attachment } from '../store';
 
@@ -41,7 +41,7 @@ export function UserBubble({ text, attachments }: { text: string; attachments?: 
       {!!text && !textIsTranscript && (
         <View style={{ backgroundColor: c.bubble, borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
                        paddingVertical: 10, paddingHorizontal: 13 }}>
-          <Text selectable style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{text}</Text>
+          <SelectableText style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{text}</SelectableText>
         </View>
       )}
     </View>
@@ -65,7 +65,7 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
           <Icon name={copied ? 'check' : 'content_copy'} size={14} color={copied ? c.ok : c.faint} />
         </Pressable>
       </View>
-      <Text selectable mono style={{ fontSize: 12, lineHeight: 12 * 1.6, paddingVertical: 8, paddingHorizontal: 10 }}>{code}</Text>
+      <SelectableText mono style={{ fontSize: 12, lineHeight: 12 * 1.6, paddingVertical: 8, paddingHorizontal: 10 }}>{code}</SelectableText>
     </View>
   );
 }
@@ -77,6 +77,12 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
  *
  *  Only the rules that actually render text are replaced; everything else stays
  *  on the library's own defaults. */
+/** Whether a node has a link anywhere under it. */
+function hasLink(node: any): boolean {
+  return node?.type === 'link' || node?.type === 'blocklink'
+    || (Array.isArray(node?.children) && node.children.some(hasLink));
+}
+
 const rules = {
   /** The library wraps every run of plain text in a `<Text>` of its own. Inside
    *  a `selectable` paragraph those are separate native text nodes, and iOS
@@ -93,8 +99,17 @@ const rules = {
     (inherited && Object.keys(inherited).length
       ? <Text key={node.key} style={[inherited, styles.text]}>{node.content}</Text>
       : node.content),
+  /** The paragraph is the unit a person drags through, so it is the one
+   *  `SelectableText` — on iOS a read-only text field, because a <Text> there
+   *  only ever copies the whole of itself.
+   *
+   *  Except a paragraph with a link in it. A run with `onPress` does nothing
+   *  inside a text field, and a link that cannot be pressed is worse than a
+   *  paragraph that copies whole, so that one stays a <Text>. */
   textgroup: (node: any, children: any, _parent: any, styles: any) => (
-    <Text key={node.key} selectable style={styles.textgroup}>{children}</Text>
+    hasLink(node)
+      ? <Text key={node.key} selectable style={styles.textgroup}>{children}</Text>
+      : <SelectableText key={node.key} style={[styles.body, styles.textgroup, { alignSelf: 'stretch', flexGrow: 1, flexShrink: 1 }]}>{children}</SelectableText>
   ),
   code_inline: (node: any, _children: any, _parent: any, styles: any, inherited: any = {}) => (
     <Text key={node.key} selectable style={[inherited, styles.code_inline]}>{node.content}</Text>
@@ -129,7 +144,9 @@ const rules = {
  *  that was there a token ago keeps its key, and React updates what changed
  *  instead of replacing all of it. The renderer and its stylesheet are built
  *  once per theme, for the same reason. */
-const MD = MarkdownIt({ typographer: true });
+// `linkify`: an answer hands over a bare URL far more often than a Markdown
+// link, and a URL that cannot be pressed has been handed over half way.
+const MD = MarkdownIt({ typographer: true, linkify: true });
 
 /** The library's own style merge: defaults under ours, plus the `_VIEW_SAFE_`
  *  twin of each entry that the render rules reach for on container nodes. */

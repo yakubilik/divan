@@ -6,7 +6,7 @@ import { Text } from './text';
 import { em, providerMark, useColors } from '../theme';
 
 export { Icon } from './icon';
-export { Text, TextInput } from './text';
+export { SelectableText, Text, TextInput } from './text';
 
 /** An icon standing in a line of text: the web font it was drawn with gives
  *  a glyph a 1.2 em line box, and rows were laid out around that height. */
