@@ -168,7 +168,7 @@ section = text[text.index("TICKET QUEUE"):].split("\n\n")[0]
 print("    " + section.replace("\n", "\n    "))
 lines = section.splitlines()
 check(len(lines) <= 6, "the section is at most six lines", str(len(lines)))
-check(any("Running" in l and "Hermes" in l and "21m" in l for l in lines),
+check(any("Running" in l and "Hermes" in l and "about 20 minutes in" in l for l in lines),
       "the running ticket, with how long")
 check(any("Waiting on the user" in l and "Fix login" in l and "Stripe" in l for l in lines),
       "the one waiting on the person, with what it asks")

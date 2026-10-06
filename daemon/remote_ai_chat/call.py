@@ -496,6 +496,17 @@ def _words(text: str | None, limit: int) -> str:
     return _trim(out, limit)
 
 
+def _rough(seconds: float) -> str:
+    """How long a worker has been at it, already rounded the way it is said."""
+    minutes = max(0.0, seconds) / 60
+    if minutes < 2:
+        return "just started"
+    if minutes < 50:
+        return f"about {int(round(minutes / 5) * 5) or int(minutes)} minutes in"
+    hours = round(minutes / 60)
+    return "about an hour in" if hours <= 1 else f"about {hours} hours in"
+
+
 def queue_section(queue: dict | None, now: float | None = None) -> str | None:
     """The ustabasi queue in at most QUEUE_LINES lines, or None without one."""
     if not queue or not queue.get("available"):
@@ -513,7 +524,7 @@ def queue_section(queue: dict | None, now: float | None = None) -> str | None:
                      + (f", it asks: {ask}" if ask else "."))
     for t in running:
         began = t.get("round_started_at") or t.get("started_at")
-        been = f", {_elapsed(now - float(began))} into round {t.get('round') or 1}" if began else ""
+        been = f", {_rough(now - float(began))}" if began else ""
         where = f" in {t['project']}" if t.get("project") else ""
         lines.append(f'- Running: "{_words(t.get("title"), QUEUE_TITLE)}"{where}{been}.')
     # Room for the header and the count, whatever else there is to say.
