@@ -29,7 +29,7 @@ from . import accounts as acct
 from . import pool as poolmod
 from .errors import Err
 from . import agents, secrets, tools
-from .call import Concierge, headline as call_headline, snapshot as call_snapshot
+from .call import Concierge, hermes_installed, headline as call_headline, snapshot as call_snapshot
 from .push import send_push
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .attachments import KINDS, normalize_image, peaks, sniff
@@ -234,6 +234,8 @@ class Server:
         self._models_at: dict[str, float] = {}
         # The voice concierge. Built here but not connected — the CLI only
         # starts when somebody actually asks it something.
+        # The account the concierge last connected as; work it starts goes there.
+        self._concierge_acct: acct.Account | None = None
         self.concierge = Concierge(self.call_snapshot, self._concierge_account,
                                    self._concierge_actions())
 
@@ -1585,7 +1587,15 @@ class Server:
     # for a session's turn — see call.py.
 
     def call_snapshot(self):
-        return call_snapshot(self.db, self.sessions, self.cfg.host_name)
+        # The queue, statuses only: one read of its database, no `git log` per
+        # worktree, because this runs before every question. A queue that is
+        # absent or locked is no section, never an error on a call.
+        try:
+            queue = ustabasimod.snapshot(self.policy.project_for, git=False)
+        except Exception as exc:
+            log.warning("call: could not read the ticket queue: %s", exc)
+            queue = None
+        return call_snapshot(self.db, self.sessions, self.cfg.host_name, queue)
 
     def _concierge_actions(self) -> dict:
         """The four things the concierge may do, as the daemon already does them.
@@ -1608,7 +1618,18 @@ class Server:
             if not hits:
                 raise Err("no_project", f"there is no project called {project}")
             cwd = hits[0]["path"]
-            chat = await self.h_chat_create(None, {"cwd": cwd, "title": secrets.mask(instruction)[:60]})
+            # Work asked for on the phone goes to Hermes when the account the
+            # call speaks as has it: a real agent with skills, so "add this to
+            # my calendar" or "file a ticket for that" lands somewhere that can
+            # do it. The concierge itself still has none of those.
+            want_chat = {"cwd": cwd, "title": secrets.mask(instruction)[:60]}
+            a = self._concierge_acct or self._account(None, "claude")
+            hermes = agents.find("hermes", a.home, cwd) if hermes_installed(a.home) else None
+            if hermes:
+                want_chat["agent_id"] = hermes["id"]
+                if a.home:
+                    want_chat["account_id"] = a.id
+            chat = await self.h_chat_create(None, want_chat)
             await self.sessions.get(chat["id"]).send(instruction.strip(), None)
             return hits[0]["name"]
 
@@ -1660,6 +1681,7 @@ class Server:
                     log.info("concierge: no machine login, speaking as account=%s", x.id)
                     a = x
                     break
+        self._concierge_acct = a
         return a.home, a.env()
 
     async def h_call_hello(self, dev: Device, d: dict) -> dict:
