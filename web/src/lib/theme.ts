@@ -179,8 +179,9 @@ export function themeCss(): string {
     `::-webkit-scrollbar-thumb:hover{background:${T.ink3};border:3px solid transparent;`
       + `background-clip:content-box}`,
     `::-webkit-scrollbar-track{background:transparent}`,
-    // Orange, not a grey wash: a selection has to be visible on every surface.
-    `::selection{background:rgba(255,140,0,.45)}`,
+    // The accent's orange, not a grey wash: a selection has to be visible on
+    // every surface, and the second surface colour was nearly the first.
+    `::selection{background:color-mix(in srgb,${T.red} 45%,transparent)}`,
   ].join('\n');
 }
 

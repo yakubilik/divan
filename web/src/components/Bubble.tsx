@@ -26,27 +26,53 @@ export function Bubble({ children }: { children: ReactNode }) {
   );
 }
 
+/** A link, opened in a tab of its own so the panel stays where it was. */
+function Link({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer"
+      style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}>
+      {children}
+    </a>
+  );
+}
+
 /** The little of Markdown that actually shows up in these answers: fenced code,
- *  inline code, and bold. Headings, tables and links are left as written — a
+ *  inline code, bold and links. Headings and tables are left as written — a
  *  renderer that half-understands them reads worse than the raw text does. */
 function inline(text: string, keyBase: string) {
   const out: ReactNode[] = [];
-  const re = /`([^`\n]+)`|\*\*([^*\n]+)\*\*/g;
+  // Code, bold, a Markdown link, and a bare URL — the last two because an
+  // answer that hands over a link and does not let it be pressed has handed
+  // over half of it.
+  const re = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>"'`]+)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
+    // A sentence that ends on a URL keeps its full stop out of the link.
+    let whole = m[0];
+    let bare = m[5];
+    if (bare) {
+      const tail = bare.match(/[.,;:!?)\]]+$/);
+      if (tail) { bare = bare.slice(0, -tail[0].length); whole = bare; }
+    }
     if (m.index > last) out.push(text.slice(last, m.index));
+    const key = `${keyBase}-${m.index}`;
     if (m[1] != null) {
       out.push(
-        <code key={`${keyBase}-${m.index}`} style={{
+        <code key={key} style={{
           ...mono, fontSize: 13, background: C.surface, border: `1px solid ${C.border}`,
           borderRadius: R.badge, padding: '1px 5px', color: C.text2,
         }}>{m[1]}</code>,
       );
+    } else if (m[2] != null) {
+      out.push(<strong key={key} style={{ fontWeight: 600 }}>{m[2]}</strong>);
+    } else if (m[3] != null) {
+      out.push(<Link key={key} href={m[4]}>{m[3]}</Link>);
     } else {
-      out.push(<strong key={`${keyBase}-${m.index}`} style={{ fontWeight: 600 }}>{m[2]}</strong>);
+      out.push(<Link key={key} href={bare!}>{bare}</Link>);
     }
-    last = m.index + m[0].length;
+    last = m.index + whole.length;
+    re.lastIndex = last;
   }
   if (last < text.length) out.push(text.slice(last));
   return out;
