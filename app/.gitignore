@@ -12,3 +12,6 @@ dist/
 .DS_Store
 identity.local.json
 scripts/.material-symbols-rounded.woff2
+
+# EMA models, copied from tts/models by scripts/copy-tts-models.sh
+/assets/tts/*.onnx
