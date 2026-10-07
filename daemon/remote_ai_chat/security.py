@@ -319,11 +319,13 @@ class TunnelGate:
     """
 
     HEADER = b"cf-connecting-ip"
+    TOLD_EVERY_S = 600.0
 
     def __init__(self, app, cfg, access: TunnelAccess | None = None) -> None:
         self.app = app
         self.cfg = cfg
         self.access = access or TunnelAccess()
+        self._told: dict[str, float] = {}
 
     @staticmethod
     def address(value: str | None) -> str | None:
@@ -345,6 +347,15 @@ class TunnelGate:
         # Config.refresh_tunnel.
         self.cfg.refresh_tunnel()
         if not self.cfg.tunnel_allows(ip):
+            # Said once per address every ten minutes: "Divan is down" from
+            # somebody at home is, most days, a provider that changed their
+            # address, and without this line nothing here shows it.
+            now = time.monotonic()
+            if now - self._told.get(ip, -self.TOLD_EVERY_S) >= self.TOLD_EVERY_S:
+                if len(self._told) > 500:
+                    self._told.clear()
+                self._told[ip] = now
+                log.warning("tunnel request from %s refused: not in tunnel_allow_ips", ip)
             await self._refuse(scope, send)
             return
         email = None
