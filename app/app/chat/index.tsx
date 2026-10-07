@@ -305,6 +305,13 @@ export default function ChatPlace() {
               <Icon name="edit_square" size={22} />
             </Pressable>
           )}
+          {/* The general call: this computer's Hermes, not any one chat. */}
+          {withControls && (
+            <Pressable accessibilityLabel={T('mCall')} hitSlop={6} onPress={() => go(() => router.push('/call'))}
+              style={({ pressed }) => [{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
+              <Icon name="call" size={21} />
+            </Pressable>
+          )}
         </View>
         {withControls && (
           <View style={{ flexDirection: 'row', gap: 6 }}>
