@@ -5,10 +5,10 @@ Pod::Spec.new do |s|
   s.description    = s.summary
   s.license        = 'MIT'
   s.author         = 'remote-ai-chat'
-  s.homepage       = 'https://github.com/yakubilik/remote-ai-chat'
+  s.homepage       = 'https://github.com/yakubilik/divan'
   s.platforms      = { :ios => '15.1' }
   s.swift_version  = '5.9'
-  s.source         = { git: 'https://github.com/yakubilik/remote-ai-chat.git' }
+  s.source         = { git: 'https://github.com/yakubilik/divan.git' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'

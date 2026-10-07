@@ -8,8 +8,8 @@
  *  talking — and that they are the words you said.
  *
  *  The second half is what decides the order of the engines. Measured on one
- *  sentence of Turkish with the work's own English in it ("yeni bir branch aç,
- *  commit at, deploy et"): whisper on the computer wrote it down right in a
+ *  sentence of Turkish with the work's own English in it (open a new branch,
+ *  commit, deploy): whisper on the computer wrote it down right in a
  *  sixth of the time it took to say. The browser's own recogniser, given the
  *  same recording as a microphone in Chrome 154, heard sound and returned
  *  nothing — on-device and cloud alike, no words and no error. A recogniser
@@ -111,9 +111,9 @@ export function appendSpeech(prev: string, chunk: string): string {
  *  it should imagine came just before the audio — and both of them use it to
  *  settle a spelling they would otherwise guess at. The useful vocabulary is
  *  not a dictionary: it is the handful of names on this person's own board.
- *  A product called `isghocam` is not in any model's training set, and neither
- *  is the machine in the corner of the room; said once in a prompt, both come
- *  back spelled right.
+ *  A product called `Quire` is heard as "choir" by every model, and the
+ *  machine in the corner of the room is not in any training set; said once in
+ *  a prompt, both come back spelled right.
  *
  *  The fixed half is the vocabulary of the work itself, which every engine
  *  mis-hears in the middle of a sentence in another language — "commit" and
@@ -266,7 +266,7 @@ export function setDictateLang(lang: string): void {
   try { localStorage.setItem(LANG_KEY, lang); } catch { /* private mode */ }
 }
 
-/** `tr-TR` as "Turkish (Türkiye)", in the reader's own language, or back as
+/** `nl-NL` as "Dutch (Netherlands)", in the reader's own language, or back as
  *  itself where the browser cannot name it. */
 export function langName(tag: string): string {
   try {

@@ -461,7 +461,7 @@ export interface DivanProject {
    *  with three commits a day can be a dead experiment — so it is written by a
    *  person and empty until somebody says. */
   stage?: string;
-  /** A product is not a folder: isghocam owns its site and its API. */
+  /** A product is not a folder: Quire owns its site and its API. */
   repos: string[];
   sort: number; archived: boolean; created_at: number; updated_at: number;
   /** The one row in that table that is not a product: the holding place for

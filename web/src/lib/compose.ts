@@ -47,7 +47,7 @@ export function named(view: Pick<DivanView, 'projects'>, word: string): MergedPr
  *
  *  Only a finished word is taken — one followed by a space, or any word at all
  *  when `final` (the moment of sending) — so that `@isg` on its way to
- *  `@isghocam` is not matched to something else half-way. A word that names no
+ *  `@quire` is not matched to something else half-way. A word that names no
  *  product stays in the text as written. */
 export function mention(view: Pick<DivanView, 'projects'>, text: string, final = false):
   { project: string | null; text: string } {

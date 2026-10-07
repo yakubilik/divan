@@ -350,7 +350,7 @@ export interface Ticket {
   notes: TicketNote[];
   note_count: number;
   last_event: { ts: number; kind: string; msg: string } | null;
-  /** the project this is work on, by name: a ticket in babysee/app is babysee */
+  /** the project this is work on, by name: a ticket in quire/app is quire */
   project: string | null;
   /** when the round it is in began, which the queue's tickets table does not hold */
   round_started_at: number | null;
@@ -467,7 +467,7 @@ export interface DivanProject {
    *  with three commits a day can be a dead experiment — so it is written by a
    *  person, and it is empty until somebody says. */
   stage?: string;
-  /** A product is not a folder: isghocam owns its site and its API. */
+  /** A product is not a folder: Quire owns its site and its API. */
   repos: string[];
   sort: number; archived: boolean; created_at: number; updated_at: number;
   /** The one row in that table that is not a product: the holding place for

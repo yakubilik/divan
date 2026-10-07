@@ -158,6 +158,32 @@ ALLOW = {
         "test data: Turkish sentences for the speech queue",
     "app/scripts/test-waiting.cjs":
         "test data: Turkish questions the reply chips are read from",
+    "app/scripts/test-call-chat.cjs":
+        "test data: Turkish yes and no answers the chat call has to hear",
+    "app/src/call-lines.ts":
+        "a call held in Turkish is spoken in Turkish, and its yes and no are heard in it",
+    "app/src/tts/engine.ts":
+        "the Turkish voice model is warmed up on a Turkish word",
+    "app/src/tts/frontend.ts":
+        "the Turkish voice model's alphabet has the Turkish letters in it",
+    "app/src/tts/normalizer.ts":
+        "numbers, units and symbols are spelled out as Turkish words for the voice model",
+    "app/src/tts/values.ts":
+        "numbers, dates and units are spelled out as Turkish words for the voice model",
+    "app/src/tts/words.ts":
+        "the Turkish pronunciation lexicon of the voice model",
+    "app/src/voice.ts":
+        "the sample the Turkish voice says when it is picked is said in Turkish",
+    "app/src/waiting.ts":
+        "reply chips are read out of Turkish questions by their question particle",
+    "web/scripts/test-overview.mjs":
+        "test data: Turkish questions the reply pills are read from",
+    "web/scripts/test-refusal.mjs":
+        "test data: the Turkish refusal words a removed device is told",
+    "web/src/lib/refusal.ts":
+        "the panel tells a Turkish browser why it was refused in Turkish",
+    "web/src/lib/sessions.ts":
+        "reply pills are read out of Turkish questions by their question particle",
     "tts/export.py":
         "test data: the Turkish sentences the exported voice model is checked on",
     "tts/frontend_fixture.py":
@@ -166,28 +192,13 @@ ALLOW = {
         "test data: Turkish sentences and the model's reference output for them",
 }
 
-# Not an exception: a debt. The clients have Turkish in them that has not been
-# sorted into prose to translate and data to list above, and that sorting is
-# its own change. Until it lands, a language finding in one of these files is
-# printed and counted but does not fail the scan. A file that is not listed
-# fails as before, and so does a secret or a personal finding in one that is.
-# The list only shrinks: an entry leaves when its file is clean or is in ALLOW.
-PENDING = (
-    "app/src/call-lines.ts",
-    "app/src/tts/engine.ts",
-    "app/src/tts/frontend.ts",
-    "app/src/tts/normalizer.ts",
-    "app/src/tts/values.ts",
-    "app/src/tts/words.ts",
-    "app/src/voice.ts",
-    "app/src/waiting.ts",
-    "web/scripts/test-overview.mjs",
-    "web/scripts/test-refusal.mjs",
-    "web/src/lib/dictate.ts",
-    "web/src/lib/inbox.ts",
-    "web/src/lib/refusal.ts",
-    "web/src/lib/sessions.ts",
-)
+# Not an exception: a debt. A client file with Turkish in it that has not yet
+# been sorted into prose to translate and data to list above goes here, and a
+# language finding in it is printed and counted but does not fail the scan. A
+# file that is not listed fails as before, and so does a secret or a personal
+# finding in one that is. The list only shrinks, and it is empty now: every
+# client file has been sorted. Keep it empty.
+PENDING: tuple[str, ...] = ()
 
 # The scan cannot scan itself. These three hold the patterns, the samples the
 # patterns are tested against, and the report of what was found — every one of

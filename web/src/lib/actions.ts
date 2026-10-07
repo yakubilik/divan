@@ -141,7 +141,7 @@ export const setOpenItem = (
   key: string, projectId: string, itemId: string, set: Record<string, any>,
 ) => openItems(key, projectId, { item_id: itemId, set });
 
-/** `who` is passed rather than guessed: a line from Yakup is a decision and a
+/** `who` is passed rather than guessed: a line from you is a decision and a
  *  line from the assistant is a finding, and the card says which it is. */
 export const commentOpenItem = (
   key: string, projectId: string, itemId: string, comment: string, who = 'you',

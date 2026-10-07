@@ -665,7 +665,7 @@ export interface OpenRow {
   title: string;
   body: string;
   state: DivanOpenState;
-  /** `Blocked`, `Waiting on Bedirhan`, `To do`, `Done`. */
+  /** `Blocked`, `Waiting on Sam`, `To do`, `Done`. */
   label: string;
   tone: Tone;
   /** The small word for what it is about: `payments`. Empty where none. */
@@ -690,7 +690,7 @@ export function openRows(p: MergedProject, now: number, ago: Ago): OpenRow[] {
   return (p.open ?? []).map((o) => {
     const state = (OPEN_LABEL[o.state] ? o.state : 'todo') as DivanOpenState;
     // Who it is on belongs in the label rather than beside it: "Waiting" alone
-    // is the fact nobody can act on, and "Waiting on Bedirhan" is the one that
+    // is the fact nobody can act on, and "Waiting on Sam" is the one that
     // tells you whether to go and ask.
     const label = state === 'waiting' && o.owner ? `Waiting on ${o.owner}`
       : state === 'todo' && o.owner ? `${o.owner} to do`

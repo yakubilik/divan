@@ -13,8 +13,8 @@
  *
  *   · **an address you can go back through.** What pushes an entry is a place
  *     a person went to on purpose — a page, a product, a face, a card, a chat.
- *   · **an address a person can read.** `/p/babysee/board`, not
- *     `?project=babysee&tab=board&card=100.64.1.2%3A8790%3A0d2279020af7`.
+ *   · **an address a person can read.** `/p/quire/board`, not
+ *     `?project=quire&tab=board&card=100.64.1.2%3A8790%3A0d2279020af7`.
  *     A card is named by its own id and the machine it is on is looked up, the
  *     way anybody reading the link would: the address is what the thing is,
  *     not how this browser happens to reach it.
@@ -23,7 +23,7 @@
  *  not places, and a back button that closed a dialog you opened two pages ago
  *  would be a worse bug than the one this fixes.
  *
- *  Deep paths are the daemon's business too — `/p/babysee/board` is not a file,
+ *  Deep paths are the daemon's business too — `/p/quire/board` is not a file,
  *  and a reload of one has to come back as the panel rather than as a 404. The
  *  daemon serves any path that is not a file as `index.html` (`server.py`,
  *  `_mount_panel`), which is the other half of this file.
@@ -73,13 +73,13 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *  /waiting                   everything waiting on you
  *  /chats                     the Chat place · /chats/<id> one chat
  *  /machine/accounts          a page of the Machine place
- *  /p/babysee                 one product
- *  /p/babysee/branches        …the faces it has beside its code
- *  /p/babysee/board           …its board
- *  /p/babysee/new             …a new ticket being written
- *  /p/babysee/chat/9f2c…      …its chats, and the one that is open
- *  /p/babysee/b/engineering   …one of its faces
- *  /p/babysee/c/0d2279020af7  …and one card, wherever that card lives
+ *  /p/quire                   one product
+ *  /p/quire/branches          …the faces it has beside its code
+ *  /p/quire/board             …its board
+ *  /p/quire/new               …a new ticket being written
+ *  /p/quire/chat/9f2c…        …its chats, and the one that is open
+ *  /p/quire/b/engineering     …one of its faces
+ *  /p/quire/c/0d2279020af7    …and one card, wherever that card lives
  *  ```
  */
 export function pathOf(place: Place): string {
