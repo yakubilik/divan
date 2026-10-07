@@ -4,12 +4,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore, useT } from '../../src/store';
 import { useNavGuard } from '../../src/nav';
-import { useQueue, useRun } from '../../src/queue';
+import { useDivanView, useQueue, useRun } from '../../src/queue';
 import { LOCALE, type Key } from '../../src/i18n';
 import { em, useColors } from '../../src/theme';
 import { BackBar, Dot, EmptyState, Icon, SelectableText, Spinner, Text, TextInput } from '../../src/components/ui';
 import { AssistantText, ToolCard, UserBubble } from '../../src/components/chat';
-import { tone } from '../../src/components/ticket';
+import { TicketPage, fromOf, tone } from '../../src/components/ticket';
+import { cardForTicket } from '../../src/card';
 import { answerable, around, conversation, hasDetails, marks, noteHint, record, runStartedAt,
          STATUS_KEY, VOICE_KEY, type Msg, type Voice } from '../../src/tickets';
 import type { RunSilence, Turn } from '../../src/transcript';
@@ -44,7 +45,22 @@ import type { Ticket } from '../../src/protocol';
  *  worker, and that sequence belongs to the queue's own CLI, which is what the
  *  daemon runs. So the ticket leaves the red state by itself, and the wall
  *  behind this screen is re-read the moment it does. */
-export default function TicketScreen() {
+export default function TicketRoute() {
+  const params = useLocalSearchParams<{ id: string; run?: string; from?: string }>();
+  const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v) || null;
+  const view = useDivanView();
+  const active = useStore((s) => s.host);
+  const n = Number(one(params.id));
+  // The ticket page wherever the board has a card for this ticket: a
+  // notification, the wall and Needs you all land on the same page a board
+  // opens. The run as a conversation is what is left here, a press away from
+  // that page (`?run=1`), and the whole page for a ticket no card was made for.
+  const card = one(params.run) === '1' ? null : cardForTicket(view, n, active?.id);
+  if (card) return <TicketPage id={card.id} host={card.host} from={fromOf(one(params.from))} />;
+  return <TicketScreen />;
+}
+
+function TicketScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const ticketId = Number(id);
   const router = useRouter();

@@ -104,6 +104,58 @@
 .dv-chip--locked{background:var(--ink);color:var(--on-ink);border-color:transparent;cursor:default}
 .dv-chip--locked .dv-mono{background:var(--on-ink);color:var(--ink);border-color:transparent}
 
+/* §4.6 Waiting on you. */
+.dv-page--narrow{max-width:760px}
+.dv-waiting-title{margin:0;font-size:36px;line-height:40px;font-weight:500;letter-spacing:-0.035em}
+
+/* §4.4 Ticket. The human face is a ~560px column; the side column drops under
+   it when there is no room for both. */
+.dv-ticket{margin-top:32px}
+.dv-ticket>main{gap:24px}
+.dv-ticket>main>section[data-human]{max-width:560px}
+.dv-ticket-title{margin:12px 0 0;font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.025em}
+.dv-ticket-body{margin-top:10px;font-size:15px;line-height:23px;color:var(--ink-2)}
+.dv-writable{appearance:none;display:block;width:100%;text-align:left;background:transparent;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:text;white-space:pre-wrap;word-break:break-word;border-radius:6px}
+.dv-writable[data-empty="true"]{color:var(--ink-3)}
+.dv-writing{display:block;width:100%;box-sizing:border-box;margin:0;font:inherit;color:var(--ink);background:var(--hairline);border:1px solid var(--glass-edge);border-radius:10px;padding:6px 8px;outline:0;resize:none;overflow:hidden}
+.dv-writing:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.dv-link{color:inherit;text-decoration:none;border-radius:4px}
+.dv-link:hover{color:var(--ink);text-decoration:underline}
+.dv-ask{border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+.dv-ask--stuck{border-color:var(--glass-edge)}
+.dv-livebox{border-radius:var(--radius-md);padding:6px 16px 14px}
+.dv-livebox .dv-step-at{width:44px;flex:none}
+.dv-livebox-quiet{margin:10px 4px 0;font-size:13px;line-height:19px;color:var(--ink-2)}
+.dv-say{margin-top:10px;display:flex;gap:8px;align-items:center;border-radius:var(--radius-pill);background:var(--hairline);padding:4px 4px 4px 16px}
+.dv-say input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font:400 14px/20px var(--font-sans);height:36px}
+.dv-say:focus-within{outline:2px solid var(--focus);outline-offset:2px}
+.dv-run>summary{list-style:none;width:max-content}
+.dv-run>summary::-webkit-details-marker{display:none}
+.dv-agent{border-radius:var(--radius-md);padding:14px 16px}
+.dv-agent>summary{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;list-style:none;min-height:24px;border-radius:6px}
+.dv-agent>summary::-webkit-details-marker{display:none}
+.dv-agent dl{margin:14px 0 0;display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px 16px;font-size:13px;line-height:19px}
+.dv-agent dt{color:var(--ink-3)}
+.dv-agent dd{margin:0;min-width:0;word-break:break-word}
+.dv-agent dd.mono{font-family:var(--font-mono);font-size:12px}
+.dv-agent ul{margin:0;padding-left:16px}
+.dv-agent-quiet{margin:14px 0 0;font-size:13px;line-height:19px;color:var(--ink-2)}
+.dv-side{border-radius:var(--radius-lg);padding:6px 18px}
+.dv-side-row{display:flex;align-items:center;gap:8px;min-height:44px;border-top:1px solid var(--hairline);font-size:13px;line-height:18px}
+.dv-side-row:first-child{border-top:0}
+.dv-side-row .l{flex:1;color:var(--ink-3)}
+.dv-side-row .v{color:var(--ink)}
+.dv-side-row .dv-meta.v{color:var(--ink)}
+.dv-side-row .n{margin-left:0}
+.dv-side-press{appearance:none;border:0;background:transparent;font:inherit;color:inherit;padding:6px 8px;margin-right:-8px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.dv-side-press:hover{background:var(--hairline)}
+.dv-side-press svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;color:var(--ink-3)}
+.dv-btn--danger{color:var(--red)}
+.dv-confirm,.dv-editor{margin-top:12px;border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:12px}
+.dv-confirm p{margin:0;font-size:13.5px;line-height:20px}
+.dv-editor .dv-field input{height:40px;font-size:14px}
+.dv-editor .dv-field textarea{font-size:14px;line-height:20px}
+
 @media (max-width:720px){
   .dv-page{padding:16px 16px 64px}
   .dv-greet{font-size:38px;line-height:40px}

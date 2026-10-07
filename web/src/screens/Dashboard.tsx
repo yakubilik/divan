@@ -14,8 +14,10 @@ import { sessions, type Session } from '../lib/sessions';
 import { greeting, quietFor, short, summary } from '../lib/compose';
 import { uptime } from '../lib/format';
 
-export function Dashboard({ view, onProject, onCard, composer, empty }: {
+export function Dashboard({ view, onProject, onCard, onWaiting, composer, empty }: {
   view: DivanView;
+  /** Everything waiting on you, on a page of its own (HANDOVER §4.6). */
+  onWaiting?: () => void;
   onProject: (key: string) => void;
   /** Open a card's own page — the ticket. */
   onCard: (card: MergedCard) => void;
@@ -47,7 +49,14 @@ export function Dashboard({ view, onProject, onCard, composer, empty }: {
 
         {waiting.length > 0 && (
           <section style={{ marginTop: 40 }} aria-labelledby="needs-you">
-            <div className="dv-sec"><h3 id="needs-you">Needs you</h3><span className="dv-meta">{waiting.length}</span></div>
+            <div className="dv-sec">
+              <h3 id="needs-you">Needs you</h3>
+              <span className="dv-meta">{waiting.length}</span>
+              {!!onWaiting && (
+                <a href="/waiting" className="dv-btn dv-btn--ghost dv-hit" style={{ height: 28, textDecoration: 'none' }}
+                  onClick={(e) => { e.preventDefault(); onWaiting(); }}>See all</a>
+              )}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
               {waiting.map((s) => <Wait key={s.id} session={s} onOpen={() => onCard(s.card)} />)}
             </div>

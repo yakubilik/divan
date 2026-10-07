@@ -1290,7 +1290,10 @@ void Promise.all([newTicket.ready, voicenote.ready]).then(async () => {
   // …and the project page, its board and the locked Composer (#125).
   const project = require('./test-handover-project.cjs');
   await project.ready;
-  checks.push(...newTicket.checks, ...voicenote.checks, ...composer.checks, ...project.checks);
+  // …and the ticket page and Waiting on you (#126).
+  const ticket = require('./test-handover-ticket.cjs');
+  await ticket.ready;
+  checks.push(...newTicket.checks, ...voicenote.checks, ...composer.checks, ...project.checks, ...ticket.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

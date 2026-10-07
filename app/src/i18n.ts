@@ -378,7 +378,16 @@ const en = {
   // What a tap on a card does. `waitAnswer` is the one string here that is
   // never shown: an answer wears the question's own words, and this is the
   // name the button is known by rather than the words on it.
-  waitAnswer: 'Answer', waitReply: 'Reply…', waitLook: 'Open live view', waitDone: 'Mark it done',
+  waitAnswer: 'Answer', waitReply: 'Reply…', waitLook: 'Open live view', waitDone: 'Mark done',
+  // HANDOVER §4.6: the title says the counts, and three groups.
+  waitAnswerOne: '1 answer', waitAnswers: '{n} answers', waitTaskOne: '1 task', waitTasks: '{n} tasks',
+  waitNothing: 'Nothing is waiting on you.',
+  waitOldest: 'Oldest first. Everything else is moving on its own.',
+  wgAsking: 'An agent is asking', wgDecision: 'A decision', wgPlate: 'On your plate',
+  wgPlateNote: 'only you can do these',
+  waitOpenTicket: 'Open ticket', waitComment: 'Comment', waitCommentBox: 'Add a comment',
+  waitCommented: 'comment added', waitStillOpen: '{project} · Still open',
+  waitWhere: '{project} · {title}',
   waitSending: 'sending…', waitSent: 'sent',
   waitNotSent: "Couldn't reach {machine}",
   waitCalm: 'Nothing is waiting on you',
@@ -518,6 +527,17 @@ const en = {
   caRunning: 'running {d}',
   caLiveQuiet: 'Nothing is being written',
   caLiveQuietBody: 'No worker is printing anything on this card right now.',
+  // HANDOVER §4.4: one ticket on one page.
+  tkAsking: 'The agent is asking', tkStopped: 'The agent stopped', tkReply: 'Reply',
+  tkAnswered: 'answered', tkNoSentences: 'Nobody has written the sentences for this one yet.',
+  tkSay: 'Say one sentence to the agent',
+  tkAgentFace: 'Agent face', tkAgentFaceNote: 'goal, done when, tests, files',
+  tkGoal: 'Goal', tkDoneWhen: 'Done when', tkTest: 'Test', tkFiles: 'Files',
+  tkConstraints: 'Constraints', tkNotes: 'Notes', tkNone: '—',
+  tkColumn: 'Column', tkMachine: 'Machine', tkAlone: 'Runs alone', tkOff: 'off',
+  tkNotYet: 'not settable yet', tkOpened: 'Opened', tkHand: 'Hand this card to somebody else',
+  tkWholeRun: 'The whole run', tkShowAll: 'Show all {n} steps', tkShowLess: 'Show the latest',
+  tkBack: 'Back',
   caGone: 'That card is not on any board any more',
   caGoneBody: 'It may have been deleted, or the computer it was on has not answered yet.',
   // the fastest screen (src/compose.ts): a title, two or three sentences, and

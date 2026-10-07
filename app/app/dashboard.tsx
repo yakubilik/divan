@@ -77,7 +77,7 @@ export default function Dashboard() {
   const enter = (key: string | null) => router.setParams({ project: key ?? '' });
   const open = (what: { ustabasi_id: number | null; host: string; projectKey: string }) => {
     const where = target(what, host?.id);
-    if ('ticket' in where) go(() => router.push(`/ticket/${where.ticket}`));
+    if ('ticket' in where) go(() => router.push(`/ticket/${where.ticket}?from=dashboard`));
     else enter(where.project);
   };
   const ago: Ago = (seconds) => since(seconds, T);
@@ -90,7 +90,7 @@ export default function Dashboard() {
         onFace={(to) => router.setParams({ tab: to === 'overview' ? '' : to })}
         onAllDone={() => router.setParams({ done: 'all' })}
         onColumn={(to) => router.setParams({ col: to })}
-        onOpen={(c) => go(() => router.push(`/card/${c.id}?host=${c.host}`))} />
+        onOpen={(c) => go(() => router.push(`/card/${c.id}?host=${c.host}&from=${face === 'board' ? 'board' : 'project'}`))} />
     );
     return (
       <Shell place="dashboard" back={{ label: T('tabDashboard'), onPress: () => enter(null) }}>
@@ -221,11 +221,11 @@ function Waiting({ view, only = null }: {
   if (!list.length) return null;
   const openCard = (item: WaitItem) => {
     const where = target({ ustabasi_id: item.card.ustabasi_id, host: item.card.host, projectKey: item.projectKey }, host?.id);
-    if ('ticket' in where) go(() => router.push(`/ticket/${where.ticket}`));
-    else go(() => router.push(`/card/${item.card.id}?host=${item.card.host}`));
+    if ('ticket' in where) go(() => router.push(`/ticket/${where.ticket}?from=dashboard`));
+    else go(() => router.push(`/card/${item.card.id}?host=${item.card.host}&from=dashboard`));
   };
   const act = async (item: WaitItem, doing: Doing, words: string) => {
-    if (doing.do === 'open') { go(() => router.push(`/ticket/${doing.ticket}`)); return; }
+    if (doing.do === 'open') { go(() => router.push(`/card/${doing.card}?host=${doing.host}&from=dashboard`)); return; }
     const id = item.card.id;
     setBusy((had) => ({ ...had, [id]: { sending: true } }));
     try {

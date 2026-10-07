@@ -275,9 +275,9 @@ for (const scheme of ['dark', 'light']) {
   elsewhere[0].press();
   checks.push(
     ['tapping a card opens the card itself, on the machine it is on',
-      cards.length === 1 && eq(here, ['/card/q3?host=h1'])],
+      cards.length === 1 && eq(here, ['/card/q3?host=h1&from=board'])],
     ['…including one on a machine this phone is not holding a socket to',
-      elsewhere.length === 1 && eq(R.nav.pushed(), ['/card/m1?host=h2'])],
+      elsewhere.length === 1 && eq(R.nav.pushed(), ['/card/m1?host=h2&from=board'])],
   );
   const face = draw('dark', [STUDIO], { project: 'quire' });
   R.presses().filter((p) => p.text.includes('bdBoard'))[0].press();
