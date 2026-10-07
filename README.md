@@ -1,4 +1,7 @@
-# remote-ai-chat
+# Divan
+
+*Formerly remote-ai-chat. The CLI, the Python package and `~/.remote-ai-chat`
+keep the old name for now.*
 
 **Your own computer's coding agent, from your phone.** Not a hosted copy of it —
 the actual `claude` or `codex` process on your machine, in your repo, signed in
@@ -119,8 +122,8 @@ On every computer you want to reach:
 **macOS / Linux**
 
 ```bash
-git clone https://github.com/yakubilik/remote-ai-chat.git
-cd remote-ai-chat/daemon && ./install.sh
+git clone https://github.com/yakubilik/divan.git
+cd divan/daemon && ./install.sh
 ```
 
 **Windows** (Windows PowerShell 5.1 is enough; no administrator needed)
