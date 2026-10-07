@@ -107,15 +107,15 @@ const cold = {
   order: ['studio'], focus: 'studio', ready: true,
 };
 
-/** One page of the drawer, without the drawer: the column is a `<nav>` and
- *  every page is drawn after it. */
+/** One page of the place, without its tabs: the tabs and the row of pages
+ *  under them come first, and the page is the box marked as one. */
 function page(name, world = 'fresh', fleet = paired) {
   seed(world === 'alone' ? nothing : fleet);
   const markup = renderToStaticMarkup(h(MachineUI.Machine, {
     view: name, fleet: view(world), onView() {}, onOpenChat() {}, onNewChat() {},
     onNewChatIn() {}, onStartChat() {}, onPeek() {},
   }));
-  const cut = markup.indexOf('</nav>');
+  const cut = markup.indexOf('data-machine-page');
   return { drawer: markup.slice(0, cut), body: markup.slice(cut) };
 }
 
@@ -140,14 +140,12 @@ const has = (markup, ...all) => all.every((w) => words(markup).includes(w));
 group('each page is the frame’s page');
 {
   const machines = page('machines');
-  ok('Machines is W12’s table on W12’s tracks, bar the column our third button widens',
-    anyStyle(machines.body, (d) => d['grid-template-columns']
-      === '34px minmax(0, 1.4fr) 130px 120px 110px 110px minmax(0, 230px)')
-    && has(machines.body, 'Machines', 'machine', 'state', 'last contact', 'running',
-      'quota use today', 'studio', 'mini'),
+  ok('Machines is a card per computer (HANDOVER §4.9): its name, online, what it runs, when it was seen',
+    (machines.body.match(/class="dv-glass dv-machine"/g) ?? []).length === 2
+    && has(machines.body, 'Machines', 'studio', 'mini', 'online', 'seen just now'),
     words(machines.body).slice(0, 200));
-  ok('…with the three cards the frame ends on: the quota, the pairing and the quiet machine',
-    has(machines.body, 'Agent quota', 'warn 20%', 'stop 5%',
+  ok('…with the quota and the executors beside them, and pairing and the quiet machine under them',
+    has(machines.body, 'Quota', 'warn 20%', 'stop 5%', 'Executors',
       'Pair a new machine', 'remote-ai-chat pair', 'When a machine goes quiet'));
 
   const executors = page('executors');
@@ -208,13 +206,13 @@ group('with nothing paired, and with a machine that cannot be reached');
     words(alone.body).slice(-160));
 
   const gone = page('machines', 'unreachable');
-  ok('the machine that cannot be reached is washed in amber, and offered the two buttons worth pressing',
-    anyStyle(gone.body, (d) => d.background === v('amberBg'))
-    && has(gone.body, 'unreachable', 'Try again', 'Remove')
+  ok('the machine that cannot be reached says unreachable in red, and is offered the two buttons worth pressing',
+    /dv-status--stuck dv-said"[^>]*><i[^>]*><\/i>unreachable/.test(gone.body)
+    && has(gone.body, 'unreachable', 'last seen', 'Try again', 'Remove')
     && has(gone.body, 'Terminal', 'Screen', 'Folders'),
     words(gone.body).slice(0, 240));
-  ok('…and its agents are what was last known rather than what is running',
-    has(gone.body, 'unknown'), words(gone.body).slice(0, 240));
+  ok('…and what it last reported is said to be possibly stale',
+    has(gone.body, 'What it last reported may be stale.'), words(gone.body).slice(0, 240));
 }
 
 // ── 2 · a sign-in that is about to stop working ────────────────────────────
@@ -272,9 +270,8 @@ group('a sign-in is seen expiring before it expires');
     has(drawn.body, 'expires in 12 days', 'Renew')
     && anyStyle(drawn.body, (d) => d.background === v('amberBg')),
     words(drawn.body).slice(0, 300));
-  ok('…and the drawer carries how many want a person, so it is seen from the other seven pages',
-    /Accounts &amp; sign-ins<\/span><span[^>]*>2</.test(drawn.drawer)
-    && anyStyle(drawn.drawer, (d) => d.color === v('amber')),
+  ok('…and the row of pages under Executors carries how many want a person',
+    /Accounts &amp; sign-ins<\/span><b class="dv-badge"[^>]*>2</.test(drawn.drawer),
     words(drawn.drawer).slice(0, 200));
 }
 
@@ -331,7 +328,7 @@ group('Terminals and Remote screen: the frames’ chrome, today’s behaviour');
 {
   const terminal = page('terminal');
   ok('Terminals stands under the page head every Divan page has, in the drawer’s own word',
-    has(terminal.body, 'Terminals')
+    has(terminal.body, 'Terminal')
     && anyStyle(terminal.body, (d) => d['font-size'] === '28px' && d['letter-spacing'] === '-.02em'),
     words(terminal.body).slice(0, 120));
 

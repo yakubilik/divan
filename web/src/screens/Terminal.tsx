@@ -670,7 +670,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
               is the design system's own `page` head and not a size invented
               here. */}
           <SectionHeader
-            kind="page" title="Terminals"
+            kind="page" title="Terminal"
             note={`${onlineCount} of ${order.length} online`}
             style={{ flexShrink: 0 }}
           />

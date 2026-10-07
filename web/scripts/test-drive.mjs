@@ -315,7 +315,12 @@ const nav = (label) => [...(doc.querySelector('header')?.querySelectorAll('butto
   .find((b) => (b.textContent ?? '').trim().startsWith(label)) ?? null;
 // …read off the row's own name and not its whole line, which also carries the
 // count of what is waiting under it.
-const page = () => doc.querySelector('nav [aria-current="page"] span')?.textContent?.trim() ?? null;
+// A tab with one page under it has no row of links, and its page is the tab.
+const page = () => doc.querySelector('nav [aria-current="page"] span')?.textContent?.trim()
+  ?? doc.querySelector('[aria-label="Machine"] [aria-pressed="true"]')?.firstChild?.textContent?.trim() ?? null;
+/** A tab of the Machine place, by its name. */
+const machineTab = (label) => [...doc.querySelectorAll('[aria-label="Machine"] button')]
+  .find((b) => (b.firstChild?.textContent ?? '').trim() === label) ?? null;
 /** The page under the bar, as markup: what a theme change must not touch. */
 const body = () => doc.querySelector('header')?.nextElementSibling?.innerHTML ?? '';
 /** Its head — the one 28 pt line on a Divan page. */
@@ -480,7 +485,7 @@ group('the back button steps through the panel instead of out of it');
     w.location.pathname === '/machine/accounts', w.location.pathname);
   await back();
   ok('…and Back walks them one at a time',
-    w.location.pathname === '/machine/terminal' && page() === 'Terminals',
+    w.location.pathname === '/machine/terminal' && page() === 'Terminal',
     `${page()} · ${w.location.pathname}`);
 
   await press('0');
@@ -1046,7 +1051,7 @@ group('the sign-in that is expiring is counted before that page is opened');
 {
   const header = doc.querySelector('header');
   /** A row of the drawer, by the name on it. */
-  const row = (label) => [...doc.querySelectorAll('nav button')]
+  const row = (label) => [...doc.querySelectorAll('nav a')]
     .find((b) => (b.querySelector('span')?.textContent ?? '').trim() === label) ?? null;
 
   await click(find('Dashboard', header));
@@ -1061,10 +1066,12 @@ group('the sign-in that is expiring is counted before that page is opened');
   ok('entering the Machine place asks the computer which sign-ins it has',
     asked.some((a) => a.key === 'studio' && a.type === 'account.list'),
     JSON.stringify(asked.map((a) => a.type)));
-  ok('…and the drawer counts the ones that want a person, on the page it opens on',
-    page() === 'Machines' && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
-    && (row('Accounts & sign-ins')?.innerHTML ?? '').includes('var(--dv-amber)'),
-    `${page()} · ${row('Accounts & sign-ins')?.textContent}`);
+  const marked = page() === 'Machines' && (machineTab('Executors')?.textContent ?? '').includes('needs you');
+  await click(machineTab('Executors'));
+  ok('…and the tabs count the ones that want a person: a mark on Executors, the number on its Accounts link',
+    marked && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
+    && !!row('Accounts & sign-ins')?.querySelector('.dv-badge'),
+    `${marked} · ${row('Accounts & sign-ins')?.textContent}`);
   await press('6');
   ok('…and Admin says the same thing about them, on a page nobody asked twice',
     page() === 'Admin' && text().includes('2 want you')
@@ -1094,7 +1101,7 @@ group('the sign-in that is expiring is counted before that page is opened');
 group('a ticket shows what the worker is doing right now');
 {
   await press('4');
-  ok('the terminal place is one key away', page() === 'Terminals', `${page()}`);
+  ok('the terminal place is one key away', page() === 'Terminal', `${page()}`);
   const toggle = [...doc.querySelectorAll('[role="radio"]')]
     .find((b) => (b.textContent ?? '').trim() === 'Ustabasi') ?? null;
   ok('…with the queue as one of the two things the wall shows', !!toggle);

@@ -1,62 +1,33 @@
-/** The first page of the Machine drawer: every paired computer, what it is
- *  running, and how much of its plan is gone.
+/** Machine › Machines (HANDOVER §4.9): a card per computer — its own name in
+ *  mono, online or unreachable, what it is running and when it was last seen —
+ *  and beside them the quota ring and who can do work.
  *
- *  Web15 W12 and Web14 W10 are this page — the same table at two widths. Five
- *  columns and the row's own buttons: a machine, whether it is answering, when
- *  it last did, what it was running then and what it has spent today. The
- *  machine that cannot be reached is washed in amber and its buttons are the
- *  two that are worth pressing on a computer that is not there — ask it again,
- *  or let it go.
- *
- *  Under the table, the three things W12 says about the fleet as a whole: what
- *  it has left to run an agent on and the thresholds it is read against, how a
- *  new machine is added, and what happens while one of them is quiet. The last
- *  is not a promise — it is the merge's own rule (`STALE_AFTER_S`), written
- *  where somebody looking at a quiet machine will read it.
- *
- *  What the frame offers and this does not: the frame's pairing card counts a
- *  code down (`code expires in 9:41`) and its quiet-machine card offers to move
- *  tasks to another computer by itself. Neither exists — `pair` prints a link
- *  with no clock on it, and nothing moves work between machines — so the card
- *  says how pairing really works and the moving is not offered.
+ *  A machine that cannot be reached says so in red, in words, and says that
+ *  what it last reported may be stale; its buttons are the two worth pressing on
+ *  a computer that is not there — ask it again, or let it go. The pairing card
+ *  and the rule for a quiet machine stay under the cards. No figure here is
+ *  made up: the ring is the fleet's measured share, and with nothing measured
+ *  it says so instead.
  */
 import { useState } from 'react';
 import { uptime } from '../lib/format';
-import { STALE_AFTER_S, type DivanView } from '../lib/divan';
+import { STALE_AFTER_S, type DivanView, type HostView } from '../lib/divan';
 import {
-  ACTION_LABEL, machineLines, quotaVerdict, useThresholds,
+  ACTION_LABEL, executorLines, machineLines, quotaVerdict, resetsWords, useThresholds,
   type MachineAction,
 } from '../lib/machine';
 import { useFleet } from '../lib/fleet';
 import { parsePairing } from '../lib/actions';
 import { useDivanStore } from '../lib/divan';
-import { T, type Tone } from '../lib/theme';
+import { T } from '../lib/theme';
 import type { View } from '../lib/shell';
-import {
-  Button, Card, Cell, EmptyState, NameCell, Quoted, SectionHeader, StatusDot, Table, Tag,
-  Well, Write, type Column,
-} from '../ui/divan';
-import { P } from '../ui/kit';
+import { Button, Card, EmptyState, Quoted, SectionHeader, Write } from '../ui/divan';
 
 /** How long ago it answered, the way W12 says it: `12s ago` while it is still
  *  seconds, and the panel's own `2h 14m` after that. */
 function since(seconds: number | null): string {
   return seconds != null && seconds < 60 ? `${Math.round(seconds)}s` : uptime(seconds);
 }
-
-/** W12's own tracks, `34px minmax(0,1.4fr) 130px 120px 110px 110px 200px`, with
- *  one of them ours: the frame ends its rows on two buttons and a `···`, and
- *  this panel has no menu to put behind that — so the third action is a word
- *  (`Folders`) and the column it stands in is as wide as three words need. */
-const COLUMNS: Column[] = [
-  { width: '34px' },
-  { label: 'machine', width: 'minmax(0, 1.4fr)' },
-  { label: 'state', width: '130px' },
-  { label: 'last contact', width: '120px' },
-  { label: 'running', width: '110px' },
-  { label: 'quota use today', width: '110px' },
-  { width: 'minmax(0, 230px)' },
-];
 
 export function Machines({ view, onView, onFocus }: {
   view: DivanView;
@@ -86,6 +57,10 @@ export function Machines({ view, onView, onFocus }: {
 
   const lines = machineLines(view, since, thresholds);
   const quota = quotaVerdict(view.quota, thresholds);
+  const left = view.quota.left != null && !view.quota.unknown ? Math.max(0, Math.min(1, view.quota.left)) : null;
+  const low = quota.state === 'warn' || quota.state === 'stop' || quota.state === 'spent';
+  const resets = view.quota.resets_at != null ? resetsWords(view.quota.resets_at, view.now) : '';
+  const workers = executorLines(view);
 
   const act = (key: string, action: MachineAction) => {
     if (action === 'remove') {
@@ -117,85 +92,159 @@ export function Machines({ view, onView, onFocus }: {
 
   return (
     <>
-      <SectionHeader kind="page" title="Machines" note={`${view.hosts.length} paired`} />
+      <section>
+        <h1 style={{ margin: 0, fontSize: 28, lineHeight: '34px', fontWeight: 600, letterSpacing: '-0.025em' }}>
+          Machines
+        </h1>
+        <p style={{ margin: '8px 0 0', fontSize: 15, lineHeight: '22px', color: T.ink2 }}>
+          {fleetSentence(view, quota.state)}
+        </p>
+      </section>
 
-      <Table
-        columns={COLUMNS}
-        rows={lines.map((m) => ({
-          key: m.key,
-          tone: 'amber' as Tone,
-          wash: m.wash,
-          cells: [
-            <Well icon={P.cpu} />,
-            <NameCell mark title={m.machine} note={m.detail || undefined} />,
-            <>
-              <StatusDot state={m.state} hollow={m.state === 'asking'} />
-              <Cell text={m.says} tone={m.tone} />
-            </>,
-            <Cell text={m.contact || 'never'} tone={m.contact ? undefined : 'ink3'} />,
-            <Cell text={m.running} tone={m.wash ? 'amber' : undefined} />,
-            <Cell text={m.quota} tone={m.quotaTone} />,
-            <span style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-              {m.actions.map((a) => (
-                <Button
-                  key={a} small face="outline"
-                  label={a === 'remove' && confirming === m.key ? 'Sure?' : ACTION_LABEL[a]}
-                  title={a === 'remove' ? `Unpair ${m.machine} from this panel` : undefined}
-                  onClick={() => act(m.key, a)}
+      <div className="dv-cols2" style={{ marginTop: 8 }}>
+        <main style={{ gap: 12 }}>
+          {lines.map((m) => {
+            const h = view.hosts.find((x) => x.key === m.key)!;
+            const never = h.missing && h.age == null;
+            const says = h.reachable ? 'online' : never ? 'never answered' : 'unreachable';
+            return (
+              <article key={m.key} className="dv-glass dv-machine" data-machine={m.machine}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span className="dv-machine-name" style={h.reachable ? undefined : { color: T.ink2 }}>
+                    {m.machine}
+                  </span>
+                  <span className={`dv-status ${h.reachable ? 'dv-status--run' : never ? 'dv-status--idle' : 'dv-status--stuck dv-said'}`}
+                    style={{ marginLeft: 'auto' }} data-state={says}>
+                    <i aria-hidden="true" />{says}
+                  </span>
+                </div>
+                <p>{runningSentence(view, h)}</p>
+                <span className="dv-meta">{seenWords(h)}{m.detail ? ` · ${m.detail}` : ''}</span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {m.actions.map((a) => (
+                    <button key={a} type="button" className={`dv-btn dv-hit${a === 'remove' ? ' dv-btn--danger' : ''}`}
+                      aria-label={a === 'remove' ? `Unpair ${m.machine} from this panel` : `${ACTION_LABEL[a]} · ${m.machine}`}
+                      onClick={() => act(m.key, a)}>
+                      {a === 'remove' && confirming === m.key ? 'Sure?' : ACTION_LABEL[a]}
+                    </button>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+
+          <Card>
+            <SectionHeader title="Pair a new machine" />
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+              Run this on the computer you want to add and paste the link it prints. It appears
+              here within a few seconds.
+            </div>
+            <Quoted>{PAIR_CMD}</Quoted>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Quoted style={{ flex: 1, minWidth: 0 }}>
+                <Write
+                  value={link} onChange={(v) => { setLink(v); setPairError(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') pair(); }}
+                  label="The pairing link that command printed"
+                  placeholder="remoteaichat://pair?host=…"
                 />
+              </Quoted>
+              <Button small label="Pair" onClick={pair} />
+            </div>
+            {!!pairError && (
+              <div style={{ fontSize: 12.5, color: T.amber }}>{pairError}</div>
+            )}
+          </Card>
+
+          <Card>
+            <SectionHeader title="When a machine goes quiet" />
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
+              After {Math.round(STALE_AFTER_S / 60)} minutes without an answer it is drawn as
+              unreachable, with what it last said. Nothing is moved to another machine: what it
+              was doing, it is still doing.
+            </div>
+          </Card>
+        </main>
+
+        <aside style={{ gap: 24 }}>
+          <section data-quota>
+            <div className="dv-sec"><h3>Quota</h3>{!!resets && <span className="dv-meta">{resets}</span>}</div>
+            <div className="dv-glass dv-quota">
+              {left != null ? (
+                <>
+                  <span className={`dv-ring${low ? ' dv-ring--low' : ''}`} aria-hidden="true"
+                    style={{ ['--p' as any]: `${Math.round(left * 100)}%` }} />
+                  <div>
+                    <div style={{ font: '500 20px/24px var(--font-mono)' }}>
+                      {Math.round(left * 100)}%
+                      {low && <span style={{ color: T.amber, fontFamily: 'var(--font-sans)', fontSize: 13, marginLeft: 8 }}>low</span>}
+                    </div>
+                    <div style={{ fontSize: 13, lineHeight: '19px', color: T.ink2 }}>left of the plan</div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, lineHeight: '19px', color: T.ink2 }}>
+                  {quota.state === 'spent' ? 'No quota left. Agents pick up again at reset.' : 'No plan window measured yet.'}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+              <span className="dv-meta" style={{ alignSelf: 'center' }}>
+                warn {Math.round(thresholds.warn * 100)}% · stop {Math.round(thresholds.stop * 100)}%
+              </span>
+              <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={() => onView('quota')}>Change</button>
+              <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={() => onView('fleet')}
+                title="Every session running anywhere, and the windows each sign-in reports">Plan limits</button>
+            </div>
+          </section>
+          <section>
+            <div className="dv-sec"><h3>Executors</h3><span className="dv-meta">{workers.length}</span></div>
+            <div className="dv-glass" style={{ borderRadius: 'var(--radius-md)', padding: '2px 14px' }}>
+              {workers.map((e) => (
+                <div key={e.key} className="dv-live" style={{ padding: '12px 4px' }}>
+                  <i className={`dv-dot${e.tone === 'run' ? ' dv-dot--run' : e.tone === 'amber' ? ' dv-dot--ask' : e.tone === 'red' ? ' dv-dot--stuck' : ''}`} aria-hidden="true" />
+                  <span className="t">{e.who}</span>
+                  <span className="dv-meta" style={e.tone === 'amber' ? { color: T.amber } : undefined}>
+                    {[e.machine, e.says].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
               ))}
-            </span>,
-          ],
-        }))}
-      />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
-        <Card>
-          <SectionHeader title="Agent quota" right={quota.says} tone={quota.tone} />
-          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>{quota.body}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Tag label={`warn ${Math.round(thresholds.warn * 100)}%`} tone="ink3" />
-            <Tag label={`stop ${Math.round(thresholds.stop * 100)}%`} tone="ink3" />
-            <Button small face="outline" label="Change" onClick={() => onView('quota')} />
-            <Button small face="outline" label="Plan limits" onClick={() => onView('fleet')}
-              title="Every session running anywhere, and the windows each sign-in reports" />
-          </div>
-        </Card>
-
-        <Card>
-          <SectionHeader title="Pair a new machine" />
-          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
-            Run this on the computer you want to add and paste the link it prints. It appears
-            here within a few seconds.
-          </div>
-          <Quoted>{PAIR_CMD}</Quoted>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Quoted style={{ flex: 1, minWidth: 0 }}>
-              <Write
-                value={link} onChange={(v) => { setLink(v); setPairError(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') pair(); }}
-                label="The pairing link that command printed"
-                placeholder="remoteaichat://pair?host=…"
-              />
-            </Quoted>
-            <Button small label="Pair" onClick={pair} />
-          </div>
-          {!!pairError && (
-            <div style={{ fontSize: 12.5, color: T.amber }}>{pairError}</div>
-          )}
-        </Card>
-
-        <Card>
-          <SectionHeader title="When a machine goes quiet" />
-          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
-            After {Math.round(STALE_AFTER_S / 60)} minutes without an answer its numbers are
-            drawn as what they were, its agents show as unknown and its row turns amber.
-            Nothing is moved to another machine: what it was doing, it is still doing.
-          </div>
-        </Card>
+            </div>
+          </section>
+        </aside>
       </div>
     </>
   );
+}
+
+/** The one sentence under the title: how many answer, and whether there is
+ *  quota to start work on. Nothing about quota where none was measured. */
+export function fleetSentence(view: DivanView, quota: string): string {
+  const n = view.hosts.length;
+  const up = view.hosts.filter((h) => h.reachable).length;
+  const head = up === n ? (n === 1 ? 'Reachable.' : `All ${n} reachable.`) : `${up} of ${n} reachable.`;
+  const tail = quota === 'ok' ? ' Enough quota to start work.'
+    : quota === 'warn' ? ' Quota is low.'
+      : quota === 'stop' ? ' Quota is under the stop line: new tickets wait.'
+        : quota === 'spent' ? ' No quota left.' : '';
+  return head + tail;
+}
+
+/** What a machine is running, by name; on one that has gone quiet, what it was
+ *  running when it was last heard, and that this may no longer be true. */
+export function runningSentence(view: DivanView, h: HostView): string {
+  const titles = view.agents.filter((a) => a.host === h.key).map((a) => a.title).filter(Boolean);
+  const list = titles.length ? `${titles.length}: ${titles.join(', ')}.` : '';
+  if (h.reachable) return list ? `Running ${list}` : 'Nothing running.';
+  if (h.missing && h.age == null) return 'It has never answered, so there is nothing to show.';
+  return `${list ? `Was running ${list}` : 'Nothing was running.'} What it last reported may be stale.`;
+}
+
+/** `seen just now`, `seen 4m ago`, `last seen 3h ago`. */
+export function seenWords(h: HostView): string {
+  if (h.age == null) return 'never seen';
+  const when = h.age < 60 ? 'just now' : `${uptime(h.age)} ago`;
+  return h.reachable ? `seen ${when}` : `last seen ${when}`;
 }
 
 /** What `pair` is run as on the computer being added. The panel does not print
