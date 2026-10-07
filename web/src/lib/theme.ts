@@ -1,24 +1,17 @@
 /** Divan's palette on the desktop, and the switch between its two themes.
  *
- *  Every colour here was read out of a frame's own CSS custom properties
- *  (`design/divan/frames/12-web12-*.html` and `13-web13-*` — the same desktop
- *  screens dark and light — and `14-web14-*` and `15-web15-*` for the parts the
- *  later screens need), not chosen here. The frames open every screen with the
- *  same block of sixteen declarations, which is why this table has exactly
- *  those sixteen and no favourites of its own; `design/divan/TOKENS.md` says
- *  which frame each value came from, and a disagreement between this file and
- *  an artboard is settled by the artboard.
- *
- *  The frames are deliberately not in this repository — they are private and
- *  this repository is public — so `scripts/test-divan.mjs` carries a
- *  transcription of the two blocks and holds this table to it.
+ *  Every colour here is a value of `src/styles/divan-tokens.css`, the design
+ *  system's own token sheet, copied into this tree as it was handed over. That
+ *  file is the single source: `SOURCE` below names, for each token, the custom
+ *  property it is read from, `scripts/test-divan.mjs` parses the sheet and holds
+ *  both tables to it, and `design/divan/TOKENS.md` writes the mapping down.
  *
  *  Nothing on screen reads a value out of this file directly. Both themes are
  *  written into the document as CSS custom properties (`themeCss`), and what a
  *  component reads is a reference to one of them: `T.ink3` is the string
  *  `var(--dv-ink3)`. That is what makes the switch free — the whole panel
- *  changes theme without a React render, and there is no second copy of the
- *  palette to keep in step.
+ *  changes theme without a React render, and the older screens follow the new
+ *  palette without a line of theirs changing.
  */
 
 import { useEffect, useReducer } from 'react';
@@ -27,118 +20,101 @@ export type Scheme = 'light' | 'dark';
 
 export interface Tokens {
   scheme: Scheme;
-  /** The page. `--bg` */
+  /** The page. `--canvas` */
   bg: string;
-  /** The first surface: a card, a column, a panel, a chip. `--s1` */
+  /** The first surface: a card, a column, a panel, a list. `--glass-1` */
   s1: string;
-  /** The second surface: a selected tab, an icon well, a quiet fill. Above
-   *  `s1` in the dark, below `bg` in the light — in both, the tone a selected
-   *  thing takes. `--s2` */
+  /** The second surface: hover, a selected segment, a monogram's ground.
+   *  `--glass-2` */
   s2: string;
-  /** The same surface a step further from the page: what is being held or is
-   *  open over something else. Not one of the sixteen — the desktop frames
-   *  never draw a card in the air — so it is borrowed from the phone's
-   *  `--s2` of Mobile3's drag frame, and on the light side from Mobile4 C1.
-   *  Recorded as borrowed in `design/divan/TOKENS.md`. */
+  /** What stands out from the page: the composer, something held open over it.
+   *  `--glass-strong` */
   sLift: string;
-  /** Hairline: a separator, the ring every card on the desktop wears
-   *  (`box-shadow:0 0 0 1px var(--line)`, 56 times across the web frames).
-   *  `--line` */
+  /** The 1px edge every surface wears. `--glass-edge` */
   line: string;
-  /** The emphasised line: an outline button, an unfilled track, the rule
-   *  between the nav and the project chips. `--line2` */
+  /** A separator, an unfilled track, the neutral chip fill. `--hairline` */
   line2: string;
   /** Primary text, and the button drawn in it. `--ink` */
   ink: string;
-  /** Secondary text: a description, the body line under a title. `--ink2` */
+  /** Text and glyphs on an ink fill. `--on-ink` */
+  onInk: string;
+  /** Secondary text. `--ink-2` */
   ink2: string;
-  /** Meta: mono numbers, timestamps, placeholders, a column's aside. `--ink3` */
+  /** Mono meta, timestamps, placeholders. `--ink-3` */
   ink3: string;
-  /** Needs you. `--amber` */
+  /** Needs you — the only accent. `--amber` */
   amber: string;
-  /** Behind it. `--amberBg` */
+  /** Behind it. `--amber-wash` */
   amberBg: string;
-  /** Text on top of amber — the one pair the frames spell out. `--onAmber` */
+  /** Text on top of amber. `--on-amber` */
   onAmber: string;
-  /** The amber drawn as a ring rather than a fill, around the panel of an agent
-   *  that is asking: Web12 W1 and W2's `inset 0 0 0 1px rgba(234,182,90,.3)`,
-   *  and Web13 W3 and W4's `rgba(156,98,16,.35)` on the light side. (The phone
-   *  draws the same ring a hundredth lighter; the value here is the desktop's
-   *  own, which is the frame this file is extracted from.) */
+  /** The edge of a card that is asking. `--amber` */
   amberRing: string;
-  /** Stuck, failed, deleted. `--red` */
+  /** Stuck, failed, unreachable — a dot or a word only. `--red` */
   red: string;
+  /** Behind a red word: the neutral chip fill, never a red one. `--hairline` */
   redBg: string;
-  /** Running, healthy, reachable. `--run` */
+  /** Running, healthy. `--run` */
   run: string;
+  /** Behind a green word: the neutral chip fill. `--hairline` */
   runBg: string;
-  /** What a shadow is made of in this theme. `--sh` */
+  /** What a shadow is made of: the fall of `--shadow-float`. */
   sh: string;
-  /** Behind a modal, a sheet or a lightbox. Derived, not extracted: the
-   *  desktop frames draw no dim — the machine drawer of Web15 is a page, not a
-   *  panel over one — so the dark side is `--sh` itself and the light side is
-   *  the same ink at the weight the panel already dimmed with. Recorded as
-   *  derived in `design/divan/TOKENS.md`. */
+  /** Behind a modal, a sheet or a lightbox: the same fall. */
   scrim: string;
   /** A ticket nobody has taken yet: the dashed square, and the mark inside it.
-   *
-   *  The dark side is the artboard's own — Mobile3's drag frame draws
-   *  `1.5px dashed oklch(0.6 0.1 275)` around `oklch(0.72 0.1 275)`, converted
-   *  to sRGB the way the monograms were. Nothing is dragged on a light
-   *  artboard, so the light side is derived, and it is derived from the
-   *  placeholder the desktop frames do draw in both themes: Web12 W2's
-   *  "+ Add branch" card, `1.5px dashed var(--line2)` with `var(--ink3)` on it.
-   *  A dark-theme indigo on a light page reads at 2.3:1, which is how this one
-   *  was found. Recorded as derived in `design/divan/TOKENS.md`. */
+   *  `--hairline` and `--ink-3`, the dashed "add" chip's own pair. */
   execLine: string;
   execInk: string;
 }
 
-/** Web14 W6 · Project · Quire · Overview tab — one of the dark frames that
- *  declare the whole block, character for character. (Web12 W1 and W2 declare
- *  fourteen of the sixteen and agree with all but the last decimal of
- *  `--line2` and the three washes.) `sLift`, `amberRing` and `scrim` are not in
- *  that block and say above where they come from. */
+/** Night: `.dv-root[data-theme="dark"]` in divan-tokens.css. */
 export const DARK: Tokens = {
   scheme: 'dark',
-  bg: '#131210', s1: '#1C1B18', s2: '#26241F', sLift: '#2A2822',
-  line: 'rgba(236,232,225,.08)', line2: 'rgba(236,232,225,.2)',
-  ink: '#EDE9E2', ink2: '#A9A499', ink3: '#8C877E',
-  amber: '#EAB65A', amberBg: 'rgba(234,182,90,.11)', onAmber: '#1A1609',
-  amberRing: 'rgba(234,182,90,.3)',
-  red: '#EE6D55', redBg: 'rgba(238,109,85,.12)',
-  run: '#7CC6A6', runBg: 'rgba(124,198,166,.1)',
-  sh: 'rgba(0,0,0,.5)',
-  scrim: 'rgba(0,0,0,.5)',
-  execLine: '#6F7BBC', execInk: '#92A0E3',
+  bg: '#18191c', s1: '#202125', s2: '#28292d', sLift: '#232428',
+  line: 'rgba(255,255,255,0.07)', line2: 'rgba(255,255,255,0.08)',
+  ink: '#ededeb', onInk: '#18191c', ink2: '#b3b3ae', ink3: '#919189',
+  amber: '#e6b261', amberBg: 'rgba(230,178,97,0.14)', onAmber: '#1a140b',
+  amberRing: '#e6b261',
+  red: '#ec7a62', redBg: 'rgba(255,255,255,0.08)',
+  run: '#7ccaa6', runBg: 'rgba(255,255,255,0.08)',
+  sh: 'rgba(0,0,0,0.5)',
+  scrim: 'rgba(0,0,0,0.5)',
+  execLine: 'rgba(255,255,255,0.08)', execInk: '#919189',
 };
 
-/** Web15 W12 · Machine drawer · Machines — one of the eight light frames of
- *  that group, all of which declare the whole block character for character.
- *  (Web13 W3 and W4 declare fourteen of the sixteen and agree with every one.) */
+/** Day: `.dv-root[data-theme="light"]` in divan-tokens.css. */
 export const LIGHT: Tokens = {
   scheme: 'light',
-  bg: '#F5F3EE', s1: '#FFFFFF', s2: '#ECE9E2', sLift: '#E9E6DE',
-  line: 'rgba(27,26,23,.09)', line2: 'rgba(27,26,23,.18)',
-  ink: '#1B1A17', ink2: '#5C5850', ink3: '#7A756C',
-  amber: '#9C6210', amberBg: 'rgba(214,150,40,.14)', onAmber: '#FFFFFF',
-  amberRing: 'rgba(156,98,16,.35)',
-  red: '#C2412B', redBg: 'rgba(194,65,43,.1)',
-  run: '#2F8067', runBg: 'rgba(47,128,103,.1)',
-  sh: 'rgba(27,26,23,.12)',
-  scrim: 'rgba(27,26,23,.35)',
-  execLine: 'rgba(27,26,23,.18)', execInk: '#7A756C',
+  bg: '#f1f1ef', s1: '#fafaf8', s2: '#ffffff', sLift: '#ffffff',
+  line: 'rgba(0,0,0,0.07)', line2: 'rgba(0,0,0,0.065)',
+  ink: '#0b0b0c', onInk: '#f7f7f5', ink2: '#4a4a46', ink3: '#696964',
+  amber: '#8a560c', amberBg: 'rgba(200,140,40,0.14)', onAmber: '#ffffff',
+  amberRing: '#8a560c',
+  red: '#b3381e', redBg: 'rgba(0,0,0,0.065)',
+  run: '#2a7560', runBg: 'rgba(0,0,0,0.065)',
+  sh: 'rgba(0,0,0,0.26)',
+  scrim: 'rgba(0,0,0,0.26)',
+  execLine: 'rgba(0,0,0,0.065)', execInk: '#696964',
+};
+
+/** Which custom property of divan-tokens.css each token is, on both sides. A
+ *  property that holds a shadow gives the colour of its last layer — the long
+ *  fall of `--shadow-float` is what a shadow and a dim are made of. Roles the
+ *  sheet has no property for take the one the design gives that job: red and
+ *  green are a dot or a word and never a fill, so their washes are the neutral
+ *  chip fill `--hairline`, which is what `.dv-status` sits on. */
+export const SOURCE: Record<Exclude<keyof Tokens, 'scheme'>, string> = {
+  bg: '--canvas', s1: '--glass-1', s2: '--glass-2', sLift: '--glass-strong',
+  line: '--glass-edge', line2: '--hairline',
+  ink: '--ink', onInk: '--on-ink', ink2: '--ink-2', ink3: '--ink-3',
+  amber: '--amber', amberBg: '--amber-wash', onAmber: '--on-amber', amberRing: '--amber',
+  red: '--red', redBg: '--hairline', run: '--run', runBg: '--hairline',
+  sh: '--shadow-float', scrim: '--shadow-float',
+  execLine: '--hairline', execInk: '--ink-3',
 };
 
 export const tokensFor = (scheme: Scheme): Tokens => (scheme === 'dark' ? DARK : LIGHT);
-
-/** The values in the table that are not in a frame at all, and the one whose
- *  value is in a frame but whose role is not. Named here so that another of
- *  either cannot appear without `design/divan/TOKENS.md` gaining a line about
- *  it — a check holds the two lists together. `execLine` and `execInk` are
- *  derived on the light side only: the dark side of both is an artboard's. */
-export const DERIVED = ['scrim', 'execLine', 'execInk'] as const;
-export const BORROWED = ['sLift'] as const;
 
 export type TokenName = Exclude<keyof Tokens, 'scheme'>;
 
@@ -172,7 +148,7 @@ export function themeCss(): string {
     rule('light'),
     // The page itself, so that the document behind the panel is the panel's own
     // colour before React has drawn anything over it.
-    `html,body{background:${T.bg};color:${T.ink}}`,
+    `html,body{background:${T.bg};color:${T.ink};font-family:${SANS}}`,
     `::-webkit-scrollbar{width:10px;height:10px}`,
     `::-webkit-scrollbar-thumb{background:${T.line2};border-radius:5px;`
       + `border:3px solid transparent;background-clip:content-box}`,
@@ -188,8 +164,8 @@ export function themeCss(): string {
 // ── the switch ──────────────────────────────────────────────────────────────
 
 /** What the reader asked for, which is not the same as what is on screen:
- *  `system` is the default and follows the computer, and the other two are a
- *  decision that outlives the tab. */
+ *  `system` follows the computer, and the other two are a decision that
+ *  outlives the tab. Nothing stored is Night: it is the design's default. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
 const KEY = 'rac.theme';
@@ -208,8 +184,8 @@ export function systemScheme(): Scheme {
 function storedChoice(): ThemeChoice {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw === 'light' || raw === 'dark' || raw === 'system' ? raw : 'system';
-  } catch { return 'system'; }
+    return raw === 'light' || raw === 'dark' || raw === 'system' ? raw : 'dark';
+  } catch { return 'dark'; }
 }
 
 export const resolveScheme = (choice: ThemeChoice): Scheme => (
@@ -222,6 +198,9 @@ export const resolveScheme = (choice: ThemeChoice): Scheme => (
 function apply(scheme: Scheme): void {
   if (typeof document === 'undefined') return;
   document.documentElement.dataset.theme = scheme;
+  // The app root carries it too: divan-tokens.css declares its properties on
+  // `.dv-root[data-theme]`, and the components sheet styles under `.dv-root`.
+  document.getElementById('root')?.setAttribute('data-theme', scheme);
 }
 
 interface ThemeState {
@@ -282,33 +261,17 @@ export function useTheme(): ThemeState {
 
 // ── the marks a project and an executor are drawn with ───────────────────────
 
-/** White, which the frames write as `#fff` on a monogram and on an executor's
- *  square. It belongs to the mark rather than to the theme — a coloured square
- *  brings its own background and does not follow the page — which is why it is
- *  a constant here and not a token. */
+/** White, which the frames write as `#fff` on an executor's square. It belongs
+ *  to the mark rather than to the theme — a coloured square brings its own
+ *  background and does not follow the page — which is why it is a constant here
+ *  and not a token. */
 export const ON_COLOUR = '#FFFFFF';
 
-/** A project's monogram colour. The frames pick these out of a small ramp of
- *  equally dark, equally muted hues so that four projects in a list are told
- *  apart by hue alone and none of them shouts; white sits on every one.
- *
- *  Written `oklch(0.48 0.07 H)` on the artboard — Web12 W1 draws the first four
- *  on one dashboard (Quire 265, Kanji Daily 320, Hush 210, The Long Walk 130)
- *  and the fifth, 95, belongs to the project Mobile7 S6 invents. Converted to
- *  the sRGB a browser shows, so that the phone and the panel spell the same
- *  project the same colour. */
-export const MONOGRAM = ['#4A5D86', '#6F5076', '#226873', '#50663A', '#706332'] as const;
-
-/** Which of them a project gets. A screen with the whole list in front of it
- *  passes the project's place in that list, and four projects get four
- *  different hues, which is the frames' own arrangement; a screen holding one
- *  project and no list falls back to the name, which at least keeps the same
- *  project the same colour everywhere it appears. */
-export function monogram(name: string, index?: number | null): string {
-  if (index != null) return MONOGRAM[((index % MONOGRAM.length) + MONOGRAM.length) % MONOGRAM.length];
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return MONOGRAM[h % MONOGRAM.length];
+/** A project's monogram ground. Monograms are colourless — the letter on the
+ *  second surface — because projects are told apart by name, not by colour.
+ *  `index` is still taken so that a caller holding a list need not change. */
+export function monogram(_name: string, _index?: number | null): string {
+  return T.s2;
 }
 
 /** How an executor is drawn: its mark, its colour, and whether the square is
@@ -406,33 +369,35 @@ export function toneFace(label: string, tone: Tone): ToneFace {
 
 // ── form ────────────────────────────────────────────────────────────────────
 
-/** The corners the desktop frames draw, and nothing else. */
+/** The design's five corners — sm 10 · md 16 · lg 22 · xl 28 · pill — and the
+ *  roles the panel already had, each landed on one of them. */
+const CORNER = { sm: 10, md: 16, lg: 22, xl: 28, pill: 999 } as const;
+
 export const RADIUS = {
-  /** A status chip: `padding:4px 8px;border-radius:7px`. */
-  chip: 7,
+  ...CORNER,
+  /** A status chip. */
+  chip: CORNER.pill,
   /** An executor's square, a small mark. */
-  mark: 8,
-  /** A list row's icon well, a small button, the selected tab inside its
-   *  track: `height:32px;border-radius:9px`, 33 times in Web15. */
-  well: 9,
-  /** A top-bar item and a side-panel row: `height:34px;border-radius:10px`, and
-   *  the inset block a worker quotes its figures in (Web12 W1). */
-  nav: 10,
-  quote: 10,
-  /** A button that ends a card: `height:34px;border-radius:11px` (Web14 W9). */
-  button: 11,
+  mark: CORNER.sm,
+  /** A list row's icon well, a small button, the selected tab in its track. */
+  well: CORNER.sm,
+  /** A top-bar item and a side-panel row, and an inset quote block. */
+  nav: CORNER.sm,
+  quote: CORNER.sm,
+  /** A button that ends a card. */
+  button: CORNER.pill,
   /** The tab strip's track, and a card in the chat panel. */
-  tab: 12,
+  tab: CORNER.md,
   /** A counter tile, a ticket card on the board. */
-  tile: 14,
+  tile: CORNER.md,
   /** A card, a board column, the chat panel, the drawer. */
-  card: 16,
-  /** A pill: `height:32px;border-radius:16px`, 46 times across the frames. */
-  pill: 16,
-  /** The composer inside a panel: `height:40px;border-radius:20px`. */
-  field: 20,
-  /** The command bar across the bottom: `height:52px;border-radius:26px`. */
-  bar: 26,
+  card: CORNER.md,
+  /** A pill. */
+  pill: CORNER.pill,
+  /** The composer inside a panel. */
+  field: CORNER.pill,
+  /** The command bar across the bottom: the composer's corner. */
+  bar: CORNER.xl,
 } as const;
 
 /** Heights and spans the desktop frames repeat. */
@@ -510,7 +475,10 @@ export const SHADOW = {
 /** An outline, which the frames draw inside the shape rather than on it. */
 export const outline = (colour: string) => `inset 0 0 0 1px ${colour}`;
 
-export const MONO = 'ui-monospace, "SF Mono", Menlo, monospace';
+/** The two typefaces, as divan-tokens.css spells `--font-sans` and
+ *  `--font-mono`. Geist is loaded by divan-components.css. */
+export const SANS = '"Geist", ui-sans-serif, system-ui, -apple-system, sans-serif';
+export const MONO = '"Geist Mono", ui-monospace, "SF Mono", Menlo, monospace';
 
 // ── the older vocabulary ────────────────────────────────────────────────────
 
@@ -526,9 +494,8 @@ export const MONO = 'ui-monospace, "SF Mono", Menlo, monospace';
  *   · `mute` and `faint` are both `--ink3`. The panel grew four tiers of text;
  *     the frames draw three, and they put mono meta, timestamps and
  *     placeholders in the same one.
- *   · `accent` is `--red`. The frames give the send button `--ink` and keep red
- *     for trouble; the panel's accent is the colour of Allow, of the recording
- *     dot and of delete, which is that red.
+ *   · `accent` is `--ink`, with `--on-ink` on it: the design's primary fill.
+ *     Red is kept for trouble and is never a fill.
  *   · `accentSoft` — the panel's "this one is selected" colour — is `--ink`.
  *     The frames draw a selected nav item, chip or tab in the primary ink and
  *     the rest in `--ink3`, and nothing in them is a lighter accent.
@@ -557,12 +524,15 @@ export const C = {
   text2: T.ink2,
   mute: T.ink3,
   faint: T.ink3,
-  /** Text and glyphs on top of a filled accent or a coloured mark. */
-  onAccent: ON_COLOUR,
+  /** Text and glyphs on top of a filled accent. */
+  onAccent: T.onInk,
   /** Text on top of amber — the one pair the frames spell out. */
   onWarn: T.onAmber,
 
-  accent: T.red,
+  /** The filled control — a primary button, send, a switch thrown on — is
+   *  the design's primary fill, `--ink` under `--on-ink`: red is a dot or a
+   *  word and never a fill. */
+  accent: T.ink,
   /** The selected one of anything. */
   accentSoft: T.ink,
   accentTint: T.redBg,
@@ -580,11 +550,11 @@ export const C = {
   scrim: T.scrim,
 } as const;
 
-/** The corners the older screens are drawn on. Left as they were — this ticket
- *  replaces the palette and adds the parts; the screens that use these are the
- *  ones it is not rebuilding. */
+/** The corners the older screens are drawn on, each landed on one of the
+ *  design's five. */
 export const R = {
-  badge: 6, btn: 8, input: 10, card: 12, media: 14, chip: 16, bubble: 18, composer: 26,
+  badge: RADIUS.sm, btn: RADIUS.sm, input: RADIUS.sm, card: RADIUS.md, media: RADIUS.md,
+  chip: RADIUS.pill, bubble: RADIUS.lg, composer: RADIUS.xl,
 } as const;
 
 /** Colour for a chat's status dot, and for the row that carries it. */

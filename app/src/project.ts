@@ -62,6 +62,29 @@ export function subtitle(p: MergedProject): string {
   return [(p.kind || '').trim(), (p.summary || '').trim()].filter(Boolean).join(' · ');
 }
 
+/** What the meta line under a product's name is made of (HANDOVER §4.2):
+ *  its stage as one word, the day it got there where somebody wrote that day
+ *  down, and the machines it runs on — `live since 4 Jan 2026 · runs on
+ *  mac-studio`. The stage is the person's word and goes in as written. */
+export function meta(p: MergedProject): { stage: string; since: string | null; machines: string[] } {
+  const stage = (p.stage || '').trim().toLowerCase();
+  const reached = stage ? p.milestones.filter((m) => m.kind === stage).pop() : undefined;
+  return { stage, since: reached ? day(reached.at) : null, machines: p.machines };
+}
+
+/** `4 Jan 2026`. */
+export function day(at: number): string {
+  return new Date(at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** Whether anything feeds a branch: something has written its summary, or —
+ *  for engineering — the product has a repository to read. A branch nothing
+ *  feeds says `Source not connected yet.` and shows no number. */
+export function connected(p: MergedProject, b: MergedBranch): boolean {
+  return !!(b.summary || '').trim() || b.summary_at != null
+    || (b.kind.toLowerCase() === 'engineering' && p.repos.length > 0);
+}
+
 // ── the two lines at the top ────────────────────────────────────────────────
 
 /** One sentence of a line. `who` is the executor it names, where it names one:

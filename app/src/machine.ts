@@ -77,6 +77,11 @@ export interface MachineLine {
   ring: 'amber' | 'line';
   figures: Figure[];
   actions: MachineAction[];
+  /** HANDOVER §4.9: what it is running by name, and on a machine that has gone
+   *  quiet what it was running and that this may no longer be true. */
+  line: Words[];
+  /** `seen just now`, `last seen 3h ago`, `never seen`. */
+  seen: Words;
 }
 
 export function machineLines(view: DivanView, ago: Ago): MachineLine[] {
@@ -84,13 +89,42 @@ export function machineLines(view: DivanView, ago: Ago): MachineLine[] {
     id: h.id,
     machine: h.machine,
     detail: [h.os, h.error].filter(Boolean).join(' · '),
-    state: h.reachable ? 'running' : h.missing ? 'quiet' : 'asking',
-    says: h.reachable ? 'maReachable' : h.missing ? 'maNever' : 'maUnreachable',
-    tone: h.reachable ? 'run' : h.missing ? 'ink3' : 'amber',
-    ring: !h.reachable && !h.missing ? 'amber' : 'line',
+    state: h.reachable ? 'running' : h.missing ? 'quiet' : 'stuck',
+    says: h.reachable ? 'maOnline' : h.missing ? 'maNever' : 'maUnreachable',
+    // Unreachable is red, as a word (HANDOVER §2): never a fill.
+    tone: h.reachable ? 'run' : h.missing ? 'ink3' : 'red',
+    ring: 'line',
     figures: figures(h, ago),
     actions: h.reachable ? ['screen'] : ['retry'],
+    line: runningLine(view, h),
+    seen: seenWords(h, ago),
   }));
+}
+
+/** What a machine runs, by the titles of the work on it. */
+function runningLine(view: DivanView, h: HostView): Words[] {
+  const titles = view.agents.filter((a) => a.host === h.id).map((a) => a.title).filter(Boolean);
+  const list = { n: titles.length, list: titles.join(', ') };
+  if (h.reachable) return [titles.length ? key('maRunningList', list) : key('maNothingRunning')];
+  if (h.missing) return [key('maNeverSaid')];
+  return [titles.length ? key('maWasRunning', list) : key('maNothingWas'), key('maStale')];
+}
+
+function seenWords(h: HostView, ago: Ago): Words {
+  if (h.age == null) return key('maNeverSeen');
+  const when = h.age < 60 ? 'just now' : `${ago(h.age)} ago`;
+  return key(h.reachable ? 'maSeen' : 'maLastSeen', { d: when });
+}
+
+/** The one sentence under the Machines title: how many answer, and whether
+ *  there is quota to start work on. Nothing about quota where none was read. */
+export function fleetLine(view: DivanView): Words[] {
+  const n = view.hosts.length;
+  const up = view.hosts.filter((h) => h.reachable).length;
+  const head = up === n ? (n === 1 ? key('maOneUp') : key('maAllUp', { n })) : key('maSomeUp', { up, n });
+  const q = view.quota;
+  if (q.unknown || (q.left == null && !q.spent)) return [head];
+  return [head, q.spent ? key('maOut') : (q.left ?? 0) <= WARN_AT ? key('maThin') : key('maEnough')];
 }
 
 /** The two numbers under the head, and neither of them is invented. A machine

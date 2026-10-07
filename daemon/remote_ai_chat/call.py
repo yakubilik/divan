@@ -39,6 +39,7 @@ from claude_agent_sdk import (
     ToolUseBlock,
     ClaudeAgentOptions,
     ClaudeSDKClient,
+    RateLimitEvent,
     ResultMessage,
     TextBlock,
     create_sdk_mcp_server,
@@ -719,6 +720,48 @@ TOOL_NAMES = ["mcp__rac__send_message", "mcp__rac__start_work",
               "mcp__rac__answer_approval", "mcp__rac__stop_session"]
 
 
+# ── running out of plan ───────────────────────────────────────────────────────
+class NoRoom(Exception):
+    """No signed-in account has plan left to answer on. `until` is when the
+    earliest of them comes back, where anything says."""
+
+    def __init__(self, until: float | None = None):
+        super().__init__("no account has plan left")
+        self.until = until
+
+
+class _Limited(Exception):
+    """The turn was refused because the account it ran on is out of plan."""
+
+
+# What the CLI says in place of an answer when the plan is spent. It arrives as
+# ordinary assistant text, so without this it is read out to the caller.
+_LIMIT_TEXT = re.compile(r"usage limit|hit your limit|limit reached|rate.?limit", re.I)
+
+_DAYS_TR = ("pazartesi", "salı", "çarşamba", "perşembe", "cuma", "cumartesi", "pazar")
+
+
+def _is_limit(text: str | None) -> bool:
+    return bool(text and _LIMIT_TEXT.search(text))
+
+
+def no_room(until: float | None, lang: str | None, now: float | None = None) -> str:
+    """The one sentence a call says when every account is out of plan."""
+    turkish = (lang or "").split("-")[0].lower() == "tr"
+    now = now or time.time()
+    if not until or until <= now:
+        return ("Hiçbir hesapta kullanım hakkı kalmadı." if turkish
+                else "No account has any plan left right now.")
+    then = time.localtime(until)
+    clock = time.strftime("%H:%M", then)
+    gap = (date.fromtimestamp(until) - date.fromtimestamp(now)).days
+    if turkish:
+        day = "" if gap <= 0 else "yarın " if gap == 1 else _DAYS_TR[then.tm_wday] + " "
+        return f"Hiçbir hesapta kullanım hakkı kalmadı, en erken sıfırlanma {day}saat {clock}."
+    day = "" if gap <= 0 else "tomorrow " if gap == 1 else "on " + time.strftime("%A", then) + " "
+    return f"No account has any plan left, the earliest one resets {day}at {clock}."
+
+
 # ── the model ─────────────────────────────────────────────────────────────────
 class Concierge:
     """One warm Claude session, kept connected between questions.
@@ -728,9 +771,13 @@ class Concierge:
     for free, because the session still has the previous exchange.
     """
 
-    def __init__(self, snapshot_fn, resolve_account, actions: Actions | None = None):
+    def __init__(self, snapshot_fn, resolve_account, actions: Actions | None = None,
+                 on_limits: Callable[[dict], Any] | None = None,
+                 on_limited: Callable[[], Any] | None = None):
         self._snapshot = snapshot_fn            # () -> (text, [chat_id, ...])
-        self._resolve = resolve_account         # () -> (home | None, env)
+        self._resolve = resolve_account         # () -> (home | None, env), or NoRoom
+        self._on_limits = on_limits             # a plan reading from our own turn
+        self._on_limited = on_limited           # the account just refused a turn
         self._index: list[str] = []             # the numbers in the last snapshot
         self._actions = actions or {}
         self._client: ClaudeSDKClient | None = None
@@ -802,60 +849,106 @@ class Concierge:
     async def ask(self, question: str, lang: str | None = None) -> dict:
         async with self._lock:
             t0 = time.monotonic()
-            snap, self._index = self._snapshot()
-            # The phone knows which language it just transcribed, and saying so
-            # beats hoping. Left to itself the model took the language from the
-            # snapshot — which is full of Turkish — and answered an English
-            # question in Turkish.
-            # The phone sends a full BCP-47 tag ("tr-TR"), not a bare language
-            # code, so match on the prefix — keyed on the whole tag this lookup
-            # never hit and the model was left to guess from the snapshot.
-            code = (lang or "").split("-")[0].lower()
-            want = {"tr": "Answer in Turkish.", "en": "Answer in English."}.get(code)
-            client = await self._ensure()
-            connected = time.monotonic()
-            first: float | None = None
-            chunks: list[str] = []
-            used: list[str] = []
-            cost = None
-            try:
-                prompt = f"<state>\n{snap}\n</state>\n\n{question}"
-                if want:
-                    prompt += f"\n\n({want})"
-                await client.query(prompt)
-                async for msg in client.receive_response():
-                    if isinstance(msg, AssistantMessage):
-                        for block in msg.content:
-                            if isinstance(block, TextBlock) and block.text:
-                                if first is None:
-                                    first = time.monotonic()
-                                chunks.append(block.text)
-                            elif isinstance(block, ToolUseBlock):
-                                used.append(block.name.replace("mcp__rac__", ""))
-                    elif isinstance(msg, ResultMessage):
-                        cost = msg.total_cost_usd
-                        break
-            except Exception as exc:
-                await self.close()
-                log.warning("concierge turn failed: %s", exc)
-                raise
+            # One question, as many accounts as it takes. An account that turns
+            # out to be spent is left behind and the same question is asked of
+            # the next one, so the caller hears an answer and never the refusal.
+            # It ends because every refusal takes an account out of the running.
+            while True:
+                try:
+                    return await self._turn(question, lang, t0)
+                except NoRoom as exc:
+                    log.info("concierge: no account has plan left")
+                    return {"text": no_room(exc.until, lang), "limited": True,
+                            "ms": int((time.monotonic() - t0) * 1000), "connect_ms": None,
+                            "first_token_ms": None, "cost_usd": None, "snapshot_chars": 0,
+                            "turn": self._turns, "did": []}
+                except _Limited:
+                    await self.close()
+                    if self._on_limited is None:
+                        raise
+                    log.info("concierge: account out of plan, trying the next one")
+                    self._on_limited()
 
-            self._turns += 1
-            self._last = time.monotonic()
-            from .session import plain
-            # Markdown is not a sound. Strip it even though the prompt forbids
-            # it — a stray asterisk read out loud is worse than a lost emphasis.
-            text = speakable(clip(plain("".join(chunks)).strip()), self._hermes)
-            return {
-                "text": text,
-                "ms": int((time.monotonic() - t0) * 1000),
-                "connect_ms": int((connected - t0) * 1000),
-                "first_token_ms": int((first - t0) * 1000) if first else None,
-                "cost_usd": cost,
-                "snapshot_chars": len(snap),
-                "turn": self._turns,
-                "did": used,
-            }
+    def _heard(self, info) -> None:
+        """Pass a plan reading on, the way a chat's turn does."""
+        if self._on_limits is None:
+            return
+        try:
+            from .providers.claude import ClaudeProvider
+            self._on_limits(ClaudeProvider._limits(info))
+        except Exception as exc:
+            log.warning("concierge: could not pass on a limit reading: %s", exc)
+
+    async def _turn(self, question: str, lang: str | None, t0: float) -> dict:
+        snap, self._index = self._snapshot()
+        # The phone knows which language it just transcribed, and saying so
+        # beats hoping. Left to itself the model took the language from the
+        # snapshot — which is full of Turkish — and answered an English
+        # question in Turkish.
+        # The phone sends a full BCP-47 tag ("tr-TR"), not a bare language
+        # code, so match on the prefix — keyed on the whole tag this lookup
+        # never hit and the model was left to guess from the snapshot.
+        code = (lang or "").split("-")[0].lower()
+        want = {"tr": "Answer in Turkish.", "en": "Answer in English."}.get(code)
+        client = await self._ensure()
+        connected = time.monotonic()
+        first: float | None = None
+        chunks: list[str] = []
+        used: list[str] = []
+        cost = None
+        refused = False
+        failed: str | None = None
+        try:
+            prompt = f"<state>\n{snap}\n</state>\n\n{question}"
+            if want:
+                prompt += f"\n\n({want})"
+            await client.query(prompt)
+            async for msg in client.receive_response():
+                if isinstance(msg, RateLimitEvent):
+                    self._heard(msg.rate_limit_info)
+                    refused = refused or msg.rate_limit_info.status == "rejected"
+                elif isinstance(msg, AssistantMessage):
+                    refused = refused or msg.error == "rate_limit"
+                    for block in msg.content:
+                        if isinstance(block, TextBlock) and block.text:
+                            if first is None:
+                                first = time.monotonic()
+                            chunks.append(block.text)
+                        elif isinstance(block, ToolUseBlock):
+                            used.append(block.name.replace("mcp__rac__", ""))
+                elif isinstance(msg, ResultMessage):
+                    cost = msg.total_cost_usd
+                    if msg.is_error:
+                        failed = msg.result or "".join(chunks) or "error"
+                    break
+        except Exception as exc:
+            await self.close()
+            log.warning("concierge turn failed: %s", exc)
+            if _is_limit(str(exc)):
+                raise _Limited() from exc
+            raise
+        # A refused turn still "answers": the CLI's own line about the limit.
+        # Only a turn that ended in error counts, so a warning on a turn that
+        # went through is never mistaken for one.
+        if failed and (refused or _is_limit(failed)):
+            raise _Limited()
+
+        self._turns += 1
+        self._last = time.monotonic()
+        from .session import plain
+        # Markdown is not a sound. Strip it even though the prompt forbids
+        # it — a stray asterisk read out loud is worse than a lost emphasis.
+        text = speakable(clip(plain("".join(chunks)).strip()), self._hermes)
+        return {
+            "text": text,
+            "ms": int((time.monotonic() - t0) * 1000),
+            "connect_ms": int((connected - t0) * 1000),
+            "first_token_ms": int((first - t0) * 1000) if first else None,
+            "cost_usd": cost,
+            "snapshot_chars": len(snap),
+            "turn": self._turns,
+            "did": used,
+        }
 
     async def warm(self) -> None:
         """Pay for the first question before it is asked.
@@ -875,9 +968,20 @@ class Concierge:
                 if self._turns:
                     return                      # already used; nothing to warm
                 await client.query("Warm-up, not from the caller. Reply with the single word OK.")
+                refused = False
                 async for msg in client.receive_response():
-                    if isinstance(msg, ResultMessage):
+                    if isinstance(msg, RateLimitEvent):
+                        self._heard(msg.rate_limit_info)
+                        refused = refused or msg.rate_limit_info.status == "rejected"
+                    elif isinstance(msg, ResultMessage):
+                        refused = bool(msg.is_error) and (refused or _is_limit(msg.result))
                         break
+                if refused and self._on_limited is not None:
+                    # Found out before the caller asked anything: the first
+                    # question opens on the next account instead of this one.
+                    await self.close()
+                    self._on_limited()
+                    return
                 self._turns += 1
                 self._last = time.monotonic()
         except Exception as exc:

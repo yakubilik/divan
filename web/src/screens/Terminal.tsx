@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  MONO, ON_COLOUR, RADIUS, SHADOW, T, toneFace, type State, type ToneFace,
+  MONO, RADIUS, SHADOW, T, toneFace, type State, type ToneFace,
 } from '../lib/theme';
 import { Icon, P, mono } from '../ui/kit';
 import { ago, cost, duration, shortPath, tildeAll, tokens, toolSummary } from '../lib/format';
@@ -413,8 +413,8 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
                 // the same shape the chat screen uses, so a tile reads as the
                 // conversation it is a window onto.
                 borderRadius: you ? '14px 14px 5px 14px' : '14px 14px 14px 5px',
-                background: you ? T.red : T.s2,
-                color: you ? ON_COLOUR : T.ink,
+                background: you ? T.ink : T.s2,
+                color: you ? T.onInk : T.ink,
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 wordBreak: 'break-word',
               }}>{l.text}</span>
@@ -479,6 +479,8 @@ function saveKeys(name: string, keys: string[]): void {
 export interface TerminalProps {
   onPeek: (hostKey: string, chatId: string) => void;
   onNewChat: () => void;
+  /** A ticket to open on the queue's wall as the page comes up. */
+  ticket?: number | null;
 }
 
 /** Which wall this screen is showing. Remembered, because it is a way of
@@ -503,10 +505,11 @@ function SourceToggle({ value, onChange }: { value: Source; onChange: (s: Source
   );
 }
 
-export function Terminal({ onPeek, onNewChat }: TerminalProps) {
+export function Terminal({ onPeek, onNewChat, ticket = null }: TerminalProps) {
   const { hosts, order } = useFleet();
   const logs = useLogs((s) => s.logs);
-  const [source, setSourceState] = useState<Source>(loadSource);
+  // A ticket handed in (a card link in a chat) is read on the queue's own wall.
+  const [source, setSourceState] = useState<Source>(() => (ticket != null ? 'ustabasi' : loadSource()));
   const [filter, setFilter] = useState<Phase | 'all'>('all');
   const [query, setQuery] = useState('');
   const [wall, setWall] = useState<string[]>(() => loadKeys(WALL_KEY));
@@ -651,7 +654,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
 
   // The other wall. Placed after every hook above, so switching walls is not a
   // change in how many hooks this component runs.
-  if (source === 'ustabasi') return <Ustabasi header={toggle} />;
+  if (source === 'ustabasi') return <Ustabasi header={toggle} open={ticket} />;
 
   return (
     <div style={{
@@ -670,7 +673,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
               is the design system's own `page` head and not a size invented
               here. */}
           <SectionHeader
-            kind="page" title="Terminals"
+            kind="page" title="Terminal"
             note={`${onlineCount} of ${order.length} online`}
             style={{ flexShrink: 0 }}
           />

@@ -25,6 +25,8 @@ export interface Chat {
   created_at: number;
   updated_at: number;
   session_ids?: string;
+  /** The product this chat is filed under, by that computer's id for it. */
+  project_id?: string | null;
   /** 1 to keep this chat on the sign-in named above even while the account
    *  pool is on. Off by default: the pool is a mode, and a chat is in it
    *  unless somebody says otherwise. */
@@ -429,6 +431,25 @@ export interface DivanBranch {
   open: number;
 }
 
+/** One thing a product is still waiting on, and the thread under it (the
+ *  project page's Still open). Not a card: most of these cannot be handed to
+ *  anything on the computer. */
+export interface DivanOpenItem {
+  id: string;
+  project_id: string;
+  title: string;
+  body: string;
+  state: 'blocked' | 'waiting' | 'todo' | 'done';
+  /** Whose it is, where that is a person rather than this computer. */
+  owner: string;
+  area: string;
+  sort: number;
+  comments: { at: number; who: string; text: string }[];
+  created_at: number;
+  updated_at: number;
+  closed_at: number | null;
+}
+
 export interface DivanProject {
   /** `name` is what a screen says and `slug` is what two machines match the same
    *  product by, so they are not always the same word: this product is called
@@ -459,6 +480,8 @@ export interface DivanProject {
    *  turned down, and every card whose executor is a person. */
   waiting: number;
   summary_line: string;
+  /** What it is still waiting on. Absent on a daemon older than the list. */
+  open_items?: DivanOpenItem[];
   /** What has happened to it, dated, oldest first — and what is promised, which
    *  is the same list with a date in the future. Absent from a daemon that
    *  predates it. */

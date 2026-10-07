@@ -274,3 +274,13 @@ export function useDivanView(): DivanView & { reload: () => void } {
   const view = useMemo(() => merge(entries(hosts, divan), now), [hosts, divan, now]);
   return { ...view, reload };
 }
+
+/** The same merged view, read and never asked for: the line over every page
+ *  draws what the screens under it have already polled, and does not start a
+ *  second timer of its own. */
+export function useDivanShown(): DivanView {
+  const hosts = useStore((s) => s.hosts);
+  const divan = useStore((s) => s.divan);
+  const now = useNow();
+  return useMemo(() => merge(entries(hosts ?? [], divan ?? {}), now), [hosts, divan, now]);
+}

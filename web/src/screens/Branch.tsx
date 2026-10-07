@@ -1,165 +1,190 @@
-/** One face of a product: Quire / Engineering, and the same layout for every
- *  other branch.
+/** One face of a product — Quire / Engineering — and the same layout for every
+ *  other branch (HANDOVER §4.7).
  *
- *  Web14 W7 is this page. The breadcrumb, then the name with what the branch is
- *  doing under it and its numbers against it, then the branch's own blocks in a
- *  three-column grid. Engineering fills them with repositories, tickets and what
- *  was said; another branch uses the same slots for the same three questions
- *  asked of its own cards — one layout for every branch, which is the frame's own
- *  note on it.
+ *  The title, one sentence about what the branch is doing and when that was
+ *  last true (`updated 14m ago`), two or three figures, and then two columns:
+ *  the branch's own list and its tickets in the main one, "What the agent did"
+ *  in the side one.
  *
- *  **A branch with no source connected says so.** `summary` is empty until one
- *  is, and every branch but engineering is in that state today (`docs/PROTOCOL.md`,
- *  "Branches are the faces of a product"). So the line under the name is the
- *  branch's own sentence where something wrote one, the worst card's line where
- *  nothing did, and *no source connected yet* where there is neither — never a
- *  number nobody measured. The frame's `deploys per day · 30 days` chart, its
- *  `212/214 tests`, its `v3.18 deployed` and the check marks beside a repository
- *  are exactly those numbers, and none of them is drawn: nothing carries a
- *  day-by-day history, a test result or a deploy.
+ *  **A branch with no source connected says so and nothing else.** `summary` is
+ *  empty until something writes one, and every branch but engineering is in
+ *  that state today (`docs/PROTOCOL.md`). Such a branch shows no figure and no
+ *  list — one sentence, `Source not connected yet.` Its cards are still on the
+ *  board, which is one press back.
  *
- *  What is on the page is the board's own: how much is open on this face, what is
- *  in progress, what is done, the repositories its cards run in, the cards
- *  themselves and what the mirror last wrote on them. The judgements are
- *  `lib/project.ts`.
+ *  What the frame draws and nothing carries — open pull requests, red checks —
+ *  is not drawn: engineering's own list is its repositories, which the board
+ *  does know. Every figure is a count off the board. The judgements are
+ *  `lib/project.ts` and `lib/board.ts`.
  */
 import { uptime } from '../lib/format';
-import { clock } from '../lib/overview';
 import {
-  branchCards, branchState, cardsOn, figures, happened, refreshed, repoRows, NO_SOURCE,
+  NOT_CONNECTED, branchCards, cardsOn, connected, figures, happened, repoRows,
 } from '../lib/project';
-import { STATE_MARK, T } from '../lib/theme';
+import { BOARD, status } from '../lib/board';
 import type { MergedBranch, MergedCard, MergedProject } from '../lib/divan';
-import { cardMark } from '../lib/board';
-import {
-  Card, EmptyState, Figures, Monogram, Row, SectionHeader, StampRow, StatusDot, Tag,
-} from '../ui/divan';
-import { mono } from '../ui/kit';
 
-export function Branch({ project: p, branch: b, index, now, onProject, onCard }: {
+/** The words a figure is drawn under. */
+const FIGURE_LABEL: Record<string, string> = {
+  open: 'Open tickets', 'in progress': 'In progress', done: 'Done',
+};
+
+/** `today`, `yesterday`, `5 Oct` — the side column's mono date. */
+export function dayWord(at: number | null | undefined, now: number): string {
+  if (at == null) return '';
+  const d = new Date(at * 1000);
+  const n = new Date(now * 1000);
+  if (d.toDateString() === n.toDateString()) return 'today';
+  const y = new Date(n); y.setDate(n.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'yesterday';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/** When anything on this branch was last true: its own summary, or the newest
+ *  card on it. Null where nothing has ever been said. */
+export function updatedAt(b: MergedBranch, cards: MergedCard[]): number | null {
+  const times = [b.summary_at, ...cards.map((c) => c.agent_status_at ?? c.updated_at)]
+    .filter((t): t is number => typeof t === 'number' && t > 0);
+  return times.length ? Math.max(...times) : null;
+}
+
+export function Branch({ project: p, branch: b, now, onCard, onBoard }: {
   project: MergedProject;
   branch: MergedBranch;
-  /** The product's place in the list, so its monogram is the hue it is
-   *  everywhere else. */
-  index: number;
+  /** Kept for the callers that pass it; the monogram is not on this page. */
+  index?: number;
   now: number;
-  onProject: () => void;
+  /** Kept for the callers that pass it; the way back is the line's own. */
+  onProject?: () => void;
   onCard: (card: MergedCard) => void;
+  /** The board this branch's tickets are on. */
+  onBoard?: () => void;
 }) {
+  const name = b.name || b.kind;
+  const fed = connected(p, b);
   const cards = cardsOn(p, b.kind);
-  const state = branchState(cards);
-  const fresh = refreshed(b, now);
-  const said = happened(p, b.kind);
+
+  const head = (
+    <section>
+      <h1 style={{ margin: 0, fontSize: 28, lineHeight: '34px', fontWeight: 600, letterSpacing: '-0.025em' }}>
+        {name}
+      </h1>
+    </section>
+  );
+
+  if (!fed) {
+    return (
+      <div data-branch={b.kind} data-connected="false">
+        {head}
+        <p style={{ margin: '8px 0 0', fontSize: 15, lineHeight: '22px', color: 'var(--dv-ink2)' }}>{NOT_CONNECTED}</p>
+      </div>
+    );
+  }
+
+  const line = branchCards(p, now).find((x) => x.kind === b.kind)?.line ?? '';
+  const at = updatedAt(b, cards);
   const repos = repoRows(p, b.kind);
-  // The line under the name is the branch card's own reading, so the grid a
-  // person came from and the page they arrived at cannot disagree.
-  const card = branchCards(p, now).find((x) => x.kind === b.kind);
+  const did = happened(p, b.kind).slice(0, 8);
+  const figs = figures(b).slice(0, 3);
+  const column = (c: MergedCard) => BOARD.find((x) => x.key === c.column)?.label
+    ?? (c.column === 'review' ? 'In Progress' : c.column);
 
   return (
-    // No shorter than what is in it, for the reason the product's page gives.
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0 }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 500, color: T.ink2,
-      }}>
-        <Monogram name={p.name} index={index} size={20} />
-        <button type="button" onClick={onProject} title={`Everything on ${p.name}`}
-          style={{
-            background: 'transparent', border: 'none', padding: 0, font: 'inherit',
-            color: T.ink2, cursor: 'pointer',
-          }}>{p.name}</button>
-        <span style={{ color: T.ink3 }}>/</span>
-        <span style={{ color: T.ink }}>{b.name || b.kind}</span>
-        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <StatusDot state={state === 'quiet' ? T.line2 : state} />
-          <span style={{ ...mono, fontSize: 12, color: T.ink3 }}>
-            {b.machines.length ? b.machines.join(' · ') : 'no machine'}
-          </span>
-        </span>
-      </div>
+    <div data-branch={b.kind} data-connected="true">
+      <section>
+        <h1 style={{ margin: 0, fontSize: 28, lineHeight: '34px', fontWeight: 600, letterSpacing: '-0.025em' }}>
+          {name}
+        </h1>
+        <p style={{ margin: '8px 0 0', fontSize: 15, lineHeight: '22px', color: 'var(--dv-ink2)' }} data-branch-line>
+          {line ? `${line.replace(/[.\s]+$/, '')}.` : ''}
+          {at != null && <> Updated {Math.max(0, now - at) < 60 ? 'just now' : `${uptime(Math.max(0, now - at))} ago`}.</>}
+        </p>
+      </section>
 
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 24, alignItems: 'end',
-      }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-.02em' }}>
-            {b.name || b.kind}
-          </div>
-          <div style={{
-            fontSize: 15, lineHeight: 1.45, color: T.ink2, marginTop: 6,
-          }}>{card?.line ?? NO_SOURCE}</div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-          {!!fresh && (
-            <span style={{
-              ...mono, fontSize: 11, color: fresh.tone === 'amber' ? T.amber : T.ink3,
-            }}>{fresh.text}</span>
-          )}
-          <Figures figures={figures(b)} />
-        </div>
-      </div>
-
-      {!cards.length && !repos.length ? (
-        <EmptyState
-          title="Nothing on this face yet."
-          body={`No card on the board names ${b.name || b.kind}, and nothing is connected behind it.
-                 Tell Divan about a card in the chat and it lands in the Ice Box, which starts
-                 nothing.`}
-          foot={p.machines.join(' · ') || 'no machine'}
-        />
-      ) : (
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12,
-          alignItems: 'start',
+      {figs.length > 0 && (
+        <section data-figures style={{
+          marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12,
         }}>
-          <Card inset={false} style={{ padding: '16px 18px 4px' }}>
-            <SectionHeader title="Repositories" count={repos.length || null} />
-            {/* Each row carries its own hairline, the head above them included:
-                the frame draws `border-top` on every one. */}
-            {repos.length ? repos.map((r) => (
-              <Row key={r.path} mark title={r.name}
-                note={r.machines.join(' · ') || undefined}
-                style={{ padding: '10px 0', gap: 8 }} />
-            )) : (
-              <div style={{ fontSize: 13.5, color: T.ink2, padding: '4px 0 14px' }}>
-                Nothing on this face names a repository.
-              </div>
-            )}
-          </Card>
-
-          <Card inset={false} style={{ padding: '16px 18px 4px' }}>
-            <SectionHeader title="Cards" count={cards.length || null} />
-            {cards.length ? cards.slice(0, 6).map((c) => {
-              const mark = cardMark(c, now, uptime);
-              return (
-                <Row key={c.id} title={c.title} onClick={() => onCard(c)}
-                  note={c.machine} style={{ padding: '10px 0', gap: 8 }}
-                  right={mark
-                    ? <Tag mark={STATE_MARK[mark.state]} label={mark.label} tone={mark.tone} />
-                    : undefined} />
-              );
-            }) : (
-              <div style={{ fontSize: 13.5, color: T.ink2, padding: '4px 0 14px' }}>
-                No card on the board names this face.
-              </div>
-            )}
-          </Card>
-
-          <Card inset={false} style={{ padding: '16px 18px 14px' }}>
-            <SectionHeader title="Recent activity" />
-            {said.length ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10 }}>
-                {said.slice(0, 4).map((h) => (
-                  <StampRow key={h.card.id} at={clock(h.at)} text={h.text} />
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: 13.5, color: T.ink2, paddingTop: 10 }}>
-                Nothing has been said on this face yet.
-              </div>
-            )}
-          </Card>
-        </div>
+          {figs.map((f) => (
+            <div key={f.label} className="dv-glass dv-count">
+              <span className="l">{FIGURE_LABEL[f.label] ?? f.label}</span>
+              <span className="n">{f.value}</span>
+            </div>
+          ))}
+        </section>
       )}
+
+      <div className="dv-cols2">
+        <main style={{ gap: 28 }}>
+          {b.kind.toLowerCase() === 'engineering' && (
+            <section>
+              <div className="dv-sec"><h3>Repositories</h3><span className="dv-meta">{repos.length}</span></div>
+              <div className="dv-glass" style={{ borderRadius: 'var(--radius-md)', padding: '4px 14px' }}>
+                {repos.length ? repos.map((r) => (
+                  <div key={r.path} className="dv-live" style={{ padding: '12px 4px' }}>
+                    <span className="t" style={{ fontFamily: 'var(--font-mono)' }}>{r.name}</span>
+                    <span className="dv-meta">{r.machines.join(' · ')}</span>
+                  </div>
+                )) : (
+                  <p className="dv-live" style={{ margin: 0, padding: '12px 4px', color: 'var(--dv-ink2)' }}>
+                    Nothing on this branch names a repository.
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+          <section>
+            <div className="dv-sec">
+              <h3>Tickets</h3>
+              {!!onBoard && (
+                <a href="#board" className="dv-link" style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 500 }}
+                  onClick={(e) => { e.preventDefault(); onBoard(); }}>On the board</a>
+              )}
+            </div>
+            <div className="dv-glass" style={{ borderRadius: 'var(--radius-md)', padding: '4px 14px' }} data-branch-tickets>
+              {cards.length ? cards.map((c) => {
+                const st = status(c);
+                return (
+                  <button key={c.id} type="button" className="dv-live press" style={{ padding: '12px 4px' }}
+                    onClick={() => onCard(c)}>
+                    {st
+                      ? <span className={`dv-status dv-status--${st.kind}`}><i />{st.word}</span>
+                      : <i className="dv-dot" aria-hidden="true" />}
+                    <span className="t">{c.title}</span>
+                    <span className="dv-meta">{column(c)}</span>
+                  </button>
+                );
+              }) : (
+                <p className="dv-live" style={{ margin: 0, padding: '12px 4px', color: 'var(--dv-ink2)' }}>
+                  No ticket on the board names this branch.
+                </p>
+              )}
+            </div>
+          </section>
+        </main>
+
+        <aside>
+          <section>
+            <div className="dv-sec"><h3>What the agent did</h3></div>
+            <div className="dv-glass" style={{ borderRadius: 'var(--radius-lg)', padding: '16px 18px 4px' }} data-agent-did>
+              {did.length ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '72px minmax(0, 1fr)', gap: '0 12px' }}>
+                  {did.map((h) => (
+                    <div key={h.card.id} style={{ display: 'contents' }}>
+                      <span className="dv-meta">{dayWord(h.at, now)}</span>
+                      <div style={{ paddingBottom: 16, fontSize: 13, lineHeight: '19px' }}>{h.text}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ margin: '0 0 12px', fontSize: 13, lineHeight: '19px', color: 'var(--dv-ink2)' }}>
+                  Nothing done here yet.
+                </p>
+              )}
+            </div>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

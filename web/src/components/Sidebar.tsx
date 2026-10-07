@@ -15,6 +15,7 @@ const W = 260;
  *  the button that starts a chat. Anything narrower stops being a target. */
 const RAIL = 48;
 const ALL_LABEL = 'All computers';
+const NOBODY: string[] = [];
 
 export function ProviderMark({ provider, dim }: { provider: string; dim?: boolean }) {
   const claude = provider === 'claude';
@@ -139,6 +140,61 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const EVERYONE = 'Everyone';
+const PERSON_KEY = 'rac.person';
+
+function savedPeople(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(PERSON_KEY) || '{}') ?? {}; } catch { return {}; }
+}
+
+/** Whose chats the list shows, on a computer more than one person uses. Above
+ *  every group, and picked the way a computer is: the one showing, and the
+ *  others under it. */
+function PersonCard({ names, who, counts, onPick }: {
+  names: string[]; who: string | null; counts: Record<string, number>;
+  onPick: (who: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const total = names.reduce((n, p) => n + (counts[p] ?? 0), 0);
+  const line = (key: string, label: string, n: number, pick: string | null) => (
+    <button
+      key={key} type="button"
+      onClick={() => { onPick(pick); setOpen(false); }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 34,
+        padding: '0 12px', background: 'transparent', border: 'none',
+        borderTop: `1px solid ${C.border}`, cursor: 'pointer', textAlign: 'left',
+      }}
+    >
+      <Icon path={P.users} size={13} color={pick ? C.mute : C.accentSoft} />
+      <span style={{ flex: 1, fontSize: 12, color: C.text2 }}>{label}</span>
+      <span style={{ fontSize: 11, color: C.faint }}>{n}</span>
+    </button>
+  );
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: R.card, background: C.bg, overflow: 'hidden' }}>
+      <button
+        type="button" onClick={() => setOpen((o) => !o)}
+        aria-label="Whose chats" data-person={who ?? 'all'}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 34, padding: '0 12px',
+          background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <Icon path={P.users} size={14} color={who ? C.mute : C.accentSoft} />
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+          overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{who ?? EVERYONE}</span>
+        <span style={{ fontSize: 11, color: C.faint }}>{who ? (counts[who] ?? 0) : total}</span>
+        <Icon path={open ? P.chevronDown : P.chevronRight} size={13} color={C.faint} />
+      </button>
+      {open && who && line('__all', EVERYONE, total, null)}
+      {open && names.filter((p) => p !== who).map((p) => line(p, p, counts[p] ?? 0, p))}
     </div>
   );
 }
@@ -316,7 +372,7 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete }: {
       onFocus={() => setOver(true)} onBlur={() => setOver(false)}
     >
     <button
-      type="button" onClick={onPick}
+      type="button" onClick={onPick} className={selected ? 'dv-tinted' : undefined}
       draggable={!!onDrag} onDragStart={onDrag && ((e) => onDrag(e.dataTransfer))}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56,
@@ -422,6 +478,28 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   const saved = (focus && orders[focus]) || [];
 
   const slot = focus ? hosts[focus] : null;
+  // Whose chats are showing. Each browser opens on its own person's, and
+  // remembers what was picked instead, per computer.
+  const [picked, setPicked] = useState(savedPeople);
+  const names = slot?.people?.names ?? NOBODY;
+  const shared = names.length > 1 && !project;
+  const chosen = focus ? picked[focus] : undefined;
+  const who = !shared ? null
+    : chosen === '' ? null
+    : chosen && names.includes(chosen) ? chosen
+    : (slot?.people?.me ?? null);
+  const pickPerson = (p: string | null) => {
+    if (!focus) return;
+    const next = { ...picked, [focus]: p ?? '' };
+    setPicked(next);
+    try { localStorage.setItem(PERSON_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  };
+  const ownerOf = (c: Chat) => (c.owner && names.includes(c.owner) ? c.owner : names[0]);
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {};
+    if (shared) for (const c of slot?.chats ?? []) out[ownerOf(c)] = (out[ownerOf(c)] ?? 0) + 1;
+    return out;
+  }, [shared, slot?.chats, names]);
   // One computer paired means there is nothing to merge: the fleet list and
   // that computer's list would be the same list, minus its groups.
   const fleetWide = !project && allHosts && order.length > 1;
@@ -430,8 +508,10 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
     if (project) return projectSections(hosts, project.ids, q, now);
     if (fleetWide) return fleetSections(hosts, order, q);
     if (!slot) return [] as Section[];
-    return arrange(sections(slot.chats.filter((c) => matches(c, q)), slot.groups, focus!, !!q, now), saved);
-  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now, saved.join('\n'), project?.ids]);
+    const mine = who ? slot.chats.filter((c) => ownerOf(c) === who) : slot.chats;
+    return arrange(sections(mine.filter((c) => matches(c, q)), slot.groups, focus!, !!q, now), saved);
+  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now, saved.join('\n'), project?.ids,
+      who, names]);
   // Groups belong to one computer, so there is one to make only while the list
   // is one computer's.
   const canGroup = !!slot && !!focus && !fleetWide && !project;
@@ -472,13 +552,13 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   // whatever this does.
   if (railed) {
     return (
-      <div style={{
+      <div className="dv-chatlist" style={{
         width: RAIL, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`,
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         padding: '8px 0', height: '100%',
       }}>
         <button
-          type="button" onClick={() => onCollapse?.(false)} title="Show the chat list"
+          type="button" onClick={() => onCollapse?.(false)} title="Show the chat list" aria-label="Show the chat list"
           style={{
             width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
             background: 'transparent', border: `1px solid ${C.border}`,
@@ -489,7 +569,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         </button>
         <div style={{ flex: 1 }} />
         <button
-          type="button" onClick={onNewChat} title="New chat"
+          type="button" onClick={onNewChat} title="New chat" aria-label="New chat"
           style={{
             width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
             background: C.accent, border: `1px solid ${C.accent}`,
@@ -506,7 +586,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   }
 
   return (
-    <div style={{
+    <div className="dv-chatlist" style={{
       width: W, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`,
       display: 'flex', flexDirection: 'column', height: '100%',
     }}>
@@ -521,7 +601,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         </div>
         {onCollapse && (
           <button
-            type="button" onClick={() => onCollapse(true)} title="Hide the chat list"
+            type="button" onClick={() => onCollapse(true)} title="Hide the chat list" aria-label="Hide the chat list"
             style={{
               width: 30, height: 30, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
               background: 'transparent', border: `1px solid ${C.border}`,
@@ -562,7 +642,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         }}>
           <Icon path={P.search} size={14} color={C.mute} />
           <input
-            ref={searchRef} name="chat-search"
+            ref={searchRef} name="chat-search" aria-label="Search chats"
             value={query} onChange={(e) => setQuery(e.target.value)}
             placeholder="Search chats"
             style={{
@@ -586,6 +666,12 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
           </button>
         )}
       </div>
+
+      {shared && !fleetWide && (
+        <div style={{ padding: '0 8px 8px' }}>
+          <PersonCard names={names} who={who} counts={counts} onPick={pickPerson} />
+        </div>
+      )}
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
         {list.map((s) => {
