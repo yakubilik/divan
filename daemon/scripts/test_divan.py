@@ -456,10 +456,10 @@ check("worst first: blocked, then waiting, then to-do",
 # The thread says who. A finding from the assistant read as the person's
 # decision is how the wrong thing gets done.
 board.comment_open_item(domain["id"], "Still pending as of this morning.", who="hermes")
-board.comment_open_item(domain["id"], "Bedirhan has the registrar login.", who="you")
+board.comment_open_item(domain["id"], "A colleague has the registrar login.", who="you")
 check("a comment keeps the voice that wrote it",
       [(c["who"], c["text"][:8]) for c in board.get_open_item(domain["id"])["comments"]],
-      [("hermes", "Still pe"), ("you", "Bedirhan")])
+      [("hermes", "Still pe"), ("you", "A collea")])
 refuses("an empty comment", board.comment_open_item, domain["id"], "  ")
 
 # Settled items stay on the product: a beta is partly described by the list it

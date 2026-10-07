@@ -4,23 +4,24 @@ set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 S="$here/mac-security-audit.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+H="$T/home"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-mkdir -p "$T/home/.remote-ai-chat" "$T/home/.ssh" "$T/home/projects/app/secrets" "$T/home/projects/repo"
-echo 'X=1' > "$T/home/projects/app/.env"; chmod 644 "$T/home/projects/app/.env"
-chmod 755 "$T/home/projects/app/secrets" "$T/home/.remote-ai-chat"
-echo x > "$T/home/.remote-ai-chat/db.sqlite"; chmod 644 "$T/home/.remote-ai-chat/db.sqlite"
-chmod 755 "$T/home/.ssh"
+mkdir -p "$H/.remote-ai-chat" "$H/.ssh" "$H/projects/app/secrets" "$H/projects/repo"
+echo 'X=1' > "$H/projects/app/.env"; chmod 644 "$H/projects/app/.env"
+chmod 755 "$H/projects/app/secrets" "$H/.remote-ai-chat"
+echo x > "$H/.remote-ai-chat/db.sqlite"; chmod 644 "$H/.remote-ai-chat/db.sqlite"
+chmod 755 "$H/.ssh"
 # tracked secret file + key-like string in a repo
-git -C "$T/home/projects/repo" init -q
-echo 'K=1' > "$T/home/projects/repo/.env"
+git -C "$H/projects/repo" init -q
+echo 'K=1' > "$H/projects/repo/.env"
 fake="AKIA$(printf 'ABCDEFGHIJKLMNOP')"
-echo "aws=$fake" > "$T/home/projects/repo/notes.txt"
-git -C "$T/home/projects/repo" add -A
-git -C "$T/home/projects/repo" -c user.email=a@b -c user.name=t commit -qm init
+echo "aws=$fake" > "$H/projects/repo/notes.txt"
+git -C "$H/projects/repo" add -A
+git -C "$H/projects/repo" -c user.email=a@b -c user.name=t commit -qm init
 
-export AUDIT_HOME="$T/home" AUDIT_ROOTS="$T/home/projects" AUDIT_SYSTEM=0 AUDIT_REPORT="$T/report.md"
-snap() { find "$T/home" -not -path '*/.git/*' -exec stat -f '%N %Lp' {} + | sort; }
+export AUDIT_HOME="$H" AUDIT_ROOTS="$H/projects" AUDIT_SYSTEM=0 AUDIT_REPORT="$T/report.md"
+snap() { find "$H" -not -path '*/.git/*' -exec stat -f '%N %Lp' {} + | sort; }
 
 # 1. read-only run changes no mode
 snap > "$T/before"
@@ -39,10 +40,10 @@ done
 
 # 2. --fix repairs modes
 bash "$S" --fix >/dev/null
-[ "$(stat -f %Lp "$T/home/projects/app/.env")" = 600 ] || fail ".env not 600"
-[ "$(stat -f %Lp "$T/home/projects/app/secrets")" = 700 ] || fail "secrets not 700"
-[ "$(stat -f %Lp "$T/home/.remote-ai-chat")" = 700 ] || fail "rac dir not 700"
-[ "$(stat -f %Lp "$T/home/.remote-ai-chat/db.sqlite")" = 600 ] || fail "db not 600"
-[ "$(stat -f %Lp "$T/home/.ssh")" = 700 ] || fail ".ssh not 700"
-grep -q 'Needs Yakup' "$T/report.md" || fail "report lacks needs section"
+[ "$(stat -f %Lp "$H/projects/app/.env")" = 600 ] || fail ".env not 600"
+[ "$(stat -f %Lp "$H/projects/app/secrets")" = 700 ] || fail "secrets not 700"
+[ "$(stat -f %Lp "$H/.remote-ai-chat")" = 700 ] || fail "rac dir not 700"
+[ "$(stat -f %Lp "$H/.remote-ai-chat/db.sqlite")" = 600 ] || fail "db not 600"
+[ "$(stat -f %Lp "$H/.ssh")" = 700 ] || fail ".ssh not 700"
+grep -q 'Needs a person' "$T/report.md" || fail "report lacks needs section"
 echo "ok"
