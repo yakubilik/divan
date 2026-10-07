@@ -303,6 +303,26 @@ const en = {
   // Divan's three places (src/shell.ts) and the two the app draws itself: the
   // Dashboard's shell and the Machine list.
   tabDashboard: 'Dashboard', tabChat: 'Chat', tabMachine: 'Machine',
+  // the Dashboard's Composer and the line over every page (Divan 2/6)
+  cmAsk: 'Ask', cmIce: 'Ice Box', cmNow: 'Start',
+  cmAskHint: 'asks, starts nothing', cmIceHint: 'drops a card, starts nothing', cmNowHint: 'card goes straight to In Progress',
+  cmMorning: 'Good morning.', cmAfternoon: 'Good afternoon.', cmEvening: 'Good evening.',
+  cmNeeds: '{n} need you', cmNeedsOne: '1 needs you', cmNeedsNone: 'nothing needs you',
+  cmWorking: '{n} working', cmWorkingNone: 'nothing working', cmStuck: '{n} stuck', cmStuckNone: 'nothing is stuck',
+  cmTo: 'to', cmAddProject: '+ project', cmEmptyScope: 'empty = Hermes files it',
+  cmPlaceholder: 'Tell Divan what to do.', cmLabel: 'Message to Divan', cmSend: 'Send',
+  cmProject: 'Project', cmAgent: 'Agent', cmAccount: 'Account', cmModel: 'Model',
+  cmAuto: 'auto', cmHermes: 'Hermes', cmNoAgent: 'No agent', cmOwnAccount: "This phone's computer",
+  cmNoModel: 'none offered', cmLowQuota: 'low quota', cmReset: '{name} back to the default',
+  cmClearScope: 'Clear {name}', cmMore: 'More options',
+  cmNeedsProject: 'A card needs a project: type @name or press + project.',
+  cmStarting: 'starting a chat…', cmFiling: 'filing the card…', cmFiled: 'Filed in {col} on {project}.',
+  cmNoComputer: 'No computer is connected.', cmNotOnHost: 'No paired computer has {project}.',
+  cmAbout: '(This is about {project}.)',
+  cmWorkingNow: 'Working now', cmQuiet: 'quiet {age}', cmQuietFor: 'Quiet for {age}. Nothing queued.',
+  cmAsking: 'asking', cmYourCall: 'your call', cmStuckWord: 'stuck', cmYours: 'yours',
+  cmMachines: 'machines', cmQuota: 'quota', cmLow: 'low', cmBackTo: 'Back to {place}', cmOpen: 'Open',
+  cmSent: 'sent · {text}', cmNotSent: 'not sent · {text}', cmProjectsMeta: '{n} · {q} quiet',
   allProjects: 'All', overview: 'Overview', projects: 'Projects', branches: 'Branches',
   dashProjects: '{n} projects', dashSorted: 'sorted by urgency',
   dashQueueNote: 'what this computer is working through',
@@ -359,7 +379,16 @@ const en = {
   // What a tap on a card does. `waitAnswer` is the one string here that is
   // never shown: an answer wears the question's own words, and this is the
   // name the button is known by rather than the words on it.
-  waitAnswer: 'Answer', waitReply: 'Reply…', waitLook: 'Open live view', waitDone: 'Mark it done',
+  waitAnswer: 'Answer', waitReply: 'Reply…', waitLook: 'Open live view', waitDone: 'Mark done',
+  // HANDOVER §4.6: the title says the counts, and three groups.
+  waitAnswerOne: '1 answer', waitAnswers: '{n} answers', waitTaskOne: '1 task', waitTasks: '{n} tasks',
+  waitNothing: 'Nothing is waiting on you.',
+  waitOldest: 'Oldest first. Everything else is moving on its own.',
+  wgAsking: 'An agent is asking', wgDecision: 'A decision', wgPlate: 'On your plate',
+  wgPlateNote: 'only you can do these',
+  waitOpenTicket: 'Open ticket', waitComment: 'Comment', waitCommentBox: 'Add a comment',
+  waitCommented: 'comment added', waitStillOpen: '{project} · Still open',
+  waitWhere: '{project} · {title}',
   waitSending: 'sending…', waitSent: 'sent',
   waitNotSent: "Couldn't reach {machine}",
   waitCalm: 'Nothing is waiting on you',
@@ -439,6 +468,16 @@ const en = {
   bdRunning: 'Running {d}', bdRunningBare: 'Running',
   bdReviewed: 'Passed review', bdCancelled: 'Cancelled',
   bdPickedUp: 'Picked up',
+  // The status word on a card and in In progress now (HANDOVER §3 dv-status).
+  stAsking: 'asking', stTesting: 'testing', stRunning: 'running', stStuck: 'stuck', stFailed: 'failed',
+  stPassed: 'passed', stCancelled: 'cancelled', stYours: 'yours', stNextUp: 'next up', stWaiting: 'waiting',
+  stDone: 'done',
+  bdHint: 'Hold a card and drop it on a tab to move it. In Progress starts it.',
+  bdShowMore: 'Show {n} more',
+  // A product's page (HANDOVER §4.2).
+  pjChats: 'Chats', pjOpen: 'Open', pjInProgressNow: 'In progress now',
+  pjNotConnected: 'Source not connected yet.', pjSince: '{stage} since {date}', pjRunsOn: 'runs on {machines}',
+  pjNoChats: 'No chat is filed under this project yet.',
   bdNothing: 'Nothing in this column.',
   bdDoneNote: 'The last month of finished work, out of {n}.',
   bdDoneNone: 'Nothing finished in the last month is on this phone. {n} in all.',
@@ -489,12 +528,24 @@ const en = {
   caRunning: 'running {d}',
   caLiveQuiet: 'Nothing is being written',
   caLiveQuietBody: 'No worker is printing anything on this card right now.',
+  // HANDOVER §4.4: one ticket on one page.
+  tkAsking: 'The agent is asking', tkStopped: 'The agent stopped', tkReply: 'Reply',
+  tkAnswered: 'answered', tkNoSentences: 'Nobody has written the sentences for this one yet.',
+  tkSay: 'Say one sentence to the agent',
+  tkAgentFace: 'Agent face', tkAgentFaceNote: 'goal, done when, tests, files',
+  tkGoal: 'Goal', tkDoneWhen: 'Done when', tkTest: 'Test', tkFiles: 'Files',
+  tkConstraints: 'Constraints', tkNotes: 'Notes', tkNone: '—',
+  tkColumn: 'Column', tkMachine: 'Machine', tkAlone: 'Runs alone', tkOff: 'off',
+  tkNotYet: 'not settable yet', tkOpened: 'Opened', tkHand: 'Hand this card to somebody else',
+  tkWholeRun: 'The whole run', tkShowAll: 'Show all {n} steps', tkShowLess: 'Show the latest',
+  tkBack: 'Back',
   caGone: 'That card is not on any board any more',
   caGoneBody: 'It may have been deleted, or the computer it was on has not answered yet.',
   // the fastest screen (src/compose.ts): a title, two or three sentences, and
   // two buttons. There is no string here for an executor or a brief, because
   // there is no field for one.
   ntAdd: '+ ticket', ntNew: 'New ticket',
+  ntStartNow: 'Start now', ntCreate: 'Create', ntPutIn: 'Put it in', ntTitle: 'Title', ntSentences: 'Two or three sentences',
   ntTitleHint: 'What is it?',
   ntSummaryHint: 'Two or three sentences, or none.',
   ntLater: 'executor & agent brief: later, or drafted by Divan',
@@ -515,6 +566,31 @@ const en = {
   mCall: 'Call', mCallNote: 'talk to this computer out loud',
   mSettings: 'Settings', mSettingsNote: 'appearance, security, notifications',
   mExecutors: 'Executors', mExecutorsNote: '{n} who can do work',
+  // HANDOVER §4.9: the four tabs, and the pages under each.
+  mTerminal: 'Terminal', mQueue: 'Ticket queue', mQueueNote: 'every ticket the queue holds, and what it is doing',
+  mUnder: 'Also under {tab}',
+  maOnline: 'online', maRunningList: 'Running {n}: {list}.', maNothingRunning: 'Nothing running.',
+  maWasRunning: 'Was running {n}: {list}.', maNothingWas: 'Nothing was running.',
+  maStale: 'What it last reported may be stale.', maNeverSaid: 'It has never answered, so there is nothing to show.',
+  maSeen: 'seen {d}', maLastSeen: 'last seen {d}', maJustNow: 'just now', maNeverSeen: 'never seen',
+  maLeftOfPlan: 'left of the plan', maLow: 'low', maNoWindow: 'No plan window measured yet.',
+  maAllUp: 'All {n} reachable.', maSomeUp: '{up} of {n} reachable.', maOneUp: 'Reachable.',
+  maEnough: 'Enough quota to start work.', maThin: 'Quota is low.', maOut: 'No quota left.',
+  tmNote: 'Every chat on this computer, and the ticket queue.', tmNone: 'No chat on this computer yet.',
+  tmIdle: 'idle', tmWorking: 'working', tmAsking: 'needs approval',
+  stNewChats: 'New chats', stDefaultAccount: 'Default account', stDefaultModel: 'Default model',
+  stDefaultsChips: 'what the Composer opens with until its chip is changed for one chat',
+  stOwnAccount: "This computer's account", stNoModel: 'none offered yet',
+  // HANDOVER §4.8: one conversation, filed by Hermes.
+  chEarlier: 'Earlier', chFiled: 'filed under {project}', chTalk: 'Talk to Hermes', chNoneYet: 'No conversation yet.',
+  chCardQueued: 'Queued',
+  // HANDOVER §4.7: a branch's own page.
+  brUpdated: 'Updated {d}.', brUpdatedNow: 'Updated just now.', brDid: 'What the agent did', brTickets: 'Tickets',
+  brOnBoard: 'On the board', brRepos: 'Repositories', brNoSource: 'Source not connected yet.',
+  brNothingDone: 'Nothing done here yet.', brNoTickets: 'No ticket on the board names this branch.',
+  brNoRepos: 'Nothing on this branch names a repository.',
+  brOpen: 'Open tickets', brInProgress: 'In progress', brDone: 'Done',
+  dayToday: 'today', dayYesterday: 'yesterday',
   // Machine › Machines (Mobile11 S15): one card per computer, and the quota
   // that belongs to the account rather than to any of them over the top.
   maTitle: 'Machines', maPair: '+ Pair',

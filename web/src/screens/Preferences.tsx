@@ -276,6 +276,7 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
       if (ev.event === 'account.login.prompt') {
         setPrompt(d as LoginPrompt);
         setStage((s) => (s === 'done' ? s : (d.needs_code ? 'code' : 'waiting')));
+        if (d.needs_code) setBusy(false);
       }
       if (ev.event === 'account.login.done') {
         setStage('done');
@@ -307,6 +308,9 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
       // An API key is settled inside the request; everything else waits for a
       // prompt event. The done event arrives either way.
       setStage(r?.needs_code ? 'code' : 'waiting');
+      // Asked for a code, the sheet is waiting on the person, not the computer:
+      // Verify has to be pressable.
+      if (r?.needs_code) setBusy(false);
     } catch (e) {
       setBusy(false);
       setProblem(err(e));

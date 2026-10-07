@@ -1291,8 +1291,29 @@ checks.push(...require('./test-tts.cjs').checks);
 // who reads an answer, a stop in the middle of one, and a build without it.
 const ema = require('./test-ema.cjs');
 
-void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(() => {
-  checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks);
+// …and the Dashboard's Composer, pressed once the three above have let go of
+// the shared store: it types, presses send and waits for what comes back.
+void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(async () => {
+  const composer = require('./test-composer.cjs');
+  await composer.ready();
+  // …and the project page, its board and the locked Composer (#125).
+  const project = require('./test-handover-project.cjs');
+  await project.ready;
+  // …and the ticket page and Waiting on you (#126).
+  const ticket = require('./test-handover-ticket.cjs');
+  await ticket.ready;
+  // …and Branch, Chat and Machine (#127). Last: it stands the chat screen up,
+  // which adds stand-ins to the shared harness that nothing before it needs.
+  const machine = require('./test-handover-machine.cjs');
+  await machine.ready;
+  // …and every route in both schemes (#128), over the fleet that one stands up.
+  const every = require('./test-every-screen.cjs');
+  await every.ready;
+  // …and the actions on screens that came over from main unchanged, pressed.
+  const actions = require('./test-phone-actions.cjs');
+  await actions.ready;
+  checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks, ...composer.checks, ...project.checks, ...ticket.checks,
+              ...machine.checks, ...every.checks, ...actions.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

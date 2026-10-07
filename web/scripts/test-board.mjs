@@ -92,7 +92,7 @@ const productOf = (name, key) => view(name).projects.find((p) => p.key === key) 
 function styles(markup) {
   return [...markup.matchAll(/style="([^"]*)"/g)].map((m) => {
     const decl = {};
-    for (const pair of m[1].split(';')) {
+    for (const pair of m[1].replace(/&quot;/g, '"').split(';')) {
       const cut = pair.indexOf(':');
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
@@ -103,7 +103,7 @@ const anyStyle = (markup, pred) => styles(markup).some(pred);
 const countStyles = (markup, pred) => styles(markup).filter(pred).length;
 const COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|oklch\([^)]*\)|hsla?\([^)]*\)/g;
 const v = (n) => `var(--dv-${n})`;
-const OWN = new Set([K.ON_COLOUR, ...K.MONOGRAM,
+const OWN = new Set([K.ON_COLOUR,
                      ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                      ...Object.values(K.MEDIA)]);
 
@@ -117,68 +117,26 @@ group('the four columns, and what is in them');
 {
   const quire = productOf('busy', 'quire');
   const cols = B.columns(quire, NOW, ago);
-
-  ok('the columns are the frames’ four, with the queue’s own review among them',
-    eq(cols.map((c) => c.label), ['Ice Box', 'Queued', 'In Progress', 'Review', 'Done']));
+  ok('the columns are the four the handover names, with review folded into In Progress',
+    eq(cols.map((c) => c.label), ['Ice Box', 'Queued', 'In Progress', 'Done'])
+    && eq(cols.map((c) => c.sub), ['someday', 'top = next', 'drop here = start', 'this month']));
   ok('…each holding the cards the machines put in it, however many machines',
-    eq(cols.map((c) => c.tickets.map((t) => t.card.id)),
-      [['k3'], [], ['m1', 'k2', 'k1'], [], []]),
+    eq(cols.map((c) => c.tickets.map((t) => t.card.id)), [['k3'], [], ['m1', 'k2', 'k1'], []]),
     JSON.stringify(cols.map((c) => c.tickets.map((t) => t.card.id))));
-  // The open board is what a merged view carries: the daemon leaves `done` out
-  // of the cards and sends the number. A column that drew three cards and said
-  // `3` over forty-eight finished ones would be the page lying about a figure
-  // it was handed.
-  ok('Done is the machines’ own number, and says how much of it is not here',
-    cols[4].count === 3 && cols[4].tickets.length === 0 && cols[4].more === '+ 3 more');
-  ok('…and a column that is whole says nothing of the sort',
-    cols.slice(0, 4).every((c) => c.more === '' && c.count === c.tickets.length));
-  ok('the column something is happening in says so, and how many',
-    cols[2].live === true && cols[2].sub === '1 working'
-    && cols[0].sub === 'someday' && cols[1].sub === 'next up' && cols[1].live === false);
-
+  ok('Done counts this month’s cards, never an all-time total over them',
+    cols[3].count === 0 && quire.counts.done === 3);
   const by = Object.fromEntries(cols.flatMap((c) => c.tickets).map((t) => [t.card.id, t]));
-  ok('a ticket wears the square of whoever is on it, over what that worker does',
-    by.k1.face === 'coder' && by.k1.who === 'Coder' && by.k1.kind === K.EXECUTORS.coder.kind
-    && by.k3.face === 'unassigned' && by.k3.who === 'Nobody',
-    `${by.k1.who} · ${by.k1.kind}`);
-  ok('…and the mark in its corner is the state the mirror wrote, in the frames’ words',
-    eq([by.k2.mark.label, by.k2.mark.state, by.m1.mark.label, by.m1.mark.state],
-      ['Asking you', 'asking', 'Stuck 90m', 'stuck']),
-    JSON.stringify([by.k2.mark, by.m1.mark]));
-  ok('…a card nobody has picked up carries no mark rather than an invented one',
-    by.k3.mark === null && by.k3.waiting === false && by.k2.waiting === true);
-  const hush = B.columns(productOf('busy', 'hush'), NOW, ago)[2].tickets[0];
-  ok('a card that is a person’s own is quiet, and drawn as an outline',
-    hush.mark.label === 'Waiting on you' && hush.mark.tone === 'ink2' && hush.hollow === true
-    && hush.waiting === true);
-
-  // A card dropped in another column is there until the machine that holds the
-  // board says so — and not one poll longer.
+  ok('the status word is the real one, and only the asking or stuck card carries a sentence',
+    eq([by.k2.status, by.m1.status], [{ kind: 'ask', word: 'asking' }, { kind: 'stuck', word: 'stuck' }])
+    && by.k2.line.length > 0 && by.k3.status === null && by.k3.line === '');
   const dropped = B.columns(quire, NOW, ago, { k3: 'queued' });
-  ok('a card that was dropped is in the column it was dropped in',
-    eq(dropped.map((c) => c.tickets.map((t) => t.card.id)), [[], ['k3'], ['m1', 'k2', 'k1'], [], []])
-    && dropped[0].count === 0 && dropped[1].count === 1,
-    JSON.stringify(dropped.map((c) => [c.count, c.tickets.map((t) => t.card.id)])));
-  ok('…until the machine agrees, and then the overlay is gone',
-    eq(B.settled({ k3: 'queued' }, quire.cards), { k3: 'queued' })
-    && eq(B.settled({ k3: 'ice_box' }, quire.cards), {})
-    && eq(B.settled({ gone: 'done' }, quire.cards), {}));
+  ok('a card that was dropped is in the column it was dropped in, until the machine agrees',
+    eq(dropped.map((c) => c.tickets.map((t) => t.card.id)), [[], ['k3'], ['m1', 'k2', 'k1'], []])
+    && eq(B.settled({ k3: 'queued' }, quire.cards), { k3: 'queued' })
+    && eq(B.settled({ k3: 'ice_box' }, quire.cards), {}));
   ok('and a column never offers to take the card it already holds',
     B.takes('queued', 'ice_box') === true && B.takes('ice_box', 'ice_box') === false
     && B.takes('ice_box', null) === false);
-}
-
-group('a card is its title, and the rest is one press away');
-{
-  const drawn = board('busy', 'quire');
-  const quire = productOf('busy', 'quire');
-  const summaries = quire.cards.map((c) => (c.summary || '').trim()).filter(Boolean);
-  ok('the fixture has cards with something written under the title', summaries.length > 0);
-  ok('…and none of it is on the board',
-    summaries.every((line) => !drawn.includes(line)),
-    summaries.find((line) => drawn.includes(line)));
-  ok('the titles are all there, which is what a board is read by',
-    quire.cards.filter((c) => c.column !== 'done').every((c) => drawn.includes(c.title)));
 }
 
 group('a card dragged in front of the queue says so');
@@ -223,96 +181,6 @@ group('a card pressed on the board takes a window');
     `${shut.live.length} live while closed · ${back.panels.map((p) => p.id).join(', ')}`);
 }
 
-// ── 2 · the page is the frames’ page ───────────────────────────────────────
-
-group('Web12 W2, and Web13 W4 which is the same board in the light');
-{
-  const drawn = board('busy', 'quire');
-
-  ok('the columns are abreast on the frame’s grid, one per column',
-    anyStyle(drawn, (d) => d['grid-template-columns'] === 'repeat(5, minmax(0, 1fr))'
-      && d.gap === '12px')
-    && countStyles(drawn, (d) => d['border-radius'] === `${K.RADIUS.card}px` && d.padding === '12px') === 5);
-  ok('…each headed by its name, its count and the mono aside the frame gives it',
-    /Ice Box/.test(drawn) && /In Progress/.test(drawn) && /someday/.test(drawn)
-    && /1 working/.test(drawn) && /\+ 3 more/.test(drawn));
-  ok('a ticket is the board’s card: the frame’s corner, padding and gap',
-    countStyles(drawn, (d) => d.padding === '12px 14px 13px' && d.gap === '8px'
-      && d['border-radius'] === `${K.RADIUS.tile}px`) === 4);
-  ok('…with a 28 pt square, the name at 13 over a mono line, and its title at 15.5',
-    countStyles(drawn, (d) => d.width === `${K.SIZE.executor}px`) === 4
-    && countStyles(drawn, (d) => d['font-size'] === '15.5px' && d['letter-spacing'] === '-.005em') === 4
-    && countStyles(drawn, (d) => d['font-size'] === '10.5px' && d.color === v('ink3')) === 4);
-  ok('…and the mark in its corner as a tag, in the wash of what it is saying',
-    /Asking you/.test(drawn) && /Stuck/.test(drawn)
-    && anyStyle(drawn, (d) => d.background === v('amberBg') && d.padding === '4px 8px'
-      && d['border-radius'] === `${K.RADIUS.chip}px`));
-  ok('every ticket can be picked up, and the ones needing a person can be pressed',
-    (drawn.match(/draggable="true"/g) ?? []).length === 4
-    && /title="Answer Coder on Stripe keys"/.test(drawn), drawn.match(/title="[^"]*"/g)?.join(' '));
-  ok('the card nothing runs on is an outline rather than a surface',
-    anyStyle(board('busy', 'hush'), (d) => d.background === 'transparent'
-      && d.border === `1.5px dashed ${v('line2')}`));
-
-  // The whole of the difference between W2 and W4.
-  K.setThemeChoice('dark');
-  const dark = board('busy', 'quire');
-  K.setThemeChoice('light');
-  const light = board('busy', 'quire');
-  K.setThemeChoice('dark');
-  ok('W4 is W2 in the other theme: the same markup, one attribute apart',
-    dark === light, `${dark.length} vs ${light.length}`);
-  ok('…and it is a board with colours in it, none of them its own',
-    /var\(--dv-/.test(dark)
-    && (dark.replace(/var\([^)]*\)/g, '').match(COLOUR) ?? []).every((c) => OWN.has(c)));
-  ok('the page is composed of the parts and spells no style of its own',
-    /from '\.\.\/ui\/divan'/.test(src('src/screens/Board.tsx'))
-    && !COLOUR.test(src('src/screens/Board.tsx').replace(/\/\*[\s\S]*?\*\//g, '')));
-  ok('…and the board is a tab of the product’s page rather than a place of its own',
-    /<Board\s+view=\{view\} project=\{project\}/.test(src('src/screens/Overview.tsx'))
-    && /<Tabs\b/.test(src('src/screens/Overview.tsx')));
-  ok('none of it reaches the chat',
-    !/from '[^']*(ChatView|Bubble|Timeline|ChatDetails|TicketChat)'/.test(src('src/screens/Board.tsx')));
-}
-
-// ── 3 · a new ticket, written where it lands ───────────────────────────────
-
-group('Web14 W9: the new ticket is the first card of Ice Box');
-{
-  const quire = productOf('busy', 'quire');
-  const drafting = renderToStaticMarkup(h(BoardUI.Board, {
-    view: view('busy'), project: quire, drafting: true, onDraft() {},
-  }));
-  const columns = drafting.split('role="tab"');
-
-  // The card being written is drawn where it will be: inside the first column,
-  // above the card that was at the top of it. Not a modal, not a page — the
-  // board is still under it, which is the whole point of writing it here.
-  const ice = columns[1];
-  ok('the card being written is inside Ice Box, above the cards that were there',
-    ice.includes('aria-label="Title"')
-    && ice.indexOf('aria-label="Title"') < ice.indexOf('CSV export'),
-    ice.slice(0, 200));
-  ok('…and it is the only one: the other three columns are drawn as they were',
-    (drafting.match(/aria-label="Title"/g) ?? []).length === 1
-    && drafting.includes('Stripe keys') && drafting.includes('Out-of-order deliveries'));
-  ok('…with the amber ring and the long fall the frame draws it under',
-    anyStyle(drafting, (d) => (d['box-shadow'] ?? '').startsWith(`0 0 0 1.5px ${v('amberRing')}`)
-      && (d['box-shadow'] ?? '').includes('12px 30px')));
-  ok('…the two keys under it, and the count against the limit the ticket page uses',
-    /Add · ↵/.test(drafting) && /Esc/.test(drafting) && /0\/220/.test(drafting));
-  ok('the board has no page of its own for it, and the panel has no place for one',
-    !/screens\/NewTicket/.test(src('src/App.tsx'))
-    && /drafting && col.key === 'ice_box'/.test(src('src/screens/Board.tsx'))
-    && !/'newTicket'/.test(src('src/lib/shell.ts')));
-  ok('…and a board with nothing on it draws the columns while one is being written',
-    renderToStaticMarkup(h(BoardUI.Board, {
-      view: view('slow'), project: productOf('slow', 'pebble'), drafting: true, onDraft() {},
-    })).includes('aria-label="Title"'));
-  ok('…where without one it is the sentence that says so, with a way in',
-    board('slow', 'pebble').includes('Nothing on this board yet'));
-}
-
 // ── 4 · every state of a board ─────────────────────────────────────────────
 
 group('a board with nothing on it, one that is old, and one nobody can reach');
@@ -347,6 +215,8 @@ group('a board with nothing on it, one that is old, and one nobody can reach');
   ok('…and one whose cards are all on a machine that never sent them still says how many',
     board('slow', 'the-long-walk').includes('Ice Box')
     && board('slow', 'the-long-walk').includes('+ 3 more'));
+  ok('the board is drawn in the handover’s classes and no blur',
+    board('busy', 'quire').includes('dv-card') && !/backdrop-filter/.test(src('src/screens/Board.tsx')));
   ok('a board read off a machine that has gone quiet keeps the cards it last sent',
     board('quiet', 'quire').includes('Out-of-order deliveries'));
   ok('…and so does one whose machine refuses the connection',

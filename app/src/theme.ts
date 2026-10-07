@@ -39,13 +39,13 @@ export function useTokens(): Tokens {
  *  weight out of a family of static files, so each weight is its own family
  *  and `Text` maps `fontWeight` onto it. */
 export const FONTS = {
-  'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
-  'Inter-Medium': require('../assets/fonts/Inter-Medium.ttf'),
-  'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
-  'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
-  'JetBrainsMono-Regular': require('../assets/fonts/JetBrainsMono-Regular.ttf'),
-  'JetBrainsMono-Medium': require('../assets/fonts/JetBrainsMono-Medium.ttf'),
-  'JetBrainsMono-SemiBold': require('../assets/fonts/JetBrainsMono-SemiBold.ttf'),
+  'Geist-Regular': require('../assets/fonts/Geist-Regular.ttf'),
+  'Geist-Medium': require('../assets/fonts/Geist-Medium.ttf'),
+  'Geist-SemiBold': require('../assets/fonts/Geist-SemiBold.ttf'),
+  'Geist-Bold': require('../assets/fonts/Geist-Bold.ttf'),
+  'GeistMono-Regular': require('../assets/fonts/GeistMono-Regular.ttf'),
+  'GeistMono-Medium': require('../assets/fonts/GeistMono-Medium.ttf'),
+  'GeistMono-SemiBold': require('../assets/fonts/GeistMono-SemiBold.ttf'),
 };
 
 /** Stands in for a font family in a style: `Text` swaps it for the mono file
@@ -54,8 +54,8 @@ export const MONO = 'mono';
 
 export function family(weight: string | number | undefined, mono: boolean): string {
   const w = Number(weight === 'bold' ? 700 : weight === 'normal' || weight == null ? 400 : weight) || 400;
-  if (mono) return w >= 600 ? 'JetBrainsMono-SemiBold' : w >= 500 ? 'JetBrainsMono-Medium' : 'JetBrainsMono-Regular';
-  return w >= 700 ? 'Inter-Bold' : w >= 600 ? 'Inter-SemiBold' : w >= 500 ? 'Inter-Medium' : 'Inter-Regular';
+  if (mono) return w >= 600 ? 'GeistMono-SemiBold' : w >= 500 ? 'GeistMono-Medium' : 'GeistMono-Regular';
+  return w >= 700 ? 'Geist-Bold' : w >= 600 ? 'Geist-SemiBold' : w >= 500 ? 'Geist-Medium' : 'Geist-Regular';
 }
 
 /** CSS letter-spacing is in em; React Native's is in points. */

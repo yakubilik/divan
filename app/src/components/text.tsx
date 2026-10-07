@@ -4,12 +4,12 @@ import { family, MONO, useColors } from '../theme';
 
 /** What a nested run of text inherits from the one around it. React Native
  *  already passes colour and size down; the font file is ours to pass, because
- *  each weight of Inter and JetBrains Mono is a family of its own. */
+ *  each weight of Geist and Geist Mono is a family of its own. */
 const Inherit = createContext<{ weight?: TextStyle['fontWeight']; mono: boolean } | null>(null);
 
 export type TxtProps = TextProps & { mono?: boolean };
 
-/** Every string in the app goes through this: Inter by default, JetBrains Mono
+/** Every string in the app goes through this: Geist by default, Geist Mono
  *  with `mono` (or `fontFamily: MONO`), and `fontWeight` turned into the file
  *  that has that weight. */
 export const Text = forwardRef<RNText, TxtProps>(function Text({ style, mono, ...rest }, ref) {

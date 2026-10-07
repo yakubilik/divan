@@ -70,11 +70,13 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *
  *  ```
  *  /                          the Dashboard
+ *  /waiting                   everything waiting on you
  *  /chats                     the Chat place · /chats/<id> one chat
  *  /machine/accounts          a page of the Machine place
  *  /p/babysee                 one product
  *  /p/babysee/branches        …the faces it has beside its code
  *  /p/babysee/board           …its board
+ *  /p/babysee/new             …a new ticket being written
  *  /p/babysee/chat/9f2c…      …its chats, and the one that is open
  *  /p/babysee/b/engineering   …one of its faces
  *  /p/babysee/c/0d2279020af7  …and one card, wherever that card lives
@@ -83,11 +85,11 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
 export function pathOf(place: Place): string {
   if (place.view === 'chats') return place.chat ? `/chats/${enc(place.chat)}` : '/chats';
   if (place.view !== 'overview') return `/machine/${place.view}`;
-  if (!place.project) return '/';
+  if (!place.project) return place.tab === 'waiting' ? '/waiting' : '/';
   const head = `/p/${enc(place.project)}`;
   if (place.card) return `${head}/c/${enc(place.card)}`;
   if (place.branch) return `${head}/b/${enc(place.branch)}`;
-  if (place.tab === 'board' || place.tab === 'branches') return `${head}/${place.tab}`;
+  if (place.tab === 'board' || place.tab === 'branches' || place.tab === 'new') return `${head}/${place.tab}`;
   // The product's own chats, and the one that is open among them.
   if (place.tab === 'chat') return place.chat ? `${head}/chat/${enc(place.chat)}` : `${head}/chat`;
   return head;
@@ -128,13 +130,14 @@ export function readPlace(pathname: string, search = ''): Place {
 
   if (!parts.length) return place;
   if (parts[0] === 'chats') return { ...place, view: 'chats', chat: parts[1] ?? null };
+  if (parts[0] === 'waiting') return { ...place, tab: 'waiting' };
   if (parts[0] === 'machine') {
     const view = parts[1] as View;
     return { ...place, view: MACHINE.includes(view) ? view : 'machines' };
   }
   if (parts[0] === 'p' && parts[1]) {
     const scoped: Place = { ...place, project: parts[1] };
-    if (parts[2] === 'board' || parts[2] === 'branches') return { ...scoped, tab: parts[2] };
+    if (parts[2] === 'board' || parts[2] === 'branches' || parts[2] === 'new') return { ...scoped, tab: parts[2] };
     if (parts[2] === 'chat') return { ...scoped, tab: 'chat', chat: parts[3] ?? null };
     if (parts[2] === 'b' && parts[3]) return { ...scoped, branch: parts[3] };
     if (parts[2] === 'c' && parts[3]) return { ...scoped, card: parts[3], tab: 'board' };

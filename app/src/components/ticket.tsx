@@ -1,7 +1,26 @@
 import React from 'react';
-import { Pressable, View } from 'react-native';
-import { useColors, type Palette } from '../theme';
-import { useT } from '../store';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { em, useColors, useTokens, type Palette } from '../theme';
+import { useStore, useT } from '../store';
+import { useNavGuard } from '../nav';
+import { useCard, useDivanView } from '../queue';
+import {
+  HANDS, SILENCE, STEPS_SHOWN, answered, asking, find, live, saying, sections, side, stamp, trail,
+  type Section,
+} from '../card';
+import { clock, executorKey, type Ago } from '../dashboard';
+import { short } from '../compose';
+import { status } from '../board';
+import type { Key } from '../i18n';
+import type { MergedCard } from '../divan';
+import type { DivanCardDetail } from '../protocol';
+import { Card, EmptyState, Pill, SectionHeader, Tap } from './divan';
+import { BackRow } from './waiting';
+import { Block, BriefLine, Commands, Criterion, LiveRow, SayBox, TrailRow } from './card';
+import { StatusWord } from './board';
+import { Shell } from './shell';
+import { measure, openMenu } from './overlay';
 import { answerable, cardLine, commitCount, first, roundAge, since, STATUS_KEY, stepLine,
          totalAge } from '../tickets';
 import { Dot, Icon, Spinner, Text } from './ui';
@@ -149,4 +168,318 @@ export function TicketHeader({ t, now, onBack, right }: {
       {right}
     </View>
   );
+}
+
+// ── one ticket on one page (HANDOVER §4.4) ──────────────────────────────────
+
+/** Where a ticket was opened from, as the address carries it, and where Back
+ *  leads when there is no screen under this one to go back to (a link opened
+ *  cold, a notification). */
+export type From = 'waiting' | 'dashboard' | 'project' | 'board' | null;
+
+/** One ticket, on one page: the human face — the status, `project · #no ·
+ *  column`, the title and the sentences a person wrote — then, when the agent
+ *  is asking, its question in an amber-edged card whose answers are one press
+ *  each; then Live, the run's latest steps as a time and a sentence, with the
+ *  one line you can say into it; then the Agent face, shut until it is pressed:
+ *  Goal, Done when, Test, Files. The side column of the desktop page is under
+ *  all of it here: Column, Executor (a menu under it), Machine, Branch, Runs
+ *  alone, Opened — and then what has happened to the card.
+ *
+ *  **No text an agent produced is on the human face.** The question is the one
+ *  thing an agent wrote that is open on the page, because it is addressed to
+ *  the reader; the brief is behind the Agent face and the run is in Live. The
+ *  judgements are `src/card.ts`.
+ *
+ *  Which parts are open (the Agent face, every step) is in the address, the way
+ *  the board keeps its column: a redraw lands on what somebody was reading. */
+export function TicketPage({ id, host, from }: { id: string; host: string | null; from: From }) {
+  const router = useRouter();
+  const go = useNavGuard();
+  const T = useT();
+  const t = useTokens();
+  const view = useDivanView();
+  const sayCard = useStore((s) => s.sayCard);
+  const handCard = useStore((s) => s.handCard);
+  const active = useStore((s) => s.host);
+  const params = useLocalSearchParams<{ agent?: string; steps?: string }>();
+  const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v) || null;
+  const card = find(view, id, host);
+  const project = card ? view.projects.find((p) => p.key === card.projectKey) ?? null : null;
+  const got = useCard(id, host ?? card?.host ?? null);
+  const ago: Ago = (seconds) => since(seconds, T);
+  // The sentence being written is kept in the store, the way a project's
+  // Composer keeps its own: leaving the page does not throw it away.
+  const sayKey = `say:${host ?? ''}:${id}`;
+  const draft = useStore((s) => s.drafts?.[sayKey]?.text ?? '');
+  const keep = useStore((s) => s.setDraft);
+  const setDraft = (text: string) => keep(sayKey, { text });
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+  const executorRef = React.useRef<View>(null);
+
+  const to = card ? saying(card) : null;
+  /** A sentence into the run: the queue's note, which is the live channel the
+   *  ticket's chat has always used. It lands in Live where it was said. */
+  const say = React.useCallback(async (text: string, fromBox: boolean) => {
+    if (!text || busy || !to || !card) return;
+    if (fromBox) setDraft('');
+    setBusy(true);
+    setErr(null);
+    try {
+      await sayCard(to, text);
+    } catch (e: any) {
+      if (fromBox) setDraft(text);
+      setErr(e?.message || T('waitNotSent', { machine: card.machine }));
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, to, card, sayCard, T, sayKey]);
+
+  const backLabel = from === 'waiting' ? T('waitTitle')
+    : from === 'dashboard' ? T('tabDashboard')
+    : from === 'project' ? (project?.name ?? T('tkBack'))
+    : project ? `${project.name} · ${T('bdBoard')}` : T('bdBoard');
+  const back = () => {
+    if (router.canGoBack()) { router.back(); return; }
+    router.replace(from === 'waiting' ? '/waiting'
+      : from === 'dashboard' ? '/dashboard'
+      : project ? `/dashboard?project=${project.key}${from === 'project' ? '' : '&tab=board'}` : '/dashboard');
+  };
+
+  if (!card) {
+    return (
+      <Shell place="dashboard" badge={view.totals.needsYou}>
+        <View style={{ flex: 1, paddingTop: 8, paddingHorizontal: 16 }}>
+          <BackRow label={backLabel} onPress={back} style={{ paddingHorizontal: 4 }} />
+          <EmptyState title={T('caGone')} body={T('caGoneBody')} />
+        </View>
+      </Shell>
+    );
+  }
+
+  const ticket = got.detail?.ticket ?? null;
+  const ask = asking(card, ticket, got.said);
+  const st = status(card);
+  const lines = live(got.turns, got.said, got.stamps, got.live);
+  const all = one(params.steps) === 'all';
+  const shown = all ? lines : lines.slice(-STEPS_SHOWN);
+  const agentOpen = one(params.agent) === 'open';
+  const rows = side(view, card, project, ago);
+  const moments = trail(card);
+  const where = [project?.name, card.ustabasi_id != null ? `#${card.ustabasi_id}` : null,
+                 T(rows[0].word!)].filter(Boolean).join(' · ');
+  const quiet = !lines.length && got.silence ? SILENCE[got.silence] : null;
+  const whole = card.ustabasi_id != null && card.host === active?.id;
+
+  const hand = async () => {
+    const anchor = await measure(executorRef);
+    openMenu({
+      anchor, align: 'right', width: 220,
+      items: HANDS.map((x) => ({
+        label: T(executorKey(x)), checked: x === card.executor,
+        onPress: () => { void handCard({ card: card.id, host: card.host }, x).catch((e: any) => setErr(e?.message ?? '')); },
+      })),
+    });
+  };
+
+  return (
+    <Shell place="dashboard" badge={view.totals.needsYou}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingTop: 6, paddingHorizontal: 16, paddingBottom: 32, gap: 24 }}>
+          <BackRow label={backLabel} onPress={back} style={{ paddingHorizontal: 4 }} />
+
+          {/* The human face. */}
+          <View style={{ gap: 10, paddingHorizontal: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {answered(card, got.said)
+                ? <StatusWord kind="idle" word={T('tkAnswered')} />
+                : !!st && <StatusWord kind={st.kind} word={T(st.word)} />}
+              <Text mono numberOfLines={1} style={{ flexShrink: 1, fontSize: 11.5, color: t.ink3 }}>{where}</Text>
+            </View>
+            <Text style={{ fontSize: 26, lineHeight: 31, fontWeight: '600', letterSpacing: em(26, -0.025) }}>{card.title}</Text>
+            {card.summary.trim()
+              ? <Text style={{ fontSize: 15, lineHeight: 23, color: t.ink2 }}>{card.summary.trim()}</Text>
+              : <Text style={{ fontSize: 15, lineHeight: 23, color: t.ink3 }}>{T('tkNoSentences')}</Text>}
+          </View>
+
+          {!!ask && (
+            <Card ring={ask.stuck ? 'line' : 'amber'}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ flex: 1, fontSize: 12.5, fontWeight: '500', color: ask.stuck ? t.red : t.amber }}>
+                  {T(ask.stuck ? 'tkStopped' : 'tkAsking')}
+                </Text>
+                {card.agent_status_at != null && (
+                  <Text mono style={{ fontSize: 11, color: t.ink3 }}>{short(view.now - card.agent_status_at)}</Text>
+                )}
+              </View>
+              <Text style={{ fontSize: 15, lineHeight: 15 * 1.35, fontWeight: '500' }}>{ask.text}</Text>
+              {!!to && ask.answers.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {ask.answers.map((words, i) => (
+                    <Pill key={words} label={words} face={i === 0 ? 'amber' : 'outline'}
+                      onPress={busy ? undefined : () => void say(words, false)} />
+                  ))}
+                </View>
+              )}
+            </Card>
+          )}
+
+          {/* Live: the latest steps, and the one line you can say into it. */}
+          <View style={{ gap: 10 }}>
+            <SectionHeader title={T('caLive')}
+              right={[T(executorKey(card.executor)), card.machine].filter(Boolean).join(' · ')} />
+            <Card inset={false} style={{ paddingVertical: 6 }}>
+              {quiet ? (
+                <View style={{ padding: 10, gap: 3 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: t.ink2 }}>{T(quiet.title)}</Text>
+                  <Text style={{ fontSize: 12.5, lineHeight: 12.5 * 1.45, color: t.ink3 }}>{T(quiet.body)}</Text>
+                </View>
+              ) : shown.map((line) => (
+                <LiveRow key={line.id} tone={line.tone} now={line.now}
+                  time={line.at == null ? null : clock(line.at)}
+                  text={line.said ? T(line.said.key, line.said.params) : line.text ?? ''} />
+              ))}
+              {lines.length > STEPS_SHOWN && (
+                <Tap onPress={() => router.setParams({ steps: all ? '' : 'all' })}
+                  style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 10 }}>
+                  <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.ink2 }}>
+                    {all ? T('tkShowLess') : T('tkShowAll', { n: lines.length })}
+                  </Text>
+                </Tap>
+              )}
+            </Card>
+            {to ? (
+              <SayBox value={draft} onChangeText={setDraft} onSend={() => void say(draft.trim(), true)}
+                busy={busy} error={err} placeholder={T('tkSay')} label={T('tkSay')} foot={T('caSayFoot')} />
+            ) : (
+              <Text mono style={{ fontSize: 11, color: t.ink3, textAlign: 'center' }}>{T('caSayNobody')}</Text>
+            )}
+            {whole && (
+              <Tap onPress={() => go(() => router.push(`/ticket/${card.ustabasi_id}?run=1`))}
+                style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start', paddingHorizontal: 4 }}>
+                <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.ink2 }}>{T('tkWholeRun')}</Text>
+              </Tap>
+            )}
+          </View>
+
+          <AgentFace open={agentOpen} detail={got.detail} card={card} loading={got.loading} error={got.error}
+            onToggle={() => router.setParams({ agent: agentOpen ? '' : 'open' })} />
+
+          {/* The side column, under the page. */}
+          <Card inset={false} style={{ paddingHorizontal: 14 }}>
+            {rows.map((r, i) => {
+              const value = (
+                <>
+                  <Text mono={r.mono} numberOfLines={1} style={{ flexShrink: 1, fontSize: 13.5, fontWeight: '500' }}>
+                    {r.word ? T(r.word) : r.text}
+                  </Text>
+                  {!!r.note && (
+                    <Text mono numberOfLines={1} style={{ flexShrink: 1, fontSize: 11, color: r.warn ? t.amber : t.ink3 }}>
+                      {T(r.note.key, r.note.params)}
+                    </Text>
+                  )}
+                </>
+              );
+              return (
+                <View key={r.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44,
+                                           borderTopWidth: i === 0 ? 0 : 1, borderTopColor: t.line }}>
+                  <Text style={{ width: 96, fontSize: 13, color: t.ink3 }}>{T(r.label)}</Text>
+                  {r.key === 'executor' ? (
+                    <View ref={executorRef} collapsable={false} style={{ flex: 1 }}>
+                      <Tap onPress={() => void hand()} label={T('tkHand')}
+                        style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {value}
+                        <Icon name="expand_more" size={16} color={t.ink3} />
+                      </Tap>
+                    </View>
+                  ) : (
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>{value}</View>
+                  )}
+                </View>
+              );
+            })}
+          </Card>
+
+          {moments.length > 0 && (
+            <View>
+              <SectionHeader title={T('caActivity')} style={{ marginBottom: 6 }} />
+              {moments.map((m) => (
+                <TrailRow key={`${m.at}-${m.said.key}`} time={when(m.at)}
+                  text={T(m.said.key, { ...m.said.params, ...(m.who ? { who: T(m.who) } : {}),
+                                        ...(m.col ? { col: T(m.col) } : {}) })} />
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Shell>
+  );
+}
+
+/** A moment in the trail: the time where it is today's, the date where not. */
+function when(at: number): string {
+  const d = new Date(at * 1000);
+  return new Date().toDateString() === d.toDateString() ? clock(at) : stamp(at).split(',')[0];
+}
+
+const FACE_ROW: Record<Section['key'], Key> = {
+  goal: 'tkGoal', done: 'tkDoneWhen', test: 'tkTest', files: 'tkFiles', constraints: 'tkConstraints', notes: 'tkNotes',
+};
+
+/** The brief, shut until it is pressed: Goal, Done when, Test, Files — and the
+ *  constraints and notes where the card has any. */
+function AgentFace({ open, detail, card, loading, error, onToggle }: {
+  open: boolean;
+  detail: DivanCardDetail | null;
+  card: MergedCard;
+  loading: boolean;
+  error: string | null;
+  onToggle: () => void;
+}) {
+  const T = useT();
+  const t = useTokens();
+  const blocks = sections(detail?.card.agent, detail?.ticket);
+  const at = (key: Section['key']) => blocks.find((b) => b.key === key) ?? null;
+  const order: Section['key'][] = ['goal', 'done', 'test', 'files', 'constraints', 'notes'];
+  return (
+    <Card>
+      <Tap onPress={onToggle} label={T('tkAgentFace')}
+        style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Icon name={open ? 'expand_less' : 'chevron_right'} size={16} color={t.ink3} />
+        <Text style={{ fontSize: 13, fontWeight: '600' }}>{T('tkAgentFace')}</Text>
+        <Text mono numberOfLines={1} style={{ flex: 1, textAlign: 'right', fontSize: 11, color: t.ink3 }}>
+          {T('tkAgentFaceNote')}
+        </Text>
+      </Tap>
+      {open && (!detail ? (
+        <Text style={{ fontSize: 13, lineHeight: 19, color: t.ink2 }}>
+          {loading ? T('wsStarting') : `${T('caBriefQuiet', { machine: card.machine })}${error ? ` · ${error}` : ''}`}
+        </Text>
+      ) : !blocks.length ? (
+        <Text style={{ fontSize: 13, lineHeight: 19, color: t.ink2 }}>{T('caNoBrief')}</Text>
+      ) : (
+        <View style={{ gap: 12 }}>
+          {order.filter((k) => k === 'goal' || k === 'done' || k === 'test' || k === 'files' || at(k)).map((k) => {
+            const b = at(k);
+            return (
+              <Block key={k} label={T(FACE_ROW[k])} count={b?.count ?? null}>
+                {!b ? <BriefLine text={T('tkNone')} quiet />
+                  : b.kind === 'code' ? <Commands lines={b.lines} />
+                  : b.kind === 'list' && b.met
+                    ? <View>{b.lines.map((line, i) => <Criterion key={i} text={line} met={b.met![i]} />)}</View>
+                    : <View>{b.lines.map((line, i) => <BriefLine key={i} text={line} quiet={b.key === 'files'} />)}</View>}
+              </Block>
+            );
+          })}
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+/** Where a ticket was opened from, out of the address. */
+export function fromOf(v: string | null | undefined): From {
+  return v === 'waiting' || v === 'dashboard' || v === 'project' || v === 'board' ? v : null;
 }

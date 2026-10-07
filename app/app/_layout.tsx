@@ -144,6 +144,7 @@ export default function RootLayout() {
             lit under them. */}
         <Stack.Screen name="machines" />
         <Stack.Screen name="executors" />
+        <Stack.Screen name="terminal" />
         {/* A call is a mode, not a place: it comes up over whatever you were
             reading and leaves it exactly where it was. */}
         <Stack.Screen name="call" options={{ presentation: 'modal' }} />

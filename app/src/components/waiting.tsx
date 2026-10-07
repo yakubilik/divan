@@ -51,7 +51,7 @@ export function BackRow({ label, onPress, style }: {
  *  The second line is the whole of "where did this come from": the frame writes
  *  `Quire · Safari 17 login · on studio`, and a list gathered off four computers
  *  is unreadable without it. */
-export function WaitingCard({ face, who, from, age, said, asked, note, tone, actions, onPress }: {
+export function WaitingCard({ face, who, from, age, said, asked, stuck, body, note, tone, actions, after, onPress }: {
   /** Which executor face the card wears (`ExecutorBadge`). */
   face: string;
   /** `Coder`, `You` — already in the reader's language. */
@@ -63,11 +63,17 @@ export function WaitingCard({ face, who, from, age, said, asked, note, tone, act
   said: string;
   /** `said` is a question, not a report. */
   asked?: boolean;
+  /** The status word of an agent that stopped, in red beside the age. */
+  stuck?: string | null;
+  /** A quiet paragraph under what was said. */
+  body?: string | null;
   /** A mono line under the buttons: what a tap on one of them did, or why it
    *  did not. Absent while there is nothing to report, which is almost always. */
   note?: string | null;
   tone?: Tone;
   actions?: React.ReactNode;
+  /** Something under the buttons that a press opened: a comment box. */
+  after?: React.ReactNode;
   onPress?: () => void;
 }) {
   const t = useTokens();
@@ -79,6 +85,9 @@ export function WaitingCard({ face, who, from, age, said, asked, note, tone, act
           <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600' }}>{who}</Text>
           <Text mono numberOfLines={1} style={{ fontSize: 10.5, color: t.ink3, marginTop: 2 }}>{from}</Text>
         </View>
+        {!!stuck && (
+          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '500', color: toneColours(t, 'red').fg }}>{stuck}</Text>
+        )}
         {!!age && (
           <Text mono numberOfLines={1} style={{ fontSize: 11, color: t.ink3 }}>{age}</Text>
         )}
@@ -86,7 +95,9 @@ export function WaitingCard({ face, who, from, age, said, asked, note, tone, act
       {!!said && (asked
         ? <Text style={{ fontSize: 15, lineHeight: 15 * 1.35, fontWeight: '500' }}>{said}</Text>
         : <Text style={{ fontSize: 14, lineHeight: 14 * 1.4, color: t.ink2 }}>{said}</Text>)}
+      {!!body && <Text style={{ fontSize: 13, lineHeight: 13 * 1.45, color: t.ink2 }}>{body}</Text>}
       {!!actions && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>{actions}</View>}
+      {after}
       {!!note && (
         <Text mono numberOfLines={2}
           style={{ fontSize: 11, fontWeight: '500', color: tone ? toneColours(t, tone).fg : t.ink3 }}>{note}</Text>

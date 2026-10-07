@@ -605,107 +605,28 @@ for (const scheme of ['dark', 'light']) {
   const calm = draw(scheme, CALM);
   const spent = draw(scheme, SPENT);
   const empty = draw(scheme, []);
-  const styles = (m) => R.styles(m);
-  const painted = (m, colour) => styles(m).some((s) => s.backgroundColor === colour);
-  const inked = (m, colour) => styles(m).some((s) => s.color === colour);
 
   checks.push(
-    // V1 · the busy top
-    [`${scheme}: the busy screen draws the counters, the questions and the projects`,
-      ['cNeedsYou', 'cStuck', 'cRunning', 'cDoneToday', 'needsYou', 'projects', 'Quire', 'Hush']
-        .every((word) => busy.includes(word))],
-    [`${scheme}: …with the counters that are about a person in their own colours`,
-      painted(busy, t.amberBg) && painted(busy, t.redBg)],
-    // V2 · the cards and the roster
-    [`${scheme}: every product has a card, and every agent at work a line`,
-      busy.includes('agents') && busy.includes('exCoder') && busy.includes('Bulk CSV invite · 3 of 5 checks')],
-    [`${scheme}: …each card carrying what git said and what the board says`,
-      busy.includes('pfFinished') && busy.includes('14') && busy.includes('pcStuck')],
-    [`${scheme}: \u2026and a repository whose last commit has no readable date says so, rather than a time`,
-      (() => {
-        const m = draw(scheme, [paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
-          quota: quota({ left: 0.5 }), projects: [project('Quire', { repos: ['/r/quire'] })],
-          activity: { '/r/quire': { at: null, week: 3, today: 0 } } }) })]);
-        return m.includes('pfNeverMoved') && !m.includes('pfMoved') && m.includes('pfFinished');
-      })()],
-    [`${scheme}: the way in is offered on the question that has one and on no other`,
-      (busy.match(/ticketAnswer/g) ?? []).length === 1 && D.asks(BUSY).length === 2],
-    [`${scheme}: the quota track is labelled on the healthy line and on neither of the others`,
-      busy.includes('>sysQuota<') && !stale.includes('>sysQuota<') && !spent.includes('>sysQuota<')],
-    [`${scheme}: …and a product with no repository is drawn without that figure rather than with an empty one`,
-      busy.includes('Pebble') && (busy.match(/pfFinished/g) ?? []).length === 3
-      && BUSY.projects.filter((p) => p.activity).length === 3],
-    [`${scheme}: \u2026and that card is still a finished card: a name, a state, and no hole where the figure was`,
-      (() => {
-        const one = draw(scheme, [paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
-          quota: quota({ left: 0.5 }), projects: [project('Pebble')] }) })]);
-        return one.includes('Pebble') && one.includes('pcQuiet') && one.includes('plIdle')
-          && !one.includes('pfFinished') && !one.includes('cDoneToday');
-      })()],
-    // V3 · the calm morning
-    [`${scheme}: with nothing waiting the screen says so, in the frame's own words`,
-      calm.includes('calmTitle') && painted(calm, t.runBg)],
-    [`${scheme}: …and the busy screen does not say it`,
-      !busy.includes('calmTitle') && !stale.includes('calmTitle')],
-    // Mobile5 S1 · a machine unreachable
-    [`${scheme}: a quiet machine turns the system line and explains itself above the counters`,
-      stale.includes('sysUnreachable') && stale.includes('dashStale') && stale.includes('dashPartly')
-      && painted(stale, t.amberBg)],
-    [`${scheme}: …the fourth counter becomes the agents nobody can vouch for`,
-      stale.includes('cUnknown') && !stale.includes('cDoneToday')],
-    [`${scheme}: …and the product that lives there says when it was last seen`,
-      stale.includes('pcStale') && stale.includes('pfLastSeen')],
-    // Mobile5 S2 · out of quota
+    [`${scheme}: the busy screen is the greeting, its counted line, what needs you and the projects`,
+      ['cmEvening', 'cmMorning', 'cmAfternoon'].some((g) => busy.includes(`>${g}<`))
+      && ['>needsYou<', '>projects<', 'Quire', 'Hush', '>cmNeeds<', '>cmWorking<', '>cmStuck<'].every((w) => busy.includes(w))],
+    [`${scheme}: every agent at work is a line under Working now, with its product and executor`,
+      busy.includes('>cmWorkingNow<') && busy.includes('Bulk CSV invite') && /Quire · exCoder · /.test(busy)],
+    [`${scheme}: a product with no repository is still a tile, and a dormant one is a quiet row`,
+      busy.includes('data-label="Pebble"') && /data-label="The Long Walk"[\s\S]*?cmQuiet/.test(busy)],
+    [`${scheme}: with nothing waiting the line says so in words and Needs you is not drawn`,
+      calm.includes('>cmNeedsNone<') && calm.includes('>cmStuckNone<') && !calm.includes('>needsYou<')],
+    [`${scheme}: a quiet machine is explained under the greeting, and its product says when it was last seen`,
+      stale.includes('dashStale') && stale.includes('pfLastSeen')],
     [`${scheme}: no quota left is red, and says what stopped and when it starts again`,
-      spent.includes('pausedTitle') && spent.includes('pausedBody') && spent.includes('sysQuotaSpent')
-      && painted(spent, t.redBg)],
-    [`${scheme}: …and the counter is what was paused, not what is running`,
-      spent.includes('cPaused') && !spent.includes('cDoneToday')],
-    // …and the two the calm block was drawn over. Both are "nothing needs you"
-    // as far as the three counters a person reads are concerned, and in neither
-    // of them is the screen entitled to say so.
-    [`${scheme}: "all clear" is not said over a machine that has gone quiet with agents on it`,
-      (() => {
-        const m = draw(scheme, QUIET_CALM);
-        return !m.includes('calmTitle') && m.includes('cUnknown') && m.includes('dashStale');
-      })()],
-    [`${scheme}: an agent that has said nothing yet is timed instead, rather than reading as a bare title`,
-      /Bulk CSV invite · \d/.test(draw(scheme, QUIET_CALM))],
-    // …and the two halves of "out of quota" cannot disagree: the block is about
-    // the fleet and the corner is about the product, so on a fleet where one
-    // computer is spent and one is not there is no block, and the corner of the
-    // product that stopped still says so, with its own machine's hour under it.
+      spent.includes('pausedTitle') && spent.includes('pausedBody')],
     [`${scheme}: one machine out of quota and one with room draws no red block, and still says which product stopped`,
-      (() => {
-        const m = draw(scheme, MIXED);
-        return !m.includes('pausedTitle') && m.includes('pcPaused') && m.includes('pfResume')
-          && !m.includes('calmTitle');
-      })()],
-    [`${scheme}: \u2026and the counter still counts the agents that stopped`,
-      draw(scheme, MIXED).includes('cPaused')],
-    [`${scheme}: \u2026nor over a fleet that has run out of quota`,
-      (() => {
-        const m = draw(scheme, SPENT_ONLY);
-        return m.includes('pausedTitle') && !m.includes('calmTitle')
-          // …and the product whose agents were stopped says when they resume.
-          && m.includes('pcPaused') && m.includes('pfResume');
-      })()],
-    // The screen and the rule are one thing, checked as one: `calm()` decides,
-    // and this is every fleet above put through the screen to see that what it
-    // decided is what came out. A guard written out a second time in the screen
-    // is exactly how the block came to be drawn over a quiet machine's own
-    // sentence, and it is this check that would have caught it.
-    [`${scheme}: the calm block is drawn exactly when the rule says it is, in every state`,
-      Object.entries(FLEETS).every(([, hosts]) =>
-        draw(scheme, hosts).includes('calmTitle') === D.calm(view(hosts)))],
-
-    // …and the states a screen made of other computers' answers is really in
+      (() => { const m = draw(scheme, MIXED); return !m.includes('pausedTitle') && m.includes('pfResume'); })()],
     [`${scheme}: a phone paired with nothing draws the whole screen without throwing`,
-      empty.includes('sysNoMachines') && empty.includes('dashEmpty') && empty.includes('tabDashboard')],
-    [`${scheme}: …with no counters standing on numbers nobody counted`,
-      !empty.includes('cDoneToday')],
-    [`${scheme}: the system line is plain while all is well and coloured when it is not`,
-      !painted(busy, t.amberBg + 'x') && inked(stale, t.amber) && inked(spent, t.red)],
+      empty.includes('dashEmpty') && empty.includes('>divan<')],
+    [`${scheme}: the Composer is on the page in the design's lifted surface`,
+      empty.includes('data-label="cmLabel"') && R.styles(busy).some((st) => st.backgroundColor === t.sLift
+        && st.borderRadius === K.RADIUS.xl)],
   );
 }
 
@@ -722,7 +643,7 @@ for (const scheme of ['dark', 'light']) {
   for (const scheme of ['dark', 'light']) {
     const tok = K.tokensFor(scheme);
     const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR,
-                         ...K.MONOGRAM, 'transparent']);
+                         'transparent']);
     const strayed = new Set();
     for (const markup of [draw(scheme, [studio()]), draw(scheme, [studio(), MINI]),
                           draw(scheme, CALM), draw(scheme, SPENT), draw(scheme, [])]) {
@@ -749,35 +670,30 @@ for (const scheme of ['dark', 'light']) {
       .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")),
     text: m[2],
   }));
-  const title = (markup) => (texts(markup).find((x) => x.style.fontSize === 26
-    && x.style.fontFamily === 'Inter-SemiBold') ?? {}).text;
+  const title = (markup) => (texts(markup).find((x) => x.style.fontSize === 28
+    && x.style.fontFamily === 'Geist-SemiBold') ?? {}).text;
 
   draw('dark', [studio(), MINI]);
-  const cardPress = R.presses().find((p) => p.text.includes('Quire') && p.text !== 'Quire'
-    && p.text.includes('pfFinished'));
-  cardPress.press();
-  checks.push(['tapping a project card enters that project',
+  R.presses().find((p) => p.label === 'Quire').press();
+  checks.push(['tapping a project tile enters that project',
     title(R.render('dark', h(Dashboard))) === 'Quire']);
 
-  // …and an agent row opens what that agent is doing. The one on this phone's
-  // own computer has a ticket behind it — the run itself, as the model prints
-  // it — and that is a route rather than anything visible in the markup it left,
-  // so the push is recorded. The one on the machine that has gone quiet has a
-  // queue this phone cannot read, and enters its product instead.
+  // …and a Working now row opens what that agent is doing: the run, where this
+  // phone's own computer has a ticket behind it; its product, where the machine
+  // has gone quiet.
   R.params.reset();
   R.nav.reset();
   draw('dark', [studio(), MINI]);
-  const rows = R.presses().filter((p) => p.text.startsWith('◌') || p.text.startsWith('●'));
-  checks.push(['there is a line for every agent at work, and every one of them is pressable',
-    rows.length === 3]);
-  rows.find((p) => p.text.startsWith('●')).press();
+  const rows = R.presses().filter((p) => !p.label && /Bulk CSV invite|Gradle 8.7 build|Deck sync/.test(p.text));
+  checks.push(['there is a line for every agent at work, and every one of them is pressable', rows.length === 3]);
+  rows.find((p) => p.text.includes('Bulk CSV invite')).press();
   checks.push(['an agent on this phone’s own computer opens the run it is printing',
-    eq(R.nav.pushed(), ['/ticket/9'])]);
+    eq(R.nav.pushed(), ['/ticket/9?from=dashboard'])]);
 
   R.nav.reset();
   R.params.reset();
   draw('dark', [studio(), MINI]);
-  R.presses().filter((p) => p.text.startsWith('◌'))[0].press();
+  R.presses().find((p) => !p.label && p.text.includes('Gradle 8.7 build')).press();
   checks.push(['an agent on a machine that has gone quiet enters its product instead',
     title(R.render('dark', h(Dashboard))) === 'Kanji Daily' && eq(R.nav.pushed(), [])]);
   R.store.reset();
@@ -791,6 +707,8 @@ for (const scheme of ['dark', 'light']) {
   const screen = src('app/dashboard.tsx');
   const parts = src('src/components/dashboard.tsx');
   const judgement = src('src/dashboard.ts');
+  const shellParts = src('src/components/shell.tsx');
+  const panelAgreement = fs.readFileSync(path.join(root, '..', 'web', 'scripts', 'test-overview.mjs'), 'utf8');
   checks.push(
     ['the Dashboard is built out of the design system and nothing else',
       /from '\.\.\/src\/components\/divan'/.test(screen)
@@ -800,9 +718,9 @@ for (const scheme of ['dark', 'light']) {
       /useTokens\(\)/.test(parts) && /toneColours\(/.test(parts)],
     ['what the screen says is decided where a check can reach it, with no React in it',
       !/\brequire\(|from 'react/.test(judgement) && /export function systemLine/.test(judgement)
-      && /export function counters/.test(judgement)],
+      && /export function agentRows/.test(judgement)],
     ['the chat is not touched by any of it',
-      !/components\/chat|chat\//.test(screen) && !/components\/chat/.test(parts)],
+      !/components\/chat/.test(screen) && !/components\/chat/.test(parts)],
     ['nothing on the Dashboard leads to a screen that is about a computer',
       !/'\/host-sheet'|'\/pool'|'\/accounts'|'\/screen'|'\/agents'/.test(screen)],
   );
@@ -815,7 +733,9 @@ for (const scheme of ['dark', 'light']) {
   // or by one of its blocks, or called by another judgement in here.
   const exported = [...judgement.matchAll(/export function (\w+)/g)].map((m) => m[1]);
   const orphans = exported.filter((name) => {
-    if (new RegExp(`\\b${name}\\b`).test(screen) || new RegExp(`\\b${name}\\b`).test(parts)) return false;
+    // …or the line over every page (`components/shell`), or the panel, which
+    // holds itself to this module's answers (`web/scripts/test-overview.mjs`).
+    if ([screen, parts, shellParts, panelAgreement].some((f) => new RegExp(`\\b${name}\\b`).test(f))) return false;
     // …or something else in here calls it, which is more than its own definition.
     return (judgement.match(new RegExp(`\\b${name}\\s*\\(`, 'g')) ?? []).length <= 1;
   });

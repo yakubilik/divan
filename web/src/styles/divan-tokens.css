@@ -1,0 +1,80 @@
+/* Divan tokens — final values approved on 7 Oct 2026.
+   Night is the default theme. Day is first-class too.
+   Cards are FLAT: no backdrop-filter anywhere (the glass effect was tried and rejected).
+   Load this file before divan-components.css. Put class="dv-root" and data-theme="dark|light" on the app root. */
+
+.dv-root {
+  /* type */
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* radius */
+  --radius-sm: 10px;   /* monograms, small buttons */
+  --radius-md: 16px;   /* cards, lists, menus */
+  --radius-lg: 22px;   /* project tiles, side panels */
+  --radius-xl: 28px;   /* the composer */
+  --radius-pill: 999px;/* chips, status tags, segmented controls */
+
+  /* kept for compatibility with divan-components.css; neutralised below */
+  --blur-glass: 0px;
+  --blur-strong: 0px;
+}
+
+/* ---------- Night (default) ---------- */
+.dv-root,
+.dv-root[data-theme="dark"] {
+  --canvas: #18191c;                      /* soft charcoal page, not black */
+  --canvas-light: rgba(255,255,255,0.05); /* one faint light at the top centre */
+  --glass-1: #202125;                     /* card / tile surface */
+  --glass-2: #28292d;                     /* hover, selected, raised */
+  --glass-strong: #232428;                /* composer */
+  --glass-edge: rgba(255,255,255,0.07);   /* 1px border on every surface */
+  --hairline: rgba(255,255,255,0.08);     /* separators, neutral chip fill */
+
+  --ink: #ededeb;    /* primary text, primary fill */
+  --ink-2: #b3b3ae;  /* secondary text */
+  --ink-3: #919189;  /* mono meta, placeholders (>= 4.5:1 on every surface) */
+  --on-ink: #18191c; /* text on an ink fill */
+
+  --amber: #e6b261;                     /* needs you — the only accent */
+  --amber-wash: rgba(230,178,97,0.14);
+  --on-amber: #1a140b;
+  --red: #ec7a62;                       /* stuck, failed, unreachable — dot or word only */
+  --run: #7ccaa6;                       /* running, healthy — dot only */
+  --focus: #ededeb;
+
+  --shadow-glass: 0 1px 2px 0 rgba(0,0,0,0.18);
+  --shadow-float: 0 1px 2px 0 rgba(0,0,0,0.2), 0 16px 36px -20px rgba(0,0,0,0.5);
+}
+
+/* ---------- Day ---------- */
+.dv-root[data-theme="light"] {
+  --canvas: #f1f1ef;
+  --canvas-light: rgba(255,255,255,0.9);
+  --glass-1: #fafaf8;
+  --glass-2: #ffffff;
+  --glass-strong: #ffffff;
+  --glass-edge: rgba(0,0,0,0.07);
+  --hairline: rgba(0,0,0,0.065);
+
+  --ink: #0b0b0c;
+  --ink-2: #4a4a46;
+  --ink-3: #696964;
+  --on-ink: #f7f7f5;
+
+  --amber: #8a560c;
+  --amber-wash: rgba(200,140,40,0.14);
+  --on-amber: #ffffff;
+  --red: #b3381e;
+  --run: #2a7560;
+  --focus: #0b0b0c;
+
+  --shadow-glass: 0 1px 2px 0 rgba(0,0,0,0.05), 0 12px 28px -20px rgba(0,0,0,0.18);
+  --shadow-float: 0 2px 4px 0 rgba(0,0,0,0.06), 0 30px 60px -32px rgba(0,0,0,0.26);
+}
+
+/* Status: "in review / testing" is grey (a second agent is checking the work). */
+.dv-status--review i { background: var(--ink-2); }
+
+/* The greeting is lighter than the system's default 600. */
+.dv-greet { font-weight: 500; }

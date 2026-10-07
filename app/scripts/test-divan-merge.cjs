@@ -502,12 +502,14 @@ checks.push(
   // machine for a single row, and the two writes are the two things a Divan
   // screen changes about a board: where a card is (`divan.card.move`, the drag)
   // and that there is one at all (`divan.card.create`, Mobile8 S9). Everything
-  // else a board can do — rewriting a card, setting an executor, writing an
-  // agent face — is said to the agent in a chat, which is the entrance the
-  // protocol document describes, and would be a fifth string here.
-  ['the board asks the computer for four things and no more',
+  // else a board can do — rewriting a card, writing an agent face — is said to
+  // the agent in a chat. Two more writes came with the ticket page and Waiting
+  // on you (HANDOVER §4.4, §4.6): who a card is handed to
+  // (`divan.card.executor`) and a product's Still open item closed or
+  // commented on (`divan.project.open`), the panel's own two calls.
+  ['the board asks the computer for six things and no more',
     [...store.matchAll(/'(divan\.[a-z.]+)'/g)].map((m) => m[1]).join(',')
-      === 'divan.snapshot,divan.snapshot,divan.card.get,divan.card.move,divan.card.create'],
+      === 'divan.snapshot,divan.snapshot,divan.card.get,divan.card.executor,divan.project.open,divan.card.move,divan.card.create'],
   // …and the write goes to the machine the card is on, which on a screen made
   // of four computers' boards is not the one this phone holds a socket to.
   ['a write goes to the computer the card is on, by name',
@@ -516,7 +518,7 @@ checks.push(
     && /onHost\(what\.host, 'ustabasi\.note'/.test(store)
     && /onHost(<[^>]+>)?\(what\.host, 'divan\.card\.move'/.test(store)],
   ['…and only that machine is re-read afterwards',
-    (store.match(/await get\(\)\.loadDivan\(what\.host\);/g) || []).length === 2],
+    (store.match(/await get\(\)\.loadDivan\(what\.host\);/g) || []).length === 4],
 );
 
 // ── and the rule every Divan screen after this one is held to ──────────────

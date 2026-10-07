@@ -5,8 +5,7 @@ import { useT } from '../src/store';
 import { useDivanView } from '../src/queue';
 import { executorGroups, type Words } from '../src/machine';
 import { EmptyState, SectionHeader } from '../src/components/divan';
-import { ExecutorRow, PageHead } from '../src/components/machine';
-import { BackRow } from '../src/components/waiting';
+import { ExecutorRow, MachineTabs, PageHead, UnderTab } from '../src/components/machine';
 import { Shell } from '../src/components/shell';
 
 /** Machine › Executors — Mobile11 S14.
@@ -24,14 +23,14 @@ import { Shell } from '../src/components/shell';
  *  last, runs on no machine, and his state is how much is waiting on him.
  *
  *  The reading is `src/machine.ts` so that `scripts/test-machine.cjs` can hold
- *  this page to it without a phone. */
+ *  this page to it without a phone. It is the second of Machine's four tabs
+ *  (HANDOVER §4.9); the agents, the sign-ins and the pool sit under it. */
 export default function Executors() {
   const router = useRouter();
   const T = useT();
   const view = useDivanView();
   const say = (w: Words) => (w.said ? T(w.said.key, w.said.params) : w.text);
 
-  const back = () => { if (router.canGoBack()) router.back(); else router.replace('/machine'); };
   // One reading of "is there anybody", so the count beside the title cannot
   // stand over a page that says there is nobody.
   const groups = executorGroups(view);
@@ -41,8 +40,8 @@ export default function Executors() {
     <Shell place="machine" badge={view.totals.needsYou}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 20,
                                            paddingBottom: 24 }}>
-        <BackRow label={T('mTitle')} onPress={back} />
-        <PageHead title={T('exTitle')} count={total || null} style={{ marginTop: 6, paddingHorizontal: 0 }} />
+        <MachineTabs here="executors" />
+        <PageHead title={T('exTitle')} count={total || null} style={{ marginTop: 12, paddingHorizontal: 0 }} />
         {total === 0
           ? <EmptyState title={T('exNone')} body={T('exNoneBody')} />
           : groups.map((g) => (
@@ -56,6 +55,7 @@ export default function Executors() {
               ))}
             </View>
           ))}
+        <UnderTab here="executors" style={{ marginTop: 18 }} />
       </ScrollView>
     </Shell>
   );

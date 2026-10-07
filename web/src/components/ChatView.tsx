@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
 import { Chip, Dot, Icon, P, Pulse, Spinner, mono, Empty } from '../ui/kit';
-import { Timeline } from './Timeline';
+import { Timeline, type TicketLink } from './Timeline';
 import { ChatComposer } from './ChatComposer';
 import { ChatMenu } from './ChatMenu';
 import { ChatDetails } from './ChatDetails';
@@ -29,7 +29,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
   const running = chat.status === 'running';
   const awaiting = chat.status === 'awaiting_approval';
   return (
-    <div style={{
+    <div className="dv-chathead" style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
       borderBottom: `1px solid ${C.border}`, flexShrink: 0, position: 'relative',
     }}>
@@ -53,7 +53,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
           </>}
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <div className="dv-chatchips" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         {/* Which sign-in is being spent, and the way to another one: this is
             where a person looks when a plan's limit has run out mid-chat. */}
         <Chip onClick={() => onEdit('account_id')} title="Account running this chat" shrink>
@@ -103,7 +103,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
           Details
         </button>
         <button
-          type="button" onClick={onMenu} title="Chat menu"
+          type="button" onClick={onMenu} title="Chat menu" aria-label="Chat menu"
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, lineHeight: 0 }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill={C.mute}>
@@ -170,8 +170,13 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
 /** What is attached but not sent yet. A picture is shown as the picture, at the
  *  size a thumbnail wants to be — a file name is not a preview, and the whole
  *  point of attaching a screenshot is to see that it is the right one. */
-export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending, filedUnder, tickets }: {
   chat: Chat | null;
+  /** The product Hermes filed this conversation under, as the thin rule over it
+   *  (HANDOVER §4.8). Null where nothing claims it. */
+  filedUnder?: string | null;
+  /** Where a card this conversation filed opens. */
+  tickets?: TicketLink | null;
   hostKey: string | null;
   log: ChatLog;
   groupName: string | null;
@@ -274,13 +279,23 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
         {log.error && (
           <div style={{ fontSize: 13, color: C.danger, padding: 12 }}>{log.error}</div>
         )}
-        <Timeline items={log.items} hostKey={hostKey ?? ''} onRespond={onRespond} />
+        <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {!!filedUnder && (
+            <div className="dv-filed" data-filed-under={filedUnder}>
+              <span className="dv-meta">filed under {filedUnder}</span>
+            </div>
+          )}
+          <Timeline items={log.items} hostKey={hostKey ?? ''} onRespond={onRespond} tickets={tickets} />
+        </div>
       </div>
-      {busy && <WorkingStrip log={log} onInterrupt={onInterrupt} />}
-      <ChatComposer
-        chat={chat} hostKey={hostKey ?? ''} busy={busy} sending={sending}
-        onSend={onSend} onInterrupt={onInterrupt} onUpload={onUpload}
-      />
+      {/* The same column the conversation reads in, so the box sits under it. */}
+      <div style={{ width: '100%', maxWidth: 800, margin: '0 auto', flexShrink: 0 }}>
+        {busy && <WorkingStrip log={log} onInterrupt={onInterrupt} />}
+        <ChatComposer
+          chat={chat} hostKey={hostKey ?? ''} busy={busy} sending={sending}
+          onSend={onSend} onInterrupt={onInterrupt} onUpload={onUpload}
+        />
+      </div>
     </div>
   );
 }

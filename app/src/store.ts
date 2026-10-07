@@ -5,11 +5,11 @@ import { useCallback } from 'react';
 import { callOnce, client, httpBase, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, QueueNotice, RunPage, TicketReport, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, DivanColumn, DivanExecutor, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, QueueNotice, RunPage, TicketReport, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, Polls, silent, type HostDivan } from './divan';
 import { missed, opening, took, type Open, type Say } from './card';
-import { filed, type Filing } from './compose';
+import { filed, NO_DRAFT, type ComposeDraft, type Filing } from './compose';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -124,6 +124,14 @@ interface State {
    *  answering it has to reach the mini — so the machine is named rather than
    *  assumed, the same way a sign-in is read off a second computer. */
   answerCard: (what: { ticket: number; host: string }, text: string) => Promise<void>;
+  /** Hand a card to another executor, or to nobody, on the computer it is on
+   *  (`divan.card.executor`). */
+  handCard: (what: { card: string; host: string }, executor: DivanExecutor | null) => Promise<void>;
+  /** Close a product's Still open item, or add a line to its thread, on the
+   *  computer it is written on (`divan.project.open`, the project page's own
+   *  call on the panel). */
+  openItem: (what: { host: string; project: string; item: string },
+             d: { set?: Record<string, unknown>; comment?: string }) => Promise<void>;
   /** Move a card to a column, on whichever computer it is on, and to a place in
    *  that column where one was picked — position is priority on this board.
    *
@@ -221,6 +229,15 @@ interface State {
   checkUpdate: (refresh?: boolean) => Promise<void>;
   applyUpdate: () => Promise<{ ok: boolean; error?: string }>;
   setShowArchived: (v: boolean) => void;
+  /** What is typed into the Dashboard's Composer, and the mode and chips under
+   *  it. Here rather than in the screen so that leaving the Dashboard for a
+   *  moment does not lose a half-written sentence. */
+  compose: ComposeDraft;
+  setCompose: (patch: Partial<ComposeDraft>) => void;
+  /** …and the Composer at the foot of each product's page, by product: its own
+   *  draft, so a sentence about one product is not waiting on the Dashboard. */
+  drafts: Record<string, ComposeDraft>;
+  setDraft: (project: string, patch: Partial<ComposeDraft>) => void;
   settleLive: (chatId: string) => void;
   loadProjects: () => Promise<void>;
   openChat: (id: string) => Promise<void>;
@@ -646,6 +663,7 @@ export const useStore = create<State>((set, get) => {
     projects: [], accounts: [], tools: [], npmAvailable: true, loginPrompt: null, loginDone: null,
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
+    compose: NO_DRAFT, drafts: {},
     chats: {}, groups: [], showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
     ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {}, openCard: null,
@@ -794,6 +812,10 @@ export const useStore = create<State>((set, get) => {
     },
 
     setShowArchived: (v) => { set({ showArchived: v }); },
+    setCompose: (patch) => { set({ compose: { ...get().compose, ...patch } }); },
+    setDraft: (project, patch) => {
+      set({ drafts: { ...get().drafts, [project]: { ...(get().drafts[project] ?? NO_DRAFT), ...patch } } });
+    },
 
     /** Drop a finished live segment once the chat screen has typed it out. */
     settleLive: (chatId) => {
@@ -1054,6 +1076,20 @@ export const useStore = create<State>((set, get) => {
       // from is that the card stops waiting once it has been answered. Only the
       // machine that was written to: asking the other three would be three
       // requests about a thing that did not change.
+      await get().loadDivan(what.host);
+    },
+
+    handCard: async (what, executor) => {
+      await onHost(what.host, 'divan.card.executor', { card_id: what.card, executor });
+      await get().loadDivan(what.host);
+    },
+
+    openItem: async (what, d) => {
+      await onHost(what.host, 'divan.project.open', {
+        project_id: what.project, item_id: what.item,
+        ...(d.set ? { set: d.set } : {}),
+        ...(d.comment != null ? { comment: d.comment, who: 'you' } : {}),
+      });
       await get().loadDivan(what.host);
     },
 

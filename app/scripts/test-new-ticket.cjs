@@ -269,12 +269,13 @@ for (const scheme of ['dark', 'light']) {
   const empty = draw(scheme, [], { project: 'quire' }, {});
 
   checks.push(
-    [`${scheme}: S9's four things are on it — the way out, the product, the two boxes and the two buttons`,
+    [`${scheme}: the form is the way out, the product, Title, the sentences, Ice Box · Queued · Start now and Create`,
       styleOf(page, 'cancel').color === t.ink2 && page.includes('>Quire<')
       && boxes(page).length === 2
-      && page.includes('>ntIceBox<') && page.includes('>ntQueued<')],
+      && page.includes('data-label="ntTitle"') && page.includes('data-label="ntSentences"')
+      && ['>bdIceBox<', '>bdQueued<', '>ntStartNow<', '>ntCreate<'].every((w) => page.includes(w))],
     [`${scheme}: …and the boxes are set in the app's own type, not the phone's`,
-      eq(boxes(page).map((s) => s.fontFamily), ['Inter-SemiBold', 'Inter-Regular'])
+      eq(boxes(page).map((s) => s.fontFamily), ['Geist-SemiBold', 'Geist-Regular'])
       && !boxes(page).some((s) => s.fontWeight)],
     [`${scheme}: the line under the box says what is not being asked for, and counts`,
       styleOf(page, 'ntLater').color === t.ink3 && styleOf(page, 'ntLater').fontFamily.includes('Mono')
@@ -283,7 +284,7 @@ for (const scheme of ['dark', 'light']) {
       !/caGoal|caDoneWhen|caTest|caConstraints|caNotes|caExecutor|ntExecutor/.test(page)
       && (page.match(/data-placeholder=/g) ?? []).length === 2],
     [`${scheme}: with no product anywhere it says so instead of offering a card`,
-      empty.includes('>ntNowhere<') && !empty.includes('>ntIceBox<')],
+      empty.includes('>ntNowhere<') && !empty.includes('>ntCreate<')],
     [`${scheme}: every state of this screen renders`,
       Object.values(STATES).every(([hosts, params, props]) => {
         const markup = draw(scheme, hosts, params, props);
@@ -305,35 +306,48 @@ async function pressed() {
 
   draw('dark', [STUDIO, MINI], { project: 'quire' },
        { opening: 'Export client list as CSV', sentences: 'Studios keep asking to download their list.' });
-  R.pressOn('ntIceBox');
+  R.pressOn('ntCreate');
   await settle();
   const ice = filed.slice();
   const where = R.nav.replaced();
 
+  // Choosing a segment writes it into the address; the form drawn from that
+  // address files there.
   draw('dark', [STUDIO, MINI], { project: 'quire' }, { opening: 'Export client list as CSV' });
-  R.pressOn('ntQueued');
+  R.pressOn('bdQueued');
+  const chosen = { ...R.params.get() };
+  draw('dark', [STUDIO, MINI], chosen, { opening: 'Export client list as CSV' });
+  R.pressOn('ntCreate');
   await settle();
   const queued = filed.slice();
 
+  draw('dark', [STUDIO, MINI], { project: 'quire', into: 'in_progress' }, { opening: 'Start the webhook retries' });
+  R.pressOn('ntCreate');
+  await settle();
+  const started = filed.slice();
+  const landedOn = R.nav.replaced();
+
   draw('dark', [STUDIO, MINI], { project: 'quire' }, {});
-  R.pressOn('ntIceBox');
+  R.pressOn('ntCreate');
   await settle();
   const nothing = filed.slice();
 
   draw('dark', [STUDIO, MINI], { project: 'quire' }, { opening: 'Long one', sentences: LONG });
-  R.pressOn('ntIceBox');
+  R.pressOn('ntCreate');
   await settle();
   const over = filed.slice();
 
   checks.push(
-    ['Add to Ice Box files it into Ice Box, on the machine that has the product',
+    ['Create files divan.card.create into Ice Box by default, on the machine that has the product, with only the human face',
       eq(ice, [{ host: 'h1', card: { project_id: ON_STUDIO, title: 'Export client list as CSV',
                                      summary: 'Studios keep asking to download their list.',
-                                     column: 'ice_box' } }])],
-    ['…and leaves the phone on that column of that board',
-      eq(where, ['/dashboard?project=quire&tab=board&col=ice_box'])],
-    ['Queue it is the same card one column along, with no sentences written',
-      queued.length === 1 && queued[0].card.column === 'queued' && queued[0].card.summary === ''],
+                                     column: 'ice_box' } }])
+      && eq(where, ['/dashboard?project=quire&tab=board&col=ice_box'])],
+    ['…into Queued when that segment is chosen, and straight into In Progress on Start now',
+      chosen.into === 'queued' && queued.length === 1 && queued[0].card.column === 'queued'
+      && queued[0].card.summary === ''
+      && started.length === 1 && started[0].card.column === 'in_progress'
+      && eq(landedOn, ['/dashboard?project=quire&tab=board&col=in_progress'])],
     ['a card with no title is not filed',
       nothing.length === 0],
     ['what is in the box is what is filed, past the limit the line counts against',
@@ -352,7 +366,7 @@ async function pressed() {
   });
   R.params.set({ project: 'quire' });
   R.render('dark', h(NewTicket, { opening: 'Export client list as CSV' }));
-  R.pressOn('ntIceBox');
+  R.pressOn('ntCreate');
   await settle();
   checks.push(
     ['a machine that would not take the card leaves the phone on the page it was written on',

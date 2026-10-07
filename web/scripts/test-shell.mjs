@@ -134,7 +134,7 @@ const NOW = fixture.NOW;
 function styles(markup) {
   return [...markup.matchAll(/style="([^"]*)"/g)].map((m) => {
     const decl = {};
-    for (const pair of m[1].split(';')) {
+    for (const pair of m[1].replace(/&quot;/g, '"').split(';')) {
       const cut = pair.indexOf(':');
       if (cut > 0) decl[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
     }
@@ -159,7 +159,7 @@ function paint(markup) {
 
 /** A colour that belongs to what it is drawn on rather than to the page: white
  *  on a coloured square, a monogram's own hue. */
-const OWN = new Set([K.ON_COLOUR, ...K.MONOGRAM,
+const OWN = new Set([K.ON_COLOUR,
                      ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                      ...Object.values(K.MEDIA)]);
 
@@ -249,7 +249,7 @@ group('three places, and nothing beside them');
     && shell.MACHINE_ROWS.length === 8);
   ok('…the eight rows being the frame’s eight, in the frame’s order',
     eq(shell.MACHINE_ROWS.map((r) => r.label),
-      ['Machines', 'Executors', 'Terminals', 'Remote screen', 'Accounts & sign-ins',
+      ['Machines', 'Executors', 'Terminal', 'Remote screen', 'Accounts & sign-ins',
        'Quota thresholds', 'Admin', 'Settings']),
     shell.MACHINE_ROWS.map((r) => r.label).join(', '));
   ok('…and a page with no row of its own is drawn under the row it was opened from',
@@ -349,17 +349,18 @@ group('nothing was dropped in the move');
     view: 'overview', onView() {}, now: NOW, chips: null,
     dots: { chat: 'asking', machine: 'asking' }, onProject() {},
   }));
-  ok('…and the bar draws each on the place it belongs to',
-    styles(lit).filter((d) => d.width === '7px' && d.background === v('amber')).length === 2);
+  ok('…and the line draws each on the place it belongs to',
+    (lit.match(/dv-dot dv-dot--ask/g) ?? []).length === 2
+    && /Chats<\/span><i class="dv-dot dv-dot--ask"/.test(lit) && /Machine<\/span><i class="dv-dot dv-dot--ask"/.test(lit));
   seed({ hosts: { studio: withUpdate() }, order: ['studio'], focus: 'studio', ready: true });
   // The column, and not the screen beside it: the fleet panel on the right
   // draws dots of its own and counting those would say nothing.
   const column = renderToStaticMarkup(h(MachineUI.Machine, machineProps('machines', view('fresh'))))
-    .split('</nav>')[0];
-  ok('…and the Machine list draws them again on the page each is about',
-    /Terminals<\/span><span[^>]*>1</.test(column)
-    && styles(column).filter((d) => d.width === '7px' && d.background === v('amber')).length === 1,
-    `${styles(column).filter((d) => d.width === '7px').length} dots`);
+    .split('data-machine-page')[0];
+  ok('…and the Machine tabs draw them again on the tab each is about, and the pages under it',
+    /Terminal<i class="dv-dot dv-dot--ask"/.test(column) && /Machines<i class="dv-dot dv-dot--ask"/.test(column)
+    && /Update<\/span><i class="dv-dot dv-dot--ask"/.test(column),
+    column.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
 }
 
 group('what the panel offers, it can still do');
@@ -527,10 +528,10 @@ group('the page is scoped, not a second screen');
   const one = renderToStaticMarkup(h(OverviewUI.Overview, {
     view: fresh, project: D.project(fresh, 'quire'), onProject() {},
   }));
-  ok('unscoped, it is the page head and every product', all.includes('Overview')
+  ok('unscoped, it is the greeting and every product', /<h1 class="dv-greet">Good (morning|afternoon|evening)\.<\/h1>/.test(all)
     && all.includes('Quire') && all.includes('Hush'));
   ok('scoped, the head is the product and the aside is the machines it is on',
-    one.includes('Quire') && one.includes('studio · mini') && !one.includes('Hush'));
+    one.includes('Quire') && one.includes('runs on studio, mini') && !one.includes('Hush'));
   ok('…and it is the same screen rather than a second one',
     all !== one && one.length > 200 && all.length > 200);
   // The faces of a product are their own tab now. `done` in their numbers is
@@ -543,13 +544,13 @@ group('the page is scoped, not a second screen');
     faces.includes('Engineering') && faces.includes('open') && faces.includes('done')
     && faces.includes('>3<'),
     faces.slice(faces.indexOf('Branches'), faces.indexOf('Branches') + 300));
-  ok('…and which states it is in, as characters and not only as colour',
-    ['■', '?', '●'].every((c) => faces.includes(c)));
+  ok('…and which states its cards are in, as words and not only as colour',
+    ['asking', 'stuck'].every((w) => one.includes(`</i>${w}</span>`)));
   // …and the page you land on is the other question: what is happening on the
   // product and how it got here, with no grid of faces on it.
-  ok('the product page is what is happening on it and what it has been through',
-    one.includes('Right now') && one.includes('Timeline')
-    && !one.slice(one.indexOf('Right now')).includes('Engineering'));
+  ok('the product page is its board in four numbers, its branches and what it has been through, with no stage rail',
+    one.includes('In progress now') && one.includes('Timeline') && one.includes('Branches')
+    && !one.includes('dv-stage'));
   ok('a page built partly out of a quiet machine says how old it is',
     renderToStaticMarkup(h(OverviewUI.Overview, { view: view('stale'), project: null, onProject() {} }))
       .includes('quiet for'));
@@ -601,9 +602,9 @@ group('the page is scoped, not a second screen');
     // markup: a scoped page carries the word "Overview" now, as the first of
     // the tabs over a product (Web12 W2), and what must not be the Dashboard's
     // is the head.
-    const pageHead = (m) => (m.match(/font-size:28px[^>]*>([^<]*)</) ?? [, null])[1];
+    const pageHead = (m) => (m.match(/data-project-head="">([^<]*)</) ?? m.match(/font-size:28px[^>]*>([^<]*)</) ?? [, null])[1];
     ok('the panel opened at a product reads that product, and without one reads them all',
-      pageHead(scoped) === 'Quire' && pageHead(whole) === 'Overview' && whole.includes('Hush'),
+      pageHead(scoped) === 'Quire' && /class="dv-greet"/.test(whole) && whole.includes('Hush'),
       `${pageHead(scoped)} vs ${pageHead(whole)}`);
   }
 
@@ -616,74 +617,37 @@ group('the page is scoped, not a second screen');
 
 // ── 6 · the bar is the design system’s, in both themes ─────────────────────
 
-group('the bar is built out of the parts');
+group('the line over every page');
 {
-  const bar = renderToStaticMarkup(h(ShellUI.Shell, {
-    view: 'overview', onView() {}, now: NOW,
-    chips: shell.chips(view('fresh'), 'quire'), onProject() {},
+  const fresh = view('fresh');
+  const home = renderToStaticMarkup(h(ShellUI.Shell, { view: 'overview', onView() {}, fleet: fresh }));
+  const deep = renderToStaticMarkup(h(ShellUI.Shell, {
+    view: 'overview', onView() {}, fleet: fresh, back: { label: 'Dashboard', onBack() {} },
   }));
-  const s = styles(bar);
-  ok('the bar is the height the frames draw, on their own hairline',
-    s.some((d) => d.height === `${K.SIZE.topBar}px` && d['border-bottom'] === `1px solid ${v('line')}`));
-  // The wordmark was `divan` in 13 pt mono — the product's own name set at the
-  // size of a caption. It is a mark and a name now, and the name is set the way
-  // a name is: the page-title weight and tracking, big enough to be the thing
-  // you read first in the bar.
-  ok('…and opens on the mark with the name beside it', bar.includes('Divan')
-    && bar.includes('<svg') && !/>divan</.test(bar)
-    && s.some((d) => d['font-size'] === '19px' && d['font-weight'] === '600'
-      && d['letter-spacing'] === '-.02em'));
-  ok('…and the mark is drawn in the ink around it, so one file is both themes',
-    /<svg[^>]*fill="currentColor"/.test(bar));
-  ok('the three places are nav items at the frames’ own height and corner',
-    s.filter((d) => d.height === `${K.SIZE.navItem}px`
-      && d['border-radius'] === `${K.RADIUS.nav}px`).length === 3);
-  ok('…the one you are in filled with the second surface, the others in the meta grey',
-    s.filter((d) => d.height === '34px' && d.background === v('s2')).length === 1
-    && s.filter((d) => d.height === '34px' && d.color === v('ink3')).length === 2);
-  // A glyph is named in the shell's own lists and drawn from the icon table, so
-  // a name that never became a path draws an empty `<path d="grid">` and a
-  // reading of the source cannot tell. This is the drawing, measured.
-  ok('…each with its glyph actually drawn, at the frames’ 17 pt',
-    (bar.match(new RegExp(`<svg width="${K.SIZE.rowIcon}"[^>]*>\\s*<path d="[Mm][^"]{8,}"`, 'g')) ?? [])
-      .length >= 3,
-    (bar.match(/<path d="[^"]*"/g) ?? []).slice(0, 4).join(' '));
-  ok('the rule between the places and the chips is the frames’ own',
-    s.some((d) => d.width === '1px' && d.height === '22px' && d.background === v('line2')));
-  ok('the chips are pills, the chosen one filled with the ink',
-    s.filter((d) => d.height === `${K.SIZE.pill}px` && d['border-radius'] === '16px').length === 3
-    && s.some((d) => d.background === v('ink') && d.color === v('bg')));
-  ok('…and each carries the dot that says how its product is doing',
-    s.filter((d) => d.width === '7px' && d.height === '7px').length === 3);
-  ok('the far end is the clock and the switch, and the clock is to the minute',
-    /[A-Z][a-z]{2} \d+ [A-Z][a-z]{2,4} · \d\d:\d\d/.test(bar)
-    && s.some((d) => d.height === `${K.SIZE.barChip}px` && d['border-radius'] === '9px'));
-
-  ok('nothing in the bar is a colour of its own',
-    [...paint(bar).literal].every((c) => OWN.has(c)), [...paint(bar).literal].join(', '));
-  ok('…and every colour it names exists in both themes',
-    [...paint(bar).vars].every((n) => K.DARK[n] !== undefined && K.LIGHT[n] !== undefined));
-
-  // Over the Machine place the frames draw no chips: that bar ends in what the
-  // fleet is doing instead.
-  const machineBar = renderToStaticMarkup(h(ShellUI.Shell, {
-    view: 'terminal', onView() {}, now: NOW, chips: null, onProject() {},
+  ok('it is the design system’s thin line, on every page', home.includes('class="dv-topline"')
+    && deep.includes('class="dv-topline"'));
+  ok('on the Dashboard it opens on the word, and anywhere else on the way back',
+    />divan<\/a>/.test(home) && !home.includes('dv-back')
+    && deep.includes('aria-label="Back to Dashboard"') && !/>divan<\/a>/.test(deep));
+  ok('the right end counts the machines that answered out of the ones paired',
+    new RegExp(`<b>${fresh.totals.reachable}/${fresh.totals.machines}</b><span class="sys-word"> machines`).test(home));
+  ok('…and the place buttons are Chats and Machine, with no project chips beside them',
+    home.includes('Chats') && home.includes('Machine') && !home.includes('Quire'));
+  const noQuota = renderToStaticMarkup(h(ShellUI.Shell, {
+    view: 'overview', onView() {}, fleet: { ...fresh, quota: { ...fresh.quota, left: null, unknown: true } },
   }));
-  ok('the chips are over the Dashboard and not over the Machine pages',
-    !machineBar.includes('Quire') && machineBar.includes('Machine'));
-
-  ok('the shell and its pages are composed of the parts and spell no style of their own',
-    ['src/components/Shell.tsx', 'src/screens/Overview.tsx', 'src/screens/Machine.tsx']
-      .every((f) => /from '\.\.\/ui\/divan'/.test(src(f)))
-    && !['src/components/Shell.tsx', 'src/screens/Overview.tsx', 'src/screens/Machine.tsx']
-      .some((f) => COLOUR.test(src(f).replace(/\/\*[\s\S]*?\*\//g, ''))));
-  ok('the parts the bar is made of are parts, in the module the screens share',
-    ['TopBar', 'NavItem', 'BarDivider', 'BarChip', 'BarStamp']
-      .every((p) => new RegExp(`export function ${p}\\(`).test(src('src/ui/divan.tsx')))
-    && ['TopBar', 'NavItem', 'BarDivider', 'BarChip', 'BarStamp']
-      .every((p) => typeof parts[p] === 'function'));
-  ok('…and the gallery draws the bar, so it can be held up against the frame',
-    /name: 'TopBar'/.test(src('scripts/divan-gallery.tsx')));
+  const low = renderToStaticMarkup(h(ShellUI.Shell, {
+    view: 'overview', onView() {}, fleet: { ...fresh, quota: { ...fresh.quota, left: 0.1, unknown: false } },
+  }));
+  const ample = renderToStaticMarkup(h(ShellUI.Shell, {
+    view: 'overview', onView() {}, fleet: { ...fresh, quota: { ...fresh.quota, left: 0.64, unknown: false } },
+  }));
+  ok('a quota nothing measured draws no ring and no number', !noQuota.includes('dv-ring'));
+  ok('a measured one is the ring and its figure, amber with the word under the line',
+    /dv-ring"[^>]*--p:64%/.test(ample) && ample.includes('<b>64%</b>') && !ample.includes('dv-ring--low')
+    && low.includes('dv-ring dv-ring--low') && />low</.test(low));
+  ok('the line draws no colour of its own', !COLOUR.test(src('src/components/Shell.tsx')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/const [A-Z]+ = '[^']*';/g, '')));
 }
 
 // ── 7 · the switch ─────────────────────────────────────────────────────────
@@ -692,14 +656,12 @@ group('the switch changes the theme and nothing else');
 {
   K.setThemeChoice('dark');
   const dark = renderToStaticMarkup(h(ShellUI.ThemeSwitch));
-  ok('in the dark it offers the light one', dark.includes('Light')
-    && dark.includes('Switch to the light theme'));
+  ok('in the dark it offers the light one', dark.includes('Switch to the light theme'));
   ok('…and it is on the document before anything else happens',
     env.html.dataset.theme === 'dark');
   K.setThemeChoice('light');
   const light = renderToStaticMarkup(h(ShellUI.ThemeSwitch));
-  ok('in the light it offers the dark one', light.includes('Dark')
-    && light.includes('Switch to the dark theme'));
+  ok('in the light it offers the dark one', light.includes('Switch to the dark theme'));
   ok('…and the document says so, with no reload anywhere in the shell',
     env.html.dataset.theme === 'light'
     && !['src/components/Shell.tsx', 'src/App.tsx', 'src/lib/theme.ts']
@@ -789,9 +751,9 @@ group('every screen renders with nothing, with something stale and with a machin
     MachineUI.machineNote(view('unreachable')).includes('mini cannot be reached')
     && MachineUI.machineNote(view('fresh')).includes('all reachable')
     && MachineUI.machineNote(view('alone')).includes('No computer'));
-  ok('…and marks the row it is under',
-    anyStyle(drawn['unreachable dark Machine › Machines'],
-      (d) => (d.border ?? '').includes(v('amber')) && d.width === '7px'));
+  ok('…and marks the tab it is under in red, with the word',
+    /Machines<i class="dv-dot dv-dot--stuck"[^>]*><\/i><span class="dv-hidden">unreachable/
+      .test(drawn['unreachable dark Machine › Machines'] ?? ''));
 
   // The whole panel, with the shell around it: the one render that proves the
   // three places, the bar and the pages are wired to each other rather than
@@ -803,9 +765,9 @@ group('every screen renders with nothing, with something stale and with a machin
   catch (e) { ok('the panel stands up with the shell around it', false, e.message.slice(0, 200)); }
   if (app) {
     ok('the panel stands up with the shell around it', app.length > 500);
-    ok('…and opens on the Dashboard, with the bar over it',
-      app.includes('Divan') && app.includes('Dashboard') && app.includes('Chat')
-      && app.includes('Machine') && app.includes('Overview'));
+    ok('…and opens on the Dashboard, with the line over it',
+      />divan<\/a>/.test(app) && app.includes('Chats') && app.includes('Machine')
+      && app.includes('class="dv-greet"'));
     ok('…and paints nothing of its own', [...paint(app).literal].every((c) => OWN.has(c)),
       [...paint(app).literal].join(', '));
   }

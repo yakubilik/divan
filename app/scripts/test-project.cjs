@@ -66,6 +66,7 @@ const project = (name, o = {}) => ({
   repos: o.repos || [], sort: 0, archived: false, created_at: 0, updated_at: o.updated_at || NOW - 60,
   branches: o.branches || [], counts: o.counts || {},
   running: o.running || 0, waiting: o.waiting || 0, summary_line: '',
+  stage: o.stage || '', milestones: o.milestones || [],
 });
 const card = (id, o = {}) => ({
   id, project_id: o.project, branch_id: `${o.branch || 'engineering'}-id`, branch: o.branch || 'engineering',
@@ -95,6 +96,7 @@ const paired = (id, name, o) => ({ id, name, state: { snapshot: o.snapshot ?? nu
  *  written a few minutes ago, its Customers summary three days ago. */
 const QUIRE = project('Quire', {
   kind: 'SaaS', summary: 'client portals for studios', repos: ['/r/quire', '/r/quire-web'],
+  stage: 'live', milestones: [{ id: 'm-live', at: Date.UTC(2026, 0, 4) / 1000, title: 'Live', note: '', kind: 'live' }],
   running: 2, waiting: 2, counts: { ice_box: 11, queued: 4, in_progress: 5, done: 48 },
   branches: [
     branch('engineering', 'Engineering', { summary: 'v3.18 deployed, Safari login still red',
@@ -756,76 +758,37 @@ for (const scheme of ['dark', 'light']) {
   const inked = (m, colour) => R.styles(m).some((s) => s.color === colour);
 
   checks.push(
-    // V4: the product, the two lines, the branches.
-    [`${scheme}: the page is the product’s own: its name, what it is, and its monogram`,
+    [`${scheme}: the head is the monogram, the name, the stage as a word in the meta line and the one sentence under it`,
       page.includes('>Quire<') && page.includes('SaaS · client portals for studios')
+      && page.includes('pjSince') && page.includes('pjRunsOn')
       && R.styles(page).some((s) => s.width === 44 && s.height === 44)],
-    [`${scheme}: …inside the place it is a page of, with the project bar still on it`,
-      page.includes('allProjects') && page.includes('tabDashboard')],
-    [`${scheme}: what is happening now, and what is waiting, are two labelled lines`,
-      page.includes('>prNow<') && page.includes('>prWaiting<')
-      && page.includes('prNowMany') && page.includes('prWaitMany')],
-    [`${scheme}: …the second in the colour of the worst thing on it`, inked(page, t.red)],
-    [`${scheme}: every branch is a card, under a count of them`,
+    [`${scheme}: …inside the place it is a page of, with the way back to every project on the line over it`,
+      page.includes('tabDashboard') && page.includes('cmBackTo')],
+    [`${scheme}: the segment is Overview, Board and Chats`,
+      page.includes('>overview<') && page.includes('>bdBoard<') && page.includes('>pjChats<')],
+    [`${scheme}: the board is four numbers off the columns, with In progress now under them in status words`,
+      ['>bdIceBox<', '>bdQueued<', '>bdInProgress<', '>bdDone<'].every((w) => page.includes(w))
+      && page.includes('>stRunning<')],
+    [`${scheme}: every branch is a row under a count of them; one nothing feeds says so and shows no number`,
       page.includes('>branches<') && page.includes('>5<')
-      && ['Engineering', 'SEO', 'Analytics', 'Marketing', 'Customers']
-        .every((name) => page.includes(`>${name}<`))],
-    [`${scheme}: …each with its line of status: its own summary, or the worst card's line`,
-      page.includes('v3.18 deployed') && page.includes('Pages 9 of 14 rewritten')
-      && page.includes('Pricing test read-out')],
-    [`${scheme}: …its numbers, in the board’s own counts`,
-      page.includes('>9<') && page.includes('>31<') && page.includes('>bnOpen<')
-      && page.includes('>bnProgress<') && page.includes('>bnDone<')],
-    [`${scheme}: …and when it last refreshed, in amber once that is a day ago`,
-      page.includes('>bnYesterday<') && page.includes('bnDaysOld') && inked(page, t.amber)],
-    // S4: the same page, another product's numbers, and a two-number card.
-    [`${scheme}: another product draws the same slots with its own numbers`,
+      && ['Engineering', 'SEO', 'Analytics', 'Marketing', 'Customers'].every((name) => page.includes(`>${name}<`))
+      && page.includes('>pjNotConnected<')],
+    [`${scheme}: another product draws the same page with its own numbers`,
       four.includes('>Kanji Daily<') && four.includes('iOS · Android · five kanji a day')
-      && four.includes('Android build green again') && four.includes('prNowOne')],
-    [`${scheme}: …and a branch nobody has put a card on draws no numbers at all`,
-      // Four branches, two of them with cards: two cards carry numbers, one of
-      // those has something in progress, and the other two say so in words.
-      four.includes('>Marketing<') && four.includes('branchNoSource')
-      && (four.match(/>bnOpen</g) ?? []).length === 2
-      && (four.match(/>bnDone</g) ?? []).length === 2
-      && (four.match(/>bnProgress</g) ?? []).length === 1],
-    // S5: the product that has stopped.
-    [`${scheme}: a product nothing has touched in weeks says so where the two lines were`,
-      asleep.includes('prQuietTitle') && asleep.includes('prQuietBodyCards')
-      && !asleep.includes('>prNow<') && !asleep.includes('prNowIdle')],
-    [`${scheme}: …and still draws its branches, the old ones faintly`,
-      asleep.includes('>SEO<') && R.styles(asleep).some((s) => s.opacity === 0.8)],
-    // S6: the product whose board is empty.
-    [`${scheme}: a brand-new product is a designed state and not an empty page`,
-      fresh.includes('>prNewTitle<') && fresh.includes('prNewBody')
-      && fresh.includes('>prNewFoot<')],
-    [`${scheme}: …which keeps its structure by naming the branches it already has`,
-      // The words themselves are checked above, where the table is not a stub:
-      // what is checked here is that the page asks for that line and not the
-      // one a product with no branches gets.
-      fresh.includes('prNewBody') && !fresh.includes('prNewBodyBare')],
-    [`${scheme}: …and draws no number, no branch card and no zero`,
-      !fresh.includes('>bnOpen<') && !fresh.includes('>bnDone<') && !fresh.includes('>0<')],
-    [`${scheme}: …and says in mono what will not happen without a person`,
-      /prNewFoot/.test(fresh) && /mono/.test(src('src/components/text.tsx'))],
-    // A machine that has gone quiet, on a product that lives there.
+      && (four.match(/>pjNotConnected</g) ?? []).length === 2],
+    [`${scheme}: a product nothing has touched in weeks says so`,
+      asleep.includes('prQuietTitle') && asleep.includes('prQuietBodyCards')],
+    [`${scheme}: a brand-new product is a designed state and not an empty page, with no number in place of the cards`,
+      fresh.includes('>prNewTitle<') && fresh.includes('prNewBody') && !fresh.includes('prNewBodyBare')
+      && !fresh.includes('>bnOpen<')],
     [`${scheme}: a product with a quiet machine under it says which, and how old this is`,
-      quiet.includes('prStale') && quiet.includes('prNowUnknownOne')],
-    // …and the mixed case, drawn: one machine spent, one working, one product.
-    // (The titles themselves are parameters, which the render's string table is
-    // a stub for; that the named agent is the working one is checked where the
-    // words are, in section 2.)
-    [`${scheme}: a stopped agent and a running one are both on the page, the stopped one first`,
-      mixed.includes('prNowPausedOne') && mixed.includes('prNowOne')
-      && mixed.indexOf('prNowPausedOne') < mixed.indexOf('prNowOne')],
-    [`${scheme}: …and the label in front of them is the colour of the worse of the two`,
-      styleOf(mixed, 'prNow').color === t.red
-      && styleOf(page, 'prNow').color === t.run
-      && styleOf(quiet, 'prNow').color === t.amber],
+      quiet.includes('prStale')],
+    [`${scheme}: the colour on the page is a state with its word beside it`,
+      inked(mixed, t.ink) && !/backdropFilter/.test(src('app/dashboard.tsx'))],
     [`${scheme}: every state this page can be in renders`,
       Object.entries(PAGES).every(([, [hosts, key]]) => {
         const markup = draw(scheme, hosts, key);
-        return markup.includes('tabDashboard');
+        return /tabDashboard|>divan</.test(markup);
       })],
   );
 }
@@ -841,7 +804,7 @@ for (const scheme of ['dark', 'light']) {
   for (const scheme of ['dark', 'light']) {
     const tok = K.tokensFor(scheme);
     const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR,
-                         ...K.MONOGRAM, ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
+                         ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                          K.EXEC_PENDING_INK, K.EXEC_PENDING_LINE, 'transparent']);
     const strayed = new Set();
     const every = [...Object.values(PAGES).map(([hosts, key]) => () => draw(scheme, hosts, key)),
@@ -908,15 +871,12 @@ for (const scheme of ['dark', 'light']) {
     found[0].press();
     return R.render('dark', h(Dashboard));
   };
-  const viaChip = enter((p) => p.text === 'Quire');
-  const viaCard = enter((p) => p.text.startsWith('Quire') && p.text.includes('pcStuck'));
+  const viaTile = enter((p) => p.label === 'Quire');
   checks.push(
-    ['tapping a product in the project bar opens its page, and nothing is pushed',
-      viaChip.includes('>Quire<') && viaChip.includes('>prNow<') && eq(R.nav.pushed(), [])],
-    ['…and its card on the Dashboard is the other way to the same page',
-      viaCard.includes('>Quire<') && viaCard.includes('>branches<')],
-    ['…and the way back out is the All chip, which is on the page',
-      viaChip.includes('allProjects')],
+    ['tapping a product’s tile opens its page, and nothing is pushed',
+      viaTile.includes('>Quire<') && viaTile.includes('>bdBoard<') && eq(R.nav.pushed(), [])],
+    ['…and the way back out is the line’s left end, which is on the page',
+      R.presses().some((p) => p.label === 'cmBackTo')],
     ['nothing on the page leads to a screen that is about a computer',
       !/'\/host-sheet'|'\/pool'|'\/accounts'|'\/screen'|'\/agents'/.test(src('app/dashboard.tsx'))],
   );
@@ -1060,23 +1020,23 @@ for (const scheme of ['dark', 'light']) {
     const quiet = drawBranch(scheme, [MINI], 'kanji-daily', 'engineering');
     /** Which of the page's blocks are in this markup, in the order they appear.
      *  The log's heading is singular or plural by what ran (`logTitle`). */
-    const at = (m, k) => (k === 'bpLog' ? Math.max(m.indexOf('>bpLog<'), m.indexOf('>bpLogMany<'))
-      : m.indexOf(`>${k}<`));
-    const order = (m) => ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'bpLog', 'bpTickets']
+    const at = (m, k) => m.indexOf(`>${k}<`);
+    const order = (m) => ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'brTickets', 'brDid']
       .filter((k) => at(m, k) >= 0)
       .sort((a, b) => at(m, a) - at(m, b));
 
     checks.push(
       [`${scheme}: S10 and S11 are one page: the same blocks, in the same order`,
-        eq(order(generic), ['bpOverTime', 'bpLog', 'bpTickets'])
-        && eq(order(densest), ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'bpLog', 'bpTickets'])
+        eq(order(generic), ['brTickets', 'brDid'])
+        && eq(order(densest), ['bpRepos', 'bpCommits', 'bpPulls', 'brTickets', 'brDid'])
         && ['>SEO<', '>Quire<', 'Pages 9 of 14 rewritten'].every((x) => generic.includes(x))
         && ['>Engineering<', '>Quire<', 'v3.18 deployed'].every((x) => densest.includes(x))],
       [`${scheme}: \u2026over the same numbers, which are the board\u2019s own counts`,
         [['>4<', '>bnOpen<'], ['>12<', '>bnDone<']].every(([n, l]) => generic.includes(n) && generic.includes(l))
         && ['>9<', '>3<', '>31<', '>bnProgress<'].every((x) => densest.includes(x))],
-      [`${scheme}: the one block with no source says so where it would have been`,
-        generic.includes('>bpOverTimeBody<') && densest.includes('>bpOverTimeBody<')],
+      [`${scheme}: the sentence under the title says how long ago it was true, and no chart nothing feeds is drawn`,
+        /brUpdated(Now)?/.test(generic) && /brUpdated(Now)?/.test(densest)
+        && !generic.includes('>bpOverTimeBody<') && !densest.includes('>bpOverTimeBody<')],
       [`${scheme}: Engineering lists what is open on the branch and the checks failing on it`,
         ['>bpPulls<', '>#410<', 'GBP price localisation', '>bpChecksFailing<', '>bpChecksPassing<',
          '>bpChecksPending<', 'bpDraft<'].every((x) => densest.includes(x))
@@ -1091,9 +1051,9 @@ for (const scheme of ['dark', 'light']) {
             && !none.includes('>#410<') && !gap.includes('>#410<');
         })()],
       [`${scheme}: a branch nothing writes to says so, and draws no number nobody counted`,
-        unused.includes('>branchNoSource<') && unused.includes('>bpBareTitle<')
+        unused.includes('>brNoSource<')
         && !unused.includes('>bnOpen<') && !unused.includes('>bnDone<')
-        && !unused.includes('>bpTickets<') && !unused.includes('>bpLog<')],
+        && !unused.includes('>brTickets<') && !unused.includes('>brDid<') && !unused.includes('>bpRepos<')],
       [`${scheme}: Engineering lists the repositories the product owns and what landed in them`,
         ['>quire<', '>quire-web<', '>bpCommits<', '>bnAt<', '>bpLandedToday<'].every((x) => densest.includes(x))
         && !generic.includes('>quire-web<')],
@@ -1109,7 +1069,7 @@ for (const scheme of ['dark', 'light']) {
         && R.styles(quiet).some((s2) => s2.color === K.tokensFor(scheme).amber)],
       [`${scheme}: every state of the page renders, inside the place it is a page of`,
         Object.values(BRANCHES).every(([hosts, key, kind]) =>
-          drawBranch(scheme, hosts, key, kind).includes('tabDashboard'))
+          /tabDashboard|>divan</.test(drawBranch(scheme, hosts, key, kind)))
         && drawBranch(scheme, [STUDIO], 'quire', 'design').includes('>bpGone<')
         && drawBranch(scheme, [], 'quire', 'engineering').includes('>bpGone<')],
     );

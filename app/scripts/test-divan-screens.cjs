@@ -176,7 +176,7 @@ const COLOUR = /#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|oklch\([^)]*\)/g;
 for (const scheme of ['dark', 'light']) {
   const tok = K.tokensFor(scheme);
   const own = new Set([...Object.values(tok), K.scrim(tok), K.veil(tok), K.ON_COLOUR, 'transparent',
-                       ...K.MONOGRAM, AGENT_COLOUR, `${AGENT_COLOUR}22`]);
+                       AGENT_COLOUR, `${AGENT_COLOUR}22`]);
   const strayed = new Set();
   const threw = [];
   const silent = [];
