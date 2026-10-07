@@ -7,7 +7,8 @@ import { ChatMenu } from './ChatMenu';
 import { ChatDetails } from './ChatDetails';
 import { LimitsRing } from './LimitsRing';
 import { contextUse, type ContextUse } from '../lib/machine';
-import { duration, shortPath, toolSummary } from '../lib/format';
+import { bareTitle, duration, shortPath } from '../lib/format';
+import { counted, doingNow, langOf } from '../lib/steps';
 import type { Field } from './FieldSheet';
 import type { Chat, Group, LimitWindow } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
@@ -40,7 +41,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
         <div style={{
           fontSize: 17, fontWeight: 600, whiteSpace: 'nowrap',
           overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{chat.title || 'New chat'}</div>
+        }} title={chat.title}>{bareTitle(chat.title, chat.cwd, chat.project)}</div>
         <div style={{
           fontSize: 12, color: C.mute, display: 'flex', alignItems: 'center', gap: 6, marginTop: 2,
         }}>
@@ -123,15 +124,12 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
     return () => clearInterval(t);
   }, []);
 
+  const lang = langOf(log.items);
   let started: number | null = null;
   let toolCount = 0;
-  let current: string | null = null;
   for (let i = log.items.length - 1; i >= 0; i--) {
     const it = log.items[i];
-    if (it.kind === 'tool') {
-      toolCount++;
-      if (!current && it.running) current = `${it.tool} ${toolSummary(it.tool, it.input)}`.trim();
-    }
+    if (it.kind === 'tool') toolCount++;
     if (it.kind === 'turn' || it.kind === 'error') break;
     started = it.ts;
   }
@@ -148,11 +146,11 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
         {started ? duration((now - started) * 1000) : '—'}
       </span>
       <span style={{
-        ...mono, fontSize: 12, color: C.text2, flex: 1, minWidth: 0,
+        fontSize: 13, color: C.text2, flex: 1, minWidth: 0,
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-      }}>{current ?? 'thinking…'}</span>
+      }}>{doingNow(log.items, lang)}</span>
       {toolCount > 0 && (
-        <span style={{ ...mono, fontSize: 12, color: C.mute, flexShrink: 0 }}>tool {toolCount}</span>
+        <span style={{ fontSize: 12, color: C.mute, flexShrink: 0 }}>{counted(toolCount, lang)}</span>
       )}
       <button
         type="button" onClick={onInterrupt}
@@ -287,7 +285,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
               <span className="dv-meta">filed under {filedUnder}</span>
             </div>
           )}
-          <Timeline items={log.items} hostKey={hostKey ?? ''} onRespond={onRespond} tickets={tickets} />
+          <Timeline items={log.items} hostKey={hostKey ?? ''} onRespond={onRespond} tickets={tickets} busy={busy} />
         </div>
       </div>
       {/* The same column the conversation reads in, so the box sits under it. */}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { C, R, SHADOW } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
-import { ago, uptime } from '../lib/format';
+import { ago, bareTitle, uptime } from '../lib/format';
 import { useFleet, type HostSlot } from '../lib/fleet';
 import { createGroup, deleteChat, deleteGroup, renameGroup, updateChat } from '../lib/actions';
 import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag, setSectionDrag } from '../lib/dnd';
@@ -355,8 +355,11 @@ function arrange(list: Section[], saved: string[]): Section[] {
 const NO_HOVER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches;
 const BIN = 28;
 
-function ChatRow({ chat, selected, onPick, onDrag, onDelete }: {
+function ChatRow({ chat, selected, onPick, onDrag, onDelete, under }: {
   chat: Chat; selected: boolean; onPick: () => void;
+  /** The project whose heading this row is read under, where it has one: the
+   *  title then leaves that name out and starts with what the chat is about. */
+  under?: string | null;
   /** Set where the row can be picked up and filed under another heading. */
   onDrag?: (dt: DataTransfer) => void;
   /** Asks before it deletes: the row only says which chat was meant. */
@@ -390,7 +393,7 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete }: {
         <div style={{
           fontSize: 14, fontWeight: 500, color: C.text, whiteSpace: 'nowrap',
           overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{chat.title || 'New chat'}</div>
+        }}>{under !== undefined ? bareTitle(chat.title, chat.cwd, under) : chat.title || 'New chat'}</div>
         <div style={{
           fontSize: 12, color: awaiting ? C.warn : C.mute, display: 'flex',
           alignItems: 'center', gap: 4, marginTop: 2, minWidth: 0,
@@ -801,6 +804,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                   onPick={() => onSelect(s.hostKey, c.id)}
                   onDrag={canGroup ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}
                   onDelete={() => setAsking({ what: 'delete-chat', hostKey: s.hostKey, id: c.id, name: c.title })}
+                  under={project ? c.project ?? null : s.kind === 'project' ? s.title : undefined}
                 />
               ))}
             </div>

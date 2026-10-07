@@ -7,6 +7,7 @@ import { Bubble, Prose, withSecrets } from './Bubble';
 import { Lightbox, type Shot } from './Lightbox';
 import { fileUrl } from '../lib/actions';
 import { filedBy, type Filed } from '../lib/filed';
+import { blocks, counted, langOf, tell, type Lang, type Step } from '../lib/steps';
 
 const OK_BG = C.okBg;
 const BAD_BG = C.dangerBg;
@@ -450,19 +451,15 @@ function CardLink({ filed, link }: { filed: Filed; link: TicketLink }) {
   );
 }
 
-const Row = memo(function Row({ item, prevTs, hostKey, onRespond, link }: {
-  item: Item; prevTs: number | null; hostKey: string; onRespond: Respond; link: TicketLink | null;
+const Row = memo(function Row({ item, prevTs, hostKey, onRespond }: {
+  item: Exclude<Item, Step>; prevTs: number | null; hostKey: string; onRespond: Respond;
 }) {
-  const filed = link && item.kind === 'tool' && !item.isError ? filedBy(item.output) : null;
   const gap = prevTs == null || item.ts - prevTs > 1800;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {gap && <Divider ts={item.ts} />}
       {item.kind === 'user' && <UserBubble item={item} hostKey={hostKey} />}
       {item.kind === 'assistant' && <Assistant item={item} hostKey={hostKey} />}
-      {item.kind === 'thinking' && <Thinking item={item} />}
-      {item.kind === 'tool' && <Tool item={item} />}
-      {!!filed && !!link && <CardLink filed={filed} link={link} />}
       {item.kind === 'approval' && (
         <Approval item={item} onRespond={(d) => onRespond(item.requestId, d)} />
       )}
@@ -472,12 +469,67 @@ const Row = memo(function Row({ item, prevTs, hostKey, onRespond, link }: {
   );
 });
 
-export function Timeline({ items, hostKey, onRespond, tickets }: {
+/** Everything the agent did between two things it said, as one quiet line.
+ *
+ *  The sentence is `lib/steps.ts`; the cards it stands for are behind the
+ *  chevron. A card this run filed stays out in the open under the line: it is
+ *  a result, not a step.
+ *
+ *  Redrawn only when one of its own steps changed. The run is a new array on
+ *  every fold, so it is compared step by step: a streaming answer further
+ *  down must not re-diff forty cards a second.
+ */
+const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
+  steps: Step[]; live: boolean; lang: Lang; prevTs: number | null; link: TicketLink | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const told = tell(steps, live, lang);
+  const gap = prevTs == null || steps[0].ts - prevTs > 1800;
+  const filed = link ? steps.flatMap((s) => {
+    const f = s.kind === 'tool' && !s.isError ? filedBy(s.output) : null;
+    return f ? [f] : [];
+  }) : [];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-steps={steps.length}>
+      {gap && <Divider ts={steps[0].ts} />}
+      <button
+        type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '100%',
+          minHeight: 28, padding: '0 8px 0 0', background: 'transparent', border: 'none',
+          cursor: 'pointer', textAlign: 'left', color: C.mute, fontSize: 13, lineHeight: '19px',
+        }}
+      >
+        {live ? <Spinner size={13} /> : <Icon path={P.check} size={13} color={C.faint} width={2.6} />}
+        <span style={{
+          minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          color: live ? C.text2 : C.mute,
+        }}>{told.text}</span>
+        {told.count > 1 && (
+          <span style={{ flexShrink: 0, color: C.faint }}>· {counted(told.count, lang)}</span>
+        )}
+        <Icon path={open ? P.chevronDown : P.chevronRight} size={12} color={C.faint} />
+      </button>
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {steps.map((s) => (s.kind === 'tool' ? <Tool key={s.id} item={s} /> : <Thinking key={s.id} item={s} />))}
+        </div>
+      )}
+      {!!link && filed.map((f) => <CardLink key={f.id} filed={f} link={link} />)}
+    </div>
+  );
+}, (a, b) => a.live === b.live && a.lang === b.lang && a.prevTs === b.prevTs && a.link === b.link
+  && a.steps.length === b.steps.length && a.steps.every((s, i) => s === b.steps[i]));
+
+export function Timeline({ items, hostKey, onRespond, tickets, busy = false }: {
   items: Item[];
   hostKey: string;
   onRespond: Respond;
   /** Where a card this conversation filed is opened. Absent, no link is drawn. */
   tickets?: TicketLink | null;
+  /** A turn is running: the last run of steps is still going, even in the
+   *  moment between one tool finishing and the next one starting. */
+  busy?: boolean;
 }) {
   const ticketsNow = useRef(tickets);
   ticketsNow.current = tickets;
@@ -491,17 +543,26 @@ export function Timeline({ items, hostKey, onRespond, tickets }: {
   latest.current = onRespond;
   const respond = useCallback<Respond>((rid, d) => latest.current(rid, d), []);
 
+  const rows = useMemo(() => blocks(items), [items]);
+  const lang = useMemo(() => langOf(items), [items]);
+
   // `anywhere`, not `break-word`: a link or a path with no space in it has to
   // be allowed to break, or it is the width of the whole conversation and the
   // chat scrolls sideways under it.
+  let prevTs: number | null = null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0, overflowWrap: 'anywhere' }}>
-      {items.map((item, i) => (
-        <Row
-          key={item.id} item={item} hostKey={hostKey} onRespond={respond} link={link}
-          prevTs={i > 0 ? items[i - 1].ts : null}
-        />
-      ))}
+      {rows.map((b, i) => {
+        const before = prevTs;
+        if (b.kind === 'steps') {
+          prevTs = b.steps[b.steps.length - 1].ts;
+          const live = b.steps.some((s) => s.kind === 'tool' && s.running)
+            || (busy && i === rows.length - 1);
+          return <Steps key={b.id} steps={b.steps} live={live} lang={lang} prevTs={before} link={link} />;
+        }
+        prevTs = b.item.ts;
+        return <Row key={b.item.id} item={b.item} hostKey={hostKey} onRespond={respond} prevTs={before} />;
+      })}
     </div>
   );
 }

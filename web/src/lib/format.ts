@@ -108,3 +108,20 @@ export function toolSummary(tool: string, input: any): string {
   if (tool === 'Read' || tool === 'Edit' || tool === 'Write') return tilde(s);
   return tildeAll(s);
 }
+
+/** A chat's title without the project in front of it.
+ *
+ *  The computer puts the project first in every title (`with_project`), which
+ *  is what tells forty chats apart in one long list. Read under that project's
+ *  own heading it is the same word on every row, in the place the eye lands
+ *  first, and what the chat is about is what gets cut off.
+ */
+export function bareTitle(title: string | null | undefined, cwd: string, project?: string | null): string {
+  const text = (title || '').trim();
+  const cut = text.indexOf(' · ');
+  if (cut <= 0) return text || 'New chat';
+  const head = text.slice(0, cut).toLocaleLowerCase('tr');
+  const names = cwd.split(/[/\\]/).filter(Boolean).map((n) => n.toLocaleLowerCase('tr'));
+  if (project) names.push(project.toLocaleLowerCase('tr'));
+  return names.includes(head) ? text.slice(cut + 3).trim() || 'New chat' : text;
+}
