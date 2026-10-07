@@ -631,6 +631,89 @@ def snapshot(db, sessions, host_name: str = "this computer",
     return "\n\n".join(parts), order
 
 
+# ── a chat, on the phone ──────────────────────────────────────────────────────
+# A call made from inside a chat is not the concierge: each utterance is an
+# ordinary turn of that chat, sent and stored the way a typed message is. The
+# reply stays whole in the transcript; only what is read aloud is cut down.
+#
+# Cut down by trimming, not by a second model turn. A summarising turn would
+# cost seconds the caller spends in silence, would have to run on some account
+# (the chat's own, which a call must not spend behind its back, or another one
+# the chat never chose), and could say something the reply did not. The front of
+# a reply is where an agent puts the answer, so the first sentences of its prose
+# — with the code, tables, paths and links taken out — are the spoken form.
+SPOKEN_REPLY_CHARS = 260
+
+_FENCE = re.compile(r"```.*?(?:```|\Z)", re.S)
+_TABLE_ROW = re.compile(r"^\s*\|.*$", re.M)
+_INLINE_CODE = re.compile(r"`[^`\n]*`")
+_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*?)\s*$", re.M)
+_HOLE = "\x00"
+
+_REPLY_LINES = {
+    "tr": {"rest": "Gerisi sohbette.", "only": "Cevabı sohbete yazdım."},
+    "en": {"rest": "The rest is in the chat.", "only": "I wrote the answer in the chat."},
+}
+
+
+def _reply_lang(text: str, lang: str | None) -> str:
+    code = (lang or "").split("-")[0].lower()
+    if code in _REPLY_LINES:
+        return code
+    return "tr" if _is_turkish(text) else "en"
+
+
+def spoken_reply(text: str | None, lang: str | None = None) -> str:
+    """What a chat call reads aloud of a reply: all of it when it is short
+    prose, otherwise its first sentences and a word that the rest is written.
+
+    Never a code block, a table, an inline command, a path or a URL — those are
+    dropped before anything is counted, so a reply that is mostly code is
+    "the answer is in the chat" rather than a voice spelling out a diff."""
+    raw = (text or "").strip()
+    words = _REPLY_LINES[_reply_lang(raw, lang)]
+    if not raw:
+        return ""
+    prose = _FENCE.sub("\n\n", raw)
+    prose = _TABLE_ROW.sub("", prose)
+    dropped = prose != raw
+    # Inline code, links and paths leave a hole the sentence around them cannot
+    # be read with ("I changed  and added a test"), so they mark it instead,
+    # and a marked sentence is left to the transcript.
+    marked = _PATHISH.sub(_HOLE, _URL.sub(_HOLE, _INLINE_CODE.sub(_HOLE, prose)))
+    # A list item is a sentence to the ear, so it ends like one.
+    marked = _LIST_ITEM.sub(lambda m: m.group(1) + ("" if m.group(1)[-1:] in ".!?:…" else "."), marked)
+    marked = _trim(re.sub(r"[`*_#>]", "", marked), 10_000)
+    sentences = [p for p in _SENTENCE.split(marked) if p.strip()]
+    whole = [p for p in sentences if _HOLE not in p]
+    dropped = dropped or len(whole) < len(sentences)
+    prose = " ".join(whole)
+    prose = re.sub(r"\s+", " ", prose)
+    prose = re.sub(r"\s+([.,;:!?])", r"\1", prose)
+    prose = re.sub(r"([.,;:!?])\1+", r"\1", prose).strip(" ,;:")
+    if not re.search(r"\w", prose):
+        return words["only"]
+    said = clip(prose)
+    if len(said) > SPOKEN_REPLY_CHARS:
+        said = said[:SPOKEN_REPLY_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+    if said != prose or dropped:
+        said = f"{said.rstrip()} {words['rest']}"
+    return said
+
+
+def last_reply(db, chat_id: str) -> str:
+    """The newest assistant message of the newest turn, or "" if that turn has
+    not said anything. The last message rather than all of them: what an agent
+    says before its tools ("let me look") is not the answer."""
+    for e in db.tail_events(chat_id, ("message.user", "message.assistant"), limit=40):
+        if e["event"] == "message.user":
+            return ""
+        text = (e["data"] or {}).get("text")
+        if text:
+            return text
+    return ""
+
+
 # ── what it can actually do ───────────────────────────────────────────────────
 # The concierge started out able only to describe. That is the safe shape, and
 # it is the wrong one: being told the build is stuck and being unable to say
