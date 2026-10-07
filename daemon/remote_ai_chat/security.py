@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import shlex
+import tempfile
 import time
 from contextvars import ContextVar
 from pathlib import Path
@@ -63,6 +64,7 @@ _READS = {"cat", "head", "tail", "less", "grep", "egrep", "fgrep", "rg", "ls", "
           "file", "cut", "sort", "uniq", "diff", "du", "jq", "awk", "nl", "tr", "tree",
           "echo", "printf", "test", "[", "readlink", "realpath", "basename", "dirname",
           "shasum", "md5", "xxd", "strings", "cd", "pwd"}
+_SINKS = {"/dev/null", "/dev/stdout", "/dev/stderr"}
 
 
 def _tokens(cmd: str) -> list[str]:
@@ -162,6 +164,15 @@ def _inside(p: Path, root: Path) -> bool:
     return root in p.parents
 
 
+# Scratch space: a chat clears what it put in /tmp all evening (7 Oct 2026).
+# Emptying the folder itself still asks.
+_SCRATCH = {Path(os.path.realpath(d)) for d in ("/tmp", tempfile.gettempdir())}
+
+
+def _scratch(p: Path) -> bool:
+    return any(_inside(p, d) for d in _SCRATCH)
+
+
 def _rm_reason(args: list[str], root: Path, here: Path | None) -> str | None:
     short, long, targets = _flags(args)
     if not ({"r", "R"} & short or "--recursive" in long):
@@ -178,7 +189,7 @@ def _rm_reason(args: list[str], root: Path, here: Path | None) -> str | None:
         p = _resolve(t, here)
         if p is None:
             return f"rm -r of a path that cannot be resolved: {t}"
-        if not (_inside(p, root) or (p == root and not whole)):
+        if not (_inside(p, root) or (p == root and not whole) or _scratch(p)):
             if p == root:
                 return "rm -r of the chat's whole folder"
             return f"rm -r outside the chat's folder: {p}"
@@ -215,7 +226,7 @@ def _find_reason(args: list[str], root: Path, here: Path | None) -> str | None:
         i += 1
     for t in paths or ["."]:
         p = _resolve(t, here)
-        if p is None or not (p == root or _inside(p, root)):
+        if p is None or not (p == root or _inside(p, root) or _scratch(p)):
             return f"find … -delete outside the chat's folder: {t}"
     return None
 
@@ -249,6 +260,8 @@ def _daemon_home_reason(name: str, words: list[str], args: list[str], here: Path
     """
     if not name or _reads_only(name, args):
         return None
+    if len(words) == 1 and (words[0].isdigit() or words[0] in _SINKS):
+        return None     # the far side of `2>&1` or `> /dev/null`, not a file here
     hit = next((w for w in words if _DAEMON_HOME.search(w)), None)
     if hit is None and here is not None and _DAEMON_HOME.search(str(here)):
         hit = str(here)
