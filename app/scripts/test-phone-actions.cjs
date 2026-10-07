@@ -33,7 +33,7 @@ const confirm = async () => {
   return true;
 };
 
-const METHODS = ['installAgent', 'createAccount', 'renameAccount', 'logoutAccount', 'deleteAccount', 'installTool', 'removeAgent',
+const METHODS = ['setPrefs', 'authenticate', 'installAgent', 'createAccount', 'renameAccount', 'logoutAccount', 'deleteAccount', 'installTool', 'removeAgent',
   'setPool', 'setDefaults', 'updateChat', 'deleteChat', 'createChat', 'setDevicePrefs', 'switchHost', 'removeHost',
   'createGroup', 'renameGroup', 'deleteGroup', 'setShowArchived', 'checkUpdate', 'applyUpdate', 'refreshHost'];
 let calls = [];
@@ -182,6 +182,15 @@ const ready = (async () => {
 
   // Software update, an agent from the store, the model sheet, and the way to
   // move a sign-in over from another computer.
+  screen('settings.tsx');
+  await press((p) => p.label === 'Face ID on launch');
+  const on = made('setPrefs', (p) => p.faceIdLaunch === true);
+  screen('settings.tsx');
+  R.store.set({ prefs: { chatView: 'flat', voiceIds: {}, faceIdLaunch: true } });
+  R.render('dark', h(require(path.join(root, 'app/settings.tsx')).default, {}));
+  await press((p) => p.label === 'Face ID on launch');
+  const off = made('authenticate') && made('setPrefs', (p) => p.faceIdLaunch === false);
+  checks.push(['phone: Face ID on launch is written with setPrefs, and turning it off asks Face ID first', on && off]);
   screen('settings.tsx');
   await press('Update now');
   const updated = made('applyUpdate');
