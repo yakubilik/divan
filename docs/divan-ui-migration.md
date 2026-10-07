@@ -21,6 +21,14 @@ The daemon calls are the same set on both branches: a grep of the request types 
 `web/src`, `app/src` and `app/app` gives the same 74 names on `main` and on `divan-ui`,
 and every web screen and component that `main` mounts is still mounted.
 
+`main` moved on while `divan-ui` was being built. The merge (ustabasi #136) carried three
+things over that the frames do not draw, each marked "(main, …)" in the tables: a chat
+dropped on a product heading (#132), the inbox of what the queue sent, and a ticket's
+Report (`ustabasi.notifications` and `ustabasi.report`, two request types `divan-ui` did
+not have). The demo machine for App Review (#134) has no screen of its own: it is a daemon
+with `demo = true` in its config, and both clients show it as any other computer
+(`daemon/scripts/test_demo.py`).
+
 In the tables, **Proof** names the check that presses the action and asserts its call:
 `drive:` is `web/scripts/test-drive.mjs`, `actions:` is `web/scripts/test-actions-ui.mjs`,
 `walk:` is `web/scripts/test-walk-ui.mjs`, `machine:` is `web/scripts/test-machine.mjs`,
@@ -103,6 +111,9 @@ The quoted words are the check's own name.
 | Delete an account | Same | Same | `account.delete` | drive: "agent.install, account.login and account.delete still go out" |
 | Quota thresholds | Quota page | Machine › Settings › Quota thresholds | — | machine: "quota thresholds are still settable with nothing paired" |
 | Default account and model | — (per chat only) | Machine › Settings | — | drive: "the default account and model set in Machine › Settings are what the composer’s chips show" |
+| File a chat under a product by hand (main, #132) | Chat list: drop on a product heading | Same list in the Chats place | `chat.update` | drive: "dropping a chat on a product heading sends that product’s id, and takes it out of its group" |
+| Inbox: what the queue sent (main, 7 Oct) | Bell at the end of the top bar | Bell on the top line, before the theme switch | `ustabasi.notifications` | drive: "the bell on the line counts what the queue sent, a notice opens its ticket, and the ticket page ends on its Report" |
+| Read a ticket's Report (main, 7 Oct) | Ticket page; on its own for a ticket with no card | Ticket page, above the Agent face; on its own for a ticket with no card | `ustabasi.report` | drive: "the bell on the line counts what the queue sent, a notice opens its ticket, and the ticket page ends on its Report" |
 
 ## Phone
 
@@ -143,6 +154,8 @@ The quoted words are the check's own name.
 | Face ID | Settings | Machine › Settings | — | phone: "Face ID on launch is written with setPrefs, and turning it off asks Face ID first" |
 | Default account and model | — | Machine › Settings | — | phone: "the default account and model set in Machine › Settings are what the Composer’s chips show" |
 | Call the computer | Settings › Call | Machine › Settings › Call | `call.ask` | phone: "answering a call still opens the call screen" |
+| Inbox: what the queue sent (main, 7 Oct) | Dashboard Inbox row | Dashboard foot, between the queue and Conversations | `ustabasi.notifications` | phone: "phone: the Dashboard's Inbox row counts what the queue sent and opens the list, a notice opens its ticket, and the ticket page mounts its Report" |
+| Read a ticket's Report (main, 7 Oct) | End of the queue ticket page | Same | `ustabasi.report` | phone: "phone: the Dashboard's Inbox row counts what the queue sent and opens the list, a notice opens its ticket, and the ticket page mounts its Report" |
 
 Nothing on `main` is missing on `divan-ui`; `test-inventory.mjs` also fails if any request
 or event type the clients name is absent from this file. Two phone rows are proven less

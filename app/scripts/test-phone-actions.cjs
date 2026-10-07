@@ -207,6 +207,36 @@ const ready = (async () => {
   checks.push([`phone: Update now sends applyUpdate, Install sends installAgent, the model sheet writes setDefaults, and Move a sign-in is one press from Accounts — ${JSON.stringify({ updated, installed, sheet, moving })}`,
     updated && installed && sheet && moving]);
 
+  // What the queue sent (main, after the handover): the Dashboard's Inbox row
+  // counts it and opens the list, a notice opens its ticket, and that page
+  // mounts the Report the computer reads back. The harness renders once and
+  // runs no effects, so the last is read off the source.
+  {
+    const { useInbox } = require(path.join(root, 'src/inbox.ts'));
+    const fs = require('fs');
+    stand();
+    // A static render reads a zustand store's initial state, so the notice is
+    // put there for the length of this check.
+    const initial = useInbox.getInitialState();
+    const before = { ...initial };
+    Object.assign(initial, { host: 'studio', seen: 8, last: 9, items: [{ id: 9, ticket: 42, ts: Date.now() / 1000 - 60,
+      kind: 'done', headline: '', body: 'Live keys are in.', title: 'Stripe keys', status: 'done', project: 'Quire' }] });
+    R.nav.reset();
+    const dash = R.render('dark', h(require(path.join(root, 'app/dashboard.tsx')).default));
+    const counted = /Inbox/.test(dash) && /1 new/.test(dash);
+    const row = await press((x) => (x.text ?? '').startsWith('Inbox'));
+    const listed = R.nav.pushed().some((to) => (typeof to === 'string' ? to : to?.pathname) === '/inbox');
+    screen('inbox.tsx');
+    R.nav.reset();
+    const notice = await press((x) => (x.text ?? '').startsWith('Stripe keys'));
+    const opened = R.nav.pushed().some((to) => to === '/ticket/42');
+    const mounted = /<Report id=\{t\.id\} status=\{t\.status\} \/>/.test(fs.readFileSync(path.join(root, 'app/ticket/[id].tsx'), 'utf8'))
+      && /ticketReport\(id\)/.test(fs.readFileSync(path.join(root, 'src/components/report.tsx'), 'utf8'));
+    Object.assign(initial, before);
+    checks.push([`phone: the Dashboard's Inbox row counts what the queue sent and opens the list, a notice opens its ticket, and the ticket page mounts its Report — ${JSON.stringify({ counted, row, listed, notice, opened, mounted })}`,
+      counted && row && listed && notice && opened && mounted]);
+  }
+
   // A new chat with every option still starts one.
   screen('new-chat.tsx');
   await press('Start chat');
