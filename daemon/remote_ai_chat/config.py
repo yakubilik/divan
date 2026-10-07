@@ -152,6 +152,10 @@ class Config:
     # it names, and no CLI is ever started. For lending a computer to somebody
     # who has no subscription of their own — App Review. See daemon/README.md.
     demo: bool = False
+    # More directories for `python -m remote_ai_chat.scrub` to look for keys in,
+    # beside the daemon's own and the CLIs' transcripts: wherever this machine
+    # keeps session notes. Absolute, or starting with `~`. Empty by default.
+    scrub_extra_paths: list[str] = field(default_factory=list)
 
     # ── persistence ────────────────────────────────────────────────────────
     @classmethod
@@ -221,6 +225,7 @@ class Config:
             "accounts": self.accounts,
             "pool": self.pool,
             "demo": self.demo,
+            "scrub_extra_paths": self.scrub_extra_paths,
         }
         tmp = CONFIG_PATH.with_suffix(".tmp")
         tmp.write_text(tomli_w.dumps(data))

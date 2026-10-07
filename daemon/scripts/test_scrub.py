@@ -4,8 +4,9 @@
     python scripts/test_scrub.py
 
 A temp HOME stands in for the real one: the daemon's database, a Claude
-transcript, a Codex rollout, a tool-result file and a session log, each with
-fake keys planted in it. The keychain is a dict. No check prints a value.
+transcript, a Codex rollout, a tool-result file and a session log in a folder
+config.toml names, each with fake keys planted in it. The keychain is a dict.
+No check prints a value.
 """
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ PLANTED = {
     "db-preview": ("aws", "AKIA" + "FAKE0123456789AB"),
     "claude-text": ("anthropic", "sk-ant-api03-" + A[:30]),
     "claude-tool": ("github", "ghp_" + A[:36]),
-    "claude-pem": ("pem", "-----BEGIN RSA PRIVATE KEY-----\nMIIEfake" + A + "\n-----END RSA PRIVATE KEY-----"),
+    "claude-pem": ("pem", "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEfake" + A + "\n-----END RSA PRIVATE KEY-----"),
     "codex-msg": ("google", "AIza" + A[:35]),
     "codex-env": ("secret", "hunter2" + A[:12]),                       # DB_PASSWORD=… in a command
     "tool-result": ("stripe", "sk_" + "live_" + A[:24]),
@@ -53,6 +54,7 @@ PLANTED = {
 LIVE = ("slack", "xoxb-" + "123456789012-" + A[:24])
 V = {name: value for name, (_kind, value) in PLANTED.items()}
 OLD = time.time() - 3600
+NOTES = "notes/sessions"      # where this machine keeps its session logs, under the home
 
 
 class FakeKeychain:
@@ -73,9 +75,11 @@ def jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows))
 
 
-def plant(home: Path) -> tuple[DB, Path]:
+def plant(home: Path, configured: bool = True) -> tuple[DB, Path]:
     rac = home / ".remote-ai-chat"
     db = DB(rac / "db.sqlite")
+    if configured:
+        (rac / "config.toml").write_text(f'scrub_extra_paths = ["~/{NOTES}"]\n')
     chat = db.create_chat(title="New chat", provider="claude", model="sonnet", effort=None,
                           perm_mode="ask", cwd="/tmp")
     db.append_event(chat["id"], "message.user", {"text": f"anahtarım {V['db-user']} bunu kullan"})
@@ -117,7 +121,7 @@ def plant(home: Path) -> tuple[DB, Path]:
     jsonl(home / ".claude" / "projects" / "-Users-x" / "s2.jsonl", [
         {"type": "user", "timestamp": "2026-09-10T10:00:00.000Z",
          "message": {"role": "user", "content": f"posthog {V['home-claude']}"}}])
-    log = home / ".claude" / "memory" / "yakup" / "sessions" / "2026-09-11.md"
+    log = home / NOTES / "2026-09-11.md"
     log.parent.mkdir(parents=True)
     log.write_text(f"# 11 Eylül\n\n- token yapıştırdı: {V['session-log']}\n")
 
@@ -229,13 +233,31 @@ def main() -> int:
     print("\na keychain that refuses")
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)
-        plant(home)
+        db, _live = plant(home)
+        # Closed first: a connection left to the garbage collector checkpoints
+        # the WAL whenever it goes, and that is a change nobody here made.
+        db._c.close()
         before = snapshot(home)
         code = quiet(scrub.main, ["--apply", "--home", str(home)], keychain=RefusingKeychain())
         text = (home / ".remote-ai-chat" / scrub.REPORT).read_text()
         check(code == 1 and snapshot(home) == before, "nothing is masked that is not kept")
         check("keychain refused" in text and not any(V[n] in text for n in PLANTED),
               "the report says so, by service")
+
+    print("\nno location configured")
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        db, _live = plant(home, configured=False)
+        log = home / NOTES / "2026-09-11.md"
+        before = log.read_bytes()
+        kc = FakeKeychain()
+        quiet(scrub.main, ["--apply", "--home", str(home)], keychain=kc)
+        check(log.read_bytes() == before and secrets.service_for(*PLANTED["session-log"]) not in kc.items,
+              "a folder config.toml does not name is not read")
+        roots = (home / ".remote-ai-chat", home / ".claude" / "projects", home / ".codex" / "sessions")
+        stray = [str(p) for p in scrub.targets(home) if not any(p.is_relative_to(r) for r in roots)]
+        check(not stray, "only the daemon's and the CLIs' own folders are walked", f"{stray}")
+        db._c.close()
 
     print(f"\n{'FAILED: ' + ', '.join(failures) if failures else 'all checks passed'}")
     return 1 if failures else 0
