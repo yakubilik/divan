@@ -46,6 +46,15 @@ check("running a product's own command is not work on it",
       pick([call(command="~/projects/queue/bin/queue add --json /tmp/t.json"),
             call(command=f"{ROOT}/queue/bin/queue ls"), call(file_path=f"{ROOT}/site/a.css")],
            ROOT, found), "site")
+check("running another repo's interpreter or node binary is no vote for it",
+      [found(call(command=f"{ROOT}/queue/.venv/bin/python /tmp/mail.py")),
+       found(call(command="~/projects/queue/.venv312/bin/python -m x")),
+       found(call(command=f"{ROOT}/queue/venv/bin/pip list")),
+       found(call(command=f"{ROOT}/queue/node_modules/.bin/tsc -p /tmp/y"))], [set()] * 4)
+check("…while a real path inside the repo, or the repo itself, still is",
+      [found(call(file_path=f"{ROOT}/queue/src/a.py")), found(call(command=f"cd {ROOT}/queue && ls")),
+       found(call(command=f"{ROOT}/queue/.venv/bin/python {ROOT}/queue/docs/x.py"))],
+      [{"queue"}] * 3)
 check("the newest call breaks a tie",
       pick([call(file_path=f"{ROOT}/site/a"), call(file_path=f"{ROOT}/shop/b")], ROOT, found), "site")
 check("a chat that has run nothing is where it was opened",
@@ -116,6 +125,20 @@ with tempfile.TemporaryDirectory() as tmp:
           db.get_chat(chat["id"])["project_id"], "")
     check("…and a restart's filing pass does not touch it either",
           DB(Path(tmp) / "db.sqlite").get_chat(chat["id"])["project_id"], "")
+
+    # What Daily sends: no product, set by hand — straight through set_project
+    # on a chat the computer had filed, and as the '' the clients send.
+    filed = db.create_chat(title="filed", cwd=tmp)
+    work_in(filed["id"], "shop")
+    db.set_project(filed["id"], None)
+    work_in(filed["id"], "site")
+    got = db.get_chat(filed["id"])
+    check("after set_project(cid, None) later work does not refile the chat",
+          (got["project_id"], got["project_set"]), ("", 1))
+    asyncio.run(update(loose["id"], project_id="", group_id=None))
+    work_in(loose["id"], "shop")
+    got = db.get_chat(loose["id"])
+    check("…nor after chat.update with project_id ''", (got["project_id"], got["project_set"]), ("", 1))
 
 if fails:
     print(f"FAIL ({len(fails)})")

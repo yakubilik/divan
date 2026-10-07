@@ -27,6 +27,8 @@ export interface Chat {
   session_ids?: string;
   /** The product this chat is filed under, by that computer's id for it. */
   project_id?: string | null;
+  /** 1 once a person has put the chat under a product (or Daily) by hand. */
+  project_set?: number;
   /** 1 to keep this chat on the sign-in named above even while the account
    *  pool is on. Off by default: the pool is a mode, and a chat is in it
    *  unless somebody says otherwise. */

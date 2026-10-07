@@ -160,6 +160,34 @@ const ready = (async () => {
   checks.push([`phone: a group is made (createGroup), renamed (renameGroup) and deleted (deleteGroup) from the chat list — ${JSON.stringify({ grouped, renamed, removed })}`,
     grouped && renamed && removed]);
 
+  // Daily: the move sheet's Daily row takes a chat out of its group and the
+  // product the computer filed it under, and a chat put there is listed there
+  // rather than under the folder it works in.
+  const chat = (id, cwd, more) => ({ id, group_id: null, title: id, provider: 'claude', model: 'opus',
+    effort: 'high', perm_mode: 'default', cwd, status: 'idle', last_preview: 'ok', pinned: 0, archived: 0,
+    created_at: 0, updated_at: Math.floor(Date.now() / 1000) - 60, ...more });
+  machine.stand({ params: { all: '1' } });
+  R.store.set({ prefs: { chatView: 'grouped', voiceIds: {} }, groups: [{ id: 'g1', name: 'Quire', sort: 0 }],
+    chats: { c1: chat('Refunds', '/r/quire', { id: 'c1', group_id: 'g1', project_id: 'p1', project_set: 0 }),
+             c2: chat('Pricing', '/r/hush'), c3: chat('Mail search', '/r/mailbox', { project_id: '', project_set: 1 }) },
+    updateChat: rec('updateChat') });
+  const replaced = [];
+  const realReplace = overlay.replaceMenu;
+  overlay.replaceMenu = (items) => { replaced.push(items); };
+  const markup = R.render('dark', h(Chats, { all: '1' }));
+  R.menus.reset();
+  const row = R.holds().find((x) => x.text.startsWith('Refunds'));
+  if (row) { row.hold(); await flush(); }
+  await choose('Move to group');
+  const daily = (replaced.at(-1) ?? []).find((i) => i.label === 'Daily');
+  daily?.onPress?.();
+  await flush();
+  overlay.replaceMenu = realReplace;
+  const sent = calls.filter(([m]) => m === 'updateChat').map(([, a]) => a);
+  const listed = markup.indexOf('>Daily<') >= 0 && !markup.includes('/r/mailbox') && markup.includes('Mail search');
+  checks.push([`phone: Daily in the move sheet sends updateChat with group_id null and project_id '', and a chat put in Daily is listed under Daily — ${JSON.stringify({ sent, listed })}`,
+    sent.length === 1 && sent[0][0] === 'c1' && sent[0][1].group_id === null && sent[0][1].project_id === '' && listed]);
+
   // Settings: notifications, the default model, and removing a computer.
   screen('settings.tsx');
   await press((p) => p.label === 'Approval requests');

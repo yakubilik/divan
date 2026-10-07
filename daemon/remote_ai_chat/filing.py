@@ -10,7 +10,9 @@ a chat is filed under the product its recent tool calls were inside of most.
 Recent, because a long chat moves: the one that fixed the site this morning and
 is in the app now is an app chat. And a product's own command being *run* is
 not work on that product — filing a ticket runs `ustabasi/bin/ustabasi` from
-every chat there is, and none of them is about the queue.
+every chat there is, and none of them is about the queue. Nor is borrowing its
+tools: a script run with another repo's `.venv/bin/python`, or a binary out of
+its `node_modules`, is work on whatever the script is about.
 """
 from __future__ import annotations
 
@@ -49,7 +51,7 @@ def matcher(repos: Iterable[tuple[str, str]], home: str | None = None) -> Callab
         return lambda text: set()
     found = re.compile(
         "(" + "|".join(re.escape(f) for f in sorted(forms, key=len, reverse=True)) + ")"
-        r"(?![\w.-])(?!/bin/)")
+        r"(?![\w.-])(?!/bin/)(?!/(?:\.?venv[\w.-]*|node_modules)(?![\w.-]))")
     return lambda text: {forms[m] for m in found.findall(str(text or "").replace("\\\\", "/"))}
 
 

@@ -67,7 +67,7 @@ export function DeleteGroupDialog({ name, onDelete, onClose }: {
       <div style={{ padding: 20 }}>
         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Delete group</div>
         <div style={{ fontSize: 13, color: C.mute, lineHeight: '19px', marginBottom: 16 }}>
-          “{name}” is removed. Its chats are kept, just ungrouped.
+          “{name}” is removed. Its chats are kept; they only leave the group.
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <Btn onClick={onClose}>Cancel</Btn>

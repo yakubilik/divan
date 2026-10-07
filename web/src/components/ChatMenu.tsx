@@ -71,7 +71,7 @@ function Sheet({ entries, groups, people, chat, onMove, onOwner, onNewGroup, onC
       {moving ? (
         <>
           <div style={{ fontSize: 11, color: C.mute, padding: '4px 12px 6px' }}>Move to group</div>
-          {row('Ungrouped', P.folder, () => { onMove(null); onClose(); }, false, !chat.group_id)}
+          {row('Daily', P.folder, () => { onMove(null); onClose(); }, false, !chat.group_id && !chat.project_id)}
           {groups.map((g) => row(g.name, P.folder, () => { onMove(g.id); onClose(); }, false, chat.group_id === g.id))}
           {/* The group this chat belongs in may not exist yet, and this is
               where somebody finds that out. */}
@@ -188,7 +188,9 @@ export function ChatMenu({ chat, groups, people = [], onUpdate, onNewGroup, onDe
   return (
     <Sheet
       entries={entries} groups={groups} people={people} chat={chat}
-      onMove={(groupId) => onUpdate({ group_id: groupId })}
+      // Daily is out of every group and every product: a chat the computer
+      // filed under a product would otherwise stay listed there.
+      onMove={(groupId) => onUpdate(groupId ? { group_id: groupId } : { group_id: null, project_id: '' })}
       onOwner={(name) => onUpdate({ owner: name })}
       onNewGroup={() => setGrouping(true)}
       onClose={onClose}

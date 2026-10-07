@@ -13,7 +13,7 @@ const en = {
   pairTailscale: 'Connection only over your Tailscale network',
   pairBadCode: 'Unrecognized code', pairBadCodeBody: 'This is not a remote-ai-chat pairing code.',
   // chats
-  chats: 'Chats', search: 'Search', archive: 'Archive', archiveOn: 'Archive shown', ungrouped: 'Ungrouped', computer: 'Computer',
+  chats: 'Chats', search: 'Search', archive: 'Archive', archiveOn: 'Archive shown', ungrouped: 'Daily', computer: 'Computer',
   active: '{n} active', connecting: 'connecting', unauthorized: 'no access', offline: 'offline',
   noChats: 'No chats yet', cantConnect: "Can't reach the computer", noAccess: 'Access denied', noAccessHint: 'This token was revoked or is wrong. Pair again from Settings → Add computer.',
   hintNew: 'Tap the pen: a chat opens with your defaults. Long-press to choose settings.',
@@ -21,8 +21,8 @@ const en = {
   running: 'Running…', emptyChat: 'Empty chat', awaiting: 'Approval pending', now: 'now', yesterday: 'Yesterday',
   pin: 'Pin', unpin: 'Unpin', rename: 'Rename', chatName: 'Chat name', moveToGroup: 'Move to group',
   archiveAction: 'Archive', unarchive: 'Unarchive', deleteChat: 'Delete chat', deleteChatBody: 'History is deleted from the computer too.',
-  noGroup: 'No group', newGroup: '+ New group', newGroupTitle: 'New group', groupName: 'Group name',
-  deleteGroup: 'Delete group', deleteGroupBody: 'Chats are kept, just ungrouped.', couldNotOpen: "Couldn't open",
+  noGroup: 'Daily', newGroup: '+ New group', newGroupTitle: 'New group', groupName: 'Group name',
+  deleteGroup: 'Delete group', deleteGroupBody: 'Chats are kept; they only leave the group.', couldNotOpen: "Couldn't open",
   // new chat / settings sheet
   newChat: 'New chat', tool: 'TOOL', model: 'MODEL', effort: 'EFFORT', permMode: 'PERMISSION MODE', folder: 'Folder', group: 'Group',
   startChat: 'Start chat', couldNotStart: "Couldn't start", noFolders: 'No folders under the allowed roots.',

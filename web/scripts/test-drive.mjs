@@ -281,7 +281,7 @@ seed(useFleet, {
         type === 'chat.update' && c.id === data.chat_id ? {
           ...c,
           ...('group_id' in data ? { group_id: data.group_id } : {}),
-          ...('project_id' in data ? { project_id: data.project_id,
+          ...('project_id' in data ? { project_id: data.project_id, project_set: 1,
             project: fixture.studio().projects.find((p) => p.id === data.project_id)?.name ?? null } : {}),
         }
         : type === 'group.delete' && c.group_id === data.group_id ? { ...c, group_id: null }
@@ -1426,6 +1426,58 @@ group('a chat dropped on a product is filed under it by hand');
   ok('…and on that product’s own page', !!tab && shown('Webhook retry policy') && shown('Hush pricing'),
     `tab ${!!tab} · ${w.location.pathname}`);
   await click(find('Dashboard', doc.querySelector('header')));
+}
+
+group('Daily takes a chat out of its group and its product');
+{
+  // `Hush pricing` was filed under Hush by the computer and `Quire audit` sits
+  // in the Quire group under Quire. Dropped on Daily, or moved there from the
+  // chat's menu, each goes to the computer as no group and no product — and is
+  // then listed under Daily, not under the product it came from.
+  const at = Date.now() / 1000;
+  const host = fakeHost();
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...host, chats: [...host.chats,
+      fakeChat({ id: 'h1', title: 'Hush pricing', project_id: 'p-hush', project: 'Hush', updated_at: at - 20 }),
+      fakeChat({ id: 'q1', title: 'Quire audit', group_id: 'g1', project_id: 'p-quire', project: 'Quire',
+                 cwd: '/Users/x/projects/other', updated_at: at - 30 }),
+    ] } } });
+  });
+  await click(labelledBtn('Chats'));
+  const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
+  const section = (key) => doc.querySelector(`[data-section="${key}"]`);
+  const row = (words) => [...doc.querySelectorAll('button[draggable="true"]')]
+    .find((b) => (b.textContent ?? '').includes(words));
+  ok('the list of what nobody has filed is headed Daily',
+    (section('__loose')?.textContent ?? '').startsWith('Daily') && !text().includes('Ungrouped'),
+    section('__loose')?.textContent?.slice(0, 80));
+
+  const held = new Transfer();
+  asked.length = 0;
+  await drag(row('Hush pricing'), 'dragstart', held);
+  await drag(section('__loose'), 'dragover', held);
+  await drag(section('__loose'), 'drop', held);
+  await settle();
+  const sent = asked.filter((a) => a.type === 'chat.update').map((a) => a.data);
+  ok('a chat under a product dropped on Daily is sent with no product',
+    sent.length === 1 && sent[0].chat_id === 'h1' && sent[0].project_id === '', JSON.stringify(sent));
+  ok('…and is then listed under Daily, not under the product',
+    (section('__loose')?.textContent ?? '').includes('Hush pricing') && !section('project:Hush'),
+    `${section('__loose')?.textContent?.slice(0, 200)} · ${!!section('project:Hush')}`);
+
+  await click(row('Quire audit'));
+  asked.length = 0;
+  await click(doc.querySelector('button[title="Chat menu"]'));
+  await click(find('Move to group…'));
+  await click(find('Daily'));
+  await settle();
+  const moved = asked.filter((a) => a.type === 'chat.update').map((a) => a.data);
+  ok('Daily in a chat’s move menu sends no group and no product',
+    moved.length === 1 && moved[0].chat_id === 'q1' && moved[0].group_id === null && moved[0].project_id === '',
+    JSON.stringify(moved));
+  ok('…and the chat is then listed under Daily, not under a folder of its own',
+    (section('__loose')?.textContent ?? '').includes('Quire audit') && !section('cwd:/Users/x/projects/other'),
+    section('__loose')?.textContent?.slice(0, 200));
 }
 
 group('what the queue sent');

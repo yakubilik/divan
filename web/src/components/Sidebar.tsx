@@ -281,7 +281,8 @@ const home = (path: string) => path
  *  the product the computer filed it as — and where a group already carries
  *  that product's name, the two are one section rather than two with the same
  *  heading. What neither claims falls into sections by folder, the way the
- *  phone lists them; a single folder is not a grouping, so it stays one list.
+ *  phone lists them; a single folder is not a grouping, so it stays one list:
+ *  Daily. A chat somebody moved to Daily is there whatever folder it is in.
  *
  *  A group is drawn even with nothing in it — it is where the next chats go,
  *  and one that vanished the moment it was made would read as the button
@@ -293,6 +294,7 @@ function sections(chats: Chat[], groups: Group[], hostKey: string, searching: bo
   const byGroup = new Map<string, Chat[]>();
   const byProject = new Map<string, Chat[]>();
   const byCwd = new Map<string, Chat[]>();
+  const daily: Chat[] = [];
   const quiet: Chat[] = [];
   const put = (m: Map<string, Chat[]>, k: string, c: Chat) => { m.set(k, [...(m.get(k) ?? []), c]); };
   for (const c of byRecency([...chats])) {
@@ -301,6 +303,7 @@ function sections(chats: Chat[], groups: Group[], hostKey: string, searching: bo
     if (!isCurrent(c, now)) quiet.push(c);
     else if (group) put(byGroup, group, c);
     else if (c.project) put(byProject, c.project, c);
+    else if (c.project_set && !c.project_id) daily.push(c);
     else put(byCwd, c.cwd || '', c);
   }
   const out: Section[] = [];
@@ -312,14 +315,14 @@ function sections(chats: Chat[], groups: Group[], hostKey: string, searching: bo
     out.push({ key: `project:${name}`, title: name, hostKey, chats: arr, kind: 'project',
                projectId: arr[0].project_id ?? undefined });
   }
-  if (byCwd.size > 1) {
-    for (const [path, arr] of byCwd) {
-      out.push({ key: `cwd:${path}`, title: home(path) || 'Ungrouped', hostKey, chats: arr, kind: 'folder' });
-    }
-  } else {
-    for (const arr of byCwd.values()) {
-      out.push({ key: '__loose', title: out.length ? 'Ungrouped' : 'Chats', hostKey, chats: arr, kind: 'loose' });
-    }
+  for (const [path, arr] of byCwd) {
+    if (byCwd.size > 1 && path) out.push({ key: `cwd:${path}`, title: home(path), hostKey, chats: arr, kind: 'folder' });
+    else daily.push(...arr);
+  }
+  // Drawn empty beside other sections, like a group: it is where a chat is
+  // dropped to take it out of its group and its product.
+  if (daily.length || (out.length && !searching)) {
+    out.push({ key: '__loose', title: out.length ? 'Daily' : 'Chats', hostKey, chats: byRecency(daily), kind: 'loose' });
   }
   if (quiet.length) out.push({ key: '__archive', title: 'Archive', hostKey, chats: quiet, kind: 'archive' });
   return out;
@@ -519,8 +522,9 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   const [over, setOver] = useState<string | null>(null);
   // A chat dropped on a group goes into it. Dropped on a product it comes out
   // of its group and is filed under that product for good — the computer never
-  // moves a chat a person put somewhere. Dropped on a folder or the unfiled list
-  // it only comes out of the group it was in.
+  // moves a chat a person put somewhere. Dropped on Daily it comes out of its
+  // group and its product, for good the same way. Dropped on a folder it only
+  // comes out of the group it was in.
   const drop = (s: Section, dt: DataTransfer) => {
     setOver(null);
     const drag = readChatDrag(dt);
@@ -530,6 +534,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
     const patch: Record<string, string | null> = {};
     if ((chat?.group_id ?? null) !== to) patch.group_id = to;
     if (s.kind === 'project' && s.projectId && chat?.project_id !== s.projectId) patch.project_id = s.projectId;
+    if (s.key === '__loose' && (chat?.project_id || !chat?.project_set)) patch.project_id = '';
     if (Object.keys(patch).length) updateChat(s.hostKey, drag.chatId, patch).catch(() => {});
   };
 

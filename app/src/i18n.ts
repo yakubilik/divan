@@ -21,7 +21,7 @@ const en = {
   pairConnect: 'Connect', pairManualBtn: 'Enter IP and token',
   pairBadCode: 'Unrecognized code', pairBadCodeBody: 'This is not a remote-ai-chat pairing code.',
   // chats
-  chats: 'Chats', search: 'Search', archive: 'Archive', ungrouped: 'Ungrouped', computer: 'Computer',
+  chats: 'Chats', search: 'Search', archive: 'Archive', ungrouped: 'Daily', computer: 'Computer',
   active: '{n} active', connecting: 'connecting', unauthorized: 'no access', offline: 'offline',
   noChats: 'No chats yet', cantConnect: "Can't reach {host}", noAccess: 'Access denied', noAccessHint: "This phone's token was revoked on {host}. Pair again to reconnect.",
   hintNew: 'Tap the pen for a new chat. Long-press it to choose the folder and model.',
@@ -29,10 +29,10 @@ const en = {
   running: 'Running…', emptyChat: 'Empty chat', awaiting: 'Needs approval', now: 'now', yesterday: 'yesterday',
   pin: 'Pin', unpin: 'Unpin', rename: 'Rename', chatName: 'Chat name', moveToGroup: 'Move to group',
   archiveAction: 'Archive', unarchive: 'Unarchive', deleteChat: 'Delete chat', deleteChatBody: 'History is deleted from the computer too.',
-  noGroup: 'No group', newGroupTitle: 'New group', groupName: 'Group name',
+  noGroup: 'Daily', newGroupTitle: 'New group', groupName: 'Group name',
   viewGrouped: 'Grouped', viewFlat: 'Flat',
   groupedShort: 'Grouped', flatShort: 'Flat', newGroupAction: 'New group…',
-  deleteGroup: 'Delete group', deleteGroupBody: 'Chats are kept, just ungrouped.', couldNotOpen: "Couldn't open",
+  deleteGroup: 'Delete group', deleteGroupBody: 'Chats are kept; they only leave the group.', couldNotOpen: "Couldn't open",
   // new chat / settings sheet
   newChat: 'New chat', tool: 'Tool', model: 'Model', effort: 'Effort', permMode: 'Permission mode', folder: 'Folder', group: 'Group',
   startChat: 'Start chat', couldNotStart: "Couldn't start", noFolders: 'No folders under the allowed roots.',
