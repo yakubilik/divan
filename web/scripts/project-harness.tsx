@@ -66,7 +66,7 @@ createRoot(root).render(
       projectComposer={composer}
       chats={{
         list: <Sidebar project={quire!} selected={null} selectedHost={null} onSelect={() => {}} onNewChat={() => {}} />,
-        open: null, onOpen: () => {}, onClose: () => {},
+        open: null, onClose: () => {},
       }} />
   </Shell>,
 );

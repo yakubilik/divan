@@ -1,29 +1,20 @@
-/** What was done on a product today, a chat at a time.
+/** What was done on a product today.
  *
- *  The computer writes two things on every chat (`recap.py`): one line of what
- *  it is working on, and a line for each thing that has been done in it. A
- *  product's day is those, for the chats that moved since midnight here — and
- *  for one still working, whenever it started. A chat from a daemon that does
- *  not write them yet is still part of the day, under its title.
+ *  The computer writes on every chat a line for each thing that has been done
+ *  in it (`recap.py`). A product's day is those lines, off the chats that
+ *  moved since midnight here, the latest first — a list of work, not of
+ *  chats: a chat nothing has come of yet adds nothing to it, and the chats
+ *  themselves are down the left of the page.
  */
-import { bareTitle } from './format';
-import type { Chat, ChatStatus } from './protocol';
+import type { Chat } from './protocol';
 
-export interface ChatDay {
-  id: string;
-  hostKey: string;
-  /** What the chat is working on. */
-  task: string;
-  /** What has been done in it, oldest first. */
-  done: string[];
-  status: ChatStatus;
-  /** When it last moved, as a clock. */
-  at: string;
+export interface Did {
+  key: string;
+  text: string;
 }
 
-export const STATUS_WORD: Record<ChatStatus, string> = {
-  idle: '', running: 'Working', awaiting_approval: 'Needs you',
-};
+/** How many are shown before the rest is asked for. */
+export const TODAY_SHOWN = 5;
 
 /** Midnight before `now`, where the person is. Seconds, like `updated_at`. */
 export function midnight(now: number): number {
@@ -32,18 +23,11 @@ export function midnight(now: number): number {
   return d.getTime() / 1000;
 }
 
-export function today(
-  chats: { hostKey: string; chat: Chat }[], now: number, since = midnight(now),
-): ChatDay[] {
+export function today(chats: Chat[], now: number, since = midnight(now)): Did[] {
   return chats
-    .filter(({ chat: c }) => !c.archived && (c.updated_at >= since || c.status !== 'idle'))
-    .sort((a, b) => b.chat.updated_at - a.chat.updated_at)
-    .map(({ hostKey, chat: c }) => ({
-      id: c.id,
-      hostKey,
-      task: (c.task || '').trim() || bareTitle(c.title, c.cwd, c.project),
-      done: (c.done || '').split('\n').map((l) => l.trim()).filter(Boolean),
-      status: c.status,
-      at: new Date(c.updated_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    }));
+    .filter((c) => !c.archived && c.updated_at >= since)
+    .sort((a, b) => b.updated_at - a.updated_at)
+    .flatMap((c) => (c.done || '').split('\n').map((l) => l.trim()).filter(Boolean)
+      // Written oldest first; the day reads latest first.
+      .reverse().map((text, i) => ({ key: `${c.id}:${i}`, text })));
 }

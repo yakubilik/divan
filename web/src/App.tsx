@@ -787,7 +787,6 @@ export function App() {
                 />
               ),
               open: chat ? <ChatView {...chatProps} /> : null,
-              onOpen: openHere,
               onClose: () => setTab('overview'),
             } : null}
           />

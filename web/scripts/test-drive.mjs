@@ -1319,7 +1319,8 @@ group('a product has its own chats');
   const host = fakeHost();
   await act(async () => {
     seed(useFleet, { hosts: { studio: { ...host, chats: [...host.chats,
-      fakeChat({ id: 'q1', title: 'Quire invoices', project_id: 'p-quire', project: 'Quire', updated_at: at - 30 }),
+      fakeChat({ id: 'q1', title: 'Quire invoices', project_id: 'p-quire', project: 'Quire', updated_at: at - 30,
+        done: [1, 2, 3, 4, 5, 6, 7].map((n) => `did ${n}`).join('\n') }),
       fakeChat({ id: 'h1', title: 'Hush pricing', project_id: 'p-hush', project: 'Hush', updated_at: at - 20 }),
     ] } } });
   });
@@ -1333,8 +1334,20 @@ group('a product has its own chats');
     shown('Quire invoices') && !shown('Hush pricing') && !shown('Safari login')
       && pageUp() && w.location.pathname === '/p/quire',
     w.location.pathname);
-  ok('…and says what was done on it today, a chat at a time',
-    !!doc.querySelector('[data-today] [data-today-chat="q1"]'));
+  {
+    const items = () => [...doc.querySelectorAll('[data-today] li')].map((li) => li.textContent);
+    const first = items();
+    await click(find('Show all 7'));
+    const all = items();
+    await click(find('Show fewer'));
+    ok('…and says what was done on it today as a list of work, the latest five, the rest behind Show all',
+      first.join('|') === 'did 7|did 6|did 5|did 4|did 3' && all.length === 7 && items().length === 5
+        && !doc.querySelector('[data-today] button:not([aria-expanded])'),
+      first.join('|'));
+    const page = doc.querySelector('[data-project-page] .dv-page');
+    ok('…under the Composer, which is the first thing on the page after its head',
+      !!(page.querySelector('.dv-composer').compareDocumentPosition(page.querySelector('#p-today')) & 4));
+  }
 
   await click(rowOf('Quire invoices'));
   for (let i = 0; i < 4; i++) await act(async () => {});

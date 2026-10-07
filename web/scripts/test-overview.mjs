@@ -878,25 +878,21 @@ group('Web14 W6, W7 and W8');
     faces.includes('Branches') && faces.includes('Engineering')
     && faces.includes('SEO') && faces.includes('open') && faces.includes('done'));
 
-  // Today is the product's chats that moved since midnight, each under what
-  // it is working on, with what came of it as the computer wrote it down.
+  // Today is what was done, not who did it: the lines the computer wrote on
+  // the chats that moved since midnight, latest first, and no row for a chat
+  // nothing has come of.
   {
     const at = busy.now;
-    const chat = (id, over) => ({ hostKey: 'm', chat: {
-      id, title: `quire · ${id}`, cwd: '/w/quire', project: 'quire', status: 'idle', archived: 0,
-      updated_at: at - 60, ...over } });
-    const rows = TD.today([
-      chat('old', { updated_at: at - 3 * 86_400 }),
-      chat('named', { task: 'Move mail to Resend', done: 'Added the DNS records\nSent a test\n' }),
-      chat('bare', { updated_at: at - 30 }),
-      chat('running', { updated_at: at - 3 * 86_400, status: 'running' }),
+    const chat = (id, over) => ({ id, archived: 0, updated_at: at - 60, done: '', ...over });
+    const did = TD.today([
+      chat('old', { updated_at: at - 3 * 86_400, done: 'Shipped last week' }),
+      chat('mail', { done: 'Added the DNS records\nSent a test\n' }),
+      chat('empty', { updated_at: at - 10 }),
+      chat('page', { updated_at: at - 30, done: 'Removed the tabs' }),
     ], at, at - 3600);
-    ok('today is the chats that moved today or are still working, newest first',
-      rows.map((r) => r.id).join() === 'bare,named,running', rows.map((r) => r.id).join());
-    ok('…each under its task, with what was done a line each',
-      rows[1].task === 'Move mail to Resend' && rows[1].done.join('|') === 'Added the DNS records|Sent a test');
-    ok('…and one the computer has not summed up yet is still there, under its title',
-      rows[0].task === 'bare' && rows[0].done.length === 0);
+    ok('today is what was done in the chats that moved today, latest first, and nothing for a chat with nothing done',
+      did.map((d) => d.text).join('|') === 'Removed the tabs|Sent a test|Added the DNS records',
+      did.map((d) => d.text).join('|'));
   }
 
   // The third panel: what the product is waiting for. The board holds work an

@@ -95,13 +95,11 @@ export interface OverviewProps {
   card?: string | null;
   onCard?: (id: string | null) => void;
   /** The product's chats: the list that stands down the left of every page of
-   *  it, the one that is open (or null), and what opening and closing one
-   *  does. Handed in whole, because the chat is the Chat place's own surface
+   *  it, the one that is open (or null), and what closing it does. Handed in whole, because the chat is the Chat place's own surface
    *  and its handlers live above both. */
   chats?: {
     list: React.ReactNode;
     open: React.ReactNode | null;
-    onOpen: (hostKey: string, chatId: string) => void;
     onClose: () => void;
   } | null;
   /** The Composer the unscoped page is built round (HANDOVER §4.1). */
@@ -122,8 +120,7 @@ export function Overview({
   const day = useMemo(() => {
     if (!project) return [];
     const mine = Object.keys(project.ids).flatMap((k) => (hosts[k]?.chats ?? [])
-      .filter((c) => !!project.ids[k] && c.project_id === project.ids[k])
-      .map((chat) => ({ hostKey: k, chat })));
+      .filter((c) => !!project.ids[k] && c.project_id === project.ids[k]));
     return today(mine, view.now);
   }, [project, hosts, view.now]);
   // The two pages inside a product that have a head of their own. A key that is
@@ -221,7 +218,7 @@ export function Overview({
         <ProjectHead project={project} now={view.now} compact={here === 'board' || here === 'branches'} />
         {(here === 'overview' || here === 'chat') && (
           <Project view={view} project={project}
-            today={day} onChat={chats?.onOpen}
+            today={day}
             onCard={(c) => onCard?.(idOf(c))}
             onBoard={() => to('board')}
             onBranches={() => to('branches')}

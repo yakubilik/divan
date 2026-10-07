@@ -6,11 +6,12 @@
  *  the name, what it is for in one sentence and a meta line with its stage as
  *  a word.
  *
- *  Under it: what was done on the product today, a chat at a time
+ *  Under it, first, the Composer, locked to this product — the one way to
+ *  start anything here, a ticket included, and so the first thing in reach.
+ *  Then what was done on the product today, as a short list of work
  *  (`lib/today.ts`); what needs you; the board in four numbers with the In
  *  Progress cards under them; and beside those what the product is still
- *  waiting on (`components/StillOpen.tsx`). At the foot, the Composer, locked
- *  to this product — the one way to start anything here, a ticket included.
+ *  waiting on (`components/StillOpen.tsx`).
  *
  *  Every figure is counted off the board (`lib/board.ts`) and every sentence is
  *  decided in `lib/project.ts`; what is left here is the arrangement.
@@ -18,7 +19,8 @@
 import { uptime } from '../lib/format';
 import { counts, inProgress } from '../lib/board';
 import { blank, blankBody, metaLine, oldLine, quiet } from '../lib/project';
-import { STATUS_WORD, type ChatDay } from '../lib/today';
+import { useState } from 'react';
+import { TODAY_SHOWN, type Did } from '../lib/today';
 import { summaryOf } from '../lib/overview';
 import { sessions } from '../lib/sessions';
 import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
@@ -55,13 +57,11 @@ export function ProjectHead({ project: p, now, compact }: {
   );
 }
 
-export function Project({ view, project: p, today, onChat, onCard, onBoard, onBranches, composer }: {
+export function Project({ view, project: p, today, onCard, onBoard, onBranches, composer }: {
   view: DivanView;
   project: MergedProject;
-  /** The chats that are part of today on this product, newest first. */
-  today: ChatDay[];
-  /** One of them, opened where this page is. */
-  onChat?: (hostKey: string, chatId: string) => void;
+  /** What was done on this product today, latest first. */
+  today: Did[];
   /** A card's own page. */
   onCard?: (card: MergedCard) => void;
   /** The board, from its summary. */
@@ -76,6 +76,7 @@ export function Project({ view, project: p, today, onChat, onCard, onBoard, onBr
   const waiting = sessions(view).filter((s) => s.projectKey === p.key);
   return (
     <>
+      {!!composer && <div style={{ marginTop: 28 }}>{composer}</div>}
       {!!old && <p className="dv-meta" style={{ margin: '16px 0 0' }}>{old}</p>}
       {!!asleep && (
         <p style={{ margin: '16px 0 0', fontSize: 15, lineHeight: '22px', color: 'var(--ink-2)' }}>
@@ -84,7 +85,7 @@ export function Project({ view, project: p, today, onChat, onCard, onBoard, onBr
       )}
       <div className="dv-cols2">
         <main>
-          <Today rows={today} onChat={onChat} />
+          <Today rows={today} />
           {waiting.length > 0 && (
             <section aria-labelledby="p-needs-you">
               <div className="dv-sec"><h3 id="p-needs-you">Needs you</h3><span className="dv-meta">{waiting.length}</span></div>
@@ -99,7 +100,6 @@ export function Project({ view, project: p, today, onChat, onCard, onBoard, onBr
           <StillOpen project={p} now={view.now} />
         </aside>
       </div>
-      {!!composer && <div style={{ marginTop: 40 }}>{composer}</div>}
     </>
   );
 }
@@ -159,42 +159,33 @@ function BoardSummary({ view, project: p, onCard, onBoard, onBranches }: {
   );
 }
 
-/** What was done on the product today: each chat that moved, what it is
- *  working on, and under that what came of it. */
-function Today({ rows, onChat }: {
-  rows: ChatDay[];
-  onChat?: (hostKey: string, chatId: string) => void;
-}) {
+/** What was done on the product today: the latest few things, and the rest
+ *  behind one word. */
+function Today({ rows }: { rows: Did[] }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? rows : rows.slice(0, TODAY_SHOWN);
+  const more = rows.length - TODAY_SHOWN;
   return (
     <section aria-labelledby="p-today">
       <div className="dv-sec">
         <h3 id="p-today">Today</h3>
-        {rows.length > 0 && <span className="dv-meta">{rows.length === 1 ? '1 chat' : `${rows.length} chats`}</span>}
+        {rows.length > 0 && <span className="dv-meta">{rows.length} done</span>}
       </div>
       {rows.length ? (
-        <div className="dv-glass" data-today="" style={{ borderRadius: 'var(--radius-md)', padding: '4px 14px' }}>
-          {rows.map((r) => (
-            <button key={r.id} type="button" className="dv-live press" data-today-chat={r.id}
-              style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: '12px 4px' }}
-              onClick={() => onChat?.(r.hostKey, r.id)}>
-              <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                <span className="t" style={{ flex: 1, minWidth: 0 }}>{r.task}</span>
-                {r.status !== 'idle' && (
-                  <span className={`dv-status dv-status--${r.status === 'running' ? 'run' : 'ask'}`}><i />{STATUS_WORD[r.status]}</span>
-                )}
-                <span className="dv-meta">{r.at}</span>
-              </span>
-              {r.done.length > 0 && (
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: '20px', color: 'var(--ink-2)' }}>
-                  {r.done.map((d) => <li key={d}>{d}</li>)}
-                </ul>
-              )}
+        <div className="dv-glass" data-today="" style={{ borderRadius: 'var(--radius-md)', padding: '14px 18px' }}>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: '22px', color: 'var(--ink)' }}>
+            {shown.map((d) => <li key={d.key}>{d.text}</li>)}
+          </ul>
+          {more > 0 && (
+            <button type="button" className="dv-btn dv-btn--ghost dv-hit" aria-expanded={all}
+              style={{ height: 28, marginTop: 8, marginLeft: -6 }} onClick={() => setAll((v) => !v)}>
+              {all ? 'Show fewer' : `Show all ${rows.length}`}
             </button>
-          ))}
+          )}
         </div>
       ) : (
         <p style={{ margin: '0 4px', fontSize: 13.5, lineHeight: '20px', color: 'var(--ink-2)' }}>
-          Nothing yet today. What a chat on this product gets done is written here as it happens.
+          Nothing finished yet today. What the chats on this product get done is written here.
         </p>
       )}
     </section>

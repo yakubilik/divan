@@ -18,9 +18,9 @@ from typing import NamedTuple
 
 from . import naming
 
-MAX_DONE = 6
+MAX_DONE = 4
 _TASK_CHARS = 140
-_DONE_CHARS = 160
+_DONE_CHARS = 110
 _USER_CHARS = 400
 _REPLY_CHARS = 900
 _FIRST, _LAST = 2, 4
@@ -38,8 +38,10 @@ TASK: <one line: what this conversation is working on>
 Rules:
 - Write in the language the person writes in.
 - TASK names the goal in under fifteen words. No project name, no assistant name.
-- A bullet is something finished, in the past tense, concrete enough to mean \
-something to the person tomorrow: what was changed, found, decided or shipped. \
+- A bullet is something finished, in the past tense, in under twelve words, \
+concrete enough to mean something to the person tomorrow: what was changed, \
+found, decided or shipped. Only work that matters to the product — not that \
+tests passed, that something was pushed or merged, or how the work was done. \
 Not a plan, not a question, not a step in progress, and never something that \
 is missing, broken or still to do.
 - Keep the bullets already in the log unless they turned out untrue, add what \
