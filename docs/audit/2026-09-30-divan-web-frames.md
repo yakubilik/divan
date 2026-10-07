@@ -1,5 +1,7 @@
 # Divan on the web, page by page against its frame
 
+> **Retired, 7 Oct 2026.** This compared the panel and the app with the *old* frames (Web12–Web15, Mobile1–6). The handover of 7 Oct 2026 replaced those frames, and the script it describes was removed. The current comparison is `docs/divan-ui-migration.md`.
+
 *30 September 2026. Run with `cd web && node scripts/audit-frames.mjs ../../remote-ai-chat/design/divan/frames`
 on `ustabasi/58-…` at the state of this commit. Seventeen web artboards — Web12 W1–W2,
 Web13 W3–W4, Web14 W6–W10, Web15 W11–W18; there is no W5 — each one rendered, and the

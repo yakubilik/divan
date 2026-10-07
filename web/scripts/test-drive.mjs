@@ -1993,6 +1993,12 @@ group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
     && !!doc.querySelector('[data-live] .dv-step-at.dv-meta'),
     JSON.stringify({ first, later }));
 
+  // the frame's Move back to Queued, under the side column
+  asked.length = 0;
+  await click(byText('aside button', 'Move back to Queued'));
+  ok('Move back to Queued on an in-progress ticket sends divan.card.move to queued',
+    sent('divan.card.move', (d) => d.card_id === 'k1' && d.column === 'queued'), JSON.stringify(asked));
+
   // 7 · every queue action the wall's ticket window offers, on the ticket
   const btn = (label) => byText('[data-queue] button', label);
   const offered = { running: [] };

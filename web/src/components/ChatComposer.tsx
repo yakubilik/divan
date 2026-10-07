@@ -222,10 +222,13 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           {`Fetching the ${langName(dictateLang())} speech model. This happens once, and then it runs on this computer.`}
         </div>
       )}
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', gap: 8, padding: 6,
-        borderRadius: R.composer, background: C.surface,
-        border: `1px solid ${dragging ? C.accent : C.border}`,
+      {/* The chat's own box is the Composer of the frame (HANDOVER §4.8); the
+          small one in a question window keeps its pill. */}
+      <div className={compact ? undefined : 'dv-glass-strong dv-composer'} style={{
+        display: 'flex', alignItems: 'flex-end', gap: 8,
+        ...(compact
+          ? { padding: 6, borderRadius: R.composer, background: C.surface, border: `1px solid ${dragging ? C.accent : C.border}` }
+          : { padding: '10px 10px 10px 12px', ...(dragging ? { borderColor: C.accent } : null) }),
       }}>
         <input
           ref={file} type="file" multiple name="attachments" style={{ display: 'none' }}
@@ -258,7 +261,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           placeholder={listening ? 'Listening…'
             : busy ? 'You can already type the next message…' : `Message ${folder}…`}
           style={{
-            flex: 1, boxSizing: 'border-box', maxHeight: compact ? 120 : 200, resize: 'none',
+            flex: 1, boxSizing: 'border-box', minHeight: 0, maxHeight: compact ? 120 : 200, resize: 'none',
             background: 'transparent', border: 'none', outline: 'none',
             fontSize: compact ? 13.5 : 15, lineHeight: compact ? '19px' : '22px',
             padding: compact ? '6px 4px' : '7px 6px', color: C.text, overflowY: 'auto',
