@@ -5,6 +5,7 @@ import asyncio
 import os
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import (
@@ -121,18 +122,18 @@ class ClaudeProvider(Provider):
         The permission callback is never consulted for Bash — the tool runs
         whatever the callback answers, which was measured, not assumed. So the
         chat's permission mode is enforced here instead: in "ask" every command
-        is put to the phone, and in the middle modes the destructive ones still
+        is put to the phone, and in every other mode the destructive ones still
         are.
 
-        Bypass asks nothing at all, and the hook is not even installed for it —
-        a mode chosen to stop being asked that still interrupted a log tail was
-        worse than no mode at all. The guard stays here too, because a hook
-        that decides permissions must not depend on being wired up correctly.
+        Bypass is one of those other modes. It runs everything else without a
+        word — a mode chosen to stop being asked must not interrupt a log tail —
+        but the destructive list is the one promise made about every mode, so
+        the hook stays installed there and a hit still waits for the phone.
         """
-        if input_data.get("tool_name") != "Bash" or self.cfg.perm_mode == "bypass":
+        if input_data.get("tool_name") != "Bash":
             return {}
         cmd = (input_data.get("tool_input") or {}).get("command", "") or ""
-        reason = destructive_reason(cmd)
+        reason = destructive_reason(cmd, self.cfg.cwd, input_data.get("cwd"))
         if not reason:
             if self.cfg.perm_mode != "ask" or "Bash" in self._session_allow:
                 return {}
@@ -149,13 +150,27 @@ class ClaudeProvider(Provider):
             "permissionDecisionReason": "Denied from the phone.",
         }}
 
+    @staticmethod
+    def _is_upload(file_path: Any) -> bool:
+        """Is this path really inside the upload folder, once resolved?
+
+        The same test the `/files` route makes. A prefix of the string is not
+        it: `uploads/../config.toml` and `uploads-evil/x` both start right.
+        """
+        if not file_path or not isinstance(file_path, str):
+            return False
+        try:
+            p = Path(file_path).expanduser().resolve()
+        except Exception:
+            return False
+        return UPLOAD_DIR.resolve() in p.parents
+
     async def _can_use_tool(self, tool_name: str, tool_input: dict, context: Any):
         if tool_name in self._session_allow:
             return PermissionResultAllow()
         # Files the user uploaded from the phone are implicitly readable.
         if tool_name == "Read":
-            fp = str((tool_input or {}).get("file_path") or "")
-            if fp.startswith(str(UPLOAD_DIR)):
+            if self._is_upload((tool_input or {}).get("file_path")):
                 return PermissionResultAllow()
         decision = await self.approval(tool_name, tool_input or {}, None)
         if decision == "allow_session":
@@ -241,8 +256,9 @@ class ClaudeProvider(Provider):
             max_buffer_size=32 * 1024 * 1024,   # big tool results (binary Read) must not kill the stream
             disallowed_tools=["AskUserQuestion"],
         )
-        if c.perm_mode != "bypass":
-            kw["hooks"] = {"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_tool_hook])]}
+        # In every mode, bypass included: the hook is what stops a destructive
+        # command, and it decides for itself what each mode lets through.
+        kw["hooks"] = {"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_tool_hook])]}
         # Where it is first, then who it is. An agent's own definition is the
         # more specific instruction and so goes last, but it never replaces the
         # context: an agent that does not know it is being read on a phone
