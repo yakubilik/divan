@@ -27,6 +27,7 @@ from .config import CONFIG_DIR, Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Dev
 from .db import DB
 from . import accounts as acct
 from . import pool as poolmod
+from . import usage as usagemod
 from .errors import Err
 from . import agents, secrets, tools
 from .call import (Concierge, NoRoom, hermes_installed, headline as call_headline, last_reply,
@@ -166,6 +167,8 @@ class Server:
         # account id -> window -> last reported usage of the plan's limits,
         # reloaded from disk so a restart does not blank the ring out.
         self.limits: dict[str, dict[str, dict]] = self.db.load_limits()
+        # account id -> when the service was last asked about its plan.
+        self._usage_asked: dict[str, float] = {}
         # Several sign-ins of one tool, driven as one. It reads the two
         # dictionaries above rather than keeping copies: an account is added or
         # a window fills, and the pool is already looking at the new answer.
@@ -522,6 +525,56 @@ class Server:
         except Exception as e:
             log.warning("could not write down the plan's limits: %s", e)
         return key
+
+    # How long a reading asked of the service is good for before it is asked
+    # again. The panel polls once a minute; this keeps two tabs at one request.
+    USAGE_EVERY_S = 45.0
+
+    async def _fresh_usage(self, key: str) -> None:
+        """Ask the service where one sign-in's plan stands, and file the answer
+        over what its last turn reported. Quietly does nothing for a sign-in
+        that cannot be asked — a key, another tool, a token that has run out."""
+        a = self.accounts.get(key)
+        now = time.time()
+        if a is None or now - self._usage_asked.get(key, 0.0) < self.USAGE_EVERY_S:
+            return
+        self._usage_asked[key] = now
+        try:
+            rows = await asyncio.wait_for(asyncio.to_thread(usagemod.read, a), usagemod.TIMEOUT_S + 1)
+        except Exception:
+            return
+        if not rows:
+            return
+        slot = self.limits.setdefault(key, {})
+        kept = []
+        for r in rows:
+            # Laid over the turn's own row, which also carries what only a turn
+            # reports: the overage fields the pool reads off any window.
+            old = slot.get(r["window"]) or {}
+            row = {**old, **r, "at": now}
+            if row.get("status") != "allowed_warning" or r["utilization"] < float(old.get("utilization") or 0):
+                row["status"] = "rejected" if r["utilization"] >= 1.0 else "allowed"
+            kept.append(row)
+        self._learn_steps(slot, kept)
+        for r in kept:
+            slot[r["window"]] = r
+        try:
+            self.db.save_limits(key, kept, now, complete=False)
+        except Exception as e:
+            log.warning("could not write down the plan's limits: %s", e)
+        self._sweep_later(key)
+
+    def _weekly(self, key: str) -> dict | None:
+        """How much of its week one sign-in has used — the figure its own
+        settings page shows. None where nothing current is known: a reading
+        from before the window rolled over describes a week that has ended."""
+        r = self.limits.get(key, {}).get("seven_day") or {}
+        used, resets = r.get("utilization"), r.get("resets_at")
+        if not isinstance(used, (int, float)):
+            return None
+        if isinstance(resets, (int, float)) and resets <= time.time():
+            return None
+        return {"account": key, "used": float(used), "resets_at": resets, "at": r.get("at")}
 
     @staticmethod
     def _learn_steps(previous: dict[str, dict], kept: list[dict]) -> None:
@@ -2309,12 +2362,18 @@ class Server:
         # to give up on a computer that was answering perfectly well.
         queue = await self._mirrored_queue(git=False)
         board = await asyncio.to_thread(self.db.divan.snapshot, self.cfg.host_name)
+        # The sign-in the asker's chats open on, where it named one: that
+        # subscription's week is the figure the bar shows, asked for fresh.
+        usage_for = str(d.get("usage_for") or "")
+        if usage_for:
+            await self._fresh_usage(usage_for)
         return {**board, "at": time.time(),
                 "os": platform.system(), "os_version": _os_version(),
                 "daemon_version": __version__,
                 # Per machine, because the sign-ins are: this is the one number
                 # that decides whether an agent can start here at all.
-                "quota": self.pool.quota(),
+                "quota": {**self.pool.quota(),
+                          "weekly": self._weekly(usage_for) if usage_for else None},
                 # The queue is the coding executor and the mirror has just read
                 # it, so its two facts come along rather than being asked for a
                 # second time: is it installed here, and is it paused.

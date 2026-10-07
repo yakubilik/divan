@@ -354,14 +354,27 @@ export function App() {
     setTimeout(() => composerRef.current?.focus(), 0);
   }, []);
 
-  /** Ask: a chat with these words in it, opened in the Chat place. */
+  /** Ask: a chat with these words in it, read on its product's Chats tab —
+   *  the product's other chats beside it, its Board and Overview one tab away.
+   *  The product is the one the Project chip named, failing that the one the
+   *  computer filed the chat under; a chat that belongs to none has only the
+   *  Chat place to be read in. */
   const ask = useCallback(async (text: string, key: string | null, picks: ToldPicks, files: File[] = []) => {
     const p = projectIn(divan, key);
     const told = await tell(text, p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null, picks, files);
     // It is read where chats are read, not as a window on the Dashboard.
     useTold.getState().close(idOfTold(told));
-    open(told.host, told.chatId);
-  }, [divan]);
+    const home = p ?? (told.projectId
+      ? divan.projects.find((q) => q.ids[told.host] === told.projectId) ?? null : null);
+    if (!home) { open(told.host, told.chatId); return; }
+    // This chat is the arrival: the tab does not go looking for its newest.
+    arrived.current = home.key;
+    setProject(home.key);
+    setTab('chat');
+    setBranch(null);
+    setCard(null);
+    select(told.host, told.chatId);
+  }, [divan, open, select]);
 
   /** A notice from the queue, pressed: its ticket's page, under its product.
    *  A ticket with no card on the board (filed before the board mirrored, or

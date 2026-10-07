@@ -1696,10 +1696,15 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
   await click(send());
   await settle();
   const scoped = asked.find((a) => a.type === 'chat.create')?.data ?? {};
+  const scopedId = asked.find((a) => a.type === 'chat.send')?.data?.chat_id;
   ok('typing @quire sets the same Project chip as its menu does, the only place a project is chosen, and the call opens in that project',
     typedChip === pressedChip && typedChip === 'Quire' && !doc.querySelector('.dv-composer .dv-scope') && left === 'why is the retry policy like this '
       && scoped.cwd === '/w/quire',
     `${typedChip} vs ${pressedChip} · «${left}» · ${scoped.cwd}`);
+  ok('…and it is read on that project’s Chats tab, the project’s other chats beside it, not on a page of its own',
+    place() === 'Dashboard' && w.location.pathname === `/p/quire/chat/${scopedId}`
+      && !!doc.querySelector('textarea[name="composer"]'),
+    `${place()} · ${w.location.pathname}`);
 
   // 5 · Needs you
   await press('0');

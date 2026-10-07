@@ -39,6 +39,9 @@ export interface Told {
   /** When it was started, in seconds — newest first is the order they are
    *  drawn in, and the one just typed is the one being read. */
   at: number;
+  /** The product its computer filed it under when it was made, by that
+   *  computer's own id for it. Absent where the folder belongs to none. */
+  projectId?: string | null;
 }
 
 /** One spelling of a started chat's id, the way `sessions.ts` has one for a
@@ -230,6 +233,7 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
   const told: Told = {
     host, chatId: chat.id, title: chat.title || title,
     at: Math.floor(Date.now() / 1000),
+    projectId: chat.project_id ?? null,
   };
   useTold.getState().start(told);
   // The timeline is opened before the send rather than after it: what comes

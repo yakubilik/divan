@@ -658,11 +658,11 @@ def forget_credentials(acc: Account) -> Account:
     return acc
 
 
-def _keychain_read() -> str | None:
+def _keychain_read(service: str = KEYCHAIN_SERVICE) -> str | None:
     if sys.platform != "darwin":
         return None
     try:
-        r = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+        r = subprocess.run(["security", "find-generic-password", "-s", service, "-w"],
                            capture_output=True, text=True, timeout=15)
         return r.stdout.strip() or None
     except Exception:
