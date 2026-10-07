@@ -45,6 +45,15 @@ const answer = async (key: string, type: string, data: any = {}) => {
     case 'agent.store': return { agents: [] };
     case 'ustabasi.list': return { available: !bare, tickets: bare ? [] : wall(), queue: { last_tick: at - 30 } };
     case 'ustabasi.run': return { available: true, reason: '', run: 'r-1', events: [], cursor: null, reset: true, live: false, caught_up: true, shots: [] };
+    // What the queue sent and what a ticket came back with, as the daemon reads them back.
+    case 'ustabasi.notifications': return { available: !bare, last: bare ? 0 : 3, items: bare || data.after >= 3 ? [] : [
+      { id: 3, ticket: 41, ts: at - 600, kind: 'done', headline: '', body: 'Retries survive a restart now.',
+        title: 'Webhook retry policy', status: 'done', project: 'Quire' }] };
+    case 'ustabasi.report': return { id: data.id, title: '', status: '', verdict: 'pass',
+      summary: 'Retries are written to the table before the first attempt, so a restart picks them up.',
+      verdict_summary: 'Both criteria hold on a restarted worker.',
+      files: [{ path: 'docs/retries.md', name: 'retries.md', size: 96, cut: false,
+                text: '## Retry schedule\n\n| Attempt | Wait |\n|---|---|\n| 1 | 30 s |\n| 2 | 5 min |\n| 3 | 1 h |' }] };
     case 'pool.get': case 'pool.set':
       return { settings: { enabled: false, threshold: 0.9, thresholds: {}, use_overage: 'account', overage_by_account: {}, reserve: 0.05, order: {}, max_hops: 3 }, accounts: [] };
     case 'daemon.status':
