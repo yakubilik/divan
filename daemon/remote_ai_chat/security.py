@@ -35,9 +35,8 @@ DESTRUCTIVE_PATTERNS = [
     # patterns, and `pkill -f x -u me -P 1` kills everything with "me" or "1" in it.
     re.compile(r"\bpkill(?:\s+(?:-[uUPgGtsF]\s+\S+|-[fvilnxaoqILN0-9]+|-[A-Z]{2,}))*"
                r"\s+(?:\"[^\"]*\"|'[^']*'|[^-\s]\S*)\s+-[A-Za-z]"),
-    # The daemon's config and token store. Uploads are fine, and so is the log:
-    # reading it is the first thing anybody debugging the daemon does.
-    re.compile(r"\.remote-ai-chat/(?!uploads/|logs/)"),
+    # The sign-ins and the push key: even reading these puts a token in a chat.
+    re.compile(r"\.credentials\.json|\.remote-ai-chat/apns/"),
     # Python deleting a tree is `rm -r` with the path hidden inside a string.
     re.compile(r"\brmtree\s*\("),
     # `sh -c "$(curl …)"` and `bash <(curl …)`: the pipe spelled another way.
@@ -57,6 +56,13 @@ _SUBSTITUTION = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
 _GLOB = re.compile(r"[*?\[]|(?<!\$)\{")
 _EVERYTHING = {"*", ".*", "{*,.*}", "{.*,*}", "{,.}*", ".[!.]*"}
 _OPEN_MODE = re.compile(r"^(0?777|[ugoa]*a[ugoa]*[+=]rwx|ugo[+=]rwx)$")
+# The daemon's own folder: its config, its database. Uploads, the log and the
+# accounts' memory and skills are what a chat works in all day.
+_DAEMON_HOME = re.compile(r"\.remote-ai-chat(?:/(?!(?:uploads|logs|accounts)/)|$)")
+_READS = {"cat", "head", "tail", "less", "grep", "egrep", "fgrep", "rg", "ls", "wc", "stat",
+          "file", "cut", "sort", "uniq", "diff", "du", "jq", "awk", "nl", "tr", "tree",
+          "echo", "printf", "test", "[", "readlink", "realpath", "basename", "dirname",
+          "shasum", "md5", "xxd", "strings", "cd", "pwd"}
 
 
 def _tokens(cmd: str) -> list[str]:
@@ -221,6 +227,34 @@ def _chmod_reason(args: list[str]) -> str | None:
     return None
 
 
+def _reads_only(name: str, args: list[str]) -> bool:
+    if name in _READS:
+        return True
+    if name == "sed":
+        short, long, _ = _flags(args)
+        return "i" not in short and "--in-place" not in long
+    if name == "find":
+        return not any(a == "-delete" or a.startswith(("-exec", "-ok", "-fprint")) for a in args)
+    if name == "sqlite3":
+        return "-readonly" in args or any("mode=ro" in a for a in args)
+    return False
+
+
+def _daemon_home_reason(name: str, words: list[str], args: list[str], here: Path | None) -> str | None:
+    """A command that can change the daemon's own files.
+
+    Reading them is how the daemon gets debugged, and it asked for that twenty
+    times an evening (7 Oct 2026). The target of a `>` arrives here as a
+    command of its own, named after the file, so a redirect is caught too.
+    """
+    if not name or _reads_only(name, args):
+        return None
+    hit = next((w for w in words if _DAEMON_HOME.search(w)), None)
+    if hit is None and here is not None and _DAEMON_HOME.search(str(here)):
+        hit = str(here)
+    return f"changes the daemon's own files: {hit}" if hit else None
+
+
 def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> str | None:
     if depth > 4:
         return None
@@ -262,6 +296,8 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
                         break
             if script:
                 reason = _parsed_reason(script, root, here, depth + 1)
+                name = ""       # what it touches was just read from the script
+        reason = reason or _daemon_home_reason(name, words, args, here)
         if reason:
             return reason
     return None

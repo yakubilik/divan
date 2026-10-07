@@ -55,6 +55,11 @@ FLAGGED = [
     "cd /tmp && rm -rf x",
     "bash -lc 'rm -rf ~/projects'",
     "sudo reboot",
+    "echo x >> ~/.remote-ai-chat/config.toml",
+    "sed -i '' s/a/b/ ~/.remote-ai-chat/config.toml",
+    "cd ~/.remote-ai-chat && mv db.sqlite db.old",
+    'sqlite3 ~/.remote-ai-chat/db.sqlite "delete from chats"',
+    "cat ~/.remote-ai-chat/accounts/claude-1/.credentials.json",
 ]
 
 ALLOWED = [
@@ -66,6 +71,11 @@ ALLOWED = [
     "rm -rf build/*",
     "find . -name '*.pyc' -delete",
     "bash -lc 'git status'",
+    "sed -n 3,16p ~/.remote-ai-chat/config.toml",
+    'sqlite3 -readonly ~/.remote-ai-chat/db.sqlite "select 1"',
+    "M=~/.remote-ai-chat/accounts/claude-1/projects/x/memory; cat $M/a.md; ls ~/projects",
+    'echo "- [A](a.md)" >> ~/.remote-ai-chat/accounts/claude-1/projects/x/memory/MEMORY.md',
+    "bash -lc 'tail -50 ~/.remote-ai-chat/logs/daemon.log'",
 ]
 
 
