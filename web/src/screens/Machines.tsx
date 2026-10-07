@@ -177,7 +177,7 @@ export function Machines({ view, onView, onFocus }: {
                   <div>
                     <div style={{ font: '500 20px/24px var(--font-mono)' }}>
                       {Math.round(left * 100)}%
-                      {low && <span style={{ color: T.amber, fontFamily: 'var(--font-sans)', fontSize: 13, marginLeft: 8 }}>low</span>}
+                      {low && <span data-low style={{ color: T.amber, fontFamily: 'var(--font-sans)', fontSize: 13, marginLeft: 8 }}>low</span>}
                     </div>
                     <div style={{ fontSize: 13, lineHeight: '19px', color: T.ink2 }}>left of the plan</div>
                   </div>
