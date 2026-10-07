@@ -47,14 +47,15 @@ python -m remote_ai_chat.scrub [--apply]   # keys already in chat history, into 
 ```
 
 `scrub` reads the events table and the transcripts Claude Code and Codex keep
-(`~/.remote-ai-chat`, `~/.claude/projects`, `~/.codex/sessions`, the session
-logs). Without `--apply` it only writes `~/.remote-ai-chat/secret-report.md`:
+(`~/.remote-ai-chat`, `~/.claude/projects`, `~/.codex/sessions`), plus any
+directory listed under `scrub_extra_paths` in `config.toml` — a folder of
+session notes, say; none by default. Without `--apply` it only writes `~/.remote-ai-chat/secret-report.md`:
 each key's kind, fingerprint and keychain service, how many files held it and
 when — the list to rotate, never a value. With `--apply` every key goes into the
 login keychain first and the file is then rewritten with the placeholder; a file
 written in the last ten minutes is left for the next run.
 `../scripts/install-secret-scrub.sh` runs it hourly under launchd
-(`com.yakup.secret-scrub`), so what the CLIs write later is masked too.
+(`com.remote-ai-chat.secret-scrub`), so what the CLIs write later is masked too.
 
 `project` is the entrance to the board's products: the Divan clients have no form
 for making one and are not getting one, so a product is created and edited by

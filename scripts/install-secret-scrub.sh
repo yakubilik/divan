@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Install (or refresh) com.yakup.secret-scrub: every hour, `python -m remote_ai_chat.scrub
+# Install (or refresh) com.remote-ai-chat.secret-scrub: every hour, `python -m remote_ai_chat.scrub
 # --apply`, so keys the CLIs write into their transcripts later are kept in the keychain
 # and masked too. The report it keeps is ~/.remote-ai-chat/secret-report.md.
 #
@@ -7,7 +7,7 @@
 #   RAC_DAEMON_DIR  the daemon checkout to run from (default: the one this script is in)
 #   RAC_PYTHON      its interpreter (default: .venv312, then .venv, inside that checkout)
 set -e
-LABEL=com.yakup.secret-scrub
+LABEL=com.remote-ai-chat.secret-scrub
 DAEMON="${RAC_DAEMON_DIR:-${0:A:h:h}/daemon}"
 AGENTS="$HOME/Library/LaunchAgents"
 PLIST="$AGENTS/$LABEL.plist"

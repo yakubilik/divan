@@ -209,7 +209,7 @@ say "## Summary"
 say ""
 say "- issues found: $ISSUES; fixed this run: $FIXED"
 say ""
-say "## Needs Yakup (sudo / GUI, not done by this script)"
+say "## Needs a person (sudo / GUI, not done by this script)"
 say ""
 if [ ${#NEEDS[@]} -eq 0 ]; then say "- nothing"; else
   for n in "${NEEDS[@]}"; do say '```'; say "$n"; say '```'; done

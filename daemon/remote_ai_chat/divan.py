@@ -30,7 +30,7 @@ human face.
 
 And the rule everything else is built around: **a card the coding agent has
 follows its ticket; a card a person has follows the person.** Nobody drags a
-ticket across the board by hand (Yakup, 2026-09-30: "I am not going to move them one by one").
+ticket across the board by hand.
 The queue already knows where each ticket is — queued, running, blocked, failed,
 done, cancelled — and the mirror reads that into two things at once: the small
 status mark on the card, and the column the card sits in (`STATUS_COLUMN`). A
@@ -348,7 +348,7 @@ CREATE TABLE IF NOT EXISTS open_items (
   -- 'blocked' (nothing can move until it is done), 'waiting' (somebody else
   -- has it), 'todo' (ours to do, nobody has), 'done'
   state TEXT DEFAULT 'todo',
-  -- who it is on, where that is a person rather than this computer: 'Bedirhan',
+  -- who it is on, where that is a person rather than this computer: 'a colleague',
   -- 'the registrar'. Empty where it is simply ours.
   owner TEXT DEFAULT '',
   -- what it is about, for the small word on the card: 'payments', 'content'
@@ -1011,7 +1011,7 @@ class Board:
 
     def comment_open_item(self, item_id: str, text: str, who: str = "you") -> dict:
         """One line under an item. `who` is said out loud because the two
-        writers here are not the same voice: a note from Yakup is a decision and
+        writers here are not the same voice: a note from the person is a decision and
         a note from the assistant is a finding."""
         item = self.get_open_item(item_id)
         if item is None:

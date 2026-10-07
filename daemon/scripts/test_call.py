@@ -92,21 +92,21 @@ check(call.speakable("No, efendim.", hermes=False) == "No, sir.",
 print("profile")
 mem = hermes_home / "projects" / "-Users-x-projects-a" / "memory"
 mem.mkdir(parents=True)
-(mem / "who-is-yakup.md").write_text(
-    "---\nname: who-is-yakup\ndescription: d\n---\n\nYakup, a developer. " + "x" * 2000)
-(mem / "yakup-working-style.md").write_text("---\nname: s\n---\n\nTerse, Turkish.\n")
+(mem / "who-is-ada.md").write_text(
+    "---\nname: who-is-ada\ndescription: d\n---\n\nAda, a developer. " + "x" * 2000)
+(mem / "ada-working-style.md").write_text("---\nname: s\n---\n\nTerse, Turkish.\n")
 (mem / "secrets-handling.md").write_text("never read this")
 twin = hermes_home / "projects" / "-Users-x-projects-b" / "memory"
 twin.mkdir(parents=True)
-(twin / "who-is-yakup.md").write_text("---\nname: who-is-yakup\n---\n\nYakup, a developer.\n")
+(twin / "who-is-ada.md").write_text("---\nname: who-is-ada\n---\n\nAda, a developer.\n")
 block = call.profile(str(hermes_home))
 check(0 < len(block) <= call.PROFILE_CHARS, "a profile block of at most 1500 characters", str(len(block)))
-check("Yakup, a developer." in block and "name:" not in block and "---" not in block,
+check("Ada, a developer." in block and "name:" not in block and "---" not in block,
       "read from who-is, without frontmatter", block[:200])
 check("never read this" not in block, "and nothing else out of memory")
-(mem / "who-is-yakup.md").write_text("---\nname: w\n---\n\nYakup, a developer.\n")
+(mem / "who-is-ada.md").write_text("---\nname: w\n---\n\nAda, a developer.\n")
 block = call.profile(str(hermes_home))
-check("Terse, Turkish." in block and block.count("Yakup, a developer.") == 1,
+check("Terse, Turkish." in block and block.count("Ada, a developer.") == 1,
       "working-style is in it too, and a file shared across projects once", block)
 check(call.profile(str(plain_home)) == "" and call.profile(str(tmp / "missing")) == "",
       "an empty or missing memory folder gives no profile and no error")

@@ -397,7 +397,7 @@ async def prioritise(ticket_id: int, priority: int = 1) -> dict:
 # events are a checklist — which steps are behind it, which one it is on, and
 # which of the ones behind it were turned down.
 
-# `worker round 1 pid 26328 model claude-opus-5 account yakup`, which is the
+# `worker round 1 pid 26328 model claude-opus-5 account main`, which is the
 # queue writing to its own log. Every field after the round is optional: an
 # older queue wrote fewer of them, and a step with no pid is still a step.
 START_LINE = re.compile(
@@ -854,7 +854,7 @@ def notifications(after: int = 0, limit: int = INBOX_LIMIT,
     items = []
     for r in rows:
         lines = [ln for ln in secrets.mask(r["text"] or "").splitlines() if ln.strip()]
-        # The first line is the headline every path sends ("#111 ✅ … — bitti");
+        # The first line is the headline every path sends ("#111 ✅ … — done");
         # the rest is the body, without the CLI hint the Telegram text ends on.
         body = [ln for ln in lines[1:] if not ln.strip().startswith("ustabasi ")]
         items.append({
@@ -958,8 +958,8 @@ def follow_message(f: dict) -> str:
     tells the agent what to do with it: the person is waiting in this chat."""
     head = f"🔔 ustabasi #{f['ticket']} {_KIND_WORD.get(f['kind'], f['kind'])}: {f['title']}"
     said = f["ask"] or f["body"]
-    tail = ("You filed this ticket from this chat and Yakup is waiting here for it. "
-            "Tell him what came of it in a few plain lines, in his language"
-            + ("; put its question to him simply" if f["kind"] == "blocked" else "")
+    tail = ("You filed this ticket from this chat and the person is waiting here for it. "
+            "Tell them what came of it in a few plain lines, in their language"
+            + ("; put its question to them simply" if f["kind"] == "blocked" else "")
             + f". `ustabasi show {f['ticket']}` has the details.")
     return f"{head}\n\n{said}\n\n{tail}" if said else f"{head}\n\n{tail}"
