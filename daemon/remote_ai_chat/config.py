@@ -148,12 +148,18 @@ class Config:
     # Several sign-ins of one tool, driven as one: see pool.Settings. Off until
     # somebody turns it on — a machine with one account has nothing to pool.
     pool: dict = field(default_factory=dict)
+    # A demo machine: every chat runs the scripted demo provider, whatever tool
+    # it names, and no CLI is ever started. For lending a computer to somebody
+    # who has no subscription of their own — App Review. See daemon/README.md.
+    demo: bool = False
 
     # ── persistence ────────────────────────────────────────────────────────
     @classmethod
     def load(cls) -> "Config":
         if not CONFIG_PATH.exists():
             cfg = cls()
+            if os.environ.get("RAC_PORT"):
+                cfg.port = int(os.environ["RAC_PORT"])
             cfg.save()
             return cfg
         raw = tomllib.loads(CONFIG_PATH.read_text())
@@ -167,6 +173,9 @@ class Config:
         cfg.accounts = accounts
         cfg.pool = pool if isinstance(pool, dict) else {}
         cfg._devices_mtime = _mtime(CONFIG_PATH)
+        # The port of a second daemon on the same machine, beside RAC_HOME.
+        if os.environ.get("RAC_PORT"):
+            cfg.port = int(os.environ["RAC_PORT"])
         return cfg
 
     def save(self) -> None:
@@ -211,6 +220,7 @@ class Config:
             "revoked_tokens": self.revoked_tokens,
             "accounts": self.accounts,
             "pool": self.pool,
+            "demo": self.demo,
         }
         tmp = CONFIG_PATH.with_suffix(".tmp")
         tmp.write_text(tomli_w.dumps(data))

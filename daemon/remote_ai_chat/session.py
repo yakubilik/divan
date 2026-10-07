@@ -16,6 +16,7 @@ from .security import PathPolicy
 from .providers.base import Provider, ProviderConfig
 from .providers.claude import ClaudeProvider
 from .providers.codex import CodexProvider
+from .providers.demo import DemoProvider
 
 log = logging.getLogger("rac.session")
 
@@ -191,7 +192,9 @@ class ChatSession:
 
     # ── provider ───────────────────────────────────────────────────────────
     def _make_provider(self, chat: dict) -> Provider:
-        cls = PROVIDERS.get(chat["provider"], ClaudeProvider)
+        # A demo machine runs the script for every chat, including one made
+        # before the switch was turned on: it has no CLI to run anything else.
+        cls = DemoProvider if self.cfg.demo else PROVIDERS.get(chat["provider"], ClaudeProvider)
         home, env = self.resolve_account(chat) if self.resolve_account else (None, {})
         pc = ProviderConfig(
             account_home=home, account_id=chat.get("account_id"), account_env=env,

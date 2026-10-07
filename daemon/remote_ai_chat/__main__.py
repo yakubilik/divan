@@ -1,4 +1,4 @@
-"""CLI: serve | pair | web | project | devices | revoke | unlock | status"""
+"""CLI: serve | pair | web | project | demo-seed | devices | revoke | unlock | status"""
 from __future__ import annotations
 
 import argparse
@@ -389,6 +389,151 @@ def _project_parser(sub) -> None:
     p.set_defaults(fn=cmd_project)
 
 
+# ── a demo machine's first screen ────────────────────────────────────────────
+#
+# A reviewer pairs a phone with a demo machine (`demo = true`) and the first
+# thing they see is Divan. Empty, it explains nothing; so this puts one product
+# on it, a few cards across the board and one chat that has run, all through
+# the same requests the phone makes. Everything is looked up by name before it
+# is made, so running it again changes nothing.
+
+DEMO_PROJECT = ("Sample app", "sample-app")
+DEMO_PURPOSE = "A small app to show what a board and a chat look like."
+DEMO_CARDS = (
+    ("Sign in with Apple", "Let people sign in with their Apple ID.", "done"),
+    ("Offline reading", "Keep the last ten articles readable without a connection.",
+     "in_progress"),
+    ("Fix the README typo", "The first line says 'exmaple'.", "review"),
+    ("Export notes as PDF", "One button, one file, shareable.", "queued"),
+    ("Home screen widget", "Today's reading time at a glance.", "ice_box"),
+)
+DEMO_CHAT = "Fix the README typo"
+DEMO_README = "# Sample app\n\nA small exmaple project.\n"
+
+
+class _Link:
+    """Several requests over one socket, and the events that arrive between them.
+
+    `_protocol` is one request and done; seeding a chat has to send a message,
+    answer the approval it raises and wait for the turn to end, all as the same
+    device.
+    """
+
+    def __init__(self, ws) -> None:
+        self.ws = ws
+        self.rid = 0
+        self.events: list[dict] = []
+
+    async def call(self, typ: str, data: dict) -> dict:
+        self.rid += 1
+        rid = self.rid
+        await self.ws.send(json.dumps({"id": rid, "type": typ, "data": data}))
+        while True:
+            msg = await self._recv()
+            if msg.get("id") != rid:
+                continue
+            if msg.get("type") == "error":
+                d = msg.get("data") or {}
+                raise SystemExit(f"{typ}: {d.get('code') or 'refused'}: {d.get('message')}")
+            return msg.get("data") or {}
+
+    async def event(self, chat_id: str, names: tuple[str, ...]) -> dict:
+        """The next event of one of these kinds for this chat."""
+        while True:
+            for i, ev in enumerate(self.events):
+                if ev.get("chat_id") == chat_id and ev.get("event") in names:
+                    return self.events.pop(i)
+            await self._recv()
+
+    async def _recv(self) -> dict:
+        try:
+            raw = await asyncio.wait_for(self.ws.recv(), _ANSWER_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            raise SystemExit("the daemon did not answer")
+        msg = json.loads(raw)
+        if msg.get("type") == "event":
+            self.events.append(msg)
+        return msg
+
+
+async def _demo_seed(cfg: Config, folder: Path) -> dict:
+    import websockets
+    dev, token = cfg.add_device("cli")
+    made = {"project": 0, "cards": 0, "chat": 0}
+    try:
+        uri = f"ws://127.0.0.1:{cfg.port}/ws?token={token}"
+        async with websockets.connect(uri, max_size=8 * 1024 * 1024) as ws:
+            link = _Link(ws)
+            name, slug = DEMO_PROJECT
+            listed = await link.call("divan.projects", {})
+            project = next((p for p in listed.get("projects") or []
+                            if p.get("slug") == slug), None)
+            if project is None:
+                project = await link.call("divan.project.create", {
+                    "name": name, "slug": slug, "kind": "app",
+                    "purpose": DEMO_PURPOSE, "repos": [str(folder)]})
+                made["project"] = 1
+            board = await link.call("divan.board", {"project_id": project["id"]})
+            have = {c["title"] for col in (board.get("columns") or {}).values() for c in col}
+            # Created bottom of the board first, so each column reads top-down
+            # in the order written above.
+            for title, summary, column in reversed(DEMO_CARDS):
+                if title in have:
+                    continue
+                await link.call("divan.card.create", {
+                    "project_id": project["id"], "title": title,
+                    "summary": summary, "column": column})
+                made["cards"] += 1
+            chats = (await link.call("chat.list", {"include_archived": True})).get("chats") or []
+            if not any(c.get("cwd") == str(folder) and DEMO_CHAT in (c.get("title") or "")
+                       for c in chats):
+                chat = await link.call("chat.create", {
+                    "provider": "demo", "cwd": str(folder), "title": DEMO_CHAT})
+                await link.call("chat.send", {"chat_id": chat["id"],
+                                              "text": "Can you fix the typo in the README?"})
+                ask = await link.event(chat["id"], ("approval.request", "turn.done", "turn.error"))
+                if ask["event"] == "approval.request":
+                    await link.call("approval.respond", {
+                        "chat_id": chat["id"], "decision": "allow",
+                        "request_id": ask["data"]["request_id"]})
+                    ask = await link.event(chat["id"], ("turn.done", "turn.error"))
+                if ask["event"] == "turn.error":
+                    raise SystemExit(f"the sample chat failed: {(ask.get('data') or {}).get('message')}")
+                await link.call("chat.update", {"chat_id": chat["id"],
+                                                "project_id": project["id"]})
+                made["chat"] = 1
+    finally:
+        cfg.revoke(dev.id, remember=False)
+    return made
+
+
+def cmd_demo_seed(args: argparse.Namespace) -> None:
+    cfg = Config.load()
+    if not cfg.demo:
+        # Off a demo machine the chat below would be a real agent's turn,
+        # on somebody's real subscription, editing a real folder.
+        print("This is not a demo machine. Set `demo = true` in config.toml first"
+              " (daemon/README.md, 'Demo machine').", file=sys.stderr)
+        sys.exit(2)
+    if not _already_serving(cfg.port):
+        print(f"Nothing answers on port {cfg.port}. Start it first: remote-ai-chat serve",
+              file=sys.stderr)
+        sys.exit(2)
+    # The chat needs a folder to sit in, inside the roots a chat may open. The
+    # demo agent never touches it; this is the one write, and only once.
+    folder = Path(cfg.allowed_roots[0]).expanduser().resolve() / DEMO_PROJECT[1]
+    folder.mkdir(parents=True, exist_ok=True)
+    readme = folder / "README.md"
+    if not readme.exists():
+        readme.write_text(DEMO_README)
+    made = asyncio.run(_demo_seed(cfg, folder))
+    if not any(made.values()):
+        print("Already seeded; nothing to add.")
+        return
+    print(f"Seeded: {made['project']} project, {made['cards']} card(s),"
+          f" {made['chat']} chat — in {folder}")
+
+
 PLIST_LABEL = "com.remote-ai-chat.daemon"
 
 
@@ -549,6 +694,8 @@ def main() -> None:
                    help="a tunnel's hostname: print a link for a browser elsewhere (docs/TUNNEL.md)")
     s.set_defaults(fn=cmd_web)
     _project_parser(sub)
+    s = sub.add_parser("demo-seed", help="put a sample product, cards and chat on a demo machine")
+    s.set_defaults(fn=cmd_demo_seed)
     s = sub.add_parser("devices"); s.set_defaults(fn=cmd_devices)
     s = sub.add_parser("revoke"); s.add_argument("device_id"); s.set_defaults(fn=cmd_revoke)
     s = sub.add_parser("unlock", help="lift a tunnel lock on an address, without a restart")

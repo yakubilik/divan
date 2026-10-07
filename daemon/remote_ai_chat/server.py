@@ -40,6 +40,7 @@ from . import divan as divanmod
 from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager, with_project
 from .providers.claude_models import live_models as claude_live_models
 from .providers.codex import live_models as codex_live_models
+from .providers.demo import DemoProvider
 
 log = logging.getLogger("rac.server")
 
@@ -399,7 +400,7 @@ class Server:
 
     def _agent_prompt(self, chat: dict) -> str | None:
         aid = chat.get("agent_id")
-        if not aid:
+        if not aid or self.cfg.demo:
             return None
         home = self._account(chat.get("account_id"), chat["provider"]).home
         if aid == agents.CREATOR_ID:
@@ -433,6 +434,8 @@ class Server:
     def _resolve_account_home(self, chat: dict) -> tuple[str | None, dict[str, str]]:
         """Where the account keeps its login, and the environment that carries
         it — an account signed in with a key has nothing on disk to point at."""
+        if self.cfg.demo:
+            return None, {}
         a = self._account(chat.get("account_id"), chat["provider"])
         return a.home, a.env()
 
@@ -1425,6 +1428,8 @@ class Server:
                 "groups": self.db.list_groups()}
 
     async def h_chat_create(self, dev: Device, d: dict) -> dict:
+        if self.cfg.demo:
+            return await self._demo_chat_create(d)
         provider = d.get("provider", "claude")
         if provider not in PROVIDERS:
             raise Err("unknown_provider", "unknown tool")
@@ -1457,6 +1462,33 @@ class Server:
             title=with_project(d.get("title") or NEW_CHAT_TITLE,
                                self.policy.project_for(cwd)),
             max_turns=d.get("max_turns"), max_budget_usd=d.get("max_budget_usd"),
+        )
+        await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.created",
+                              "data": chat, "ts": time.time()})
+        return chat
+
+    async def _demo_chat_create(self, d: dict) -> dict:
+        """A chat on a demo machine: the demo tool, whatever the client named.
+
+        A client that predates demo mode still offers Claude and Codex, and
+        asks for one of them. Refusing would leave a reviewer with no way to
+        start a chat at all, so the name is taken as "a chat" and the demo
+        script is what runs. No account and no agent: neither exists here.
+        """
+        cwd = d.get("cwd") or self.cfg.allowed_roots[0]
+        if err := self.policy.cwd_error(cwd):
+            raise Err(err, "that folder cannot be opened")
+        cat = DemoProvider.catalog()
+        models = [m["id"] for m in cat["models"]]
+        chat = self.db.create_chat(
+            account_id=None, agent_id=None, pool_pinned=0,
+            provider=DemoProvider.name,
+            model=d.get("model") if d.get("model") in models else models[0],
+            effort=None, perm_mode=cat["perm_modes"][0],
+            cwd=str(Path(cwd).expanduser().resolve()), group_id=d.get("group_id"),
+            title=with_project(d.get("title") or NEW_CHAT_TITLE,
+                               self.policy.project_for(cwd)),
+            max_turns=None, max_budget_usd=None,
         )
         await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.created",
                               "data": chat, "ts": time.time()})
@@ -2404,6 +2436,9 @@ class Server:
 
     # ── info ───────────────────────────────────────────────────────────────
     def catalog(self) -> dict:
+        if self.cfg.demo:
+            # Only what a chat here can actually run.
+            return {DemoProvider.name: DemoProvider.catalog()}
         cat = {name: cls.catalog() for name, cls in PROVIDERS.items()}
         for name, models in self._models.items():
             if models and name in cat:
@@ -2424,6 +2459,8 @@ class Server:
         """Both live model lists, fetched side by side. Called at startup as well
         as from hello, so a chat that nobody opened a picker for still resolves
         its model the way the picker would have shown it."""
+        if self.cfg.demo:
+            return          # no CLI to ask, and none in the catalog
         await asyncio.gather(self._warm_models("codex", codex_live_models),
                              self._warm_models("claude", claude_live_models))
 
@@ -2459,7 +2496,10 @@ class Server:
 
     def host_info(self) -> dict:
         if self._versions is None:
-            self._versions = {p: tools.version(p) for p in ("claude", "codex")}
+            # A demo machine starts no CLI, not even to ask its version — the
+            # SDK carries a claude binary of its own that would answer.
+            self._versions = ({p: None for p in ("claude", "codex")} if self.cfg.demo
+                              else {p: tools.version(p) for p in ("claude", "codex")})
         return {
             "name": self.cfg.host_name, "os": platform.system(), "os_version": _os_version(),
             "daemon_version": __version__, "uptime_s": int(time.time() - self.started),
