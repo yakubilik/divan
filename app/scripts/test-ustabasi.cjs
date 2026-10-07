@@ -1293,7 +1293,12 @@ void Promise.all([newTicket.ready, voicenote.ready]).then(async () => {
   // …and the ticket page and Waiting on you (#126).
   const ticket = require('./test-handover-ticket.cjs');
   await ticket.ready;
-  checks.push(...newTicket.checks, ...voicenote.checks, ...composer.checks, ...project.checks, ...ticket.checks);
+  // …and Branch, Chat and Machine (#127). Last: it stands the chat screen up,
+  // which adds stand-ins to the shared harness that nothing before it needs.
+  const machine = require('./test-handover-machine.cjs');
+  await machine.ready;
+  checks.push(...newTicket.checks, ...voicenote.checks, ...composer.checks, ...project.checks, ...ticket.checks,
+              ...machine.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

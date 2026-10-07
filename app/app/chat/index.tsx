@@ -10,7 +10,7 @@
 // under it is the only thing the place adds.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, SectionList, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore, useT } from '../../src/store';
 import { useNavGuard } from '../../src/nav';
@@ -79,9 +79,6 @@ export default function ChatPlace() {
   const { all } = useLocalSearchParams<{ all?: string }>();
   const loadedList = useStore((st) => st.chatsLoaded);
   const landOn = landing(chats, !!all);
-  useEffect(() => {
-    if (landOn && loadedList) router.replace(`/chat/${landOn}`);
-  }, [landOn, loadedList]); // eslint-disable-line react-hooks/exhaustive-deps
   const send = useStore((s) => s.send);
   const [first, setFirst] = useState('');
   /** No conversation yet: what is said here opens one on this computer's
@@ -330,6 +327,10 @@ export default function ChatPlace() {
       )}
     </>
   );
+
+  // Every hook is above this line: the place goes straight into the newest
+  // conversation once the computer has said which chats it has.
+  if (landOn && loadedList) return <Redirect href={`/chat/${landOn}`} />;
 
   let body: React.ReactNode;
   if (switching) {

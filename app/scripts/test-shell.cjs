@@ -417,12 +417,20 @@ checks.push(
     setShowArchived: () => {}, setPrefs: async () => {},
   });
   const ChatPlace = require(path.join(root, 'app/chat/index.tsx')).default;
+  R.nav.reset();
+  R.params.reset();
+  R.render('dark', h(ChatPlace));
+  const went = R.nav.replaced();
+  // Earlier asks for the list by name.
+  R.params.set({ all: '1' });
   const list = R.render('dark', h(ChatPlace));
+  R.params.reset();
   R.nav.reset();
   const row = R.presses().find((press) => press.text.includes('Babysee build'));
   if (row) row.press();
   checks.push(
-    ['the Chat place comes out with every conversation on it, not just the newest',
+    ['the Chat place goes straight into the newest conversation (HANDOVER §4.8)', eq(went, ['/chat/a'])],
+    ['…and Earlier brings back every conversation, not just the newest',
       list.includes('Babysee build') && list.includes('isghocam SEO')],
     ['…a row of it opens that conversation', eq(R.nav.pushed(), ['/chat/a'])],
     ['…and the three places are still under it', list.includes('tabChat') && list.includes('tabMachine')],
