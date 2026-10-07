@@ -3,7 +3,7 @@
  *  The panel has always talked to every computer at once — that is what it is
  *  for — but what it merged was chats: a list per machine, and the machine was
  *  the thing you were looking at. Divan turns that over. The project is the
- *  context and the machine is a detail of a running task: isghocam's site may be
+ *  context and the machine is a detail of a running task: Quire's site may be
  *  checked out on the studio and its API on the mini, and that is one product
  *  with cards on two machines, not two products and not a question about which
  *  socket you happen to be holding.

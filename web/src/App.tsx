@@ -759,7 +759,7 @@ export function App() {
             //
             // On a page about one product it opens *in* that product: on a
             // machine that has it, in its repository. Asking Divan something
-            // while looking at babysee is asking about babysee, and a chat
+            // while looking at Quire is asking about Quire, and a chat
             // that opened in the last folder this computer happened to use is
             // one you have to orient before it can do anything.
             onAsk={(text: string) => tell(text, scope)}
@@ -984,7 +984,7 @@ function FirstWord({ onSay }: { onSay: (text: string) => Promise<void> }) {
 }
 
 /** A place, as the words the way back to it says: `Waiting on you`,
- *  `isghocam · Board`, `Dashboard`. */
+ *  `Quire · Board`, `Dashboard`. */
 function placeName(p: Place, view: ReturnType<typeof useDivanView>): string {
   if (p.view !== 'overview') return p.view === 'chats' ? 'Chats' : 'Machine';
   if (!p.project) return p.tab === 'waiting' ? 'Waiting on you' : 'Dashboard';

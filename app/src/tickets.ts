@@ -441,7 +441,7 @@ export function record(t: Ticket): string {
 //
 // Twenty cards in one list is a pile you have to read twice: the two tickets on
 // the same repository are eight cards apart and look unrelated. Grouped, "what
-// is happening in babysee" is answered by looking at one heading. The panel
+// is happening in Quire" is answered by looking at one heading. The panel
 // settled on this in ticket #13 (web/src/lib/ustabasi.ts); this is the same
 // reading in the app's own words, so a change to one is a change owed to the
 // other.
@@ -453,7 +453,7 @@ export function record(t: Ticket): string {
 // step it is on, and what has landed on the branch.
 
 /** The project a ticket is work on, by name. The daemon names it — a ticket in
- *  `babysee/app` is babysee — and the folder name is the fallback for a
+ *  `quire/app` is quire — and the folder name is the fallback for a
  *  repository its path policy has nothing to say about. Never the path: this
  *  screen is a screenshot away from being public. */
 export function projectName(t: Ticket): string {
@@ -523,7 +523,7 @@ export function commitCount(t: Ticket, T: Translate): string | null {
  *
  *  Usually the newest event — "merged into main (4dd999f)", "all accounts
  *  limited, queue paused until 17:05". Not a `start`, though. That one reads
- *  `worker round 1 pid 74155 model claude-opus-5 account yakup`, which is the
+ *  `worker round 1 pid 74155 model claude-opus-5 account main`, which is the
  *  queue talking to its own log, and a pid on a card is something to look past.
  *  With nothing worth repeating, the card says what the ticket is for instead. */
 export function cardLine(t: Ticket): string {

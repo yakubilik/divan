@@ -6,7 +6,7 @@
 // the top-level context and everything — chats, folders, accounts, the ticket
 // wall — was scoped to whichever one was active. Divan turns that over. The
 // project is the context and the machine is a detail of a running task:
-// isghocam's site may be checked out on the studio and its API on the mini, and
+// Quire's site may be checked out on the studio and its API on the mini, and
 // that is one project with cards on two machines, not two projects and not a
 // question about which computer you happen to be holding a socket to.
 //
