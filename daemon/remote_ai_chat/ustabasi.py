@@ -818,3 +818,89 @@ def run(ticket_id: int, cursor=None) -> dict:
         # is finished, which is in the middle of a run and not at the start.
         "shots": _shots(run_dir),
     }
+
+
+# ── what the queue told the owner, and what a ticket left behind ───────────
+
+#: How far back the inbox reaches. Older than that is history, not news.
+INBOX_LIMIT = 80
+
+#: A report a ticket wrote is named in what it said about itself: a path to a
+#: document. Only documents — code is the diff's business, not the report's.
+_REPORT_PATH = re.compile(r"(?<![\w:/.~])(?:~/|/)[^\s`'\"()<>\]\[|,;]+?\.(?:md|txt|csv|log|html)\b")
+
+#: A report bigger than this is a dump; the panel shows its opening and says so.
+REPORT_BYTES = 200_000
+
+
+def notifications(after: int = 0, limit: int = INBOX_LIMIT,
+                  project_for: Callable[[str], str | None] | None = None) -> dict:
+    """What the queue sent, newest first: the same messages Telegram and the
+    phone's push got, kept so they can be read again after the push is gone.
+
+    `after` is the newest id the asker has already seen; with it, only what is
+    newer comes back. Every text goes through the key mask on the way out — a
+    notification quotes workers, and a worker can quote anything.
+    """
+    if not available():
+        return {"available": False, "items": [], "last": 0}
+    from . import secrets
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT n.id, n.ticket_id, n.ts, n.kind, n.text, t.title, t.repo, t.status"
+            " FROM notifications n LEFT JOIN tickets t ON t.id = n.ticket_id"
+            " WHERE n.id > ? ORDER BY n.id DESC LIMIT ?", (int(after or 0), int(limit))).fetchall()
+        last = conn.execute("SELECT COALESCE(MAX(id), 0) FROM notifications").fetchone()[0]
+    items = []
+    for r in rows:
+        lines = [ln for ln in secrets.mask(r["text"] or "").splitlines() if ln.strip()]
+        # The first line is the headline every path sends ("#111 ✅ … — bitti");
+        # the rest is the body, without the CLI hint the Telegram text ends on.
+        body = [ln for ln in lines[1:] if not ln.strip().startswith("ustabasi ")]
+        items.append({
+            "id": r["id"], "ticket": r["ticket_id"], "ts": r["ts"], "kind": r["kind"],
+            "headline": lines[0] if lines else "", "body": "\n".join(body).strip(),
+            "title": r["title"] or "", "status": r["status"] or "",
+            "project": _project(r["repo"], project_for) if r["repo"] else None,
+        })
+    return {"available": True, "items": items, "last": last}
+
+
+def report(ticket_id: int) -> dict:
+    """What a ticket came back with, for a person to read: the worker's own
+    summary, the verifier's verdict, and every document the ticket named in
+    either — the rotation list, the audit — read here, because those live
+    outside the folders the file endpoint serves, and masked, because a report
+    about keys is exactly the file that might quote one."""
+    from . import secrets
+    if not available():
+        raise LookupError("no queue")
+    with _connect() as conn:
+        row = conn.execute("SELECT id, title, status, report, verdict, notes FROM tickets WHERE id=?",
+                           (int(ticket_id),)).fetchone()
+        sent = [r[0] for r in conn.execute(
+            "SELECT text FROM notifications WHERE ticket_id=? ORDER BY id", (int(ticket_id),))]
+    if row is None:
+        raise LookupError("no such ticket")
+    rep = _json(row["report"], {}) or {}
+    ver = _json(row["verdict"], {}) or {}
+    summary = secrets.mask(str(rep.get("summary") or "")).strip()
+    verdict = secrets.mask(str(ver.get("summary") or "")).strip()
+    haystack = "\n".join([row["report"] or "", row["verdict"] or "", row["notes"] or "", *sent])
+    files, seen = [], set()
+    for m in _REPORT_PATH.finditer(haystack):
+        p = Path(m.group(0)).expanduser()
+        try:
+            p = p.resolve()
+            if p in seen or not p.is_file():
+                continue
+            seen.add(p)
+            size = p.stat().st_size
+            raw = p.read_bytes()[:REPORT_BYTES].decode("utf-8", "replace")
+        except OSError:
+            continue
+        files.append({"path": str(p), "name": p.name, "size": size,
+                      "cut": size > REPORT_BYTES, "text": secrets.mask(raw)})
+    return {"id": row["id"], "title": row["title"], "status": row["status"],
+            "summary": summary, "verdict": ver.get("verdict") or "", "verdict_summary": verdict,
+            "files": files}
