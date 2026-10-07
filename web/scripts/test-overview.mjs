@@ -214,7 +214,8 @@ group('the panel and the phone say the same thing about the same board');
 
   // The Dashboard of HANDOVER §4.1 draws neither of the two lines above any
   // more: a tile carries the worst card's own line, and Working now writes an
-  // agent as its title over `project · executor · machine · time`. Both
+  // agent as its title over `project · executor · machine · time` — on the
+  // panel both are a badge's tooltip. Both
   // screens are held to composing that row the same way.
   const phoneScreen = appSrc('app/app/dashboard.tsx');
   const panelScreen = readFileSync(join(web, 'src', 'screens', 'Dashboard.tsx'), 'utf8');
@@ -373,11 +374,11 @@ group('the Dashboard: greeting, Composer, Needs you, Projects, Working now');
   ok('what needs a person is a grid of wait cards under a small head',
     busy.includes('<h3 id="needs-you">Needs you</h3>') && (busy.match(/class="dv-glass dv-wait"/g) ?? []).length
       === view('busy').cards.filter((c) => S.kindOf(c)).length);
-  ok('every product is a tile that is a link to its own page',
+  ok('every product is a badge that is a link to its own page',
     view('busy').projects.every((p) => busy.includes(`href="/p/${encodeURIComponent(p.key)}"`)));
-  ok('what is working now is a list row per agent, with project · executor · machine',
-    (busy.match(/class="dv-live"/g) ?? []).length === OV.agentRows(view('busy')).length
-    && /Coder/.test(busy));
+  ok('what is running is a badge per agent, each a link to its own ticket',
+    OV.agentRows(view('busy')).length > 0 && OV.agentRows(view('busy')).every((r) =>
+      busy.includes(`data-running="${r.agent.host}:${r.agent.card_id}" href="/p/`)));
   K.setThemeChoice('dark');
   const dark = page('busy');
   K.setThemeChoice('light');

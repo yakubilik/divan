@@ -61,6 +61,18 @@
 .dv-tile .count .w{font-family:var(--font-sans);font-weight:400;color:var(--ink-3)}
 .dv-wait .dv-btn{min-height:30px}
 .dv-live .dv-dot{flex:none}
+/* The Dashboard's two rows of badges: products, and what is running. Side by
+   side on a desk, one under the other where there is no room. */
+.dv-rows{display:flex;flex-wrap:wrap;align-items:flex-start;gap:28px 40px;margin-top:40px}
+.dv-rows>section{flex:1 1 320px;min-width:0}
+.dv-chips{display:flex;flex-wrap:wrap;gap:8px}
+.dv-chip{appearance:none;display:inline-flex;align-items:center;gap:8px;height:34px;max-width:100%;padding:0 12px 0 8px;border-radius:var(--radius-pill);color:var(--ink);font:500 13px/18px var(--font-sans);text-decoration:none;cursor:pointer;transition:background .18s ease}
+.dv-chip:hover{background:var(--glass-2)}
+.dv-chip .t{min-width:0;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-chip .dv-dot{flex:none}
+.dv-chip-meta{font:400 11.5px var(--font-mono);color:var(--ink-3);white-space:nowrap}
+.dv-chip .count{display:inline-flex;align-items:center;gap:4px;font:500 11.5px var(--font-mono);color:var(--ink-2)}
+.dv-chip.dv-tile--dormant,.dv-chip.dv-tile--dormant .dv-mono{color:var(--ink-3)}
 .dv-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* The status a second agent is checking (HANDOVER §2: grey dot + word). */

@@ -108,11 +108,13 @@ export interface OverviewProps {
   onOpenCard?: (card: MergedCard) => void;
   /** The Composer at the foot of a product's page, locked to that product. */
   projectComposer?: React.ReactNode;
+  /** A running chat's badge on the Dashboard: open that chat. */
+  onOpenChat?: (host: string, chatId: string) => void;
 }
 
 export function Overview({
   view, project, onProject, onAsk, askNote, tab, onTab, branch, onBranch, card, onCard, chats,
-  composer, onOpenCard, projectComposer,
+  composer, onOpenCard, projectComposer, onOpenChat,
 }: OverviewProps) {
   const here: ProjectTab = tab ?? 'overview';
   // What this product's chats did today, off every computer that has it.
@@ -142,7 +144,7 @@ export function Overview({
     if (here === 'waiting') return <Waiting view={view} onCard={openCard} />;
     return (
       <Dashboard view={view} onProject={onProject} composer={composer}
-        onCard={openCard} onWaiting={() => onTab?.('waiting')}
+        onCard={openCard} onChat={onOpenChat} onWaiting={() => onTab?.('waiting')}
         empty={<Nothing view={view} />} />
     );
   }

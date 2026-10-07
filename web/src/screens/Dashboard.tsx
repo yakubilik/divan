@@ -1,5 +1,6 @@
 /** The Dashboard (HANDOVER §4.1): a greeting and one line of what is going on,
- *  the Composer, what needs you, the products, and what is working now.
+ *  the Composer, what needs you, and then two rows of badges side by side: the
+ *  products, and what is running now.
  *
  *  Every figure on it is counted off the merged boards (`lib/divan.ts`); a
  *  section with nothing in it is not drawn at all — "Needs you" is absent from
@@ -10,17 +11,20 @@ import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
 import { useDivanStore } from '../lib/divan';
 import { moveCard, ticketNote } from '../lib/actions';
 import { agentRows, age, dormant, freshness, latest, line, staleWords, staleness } from '../lib/overview';
+import { useFleet } from '../lib/fleet';
 import { sessions, type Session } from '../lib/sessions';
 import { greeting, quietFor, short, summary } from '../lib/compose';
 import { uptime } from '../lib/format';
 
-export function Dashboard({ view, onProject, onCard, onWaiting, composer, empty }: {
+export function Dashboard({ view, onProject, onCard, onChat, onWaiting, composer, empty }: {
   view: DivanView;
   /** Everything waiting on you, on a page of its own (HANDOVER §4.6). */
   onWaiting?: () => void;
   onProject: (key: string) => void;
   /** Open a card's own page — the ticket. */
   onCard: (card: MergedCard) => void;
+  /** Open a chat that is in the middle of a turn. */
+  onChat?: (host: string, chatId: string) => void;
   composer: React.ReactNode;
   /** What to say where there are no products to draw. */
   empty?: React.ReactNode;
@@ -63,8 +67,10 @@ export function Dashboard({ view, onProject, onCard, onWaiting, composer, empty 
           </section>
         )}
 
-        <Projects view={view} onProject={onProject} empty={empty} />
-        <Working view={view} />
+        <div className="dv-rows">
+          <Projects view={view} onProject={onProject} empty={empty} />
+          <Running view={view} onCard={onCard} onChat={onChat} />
+        </div>
       </div>
     </div>
   );
@@ -133,80 +139,96 @@ export function Wait({ session: s, onOpen }: { session: Session; onOpen: () => v
   );
 }
 
-/** Tiles, three across on a desk; the dormant ones last and dimmed. */
+/** A badge per product, in a row that wraps; the dormant ones last and dimmed.
+ *  The line a tile used to carry is the badge's tooltip. */
 function Projects({ view, onProject, empty }: {
   view: DivanView; onProject: (key: string) => void; empty?: React.ReactNode;
 }) {
-  if (!view.projects.length) return empty ? <section style={{ marginTop: 40 }}>{empty}</section> : null;
+  if (!view.projects.length) return empty ? <section>{empty}</section> : null;
   const awake = view.projects.filter((p) => !dormant(p, view.now));
   const asleep = view.projects.filter((p) => dormant(p, view.now));
   return (
-    <section style={{ marginTop: 40 }} aria-labelledby="projects">
+    <section aria-labelledby="projects">
       <div className="dv-sec">
         <h3 id="projects">Projects</h3>
         <span className="dv-meta">{view.projects.length}{asleep.length ? ` · ${asleep.length} quiet` : ''}</span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+      <div className="dv-chips">
         {[...awake, ...asleep].map((p) => (
-          <Tile key={p.key} project={p} now={view.now} dim={asleep.includes(p)} onOpen={() => onProject(p.key)} />
+          <Badge key={p.key} project={p} now={view.now} dim={asleep.includes(p)} onOpen={() => onProject(p.key)} />
         ))}
       </div>
     </section>
   );
 }
 
-function Tile({ project: p, now, dim, onOpen }: {
+function Badge({ project: p, now, dim, onOpen }: {
   project: MergedProject; now: number; dim: boolean; onOpen: () => void;
 }) {
-  const since = age(p, now);
   const asking = Math.max(0, p.waiting - p.stuck);
-  const said = dim ? quietFor(since ?? 0, p.counts.queued ?? 0)
+  const said = dim ? quietFor(age(p, now) ?? 0, p.counts.queued ?? 0)
     : latest(p.cards) || p.summary || line(p, now);
   return (
-    <a className={`dv-glass dv-tile${dim ? ' dv-tile--dormant' : ''}`} href={`/p/${encodeURIComponent(p.key)}`}
-      data-tile={p.key} onClick={(e) => { e.preventDefault(); onOpen(); }}>
-      <div className="dv-tile-head">
-        <span className="dv-mono" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
-        <span className="dv-tile-name">{p.name}</span>
-        {!!p.stage && <span className="dv-tile-stage">{p.stage}</span>}
-      </div>
-      <p className="dv-tile-now">{said}</p>
-      <div className="dv-tile-foot">
-        {p.running > 0 && <span className="count"><i className="dv-dot dv-dot--run" aria-hidden="true" />{p.running} <span className="w">working</span></span>}
-        {asking > 0 && <span className="count" style={{ color: 'var(--amber)' }}><i className="dv-dot dv-dot--ask" aria-hidden="true" />{asking} <span className="w">need you</span></span>}
-        {p.stuck > 0 && <span className="count"><i className="dv-dot dv-dot--stuck" aria-hidden="true" />{p.stuck} <span className="w">stuck</span></span>}
-        {(freshness(p) ?? since) != null && (
-          <span className="dv-meta when">{freshness(p) ?? short(since!)}</span>
-        )}
-      </div>
+    <a className={`dv-glass dv-chip dv-hit${dim ? ' dv-tile--dormant' : ''}`} href={`/p/${encodeURIComponent(p.key)}`}
+      title={said} data-tile={p.key} onClick={(e) => { e.preventDefault(); onOpen(); }}>
+      <span className="dv-mono dv-mono--sm" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
+      <span className="t">{p.name}</span>
+      {!!p.stage && <span className="dv-chip-meta">{p.stage}</span>}
+      {!!freshness(p) && <span className="dv-chip-meta">{freshness(p)}</span>}
+      {p.running > 0 && <span className="count"><i className="dv-dot dv-dot--run" aria-hidden="true" />{p.running}<span className="dv-hidden"> working</span></span>}
+      {asking > 0 && <span className="count"><i className="dv-dot dv-dot--ask" aria-hidden="true" />{asking}<span className="dv-hidden"> need you</span></span>}
+      {p.stuck > 0 && <span className="count"><i className="dv-dot dv-dot--stuck" aria-hidden="true" />{p.stuck}<span className="dv-hidden"> stuck</span></span>}
     </a>
   );
 }
 
-/** Every agent at work on every product: project · executor · machine · time. */
-function Working({ view }: { view: DivanView }) {
+/** Everything in the middle of work, a badge each: the agents on tickets, and
+ *  the chats with a turn running. A badge opens the thing it names. Absent when
+ *  nothing is running. */
+function Running({ view, onCard, onChat }: {
+  view: DivanView; onCard: (card: MergedCard) => void; onChat?: (host: string, chatId: string) => void;
+}) {
+  const hosts = useFleet((s) => s.hosts);
   const rows = agentRows(view);
-  if (!rows.length) return null;
-  const machines = new Set(rows.map((r) => r.agent.host)).size;
+  const chats = Object.entries(hosts).flatMap(([host, slot]) =>
+    (slot?.chats ?? []).filter((c) => c.status !== 'idle' && !c.archived).map((chat) => ({ host, chat })));
+  if (!rows.length && !chats.length) return null;
   return (
-    <section style={{ marginTop: 40 }} aria-labelledby="working-now">
+    <section aria-labelledby="running-now">
       <div className="dv-sec">
-        <h3 id="working-now">Working now</h3>
-        <span className="dv-meta">{rows.length} · {machines === 1 ? '1 machine' : `${machines} machines`}</span>
+        <h3 id="running-now">Running</h3>
+        <span className="dv-meta">{rows.length + chats.length}</span>
       </div>
-      <div className="dv-glass" style={{ borderRadius: 'var(--radius-md)', padding: '4px 14px' }}>
+      <div className="dv-chips">
         {rows.map((r) => {
+          const card = view.cards.find((c) => c.host === r.agent.host && c.id === r.agent.card_id);
           const name = view.projects[r.index]?.name ?? r.agent.project;
           const when = r.agent.unknown ? 'state unknown'
             : r.agent.since == null ? '' : short(view.now - r.agent.since);
+          const dot = r.agent.unknown ? 'dv-dot--ask' : r.tone === 'red' ? 'dv-dot--stuck' : 'dv-dot--run';
           return (
-            <div key={`${r.agent.host}:${r.agent.card_id}`} className="dv-live">
-              <i className={`dv-dot ${r.agent.unknown ? 'dv-dot--ask' : r.tone === 'red' ? 'dv-dot--stuck' : 'dv-dot--run'}`} aria-hidden="true" />
+            <a key={`${r.agent.host}:${r.agent.card_id}`} className="dv-glass dv-chip dv-hit"
+              title={[name, r.who, r.agent.machine || r.agent.hostName, when].filter(Boolean).join(' · ')}
+              data-running={`${r.agent.host}:${r.agent.card_id}`}
+              href={card ? `/p/${encodeURIComponent(card.projectKey)}/c/${encodeURIComponent(card.id)}` : undefined}
+              onClick={(e) => { e.preventDefault(); if (card) onCard(card); }}>
+              <i className={`dv-dot ${dot}`} aria-hidden="true" />
               <span className="t">{r.agent.title}</span>
-              <span className="dv-meta">{[name, r.who, r.agent.machine || r.agent.hostName, when].filter(Boolean).join(' · ')}</span>
-            </div>
+              <span className="dv-chip-meta">{[name, when].filter(Boolean).join(' · ')}</span>
+            </a>
           );
         })}
+        {chats.map(({ host, chat }) => (
+          <button key={`${host}:${chat.id}`} type="button" className="dv-glass dv-chip dv-hit"
+            title={chat.task || chat.last_preview || chat.title} data-running-chat={`${host}:${chat.id}`}
+            onClick={() => onChat?.(host, chat.id)}>
+            <i className={`dv-dot ${chat.status === 'awaiting_approval' ? 'dv-dot--ask' : 'dv-dot--run'}`} aria-hidden="true" />
+            <span className="t">{chat.title || 'Chat'}</span>
+            <span className="dv-chip-meta">
+              {[chat.project, chat.status === 'awaiting_approval' ? 'asks' : short(view.now - chat.updated_at)].filter(Boolean).join(' · ')}
+            </span>
+          </button>
+        ))}
       </div>
     </section>
   );

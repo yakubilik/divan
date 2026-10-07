@@ -735,6 +735,7 @@ export function App() {
                 onOptions={() => setNewChat({})} />
             )}
             onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setBranch(null); setCard(idOf(c)); }}
+            onOpenChat={open}
             // The Composer at the foot of a product: everything it sends is
             // about that product, and the chat it starts is read right here,
             // in the middle of the product's page, with the list beside it.
