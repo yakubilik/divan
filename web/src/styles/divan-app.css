@@ -6,6 +6,8 @@
 /* A control drawn smaller than a fingertip still answers one: the box it
    draws stays, the area that takes the press is 44px tall. */
 .dv-hit{position:relative}
+/* Grey text on a tinted row — an amber wash, a selected row — is read in ink-2: ink-3 falls under 4.5:1 there. */
+.dv-tinted{--dv-ink3:var(--dv-ink2)}
 .dv-hit::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;height:44px;margin-top:-22px}
 
 /* The page column every screen sits in. */
@@ -23,7 +25,7 @@
 /* §5: the chips under the Composer. One row, scrolled sideways on a narrow
    screen rather than wrapped. */
 .dv-pickers{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}
-.dv-picker .lbl{color:var(--ink-3);font-weight:500}
+.dv-picker .lbl{color:var(--ink-2);font-weight:400}
 .dv-picker .val{color:var(--ink-2)}
 .dv-picker[data-changed="true"] .val{color:var(--ink)}
 .dv-picker[data-changed="true"]{border-color:var(--ink-3)}
@@ -156,8 +158,18 @@
 .dv-editor .dv-field input{height:40px;font-size:14px}
 .dv-editor .dv-field textarea{font-size:14px;line-height:20px}
 
+.dv-split{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;align-items:start}
+.dv-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+
 @media (max-width:720px){
   .dv-page{padding:16px 16px 64px}
+  /* A side column drops below the main one; a chat list sits above its chat. */
+  .dv-split{grid-template-columns:minmax(0,1fr)}
+  .dv-grid3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dv-chatpane{flex-direction:column}
+  .dv-chathead,.dv-chatchips{flex-wrap:wrap}
+  .dv-chatchips>*{flex-shrink:0;max-width:100%}
+  .dv-chatpane>.dv-chatlist{width:100%!important;height:auto!important;max-height:40vh;border-right:none!important;border-bottom:1px solid var(--hairline)}
   .dv-greet{font-size:38px;line-height:40px}
   .dv-topline .sys{gap:6px}
   .dv-topline .sys .sys-word{display:none}
@@ -184,3 +196,13 @@
 .dv-cardlink .t{font-size:13.5px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dv-cardlink svg{width:16px;height:16px;stroke:var(--ink-3);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .dv-cardlink:focus-visible,.dv-subnav a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* §2: on the phone layout every press is a 44px target. Last in the sheet so it
+   outranks a part's own min-height; a min-size wins over any height. The display
+   rule has no specificity, so a part that sets its own display keeps it. */
+@media (max-width:720px){
+  .dv-root :is(button, a[href], select, textarea, summary, [role=button], [role=tab],
+    input:not([type=hidden]):not([type=checkbox]):not([type=radio])){min-height:44px;box-sizing:border-box}
+  .dv-root :is(button, a[href], summary, [role=button], [role=tab]){min-width:44px}
+  :where(.dv-root) :where(a[href]){display:inline-flex;align-items:center}
+}

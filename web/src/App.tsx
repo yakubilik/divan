@@ -751,7 +751,7 @@ export function App() {
             which opens the list beside it — nothing was deleted, and each is
             still at its own address. */}
         {place === 'chat' && (
-          <>
+          <div className="dv-chatpane" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
             {earlier && (
               <Sidebar
                 selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
@@ -777,7 +777,7 @@ export function App() {
                 }} />
               )}
             </div>
-          </>
+          </div>
         )}
 
         {place === 'machine' && (

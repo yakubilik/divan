@@ -203,7 +203,7 @@ export function Overview({
           </div>
         )}
         {here === 'chat' && (
-          <div style={{
+          <div className="dv-chatpane" style={{
             marginTop: 24, height: 'calc(100vh - 220px)', minHeight: 420, display: 'flex', overflow: 'hidden',
             border: '1px solid var(--glass-edge)', borderRadius: 'var(--radius-md)',
           }}>{chats?.pane}</div>

@@ -34,14 +34,10 @@ export function Branches({ project: p, now, onBranch }: {
 }) {
   const branches = branchCards(p, now);
   return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 24, alignItems: 'start',
-    }}>
+    <div className="dv-split">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
         <SectionHeader title="Branches" count={branches.length} />
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10,
-        }}>
+        <div className="dv-grid3">
           {branches.map((b) => (
             <Card key={b.key} onClick={() => onBranch(b.kind)} title={`Everything on ${b.name}`}
               style={{ gap: 12 }}>

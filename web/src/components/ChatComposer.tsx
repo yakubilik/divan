@@ -242,7 +242,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           <Icon path={P.plus} size={compact ? 15 : 18} color={C.text} />
         </button>
         <textarea
-          ref={ref} name="composer" value={shown} rows={1}
+          ref={ref} name="composer" aria-label="Message" value={shown} rows={1}
           onChange={(e) => setText(e.target.value)}
           onPaste={onPaste}
           onKeyDown={(e) => {
