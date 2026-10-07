@@ -28,11 +28,14 @@ export interface Chat {
   updated_at: number;
   session_ids?: string;
   /** The product this chat is work on, as that computer filed it from what
-   *  its agent touched — its id on the board, and the name a list draws.
-   *  Absent from a daemon older than the filing; `null` when nothing claims
-   *  the chat. */
+   *  its agent first touched — its id on the board, and the name a list draws.
+   *  Filed once and never moved by the computer after; `chat.update` with a
+   *  `project_id` sets it by hand. Absent from a daemon older than the filing;
+   *  `null` when nothing claims the chat. */
   project_id?: string | null;
   project?: string | null;
+  /** 1 once a person has put the chat under a product (or Unfiled) by hand. */
+  project_set?: number;
 }
 
 export interface Group { id: string; name: string; sort: number; created_at: number }

@@ -144,11 +144,13 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
 }
 
 /** `group` is the only kind somebody made, and so the only one with a name to
- *  change or a heading to take away. `project` is the computer's own filing,
- *  and `archive` is where everything that has gone quiet ends up. */
+ *  change or a heading to take away. `project` is a product the chats were
+ *  filed under, and carries that product's id on this computer so a chat can
+ *  be dropped into it; `archive` is where everything that has gone quiet ends up. */
 interface Section {
   key: string; title: string; hostKey: string; chats: Chat[];
   kind: 'group' | 'project' | 'folder' | 'loose' | 'archive' | 'host';
+  projectId?: string;
 }
 
 /** How long a chat stays in the list after it last moved. */
@@ -251,7 +253,8 @@ function sections(chats: Chat[], groups: Group[], hostKey: string, searching: bo
     if (arr.length || !searching) out.push({ key: g.id, title: g.name, hostKey, chats: arr, kind: 'group' });
   }
   for (const [name, arr] of byProject) {
-    out.push({ key: `project:${name}`, title: name, hostKey, chats: arr, kind: 'project' });
+    out.push({ key: `project:${name}`, title: name, hostKey, chats: arr, kind: 'project',
+               projectId: arr[0].project_id ?? undefined });
   }
   if (byCwd.size > 1) {
     for (const [path, arr] of byCwd) {
@@ -432,16 +435,20 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   const canGroup = !!slot && !!focus && !fleetWide && !project;
   /** The heading a dragged chat is over. */
   const [over, setOver] = useState<string | null>(null);
-  // A chat dropped on a group goes into it; dropped on anything that is not a
-  // group — a product, a folder, the unfiled list — it comes out of the one it
-  // was in, and is the computer's to file again.
+  // A chat dropped on a group goes into it. Dropped on a product it comes out
+  // of its group and is filed under that product for good — the computer never
+  // moves a chat a person put somewhere. Dropped on a folder or the unfiled list
+  // it only comes out of the group it was in.
   const drop = (s: Section, dt: DataTransfer) => {
     setOver(null);
     const drag = readChatDrag(dt);
     if (!drag || drag.hostKey !== s.hostKey) return;
     const to = s.kind === 'group' ? s.key : null;
-    const from = hosts[s.hostKey]?.chats.find((c) => c.id === drag.chatId)?.group_id ?? null;
-    if (from !== to) updateChat(s.hostKey, drag.chatId, { group_id: to }).catch(() => {});
+    const chat = hosts[s.hostKey]?.chats.find((c) => c.id === drag.chatId);
+    const patch: Record<string, string | null> = {};
+    if ((chat?.group_id ?? null) !== to) patch.group_id = to;
+    if (s.kind === 'project' && s.projectId && chat?.project_id !== s.projectId) patch.project_id = s.projectId;
+    if (Object.keys(patch).length) updateChat(s.hostKey, drag.chatId, patch).catch(() => {});
   };
 
   /** Where a dragged heading would land: this side of that section. */
