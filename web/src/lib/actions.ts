@@ -62,7 +62,9 @@ export const editTicket = (key: string, id: number, card: {
 export const deleteTicket = (key: string, id: number, force = false) =>
   call<{ message?: string }>(key, 'ustabasi.delete', { id, force });
 
-/** Move a card into a column of the board, at the bottom of it.
+/** Move a card into a column of the board: at the bottom of it, or at
+ *  `position` — an index in that column once the card has left it, which is
+ *  how Queued is put in order of priority.
  *
  *  The move has happened by the time this answers, whatever `error` says: a
  *  card landing in In Progress with a coding agent on it is also what files it
@@ -70,9 +72,9 @@ export const deleteTicket = (key: string, id: number, force = false) =>
  *  refuses leaves the card where it was put and says why. The board never
  *  springs back under a cursor, so a screen reports the line and keeps the
  *  card. */
-export const moveCard = (key: string, cardId: string, column: string) =>
+export const moveCard = (key: string, cardId: string, column: string, position?: number) =>
   call<{ card: DivanCard; error: string | null }>(key, 'divan.card.move',
-    { card_id: cardId, column });
+    { card_id: cardId, column, ...(position != null ? { position } : {}) });
 
 /** One card with **both faces**, and the live half where a ticket was filed for
  *  it. The board's cards carry the human face only — this is the one request

@@ -30,9 +30,11 @@
 import type { DivanColumn } from './protocol';
 import type { MergedCard, MergedProject } from './divan';
 import { stuck, waiting } from './divan';
-import { COLUMN_LABEL, executorWord, type Ago } from './overview';
+import { executorWord, type Ago } from './overview';
 import { executorFace, idOf } from './sessions';
 import { EXECUTORS, STATE_TONE, type State, type Tone } from './theme';
+import { short } from './compose';
+import { day } from './project';
 
 /** Where a card has been put but the machine has not said so yet, by card id. */
 export type Moves = Record<string, DivanColumn>;
@@ -97,12 +99,49 @@ export interface Ticket {
   hollow: boolean;
   /** The window this card is, where the reader asks for it. */
   session: string;
+  /** The `dv-status` word: what is actually happening to it. */
+  status: Status | null;
+  /** The one sentence under the title, where there is one worth a line: what
+   *  the agent asked, or why it stopped. Empty otherwise. */
+  line: string;
+  /** The mono corner: machine · how long, or the day it was finished. */
+  meta: string;
+}
+
+// ── the status word ─────────────────────────────────────────────────────────
+
+/** The `dv-status` modifier a word is drawn with (HANDOVER §3). */
+export type StatusKind = 'run' | 'ask' | 'stuck' | 'review' | 'idle' | 'done';
+
+export interface Status { kind: StatusKind; word: string }
+
+/** What is actually happening to a card, in one word, and only what the board
+ *  knows: no fraction is drawn after `testing`, because nothing on the wire
+ *  counts a verifier's checks. A card in Ice Box carries none. */
+export function status(card: MergedCard): Status | null {
+  if (card.column === 'done') {
+    if (card.agent_status === 'cancelled') return { kind: 'idle', word: 'cancelled' };
+    return { kind: 'done', word: 'done' };
+  }
+  if (card.agent_status === 'failed') return { kind: 'stuck', word: 'failed' };
+  if (card.agent_status === 'blocked') return { kind: 'stuck', word: 'stuck' };
+  if (card.agent_status === 'asking') return { kind: 'ask', word: 'asking' };
+  if (card.column === 'review') return { kind: 'review', word: 'testing' };
+  if (card.agent_status === 'running') return { kind: 'run', word: 'running' };
+  if (card.agent_status === 'verified') return { kind: 'done', word: 'passed' };
+  if (card.agent_status === 'cancelled') return { kind: 'idle', word: 'cancelled' };
+  if (card.column === 'in_progress' && card.executor === 'human') return { kind: 'idle', word: 'yours' };
+  if (card.column === 'in_progress') return { kind: 'idle', word: 'next up' };
+  if (card.column === 'queued') return { kind: 'idle', word: 'waiting' };
+  return null;
 }
 
 export function ticket(card: MergedCard, now: number, ago: Ago): Ticket {
   const face = executorFace(card);
   const known = EXECUTORS[face];
   const branch = (card.branch || '').trim();
+  const st = status(card);
+  const stamp = card.agent_status_at ?? card.moved_at ?? null;
   return {
     card,
     face,
@@ -116,60 +155,95 @@ export function ticket(card: MergedCard, now: number, ago: Ago): Ticket {
     waiting: waiting(card),
     hollow: card.executor === 'human',
     session: idOf(card),
+    status: st,
+    line: st && (st.kind === 'ask' || st.kind === 'stuck') ? (card.agent_detail || '').trim() : '',
+    meta: card.column === 'done'
+      ? day(card.moved_at ?? card.updated_at)
+      : card.column === 'ice_box' || card.column === 'queued'
+        ? [card.column === 'queued' ? executorWord(card.executor) : '', card.created_at ? short(now - card.created_at) : '']
+          .filter(Boolean).join(' · ')
+        : [card.machine || card.hostName, stamp != null ? short(now - stamp) : ''].filter(Boolean).join(' · '),
   };
 }
 
 // ── the four columns ────────────────────────────────────────────────────────
 
-/** The mono aside at the far end of a column head. Two of the four are what
- *  the column *is* and are the frame's own words; the other two are counted,
- *  and a column with nothing to count says nothing. Web12 W2 writes `this
- *  month 12` over Done, and that is what the daemon sends of it: the cards
- *  finished in the last month, newest first. */
-const SUB: Partial<Record<DivanColumn, string>> = { ice_box: 'someday', queued: 'next up' };
+/** The four columns a person sees (HANDOVER §4.3), with the aside each head
+ *  carries. Review is the queue's own word for a ticket a second agent is
+ *  checking; to a person that card is still In Progress, and its status says
+ *  `testing` — the column is the intent and the status is what is true. */
+export const BOARD: { key: DivanColumn; label: string; sub: string }[] = [
+  { key: 'ice_box', label: 'Ice Box', sub: 'someday' },
+  { key: 'queued', label: 'Queued', sub: 'top = next' },
+  { key: 'in_progress', label: 'In Progress', sub: 'drop here = start' },
+  { key: 'done', label: 'Done', sub: 'this month' },
+];
+
+/** The column a card is drawn in: review folds into In Progress. */
+export const shown = (column: DivanColumn): DivanColumn => (column === 'review' ? 'in_progress' : column);
+
+/** How many finished cards Done draws before `Show N more`. */
+export const DONE_SHOWN = 3;
 
 export interface BoardColumn {
   key: DivanColumn;
   label: string;
-  /** The cards in it, in the order somebody put them in. */
+  /** The cards in it, in the order somebody put them in; Done newest first. */
   tickets: Ticket[];
-  /** How many are in the column altogether, finished ones included. */
+  /** How many there are. Done is this month's cards, which is all of Done a
+   *  machine sends (`DONE_WINDOW_S`): the number is never a total of work
+   *  finished last March sitting over a list of this month's. The other three
+   *  are the machines' own counts, which a machine sends whole. */
   count: number;
   sub: string;
   /** Work is happening in it. */
   live: boolean;
-  /** What the count says is there and this page does not carry: `+ 45 more`,
-   *  which on Done is the whole of it. Empty where the column is whole. */
+  /** Cards a machine counted and did not send: `+ 3 more`. Empty normally. */
   more: string;
 }
 
 export function columns(p: MergedProject, now: number, ago: Ago, moved: Moves = {}): BoardColumn[] {
-  const at = (c: MergedCard) => moved[c.id] ?? c.column;
-  return COLUMN_LABEL.map(({ key, label }) => {
+  const at = (c: MergedCard) => shown(moved[c.id] ?? c.column);
+  return BOARD.map(({ key, label, sub }) => {
     const cards = p.cards.filter((c) => at(c) === key)
       .sort((a, b) => key === 'done'
         ? ((b.moved_at ?? 0) - (a.moved_at ?? 0)) || a.title.localeCompare(b.title)
-        : a.position - b.position || a.title.localeCompare(b.title));
-    // What the machines say is in the column, against what they actually sent
-    // of it — measured against where each card *was*, not where a cursor has
-    // just put it, so that a card in the air does not leave a phantom behind
-    // it. On Done that gap is the whole column and on the other three it is
-    // normally nothing, which is one rule rather than a rule and an exception.
-    const hidden = Math.max(0,
-      (p.counts[key] ?? 0) - p.cards.filter((c) => c.column === key).length);
-    const running = cards.filter((c) => c.agent_status === 'running').length;
+        // Review after the cards still being written, each in its own order.
+        : (a.column === 'review' ? 1 : 0) - (b.column === 'review' ? 1 : 0)
+          || a.position - b.position || a.title.localeCompare(b.title));
+    const said = key === 'done' ? 0
+      : (p.counts[key] ?? 0) + (key === 'in_progress' ? p.counts.review ?? 0 : 0);
+    const hidden = Math.max(0, said - p.cards.filter((c) => shown(c.column) === key).length);
     return {
       key,
       label,
       tickets: cards.map((c) => ticket(c, now, ago)),
       count: cards.length + hidden,
-      sub: SUB[key] ?? (key === 'done'
-        ? (cards.length ? `this month ${cards.length}` : '')
-        : running ? `${running} working` : ''),
-      live: running > 0,
+      sub,
+      live: cards.some((c) => c.agent_status === 'running'),
       more: hidden ? `+ ${hidden} more` : '',
     };
   });
+}
+
+/** The four numbers of the project page's board summary, off the same columns
+ *  the board draws — one reading of the board, not two. */
+export function counts(p: MergedProject, now: number, ago: Ago): { key: DivanColumn; label: string; n: number; sub: string }[] {
+  const subs: Partial<Record<DivanColumn, string>> = { queued: 'next up', in_progress: 'agents working' };
+  return columns(p, now, ago).map((c) => ({ key: c.key, label: c.label, n: c.count, sub: subs[c.key] ?? c.sub }));
+}
+
+/** `In progress now`: the In Progress column's cards with their real status,
+ *  worst first, at most five. */
+export const NOW_MAX = 5;
+
+export function inProgress(p: MergedProject, now: number, ago: Ago): Ticket[] {
+  const rank = (t: Ticket) => ({ stuck: 0, ask: 1, review: 2, run: 3 } as Record<string, number>)[t.status?.kind ?? ''] ?? 4;
+  return columns(p, now, ago)[2].tickets
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => rank(a.t) - rank(b.t) || a.i - b.i)
+    .slice(0, NOW_MAX)
+    .map((x) => x.t);
 }
 
 /** Whether this column would take the card in the air. Its own will not: the

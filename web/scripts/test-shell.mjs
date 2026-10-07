@@ -531,7 +531,7 @@ group('the page is scoped, not a second screen');
   ok('unscoped, it is the greeting and every product', /<h1 class="dv-greet">Good (morning|afternoon|evening)\.<\/h1>/.test(all)
     && all.includes('Quire') && all.includes('Hush'));
   ok('scoped, the head is the product and the aside is the machines it is on',
-    one.includes('Quire') && one.includes('studio · mini') && !one.includes('Hush'));
+    one.includes('Quire') && one.includes('runs on studio, mini') && !one.includes('Hush'));
   ok('…and it is the same screen rather than a second one',
     all !== one && one.length > 200 && all.length > 200);
   // The faces of a product are their own tab now. `done` in their numbers is
@@ -544,13 +544,13 @@ group('the page is scoped, not a second screen');
     faces.includes('Engineering') && faces.includes('open') && faces.includes('done')
     && faces.includes('>3<'),
     faces.slice(faces.indexOf('Branches'), faces.indexOf('Branches') + 300));
-  ok('…and which states it is in, as characters and not only as colour',
-    ['■', '?', '●'].every((c) => faces.includes(c)));
+  ok('…and which states its cards are in, as words and not only as colour',
+    ['asking', 'stuck'].every((w) => one.includes(`</i>${w}</span>`)));
   // …and the page you land on is the other question: what is happening on the
   // product and how it got here, with no grid of faces on it.
-  ok('the product page is what is happening on it and what it has been through',
-    one.includes('Right now') && one.includes('Timeline')
-    && !one.slice(one.indexOf('Right now')).includes('Engineering'));
+  ok('the product page is its board in four numbers, its branches and what it has been through, with no stage rail',
+    one.includes('In progress now') && one.includes('Timeline') && one.includes('Branches')
+    && !one.includes('dv-stage'));
   ok('a page built partly out of a quiet machine says how old it is',
     renderToStaticMarkup(h(OverviewUI.Overview, { view: view('stale'), project: null, onProject() {} }))
       .includes('quiet for'));
@@ -602,7 +602,7 @@ group('the page is scoped, not a second screen');
     // markup: a scoped page carries the word "Overview" now, as the first of
     // the tabs over a product (Web12 W2), and what must not be the Dashboard's
     // is the head.
-    const pageHead = (m) => (m.match(/font-size:28px[^>]*>([^<]*)</) ?? [, null])[1];
+    const pageHead = (m) => (m.match(/data-project-head="">([^<]*)</) ?? m.match(/font-size:28px[^>]*>([^<]*)</) ?? [, null])[1];
     ok('the panel opened at a product reads that product, and without one reads them all',
       pageHead(scoped) === 'Quire' && /class="dv-greet"/.test(whole) && whole.includes('Hush'),
       `${pageHead(scoped)} vs ${pageHead(whole)}`);

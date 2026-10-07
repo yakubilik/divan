@@ -42,9 +42,12 @@ export interface ComposerProps {
    *  the full dialog, for the times a default is not the answer. */
   onOptions?: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement>;
+  /** The product this Composer belongs to (the foot of a project page): every
+   *  send carries it, and its chip cannot be taken off or changed. */
+  lock?: string | null;
 }
 
-export function Composer({ view, onAsk, onCard, onOptions, inputRef }: ComposerProps) {
+export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null }: ComposerProps) {
   const host = useFleet((s) => s.focus);
   const slot = useFleet((s) => (s.focus ? s.hosts[s.focus] : null));
   const prefs = usePrefs((s) => s.defaults);
@@ -108,10 +111,12 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef }: ComposerP
     ? (provider !== 'claude' ? 'No agent' : agents && !hermes ? 'No agent' : 'Hermes')
     : picks.agent === null ? 'No agent'
       : (agents?.find((a) => a.id === picks.agent)?.label ?? picks.agent);
-  const project = picks.project ? view.projects.find((p) => p.key === picks.project) ?? null : null;
+  const scoped = lock ?? picks.project ?? null;
+  const project = scoped ? view.projects.find((p) => p.key === scoped) ?? null : null;
   const low = lowQuota(slot?.limits?.[limitsKey(provider, account)], warn) === true;
 
   const change = (value: string) => {
+    if (lock) { setText(value); if (said?.error) setSaid(null); return; }
     const m = mention(view, value);
     if (m.project) setPicks((p) => ({ ...p, project: m.project }));
     setText(m.text);
@@ -120,8 +125,8 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef }: ComposerP
 
   const send = async () => {
     if (mic.state !== 'idle') { mic.stop(); return; }
-    const m = mention(view, text, true);
-    const scope = m.project ?? picks.project ?? null;
+    const m = lock ? { project: null, text } : mention(view, text, true);
+    const scope = lock ?? m.project ?? picks.project ?? null;
     const words = m.text.trim();
     if (m.project) { setPicks((p) => ({ ...p, project: m.project })); setText(m.text); }
     if (!words || busy) return;
@@ -171,7 +176,12 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef }: ComposerP
     <section className="dv-glass-strong dv-composer" ref={box} aria-label="Composer">
       <div className="dv-scope" data-menu-root="">
         <span className="lbl">to</span>
-        {project ? (
+        {lock ? (
+          <span className="dv-chip dv-chip--locked" data-locked="true" aria-label={`Scope ${project?.name ?? lock}, fixed to this project`}>
+            <span className="dv-mono dv-mono--sm" aria-hidden="true">{(project?.name ?? lock).charAt(0).toUpperCase()}</span>
+            {project?.name ?? lock}
+          </span>
+        ) : project ? (
           <button type="button" className="dv-chip dv-hit" aria-pressed="true"
             aria-label={`Scope ${project.name}, press to clear`}
             onClick={() => reset('project')}>
@@ -188,12 +198,13 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef }: ComposerP
           <Menu label="Projects" options={projectOptions} value={null}
             onPick={(v) => pick({ project: v })} empty="No project on any machine yet." />
         )}
-        <span className="dv-meta" style={{ marginLeft: 'auto' }}>empty = Hermes files it</span>
+        {!lock && <span className="dv-meta" style={{ marginLeft: 'auto' }}>empty = Hermes files it</span>}
       </div>
       <label htmlFor="composer-in" style={HIDDEN}>Message to Divan</label>
       <textarea
         id="composer-in" ref={field} rows={2}
-        placeholder={mic.state === 'listening' ? 'Listening…' : 'Tell Divan what to do, in which project.'}
+        placeholder={mic.state === 'listening' ? 'Listening…'
+          : lock ? `Ask about ${project?.name ?? lock}, or drop a card.` : 'Tell Divan what to do, in which project.'}
         value={mic.interim ? appendSpeech(text, mic.interim) : text}
         onChange={(e) => change(e.target.value)}
         onKeyDown={(e) => {
@@ -217,13 +228,13 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef }: ComposerP
         </button>
       </div>
       <div className="dv-pickers" role="group" aria-label="What a new chat opens with">
-        <Picker name="Project" value={project ? project.name : 'auto'} changed={!!project}
+        {!lock && <Picker name="Project" value={project ? project.name : 'auto'} changed={!!project}
           open={menu === 'project'} onOpen={() => setMenu(menu === 'project' ? null : 'project')}
           onReset={() => reset('project')}>
           <Menu label="Projects" options={[{ value: '', label: 'auto' }, ...projectOptions]}
             value={picks.project ?? ''} empty="No project on any machine yet."
             onPick={(v) => (v ? pick({ project: v }) : (reset('project'), setMenu(null)))} />
-        </Picker>
+        </Picker>}
         <Picker name="Agent" value={agentLabel} changed={picks.agent !== undefined}
           open={menu === 'agent'} onOpen={() => setMenu(menu === 'agent' ? null : 'agent')}
           onReset={() => reset('agent')}>

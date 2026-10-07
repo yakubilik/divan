@@ -42,20 +42,12 @@
  *  against: no machine has answered yet, a machine answered and has since gone
  *  quiet, and a machine that cannot be reached at all.
  */
-import { useEffect, useState } from 'react';
-import { uptime } from '../lib/format';
-import {
-  agentLine, agentRows, calm, calmWords, cardMarks, chip, clock,
-  count, counters, figure, freshness, latest, line, marks, staleWords, staleness, summaryOf,
-} from '../lib/overview';
+import { useState } from 'react';
 import { RADIUS, SHADOW, SIZE, T } from '../lib/theme';
 import { branchOf } from '../lib/project';
 import { idOf } from '../lib/sessions';
 import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
-import {
-  Card, CommandBar, Counter, EmptyState, Monogram, Note, RosterRow, SectionHeader,
-  StateMark, Tabs, Tag,
-} from '../ui/divan';
+import { CommandBar, EmptyState } from '../ui/divan';
 import { mono } from '../ui/kit';
 import { Sessions } from '../components/Sessions';
 import { MicButton, useMic } from '../components/Mic';
@@ -64,25 +56,15 @@ import { useFleet } from '../lib/fleet';
 import { Board } from './Board';
 import { Branch } from './Branch';
 import { Branches } from './Branches';
-import { Project } from './Project';
+import { Project, ProjectHead } from './Project';
+import { NewTicket } from './NewTicket';
 import { Ticket } from './Ticket';
 import { Dashboard } from './Dashboard';
 
-/** The tabs over a product (Web12 W2, Web14 W6): what is happening on it, the
- *  faces it has beside its code, its board, and — the frame's own fourth,
- *  `Chats 6` — the chats that are work on it. The Chat place in the bar above
- *  is every chat on a computer; this is the ones about one product, read and
- *  answered without leaving the product.
- *
- *  Branches is a tab rather than the top of the Overview because the two answer
- *  different questions: how a product is organised is something a person looks
- *  up, and what is going on is what they opened the product for. */
-export const PROJECT_TABS = [
-  { key: 'overview', label: 'Overview' }, { key: 'branches', label: 'Branches' },
-  { key: 'board', label: 'Board' }, { key: 'chat', label: 'Chat' },
-] as const;
-
-export type ProjectTab = typeof PROJECT_TABS[number]['key'];
+/** Where inside a product the page is: the three views of the segment, the
+ *  branches with their repositories (reached from the Branches section), and a
+ *  new ticket being written. Each is a path of its own (`lib/nav.ts`). */
+export type ProjectTab = 'overview' | 'board' | 'chat' | 'branches' | 'new';
 
 export interface OverviewProps {
   view: DivanView;
@@ -120,14 +102,14 @@ export interface OverviewProps {
   composer?: React.ReactNode;
   /** A waiting card's Open: its own page, inside its product. */
   onOpenCard?: (card: MergedCard) => void;
+  /** The Composer at the foot of a product's page, locked to that product. */
+  projectComposer?: React.ReactNode;
 }
 
 export function Overview({
   view, project, onProject, onAsk, askNote, tab, onTab, branch, onBranch, card, onCard, chats,
-  composer, onOpenCard,
+  composer, onOpenCard, projectComposer,
 }: OverviewProps) {
-  const old = staleness(view);
-  const agents = agentRows(view);
   const here: ProjectTab = tab ?? 'overview';
   // The two pages inside a product that have a head of their own. A key that is
   // no longer in the view — a card that has been finished, a machine that has
@@ -143,15 +125,6 @@ export function Overview({
     : null;
   const face = project && !open ? branchOf(project, branch ?? null) : null;
   const deep = !!open || !!face;
-  const board = !!project && !deep && here === 'board';
-  const chatting = !!project && !deep && here === 'chat';
-  const [drafting, setDrafting] = useState(false);
-  // A half-written card belongs to the board it was opened on: leaving the
-  // product, or the board for a card's own page, puts it down. A *tab* is put
-  // down where the tab is pressed rather than here — the word that opens a
-  // draft moves the tab itself, and an effect watching the tab would close the
-  // card in the same commit that opened it.
-  useEffect(() => { setDrafting(false); }, [project?.key, deep]);
   if (!project) {
     return (
       <Dashboard view={view} onProject={onProject} composer={composer}
@@ -159,107 +132,74 @@ export function Overview({
         empty={<Nothing view={view} />} />
     );
   }
-  const aside = project
-    ? (project.machines.join(' · ') || 'no machine')
-    : old
-      ? `partly as of ${clock(old.asOf)}`
-      : `${count(view.projects.length, 'project')} · ${count(agents.length, 'agent')}`;
-  const said = project ? marks(project) : [];
 
-  return (
-    <div style={{
-      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20,
-      // The chat has a composer of its own, so the command bar is not drawn
-      // over it and the page does not keep room for one.
-      padding: `24px 32px ${chatting ? 20 : BAR_ROW + 12}px`, background: T.bg,
-      // The board fills the page and its columns scroll, and so does the chat;
-      // everything else is a page that scrolls under a bar fixed over it.
-      overflowY: board || chatting ? 'hidden' : 'auto',
-    }}>
-      {!deep && (
-      <SectionHeader
-        kind="page"
-        lead={project
-          ? <Monogram name={project.name} index={view.projects.indexOf(project)} size={44} />
-          : undefined}
-        title={project ? project.name : 'Overview'}
-        // The frame's own line under a product's name, with the machines it is
-        // checked out on after it: `SaaS · client portals for studios · studio
-        // · mini`.
-        note={project ? [summaryOf(project), aside].join(' · ') : undefined}
-        right={project ? (said.length ? <Marks project={project} /> : null) : aside}
-        tone={!project && old ? 'amber' : undefined}
-      >
-        {!!project && (
-          <Tabs
-            tabs={PROJECT_TABS.map((t) => (t.key === 'branches'
-              // The frame's `Chats 6`: the number belongs to the tab that has
-              // one, and a product whose faces have not arrived yet has none.
-              ? { ...t, count: project.branches.length || null }
-              : t.key === 'chat' ? { ...t, count: chats?.count || null } : { ...t }))}
-            value={here}
-            onChange={(key) => { setDrafting(false); onTab?.(key as ProjectTab); }}
-            style={{ marginLeft: 14 }} />
-        )}
-        {/* Web14 W6 puts it at the far end of this line, and W9 is what it
-            opens: the card is written at the top of Ice Box, so the press lands
-            on the board with the draft open. */}
-        {!!project && (
-          <button type="button" style={NEW_TICKET}
-            onClick={() => { onTab?.('board'); setDrafting(true); }}>+ New ticket</button>
-        )}
-      </SectionHeader>
-      )}
-      {/* The fleet's own sentence, over the page that is about the fleet. A
-          product's page says which of *its* machines has gone quiet, which is
-          the same fact said more precisely — twice would be the page arguing
-          with itself. */}
-      {!!old && !project && (
-        <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>
-          {staleWords(old, uptime)}
-        </div>
-      )}
-      {!project && <Everything view={view} onProject={onProject} />}
-      {!!project && !!open && (
-        <Ticket
-          card={open} project={project} index={view.projects.indexOf(project)} now={view.now}
-          onProject={() => { onCard?.(null); onBranch?.(null); }}
-          onBranch={(kind) => { onCard?.(null); onBranch?.(kind); }}
-        />
-      )}
-      {!!project && !open && !!face && (
-        <Branch
-          project={project} branch={face} index={view.projects.indexOf(project)} now={view.now}
-          onProject={() => onBranch?.(null)}
-          onCard={(c: MergedCard) => onCard?.(idOf(c))}
-        />
-      )}
-      {chatting && (
-        <div style={{
-          flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden',
-          border: `1px solid ${T.line}`, borderRadius: RADIUS.card,
-        }}>{chats?.pane}</div>
-      )}
-      {!!project && !deep && !chatting && (board
-        ? (
-          <Board
-            view={view} project={project}
-            drafting={drafting} onDraft={setDrafting}
-            onCard={(t) => onCard?.(idOf(t.card))}
+  if (deep) {
+    // A card's page and a branch's page keep their own heads and the bar under
+    // them until their own step of the redesign.
+    return (
+      <div style={{
+        flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20,
+        padding: `24px 32px ${BAR_ROW + 12}px`, background: T.bg, overflowY: 'auto',
+      }}>
+        {!!open && (
+          <Ticket
+            card={open} project={project} index={view.projects.indexOf(project)} now={view.now}
+            onProject={() => { onCard?.(null); onBranch?.(null); }}
+            onBranch={(kind) => { onCard?.(null); onBranch?.(kind); }}
           />
-        )
-        : here === 'branches'
-          ? (
-            <Branches
-              project={project} now={view.now}
-              onBranch={(kind) => onBranch?.(kind)}
-            />
-          )
-          : <Project view={view} project={project} onCard={(c) => onCard?.(idOf(c))} />)}
-      {/* The bar and the windows are over the page rather than in it: the page
-          scrolls, and a question that scrolled away with it would be a
-          notification again. */}
-      {!!onAsk && !chatting && <Bar onAsk={onAsk} note={askNote ?? null} />}
+        )}
+        {!open && !!face && (
+          <Branch
+            project={project} branch={face} index={view.projects.indexOf(project)} now={view.now}
+            onProject={() => onBranch?.(null)}
+            onCard={(c: MergedCard) => onCard?.(idOf(c))}
+          />
+        )}
+        {!!onAsk && <Bar onAsk={onAsk} note={askNote ?? null} />}
+        <Sessions view={view} />
+      </div>
+    );
+  }
+
+  const to = (key: string) => onTab?.(key as ProjectTab);
+  const writeNew = () => onTab?.('new');
+  return (
+    <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+      <div className="dv-page">
+        {here !== 'new' && (
+          <ProjectHead project={project} now={view.now} tab={here} onTab={to} onNew={writeNew}
+            compact={here !== 'overview'} />
+        )}
+        {here === 'overview' && (
+          <Project view={view} project={project}
+            onCard={(c) => onCard?.(idOf(c))}
+            onBoard={() => to('board')}
+            onBranch={(kind) => onBranch?.(kind)}
+            onBranches={() => to('branches')}
+            composer={projectComposer} />
+        )}
+        {here === 'board' && (
+          <>
+            <Board view={view} project={project} onNew={writeNew}
+              onCard={(t) => onCard?.(idOf(t.card))} />
+            {!!projectComposer && <div style={{ marginTop: 32 }}>{projectComposer}</div>}
+          </>
+        )}
+        {here === 'branches' && (
+          <div style={{ marginTop: 32 }}>
+            <Branches project={project} now={view.now} onBranch={(kind) => onBranch?.(kind)} />
+          </div>
+        )}
+        {here === 'chat' && (
+          <div style={{
+            marginTop: 24, height: 'calc(100vh - 220px)', minHeight: 420, display: 'flex', overflow: 'hidden',
+            border: '1px solid var(--glass-edge)', borderRadius: 'var(--radius-md)',
+          }}>{chats?.pane}</div>
+        )}
+        {here === 'new' && (
+          <NewTicket view={view} project={project} onClose={() => to('board')} onCreated={() => to('board')} />
+        )}
+      </div>
       <Sessions view={view} />
     </div>
   );
@@ -341,141 +281,6 @@ function Bar({ onAsk, note }: {
  *  product a sentence will be said about). It is also what the page leaves
  *  empty at its foot, so the two are one number. */
 const BAR_ROW = 118;
-
-/** Everything, which is the page the frames draw: the counters, the products and
- *  the roster. */
-function Everything({ view, onProject }: { view: DivanView; onProject: (key: string) => void }) {
-  const quiet = calm(view);
-  const words = calmWords(view);
-  const rows = agentRows(view);
-  if (!view.hosts.length || !view.projects.length) return <Nothing view={view} />;
-  return (
-    <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
-        {counters(view).map((c) => (
-          <Counter key={c.label} value={c.value} label={c.label} tone={c.tone} ring={c.ring} />
-        ))}
-      </div>
-      {/* A morning where nothing needs anybody is a state this page is designed
-          for, and not the busy one with its numbers at zero. The rule is
-          `calm()` and not a copy of it: two spellings of one rule is how a
-          screen comes to say "all clear" over a quiet machine's own amber
-          sentence. */}
-      {quiet && (
-        <Note tone="run" dot title={words.title} foot={words.foot ? [words.foot] : undefined} />
-      )}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 24, alignItems: 'start',
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-          <SectionHeader title="Projects" note="sorted by urgency" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-            {view.projects.map((p, i) => (
-              <ProjectCard key={p.key} project={p} index={i} now={view.now}
-                onClick={() => onProject(p.key)} />
-            ))}
-          </div>
-        </div>
-        {!!rows.length && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-            <SectionHeader title="Agents" count={rows.length} />
-            <Card inset={false} style={{ padding: '2px 12px' }}>
-              {rows.map((r, i) => (
-                <RosterRow
-                  key={`${r.agent.host}:${r.agent.card_id}`} first={i === 0}
-                  mark={r.mark} tone={r.tone} who={r.who}
-                  lead={<Monogram name={view.projects[r.index]?.name ?? r.agent.project}
-                    index={r.index < 0 ? null : r.index} size={18} />}
-                  text={agentLine(r, view.now, uptime)}
-                />
-              ))}
-            </Card>
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-/** One product's card (Web12 W1): its monogram and name, where its work is, the
- *  worst true thing about it in the corner, what git says, and the board's own
- *  marks with the worst card's line beside them. */
-function ProjectCard({ project: p, index, now, onClick }: {
-  project: MergedProject; index: number; now: number; onClick: () => void;
-}) {
-  const corner = chip(p, now, uptime);
-  const fresh = freshness(p);
-  const git = figure(p, now, uptime);
-  const board = cardMarks(p);
-  const said = latest(p.cards);
-  return (
-    <Card onClick={onClick} title={`Everything on ${p.name}`} style={{ gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <Monogram name={p.name} index={index} />
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{
-            fontSize: 16, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}>{p.name}</div>
-          <div style={{
-            ...mono, fontSize: 11.5, color: T.ink3, marginTop: 2,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{line(p, now)}</div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-          <Tag mark={corner.mark} label={corner.text} tone={corner.tone} />
-          {!!fresh && <span style={{ ...mono, fontSize: 10.5, color: T.ink3 }}>{fresh}</span>}
-        </div>
-      </div>
-      {!!git && (
-        <div>
-          <div style={{ ...mono, fontSize: 24, lineHeight: 1, fontWeight: 500, letterSpacing: '-.02em' }}>
-            {git.value}
-          </div>
-          <div style={{ ...mono, fontSize: 11, color: T.ink3, marginTop: 6, whiteSpace: 'nowrap' }}>
-            {git.label} · {git.moved}
-          </div>
-        </div>
-      )}
-      {(!!board.length || !!said) && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, minWidth: 0,
-          borderTop: `1px solid ${T.line}`, paddingTop: 10,
-        }}>
-          <span style={{ display: 'flex', gap: 8, flex: 'none' }}>
-            {board.map((m) => <StateMark key={m.mark} state={m.mark} label={m.n} size={11.5} />)}
-          </span>
-          {!!said && (
-            <span style={{
-              marginLeft: 'auto', fontSize: 12.5, color: T.ink2, minWidth: 0,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>{said}</span>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/** The word at the far end of a product's head, which the frame sets as plain
- *  type rather than as a button. */
-const NEW_TICKET: React.CSSProperties = {
-  marginLeft: 'auto', flex: 'none', background: 'transparent', border: 'none', padding: 0,
-  font: 'inherit', fontSize: 13, fontWeight: 500, color: T.ink, cursor: 'pointer',
-  whiteSpace: 'nowrap',
-};
-
-/** `? 1 asking · ■ 1 stuck · ● 2 running`, and nothing at all where none of the
- *  three is true — a calm product says so by being quiet. */
-function Marks({ project, style }: { project: MergedProject; style?: React.CSSProperties }) {
-  const list = marks(project);
-  if (!list.length) return null;
-  return (
-    <span style={{ display: 'inline-flex', gap: 12, flex: 'none', ...style }}>
-      {list.map((m) => <StateMark key={m.state} state={m.state} label={m.label} />)}
-    </span>
-  );
-}
 
 /** Nothing to draw, in whichever of its four ways. A page with no products on
  *  it is not the same thing as a page whose machines have not answered. */
