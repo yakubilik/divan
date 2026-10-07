@@ -1,34 +1,47 @@
-Divan is a client for an open-source daemon that the user installs on
-their own computer. There is no backend of ours and no account system. The app
-connects over the user's own network to that daemon, which drives a
-command-line coding agent the user has already installed and signed into.
+A DEMO COMPUTER IS ONLINE FOR THIS REVIEW
 
-Because of that, the app cannot be exercised end to end without a computer
-running the daemon, and we cannot ship one with the app.
+Divan is a client for an open-source daemon that the user installs on their
+own computer. There is no backend of ours and no account system, so the app
+needs a computer to talk to. We have put one online for you.
 
-If you would like to drive it yourself, we will put a demo daemon online at a
-public address for the duration of the review and send you a pairing link you
-can open on the test device. Ask in Resolution Center and we will reply the
-same day, within hours during European working time.
+To pair the test device, do either of these:
 
-Everything the app does is also readable in the open source: the phone client,
-the daemon, and the wire protocol between them are all in the public
-repository linked at the bottom of this note.
+1. Scan the QR code attached to this submission (app-review-qr.png) on the
+   app's pairing screen. It is the screen the app opens on; allow the camera
+   when asked.
+
+2. Or open this link in Safari on the test device, with the app installed:
+
+<pairing link: kept out of the repository, it carries the demo token>
+
+No login, password or account is involved. Pairing takes a second, and the app
+then opens on the demo computer.
+
+What you will find there: a project called "Sample app", a board with five
+cards, and one conversation. You can open the conversation, send a message and
+watch the reply stream in, and move through the board and the project pages.
+The demo computer runs a scripted agent, so nothing you type executes anything;
+on a user's own computer the same screens drive the coding agent they have
+installed there.
+
+The demo stays online for the whole review. If it does not answer, tell us in
+Resolution Center and we will reply the same day, within hours during European
+working time.
 
 Notes on specific items:
 
 - Camera: used once, to scan the pairing QR code the daemon prints. Nothing is
   photographed or stored.
 - Local network: the app connects directly to the user's own computer by IP
-  address. It contacts no other host.
-- App Transport Security: the connection is a WebSocket to a private address on
-  the user's own network. There is no public hostname, so there is no
-  certificate to obtain; the traffic never leaves the user's network, which on
-  a tailnet is already encrypted at the network layer.
+  address. It contacts no host of ours.
+- App Transport Security: in normal use the connection is a WebSocket to a
+  private address on the user's own network, where there is no public hostname
+  and so no certificate to obtain. The demo computer is reached the same way,
+  over a public address, only so that you can test.
 - Face ID: optional, for locking the app and for confirming a destructive
   command.
-- The app collects no data at all — no analytics SDK, no crash reporting, no
+- The app collects no data at all: no analytics SDK, no crash reporting, no
   identifiers, and no server of ours to send them to.
 
 Source code, daemon install instructions and the full wire protocol are public:
-https://github.com/yakubilik/remote-ai-chat
+https://github.com/yakubilik/divan
