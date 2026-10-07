@@ -213,6 +213,11 @@ seed(useFleet, {
     // What the panel can now do to a ticket. The queue's own CLI owns what
     // each of them means; a fake only has to answer in the shape it answers —
     // a sentence — and record that it was asked.
+    // What a ticket came back with, in the shape the daemon reads it back:
+    // nothing written yet, which the ticket page draws as no Report at all.
+    if (type === 'ustabasi.report') {
+      return { id: data.id, title: '', status: '', summary: '', verdict: '', verdict_summary: '', files: [] };
+    }
     if (type.startsWith('ustabasi.') && type !== 'ustabasi.run') {
       queueAsks.push({ type, data });
       if (type === 'ustabasi.edit' && !(data.done_criteria ?? []).length) {
@@ -1390,7 +1395,7 @@ group('a chat dropped on a product is filed under it by hand');
       fakeChat({ id: 'h1', title: 'Hush pricing', project_id: 'p-hush', project: 'Hush', updated_at: at - 20 }),
     ] } } });
   });
-  await click(find('Chat', header));
+  await click(nav('Chats'));
   const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
   const section = (key) => doc.querySelector(`[data-section="${key}"]`);
   const row = (words) => [...doc.querySelectorAll('button[draggable="true"]')]
@@ -1410,14 +1415,13 @@ group('a chat dropped on a product is filed under it by hand');
     section('project:Hush')?.textContent?.slice(0, 200));
 
   await click(find('Dashboard', header));
-  await click(find('Hush', header));
-  const tab = [...doc.querySelectorAll('button')]
-    .find((b) => !header.contains(b) && /^Chat\s*2$/.test((b.textContent ?? '').trim()));
+  await click(tile('hush'));
+  const tab = find('Chats', doc.querySelector('[aria-label="View"]'));
   await click(tab);
   const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
   ok('…and on that product’s own page', !!tab && shown('Webhook retry policy') && shown('Hush pricing'),
     `tab ${!!tab} · ${w.location.pathname}`);
-  await click(find('All', header));
+  await press('0');
 }
 
 group('the four things the panel could not do to a computer');

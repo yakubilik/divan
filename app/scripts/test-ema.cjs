@@ -280,7 +280,9 @@ async function run() {
     const sp = speaker(log, fakeEma(log));
     let done = 0;
     sp.speak('Merhaba.', 'tr-TR', () => done++);
-    await wait(20);
+    // Until it is done rather than a fixed 20 ms: the whole suite runs other
+    // screens beside this, and a busy loop can hold a 0 ms timer past 20 ms.
+    for (let i = 0; i < 100 && !done; i++) await wait(20);
     check('who speaks: Turkish with EMA ready is EMA, not expo-speech',
       log.includes('synth 0') && log.includes('play 0') && !log.some((l) => l.startsWith('system')) && done === 1);
   }
@@ -296,7 +298,7 @@ async function run() {
     const sp = speaker(log, e, { enabled: () => enabled });
     let done = 0;
     sp.speak('Merhaba.', lang, () => done++);
-    await wait(20);
+    for (let i = 0; i < 100 && !done; i++) await wait(20);
     check(`who speaks: ${name} is expo-speech`, log[0] === `system ${lang} Merhaba.` && !log.some((l) => l.startsWith('synth')) && done === 1);
   }
   {
