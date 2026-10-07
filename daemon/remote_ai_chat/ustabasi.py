@@ -904,3 +904,62 @@ def report(ticket_id: int) -> dict:
     return {"id": row["id"], "title": row["title"], "status": row["status"],
             "summary": summary, "verdict": ver.get("verdict") or "", "verdict_summary": verdict,
             "files": files}
+
+
+# ── following a ticket from the chat that filed it ─────────────────────────
+
+#: What ends a wait: the ticket finished, stopped to ask, or fell over.
+FOLLOWED_KINDS = ("done", "blocked", "failed")
+
+_KIND_WORD = {"done": "is done", "blocked": "is asking something", "failed": "failed"}
+
+
+def followed(after: int) -> tuple[list[dict], int]:
+    """The ends of tickets that were filed from a chat, newer than `after`.
+
+    A ticket knows its chat through `card.origin_chat`, which `ustabasi add`
+    writes from the RAC_CHAT_ID the daemon puts in every agent's environment.
+    Returns what to deliver and the newest notification id looked at.
+    """
+    if not available():
+        return [], after
+    from . import secrets
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT n.id, n.ticket_id, n.kind, n.text, t.title, t.card, t.ask"
+            " FROM notifications n JOIN tickets t ON t.id = n.ticket_id"
+            " WHERE n.id > ? ORDER BY n.id", (int(after),)).fetchall()
+        last = conn.execute("SELECT COALESCE(MAX(id), 0) FROM notifications").fetchone()[0]
+    out = []
+    for r in rows:
+        if r["kind"] not in FOLLOWED_KINDS:
+            continue
+        chat = (_json(r["card"], {}) or {}).get("origin_chat")
+        if not chat:
+            continue
+        lines = [ln for ln in secrets.mask(r["text"] or "").splitlines() if ln.strip()]
+        body = "\n".join(ln for ln in lines[1:] if not ln.strip().startswith("ustabasi "))
+        out.append({"chat": chat, "ticket": r["ticket_id"], "kind": r["kind"],
+                    "title": r["title"] or "", "body": body.strip(),
+                    "ask": secrets.mask(r["ask"] or "") if r["kind"] == "blocked" else ""})
+    return out, max(last, after)
+
+
+def newest_notification() -> int:
+    """The id the follower starts from on its very first run."""
+    if not available():
+        return 0
+    with _connect() as conn:
+        return conn.execute("SELECT COALESCE(MAX(id), 0) FROM notifications").fetchone()[0]
+
+
+def follow_message(f: dict) -> str:
+    """What the filing chat is told. It reads as a note from the queue, and it
+    tells the agent what to do with it: the person is waiting in this chat."""
+    head = f"🔔 ustabasi #{f['ticket']} {_KIND_WORD.get(f['kind'], f['kind'])}: {f['title']}"
+    said = f["ask"] or f["body"]
+    tail = ("You filed this ticket from this chat and Yakup is waiting here for it. "
+            "Tell him what came of it in a few plain lines, in his language"
+            + ("; put its question to him simply" if f["kind"] == "blocked" else "")
+            + f". `ustabasi show {f['ticket']}` has the details.")
+    return f"{head}\n\n{said}\n\n{tail}" if said else f"{head}\n\n{tail}"

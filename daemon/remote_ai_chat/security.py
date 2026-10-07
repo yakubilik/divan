@@ -33,6 +33,10 @@ DESTRUCTIVE_PATTERNS = [
     re.compile(r"\blaunchctl\s+(unload|bootout|disable|remove)\b"),
     re.compile(r"\bkillall\s+-9\b"),
     re.compile(r"\bpkill\s+-9?\s*-f\s+remote[-_]ai[-_]chat"),
+    # Options after the pattern are not options on macOS: they become more
+    # patterns, and `pkill -f x -u me -P 1` kills everything with "me" or "1" in it.
+    re.compile(r"\bpkill(?:\s+(?:-[uUPgGtsF]\s+\S+|-[fvilnxaoqILN0-9]+|-[A-Z]{2,}))*"
+               r"\s+(?:\"[^\"]*\"|'[^']*'|[^-\s]\S*)\s+-[A-Za-z]"),
     re.compile(r"\.remote-ai-chat/(?!uploads/)"),   # daemon config / token store (uploads are fine)
 ]
 

@@ -56,6 +56,14 @@ def is_untitled(title: str) -> bool:
 # a chat that will not catch up for a very long time.
 MAX_QUEUED = 20
 
+# A turn whose CLI was killed from outside is picked up again this many times
+# before it is reported as failed.
+REVIVE_MAX = 2
+REVIVE_PROMPT = ("[Remote AI Chat] The process running this session was stopped from outside in the "
+                 "middle of your turn and has been started again. Nobody asked anything new. Carry on "
+                 "with what you were doing from where it stopped; do not start over, and do not "
+                 "mention this note unless it changes something for the person.")
+
 # Rebuilding a dropped CLI session from the chat's own event log.
 # A chat outlives the CLI session behind it: switching account or tool clears the
 # resume id, and the next turn opens a session that has never seen this chat.
@@ -224,6 +232,7 @@ class ChatSession:
             agent_name=chat.get("agent_id"),
             cwd=chat["cwd"], session_id=chat.get("provider_session_id"),
             max_turns=chat.get("max_turns"), max_budget_usd=chat.get("max_budget_usd"),
+            chat_id=self.chat_id,
         )
         pc.preamble = preamble.build(self.cfg, pc, chat["provider"])
         provider = cls(pc, self.emit, self._approval)
@@ -689,6 +698,26 @@ class ChatSession:
             await self.emit("turn.error", {"message": str(exc)}, True)
             await self._finish(last_preview=f"Error: {exc}"[:200])
             return
+        # The CLI was killed under the turn — a stray pkill, not anything the
+        # turn did. Its session is on disk, so the turn is picked up again in a
+        # new process instead of ending as an error the person has to answer.
+        revived = 0
+        while res.killed and revived < REVIVE_MAX and self._handover is None:
+            revived += 1
+            log.warning("chat %s: the CLI was killed mid-turn; picking the turn up again (%d/%d)",
+                        self.chat_id, revived, REVIVE_MAX)
+            if res.session_id:
+                self.db.update_chat(self.chat_id, provider_session_id=res.session_id)
+            try:
+                # No session yet means nothing to pick up: the message is asked again.
+                res = await self.provider.run(
+                    REVIVE_PROMPT if res.session_id or prompt is None else prompt,
+                    None if res.session_id else attachments)
+            except Exception as exc:
+                log.exception("turn crashed while being picked up again")
+                await self.emit("turn.error", {"message": str(exc)}, True)
+                await self._finish(last_preview=f"Error: {exc}"[:200])
+                return
         self.last_active = time.monotonic()
         chat = self.db.get_chat(self.chat_id) or {}
         if self._handover is not None:

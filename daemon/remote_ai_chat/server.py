@@ -23,7 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import __version__
 from .supervisor import supervisor
 from .updater import Updater
-from .config import Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
+from .config import CONFIG_DIR, Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
 from .db import DB
 from . import accounts as acct
 from . import pool as poolmod
@@ -680,6 +680,50 @@ class Server:
     # Long enough for the clients to be back on their sockets, so they watch
     # the turn start again instead of finding it already under way.
     RESUME_DELAY_S = 3.0
+
+    FOLLOW_EVERY_S = 30.0
+    FOLLOW_STATE = CONFIG_DIR / "ustabasi-follow.json"
+
+    async def follow_tickets(self) -> None:
+        """Wake the chat that filed a ticket when the ticket ends.
+
+        An agent that files a ticket used to say "I will tell you when it is
+        done" and then could not: nothing woke it. This reads what the queue
+        sent, and for a ticket filed from a chat (`card.origin_chat`), sends the
+        result into that chat as a message — the agent there picks it up and
+        tells the person, who gets the chat's own notification for it.
+
+        The place in the queue's notifications is kept on disk. The first run
+        starts at the end: an old result is not news.
+        """
+        try:
+            after = int(json.loads(self.FOLLOW_STATE.read_text()).get("after", -1))
+        except Exception:
+            after = -1
+        while True:
+            try:
+                if after < 0:
+                    after = await asyncio.to_thread(ustabasimod.newest_notification)
+                    self.FOLLOW_STATE.write_text(json.dumps({"after": after}))
+                # A daemon on its way out starts no turns; what ended meanwhile
+                # is still there for the next one, which reads from the same place.
+                if self.draining:
+                    return
+                got, last = await asyncio.to_thread(ustabasimod.followed, after)
+                for f in got:
+                    if not self.db.get_chat(f["chat"]):
+                        continue
+                    try:
+                        await self.sessions.get(f["chat"]).send(ustabasimod.follow_message(f), None)
+                        log.info("ticket #%s %s: told chat %s", f["ticket"], f["kind"], f["chat"])
+                    except Exception:
+                        log.exception("could not tell chat %s about ticket #%s", f["chat"], f["ticket"])
+                if last != after:
+                    after = last
+                    self.FOLLOW_STATE.write_text(json.dumps({"after": after}))
+            except Exception:
+                log.exception("ticket follow pass failed")
+            await asyncio.sleep(self.FOLLOW_EVERY_S)
 
     async def resume_interrupted(self) -> None:
         """Carry on with the turns the process before this one was running.
