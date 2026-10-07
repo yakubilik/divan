@@ -391,8 +391,10 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   selectedHost: string | null;
   onSelect: (hostKey: string, chatId: string) => void;
   onNewChat: () => void;
-  /** A chat that opens already in this folder, from a heading's own + . */
-  onNewChatIn?: (hostKey: string, cwd: string) => void;
+  /** A chat that opens already in this folder, from a heading's own + . Under
+   *  a group's heading it is also filed in that group: that is what the + there
+   *  says, whatever folder the chat ends up working in. */
+  onNewChatIn?: (hostKey: string, cwd: string | undefined, groupId?: string) => void;
   searchRef?: React.RefObject<HTMLInputElement>;
   collapsed?: boolean;
   onCollapse?: (next: boolean) => void;
@@ -677,10 +679,12 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                 const cwd = s.kind === 'folder' ? s.key.slice(4)
                   : s.chats.find((c) => c.cwd)?.cwd
                     ?? hosts[s.hostKey]?.projects.find((p) => p.name === s.title)?.path;
-                return cwd ? (
+                // A group with nothing in it yet has no folder to offer, and
+                // still takes a chat.
+                return cwd || s.kind === 'group' ? (
                   <button
                     type="button" title={`New chat in ${s.title}`} aria-label={`New chat in ${s.title}`}
-                    onClick={() => onNewChatIn(s.hostKey, cwd)}
+                    onClick={() => onNewChatIn(s.hostKey, cwd, s.kind === 'group' ? s.key : undefined)}
                     style={{
                       width: 24, height: 24, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
                       background: 'transparent', border: 'none',

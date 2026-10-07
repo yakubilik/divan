@@ -66,7 +66,7 @@ export function App() {
   const [card, setCard] = useState<string | null>(opened.current.card);
   const [sel, setSel] = useState<Selection | null>(null);
   const [newChat, setNewChat] = useState<{
-    cwd?: string; agent?: { agent: Agent; accountId: string | null };
+    cwd?: string; groupId?: string; agent?: { agent: Agent; accountId: string | null };
     /** Started from a product's own page: on the computer that product is on,
      *  and read where it was started rather than in the Chat place. */
     host?: string | null; stay?: boolean;
@@ -659,7 +659,7 @@ export function App() {
             <Sidebar
               selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
               onNewChat={() => setNewChat({})}
-              onNewChatIn={(host, cwd) => setNewChat({ host, cwd })}
+              onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
               searchRef={searchRef}
               collapsed={rail} onCollapse={setRailTo}
             />
@@ -738,6 +738,7 @@ export function App() {
         <NewChat
           hostKey={(newChat.host ?? fleet.focus)!}
           initialCwd={newChat.cwd}
+          groupId={newChat.groupId}
           initialAgent={newChat.agent ?? null}
           onDone={(c) => {
             const host = (newChat.host ?? fleet.focus)!;
