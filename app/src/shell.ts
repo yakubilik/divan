@@ -174,3 +174,35 @@ export function machineRows(m: { machines: number; unreachable: number; executor
  *  `scripts/test-shell.cjs` holds the three screens to. */
 export const MACHINE_ROUTES: string[] = machineRows({ machines: 0, unreachable: 0, executors: 0 })
   .map((r) => r.route);
+
+// ── the four tabs (HANDOVER §4.9) ───────────────────────────────────────────
+
+/** A page that sits under a tab of the Machine place: the row that opens it. */
+export interface MachinePage { key: string; route: string; icon: string; title: Key; note: Key }
+
+/** One tab of the Machine place, at its own route, and the pages under it. */
+export interface MachineTab { key: 'machines' | 'executors' | 'terminal' | 'settings'; label: Key; route: string; pages: MachinePage[] }
+
+/** Machines · Executors · Terminal · Settings. Every screen the Machine list
+ *  reached is under one of them: the computer's own screen under Machines; the
+ *  agents, the sign-ins and the pool under Executors; the ticket queue under
+ *  Terminal; the voice line under Settings. */
+export const MACHINE_TABS: MachineTab[] = [
+  { key: 'machines', label: 'mMachines', route: '/machine', pages: [
+    { key: 'screen', route: '/screen', icon: 'screen_share', title: 'mScreen', note: 'mScreenNote' },
+  ] },
+  { key: 'executors', label: 'mExecutors', route: '/executors', pages: [
+    { key: 'agents', route: '/agents', icon: 'face', title: 'mAgents', note: 'mAgentsNote' },
+    { key: 'accounts', route: '/accounts', icon: 'key', title: 'mAccounts', note: 'mAccountsNote' },
+    { key: 'pool', route: '/pool', icon: 'swap_horiz', title: 'mPool', note: 'mPoolNote' },
+  ] },
+  { key: 'terminal', label: 'mTerminal', route: '/terminal', pages: [
+    { key: 'queue', route: '/ustabasi', icon: 'terminal', title: 'mQueue', note: 'mQueueNote' },
+  ] },
+  { key: 'settings', label: 'mSettings', route: '/settings', pages: [
+    { key: 'call', route: '/call', icon: 'call', title: 'mCall', note: 'mCallNote' },
+  ] },
+];
+
+/** Every route the four tabs reach, the tabs' own first. */
+export const MACHINE_TAB_ROUTES: string[] = MACHINE_TABS.flatMap((t) => [t.route, ...t.pages.map((p) => p.route)]);

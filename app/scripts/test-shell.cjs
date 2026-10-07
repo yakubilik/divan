@@ -286,8 +286,10 @@ checks.push(
   ['nothing is coloured unless a machine is actually unreachable',
     S.machineRows({ machines: 3, unreachable: 1, executors: 9 })[0].tone === 'red'
     && rows.slice(1).every((r) => !r.tone)],
-  ['the Machine screen opens exactly those rows',
-    /machineRows\(/.test(machine) && /router\.push\(row\.route\)/.test(machine)],
+  ['the Machine place is four tabs (HANDOVER §4.9), and every one of those rows is a tab or a page under one',
+    S.MACHINE_TABS.map((t) => t.key).join() === 'machines,executors,terminal,settings'
+    && routes.filter((r) => r !== '/machines').every((r) => S.MACHINE_TAB_ROUTES.includes(r))
+    && /<MachineTabs here="machines"/.test(machine) && /<UnderTab here="machines"/.test(machine)],
   ['…and no other place leads to one of them',
     routes.every((route) => !new RegExp(`'${route}'`).test(dash) && !new RegExp(`'${route}'`).test(chatPlace))],
   ['pairing is inside it too, behind the machines it adds one to',
@@ -371,9 +373,8 @@ checks.push(
       empty.includes('dashEmpty') && empty.includes('>divan<')],
     ['\u2026and no ticket queue on it, because no computer said it had one',
       !empty.includes('dashQueueNote')],
-    ['the Machine list draws every row it names, under the frame\u2019s own two lines',
-      machineScreen.includes('mTitle') && machineScreen.includes('mSubtitle')
-      && rows.every((r) => machineScreen.includes(r.title))],
+    ['the Machine place draws its four tabs and the pages under the first',
+      ['mMachines', 'mExecutors', 'mTerminal', 'mSettings', 'mUnder', 'mScreen'].every((k) => machineScreen.includes(k))],
   );
 
   // …and the same two screens against four products on two machines, one of
@@ -392,8 +393,8 @@ checks.push(
       full.includes('dashQueueNote') && full.includes('queueRed')],
     ['\u2026and a machine that has gone quiet is not drawn as a machine that is working',
       full.includes('pfLastSeen') && full.includes('dashStale')],
-    ['the Machine list counts the machines it is a list of',
-      machineFull.includes('mMachinesNote')],
+    ['the Machine place says which machines answer and which do not',
+      machineFull.includes('maOnline') && machineFull.includes('maUnreachable') && machineFull.includes('maSomeUp')],
   );
   R.store.reset();
 }

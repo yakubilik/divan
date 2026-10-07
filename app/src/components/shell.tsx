@@ -124,8 +124,9 @@ export function Topline({ back, here, onPlace }: {
   );
 }
 
-/** The quota ring: a 16 pt track with the share left drawn over it. */
-function Ring({ pct, colour, track }: { pct: number; colour: string; track: string }) {
+/** The quota ring: a 16 pt track with the share left drawn over it. `size`
+ *  scales the whole drawing — Machine's own ring is 40 pt (HANDOVER §4.9). */
+export function Ring({ pct, colour, track, size = 16 }: { pct: number; colour: string; track: string; size?: number }) {
   const p = Math.max(0, Math.min(100, pct)) / 100;
   const r = 6;
   const a = 2 * Math.PI * p - Math.PI / 2;
@@ -134,7 +135,7 @@ function Ring({ pct, colour, track }: { pct: number; colour: string; track: stri
   const arc = p >= 1 ? 'M8 2a6 6 0 1 1 0 12a6 6 0 1 1 0-12'
     : `M8 2A6 6 0 ${p > 0.5 ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)}`;
   return (
-    <Svg width={16} height={16} viewBox="0 0 16 16">
+    <Svg width={size} height={size} viewBox="0 0 16 16" accessibilityLabel={`${Math.round(pct)}%`}>
       <Path d="M8 2a6 6 0 1 1 0 12a6 6 0 1 1 0-12" stroke={track} strokeWidth={3} fill="none" />
       {p > 0 && <Path d={arc} stroke={colour} strokeWidth={3} fill="none" />}
     </Svg>
