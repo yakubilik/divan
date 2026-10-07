@@ -79,7 +79,7 @@ QUIET = [
     'cfg.allowed_roots = ["/Users/test/projects"]',
     'uses: actions/checkout@v4   # /home/runner/work is the checkout',
     're.compile(r"github_pat_[A-Za-z0-9_]{20,}"),',
-    "const REPO = 'https://github.com/yakubilik/remote-ai-chat';",
+    "const REPO = 'https://github.com/yakubilik/divan';",
     "# The name arrives percent-encoded, so the escape is not read as text.",
     "    Nobody asked, so there was no turn reading the stream, and the SDK parked",
     "# The user wanted a banner, so staying silent for every open app was wrong.",
@@ -155,8 +155,17 @@ NAME_CONTROL_HITS = ["1: author-name 'lovelace-ledger'",
 # so it is made twice: there with its reason, and here.
 ALLOWED = [
     "app/scripts/fixtures/tts-frontend.json",
+    "app/scripts/test-call-chat.cjs",
     "app/scripts/test-ema.cjs",
     "app/scripts/test-waiting.cjs",
+    "app/src/call-lines.ts",
+    "app/src/tts/engine.ts",
+    "app/src/tts/frontend.ts",
+    "app/src/tts/normalizer.ts",
+    "app/src/tts/values.ts",
+    "app/src/tts/words.ts",
+    "app/src/voice.ts",
+    "app/src/waiting.ts",
     "daemon/remote_ai_chat/call.py",
     "daemon/remote_ai_chat/secrets.py",
     "daemon/remote_ai_chat/server.py",
@@ -168,6 +177,10 @@ ALLOWED = [
     "tts/export.py",
     "tts/frontend_fixture.py",
     "tts/vectors.json",
+    "web/scripts/test-overview.mjs",
+    "web/scripts/test-refusal.mjs",
+    "web/src/lib/refusal.ts",
+    "web/src/lib/sessions.ts",
 ]
 
 
@@ -301,16 +314,10 @@ def main() -> int:
           any(h["rule"] == "aws-access-key" for h in
               audit.scan_text("daemon/remote_ai_chat/call.py", "AKIAIOSFODNN7EXAMPLE", "test")))
 
-    print("\na pending file is reported, and only its language is let through")
-    later = audit.PENDING[0]
-    check("no pending file is under daemon/, docs/ or scripts/",
-          not [p for p in audit.PENDING if p.startswith(("daemon/", "docs/", "scripts/"))])
-    check("a Turkish word there is still a finding, marked pending",
-          [h["pending"] for h in audit.scan_text(later, "onay", "test")] == [True])
-    check("a secret there is not pending",
-          [h["pending"] for h in audit.scan_text(later, "AKIAIOSFODNN7EXAMPLE", "test")] == [False])
-    check("and a file that is not listed is not pending",
-          [h["pending"] for h in audit.scan_text("web/src/App.tsx", "onay", "test")] == [False])
+    print("\nno client file is left pending")
+    check("the pending list is empty", audit.PENDING == (), repr(audit.PENDING))
+    check("so a Turkish word in a client file fails the scan",
+          [h["pending"] for h in audit.scan_text("web/src/lib/inbox.ts", "onay", "test")] == [False])
 
     print("\nthe author's own names are given at scan time, not written down here")
     # This section is about what the scanner carries when no list is given, so a

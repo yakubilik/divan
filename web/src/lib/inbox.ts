@@ -76,7 +76,7 @@ export function unread(items: Notice[], seen: Record<string, number>): number {
 }
 
 /** What a notice says, said for a list: the ticket's title, and the kind as a
- *  word. The queue's own headline ("#111 ✅ … — bitti") repeats both. */
+ *  word. The queue's own headline ("#111 ✅ … — done") repeats both. */
 export const KIND_WORD: Record<string, string> = {
   done: 'done', blocked: 'asks you', failed: 'failed', reminder: 'still waiting',
   limit: 'usage limit', deadline: 'past its deadline', deadman: 'queue stopped',
