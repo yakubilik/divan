@@ -1000,7 +1000,7 @@ export function Panel({ tone = 'amber', head, foot, width = SIZE.panel, height =
   children?: React.ReactNode;
 }) {
   return (
-    <section style={{
+    <section data-panel="" style={{
       width, height, boxSizing: 'border-box', flex: 'none',
       background: T.s1, borderRadius: RADIUS.card,
       boxShadow: `${outline(toneColours(tone).line)}, ${SHADOW.float}`,

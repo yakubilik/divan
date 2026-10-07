@@ -446,17 +446,21 @@ export function QuietRow({ name, index, meta, first, onPress }: {
 }
 
 /** One line of Working now: a dot, the title, and project · executor · machine · time. */
-export function LiveRow({ state, title, meta, first, onPress }: {
-  state: State; title: string; meta: string; first?: boolean; onPress?: () => void;
+export function LiveRow({ state, hollow, title, meta, metaTone, first, onPress }: {
+  /** A state, or the dot's colour outright. */
+  state: State | string; hollow?: boolean; title: string; meta: string;
+  /** The meta in amber: it is the word `asking`. */
+  metaTone?: 'amber';
+  first?: boolean; onPress?: () => void;
 }) {
   const t = useTokens();
   return (
     <Tap onPress={onPress}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 10,
                borderTopWidth: first ? 0 : 1, borderTopColor: t.line2 }}>
-      <StatusDot state={state} size={7} />
+      <StatusDot state={state} hollow={hollow} size={7} />
       <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.ink }}>{title}</Text>
-      <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: t.ink3, maxWidth: '55%' }}>{meta}</Text>
+      <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: metaTone === 'amber' ? t.amber : t.ink3, maxWidth: '55%' }}>{meta}</Text>
     </Tap>
   );
 }

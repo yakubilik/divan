@@ -1,302 +1,267 @@
-/** One product's page: where it is in its life, what is happening on it this
- *  minute, and what it has been through.
+/** One product's page (HANDOVER §4.2).
  *
- *  Top down: the rail of five stages with the three dates beside it, and under
- *  that two panels — **Right now** on the left and the **Timeline** on the
- *  right. The head above it — the monogram, the name, what it is for, the
- *  machines it is on and the tabs — is the page head in `screens/Overview.tsx`,
- *  which every tab of a product hangs under.
+ *  The head is the monogram, the name, what it is for in one sentence and a
+ *  meta line with its stage as a word; at the far end the Overview / Board /
+ *  Chats segment and `+ New ticket`. There is no stage rail: where a product is
+ *  in its life is the one word in the meta line.
  *
- *  It used to be the branch grid, and the grid is now a tab of its own
- *  (`screens/Branches.tsx`). The reason is what the two answer: a grid of faces
- *  says how a product is *organised*, which is a thing you look up; this page
- *  answers what is going on and how it got here, which is what a person opens a
- *  product to find out.
+ *  Under it, two columns. The main one: what in this product needs you, the
+ *  board in four numbers with the In Progress cards under them by their real
+ *  status, and the branches — a branch nothing feeds says so in a sentence and
+ *  shows no number. The side one: the timeline, and what the product is still
+ *  waiting on (`components/StillOpen.tsx`). At the foot, the Composer, locked
+ *  to this product.
  *
- *  What is on it and what is not:
- *
- *   · **Right now is the board read as events, not as columns.** A card sitting
- *     in Queued is not happening and is not on it; an agent that stopped at four
- *     in the morning is, however tidy its column looks. With nothing happening
- *     the panel says so in the two sentences the phone says it in — the same
- *     `nowLine` and `waitingLine` `scripts/test-overview.mjs` holds the two
- *     clients to.
- *   · **The timeline is written, not counted.** No table on this machine knows
- *     which Tuesday mattered, so a product's history is written down
- *     (`divan.project.milestones`, filled from the repositories by
- *     `scripts/divan_facts.py`) and a product nobody has written one for draws
- *     no line rather than a line of guesses.
- *   · **A stage nobody has said draws no rail.** Five empty steps would be a
- *     claim that the product has got nowhere.
- *
- *  The judgements are `lib/project.ts`. What is left here is the arrangement.
+ *  Every figure is counted off the board (`lib/board.ts`) and every sentence is
+ *  decided in `lib/project.ts`; what is left here is the arrangement.
  */
 import { uptime } from '../lib/format';
+import { counts, inProgress } from '../lib/board';
 import {
-  blank, blankBody, facts, nowLine, oldLine, processes, quiet, rail, since, timeline,
-  waitingLine, type Moment, type Process, type Step,
+  NOT_CONNECTED, blank, blankBody, branchCards, connected, metaLine, oldLine, quiet, since,
+  timeline, type Moment,
 } from '../lib/project';
-import { RADIUS, T, toneColours } from '../lib/theme';
+import { summaryOf } from '../lib/overview';
+import { sessions } from '../lib/sessions';
 import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
-import { Card, EmptyState, SectionHeader } from '../ui/divan';
 import { StillOpen } from '../components/StillOpen';
-import { mono } from '../ui/kit';
+import { Wait } from './Dashboard';
 
-export function Project({ view, project: p, onCard }: {
+/** The segment over a product, and the path each one is written at. */
+export const PROJECT_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'board', label: 'Board' },
+  { key: 'chat', label: 'Chats' },
+] as const;
+
+/** The head over every view of a product. Compact over the board and the
+ *  chats, the way the Board frame draws it. */
+export function ProjectHead({ project: p, now, tab, onTab, onNew, compact }: {
+  project: MergedProject;
+  now: number;
+  tab: string;
+  onTab: (tab: string) => void;
+  onNew: () => void;
+  compact?: boolean;
+}) {
+  const open = counts(p, now, uptime);
+  const tools = (
+    <div className="dv-phead-tools">
+      <div className="dv-seg" role="group" aria-label="View">
+        {PROJECT_TABS.map((t) => (
+          <button key={t.key} type="button" aria-pressed={tab === t.key} onClick={() => onTab(t.key)}>{t.label}</button>
+        ))}
+      </div>
+      <button type="button" className="dv-btn dv-btn--primary dv-hit" onClick={onNew}>+ New ticket</button>
+    </div>
+  );
+  if (compact) {
+    const live = open.slice(0, 3).reduce((n, c) => n + c.n, 0);
+    return (
+      <section className="dv-phead dv-phead--compact">
+        <span className="dv-mono" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
+        <h1 data-project-head="">{p.name}</h1>
+        <span className="dv-meta">{`${live} open · ${open[3].n} done this month`}</span>
+        {tools}
+      </section>
+    );
+  }
+  const meta = metaLine(p);
+  return (
+    <section className="dv-phead">
+      <span className="dv-mono" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
+      <div style={{ flex: '1 1 420px', minWidth: 0 }}>
+        <h1 data-project-head="">{p.name}</h1>
+        <p data-description="" style={{ margin: '6px 0 0', fontSize: 15, lineHeight: '22px', color: 'var(--ink-2)' }}>{summaryOf(p)}</p>
+        {!!meta && <p className="dv-meta" data-meta="" style={{ margin: '6px 0 0' }}>{meta}</p>}
+      </div>
+      {tools}
+    </section>
+  );
+}
+
+export function Project({ view, project: p, onCard, onBoard, onBranch, onBranches, composer }: {
   view: DivanView;
   project: MergedProject;
-  /** A line of Right now is a way in: the card's own page. */
+  /** A card's own page. */
   onCard?: (card: MergedCard) => void;
+  /** The board, from its summary. */
+  onBoard?: () => void;
+  /** A branch's own page, by kind. */
+  onBranch?: (kind: string) => void;
+  /** The branches with their repositories and recent activity. */
+  onBranches?: () => void;
+  /** The Composer, locked to this product. */
+  composer?: React.ReactNode;
 }) {
   const asleep = quiet(p, view.now, uptime);
   const old = oldLine(p, view.now, uptime);
-
+  const waiting = sessions(view).filter((s) => s.projectKey === p.key);
   return (
-    // As tall as what is in it and no shorter. The page that holds this is a
-    // column that scrolls, and a column squeezes whatever lets it: left free to
-    // shrink, this stopped at the height of the window and everything in it
-    // spilled out underneath — past the room the page keeps clear for the bar,
-    // so the last thing still open sat behind it and no scroll reached it.
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flexShrink: 0 }}>
-      {!!old && <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>{old}</div>}
-      <Life project={p} now={view.now} />
+    <>
+      {!!old && <p className="dv-meta" style={{ margin: '16px 0 0' }}>{old}</p>}
       {!!asleep && (
-        <Card hollow style={{ gap: 6 }}>
-          <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-.01em' }}>{asleep.title}</div>
-          <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>{asleep.body}</div>
-        </Card>
+        <p style={{ margin: '16px 0 0', fontSize: 15, lineHeight: '22px', color: 'var(--ink-2)' }}>
+          <b style={{ color: 'var(--ink)', fontWeight: 600 }}>{asleep.title}</b> {asleep.body}
+        </p>
       )}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 420px', gap: 24, alignItems: 'start',
-      }}>
-        {/* One column for both, and not two rows of a grid. As rows, the
-            first was as tall as the taller of its two cells — the timeline —
-            so a product with one thing running and a long history drew a hole
-            the height of that history between Right now and what is still
-            open. What is happening and what is not are the same question
-            asked twice, and a reader goes down one column for both. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
-          {blank(p)
-            // A board nobody has put a card on yet. It used to replace the whole
-            // page, which is how a product with eight months of history behind it
-            // came out reading as something nobody had started: the board is
-            // empty, the *product* is not, and the two are different sentences.
-            ? (
-              <EmptyState
-                title="A new board."
-                body={blankBody(p)}
-                foot="Nothing starts by itself: a card runs when it is moved into In Progress."
-                style={{ padding: '8px 0 24px' }}
-              />
-            )
-            : <RightNow view={view} project={p} onCard={onCard} />}
+      <div className="dv-cols2">
+        <main>
+          {waiting.length > 0 && (
+            <section aria-labelledby="p-needs-you">
+              <div className="dv-sec"><h3 id="p-needs-you">Needs you</h3><span className="dv-meta">{waiting.length}</span></div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {waiting.map((s) => <Wait key={s.id} session={s} onOpen={() => onCard?.(s.card)} />)}
+              </div>
+            </section>
+          )}
+          <BoardSummary view={view} project={p} onCard={onCard} onBoard={onBoard} />
+          <Branches project={p} now={view.now} onBranch={onBranch} onBranches={onBranches} />
+        </main>
+        <aside>
+          <Timeline project={p} now={view.now} />
           <StillOpen project={p} now={view.now} />
-        </div>
-        <Timeline project={p} now={view.now} />
+        </aside>
       </div>
-    </div>
+      {!!composer && <div style={{ marginTop: 40 }}>{composer}</div>}
+    </>
   );
 }
 
-// ── the block across the top ────────────────────────────────────────────────
-
-/** Where the product is in its life, and the three dates that say it in
- *  numbers. One card and not two: the rail is a claim — somebody said this is
- *  live — and the dates beside it are what that claim is made of.
- *
- *  A product with neither draws nothing at all rather than an empty card. */
-function Life({ project: p, now }: { project: MergedProject; now: number }) {
-  const steps = rail(p);
-  const dates = facts(p, now);
-  const last = [...timeline(p, now)].find((m) => !m.future && !m.today);
-  if (!steps && !dates.length) return null;
+/** Four numbers off the real columns, and the In Progress cards under them. */
+function BoardSummary({ view, project: p, onCard, onBoard }: {
+  view: DivanView; project: MergedProject;
+  onCard?: (card: MergedCard) => void; onBoard?: () => void;
+}) {
+  const href = `/p/${encodeURIComponent(p.key)}/board`;
+  const go = (e: React.MouseEvent) => { if (onBoard) { e.preventDefault(); onBoard(); } };
+  const rows = inProgress(p, view.now, uptime);
   return (
-    <Card radius={RADIUS.tile} style={{
-      flexDirection: 'row', alignItems: 'stretch', gap: 28, padding: '14px 18px',
-    }}>
-      {!!steps && (
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {steps.map((s) => <Bar key={s.key} step={s} />)}
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {steps.map((s) => (
-              <span key={s.key} style={{
-                flex: 1, minWidth: 0, fontSize: 12, fontWeight: s.here ? 600 : 400,
-                color: s.here ? T.ink : T.ink3,
-              }}>{s.label}</span>
+    <section aria-labelledby="p-board">
+      <div className="dv-sec">
+        <h3 id="p-board">Board</h3>
+        <a href={href} onClick={go} style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 500, color: 'var(--ink-2)' }}>Open board</a>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }} data-counts="">
+        {counts(p, view.now, uptime).map((c) => (
+          <a key={c.key} href={href} onClick={go} data-count={c.key}
+            className={`dv-count ${c.key === 'in_progress' ? 'dv-glass-raised dv-count--hot' : 'dv-glass'}`}>
+            <span className="l">{c.label}</span>
+            <span className="n">{c.n}</span>
+            <span className="dv-meta">{c.sub}</span>
+          </a>
+        ))}
+      </div>
+      {blank(p) ? (
+        <p style={{ margin: '16px 4px 0', fontSize: 13.5, lineHeight: '20px', color: 'var(--ink-2)' }}>
+          A new board. {blankBody(p)}
+        </p>
+      ) : rows.length > 0 && (
+        <>
+          <div className="dv-sec" style={{ marginTop: 24 }}><h3>In progress now</h3><span className="dv-meta">{rows.length}</span></div>
+          <div className="dv-glass" data-in-progress="" style={{ borderRadius: 'var(--radius-md)', padding: '4px 14px' }}>
+            {rows.map((t) => (
+              <button key={t.card.id} type="button" className="dv-live press" style={{ flexWrap: 'wrap', padding: '12px 4px' }}
+                onClick={() => onCard?.(t.card)} data-row={t.card.id}>
+                {!!t.status && (
+                  <span className={`dv-status dv-status--${t.status.kind}`} style={{ minWidth: 84 }}><i />{t.status.word}</span>
+                )}
+                <span className="t">{t.card.title}</span>
+                {!!t.meta && <span className="dv-meta">{t.meta}</span>}
+              </button>
             ))}
           </div>
-          {!!last && (
-            <div style={{ fontSize: 13, color: T.ink2, marginTop: 2 }}>
-              {last.title}
-              <span style={{ ...mono, fontSize: 11.5, color: T.ink3 }}>{`  ·  ${last.date}`}</span>
-            </div>
-          )}
-        </div>
+        </>
       )}
-      {!!dates.length && (
-        <div style={{
-          flex: 'none', display: 'flex', gap: 28,
-          borderLeft: steps ? `1px solid ${T.line}` : undefined, paddingLeft: steps ? 28 : 0,
-        }}>
-          {dates.map((f) => (
-            <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ ...mono, fontSize: 10.5, color: T.ink3 }}>{f.label}</div>
-              <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-.01em', whiteSpace: 'nowrap' }}>
-                {f.value}
-              </div>
-              {!!f.note && (
-                <div style={{
-                  ...mono, fontSize: 11, whiteSpace: 'nowrap',
-                  color: f.tone ? toneColours(f.tone).fg : T.ink3,
-                }}>{f.note}</div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
+    </section>
   );
 }
 
-/** One step of the rail: a 4 pt bar, filled up to where the product is. The one
- *  it is on is the running green — the same colour work in progress is drawn in
- *  everywhere else on the panel — and the steps behind it are the strong
- *  hairline, which reads as done rather than as happening. */
-function Bar({ step }: { step: Step }) {
-  return (
-    <span style={{
-      flex: 1, height: 4, borderRadius: 2,
-      background: step.here ? T.run : step.passed ? T.line2 : T.line,
-    }} />
-  );
-}
-
-// ── what is happening ───────────────────────────────────────────────────────
-
-/** The left panel. Every row is a card something is happening to, worst first;
- *  with nothing happening it is the two sentences rather than an empty box,
- *  because "nothing is running" and "nothing is waiting on you" are answers. */
-function RightNow({ view, project: p, onCard }: {
-  view: DivanView; project: MergedProject; onCard?: (card: MergedCard) => void;
+/** The branches as tiles. One nothing feeds says so, and shows no number. */
+function Branches({ project: p, now, onBranch, onBranches }: {
+  project: MergedProject; now: number;
+  onBranch?: (kind: string) => void; onBranches?: () => void;
 }) {
-  const rows = processes(p, view.now, uptime);
-  const now = nowLine(view, p);
-  const wait = waitingLine(p);
+  const cards = branchCards(p, now);
+  if (!cards.length) return null;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-      <SectionHeader title="Right now"
-        right={rows.length
-          ? <span style={{ ...mono, fontSize: 11.5, color: T.ink3 }}>
-              {`${rows.length} ${rows.length === 1 ? 'process' : 'processes'}`}
-            </span>
-          : null} />
-      {rows.length
-        ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {rows.map((r) => <Happening key={r.key} row={r} onCard={onCard} />)}
-          </div>
-        )
-        : (
-          <Card style={{ gap: 6 }}>
-            <div style={{ fontSize: 14, lineHeight: 1.45 }}>{now.text}</div>
-            <div style={{ fontSize: 14, lineHeight: 1.45, color: T.ink2 }}>{wait.text}</div>
-          </Card>
+    <section aria-labelledby="p-branches">
+      <div className="dv-sec">
+        <h3 id="p-branches">Branches</h3>
+        <span className="dv-meta">{cards.length}</span>
+        {!!onBranches && (
+          <button type="button" className="dv-btn dv-btn--ghost dv-hit" style={{ height: 28 }} onClick={onBranches}>Repositories</button>
         )}
-    </div>
-  );
-}
-
-function Happening({ row, onCard }: { row: Process; onCard?: (card: MergedCard) => void }) {
-  const c = toneColours(row.tone);
-  return (
-    <Card radius={RADIUS.tile} onClick={onCard && (() => onCard(row.card))}
-      title={onCard ? `Open ${row.title}` : undefined}
-      style={{
-        flexDirection: 'row', alignItems: 'center', gap: 14, padding: '10px 14px',
-      }}>
-      <span style={{
-        flex: 'none', ...mono, fontSize: 10.5, fontWeight: 600, padding: '5px 8px',
-        borderRadius: RADIUS.chip, background: c.bg, color: c.fg, whiteSpace: 'nowrap',
-      }}>{row.label}</span>
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <div style={{
-          fontSize: 14.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>{row.title}</div>
-        {/* One line, not two. What an agent last said is a paragraph, and two
-            lines of it per row turned the panel into a wall of prose that had
-            to be read to be skimmed — which is the opposite of what a panel
-            called Right now is for. The rest of the sentence is on the card's
-            own page, one press away. */}
-        <div style={{
-          fontSize: 13, lineHeight: 1.4, color: T.ink2,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{row.body}</div>
       </div>
-      {!!row.since && (
-        <span style={{ flex: 'none', ...mono, fontSize: 11, color: T.ink3 }}>{row.since}</span>
-      )}
-    </Card>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+        {cards.map((b) => {
+          const branch = p.branches.find((x) => x.kind === b.kind)!;
+          const fed = connected(p, branch);
+          return (
+            <a key={b.key} className="dv-glass dv-tile dv-branch" data-branch={b.kind}
+              data-connected={fed ? 'true' : 'false'}
+              href={`/p/${encodeURIComponent(p.key)}/b/${encodeURIComponent(b.kind)}`}
+              onClick={(e) => { e.preventDefault(); onBranch?.(b.kind); }}>
+              <div className="dv-tile-head">
+                <span className="dv-tile-name">{b.name}</span>
+                {fed && !!b.refreshed && <span className="dv-tile-stage">{b.refreshed.text}</span>}
+              </div>
+              {fed ? (
+                <>
+                  {!b.sourceless && <p className="dv-tile-now">{b.line}</p>}
+                  {!!b.figures.length && (
+                    <div className="dv-tile-foot">
+                      {b.figures.map((f) => <span key={f.label} className="count">{f.value} <span className="w">{f.label}</span></span>)}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="dv-tile-now" style={{ color: 'var(--ink-3)' }}>{NOT_CONNECTED}</p>
+              )}
+            </a>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
-// ── …and what it has been through ───────────────────────────────────────────
-
-/** The right panel: the product's own history, newest first, with today in its
- *  place among it. A product nobody has written a history for says so — and
- *  says where one comes from, because the answer is a sentence to the agent and
- *  not a form. */
+/** The product's own history, newest first, with today in its place. */
 function Timeline({ project: p, now }: { project: MergedProject; now: number }) {
   const rows = timeline(p, now);
   const head = since(p);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-      <SectionHeader title="Timeline"
-        right={head ? <span style={{ ...mono, fontSize: 11.5, color: T.ink3 }}>{head}</span> : null} />
-      <Card style={{ gap: 0 }}>
-        {rows.length
-          ? rows.map((m, i) => <Line key={m.key} moment={m} last={i === rows.length - 1} />)
-          : (
-            <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>
-              Nothing has been written down about this product yet. Ask the agent in a chat to
-              set its milestones and they appear here.
-            </div>
-          )}
-      </Card>
-    </div>
+    <section aria-labelledby="p-timeline">
+      <div className="dv-sec"><h3 id="p-timeline">Timeline</h3>{!!head && <span className="dv-meta">{head}</span>}</div>
+      <div className="dv-glass" style={{ borderRadius: 'var(--radius-lg)', padding: '18px 18px 6px' }}>
+        {rows.length ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '92px 14px minmax(0, 1fr)', gap: '0 10px' }}>
+            {rows.map((m) => <Line key={m.key} moment={m} />)}
+          </div>
+        ) : (
+          <p style={{ margin: '0 0 12px', fontSize: 13.5, lineHeight: '20px', color: 'var(--ink-2)' }}>
+            Nothing has been written down about this product yet. Ask the agent in a chat to set its
+            milestones and they appear here.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
-/** One line of it: the date in mono on the left, the dot on the rule, the thing
- *  on the right. A date that has not arrived is a ring rather than a fill and
- *  the whole line is grey — a promise and a fact drawn the same way would be the
- *  one lie on the page. */
-function Line({ moment: m, last }: { moment: Moment; last: boolean }) {
-  const colour = m.today ? T.run : m.future ? T.ink3 : T.ink;
+/** One line of it. A date that has not arrived is a ring rather than a dot. */
+function Line({ moment: m }: { moment: Moment }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '88px 16px minmax(0, 1fr)', gap: 8 }}>
-      <span style={{
-        ...mono, fontSize: 11, lineHeight: '20px', whiteSpace: 'nowrap',
-        color: m.today ? T.run : T.ink3,
-      }}>{m.date}</span>
-      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <span style={{
-          marginTop: 6, width: 8, height: 8, borderRadius: 4, flex: 'none',
-          background: m.future ? 'transparent' : colour,
-          boxShadow: m.future ? `inset 0 0 0 1.5px ${T.ink3}` : undefined,
-        }} />
-        {!last && <span style={{ flex: 1, width: 1, background: T.line, marginTop: 2 }} />}
-      </span>
-      <div style={{ paddingBottom: last ? 0 : 12, minWidth: 0 }}>
-        <div style={{
-          fontSize: 13.5, fontWeight: m.today ? 600 : 500, lineHeight: '20px', color: colour,
-        }}>{m.title}</div>
-        {!!m.note && (
-          <div style={{ fontSize: 12, lineHeight: 1.4, color: T.ink3, marginTop: 1 }}>{m.note}</div>
-        )}
+    <>
+      <span className="dv-meta" style={{ color: m.today ? 'var(--ink-2)' : undefined }}>{m.date}</span>
+      <i className={`dv-dot${m.today ? ' dv-dot--run' : ''}`} aria-hidden="true"
+        style={{ marginTop: 5, ...(m.today ? {} : m.future
+          ? { background: 'transparent', boxShadow: 'inset 0 0 0 1.5px var(--ink-3)' }
+          : { background: 'var(--ink-2)' }) }} />
+      <div style={{ paddingBottom: 18, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: m.future ? 'var(--ink-3)' : 'var(--ink)' }}>{m.title}</div>
+        {!!m.note && <div style={{ fontSize: 13, lineHeight: '19px', color: 'var(--ink-2)' }}>{m.note}</div>}
       </div>
-    </div>
+    </>
   );
 }

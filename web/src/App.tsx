@@ -629,6 +629,17 @@ export function App() {
                 onOptions={() => setNewChat({})} />
             )}
             onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setBranch(null); setCard(idOf(c)); }}
+            // The Composer at the foot of a product: everything it sends is
+            // about that product, and Ask opens the chat as a window on the
+            // page, the way the bar it replaces did.
+            projectComposer={scopedTo ? (
+              <Composer view={divan} lock={scopedTo.key} onCard={file}
+                onAsk={(text, _key, picks) => tell(text, scope, picks)}
+                onOptions={() => {
+                  const at = whereFor(scope, fleet.hosts, fleet.focus);
+                  setNewChat({ cwd: at.cwd ?? undefined, host: at.host, stay: true });
+                }} />
+            ) : null}
             tab={tab} onTab={setTab}
             branch={branch} onBranch={setBranch}
             card={card} onCard={setCard}

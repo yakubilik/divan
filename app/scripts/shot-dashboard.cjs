@@ -48,16 +48,6 @@ const snap = { machine: 'studio', os: 'Darwin', at: NOW, queue: {},
   activity: { '/r/quire': { at: NOW - 840, week: 4, today: 1 }, '/r/hush': { at: NOW - 3600, week: 2, today: 0 },
               '/r/pebble': { at: NOW - 3 * 3600, week: 1, today: 0 }, '/r/walk': { at: NOW - 35 * DAY, week: 0, today: 0 } } };
 
-R.words.real();
-R.store.set({ hosts: [{ id: 'h1', name: 'studio' }], divan: { h1: { snapshot: snap, at: NOW, reachable: true, error: null, old: false } },
-  host: { id: 'h1' }, conn: 'online', loadDivan() {}, ustabasi: { available: true, tickets: [] }, ustabasiOld: false, loadUstabasi() {},
-  catalog: { claude: { models: [{ id: 'opus', label: 'Opus 5', hint: '' }], efforts: ['high'], perm_modes: ['default'] } },
-  defaults: { provider: 'claude', model: 'opus', effort: 'high', perm_mode: 'default', cwd: null, byProvider: {} },
-  accounts: [{ id: 'default-claude', provider: 'claude', label: 'own', logged_in: true, is_default: true, detail: '' }],
-  accountsLoaded: true, loadAccounts: async () => {}, limits: {}, projects: [], listAgents: async () => [],
-  compose: C.NO_DRAFT, setCompose() {} });
-const markup = R.render(scheme, h(Dashboard));
-
 const UNITLESS = new Set(['fontWeight', 'opacity', 'flex', 'flexGrow', 'flexShrink', 'zIndex', 'aspectRatio']);
 const css = (st) => {
   const out = ['display:flex', 'flex-direction:column', 'box-sizing:border-box', 'min-width:0', 'position:relative'];
@@ -83,6 +73,8 @@ const css = (st) => {
   }
   return out.join(';');
 };
+/** Write a rendered screen out as a picture, 390 pt wide. */
+function photograph(markup, scheme, out, height = 1500) {
 const html = markup
   .replace(/<(div|span) data-rn="([^"]+)" data-style="([^"]*)"([^>]*)>/g, (m, tag, kind, style, rest) => {
     const st = JSON.parse(style.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'"));
@@ -102,7 +94,24 @@ const chrome = [process.env.CHROME, '/Applications/Google Chrome.app/Contents/Ma
   '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser'].filter(Boolean).find((p) => fs.existsSync(p));
 // The browser can linger after it has written the file; the picture is what counts.
 try { execFileSync(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', `--user-data-dir=${path.join(dir, 'p')}`,
-  '--window-size=390,1500', '--force-device-scale-factor=2', '--virtual-time-budget=4000',
-  `--screenshot=${out}`, `file://${path.join(dir, 'page.html')}`], { stdio: 'ignore', timeout: 30000 }); } catch { /* see above */ }
-console.log(out);
+  `--window-size=390,${height}`, '--force-device-scale-factor=2', '--virtual-time-budget=4000',
+  `--screenshot=${out}`, `file://${path.join(dir, 'page.html')}`], { stdio: 'ignore', timeout: 180000 }); } catch { /* see above */ }
+return out;
+}
+
+module.exports = { photograph };
+
+if (require.main === module) {
+R.words.real();
+R.store.set({ hosts: [{ id: 'h1', name: 'studio' }], divan: { h1: { snapshot: snap, at: NOW, reachable: true, error: null, old: false } },
+  host: { id: 'h1' }, conn: 'online', loadDivan() {}, ustabasi: { available: true, tickets: [] }, ustabasiOld: false, loadUstabasi() {},
+  catalog: { claude: { models: [{ id: 'opus', label: 'Opus 5', hint: '' }], efforts: ['high'], perm_modes: ['default'] } },
+  defaults: { provider: 'claude', model: 'opus', effort: 'high', perm_mode: 'default', cwd: null, byProvider: {} },
+  accounts: [{ id: 'default-claude', provider: 'claude', label: 'own', logged_in: true, is_default: true, detail: '' }],
+  accountsLoaded: true, loadAccounts: async () => {}, limits: {}, projects: [], listAgents: async () => [],
+  compose: C.NO_DRAFT, setCompose() {} });
+console.log(photograph(R.render(scheme, h(Dashboard)), scheme, out));
 process.exit(0);
+
+}
+

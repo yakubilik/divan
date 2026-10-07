@@ -294,6 +294,8 @@ const store = {
 };
 const params = {
   set(patch) { Object.assign(PARAMS, patch); },
+  /** What the address says now: a press that writes into it is read here. */
+  get() { return { ...PARAMS }; },
   reset() { for (const k of Object.keys(PARAMS)) delete PARAMS[k]; },
 };
 /** Every route a press pushed, oldest first. Not cleared by `render`: a push

@@ -1287,7 +1287,10 @@ const voicenote = require('./test-voicenote.cjs');
 void Promise.all([newTicket.ready, voicenote.ready]).then(async () => {
   const composer = require('./test-composer.cjs');
   await composer.ready();
-  checks.push(...newTicket.checks, ...voicenote.checks, ...composer.checks);
+  // …and the project page, its board and the locked Composer (#125).
+  const project = require('./test-handover-project.cjs');
+  await project.ready;
+  checks.push(...newTicket.checks, ...voicenote.checks, ...composer.checks, ...project.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

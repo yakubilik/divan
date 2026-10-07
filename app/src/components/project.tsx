@@ -15,42 +15,97 @@
 import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './text';
-import { Card, Monogram, StatusDot } from './divan';
+import { Card, Monogram, StatusDot, Tap } from './divan';
 import { SLOTS } from '../project';
 import { em, RADIUS, toneColours, useTokens, type State, type Tone } from '../theme';
 
 // ── 1 · whose page this is ──────────────────────────────────────────────────
 
-/** Mobile2 V4 and Mobile7 S4/S5: a 44 pt monogram, the product's name at 26 pt
- *  semibold, and under it in mono what sort of thing it is and what it is for.
- *
- *  The mono line is content and not ours (`project.ts subtitle`), so a product
- *  nobody has described has no line rather than an invented one. */
-export function ProjectHead({ name, index, note, right, style }: {
+/** ProjectPhone's head: a 44 pt monogram, the name at 28 with the meta line
+ *  under it — the stage as a word, `live since 4 Jan 2026` — and the one
+ *  sentence of what it is for below. No stage rail: the stage is that word. */
+export function ProjectHead({ name, index, meta, description, right, style }: {
   name: string;
-  /** Its place in the project list, so one product is one hue everywhere. */
+  /** Its place in the project list. */
   index: number | null;
-  note?: string;
-  /** What sits at the far end of the head. The board face puts `+ ticket`
-   *  there (Mobile2 V5 and Mobile8 S7 both draw it in the head's far corner);
-   *  the Overview has nothing to put there and passes none. */
+  meta?: string;
+  description?: string;
   right?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
   return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }, style]}>
-      <Monogram name={name} index={index} size={44} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text numberOfLines={1} style={{ fontSize: 26, fontWeight: '600', letterSpacing: em(26, -0.02) }}>
-          {name}
-        </Text>
-        {!!note && (
-          <Text mono numberOfLines={1} style={{ fontSize: 12, color: t.ink3, marginTop: 5 }}>{note}</Text>
-        )}
+    <View style={[{ gap: 10 }, style]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Monogram name={name} index={index} size={44} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={{ fontSize: 28, lineHeight: 32, fontWeight: '600', letterSpacing: em(28, -0.03) }}>
+            {name}
+          </Text>
+          {!!meta && <Text mono numberOfLines={1} style={{ fontSize: 11.5, lineHeight: 16, color: t.ink3 }}>{meta}</Text>}
+        </View>
+        {right}
       </View>
-      {right}
+      {!!description && (
+        <Text style={{ fontSize: 14, lineHeight: 20, color: t.ink2 }}>{description}</Text>
+      )}
     </View>
+  );
+}
+
+/** The board in four numbers (ProjectPhone): one card, four columns of a mono
+ *  figure over its name, In Progress in ink. The whole card opens the board. */
+export function BoardSummary({ counts, label, onPress, style }: {
+  counts: { key: string; label: string; count: number }[];
+  label: string;
+  onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTokens();
+  return (
+    <Tap onPress={onPress}
+      style={[{ flexDirection: 'row', backgroundColor: t.s1, borderRadius: RADIUS.md, borderWidth: 1,
+                borderColor: t.line, paddingVertical: 12, paddingHorizontal: 8, minHeight: 44 }, style]}>
+      <View accessibilityLabel={label} style={{ flexDirection: 'row', flex: 1 }}>
+        {counts.map((c) => {
+          const hot = c.key === 'in_progress';
+          return (
+            <View key={c.key} style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+              <Text mono style={{ fontSize: 18, lineHeight: 22, fontWeight: '500', color: t.ink }}>{c.count}</Text>
+              <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: hot ? t.ink2 : t.ink3 }}>{c.label}</Text>
+            </View>
+          );
+        })}
+      </View>
+    </Tap>
+  );
+}
+
+/** One branch as a row (ProjectPhone): its name, and either its numbers or —
+ *  where nothing feeds it — the sentence that says so. The row opens the
+ *  branch's own page. */
+export function BranchRow({ name, figures, note, first, onPress }: {
+  name: string;
+  figures: { value: number | string; label: string }[];
+  /** `Source not connected yet.`, in place of any number. */
+  note?: string | null;
+  first?: boolean;
+  onPress?: () => void;
+}) {
+  const t = useTokens();
+  return (
+    <Tap onPress={onPress}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingVertical: 10,
+               borderTopWidth: first ? 0 : 1, borderTopColor: t.line2 }}>
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13.5, fontWeight: '500', color: t.ink }}>{name}</Text>
+      {note
+        ? <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.ink3 }}>{note}</Text>
+        : figures.map((f) => (
+          <Text key={f.label} mono numberOfLines={1} style={{ fontSize: 11.5, color: t.ink3 }}>
+            {`${f.value} ${f.label}`}
+          </Text>
+        ))}
+    </Tap>
   );
 }
 

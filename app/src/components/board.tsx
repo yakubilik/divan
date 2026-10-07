@@ -21,8 +21,9 @@ import React from 'react';
 import { View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon } from './icon';
 import { Text } from './text';
-import { Card, ExecutorBadge, Tap } from './divan';
+import { Card, StatusDot, Tap } from './divan';
 import { RADIUS, toneColours, useTokens, type Tone } from '../theme';
+import type { StatusKind } from '../board';
 
 // ── 1 · the line above the cards ────────────────────────────────────────────
 
@@ -58,50 +59,50 @@ export function ColumnLine({ marks, machines, style }: {
   );
 }
 
-// ── 2 · a card ──────────────────────────────────────────────────────────────
+// ── 2 · the status word ─────────────────────────────────────────────────────
 
-/** One card on the board.
+/** The dot a status word is drawn with (HANDOVER §2): running green, asking
+ *  amber, stuck red, testing grey, done the quiet grey; queued and idle are an
+ *  empty ring. Never the dot alone. */
+export function statusDot(t: ReturnType<typeof useTokens>, kind: StatusKind): { colour: string; hollow: boolean } {
+  switch (kind) {
+    case 'run': return { colour: t.run, hollow: false };
+    case 'ask': return { colour: t.amber, hollow: false };
+    case 'stuck': return { colour: t.red, hollow: false };
+    case 'review': return { colour: t.ink2, hollow: false };
+    case 'done': return { colour: t.ink3, hollow: false };
+    default: return { colour: t.ink3, hollow: true };
+  }
+}
+
+/** `dv-status`: the dot and the word. Asking is the one word in amber. */
+export function StatusWord({ kind, word, style }: { kind: StatusKind; word: string; style?: StyleProp<ViewStyle> }) {
+  const t = useTokens();
+  const d = statusDot(t, kind);
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6 }, style]}>
+      <StatusDot state={d.colour} hollow={d.hollow} size={7} />
+      <Text style={{ fontSize: 12.5, fontWeight: '500', color: kind === 'ask' ? t.amber : t.ink2 }}>{word}</Text>
+    </View>
+  );
+}
+
+// ── 3 · a card ──────────────────────────────────────────────────────────────
+
+/** One card on the board (BoardPhone): the title, the one sentence an agent
+ *  asked or stopped on, the status word and the mono corner — machine and how
+ *  long. A card that is asking has an amber edge as well as the word.
  *
- *  Mobile8 S7: `background:s1; border-radius:14px; padding:11px 13px; gap:7`
- *  with a hairline ring, a 24 pt executor square, its name at 12.5 semibold, the
- *  machine in mono 10.5 beside it, and the state chip pushed to the far end —
- *  mono 11 at `padding:4px 8px; border-radius:7px`, its tone's colour on its
- *  tone's wash. Then the title at 15 semibold and the card's own sentence under
- *  it in `ink2`, cut at one line.
- *
- *  `mine` is Mobile2 V5's own card for a ticket a person owns: no surface, a
- *  `1.5px` dashed outline, and no machine — nothing runs on it, so there is no
- *  computer for it to be running on.
- *
- *  A card is a way in only where there is something to open: the run behind it,
- *  on the computer this phone holds a socket to. Everywhere else it is a card and
- *  not a press, because another machine's ticket number would open this
- *  machine's queue (`src/board.ts items`). */
-export function BoardCard({ face, who, machine, mark, title, line, mine, lifted, landed,
-                            hold, onPress, style }: {
-  /** Which executor square to draw (`components/divan` `ExecutorBadge`), by the
-   *  name the design gives that face. */
-  face: string;
-  who: string;
-  /** The computer it runs on, and — when that computer has gone quiet — when it
-   *  was last heard from. */
-  machine?: { name: string; seen?: string | null } | null;
-  /** The state chip: its character, its words and its tone. */
-  mark?: { text: string; tone: Tone } | null;
+ *  `mine` is a person's own card: no surface and a dashed outline, because
+ *  nothing runs on it. `lifted` is the card under the thumb; `landed` the one
+ *  just put down, with what happened and the way to take it back. */
+export function BoardCard({ title, line, status, meta, mine, lifted, landed, hold, onPress, style }: {
   title: string;
-  /** The card's own sentence. Absent where nobody wrote one. */
   line?: string;
+  status?: { kind: StatusKind; word: string } | null;
+  meta?: string;
   mine?: boolean;
-  /** It is being held: Mobile3 D1's card, on the lifted surface and a shade
-   *  larger, where it lies. */
   lifted?: boolean;
-  /** …and it has just been put down: Mobile3 D4, the one card on a board that is
-   *  not quiet, with a line across its foot saying what happened and — where the
-   *  move can be taken back — the way to take it back.
-   *
-   *  It is a fact about this phone rather than about the board, which is why it
-   *  arrives as a prop and not as a status: nothing on the wire says "somebody
-   *  moved me four seconds ago". */
   landed?: { text: string; tone: Tone; action?: string; onAction?: () => void } | null;
   /** What makes it draggable (`components/drag` `useDrag`). */
   hold?: { holdMs: number; onLongPress: (e: GestureResponderEvent) => void; onPressOut: () => void };
@@ -109,58 +110,35 @@ export function BoardCard({ face, who, machine, mark, title, line, mine, lifted,
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
-  const col = mark ? toneColours(t, mark.tone) : null;
-  // A quiet machine is the one thing on this card that may take a colour outside
-  // the chip: what the chip says was true when that computer last answered, and
-  // an amber badge is how the frame says so (S7's `mini · seen 21:02`).
-  const stale = !!machine?.seen;
   return (
-    <Card radius={RADIUS.tile} inset={false} dashed={mine && !landed} onPress={onPress}
-      lifted={lifted} ring={landed ? 'run' : lifted ? 'none' : 'line'}
+    <Card radius={RADIUS.md} inset={false} dashed={mine && !landed} onPress={onPress}
+      lifted={lifted} ring={landed ? 'run' : status?.kind === 'ask' ? 'amber' : lifted ? 'none' : 'line'}
       wash={landed ? landed.tone : null}
       holdMs={hold?.holdMs} onLongPress={hold?.onLongPress} onPressOut={hold?.onPressOut}
-      /* D1 draws the held card at `scale(1.03)`: the one transform on this
-         board, and it is what says the card is off the page rather than on it. */
       style={[lifted && { transform: [{ scale: 1.03 }] }, style]}>
-      <View style={{ padding: 11, paddingHorizontal: 13, gap: 7 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <ExecutorBadge executor={face} size={24} />
-          <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '600' }}>{who}</Text>
-          {!!machine && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 }}>
-              <Icon name="monitor" size={11} color={stale ? t.amber : t.ink3} />
-              <Text mono numberOfLines={1} style={{ fontSize: 10.5, color: stale ? t.amber : t.ink3 }}>
-                {machine.seen ? `${machine.name} · ${machine.seen}` : machine.name}
+      <View style={{ padding: 14, gap: 10 }}>
+        <Text numberOfLines={2} style={{ fontSize: 15, lineHeight: 21, fontWeight: '500',
+                                         color: status?.kind === 'done' ? t.ink2 : t.ink }}>{title}</Text>
+        {!!line && <Text numberOfLines={1} style={{ fontSize: 13, lineHeight: 19, color: t.ink2 }}>{line}</Text>}
+        {(!!status || !!meta) && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {!!status && <StatusWord kind={status.kind} word={status.word} />}
+            {!!meta && (
+              <Text mono numberOfLines={1} style={{ marginLeft: 'auto', flexShrink: 1, fontSize: 11.5, color: t.ink3 }}>
+                {meta}
               </Text>
-            </View>
-          )}
-          {!!mark && (
-            /* The chip a person's own card gets is the one the frame draws
-               without a wash: grey words on the card itself (V5). */
-            <Text mono numberOfLines={1}
-              style={{ marginLeft: 'auto', fontSize: 11, fontWeight: '500',
-                       color: col!.fg, backgroundColor: mark.tone === 'ink2' ? 'transparent' : col!.bg,
-                       paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, overflow: 'hidden' }}>
-              {mark.text}
-            </Text>
-          )}
-        </View>
-        <Text numberOfLines={2} style={{ fontSize: 15, lineHeight: 15 * 1.3, fontWeight: '600' }}>{title}</Text>
-        {!!line && (
-          <Text numberOfLines={1} style={{ fontSize: 13, lineHeight: 13 * 1.4, color: t.ink2 }}>{line}</Text>
+            )}
+          </View>
         )}
       </View>
       {!!landed && (
-        /* D4's foot: `border-top`, `padding:8px 12px`, what happened at 12 pt in
-           `ink2` and the way back at the same size in `ink`. The frame draws that
-           line in a green of its own; the hairline a card already has is the one
-           this palette has a token for. */
+        /* D4's foot: what happened, and the way back where there is one. */
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8,
                        borderTopWidth: 1, borderTopColor: t.line2,
                        paddingVertical: 8, paddingHorizontal: 12 }}>
           <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12, color: t.ink2 }}>{landed.text}</Text>
           {!!landed.action && (
-            <Tap onPress={landed.onAction} style={{ marginLeft: 'auto' }}>
+            <Tap onPress={landed.onAction} style={{ marginLeft: 'auto', minHeight: 44, justifyContent: 'center' }}>
               <Text style={{ fontSize: 12, fontWeight: '600', color: t.ink }}>{landed.action}</Text>
             </Tap>
           )}

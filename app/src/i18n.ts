@@ -458,6 +458,16 @@ const en = {
   bdRunning: 'Running {d}', bdRunningBare: 'Running',
   bdReviewed: 'Passed review', bdCancelled: 'Cancelled',
   bdPickedUp: 'Picked up',
+  // The status word on a card and in In progress now (HANDOVER §3 dv-status).
+  stAsking: 'asking', stTesting: 'testing', stRunning: 'running', stStuck: 'stuck', stFailed: 'failed',
+  stPassed: 'passed', stCancelled: 'cancelled', stYours: 'yours', stNextUp: 'next up', stWaiting: 'waiting',
+  stDone: 'done',
+  bdHint: 'Hold a card and drop it on a tab to move it. In Progress starts it.',
+  bdShowMore: 'Show {n} more',
+  // A product's page (HANDOVER §4.2).
+  pjChats: 'Chats', pjOpen: 'Open', pjInProgressNow: 'In progress now',
+  pjNotConnected: 'Source not connected yet.', pjSince: '{stage} since {date}', pjRunsOn: 'runs on {machines}',
+  pjNoChats: 'No chat is filed under this project yet.',
   bdNothing: 'Nothing in this column.',
   bdDoneNote: 'The last month of finished work, out of {n}.',
   bdDoneNone: 'Nothing finished in the last month is on this phone. {n} in all.',
@@ -514,6 +524,7 @@ const en = {
   // two buttons. There is no string here for an executor or a brief, because
   // there is no field for one.
   ntAdd: '+ ticket', ntNew: 'New ticket',
+  ntStartNow: 'Start now', ntCreate: 'Create', ntPutIn: 'Put it in', ntTitle: 'Title', ntSentences: 'Two or three sentences',
   ntTitleHint: 'What is it?',
   ntSummaryHint: 'Two or three sentences, or none.',
   ntLater: 'executor & agent brief: later, or drafted by Divan',

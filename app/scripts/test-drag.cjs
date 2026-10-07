@@ -399,9 +399,9 @@ function STRAY(colour, t) {
     ['…and picking one up reaches the phone, which is the whole of the gesture starting',
       card.length === 1 && eq(buzzed, ['light'])],
     ['a card the drop has filed with the queue says the agent has it, off the board itself',
-      (filed.match(/● bdPickedUp/g) ?? []).length === 1 && !board.includes('bdPickedUp')],
+      (filed.match(/>stNextUp</g) ?? []).length === 1 && !board.includes('stNextUp')],
     ['…and no other card claims it: not one still waiting its turn in Queued, not one with no ticket',
-      !draw(started, { project: 'quire', tab: 'board', col: 'queued' }).includes('bdPickedUp')],
+      !draw(started, { project: 'quire', tab: 'board', col: 'queued' }).includes('stNextUp')],
   );
 }
 

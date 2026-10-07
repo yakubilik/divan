@@ -71,7 +71,7 @@ const STATUS: Record<Session['kind'], { cls: string; word: string }> = {
 /** One thing waiting, answered with one press: the answer the worker proposed
  *  first is amber and sends the note the question window always sent
  *  (`ustabasi.note`); Open goes to the ticket. */
-function Wait({ session: s, onOpen }: { session: Session; onOpen: () => void }) {
+export function Wait({ session: s, onOpen }: { session: Session; onOpen: () => void }) {
   const [sent, setSent] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

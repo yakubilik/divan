@@ -50,6 +50,57 @@
 .dv-live .dv-dot{flex:none}
 .dv-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
+/* The status a second agent is checking (HANDOVER §2: grey dot + word). */
+.dv-status--review i{background:var(--ink-2)}
+
+/* §4.2 Project: the head, the segment, the board summary. */
+.dv-phead{margin-top:28px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.dv-phead .dv-mono{width:52px;height:52px;font-size:22px;border-radius:14px}
+.dv-phead h1{margin:0;font-size:40px;line-height:44px;font-weight:600;letter-spacing:-0.035em}
+.dv-phead--compact{align-items:center;gap:14px}
+.dv-phead--compact .dv-mono{width:36px;height:36px;font-size:15px;border-radius:var(--radius-sm)}
+.dv-phead--compact h1{font-size:24px;line-height:30px;letter-spacing:-0.02em}
+.dv-phead-tools{display:flex;gap:8px;align-items:center;align-self:center;flex-wrap:wrap}
+.dv-phead--compact .dv-phead-tools{margin-left:auto}
+.dv-cols2{margin-top:32px;display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+.dv-cols2>main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:32px}
+.dv-cols2>aside{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:32px}
+.dv-count{text-decoration:none;color:inherit;border-radius:var(--radius-md);padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.dv-count .l{font-size:12.5px;font-weight:500;color:var(--ink-2)}
+.dv-count .n{font:500 20px/24px var(--font-mono)}
+.dv-count--hot .l{font-weight:600;color:var(--ink)}
+.dv-live.press{appearance:none;border-left:0;border-right:0;border-bottom:0;background:transparent;width:100%;text-align:left;font-family:inherit;color:inherit;cursor:pointer;min-height:44px}
+.dv-live.press:first-child{border-top:0}
+.dv-tile.dv-branch{min-height:120px;padding:16px}
+.dv-tile.dv-branch .dv-tile-name{font-size:15px}
+
+/* §4.3 Board: four columns, scrolled sideways on a narrow window. */
+.dv-page--wide{max-width:1180px}
+.dv-board{margin-top:24px;overflow-x:auto;padding-bottom:8px}
+.dv-board-cols{display:grid;grid-template-columns:repeat(4,minmax(260px,1fr));gap:16px;align-items:start;min-width:1088px}
+.dv-col{display:flex;flex-direction:column;gap:10px;min-height:120px;padding:4px;border-radius:var(--radius-md);outline:1px dashed transparent;outline-offset:2px}
+.dv-col[data-takes="true"]{outline-color:var(--hairline)}
+.dv-col[data-dropping="true"]{outline-color:var(--ink-3);background:var(--hairline)}
+.dv-card{border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:10px;cursor:grab}
+.dv-card[data-status="ask"]{border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+.dv-card[data-lifted="true"]{opacity:.5}
+.dv-card[data-aimed="true"]{box-shadow:0 -2px 0 0 var(--ink-3)}
+.dv-card-title{appearance:none;border:0;background:transparent;padding:0;margin:0;text-align:left;font:inherit;font-size:14px;line-height:20px;font-weight:500;color:var(--ink);cursor:pointer;border-radius:4px}
+.dv-card[data-status="done"] .dv-card-title{color:var(--ink-2)}
+.dv-card-line{margin:0;font-size:13px;line-height:19px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-card-foot{display:flex;align-items:center;gap:8px;min-width:0}
+.dv-card-foot .dv-meta{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* §4.5 New ticket. */
+.dv-field{display:flex;flex-direction:column;gap:6px}
+.dv-field label{font-size:12.5px;font-weight:500;color:var(--ink-2)}
+.dv-field input,.dv-field textarea{border-radius:12px;border:1px solid var(--glass-edge);background:var(--hairline);color:var(--ink);outline:0}
+.dv-field input{height:48px;padding:0 14px;font:500 17px/22px var(--font-sans)}
+.dv-field textarea{padding:12px 14px;font:400 15px/22px var(--font-sans);resize:none}
+.dv-field input:focus-visible,.dv-field textarea:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.dv-chip--locked{background:var(--ink);color:var(--on-ink);border-color:transparent;cursor:default}
+.dv-chip--locked .dv-mono{background:var(--on-ink);color:var(--ink);border-color:transparent}
+
 @media (max-width:720px){
   .dv-page{padding:16px 16px 64px}
   .dv-greet{font-size:38px;line-height:40px}

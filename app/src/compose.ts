@@ -44,14 +44,13 @@ export const SUMMARY_MAX = 220;
 export const SUMMARY_LINES = 3;
 export const LINE_HEIGHT = 24;
 
-/** Where the two buttons file it. Neither starts anything: Ice Box is the
- *  someday pile and Queued is next up, and work begins when a card is dragged
- *  into In Progress (`src/drag.ts`). That is why this screen has no approval
- *  step to skip — there is nothing to approve. */
-export type Landing = Extract<DivanColumn, 'ice_box' | 'queued'>;
+/** Where a new card goes (HANDOVER §4.5): Ice Box, the default and the
+ *  someday pile; Queued, next up; or Start now, straight into In Progress,
+ *  which starts the work. One segment, then Create — nothing to approve. */
+export type Landing = Extract<DivanColumn, 'ice_box' | 'queued' | 'in_progress'>;
 
-/** Ice Box first and filled in, Queued beside it as an outline (S9). */
-export const LANDINGS: Landing[] = ['ice_box', 'queued'];
+/** The segment, in its order. */
+export const LANDINGS: Landing[] = ['ice_box', 'queued', 'in_progress'];
 
 /** The computer the card is written on, and that machine's own id for this
  *  product.
@@ -119,8 +118,7 @@ export interface Filing {
   project_id: string;
   title: string;
   summary: string;
-  /** …or In Progress, which only the Dashboard's Start now writes into. */
-  column: Landing | 'in_progress';
+  column: Landing;
 }
 
 export function filing(w: Writer, d: Draft, into: Landing | 'in_progress'): Filing {

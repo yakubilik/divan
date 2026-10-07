@@ -319,8 +319,9 @@ const page = () => doc.querySelector('nav [aria-current="page"] span')?.textCont
 /** The page under the bar, as markup: what a theme change must not touch. */
 const body = () => doc.querySelector('header')?.nextElementSibling?.innerHTML ?? '';
 /** Its head — the one 28 pt line on a Divan page. */
-const head = () => [...doc.querySelectorAll('span, div')]
-  .find((e) => e.style.fontSize === '28px')?.textContent?.trim() ?? null;
+const head = () => doc.querySelector('h1[data-project-head]')?.textContent?.trim()
+  ?? [...doc.querySelectorAll('span, div')]
+    .find((e) => e.style.fontSize === '28px')?.textContent?.trim() ?? null;
 
 const press = async (key) => {
   await act(async () => {
@@ -330,6 +331,9 @@ const press = async (key) => {
 /** The button whose label is this word, anywhere on the page. */
 const find = (label, within = doc) => [...within.querySelectorAll('button')]
   .find((b) => (b.textContent ?? '').trim() === label) ?? null;
+/** An icon button, by the name it is read out as. */
+const labelledBtn = (label) => [...doc.querySelectorAll('button')]
+  .find((b) => b.getAttribute('aria-label') === label) ?? null;
 const click = async (el) => {
   await act(async () => { el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); });
 };
@@ -522,7 +526,7 @@ group('what needs a person opens itself as a conversation');
   /** What the open windows say, and not what the page under them says — a
    *  project card carries the worst card's own line, which is this very
    *  question, so "the window is gone" has to be asked of the windows. */
-  const windows = () => [...doc.querySelectorAll('section')]
+  const windows = () => [...doc.querySelectorAll('section[data-panel]')]
     .map((e) => e.textContent ?? '').join(' · ');
   await act(async () => {
     seed(useDivanStore, { snaps: { studio: answered(board.busy[0].snap, now) } });
@@ -540,7 +544,10 @@ group('what needs a person opens itself as a conversation');
   ok('…and the second thing waiting opens beside it rather than in a queue',
     windows().includes('App Review reply') && windows().includes('your call'));
 
-  const pill = find('Use the live ones now');
+  // The window's own answer: the product page carries the same question as a
+  // Needs you card, which is drawn before the windows.
+  const pill = [...doc.querySelectorAll('section[data-panel] button')]
+    .find((b) => (b.textContent ?? '').trim() === 'Use the live ones now') ?? null;
   ok('the answers the worker proposed are pressable', !!pill);
   asked.length = 0;
   await click(pill);
@@ -571,24 +578,23 @@ group('what needs a person opens itself as a conversation');
   // The bar across the bottom of every desktop frame, and what it does with a
   // sentence. Found the way a person finds it — by what the field says it is —
   // rather than by a `name` attribute nothing on screen carries.
-  const bar = () => [...doc.querySelectorAll('input')]
-    .find((i) => (i.getAttribute('aria-label') ?? '').startsWith('Tell Divan')) ?? null;
-  const arrow = () => [...doc.querySelectorAll('button')]
-    .find((b) => (b.textContent ?? '').trim() === '↑') ?? null;
+  const bar = () => doc.querySelector('#composer-in');
+  const arrow = () => {
+    const send = doc.querySelector('.dv-composer button[aria-label="Send"]');
+    return send && !send.disabled ? send : null;
+  };
   const palette = () => [...doc.querySelectorAll('input')]
     .some((i) => (i.getAttribute('aria-label') ?? '').startsWith('Search folders'));
   /** The chat's own window, by the words it was started with. */
-  const chatWindow = () => [...doc.querySelectorAll('section')]
+  const chatWindow = () => [...doc.querySelectorAll('section[data-panel]')]
     .find((e) => (e.textContent ?? '').includes('ship the beta tonight')) ?? null;
   const labelled = (label, within) => [...within.querySelectorAll('button')]
     .find((b) => b.getAttribute('aria-label') === label) ?? null;
 
-  ok('the command bar is on the page, and it is the field it looks like', !!bar());
+  ok('the Composer is at the foot of the product’s page, and it is the field it looks like', !!bar());
   ok('…whose send is not a button while there is nothing to send', arrow() === null);
   await type(bar(), 'ship the beta tonight');
   ok('…and is one the moment there is', !!arrow());
-  ok('…which is also what the colour says: the chat’s own send disc, filled',
-    arrow().style.background.includes('--dv-ink'), arrow().style.background);
   asked.length = 0;
   await click(arrow());
   ok('pressing it opens a chat on the computer in focus, named after the words',
@@ -670,7 +676,7 @@ group('what needs a person opens itself as a conversation');
   ok('…and it cannot be pushed off the screen',
     parseInt(box().right, 10) === 0 && parseInt(box().bottom, 10) === 0, JSON.stringify(box()));
 
-  const windowFor = (words) => [...doc.querySelectorAll('section')]
+  const windowFor = (words) => [...doc.querySelectorAll('section[data-panel]')]
     .find((e) => (e.textContent ?? '').includes(words)) ?? null;
   const boxOf = (words) => {
     const w = windowFor(words);
@@ -783,8 +789,8 @@ group('what needs a person opens itself as a conversation');
     const words = (first?.textContent ?? '').trim();
     return !first || words.includes('⌘K') ? '' : words;
   };
-  ok('on a product’s page the bar says which product the chat will be about',
-    overBar() === 'Quire', `«${overBar()}»`);
+  ok('on a product’s page the Composer says which product the chat will be about',
+    (doc.querySelector('.dv-composer [data-locked]')?.textContent ?? '').includes('Quire'));
   await type(bar(), 'why is the retry policy like this');
   asked.length = 0;
   await click(arrow());
@@ -794,12 +800,12 @@ group('what needs a person opens itself as a conversation');
     JSON.stringify(asked.filter((a) => a.type === 'chat.create').map((a) => a.data?.cwd)));
   // …and the window it opened is put away again, so the board below is read
   // with nothing standing over it.
-  const opened = [...doc.querySelectorAll('section')]
+  const opened = [...doc.querySelectorAll('section[data-panel]')]
     .find((e) => (e.textContent ?? '').includes('why is the retry policy')) ?? null;
   if (opened) await click(labelled('Close', opened));
   await click(find('Dashboard', doc.querySelector('header')));
-  ok('…and off that page the bar is not drawn: the Composer is', overBar() === ''
-    && !!doc.querySelector('#composer-in'), `«${overBar()}»`);
+  ok('…and off that page the bar is not drawn: the open Composer is', overBar() === ''
+    && !!doc.querySelector('#composer-in') && !doc.querySelector('.dv-composer [data-locked]'), `«${overBar()}»`);
 
   // The key written on the bar is still the key: the bar is a composer, and the
   // palette is what ⌘K opens.
@@ -819,20 +825,18 @@ group('the board, with the asking agent’s chat beside it');
   await click(tile('quire'));
   await click(find('Board'));
 
-  /** A column of the board, by its name: the head is a tab and the column is
-   *  what catches a drop, which is the element around it. */
-  const column = (name) => [...doc.querySelectorAll('[role="tab"]')]
-    .find((b) => (b.textContent ?? '').startsWith(name))?.parentElement ?? null;
+  /** A column of the board, by its name: the section that catches a drop. */
+  const column = (name) => doc.querySelector(`section.dv-col[aria-label="${name}"]`);
   /** A ticket, by the words on it. Every one of them can be picked up, which is
    *  what tells a card apart from everything else on the page. */
   const ticket = (words) => [...doc.querySelectorAll('[draggable="true"]')]
     .find((e) => (e.textContent ?? '').includes(words)) ?? null;
-  const windows = () => [...doc.querySelectorAll('section')].map((e) => e.textContent ?? '').join(' · ');
+  const windows = () => [...doc.querySelectorAll('section[data-panel]')].map((e) => e.textContent ?? '').join(' · ');
 
   ok('the Board tab of a product is its board, four columns of the machines’ own',
     ['Ice Box', 'Queued', 'In Progress', 'Done'].every((c) => !!column(c))
     && !!ticket('Webhook retry policy') && !!ticket('CSV export'),
-    [...doc.querySelectorAll('[role="tab"]')].map((b) => b.textContent).join(' | '));
+    [...doc.querySelectorAll('section.dv-col')].map((b) => b.getAttribute('aria-label')).join(' | '));
   ok('…still on the Dashboard, and still the page the bar is over',
     place() === 'Dashboard' && head() === 'Quire', `${place()} · ${head()}`);
 
@@ -842,7 +846,7 @@ group('the board, with the asking agent’s chat beside it');
   ok('with every question put away, nothing is open over the board', windows() === '',
     windows().slice(0, 200));
 
-  await click(ticket('Stripe keys'));
+  await click(ticket('Stripe keys').querySelector('button'));
   ok('pressing the card of an agent that is asking opens its chat beside the board',
     windows().includes('asks you') && windows().includes('Use the live ones now')
     && windows().includes('Quire · Stripe keys'), windows().slice(0, 300));
@@ -859,7 +863,7 @@ group('the board, with the asking agent’s chat beside it');
   // what the window sent is kept on screen until the machine that holds the
   // board has been re-read.
   ok('…and until the board is re-read the card still says it is asking',
-    !!ticket('Stripe keys') && (ticket('Stripe keys').textContent ?? '').includes('Asking you'));
+    !!ticket('Stripe keys') && (ticket('Stripe keys').textContent ?? '').includes('asking'));
   const back = {
     ...studio,
     cards: studio.cards.map((c) => (c.id === 'k2'
@@ -867,7 +871,7 @@ group('the board, with the asking agent’s chat beside it');
   };
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(back, now) } }); });
   ok('…and when it is, the mark clears on the card and the window is gone',
-    (ticket('Stripe keys').textContent ?? '').includes('Running')
+    (ticket('Stripe keys').textContent ?? '').includes('running')
     && !windows().includes('Use the live ones now'),
     `${ticket('Stripe keys')?.textContent} · ${windows().slice(0, 120)}`);
 
@@ -879,8 +883,8 @@ group('the board, with the asking agent’s chat beside it');
     dt.types.includes('application/x-rac-card'), dt.types.join(', '));
   await drag(column('Queued'), 'dragover', dt);
   ok('…a column that would take it says so, and the one it came out of does not',
-    column('Queued').querySelector('[role="tab"]').getAttribute('aria-selected') === 'true'
-    && column('Ice Box').querySelector('[role="tab"]').getAttribute('aria-selected') === 'false');
+    column('Queued').dataset.dropping === 'true' && column('Queued').dataset.takes === 'true'
+    && column('Ice Box').dataset.takes === undefined);
   asked.length = 0;
   await drag(column('Queued'), 'drop', dt);
   ok('dropping it asks the machine that holds the board to move it there',
@@ -928,7 +932,7 @@ group('a card can be corrected and handed to somebody');
   // was the wrong guess. All three are writes this panel could not make.
   const ticket = (words) => [...doc.querySelectorAll('[draggable="true"]')]
     .find((e) => (e.textContent ?? '').includes(words)) ?? null;
-  await click(ticket('CSV export'));
+  await click(ticket('CSV export').querySelector('button'));
   ok('a card that nobody is waiting on opens as its own page',
     head() === 'CSV export' || text().includes('CSV export'), `${head()}`);
 
@@ -982,84 +986,60 @@ group('a card can be corrected and handed to somebody');
     head() === 'Quire' && place() === 'Dashboard', `${head()} · ${place()}`);
 }
 
-group('a new ticket, written at the top of Ice Box');
+group('New ticket: Title, the sentences, where it goes, Create (HANDOVER §4.5)');
 {
-  /** Typing, as React hears it: the value is set through the prototype's own
-   *  setter so that React's tracker sees a change and the input event is not
-   *  swallowed as a no-op. */
-  const type = async (el, value) => {
-    const setter = Object.getOwnPropertyDescriptor(
-      el.tagName === 'TEXTAREA' ? w.HTMLTextAreaElement.prototype : w.HTMLInputElement.prototype,
-      'value').set;
-    await act(async () => {
-      setter.call(el, value);
-      el.dispatchEvent(new w.Event('input', { bubbles: true }));
-    });
+  const field = (label) => {
+    const l = [...doc.querySelectorAll('label')].find((e) => (e.textContent ?? '').trim() === label);
+    return l ? doc.getElementById(l.htmlFor) : null;
   };
-  const field = (label) => doc.querySelector(`[aria-label="${label}"]`);
-  const enter = async (el) => {
-    await act(async () => {
-      el.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    });
+  const create = () => find('Create');
+  const segment = (label) => [...(doc.querySelector('[aria-label="Put it in"]')?.querySelectorAll('button') ?? [])]
+    .find((b) => (b.textContent ?? '').trim() === label) ?? null;
+  const filed = () => asked.filter((a) => a.type === 'divan.card.create');
+  /** Open the form from the product's head, write a card, pick where, Create. */
+  const write = async (title, sentences, where) => {
+    await click(find('+ New ticket'));
+    await type(field('Title'), title);
+    if (sentences) await type(field('Two or three sentences'), sentences);
+    if (where) await click(segment(where));
+    asked.length = 0;
+    await click(create());
   };
-  const iceBox = () => [...doc.querySelectorAll('[role="tab"]')]
-    .find((b) => (b.textContent ?? '').startsWith('Ice Box'))?.parentElement ?? null;
 
-  // The frame's word is at the end of the *product's* head, and a reader meets
-  // it on the Overview tab: it has to carry them to the board with the card
-  // already open, in one press.
   await click(find('Overview'));
-  ok('on a product’s own page nothing is being written yet',
-    !field('Title') && head() === 'Quire' && !iceBox());
-
   await click(find('+ New ticket'));
-  ok('the word at the end of a product’s head opens the board with a card being written',
-    !!field('Title') && !!iceBox()?.contains(field('Title')) && place() === 'Dashboard',
-    doc.body.textContent?.slice(0, 120));
+  ok('+ New ticket opens one form: the product, Title, the sentences, the segment and Create, nothing else to fill',
+    !!field('Title') && !!field('Two or three sentences') && !!create()
+    && segment('Ice Box')?.getAttribute('aria-pressed') === 'true'
+    && w.location.pathname === '/p/quire/new'
+    && doc.querySelectorAll('form[aria-label="New ticket"] input, form[aria-label="New ticket"] textarea, form[aria-label="New ticket"] select').length === 2,
+    w.location.pathname);
+  await click(labelledBtn('Close'));
 
-  await type(field('Title'), 'Export client list as CSV');
-  await type(field('What to do'), 'Studios keep asking to download their client list.');
-  asked.length = 0;
-  await enter(field('Title'));
-  ok('…and pressing return files it on the machine that holds the product, in Ice Box',
-    asked.some((a) => a.key === 'studio' && a.type === 'divan.card.create'
-      && a.data.project_id === 'p-quire' && a.data.column === 'ice_box'
-      && a.data.title === 'Export client list as CSV'
-      && a.data.summary === 'Studios keep asking to download their client list.'),
-    JSON.stringify(asked.slice(0, 3)));
+  await write('Export client list as CSV', 'Studios keep asking to download their client list.');
+  const ice = filed()[0]?.data;
+  await write('Invite by CSV', '', 'Queued');
+  const queued = filed()[0]?.data;
+  await write('Fix the webhook retries', 'They retry forever.', 'Start now');
+  const now = filed()[0]?.data;
+  ok('Create files divan.card.create into Ice Box by default, Queued or In Progress when chosen, with only a title required',
+    ice?.column === 'ice_box' && ice.project_id === 'p-quire' && ice.title === 'Export client list as CSV'
+    && ice.summary === 'Studios keep asking to download their client list.'
+    && queued?.column === 'queued' && queued.title === 'Invite by CSV' && queued.summary === ''
+    && now?.column === 'in_progress' && !('executor' in now) && !('agent' in now)
+    && w.location.pathname === '/p/quire/board',
+    JSON.stringify([ice, queued, now]));
 
-  // A machine that has gone quiet is a memory of a refusal, not a refusal: the
-  // card is still written to the machine that has the product, and what comes
-  // back from that is the answer.
-  const was = useDivanStore.getState().snaps.studio;
-  await act(async () => { seed(useDivanStore, { snaps: { studio: silent(was, 'connection refused') } }); });
-  await click(find('+ New ticket'));
-  await type(field('Title'), 'Invite by CSV');
-  asked.length = 0;
-  await enter(field('Title'));
-  ok('a product whose only machine has gone quiet is still written to',
-    asked.some((a) => a.key === 'studio' && a.type === 'divan.card.create'
-      && a.data.title === 'Invite by CSV'),
-    JSON.stringify(asked.slice(0, 3)));
-
-  // …and when the machine really is gone, the card is still on the screen with
-  // what was typed in it, and the words that came back are under it.
+  // When the machine cannot be reached the form keeps what was typed and says why.
   const call = useFleet.getState().call;
   await act(async () => {
     seed(useFleet, { call: async () => { throw new Error('That computer did not answer'); } });
   });
-  await click(find('+ New ticket'));
-  await type(field('Title'), 'Invite by CSV');
-  await enter(field('Title'));
+  await write('Invite by CSV', '', null);
   ok('…and one that cannot be reached keeps what was typed and says why',
-    field('Title')?.value === 'Invite by CSV'
-    && (iceBox()?.textContent ?? '').includes('That computer did not answer'),
-    (iceBox()?.textContent ?? '').slice(0, 200));
-  await act(async () => {
-    seed(useFleet, { call });
-    seed(useDivanStore, { snaps: { studio: was } });
-  });
-  await click(find('Esc'));
+    field('Title')?.value === 'Invite by CSV' && text().includes('That computer did not answer'));
+  await act(async () => { seed(useFleet, { call }); });
+  await click(labelledBtn('Close'));
 }
 
 group('the sign-in that is expiring is counted before that page is opened');
@@ -1360,8 +1340,7 @@ group('a product has its own chats');
   });
   await click(find('Dashboard', header));
   await click(tile('quire'));
-  const tab = [...doc.querySelectorAll('button')]
-    .find((b) => !header.contains(b) && /^Chat\s*1$/.test((b.textContent ?? '').trim()));
+  const tab = find('Chats', doc.querySelector('[aria-label="View"]'));
   await click(tab);
   const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
   ok('the product’s Chat tab lists the chats filed under it and no others, with the newest open',
@@ -1658,6 +1637,171 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
       && account.textContent.includes('low quota')
       && asked.some((a) => a.type === 'chat.create') && dialogs() === 0,
     `${account.getAttribute('aria-label')} · ${asked.map((a) => a.type)}`);
+}
+
+group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
+{
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+  const now = Math.floor(Date.now() / 1000);
+  const base = boards(now).busy[0].snap;
+  const c = (id, over) => ({ ...base.cards[0], id, ustabasi_id: null, agent_status: null,
+    agent_status_at: null, agent_detail: '', summary: '', ...over });
+  const snap = { ...base, cards: [...base.cards,
+    c('q1', { column: 'queued', position: 0, title: 'Bulk invite' }),
+    c('q2', { column: 'queued', position: 1, title: 'Zapier hook' }),
+    c('q3', { column: 'queued', position: 2, title: 'Audit log' }),
+    c('r1', { column: 'review', title: 'Payment flow', agent_status: 'running', agent_status_at: now - 480 }),
+    c('i3', { column: 'in_progress', position: 2, title: 'Lesson search', agent_status: 'running', agent_status_at: now - 360 }),
+    c('i4', { column: 'in_progress', position: 3, title: 'Certificate PDF', agent_status: 'running', agent_status_at: now - 2460 }),
+    c('i5', { column: 'in_progress', position: 4, title: 'Exam timer', agent_status: 'blocked', agent_status_at: now - 4300,
+              agent_detail: 'Test fails on Safari 17.' }),
+    ...[1, 2, 3, 4, 5].map((n) => c(`d${n}`, { column: 'done', title: `Shipped ${n}`, moved_at: now - n * 86400 })),
+  ] };
+  await act(async () => {
+    seed(useDivanStore, { snaps: { studio: answered(snap, now) } });
+    useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS });
+    useDock.setState({ minimised: ['studio:k2', 'studio:h1', 'studio:i5'], closed: {}, raised: [] });
+  });
+  await press('0');
+  await click(tile('quire'));
+  const seg = (label) => find(label, doc.querySelector('[aria-label="View"]'));
+  const pressed = () => doc.querySelector('[aria-label="View"] [aria-pressed="true"]')?.textContent ?? null;
+  const reload = async (path) => {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+  };
+  const goBack = async () => {
+    await act(async () => {
+      const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+      w.history.back();
+      await landed;
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  };
+
+  // 2 · the head and the segment
+  const meta = doc.querySelector('.dv-phead [data-meta]')?.textContent ?? '';
+  const headOk = !!doc.querySelector('.dv-phead .dv-mono') && head() === 'Quire'
+    && doc.querySelector('.dv-phead [data-description]')?.textContent === 'client portals for studios'
+    && meta.startsWith('live since') && !doc.querySelector('.dv-stage')
+    && !/\bIdea\b[\s\S]*\bGrowth\b/.test(text());
+  await click(seg('Board'));
+  const onBoard = w.location.pathname === '/p/quire/board' && !!doc.querySelector('section.dv-col');
+  await click(seg('Chats'));
+  const onChats = w.location.pathname.startsWith('/p/quire/chat') && pressed() === 'Chats';
+  await click(seg('Overview'));
+  const onOverview = w.location.pathname === '/p/quire' && !!doc.querySelector('[data-counts]');
+  await click(seg('Board'));
+  await goBack();
+  const backed = w.location.pathname === '/p/quire' && pressed() === 'Overview';
+  const reloads = [];
+  for (const [path, word] of [['/p/quire/board', 'Board'], ['/p/quire/chat', 'Chats'], ['/p/quire', 'Overview']]) {
+    await reload(path);
+    reloads.push(pressed() === word && w.location.pathname.startsWith(path));
+  }
+  ok('the head is monogram, name, one sentence and a meta line with the stage as a word, no stage bar; the segment switches the view and each path survives reload and Back',
+    headOk && onBoard && onChats && onOverview && backed && reloads.every(Boolean),
+    JSON.stringify({ headOk, meta, onBoard, onChats, onOverview, backed, reloads }));
+
+  // 3 · the board summary
+  const counted = Object.fromEntries([...doc.querySelectorAll('[data-count]')]
+    .map((a) => [a.dataset.count, Number(a.querySelector('.n')?.textContent)]));
+  const rows = [...doc.querySelectorAll('[data-in-progress] [data-row]')]
+    .map((r) => [r.querySelector('.dv-status')?.textContent, r.querySelector('.t')?.textContent]);
+  await click(seg('Board'));
+  const columnCount = (name) => Number(doc.querySelector(`section.dv-col[aria-label="${name}"] .dv-sec .dv-meta`)?.textContent);
+  const fromColumns = { ice_box: columnCount('Ice Box'), queued: columnCount('Queued'),
+    in_progress: columnCount('In Progress'), done: columnCount('Done') };
+  ok('the board summary counts the four real columns, and In progress now lists five In Progress cards with their status words',
+    JSON.stringify(counted) === JSON.stringify(fromColumns)
+    && JSON.stringify(counted) === JSON.stringify({ ice_box: 1, queued: 3, in_progress: 6, done: 5 })
+    && rows.length === 5 && ['stuck', 'asking', 'testing', 'running'].every((w2) => rows.some((r) => r[0] === w2)),
+    JSON.stringify({ counted, fromColumns, rows }));
+
+  // 6 · asking edge, and Done this month
+  const card = (words) => [...doc.querySelectorAll('article.dv-card')].find((e) => (e.textContent ?? '').includes(words)) ?? null;
+  const doneCards = () => doc.querySelectorAll('section.dv-col[aria-label="Done"] article').length;
+  const css = readFileSync(join(web, 'src', 'styles', 'divan-app.css'), 'utf8');
+  const asking = card('Stripe keys');
+  const shownBefore = doneCards();
+  const more = find('Show 2 more');
+  if (more) await click(more);
+  ok('an asking card carries the amber edge and the word asking; Done shows this month with Show N more revealing the rest',
+    asking?.dataset.status === 'ask' && (asking.querySelector('.dv-status')?.textContent === 'asking')
+    && /\.dv-card\[data-status="ask"\]\{border-color:color-mix\(in srgb,var\(--amber\)/.test(css)
+    && shownBefore === 3 && !!more && doneCards() === 5 && !find('Show 2 more'),
+    `${asking?.dataset.status} · ${shownBefore} → ${doneCards()}`);
+
+  // 8 · Queued is the priority order
+  const column = (name) => doc.querySelector(`section.dv-col[aria-label="${name}"]`);
+  asked.length = 0;
+  const lift = new Transfer();
+  await drag(card('Audit log'), 'dragstart', lift);
+  await drag(card('Bulk invite'), 'dragover', lift);
+  await drag(card('Bulk invite'), 'drop', lift);
+  const reordered = asked.find((a) => a.type === 'divan.card.move');
+  ok('a Queued card dropped on another Queued card takes its place, which is the priority',
+    reordered?.data.card_id === 'q3' && reordered.data.column === 'queued' && reordered.data.position === 0,
+    JSON.stringify(reordered));
+
+  // 1 · Queued → In Progress starts it, asking nothing
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  asked.length = 0;
+  const start = new Transfer();
+  await drag(card('Bulk invite'), 'dragstart', start);
+  await drag(column('In Progress'), 'dragover', start);
+  await drag(column('In Progress'), 'drop', start);
+  await settle();
+  ok('dragging a card from Queued into In Progress issues divan.card.move with In Progress, and no confirmation appears',
+    asked.some((a) => a.type === 'divan.card.move' && a.data.card_id === 'q1' && a.data.column === 'in_progress')
+    && doc.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]').length === 0
+    && (column('In Progress').textContent ?? '').includes('Bulk invite'),
+    JSON.stringify(asked.map((a) => [a.type, a.data?.column])));
+
+  // 4 · branches
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  await click(seg('Overview'));
+  const seo = doc.querySelector('[data-branch="SEO"]');
+  const eng = doc.querySelector('[data-branch="Engineering"]');
+  const seoOk = seo?.dataset.connected === 'false'
+    && (seo.textContent ?? '').includes('Source not connected yet.') && !/\d/.test(seo.textContent ?? '');
+  await click(eng);
+  ok('a branch with no source says Source not connected yet. and no number; a connected one opens the branch page',
+    seoOk && eng?.dataset.connected === 'true' && w.location.pathname === '/p/quire/b/Engineering',
+    `${seo?.textContent} · ${w.location.pathname}`);
+  await goBack();
+
+  // 7 · the Composer at the foot is locked
+  const scope = doc.querySelector('.dv-composer .dv-scope');
+  const locked = scope?.querySelector('[data-locked]');
+  const removable = [...(scope?.querySelectorAll('button') ?? [])].length
+    + doc.querySelectorAll('.dv-composer [data-picker="Project"]').length;
+  await click(find('Ice Box', doc.querySelector('.dv-composer [aria-label="Mode"]')));
+  await type(doc.querySelector('#composer-in'), '@hush Write the changelog ');
+  asked.length = 0;
+  await click(doc.querySelector('.dv-composer button[aria-label="Send"]'));
+  await settle();
+  const sent = asked.find((a) => a.type === 'divan.card.create');
+  // 8 · what the old page could do: Still open's thread, from the side column
+  const post = [...doc.querySelectorAll('aside [role="button"]')]
+    .find((e) => (e.textContent ?? '').includes('Payment provider keys')) ?? null;
+  if (post) await click(post);
+  const say = [...doc.querySelectorAll('aside input')]
+    .find((i) => (i.getAttribute('placeholder') ?? '').startsWith('Say something')) ?? null;
+  if (say) await type(say, 'Bedirhan has the account');
+  asked.length = 0;
+  if (say) await act(async () => { say.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  ok('Still open sits in the side column and its thread still takes a comment',
+    !!post && asked.some((a) => a.type === 'divan.project.open' && a.data.comment === 'Bedirhan has the account'),
+    JSON.stringify(asked.map((a) => [a.type, a.data?.comment])));
+
+  ok('the Composer at the foot of a project carries that project, and its chip cannot be removed',
+    (locked?.textContent ?? '').includes('Quire') && removable === 0
+    && sent?.data.project_id === 'p-quire' && sent.data.column === 'ice_box',
+    `${removable} · ${JSON.stringify(sent?.data)}`);
 }
 
 group('nothing was lost on the way');

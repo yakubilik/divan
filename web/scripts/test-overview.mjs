@@ -870,12 +870,11 @@ group('Web14 W6, W7 and W8');
   // five stages, the dates beside it, what is happening this minute and the
   // history behind it. The faces are a tab of their own — how a product is
   // organised is a thing a person looks up, not what they opened it for.
-  ok('the product page is where it stands, what is happening, and how it got here',
-    product.includes('Live') && product.includes('Started')
-    && product.includes('Right now') && product.includes('Timeline')
-    && product.includes('v1.0 live') && product.includes('Today'));
-  ok('…and the branch grid is not on it',
-    !product.includes('Branches</div>') && !/Right now[\s\S]*Engineering/.test(product));
+  ok('the product page is where it stands, what is in progress, and how it got here',
+    product.includes('live since') && product.includes('In progress now')
+    && product.includes('Timeline') && product.includes('v1.0 live') && product.includes('Today'));
+  ok('…with its branches on it, and a branch nothing feeds saying so',
+    product.includes('data-branch="SEO"') && product.includes(PR.NOT_CONNECTED));
   ok('the faces are their own tab, with their own numbers',
     faces.includes('Branches') && faces.includes('Engineering')
     && faces.includes('SEO') && faces.includes('open') && faces.includes('done'));

@@ -541,7 +541,7 @@ export function Segments({ segments, value, onChange, on = 's1', disabled, style
         const sel = seg.key === value;
         return (
           <Pressable key={seg.key} accessibilityRole="tab" accessibilityState={{ selected: sel }}
-            disabled={disabled} onPress={() => onChange(seg.key)}
+            disabled={disabled} onPress={() => onChange(seg.key)} hitSlop={{ top: 4, bottom: 4 }}
             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
                      paddingVertical: 8, borderRadius: boxed ? 8 : RADIUS.well,
                      backgroundColor: sel ? (boxed ? t.s1 : t.s2) : 'transparent',
