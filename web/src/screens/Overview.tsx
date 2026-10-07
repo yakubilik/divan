@@ -151,22 +151,24 @@ export function Overview({
   }
 
   if (deep) {
-    // A card's page and a branch's page keep their own heads and the bar under
-    // them until their own step of the redesign.
+    // A branch's page is the handover's own (§4.7); the bar that asks about the
+    // product and the sessions running on it stay under it.
     return (
-      <div style={{
-        flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20,
-        padding: `24px 32px ${BAR_ROW + 12}px`, background: T.bg, overflowY: 'auto',
-      }}>
-        {!!face && (
-          <Branch
-            project={project} branch={face} index={view.projects.indexOf(project)} now={view.now}
-            onProject={() => onBranch?.(null)}
-            onCard={(c: MergedCard) => onCard?.(idOf(c))}
-          />
-        )}
-        {!!onAsk && <Bar onAsk={onAsk} note={askNote ?? null} />}
-        <Sessions view={view} />
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: T.bg }}>
+        <div className="dv-page" style={{ paddingBottom: BAR_ROW + 12 }}>
+          {!!face && (
+            <Branch
+              project={project} branch={face} index={view.projects.indexOf(project)} now={view.now}
+              onProject={() => onBranch?.(null)}
+              onCard={(c: MergedCard) => onCard?.(idOf(c))}
+              onBoard={() => { onBranch?.(null); onTab?.('board'); }}
+            />
+          )}
+          <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {!!onAsk && <Bar onAsk={onAsk} note={askNote ?? null} />}
+            <Sessions view={view} />
+          </div>
+        </div>
       </div>
     );
   }

@@ -249,7 +249,7 @@ group('three places, and nothing beside them');
     && shell.MACHINE_ROWS.length === 8);
   ok('…the eight rows being the frame’s eight, in the frame’s order',
     eq(shell.MACHINE_ROWS.map((r) => r.label),
-      ['Machines', 'Executors', 'Terminals', 'Remote screen', 'Accounts & sign-ins',
+      ['Machines', 'Executors', 'Terminal', 'Remote screen', 'Accounts & sign-ins',
        'Quota thresholds', 'Admin', 'Settings']),
     shell.MACHINE_ROWS.map((r) => r.label).join(', '));
   ok('…and a page with no row of its own is drawn under the row it was opened from',
@@ -356,11 +356,11 @@ group('nothing was dropped in the move');
   // The column, and not the screen beside it: the fleet panel on the right
   // draws dots of its own and counting those would say nothing.
   const column = renderToStaticMarkup(h(MachineUI.Machine, machineProps('machines', view('fresh'))))
-    .split('</nav>')[0];
-  ok('…and the Machine list draws them again on the page each is about',
-    /Terminals<\/span><span[^>]*>1</.test(column)
-    && styles(column).filter((d) => d.width === '7px' && d.background === v('amber')).length === 1,
-    `${styles(column).filter((d) => d.width === '7px').length} dots`);
+    .split('data-machine-page')[0];
+  ok('…and the Machine tabs draw them again on the tab each is about, and the pages under it',
+    /Terminal<i class="dv-dot dv-dot--ask"/.test(column) && /Machines<i class="dv-dot dv-dot--ask"/.test(column)
+    && /Update<\/span><i class="dv-dot dv-dot--ask"/.test(column),
+    column.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
 }
 
 group('what the panel offers, it can still do');
@@ -751,9 +751,9 @@ group('every screen renders with nothing, with something stale and with a machin
     MachineUI.machineNote(view('unreachable')).includes('mini cannot be reached')
     && MachineUI.machineNote(view('fresh')).includes('all reachable')
     && MachineUI.machineNote(view('alone')).includes('No computer'));
-  ok('…and marks the row it is under',
-    anyStyle(drawn['unreachable dark Machine › Machines'],
-      (d) => (d.border ?? '').includes(v('amber')) && d.width === '7px'));
+  ok('…and marks the tab it is under in red, with the word',
+    /Machines<i class="dv-dot dv-dot--stuck"[^>]*><\/i><span class="dv-hidden">unreachable/
+      .test(drawn['unreachable dark Machine › Machines'] ?? ''));
 
   // The whole panel, with the shell around it: the one render that proves the
   // three places, the bar and the pages are wired to each other rather than

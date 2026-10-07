@@ -479,6 +479,8 @@ function saveKeys(name: string, keys: string[]): void {
 export interface TerminalProps {
   onPeek: (hostKey: string, chatId: string) => void;
   onNewChat: () => void;
+  /** A ticket to open on the queue's wall as the page comes up. */
+  ticket?: number | null;
 }
 
 /** Which wall this screen is showing. Remembered, because it is a way of
@@ -503,10 +505,11 @@ function SourceToggle({ value, onChange }: { value: Source; onChange: (s: Source
   );
 }
 
-export function Terminal({ onPeek, onNewChat }: TerminalProps) {
+export function Terminal({ onPeek, onNewChat, ticket = null }: TerminalProps) {
   const { hosts, order } = useFleet();
   const logs = useLogs((s) => s.logs);
-  const [source, setSourceState] = useState<Source>(loadSource);
+  // A ticket handed in (a card link in a chat) is read on the queue's own wall.
+  const [source, setSourceState] = useState<Source>(() => (ticket != null ? 'ustabasi' : loadSource()));
   const [filter, setFilter] = useState<Phase | 'all'>('all');
   const [query, setQuery] = useState('');
   const [wall, setWall] = useState<string[]>(() => loadKeys(WALL_KEY));
@@ -651,7 +654,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
 
   // The other wall. Placed after every hook above, so switching walls is not a
   // change in how many hooks this component runs.
-  if (source === 'ustabasi') return <Ustabasi header={toggle} />;
+  if (source === 'ustabasi') return <Ustabasi header={toggle} open={ticket} />;
 
   return (
     <div style={{
@@ -670,7 +673,7 @@ export function Terminal({ onPeek, onNewChat }: TerminalProps) {
               is the design system's own `page` head and not a size invented
               here. */}
           <SectionHeader
-            kind="page" title="Terminals"
+            kind="page" title="Terminal"
             note={`${onlineCount} of ${order.length} online`}
             style={{ flexShrink: 0 }}
           />

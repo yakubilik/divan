@@ -22,7 +22,7 @@
 //     the phone is already holding. The store makes the request and applies it
 //     (`createCard`); the reading is here, where it can be checked.
 import type { DivanView, HostDivan, MergedProject } from './divan';
-import type { CliAccount, DivanCard, DivanColumn, LimitWindow, Provider, ProviderCatalog } from './protocol';
+import type { CliAccount, Defaults, DivanCard, DivanColumn, LimitWindow, Provider, ProviderCatalog } from './protocol';
 import type { Key } from './i18n';
 
 /** How long the card's own sentences are allowed to be. S9 counts `108 / 220`
@@ -297,4 +297,25 @@ export function short(seconds: number): string {
   if (d < 14) return `${d}d`;
   if (d < 60) return `${Math.floor(d / 7)}w`;
   return `${Math.floor(d / 30)}mo`;
+}
+
+/** The tool the Composer opens a new chat on: Claude where the computer has it
+ *  (every chat it starts is Hermes'), the computer's usual one where not. */
+export function composerProvider(catalog: Partial<Record<Provider, ProviderCatalog>> | null | undefined,
+                                 d: Defaults | null | undefined): Provider {
+  return catalog?.claude ? 'claude' : d?.provider ?? 'claude';
+}
+
+/** Machine › Settings writing a lasting default (HANDOVER §5): the sign-in or
+ *  the model the next new chat opens with on this tool, as the patch the store
+ *  keeps. A chip changed in the Composer is for one chat; this is for all of
+ *  them after it. */
+export function withDefault(d: Defaults, provider: Provider,
+                            patch: { model?: string; account_id?: string }): Partial<Defaults> {
+  const cur = d.byProvider?.[provider]
+    ?? { model: d.model, effort: d.effort ?? null, perm_mode: d.perm_mode, account_id: '' };
+  return {
+    byProvider: { ...(d.byProvider ?? {}), [provider]: { ...cur, ...patch } },
+    ...(patch.model && provider === d.provider ? { model: patch.model } : {}),
+  };
 }

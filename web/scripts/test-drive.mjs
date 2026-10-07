@@ -315,7 +315,12 @@ const nav = (label) => [...(doc.querySelector('header')?.querySelectorAll('butto
   .find((b) => (b.textContent ?? '').trim().startsWith(label)) ?? null;
 // …read off the row's own name and not its whole line, which also carries the
 // count of what is waiting under it.
-const page = () => doc.querySelector('nav [aria-current="page"] span')?.textContent?.trim() ?? null;
+// A tab with one page under it has no row of links, and its page is the tab.
+const page = () => doc.querySelector('nav [aria-current="page"] span')?.textContent?.trim()
+  ?? doc.querySelector('[aria-label="Machine"] [aria-pressed="true"]')?.firstChild?.textContent?.trim() ?? null;
+/** A tab of the Machine place, by its name. */
+const machineTab = (label) => [...doc.querySelectorAll('[aria-label="Machine"] button')]
+  .find((b) => (b.firstChild?.textContent ?? '').trim() === label) ?? null;
 /** The page under the bar, as markup: what a theme change must not touch. */
 const body = () => doc.querySelector('header')?.nextElementSibling?.innerHTML ?? '';
 /** Its head — the one 28 pt line on a Divan page. */
@@ -400,9 +405,12 @@ group('the keyboard');
 group('the bar');
 {
   await click(nav('Chats'));
-  ok('the Chat place is one press away, and it is the chat and its list',
-    place() === 'Chat' && !!doc.querySelector('input[name="chat-search"]')
-    && text().includes('Webhook retry policy'), `${place()}`);
+  const landed = place() === 'Chat' && !!doc.querySelector('textarea')
+    && !doc.querySelector('input[name="chat-search"]');
+  await click(find('Earlier'));
+  ok('the Chat place is one press away and lands writable in a chat; Earlier opens the list',
+    landed && !!doc.querySelector('input[name="chat-search"]')
+    && text().includes('Webhook retry policy'), `${landed} · ${place()}`);
 
   await click(nav('Machine'));
   ok('…and the Machine place opens on the first row of its list',
@@ -480,7 +488,7 @@ group('the back button steps through the panel instead of out of it');
     w.location.pathname === '/machine/accounts', w.location.pathname);
   await back();
   ok('…and Back walks them one at a time',
-    w.location.pathname === '/machine/terminal' && page() === 'Terminals',
+    w.location.pathname === '/machine/terminal' && page() === 'Terminal',
     `${page()} · ${w.location.pathname}`);
 
   await press('0');
@@ -1046,7 +1054,7 @@ group('the sign-in that is expiring is counted before that page is opened');
 {
   const header = doc.querySelector('header');
   /** A row of the drawer, by the name on it. */
-  const row = (label) => [...doc.querySelectorAll('nav button')]
+  const row = (label) => [...doc.querySelectorAll('nav a')]
     .find((b) => (b.querySelector('span')?.textContent ?? '').trim() === label) ?? null;
 
   await click(find('Dashboard', header));
@@ -1061,10 +1069,12 @@ group('the sign-in that is expiring is counted before that page is opened');
   ok('entering the Machine place asks the computer which sign-ins it has',
     asked.some((a) => a.key === 'studio' && a.type === 'account.list'),
     JSON.stringify(asked.map((a) => a.type)));
-  ok('…and the drawer counts the ones that want a person, on the page it opens on',
-    page() === 'Machines' && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
-    && (row('Accounts & sign-ins')?.innerHTML ?? '').includes('var(--dv-amber)'),
-    `${page()} · ${row('Accounts & sign-ins')?.textContent}`);
+  const marked = page() === 'Machines' && (machineTab('Executors')?.textContent ?? '').includes('needs you');
+  await click(machineTab('Executors'));
+  ok('…and the tabs count the ones that want a person: a mark on Executors, the number on its Accounts link',
+    marked && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
+    && !!row('Accounts & sign-ins')?.querySelector('.dv-badge'),
+    `${marked} · ${row('Accounts & sign-ins')?.textContent}`);
   await press('6');
   ok('…and Admin says the same thing about them, on a page nobody asked twice',
     page() === 'Admin' && text().includes('2 want you')
@@ -1094,7 +1104,7 @@ group('the sign-in that is expiring is counted before that page is opened');
 group('a ticket shows what the worker is doing right now');
 {
   await press('4');
-  ok('the terminal place is one key away', page() === 'Terminals', `${page()}`);
+  ok('the terminal place is one key away', page() === 'Terminal', `${page()}`);
   const toggle = [...doc.querySelectorAll('[role="radio"]')]
     .find((b) => (b.textContent ?? '').trim() === 'Ustabasi') ?? null;
   ok('…with the queue as one of the two things the wall shows', !!toggle);
@@ -2028,6 +2038,278 @@ group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
     one === 'Nothing is waiting on you.' && !page.querySelector('[data-group], p') && !doc.getElementById('needs-you')
     && home(), JSON.stringify({ one }));
   await act(async () => { useFleet.setState({ call: prior }); });
+}
+
+group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
+{
+  const { useLogs, logKey } = await load('src/lib/timeline.js');
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+  const reload = async (path) => {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+  };
+  const sent = (type, pred = () => true) => asked.some((a) => a.type === type && pred(a.data ?? {}));
+  const byText = (sel, words, within = doc) => [...within.querySelectorAll(sel)]
+    .find((e) => (e.textContent ?? '').trim() === words) ?? null;
+  const now = Date.now() / 1000;
+  const prior = useFleet.getState().call;
+  const priorDivan = useDivanStore.getState().snaps;
+  let studioSnap = fixture.studio();
+  await act(async () => {
+    useFleet.setState({ call: async (key, type, data) => {
+      if (type === 'divan.snapshot') {
+        if (key === 'studio') return studioSnap;
+        throw new Error('That computer did not answer');
+      }
+      if (type === 'agent.store') {
+        asked.push({ key, type, data });
+        return { sources: [{ id: 'hermes', label: 'Hermes', repo: 'x/hermes', note: '',
+          items: [{ id: 'reviewer', label: 'Reviewer', glyph: 'R', about: 'reads a diff' }] }] };
+      }
+      return prior(key, type, data);
+    } });
+    seed(useDivanStore, { snaps: { studio: answered(studioSnap, now) } });
+  });
+
+  // The conversation the Chat place lands on: filed under Quire, a picture in
+  // the question, an approval waiting, and two tickets its agent filed — one
+  // the board has a card for (#41, k1) and one it has not (#99).
+  const host = fakeHost();
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...host, chats: host.chats.map((c) => (
+      c.id === 'c1' ? { ...c, project_id: 'p-quire', updated_at: now - 5 } : { ...c, updated_at: now - 120 })) } } });
+    seed(useLogs, { logs: { [logKey('studio', 'c1')]: {
+      items: [
+        { kind: 'user', id: 'u1', ts: now - 300, text: 'Students keep asking about refunds.', queued: false,
+          attachments: [{ kind: 'image', path: '/tmp/refunds.png', name: 'refunds.png' }] },
+        { kind: 'assistant', id: 'a1', ts: now - 290, segment: 0, text: 'Agreed. I put it in Ice Box.', done: true },
+        { kind: 'tool', id: 't1', ts: now - 280, tool: 'Bash', input: { command: 'ustabasi add retry.json' },
+          output: '#41 queued: Webhook retry policy  (worker opus, verifier opus)', isError: false, running: false },
+        { kind: 'tool', id: 't2', ts: now - 270, tool: 'Bash', input: { command: 'ustabasi add refund.json' },
+          output: '#99 queued: Refund policy page  (worker opus, verifier opus)', isError: false, running: false },
+        { kind: 'approval', id: 'p1', ts: now - 260, requestId: 'r9', tool: 'Bash', input: { command: 'git push' },
+          preview: 'git push', danger: false, reason: null, decision: null },
+      ],
+      seq: 10, truncated: false, busy: false, pending: [], loading: false, error: null,
+    } } });
+  });
+
+  // 3 · lands writable, and every chat is still reachable
+  await reload('/chats');
+  const landed = place() === 'Chat' && !!doc.querySelector('textarea[name="composer"]')
+    && (doc.body.textContent ?? '').includes('Students keep asking about refunds.');
+  await reload('/p/quire/chat/c2');
+  const cold = (doc.body.textContent ?? '').includes('Safari login') && w.location.pathname === '/p/quire/chat/c2'
+    && !!doc.querySelector('textarea[name="composer"]');
+  await reload('/p/quire/chat');
+  const listed = [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('Webhook retry policy'));
+  await reload('/chats');
+  await click(find('Earlier'));
+  const row = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Invoice PDF'));
+  if (row) await click(row);
+  await settle();
+  const fromEarlier = w.location.pathname === '/chats/c3';
+  await click(find('Hide earlier'));
+  ok('the Chat place lands in a writable chat without a choice; /p/<project>/chat/<id> draws one cold, the project’s Chats lists it, and Earlier opens any other',
+    landed && cold && listed && fromEarlier, JSON.stringify({ landed, cold, listed, fromEarlier }));
+
+  // 1 · send, stream, bubble, interrupt, approval, picture, mic
+  w.SpeechRecognition = class { start() { setTimeout(() => this.onstart?.(), 0); } stop() { this.onend?.(); } abort() { this.onend?.(); } };
+  await reload('/chats');
+  let words = [...doc.querySelectorAll('div')].find((e) => [...e.childNodes]
+    .some((n) => n.nodeType === 3 && n.textContent === 'Students keep asking about refunds.'));
+  while (words && words.style?.background !== 'var(--dv-s2)') words = words.parentElement;
+  const bubble = !!words && words.parentElement?.style.justifyContent === 'flex-end';
+  const plain = [...doc.querySelectorAll('span, div, p')]
+    .find((e) => (e.textContent ?? '').trim() === 'Agreed. I put it in Ice Box.' && !e.querySelector('*'));
+  let lit = plain; let plainText = !!plain;
+  while (lit && lit !== doc.body) { if (lit.style?.background === 'var(--dv-s2)') plainText = false; lit = lit.parentElement; }
+  const picture = !!doc.querySelector('img[alt="refunds.png"], img[src*="refunds.png"]');
+  await type(doc.querySelector('textarea[name="composer"]'), 'How did the paywall copy do?');
+  await act(async () => {
+    doc.querySelector('textarea[name="composer"]').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+  await settle();
+  const said = sent('chat.send', (d) => d.chat_id === 'c1' && d.text === 'How did the paywall copy do?');
+  const feed = (seq, event, data = {}) => useLogs.getState().feed('studio', { seq, event, chat_id: 'c1', ts: now, data });
+  await act(async () => {
+    feed(11, 'message.user', { text: 'How did the paywall copy do?' });
+    feed(12, 'turn.started');
+    feed(13, 'text.delta', { segment: 1, text: 'The analytics source ' });
+  });
+  const half = (doc.body.textContent ?? '').includes('The analytics source');
+  await act(async () => { feed(14, 'text.delta', { segment: 1, text: 'is not connected yet.' }); });
+  const whole = (doc.body.textContent ?? '').includes('The analytics source is not connected yet.');
+  const stop = find('Stop') ?? labelledBtn('Stop');
+  if (stop) await click(stop);
+  const stopped = sent('chat.interrupt', (d) => d.chat_id === 'c1');
+  await act(async () => { feed(15, 'turn.done', {}); });
+  await click(find('Allow'));
+  const allowed = sent('approval.respond', (d) => d.request_id === 'r9' && d.decision === 'allow');
+  const dictate = labelledBtn('Dictate');
+  if (dictate) await click(dictate);
+  await settle();
+  const mic = !!dictate && (dictate.getAttribute('aria-pressed') === 'true' || !!labelledBtn('Stop dictating')
+    || dictate.disabled);
+  if (labelledBtn('Stop dictating')) await click(labelledBtn('Stop dictating'));
+  delete w.SpeechRecognition;
+  ok('a message sends chat.send and the reply streams in; the user is a right-hand --glass-2 bubble and Hermes plain text; interrupt, approval, the picture and the mic are there and work',
+    said && half && whole && bubble && plainText && stopped && allowed && picture && mic,
+    JSON.stringify({ said, half, whole, bubble, plainText, stopped, allowed, picture, mic }));
+
+  // 2 · filed under, and the card it filed
+  const rule = doc.querySelector('.dv-filed')?.textContent?.trim();
+  const link41 = doc.querySelector('.dv-cardlink[data-ticket="41"]');
+  const linkText = link41?.textContent ?? '';
+  await click(link41);
+  await settle();
+  const toCard = w.location.pathname === '/p/quire/c/k1';
+  await reload('/chats');
+  await click(doc.querySelector('.dv-cardlink[data-ticket="99"]'));
+  await settle();
+  const toQueue = w.location.pathname === '/machine/terminal';
+  ok('a chat filed under a project shows the thin rule, and a card it filed is a small link under the message that opens the ticket',
+    rule === 'filed under Quire' && linkText.includes('In Progress') && linkText.includes('Webhook retry policy')
+    && toCard && toQueue, JSON.stringify({ rule, linkText, toCard, toQueue }));
+
+  // 4 · four tabs, each at its own path; every page under one; the calls
+  await reload('/machine/machines');
+  const paths = [];
+  for (const label of ['Executors', 'Terminal', 'Settings', 'Machines']) {
+    await click(machineTab(label));
+    paths.push(w.location.pathname);
+  }
+  const under = {};
+  for (const [tab, pages] of [['Machines', ['screen', 'fleet', 'projects', 'admin', 'update']],
+                              ['Executors', ['agents', 'accounts']], ['Settings', ['preferences', 'quota']]]) {
+    await click(machineTab(tab));
+    for (const v of pages) {
+      await click(doc.querySelector(`nav a[href="/machine/${v}"]`));
+      under[v] = w.location.pathname === `/machine/${v}`;
+    }
+  }
+  // Terminal: a tile opened over the wall takes a command and shows what comes back.
+  await click(machineTab('Terminal'));
+  if (find('Chats')) await click(find('Chats'));
+  const addAll = [...doc.querySelectorAll('button')].find((b) => /^Add \d/.test((b.textContent ?? '').trim()));
+  if (addAll) await click(addAll);
+  const tileEl = [...doc.querySelectorAll('button')].find((b) => b.querySelector('button[title="Rename this chat"]')
+    && (b.textContent ?? '').includes('Webhook retry policy'));
+  if (tileEl) await click(tileEl);
+  await settle();
+  const box = doc.querySelector('textarea[name="composer"]');
+  if (box) {
+    await type(box, 'git status');
+    await act(async () => { box.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    await act(async () => { feed(16, 'text.delta', { segment: 2, text: 'On branch main, nothing to commit.' }); });
+  }
+  const command = sent('chat.send', (d) => d.chat_id === 'c1' && d.text === 'git status')
+    && (doc.body.textContent ?? '').includes('On branch main, nothing to commit.');
+  await act(async () => { w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  // agent.install, from Executors › Agents on this computer
+  await reload('/machine/agents');
+  await settle();
+  const install = find('Install');
+  if (install) await click(install);
+  await settle();
+  const installed = sent('agent.install', (d) => d.id === 'reviewer');
+  // account.login and account.delete, from Settings › This computer › Accounts
+  await reload('/machine/preferences');
+  const accountsRow = [...doc.querySelectorAll('nav button')].find((b) => (b.textContent ?? '').trim().startsWith('Accounts'));
+  if (accountsRow) await click(accountsRow);
+  await settle();
+  if (find('Sign in')) await click(find('Sign in'));
+  await settle();
+  if (find('Start')) await click(find('Start'));
+  await settle();
+  const login = sent('account.login', (d) => d.account_id === 'a3');
+  if (find('Cancel')) await click(find('Cancel'));
+  await settle();
+  const del = [...doc.querySelectorAll('button')].filter((b) => (b.textContent ?? '').trim() === 'Delete')[0];
+  if (del) await click(del);
+  await settle();
+  const confirmDel = [...doc.querySelectorAll('button')].filter((b) => (b.textContent ?? '').trim() === 'Delete').pop();
+  if (confirmDel) await click(confirmDel);
+  await settle();
+  const deleted = sent('account.delete');
+  ok('Machine has four tabs at their own paths; Screen, Agents, Accounts, Admin, Update and Preferences sit under one; Terminal takes a command; agent.install, account.login and account.delete still go out',
+    JSON.stringify(paths) === JSON.stringify(['/machine/executors', '/machine/terminal', '/machine/settings', '/machine/machines'])
+    && Object.values(under).every(Boolean) && Object.keys(under).length === 9
+    && command && installed && login && deleted,
+    JSON.stringify({ paths, under, command, installed, login, deleted }));
+
+  // 5 · unreachable, running, the quota ring
+  studioSnap = { ...fixture.studio(), quota: { enabled: true, accounts: 2, blocked: 0, spent: false,
+    left: 0.64, resets_at: now + 2 * 86_400, unknown: false } };
+  const mini = { ...fakeHost(), cfg: { ...fakeHost().cfg, name: 'mini' }, status: 'offline', chats: [] };
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: useFleet.getState().hosts.studio, mini }, order: ['studio', 'mini'] });
+    seed(useDivanStore, { snaps: { studio: answered(studioSnap, now),
+      mini: silent(answered(fixture.mini(), now - 3 * 3600), 'connection refused') } });
+  });
+  await reload('/machine/machines');
+  const card = (name) => doc.querySelector(`article[data-machine="${name}"]`);
+  const studioCard = card('studio')?.textContent ?? '';
+  const miniCard = card('mini');
+  const red = miniCard?.querySelector('.dv-status--stuck.dv-said');
+  const ring = doc.querySelector('[data-quota] .dv-ring');
+  const quotaText = doc.querySelector('[data-quota]')?.textContent ?? '';
+  const okRing = ring?.style.getPropertyValue('--p') === '64%' && !ring.classList.contains('dv-ring--low')
+    && quotaText.includes('64%') && /Resets/.test(quotaText) && !quotaText.includes('low');
+  await act(async () => { useThresholds.setState({ thresholds: { warn: 0.7, stop: 0.05 } }); });
+  const lowRing = doc.querySelector('[data-quota] .dv-ring')?.classList.contains('dv-ring--low')
+    && doc.querySelector('[data-quota] [data-low]')?.textContent === 'low';
+  await act(async () => { useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS }); });
+  ok('an unreachable machine says unreachable in red, that its data may be stale, and when it was last seen; an online one says what it runs; the ring is the real share and reset, amber with low when low',
+    red?.textContent === 'unreachable' && (miniCard?.textContent ?? '').includes('What it last reported may be stale.')
+    && (miniCard?.textContent ?? '').includes('last seen 3h') && studioCard.includes('Running 1: Webhook retry policy.')
+    && okRing && lowRing,
+    JSON.stringify({ red: red?.textContent, mini: miniCard?.textContent, studioCard, quotaText, okRing, lowRing }));
+
+  // 6 · Machine › Settings sets what the next new chat opens with
+  await reload('/machine/settings');
+  const pickSelect = async (id, value) => {
+    const el = doc.getElementById(id);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(w.HTMLSelectElement.prototype, 'value').set.call(el, value);
+      el.dispatchEvent(new w.Event('change', { bubbles: true }));
+    });
+  };
+  await pickSelect('default-model', 'claude-sonnet-5');
+  await pickSelect('default-account', 'a2');
+  await reload('/');
+  const chips = [...doc.querySelectorAll('.dv-picker')].map((b) => (b.textContent ?? '').trim());
+  ok('the default account and model set in Machine › Settings are what the composer’s chips show for the next chat',
+    chips.some((c) => c.includes('Sonnet 5')) && chips.some((c) => c.includes('yakup@')), JSON.stringify(chips));
+
+  // 7 · a branch page, connected and not
+  await reload('/p/quire/b/Engineering');
+  const page7 = doc.querySelector('[data-branch="Engineering"]');
+  const figs = page7?.querySelectorAll('[data-figures] .dv-count').length ?? 0;
+  const line7 = page7?.querySelector('[data-branch-line]')?.textContent ?? '';
+  const main7 = page7?.querySelector('.dv-cols2 > main')?.textContent ?? '';
+  const side7 = page7?.querySelector('.dv-cols2 > aside')?.textContent ?? '';
+  await reload('/p/hush/b/App%20Review');
+  const bare = doc.querySelector('[data-branch="App Review"]');
+  const bareText = bare?.textContent ?? '';
+  ok('a branch is its title, one status sentence with Updated <ago>, two or three figures, its list and tickets, What the agent did beside them; an unconnected one only says Source not connected yet.',
+    page7?.querySelector('h1')?.textContent === 'Engineering' && line7.includes('Bulk invite is three checks in.')
+    && /Updated .+ ago\.|Updated just now\./.test(line7) && figs >= 2 && figs <= 3
+    && main7.includes('Repositories') && main7.includes('Tickets') && main7.includes('Webhook retry policy')
+    && side7.includes('What the agent did')
+    && bare?.dataset.connected === 'false' && bareText === 'App ReviewSource not connected yet.'
+    && !bare.querySelector('[data-figures], .dv-cols2'),
+    JSON.stringify({ figs, line7, main7: main7.slice(0, 120), side7: side7.slice(0, 80), bareText }));
+
+  await act(async () => {
+    useFleet.setState({ call: prior });
+    seed(useDivanStore, { snaps: priorDivan });
+    seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'] });
+  });
+  await reload('/');
 }
 
 group('nothing was lost on the way');

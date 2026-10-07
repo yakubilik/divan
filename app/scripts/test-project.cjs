@@ -1020,23 +1020,23 @@ for (const scheme of ['dark', 'light']) {
     const quiet = drawBranch(scheme, [MINI], 'kanji-daily', 'engineering');
     /** Which of the page's blocks are in this markup, in the order they appear.
      *  The log's heading is singular or plural by what ran (`logTitle`). */
-    const at = (m, k) => (k === 'bpLog' ? Math.max(m.indexOf('>bpLog<'), m.indexOf('>bpLogMany<'))
-      : m.indexOf(`>${k}<`));
-    const order = (m) => ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'bpLog', 'bpTickets']
+    const at = (m, k) => m.indexOf(`>${k}<`);
+    const order = (m) => ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'brTickets', 'brDid']
       .filter((k) => at(m, k) >= 0)
       .sort((a, b) => at(m, a) - at(m, b));
 
     checks.push(
       [`${scheme}: S10 and S11 are one page: the same blocks, in the same order`,
-        eq(order(generic), ['bpOverTime', 'bpLog', 'bpTickets'])
-        && eq(order(densest), ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'bpLog', 'bpTickets'])
+        eq(order(generic), ['brTickets', 'brDid'])
+        && eq(order(densest), ['bpRepos', 'bpCommits', 'bpPulls', 'brTickets', 'brDid'])
         && ['>SEO<', '>Quire<', 'Pages 9 of 14 rewritten'].every((x) => generic.includes(x))
         && ['>Engineering<', '>Quire<', 'v3.18 deployed'].every((x) => densest.includes(x))],
       [`${scheme}: \u2026over the same numbers, which are the board\u2019s own counts`,
         [['>4<', '>bnOpen<'], ['>12<', '>bnDone<']].every(([n, l]) => generic.includes(n) && generic.includes(l))
         && ['>9<', '>3<', '>31<', '>bnProgress<'].every((x) => densest.includes(x))],
-      [`${scheme}: the one block with no source says so where it would have been`,
-        generic.includes('>bpOverTimeBody<') && densest.includes('>bpOverTimeBody<')],
+      [`${scheme}: the sentence under the title says how long ago it was true, and no chart nothing feeds is drawn`,
+        /brUpdated(Now)?/.test(generic) && /brUpdated(Now)?/.test(densest)
+        && !generic.includes('>bpOverTimeBody<') && !densest.includes('>bpOverTimeBody<')],
       [`${scheme}: Engineering lists what is open on the branch and the checks failing on it`,
         ['>bpPulls<', '>#410<', 'GBP price localisation', '>bpChecksFailing<', '>bpChecksPassing<',
          '>bpChecksPending<', 'bpDraft<'].every((x) => densest.includes(x))
@@ -1051,9 +1051,9 @@ for (const scheme of ['dark', 'light']) {
             && !none.includes('>#410<') && !gap.includes('>#410<');
         })()],
       [`${scheme}: a branch nothing writes to says so, and draws no number nobody counted`,
-        unused.includes('>branchNoSource<') && unused.includes('>bpBareTitle<')
+        unused.includes('>brNoSource<')
         && !unused.includes('>bnOpen<') && !unused.includes('>bnDone<')
-        && !unused.includes('>bpTickets<') && !unused.includes('>bpLog<')],
+        && !unused.includes('>brTickets<') && !unused.includes('>brDid<') && !unused.includes('>bpRepos<')],
       [`${scheme}: Engineering lists the repositories the product owns and what landed in them`,
         ['>quire<', '>quire-web<', '>bpCommits<', '>bnAt<', '>bpLandedToday<'].every((x) => densest.includes(x))
         && !generic.includes('>quire-web<')],

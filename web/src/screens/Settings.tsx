@@ -21,6 +21,10 @@ import { useFleet } from '../lib/fleet';
 import type { View } from '../lib/shell';
 import { Button, Card, Choice, EmptyState, Row, SectionHeader } from '../ui/divan';
 import { glyph } from '../ui/kit';
+import { usePrefs } from '../lib/prefs';
+import { toldDefaults } from '../lib/tell';
+import { accountOptions } from '../lib/compose';
+import type { Provider } from '../lib/protocol';
 
 const THEMES: { key: ThemeChoice; label: string }[] = [
   { key: 'system', label: 'Auto' },
@@ -84,6 +88,8 @@ export function Settings({ onView }: { onView: (view: View) => void }) {
         />
       </Card>
 
+      {!!focus && !!hosts[focus] && <NewChats host={focus} machine={machine} />}
+
       {order.length ? (
         <Card inset={false} style={{ padding: '4px 0 0' }}>
           <SectionHeader
@@ -113,5 +119,51 @@ export function Settings({ onView }: { onView: (view: View) => void }) {
         heading lives on the computer it belongs to; the panel only reads and changes it.
       </div>
     </>
+  );
+}
+
+/** What the next new chat opens with on the computer in focus: the sign-in it
+ *  spends and the model it runs. These are the Composer's chips before anybody
+ *  touches them (HANDOVER §5) — a chip changed in the Composer is for that one
+ *  chat, and this is where the lasting answer is set. */
+function NewChats({ host, machine }: { host: string; machine: string }) {
+  const slot = useFleet((s) => s.hosts[host]);
+  const prefs = usePrefs((s) => s.defaults);
+  const setProviderDefaults = usePrefs((s) => s.setProviderDefaults);
+  // The tool the Composer opens a chat on: Claude where this computer has it,
+  // its usual tool where it does not (`tell`).
+  const open = toldDefaults(slot, prefs, host, 'claude') ?? toldDefaults(slot, prefs, host);
+  const provider: Provider = open?.provider ?? 'claude';
+  const accounts = accountOptions(slot?.accounts ?? [], provider);
+  const models = slot?.catalog?.[provider]?.models ?? [];
+  const field = { height: 36, borderRadius: 10, border: `1px solid ${T.line}`, background: T.line2,
+                  color: T.ink, font: '500 13px/18px var(--font-sans)', padding: '0 10px', minWidth: 200 };
+  return (
+    <Card inset={false} style={{ padding: '4px 0 0' }} data-new-chats>
+      <SectionHeader kind="mark" title={machine ? `new chats · ${machine}` : 'new chats'}
+        style={{ padding: '8px 20px 6px' }} />
+      <Row
+        title={<label htmlFor="default-account">Default account</label>}
+        note="the sign-in a new chat spends, unless the Composer's chip is changed for that chat"
+        style={{ padding: '14px 20px' }}
+        right={accounts.length ? (
+          <select id="default-account" style={field} value={open?.account_id ?? ''}
+            onChange={(e) => setProviderDefaults(host, provider, { account_id: e.target.value })}>
+            {accounts.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+          </select>
+        ) : <span className="dv-meta">no sign-in reported yet</span>}
+      />
+      <Row
+        title={<label htmlFor="default-model">Default model</label>}
+        note="the model a new chat runs, unless the Composer's chip is changed for that chat"
+        style={{ padding: '14px 20px' }}
+        right={models.length ? (
+          <select id="default-model" style={field} value={open?.model ?? ''}
+            onChange={(e) => setProviderDefaults(host, provider, { model: e.target.value })}>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+          </select>
+        ) : <span className="dv-meta">none offered yet</span>}
+      />
+    </Card>
   );
 }

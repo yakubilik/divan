@@ -136,8 +136,8 @@ checks.push(
     eq(S.machineRows({ machines: 3, unreachable: 1, executors: 9 }).map((r) => r.route),
        ['/machines', '/executors', '/agents', '/screen', '/accounts', '/pool', '/call', '/settings'])
     && page('drawer').includes('mExecutors') && page('drawer').includes('mMachines')],
-  ['the machines page is the quota, a card per computer, and the way to pair another',
-    page('machines').includes('maQuota') && page('machines').includes('maQuotaLeft')
+  ['the machines page is a card per computer, the quota ring and the way to pair another',
+    page('machines').includes('maQuota') && page('machines').includes('maLeftOfPlan')
     && ['studio', 'mini', 'cloud'].every((n) => page('machines').includes(n))
     && page('machines').includes('maPair')],
   ['the executors page groups them by kind, and the heading says what each kind is for',
@@ -152,17 +152,17 @@ checks.push(
     at('mini').says === 'maUnreachable'
     && eq(at('mini').figures.map((f) => f.label), ['maLastContact', 'maRunning'])
     && at('mini').figures[0].value.said.params.d === ago(QUIET)],
-  ['…and the staleness is worn rather than left to be inferred: an amber ring, a hollow dot, an amber number',
-    at('mini').ring === 'amber' && at('mini').figures[0].tone === 'amber'
-    && at('mini').state !== 'running'
-    && R.styles(page('machines')).some((s) => s.borderColor === K.DARK.amberRing)
-    && R.styles(page('machines')).some((s) => s.color === K.DARK.amber)],
+  ['…and says it in red, as a word, with that what it last reported may be stale and when it was last seen',
+    at('mini').tone === 'red' && at('mini').state === 'stuck'
+    && at('mini').line.some((w) => w.said?.key === 'maStale') && at('mini').seen.said.key === 'maLastSeen'
+    && R.styles(page('machines')).some((s) => s.color === K.DARK.red)
+    && page('machines').includes('maStale') && page('machines').includes('maLastSeen')],
   ['…and what it was running is not read as what it is running',
     said(at('mini').figures[1].value) === '1 task · unknown'
     && said(at('studio').figures[1].value) === '2 tasks'],
   ['a machine that has never answered has no last contact to print, and says that instead',
     at('cloud').says === 'maNever' && at('cloud').figures.length === 0
-    && at('studio').says === 'maReachable'],
+    && at('studio').says === 'maOnline' && at('studio').line[0].said.key === 'maRunningList'],
   ['…and both of them offer the one thing that helps, which is asking again',
     eq(at('cloud').actions, ['retry']) && eq(at('mini').actions, ['retry'])
     && eq(at('studio').actions, ['screen'])],
@@ -236,7 +236,7 @@ function leadsTo(file) {
   for (const m of code.matchAll(/router\.(?:push|replace)\(\s*['"`](\/[\w\-/[\]]+)['"`]/g)) out.add(m[1]);
   for (const m of code.matchAll(/pathname:\s*['"`](\/[\w\-/[\]]+)['"`]/g)) out.add(m[1]);
   for (const m of code.matchAll(/router\.(?:push|replace)\(\s*`(\/[\w-]+)\/\$\{/g)) out.add(`${m[1]}/[id]`);
-  if (file === 'app/machine.tsx') for (const r of S.MACHINE_ROUTES) out.add(r);
+  if (/<MachineTabs|<UnderTab/.test(code)) for (const r of S.MACHINE_TAB_ROUTES) out.add(r);
   return [...out];
 }
 
@@ -258,7 +258,7 @@ const reachable = (() => {
 checks.push(['every screen the Machine place led to before this ticket still leads there',
   (() => { const lost = BEFORE.filter((r) => !reachable.has(r));
            return lost.length === 0 || `lost ${lost.join(', ')}`; })() === true],
-  ['…and the two new pages are in it', reachable.has('/machines') && reachable.has('/executors')]);
+  ['…and the four tabs are in it', ['/machine', '/executors', '/terminal', '/settings'].every((r) => reachable.has(r))]);
 
 module.exports = { checks };
 

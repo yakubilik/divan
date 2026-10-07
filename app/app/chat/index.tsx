@@ -10,7 +10,7 @@
 // under it is the only thing the place adds.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, SectionList, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore, useT } from '../../src/store';
 import { useNavGuard } from '../../src/nav';
@@ -19,7 +19,7 @@ import { em, useColors } from '../../src/theme';
 import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../../src/components/ui';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Shell } from '../../src/components/shell';
-import { HOME } from '../../src/shell';
+import { HOME, landing } from '../../src/shell';
 import type { Chat } from '../../src/protocol';
 
 /** The one section the flat view draws. It is never shown as a heading, so it
@@ -72,6 +72,34 @@ export default function ChatPlace() {
   const viewPill = useRef<View>(null);
 
   useEffect(() => { if (conn === 'online') { void refresh().catch(() => {}); void loadProjects().catch(() => {}); } }, [conn, refresh, loadProjects]);
+
+  // HANDOVER §4.8: the place opens writable on the newest conversation, with no
+  // choice in front of it. The list is still here — the conversation's own
+  // Earlier asks for it by name (`?all=1`), and a row opens any chat.
+  const { all } = useLocalSearchParams<{ all?: string }>();
+  const loadedList = useStore((st) => st.chatsLoaded);
+  const landOn = landing(chats, !!all);
+  const send = useStore((s) => s.send);
+  const [first, setFirst] = useState('');
+  /** No conversation yet: what is said here opens one on this computer's
+   *  defaults and goes straight into it. */
+  const sayFirst = useCallback(async () => {
+    const words = first.trim();
+    const cwd = defaults.cwd || projects[0]?.path;
+    if (!words || creating.current) return;
+    if (!cwd) { go(() => router.push('/new-chat')); return; }
+    creating.current = true;
+    try {
+      const chat = await createChat({ provider: defaults.provider, model: defaults.model, effort: defaults.effort, perm_mode: defaults.perm_mode, cwd, account_id: defaults.byProvider?.[defaults.provider]?.account_id ?? undefined } as any);
+      await send(chat.id, words);
+      setFirst('');
+      router.replace(`/chat/${chat.id}`);
+    } catch (e: any) {
+      alert(T('couldNotOpen'), e?.message ?? String(e));
+    } finally {
+      creating.current = false;
+    }
+  }, [first, defaults, projects, createChat, send, router, go, T]);
 
   // Long-press: open a chat immediately with the defaults. Tap: the picker sheet.
   const creating = useRef(false);
@@ -300,6 +328,10 @@ export default function ChatPlace() {
     </>
   );
 
+  // Every hook is above this line: the place goes straight into the newest
+  // conversation once the computer has said which chats it has.
+  if (landOn && loadedList) return <Redirect href={`/chat/${landOn}`} />;
+
   let body: React.ReactNode;
   if (switching) {
     body = (
@@ -329,8 +361,21 @@ export default function ChatPlace() {
     );
   } else if (empty) {
     body = online ? (
-      <EmptyState icon="chat_bubble" title={T('noChats')} body={T('hintNew')}
-        action={<SmallButton title={T('newChat')} onPress={() => go(() => router.replace(HOME))} />} />
+      <View style={{ flex: 1, justifyContent: 'flex-end', padding: 16, gap: 10 }}>
+        <Text style={{ fontSize: 13, color: c.muted, textAlign: 'center' }}>{T('chNoneYet')}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 28, borderWidth: 1, borderColor: c.line,
+                       backgroundColor: c.card, paddingLeft: 18, paddingRight: 6, minHeight: 56 }}>
+          <TextInput value={first} onChangeText={setFirst} placeholder={T('chTalk')} accessibilityLabel={T('chTalk')}
+            placeholderTextColor={c.faint} returnKeyType="send" onSubmitEditing={() => void sayFirst()}
+            style={{ flex: 1, fontSize: 15 }} />
+          <Pressable accessibilityRole="button" accessibilityLabel={T('send')} onPress={() => void sayFirst()}
+            disabled={!first.trim()}
+            style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+                     backgroundColor: first.trim() ? c.ink : c.fill }}>
+            <Icon name="arrow_upward" size={20} color={first.trim() ? c.onInk : c.faint} />
+          </Pressable>
+        </View>
+      </View>
     ) : conn === 'unauthorized' ? (
       <EmptyState icon="key_off" title={T('noAccess')} body={T('noAccessHint', { host: hostName })}
         action={<SmallButton title={T('pairAgain')} onPress={() => go(() => router.push({ pathname: '/pair', params: { add: '1' } }))} />} />

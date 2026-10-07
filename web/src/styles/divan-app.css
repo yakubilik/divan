@@ -164,3 +164,23 @@
   .dv-seg button{white-space:nowrap;padding:0 10px}
   .dv-composer-foot>.dv-meta{display:none}
 }
+
+/* §4.9 Machine: the row of pages under a tab, and the machine cards. */
+.dv-subnav{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.dv-subnav a{text-decoration:none}
+.dv-subnav a[aria-current="page"]{background:var(--glass-2);color:var(--ink);border-color:var(--glass-edge)}
+.dv-subnav .dv-badge{margin-left:2px}
+.dv-machine{border-radius:var(--radius-lg);padding:18px;display:flex;flex-direction:column;gap:12px}
+.dv-machine-name{font:600 17px/22px var(--font-mono);letter-spacing:-0.01em}
+.dv-machine p{margin:0;font-size:13px;line-height:19px;color:var(--ink-2)}
+.dv-status--stuck.dv-said{color:var(--red)}
+.dv-quota{border-radius:var(--radius-lg);padding:18px;display:flex;align-items:center;gap:14px}
+.dv-quota .dv-ring{width:40px;height:40px;-webkit-mask:radial-gradient(circle 14px,transparent 98%,#000 100%);mask:radial-gradient(circle 14px,transparent 98%,#000 100%)}
+
+/* §4.8 Chat: the rule a conversation is filed under, and the card it filed. */
+.dv-filed{display:flex;align-items:center;gap:10px}
+.dv-filed::before,.dv-filed::after{content:"";flex:1;height:1px;background:var(--hairline)}
+.dv-cardlink{align-self:flex-start;text-decoration:none;color:var(--ink);border-radius:12px;padding:10px 12px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;gap:10px;max-width:100%}
+.dv-cardlink .t{font-size:13.5px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-cardlink svg{width:16px;height:16px;stroke:var(--ink-3);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.dv-cardlink:focus-visible,.dv-subnav a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}

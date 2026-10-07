@@ -232,7 +232,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
         />
         <button
-          type="button" onClick={() => file.current?.click()} title="Attach a file"
+          type="button" onClick={() => file.current?.click()} title="Attach a file" aria-label="Attach a file"
           style={{
             width: disc, height: disc, borderRadius: disc / 2, flexShrink: 0, cursor: 'pointer',
             background: C.surface2, border: `1px solid ${C.border}`,
@@ -268,7 +268,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
         <button
           type="button" onClick={busy && !ready ? onInterrupt : submit}
           disabled={!busy && !ready && mic.state === 'idle'}
-          title={busy && !ready ? 'Stop' : 'Send'}
+          title={busy && !ready ? 'Stop' : 'Send'} aria-label={busy && !ready ? 'Stop' : 'Send'}
           style={{
             width: disc, height: disc, borderRadius: disc / 2, flexShrink: 0,
             cursor: busy || ready ? 'pointer' : 'default',

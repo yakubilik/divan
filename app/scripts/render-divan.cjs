@@ -69,6 +69,9 @@ const BUZZES = [];
  *  and the only way to type into one here is to call what it calls. */
 const FIELDS = [];
 
+/** Every viewfinder's scan handler in the last render. */
+const SCANS = [];
+
 /** Every menu a press asked the app's own popover for (`components/overlay`),
  *  newest last: what a chip offers is a claim about the menu it opens. */
 const MENUS = [];
@@ -104,6 +107,9 @@ function host(tag, kind) {
       FIELDS.push({ label: rest.accessibilityLabel ?? null, placeholder: rest.placeholder ?? null,
                     change: rest.onChangeText });
     }
+    // The pairing screen's viewfinder: what it does with a code it reads is a
+    // claim about this handler, and a scan is how a check asks it.
+    if (typeof rest.onBarcodeScanned === 'function') SCANS.push(rest.onBarcodeScanned);
     if (typeof rest.onLongPress === 'function') {
       HOLDS.push({ text: textOf(children), hold: rest.onLongPress, out: rest.onPressOut,
                    delay: rest.delayLongPress ?? null });
@@ -186,6 +192,9 @@ const STUBS = {
     SafeAreaProvider: host('div', 'SafeAreaProvider'),
   },
   'expo-router': {
+    // The router a module reaches for outside a component (`src/incoming-call`
+    // pushes the call screen when a ringing phone is answered).
+    router: { push: (to) => { PUSHED.push(to); }, replace: (to) => { REPLACED.push(to); }, back() {} },
     useRouter: () => ({ back() {}, canGoBack: () => false,
                         // A screen that files something does not push the page
                         // it lands on, it replaces itself with it — so where
@@ -206,7 +215,9 @@ const STUBS = {
     // What is in the address. The Dashboard keeps the project being read
     // there, so a check can render it scoped by putting one in first.
     useLocalSearchParams: () => PARAMS,
-    Redirect: () => null,
+    // A screen that sends you on at once (the Chat place, to its newest
+    // conversation) says where in the same list a replace does.
+    Redirect: ({ href }) => { REPLACED.push(href); return null; },
     useFocusEffect: () => {},
     Stack: Object.assign(host('div', 'Stack'), { Screen: () => null }),
   },
@@ -347,6 +358,7 @@ function render(scheme, element) {
   HOLDS.length = 0;
   BUZZES.length = 0;
   FIELDS.length = 0;
+  SCANS.length = 0;
   return renderToStaticMarkup(React.createElement(theme.ForceScheme, { scheme }, element));
 }
 
@@ -394,5 +406,8 @@ function paint(markup) {
   return out;
 }
 
+/** What the last render's viewfinders would do with a code they read. */
+function scans() { return SCANS.slice(); }
+
 module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten,
-                   store, params, nav, camera, presses, pressOn, holds, buzzes, typeInto, menus, words };
+                   store, params, nav, camera, presses, pressOn, holds, buzzes, typeInto, menus, words, scans };

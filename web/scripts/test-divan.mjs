@@ -1086,7 +1086,7 @@ group('the chat was left alone');
     && /ChatComposer/.test(view) && !/ui\/divan/.test(composer));
   ok('the transcript still scrolls under it', /overflowY: 'auto'/.test(view));
   ok('a bubble is still squared off on the corner that points at who said it',
-    /borderRadius: `\$\{R\.bubble\}px \$\{R\.bubble\}px 4px/.test(src('src/components/Bubble.tsx')));
+    /borderRadius: '18px 18px 6px 18px'/.test(src('src/components/Bubble.tsx')));
 }
 
 group('the keyboard and the palette still work');

@@ -85,7 +85,7 @@ export const MACHINE_ROWS: MachineRow[] = [
     note: 'who can do work, where they are and what they are on',
   },
   {
-    view: 'terminal', label: 'Terminals', icon: 'terminal', shortcut: '⌘4',
+    view: 'terminal', label: 'Terminal', icon: 'terminal', shortcut: '⌘4',
     note: 'every chat at once, and the ticket queue',
   },
   {
@@ -280,4 +280,40 @@ export function searchWithProject(search: string, key: string | null): string {
   else q.delete(PROJECT_PARAM);
   const out = q.toString();
   return out ? `?${out}` : '';
+}
+
+// ── the four tabs (HANDOVER §4.9) ───────────────────────────────────────────
+
+/** One tab of the Machine place, and every page that sits under it. The first
+ *  page is the tab's own and the one it opens on; the rest are the pages the
+ *  old drawer had rows or asides for, filed under the tab they are about. */
+export interface MachineTab {
+  key: 'machines' | 'executors' | 'terminal' | 'settings';
+  label: string;
+  pages: View[];
+}
+
+/** Machines · Executors · Terminal · Settings. Nothing the drawer reached is
+ *  dropped: the computer's own screen, its sessions, its folders, its update and
+ *  Admin are about a machine; the agents installed on it and the sign-ins they
+ *  work through are about who does the work; the quota thresholds and every
+ *  default a new chat takes are settings. */
+export const MACHINE_TABS: MachineTab[] = [
+  { key: 'machines', label: 'Machines', pages: ['machines', 'screen', 'fleet', 'projects', 'admin', 'update'] },
+  { key: 'executors', label: 'Executors', pages: ['executors', 'agents', 'accounts'] },
+  { key: 'terminal', label: 'Terminal', pages: ['terminal'] },
+  { key: 'settings', label: 'Settings', pages: ['settings', 'preferences', 'quota'] },
+];
+
+/** Which tab a page is under. A view no tab names is the first tab's, which is
+ *  also where the place opens. */
+export function machineTab(view: View): MachineTab {
+  return MACHINE_TABS.find((t) => t.pages.includes(view)) ?? MACHINE_TABS[0];
+}
+
+/** What a page is called in the row under its tab. */
+export function machinePageLabel(view: View): string {
+  return MACHINE_ROWS.find((r) => r.view === view)?.label
+    ?? MACHINE_ASIDE.find((a) => a.view === view)?.label
+    ?? view;
 }

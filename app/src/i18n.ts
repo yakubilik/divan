@@ -565,6 +565,31 @@ const en = {
   mCall: 'Call', mCallNote: 'talk to this computer out loud',
   mSettings: 'Settings', mSettingsNote: 'appearance, security, notifications',
   mExecutors: 'Executors', mExecutorsNote: '{n} who can do work',
+  // HANDOVER §4.9: the four tabs, and the pages under each.
+  mTerminal: 'Terminal', mQueue: 'Ticket queue', mQueueNote: 'every ticket the queue holds, and what it is doing',
+  mUnder: 'Also under {tab}',
+  maOnline: 'online', maRunningList: 'Running {n}: {list}.', maNothingRunning: 'Nothing running.',
+  maWasRunning: 'Was running {n}: {list}.', maNothingWas: 'Nothing was running.',
+  maStale: 'What it last reported may be stale.', maNeverSaid: 'It has never answered, so there is nothing to show.',
+  maSeen: 'seen {d}', maLastSeen: 'last seen {d}', maJustNow: 'just now', maNeverSeen: 'never seen',
+  maLeftOfPlan: 'left of the plan', maLow: 'low', maNoWindow: 'No plan window measured yet.',
+  maAllUp: 'All {n} reachable.', maSomeUp: '{up} of {n} reachable.', maOneUp: 'Reachable.',
+  maEnough: 'Enough quota to start work.', maThin: 'Quota is low.', maOut: 'No quota left.',
+  tmNote: 'Every chat on this computer, and the ticket queue.', tmNone: 'No chat on this computer yet.',
+  tmIdle: 'idle', tmWorking: 'working', tmAsking: 'needs approval',
+  stNewChats: 'New chats', stDefaultAccount: 'Default account', stDefaultModel: 'Default model',
+  stDefaultsChips: 'what the Composer opens with until its chip is changed for one chat',
+  stOwnAccount: "This computer's account", stNoModel: 'none offered yet',
+  // HANDOVER §4.8: one conversation, filed by Hermes.
+  chEarlier: 'Earlier', chFiled: 'filed under {project}', chTalk: 'Talk to Hermes', chNoneYet: 'No conversation yet.',
+  chCardQueued: 'Queued',
+  // HANDOVER §4.7: a branch's own page.
+  brUpdated: 'Updated {d}.', brUpdatedNow: 'Updated just now.', brDid: 'What the agent did', brTickets: 'Tickets',
+  brOnBoard: 'On the board', brRepos: 'Repositories', brNoSource: 'Source not connected yet.',
+  brNothingDone: 'Nothing done here yet.', brNoTickets: 'No ticket on the board names this branch.',
+  brNoRepos: 'Nothing on this branch names a repository.',
+  brOpen: 'Open tickets', brInProgress: 'In progress', brDone: 'Done',
+  dayToday: 'today', dayYesterday: 'yesterday',
   // Machine › Machines (Mobile11 S15): one card per computer, and the quota
   // that belongs to the account rather than to any of them over the top.
   maTitle: 'Machines', maPair: '+ Pair',
