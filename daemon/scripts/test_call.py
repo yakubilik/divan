@@ -122,9 +122,9 @@ check(block in prompt and call.MANNER_HERMES in prompt,
       "the session's system prompt carries the profile and the Hermes manner")
 check(len(prompt) - len(call.system_prompt(False)) <= 2500,
       "and grows by at most ~2500 characters", str(len(prompt) - len(call.system_prompt(False))))
-check(opts.model == call.MODEL_ALIASES.get("haiku", "haiku") and call.MODEL == "haiku"
+check(opts.model == call.MODEL_ALIASES["sonnet"] and call.MODEL == "sonnet"
       and opts.tools == [] and opts.setting_sources is None,
-      "still haiku, no built-in tools, no settings")
+      "the general call's session is Sonnet, no built-in tools, no settings", str(opts.model))
 prompt, _ = asyncio.run(options_prompt(plain_home))
 check(prompt == call.system_prompt(False), "a home with neither is today's prompt")
 

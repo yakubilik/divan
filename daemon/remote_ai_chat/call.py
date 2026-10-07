@@ -51,10 +51,11 @@ from .providers.claude import MODEL_ALIASES
 
 log = logging.getLogger("rac.call")
 
-# Haiku, because the answer is a sentence read from a snapshot and the only
-# thing that matters is how fast it starts. Effort is deliberately not set:
-# Haiku 4.5 rejects it.
-MODEL = "haiku"
+# Sonnet: the general call is a conversation with Hermes about the whole
+# computer, and Haiku's answers read as a status line rather than a person.
+# Resolved through MODEL_ALIASES like every other model. Effort is deliberately
+# not set: the answer is a spoken sentence and how fast it starts matters more.
+MODEL = "sonnet"
 
 # A fresh session after this much quiet, or this many questions. Each question
 # resends the whole snapshot, so a call left open all day would otherwise carry

@@ -10,7 +10,7 @@ import { useColors, type Palette } from '../src/theme';
 import { Text } from '../src/components/ui';
 import { abortListening, EMA_SAMPLE, emaAvailable, emaStats, ensureMic, label as voiceLabel, listVoices, locale as voiceLocale, pickVoice, pickup, ring, setEmaEnabled, setVoicePrefs, speak, startListening, stopListening, stopSpeaking, voiceName, warmEma } from '../src/voice';
 import { isTurkish } from '../src/tts/speaker';
-import { callLines, headline } from '../src/call-lines';
+import { callLines } from '../src/call-lines';
 import { Switch } from '../src/components/divan';
 import type * as Speech from 'expo-speech';
 
@@ -413,9 +413,7 @@ export default function Call() {
    *  about four seconds cold, because the CLI sets itself up on its first
    *  query; `call.hello` starts that on the way past and the ringing covers it,
    *  so the first question lands in about a second like every other one. The
-   *  greeting itself is spoken by the phone and never waits on the network —
-   *  the three numbers behind it are used if they have arrived and skipped if
-   *  they have not. */
+   *  greeting itself is spoken by the phone and never waits on the network. */
   const start = useCallback(async () => {
     if (!(await ensureMic())) { setNote(T('callNoMic')); return; }
     setNote(null);
@@ -429,13 +427,10 @@ export default function Call() {
     await pickVoice(lang);
     setVoice(voiceName(lang));
 
-    // Fired, not awaited: this is also what warms the model session, and the
-    // ringing is what it warms behind.
-    let rest: string | null = null;
-    void client.call<{ working: number; blocked: number; idle: number }>('call.hello', {})
-      // Spoken, so in the call's language rather than the interface's.
-      .then((h) => { rest = headline(lang, h); })
-      .catch(() => {});
+    // Fired, not awaited, and its answer not used: this is what warms the model
+    // session, and the ringing is what it warms behind. What is running is
+    // not said at pickup; the model answers that when it is asked.
+    void client.call('call.hello', {}).catch(() => {});
 
     // Ringing, then the click of the other end picking up, then the voice. The
     // microphone opens on the click and not before: a ringtone is not a
@@ -445,28 +440,17 @@ export default function Call() {
     await pickup();
     if (!live.current) return;
 
-    const greeting = callLines(lang).greeting;
+    const { greeting, greetingSpoken } = callLines(lang);
     setPhaseBoth('speaking');
     say('them', greeting);
     if (BARGE_IN) { startListening(lang); micOn.current = true; }
 
-    // Every one of these runs on `onStopped` too, which is what cutting in
-    // triggers — and cutting in has already opened the microphone itself. The
-    // phase guard is what stops the greeting from opening a second one on its
-    // way out.
-    sayAloud(greeting, () => {
-      if (!live.current || phaseRef.current !== 'speaking') return;
-      // The greeting takes about half a second to say and the round trip takes
-      // milliseconds, so the headline is almost always here by now. When it is
-      // not, the call simply opens without it rather than holding the line.
-      if (rest) {
-        say('them', rest);
-        sayAloud(rest, () => {
-          if (live.current && phaseRef.current === 'speaking') listen();
-        }, `${greeting} ${rest}`);
-      } else {
-        listen();
-      }
+    // The greeting, then straight to listening. This runs on `onStopped` too,
+    // which is what cutting in triggers — and cutting in has already opened the
+    // microphone itself. The phase guard is what stops the greeting from
+    // opening a second one on its way out.
+    sayAloud(greetingSpoken, () => {
+      if (live.current && phaseRef.current === 'speaking') listen();
     });
   }, [lang, listen, say, setPhaseBoth, T]);
 

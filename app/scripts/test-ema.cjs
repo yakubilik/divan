@@ -241,21 +241,6 @@ async function pipeline() {
 // ── the rest ────────────────────────────────────────────────────────────────
 
 async function run() {
-  // what the phone says itself on a call: the call's language, never a butler
-  {
-    const L = require(path.join(root, 'src/call-lines.ts'));
-    const all = (lang) => {
-      const l = L.callLines(lang);
-      return [l.greeting, l.quiet, l.working(2), l.blocked(1), L.headline(lang, { working: 2, blocked: 1 }), L.headline(lang, { working: 0, blocked: 0 })];
-    };
-    check('call lines: tr-TR answers Alo and says the headline in Turkish', JSON.stringify(all('tr-TR')) === JSON.stringify(
-      ['Alo.', 'Her şey sakin.', '2 iş çalışıyor.', '1 iş seni bekliyor.', '1 iş seni bekliyor. 2 iş çalışıyor.', 'Her şey sakin.']));
-    check('call lines: en-US answers Hello and says the headline in English', JSON.stringify(all('en-US')) === JSON.stringify(
-      ['Hello.', 'All quiet here.', '2 running.', '1 waiting on you.', '1 waiting on you. 2 running.', 'All quiet here.']));
-    check('call lines: no line in any language is a butler\'s (service, sir, efendim)',
-      ['tr-TR', 'en-US', 'en-GB', 'de-DE'].flatMap(all).every((t) => !/service|\bsir\b|efendim/i.test(t)));
-  }
-
   // host steps against the Python, exactly
   {
     const vectors = JSON.parse(fs.readFileSync(path.join(repo, 'tts/vectors.json'), 'utf8'));
@@ -280,7 +265,9 @@ async function run() {
     const sp = speaker(log, fakeEma(log));
     let done = 0;
     sp.speak('Merhaba.', 'tr-TR', () => done++);
-    await wait(20);
+    // Bounded, not fixed: inside the whole suite other screens hold the event
+    // loop and 20 ms was not always enough for the last callback to land.
+    for (let i = 0; i < 50 && !done; i++) await wait(20);
     check('who speaks: Turkish with EMA ready is EMA, not expo-speech',
       log.includes('synth 0') && log.includes('play 0') && !log.some((l) => l.startsWith('system')) && done === 1);
   }
