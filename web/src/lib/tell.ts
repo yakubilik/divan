@@ -120,13 +120,13 @@ export interface Scoped {
 /** Which computer a chat opens on and in which folder, for a page that is
  *  about one product.
  *
- *  Asking Divan something while looking at babysee is asking about babysee, and
+ *  Asking Divan something while looking at Quire is asking about Quire, and
  *  a chat that opened in whatever folder this computer last used is a chat you
  *  have to tell where it is before it can do anything. So a scoped page opens
  *  the chat *in the product*: on a machine that product has work on, in the
  *  first of its repositories that machine actually has.
  *
- *  The machine matters as much as the folder — a repository of babysee is a
+ *  The machine matters as much as the folder — a repository of Quire is a
  *  path on the computer that holds it and nothing at all on the others — so the
  *  computer in focus only wins if the product is on it.
  *

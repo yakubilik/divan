@@ -544,6 +544,27 @@ def _plist_path():
     return Path.home() / "Library" / "LaunchAgents" / f"{PLIST_LABEL}.plist"
 
 
+def _plist_labels(user: str) -> list[str]:
+    """Every label this daemon has been registered under on macOS: the one
+    `install` writes, and the one daemon/install.sh writes."""
+    return [PLIST_LABEL, f"com.{user}.remote-ai-chat"]
+
+
+def _uninstall_launchd(home: Path, uid: str, user: str, run) -> list[str]:
+    """Boot out and delete whichever of the labels has a plist. Returns the
+    labels it removed. `run` is subprocess.run, passed in so a test can see
+    the launchctl calls without making them."""
+    removed = []
+    for label in _plist_labels(user):
+        path = home / "Library" / "LaunchAgents" / f"{label}.plist"
+        if not path.exists():
+            continue
+        run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True)
+        path.unlink()
+        removed.append(label)
+    return removed
+
+
 WIN_RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 WIN_TASK = "remote-ai-chat"
 
@@ -666,16 +687,10 @@ def cmd_uninstall(args: argparse.Namespace) -> None:
     if sys.platform == "win32":
         print("On Windows: Unregister-ScheduledTask -TaskName remote-ai-chat", file=sys.stderr)
         sys.exit(2)
-    import subprocess
-    if sys.platform == "win32":
-        _win_uninstall()
-        return
+    import getpass, subprocess
     uid = subprocess.run(["id", "-u"], capture_output=True, text=True).stdout.strip()
-    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{PLIST_LABEL}"], capture_output=True)
-    path = _plist_path()
-    if path.exists():
-        path.unlink()
-    print("Removed.")
+    removed = _uninstall_launchd(Path.home(), uid, getpass.getuser(), subprocess.run)
+    print(f"Removed: {', '.join(removed)}" if removed else "Nothing installed.")
 
 
 def cmd_status(args: argparse.Namespace) -> None:

@@ -32,7 +32,7 @@ export interface Ticket {
   stage: string;
   round: number;
   repo: string;
-  /** the project this is work on, by name: a ticket in babysee/app is babysee */
+  /** the project this is work on, by name: a ticket in quire/app is quire */
   project: string | null;
   branch: string | null;
   created_at: number;
@@ -329,8 +329,8 @@ export function sortTickets(tickets: Ticket[]): Ticket[] {
   });
 }
 
-/** The project a ticket is work on. The daemon names it — `babysee/app` is
- *  babysee — and the folder name is the fallback for a repository its path
+/** The project a ticket is work on. The daemon names it — `quire/app` is
+ *  quire — and the folder name is the fallback for a repository its path
  *  policy has nothing to say about. */
 export function projectName(t: Ticket): string {
   const named = (t.project || '').trim();
@@ -345,7 +345,7 @@ export interface Group { project: string; tickets: Ticket[] }
  *
  *  Twenty cards in one grid is a wall you have to read twice: the two tickets on
  *  the same repository are three columns apart and look unrelated. Grouped, the
- *  question "what is happening in babysee" is answered by looking at one column.
+ *  question "what is happening in Quire" is answered by looking at one column.
  *  A project with nothing in it is not a column — the grouping comes out of the
  *  tickets, so there is nothing to leave out.
  */
@@ -411,7 +411,7 @@ export function commitCount(t: Ticket): string | null {
  *
  *  Usually the newest event — "merged into main (4dd999f)", "all accounts
  *  limited, queue paused until 17:05". Not a `start`, though. That one reads
- *  `worker round 1 pid 74155 model claude-opus-5 account yakup`, which is the
+ *  `worker round 1 pid 74155 model claude-opus-5 account main`, which is the
  *  queue talking to its own log: the card says whose hands the ticket is in and
  *  which round by itself, and a pid on a card is something to look past. With
  *  nothing worth repeating, the card says what the ticket is for instead. */

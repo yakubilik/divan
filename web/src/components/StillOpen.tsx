@@ -3,7 +3,7 @@
  *  In the side column of a product's page, under the Timeline. The board and
  *  the timeline answer "what is happening" and "how did it get here", and
  *  between them they could not answer the question a person actually opens a product with:
- *  **what is this waiting for.** isghocam read `closed beta` with nothing on the
+ *  **what is this waiting for.** Quire read `closed beta` with nothing on the
  *  page saying the payment token had never been made or that the content was
  *  not wired up — both of them things no agent on this computer can do, so
  *  neither was ever a card.
@@ -15,7 +15,7 @@
  *
  *  Each is a post: a state, a line, what is actually needed under it, and a
  *  thread. Two voices write in the thread and it says which — a note from
- *  Yakup is a decision ("Bedirhan has the account"), a note from the assistant
+ *  you is a decision ("Sam has the account"), a note from the assistant
  *  is a finding ("the key is still CHANGE_ME in prod"), and a finding read as a
  *  decision is how the wrong thing gets done.
  *

@@ -2,7 +2,7 @@
 
 ## Reporting
 
-Open a [private security advisory](https://github.com/yakubilik/remote-ai-chat/security/advisories/new)
+Open a [private security advisory](https://github.com/yakubilik/divan/security/advisories/new)
 rather than a public issue. Include what the daemon was doing, what the phone
 sent, and the version (`remote-ai-chat status`). You will get an answer; this is
 a small project run by one person, so the honest estimate is days, not hours.
