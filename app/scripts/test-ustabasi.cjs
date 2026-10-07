@@ -1315,8 +1315,11 @@ void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(async () =>
   // …and the general call: the chat list's button and the pickup (#142).
   const call = require('./test-call-pickup.cjs');
   await call.ready;
+  // …and a call placed from inside a chat, which talks to that chat (#143).
+  const chatCall = require('./test-call-chat.cjs');
+  await chatCall.ready;
   checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks, ...composer.checks, ...project.checks, ...ticket.checks,
-              ...machine.checks, ...every.checks, ...actions.checks, ...call.checks);
+              ...machine.checks, ...every.checks, ...actions.checks, ...call.checks, ...chatCall.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {
