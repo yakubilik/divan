@@ -158,7 +158,8 @@ The quoted words are the check's own name.
 | Face ID | Settings | Machine › Settings | — | phone: "Face ID on launch is written with setPrefs, and turning it off asks Face ID first" |
 | Default account and model | — | Machine › Settings | — | phone: "the default account and model set in Machine › Settings are what the Composer’s chips show" |
 | Call the computer | Settings › Call | Machine › Settings › Call | `call.ask` | phone: "answering a call still opens the call screen" |
-| Inbox: what the queue sent (main, 7 Oct) | Dashboard Inbox row | Dashboard foot, between the queue and Conversations | `ustabasi.notifications` | phone: "phone: the Dashboard's Inbox row counts what the queue sent and opens the list, a notice opens its ticket, and the ticket page mounts its Report" |
+| Call a chat (main #143, 7 Oct) | — | Call button in a conversation's header | `chat.send`, `chat.history`, `call.reply` | phone: "chat call: a turn that runs tools says one brief" |
+| Inbox: what the queue sent (main, 7 Oct) | Dashboard Inbox row | Dashboard foot, above the queue and Conversations rows | `ustabasi.notifications` | phone: "phone: the Dashboard's Inbox row counts what the queue sent and opens the list, a notice opens its ticket, and the ticket page mounts its Report" |
 | Read a ticket's Report (main, 7 Oct) | End of the queue ticket page | Same | `ustabasi.report` | phone: "phone: the Dashboard's Inbox row counts what the queue sent and opens the list, a notice opens its ticket, and the ticket page mounts its Report" |
 
 Nothing on `main` is missing on `divan-ui`; `test-inventory.mjs` also fails if any request
