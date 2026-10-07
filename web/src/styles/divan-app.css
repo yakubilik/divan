@@ -171,8 +171,13 @@
   .dv-chatchips>*{flex-shrink:0;max-width:100%}
   .dv-chatpane>.dv-chatlist{width:100%!important;height:auto!important;max-height:40vh;border-right:none!important;border-bottom:1px solid var(--hairline)}
   .dv-greet{font-size:38px;line-height:40px}
-  .dv-topline .sys{gap:6px}
+  .dv-topline{gap:8px}
+  .dv-topline .sys{gap:4px}
   .dv-topline .sys .sys-word{display:none}
+  /* Five things and the bell on 350px: no rules between them, tighter buttons,
+     and the bell's count without its dot. */
+  .dv-topline .sys .sep,.dv-topline .sys [data-inbox] .dv-dot{display:none}
+  .dv-topline .sys .dv-btn{padding:0 6px}
   .dv-seg button{white-space:nowrap;padding:0 10px}
   .dv-composer-foot>.dv-meta{display:none}
 }

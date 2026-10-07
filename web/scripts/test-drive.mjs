@@ -216,6 +216,11 @@ seed(useFleet, {
     // What the panel can now do to a ticket. The queue's own CLI owns what
     // each of them means; a fake only has to answer in the shape it answers —
     // a sentence — and record that it was asked.
+    // What a ticket came back with, in the shape the daemon reads it back:
+    // nothing written yet, which the ticket page draws as no Report at all.
+    if (type === 'ustabasi.report') {
+      return { id: data.id, title: '', status: '', summary: '', verdict: '', verdict_summary: '', files: [] };
+    }
     if (type.startsWith('ustabasi.') && type !== 'ustabasi.run') {
       queueAsks.push({ type, data });
       if (type === 'ustabasi.edit' && !(data.done_criteria ?? []).length) {
@@ -2093,6 +2098,47 @@ group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
     && stopped && nexted && queueOk && cold && toWaiting && backLabel === 'Waiting on you'
     && coldBack === 'Quire · Board' && w.location.pathname === '/p/quire/board',
     JSON.stringify({ offered, stopped, nexted, queueOk, cold, toWaiting, backLabel, coldBack, path: w.location.pathname }));
+
+  // 7 · what the queue sent: the bell on the line, the ticket a notice opens,
+  // and the Report that ticket came back with (main, after the handover).
+  {
+    const inner = useFleet.getState().call;
+    await act(async () => {
+      useFleet.setState({ call: async (key, type, data) => {
+        if (type === 'ustabasi.notifications') {
+          asked.push({ key, type, data });
+          return { available: true, last: 9, items: data.after >= 9 ? [] : [{ id: 9, ticket: 42, ts: now - 60,
+            kind: 'done', headline: '', body: 'Live keys are in.', title: 'Stripe keys', status: 'done', project: 'Quire' }] };
+        }
+        if (type === 'ustabasi.report' && data.id === 42) {
+          asked.push({ key, type, data });
+          return { id: 42, title: 'Stripe keys', status: 'done', summary: 'Live keys are in and the webhook answers.',
+            verdict: 'pass', verdict_summary: 'Both criteria hold.',
+            files: [{ path: 'docs/rotation.md', name: 'rotation.md', size: 60, cut: false,
+                      text: '# Rotation\n\n| Key | State |\n|---|---|\n| live | set |' }] };
+        }
+        return inner(key, type, data);
+      } });
+    });
+    asked.length = 0;
+    await reload('/');
+    const bell = doc.querySelector('header [data-inbox]');
+    const counted = bell?.getAttribute('aria-label') === 'Inbox, 1 new';
+    await click(bell);
+    const notice = byText('button div', 'Stripe keys', doc.querySelector('[role="dialog"][aria-label="Inbox"]'))?.closest('button');
+    await click(notice);
+    await settle();
+    const report = [...doc.querySelectorAll('main section')].find((x) => x.firstChild?.textContent === 'Report');
+    ok('the bell on the line counts what the queue sent, a notice opens its ticket, and the ticket page ends on its Report',
+      sent('ustabasi.notifications', () => true) && counted && !!notice
+      && w.location.pathname === '/p/quire/c/k2' && sent('ustabasi.report', (d) => d.id === 42)
+      && (report?.textContent ?? '').includes('Live keys are in and the webhook answers.')
+      && !!report?.querySelector('table')
+      && doc.querySelector('header [data-inbox]')?.getAttribute('aria-label') === 'Inbox',
+      JSON.stringify({ counted, notice: !!notice, path: w.location.pathname, report: report?.textContent?.slice(0, 120),
+        asked: asked.map((a) => a.type) }));
+    await act(async () => { useFleet.setState({ call: inner }); });
+  }
 
   // 6 · nothing waiting
   const calm = boards(now).calm[0].snap;

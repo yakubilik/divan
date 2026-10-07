@@ -1,4 +1,4 @@
-/** The bell at the end of the bar: what the queue sent, kept.
+/** The bell on the top line: what the queue sent, kept.
  *
  *  A count of what has come in since the list was last opened, and the list
  *  itself on a press — newest first, each one the ticket's title, what
@@ -9,7 +9,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { KIND_WORD, unread, useInbox, type Notice } from '../lib/inbox';
 import { T, SHADOW } from '../lib/theme';
-import { BarChip } from '../ui/divan';
 import { P, mono } from '../ui/kit';
 import { uptime } from '../lib/format';
 
@@ -46,12 +45,16 @@ export function InboxBell({ onOpen }: { onOpen: (n: Notice) => void }) {
 
   return (
     <div ref={box} style={{ position: 'relative', flex: 'none' }}>
-      <BarChip
-        icon={P.bell} label={count ? String(count) : 'Inbox'}
-        tone={count ? 'amber' : undefined}
+      {/* Drawn like the line's place buttons: an icon, the word (folded away
+          on a narrow window), and the count with an amber dot when it has one. */}
+      <button type="button" className="dv-btn dv-btn--ghost dv-hit" data-inbox=""
+        aria-expanded={open} aria-label={count ? `Inbox, ${count} new` : 'Inbox'}
         title={count ? `${count} new from the queue` : 'What the queue sent'}
-        onClick={toggle}
-      />
+        onClick={toggle}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d={P.bell} /></svg>
+        <span className="sys-word">Inbox</span>
+        {!!count && <><b>{count}</b><i className="dv-dot dv-dot--ask" aria-hidden="true" /></>}
+      </button>
       {open && (
         <div role="dialog" aria-label="Inbox" style={{
           position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 40, width: 420,
