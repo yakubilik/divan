@@ -544,7 +544,8 @@ class Server:
         raw = {**self.pool.settings.to_dict(),
                **{k: v for k, v in d.items()
                   if k in ("enabled", "threshold", "thresholds", "use_overage",
-                           "overage_by_account", "reserve", "order", "max_hops")}}
+                           "overage_by_account", "reserve", "order", "max_hops",
+                           "wait_under_s")}}
         self.pool.settings = poolmod.Settings.from_dict(raw)
         self.cfg.pool = self.pool.settings.to_dict()
         self.cfg.save()
@@ -571,9 +572,30 @@ class Server:
         current = chat.get("account_id") or acct.DEFAULT_ID + "-" + provider
         if not self.pool.state(current, provider).blocked:
             return None
-        return await self._pool_next(provider, {current})
+        return await self._pool_plan(provider, current)
 
-    async def _pool_next_for(self, chat: dict) -> str | None:
+    async def _pool_plan(self, provider: str, current: str) -> "str | poolmod.Wait | None":
+        """What a chat on a spent sign-in does next.
+
+        Three answers, in this order. A limit that comes back within
+        `wait_under_s` is waited out where it is — the session keeps its memory,
+        which a move would throw away. Otherwise the next sign-in with room.
+        With none left, the earliest moment any of them comes back, so the chat
+        picks itself up then instead of stopping for good. None only when no
+        account says when it will be back.
+        """
+        now = time.time()
+        st = self.pool.state(current, provider, now)
+        if st.blocked and st.until and 0 < st.until - now <= self.pool.settings.wait_under_s:
+            return poolmod.Wait(st.until, True)
+        nxt = await self._pool_next(provider, {current})
+        if nxt:
+            return nxt
+        back = [s.until for s in (self.pool.state(a, provider, now) for a in self.pool.order(provider))
+                if s.blocked and s.until and s.until > now]
+        return poolmod.Wait(min(back), False) if back else None
+
+    async def _pool_next_for(self, chat: dict) -> "str | poolmod.Wait | None":
         """Where a chat whose turn has just been stopped should carry on.
 
         Split from `_pool_pick` because it is asked at a different moment and
@@ -584,7 +606,7 @@ class Server:
             return None
         provider = chat.get("provider") or "claude"
         current = chat.get("account_id") or acct.DEFAULT_ID + "-" + provider
-        return await self._pool_next(provider, {current})
+        return await self._pool_plan(provider, current)
 
     async def _pool_next(self, provider: str, exclude: set[str]) -> str | None:
         """The next sign-in worth moving to, confirmed to still be signed in.

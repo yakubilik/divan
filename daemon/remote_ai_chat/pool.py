@@ -138,6 +138,11 @@ class Settings:
     # a machine whose accounts are all full would walk the whole list on every
     # message, opening and closing a CLI session for each.
     max_hops: int = 3
+    # A limit that comes back within this many seconds is waited out on the
+    # same sign-in rather than handed to another one: a move throws away the
+    # CLI session's memory and replays the transcript into a fresh context,
+    # which costs more than a short wait. Longer than this, the chat moves.
+    wait_under_s: int = 900
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> "Settings":
@@ -161,6 +166,8 @@ class Settings:
             s.reserve = min(0.5, max(0.0, float(raw["reserve"])))
         if isinstance(raw.get("max_hops"), int):
             s.max_hops = min(10, max(1, raw["max_hops"]))
+        if isinstance(raw.get("wait_under_s"), (int, float)):
+            s.wait_under_s = int(min(3600, max(0, raw["wait_under_s"])))
         order = raw.get("order")
         if isinstance(order, dict):
             s.order = {str(k): [str(i) for i in v]
@@ -169,6 +176,17 @@ class Settings:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class Wait:
+    """The pool's answer when there is nowhere to go *now*: wait until `until`.
+
+    `stay` is the short wait on the account the chat is already on (its limit
+    comes back within `wait_under_s`); without it every sign-in is spent and
+    this is the earliest one to come back."""
+    until: float
+    stay: bool
 
 
 @dataclass

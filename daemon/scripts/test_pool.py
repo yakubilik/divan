@@ -490,7 +490,7 @@ def stub_host(db, accounts, sessions, **settings):
     host.limits = {}
     host.accounts = accounts
     host.sessions = type("S", (), {"sessions": sessions})()
-    for name in ("_limit_rows", "_sessions_on", "_pool_next", "_pool_next_for",
+    for name in ("_limit_rows", "_sessions_on", "_pool_next", "_pool_next_for", "_pool_plan",
                  "_pool_pick", "_pool_sweep", "_remember_limits"):
         setattr(host, name, getattr(Server, name).__get__(host))
     host._learn_steps = Server._learn_steps          # a staticmethod, not bound
@@ -705,7 +705,9 @@ async def scenario_stop_first(db) -> None:
 
 
 async def scenario_nowhere_to_go(db) -> None:
-    """Every sign-in spent. The turn stops rather than carrying on.
+    """Every sign-in spent, and none says when it comes back. The turn stops
+    rather than carrying on. (With a known reset it waits for it instead —
+    `scenario_wait_it_out`.)
 
     Carrying on where it was would either be refused — costing a dead turn and
     a confusing chat — or, on a sign-in that can bill past its plan, be exactly
@@ -751,7 +753,7 @@ async def scenario_nowhere_to_go(db) -> None:
         for aid in ("acct-2", "acct-3"):
             host.limits[aid] = {"five_hour": {
                 "window": "five_hour", "status": "rejected", "utilization": 1.0,
-                "resets_at": time.time() + 2 * HOUR, "at": time.time()}}
+                "resets_at": None, "at": time.time()}}
 
         await host._pool_sweep("acct-2")
         gate.set()
@@ -768,6 +770,92 @@ async def scenario_nowhere_to_go(db) -> None:
         server_mod.acct.refresh = real_refresh
 
 
+async def scenario_wait_it_out(db) -> None:
+    """A limit that comes back soon is waited out on the same sign-in; with
+    every sign-in spent, the chat waits for the first one back and carries on
+    there, queue and all, instead of stopping for good."""
+    print("\nwaiting a limit out")
+    import remote_ai_chat.server as server_mod
+    import remote_ai_chat.session as session_mod
+    real_refresh, real_slack = server_mod.acct.refresh, session_mod.RESET_SLACK_S
+    server_mod.acct.refresh = lambda a: (setattr(a, "logged_in", True), a)[1]
+    session_mod.RESET_SLACK_S = 0.0
+    try:
+        accounts = {
+            "acct-2": Account(id="acct-2", provider="claude", label="second", home="/tmp/a2", created_at=2),
+            "acct-3": Account(id="acct-3", provider="claude", label="third", home="/tmp/a3", created_at=3),
+        }
+        spent = lambda secs: {"five_hour": {"window": "five_hour", "status": "rejected",  # noqa: E731
+                                            "utilization": 1.0, "resets_at": time.time() + secs,
+                                            "at": time.time()}}
+
+        async def run_until_limited(resets: dict) -> tuple:
+            chat = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
+                                  perm_mode="ask", cwd="/tmp", account_id="acct-2")
+            sessions: dict = {}
+            host = stub_host(db, accounts, sessions, order={"claude": ["acct-2", "acct-3"]})
+            s, built, events, _ = make_session(db, chat, host._pool_pick, host._pool_next_for)
+            sessions[chat["id"]] = s
+            gate = asyncio.Event()
+            orig = s._make_provider
+
+            def gated(c):
+                p = orig(c)
+                if len(built) == 1:
+                    p.gate = gate
+                return p
+            s._make_provider = gated
+            await s.send("long one", None)
+            await asyncio.sleep(0)
+            await s.send("and this", None)
+            for aid, secs in resets.items():
+                host.limits[aid] = spent(secs)
+            await host._pool_sweep("acct-2")
+            gate.set()
+            await asyncio.wait_for(s.running, 10)
+            return chat, built, events
+
+        chat, built, events = await run_until_limited({"acct-2": 1.0})
+        waits = [d for e, d in events if e == "pool.waiting"]
+        check(bool(waits) and waits[0]["same_account"] is True,
+              "a limit back within the wait is waited out, not moved from", str(waits))
+        check(db.get_chat(chat["id"])["account_id"] == "acct-2" and not any(e == "account.switched" for e, _ in events),
+              "the chat stays on its sign-in")
+        check(len(built) >= 2 and all(p.account_id == "acct-2" for p in built) and built[-1].prompts,
+              "and carries on there once it resets", str([(p.account_id, len(p.prompts)) for p in built]))
+
+        chat, built, events = await run_until_limited({"acct-2": 4 * HOUR, "acct-3": 1.0})
+        waits = [d for e, d in events if e == "pool.waiting"]
+        check(bool(waits) and waits[0]["same_account"] is False,
+              "with every sign-in spent it waits for the first one back", str(waits))
+        check(db.get_chat(chat["id"])["account_id"] == "acct-3",
+              "and moves to that one when it does", db.get_chat(chat["id"])["account_id"])
+        check(not any(e == "pool.exhausted" for e, _ in events), "it never gives up while a reset is known")
+
+        # Stop pressed during the wait: it ends now, not at the reset.
+        chat = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
+                              perm_mode="ask", cwd="/tmp", account_id="acct-2")
+        sessions2: dict = {}
+        host2 = stub_host(db, accounts, sessions2, order={"claude": ["acct-2", "acct-3"]})
+        s2, _b, ev2, _ = make_session(db, chat, host2._pool_pick, host2._pool_next_for)
+        host2.limits["acct-2"] = spent(600)
+        await s2.send("hello", None)
+        for _ in range(50):
+            if any(e == "pool.waiting" for e, _ in ev2):
+                break
+            await asyncio.sleep(0.02)
+        await s2.interrupt()
+        await asyncio.wait_for(s2.running, 2)
+        check(db.get_chat(chat["id"])["status"] == "idle", "stop during the wait ends it there",
+              db.get_chat(chat["id"])["status"])
+        check(any("and this" in (p.prompts[-1] if p.prompts else "") for p in built) or
+              any("and this" in q for p in built for q in p.prompts),
+              "the message queued behind it runs too")
+    finally:
+        server_mod.acct.refresh = real_refresh
+        session_mod.RESET_SLACK_S = real_slack
+
+
 async def main() -> None:
     scenario_reading()
     scenario_never_spend()
@@ -782,6 +870,7 @@ async def main() -> None:
         await scenario_wiring(db)
         await scenario_stop_first(db)
         await scenario_nowhere_to_go(db)
+        await scenario_wait_it_out(db)
     print()
     if failures:
         print(f"{len(failures)} failed: " + ", ".join(failures))
