@@ -41,6 +41,8 @@ export interface MachineProps {
   onNewChatIn: (cwd: string) => void;
   onStartChat: (agent: Agent, accountId: string | null) => void;
   onPeek: (hostKey: string, chatId: string) => void;
+  /** A ticket a chat's card link asked for, opened on the Terminal tab. */
+  ticket?: number | null;
 }
 
 /** The note under the title of the column: Web15 W12's `One machine is
@@ -181,7 +183,7 @@ function Page(props: MachineProps) {
   const { view, onView, fleet, onOpenChat, onNewChat, onNewChatIn, onStartChat, onPeek } = props;
   const setFocus = useFleet.getState().setFocus;
   if (view === 'executors') return <Executors view={fleet} onView={onView} />;
-  if (view === 'terminal') return <Terminal onPeek={onPeek} onNewChat={onNewChat} />;
+  if (view === 'terminal') return <Terminal key={props.ticket ?? 'wall'} onPeek={onPeek} onNewChat={onNewChat} ticket={props.ticket} />;
   if (view === 'screen') return <Screen />;
   if (view === 'accounts') {
     return <Accounts now={fleet.now} onView={onView} onFocus={setFocus} />;

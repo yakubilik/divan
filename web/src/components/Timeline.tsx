@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import { cost, duration, tokens, toolSummary, clock } from '../lib/format';
@@ -6,6 +6,7 @@ import type { Item } from '../lib/timeline';
 import { Bubble, Prose } from './Bubble';
 import { Lightbox, type Shot } from './Lightbox';
 import { fileUrl } from '../lib/actions';
+import { filedBy, type Filed } from '../lib/filed';
 
 const OK_BG = C.okBg;
 const BAD_BG = C.dangerBg;
@@ -429,9 +430,30 @@ type Respond = (requestId: string, d: 'allow' | 'allow_session' | 'deny') => voi
  *  "freezes" and wants a refresh: the refresh does not fix anything, it just
  *  gives it a shorter conversation to redraw.
  */
-const Row = memo(function Row({ item, prevTs, hostKey, onRespond }: {
-  item: Item; prevTs: number | null; hostKey: string; onRespond: Respond;
+/** A card the conversation filed, as the small link under the message that
+ *  filed it: which column it is in and its title, and a press opens it. */
+export interface TicketLink {
+  open: (id: number) => void;
+  /** What the board says about that ticket now, where it has a card for it. */
+  describe: (id: number) => { column: string; title: string } | null;
+}
+
+function CardLink({ filed, link }: { filed: Filed; link: TicketLink }) {
+  const known = link.describe(filed.id);
+  return (
+    <a href={`#ticket-${filed.id}`} className="dv-glass dv-cardlink" data-ticket={filed.id}
+      onClick={(e) => { e.preventDefault(); link.open(filed.id); }}>
+      <span className="dv-meta">{known?.column ?? 'Queued'}</span>
+      <span className="t">{known?.title ?? filed.title}</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+    </a>
+  );
+}
+
+const Row = memo(function Row({ item, prevTs, hostKey, onRespond, link }: {
+  item: Item; prevTs: number | null; hostKey: string; onRespond: Respond; link: TicketLink | null;
 }) {
+  const filed = link && item.kind === 'tool' && !item.isError ? filedBy(item.output) : null;
   const gap = prevTs == null || item.ts - prevTs > 1800;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -440,6 +462,7 @@ const Row = memo(function Row({ item, prevTs, hostKey, onRespond }: {
       {item.kind === 'assistant' && <Assistant item={item} hostKey={hostKey} />}
       {item.kind === 'thinking' && <Thinking item={item} />}
       {item.kind === 'tool' && <Tool item={item} />}
+      {!!filed && !!link && <CardLink filed={filed} link={link} />}
       {item.kind === 'approval' && (
         <Approval item={item} onRespond={(d) => onRespond(item.requestId, d)} />
       )}
@@ -449,11 +472,19 @@ const Row = memo(function Row({ item, prevTs, hostKey, onRespond }: {
   );
 });
 
-export function Timeline({ items, hostKey, onRespond }: {
+export function Timeline({ items, hostKey, onRespond, tickets }: {
   items: Item[];
   hostKey: string;
   onRespond: Respond;
+  /** Where a card this conversation filed is opened. Absent, no link is drawn. */
+  tickets?: TicketLink | null;
 }) {
+  const ticketsNow = useRef(tickets);
+  ticketsNow.current = tickets;
+  const link = useMemo<TicketLink | null>(() => (tickets ? {
+    open: (id) => ticketsNow.current?.open(id),
+    describe: (id) => ticketsNow.current?.describe(id) ?? null,
+  } : null), [!!tickets]);
   // The handler is rebuilt on every render of the screen above; a row must not
   // redraw because of that, so what the rows hold is a stable stand-in for it.
   const latest = useRef(onRespond);
@@ -467,7 +498,7 @@ export function Timeline({ items, hostKey, onRespond }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0, overflowWrap: 'anywhere' }}>
       {items.map((item, i) => (
         <Row
-          key={item.id} item={item} hostKey={hostKey} onRespond={respond}
+          key={item.id} item={item} hostKey={hostKey} onRespond={respond} link={link}
           prevTs={i > 0 ? items[i - 1].ts : null}
         />
       ))}

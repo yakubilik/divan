@@ -369,7 +369,7 @@ group('Terminals and Remote screen: the frames’ chrome, today’s behaviour');
 
   const machine = src('src/screens/Machine.tsx');
   ok('and both are still what those two rows open',
-    /view === 'terminal'\) return <Terminal onPeek=\{onPeek\} onNewChat=\{onNewChat\} \/>/.test(machine)
+    /view === 'terminal'\) return <Terminal key=\{[^}]*\} onPeek=\{onPeek\} onNewChat=\{onNewChat\} ticket=\{props\.ticket\} \/>/.test(machine)
     && /view === 'screen'\) return <Screen \/>/.test(machine));
 }
 

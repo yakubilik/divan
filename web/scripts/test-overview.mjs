@@ -921,8 +921,8 @@ group('Web14 W6, W7 and W8');
   // A branch with no source connected says so — on the grid, and on the page
   // the grid opens.
   ok('a branch with nothing connected behind it says so',
-    faces.includes(PR.NO_SOURCE) && seo.includes(PR.NO_SOURCE)
-    && PR.branchCards(quire, busy.now).find((b) => b.kind === 'SEO').sourceless === true);
+    faces.includes(PR.NO_SOURCE) && seo.includes(PR.NOT_CONNECTED) && !seo.includes('data-figures')
+    && !seo.includes('What the agent did') && PR.branchCards(quire, busy.now).find((b) => b.kind === 'SEO').sourceless === true);
   ok('…and one that has a source says what it said instead',
     engineering.includes('Bulk invite is three checks in.')
     && !engineering.slice(engineering.indexOf('Engineering'), engineering.indexOf('Repositories'))
@@ -931,9 +931,9 @@ group('Web14 W6, W7 and W8');
   ok('…and one nothing is connected to but something was said on quotes that',
     PR.branchCards(quire, busy.now).find((b) => b.kind === 'API').line
       === 'The provider replays events out of order and I gave up.');
-  ok('a branch page is that face’s numbers, its repositories and what was said on it',
-    engineering.includes('Repositories') && engineering.includes('Cards')
-    && engineering.includes('Recent activity') && engineering.includes('quire')
+  ok('a branch page is its figures, its repositories and tickets, and what the agent did beside them',
+    engineering.includes('Repositories') && engineering.includes('Tickets') && engineering.includes('data-figures')
+    && engineering.includes('What the agent did') && engineering.includes('quire')
     // …and it is the branch's page rather than the product's with a name on it.
     && !engineering.includes('Branches'));
   ok('…and a card opens its own page under the same product',

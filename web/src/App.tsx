@@ -82,6 +82,12 @@ export function App() {
   // hung off `sel` — the live token count, the approval queue, the field sheet
   // — works inside the overlay without a second copy of any of it.
   const [peek, setPeek] = useState(false);
+  /** The Chat place is one conversation (HANDOVER §4.8); every other chat is a
+   *  press away behind this quiet "Earlier", which opens the list beside it. */
+  const [earlier, setEarlier] = useState(false);
+  /** A ticket a card link in a chat asked for, with no card on any board: it is
+   *  read on the queue's wall under Machine › Terminal. */
+  const [ticket, setTicket] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   /** The Dashboard's Composer, which ⌘N and every "new chat" now lead to. */
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -295,6 +301,20 @@ export function App() {
     if (newest) select(newest.k, newest.c.id); else setSel(null);
   }, [view, tab, scopedTo?.key, fleet.ready]);
 
+  // The Chat place opens writable, on the newest conversation, without anybody
+  // choosing one. An address that names a chat is honoured instead (above).
+  useEffect(() => {
+    if (view !== 'chats' || sel || !fleet.ready) return;
+    if (opened.current.chat && opened.current.view === 'chats') return;
+    const newest = fleet.order
+      .flatMap((k) => (fleet.hosts[k]?.chats ?? []).filter((c) => !c.archived).map((c) => ({ k, c })))
+      .sort((a, b) => b.c.updated_at - a.c.updated_at)[0];
+    if (newest) select(newest.k, newest.c.id);
+  }, [view, sel, fleet.ready, fleet.hosts, fleet.order]);
+
+  // A ticket handed to the Terminal tab is for that one visit.
+  useEffect(() => { if (view !== 'terminal') setTicket(null); }, [view]);
+
   const open = useCallback((hostKey: string, chatId: string) => {
     select(hostKey, chatId);
     setPeek(false);
@@ -499,8 +519,33 @@ export function App() {
     `${location.pathname}?host=${encodeURIComponent(sel.hostKey)}&chat=${encodeURIComponent(sel.chatId)}`,
     '_blank', 'width=1100,height=860');
 
+  /** The product this conversation is filed under, by the name the board
+   *  gives it. */
+  const filedUnder = chat?.project_id && sel
+    ? divan.projects.find((p) => p.ids[sel.hostKey] === chat.project_id)?.name ?? null
+    : null;
+  /** A card the conversation filed: its card on a board where there is one,
+   *  and the queue's own wall where there is not. */
+  const tickets = {
+    open: (id: number) => {
+      const found = divan.cards.find((c) => c.ustabasi_id === id);
+      setPeek(false);
+      if (found) {
+        setView('overview'); setProject(found.projectKey); setTab('board'); setBranch(null);
+        setCard(`${found.host}:${found.id}`);
+        return;
+      }
+      setTicket(id);
+      setView('terminal');
+    },
+    describe: (id: number) => {
+      const found = divan.cards.find((c) => c.ustabasi_id === id);
+      return found ? { column: COLUMN_WORD[found.column] ?? found.column, title: found.title } : null;
+    },
+  };
+
   const chatProps = {
-    chat, hostKey: sel?.hostKey ?? null, log, sending,
+    chat, hostKey: sel?.hostKey ?? null, log, sending, filedUnder, tickets,
     groupName: chat?.group_id
       ? (slot?.groups.find((g) => g.id === chat.group_id)?.name ?? null)
       : null,
@@ -600,7 +645,7 @@ export function App() {
       if (e.key === 'k') { e.preventDefault(); setPalette((p) => !p); }
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
       else if (e.key === 'n') { e.preventDefault(); compose(); }
-      else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
+      else if (e.key === 'f') { e.preventDefault(); setView('chats'); setEarlier(true); setTimeout(() => searchRef.current?.focus(), 0); }
       // The keys the panel already had open the pages they always did — they
       // are pages of the Machine place now, and nothing about where they land
       // has changed. ⌘0 is for the place the panel opens on; ⌘7 and ⌘8 are the
@@ -701,19 +746,37 @@ export function App() {
           />
         )}
 
-        {/* The chat, untouched: the list it is picked from and the chat itself,
-            exactly as they were. The list no longer carries the navigation —
-            the bar above does — so what is left of it is the chats. */}
+        {/* One conversation (HANDOVER §4.8): the newest, open and writable the
+            moment the place is entered. Every other chat is behind Earlier,
+            which opens the list beside it — nothing was deleted, and each is
+            still at its own address. */}
         {place === 'chat' && (
           <>
-            <Sidebar
-              selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
-              onNewChat={compose}
-              onNewChatIn={(host, cwd) => setNewChat({ host, cwd })}
-              searchRef={searchRef}
-              collapsed={rail} onCollapse={setRailTo}
-            />
-            <ChatView {...chatProps} />
+            {earlier && (
+              <Sidebar
+                selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
+                onNewChat={compose}
+                onNewChatIn={(host, cwd) => setNewChat({ host, cwd })}
+                searchRef={searchRef}
+                collapsed={rail} onCollapse={setRailTo}
+              />
+            )}
+            <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '4px 20px' }}>
+                <button type="button" className="dv-btn dv-btn--ghost dv-hit" aria-expanded={earlier}
+                  onClick={() => setEarlier((v) => !v)}>
+                  {earlier ? 'Hide earlier' : 'Earlier'}
+                </button>
+                <span className="dv-meta" style={{ marginLeft: 'auto' }}>Hermes</span>
+              </div>
+              {chat ? <ChatView {...chatProps} /> : (
+                <FirstWord onSay={async (text) => {
+                  const told = await tell(text, null);
+                  useTold.getState().close(idOfTold(told));
+                  select(told.host, told.chatId);
+                }} />
+              )}
+            </div>
           </>
         )}
 
@@ -725,6 +788,7 @@ export function App() {
             onNewChatIn={(cwd) => setNewChat({ cwd })}
             onStartChat={(agent, accountId) => setNewChat({ agent: { agent, accountId } })}
             onPeek={(hostKey, chatId) => { select(hostKey, chatId); setPeek(true); }}
+            ticket={ticket}
           />
         )}
       </Shell>
@@ -825,6 +889,45 @@ export function App() {
         />
       )}
     </>
+  );
+}
+
+const COLUMN_WORD: Record<string, string> = {
+  ice_box: 'Ice Box', queued: 'Queued', in_progress: 'In Progress', done: 'Done',
+};
+
+/** The Chat place with no conversation in it yet: a box that is already
+ *  writable. What is said in it opens a chat with every default this computer
+ *  has (`tell`) — nothing is chosen first. */
+function FirstWord({ onSay }: { onSay: (text: string) => Promise<void> }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const say = async () => {
+    const words = text.trim();
+    if (!words || busy) return;
+    setBusy(true); setError(null);
+    try { await onSay(words); setText(''); }
+    catch (e: any) { setError(e?.message ?? 'That did not go through'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '20px 24px 32px' }}>
+      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <p className="dv-meta" style={{ margin: 0, textAlign: 'center' }}>No conversation yet.</p>
+        <form className="dv-glass-strong dv-composer" data-first-word
+          style={{ padding: '12px 12px 12px 18px', display: 'flex', alignItems: 'center', gap: 8 }}
+          onSubmit={(e) => { e.preventDefault(); void say(); }}>
+          <label htmlFor="first-word" className="dv-hidden">Message to Hermes</label>
+          <input id="first-word" value={text} onChange={(e) => setText(e.target.value)} placeholder="Talk to Hermes"
+            style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'inherit', font: '400 15px/22px var(--font-sans)' }} />
+          <button type="submit" className="dv-send" aria-label="Send" disabled={busy || !text.trim()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+          </button>
+        </form>
+        {!!error && <p style={{ margin: 0, fontSize: 13, color: T.red }}>{error}</p>}
+      </div>
+    </div>
   );
 }
 

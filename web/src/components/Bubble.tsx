@@ -15,8 +15,9 @@ export function Bubble({ children }: { children: ReactNode }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
       <div style={{
-        maxWidth: '72%', background: C.surface2,
-        borderRadius: `${R.bubble}px ${R.bubble}px 4px ${R.bubble}px`,
+        // HANDOVER §4.8: `--glass-2`, a hairline edge, the corner it speaks from.
+        maxWidth: '80%', background: C.surface2, border: `1px solid ${C.border}`,
+        borderRadius: '18px 18px 6px 18px',
         padding: '10px 14px', fontSize: 15, lineHeight: '22px', whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
       }}>

@@ -405,9 +405,12 @@ group('the keyboard');
 group('the bar');
 {
   await click(nav('Chats'));
-  ok('the Chat place is one press away, and it is the chat and its list',
-    place() === 'Chat' && !!doc.querySelector('input[name="chat-search"]')
-    && text().includes('Webhook retry policy'), `${place()}`);
+  const landed = place() === 'Chat' && !!doc.querySelector('textarea')
+    && !doc.querySelector('input[name="chat-search"]');
+  await click(find('Earlier'));
+  ok('the Chat place is one press away and lands writable in a chat; Earlier opens the list',
+    landed && !!doc.querySelector('input[name="chat-search"]')
+    && text().includes('Webhook retry policy'), `${landed} · ${place()}`);
 
   await click(nav('Machine'));
   ok('…and the Machine place opens on the first row of its list',
