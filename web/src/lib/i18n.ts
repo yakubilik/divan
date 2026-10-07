@@ -137,7 +137,7 @@ const en = {
   pushNo: "This device can't receive notifications (simulator or permission denied). A dev build on a real phone is needed.",
   host: 'HOST', system: 'System', daemon: 'Daemon', uptime: 'Uptime', activeSessions: 'Active sessions', roots: 'Roots',
   // lock
-  locked: 'Locked', unlockBtn: 'Unlock with Face ID', unlockReason: 'Unlock Remote AI Chat',
+  locked: 'Locked', unlockBtn: 'Unlock with Face ID', unlockReason: 'Unlock Divan',
   // ws
   // errors from the computer, keyed by the daemon's error code
   errUnknownTool: 'Unknown tool', errUnknownProvider: 'Unknown tool', errUnknownPermMode: 'Unknown permission mode',

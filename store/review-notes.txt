@@ -1,4 +1,4 @@
-Remote AI Chat is a client for an open-source daemon that the user installs on
+Divan is a client for an open-source daemon that the user installs on
 their own computer. There is no backend of ours and no account system. The app
 connects over the user's own network to that daemon, which drives a
 command-line coding agent the user has already installed and signed into.

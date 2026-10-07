@@ -166,7 +166,7 @@ const en = {
   host: 'Host', system: 'OS', daemon: 'Daemon', uptime: 'Uptime', activeSessions: 'Active sessions', roots: 'Allowed roots',
   call: 'Call',
   // lock
-  locked: 'Locked', unlockBtn: 'Unlock', unlockReason: 'Unlock Remote AI Chat',
+  locked: 'Locked', unlockBtn: 'Unlock', unlockReason: 'Unlock Divan',
   // errors from the computer, keyed by the daemon's error code
   errUnknownTool: 'Unknown tool', errUnknownProvider: 'Unknown tool', errUnknownPermMode: 'Unknown permission mode',
   errInstallRunning: 'An installation is already running', errNpmMissing: 'Node.js (npm) is not installed on the computer',
