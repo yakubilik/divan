@@ -305,7 +305,7 @@ const ready = (async () => {
   }
 })();
 
-module.exports = { checks, ready };
+module.exports = { checks, ready, stand };
 
 if (require.main === module) {
   ready.then(() => {

@@ -288,11 +288,14 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
           <Timeline items={log.items} hostKey={hostKey ?? ''} onRespond={onRespond} tickets={tickets} />
         </div>
       </div>
-      {busy && <WorkingStrip log={log} onInterrupt={onInterrupt} />}
-      <ChatComposer
-        chat={chat} hostKey={hostKey ?? ''} busy={busy} sending={sending}
-        onSend={onSend} onInterrupt={onInterrupt} onUpload={onUpload}
-      />
+      {/* The same column the conversation reads in, so the box sits under it. */}
+      <div style={{ width: '100%', maxWidth: 800, margin: '0 auto', flexShrink: 0 }}>
+        {busy && <WorkingStrip log={log} onInterrupt={onInterrupt} />}
+        <ChatComposer
+          chat={chat} hostKey={hostKey ?? ''} busy={busy} sending={sending}
+          onSend={onSend} onInterrupt={onInterrupt} onUpload={onUpload}
+        />
+      </div>
     </div>
   );
 }
