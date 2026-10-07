@@ -410,7 +410,7 @@ export function Tile({ name, index, now, counts, when, onPress }: {
   const t = useTokens();
   return (
     <Pressable accessibilityRole="link" accessibilityLabel={name} onPress={onPress}
-      style={{ flex: 1, minHeight: 132, padding: 14, gap: 10, borderRadius: RADIUS.lg,
+      style={{ flex: 1, minWidth: 0, minHeight: 132, padding: 14, gap: 10, borderRadius: RADIUS.lg,
                backgroundColor: t.s1, borderWidth: 1, borderColor: t.line }}>
       <Monogram name={name} index={index} size={30} />
       <Text numberOfLines={1} style={{ fontSize: 15, lineHeight: 22, fontWeight: '600', color: t.ink }}>{name}</Text>
@@ -423,7 +423,9 @@ export function Tile({ name, index, now, counts, when, onPress }: {
             <Text style={{ fontSize: 12, color: t.ink3 }}>{c.word}</Text>
           </View>
         ))}
-        {!!when && <Text mono style={{ marginLeft: 'auto', fontSize: 11.5, color: t.ink3 }}>{when}</Text>}
+        {/* A busy tile's footer wraps, and the time is cut short rather than
+            run past the tile's edge (the web tile does the same). */}
+        {!!when && <Text mono numberOfLines={1} style={{ marginLeft: 'auto', flexShrink: 1, minWidth: 0, fontSize: 11.5, color: t.ink3 }}>{when}</Text>}
       </View>
     </Pressable>
   );
