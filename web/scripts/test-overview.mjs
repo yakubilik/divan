@@ -971,24 +971,17 @@ group('Web14 W6, W7 and W8');
     opened, ...over,
   }));
   const page = draw();
-  const LABEL = 'What to do · title + 3 sentences';
-  const above = page.slice(0, page.indexOf(LABEL));
+  // Everything above the Agent face: the human face, the question and Live.
+  const above = page.slice(0, page.indexOf('data-agent-face'));
+  const shut = page.match(/<details[^>]*data-agent-face[^>]*>/)?.[0] ?? '';
 
-  // Web14 W8 used to draw all three faces at once. It no longer does, and the
-  // reason is the page it made: the brief is six blocks of mono written for a
-  // worker, and open by default it repeated the sentences above it and the log
-  // beside it — three copies of the same paragraph down one screen. So the
-  // human face and the live half are the page, and the agent's half is a shut
-  // row that names itself and says how much of it there is.
+  // HANDOVER §4.4: the human face, Live, and the agent face in a shut
+  // <details> that names itself.
   ok('the ticket page is the human face and the live half, with the agent shut',
     page.includes(card.title) && page.includes(card.summary)
-    // The box has a name on it: it is the description, and a box a person has
-    // to work out what belongs in is the box that filled up with file paths.
-    && page.includes('Description')
     && page.includes('Live') && page.includes('Executor')
-    && page.includes('Agent instructions')
-    && page.includes(`${TK.brief(opened.full, QUEUE).lines} lines`)
-    && !page.includes(AGENT.goal) && !page.includes(AGENT.verify_cmd));
+    && page.includes('Agent face') && !!shut && !/\sopen(=|\s|>)/.test(shut)
+    && !above.includes(AGENT.goal) && !above.includes(AGENT.verify_cmd));
   // The one failure this page could have that nobody would notice: the box
   // reads perfectly well with the agent's goal in it, and it is the wrong text.
   ok('nothing an agent wrote is on the human face',
@@ -996,11 +989,12 @@ group('Web14 W6, W7 and W8');
       .every((text) => !above.includes(text))
     && TK.human({ ...card, ...AGENT }).summary === card.summary,
     above.slice(Math.max(0, above.length - 300)));
+  const bare = draw({ card: { ...card, summary: '' } });
   ok('…and a card nobody wrote sentences for says so rather than borrowing the goal',
     TK.human({ title: 'x', summary: '' }).bare === true
     && TK.human({ title: 'x', summary: '' }).summary === ''
-    && !draw({ card: { ...card, summary: '' } })
-      .slice(0, draw({ card: { ...card, summary: '' } }).indexOf(LABEL)).includes(AGENT.goal));
+    && bare.includes('Nobody has written the sentences for this one yet.')
+    && !bare.slice(0, bare.indexOf('data-agent-face')).includes(AGENT.goal));
 
   // The verifier answers the criteria in order and writes its own wording; a
   // verdict that answers four of five would put the fourth mark on the fifth
@@ -1016,7 +1010,7 @@ group('Web14 W6, W7 and W8');
     && TK.brief(opened.full, QUEUE).passed === null);
   ok('a machine that has not handed the brief over says so, and the card is still readable',
     draw({ opened: { full: null, ticket: null, error: 'connection refused' } })
-      .includes('did not hand the agent instructions over')
+      .includes('did not hand the agent face over')
     && draw({ opened: { full: null, ticket: null, error: 'connection refused' } })
       .includes(card.title));
   // The whole of the difference between a frame and its light twin, which is

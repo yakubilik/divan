@@ -57,12 +57,13 @@ import { Branches } from './Branches';
 import { Project, ProjectHead } from './Project';
 import { NewTicket } from './NewTicket';
 import { Ticket } from './Ticket';
+import { Waiting } from './Waiting';
 import { Dashboard } from './Dashboard';
 
 /** Where inside a product the page is: the three views of the segment, the
  *  branches with their repositories (reached from the Branches section), and a
  *  new ticket being written. Each is a path of its own (`lib/nav.ts`). */
-export type ProjectTab = 'overview' | 'board' | 'chat' | 'branches' | 'new';
+export type ProjectTab = 'overview' | 'board' | 'chat' | 'branches' | 'new' | 'waiting';
 
 export interface OverviewProps {
   view: DivanView;
@@ -124,10 +125,28 @@ export function Overview({
   const face = project && !open ? branchOf(project, branch ?? null) : null;
   const deep = !!open || !!face;
   if (!project) {
+    const openCard = (c: MergedCard) => (onOpenCard ? onOpenCard(c) : onProject(c.projectKey));
+    if (here === 'waiting') return <Waiting view={view} onCard={openCard} />;
     return (
       <Dashboard view={view} onProject={onProject} composer={composer}
-        onCard={(c) => (onOpenCard ? onOpenCard(c) : onProject(c.projectKey))}
+        onCard={openCard} onWaiting={() => onTab?.('waiting')}
         empty={<Nothing view={view} />} />
+    );
+  }
+
+  if (open) {
+    return (
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+        <div className="dv-page">
+          <Ticket
+            card={open} project={project} index={view.projects.indexOf(project)} now={view.now}
+            onProject={() => { onCard?.(null); onBranch?.(null); onTab?.('overview'); }}
+            onBranch={(kind) => { onCard?.(null); onBranch?.(kind); }}
+          />
+          {!!projectComposer && <div style={{ marginTop: 40 }}>{projectComposer}</div>}
+        </div>
+        <Sessions view={view} />
+      </div>
     );
   }
 
@@ -139,14 +158,7 @@ export function Overview({
         flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20,
         padding: `24px 32px ${BAR_ROW + 12}px`, background: T.bg, overflowY: 'auto',
       }}>
-        {!!open && (
-          <Ticket
-            card={open} project={project} index={view.projects.indexOf(project)} now={view.now}
-            onProject={() => { onCard?.(null); onBranch?.(null); }}
-            onBranch={(kind) => { onCard?.(null); onBranch?.(kind); }}
-          />
-        )}
-        {!open && !!face && (
+        {!!face && (
           <Branch
             project={project} branch={face} index={view.projects.indexOf(project)} now={view.now}
             onProject={() => onBranch?.(null)}

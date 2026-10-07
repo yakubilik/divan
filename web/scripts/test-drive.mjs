@@ -129,7 +129,7 @@ const { MACHINE_ROWS } = await load('src/lib/shell.js');
 const { useThresholds, DEFAULT_THRESHOLDS } = await load('src/lib/machine.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
 const { boards } = await import(pathToFileURL(join(web, 'scripts', 'overview-fixture.js')).href);
-const { wall: tickets } = await import(pathToFileURL(join(web, 'scripts', 'ticket-fixture.js')).href);
+const { wall: tickets, ticket: queueTicket } = await import(pathToFileURL(join(web, 'scripts', 'ticket-fixture.js')).href);
 const { host: fixtureHost, chat: fakeChat } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
 /** The fixture's computer, with its chats a minute old by this machine's clock.
  *  The fixture is set at one fixed moment and the chat list keeps only the last
@@ -962,7 +962,7 @@ group('a card can be corrected and handed to somebody');
     .find((b) => b.getAttribute('title') === 'Hand this card to somebody else') ?? null;
   ok('the executor is a row you can press rather than a fact you are told', !!handRow);
   await click(handRow);
-  const hands = () => [...doc.querySelectorAll('[role="option"]')];
+  const hands = () => [...doc.querySelectorAll('[role="menuitemradio"]')];
   ok('…and it offers the ones a board knows, Nobody among them',
     hands().length === 4 && hands().some((o) => (o.textContent ?? '').includes('Nobody'))
     && hands().some((o) => (o.textContent ?? '').includes('Research')),
@@ -978,7 +978,7 @@ group('a card can be corrected and handed to somebody');
   // Back up to the product, the way the page offers: the card page is reached
   // from the board and goes back to it, and the group below opens on a
   // product's own head.
-  const crumb = [...doc.querySelectorAll('button')]
+  const crumb = [...doc.querySelectorAll('[data-human] a')]
     .find((b) => (b.textContent ?? '').trim() === 'Quire') ?? null;
   ok('a card page says where it came from, and goes back there', !!crumb);
   await click(crumb);
@@ -1802,6 +1802,232 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     (locked?.textContent ?? '').includes('Quire') && removable === 0
     && sent?.data.project_id === 'p-quire' && sent.data.column === 'ice_box',
     `${removable} · ${JSON.stringify(sent?.data)}`);
+}
+
+group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
+{
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+  const now = Math.floor(Date.now() / 1000);
+  const base = boards(now).busy[0].snap;
+  const c = (id, over) => ({ ...base.cards[0], id, summary: '', agent_detail: '', ...over });
+  const snap = {
+    ...base,
+    projects: base.projects.map((p) => (p.slug !== 'quire' ? p : { ...p, open_items: [
+      { id: 'o1', project_id: p.id, title: 'Generate a Shopier API key', body: 'Paste it into the project.',
+        state: 'todo', owner: '', area: 'payments', sort: 0, comments: [], created_at: now - 3 * 86400,
+        updated_at: now - 3 * 86400, closed_at: null },
+      { id: 'o2', project_id: p.id, title: 'Domain transfer', body: '', state: 'waiting', owner: 'Bedirhan',
+        area: '', sort: 1, comments: [], created_at: now - 5 * 86400, updated_at: now, closed_at: null },
+    ] })),
+    cards: [
+      ...base.cards.filter((x) => x.id !== 'k2'),
+      c('k2', { title: 'Stripe keys', agent_status: 'asking', agent_status_at: now - 1800, ustabasi_id: 42,
+                summary: 'Live keys go in before launch.',
+                agent_detail: 'The test keys work. Use the live ones now, or wait for the review?' }),
+      c('dc', { title: 'Paywall copy', executor: 'assistant', agent_status: 'asking', agent_status_at: now - 3600,
+                ustabasi_id: 43, agent_detail: 'Keep the calm version, or test the urgent one?' }),
+      c('s1', { title: 'Exam timer', agent_status: 'blocked', agent_status_at: now - 9000, ustabasi_id: 45,
+                agent_detail: 'Test fails on Safari 17.' }),
+      c('q1', { title: 'Audit log', column: 'queued', position: 0, agent_status: 'queued', agent_status_at: now - 100,
+                ustabasi_id: 46 }),
+    ],
+  };
+  const FACE = { goal: 'Make the retries survive a restart', done_criteria: ['retries survive a restart'],
+                 verify_cmd: 'npm test -- retries', constraints: [], paths: ['src/webhooks/retry.ts'], notes: '' };
+  const STATUS = { 41: 'running', 42: 'blocked', 43: 'blocked', 45: 'failed', 46: 'queued' };
+  const prior = useFleet.getState().call;
+  let page41 = 0;
+  await act(async () => {
+    useFleet.setState({ call: async (key, type, data) => {
+      if (type === 'divan.card.get') {
+        asked.push({ key, type, data });
+        const card = snap.cards.find((x) => x.id === data.card_id);
+        const id = card?.ustabasi_id ?? null;
+        return { card: { ...card, agent: FACE }, project: null, run: null,
+          ticket: id == null ? null : queueTicket({ id, title: card.title, status: STATUS[id] ?? 'running',
+            ask: card.agent_detail, escalation: '', notes: [], note_count: 0, verdict: null, steps: [],
+            started_at: now - 900, round_started_at: now - 900, created_at: now - 3600, last_event: null }) };
+      }
+      if (type === 'ustabasi.run' && data.id === 41) {
+        runAsks.push(data);
+        page41 += 1;
+        return { available: true, reason: '', run: 'r-41', live: true, caught_up: false, shots: [],
+          cursor: `c${page41}`, reset: !data.cursor,
+          events: data.cursor ? [{ k: 'text', text: `Wrote step ${page41}` }]
+            : [{ k: 'text', text: 'Reading the webhook handler first.' }] };
+      }
+      if (type === 'divan.project.open') {
+        asked.push({ key, type, data });
+        return { project_id: data.project_id, open_items: [] };
+      }
+      return prior(key, type, data);
+    } });
+    seed(useDivanStore, { snaps: { studio: answered(snap, now) } });
+    useDock.setState({ minimised: ['studio:k2', 'studio:dc', 'studio:s1', 'studio:h1'], closed: {}, raised: [] });
+  });
+  const reload = async (path) => {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+  };
+  const backBtn = () => doc.querySelector('header .dv-back');
+  const goBack = async () => {
+    await act(async () => {
+      const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+      backBtn().dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+      await landed;
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await settle();
+  };
+  const sent = (type, pred) => asked.some((a) => a.type === type && a.key === 'studio' && pred(a.data));
+  const live = () => [...doc.querySelectorAll('[data-live] .dv-live')]
+    .map((r) => [r.querySelector('.dv-step-at')?.textContent ?? '', r.querySelector('.t')?.textContent ?? '']);
+  const byText = (sel, words, within = doc) => [...within.querySelectorAll(sel)]
+    .find((e) => (e.textContent ?? '').trim() === words) ?? null;
+
+  // 5 · Waiting on you
+  await reload('/');
+  const seeAll = byText('#needs-you ~ a, .dv-sec a', 'See all');
+  await click(seeAll);
+  const title = doc.querySelector('h1.dv-waiting-title')?.textContent;
+  const groups = [...doc.querySelectorAll('[data-waiting] [data-group] h3')].map((h) => h.textContent);
+  const asking = [...doc.querySelectorAll('[data-group="w-asking"] [data-wait]')].map((e) => e.dataset.wait);
+  const plate = [...doc.querySelectorAll('[data-group="w-plate"] [data-plate]')].map((e) => e.dataset.plate);
+  const k2 = doc.querySelector('[data-wait="studio:k2"]');
+  asked.length = 0;
+  await click(byText('button', 'Use the live ones now', k2));
+  const noted = sent('ustabasi.note', (d) => d.id === 42 && d.text === 'Use the live ones now');
+  const k2Gone = !doc.querySelector('[data-wait="studio:k2"]');
+  const cardItem = doc.querySelector('[data-plate="studio:h1"]');
+  const openItem = doc.querySelector('[data-plate="quire:o1"]');
+  await click(byText('button', 'Mark done', cardItem));
+  await click(byText('button', 'Comment', openItem));
+  await type(openItem.querySelector('input'), 'Bedirhan has the account');
+  await act(async () => { openItem.querySelector('form').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); });
+  await settle();
+  await click(byText('button', 'Mark done', doc.querySelector('[data-plate="quire:o1"]')));
+  const moved = sent('divan.card.move', (d) => d.card_id === 'h1' && d.column === 'done');
+  const commented = sent('divan.project.open', (d) => d.item_id === 'o1' && d.comment === 'Bedirhan has the account');
+  const closed = sent('divan.project.open', (d) => d.item_id === 'o1' && d.set?.state === 'done');
+  ok('Waiting on you: the title states the counts, three groups oldest first, an answer is one press, and Mark done / Comment send their calls',
+    w.location.pathname === '/waiting' && title === '3 answers, 2 tasks.'
+    && JSON.stringify(groups) === JSON.stringify(['An agent is asking', 'A decision', 'On your plate'])
+    && JSON.stringify(asking) === JSON.stringify(['studio:s1', 'studio:k2'])
+    && JSON.stringify(plate) === JSON.stringify(['quire:o1', 'studio:h1'])
+    && noted && k2Gone && moved && commented && closed,
+    JSON.stringify({ path: w.location.pathname, title, groups, asking, plate, noted, k2Gone, moved, commented, closed }));
+
+  // 1 · the asking card on the ticket, opened from Waiting on you
+  await reload('/waiting');
+  await click(byText('a', 'Open ticket', doc.querySelector('[data-wait="studio:k2"]')));
+  await settle();
+  const card = doc.querySelector('[data-asking]');
+  const amber = !!card && card.classList.contains('dv-ask') && !card.classList.contains('dv-ask--stuck')
+    && (card.textContent ?? '').includes('Use the live ones now, or wait for the review?');
+  asked.length = 0;
+  await click(byText('button', 'Use the live ones now', card));
+  await settle();
+  ok('the agent’s question is an amber-edged card; an answer sends ustabasi.note and the card leaves the asking state',
+    amber && sent('ustabasi.note', (d) => d.id === 42 && d.text === 'Use the live ones now')
+    && !doc.querySelector('[data-asking]') && !!doc.querySelector('[data-status="answered"]'),
+    JSON.stringify({ amber, asked: asked.map((a) => [a.type, a.data?.text]) }));
+
+  // 2 · one sentence into the run
+  asked.length = 0;
+  await type(doc.getElementById('t-say'), 'Batch the commit');
+  await act(async () => { doc.querySelector('[data-live] form.dv-say').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); });
+  await settle();
+  const said = live().find(([, t]) => t === 'You: Batch the commit');
+  ok('a sentence typed into Say one sentence to the agent is sent as ustabasi.note to that ticket and appears in Live',
+    !!doc.querySelector('label[for="t-say"]') && sent('ustabasi.note', (d) => d.id === 42 && d.text === 'Batch the commit')
+    && !!said && /^\d\d:\d\d$/.test(said[0]), JSON.stringify(live()));
+
+  // 7 · Back returns to where the ticket was opened from
+  const backLabel = backBtn()?.textContent;
+  await goBack();
+  const toWaiting = w.location.pathname === '/waiting' && !!doc.querySelector('[data-waiting]');
+
+  // 4 · the agent face and the side column
+  await reload('/p/quire/board');
+  const title1 = [...doc.querySelectorAll('.dv-card-title')].find((b) => b.textContent === 'Webhook retry policy');
+  await click(title1);
+  await settle();
+  const face = doc.querySelector('details[data-agent-face]');
+  const shut = !!face && !face.open;
+  if (face) { face.open = true; }
+  const terms = [...(face?.querySelectorAll('dt') ?? [])].map((d) => d.textContent);
+  const rows = [...doc.querySelectorAll('[data-side] .dv-side-row .l')].map((l) => l.textContent);
+  const human = doc.querySelector('[data-human]')?.textContent ?? '';
+  asked.length = 0;
+  await click(doc.querySelector('[data-side] [aria-haspopup="menu"]'));
+  await click(byText('[role="menuitemradio"]', 'Research'));
+  ok('the agent face is shut on open and holds Goal, Done when, Test, Files; the side column is the six rows and Executor sends divan.card.executor',
+    shut && JSON.stringify(terms.slice(0, 4)) === JSON.stringify(['Goal', 'Done when', 'Test', 'Files'])
+    && JSON.stringify(rows) === JSON.stringify(['Column', 'Executor', 'Machine', 'Branch', 'Runs alone', 'Opened'])
+    && !human.includes(FACE.goal) && !human.includes(FACE.verify_cmd)
+    && sent('divan.card.executor', (d) => d.card_id === 'k1' && d.executor === 'assistant'),
+    JSON.stringify({ shut, terms, rows }));
+
+  // 3 · Live moves while the run is going
+  const first = live();
+  await act(async () => { await new Promise((r) => setTimeout(r, 2800)); });
+  await settle();
+  const later = live();
+  const fresh = later.find(([, t]) => /^Wrote step \d/.test(t));
+  ok('Live shows the run’s latest steps as a mono time and a sentence, and grows while the run goes without a reload',
+    first.some(([, t]) => t.startsWith('Reading the webhook handler first.'))
+    && !!fresh && /^\d\d:\d\d$/.test(fresh[0]) && later.length > first.length
+    && !!doc.querySelector('[data-live] .dv-step-at.dv-meta'),
+    JSON.stringify({ first, later }));
+
+  // 7 · every queue action the wall's ticket window offers, on the ticket
+  const btn = (label) => byText('[data-queue] button', label);
+  const offered = { running: [] };
+  offered.running = [...doc.querySelectorAll('[data-queue] button')].map((b) => b.textContent);
+  asked.length = 0;
+  await click(btn('Stop'));
+  const stopped = sent('ustabasi.cancel', (d) => d.id === 41);
+  await reload('/p/quire/c/q1');
+  const cold = !!doc.querySelector('[data-ticket="q1"]');
+  offered.queued = [...doc.querySelectorAll('[data-queue] button')].map((b) => b.textContent);
+  await click(btn('Run next'));
+  const nexted = sent('ustabasi.priority', (d) => d.id === 46);
+  const coldBack = backBtn()?.textContent;
+  await reload('/p/quire/c/s1');
+  offered.failed = [...doc.querySelectorAll('[data-queue] button')].map((b) => b.textContent);
+  await click(btn('Restart'));
+  await click(btn('Edit'));
+  await type(doc.getElementById('q-goal'), 'Make the timer work on Safari 17');
+  await act(async () => { doc.querySelector('form.dv-editor').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); });
+  await settle();
+  await click(btn('Delete'));
+  await click(byText('button', 'Delete it'));
+  await settle();
+  const queueOk = sent('ustabasi.restart', (d) => d.id === 45)
+    && sent('ustabasi.edit', (d) => d.id === 45 && d.goal === 'Make the timer work on Safari 17')
+    && sent('ustabasi.delete', (d) => d.id === 45);
+  await click(backBtn());
+  await settle();
+  ok('run next, stop, restart, edit and delete are on the ticket; a ticket link opened cold draws it, and Back returns to where it was opened from',
+    JSON.stringify(offered) === JSON.stringify({ running: ['Stop', 'Delete'], queued: ['Run next', 'Edit', 'Delete'], failed: ['Restart', 'Edit', 'Delete'] })
+    && stopped && nexted && queueOk && cold && toWaiting && backLabel === 'Waiting on you'
+    && coldBack === 'Quire · Board' && w.location.pathname === '/p/quire/board',
+    JSON.stringify({ offered, stopped, nexted, queueOk, cold, toWaiting, backLabel, coldBack, path: w.location.pathname }));
+
+  // 6 · nothing waiting
+  const calm = boards(now).calm[0].snap;
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(calm, now) } }); });
+  await reload('/waiting');
+  const page = doc.querySelector('[data-waiting]');
+  const one = page?.textContent;
+  await reload('/');
+  ok('with nothing waiting the page is one sentence and the Dashboard has no Needs you',
+    one === 'Nothing is waiting on you.' && !page.querySelector('[data-group], p') && !doc.getElementById('needs-you')
+    && home(), JSON.stringify({ one }));
+  await act(async () => { useFleet.setState({ call: prior }); });
 }
 
 group('nothing was lost on the way');

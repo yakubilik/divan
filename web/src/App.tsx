@@ -137,10 +137,13 @@ export function App() {
   // …and the same for a card: a link to one is a link to a card on whichever
   // machine has it, and which machine that is cannot be known until that
   // computer has answered with its board.
+  // Once: leaving that card is not a reason to open it again.
+  const cardHonoured = useRef(false);
   useEffect(() => {
-    if (card || !opened.current.card) return;
+    if (cardHonoured.current || !opened.current.card) return;
+    if (card && card !== opened.current.card) { cardHonoured.current = true; return; }
     const key = cardKey(opened.current.card);
-    if (key) setCard(key);
+    if (key) { cardHonoured.current = true; setCard(key); }
   }, [card, divan.cards, cardKey]);
 
   /** Where the panel is, as one value: what goes in the address, and what the
@@ -164,18 +167,30 @@ export function App() {
   /** Set while a `popstate` is being applied, so that putting the state back
    *  does not push the entry we have just gone back from. */
   const going = useRef(false);
+  /** The page a card was opened from, while that card is open. */
+  const [cameFrom, setCameFrom] = useState<Place | null>(null);
+  /** The opened address has been written back in this build's shape. */
+  const settled = useRef(false);
 
   useEffect(() => {
     if (typeof history === 'undefined') return;
     if (going.current) { going.current = false; shown.current = where; return; }
-    if (samePlace(shown.current, where)) return;
-    const first = shown.current === opened.current;
     const url = pathOf(where) + searchOf(where);
-    // The first move writes over the entry the panel was opened on — that one
-    // is this page, not a step away from it — and every move after it is a
-    // step Back can undo.
-    if (first) history.replaceState(where, '', url);
-    else history.pushState(where, '', url);
+    // The address the panel was opened on is written over once, in the shape
+    // this build writes it — that entry is this page, not a step away from it —
+    // and every move after it is a step Back can undo.
+    if (!settled.current) {
+      settled.current = true;
+      shown.current = where;
+      if (location.pathname + location.search !== url) history.replaceState(where, '', url);
+      return;
+    }
+    if (samePlace(shown.current, where)) return;
+    // A card opened by a press in the panel remembers the page it was opened
+    // from, so its Back is the browser's own Back and lands there. A card the
+    // panel was opened on has no such page, and its Back is its product's board.
+    if (where.card && where.card !== shown.current.card) setCameFrom(shown.current);
+    history.pushState(where, '', url);
     shown.current = where;
   }, [where]);
 
@@ -208,13 +223,20 @@ export function App() {
   /** Where the left end of the line leads: up one level, and on the Dashboard
    *  nowhere — it is the word. */
   const scopedName = projectIn(divan, project)?.name ?? project;
+  const from = card ? cameFrom : null;
   const back = view !== 'overview'
     ? { label: 'Dashboard', onBack: () => setView('overview') }
-    : project && (card || branch)
-      ? { label: scopedName ?? 'Project', onBack: () => { setCard(null); setBranch(null); } }
-      : project
-        ? { label: 'Dashboard', onBack: () => chooseProject(null) }
-        : null;
+    : project && card
+      ? (from
+        ? { label: placeName(from, divan), onBack: () => history.back() }
+        : { label: `${scopedName ?? 'Project'} · Board`, onBack: () => { setCard(null); setBranch(null); setTab('board'); } })
+      : project && branch
+        ? { label: scopedName ?? 'Project', onBack: () => { setCard(null); setBranch(null); } }
+        : project
+          ? { label: 'Dashboard', onBack: () => chooseProject(null) }
+          : tab === 'waiting'
+            ? { label: 'Dashboard', onBack: () => setTab('overview') }
+            : null;
 
   const slot = sel ? fleet.hosts[sel.hostKey] : (fleet.focus ? fleet.hosts[fleet.focus] : null);
   const chat: Chat | null = useMemo(() => {
@@ -804,4 +826,17 @@ export function App() {
       )}
     </>
   );
+}
+
+/** A place, as the words the way back to it says: `Waiting on you`,
+ *  `isghocam · Board`, `Dashboard`. */
+function placeName(p: Place, view: ReturnType<typeof useDivanView>): string {
+  if (p.view !== 'overview') return p.view === 'chats' ? 'Chats' : 'Machine';
+  if (!p.project) return p.tab === 'waiting' ? 'Waiting on you' : 'Dashboard';
+  const name = projectIn(view, p.project)?.name ?? p.project;
+  if (p.card) return name;
+  if (p.branch) return `${name} · ${p.branch}`;
+  if (p.tab === 'board') return `${name} · Board`;
+  if (p.tab === 'chat') return `${name} · Chats`;
+  return name;
 }
