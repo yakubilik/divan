@@ -12,14 +12,15 @@
  *  test. That is not an omission — S9 draws none, and the mono line under the
  *  box is the screen saying so out loud. */
 import React from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 // Both boxes go through the app's own input rather than React Native's, the
 // way every other field in the app does (`components/card` `SayBox`): it is
-// what turns a weight into the Inter file that has it, and what brings the
+// what turns a weight into the Geist file that has it, and what brings the
 // caret colour, the keyboard's own theme and the padding the design draws.
 import { Text, TextInput } from './text';
 import { Icon } from './icon';
-import { Monogram, Pill, Tap } from './divan';
+import { Monogram, Pill, StatusDot, Tap } from './divan';
+import { measure, openMenu } from './overlay';
 import { LINE_HEIGHT, SUMMARY_LINES } from '../compose';
 import { em, RADIUS, useTokens, type State } from '../theme';
 
@@ -90,15 +91,16 @@ export function ProjectRow({ projects, value, onPick, style }: {
 /** The title: `font:600 24px/1.25; letter-spacing:-.015em`, and the one thing
  *  on the screen that is required. It is the page's own heading as well as its
  *  field — there is no label over it, because the screen is nothing else. */
-export function TitleBox({ value, onChangeText, placeholder, editable }: {
+export function TitleBox({ value, onChangeText, placeholder, editable, label }: {
   value: string;
+  label?: string;
   onChangeText: (text: string) => void;
   placeholder: string;
   editable?: boolean;
 }) {
   const t = useTokens();
   return (
-    <TextInput value={value} onChangeText={onChangeText} editable={editable !== false}
+    <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} editable={editable !== false}
       autoFocus multiline placeholder={placeholder} placeholderTextColor={t.ink3}
       style={{ fontSize: 24, lineHeight: 24 * 1.25, fontWeight: '600',
                letterSpacing: em(24, -0.015), color: t.ink }} />
@@ -113,15 +115,16 @@ export function TitleBox({ value, onChangeText, placeholder, editable }: {
  *  The number under it counts and nothing else: the box takes what is typed
  *  into it and that is what is filed, which is what the desktop's composer
  *  does with the same field (`src/compose.ts` `SUMMARY_MAX`). */
-export function SentenceBox({ value, onChangeText, placeholder, editable }: {
+export function SentenceBox({ value, onChangeText, placeholder, editable, label }: {
   value: string;
+  label?: string;
   onChangeText: (text: string) => void;
   placeholder: string;
   editable?: boolean;
 }) {
   const t = useTokens();
   return (
-    <TextInput value={value} onChangeText={onChangeText} editable={editable !== false}
+    <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} editable={editable !== false}
       multiline placeholder={placeholder} placeholderTextColor={t.ink3}
       style={{ height: SUMMARY_LINES * LINE_HEIGHT, textAlignVertical: 'top',
                fontSize: 16, lineHeight: LINE_HEIGHT, color: t.ink2 }} />
@@ -147,6 +150,180 @@ export function ComposeFoot({ note, count, style }: {
                     borderTopWidth: 1, borderTopColor: t.line, paddingTop: 10 }, style]}>
       <Text mono numberOfLines={1} style={{ flexShrink: 1, fontSize: 11, color: t.ink3 }}>{note}</Text>
       <Text mono style={{ marginLeft: 'auto', fontSize: 11, color: t.ink3 }}>{count}</Text>
+    </View>
+  );
+}
+
+// ── 2 · the Dashboard's Composer (HANDOVER §3, §5) ──────────────────────────
+
+/** One option in a chip's menu. */
+export interface ChipOption { value: string; label: string; checked: boolean }
+
+/** One of the four chips under the field. */
+export interface ComposeChip {
+  name: string;
+  value: string;
+  /** Not the default: drawn in ink, with an × back to it. */
+  changed: boolean;
+  /** The amber dot and its word (`low quota`), or nothing. */
+  warn?: string | null;
+  options: ChipOption[];
+  empty: string;
+  onPick: (value: string) => void;
+  onReset: () => void;
+  resetLabel: string;
+}
+
+/** The Composer on the phone (DashboardPhone): the scope over the field, the
+ *  field, the mode and send under it, and the chips in one row that scrolls
+ *  sideways. A chip opens the app's own menu under it — never a sheet, never a
+ *  system list — and nothing opens unless a chip is pressed. */
+export function Composer({ to, scope, onClearScope, clearLabel, addLabel, scopeOptions, emptyScope,
+  label, placeholder, text, onText, modes, mode, onMode, sendLabel, onSend, busy, chips, more, note, noteTone,
+  locked }: {
+  to: string;
+  /** The scope is the page's product and cannot be taken off: the chip is
+   *  drawn with no × and is not a press. */
+  locked?: boolean;
+  scope: { name: string; index: number | null } | null;
+  onClearScope: () => void;
+  clearLabel: string;
+  addLabel: string;
+  scopeOptions: { options: ChipOption[]; empty: string; onPick: (value: string) => void };
+  emptyScope: string;
+  label: string;
+  placeholder: string;
+  text: string;
+  onText: (text: string) => void;
+  modes: { key: string; label: string }[];
+  mode: string;
+  onMode: (key: string) => void;
+  sendLabel: string;
+  onSend: () => void;
+  busy?: boolean;
+  chips: ComposeChip[];
+  more?: { label: string; onPress: () => void } | null;
+  note?: string | null;
+  noteTone?: 'red' | 'ink3';
+}) {
+  const t = useTokens();
+  const add = React.useRef<View>(null);
+  return (
+    <View style={{ backgroundColor: t.sLift, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: t.line,
+                   paddingTop: 16, paddingHorizontal: 16, paddingBottom: 10,
+                   boxShadow: `0 16px 36px -20px ${t.sh}` }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <Text mono style={{ fontSize: 11.5, color: t.ink3 }}>{to}</Text>
+        {scope && locked ? (
+          <View accessibilityLabel={scope.name}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, borderRadius: RADIUS.pill,
+                     paddingLeft: 6, paddingRight: 11, backgroundColor: t.ink }}>
+            <Monogram name={scope.name} index={scope.index} size={18} />
+            <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.onInk }}>{scope.name}</Text>
+          </View>
+        ) : scope ? (
+          <Tap onPress={onClearScope}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 }}>
+            <View accessibilityLabel={clearLabel}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, borderRadius: RADIUS.pill,
+                       paddingLeft: 6, paddingRight: 11, backgroundColor: t.ink }}>
+              <Monogram name={scope.name} index={scope.index} size={18} />
+              <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.onInk }}>{scope.name}</Text>
+              <Text style={{ fontSize: 12.5, color: t.onInk, opacity: 0.6 }}>×</Text>
+            </View>
+          </Tap>
+        ) : (
+          <View ref={add} collapsable={false}>
+            <Tap onPress={() => void openChip(add, scopeOptions.options, scopeOptions.empty, scopeOptions.onPick)}
+              style={{ minHeight: 44, justifyContent: 'center' }}>
+              <View style={{ height: 28, borderRadius: RADIUS.pill, paddingHorizontal: 11, justifyContent: 'center',
+                             borderWidth: 1, borderStyle: 'dashed', borderColor: t.line2 }}>
+                <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.ink3 }}>{addLabel}</Text>
+              </View>
+            </Tap>
+          </View>
+        )}
+        {!locked && <Text mono style={{ marginLeft: 'auto', fontSize: 11.5, color: t.ink3 }}>{emptyScope}</Text>}
+      </View>
+      <TextInput accessibilityLabel={label} value={text} onChangeText={onText} placeholder={placeholder}
+        placeholderTextColor={t.ink3} multiline
+        style={{ fontSize: 16, lineHeight: 24, minHeight: 52, color: t.ink, paddingHorizontal: 4, paddingVertical: 2 }} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, marginTop: 8,
+                     borderTopWidth: 1, borderTopColor: t.line2 }}>
+        <View style={{ flexDirection: 'row', padding: 3, gap: 2, borderRadius: RADIUS.pill, backgroundColor: t.line2 }}>
+          {modes.map((m) => {
+            const on = m.key === mode;
+            return (
+              <Pressable key={m.key} accessibilityRole="button" accessibilityState={{ selected: on }}
+                onPress={() => onMode(m.key)} hitSlop={{ top: 7, bottom: 7 }}
+                style={{ height: 30, paddingHorizontal: 10, borderRadius: RADIUS.pill, justifyContent: 'center',
+                         backgroundColor: on ? t.s2 : 'transparent' }}>
+                <Text style={{ fontSize: 12.5, fontWeight: '500', color: on ? t.ink : t.ink2 }}>{m.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={{ flex: 1 }} />
+        <Pressable accessibilityLabel={sendLabel} accessibilityRole="button" onPress={busy ? undefined : onSend}
+          style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+                   backgroundColor: text.trim() && !busy ? t.ink : t.line2 }}>
+          <Icon name="arrow_upward" size={20} color={text.trim() && !busy ? t.onInk : t.ink3} />
+        </Pressable>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginTop: 8 }}
+        contentContainerStyle={{ gap: 6, alignItems: 'center' }}>
+        {chips.map((c) => <ChipButton key={c.name} chip={c} />)}
+        {!!more && (
+          <Tap onPress={more.onPress} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
+            <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.ink2 }}>{more.label}</Text>
+          </Tap>
+        )}
+      </ScrollView>
+      {!!note && (
+        <Text mono style={{ fontSize: 11.5, lineHeight: 16, marginTop: 6, color: noteTone === 'red' ? t.red : t.ink3 }}>
+          {note}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/** Open a chip's menu under it: the app's own popover (`components/overlay`). */
+async function openChip(ref: React.RefObject<View | null>, options: ChipOption[], empty: string,
+                        onPick: (value: string) => void) {
+  const anchor = await measure(ref);
+  openMenu({
+    anchor, align: 'left',
+    items: options.length
+      ? options.map((o) => ({ label: o.label, checked: o.checked, onPress: () => onPick(o.value) }))
+      : [{ kind: 'cancel', label: empty }],
+  });
+}
+
+function ChipButton({ chip: c }: { chip: ComposeChip }) {
+  const t = useTokens();
+  const ref = React.useRef<View>(null);
+  return (
+    <View ref={ref} collapsable={false} style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <Tap onPress={() => void openChip(ref, c.options, c.empty, c.onPick)}
+        style={{ minHeight: 44, justifyContent: 'center' }}>
+        <View accessibilityLabel={`${c.name}: ${c.value}${c.warn ? `, ${c.warn}` : ''}`}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, borderRadius: RADIUS.pill,
+                   paddingLeft: 10, paddingRight: 8, backgroundColor: t.line2, borderWidth: 1,
+                   borderColor: c.changed ? t.ink3 : t.line }}>
+          <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.ink3 }}>{c.name}</Text>
+          <Text style={{ fontSize: 12.5, fontWeight: '500', color: c.changed ? t.ink : t.ink2 }}>{c.value}</Text>
+          {!!c.warn && <StatusDot state="asking" size={6} />}
+          {!!c.warn && <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.amber }}>{c.warn}</Text>}
+          <Icon name="expand_more" size={16} color={t.ink3} />
+        </View>
+      </Tap>
+      {c.changed && (
+        <Pressable accessibilityLabel={c.resetLabel} accessibilityRole="button" onPress={c.onReset}
+          style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -8 }}>
+          <Icon name="close" size={16} color={t.ink2} />
+        </Pressable>
+      )}
     </View>
   );
 }

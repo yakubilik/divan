@@ -12,9 +12,14 @@
  *  bring their own. */
 import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Icon } from './icon';
 import { Text } from './text';
-import { Button, Card, ExecutorBadge, StatusDot, Tap } from './divan';
+import { Button, Card, ExecutorBadge, Group, ListRow, Segments, StatusDot, Tap } from './divan';
+import { Ring } from './shell';
+import { useT } from '../store';
+import { useNavGuard } from '../nav';
+import { MACHINE_TABS, type MachineTab } from '../shell';
 import { em, RADIUS, SIZE, toneColours, useTokens, type State, type Tone } from '../theme';
 
 // ── 1 · the head of a page ──────────────────────────────────────────────────
@@ -103,7 +108,11 @@ export function QuotaCard({ title, says, left, tone, foot, style }: {
  *  in amber, so "this one has stopped" survives being read in grey and being
  *  glanced at sideways. Removing it is the frame's own long-press. */
 export function MachineCard({ name, detail, state, says, tone, ring, figures, actions,
-                             onLongPress, style }: {
+                             onLongPress, line, seen, style }: {
+  /** What it runs, by name — and on a quiet machine, that this may be stale. */
+  line?: string[];
+  /** `seen just now`, `last seen 3h ago`. */
+  seen?: string;
   name: string;
   detail?: string;
   state: State;
@@ -132,11 +141,15 @@ export function MachineCard({ name, detail, state, says, tone, ring, figures, ac
           {!!detail && <Text numberOfLines={1} style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}>{detail}</Text>}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <StatusDot size={7} hollow={state !== 'running'}
+          <StatusDot size={7} hollow={state === 'quiet'}
             state={state === 'quiet' ? t.ink3 : state} />
-          <Text mono numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '500', color: col.fg }}>{says}</Text>
+          <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '500', color: col.fg }}>{says}</Text>
         </View>
       </View>
+      {!!line?.length && (
+        <Text style={{ fontSize: 13, lineHeight: 19, color: t.ink2 }}>{line.join(' ')}</Text>
+      )}
+      {!!seen && <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: t.ink3 }}>{seen}</Text>}
       {figures.length > 0 && (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {figures.map((f) => (
@@ -211,5 +224,66 @@ export function ExecutorRow({ face, who, machine, doing, says, tone, ring, first
       </View>
       <Chip text={says} tone={tone} ring={ring} />
     </View>
+  );
+}
+
+// ── 5 · the four tabs (HANDOVER §4.9) ───────────────────────────────────────
+
+/** Machines · Executors · Terminal · Settings, each at its own route. Pressing
+ *  one replaces the page rather than stacking it: they are four faces of one
+ *  place, and Back leaves the place. */
+export function MachineTabs({ here, style }: { here: MachineTab['key']; style?: StyleProp<ViewStyle> }) {
+  const T = useT();
+  const router = useRouter();
+  const go = useNavGuard();
+  return (
+    <Segments style={style} value={here}
+      segments={MACHINE_TABS.map((tab) => ({ key: tab.key, label: T(tab.label) }))}
+      onChange={(key) => {
+        const tab = MACHINE_TABS.find((x) => x.key === key);
+        if (tab && key !== here) go(() => router.replace(tab.route));
+      }} />
+  );
+}
+
+/** The pages that sit under a tab, as rows at the foot of it: everything the
+ *  old Machine list reached is one of these, one press away. */
+export function UnderTab({ here, style }: { here: MachineTab['key']; style?: StyleProp<ViewStyle> }) {
+  const T = useT();
+  const router = useRouter();
+  const go = useNavGuard();
+  const tab = MACHINE_TABS.find((x) => x.key === here);
+  if (!tab?.pages.length) return null;
+  return (
+    <Group label={T('mUnder', { tab: T(tab.label) })} style={style}>
+      {tab.pages.map((p, i) => (
+        <ListRow key={p.key} first={i === 0} boxed icon={p.icon} title={T(p.title)} note={T(p.note)}
+          onPress={() => go(() => router.push(p.route))} />
+      ))}
+    </Group>
+  );
+}
+
+/** The quota as the frame draws it: a 40 pt ring of the share left, the figure,
+ *  `left of the plan`, and the reset. Amber, with the word, when it is low. */
+export function QuotaRing({ pct, low, resets, style }: {
+  pct: number; low: boolean; resets?: string | null; style?: StyleProp<ViewStyle>;
+}) {
+  const T = useT();
+  const t = useTokens();
+  return (
+    <Card ring="line" inset={false} radius={RADIUS.tile} style={style}>
+      <View style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Ring pct={pct} colour={low ? t.amber : t.ink2} track={t.line2} size={40} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+            <Text mono style={{ fontSize: 20, lineHeight: 24, fontWeight: '500' }}>{pct}%</Text>
+            {low && <Text style={{ fontSize: 13, fontWeight: '500', color: t.amber }}>{T('maLow')}</Text>}
+          </View>
+          <Text style={{ fontSize: 13, lineHeight: 19, color: t.ink2 }}>{T('maLeftOfPlan')}</Text>
+          {!!resets && <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: t.ink3, marginTop: 2 }}>{resets}</Text>}
+        </View>
+      </View>
+    </Card>
   );
 }

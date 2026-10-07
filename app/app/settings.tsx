@@ -6,11 +6,12 @@ import { useTokens } from '../src/theme';
 import type { Key } from '../src/i18n';
 import type { UpdateStatus } from '../src/protocol';
 import { Group, ListRow, RowButton, StatusDot, Switch } from '../src/components/divan';
-import { PageHead } from '../src/components/machine';
-import { BackRow } from '../src/components/waiting';
+import { MachineTabs, PageHead, UnderTab } from '../src/components/machine';
+import { Shell } from '../src/components/shell';
+import { composerProvider, withDefault } from '../src/compose';
 import { Icon } from '../src/components/icon';
 import { Text } from '../src/components/text';
-import { alert } from '../src/components/overlay';
+import { alert, measure, openMenu } from '../src/components/overlay';
 import { tilde } from '../src/components/pickers';
 
 /** Why this computer cannot follow main, in the reader's words. A blocker is
@@ -69,14 +70,46 @@ export default function Settings() {
     ]);
   }
   const openDefaults = () => router.push({ pathname: '/model-sheet', params: { defaults: '1' } });
+  const setDefaults = useStore((s) => s.setDefaults);
+  // What the Composer's chips open with (HANDOVER §5), and where that lasting
+  // answer is changed: the sign-in and the model of the tool it opens chats on.
+  const chipTool = composerProvider(catalog, defaults);
+  const chipModels = catalog?.[chipTool]?.models ?? [];
+  const chipPd = defaults.byProvider?.[chipTool];
+  const chipModel = [chipPd?.model, defaults.model].find((m) => m && chipModels.some((x) => x.id === m)) ?? chipModels[0]?.id ?? null;
+  const chipAccounts = accounts.filter((a) => a.provider === chipTool && (a.logged_in || a.is_default))
+    .map((a) => ({ value: a.is_default ? '' : a.id, label: a.is_default ? T('stOwnAccount') : a.label }));
+  const chipAccount = chipPd?.account_id ?? '';
+  const accountRef = React.useRef<View>(null);
+  const modelRef = React.useRef<View>(null);
+  const pickFrom = async (ref: React.RefObject<View | null>, items: { value: string; label: string }[],
+                          now: string | null, onPick: (v: string) => void) => {
+    const anchor = await measure(ref);
+    openMenu({ anchor, align: 'right', items: items.map((o) => ({ label: o.label, checked: o.value === now, onPress: () => onPick(o.value) })) });
+  };
   const err = (e: any) => alert(T('error'), e.message);
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <Shell place="machine">
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 16,
                                            paddingBottom: 40, gap: 10 }}>
-        <BackRow label={T('mTitle')} onPress={() => router.back()} style={{ paddingHorizontal: 4 }} />
-        <PageHead title={T('settings')} style={{ marginBottom: 2 }} />
+        <MachineTabs here="settings" />
+        <PageHead title={T('settings')} style={{ marginTop: 6, marginBottom: 2 }} />
+
+        <Group label={T('stNewChats')}>
+          <View ref={accountRef} collapsable={false}>
+            <ListRow first boxed title={T('stDefaultAccount')} note={T('stDefaultsChips')} monoMeta={false}
+              meta={chipAccounts.find((a) => a.value === chipAccount)?.label ?? (chipAccount || T('stOwnAccount'))}
+              onPress={() => void pickFrom(accountRef, chipAccounts, chipAccount,
+                (v) => void setDefaults(withDefault(defaults, chipTool, { account_id: v })))} />
+          </View>
+          <View ref={modelRef} collapsable={false}>
+            <ListRow boxed title={T('stDefaultModel')}
+              meta={chipModels.find((m) => m.id === chipModel)?.label ?? chipModel ?? T('stNoModel')}
+              onPress={() => void pickFrom(modelRef, chipModels.map((m) => ({ value: m.id, label: m.label || m.id })), chipModel,
+                (v) => void setDefaults(withDefault(defaults, chipTool, { model: v })))} />
+          </View>
+        </Group>
 
         <Group label={T('sgComputers')}>
           {hosts.map((h, i) => {
@@ -179,8 +212,9 @@ export default function Settings() {
             <Text style={{ fontSize: 12, color: t.ink3, paddingHorizontal: 4 }}>{T('hostRefresh')}</Text>
           </>
         )}
+        <UnderTab here="settings" style={{ marginTop: 8 }} />
       </ScrollView>
-    </View>
+    </Shell>
   );
 }
 

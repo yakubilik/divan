@@ -30,7 +30,7 @@ export function Report({ host, ticket, status }: { host: string; ticket: number;
   if (error) {
     return <div style={{ ...mono, fontSize: 11.5, color: T.ink3 }}>the report did not come: {error}</div>;
   }
-  if (!rep || (!rep.summary && !rep.verdict_summary && !rep.files.length)) return null;
+  if (!rep || (!rep.summary && !rep.verdict_summary && !rep.files?.length)) return null;
   return (
     <section style={{ maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-.01em' }}>Report</div>
@@ -48,7 +48,7 @@ export function Report({ host, ticket, status }: { host: string; ticket: number;
           <Prose text={rep.verdict_summary} />
         </div>
       )}
-      {rep.files.map((f) => (
+      {(rep.files ?? []).map((f) => (
         <details key={f.path} open style={{
           borderRadius: 12, background: T.s1, boxShadow: `0 0 0 1px ${T.line}`, overflow: 'hidden',
         }}>

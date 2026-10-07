@@ -11,12 +11,10 @@
 // Three rules run through it, and they are the ones that make it worth opening
 // instead of the four boards:
 //
-//   * **grouped by the kind of answer it needs.** An agent that stopped
-//     mid-work with a question, a decision nobody is blocked on, something that
-//     fell over, and a card that is yours to do are four different things to
-//     the person about to deal with them, and the frame (Mobile6 S3) labels
-//     each group with its own mark and colour. Yours come last, because they
-//     are the ones that can wait.
+//   * **grouped by the kind of answer it needs** (HANDOVER §4.6): an agent is
+//     asking — a worker standing still for a sentence, or one that stopped —
+//     a decision nobody is blocked on, and what is on your plate. Yours come
+//     last, because they are the ones that can wait. Oldest first in each.
 //   * **every item says where it came from.** Which product, and which
 //     computer — a question is answered differently depending on whether the
 //     machine holding the work is the one in front of you or the laptop that
@@ -27,8 +25,8 @@
 //     same rule the Dashboard's figures are under, applied to language.
 import { stuck, waiting, type DivanView, type MergedCard } from './divan';
 import type { Key } from './i18n';
-import type { DivanColumn, DivanExecutor } from './protocol';
-import { STATE_MARK, type State, type Tone } from './tokens';
+import type { DivanColumn, DivanExecutor, DivanOpenItem } from './protocol';
+import type { State, Tone } from './tokens';
 
 /** The four groups of Mobile6 S3, in the order it draws them. */
 export type Kind = 'question' | 'decision' | 'stuck' | 'yours';
@@ -58,13 +56,6 @@ export const KIND_LABEL: Record<Kind, Key> = {
 export const KIND_TONE: Record<Kind, Tone> = {
   stuck: 'red', question: 'amber', decision: 'amber', yours: 'ink2',
 };
-
-/** The mark in front of a group's name. The `yours` head is a word on its own
- *  (Mobile6 S3 draws `yours · 1` with no glyph), which is why this is not
- *  simply `STATE_MARK[KIND_STATE[kind]]`. */
-export function kindMark(kind: Kind): string {
-  return kind === 'yours' ? '' : STATE_MARK[KIND_STATE[kind]];
-}
 
 /** Which of the four a card waiting on a person is.
  *
@@ -291,39 +282,6 @@ export function source(item: Item): { key: Key; params: Record<string, string | 
            params: { project: item.project, title: item.card.title, machine: item.machine } };
 }
 
-/** One head and the cards under it (Mobile6 S3). A kind with nothing in it is
- *  not a group: the groups come out of the items, so there is nothing to leave
- *  out, and a head reading `? questions · 0` is a heading over an absence. */
-export interface Group {
-  kind: Kind;
-  mark: string;
-  label: Key;
-  tone: Tone;
-  items: Item[];
-}
-
-export function groups(view: DivanView): Group[] {
-  const list = items(view);
-  return KINDS
-    .map((kind) => ({ kind, mark: kindMark(kind), label: KIND_LABEL[kind],
-                      tone: KIND_TONE[kind], items: list.filter((i) => i.kind === kind) }))
-    .filter((g) => g.items.length > 0);
-}
-
-/** The line under the title: how many products this list reaches across, and
- *  the order it is in. Both are facts about the list rather than decoration —
- *  "4 things, all of them one project" and "4 things in 4 projects" are
- *  different mornings.
- *
- *  Null for an empty list, which is not "across 0 projects": there is nothing
- *  for a line about the list to be about, and the screen says what it has
- *  instead. */
-export function across(list: Item[]): { key: Key; params?: Record<string, string | number> } | null {
-  const n = new Set(list.map((i) => i.projectKey)).size;
-  if (n === 0) return null;
-  return n === 1 ? { key: 'waitAcrossOne' } : { key: 'waitAcross', params: { n } };
-}
-
 // ── what a tap does ─────────────────────────────────────────────────────────
 
 /** The one thing an action actually does. Two writes and a way in, and no more
@@ -332,7 +290,7 @@ export function across(list: Item[]): { key: Key; params?: Record<string, string
 export type Doing =
   | { do: 'note'; ticket: number; host: string; text: string }
   | { do: 'move'; card: string; host: string; column: DivanColumn }
-  | { do: 'open'; ticket: number };
+  | { do: 'open'; card: string; host: string };
 
 /** A button on a card: what it says, how it is drawn, and what it does. */
 export interface Action {
@@ -348,57 +306,108 @@ export interface Action {
   doing: Doing;
 }
 
-/** What is offered on one item, in the order Mobile6 S3 draws it.
+/** What is offered on one item (HANDOVER §4.6): one press answers it.
  *
- *  Every action here has to be one that **takes the item off this screen**, or
- *  it is a button that leaves a card sitting exactly where it was under a thumb
- *  that has already dealt with it.
+ *  A question's answers, in its own words, first one amber: each is a note to
+ *  the queue that asked, which re-opens the ticket and takes the card off this
+ *  screen. A card with no ticket behind it has nothing to send a note to. A
+ *  card that is yours is `Mark done`, which moves it to Done. Every item can be
+ *  opened — the ticket page, with its question and the box to say anything
+ *  else — and the card's own page reaches any machine, so the opening is not
+ *  limited to the computer this phone holds a socket to.
  *
- *  A **note** does: the queue re-opens a stopped ticket the moment one lands, so
- *  the card stops asking and starts working again. That is the answer, and it is
- *  offered in the question's own words where the question offered any — first
- *  one filled amber, the way the frame draws the answer the agent is proposing.
- *  Where the question offered none, or the answer is not one of two phrases,
- *  there is `Reply…`, which opens the ticket and its box. A card with no ticket
- *  behind it has nothing to send a note to and is offered neither.
- *
- *  **Moving a card that is yours to Done** does too, and it is the one true
- *  thing about such a card: nothing is running on it, so the only news there can
- *  be is that you did it. Mobile6 S3 draws `Start` and `Hand to Divan` beside
- *  it; neither exists as a single action — nothing starts a card a person is on,
- *  and handing one over is two writes with nothing at the end of them to pick it
- *  up — so neither is drawn rather than drawn and inert.
- *
- *  What is deliberately not here is the frame's `Back to Queued` on a stuck
- *  card. A column is not a status: the queue would go on holding that ticket as
- *  blocked, the mirror would go on writing `stuck` onto the card, and the card
- *  would come straight back to this screen from a column nobody expected it in.
- *  The way out of stuck is to say something to it.
- *
- *  `activeHost` is the computer this phone holds a socket to. Only that
- *  computer's queue has a screen in this app, so only its runs can be opened; an
- *  answer, by contrast, goes to whichever machine the card is on, because that
- *  is a request and not a page. */
-export function actions(item: Item, activeHost: string | null | undefined): Action[] {
+ *  `activeHost` is kept for the callers that still pass it. */
+export function actions(item: Item, _activeHost?: string | null): Action[] {
   const { card } = item;
-  const ticket = card.ustabasi_id;
-  const mine = ticket != null && card.host === activeHost;
+  const open: Action = { key: 'waitOpenTicket', face: 'outline',
+                         doing: { do: 'open', card: card.id, host: card.host } };
   if (item.kind === 'yours') {
-    return [{ key: 'waitDone', face: 'outline',
-              doing: { do: 'move', card: card.id, host: card.host, column: 'done' } }];
+    return [{ key: 'waitDone', face: 'ink',
+              doing: { do: 'move', card: card.id, host: card.host, column: 'done' } }, open];
   }
+  const ticket = card.ustabasi_id;
   const out: Action[] = ticket == null ? [] : item.answers.map((text, i) => ({
     key: 'waitAnswer' as Key, label: text, face: (i === 0 ? 'amber' : 'outline') as Action['face'],
     pill: true, doing: { do: 'note', ticket, host: card.host, text } as Doing,
   }));
-  if (mine) {
-    // The stuck card's way in is the run itself — what the model printed before
-    // it gave up, which is the first thing anybody wants — and the frame fills
-    // that button. A question's is the box under it.
-    out.push(item.kind === 'stuck' && !out.length
-      ? { key: 'waitLook', face: 'ink', doing: { do: 'open', ticket: ticket! } }
-      : { key: 'waitReply', face: out.length ? 'outline' : 'amber', pill: out.length > 0,
-          doing: { do: 'open', ticket: ticket! } });
-  }
-  return out;
+  return [...out, open];
+}
+
+// ── the three groups (HANDOVER §4.6) ────────────────────────────────────────
+
+/** An agent is asking · A decision · On your plate. A stopped agent is in the
+ *  first: it needs a sentence from you to go on, the same as a question. */
+export type Bucket = 'asking' | 'decision' | 'plate';
+
+export const BUCKETS: Bucket[] = ['asking', 'decision', 'plate'];
+
+export const BUCKET_LABEL: Record<Bucket, Key> = {
+  asking: 'wgAsking', decision: 'wgDecision', plate: 'wgPlate',
+};
+
+export function bucketOf(kind: Kind): Bucket {
+  return kind === 'decision' ? 'decision' : kind === 'yours' ? 'plate' : 'asking';
+}
+
+/** A product's Still open item that is yours to do. */
+export interface OpenEntry {
+  id: string;
+  host: string;
+  /** That machine's own id for the product, which is what a write names. */
+  projectId: string;
+  project: string;
+  index: number;
+  item: DivanOpenItem;
+  age: number | null;
+}
+
+/** Whose a Still open item is: done is nobody's; one with a person named on it
+ *  is that person's, and on this page only when that person is you; one with
+ *  nobody named is yours unless it is waiting on somebody. */
+export function mine(item: DivanOpenItem): boolean {
+  if (item.state === 'done') return false;
+  const owner = (item.owner || '').trim();
+  if (owner) return /^(yakup|you|me)$/i.test(owner);
+  return item.state !== 'waiting';
+}
+
+export type Entry =
+  | { kind: 'card'; id: string; item: Item; age: number | null }
+  | { kind: 'open'; id: string; open: OpenEntry; age: number | null };
+
+export interface Bucketed {
+  bucket: Bucket;
+  label: Key;
+  entries: Entry[];
+}
+
+/** The three groups, oldest first in each, a group with nothing in it left
+ *  out. On your plate is the cards that are yours and the Still open items
+ *  nobody else has been named for. */
+export function buckets(view: DivanView): Bucketed[] {
+  const oldest = (a: Entry, b: Entry) => (b.age ?? -1) - (a.age ?? -1);
+  const cards: Entry[] = items(view).map((item) => ({ kind: 'card', id: `${item.card.host}:${item.card.id}`, item, age: item.age }));
+  const open: Entry[] = view.projects.flatMap((p, index) => p.open.filter((o) => mine(o)).map((item) => ({
+    kind: 'open' as const, id: `${item.host}:${item.id}`, age: item.created_at ? Math.max(0, view.now - item.created_at) : null,
+    open: { id: item.id, host: item.host, projectId: p.ids[item.host] ?? item.project_id, project: p.name, index,
+            item, age: item.created_at ? Math.max(0, view.now - item.created_at) : null },
+  })));
+  return BUCKETS.map((bucket) => ({
+    bucket,
+    label: BUCKET_LABEL[bucket],
+    entries: [...cards.filter((e) => e.kind === 'card' && bucketOf(e.item.kind) === bucket),
+              ...(bucket === 'plate' ? open : [])].sort(oldest),
+  })).filter((g) => g.entries.length > 0);
+}
+
+/** The title, as the parts of a sentence: `2 answers, 1 task.` — or the one
+ *  sentence the page is when nothing waits. */
+export function headline(groups: Bucketed[]): { key: Key; params?: Record<string, number> }[] {
+  const answers = groups.filter((g) => g.bucket !== 'plate').reduce((n, g) => n + g.entries.length, 0);
+  const tasks = groups.filter((g) => g.bucket === 'plate').reduce((n, g) => n + g.entries.length, 0);
+  if (!answers && !tasks) return [{ key: 'waitNothing' }];
+  return [
+    ...(answers ? [answers === 1 ? { key: 'waitAnswerOne' as Key } : { key: 'waitAnswers' as Key, params: { n: answers } }] : []),
+    ...(tasks ? [tasks === 1 ? { key: 'waitTaskOne' as Key } : { key: 'waitTasks' as Key, params: { n: tasks } }] : []),
+  ];
 }

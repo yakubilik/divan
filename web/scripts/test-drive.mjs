@@ -129,7 +129,7 @@ const { MACHINE_ROWS } = await load('src/lib/shell.js');
 const { useThresholds, DEFAULT_THRESHOLDS } = await load('src/lib/machine.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
 const { boards } = await import(pathToFileURL(join(web, 'scripts', 'overview-fixture.js')).href);
-const { wall: tickets } = await import(pathToFileURL(join(web, 'scripts', 'ticket-fixture.js')).href);
+const { wall: tickets, ticket: queueTicket } = await import(pathToFileURL(join(web, 'scripts', 'ticket-fixture.js')).href);
 const { host: fixtureHost, chat: fakeChat } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
 /** The fixture's computer, with its chats a minute old by this machine's clock.
  *  The fixture is set at one fixed moment and the chat list keeps only the last
@@ -156,6 +156,8 @@ const seed = (store, patch) => {
  *  what a pressed answer actually sends is the one thing about a session that a
  *  render cannot say. */
 const asked = [];
+/** The two reads the queue's inbox and a ticket's report make, kept for the whole run. */
+const queueReads = [];
 /** Every `ustabasi.run` this panel made, so a poll that asks for the same page
  *  twice — or never carries the cursor — is visible. */
 const runAsks = [];
@@ -177,6 +179,7 @@ seed(useFleet, {
   hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true,
   call: async (key, type, data) => {
     asked.push({ key, type, data });
+    if (type === 'ustabasi.notifications' || type === 'ustabasi.report') queueReads.push({ type, data });
     // The board is the one thing not answered from here: the snapshots are
     // seeded below, and a socket that answered `{}` would replace a fixture with
     // an empty board. A poll that fails is one of the states the panel has to
@@ -237,6 +240,9 @@ seed(useFleet, {
                   name: 'onboarding', at: Date.now() / 1000, size: 40_000 }],
       };
     }
+    if (type === 'divan.card.create') {
+      return { id: `card${++made_n}`, ...data, executor: null, agent_status: null };
+    }
     if (type === 'agent.list') {
       return { agents: [{ id: 'hermes', name: 'hermes', label: 'Hermes', installed: true, scope: 'account' }] };
     }
@@ -290,7 +296,7 @@ seed(useFleet, {
 seed(useDivanStore, { snaps: { studio: answered(fixture.studio(), Date.now() / 1000) } });
 setThemeChoice('dark');
 
-const root = createRoot(w.document.getElementById('root'));
+let root = createRoot(w.document.getElementById('root'));
 await act(async () => { root.render(React.createElement(App)); });
 
 // ── what is on screen ───────────────────────────────────────────────────────
@@ -301,15 +307,34 @@ const text = () => doc.body.textContent ?? '';
  *  are on: both are `aria-current="page"`, which is how the frames' "filled"
  *  nav item and side panel row say the same thing to a reader who cannot see
  *  the fill. */
-const place = () => doc.querySelector('header [aria-current="page"]')?.textContent?.trim() ?? null;
+const place = () => {
+  const header = doc.querySelector('header');
+  if (!header) return null;
+  const cur = (header.querySelector('[aria-current="page"]')?.textContent ?? '').trim();
+  if (!cur || cur === 'divan') return 'Dashboard';
+  return cur.startsWith('Chats') ? 'Chat' : cur.startsWith('Machine') ? 'Machine' : cur;
+};
+/** On the Dashboard itself, unscoped: the page with the greeting on it. */
+const home = () => !!doc.querySelector('h1.dv-greet');
+/** A product's tile on the Dashboard. */
+const tile = (key) => doc.querySelector(`a[data-tile="${key}"]`);
+/** A place's button on the line, whatever light it carries after its name. */
+const nav = (label) => [...(doc.querySelector('header')?.querySelectorAll('button') ?? [])]
+  .find((b) => (b.textContent ?? '').trim().startsWith(label)) ?? null;
 // …read off the row's own name and not its whole line, which also carries the
 // count of what is waiting under it.
-const page = () => doc.querySelector('nav [aria-current="page"] span')?.textContent?.trim() ?? null;
+// A tab with one page under it has no row of links, and its page is the tab.
+const page = () => doc.querySelector('nav [aria-current="page"] span')?.textContent?.trim()
+  ?? doc.querySelector('[aria-label="Machine"] [aria-pressed="true"]')?.firstChild?.textContent?.trim() ?? null;
+/** A tab of the Machine place, by its name. */
+const machineTab = (label) => [...doc.querySelectorAll('[aria-label="Machine"] button')]
+  .find((b) => (b.firstChild?.textContent ?? '').trim() === label) ?? null;
 /** The page under the bar, as markup: what a theme change must not touch. */
 const body = () => doc.querySelector('header')?.nextElementSibling?.innerHTML ?? '';
 /** Its head — the one 28 pt line on a Divan page. */
-const head = () => [...doc.querySelectorAll('span, div')]
-  .find((e) => e.style.fontSize === '28px')?.textContent?.trim() ?? null;
+const head = () => doc.querySelector('h1[data-project-head]')?.textContent?.trim()
+  ?? [...doc.querySelectorAll('span, div')]
+    .find((e) => e.style.fontSize === '28px')?.textContent?.trim() ?? null;
 
 const press = async (key) => {
   await act(async () => {
@@ -319,6 +344,9 @@ const press = async (key) => {
 /** The button whose label is this word, anywhere on the page. */
 const find = (label, within = doc) => [...within.querySelectorAll('button')]
   .find((b) => (b.textContent ?? '').trim() === label) ?? null;
+/** An icon button, by the name it is read out as. */
+const labelledBtn = (label) => [...doc.querySelectorAll('button')]
+  .find((b) => b.getAttribute('aria-label') === label) ?? null;
 const click = async (el) => {
   await act(async () => { el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); });
 };
@@ -355,9 +383,9 @@ const drag = async (el, type, dataTransfer) => {
 
 group('the panel comes up');
 {
-  ok('it mounted, with the bar over it', text().includes('Divan') && !!doc.querySelector('header'));
+  ok('it mounted, with the line over it', !!doc.querySelector('header .dv-topline'));
   ok('…on the Dashboard, which is the place it opens on',
-    place() === 'Dashboard' && head() === 'Overview', `${place()} · ${head()}`);
+    place() === 'Dashboard' && home(), `${place()} · ${head()}`);
   ok('…with the products of the machine it was seeded with',
     text().includes('Quire') && text().includes('Hush'));
   ok('…and the theme on the document before anything was pressed',
@@ -376,7 +404,7 @@ group('the keyboard');
       place() === 'Machine' && page() === row.label, `${place()} › ${page()}`);
   }
   await press('0');
-  ok('⌘0 goes back to the Dashboard', place() === 'Dashboard' && head() === 'Overview',
+  ok('⌘0 goes back to the Dashboard', place() === 'Dashboard' && home(),
     `${place()} · ${head()}`);
   await press('9');
   ok('…and a key nothing is bound to changes nothing', place() === 'Dashboard');
@@ -384,53 +412,39 @@ group('the keyboard');
 
 group('the bar');
 {
-  await click(find('Chat', doc.querySelector('header')));
-  ok('the Chat place is one press away, and it is the chat and its list',
-    place() === 'Chat' && !!doc.querySelector('input[name="chat-search"]')
-    && text().includes('Webhook retry policy'), `${place()}`);
+  await click(nav('Chats'));
+  const landed = place() === 'Chat' && !!doc.querySelector('textarea')
+    && !doc.querySelector('input[name="chat-search"]');
+  await click(find('Earlier'));
+  ok('the Chat place is one press away and lands writable in a chat; Earlier opens the list',
+    landed && !!doc.querySelector('input[name="chat-search"]')
+    && text().includes('Webhook retry policy'), `${landed} · ${place()}`);
 
-  await click(find('Machine', doc.querySelector('header')));
+  await click(nav('Machine'));
   ok('…and the Machine place opens on the first row of its list',
     place() === 'Machine' && page() === MACHINE_ROWS[0].label, `${place()} › ${page()}`);
 
   await click(find('Dashboard', doc.querySelector('header')));
-  ok('…and the Dashboard comes back', place() === 'Dashboard' && head() === 'Overview');
+  ok('…and the Dashboard comes back', place() === 'Dashboard' && home());
 }
 
-group('the project bar scopes the page');
+group('a project tile opens the project');
 {
-  const chip = (label) => find(label, doc.querySelector('header'));
-  ok('the chips are All and the products, in the merge’s order',
-    [...doc.querySelectorAll('header button')].map((b) => b.textContent.trim())
-      .filter((t) => ['All', 'Quire', 'Hush'].includes(t)).join(' ') === 'All Quire Hush');
-
+  ok('the tiles are the products, in the merge’s order',
+    [...doc.querySelectorAll('a[data-tile]')].map((a) => a.dataset.tile).join(' ') === 'quire hush');
   const steps = w.history.length;
-  await click(chip('Quire'));
+  await click(tile('quire'));
   ok('pressing one writes it into the address, as a path a person can read',
     w.location.pathname === '/p/quire' && w.location.search === '',
     w.location.pathname + w.location.search);
-  // It used to replace the entry rather than push one, and that was the whole
-  // of the back button being broken: with one entry in the history, Back left
-  // the panel from wherever you were.
   ok('…and leaves an entry behind it, so that Back is a step and not the way out',
     w.history.length === steps + 1, `${steps} → ${w.history.length}`);
-  ok('…and the page under the bar comes back scoped to it',
+  ok('…and the page under the line comes back scoped to it',
     head() === 'Quire' && !body().includes('Hush'), `${head()}`);
-  await click(chip('All'));
-  ok('pressing All takes the product out of the address rather than emptying it',
-    w.location.pathname === '/' && w.location.search === '',
+  await click(find('Dashboard', doc.querySelector('header')));
+  ok('the left end of the line leads back to every product',
+    w.location.pathname === '/' && home() && body().includes('Hush'),
     w.location.pathname + w.location.search);
-  ok('…and the page is every product again', head() === 'Overview' && body().includes('Hush'));
-
-  // The chips are over the Dashboard and the pages under it, and nowhere else:
-  // Web15's bar, over the Machine pages, ends in what the fleet is doing
-  // instead. So the bar loses them on the way in and has them again on the way
-  // back — which is also why a chip can only ever be pressed from the place it
-  // scopes.
-  await press('4');
-  ok('the Machine place’s bar draws no chips', chip('Quire') === null && chip('All') === null);
-  await press('0');
-  ok('…and the Dashboard’s has them again', !!chip('Quire') && !!chip('All'));
 }
 
 group('the back button steps through the panel instead of out of it');
@@ -439,7 +453,6 @@ group('the back button steps through the panel instead of out of it');
   // every bit of where you were in memory, wrote one `replaceState` for the
   // product and nothing else, so the browser had a single entry in its history
   // and Back left the page — from three levels into a board.
-  const chip = (label) => find(label, doc.querySelector('header'));
   /** The browser's own Back. jsdom runs a traversal as a queued navigation and
    *  delivers `popstate` after it, so this waits for the event rather than for
    *  a number of ticks — a back that never arrived is a failed check below and
@@ -458,10 +471,9 @@ group('the back button steps through the panel instead of out of it');
   };
 
   await press('0');
-  await click(chip('All'));
   const from = w.history.length;
 
-  await click(chip('Quire'));
+  await click(tile('quire'));
   await click(find('Board'));
   ok('two steps in, the address says both of them',
     w.location.pathname === '/p/quire/board', w.location.pathname);
@@ -474,7 +486,7 @@ group('the back button steps through the panel instead of out of it');
     && place() === 'Dashboard', `${head()} · ${w.location.pathname}`);
   await back();
   ok('…and again puts the product back to every product',
-    head() === 'Overview' && w.location.pathname === '/',
+    home() && w.location.pathname === '/',
     `${head()} · ${w.location.pathname}`);
 
   // The pages of the Machine place are steps too, and so is a chat.
@@ -484,29 +496,29 @@ group('the back button steps through the panel instead of out of it');
     w.location.pathname === '/machine/accounts', w.location.pathname);
   await back();
   ok('…and Back walks them one at a time',
-    w.location.pathname === '/machine/terminal' && page() === 'Terminals',
+    w.location.pathname === '/machine/terminal' && page() === 'Terminal',
     `${page()} · ${w.location.pathname}`);
 
   await press('0');
   ok('…all the way home, where the address is the bare path again',
-    w.location.pathname === '/' && w.location.search === '' && head() === 'Overview',
+    w.location.pathname === '/' && w.location.search === '' && home(),
     w.location.pathname + w.location.search);
 }
 
 group('the switch, in a document');
 {
-  const chip = () => find('Light', doc.querySelector('header')) ?? find('Dark', doc.querySelector('header'));
+  const chip = () => doc.querySelector('header button[title^="Switch to the"]');
   const before = body();
   const bar = doc.querySelector('header');
-  ok('in the dark, the bar offers the light theme', !!find('Light', doc.querySelector('header')));
+  ok('in the dark, the line offers the light theme', chip()?.title === 'Switch to the light theme');
   await click(chip());
   ok('pressing it moves the document’s theme, and nothing else says it',
     doc.documentElement.dataset.theme === 'light' && themeScheme() === 'light');
   ok('…the page under the bar is the same markup it was',
     body() === before, `${body().length} vs ${before.length}`);
   ok('…and it is a page with colours in it, so that means something',
-    before.includes('var(--dv-'));
-  ok('…and the bar now offers the other one', !!find('Dark', doc.querySelector('header')));
+    before.includes('class="dv-'));
+  ok('…and the line now offers the other one', chip()?.title === 'Switch to the dark theme');
   await click(chip());
   ok('and back again', doc.documentElement.dataset.theme === 'dark' && body() === before);
   ok('nothing reloaded: the bar is the same element it was before the switch',
@@ -523,16 +535,21 @@ group('what needs a person opens itself as a conversation');
   const board = boards(now);
   /** A button the words are somewhere inside, rather than all of it: a tab
    *  carries the square of whoever is in it as well as the card's name. */
-  const inside = (label) => [...doc.querySelectorAll('button')]
+  // The last such button: the dock is drawn after the page it stands over, and
+  // a product's page carries the same card names in its own rows.
+  const inside = (label) => [...doc.querySelectorAll('button')].reverse()
     .find((b) => (b.textContent ?? '').includes(label)) ?? null;
   /** What the open windows say, and not what the page under them says — a
    *  project card carries the worst card's own line, which is this very
    *  question, so "the window is gone" has to be asked of the windows. */
-  const windows = () => [...doc.querySelectorAll('section')]
+  const windows = () => [...doc.querySelectorAll('section[data-panel]')]
     .map((e) => e.textContent ?? '').join(' · ');
   await act(async () => {
     seed(useDivanStore, { snaps: { studio: answered(board.busy[0].snap, now) } });
   });
+  // The windows stand over a product's page; the Dashboard answers in its
+  // Needs you cards instead.
+  await click(tile('quire'));
 
   ok('a question that is waiting opens by itself, with nobody pressing anything',
     windows().includes('asks you') && windows().includes('Use the live ones now'),
@@ -543,7 +560,10 @@ group('what needs a person opens itself as a conversation');
   ok('…and the second thing waiting opens beside it rather than in a queue',
     windows().includes('App Review reply') && windows().includes('your call'));
 
-  const pill = find('Use the live ones now');
+  // The window's own answer: the product page carries the same question as a
+  // Needs you card, which is drawn before the windows.
+  const pill = [...doc.querySelectorAll('section[data-panel] button')]
+    .find((b) => (b.textContent ?? '').trim() === 'Use the live ones now') ?? null;
   ok('the answers the worker proposed are pressable', !!pill);
   asked.length = 0;
   await click(pill);
@@ -563,32 +583,34 @@ group('what needs a person opens itself as a conversation');
   await click(inside('Stripe keys'));
   ok('…which brings it back', windows().includes('Use the live ones now'));
 
+  const named = () => [...doc.querySelectorAll('button')]
+    .filter((b) => (b.textContent ?? '').includes('Stripe keys')).length;
+  const had = named();
   const shut = [...doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Close');
   await click(shut);
   ok('closing one takes it off the page, tab and all',
-    !windows().includes('Use the live ones now') && !inside('Stripe keys'), windows().slice(0, 300));
+    !windows().includes('Use the live ones now') && named() === had - 1, windows().slice(0, 300));
 
   // The bar across the bottom of every desktop frame, and what it does with a
   // sentence. Found the way a person finds it — by what the field says it is —
   // rather than by a `name` attribute nothing on screen carries.
-  const bar = () => [...doc.querySelectorAll('input')]
-    .find((i) => (i.getAttribute('aria-label') ?? '').startsWith('Tell Divan')) ?? null;
-  const arrow = () => [...doc.querySelectorAll('button')]
-    .find((b) => (b.textContent ?? '').trim() === '↑') ?? null;
+  const bar = () => doc.querySelector('#composer-in');
+  const arrow = () => {
+    const send = doc.querySelector('.dv-composer button[aria-label="Send"]');
+    return send && !send.disabled ? send : null;
+  };
   const palette = () => [...doc.querySelectorAll('input')]
     .some((i) => (i.getAttribute('aria-label') ?? '').startsWith('Search folders'));
   /** The chat's own window, by the words it was started with. */
-  const chatWindow = () => [...doc.querySelectorAll('section')]
+  const chatWindow = () => [...doc.querySelectorAll('section[data-panel]')]
     .find((e) => (e.textContent ?? '').includes('ship the beta tonight')) ?? null;
   const labelled = (label, within) => [...within.querySelectorAll('button')]
     .find((b) => b.getAttribute('aria-label') === label) ?? null;
 
-  ok('the command bar is on the page, and it is the field it looks like', !!bar());
+  ok('the Composer is at the foot of the product’s page, and it is the field it looks like', !!bar());
   ok('…whose send is not a button while there is nothing to send', arrow() === null);
   await type(bar(), 'ship the beta tonight');
   ok('…and is one the moment there is', !!arrow());
-  ok('…which is also what the colour says: the chat’s own send disc, filled',
-    arrow().style.background.includes('--dv-red'), arrow().style.background);
   asked.length = 0;
   await click(arrow());
   ok('pressing it opens a chat on the computer in focus, named after the words',
@@ -600,7 +622,7 @@ group('what needs a person opens itself as a conversation');
       && a.data.text === 'ship the beta tonight'),
     JSON.stringify(asked.filter((a) => a.type === 'chat.send').map((a) => a.data)));
   ok('…without leaving the page it was typed on',
-    place() === 'Dashboard' && head() === 'Overview', `${place()} · ${head()}`);
+    place() === 'Dashboard' && head() === 'Quire', `${place()} · ${head()}`);
   ok('…with the chat open on that page, in the corner the windows stand in',
     !!chatWindow(), windows().slice(0, 200));
   ok('…and the field empty again, because the sentence landed', bar().value === '');
@@ -670,7 +692,7 @@ group('what needs a person opens itself as a conversation');
   ok('…and it cannot be pushed off the screen',
     parseInt(box().right, 10) === 0 && parseInt(box().bottom, 10) === 0, JSON.stringify(box()));
 
-  const windowFor = (words) => [...doc.querySelectorAll('section')]
+  const windowFor = (words) => [...doc.querySelectorAll('section[data-panel]')]
     .find((e) => (e.textContent ?? '').includes(words)) ?? null;
   const boxOf = (words) => {
     const w = windowFor(words);
@@ -771,8 +793,7 @@ group('what needs a person opens itself as a conversation');
 
   // …and the same bar, on a page about one product: the chat opens in that
   // product rather than in whatever folder this computer last used.
-  const bandChip = (label) => find(label, doc.querySelector('header'));
-  await click(bandChip('Quire'));
+
   /** The line over the command bar, if there is one: the bar stands in a fixed
    *  box in the middle of the bottom edge, and what is above it inside that box
    *  is the note. The bar itself carries the key on it, which is how the two
@@ -784,8 +805,8 @@ group('what needs a person opens itself as a conversation');
     const words = (first?.textContent ?? '').trim();
     return !first || words.includes('⌘K') ? '' : words;
   };
-  ok('on a product’s page the bar says which product the chat will be about',
-    overBar() === 'Quire', `«${overBar()}»`);
+  ok('on a product’s page the Composer says which product the chat will be about',
+    (doc.querySelector('.dv-composer [data-locked]')?.textContent ?? '').includes('Quire'));
   await type(bar(), 'why is the retry policy like this');
   asked.length = 0;
   await click(arrow());
@@ -793,14 +814,14 @@ group('what needs a person opens itself as a conversation');
     asked.some((a) => a.key === 'studio' && a.type === 'chat.create'
       && a.data.cwd === '/w/quire'),
     JSON.stringify(asked.filter((a) => a.type === 'chat.create').map((a) => a.data?.cwd)));
-  await click(bandChip('All'));
-  ok('…and off that page it says nothing again', overBar() === '', `«${overBar()}»`);
-
   // …and the window it opened is put away again, so the board below is read
   // with nothing standing over it.
-  const opened = [...doc.querySelectorAll('section')]
+  const opened = [...doc.querySelectorAll('section[data-panel]')]
     .find((e) => (e.textContent ?? '').includes('why is the retry policy')) ?? null;
   if (opened) await click(labelled('Close', opened));
+  await click(find('Dashboard', doc.querySelector('header')));
+  ok('…and off that page the bar is not drawn: the open Composer is', overBar() === ''
+    && !!doc.querySelector('#composer-in') && !doc.querySelector('.dv-composer [data-locked]'), `«${overBar()}»`);
 
   // The key written on the bar is still the key: the bar is a composer, and the
   // palette is what ⌘K opens.
@@ -816,23 +837,22 @@ group('the board, with the asking agent’s chat beside it');
   const studio = boards(now).busy[0].snap;
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(studio, now) } }); });
   const chip = (label) => find(label, doc.querySelector('header'));
-  await click(chip('Quire'));
+  await press('0');
+  await click(tile('quire'));
   await click(find('Board'));
 
-  /** A column of the board, by its name: the head is a tab and the column is
-   *  what catches a drop, which is the element around it. */
-  const column = (name) => [...doc.querySelectorAll('[role="tab"]')]
-    .find((b) => (b.textContent ?? '').startsWith(name))?.parentElement ?? null;
+  /** A column of the board, by its name: the section that catches a drop. */
+  const column = (name) => doc.querySelector(`section.dv-col[aria-label="${name}"]`);
   /** A ticket, by the words on it. Every one of them can be picked up, which is
    *  what tells a card apart from everything else on the page. */
   const ticket = (words) => [...doc.querySelectorAll('[draggable="true"]')]
     .find((e) => (e.textContent ?? '').includes(words)) ?? null;
-  const windows = () => [...doc.querySelectorAll('section')].map((e) => e.textContent ?? '').join(' · ');
+  const windows = () => [...doc.querySelectorAll('section[data-panel]')].map((e) => e.textContent ?? '').join(' · ');
 
   ok('the Board tab of a product is its board, four columns of the machines’ own',
     ['Ice Box', 'Queued', 'In Progress', 'Done'].every((c) => !!column(c))
     && !!ticket('Webhook retry policy') && !!ticket('CSV export'),
-    [...doc.querySelectorAll('[role="tab"]')].map((b) => b.textContent).join(' | '));
+    [...doc.querySelectorAll('section.dv-col')].map((b) => b.getAttribute('aria-label')).join(' | '));
   ok('…still on the Dashboard, and still the page the bar is over',
     place() === 'Dashboard' && head() === 'Quire', `${place()} · ${head()}`);
 
@@ -842,7 +862,7 @@ group('the board, with the asking agent’s chat beside it');
   ok('with every question put away, nothing is open over the board', windows() === '',
     windows().slice(0, 200));
 
-  await click(ticket('Stripe keys'));
+  await click(ticket('Stripe keys').querySelector('button'));
   ok('pressing the card of an agent that is asking opens its chat beside the board',
     windows().includes('asks you') && windows().includes('Use the live ones now')
     && windows().includes('Quire · Stripe keys'), windows().slice(0, 300));
@@ -859,7 +879,7 @@ group('the board, with the asking agent’s chat beside it');
   // what the window sent is kept on screen until the machine that holds the
   // board has been re-read.
   ok('…and until the board is re-read the card still says it is asking',
-    !!ticket('Stripe keys') && (ticket('Stripe keys').textContent ?? '').includes('Asking you'));
+    !!ticket('Stripe keys') && (ticket('Stripe keys').textContent ?? '').includes('asking'));
   const back = {
     ...studio,
     cards: studio.cards.map((c) => (c.id === 'k2'
@@ -867,7 +887,7 @@ group('the board, with the asking agent’s chat beside it');
   };
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(back, now) } }); });
   ok('…and when it is, the mark clears on the card and the window is gone',
-    (ticket('Stripe keys').textContent ?? '').includes('Running')
+    (ticket('Stripe keys').textContent ?? '').includes('running')
     && !windows().includes('Use the live ones now'),
     `${ticket('Stripe keys')?.textContent} · ${windows().slice(0, 120)}`);
 
@@ -879,8 +899,8 @@ group('the board, with the asking agent’s chat beside it');
     dt.types.includes('application/x-rac-card'), dt.types.join(', '));
   await drag(column('Queued'), 'dragover', dt);
   ok('…a column that would take it says so, and the one it came out of does not',
-    column('Queued').querySelector('[role="tab"]').getAttribute('aria-selected') === 'true'
-    && column('Ice Box').querySelector('[role="tab"]').getAttribute('aria-selected') === 'false');
+    column('Queued').dataset.dropping === 'true' && column('Queued').dataset.takes === 'true'
+    && column('Ice Box').dataset.takes === undefined);
   asked.length = 0;
   await drag(column('Queued'), 'drop', dt);
   ok('dropping it asks the machine that holds the board to move it there',
@@ -928,7 +948,7 @@ group('a card can be corrected and handed to somebody');
   // was the wrong guess. All three are writes this panel could not make.
   const ticket = (words) => [...doc.querySelectorAll('[draggable="true"]')]
     .find((e) => (e.textContent ?? '').includes(words)) ?? null;
-  await click(ticket('CSV export'));
+  await click(ticket('CSV export').querySelector('button'));
   ok('a card that nobody is waiting on opens as its own page',
     head() === 'CSV export' || text().includes('CSV export'), `${head()}`);
 
@@ -958,7 +978,7 @@ group('a card can be corrected and handed to somebody');
     .find((b) => b.getAttribute('title') === 'Hand this card to somebody else') ?? null;
   ok('the executor is a row you can press rather than a fact you are told', !!handRow);
   await click(handRow);
-  const hands = () => [...doc.querySelectorAll('[role="option"]')];
+  const hands = () => [...doc.querySelectorAll('[role="menuitemradio"]')];
   ok('…and it offers the ones a board knows, Nobody among them',
     hands().length === 4 && hands().some((o) => (o.textContent ?? '').includes('Nobody'))
     && hands().some((o) => (o.textContent ?? '').includes('Research')),
@@ -974,7 +994,7 @@ group('a card can be corrected and handed to somebody');
   // Back up to the product, the way the page offers: the card page is reached
   // from the board and goes back to it, and the group below opens on a
   // product's own head.
-  const crumb = [...doc.querySelectorAll('button')]
+  const crumb = [...doc.querySelectorAll('[data-human] a')]
     .find((b) => (b.textContent ?? '').trim() === 'Quire') ?? null;
   ok('a card page says where it came from, and goes back there', !!crumb);
   await click(crumb);
@@ -982,91 +1002,67 @@ group('a card can be corrected and handed to somebody');
     head() === 'Quire' && place() === 'Dashboard', `${head()} · ${place()}`);
 }
 
-group('a new ticket, written at the top of Ice Box');
+group('New ticket: Title, the sentences, where it goes, Create (HANDOVER §4.5)');
 {
-  /** Typing, as React hears it: the value is set through the prototype's own
-   *  setter so that React's tracker sees a change and the input event is not
-   *  swallowed as a no-op. */
-  const type = async (el, value) => {
-    const setter = Object.getOwnPropertyDescriptor(
-      el.tagName === 'TEXTAREA' ? w.HTMLTextAreaElement.prototype : w.HTMLInputElement.prototype,
-      'value').set;
-    await act(async () => {
-      setter.call(el, value);
-      el.dispatchEvent(new w.Event('input', { bubbles: true }));
-    });
+  const field = (label) => {
+    const l = [...doc.querySelectorAll('label')].find((e) => (e.textContent ?? '').trim() === label);
+    return l ? doc.getElementById(l.htmlFor) : null;
   };
-  const field = (label) => doc.querySelector(`[aria-label="${label}"]`);
-  const enter = async (el) => {
-    await act(async () => {
-      el.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    });
+  const create = () => find('Create');
+  const segment = (label) => [...(doc.querySelector('[aria-label="Put it in"]')?.querySelectorAll('button') ?? [])]
+    .find((b) => (b.textContent ?? '').trim() === label) ?? null;
+  const filed = () => asked.filter((a) => a.type === 'divan.card.create');
+  /** Open the form from the product's head, write a card, pick where, Create. */
+  const write = async (title, sentences, where) => {
+    await click(find('+ New ticket'));
+    await type(field('Title'), title);
+    if (sentences) await type(field('Two or three sentences'), sentences);
+    if (where) await click(segment(where));
+    asked.length = 0;
+    await click(create());
   };
-  const iceBox = () => [...doc.querySelectorAll('[role="tab"]')]
-    .find((b) => (b.textContent ?? '').startsWith('Ice Box'))?.parentElement ?? null;
 
-  // The frame's word is at the end of the *product's* head, and a reader meets
-  // it on the Overview tab: it has to carry them to the board with the card
-  // already open, in one press.
   await click(find('Overview'));
-  ok('on a product’s own page nothing is being written yet',
-    !field('Title') && head() === 'Quire' && !iceBox());
-
   await click(find('+ New ticket'));
-  ok('the word at the end of a product’s head opens the board with a card being written',
-    !!field('Title') && !!iceBox()?.contains(field('Title')) && place() === 'Dashboard',
-    doc.body.textContent?.slice(0, 120));
+  ok('+ New ticket opens one form: the product, Title, the sentences, the segment and Create, nothing else to fill',
+    !!field('Title') && !!field('Two or three sentences') && !!create()
+    && segment('Ice Box')?.getAttribute('aria-pressed') === 'true'
+    && w.location.pathname === '/p/quire/new'
+    && doc.querySelectorAll('form[aria-label="New ticket"] input, form[aria-label="New ticket"] textarea, form[aria-label="New ticket"] select').length === 2,
+    w.location.pathname);
+  await click(labelledBtn('Close'));
 
-  await type(field('Title'), 'Export client list as CSV');
-  await type(field('What to do'), 'Studios keep asking to download their client list.');
-  asked.length = 0;
-  await enter(field('Title'));
-  ok('…and pressing return files it on the machine that holds the product, in Ice Box',
-    asked.some((a) => a.key === 'studio' && a.type === 'divan.card.create'
-      && a.data.project_id === 'p-quire' && a.data.column === 'ice_box'
-      && a.data.title === 'Export client list as CSV'
-      && a.data.summary === 'Studios keep asking to download their client list.'),
-    JSON.stringify(asked.slice(0, 3)));
+  await write('Export client list as CSV', 'Studios keep asking to download their client list.');
+  const ice = filed()[0]?.data;
+  await write('Invite by CSV', '', 'Queued');
+  const queued = filed()[0]?.data;
+  await write('Fix the webhook retries', 'They retry forever.', 'Start now');
+  const now = filed()[0]?.data;
+  ok('Create files divan.card.create into Ice Box by default, Queued or In Progress when chosen, with only a title required',
+    ice?.column === 'ice_box' && ice.project_id === 'p-quire' && ice.title === 'Export client list as CSV'
+    && ice.summary === 'Studios keep asking to download their client list.'
+    && queued?.column === 'queued' && queued.title === 'Invite by CSV' && queued.summary === ''
+    && now?.column === 'in_progress' && !('executor' in now) && !('agent' in now)
+    && w.location.pathname === '/p/quire/board',
+    JSON.stringify([ice, queued, now]));
 
-  // A machine that has gone quiet is a memory of a refusal, not a refusal: the
-  // card is still written to the machine that has the product, and what comes
-  // back from that is the answer.
-  const was = useDivanStore.getState().snaps.studio;
-  await act(async () => { seed(useDivanStore, { snaps: { studio: silent(was, 'connection refused') } }); });
-  await click(find('+ New ticket'));
-  await type(field('Title'), 'Invite by CSV');
-  asked.length = 0;
-  await enter(field('Title'));
-  ok('a product whose only machine has gone quiet is still written to',
-    asked.some((a) => a.key === 'studio' && a.type === 'divan.card.create'
-      && a.data.title === 'Invite by CSV'),
-    JSON.stringify(asked.slice(0, 3)));
-
-  // …and when the machine really is gone, the card is still on the screen with
-  // what was typed in it, and the words that came back are under it.
+  // When the machine cannot be reached the form keeps what was typed and says why.
   const call = useFleet.getState().call;
   await act(async () => {
     seed(useFleet, { call: async () => { throw new Error('That computer did not answer'); } });
   });
-  await click(find('+ New ticket'));
-  await type(field('Title'), 'Invite by CSV');
-  await enter(field('Title'));
+  await write('Invite by CSV', '', null);
   ok('…and one that cannot be reached keeps what was typed and says why',
-    field('Title')?.value === 'Invite by CSV'
-    && (iceBox()?.textContent ?? '').includes('That computer did not answer'),
-    (iceBox()?.textContent ?? '').slice(0, 200));
-  await act(async () => {
-    seed(useFleet, { call });
-    seed(useDivanStore, { snaps: { studio: was } });
-  });
-  await click(find('Esc'));
+    field('Title')?.value === 'Invite by CSV' && text().includes('That computer did not answer'));
+  await act(async () => { seed(useFleet, { call }); });
+  await click(labelledBtn('Close'));
 }
 
 group('the sign-in that is expiring is counted before that page is opened');
 {
   const header = doc.querySelector('header');
   /** A row of the drawer, by the name on it. */
-  const row = (label) => [...doc.querySelectorAll('nav button')]
+  const row = (label) => [...doc.querySelectorAll('nav a')]
     .find((b) => (b.querySelector('span')?.textContent ?? '').trim() === label) ?? null;
 
   await click(find('Dashboard', header));
@@ -1081,10 +1077,12 @@ group('the sign-in that is expiring is counted before that page is opened');
   ok('entering the Machine place asks the computer which sign-ins it has',
     asked.some((a) => a.key === 'studio' && a.type === 'account.list'),
     JSON.stringify(asked.map((a) => a.type)));
-  ok('…and the drawer counts the ones that want a person, on the page it opens on',
-    page() === 'Machines' && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
-    && (row('Accounts & sign-ins')?.innerHTML ?? '').includes('var(--dv-amber)'),
-    `${page()} · ${row('Accounts & sign-ins')?.textContent}`);
+  const marked = page() === 'Machines' && (machineTab('Executors')?.textContent ?? '').includes('needs you');
+  await click(machineTab('Executors'));
+  ok('…and the tabs count the ones that want a person: a mark on Executors, the number on its Accounts link',
+    marked && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
+    && !!row('Accounts & sign-ins')?.querySelector('.dv-badge'),
+    `${marked} · ${row('Accounts & sign-ins')?.textContent}`);
   await press('6');
   ok('…and Admin says the same thing about them, on a page nobody asked twice',
     page() === 'Admin' && text().includes('2 want you')
@@ -1114,7 +1112,7 @@ group('the sign-in that is expiring is counted before that page is opened');
 group('a ticket shows what the worker is doing right now');
 {
   await press('4');
-  ok('the terminal place is one key away', page() === 'Terminals', `${page()}`);
+  ok('the terminal place is one key away', page() === 'Terminal', `${page()}`);
   const toggle = [...doc.querySelectorAll('[role="radio"]')]
     .find((b) => (b.textContent ?? '').trim() === 'Ustabasi') ?? null;
   ok('…with the queue as one of the two things the wall shows', !!toggle);
@@ -1225,7 +1223,7 @@ group('chats are filed into groups from the panel');
       fakeChat({ id: 'c6', title: 'Old thread', project_id: 'p-hush', project: 'Hush', updated_at: at - 2 * 86400 }),
     ] } } });
   });
-  await click(find('Chat', doc.querySelector('header')));
+  await click(nav('Chats'));
   const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
   ok('a chat is under the product the computer filed it as, or the group of that name',
     !!find('Hush1') && doc.querySelector('button[aria-label="Group menu: Quire"]')
@@ -1245,8 +1243,8 @@ group('chats are filed into groups from the panel');
   await drag(doc.querySelector('[data-section="g1"]'), 'dragover', held);
   await drag(doc.querySelector('[data-section="g1"]'), 'drop', held);
   const now = order();
-  await click(find('Machine', doc.querySelector('header')));
-  await click(find('Chat', doc.querySelector('header')));
+  await click(nav('Machine'));
+  await click(nav('Chats'));
   ok('a heading dragged above another stays there, and the archive stays last',
     was[0] === 'g1' && now[0] === 'project:Hush' && now[1] === 'g1'
       && now.at(-1) === '__archive' && order().join() === now.join(),
@@ -1359,9 +1357,8 @@ group('a product has its own chats');
     ] } } });
   });
   await click(find('Dashboard', header));
-  await click(find('Quire', header));
-  const tab = [...doc.querySelectorAll('button')]
-    .find((b) => !header.contains(b) && /^Chat\s*1$/.test((b.textContent ?? '').trim()));
+  await click(tile('quire'));
+  const tab = find('Chats', doc.querySelector('[aria-label="View"]'));
   await click(tab);
   const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
   ok('the product’s Chat tab lists the chats filed under it and no others, with the newest open',
@@ -1379,7 +1376,7 @@ group('a product has its own chats');
     made?.key === 'studio' && /\/quire$/.test(made?.data.cwd ?? '')
       && place() === 'Dashboard' && w.location.pathname.startsWith('/p/quire/chat/told'),
     `${JSON.stringify(made?.data?.cwd)} · ${place()} · ${w.location.pathname}`);
-  await click(find('All', header));
+  await press('0');
 }
 
 group('a chat dropped on a product is filed under it by hand');
@@ -1396,7 +1393,8 @@ group('a chat dropped on a product is filed under it by hand');
       fakeChat({ id: 'h1', title: 'Hush pricing', project_id: 'p-hush', project: 'Hush', updated_at: at - 20 }),
     ] } } });
   });
-  await click(find('Chat', header));
+  await click(labelledBtn('Chats'));
+  if (find('Earlier')) await click(find('Earlier'));
   const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
   const section = (key) => doc.querySelector(`[data-section="${key}"]`);
   const row = (words) => [...doc.querySelectorAll('button[draggable="true"]')]
@@ -1415,15 +1413,23 @@ group('a chat dropped on a product is filed under it by hand');
     (section('project:Hush')?.textContent ?? '').includes('Webhook retry policy'),
     section('project:Hush')?.textContent?.slice(0, 200));
 
-  await click(find('Dashboard', header));
-  await click(find('Hush', header));
-  const tab = [...doc.querySelectorAll('button')]
-    .find((b) => !header.contains(b) && /^Chat\s*2$/.test((b.textContent ?? '').trim()));
+  await click(find('Dashboard', doc.querySelector('header')));
+  await click(tile('hush'));
+  const tab = find('Chats', doc.querySelector('[aria-label="View"]'));
   await click(tab);
   const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
   ok('…and on that product’s own page', !!tab && shown('Webhook retry policy') && shown('Hush pricing'),
     `tab ${!!tab} · ${w.location.pathname}`);
-  await click(find('All', header));
+  await click(find('Dashboard', doc.querySelector('header')));
+}
+
+group('what the queue sent');
+{
+  const bell = [...(doc.querySelector('header')?.querySelectorAll('button') ?? [])]
+    .find((b) => /queue/.test(b.getAttribute('title') ?? '')) ?? null;
+  ok('the bell is in the top line and the panel asks each computer what its queue sent (ustabasi.notifications)',
+    !!bell && queueReads.some((r) => r.type === 'ustabasi.notifications'),
+    `bell ${!!bell} · ${queueReads.map((r) => r.type).join(',')}`);
 }
 
 group('the four things the panel could not do to a computer');
@@ -1433,7 +1439,7 @@ group('the four things the panel could not do to a computer');
   // about what the page does with a computer that has them, codex among them —
   // the tool the fixture deliberately does not have installed.
   await act(async () => { seed(useFleet, { hosts: { studio: fakeHost() } }); });
-  await click(find('Machine', header));
+  await click(nav('Machine'));
   await press('7');
   ok('Accounts is a page of the Machine place', page() === 'Accounts & sign-ins', `${page()}`);
 
@@ -1530,8 +1536,859 @@ group('the four things the panel could not do to a computer');
     Object.keys(useFleet.getState().hosts).join(', '));
 }
 
+group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
+{
+  const now = Math.floor(Date.now() / 1000);
+  // Every board on the one computer this panel is paired with.
+  const board = (name) => ({ studio: answered(boards(now)[name][0].snap, now) });
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true });
+    seed(useDivanStore, { snaps: board('busy') });
+  });
+  await press('0');
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const field = () => doc.querySelector('#composer-in');
+  const send = () => doc.querySelector('button.dv-send');
+  const mode = (label) => [...doc.querySelectorAll('.dv-seg button')].find((b) => b.textContent.trim() === label);
+  const picker = (name) => doc.querySelector(`[data-picker="${name}"]`);
+  const value = (name) => picker(name)?.querySelector('.val')?.textContent ?? null;
+  const option = (label) => [...doc.querySelectorAll('[role="menu"] [role="menuitemradio"]')]
+    .find((b) => b.firstElementChild?.textContent === label) ?? null;
+  const dialogs = () => doc.querySelectorAll('[role="dialog"], [aria-modal="true"]').length
+    + (find('Start chat') ? 1 : 0);
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+
+  // 1 · Ask
+  asked.length = 0;
+  await type(field(), 'ship the beta tonight');
+  await click(send());
+  await settle();
+  const made = asked.findIndex((a) => a.type === 'chat.create');
+  const said = asked.findIndex((a) => a.type === 'chat.send');
+  const id = asked[made]?.data && asked[said]?.data?.chat_id;
+  ok('Ask: one press sends chat.create then chat.send with the words, and lands in that chat, with no dialog',
+    made >= 0 && said > made && asked[said].data.text === 'ship the beta tonight'
+      && place() === 'Chat' && w.location.pathname === `/chats/${id}` && dialogs() === 0,
+    `${asked.map((a) => a.type).join(',')} · ${place()} · ${w.location.pathname} · ${dialogs()}`);
+
+  // 2 · Ice Box and Start now
+  const cards = [];
+  for (const [label, column] of [['Ice Box', 'ice_box'], ['Start now', 'in_progress']]) {
+    await press('0');
+    await click(mode(label));
+    asked.length = 0;
+    await type(field(), '@quire write the retry doc');
+    await click(send());
+    await settle();
+    cards.push({ column, asked: asked.map((a) => ({ type: a.type, data: a.data })), dialogs: dialogs(),
+                 home: home() });
+  }
+  ok('Ice Box writes the card into Ice Box and Start now into In Progress, starting no chat and asking nothing',
+    cards.every((c) => c.asked.some((a) => a.type === 'divan.card.create' && a.data.column === c.column
+        && a.data.project_id === 'p-quire' && a.data.title === 'write the retry doc')
+      && !c.asked.some((a) => a.type === 'chat.create' || a.type === 'divan.card.move'
+        || a.type.startsWith('ustabasi.'))
+      && c.dialogs === 0 && c.home),
+    JSON.stringify(cards));
+
+  // 3 · the four chips
+  await press('0');
+  await click(mode('Ask'));
+  const defaults = ['Project', 'Agent', 'Account', 'Model'].map((n) => value(n));
+  await click(picker('Model').querySelector('button'));
+  const listed = [...doc.querySelectorAll('[role="menu"] [role="menuitemradio"]')].map((b) => b.firstElementChild.textContent);
+  await click(option('Sonnet 5'));
+  await click(picker('Account').querySelector('button'));
+  await click(option('yakup@…'));
+  const changed = ['Model', 'Account'].every((n) => picker(n).querySelector('[data-changed="true"]')
+    && picker(n).querySelector('.dv-picker-x'));
+  asked.length = 0;
+  await type(field(), 'which plan am I on');
+  await click(send());
+  await settle();
+  const create = asked.find((a) => a.type === 'chat.create')?.data ?? {};
+  await press('0');
+  const reset = value('Model');
+  ok('four chips show the defaults, list what the computer reports, mark a changed one with an ×, and that is what chat.create carries',
+    JSON.stringify(defaults) === JSON.stringify(['auto', 'Hermes', "This computer's account", 'Opus 5'])
+      && JSON.stringify(listed) === JSON.stringify(['Opus 5', 'Sonnet 5'])
+      && changed && create.model === 'claude-sonnet-5' && create.account_id === 'a2'
+      && create.agent_id === 'hermes' && reset === 'Opus 5',
+    `${JSON.stringify(defaults)} ${JSON.stringify(listed)} ${changed} ${JSON.stringify(create)} ${reset}`);
+
+  // 4 · @project is the scope chip
+  await type(field(), '@quire why is the retry policy like this ');
+  const typedChip = doc.querySelector('.dv-scope .dv-chip[aria-pressed="true"]')?.textContent ?? null;
+  const left = field().value;
+  await click(doc.querySelector('.dv-scope .dv-chip'));
+  await click(doc.querySelector('.dv-scope .dv-chip--add'));
+  await click(option('Quire'));
+  const pressedChip = doc.querySelector('.dv-scope .dv-chip[aria-pressed="true"]')?.textContent ?? null;
+  asked.length = 0;
+  await click(send());
+  await settle();
+  const scoped = asked.find((a) => a.type === 'chat.create')?.data ?? {};
+  ok('typing @quire makes the same scope chip as pressing it, and the call opens in that project',
+    typedChip === pressedChip && /Quire/.test(typedChip ?? '') && left === 'why is the retry policy like this '
+      && scoped.cwd === '/w/quire',
+    `${typedChip} vs ${pressedChip} · «${left}» · ${scoped.cwd}`);
+
+  // 5 · Needs you
+  await press('0');
+  const amber = doc.querySelector('[data-wait="studio:k2"] .dv-btn--amber');
+  asked.length = 0;
+  await click(amber);
+  await settle();
+  const note = asked.find((a) => a.type === 'ustabasi.note');
+  await click([...doc.querySelectorAll('[data-wait="studio:k2"] button')].find((b) => b.textContent === 'Open'));
+  const opened = w.location.pathname;
+  await act(async () => { seed(useDivanStore, { snaps: board('calm') }); });
+  await press('0');
+  ok('Needs you answers in one press with the same note the question window sent, Open goes to the ticket, and with nothing waiting the section is not in the DOM',
+    amber?.textContent === 'Use the live ones now' && note?.key === 'studio' && note?.data.id === 42
+      && note?.data.text === 'Use the live ones now' && opened === '/p/quire/c/k2'
+      && !doc.querySelector('#needs-you') && !text().includes('Needs you'),
+    `${amber?.textContent} ${JSON.stringify(note)} ${opened}`);
+
+  // 6 · tiles and the summary line
+  const calmLine = doc.querySelector('[data-summary]')?.textContent ?? '';
+  await act(async () => { seed(useDivanStore, { snaps: board('slow') }); });
+  const tiles = [...doc.querySelectorAll('a[data-tile]')];
+  const order = tiles.map((a) => `${a.dataset.tile}${a.classList.contains('dv-tile--dormant') ? '*' : ''}`);
+  await act(async () => { seed(useDivanStore, { snaps: board('busy') }); });
+  const busyLine = doc.querySelector('[data-summary]')?.textContent ?? '';
+  const totals = (await import(pathToFileURL(join(out, 'src/lib/divan.js')).href))
+    .merge([{ key: 'studio', name: 'studio', state: board('busy').studio }], now).totals;
+  await click(tile('quire'));
+  const tileWent = w.location.pathname;
+  ok('tiles open the project, dormant ones come last and dimmed, and the line counts off the boards and says nothing is stuck at zero',
+    tileWent === '/p/quire' && order.join(' ') === 'pebble the-long-walk*'
+      && /nothing needs you/.test(calmLine) && /nothing is stuck/.test(calmLine)
+      && busyLine.includes(`${totals.needsYou} things need you`) && busyLine.includes(`${totals.running} working`)
+      && (totals.stuck ? busyLine.includes(`${totals.stuck} stuck`) : busyLine.includes('nothing is stuck')),
+    `${tileWent} · ${order.join(' ')} · «${calmLine}» · «${busyLine}» · ${JSON.stringify(totals)}`);
+
+  // 7 · Back, reload, and every old destination
+  await act(async () => {
+    const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+    w.history.back();
+    await landed;
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  const backHome = home() && w.location.pathname === '/';
+  const reloads = [];
+  for (const path of ['/p/quire', '/machine/accounts', '/chats', '/']) {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+    reloads.push(path === '/p/quire' ? head() === 'Quire' : path === '/' ? home()
+      : path === '/chats' ? place() === 'Chat' : page() === 'Accounts & sign-ins');
+  }
+  await press('k');
+  const offered = [...doc.querySelectorAll('[data-i]')].map((e) => e.textContent ?? '').join(' | ');
+  await press('k');
+  const wanted = ['New chat', 'Dashboard', 'Chat', 'Machine',
+    ...MACHINE_ROWS.map((r) => `Machine › ${r.label}`), 'Machine › Folders', 'Machine › Agents on this computer',
+    'Machine › Update', 'Machine › This computer', 'Machine › Sessions and plan limits', 'Light theme'];
+  ok('Back from a project is the Dashboard, a reload redraws the page it was on, and every old destination is offered',
+    backHome && reloads.every(Boolean) && wanted.every((x) => offered.includes(x))
+      && !!nav('Chats') && !!nav('Machine'),
+    `${backHome} ${JSON.stringify(reloads)} ${wanted.filter((x) => !offered.includes(x))}`);
+
+  // 8 · low quota on the account in use, and still nothing asked
+  const account = picker('Account').querySelector('button');
+  asked.length = 0;
+  await type(field(), 'is the plan nearly spent');
+  await click(send());
+  await settle();
+  ok('the account in use is under the line: its chip carries an amber dot and the words, and the send still asks nothing',
+    /low quota/.test(account.getAttribute('aria-label') ?? '') && !!account.querySelector('.dv-dot--ask')
+      && account.textContent.includes('low quota')
+      && asked.some((a) => a.type === 'chat.create') && dialogs() === 0,
+    `${account.getAttribute('aria-label')} · ${asked.map((a) => a.type)}`);
+}
+
+group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
+{
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+  const now = Math.floor(Date.now() / 1000);
+  const base = boards(now).busy[0].snap;
+  const c = (id, over) => ({ ...base.cards[0], id, ustabasi_id: null, agent_status: null,
+    agent_status_at: null, agent_detail: '', summary: '', ...over });
+  const snap = { ...base, cards: [...base.cards,
+    c('q1', { column: 'queued', position: 0, title: 'Bulk invite' }),
+    c('q2', { column: 'queued', position: 1, title: 'Zapier hook' }),
+    c('q3', { column: 'queued', position: 2, title: 'Audit log' }),
+    c('r1', { column: 'review', title: 'Payment flow', agent_status: 'running', agent_status_at: now - 480 }),
+    c('i3', { column: 'in_progress', position: 2, title: 'Lesson search', agent_status: 'running', agent_status_at: now - 360 }),
+    c('i4', { column: 'in_progress', position: 3, title: 'Certificate PDF', agent_status: 'running', agent_status_at: now - 2460 }),
+    c('i5', { column: 'in_progress', position: 4, title: 'Exam timer', agent_status: 'blocked', agent_status_at: now - 4300,
+              agent_detail: 'Test fails on Safari 17.' }),
+    ...[1, 2, 3, 4, 5].map((n) => c(`d${n}`, { column: 'done', title: `Shipped ${n}`, moved_at: now - n * 86400 })),
+  ] };
+  await act(async () => {
+    seed(useDivanStore, { snaps: { studio: answered(snap, now) } });
+    useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS });
+    useDock.setState({ minimised: ['studio:k2', 'studio:h1', 'studio:i5'], closed: {}, raised: [] });
+  });
+  await press('0');
+  await click(tile('quire'));
+  const seg = (label) => find(label, doc.querySelector('[aria-label="View"]'));
+  const pressed = () => doc.querySelector('[aria-label="View"] [aria-pressed="true"]')?.textContent ?? null;
+  const reload = async (path) => {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+  };
+  const goBack = async () => {
+    await act(async () => {
+      const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+      w.history.back();
+      await landed;
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  };
+
+  // 2 · the head and the segment
+  const meta = doc.querySelector('.dv-phead [data-meta]')?.textContent ?? '';
+  const headOk = !!doc.querySelector('.dv-phead .dv-mono') && head() === 'Quire'
+    && doc.querySelector('.dv-phead [data-description]')?.textContent === 'client portals for studios'
+    && meta.startsWith('live since') && !doc.querySelector('.dv-stage')
+    && !/\bIdea\b[\s\S]*\bGrowth\b/.test(text());
+  await click(seg('Board'));
+  const onBoard = w.location.pathname === '/p/quire/board' && !!doc.querySelector('section.dv-col');
+  await click(seg('Chats'));
+  const onChats = w.location.pathname.startsWith('/p/quire/chat') && pressed() === 'Chats';
+  await click(seg('Overview'));
+  const onOverview = w.location.pathname === '/p/quire' && !!doc.querySelector('[data-counts]');
+  await click(seg('Board'));
+  await goBack();
+  const backed = w.location.pathname === '/p/quire' && pressed() === 'Overview';
+  const reloads = [];
+  for (const [path, word] of [['/p/quire/board', 'Board'], ['/p/quire/chat', 'Chats'], ['/p/quire', 'Overview']]) {
+    await reload(path);
+    reloads.push(pressed() === word && w.location.pathname.startsWith(path));
+  }
+  ok('the head is monogram, name, one sentence and a meta line with the stage as a word, no stage bar; the segment switches the view and each path survives reload and Back',
+    headOk && onBoard && onChats && onOverview && backed && reloads.every(Boolean),
+    JSON.stringify({ headOk, meta, onBoard, onChats, onOverview, backed, reloads }));
+
+  // 3 · the board summary
+  const counted = Object.fromEntries([...doc.querySelectorAll('[data-count]')]
+    .map((a) => [a.dataset.count, Number(a.querySelector('.n')?.textContent)]));
+  const rows = [...doc.querySelectorAll('[data-in-progress] [data-row]')]
+    .map((r) => [r.querySelector('.dv-status')?.textContent, r.querySelector('.t')?.textContent]);
+  await click(seg('Board'));
+  const columnCount = (name) => Number(doc.querySelector(`section.dv-col[aria-label="${name}"] .dv-sec .dv-meta`)?.textContent);
+  const fromColumns = { ice_box: columnCount('Ice Box'), queued: columnCount('Queued'),
+    in_progress: columnCount('In Progress'), done: columnCount('Done') };
+  ok('the board summary counts the four real columns, and In progress now lists five In Progress cards with their status words',
+    JSON.stringify(counted) === JSON.stringify(fromColumns)
+    && JSON.stringify(counted) === JSON.stringify({ ice_box: 1, queued: 3, in_progress: 6, done: 5 })
+    && rows.length === 5 && ['stuck', 'asking', 'testing', 'running'].every((w2) => rows.some((r) => r[0] === w2)),
+    JSON.stringify({ counted, fromColumns, rows }));
+
+  // 6 · asking edge, and Done this month
+  const card = (words) => [...doc.querySelectorAll('article.dv-card')].find((e) => (e.textContent ?? '').includes(words)) ?? null;
+  const doneCards = () => doc.querySelectorAll('section.dv-col[aria-label="Done"] article').length;
+  const css = readFileSync(join(web, 'src', 'styles', 'divan-app.css'), 'utf8');
+  const asking = card('Stripe keys');
+  const shownBefore = doneCards();
+  const more = find('Show 2 more');
+  if (more) await click(more);
+  ok('an asking card carries the amber edge and the word asking; Done shows this month with Show N more revealing the rest',
+    asking?.dataset.status === 'ask' && (asking.querySelector('.dv-status')?.textContent === 'asking')
+    && /\.dv-card\[data-status="ask"\]\{border-color:color-mix\(in srgb,var\(--amber\)/.test(css)
+    && shownBefore === 3 && !!more && doneCards() === 5 && !find('Show 2 more'),
+    `${asking?.dataset.status} · ${shownBefore} → ${doneCards()}`);
+
+  // 8 · Queued is the priority order
+  const column = (name) => doc.querySelector(`section.dv-col[aria-label="${name}"]`);
+  asked.length = 0;
+  const lift = new Transfer();
+  await drag(card('Audit log'), 'dragstart', lift);
+  await drag(card('Bulk invite'), 'dragover', lift);
+  await drag(card('Bulk invite'), 'drop', lift);
+  const reordered = asked.find((a) => a.type === 'divan.card.move');
+  ok('a Queued card dropped on another Queued card takes its place, which is the priority',
+    reordered?.data.card_id === 'q3' && reordered.data.column === 'queued' && reordered.data.position === 0,
+    JSON.stringify(reordered));
+
+  // 1 · Queued → In Progress starts it, asking nothing
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  asked.length = 0;
+  const start = new Transfer();
+  await drag(card('Bulk invite'), 'dragstart', start);
+  await drag(column('In Progress'), 'dragover', start);
+  await drag(column('In Progress'), 'drop', start);
+  await settle();
+  ok('dragging a card from Queued into In Progress issues divan.card.move with In Progress, and no confirmation appears',
+    asked.some((a) => a.type === 'divan.card.move' && a.data.card_id === 'q1' && a.data.column === 'in_progress')
+    && doc.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]').length === 0
+    && (column('In Progress').textContent ?? '').includes('Bulk invite'),
+    JSON.stringify(asked.map((a) => [a.type, a.data?.column])));
+
+  // 4 · branches
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  await click(seg('Overview'));
+  const seo = doc.querySelector('[data-branch="SEO"]');
+  const eng = doc.querySelector('[data-branch="Engineering"]');
+  const seoOk = seo?.dataset.connected === 'false'
+    && (seo.textContent ?? '').includes('Source not connected yet.') && !/\d/.test(seo.textContent ?? '');
+  await click(eng);
+  ok('a branch with no source says Source not connected yet. and no number; a connected one opens the branch page',
+    seoOk && eng?.dataset.connected === 'true' && w.location.pathname === '/p/quire/b/Engineering',
+    `${seo?.textContent} · ${w.location.pathname}`);
+  await goBack();
+
+  // 7 · the Composer at the foot is locked
+  const scope = doc.querySelector('.dv-composer .dv-scope');
+  const locked = scope?.querySelector('[data-locked]');
+  const removable = [...(scope?.querySelectorAll('button') ?? [])].length
+    + doc.querySelectorAll('.dv-composer [data-picker="Project"]').length;
+  await click(find('Ice Box', doc.querySelector('.dv-composer [aria-label="Mode"]')));
+  await type(doc.querySelector('#composer-in'), '@hush Write the changelog ');
+  asked.length = 0;
+  await click(doc.querySelector('.dv-composer button[aria-label="Send"]'));
+  await settle();
+  const sent = asked.find((a) => a.type === 'divan.card.create');
+  // 8 · what the old page could do: Still open's thread, from the side column
+  const post = [...doc.querySelectorAll('aside [role="button"]')]
+    .find((e) => (e.textContent ?? '').includes('Payment provider keys')) ?? null;
+  if (post) await click(post);
+  const say = [...doc.querySelectorAll('aside input')]
+    .find((i) => (i.getAttribute('placeholder') ?? '').startsWith('Say something')) ?? null;
+  if (say) await type(say, 'Bedirhan has the account');
+  asked.length = 0;
+  if (say) await act(async () => { say.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  ok('Still open sits in the side column and its thread still takes a comment',
+    !!post && asked.some((a) => a.type === 'divan.project.open' && a.data.comment === 'Bedirhan has the account'),
+    JSON.stringify(asked.map((a) => [a.type, a.data?.comment])));
+
+  ok('the Composer at the foot of a project carries that project, and its chip cannot be removed',
+    (locked?.textContent ?? '').includes('Quire') && removable === 0
+    && sent?.data.project_id === 'p-quire' && sent.data.column === 'ice_box',
+    `${removable} · ${JSON.stringify(sent?.data)}`);
+}
+
+group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
+{
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+  const now = Math.floor(Date.now() / 1000);
+  const base = boards(now).busy[0].snap;
+  const c = (id, over) => ({ ...base.cards[0], id, summary: '', agent_detail: '', ...over });
+  const snap = {
+    ...base,
+    projects: base.projects.map((p) => (p.slug !== 'quire' ? p : { ...p, open_items: [
+      { id: 'o1', project_id: p.id, title: 'Generate a Shopier API key', body: 'Paste it into the project.',
+        state: 'todo', owner: '', area: 'payments', sort: 0, comments: [], created_at: now - 3 * 86400,
+        updated_at: now - 3 * 86400, closed_at: null },
+      { id: 'o2', project_id: p.id, title: 'Domain transfer', body: '', state: 'waiting', owner: 'Bedirhan',
+        area: '', sort: 1, comments: [], created_at: now - 5 * 86400, updated_at: now, closed_at: null },
+    ] })),
+    cards: [
+      ...base.cards.filter((x) => x.id !== 'k2'),
+      c('k2', { title: 'Stripe keys', agent_status: 'asking', agent_status_at: now - 1800, ustabasi_id: 42,
+                summary: 'Live keys go in before launch.',
+                agent_detail: 'The test keys work. Use the live ones now, or wait for the review?' }),
+      c('dc', { title: 'Paywall copy', executor: 'assistant', agent_status: 'asking', agent_status_at: now - 3600,
+                ustabasi_id: 43, agent_detail: 'Keep the calm version, or test the urgent one?' }),
+      c('s1', { title: 'Exam timer', agent_status: 'blocked', agent_status_at: now - 9000, ustabasi_id: 45,
+                agent_detail: 'Test fails on Safari 17.' }),
+      c('q1', { title: 'Audit log', column: 'queued', position: 0, agent_status: 'queued', agent_status_at: now - 100,
+                ustabasi_id: 46 }),
+    ],
+  };
+  const FACE = { goal: 'Make the retries survive a restart', done_criteria: ['retries survive a restart'],
+                 verify_cmd: 'npm test -- retries', constraints: [], paths: ['src/webhooks/retry.ts'], notes: '' };
+  const STATUS = { 41: 'running', 42: 'blocked', 43: 'blocked', 45: 'failed', 46: 'queued' };
+  const prior = useFleet.getState().call;
+  let page41 = 0;
+  await act(async () => {
+    useFleet.setState({ call: async (key, type, data) => {
+      if (type === 'divan.card.get') {
+        asked.push({ key, type, data });
+        const card = snap.cards.find((x) => x.id === data.card_id);
+        const id = card?.ustabasi_id ?? null;
+        return { card: { ...card, agent: FACE }, project: null, run: null,
+          ticket: id == null ? null : queueTicket({ id, title: card.title, status: STATUS[id] ?? 'running',
+            ask: card.agent_detail, escalation: '', notes: [], note_count: 0, verdict: null, steps: [],
+            started_at: now - 900, round_started_at: now - 900, created_at: now - 3600, last_event: null }) };
+      }
+      if (type === 'ustabasi.run' && data.id === 41) {
+        runAsks.push(data);
+        page41 += 1;
+        return { available: true, reason: '', run: 'r-41', live: true, caught_up: false, shots: [],
+          cursor: `c${page41}`, reset: !data.cursor,
+          events: data.cursor ? [{ k: 'text', text: `Wrote step ${page41}` }]
+            : [{ k: 'text', text: 'Reading the webhook handler first.' }] };
+      }
+      if (type === 'divan.project.open') {
+        asked.push({ key, type, data });
+        return { project_id: data.project_id, open_items: [] };
+      }
+      return prior(key, type, data);
+    } });
+    seed(useDivanStore, { snaps: { studio: answered(snap, now) } });
+    useDock.setState({ minimised: ['studio:k2', 'studio:dc', 'studio:s1', 'studio:h1'], closed: {}, raised: [] });
+  });
+  const reload = async (path) => {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+  };
+  const backBtn = () => doc.querySelector('header .dv-back');
+  const goBack = async () => {
+    await act(async () => {
+      const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+      backBtn().dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+      await landed;
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await settle();
+  };
+  const sent = (type, pred) => asked.some((a) => a.type === type && a.key === 'studio' && pred(a.data));
+  const live = () => [...doc.querySelectorAll('[data-live] .dv-live')]
+    .map((r) => [r.querySelector('.dv-step-at')?.textContent ?? '', r.querySelector('.t')?.textContent ?? '']);
+  const byText = (sel, words, within = doc) => [...within.querySelectorAll(sel)]
+    .find((e) => (e.textContent ?? '').trim() === words) ?? null;
+
+  // 5 · Waiting on you
+  await reload('/');
+  const seeAll = byText('#needs-you ~ a, .dv-sec a', 'See all');
+  await click(seeAll);
+  const title = doc.querySelector('h1.dv-waiting-title')?.textContent;
+  const groups = [...doc.querySelectorAll('[data-waiting] [data-group] h3')].map((h) => h.textContent);
+  const asking = [...doc.querySelectorAll('[data-group="w-asking"] [data-wait]')].map((e) => e.dataset.wait);
+  const plate = [...doc.querySelectorAll('[data-group="w-plate"] [data-plate]')].map((e) => e.dataset.plate);
+  const k2 = doc.querySelector('[data-wait="studio:k2"]');
+  asked.length = 0;
+  await click(byText('button', 'Use the live ones now', k2));
+  const noted = sent('ustabasi.note', (d) => d.id === 42 && d.text === 'Use the live ones now');
+  const k2Gone = !doc.querySelector('[data-wait="studio:k2"]');
+  const cardItem = doc.querySelector('[data-plate="studio:h1"]');
+  const openItem = doc.querySelector('[data-plate="quire:o1"]');
+  await click(byText('button', 'Mark done', cardItem));
+  await click(byText('button', 'Comment', openItem));
+  await type(openItem.querySelector('input'), 'Bedirhan has the account');
+  await act(async () => { openItem.querySelector('form').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); });
+  await settle();
+  await click(byText('button', 'Mark done', doc.querySelector('[data-plate="quire:o1"]')));
+  const moved = sent('divan.card.move', (d) => d.card_id === 'h1' && d.column === 'done');
+  const commented = sent('divan.project.open', (d) => d.item_id === 'o1' && d.comment === 'Bedirhan has the account');
+  const closed = sent('divan.project.open', (d) => d.item_id === 'o1' && d.set?.state === 'done');
+  ok('Waiting on you: the title states the counts, three groups oldest first, an answer is one press, and Mark done / Comment send their calls',
+    w.location.pathname === '/waiting' && title === '3 answers, 2 tasks.'
+    && JSON.stringify(groups) === JSON.stringify(['An agent is asking', 'A decision', 'On your plate'])
+    && JSON.stringify(asking) === JSON.stringify(['studio:s1', 'studio:k2'])
+    && JSON.stringify(plate) === JSON.stringify(['quire:o1', 'studio:h1'])
+    && noted && k2Gone && moved && commented && closed,
+    JSON.stringify({ path: w.location.pathname, title, groups, asking, plate, noted, k2Gone, moved, commented, closed }));
+
+  // 1 · the asking card on the ticket, opened from Waiting on you
+  await reload('/waiting');
+  await click(byText('a', 'Open ticket', doc.querySelector('[data-wait="studio:k2"]')));
+  await settle();
+  const card = doc.querySelector('[data-asking]');
+  const amber = !!card && card.classList.contains('dv-ask') && !card.classList.contains('dv-ask--stuck')
+    && (card.textContent ?? '').includes('Use the live ones now, or wait for the review?');
+  asked.length = 0;
+  await click(byText('button', 'Use the live ones now', card));
+  await settle();
+  ok('the agent’s question is an amber-edged card; an answer sends ustabasi.note and the card leaves the asking state',
+    amber && sent('ustabasi.note', (d) => d.id === 42 && d.text === 'Use the live ones now')
+    && !doc.querySelector('[data-asking]') && !!doc.querySelector('[data-status="answered"]'),
+    JSON.stringify({ amber, asked: asked.map((a) => [a.type, a.data?.text]) }));
+
+  // 2 · one sentence into the run
+  asked.length = 0;
+  await type(doc.getElementById('t-say'), 'Batch the commit');
+  await act(async () => { doc.querySelector('[data-live] form.dv-say').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); });
+  await settle();
+  const said = live().find(([, t]) => t === 'You: Batch the commit');
+  ok('a sentence typed into Say one sentence to the agent is sent as ustabasi.note to that ticket and appears in Live',
+    !!doc.querySelector('label[for="t-say"]') && sent('ustabasi.note', (d) => d.id === 42 && d.text === 'Batch the commit')
+    && !!said && /^\d\d:\d\d$/.test(said[0]), JSON.stringify(live()));
+
+  // 7 · Back returns to where the ticket was opened from
+  const backLabel = backBtn()?.textContent;
+  await goBack();
+  const toWaiting = w.location.pathname === '/waiting' && !!doc.querySelector('[data-waiting]');
+
+  // 4 · the agent face and the side column
+  await reload('/p/quire/board');
+  const title1 = [...doc.querySelectorAll('.dv-card-title')].find((b) => b.textContent === 'Webhook retry policy');
+  await click(title1);
+  await settle();
+  const face = doc.querySelector('details[data-agent-face]');
+  const shut = !!face && !face.open;
+  if (face) { face.open = true; }
+  const terms = [...(face?.querySelectorAll('dt') ?? [])].map((d) => d.textContent);
+  const rows = [...doc.querySelectorAll('[data-side] .dv-side-row .l')].map((l) => l.textContent);
+  const human = doc.querySelector('[data-human]')?.textContent ?? '';
+  asked.length = 0;
+  await click(doc.querySelector('[data-side] [aria-haspopup="menu"]'));
+  await click(byText('[role="menuitemradio"]', 'Research'));
+  ok('the agent face is shut on open and holds Goal, Done when, Test, Files; the side column is the six rows and Executor sends divan.card.executor',
+    shut && JSON.stringify(terms.slice(0, 4)) === JSON.stringify(['Goal', 'Done when', 'Test', 'Files'])
+    && JSON.stringify(rows) === JSON.stringify(['Column', 'Executor', 'Machine', 'Branch', 'Runs alone', 'Opened'])
+    && !human.includes(FACE.goal) && !human.includes(FACE.verify_cmd)
+    && sent('divan.card.executor', (d) => d.card_id === 'k1' && d.executor === 'assistant'),
+    JSON.stringify({ shut, terms, rows }));
+
+  // 3 · Live moves while the run is going
+  const first = live();
+  await act(async () => { await new Promise((r) => setTimeout(r, 2800)); });
+  await settle();
+  const later = live();
+  const fresh = later.find(([, t]) => /^Wrote step \d/.test(t));
+  ok('Live shows the run’s latest steps as a mono time and a sentence, and grows while the run goes without a reload',
+    first.some(([, t]) => t.startsWith('Reading the webhook handler first.'))
+    && !!fresh && /^\d\d:\d\d$/.test(fresh[0]) && later.length > first.length
+    && !!doc.querySelector('[data-live] .dv-step-at.dv-meta'),
+    JSON.stringify({ first, later }));
+
+  // the frame's Move back to Queued, under the side column
+  asked.length = 0;
+  await click(byText('aside button', 'Move back to Queued'));
+  ok('Move back to Queued on an in-progress ticket sends divan.card.move to queued',
+    sent('divan.card.move', (d) => d.card_id === 'k1' && d.column === 'queued'), JSON.stringify(asked));
+
+  // 7 · every queue action the wall's ticket window offers, on the ticket
+  const btn = (label) => byText('[data-queue] button', label);
+  const offered = { running: [] };
+  offered.running = [...doc.querySelectorAll('[data-queue] button')].map((b) => b.textContent);
+  asked.length = 0;
+  await click(btn('Stop'));
+  const stopped = sent('ustabasi.cancel', (d) => d.id === 41);
+  await reload('/p/quire/c/q1');
+  const cold = !!doc.querySelector('[data-ticket="q1"]');
+  offered.queued = [...doc.querySelectorAll('[data-queue] button')].map((b) => b.textContent);
+  await click(btn('Run next'));
+  const nexted = sent('ustabasi.priority', (d) => d.id === 46);
+  const coldBack = backBtn()?.textContent;
+  await reload('/p/quire/c/s1');
+  offered.failed = [...doc.querySelectorAll('[data-queue] button')].map((b) => b.textContent);
+  await click(btn('Restart'));
+  await click(btn('Edit'));
+  await type(doc.getElementById('q-goal'), 'Make the timer work on Safari 17');
+  await act(async () => { doc.querySelector('form.dv-editor').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); });
+  await settle();
+  await click(btn('Delete'));
+  await click(byText('button', 'Delete it'));
+  await settle();
+  const queueOk = sent('ustabasi.restart', (d) => d.id === 45)
+    && sent('ustabasi.edit', (d) => d.id === 45 && d.goal === 'Make the timer work on Safari 17')
+    && sent('ustabasi.delete', (d) => d.id === 45);
+  await click(backBtn());
+  await settle();
+  ok('run next, stop, restart, edit and delete are on the ticket; a ticket link opened cold draws it, and Back returns to where it was opened from',
+    JSON.stringify(offered) === JSON.stringify({ running: ['Stop', 'Delete'], queued: ['Run next', 'Edit', 'Delete'], failed: ['Restart', 'Edit', 'Delete'] })
+    && stopped && nexted && queueOk && cold && toWaiting && backLabel === 'Waiting on you'
+    && coldBack === 'Quire · Board' && w.location.pathname === '/p/quire/board',
+    JSON.stringify({ offered, stopped, nexted, queueOk, cold, toWaiting, backLabel, coldBack, path: w.location.pathname }));
+
+  // 6 · nothing waiting
+  const calm = boards(now).calm[0].snap;
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(calm, now) } }); });
+  await reload('/waiting');
+  const page = doc.querySelector('[data-waiting]');
+  const one = page?.textContent;
+  await reload('/');
+  ok('with nothing waiting the page is one sentence and the Dashboard has no Needs you',
+    one === 'Nothing is waiting on you.' && !page.querySelector('[data-group], p') && !doc.getElementById('needs-you')
+    && home(), JSON.stringify({ one }));
+  await act(async () => { useFleet.setState({ call: prior }); });
+}
+
+group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
+{
+  const { useLogs, logKey } = await load('src/lib/timeline.js');
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+  const reload = async (path) => {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+  };
+  const sent = (type, pred = () => true) => asked.some((a) => a.type === type && pred(a.data ?? {}));
+  const byText = (sel, words, within = doc) => [...within.querySelectorAll(sel)]
+    .find((e) => (e.textContent ?? '').trim() === words) ?? null;
+  const now = Date.now() / 1000;
+  const prior = useFleet.getState().call;
+  const priorDivan = useDivanStore.getState().snaps;
+  let studioSnap = fixture.studio();
+  await act(async () => {
+    useFleet.setState({ call: async (key, type, data) => {
+      if (type === 'divan.snapshot') {
+        if (key === 'studio') return studioSnap;
+        throw new Error('That computer did not answer');
+      }
+      if (type === 'agent.store') {
+        asked.push({ key, type, data });
+        return { sources: [{ id: 'hermes', label: 'Hermes', repo: 'x/hermes', note: '',
+          items: [{ id: 'reviewer', label: 'Reviewer', glyph: 'R', about: 'reads a diff' }] }] };
+      }
+      return prior(key, type, data);
+    } });
+    seed(useDivanStore, { snaps: { studio: answered(studioSnap, now) } });
+  });
+
+  // The conversation the Chat place lands on: filed under Quire, a picture in
+  // the question, an approval waiting, and two tickets its agent filed — one
+  // the board has a card for (#41, k1) and one it has not (#99).
+  const host = fakeHost();
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...host, chats: host.chats.map((c) => (
+      c.id === 'c1' ? { ...c, project_id: 'p-quire', updated_at: now - 5 } : { ...c, updated_at: now - 120 })) } } });
+    seed(useLogs, { logs: { [logKey('studio', 'c1')]: {
+      items: [
+        { kind: 'user', id: 'u1', ts: now - 300, text: 'Students keep asking about refunds.', queued: false,
+          attachments: [{ kind: 'image', path: '/tmp/refunds.png', name: 'refunds.png' }] },
+        { kind: 'assistant', id: 'a1', ts: now - 290, segment: 0, text: 'Agreed. I put it in Ice Box.', done: true },
+        { kind: 'tool', id: 't1', ts: now - 280, tool: 'Bash', input: { command: 'ustabasi add retry.json' },
+          output: '#41 queued: Webhook retry policy  (worker opus, verifier opus)', isError: false, running: false },
+        { kind: 'tool', id: 't2', ts: now - 270, tool: 'Bash', input: { command: 'ustabasi add refund.json' },
+          output: '#99 queued: Refund policy page  (worker opus, verifier opus)', isError: false, running: false },
+        { kind: 'approval', id: 'p1', ts: now - 260, requestId: 'r9', tool: 'Bash', input: { command: 'git push' },
+          preview: 'git push', danger: false, reason: null, decision: null },
+      ],
+      seq: 10, truncated: false, busy: false, pending: [], loading: false, error: null,
+    } } });
+  });
+
+  // 3 · lands writable, and every chat is still reachable
+  await reload('/chats');
+  const landed = place() === 'Chat' && !!doc.querySelector('textarea[name="composer"]')
+    && (doc.body.textContent ?? '').includes('Students keep asking about refunds.');
+  await reload('/p/quire/chat/c2');
+  const cold = (doc.body.textContent ?? '').includes('Safari login') && w.location.pathname === '/p/quire/chat/c2'
+    && !!doc.querySelector('textarea[name="composer"]');
+  await reload('/p/quire/chat');
+  const listed = [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('Webhook retry policy'));
+  await reload('/chats');
+  await click(find('Earlier'));
+  const row = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Invoice PDF'));
+  if (row) await click(row);
+  await settle();
+  const fromEarlier = w.location.pathname === '/chats/c3';
+  await click(find('Hide earlier'));
+  ok('the Chat place lands in a writable chat without a choice; /p/<project>/chat/<id> draws one cold, the project’s Chats lists it, and Earlier opens any other',
+    landed && cold && listed && fromEarlier, JSON.stringify({ landed, cold, listed, fromEarlier }));
+
+  // 1 · send, stream, bubble, interrupt, approval, picture, mic
+  w.SpeechRecognition = class { start() { setTimeout(() => this.onstart?.(), 0); } stop() { this.onend?.(); } abort() { this.onend?.(); } };
+  await reload('/chats');
+  let words = [...doc.querySelectorAll('div')].find((e) => [...e.childNodes]
+    .some((n) => n.nodeType === 3 && n.textContent === 'Students keep asking about refunds.'));
+  while (words && words.style?.background !== 'var(--dv-s2)') words = words.parentElement;
+  const bubble = !!words && words.parentElement?.style.justifyContent === 'flex-end';
+  const plain = [...doc.querySelectorAll('span, div, p')]
+    .find((e) => (e.textContent ?? '').trim() === 'Agreed. I put it in Ice Box.' && !e.querySelector('*'));
+  let lit = plain; let plainText = !!plain;
+  while (lit && lit !== doc.body) { if (lit.style?.background === 'var(--dv-s2)') plainText = false; lit = lit.parentElement; }
+  const picture = !!doc.querySelector('img[alt="refunds.png"], img[src*="refunds.png"]');
+  await type(doc.querySelector('textarea[name="composer"]'), 'How did the paywall copy do?');
+  await act(async () => {
+    doc.querySelector('textarea[name="composer"]').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+  await settle();
+  const said = sent('chat.send', (d) => d.chat_id === 'c1' && d.text === 'How did the paywall copy do?');
+  const feed = (seq, event, data = {}) => useLogs.getState().feed('studio', { seq, event, chat_id: 'c1', ts: now, data });
+  await act(async () => {
+    feed(11, 'message.user', { text: 'How did the paywall copy do?' });
+    feed(12, 'turn.started');
+    feed(13, 'text.delta', { segment: 1, text: 'The analytics source ' });
+  });
+  const half = (doc.body.textContent ?? '').includes('The analytics source');
+  await act(async () => { feed(14, 'text.delta', { segment: 1, text: 'is not connected yet.' }); });
+  const whole = (doc.body.textContent ?? '').includes('The analytics source is not connected yet.');
+  const stop = find('Stop') ?? labelledBtn('Stop');
+  if (stop) await click(stop);
+  const stopped = sent('chat.interrupt', (d) => d.chat_id === 'c1');
+  await act(async () => { feed(15, 'turn.done', {}); });
+  await click(find('Allow'));
+  const allowed = sent('approval.respond', (d) => d.request_id === 'r9' && d.decision === 'allow');
+  const dictate = labelledBtn('Dictate');
+  if (dictate) await click(dictate);
+  const listening = () => !!dictate && (dictate.getAttribute('aria-pressed') === 'true' || !!labelledBtn('Stop dictating')
+    || dictate.disabled);
+  // Starting to listen is asynchronous; a loaded machine takes longer than one settle.
+  for (let i = 0; i < 30 && !listening(); i++) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+  }
+  const mic = listening();
+  if (labelledBtn('Stop dictating')) await click(labelledBtn('Stop dictating'));
+  delete w.SpeechRecognition;
+  ok('a message sends chat.send and the reply streams in; the user is a right-hand --glass-2 bubble and Hermes plain text; interrupt, approval, the picture and the mic are there and work',
+    said && half && whole && bubble && plainText && stopped && allowed && picture && mic,
+    JSON.stringify({ said, half, whole, bubble, plainText, stopped, allowed, picture, mic }));
+
+  // 2 · filed under, and the card it filed
+  const rule = doc.querySelector('.dv-filed')?.textContent?.trim();
+  const link41 = doc.querySelector('.dv-cardlink[data-ticket="41"]');
+  const linkText = link41?.textContent ?? '';
+  await click(link41);
+  await settle();
+  const toCard = w.location.pathname === '/p/quire/c/k1';
+  await reload('/chats');
+  await click(doc.querySelector('.dv-cardlink[data-ticket="99"]'));
+  await settle();
+  const toQueue = w.location.pathname === '/machine/terminal';
+  ok('a chat filed under a project shows the thin rule, and a card it filed is a small link under the message that opens the ticket',
+    rule === 'filed under Quire' && linkText.includes('In Progress') && linkText.includes('Webhook retry policy')
+    && toCard && toQueue, JSON.stringify({ rule, linkText, toCard, toQueue }));
+
+  // 4 · four tabs, each at its own path; every page under one; the calls
+  await reload('/machine/machines');
+  const paths = [];
+  for (const label of ['Executors', 'Terminal', 'Settings', 'Machines']) {
+    await click(machineTab(label));
+    paths.push(w.location.pathname);
+  }
+  const under = {};
+  for (const [tab, pages] of [['Machines', ['screen', 'fleet', 'projects', 'admin', 'update']],
+                              ['Executors', ['agents', 'accounts']], ['Settings', ['preferences', 'quota']]]) {
+    await click(machineTab(tab));
+    for (const v of pages) {
+      await click(doc.querySelector(`nav a[href="/machine/${v}"]`));
+      under[v] = w.location.pathname === `/machine/${v}`;
+    }
+  }
+  // Terminal: a tile opened over the wall takes a command and shows what comes back.
+  await click(machineTab('Terminal'));
+  if (find('Chats')) await click(find('Chats'));
+  const addAll = [...doc.querySelectorAll('button')].find((b) => /^Add \d/.test((b.textContent ?? '').trim()));
+  if (addAll) await click(addAll);
+  const tileEl = [...doc.querySelectorAll('button')].find((b) => b.querySelector('button[title="Rename this chat"]')
+    && (b.textContent ?? '').includes('Webhook retry policy'));
+  if (tileEl) await click(tileEl);
+  await settle();
+  const box = doc.querySelector('textarea[name="composer"]');
+  if (box) {
+    await type(box, 'git status');
+    await act(async () => { box.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    await act(async () => { feed(16, 'text.delta', { segment: 2, text: 'On branch main, nothing to commit.' }); });
+  }
+  const command = sent('chat.send', (d) => d.chat_id === 'c1' && d.text === 'git status')
+    && (doc.body.textContent ?? '').includes('On branch main, nothing to commit.');
+  await act(async () => { w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  // agent.install, from Executors › Agents on this computer
+  await reload('/machine/agents');
+  await settle();
+  const install = find('Install');
+  if (install) await click(install);
+  await settle();
+  const installed = sent('agent.install', (d) => d.id === 'reviewer');
+  // account.login and account.delete, from Settings › This computer › Accounts
+  await reload('/machine/preferences');
+  const accountsRow = [...doc.querySelectorAll('nav button')].find((b) => (b.textContent ?? '').trim().startsWith('Accounts'));
+  if (accountsRow) await click(accountsRow);
+  await settle();
+  if (find('Sign in')) await click(find('Sign in'));
+  await settle();
+  if (find('Start')) await click(find('Start'));
+  await settle();
+  const login = sent('account.login', (d) => d.account_id === 'a3');
+  if (find('Cancel')) await click(find('Cancel'));
+  await settle();
+  const del = [...doc.querySelectorAll('button')].filter((b) => (b.textContent ?? '').trim() === 'Delete')[0];
+  if (del) await click(del);
+  await settle();
+  const confirmDel = [...doc.querySelectorAll('button')].filter((b) => (b.textContent ?? '').trim() === 'Delete').pop();
+  if (confirmDel) await click(confirmDel);
+  await settle();
+  const deleted = sent('account.delete');
+  ok('Machine has four tabs at their own paths; Screen, Agents, Accounts, Admin, Update and Preferences sit under one; Terminal takes a command; agent.install, account.login and account.delete still go out',
+    JSON.stringify(paths) === JSON.stringify(['/machine/executors', '/machine/terminal', '/machine/settings', '/machine/machines'])
+    && Object.values(under).every(Boolean) && Object.keys(under).length === 9
+    && command && installed && login && deleted,
+    JSON.stringify({ paths, under, command, installed, login, deleted }));
+
+  // 5 · unreachable, running, the quota ring
+  studioSnap = { ...fixture.studio(), quota: { enabled: true, accounts: 2, blocked: 0, spent: false,
+    left: 0.64, resets_at: now + 2 * 86_400, unknown: false } };
+  const mini = { ...fakeHost(), cfg: { ...fakeHost().cfg, name: 'mini' }, status: 'offline', chats: [] };
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: useFleet.getState().hosts.studio, mini }, order: ['studio', 'mini'] });
+    seed(useDivanStore, { snaps: { studio: answered(studioSnap, now),
+      mini: silent(answered(fixture.mini(), now - 3 * 3600), 'connection refused') } });
+  });
+  await reload('/machine/machines');
+  const card = (name) => doc.querySelector(`article[data-machine="${name}"]`);
+  const studioCard = card('studio')?.textContent ?? '';
+  const miniCard = card('mini');
+  const red = miniCard?.querySelector('.dv-status--stuck.dv-said');
+  const ring = doc.querySelector('[data-quota] .dv-ring');
+  const quotaText = doc.querySelector('[data-quota]')?.textContent ?? '';
+  const okRing = ring?.style.getPropertyValue('--p') === '64%' && !ring.classList.contains('dv-ring--low')
+    && quotaText.includes('64%') && /Resets/.test(quotaText) && !quotaText.includes('low');
+  await act(async () => { useThresholds.setState({ thresholds: { warn: 0.7, stop: 0.05 } }); });
+  const lowRing = doc.querySelector('[data-quota] .dv-ring')?.classList.contains('dv-ring--low')
+    && doc.querySelector('[data-quota] [data-low]')?.textContent === 'low';
+  await act(async () => { useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS }); });
+  ok('an unreachable machine says unreachable in red, that its data may be stale, and when it was last seen; an online one says what it runs; the ring is the real share and reset, amber with low when low',
+    red?.textContent === 'unreachable' && (miniCard?.textContent ?? '').includes('What it last reported may be stale.')
+    && (miniCard?.textContent ?? '').includes('last seen 3h') && studioCard.includes('Running 1: Webhook retry policy.')
+    && okRing && lowRing,
+    JSON.stringify({ red: red?.textContent, mini: miniCard?.textContent, studioCard, quotaText, okRing, lowRing }));
+
+  // 6 · Machine › Settings sets what the next new chat opens with
+  await reload('/machine/settings');
+  const pickSelect = async (id, value) => {
+    const el = doc.getElementById(id);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(w.HTMLSelectElement.prototype, 'value').set.call(el, value);
+      el.dispatchEvent(new w.Event('change', { bubbles: true }));
+    });
+  };
+  await pickSelect('default-model', 'claude-sonnet-5');
+  await pickSelect('default-account', 'a2');
+  await reload('/');
+  const chips = [...doc.querySelectorAll('.dv-picker')].map((b) => (b.textContent ?? '').trim());
+  ok('the default account and model set in Machine › Settings are what the composer’s chips show for the next chat',
+    chips.some((c) => c.includes('Sonnet 5')) && chips.some((c) => c.includes('yakup@')), JSON.stringify(chips));
+
+  // 7 · a branch page, connected and not
+  await reload('/p/quire/b/Engineering');
+  const page7 = doc.querySelector('[data-branch="Engineering"]');
+  const figs = page7?.querySelectorAll('[data-figures] .dv-count').length ?? 0;
+  const line7 = page7?.querySelector('[data-branch-line]')?.textContent ?? '';
+  const main7 = page7?.querySelector('.dv-cols2 > main')?.textContent ?? '';
+  const side7 = page7?.querySelector('.dv-cols2 > aside')?.textContent ?? '';
+  await reload('/p/hush/b/App%20Review');
+  const bare = doc.querySelector('[data-branch="App Review"]');
+  const bareText = bare?.textContent ?? '';
+  ok('a branch is its title, one status sentence with Updated <ago>, two or three figures, its list and tickets, What the agent did beside them; an unconnected one only says Source not connected yet.',
+    page7?.querySelector('h1')?.textContent === 'Engineering' && line7.includes('Bulk invite is three checks in.')
+    && /Updated .+ ago\.|Updated just now\./.test(line7) && figs >= 2 && figs <= 3
+    && main7.includes('Repositories') && main7.includes('Tickets') && main7.includes('Webhook retry policy')
+    && side7.includes('What the agent did')
+    && bare?.dataset.connected === 'false' && bareText === 'App ReviewSource not connected yet.'
+    && !bare.querySelector('[data-figures], .dv-cols2'),
+    JSON.stringify({ figs, line7, main7: main7.slice(0, 120), side7: side7.slice(0, 80), bareText }));
+
+  await act(async () => {
+    useFleet.setState({ call: prior });
+    seed(useDivanStore, { snaps: priorDivan });
+    seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'] });
+  });
+  await reload('/');
+}
+
 group('nothing was lost on the way');
 {
+  // Read here because the ticket pages are opened by the groups above.
+  ok('a ticket page asks for the report of its own ticket (ustabasi.report)',
+    queueReads.some((r) => r.type === 'ustabasi.report' && r.data?.id != null),
+    JSON.stringify(queueReads.filter((r) => r.type === 'ustabasi.report').slice(0, 2)));
   ok('no screen the panel opened let a rejection go unhandled',
     unhandled.length === 0, [...new Set(unhandled)].slice(0, 5).join('\n    '));
 }

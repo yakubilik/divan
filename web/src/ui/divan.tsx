@@ -38,8 +38,8 @@ export type DragProps = Pick<React.HTMLAttributes<HTMLElement>,
  *  The frames draw no pressed or hovered state, so neither is invented here:
  *  what a press does is the screen's business, and what it looks like is the
  *  browser's default cursor and nothing else. */
-function Tap({ onClick, title, current, drag, style, children }: {
-  onClick?: () => void; title?: string;
+function Tap({ onClick, title, current, drag, className, style, children }: {
+  onClick?: () => void; title?: string; className?: string;
   /** The one of a set that is where you are. The frames say it with a fill;
    *  this says it to a reader who cannot see one, and to a check. */
   current?: boolean;
@@ -47,9 +47,9 @@ function Tap({ onClick, title, current, drag, style, children }: {
   style: React.CSSProperties; children?: React.ReactNode;
 }) {
   const here = current ? ('page' as const) : undefined;
-  if (!onClick) return <div style={style} title={title} aria-current={here} {...drag}>{children}</div>;
+  if (!onClick) return <div className={className} style={style} title={title} aria-current={here} {...drag}>{children}</div>;
   return (
-    <button type="button" onClick={onClick} title={title} aria-current={here} {...drag}
+    <button type="button" className={className} onClick={onClick} title={title} aria-current={here} {...drag}
       style={{ ...style, border: style.border ?? 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
       {children}
     </button>
@@ -186,7 +186,7 @@ export function Row({
 }) {
   const t = tone ? toneColours(tone) : null;
   return (
-    <Tap onClick={onClick} style={{
+    <Tap onClick={onClick} className={wash && t ? 'dv-tinted' : undefined} style={{
       display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px',
       borderTop: first ? undefined : `1px solid ${T.line}`,
       background: wash && t ? t.bg : 'transparent',
@@ -522,21 +522,22 @@ export function ExecutorBadge({ executor, size = SIZE.executor, style }: {
   );
 }
 
-/** A project's letter on its own colour: `34px` at `border-radius:9px` on a
- *  project card (Web12 W1), `46px` at `13px` in a page head (Web14 W6), `18px`
- *  at `5px` in the agent roster — white on every one of the ramp's hues. */
+/** A project's letter: `.dv-mono` — the letter in ink on the second surface,
+ *  inside the 1px edge every surface wears. No colour: projects are told apart
+ *  by name. */
 export function Monogram({ name, index, size = SIZE.monogram, style }: {
   name: string;
-  /** The project's place in the list being drawn, where there is one: the ramp
-   *  is walked in order, so no two projects on a screen share a hue. */
+  /** The project's place in the list being drawn. Kept for the callers; the
+   *  monogram no longer changes with it. */
   index?: number | null;
   size?: number;
   style?: React.CSSProperties;
 }) {
   return (
     <span style={{
-      flex: 'none', width: size, height: size, borderRadius: Math.round(size * 0.27),
-      background: monogram(name, index), color: ON_COLOUR,
+      flex: 'none', width: size, height: size, borderRadius: Math.min(RADIUS.sm, Math.round(size * 0.3)),
+      background: monogram(name, index), color: T.ink, border: `1px solid ${T.line}`,
+      boxSizing: 'border-box',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: Math.round(size * 0.45), fontWeight: 600,
       ...style,
@@ -999,7 +1000,7 @@ export function Panel({ tone = 'amber', head, foot, width = SIZE.panel, height =
   children?: React.ReactNode;
 }) {
   return (
-    <section style={{
+    <section data-panel="" style={{
       width, height, boxSizing: 'border-box', flex: 'none',
       background: T.s1, borderRadius: RADIUS.card,
       boxShadow: `${outline(toneColours(tone).line)}, ${SHADOW.float}`,
@@ -1134,7 +1135,7 @@ export function Composer({ placeholder, value, onChange, onSend, style, after }:
   const margin = '0 12px 12px';
   const field = (
     <input
-      type="text" value={value} placeholder={placeholder}
+      type="text" value={value} placeholder={placeholder} aria-label={placeholder}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' || !onSend) return;
@@ -1273,7 +1274,7 @@ export function CommandBar({ placeholder, shortcut = '⌘K', value, onChange, on
         onClick={ready ? onSend : undefined} title={ready ? 'Send' : undefined}
         style={{
           flex: 'none', width: SIZE.send, height: SIZE.send, borderRadius: SIZE.send / 2,
-          background: ready ? T.red : T.line2, color: ready ? ON_COLOUR : T.ink,
+          background: ready ? T.ink : T.line2, color: ready ? T.onInk : T.ink,
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600,
         }}
       >↑</Tap>
@@ -1575,7 +1576,8 @@ export function Table({ columns, rows, empty, style }: {
         {columns.map((c, i) => <span key={i} style={{ minWidth: 0 }}>{c.label ?? ''}</span>)}
       </div>
       {rows.map((row) => (
-        <Tap key={row.key} onClick={row.onClick} title={row.title} style={{
+        <Tap key={row.key} onClick={row.onClick} title={row.title}
+          className={row.wash && row.tone ? 'dv-tinted' : undefined} style={{
           ...grid, alignItems: 'center', padding: '13px 18px', width: '100%',
           boxSizing: 'border-box', color: T.ink,
           borderTop: `1px solid ${T.line}`,

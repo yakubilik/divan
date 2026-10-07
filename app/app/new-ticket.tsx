@@ -8,14 +8,16 @@ import { projectState } from '../src/shell';
 import {
   LANDINGS, SUMMARY_MAX, draft, filing, opens, writer, type Landing,
 } from '../src/compose';
-import { Button, EmptyState } from '../src/components/divan';
+import { Button, EmptyState, Segments } from '../src/components/divan';
+import type { Key } from '../src/i18n';
 import { ComposeBar, ComposeFoot, ProjectRow, SentenceBox, TitleBox } from '../src/components/compose';
 import { Text } from '../src/components/text';
 import { useTokens } from '../src/theme';
 
-/** The fastest screen in the product (Mobile8 S9).
+/** New ticket (HANDOVER §4.5, Mobile8 S9).
  *
- *  A title and, if there is one, two or three sentences. That is the whole
+ *  A title and, if there is one, two or three sentences, then where it goes —
+ *  Ice Box (the default), Queued or Start now — and Create. That is the whole
  *  screen: no executor picker, no brief, no wizard and nothing to approve. It
  *  opens from `+ ticket` on any board and from the empty board's own button,
  *  in both cases with that product already chosen, and it comes up over the
@@ -28,14 +30,17 @@ import { useTokens } from '../src/theme';
  *  phone. What is left here is the arrangement and the one thing that file
  *  cannot do: press the button and say what came back.
  *
- *  Neither button starts anything. Ice Box and Queued are both piles, and work
- *  begins when a card is dragged into In Progress (`src/drag.ts`) — so there is
- *  no third button here, and nothing on this screen to approve.
+ *  Ice Box and Queued are piles; Start now files the card straight into In
+ *  Progress, which is what starts the work — the same as dragging it there,
+ *  and like the drag it asks nothing first.
  *
  *  A card is written on one machine even where the product is on three. When
  *  that machine does not take it, what was typed stays in the boxes and the
  *  line above the buttons says which computer refused — the alternative is a
  *  screen that closes on a card nobody has. */
+/** The words on the segment. */
+const LANDING_LABEL: Record<Landing, Key> = { ice_box: 'bdIceBox', queued: 'bdQueued', in_progress: 'ntStartNow' };
+
 export default function NewTicket({ opening = '', sentences = '' }: {
   /** What the two boxes open with. Both empty from every way in that exists —
    *  `+ ticket` and the empty board's button open an empty card — and taken as
@@ -50,12 +55,14 @@ export default function NewTicket({ opening = '', sentences = '' }: {
   const insets = useSafeAreaInsets();
   const view = useDivanView();
   const createCard = useStore((s) => s.createCard);
-  const params = useLocalSearchParams<{ project?: string }>();
+  const params = useLocalSearchParams<{ project?: string; into?: string }>();
   const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v) || null;
 
   // Which product, in the address rather than in a `useState`, the way the
   // board keeps its column: a redraw lands on the product somebody picked.
   const project = opens(view, one(params.project));
+  // Where it goes, in the address too: Ice Box unless somebody chose.
+  const into: Landing = LANDINGS.find((l) => l === one(params.into)) ?? 'ice_box';
   const index = project ? view.projects.findIndex((p) => p.key === project.key) : -1;
   const to = writer(view, project);
 
@@ -106,8 +113,8 @@ export default function NewTicket({ opening = '', sentences = '' }: {
         ) : (
           /* S9's body: `padding:4px 22px 0` with `gap:10`. */
           <View style={{ paddingTop: 4, paddingHorizontal: 22, gap: 10 }}>
-            <TitleBox value={title} onChangeText={setTitle} placeholder={T('ntTitleHint')} editable={!busy} />
-            <SentenceBox value={text} onChangeText={setText} placeholder={T('ntSummaryHint')} editable={!busy} />
+            <TitleBox label={T('ntTitle')} value={title} onChangeText={setTitle} placeholder={T('ntTitleHint')} editable={!busy} />
+            <SentenceBox label={T('ntSentences')} value={text} onChangeText={setText} placeholder={T('ntSummaryHint')} editable={!busy} />
             <ComposeFoot note={T('ntLater')} count={T('ntCount', { n: d.used, max: SUMMARY_MAX })} />
             {/* One line, and it is the machine's: that this product's only
                 computer has been quiet, or that it would not take the card.
@@ -117,15 +124,11 @@ export default function NewTicket({ opening = '', sentences = '' }: {
                 {failed || T('ntQuiet', { machine: to.machine })}
               </Text>
             )}
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-              {LANDINGS.map((into, i) => (
-                <Button key={into} label={into === 'ice_box' ? T('ntIceBox') : T('ntQueued')}
-                  face={i === 0 ? 'ink' : 'outline'} onPress={() => void file(into)}
-                  /* The frame's own `height:46`, between the design system's
-                     two button heights; everything else about them is the
-                     system's own (`components/divan` `Button`). */
-                  style={{ flex: 1, height: 46, opacity: d.ready && !busy ? 1 : 0.4 }} />
-              ))}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
+              <Segments value={into} onChange={(key) => router.setParams({ into: key })} style={{ flex: 1 }}
+                segments={LANDINGS.map((l) => ({ key: l, label: T(LANDING_LABEL[l]) }))} />
+              <Button label={T('ntCreate')} face="ink" onPress={() => void file(into)}
+                style={{ height: 44, paddingHorizontal: 18, opacity: d.ready && !busy ? 1 : 0.4 }} />
             </View>
           </View>
         )}

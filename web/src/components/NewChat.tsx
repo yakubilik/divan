@@ -367,7 +367,7 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
         }}>
           <Icon path={P.search} size={14} color={C.mute} />
           <input
-            name="new-chat-folder"
+            name="new-chat-folder" aria-label="Search folders"
             value={query} onChange={(e) => setQuery(e.target.value)} placeholder="search folders…"
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: C.text }}
           />

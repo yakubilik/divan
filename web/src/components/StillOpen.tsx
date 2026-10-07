@@ -1,8 +1,8 @@
 /** What a product is still waiting on, and the thread under each one.
  *
- *  The third panel of a product's page, under Right now. The two that were
- *  there answer "what is happening" and "how did it get here", and between them
- *  they could not answer the question a person actually opens a product with:
+ *  In the side column of a product's page, under the Timeline. The board and
+ *  the timeline answer "what is happening" and "how did it get here", and
+ *  between them they could not answer the question a person actually opens a product with:
  *  **what is this waiting for.** isghocam read `closed beta` with nothing on the
  *  page saying the payment token had never been made or that the content was
  *  not wired up — both of them things no agent on this computer can do, so
@@ -28,12 +28,17 @@ import { NOTHING_OPEN, openLine, openRows, type OpenRow } from '../lib/project';
 import { RADIUS, T } from '../lib/theme';
 import { useDivanStore, type MergedProject } from '../lib/divan';
 import type { DivanOpenState } from '../lib/protocol';
-import { Button, Card, EmptyState, SectionHeader, Tag } from '../ui/divan';
+import { Button, Card } from '../ui/divan';
 import { DictatingComposer } from './Mic';
-import { mono } from '../ui/kit';
 
 /** The states a person can move an item between from here, in the order a
  *  thing travels through them. `done` is the press on the card itself. */
+/** The `dv-status` an item's state is drawn with: blocked is red, waiting on
+ *  somebody is amber, to do is the empty ring. */
+const STATE_KIND: Record<string, string> = { blocked: 'stuck', waiting: 'ask', todo: 'idle', done: 'done' };
+
+const SMALL: React.CSSProperties = { height: 30, padding: '0 12px' };
+
 const MOVES: { state: DivanOpenState; word: string }[] = [
   { state: 'blocked', word: 'Blocked' },
   { state: 'waiting', word: 'Waiting' },
@@ -66,25 +71,14 @@ export function StillOpen({ project: p, now }: { project: MergedProject; now: nu
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-      <SectionHeader
-        title="Still open"
-        right={(
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 12 }}>
-            {!!openLine(rows) && (
-              <span style={{ ...mono, fontSize: 11.5, color: T.ink3 }}>{openLine(rows)}</span>
-            )}
-            {!!id && (
-              <button
-                type="button" onClick={() => setWriting((w) => !w)}
-                style={{
-                  background: 'transparent', border: 'none', padding: 0, font: 'inherit',
-                  fontSize: 13, fontWeight: 500, color: T.ink, cursor: 'pointer',
-                }}
-              >{writing ? 'Cancel' : '+ Add'}</button>
-            )}
-          </span>
+      <div className="dv-sec" style={{ margin: 0 }}>
+        <h3>Still open</h3>
+        {!!openLine(rows) && <span className="dv-meta">{openLine(rows)}</span>}
+        {!!id && (
+          <button type="button" className="dv-btn dv-btn--ghost dv-hit" style={{ height: 28, marginLeft: openLine(rows) ? 0 : 'auto' }}
+            onClick={() => setWriting((w) => !w)}>{writing ? 'Cancel' : '+ Add'}</button>
         )}
-      />
+      </div>
 
       {writing && id && host && (
         <Write
@@ -96,11 +90,9 @@ export function StillOpen({ project: p, now }: { project: MergedProject; now: nu
       )}
 
       {!rows.length && !writing && (
-        <EmptyState
-          title="Nothing is waiting — that anybody has said."
-          body={NOTHING_OPEN}
-          style={{ padding: '4px 0 16px' }}
-        />
+        <p style={{ margin: 0, fontSize: 13.5, lineHeight: '20px', color: 'var(--ink-2)' }}>
+          Nothing is waiting — that anybody has said. {NOTHING_OPEN}
+        </p>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -113,9 +105,7 @@ export function StillOpen({ project: p, now }: { project: MergedProject; now: nu
           for it: a beta is partly described by the list it got through. */}
       {!!done.length && (
         <>
-          <div style={{ ...mono, fontSize: 11, color: T.ink3, paddingTop: 4 }}>
-            {done.length} settled
-          </div>
+          <div className="dv-meta" style={{ paddingTop: 4 }}>{done.length} settled</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {done.map((r) => (
               <Item key={r.key} row={r} onWrite={write} host={host} projectId={id} />
@@ -125,7 +115,7 @@ export function StillOpen({ project: p, now }: { project: MergedProject; now: nu
       )}
 
       {!!failed && (
-        <div style={{ ...mono, fontSize: 11, color: T.red }}>{failed}</div>
+        <div className="dv-meta" style={{ color: 'var(--red)' }}>{failed}</div>
       )}
     </div>
   );
@@ -158,43 +148,35 @@ function Item({ row: r, onWrite, host, projectId }: {
         if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
       }}
-      style={{ cursor: 'pointer', borderRadius: RADIUS.tile, outline: 'none' }}
-    >
-    <Card
-      radius={RADIUS.tile}
-      // The ring carries the state so a blocked item is findable without
-      // reading a word of it. Settled ones give it up: the page is about what
-      // is left.
-      ring={r.done ? 'line' : r.state === 'blocked' ? 'red' : r.state === 'waiting' ? 'amber' : 'line'}
+      className="dv-glass" data-state={r.state}
       style={{
-        gap: 10, padding: '12px 14px',
-        // Grey rather than faint — a fade is the one thing the palette cannot
-        // make legible, which is why this frame has none.
-        color: r.done ? T.ink2 : undefined,
+        cursor: 'pointer', borderRadius: 'var(--radius-md)', padding: '12px 14px',
+        display: 'flex', flexDirection: 'column', gap: 10,
+        // Grey rather than faint: a fade is the one thing the palette cannot
+        // make legible.
+        color: r.done ? 'var(--ink-2)' : undefined,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-        <Tag label={r.label} tone={r.tone} />
+        <span className={`dv-status dv-status--${STATE_KIND[r.state] ?? 'idle'}`} style={{ flex: 'none' }}><i />{r.label}</span>
         <div style={{
-          flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, letterSpacing: '-.01em',
+          flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600,
           textDecoration: r.done ? 'line-through' : undefined,
         }}>{r.title}</div>
-        {!!r.area && (
-          <span style={{ ...mono, flex: 'none', fontSize: 11, color: T.ink3 }}>{r.area}</span>
-        )}
+        {!!r.area && <span className="dv-meta" style={{ flex: 'none' }}>{r.area}</span>}
       </div>
 
       {!!r.body && (
-        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>{r.body}</div>
+        <div style={{ fontSize: 13, lineHeight: '19px', color: 'var(--ink-2)' }}>{r.body}</div>
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ ...mono, fontSize: 11, color: T.ink3 }}>{r.since}</span>
+        <span className="dv-meta">{r.since}</span>
         {/* How much has been said, as a fact and not as a control: the thread
             is shut until the card is pressed, and this is what says there is
             one to open. */}
         {!!r.thread && (
-          <span style={{ ...mono, fontSize: 11, color: T.ink2 }}>{r.thread}</span>
+          <span className="dv-meta" style={{ color: 'var(--ink-2)' }}>{r.thread}</span>
         )}
         {/* The buttons are their own presses. Without this a press on `Done`
             would settle the item and flap the thread open in the same click. */}
@@ -204,18 +186,16 @@ function Item({ row: r, onWrite, host, projectId }: {
             style={{ marginLeft: 'auto', display: 'flex', gap: 6, cursor: 'default' }}
           >
             {!r.done && MOVES.filter((m) => m.state !== r.state).map((m) => (
-              <Button
-                key={m.state} small face="outline" label={m.word}
-                onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: m.state }))}
-              />
+              <button key={m.state} type="button" className="dv-btn dv-btn--ghost dv-hit" style={SMALL}
+                onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: m.state }))}>{m.word}</button>
             ))}
             {!r.done && (
-              <Button small face="ink" label="Done"
-                onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: 'done' }))} />
+              <button type="button" className="dv-btn dv-hit" style={SMALL}
+                onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: 'done' }))}>Done</button>
             )}
             {r.done && (
-              <Button small face="outline" label="Reopen"
-                onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: 'todo' }))} />
+              <button type="button" className="dv-btn dv-hit" style={SMALL}
+                onClick={() => onWrite(setOpenItem(host!, projectId!, r.id, { state: 'todo' }))}>Reopen</button>
             )}
           </span>
         )}
@@ -227,18 +207,15 @@ function Item({ row: r, onWrite, host, projectId }: {
           onClick={(e) => e.stopPropagation()}
           style={{
             display: 'flex', flexDirection: 'column', gap: 8, cursor: 'default',
-            borderTop: `1px solid ${T.line}`, paddingTop: 10,
+            borderTop: '1px solid var(--hairline)', paddingTop: 10,
           }}
         >
           {!r.comments.length && (
-            <div style={{ fontSize: 12.5, color: T.ink3 }}>Nothing said about this one yet.</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>Nothing said about this one yet.</div>
           )}
           {r.comments.map((m, i) => (
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-              <span style={{
-                ...mono, flex: 'none', fontSize: 11, fontWeight: 600,
-                color: m.who === 'hermes' ? T.ink3 : T.ink2,
-              }}>{m.who}</span>
+              <span className="dv-meta" style={{ flex: 'none', fontWeight: 600, color: m.who === 'hermes' ? 'var(--ink-3)' : 'var(--ink-2)' }}>{m.who}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.5 }}>{m.text}</span>
             </div>
           ))}
@@ -258,7 +235,6 @@ function Item({ row: r, onWrite, host, projectId }: {
           )}
         </div>
       )}
-    </Card>
     </div>
   );
 }

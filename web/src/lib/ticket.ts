@@ -18,10 +18,12 @@
  *  arrives from it is a `DivanCardFull`; everything below takes one.
  */
 import type { AgentStatus, DivanAgentFace, DivanCardFull } from './protocol';
-import type { MergedCard, MergedProject } from './divan';
+import { stuck, type MergedCard, type MergedProject } from './divan';
 import { clock, executorWord, type Ago } from './overview';
 import { conversation, type Msg, type Ticket } from './ustabasi';
 import { STATE_TONE, type State, type Tone } from './theme';
+import { answers } from './sessions';
+import type { Turn } from './transcript';
 
 // ── 1 · the human face ──────────────────────────────────────────────────────
 
@@ -245,3 +247,154 @@ export function nowMark(status: AgentStatus | null): { state: State; label: stri
   if (!state) return null;
   return { state, label: status[0].toUpperCase() + status.slice(1) };
 }
+
+// ── 5 · the page after the handover (HANDOVER §4.4) ─────────────────────────
+
+/** One line of Live: a time in mono, and a sentence. `at` is null for a line
+ *  that was already in the run's file when the page opened — the file has no
+ *  clock in it, so that line is drawn without one rather than with a guess. */
+export interface Step {
+  id: string;
+  at: number | null;
+  text: string;
+  tone: Tone | null;
+  /** The step the worker is on right now. */
+  now?: boolean;
+  /** A sentence somebody said into the run from this page. */
+  mine?: boolean;
+}
+
+/** A sentence said from this page, and when. */
+export interface Said {
+  id: string;
+  at: number;
+  text: string;
+}
+
+/** How many of the latest steps Live shows. The rest of the run is a press
+ *  away, under it. */
+export const STEPS_SHOWN = 6;
+
+/** Live, as one line per step, oldest first.
+ *
+ *  Three things go into it. What the queue wrote down about the ticket — the
+ *  notes and where it stands now, each with its own clock (`conversation()`,
+ *  minus the goal, which is the agent face). The run's own steps, one line per
+ *  turn; the file they come from has no clock, so a step gets a time only if
+ *  it arrived while the page was open (`stamps`). And what was said from this
+ *  page, until the queue hands it back as a note. The queue's lines from before
+ *  the run began go first, then the steps already in the file, then everything
+ *  after by its time — the phone's reading (`app/src/card.ts live`). */
+export function steps(turns: Turn[], said: Said[], stamps: Record<string, number>,
+                      running: boolean, ticket: Ticket | null = null): Step[] {
+  const msgs = ticket ? conversation(ticket).filter((m) => !m.id.endsWith('-goal')) : [];
+  const start = ticket ? (ticket.round_started_at ?? ticket.started_at ?? null) : null;
+  const noted = new Set((ticket?.notes ?? []).map((n) => (n.text || '').trim()));
+  const said2 = said.filter((x) => !noted.has(x.text.trim()));
+  const asLine = (m: Msg): Step => ({
+    id: m.id, at: m.ts || null,
+    text: m.from === 'you' ? `You: ${flat(m.text)}` : flat(m.text),
+    tone: m.from === 'you' ? 'amber' : 'ink2',
+  });
+  const before = msgs.filter((m) => start != null && m.ts < start && !m.tail).map(asLine);
+  const after = msgs.filter((m) => !(start != null && m.ts < start && !m.tail)).map(asLine);
+  const run = turns.map((turn, i) => ({ ...line(turn, running && i === turns.length - 1), at: stamps[turn.id] ?? null }));
+  const quiet = run.filter((r) => r.at == null);
+  const timed: Step[] = [
+    ...after,
+    ...run.filter((r) => r.at != null),
+    ...said2.map((x) => ({ id: x.id, at: x.at, text: `You: ${x.text}`, tone: 'amber' as Tone, mine: true })),
+  ].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+  return [...before, ...quiet, ...timed];
+}
+
+function flat(text: string): string {
+  return (text || '').split('\n').map((l) => l.trim()).filter(Boolean).join(' ');
+}
+
+function line(turn: Turn, now: boolean): Step {
+  if (turn.kind === 'ended') {
+    return { id: turn.id, at: null, text: turn.failed ? 'The run ended with an error' : 'The run ended',
+             tone: turn.failed ? 'red' : 'ink3' };
+  }
+  const text = turn.kind === 'did'
+    ? [turn.tool, turn.summary].filter(Boolean).join(' ')
+    : flat(turn.text);
+  if (now) return { id: turn.id, at: null, text, tone: 'run', now: true };
+  return { id: turn.id, at: null, text,
+           tone: turn.kind === 'did' && turn.failed ? 'red' : turn.kind === 'thought' ? 'ink3' : 'ink2' };
+}
+
+/** What the agent is asking, and the answers its question offers in its own
+ *  words. Null where nobody is asking. The question is the queue's plain-words
+ *  `ask` where it kept one, then its escalation, then what the mirror wrote on
+ *  the card — the same order the wall reads it in. */
+export function question(card: MergedCard, ticket: Ticket | null):
+  { text: string; answers: string[]; stuck: boolean } | null {
+  const down = stuck(card) || ticket?.status === 'failed';
+  const asking = card.agent_status === 'asking' || (!down && ticket?.status === 'blocked');
+  if (!asking && !down) return null;
+  const text = ((ticket?.ask || '').trim() || (ticket?.escalation || '').trim()
+    || (card.agent_detail || '').trim() || card.title).trim();
+  return { text, answers: card.ustabasi_id == null ? [] : answers(text), stuck: !asking };
+}
+
+/** One row of the side column: what it is and what it says. */
+export interface SideRow {
+  key: 'column' | 'executor' | 'machine' | 'branch' | 'alone' | 'opened';
+  label: string;
+  value: string;
+  /** Mono, small, after the value. */
+  note?: string;
+  mono?: boolean;
+}
+
+/** The six rows HANDOVER §4.4 names, in its order. Every value is read off
+ *  the card; `Runs alone` is a setting the daemon does not hold yet, so it says
+ *  off — what every ticket does today — and the page offers no switch. */
+export function side(card: MergedCard, now: number, ago: Ago): SideRow[] {
+  const column = COLUMN_WORD[card.column] ?? card.column;
+  const repo = card.repo ? card.repo.split(/[/\\]/).filter(Boolean).pop() || '' : '';
+  const moved = stamp(card.updated_at, now, ago);
+  return [
+    { key: 'column', label: 'Column', value: column, note: `#${card.position + 1} in column` },
+    { key: 'executor', label: 'Executor', value: executorWord(card.executor) },
+    { key: 'machine', label: 'Machine', value: card.machine, mono: true,
+      note: card.stale ? 'not answering' : undefined },
+    { key: 'branch', label: 'Branch', value: card.branch || 'engineering', note: repo || undefined },
+    { key: 'alone', label: 'Runs alone', value: 'off' },
+    { key: 'opened', label: 'Opened', value: day(card.created_at), mono: true,
+      note: moved ? `updated ${moved}` : undefined },
+  ];
+}
+
+const COLUMN_WORD: Record<string, string> = {
+  ice_box: 'Ice Box', queued: 'Queued', in_progress: 'In Progress', review: 'In Progress', done: 'Done',
+};
+
+/** `5 Oct`. Empty where nothing was recorded. */
+function day(at: number | null): string {
+  if (!at) return '';
+  return new Date(at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/** What can be done to the queue's ticket behind a card, by its status — the
+ *  wall's ticket window's own rule (`components/TicketChat.tsx`): the queue
+ *  refuses the rest, and a button that is always refused is a button that
+ *  lies. */
+export type QueueAct = 'stop' | 'next' | 'restart' | 'edit' | 'delete';
+
+export function queueActs(status: string | null | undefined): QueueAct[] {
+  if (!status) return [];
+  const out: QueueAct[] = [];
+  if (status === 'running') out.push('stop');
+  if (status === 'queued') out.push('next');
+  if (status !== 'running' && status !== 'queued') out.push('restart');
+  if (status !== 'running') out.push('edit');
+  out.push('delete');
+  return out;
+}
+
+export const QUEUE_WORD: Record<QueueAct, string> = {
+  stop: 'Stop', next: 'Run next', restart: 'Restart', edit: 'Edit', delete: 'Delete',
+};

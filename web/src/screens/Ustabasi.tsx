@@ -210,7 +210,11 @@ export function Wall({ groups, now, onOpen }: {
 
 // ── the wall ─────────────────────────────────────────────────────────────────
 
-export function Ustabasi({ header }: { header?: React.ReactNode }) {
+export function Ustabasi({ header, open: asked = null }: {
+  header?: React.ReactNode;
+  /** A ticket to open the moment the wall is up: a card link pressed in a chat. */
+  open?: number | null;
+}) {
   const { hosts, focus, call } = useFleet();
   const slot = focus ? hosts[focus] : null;
   const online = slot?.status === 'online';
@@ -218,7 +222,7 @@ export function Ustabasi({ header }: { header?: React.ReactNode }) {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Status | 'all'>('all');
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(asked);
   const [now, setNow] = useState(Date.now() / 1000);
   const loading = useRef(false);
 

@@ -11,11 +11,14 @@ import { FieldSheet, accountName, type Field } from './components/FieldSheet';
 import { ApprovalModal, type Pending } from './components/ApprovalModal';
 import { Machine } from './screens/Machine';
 import { Overview, type ProjectTab } from './screens/Overview';
+import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
-import { project as projectIn, useDivanView } from './lib/divan';
+import { project as projectIn, useDivanStore, useDivanView } from './lib/divan';
+import { MODE_COLUMN, cardOf, writer } from './lib/compose';
+import { idOf } from './lib/sessions';
 import {
-  MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, chips, placeOf,
+  MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, placeOf,
   updateWaiting, type View,
 } from './lib/shell';
 import { HOME, pathOf, readPlace, samePlace, searchOf, type Place } from './lib/nav';
@@ -24,8 +27,8 @@ import { InboxBell } from './components/Inbox';
 import { Report } from './components/Report';
 import { Modal, ModalHead } from './components/Modal';
 import { POLL_MS, announce, useInbox, type Notice } from './lib/inbox';
-import { createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
-import { tell, whereFor, whereNote, type Scoped } from './lib/tell';
+import { createCard, createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
+import { idOfTold, tell, useTold, whereFor, whereNote, type Scoped, type ToldPicks } from './lib/tell';
 import type { Agent, Chat } from './lib/protocol';
 
 interface Selection { hostKey: string; chatId: string }
@@ -83,7 +86,15 @@ export function App() {
   // hung off `sel` — the live token count, the approval queue, the field sheet
   // — works inside the overlay without a second copy of any of it.
   const [peek, setPeek] = useState(false);
+  /** The Chat place is one conversation (HANDOVER §4.8); every other chat is a
+   *  press away behind this quiet "Earlier", which opens the list beside it. */
+  const [earlier, setEarlier] = useState(false);
+  /** A ticket a card link in a chat asked for, with no card on any board: it is
+   *  read on the queue's wall under Machine › Terminal. */
+  const [ticket, setTicket] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  /** The Dashboard's Composer, which ⌘N and every "new chat" now lead to. */
+  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   // Whether the sidebar is a list or a rail. Remembered because it is a way of
   // working — terminal mode wants the width, the chat screen wants the list —
@@ -136,10 +147,13 @@ export function App() {
   // …and the same for a card: a link to one is a link to a card on whichever
   // machine has it, and which machine that is cannot be known until that
   // computer has answered with its board.
+  // Once: leaving that card is not a reason to open it again.
+  const cardHonoured = useRef(false);
   useEffect(() => {
-    if (card || !opened.current.card) return;
+    if (cardHonoured.current || !opened.current.card) return;
+    if (card && card !== opened.current.card) { cardHonoured.current = true; return; }
     const key = cardKey(opened.current.card);
-    if (key) setCard(key);
+    if (key) { cardHonoured.current = true; setCard(key); }
   }, [card, divan.cards, cardKey]);
 
   /** Where the panel is, as one value: what goes in the address, and what the
@@ -163,18 +177,36 @@ export function App() {
   /** Set while a `popstate` is being applied, so that putting the state back
    *  does not push the entry we have just gone back from. */
   const going = useRef(false);
+  /** The page a card was opened from, while that card is open. */
+  const [cameFrom, setCameFrom] = useState<Place | null>(null);
+  /** The opened address has been written back in this build's shape. */
+  const settled = useRef(false);
+  /** Set when a place opens its newest chat on its own: that chat is the place
+   *  arrived at, not a step from it, so it takes the entry over rather than
+   *  pushing one Back would land on and bounce off. */
+  const landing = useRef(false);
 
   useEffect(() => {
     if (typeof history === 'undefined') return;
     if (going.current) { going.current = false; shown.current = where; return; }
-    if (samePlace(shown.current, where)) return;
-    const first = shown.current === opened.current;
     const url = pathOf(where) + searchOf(where);
-    // The first move writes over the entry the panel was opened on — that one
-    // is this page, not a step away from it — and every move after it is a
-    // step Back can undo.
-    if (first) history.replaceState(where, '', url);
+    // The address the panel was opened on is written over once, in the shape
+    // this build writes it — that entry is this page, not a step away from it —
+    // and every move after it is a step Back can undo.
+    if (!settled.current) {
+      settled.current = true;
+      shown.current = where;
+      if (location.pathname + location.search !== url) history.replaceState(where, '', url);
+      return;
+    }
+    if (samePlace(shown.current, where)) return;
+    // A card opened by a press in the panel remembers the page it was opened
+    // from, so its Back is the browser's own Back and lands there. A card the
+    // panel was opened on has no such page, and its Back is its product's board.
+    if (where.card && where.card !== shown.current.card) setCameFrom(shown.current);
+    if (landing.current && where.chat && !shown.current.chat) history.replaceState(where, '', url);
     else history.pushState(where, '', url);
+    landing.current = false;
     shown.current = where;
   }, [where]);
 
@@ -203,6 +235,24 @@ export function App() {
     }
     return out;
   }, [fleet.hosts, fleet.order]);
+
+  /** Where the left end of the line leads: up one level, and on the Dashboard
+   *  nowhere — it is the word. */
+  const scopedName = projectIn(divan, project)?.name ?? project;
+  const from = card ? cameFrom : null;
+  const back = view !== 'overview'
+    ? { label: 'Dashboard', onBack: () => setView('overview') }
+    : project && card
+      ? (from
+        ? { label: placeName(from, divan), onBack: () => history.back() }
+        : { label: `${scopedName ?? 'Project'} · Board`, onBack: () => { setCard(null); setBranch(null); setTab('board'); } })
+      : project && branch
+        ? { label: scopedName ?? 'Project', onBack: () => { setCard(null); setBranch(null); } }
+        : project
+          ? { label: 'Dashboard', onBack: () => chooseProject(null) }
+          : tab === 'waiting'
+            ? { label: 'Dashboard', onBack: () => setTab('overview') }
+            : null;
 
   const slot = sel ? fleet.hosts[sel.hostKey] : (fleet.focus ? fleet.hosts[fleet.focus] : null);
   const chat: Chat | null = useMemo(() => {
@@ -258,8 +308,22 @@ export function App() {
     const newest = Object.keys(scopedTo.ids)
       .flatMap((k) => (fleet.hosts[k]?.chats ?? []).filter((c) => !c.archived && mine(k, c)).map((c) => ({ k, c })))
       .sort((a, b) => b.c.updated_at - a.c.updated_at)[0];
-    if (newest) select(newest.k, newest.c.id); else setSel(null);
+    if (newest) { landing.current = true; select(newest.k, newest.c.id); } else setSel(null);
   }, [view, tab, scopedTo?.key, fleet.ready]);
+
+  // The Chat place opens writable, on the newest conversation, without anybody
+  // choosing one. An address that names a chat is honoured instead (above).
+  useEffect(() => {
+    if (view !== 'chats' || sel || !fleet.ready) return;
+    if (opened.current.chat && opened.current.view === 'chats') return;
+    const newest = fleet.order
+      .flatMap((k) => (fleet.hosts[k]?.chats ?? []).filter((c) => !c.archived).map((c) => ({ k, c })))
+      .sort((a, b) => b.c.updated_at - a.c.updated_at)[0];
+    if (newest) { landing.current = true; select(newest.k, newest.c.id); }
+  }, [view, sel, fleet.ready, fleet.hosts, fleet.order]);
+
+  // A ticket handed to the Terminal tab is for that one visit.
+  useEffect(() => { if (view !== 'terminal') setTicket(null); }, [view]);
 
   const open = useCallback((hostKey: string, chatId: string) => {
     select(hostKey, chatId);
@@ -281,6 +345,35 @@ export function App() {
     setBranch(null);
     setCard(null);
   }, []);
+
+  /** A new chat is written in the Composer: home, and the field focused. */
+  const compose = useCallback(() => {
+    setView('overview');
+    setProject(null);
+    setBranch(null);
+    setCard(null);
+    setTimeout(() => composerRef.current?.focus(), 0);
+  }, []);
+
+  /** Ask: a chat with these words in it, opened in the Chat place. */
+  const ask = useCallback(async (text: string, key: string | null, picks: ToldPicks) => {
+    const p = projectIn(divan, key);
+    const told = await tell(text, p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null, picks);
+    // It is read where chats are read, not as a window on the Dashboard.
+    useTold.getState().close(idOfTold(told));
+    open(told.host, told.chatId);
+  }, [divan]);
+
+  /** Ice Box and Start now: the card, written on a machine that has the product. */
+  const file = useCallback(async (text: string, key: string, mode: 'ice' | 'now') => {
+    const p = projectIn(divan, key);
+    const w = writer(divan, p);
+    if (!p || !w) throw new Error(`No paired computer has ${p?.name ?? 'that project'}`);
+    const { title, summary } = cardOf(text);
+    await createCard(w.host, { project_id: w.project, title, summary, column: MODE_COLUMN[mode] });
+    void useDivanStore.getState().load(w.host);
+    return `Filed in ${mode === 'ice' ? 'Ice Box' : 'In Progress'} on ${p.name}.`;
+  }, [divan]);
 
   /** A notice from the queue, pressed: its ticket's page, under its product.
    *  A ticket with no card on the board (filed before the board mirrored, or
@@ -466,8 +559,33 @@ export function App() {
     `${location.pathname}?host=${encodeURIComponent(sel.hostKey)}&chat=${encodeURIComponent(sel.chatId)}`,
     '_blank', 'width=1100,height=860');
 
+  /** The product this conversation is filed under, by the name the board
+   *  gives it. */
+  const filedUnder = chat?.project_id && sel
+    ? divan.projects.find((p) => p.ids[sel.hostKey] === chat.project_id)?.name ?? null
+    : null;
+  /** A card the conversation filed: its card on a board where there is one,
+   *  and the queue's own wall where there is not. */
+  const tickets = {
+    open: (id: number) => {
+      const found = divan.cards.find((c) => c.ustabasi_id === id);
+      setPeek(false);
+      if (found) {
+        setView('overview'); setProject(found.projectKey); setTab('board'); setBranch(null);
+        setCard(`${found.host}:${found.id}`);
+        return;
+      }
+      setTicket(id);
+      setView('terminal');
+    },
+    describe: (id: number) => {
+      const found = divan.cards.find((c) => c.ustabasi_id === id);
+      return found ? { column: COLUMN_WORD[found.column] ?? found.column, title: found.title } : null;
+    },
+  };
+
   const chatProps = {
-    chat, hostKey: sel?.hostKey ?? null, log, sending,
+    chat, hostKey: sel?.hostKey ?? null, log, sending, filedUnder, tickets,
     groupName: chat?.group_id
       ? (slot?.groups.find((g) => g.id === chat.group_id)?.name ?? null)
       : null,
@@ -507,7 +625,8 @@ export function App() {
 
   const commands: Command[] = useMemo(() => {
     const list: Command[] = [
-      { id: 'new', label: 'New chat', shortcut: '⌘N', hint: slot?.info?.name, run: () => setNewChat({}) },
+      { id: 'new', label: 'New chat', shortcut: '⌘N', hint: 'in the Composer', run: compose },
+      { id: 'new-options', label: 'New chat with every option', hint: slot?.info?.name, run: () => setNewChat({}) },
       // The three places first, then every page of the third one: the palette is
       // the one list of everywhere you can go, so it says the same thing the
       // shell does and in the same order.
@@ -557,7 +676,7 @@ export function App() {
       });
     }
     return list;
-  }, [fleet.hosts, fleet.order, fleet.allHosts, slot?.info?.name, theme.scheme, theme.choice]);
+  }, [fleet.hosts, fleet.order, fleet.allHosts, slot?.info?.name, theme.scheme, theme.choice, compose]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -565,14 +684,17 @@ export function App() {
       if (!meta) return;
       if (e.key === 'k') { e.preventDefault(); setPalette((p) => !p); }
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
-      else if (e.key === 'n') { e.preventDefault(); setNewChat({}); }
-      else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
+      else if (e.key === 'n') { e.preventDefault(); compose(); }
+      else if (e.key === 'f') { e.preventDefault(); setView('chats'); setEarlier(true); setTimeout(() => searchRef.current?.focus(), 0); }
       // The keys the panel already had open the pages they always did — they
       // are pages of the Machine place now, and nothing about where they land
       // has changed. ⌘0 is for the place the panel opens on; ⌘7 and ⌘8 are the
       // two rows the drawer gained, and ⌘2 still opens a computer's folders,
       // which is a page under the first row rather than a row of its own.
-      else if (e.key === '0') { e.preventDefault(); setView('overview'); }
+      else if (e.key === '0') {
+        e.preventDefault();
+        setView('overview'); setProject(null); setTab('overview'); setBranch(null); setCard(null);
+      }
       else if (e.key === ',') { e.preventDefault(); setView('settings'); }
       else if (e.key === '1') { e.preventDefault(); setView('machines'); }
       else if (e.key === '2') { e.preventDefault(); setView('projects'); }
@@ -602,16 +724,30 @@ export function App() {
       <style>{themeCss()}</style>
       <style>{KEYFRAMES}</style>
       <Shell
-        view={view} onView={setView} now={divan.now} dots={dots}
-        // The chips are over the Dashboard and the pages under it, which is
-        // where the frames draw them and where they mean something.
-        chips={place === 'dashboard' ? chips(divan, project) : null}
-        onProject={chooseProject}
+        view={view} onView={setView} fleet={divan} dots={dots}
+        onHome={() => { setView('overview'); chooseProject(null); }}
+        back={back}
         inbox={<InboxBell onOpen={openNotice} />}
       >
         {place === 'dashboard' && (
           <Overview
             view={divan} project={projectIn(divan, project)} onProject={chooseProject}
+            composer={(
+              <Composer view={divan} onAsk={ask} onCard={file} inputRef={composerRef}
+                onOptions={() => setNewChat({})} />
+            )}
+            onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setBranch(null); setCard(idOf(c)); }}
+            // The Composer at the foot of a product: everything it sends is
+            // about that product, and Ask opens the chat as a window on the
+            // page, the way the bar it replaces did.
+            projectComposer={scopedTo ? (
+              <Composer view={divan} lock={scopedTo.key} onCard={file}
+                onAsk={(text, _key, picks) => tell(text, scope, picks)}
+                onOptions={() => {
+                  const at = whereFor(scope, fleet.hosts, fleet.focus);
+                  setNewChat({ cwd: at.cwd ?? undefined, host: at.host, stay: true });
+                }} />
+            ) : null}
             tab={tab} onTab={setTab}
             branch={branch} onBranch={setBranch}
             card={card} onCard={setCard}
@@ -651,30 +787,49 @@ export function App() {
           />
         )}
 
-        {/* The chat, untouched: the list it is picked from and the chat itself,
-            exactly as they were. The list no longer carries the navigation —
-            the bar above does — so what is left of it is the chats. */}
+        {/* One conversation (HANDOVER §4.8): the newest, open and writable the
+            moment the place is entered. Every other chat is behind Earlier,
+            which opens the list beside it — nothing was deleted, and each is
+            still at its own address. */}
         {place === 'chat' && (
-          <>
-            <Sidebar
-              selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
-              onNewChat={() => setNewChat({})}
-              onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
-              searchRef={searchRef}
-              collapsed={rail} onCollapse={setRailTo}
-            />
-            <ChatView {...chatProps} />
-          </>
+          <div className="dv-chatpane" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
+            {earlier && (
+              <Sidebar
+                selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
+                onNewChat={compose}
+                onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
+                searchRef={searchRef}
+                collapsed={rail} onCollapse={setRailTo}
+              />
+            )}
+            <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '4px 20px' }}>
+                <button type="button" className="dv-btn dv-btn--ghost dv-hit" aria-expanded={earlier}
+                  onClick={() => setEarlier((v) => !v)}>
+                  {earlier ? 'Hide earlier' : 'Earlier'}
+                </button>
+                <span className="dv-meta" style={{ marginLeft: 'auto' }}>Hermes</span>
+              </div>
+              {chat ? <ChatView {...chatProps} /> : (
+                <FirstWord onSay={async (text) => {
+                  const told = await tell(text, null);
+                  useTold.getState().close(idOfTold(told));
+                  select(told.host, told.chatId);
+                }} />
+              )}
+            </div>
+          </div>
         )}
 
         {place === 'machine' && (
           <Machine
             view={view} onView={setView} fleet={divan}
             onOpenChat={open}
-            onNewChat={() => setNewChat({})}
+            onNewChat={compose}
             onNewChatIn={(cwd) => setNewChat({ cwd })}
             onStartChat={(agent, accountId) => setNewChat({ agent: { agent, accountId } })}
             onPeek={(hostKey, chatId) => { select(hostKey, chatId); setPeek(true); }}
+            ticket={ticket}
           />
         )}
       </Shell>
@@ -787,4 +942,56 @@ export function App() {
       )}
     </>
   );
+}
+
+const COLUMN_WORD: Record<string, string> = {
+  ice_box: 'Ice Box', queued: 'Queued', in_progress: 'In Progress', done: 'Done',
+};
+
+/** The Chat place with no conversation in it yet: a box that is already
+ *  writable. What is said in it opens a chat with every default this computer
+ *  has (`tell`) — nothing is chosen first. */
+function FirstWord({ onSay }: { onSay: (text: string) => Promise<void> }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const say = async () => {
+    const words = text.trim();
+    if (!words || busy) return;
+    setBusy(true); setError(null);
+    try { await onSay(words); setText(''); }
+    catch (e: any) { setError(e?.message ?? 'That did not go through'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '20px 24px 32px' }}>
+      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <p className="dv-meta" style={{ margin: 0, textAlign: 'center' }}>No conversation yet.</p>
+        <form className="dv-glass-strong dv-composer" data-first-word
+          style={{ padding: '12px 12px 12px 18px', display: 'flex', alignItems: 'center', gap: 8 }}
+          onSubmit={(e) => { e.preventDefault(); void say(); }}>
+          <label htmlFor="first-word" className="dv-hidden">Message to Hermes</label>
+          <input id="first-word" value={text} onChange={(e) => setText(e.target.value)} placeholder="Talk to Hermes"
+            style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'inherit', font: '400 15px/22px var(--font-sans)' }} />
+          <button type="submit" className="dv-send" aria-label="Send" disabled={busy || !text.trim()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+          </button>
+        </form>
+        {!!error && <p style={{ margin: 0, fontSize: 13, color: T.red }}>{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** A place, as the words the way back to it says: `Waiting on you`,
+ *  `isghocam · Board`, `Dashboard`. */
+function placeName(p: Place, view: ReturnType<typeof useDivanView>): string {
+  if (p.view !== 'overview') return p.view === 'chats' ? 'Chats' : 'Machine';
+  if (!p.project) return p.tab === 'waiting' ? 'Waiting on you' : 'Dashboard';
+  const name = projectIn(view, p.project)?.name ?? p.project;
+  if (p.card) return name;
+  if (p.branch) return `${name} · ${p.branch}`;
+  if (p.tab === 'board') return `${name} · Board`;
+  if (p.tab === 'chat') return `${name} · Chats`;
+  return name;
 }

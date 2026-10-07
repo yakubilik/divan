@@ -13,7 +13,7 @@
  *  bring their own. The one rule that survives every state: a figure with no
  *  source is not drawn. There is no placeholder in this file. */
 import React from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon } from './icon';
 import { Text } from './text';
 import { Button, Card, Counter, Monogram, StatusDot, Tap } from './divan';
@@ -326,5 +326,152 @@ export function AgentLine({ mark, tone, who, project, index, text, first, onPres
       <Monogram name={project} index={index} size={18} />
       <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.ink2 }}>{text}</Text>
     </Tap>
+  );
+}
+
+// ── Divan 2/6: the Dashboard of HANDOVER §4.1 (DashboardPhone) ──────────────
+
+/** `Good evening.` at 38/40, and the one counted line under it. */
+export function Greeting({ hello, said }: {
+  hello: string;
+  said: { key: string; text: string; n: number }[];
+}) {
+  const t = useTokens();
+  return (
+    <View style={{ marginTop: 16, gap: 10 }}>
+      <Text accessibilityRole="header"
+        style={{ fontSize: 38, lineHeight: 40, fontWeight: '500', letterSpacing: em(38, -0.04), color: t.ink }}>
+        {hello}
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 6 }}>
+        {said.map((s) => (
+          <View key={s.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {s.key === 'working' && s.n > 0 && <StatusDot state="running" size={7} />}
+            {s.key === 'stuck' && s.n > 0 && <StatusDot state="stuck" size={7} />}
+            <Text style={{ fontSize: 14, lineHeight: 22, color: t.ink2 }}>{s.text}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** One thing waiting (`dv-wait`): the product, how long, the question, and the
+ *  answers as buttons — the first amber, the one the worker proposed. */
+export function WaitCard({ project, index, age, question, word, tone, actions, note, noteTone }: {
+  project: string; index: number | null; age: string | null; question: string;
+  word: string; tone: Tone;
+  actions: { label: string; face: 'amber' | 'ink' | 'outline' | 'ghost'; onPress?: () => void }[];
+  note?: string | null; noteTone?: Tone;
+}) {
+  const t = useTokens();
+  const c = toneColours(t, tone);
+  return (
+    <View style={{ backgroundColor: t.s1, borderRadius: RADIUS.md, borderWidth: 1, borderColor: t.line,
+                   padding: 14, paddingBottom: 12, gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Monogram name={project} index={index} size={20} />
+        <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, fontWeight: '500', color: t.ink2 }}>{project}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 22, paddingHorizontal: 8,
+                       borderRadius: RADIUS.pill, backgroundColor: c.bg }}>
+          <StatusDot state={tone === 'red' ? 'stuck' : tone === 'amber' ? 'asking' : 'quiet'} size={7} />
+          <Text style={{ fontSize: 11.5, fontWeight: '500', color: c.fg }}>{word}</Text>
+        </View>
+        {!!age && <Text mono style={{ fontSize: 11.5, color: t.ink3 }}>{age}</Text>}
+      </View>
+      <Text style={{ fontSize: 14, lineHeight: 20, fontWeight: '500', color: t.ink }}>{question}</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {actions.map((a) => {
+          const bg = a.face === 'amber' ? t.amber : a.face === 'ink' ? t.ink : a.face === 'outline' ? t.s2 : 'transparent';
+          const fg = a.face === 'amber' ? t.onAmber : a.face === 'ink' ? t.onInk : a.face === 'ghost' ? t.ink2 : t.ink;
+          return (
+            <Pressable key={a.label} accessibilityRole="button" onPress={a.onPress}
+              style={{ minHeight: 44, justifyContent: 'center' }}>
+              <View style={{ height: 36, paddingHorizontal: 12, borderRadius: RADIUS.pill, justifyContent: 'center',
+                             backgroundColor: bg, borderWidth: a.face === 'outline' ? 1 : 0, borderColor: t.line }}>
+                <Text style={{ fontSize: 12.5, fontWeight: '500', color: fg }}>{a.label}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      {!!note && <Text mono style={{ fontSize: 11.5, color: toneColours(t, noteTone ?? 'ink3').fg }}>{note}</Text>}
+    </View>
+  );
+}
+
+/** A project tile (`dv-tile`), two to a row on the phone. */
+export function Tile({ name, index, now, counts, when, onPress }: {
+  name: string; index: number; now: string;
+  counts: { state: State; n: number; word: string }[];
+  when: string | null;
+  onPress: () => void;
+}) {
+  const t = useTokens();
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={name} onPress={onPress}
+      style={{ flex: 1, minWidth: 0, minHeight: 132, padding: 14, gap: 10, borderRadius: RADIUS.lg,
+               backgroundColor: t.s1, borderWidth: 1, borderColor: t.line }}>
+      <Monogram name={name} index={index} size={30} />
+      <Text numberOfLines={1} style={{ fontSize: 15, lineHeight: 22, fontWeight: '600', color: t.ink }}>{name}</Text>
+      <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 19, color: t.ink2 }}>{now}</Text>
+      <View style={{ marginTop: 'auto', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+        {counts.map((c) => (
+          <View key={c.state} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <StatusDot state={c.state} size={7} />
+            <Text mono style={{ fontSize: 12, fontWeight: '500', color: c.state === 'asking' ? t.amber : t.ink2 }}>{c.n}</Text>
+            <Text style={{ fontSize: 12, color: t.ink3 }}>{c.word}</Text>
+          </View>
+        ))}
+        {/* A busy tile's footer wraps, and the time is cut short rather than
+            run past the tile's edge (the web tile does the same). */}
+        {!!when && <Text mono numberOfLines={1} style={{ marginLeft: 'auto', flexShrink: 1, minWidth: 0, fontSize: 11.5, color: t.ink3 }}>{when}</Text>}
+      </View>
+    </Pressable>
+  );
+}
+
+/** A dormant product as one dimmed line (`dv-live`) under the tiles. */
+export function QuietRow({ name, index, meta, first, onPress }: {
+  name: string; index: number; meta: string; first?: boolean; onPress: () => void;
+}) {
+  const t = useTokens();
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={name} onPress={onPress}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 10,
+               borderTopWidth: first ? 0 : 1, borderTopColor: t.line2 }}>
+      <Monogram name={name} index={index} size={20} />
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.ink3 }}>{name}</Text>
+      <Text mono style={{ fontSize: 11.5, color: t.ink3 }}>{meta}</Text>
+    </Pressable>
+  );
+}
+
+/** One line of Working now: a dot, the title, and project · executor · machine · time. */
+export function LiveRow({ state, hollow, title, meta, metaTone, first, onPress }: {
+  /** A state, or the dot's colour outright. */
+  state: State | string; hollow?: boolean; title: string; meta: string;
+  /** The meta in amber: it is the word `asking`. */
+  metaTone?: 'amber';
+  first?: boolean; onPress?: () => void;
+}) {
+  const t = useTokens();
+  return (
+    <Tap onPress={onPress}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 10,
+               borderTopWidth: first ? 0 : 1, borderTopColor: t.line2 }}>
+      <StatusDot state={state} hollow={hollow} size={7} />
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.ink }}>{title}</Text>
+      <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: metaTone === 'amber' ? t.amber : t.ink3, maxWidth: '55%' }}>{meta}</Text>
+    </Tap>
+  );
+}
+
+/** The rows' own surface (`dv-glass` at `--radius-md`, `padding:4px 14px`). */
+export function Rows({ children }: { children: React.ReactNode }) {
+  const t = useTokens();
+  return (
+    <View style={{ backgroundColor: t.s1, borderRadius: RADIUS.md, borderWidth: 1, borderColor: t.line,
+                   paddingVertical: 4, paddingHorizontal: 14 }}>{children}</View>
   );
 }

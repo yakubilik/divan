@@ -1,32 +1,20 @@
 /** The Machine place: everything that is about a computer rather than about
- *  work.
+ *  work (HANDOVER §4.9).
  *
- *  Web15 draws it as `260px` of rows with the selected one filled and the page
- *  itself in the rest of the width, and its eight rows are all here: Machines,
- *  Executors, Terminals, Remote screen, Accounts & sign-ins, Quota thresholds,
- *  Admin and Settings. Six of them are pages built out of the design system
- *  (`ui/divan.tsx`) against the decisions in `lib/machine.ts`; the other two —
- *  the wall of terminals and the remote screen — do what they have always done
- *  and now say so under the head their frames put over them: W15's own chips
- *  for the computers and its line under the picture are there, and what neither
- *  of them has (a pty behind W14's tabs) says so where it would be.
- *
- *  Five pages have no row of their own (`MACHINE_ASIDE`): what is running on
- *  every computer right now, a computer's folders, the agents installed on it,
- *  the update, and every default a new chat takes. Each is opened from the page
- *  above it and drawn with that page's row still filled — one level deeper, not
- *  somewhere else. Four of them stand in this place's own page column; the
- *  fifth brings a column of its own, because everything a computer keeps is
- *  seven sections and a list of seven things is a drawer.
+ *  Four tabs — Machines, Executors, Terminal, Settings — and under each one the
+ *  pages that belong to it, as a row of links (`MACHINE_TABS`). Every page the
+ *  old drawer reached is one of them: the remote screen, the sessions and plan
+ *  limits, the folders, Admin and the update sit under Machines; the agents on
+ *  a computer and the sign-ins they work through under Executors; the quota
+ *  thresholds and everything one computer keeps under Settings. The wall of
+ *  terminals, the remote screen and this computer's own settings take the
+ *  whole width and bring their own scroll.
  */
 import { useEffect, useRef } from 'react';
-import { MACHINE_ROWS, machineRow, updateWaiting, type View } from '../lib/shell';
+import { MACHINE_TABS, machinePageLabel, machineTab, updateWaiting, type View } from '../lib/shell';
 import { useFleet } from '../lib/fleet';
 import { signIns, signInsWanting, quotaVerdict, useThresholds } from '../lib/machine';
-import { SIZE, T } from '../lib/theme';
 import type { DivanView } from '../lib/divan';
-import { glyph } from '../ui/kit';
-import { SidePanel, type PanelItem } from '../ui/divan';
 import { sources, Accounts } from './Accounts';
 import { Machines } from './Machines';
 import { Executors } from './Executors';
@@ -53,6 +41,8 @@ export interface MachineProps {
   onNewChatIn: (cwd: string) => void;
   onStartChat: (agent: Agent, accountId: string | null) => void;
   onPeek: (hostKey: string, chatId: string) => void;
+  /** A ticket a chat's card link asked for, opened on the Terminal tab. */
+  ticket?: number | null;
 }
 
 /** The note under the title of the column: Web15 W12's `One machine is
@@ -77,6 +67,12 @@ const DRAWN_HERE = new Set<View>([
   'fleet', 'projects', 'agents', 'update',
 ]);
 
+/** HANDOVER §4.9: four tabs — Machines · Executors · Terminal · Settings — each
+ *  at its own path (`/machine/<tab>`), and every other page the drawer used to
+ *  list sitting in a row of links under the tab it is about (`MACHINE_TABS`).
+ *  Nothing the drawer reached is gone; the marks it carried (an approval on the
+ *  wall, a sign-in expiring, a thin plan, an update in hand) are on the tab and
+ *  on the link they are about. */
 export function Machine(props: MachineProps) {
   const { view, onView, fleet } = props;
   const { hosts, order } = useFleet();
@@ -85,24 +81,10 @@ export function Machine(props: MachineProps) {
   /** Which computers have been asked which sign-ins they have. */
   const put = useRef(new Set<string>());
 
-  // Entering the place asks every computer which sign-ins it has.
-  //
-  // `account.list` shells out to both CLIs and can take seconds, so it is not
-  // part of the connect path — which meant, until this asked for it, that the
-  // amber count on the Accounts row was 0 on a panel nobody had opened that
-  // page on. The one thing that page exists to say was the one thing you had to
-  // go and look for.
-  //
-  // **Asked once, and once means once even when the answer never comes.** What
-  // was asked is remembered here rather than inferred from the slot: an empty
-  // list and `loading` back to false is what a refusal looks like as well as
-  // what a question nobody has put looks like, and a condition that cannot tell
-  // those two apart re-fires the moment the failure lands — which on a daemon
-  // that has never heard of the request, or one still thirty seconds deep in
-  // two CLI shell-outs, is a fresh shell-out on that machine every round trip,
-  // for as long as this place is open. A computer that goes away is forgotten,
-  // so coming back is asked again; so is re-entering the place, which is
-  // somebody's own doing rather than a loop.
+  // Entering the place asks every computer which sign-ins it has — once, and
+  // once means once even when the answer never comes: an empty list is what a
+  // refusal looks like as well as a question nobody has put, and re-asking on
+  // that would be a CLI shell-out on that machine every round trip.
   const online = order.filter((k) => hosts[k]?.status === 'online').join(',');
   useEffect(() => {
     const live = online ? online.split(',') : [];
@@ -114,70 +96,86 @@ export function Machine(props: MachineProps) {
     }
   }, [online, refreshAccounts]);
   const unreachable = fleet.hosts.filter((h) => !h.reachable).length;
-  // What under this place wants a person, on the row it is about: a chat
-  // waiting to be allowed to do something — which is on the wall as well as in
-  // the Chat place — an update in hand, a sign-in about to stop working, and a
-  // plan under the threshold somebody set on the sixth row.
   const approvals = order.reduce(
     (n, k) => n + (hosts[k]?.chats.filter((c) => c.status === 'awaiting_approval').length ?? 0), 0);
   const update = order.some((k) => updateWaiting(hosts[k]?.info?.update));
   const expiring = signInsWanting(
     signIns(sources(hosts, order), fleet.now, () => '', () => ''));
   const quota = quotaVerdict(fleet.quota, thresholds);
-  const here = machineRow(view);
+  const thin = quota.state === 'warn' || quota.state === 'stop' || quota.state === 'spent';
 
-  const items: PanelItem[] = MACHINE_ROWS.map((row) => ({
-    key: row.view,
-    label: row.label,
-    icon: glyph(row.icon),
-    // The frame puts a mark on the row that has something under it: a hollow
-    // dot for the machine that cannot be reached (Web15 W12), an amber count
-    // for the sign-in that is expiring (W16). Both are the amber of something
-    // that wants a person, which is the state that colour belongs to.
-    ...(row.view === 'machines' && unreachable > 0
-      ? { dot: 'asking' as const, hollow: true } : {}),
-    ...(row.view === 'terminal' && approvals > 0 ? { count: approvals } : {}),
-    ...(row.view === 'accounts' && expiring > 0 ? { count: expiring } : {}),
-    ...(row.view === 'quota' && (quota.state === 'warn' || quota.state === 'stop'
-      || quota.state === 'spent') ? { dot: 'asking' as const } : {}),
-    ...(row.view === 'admin' && update ? { dot: 'asking' as const } : {}),
-  }));
+  /** What wants a person on one page, as the mark beside its name. */
+  const mark = (v: View): { count?: number; dot?: boolean; red?: boolean } => (
+    v === 'machines' && unreachable > 0 ? { dot: true, red: true }
+      : v === 'terminal' && approvals > 0 ? { count: approvals }
+        : v === 'accounts' && expiring > 0 ? { count: expiring }
+          : v === 'quota' && thin ? { dot: true }
+            : (v === 'admin' || v === 'update') && update ? { dot: true }
+              : {});
+  const tab = machineTab(view);
 
   return (
-    <div style={{
-      flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch',
-      overflow: 'hidden', background: T.bg,
-    }}>
-      {/* As wide as the column itself and no wider: the sentence under the
-          rows is what a `flex: none` box would otherwise be measured by, and
-          one long line of it pushed this column to three hundred and eighty. */}
-      <div style={{
-        flex: 'none', width: SIZE.sidePanel, padding: '28px 12px 28px 20px', overflowY: 'auto',
-      }}>
-        <SidePanel
-          title="Machine" note={machineNote(fleet)}
-          items={items} value={here} onChange={(key) => onView(key as View)}
-        />
-        <div style={{ fontSize: 12.5, lineHeight: 1.5, color: T.ink3, margin: '14px 12px 0' }}>
-          {MACHINE_ROWS.find((r) => r.view === here)?.note}
+    <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 'none', padding: '8px 32px 0' }}>
+        <div style={{
+          maxWidth: 1080, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          {tab.pages.length > 1 && (
+            <nav aria-label={`Under ${tab.label}`} className="dv-subnav">
+              {tab.pages.map((v) => {
+                const m = mark(v);
+                return (
+                  <a key={v} href={`/machine/${v}`} className="dv-chip dv-hit"
+                    aria-current={v === view ? 'page' : undefined}
+                    onClick={(e) => { e.preventDefault(); if (v !== view) onView(v); }}>
+                    <span>{machinePageLabel(v)}</span>
+                    {!!m.count && <b className="dv-badge" aria-label={`${m.count} want you`}>{m.count}</b>}
+                    {!!m.dot && <Mark red={m.red} />}
+                  </a>
+                );
+              })}
+            </nav>
+          )}
+          <div className="dv-seg" role="group" aria-label="Machine" style={{ marginLeft: 'auto' }}>
+            {MACHINE_TABS.map((t) => {
+              const wants = t.pages.map(mark).find((m) => m.count || m.dot);
+              return (
+                <button key={t.key} type="button" className="dv-hit" aria-pressed={t.key === tab.key}
+                  onClick={() => { if (t.key !== tab.key || view !== t.pages[0]) onView(t.pages[0]); }}>
+                  {t.label}
+                  {!!wants && <Mark red={wants.red} />}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
-      {/* The page beside it: Web15's `grid-template-columns:260px minmax(0,1fr);
-          gap:40px`, as a column of blocks `gap:18px` apart. The three that are
-          not a column of blocks — the wall, the picture and this computer's own
-          settings — are handed the width and bring their own. */}
       {DRAWN_HERE.has(view) ? (
-        <div style={{
-          flex: 1, minWidth: 0, overflowY: 'auto', padding: '28px 32px 40px 28px',
-        }}>
+        <div data-machine-page style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 32px 80px' }}>
           <div style={{
-            display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0, maxWidth: 1080,
+            display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0, maxWidth: 1080, margin: '0 auto',
           }}>
             <Page {...props} />
           </div>
         </div>
-      ) : <Page {...props} />}
+      ) : (
+        <div data-machine-page style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden', paddingTop: 12 }}>
+          <Page {...props} />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** The dot beside a tab or a page: amber where something wants a person, red
+ *  where a machine cannot be reached — and the word for it, for a reader who
+ *  cannot see the colour. */
+function Mark({ red }: { red?: boolean }) {
+  return (
+    <>
+      <i className={`dv-dot ${red ? 'dv-dot--stuck' : 'dv-dot--ask'}`} aria-hidden="true" />
+      <span className="dv-hidden">{red ? 'unreachable' : 'needs you'}</span>
+    </>
   );
 }
 
@@ -185,7 +183,7 @@ function Page(props: MachineProps) {
   const { view, onView, fleet, onOpenChat, onNewChat, onNewChatIn, onStartChat, onPeek } = props;
   const setFocus = useFleet.getState().setFocus;
   if (view === 'executors') return <Executors view={fleet} onView={onView} />;
-  if (view === 'terminal') return <Terminal onPeek={onPeek} onNewChat={onNewChat} />;
+  if (view === 'terminal') return <Terminal key={props.ticket ?? 'wall'} onPeek={onPeek} onNewChat={onNewChat} ticket={props.ticket} />;
   if (view === 'screen') return <Screen />;
   if (view === 'accounts') {
     return <Accounts now={fleet.now} onView={onView} onFocus={setFocus} />;
