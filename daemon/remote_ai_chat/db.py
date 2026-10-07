@@ -200,7 +200,10 @@ class DB:
                           ("project_set", "INTEGER DEFAULT 0"), ("owner", "TEXT"),
                           # who the title is by ('user' once a person renamed it) and how
                           # many messages had been sent when it was last looked at (`naming`)
-                          ("title_by", "TEXT"), ("named_at", "INTEGER DEFAULT 0")):
+                          ("title_by", "TEXT"), ("named_at", "INTEGER DEFAULT 0"),
+                          # what the chat is working on, in a line, and what has
+                          # been done in it, a line each (`recap`)
+                          ("task", "TEXT"), ("done", "TEXT")):
             if col not in have:
                 self._c.execute(f"ALTER TABLE chats ADD COLUMN {col} {decl}")
         self._c.commit()
@@ -324,6 +327,18 @@ class DB:
         fields["id"] = cid
         with self._lock:
             self._c.execute(f"UPDATE chats SET {sets} WHERE id=:id", fields)
+            self._c.commit()
+        return self.get_chat(cid)
+
+    def recap_chat(self, cid: str, task: str, done: list[str]) -> dict | None:
+        """Write down what a chat is for and what came of it (`recap`).
+
+        Without touching `updated_at`, for the reason `file_chat` gives: being
+        summed up is not moving.
+        """
+        with self._lock:
+            self._c.execute("UPDATE chats SET task=?, done=? WHERE id=?",
+                            (task, "\n".join(done), cid))
             self._c.commit()
         return self.get_chat(cid)
 

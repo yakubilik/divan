@@ -104,6 +104,13 @@ def parse(answer: str) -> str | None:
 async def ask(text: str, env: dict[str, str]) -> str | None:
     """Ask the model for a title. None on any failure: a chat keeps the name
     it has, and nothing about a turn depends on this."""
+    answer = await call(text, SYSTEM, env)
+    return parse(answer) if answer is not None else None
+
+
+async def call(text: str, system: str, env: dict[str, str]) -> str | None:
+    """One short question to the smallest model with nothing loaded, and what
+    it said. None on any failure. `recap` asks through here too."""
     cli = tools.find_cli("claude")
     if not cli:
         return None
@@ -112,7 +119,7 @@ async def ask(text: str, env: dict[str, str]) -> str | None:
         try:
             proc = await asyncio.create_subprocess_exec(
                 cli, "-p", text, "--model", MODEL, "--output-format", "json",
-                "--system-prompt", SYSTEM, "--setting-sources", "", "--strict-mcp-config",
+                "--system-prompt", system, "--setting-sources", "", "--strict-mcp-config",
                 "--tools", "", "--disable-slash-commands", "--no-session-persistence",
                 # No thinking: it is a one-line answer, and thought about it
                 # takes eighteen seconds instead of two.
@@ -134,4 +141,4 @@ async def ask(text: str, env: dict[str, str]) -> str | None:
         return None
     if not isinstance(reply, dict) or reply.get("is_error"):
         return None
-    return parse(str(reply.get("result") or ""))
+    return str(reply.get("result") or "")

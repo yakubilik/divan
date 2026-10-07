@@ -11,7 +11,7 @@ from typing import Awaitable, Callable
 from .config import Config
 from .db import DB, new_id
 from .errors import Err
-from . import attachments, naming, preamble, secrets
+from . import attachments, naming, preamble, recap, secrets
 from .pool import Wait
 from .security import PathPolicy
 from .providers.base import Provider, ProviderConfig
@@ -157,6 +157,10 @@ class ChatSession:
         # manager; and the asking itself, while one is in the air.
         self.naming_env = None
         self._renaming: asyncio.Task | None = None
+        # …and the same for what the chat is working on and what it has done
+        # (`recap`). `_recap_again` is a turn that ended while one was asked.
+        self._recapping: asyncio.Task | None = None
+        self._recap_again = False
         # A move the pool asked for while this turn was running: the account it
         # goes to, and why. The turn is interrupted, and _run reads this once
         # the interrupt has come back, rather than tearing the provider down
@@ -603,7 +607,44 @@ class ChatSession:
             self.db.update_chat(self.chat_id, title=with_project(
                 secrets.shown(text).strip().split("\n")[0], self.policy.project_for(chat["cwd"])))
         await self._set_status("running", last_preview=plain(secrets.shown(text))[:200])
+        if not (chat.get("task") or "").strip():
+            self._recap_now()       # what it is working on, while it works
         return chat
+
+    def _recap_now(self) -> None:
+        """Write down again what this chat is for and what has been done in it.
+
+        Off the turn's own path, like the name. A turn that ends while the
+        last one is still being summed up is summed up after it, once.
+        """
+        if self.cfg.demo or self.naming_env is None:
+            return
+        if self._recapping and not self._recapping.done():
+            self._recap_again = True
+            return
+        self._recapping = asyncio.create_task(self._sum_up())
+
+    async def _sum_up(self) -> None:
+        try:
+            while True:
+                self._recap_again = False
+                chat = self.db.get_chat(self.chat_id)
+                env = self.naming_env(chat) if chat else None
+                if env is None:
+                    return
+                events = self.db.spoken(self.chat_id)
+                for e in events:
+                    e["data"]["text"] = secrets.shown(e["data"].get("text") or "")
+                had = recap.Recap(chat.get("task") or "", recap.lines(chat.get("done")))
+                got = await recap.ask(recap.brief(events, had), env)
+                if got and got != had and self.db.get_chat(self.chat_id) is not None:
+                    chat = self.db.recap_chat(self.chat_id, got.task, got.done)
+                    await self.broadcast({"seq": None, "chat_id": self.chat_id, "event": "chat.updated",
+                                          "data": chat, "ts": time.time()})
+                if not self._recap_again:
+                    return
+        except Exception:
+            log.exception("recap of chat %s failed", self.chat_id)
 
     def _named_for_agent(self, chat: dict) -> bool:
         """A chat still called what its agent is called, before a word is said
@@ -809,6 +850,7 @@ class ChatSession:
         await self._finish(**fields)
         if not res.is_error:
             self._rename_if_due()
+            self._recap_now()
 
     async def _finish(self, **fields) -> None:
         """End of one turn. Only a turn with nothing queued behind it puts the
