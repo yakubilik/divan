@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useSpeechRecognitionEvent } from '@jamsch/expo-speech-recognition';
@@ -10,7 +10,7 @@ import { useColors, type Palette } from '../src/theme';
 import { Text } from '../src/components/ui';
 import { abortListening, EMA_SAMPLE, emaAvailable, emaStats, ensureMic, label as voiceLabel, listVoices, locale as voiceLocale, pickVoice, pickup, ring, setEmaEnabled, setVoicePrefs, speak, startListening, stopListening, stopSpeaking, voiceName, warmEma } from '../src/voice';
 import { isTurkish } from '../src/tts/speaker';
-import { callLines } from '../src/call-lines';
+import { callLines, chatCallLines, yesNo } from '../src/call-lines';
 import { Switch } from '../src/components/divan';
 import type * as Speech from 'expo-speech';
 
@@ -45,6 +45,13 @@ const BARGE_IN = false;
  *  when the room has finished hearing it — and a Premium voice through a phone
  *  speaker carries. Three hundred milliseconds was not enough. */
 const AFTER_SPEECH_MS = 600;
+
+/** How long a call from inside a chat waits on one turn before giving up on it.
+ *  The turn itself goes on in the chat either way; this is only how long the
+ *  phone stays quiet before saying it did not hear back. */
+const TURN_MAX_MS = 15 * 60 * 1000;
+
+type TurnEnd = 'done' | 'error' | 'gone';
 
 const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
@@ -87,12 +94,27 @@ function isEcho(heard: string, spoken: string): boolean {
   return norm(residue(heard, spoken)).length < 4;
 }
 
+/** Echo while waiting on a yes or a no: most of the question, heard back. */
+function echoOfQuestion(heard: string, spoken: string): boolean {
+  const h = norm(heard);
+  const sp = norm(spoken);
+  return !h || (sp.includes(h) && h.length * 2 >= sp.length);
+}
+
 /** Your words with the leaked ones taken off the front. */
 function stripEcho(heard: string, spoken: string): string {
   return residue(heard, spoken) || heard;
 }
 
 /** The call.
+ *
+ *  Two of them share this screen. Opened from the chat list it is the general
+ *  call: questions go to the concierge (`call.ask`). Opened from a chat it
+ *  carries that chat's id and talks to that chat: every utterance is sent with
+ *  `chat.send`, as if it had been typed, so it is a turn of that session on its
+ *  own model, account and permission mode, and both sides stay in the
+ *  transcript. What is read back is the short form of the reply (`call.reply`);
+ *  the whole of it is in the chat.
  *
  *  One turn is: listen until you stop talking, ask the daemon, read the answer
  *  out, listen again. The loop is deliberate — a call that has to be poked for
@@ -112,6 +134,9 @@ export default function Call() {
   // The call is held in the phone's own language, not the interface's.
   const lang = voiceLocale();
   const conn = useStore((s) => s.conn);
+  // Set when the call was placed from inside a chat; the general call has none.
+  const { chat: chatId } = useLocalSearchParams<{ chat?: string }>();
+  const chatTitle = useStore((s) => (chatId ? s.chats?.[chatId]?.title : null));
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [heard, setHeard] = useState('');
@@ -152,6 +177,12 @@ export default function Call() {
   const lastAsked = useRef('');
   const failures = useRef(0);
   const hangUpRef = useRef<() => void>(() => {});
+  // A call from inside a chat: how to end the turn being waited on, the
+  // approval asked aloud (`asked` once the question has been said), and the
+  // lines said while the turn runs, kept in order.
+  const turnEnd = useRef<((how: TurnEnd) => void) | null>(null);
+  const approval = useRef<{ id: string; asked: boolean } | null>(null);
+  const voiceQueue = useRef<Promise<void>>(Promise.resolve());
   const pulse = useRef(new Animated.Value(0)).current;
 
   // The stored choice has to reach the voice module before anything is spoken.
@@ -327,6 +358,132 @@ export default function Call() {
     if (phaseRef.current === 'listening') listen();
   });
 
+  // ── a call from inside a chat ────────────────────────────────────────────
+  /** Say a line while a chat's turn is running, after whatever is already
+   *  being said. `phase` is what the screen shows while it is said: a question
+   *  is 'speaking', so a tap cuts in to answer it; the 'looking' line leaves
+   *  the call 'thinking'. */
+  const sayInTurn = useCallback((text: string, phase: Phase = 'thinking') => {
+    const next = voiceQueue.current.then(() => new Promise<void>((done) => {
+      if (!live.current) { done(); return; }
+      setPhaseBoth(phase);
+      say('them', text);
+      sayAloud(text, done);
+    }));
+    voiceQueue.current = next;
+    return next;
+  }, [say, sayAloud, setPhaseBoth]);
+
+  /** The approval the chat is waiting on, asked aloud. The answer is the next
+   *  thing heard (see `send`). A destructive request is said and left to the
+   *  app, the same rule the general call keeps. */
+  const askApproval = useCallback(async (d: any) => {
+    const lines = chatCallLines(lang);
+    if (d?.danger) { await sayInTurn(lines.dangerous); return; }
+    approval.current = { id: d?.request_id, asked: false };
+    await sayInTurn(lines.approval(d?.tool || ''), 'speaking');
+    if (!live.current || approval.current?.id !== d?.request_id) return;
+    approval.current.asked = true;
+    // A second "yes" in a row is a second answer, not the echo of the first.
+    lastAsked.current = '';
+    listen();
+  }, [lang, sayInTurn, listen]);
+
+  /** Answered somewhere — by voice, in the app, or by the timeout. */
+  const settleApproval = useCallback(() => {
+    approval.current = null;
+    if (phaseRef.current === 'listening') {
+      hush();
+      closeMic('abort');
+      setHeard('');
+      setPhaseBoth('thinking');
+    }
+  }, [hush, closeMic, setPhaseBoth]);
+
+  /** Follow one turn of the chat until it is over. The phone sees every event
+   *  of every chat; this listens to the one it called. Once per turn, at the
+   *  first tool, it says it is looking rather than going quiet. */
+  const followTurn = useCallback((id: string) => new Promise<TurnEnd>((resolve) => {
+    const lines = chatCallLines(lang);
+    let looked = false;
+    let failed = false;
+    let over = false;
+    const finish = (how: TurnEnd) => {
+      if (over) return;
+      over = true;
+      off();
+      offStatus();
+      clearTimeout(timer);
+      if (turnEnd.current === finish) turnEnd.current = null;
+      approval.current = null;
+      resolve(how);
+    };
+    const off = client.on((ev) => {
+      if (ev.chat_id !== id) return;
+      const d: any = ev.data || {};
+      if (ev.event === 'tool.use' && !looked) { looked = true; void sayInTurn(lines.looking); }
+      else if (ev.event === 'approval.request') void askApproval(d);
+      else if (ev.event === 'approval.resolved') { if (approval.current?.id === d.request_id) settleApproval(); }
+      else if (ev.event === 'turn.error') failed = true;
+      // Idle is the end of the turn and of anything queued behind it: the
+      // moment a typed message would have been answered too.
+      else if (ev.event === 'chat.updated' && d.status === 'idle') finish(failed ? 'error' : 'done');
+    });
+    // Events missed while the socket was down are not replayed here, so a
+    // reconnect asks whether the chat is still at it.
+    const offStatus = client.onStatus((st) => {
+      if (st !== 'online') return;
+      void client.call<{ busy?: boolean }>('chat.history', { chat_id: id, limit: 1 })
+        .then((h) => { if (h && !h.busy) finish(failed ? 'error' : 'done'); }).catch(() => {});
+    });
+    const timer = setTimeout(() => finish('error'), TURN_MAX_MS);
+    turnEnd.current = finish;
+  }), [lang, sayInTurn, askApproval, settleApproval]);
+
+  /** One utterance as a turn of the chat; the spoken form of its reply. */
+  const askChat = useCallback(async (id: string, question: string): Promise<string> => {
+    // Listening starts before sending, so a turn that ends at once is not missed.
+    const ended = followTurn(id);
+    try {
+      await client.call('chat.send', { chat_id: id, text: question });
+    } catch (err) {
+      turnEnd.current?.('gone');
+      throw err;
+    }
+    const how = await ended;
+    if (how === 'gone') return '';
+    if (how === 'error') throw new Error('turn failed');
+    const r = await client.call<{ text: string }>('call.reply', { chat_id: id, lang });
+    await voiceQueue.current;          // the 'looking' line, or an "okay", finishes first
+    return r?.text || '';
+  }, [followTurn, lang]);
+
+  /** A spoken answer to the approval question: yes allows, no denies, and
+   *  anything else asks again. */
+  const answerApproval = useCallback(async (said: string) => {
+    const a = approval.current;
+    if (!a || !chatId) return;
+    const lines = chatCallLines(lang);
+    say('you', said);
+    setHeard('');
+    const yes = yesNo(said);
+    if (yes === null) {
+      lastAsked.current = '';
+      setPhaseBoth('speaking');
+      say('them', lines.yesOrNo);
+      sayAloud(lines.yesOrNo, () => { if (live.current && phaseRef.current === 'speaking') listen(); });
+      return;
+    }
+    approval.current = null;
+    setPhaseBoth('thinking');
+    try {
+      await client.call('approval.respond', { chat_id: chatId, request_id: a.id, decision: yes ? 'allow' : 'deny' });
+    } catch {
+      // Answered in the app in the meantime; the turn goes on either way.
+    }
+    void sayInTurn(yes ? lines.allowed : lines.denied);
+  }, [chatId, lang, say, setPhaseBoth, sayAloud, listen, sayInTurn]);
+
   const ask = useCallback(async (question: string) => {
     say('you', question);
     setHeard('');
@@ -334,11 +491,15 @@ export default function Call() {
     let answer: string;
     let failed = false;
     try {
-      // The phone transcribed it, so the phone knows which language it was —
-      // the daemon would otherwise take its cue from the snapshot, which is
-      // mostly Turkish, and answer English questions in Turkish.
-      const r = await client.call<{ text: string }>('call.ask', { text: question, lang });
-      answer = (r?.text || '').trim();
+      if (chatId) {
+        answer = (await askChat(chatId, question)).trim();
+      } else {
+        // The phone transcribed it, so the phone knows which language it was —
+        // the daemon would otherwise take its cue from the snapshot, which is
+        // mostly Turkish, and answer English questions in Turkish.
+        const r = await client.call<{ text: string }>('call.ask', { text: question, lang });
+        answer = (r?.text || '').trim();
+      }
     } catch (err: any) {
       failed = true;
       answer = err?.code === 'offline' ? T('callOffline') : T('callFailed');
@@ -372,7 +533,7 @@ export default function Call() {
       if (!live.current || phaseRef.current !== 'speaking') return;
       listen();
     });
-  }, [lang, listen, say, sayAloud, setPhaseBoth, T]);
+  }, [chatId, askChat, lang, listen, say, sayAloud, setPhaseBoth, T]);
 
   /** Your turn is over: close the microphone and put the question on the wire.
    *
@@ -387,19 +548,29 @@ export default function Call() {
     const said = transcript.current.trim();
     if (!said || !live.current) return;
     hush();
-    if (isEcho(said, lastSpoken.current) || norm(said) === norm(lastAsked.current)) {
+    // The answer to an approval question is usually one short word, which the
+    // general echo rule (fewer than four letters of your own) would throw away
+    // — and "Yes or no?" contains both answers. There, echo is hearing a good
+    // half of the question back, which a one-word answer never is.
+    const answering = !!approval.current?.asked;
+    const echo = answering ? echoOfQuestion(said, lastSpoken.current) : isEcho(said, lastSpoken.current);
+    if (echo || norm(said) === norm(lastAsked.current)) {
       transcript.current = '';
       setHeard('');
       armSilence();
       return;
     }
-    lastAsked.current = said;
     sending.current = true;
     closeMic('stop');
+    // A chat waiting on an approval that was asked aloud: this is the answer.
+    if (answering) { void answerApproval(said); return; }
+    lastAsked.current = said;
     void ask(said);
-  }, [hush, ask, closeMic, armSilence]);
+  }, [hush, ask, answerApproval, closeMic, armSilence]);
 
-  useEffect(() => { sendRef.current = send; }, [send]);
+  // Kept current on every render rather than in an effect: the silence timer
+  // that calls it can fire before effects have run.
+  sendRef.current = send;
 
   // ── call control ─────────────────────────────────────────────────────────
   /** Placing the call.
@@ -430,7 +601,9 @@ export default function Call() {
     // Fired, not awaited, and its answer not used: this is what warms the model
     // session, and the ringing is what it warms behind. What is running is
     // not said at pickup; the model answers that when it is asked.
-    void client.call('call.hello', {}).catch(() => {});
+    // A call from inside a chat has no concierge to warm: it talks to the
+    // chat's own session, which is already there.
+    if (!chatId) void client.call('call.hello', {}).catch(() => {});
 
     // Ringing, then the click of the other end picking up, then the voice. The
     // microphone opens on the click and not before: a ringtone is not a
@@ -452,10 +625,15 @@ export default function Call() {
     sayAloud(greetingSpoken, () => {
       if (live.current && phaseRef.current === 'speaking') listen();
     });
-  }, [lang, listen, say, setPhaseBoth, T]);
+  }, [chatId, lang, listen, say, setPhaseBoth, T]);
 
+  /** Hanging up stops listening and speaking, and nothing else: a turn still
+   *  running goes on in the chat, exactly as a typed one would. */
   const hangUp = useCallback(() => {
     live.current = false;
+    turnEnd.current?.('gone');
+    approval.current = null;
+    voiceQueue.current = Promise.resolve();
     hush();
     closeMic('abort');
     stopSpeaking();
@@ -478,6 +656,7 @@ export default function Call() {
   // Leaving the screen must not leave a microphone open behind it.
   useEffect(() => () => {
     live.current = false;
+    turnEnd.current?.('gone');
     if (silence.current) clearTimeout(silence.current);
     abortListening();
     stopSpeaking();
@@ -504,7 +683,7 @@ export default function Call() {
   const hint = phase === 'dialling' ? T('callHintDialling')
     : phase === 'listening' ? T('callHintListening')
     : phase === 'speaking' ? T(BARGE_IN ? 'callHintSpeaking' : 'callHintTapCut')
-    : phase === 'idle' ? T('callHintIdle') : '';
+    : phase === 'idle' ? T(chatId ? 'callHintIdleChat' : 'callHintIdle') : '';
 
   const ringColor = phase === 'speaking' ? c.ok
     : phase === 'thinking' || phase === 'dialling' ? c.warn : c.accent;
@@ -515,7 +694,7 @@ export default function Call() {
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <Text style={[{ fontSize: 17, lineHeight: 24 }, { color: c.accent }]}>{T('close')}</Text>
         </Pressable>
-        <Text style={[{ fontSize: 17, fontWeight: '600' as const, lineHeight: 22 }, { color: c.ink }]}>{T('callTitle')}</Text>
+        <Text style={[{ fontSize: 17, fontWeight: '600' as const, lineHeight: 22 }, { color: c.ink }]}>{chatTitle || T('callTitle')}</Text>
         <View style={{ width: 54 }} />
       </View>
 
@@ -526,7 +705,7 @@ export default function Call() {
         onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: true })}>
         {lines.length === 0 && phase === 'idle' && (
           <Text style={[{ fontSize: 15, lineHeight: 20 }, { color: c.muted, textAlign: 'center', marginTop: 40 }]}>
-            {T('callEmpty')}
+            {T(chatId ? 'callEmptyChat' : 'callEmpty')}
           </Text>
         )}
         {lines.map((l) => (
