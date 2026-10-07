@@ -65,6 +65,14 @@ ASSIGNMENTS = {
     "yaml api key": ("api_key: ", A[:20]),
 }
 
+# A password said in a sentence, and an app password near the words that name it.
+SAID = {
+    "turkish password": ("şifrem: ", "Gizli.Sifre-2026!", "password"),
+    "turkish password mid-sentence": ("mailin şifresi ", "Gizli.Sifre-2026!", "password"),
+    "english password": ("the password is ", "Hunter22!", "password"),
+    "app password": ("gmail app password: ", "abcd efgh ijkl mnop", "apppassword"),
+}
+
 DATA_URL = "data:image/png;base64," + base64.b64encode(bytes(range(256)) * 8).decode() \
     + "/AKIA" + "FAKE0123456789AB" + "=="
 ORDINARY = {
@@ -75,6 +83,8 @@ ORDINARY = {
     "identifier": "use re_compile_everything_here and sk-learn-style naming",
     "env reference": "password: process.env.DB_PASSWORD",
     "key path": "EXPO_ASC_API_KEY_PATH=/Users/me/keys/AuthKey_AB12CD34EF.p8",
+    "talk about a password": "şifreni sıfırla, parola alanını gizle, that will pass the tests",
+    "four short words": "what does this mean when then",
 }
 
 
@@ -114,6 +124,11 @@ def detection():
     named = "OPENAI_API_KEY=" + OPENAI
     check([h.kind for h in secrets.find(named)] == ["openai"],
           "a named key in an assignment is filed under its own family")
+
+    for name, (lead, value, kind) in SAID.items():
+        masked = secrets.mask(f"{lead}{value} bunu kullan")
+        check(value not in masked and masked.startswith(lead) and f"[secret {kind} " in masked,
+              f"{name} is masked", masked)
 
     print("\nordinary text is left alone")
     for name, text in ORDINARY.items():

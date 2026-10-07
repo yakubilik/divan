@@ -499,8 +499,8 @@ class ChatSession:
                            else self._build_recap(text))
         if is_untitled(chat["title"]):
             self.db.update_chat(self.chat_id, title=with_project(
-                text.strip().split("\n")[0], self.policy.project_for(chat["cwd"])))
-        await self._set_status("running", last_preview=plain(text)[:200])
+                secrets.shown(text).strip().split("\n")[0], self.policy.project_for(chat["cwd"])))
+        await self._set_status("running", last_preview=plain(secrets.shown(text))[:200])
         return chat
 
     async def _on_idle_output(self) -> None:

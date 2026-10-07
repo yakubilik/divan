@@ -62,6 +62,21 @@ FAMILIES: list[Family] = [
     Family("secret", re.compile(
         r"(?i)(?<![A-Za-z0-9])(?P<n>[A-Za-z0-9_\-]*(?:api[_\-]?key|secret|token|passw(?:or)?d|pwd|access[_\-]?key)"
         r"[A-Za-z0-9_\-]*)['\"]?\s*[=:]\s*['\"]?(?P<v>[A-Za-z0-9_\-/+=.]{12,})"), mixed=True),
+    # An app password (Google, Apple) is four groups of four letters. The shape
+    # alone is four short words, so it counts only with the words that come
+    # with it close by: "app password", "uygulama şifresi", "gmail", "şifre".
+    Family("apppassword", re.compile(
+        r"(?i)(?:app(?:lication)?[ \-]?(?:specific )?passw(?:or)?d|uygulama şifre\w*|app şifre\w*|gmail|"
+        r"şifre\w*|parola\w*|passw(?:or)?d)[^\n]{0,40}?(?<![a-z])(?P<v>[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}|[a-z]{16})(?![a-z])")),
+    # A password said in a sentence, in Turkish or English: "şifrem: …",
+    # "mailin şifresi … bunu kullan", "password is …". The value has to have a
+    # digit or a symbol in it, which keeps "şifreni sıfırla" a sentence and
+    # `process.env.DB_PASSWORD` a name; a full stop or comma after it is the
+    # sentence's.
+    Family("password", re.compile(
+        r"(?i)(?<![A-Za-zÇĞİÖŞÜçğıöşü])(?:şifre(?:m|n|si|miz|niz|leri)?|parola(?:m|n|sı|mız)?|"
+        r"passw(?:or)?d|pwd|pw|pass)(?:\s*[:=]|\s+(?:is|şu|şudur|olarak)\b)?\s*['\"]?"
+        r"(?P<v>(?=[^\s'\"]*[^\sA-Za-zÇĞİÖŞÜçğıöşü._'\"])[^\s'\"]{6,}?)['\"]?(?=[.,;:)]*(?:\s|$))")),
 ]
 
 # Spans nothing is looked for in: an inline image is long, random, and not a
@@ -96,6 +111,24 @@ def placeholder(kind: str, service: str, stored: bool = True) -> str:
     if stored:
         return f"[secret {kind} {service} — read with: security find-generic-password -s {service} -w]"
     return f"[secret {kind} {service} — not saved: the keychain refused it]"
+
+
+#: What a person calls each family, for the places that show a placeholder as a
+#: line of text: a chat's title and the preview under it in the list.
+NAMES = {
+    "openai": "OpenAI key", "anthropic": "Anthropic key", "github": "GitHub token",
+    "aws": "AWS key", "google": "Google key", "stripe": "Stripe key", "resend": "Resend key",
+    "posthog": "PostHog key", "sentry": "Sentry token", "slack": "Slack token",
+    "telegram": "Telegram bot token", "jwt": "token", "pem": "private key", "secret": "secret",
+    "password": "password", "apppassword": "app password",
+}
+
+
+def shown(text: str) -> str:
+    """The text with each placeholder as `🔒 OpenAI key`: for a title or a preview,
+    where the pointer the agent needs is a line of noise, and a cut at 200
+    characters would leave half of one."""
+    return _PLACEHOLDER.sub(lambda m: "🔒 " + NAMES.get(m.group(0).split(" ")[1], "secret"), text or "")
 
 
 def _mixed(value: str) -> bool:
