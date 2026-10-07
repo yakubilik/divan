@@ -55,11 +55,38 @@ const answer = async (key: string, type: string, data: any = {}) => {
       login_methods: [{ id: 'subscription', label: 'Subscription' }] }], npm: true };
     case 'screen.info': return { view: true, control: true, enabled: false, os: 'darwin', displays: [] };
     case 'account.login': return { needs_code: true };
+    case 'screen.enable': return { enabled: !!data.enabled };
+    case 'daemon.restart': return { draining: true, pending: [{ chat_id: 'c2', busy: true, queued: 0 }] };
     case 'divan.card.get': return { card: snapshot.cards.find((c: any) => c.id === data.card_id) ?? null };
     case 'divan.project.open': return { items: [] };
     case 'host.git': return { repos: [] };
     default: return {};
   }
+};
+
+/** A computer paired from the page (`window.__fleet.getState().addHost`) talks
+ *  through this instead of a network: it opens at once, never answers a request
+ *  (those go through `answer` above), and `window.__emit` pushes the daemon's
+ *  events down it — the restart narration, a sign-in prompt. */
+const sockets: FakeSocket[] = [];
+class FakeSocket {
+  static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
+  readyState = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((m: { data: string }) => void) | null = null;
+  onclose: ((e: { code: number; reason: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  constructor(public url: string) {
+    sockets.push(this);
+    setTimeout(() => { this.readyState = 1; this.onopen?.(); }, 0);
+  }
+  send() {}
+  close() { this.readyState = 3; }
+}
+(window as any).WebSocket = FakeSocket;
+(window as any).__fleet = useFleet;
+(window as any).__emit = (event: string, data: object) => {
+  for (const s of sockets) if (s.readyState === 1) s.onmessage?.({ data: JSON.stringify({ type: 'event', event, data }) });
 };
 
 useFleet.setState({

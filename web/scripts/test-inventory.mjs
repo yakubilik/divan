@@ -44,7 +44,7 @@ for (const platform of ['Web', 'Phone']) {
   const empty = table.filter((r) => r.length !== 5 || !r[0] || !r[2]);
   const missing = table.filter((r) => /missing|not built|gone|removed/i.test(r[2]));
   const unproven = table.filter((r) => {
-    const m = r[4].match(/^(\w+): "(.+)"$/);
+    const m = r[4].match(/^(\w+): "(.+?)"(?: — .+)?$/);
     return !m || !SOURCES[m[1]] || !SOURCES[m[1]].includes(m[2]);
   });
   ok(`${platform}: ${table.length} actions, each with a new place and none marked missing`,
@@ -52,6 +52,22 @@ for (const platform of ['Web', 'Phone']) {
   ok(`${platform}: every proof names a check that exists in the file it cites`,
     !unproven.length, unproven.map((r) => `${r[0]} → ${r[4]}`).join('\n    '));
 }
+
+// Every request and event type either client names is somewhere in the file.
+const named = new Set();
+const walk = (dir) => {
+  for (const e of readdirSync(join(repo, dir), { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    if (e.isDirectory()) walk(p);
+    else if (/\.tsx?$/.test(e.name)) {
+      for (const m of read(p).matchAll(/['"]((?:account|agent|approval|call|chat|daemon|device|divan|group|host|limits|pool|screen|tool|update|ustabasi)\.[a-z_.]+)['"]/g)) named.add(m[1]);
+    }
+  }
+};
+for (const dir of ['web/src', 'app/src', 'app/app']) walk(dir);
+const absent = [...named].filter((t) => !doc.includes(t)).sort();
+ok(`all ${named.size} request and event types the clients name are in the file`, named.size >= 70 && !absent.length,
+  absent.join(', '));
 
 console.log(failures ? `\n${failures} failed` : '\nall good');
 process.exit(failures ? 1 : 0);

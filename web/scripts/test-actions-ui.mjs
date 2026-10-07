@@ -39,12 +39,29 @@ try {
   const restarted = await press('Restart') && await sent('daemon.restart', (d) => d.force === false);
   ok('the update page asks update.status, Update sends update.apply and Restart sends daemon.restart',
     status && updated && restarted, JSON.stringify({ status, updated, restarted }));
+  // A computer whose socket the harness holds, so the daemon's own narration of
+  // a restart can be sent down it.
+  await b.evaluate(`window.__fleet.getState().addHost({ host: '127.0.0.1', port: 9999, token: 't', name: 'spare' });
+    await new Promise((r) => setTimeout(r, 400));`);
+  await press('Restart', 'button', true);
+  await b.evaluate(`window.__emit('daemon.restarting', { state: 'draining', pending: [{ chat_id: 'c2', busy: true, queued: 0 }] });
+    await new Promise((r) => setTimeout(r, 300));`);
+  const drained = await press('Cancel', 'button', true);
+  ok('a restart that is waiting on work can be called off: Cancel sends daemon.restart.cancel',
+    drained && await sent('daemon.restart.cancel'), JSON.stringify({ drained }));
 
   console.log('── Machine › Machines › Remote screen and Folders');
   await b.cold('/machine/screen');
   const info = await sent('screen.info');
   const control = await press('Take control') && await sent('screen.enable', (d) => d.enabled === true);
   ok('the remote screen asks screen.info and Take control sends screen.enable', info && control, JSON.stringify({ info, control }));
+  const connected = await press('Connect');
+  await b.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));`);
+  ok('connected and in control, a key pressed on the page goes to the computer as screen.input',
+    connected && await sent('screen.input', (d) => JSON.stringify(d.actions).includes('enter')), JSON.stringify({ connected }));
+  // The picture itself is asked of a computer that is not there.
+  b.drain();
   await b.cold('/machine/projects');
   ok('Folders asks the computer for host.git on its repositories', await sent('host.git'));
 
@@ -72,9 +89,12 @@ try {
   await b.cold('/machine/preferences');
   await press('Accounts', 'nav button');
   const signIn = await press('Sign in') && await press('Start') && await sent('account.login');
+  const coded = signIn && await type('the code from the page', 'abcdef-123456');
+  const verified = coded && await press('Verify')
+    && await sent('account.login.submit', (d) => d.code === 'abcdef-123456');
   const cancelled = await press('Cancel') && await sent('account.login.cancel');
-  ok('Sign in sends account.login, and leaving the sheet sends account.login.cancel',
-    signIn && cancelled, JSON.stringify({ signIn, cancelled }));
+  ok('Sign in sends account.login, the code goes as account.login.submit, and leaving the sheet sends account.login.cancel',
+    signIn && verified && cancelled, JSON.stringify({ signIn, coded, verified, cancelled }));
 
   console.log('── the keyboard, the palette and the chat window');
   const key = (k) => b.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, metaKey: true, bubbles: true }));

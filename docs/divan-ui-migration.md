@@ -70,7 +70,7 @@ The quoted words are the check's own name.
 | Say something to the run | Card say box | Live › Say one sentence to the agent | `ustabasi.note` | drive: "a sentence typed into Say one sentence to the agent is sent as ustabasi.note" |
 | Read the run | Run log | Live; The whole run | `ustabasi.run` | drive: "Live shows the run’s latest steps as a mono time and a sentence" |
 | Move back to Queued | Board drag only | Ticket side column (frame) and drag | `divan.card.move` | drive: "Move back to Queued on an in-progress ticket sends divan.card.move to queued" |
-| Stop / run next / restart / edit / delete a ticket | Wall ticket window | Wall window and ticket page | `ustabasi.cancel`, `.priority`, `.restart`, `.edit`, `.delete` | drive: "run next, stop, restart, edit and delete are on the ticket" |
+| Stop / run next / restart / edit / delete a ticket | Wall ticket window | Wall window and ticket page | `ustabasi.cancel`, `ustabasi.priority`, `ustabasi.restart`, `ustabasi.edit`, `ustabasi.delete` | drive: "run next, stop, restart, edit and delete are on the ticket" |
 | The queue | Terminal place | Machine › Terminal | `ustabasi.list` | drive: "…and the queue’s tickets are on it" |
 | Type into a chat on the wall | Terminal peek | Machine › Terminal peek | `chat.send` | drive: "Terminal takes a command" |
 | Open a chat | Chat list | Earlier list; `/chats/<id>` | `chat.get` | drive: "the Chat place lands in a writable chat without a choice" |
@@ -87,9 +87,11 @@ The quoted words are the check's own name.
 | Pair a computer | Machines page | Machine › Machines › Pair | — | actions: "a pairing link pasted on Machines adds that computer to the panel" |
 | Unpair a computer | Settings / Machines | Machine card Remove; Settings | `device.revoke_self` | drive: "…and removing it revokes this browser’s pairing on that computer" |
 | Remote screen | Screen page | Machine › Machines › Remote screen | `screen.info`, `screen.enable` | actions: "the remote screen asks screen.info and Take control sends screen.enable" |
+| Drive the remote screen | Screen page | Same | `screen.input` | actions: "connected and in control, a key pressed on the page goes to the computer as screen.input" |
 | Folders | Projects page | Machine › Machines › Folders | `host.git` | actions: "Folders asks the computer for host.git on its repositories" |
 | Stop a turn from the sessions list | Fleet page | Machine › Machines › Sessions and plan limits | `chat.interrupt` | actions: "Sessions and plan limits stops a running turn (chat.interrupt)" |
 | Update the computer | Update page | Machine › Machines › Update | `update.status`, `update.apply`, `daemon.restart` | actions: "the update page asks update.status, Update sends update.apply and Restart sends daemon.restart" |
+| Call off a restart that is waiting on work | Update page Cancel | Same | `daemon.restart.cancel` | actions: "a restart that is waiting on work can be called off: Cancel sends daemon.restart.cancel" |
 | What a restart would cost | Update page | Same | `daemon.status` | drive: "the update page asks what a restart would cost" |
 | Admin | Admin page | Machine › Machines › Admin | `account.list` | drive: "…and Admin says the same thing about them, on a page nobody asked twice" |
 | Executors table | Executors page | Machine › Executors | — | machine: "Executors is W13’s table" |
@@ -97,7 +99,7 @@ The quoted words are the check's own name.
 | Install a missing CLI | Accounts page | Machine › Executors › Accounts & sign-ins | `tool.install` | drive: "…and pressing it runs the installer on that computer, for that tool" |
 | Sign-in pool | Accounts page | Same page | `pool.get`, `pool.set` | drive: "…and turning the pool on is a write to that computer, not a switch in a browser" |
 | Accounts: add, rename, sign out | Settings › This computer | Machine › Settings › This computer › Accounts | `tool.status`, `account.create`, `account.rename`, `account.logout` | actions: "the accounts page reads tool.status, and Add sends account.create with the name typed" |
-| Sign in, cancel a sign-in | Same | Same | `account.login`, `account.login.cancel` | actions: "Sign in sends account.login, and leaving the sheet sends account.login.cancel" |
+| Sign in, enter the code, cancel a sign-in | Same | Same | `account.login`, `account.login.submit`, `account.login.cancel` | actions: "Sign in sends account.login, the code goes as account.login.submit, and leaving the sheet sends account.login.cancel" |
 | Delete an account | Same | Same | `account.delete` | drive: "agent.install, account.login and account.delete still go out" |
 | Quota thresholds | Quota page | Machine › Settings › Quota thresholds | — | machine: "quota thresholds are still settable with nothing paired" |
 | Default account and model | — (per chat only) | Machine › Settings | — | drive: "the default account and model set in Machine › Settings are what the composer’s chips show" |
@@ -131,7 +133,8 @@ The quoted words are the check's own name.
 | Remote screen, Agents, Accounts, pool, queue, Call | Machine list | Under the four Machine tabs | `screen.*`, `agent.*`, `account.*`, `pool.*`, `ustabasi.*`, `call.*` | phone: "Machine has four tabs at their own routes" |
 | Accounts: add, rename, sign out, delete | Accounts | Machine › Executors › Accounts | `account.create`, `account.rename`, `account.logout`, `account.delete` | phone: "Accounts adds (createAccount), renames, signs out and deletes an account from its menu" |
 | Sign in | Account login | Same | `account.login` | phone: "signing in still sends account.login" |
-| Move a sign-in from another computer | Accounts | Same (one press) | `account.export`, `account.import` | phone: "Move a sign-in is one press from Accounts" |
+| Enter the sign-in code, cancel a sign-in | Account login | Same | `account.login.submit`, `account.login.cancel` | phone: "signing in still sends account.login" — proven up to the code field: the harness draws a screen once and cannot hold typed text, so the press that sends the code is not driven on the phone (the screen and its store call are unchanged from `main`; the same request is driven on the web) |
+| Move a sign-in from another computer | Accounts | Same (one press) | `account.export`, `account.import`, `account.forget` | phone: "Move a sign-in is one press from Accounts" |
 | Agents: install, remove | Agents, store | Machine › Executors › Agents | `agent.install`, `agent.remove` | phone: "holding an installed agent asks, then removes it (removeAgent)" |
 | Install from the store | Agent install | Same | `agent.install` | phone: "Install sends installAgent" |
 | Sign-in pool | Pool | Machine › Executors › pool | `pool.set` | phone: "the pool switch writes setPool" |
@@ -141,10 +144,27 @@ The quoted words are the check's own name.
 | Default account and model | — | Machine › Settings | — | phone: "the default account and model set in Machine › Settings are what the Composer’s chips show" |
 | Call the computer | Settings › Call | Machine › Settings › Call | `call.ask` | phone: "answering a call still opens the call screen" |
 
-Nothing on `main` is missing on `divan-ui`. One row is weaker than the rest: moving a
-sign-in needs two live computers, so the check proves the screen is one press from
-Accounts but cannot send `account.export` / `account.import`; the screen is byte-for-byte
-the one on `main`.
+Nothing on `main` is missing on `divan-ui`; `test-inventory.mjs` also fails if any request
+or event type the clients name is absent from this file. Two phone rows are proven less
+far than the rest, and say so in their row: entering a sign-in code (the harness cannot hold
+typed text) and moving a sign-in (it needs two live computers, so the check proves the
+screen is one press from Accounts but cannot send `account.export` / `account.import` / `account.forget`).
+Both screens are byte-for-byte the ones on `main`.
+
+Fixed on the way, because it blocked a `main` action: on the web, a sign-in that asked for a
+code left its sheet busy, so Verify could never be pressed (`Preferences.tsx`, the same on
+`main`).
+
+## Events the clients only listen to
+
+No press sends these; the daemon pushes them and the screens above redraw from them:
+`account.login.done`, `account.login.prompt`, `account.switched`, `agent.activity`,
+`approval.request`, `approval.resolved`, `chat.created`, `chat.deleted`, `chat.updated`,
+`daemon.restarting`, `pool.exhausted`, `pool.updated`, `tool.install.output`,
+`tool.result`, `tool.use`, `update.applied`, `update.available`. The reads a screen makes on
+its own when it opens — `chat.get`, `chat.list`, `host.info`, `host.projects`,
+`host.status`, `limits.get`, `call.hello`, `device.prefs`, `account.list`, `agent.list` — are
+named in the rows of the pages that make them or here.
 
 ## Where a screen departs from its frame, and why
 
