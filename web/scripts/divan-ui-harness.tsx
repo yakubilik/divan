@@ -15,6 +15,7 @@
 import { createRoot } from 'react-dom/client';
 import '../src/styles/divan-tokens.css';
 import '../src/styles/divan-components.css';
+import '../src/styles/divan-app.css';
 import { themeCss, type Scheme } from '../src/lib/theme';
 import { Gallery } from './divan-gallery';
 import { Onboarding } from '../src/screens/Onboarding';
@@ -23,8 +24,8 @@ import { Sidebar } from '../src/components/Sidebar';
 import { Machine } from '../src/screens/Machine';
 import { Overview } from '../src/screens/Overview';
 import { Shell } from '../src/components/Shell';
+import { Composer } from '../src/components/Composer';
 import { merge, project as productIn } from '../src/lib/divan';
-import { chips } from '../src/lib/shell';
 import { boards } from './overview-fixture.js';
 import { ChatView } from '../src/components/ChatView';
 import { Modal } from '../src/components/Modal';
@@ -147,9 +148,9 @@ const SCREENS: [string, React.ReactNode][] = [
   // The shell and the two places this ticket draws, over the same made-up
   // computer. `Overview` is handed a merged view rather than a store, so it is
   // the one screen here that can be shown with no machine answering as well.
-  ['Shell', <Shell view="overview" onView={noop} now={board.now}
-    chips={chips(board, null)} onProject={noop}>
-    <Overview view={board} project={null} onProject={noop} onAsk={noop} />
+  ['Shell', <Shell view="overview" onView={noop} fleet={board}>
+    <Overview view={board} project={null} onProject={noop} onAsk={noop}
+      composer={<Composer view={board} onAsk={async () => {}} onCard={async () => ''} onOptions={noop} />} />
   </Shell>],
   // The chat place: the bar, the list and the chat, which is the composition
   // the panel is in most of the time and the one place the shell has to leave
@@ -171,7 +172,7 @@ const SCREENS: [string, React.ReactNode][] = [
   // board is the one screen that fills the window it is in.
   ['ShellBoard', <div style={{ height: 620, display: 'flex' }}>
     <Shell view="overview" onView={noop} now={board.now}
-      chips={chips(board, 'quire')} onProject={noop}>
+      fleet={board} back={{ label: "Dashboard", onBack: noop }}>
       <Overview view={board} project={productIn(board, 'quire')} onProject={noop}
         onAsk={noop} tab="board" onTab={noop} />
     </Shell>
@@ -180,7 +181,7 @@ const SCREENS: [string, React.ReactNode][] = [
   // what is filed under it beside the chat itself.
   ['ShellProjectChat', <div style={{ height: 620, display: 'flex' }}>
     <Shell view="overview" onView={noop} now={board.now}
-      chips={chips(board, 'quire')} onProject={noop}>
+      fleet={board} back={{ label: "Dashboard", onBack: noop }}>
       <Overview view={board} project={productIn(board, 'quire')} onProject={noop}
         onAsk={noop} tab="chat" onTab={noop}
         chats={{ count: 1, pane: <>

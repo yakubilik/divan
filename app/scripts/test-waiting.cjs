@@ -414,7 +414,7 @@ for (const scheme of ['dark', 'light']) {
     // The calm state, which is the whole of the fourth promise.
     [`${scheme}: with nothing waiting the screen says so, and keeps its structure`,
       calm.includes('>waitCalm<') && calm.includes('>waitCalmBody<')
-      && calm.includes('>waitTitle<') && calm.includes('tabDashboard')],
+      && calm.includes('>waitTitle<') && /tabDashboard|>divan</.test(calm)],
     [`${scheme}: …with what was finished today under it, because that is counted`,
       calm.includes('calmDone') && CALM.totals.doneToday === 4],
     [`${scheme}: …and no head over a kind with nothing in it`,
@@ -424,7 +424,7 @@ for (const scheme of ['dark', 'light']) {
     [`${scheme}: …nor a count of zero beside the title`, !calm.includes('>0<')],
     // …and the three states a screen made of other computers' answers is in.
     [`${scheme}: a phone paired with nothing draws the whole screen without throwing`,
-      nothing.includes('>waitCalm<') && nothing.includes('tabDashboard')],
+      nothing.includes('>waitCalm<') && /tabDashboard|>divan</.test(nothing)],
     [`${scheme}: every state this screen can be in renders`,
       Object.entries(FLEETS).every(([, hosts]) => draw(scheme, hosts).includes('waitTitle'))],
   );
@@ -545,12 +545,12 @@ for (const scheme of ['dark', 'light']) {
     conn: 'online', loadDivan() {}, ustabasi: null, ustabasiOld: false, loadUstabasi() {},
   });
   const markup = R.render('dark', h(Dashboard));
-  const tile = R.presses().find((p) => p.text.includes('cNeedsYou'));
+  const tile = R.presses().find((p) => p.text === 'waitTitle');
   tile.press();
   checks.push(
-    ['the Dashboard’s first counter is the way into this screen', eq(R.nav.pushed(), ['/waiting'])],
-    ['…and the counter it opens is the number of things on it',
-      markup.includes('cNeedsYou') && W.items(view([STUDIO])).length === 4],
+    ['the Dashboard’s Needs you is the way into this screen', eq(R.nav.pushed(), ['/waiting'])],
+    ['…and it counts the things on it',
+      markup.includes('>needsYou<') && W.items(view([STUDIO])).length === 4],
   );
 
   // …and with nothing behind it there is nothing to open: a tile that dims
@@ -565,7 +565,7 @@ for (const scheme of ['dark', 'light']) {
   checks.push(['…and it is not a way in when there is nothing behind it',
     // Against a screen that did draw something pressable, so that "nothing is
     // pressable here" is not "nothing rendered at all".
-    R.presses().length > 0 && !R.presses().some((p) => p.text.includes('cNeedsYou'))]);
+    R.presses().length > 0 && !R.presses().some((p) => p.text === 'waitTitle')]);
   R.store.reset();
   R.params.reset();
   R.nav.reset();

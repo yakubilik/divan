@@ -11,17 +11,20 @@ import { FieldSheet, accountName, type Field } from './components/FieldSheet';
 import { ApprovalModal, type Pending } from './components/ApprovalModal';
 import { Machine } from './screens/Machine';
 import { Overview, type ProjectTab } from './screens/Overview';
+import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
-import { project as projectIn, useDivanView } from './lib/divan';
+import { project as projectIn, useDivanStore, useDivanView } from './lib/divan';
+import { MODE_COLUMN, cardOf, writer } from './lib/compose';
+import { idOf } from './lib/sessions';
 import {
-  MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, chips, placeOf,
+  MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, placeOf,
   updateWaiting, type View,
 } from './lib/shell';
 import { HOME, pathOf, readPlace, samePlace, searchOf, type Place } from './lib/nav';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
-import { createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
-import { tell, whereFor, whereNote, type Scoped } from './lib/tell';
+import { createCard, createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
+import { idOfTold, tell, useTold, whereFor, whereNote, type Scoped, type ToldPicks } from './lib/tell';
 import type { Agent, Chat } from './lib/protocol';
 
 interface Selection { hostKey: string; chatId: string }
@@ -80,6 +83,8 @@ export function App() {
   // — works inside the overlay without a second copy of any of it.
   const [peek, setPeek] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  /** The Dashboard's Composer, which ⌘N and every "new chat" now lead to. */
+  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   // Whether the sidebar is a list or a rail. Remembered because it is a way of
   // working — terminal mode wants the width, the chat screen wants the list —
@@ -200,6 +205,17 @@ export function App() {
     return out;
   }, [fleet.hosts, fleet.order]);
 
+  /** Where the left end of the line leads: up one level, and on the Dashboard
+   *  nowhere — it is the word. */
+  const scopedName = projectIn(divan, project)?.name ?? project;
+  const back = view !== 'overview'
+    ? { label: 'Dashboard', onBack: () => setView('overview') }
+    : project && (card || branch)
+      ? { label: scopedName ?? 'Project', onBack: () => { setCard(null); setBranch(null); } }
+      : project
+        ? { label: 'Dashboard', onBack: () => chooseProject(null) }
+        : null;
+
   const slot = sel ? fleet.hosts[sel.hostKey] : (fleet.focus ? fleet.hosts[fleet.focus] : null);
   const chat: Chat | null = useMemo(() => {
     if (!sel) return null;
@@ -277,6 +293,35 @@ export function App() {
     setBranch(null);
     setCard(null);
   }, []);
+
+  /** A new chat is written in the Composer: home, and the field focused. */
+  const compose = useCallback(() => {
+    setView('overview');
+    setProject(null);
+    setBranch(null);
+    setCard(null);
+    setTimeout(() => composerRef.current?.focus(), 0);
+  }, []);
+
+  /** Ask: a chat with these words in it, opened in the Chat place. */
+  const ask = useCallback(async (text: string, key: string | null, picks: ToldPicks) => {
+    const p = projectIn(divan, key);
+    const told = await tell(text, p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null, picks);
+    // It is read where chats are read, not as a window on the Dashboard.
+    useTold.getState().close(idOfTold(told));
+    open(told.host, told.chatId);
+  }, [divan]);
+
+  /** Ice Box and Start now: the card, written on a machine that has the product. */
+  const file = useCallback(async (text: string, key: string, mode: 'ice' | 'now') => {
+    const p = projectIn(divan, key);
+    const w = writer(divan, p);
+    if (!p || !w) throw new Error(`No paired computer has ${p?.name ?? 'that project'}`);
+    const { title, summary } = cardOf(text);
+    await createCard(w.host, { project_id: w.project, title, summary, column: MODE_COLUMN[mode] });
+    void useDivanStore.getState().load(w.host);
+    return `Filed in ${mode === 'ice' ? 'Ice Box' : 'In Progress'} on ${p.name}.`;
+  }, [divan]);
 
   // The chat on screen catches itself up the moment its computer answers
   // again. Without this a panel that was asleep, or whose socket died quietly
@@ -473,7 +518,8 @@ export function App() {
 
   const commands: Command[] = useMemo(() => {
     const list: Command[] = [
-      { id: 'new', label: 'New chat', shortcut: '⌘N', hint: slot?.info?.name, run: () => setNewChat({}) },
+      { id: 'new', label: 'New chat', shortcut: '⌘N', hint: 'in the Composer', run: compose },
+      { id: 'new-options', label: 'New chat with every option', hint: slot?.info?.name, run: () => setNewChat({}) },
       // The three places first, then every page of the third one: the palette is
       // the one list of everywhere you can go, so it says the same thing the
       // shell does and in the same order.
@@ -523,7 +569,7 @@ export function App() {
       });
     }
     return list;
-  }, [fleet.hosts, fleet.order, fleet.allHosts, slot?.info?.name, theme.scheme, theme.choice]);
+  }, [fleet.hosts, fleet.order, fleet.allHosts, slot?.info?.name, theme.scheme, theme.choice, compose]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -531,14 +577,17 @@ export function App() {
       if (!meta) return;
       if (e.key === 'k') { e.preventDefault(); setPalette((p) => !p); }
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
-      else if (e.key === 'n') { e.preventDefault(); setNewChat({}); }
+      else if (e.key === 'n') { e.preventDefault(); compose(); }
       else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
       // The keys the panel already had open the pages they always did — they
       // are pages of the Machine place now, and nothing about where they land
       // has changed. ⌘0 is for the place the panel opens on; ⌘7 and ⌘8 are the
       // two rows the drawer gained, and ⌘2 still opens a computer's folders,
       // which is a page under the first row rather than a row of its own.
-      else if (e.key === '0') { e.preventDefault(); setView('overview'); }
+      else if (e.key === '0') {
+        e.preventDefault();
+        setView('overview'); setProject(null); setTab('overview'); setBranch(null); setCard(null);
+      }
       else if (e.key === ',') { e.preventDefault(); setView('settings'); }
       else if (e.key === '1') { e.preventDefault(); setView('machines'); }
       else if (e.key === '2') { e.preventDefault(); setView('projects'); }
@@ -568,15 +617,18 @@ export function App() {
       <style>{themeCss()}</style>
       <style>{KEYFRAMES}</style>
       <Shell
-        view={view} onView={setView} now={divan.now} dots={dots}
-        // The chips are over the Dashboard and the pages under it, which is
-        // where the frames draw them and where they mean something.
-        chips={place === 'dashboard' ? chips(divan, project) : null}
-        onProject={chooseProject}
+        view={view} onView={setView} fleet={divan} dots={dots}
+        onHome={() => { setView('overview'); chooseProject(null); }}
+        back={back}
       >
         {place === 'dashboard' && (
           <Overview
             view={divan} project={projectIn(divan, project)} onProject={chooseProject}
+            composer={(
+              <Composer view={divan} onAsk={ask} onCard={file} inputRef={composerRef}
+                onOptions={() => setNewChat({})} />
+            )}
+            onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setBranch(null); setCard(idOf(c)); }}
             tab={tab} onTab={setTab}
             branch={branch} onBranch={setBranch}
             card={card} onCard={setCard}
@@ -623,7 +675,7 @@ export function App() {
           <>
             <Sidebar
               selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
-              onNewChat={() => setNewChat({})}
+              onNewChat={compose}
               onNewChatIn={(host, cwd) => setNewChat({ host, cwd })}
               searchRef={searchRef}
               collapsed={rail} onCollapse={setRailTo}
@@ -636,7 +688,7 @@ export function App() {
           <Machine
             view={view} onView={setView} fleet={divan}
             onOpenChat={open}
-            onNewChat={() => setNewChat({})}
+            onNewChat={compose}
             onNewChatIn={(cwd) => setNewChat({ cwd })}
             onStartChat={(agent, accountId) => setNewChat({ agent: { agent, accountId } })}
             onPeek={(hostKey, chatId) => { select(hostKey, chatId); setPeek(true); }}

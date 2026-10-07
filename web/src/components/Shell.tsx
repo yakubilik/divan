@@ -1,115 +1,143 @@
-/** The shell the three places stand in: the top bar, the project chips across
- *  it, and the switch between the two themes.
+/** The thin line over every page (HANDOVER §1, §3: `dv-topline`), and the page
+ *  under it.
  *
- *  What a place *is* — which screens are in it, what the Machine list holds, what
- *  the project bar says, where the chosen product is kept — is in
- *  `src/lib/shell.ts`, where a check can reach it. This is the drawing of it, out
- *  of the design system's own parts and nothing else (`ui/divan.tsx`): a bar,
- *  three nav items, a rule, a run of pills, a mono stamp and a mono chip.
+ *  It is the only navigation the panel has. On the left, the way back — or the
+ *  word `divan` on the Dashboard, which is where back leads. On the right, the
+ *  system line: how many machines answered, how much of the plan is left, the
+ *  Chats and the Machine place, and the switch between the two themes. The
+ *  three-place bar and its project chips are gone: a product is a tile on the
+ *  Dashboard, and a chat is started from the Composer.
  *
- *  Web12 W1 and Web13 W3 are this bar in the two themes, and the theme is the
- *  whole of what differs between them — every colour here is a token reference,
- *  so the switch at the far end is one attribute on `<html>` and no render of
- *  the page at all. Nothing in this file reads a colour in JavaScript.
+ *  Every number on it is counted off the merged view. A quota nothing has
+ *  measured is not drawn at all.
  */
 import { setThemeChoice, useTheme } from '../lib/theme';
-import { BarChip, BarDivider, BarStamp, NavItem, Pill, TopBar } from '../ui/divan';
-import { P, glyph } from '../ui/kit';
-import {
-  PLACES, PLACE_ICON, PLACE_LABEL, PLACE_VIEW, placeOf, type Chip, type Place, type View,
-} from '../lib/shell';
+import { placeOf, type Chip, type Place, type View } from '../lib/shell';
+import type { DivanView } from '../lib/divan';
+import { useThresholds } from '../lib/machine';
 import type { State } from '../lib/theme';
 
-/** The bar's own clock: Web12 W1's `Mon 28 Sep · 23:14`. The date is the day it
- *  is read on, in the frame's own order, and the time is to the minute — a
- *  second hand in a top bar is a thing that moves for no reason. */
+/** The line's clock, which the old bar carried and the frames dropped. Kept
+ *  for the screens that still print one. */
 export function stamp(now: number): string {
   const d = new Date(now * 1000);
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
     + ` · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-/** The chips, which are in the bar where the frames draw them: over the
- *  Dashboard and the pages under it (Web12 W1, Web14 W6), and not over the
- *  Machine pages, whose bar ends in what the fleet is doing instead (Web15).
- *
- *  It never wraps — a second row of chips would move the bar's height — and it
- *  scrolls sideways when there are more products than room, which is what the
- *  frame does with its fifth chip. */
-function ProjectBar({ chips, onSelect }: {
-  chips: Chip[];
-  onSelect: (key: string | null) => void;
-}) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
-      overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none',
-    }}>
-      {chips.map((chip) => (
-        <Pill
-          key={chip.key ?? '*'} label={chip.label} dot={chip.state}
-          face={chip.selected ? 'ink' : 'surface'}
-          title={chip.key ? `Everything on ${chip.label}` : 'Every product'}
-          onClick={() => onSelect(chip.key)}
-        />
-      ))}
-    </div>
-  );
-}
+const SVG = (d: string) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg>
+);
+const MACHINE = 'M5 4h14a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM5 13h14a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2zM7 7.5h.01M7 16.5h.01';
+const CHAT = 'M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z';
+const MOON = 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z';
+const SUN = 'M12 4V2M12 22v-2M4.9 4.9 3.5 3.5M20.5 20.5l-1.4-1.4M4 12H2M22 12h-2M4.9 19.1l-1.4 1.4M20.5 3.5l-1.4 1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z';
+const BACK = 'M15 5 8 12l7 7';
 
-/** The switch, at the end of the bar where Web15 puts what the panel has to say
- *  for itself. It is labelled with the theme it will give you — the same way the
- *  command palette offers the one that is not on screen — and it chooses by
- *  hand, so the third answer (follow this computer) stays where there is room to
- *  explain it, in Settings › Appearance. */
+/** The switch, at the end of the line. Labelled with the theme it will give
+ *  you; the third answer (follow this computer) is in Machine › Settings. */
 export function ThemeSwitch() {
   const { scheme } = useTheme();
   const other = scheme === 'dark' ? 'light' : 'dark';
   return (
-    <BarChip
-      icon={other === 'light' ? P.sun : P.moon}
-      label={other === 'light' ? 'Light' : 'Dark'}
-      title={`Switch to the ${other} theme`}
-      onClick={() => setThemeChoice(other)}
-    />
+    <button type="button" className="dv-icon-btn dv-hit" title={`Switch to the ${other} theme`}
+      aria-label={`Switch to the ${other} theme`} onClick={() => setThemeChoice(other)}>
+      {SVG(other === 'light' ? SUN : MOON)}
+    </button>
   );
 }
 
-/** A place: the bar, and the place's own content under it. */
-export function Shell({ view, onView, now, chips, dots, onProject, children }: {
+/** The right-hand half: `● 2/2 machines · ◔ quota 64% · Chats · Machine`. */
+function Sys({ fleet, here, dots, onView }: {
+  fleet?: DivanView | null;
+  here: Place;
+  dots?: Partial<Record<Place, State>>;
+  onView: (view: View) => void;
+}) {
+  const warn = useThresholds((s) => s.thresholds.warn);
+  const t = fleet?.totals;
+  const q = fleet?.quota;
+  const left = q && !q.unknown && q.left != null ? Math.max(0, Math.min(1, q.left)) : null;
+  const low = left != null && left <= warn;
+  const all = !!t && t.machines > 0 && t.reachable === t.machines;
+  return (
+    <div className="sys">
+      {!!t && t.machines > 0 && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-sys="machines">
+          <i className={`dv-dot ${all ? 'dv-dot--run' : t.reachable ? 'dv-dot--ask' : 'dv-dot--stuck'}`} aria-hidden="true" />
+          <b>{t.reachable}/{t.machines}</b><span className="sys-word"> machines</span>
+        </span>
+      )}
+      {left != null && (
+        <>
+          <span className="sep" />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-sys="quota">
+            <span className={`dv-ring${low ? ' dv-ring--low' : ''}`} aria-hidden="true"
+              style={{ ['--p' as any]: `${Math.round(left * 100)}%` }} />
+            <span className="sys-word">quota </span><b>{Math.round(left * 100)}%</b>{low && <span style={{ color: 'var(--amber)' }}>low</span>}
+          </span>
+        </>
+      )}
+      <span className="sep" />
+      <PlaceButton label="Chats" icon={CHAT} on={here === 'chat'} dot={dots?.chat}
+        onClick={() => onView('chats')} />
+      <PlaceButton label="Machine" icon={MACHINE} on={here === 'machine'} dot={dots?.machine}
+        onClick={() => onView('machines')} />
+      <ThemeSwitch />
+    </div>
+  );
+}
+
+function PlaceButton({ label, icon, on, dot, onClick }: {
+  label: string; icon: string; on: boolean; dot?: State; onClick: () => void;
+}) {
+  return (
+    <button type="button" className="dv-btn dv-btn--ghost dv-hit" aria-current={on ? 'page' : undefined}
+      // A place you are already in is not re-entered: it would drop the
+      // Machine page you are reading for the first one in its list.
+      onClick={() => { if (!on) onClick(); }}
+      title={on ? undefined : `Go to ${label}`} aria-label={label}>
+      {SVG(icon)}<span className="sys-word">{label}</span>
+      {!!dot && <><i className="dv-dot dv-dot--ask" aria-hidden="true" /><span className="dv-hidden">needs you</span></>}
+    </button>
+  );
+}
+
+/** A page: the line, and the page's own content under it. `back` is where the
+ *  left end leads; absent, it is the word, on the Dashboard. */
+export function Shell({ view, onView, fleet, dots, back, onHome, children }: {
   view: View;
   onView: (view: View) => void;
-  /** The clock the merged view was worked out at, so that the bar and the page
-   *  under it cannot age the same machine to two different minutes. */
-  now: number;
-  /** The project bar, where this place has one. */
+  /** The merged view the system line counts off. */
+  fleet?: DivanView | null;
+  /** Kept from the old bar's signature; the line has no clock and no chips. */
+  now?: number;
   chips?: Chip[] | null;
+  onProject?: (key: string | null) => void;
   /** Which places have something in them that wants a person. */
   dots?: Partial<Record<Place, State>>;
-  onProject?: (key: string | null) => void;
+  back?: { label: string; onBack: () => void } | null;
+  onHome?: () => void;
   children?: React.ReactNode;
 }) {
   const here = placeOf(view);
-  const bar = chips?.length ? chips : null;
+  const home = here === 'dashboard' && !back;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <TopBar>
-        {PLACES.map((place: Place) => (
-          <NavItem
-            key={place} label={PLACE_LABEL[place]} icon={glyph(PLACE_ICON[place])}
-            on={place === here} dot={dots?.[place] ?? null}
-            title={place === here ? undefined : `Go to ${PLACE_LABEL[place]}`}
-            // A place you are already in is not re-entered: it would drop the
-            // Machine page you are reading for the first one in the list.
-            onClick={() => { if (place !== here) onView(PLACE_VIEW[place]); }}
-          />
-        ))}
-        {!!bar && <BarDivider />}
-        {!!bar && <ProjectBar chips={bar} onSelect={(key) => onProject?.(key)} />}
-        <span style={{ marginLeft: 'auto' }} />
-        <BarStamp>{stamp(now)}</BarStamp>
-        <ThemeSwitch />
-      </TopBar>
+      <header style={{ flex: 'none', padding: '4px 20px' }}>
+        <div className="dv-topline" style={home ? { maxWidth: 1016, margin: '0 auto' } : undefined}>
+          {back ? (
+            <button type="button" className="dv-back dv-hit" onClick={back.onBack}
+              aria-label={`Back to ${back.label}`}>
+              {SVG(BACK)}{back.label}
+            </button>
+          ) : (
+            <a className="dv-word" href="/" aria-current={home ? 'page' : undefined}
+              onClick={(e) => { e.preventDefault(); onHome ? onHome() : onView('overview'); }}>divan</a>
+          )}
+          <Sys fleet={fleet} here={here} dots={dots} onView={onView} />
+        </div>
+      </header>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
         {children}
       </div>

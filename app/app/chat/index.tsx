@@ -19,6 +19,7 @@ import { em, useColors } from '../../src/theme';
 import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../../src/components/ui';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Shell } from '../../src/components/shell';
+import { HOME } from '../../src/shell';
 import type { Chat } from '../../src/protocol';
 
 /** The one section the flat view draws. It is never shown as a heading, so it
@@ -267,11 +268,11 @@ export default function ChatPlace() {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 18, paddingHorizontal: 16, paddingBottom: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
           <Text style={{ fontSize: 30, fontWeight: '600', letterSpacing: em(30, -0.025) }}>{T('chats')}</Text>
-          {/* Tap: the picker, with every choice the panel's dialog has. Long-press:
-              a chat on the defaults, for when nothing needs choosing. */}
+          {/* Tap: the Dashboard's Composer, where a new chat is written with no
+              step in between. Long-press: a chat on the defaults, at once. */}
           {withControls && (
             <Pressable accessibilityLabel={T('newChat')} hitSlop={6}
-              onPress={() => go(() => router.push('/new-chat'))} onLongPress={() => void quickNew()}
+              onPress={() => go(() => router.replace(HOME))} onLongPress={() => void quickNew()}
               style={({ pressed }) => [{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
               <Icon name="edit_square" size={22} />
             </Pressable>
@@ -329,7 +330,7 @@ export default function ChatPlace() {
   } else if (empty) {
     body = online ? (
       <EmptyState icon="chat_bubble" title={T('noChats')} body={T('hintNew')}
-        action={<SmallButton title={T('newChat')} onPress={() => go(() => router.push('/new-chat'))} />} />
+        action={<SmallButton title={T('newChat')} onPress={() => go(() => router.replace(HOME))} />} />
     ) : conn === 'unauthorized' ? (
       <EmptyState icon="key_off" title={T('noAccess')} body={T('noAccessHint', { host: hostName })}
         action={<SmallButton title={T('pairAgain')} onPress={() => go(() => router.push({ pathname: '/pair', params: { add: '1' } }))} />} />

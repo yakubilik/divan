@@ -261,7 +261,7 @@ for (const scheme of ['dark', 'light']) {
       board.includes('>overview<') && board.includes('>bdBoard<')
       && styleOf(board, '■').color === t.red],
     [`${scheme}: every state of the board renders`,
-      Object.values(BOARDS).every(([hosts, params]) => draw(scheme, hosts, params).includes('tabDashboard'))],
+      Object.values(BOARDS).every(([hosts, params]) => /tabDashboard|>divan</.test(draw(scheme, hosts, params)))],
   );
 }
 

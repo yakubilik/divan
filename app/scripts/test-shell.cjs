@@ -86,29 +86,29 @@ checks.push(
       .every((name) => Object.keys(icons.ICON_PATHS).some((k) => k.split(':')[0] === name))],
 );
 
-// The tab bar, stood up. Mobile1 V1: Dashboard, Chat, Machine, left to right,
-// the one you are in sitting in a well of `s2` and the other two in nothing.
+// The line over every place (HANDOVER §3 `dv-topline`): the word on the
+// Dashboard, the way back anywhere else, and Chat and Machine as 44 pt buttons
+// on every one of them — the two places the tab bar used to reach in one press.
 for (const place of S.PLACES) {
+  R.store.reset();
+  R.store.set({ hosts: [], divan: {} });
   const markup = R.render('dark', h(shell.Shell, { place }, null));
-  const at = S.PLACES.map((p) => markup.indexOf(S.PLACE_LABEL[p]));
-  const wells = R.styles(markup).filter((st) => st.width === 60 && st.height === 32);
-  const t = R.theme.tokensFor('dark');
+  const buttons = R.presses().map((x) => x.label);
   checks.push(
-    [`the tab bar draws all three in the frame's order, from ${place}`,
-      at.every((i) => i >= 0) && at[0] < at[1] && at[2] > at[1]],
-    [`…with ${place} the one that is lit, and only it`,
-      wells.length === 3 && wells.filter((st) => st.backgroundColor === t.s2).length === 1
-      && wells[S.PLACES.indexOf(place)].backgroundColor === t.s2],
+    [`the line over ${place} reaches Chat and Machine in one press`,
+      buttons.includes('tabChat') && buttons.includes('tabMachine')],
+    [`…and starts with ${place === 'dashboard' ? 'the word' : 'the way back'}`,
+      place === 'dashboard' ? markup.includes('>divan<') && !buttons.includes('cmBackTo')
+        : buttons.includes('cmBackTo') && !markup.includes('>divan<')],
   );
 }
 {
-  const t = R.theme.tokensFor('dark');
-  const amber = (badge) => R.styles(R.render('dark', h(shell.Shell, { place: 'chat', badge }, null)))
-    .some((st) => st.backgroundColor === t.amber);
-  checks.push(
-    ['what needs a person is counted on the Dashboard’s icon', amber(2) === true],
-    ['…and nothing is drawn there when nothing does', amber(0) === false],
-  );
+  R.store.reset();
+  R.store.set({ hosts: [{ id: 'h1', name: 'studio' }], divan: {} });
+  const none = R.render('dark', h(shell.Shell, { place: 'dashboard' }, null));
+  checks.push(['the line draws no quota where nothing measured one, and no tab bar under it',
+    !/%</.test(none) && !/TabBar/.test(src('src/components/shell.tsx'))]);
+  R.store.reset();
 }
 
 // ── 2 · the app opens on the Dashboard ──────────────────────────────────────
@@ -226,45 +226,20 @@ checks.push(
   ['…and grey on a quiet morning', S.allState({ totals: { needsYou: 0, running: 0 } }) === 'quiet'],
 );
 
-{
-  // The bar as it comes out: the selected chip filled with ink, the rest on the
-  // card colour, each with its dot.
-  const t = R.theme.tokensFor('dark');
-  const markup = R.render('dark', h(shell.ProjectBar, { chips: S.chips(view, 'quire', 'All'), onSelect() {} }));
-  const pills = R.styles(markup).filter((st) => st.height === 34);
-  const dots = R.styles(markup).filter((st) => st.width === 7 && st.height === 7);
-  checks.push(
-    ['the bar draws a chip per product, one of them filled',
-      pills.length === view.projects.length + 1
-      && pills.filter((st) => st.backgroundColor === t.ink).length === 1],
-    ['…and every one of them carries its dot', dots.length === pills.length],
-    ['…including the red one, so a chip says how its product is doing',
-      dots.some((st) => st.backgroundColor === t.red)],
-  );
-}
-
-checks.push(
-  ['the bar belongs to the shell rather than to the Dashboard alone',
-    /export function ProjectBar/.test(src('src/components/shell.tsx')) && /<ProjectBar/.test(dash)],
-);
-
-// Selecting a project enters it — pressed rather than read off the source.
-// The chip's own handler is called, which is a `router.setParams`, which is
-// what puts the project in the address; the screen is then drawn again and
-// asked what it is showing.
+// Selecting a project enters it — pressed rather than read off the source. A
+// tile's handler is a `router.setParams`, which is what puts the project in the
+// address; the screen is then drawn again and asked what it is showing.
 {
   const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
-  /** The words of every `Text` that came out, with the style it came out in. */
   const texts = (markup) => [...markup.matchAll(/<span data-rn="Text"([^>]*)>([^<]*)<\/span>/g)].map((m) => ({
     style: JSON.parse((m[1].match(/data-style="([^"]*)"/) ?? [, '{}'])[1]
       .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")),
     text: m[2],
   }));
-  /** The 26 pt semibold at the top of the page — Mobile1 V1's `Overview`, which
-   *  becomes the product's name when one is being read. The 15 pt semibolds
-   *  under it are the section headings, and there are several. */
+  /** The product's name at 26 pt over its page; on the Dashboard the greeting. */
   const title = (markup) => (texts(markup).find((t) => t.style.fontSize === 26
     && t.style.fontFamily === 'Geist-SemiBold') ?? {}).text;
+  const greeted = (markup) => texts(markup).some((t) => t.style.fontSize === 38);
 
   const machines = () => {
     R.store.reset();
@@ -276,34 +251,21 @@ checks.push(
   };
 
   const all = machines();
-  R.pressOn('Quire');                                   // the chip
+  R.presses().find((x) => x.label === 'Quire').press();   // the tile
   const scoped = R.render('dark', h(Dashboard));
-  const chips = R.styles(scoped).filter((st) => st.height === 34);
-  const t = R.theme.tokensFor('dark');
-  R.pressOn('allProjects');                             // …and back out of it
+  R.presses().find((x) => x.label === 'cmBackTo').press(); // …and back out of it
   const back = R.render('dark', h(Dashboard));
 
   checks.push(
-    ['nothing selected, the Dashboard is every project', title(all) === 'overview'
-      && all.includes('dashSorted') && ['Quire', 'Hush', 'Kanji Daily'].every((n) => all.includes(n))],
-    ['pressing a chip enters that project: the title is its name',
-      title(scoped) === 'Quire'],
+    ['nothing selected, the Dashboard is the greeting and every project', greeted(all)
+      && ['Quire', 'Hush', 'Kanji Daily'].every((n) => all.includes(n))],
+    ['pressing a tile enters that project: the title is its name', title(scoped) === 'Quire'],
     ['…the body is that project and not the list of them',
-      scoped.includes('branches') && scoped.includes('engineering') && !scoped.includes('dashSorted')],
-    ['…and the bar says which one you are in',
-      chips.filter((st) => st.backgroundColor === t.ink).length === 1],
-    ['pressing All comes back out to every project',
-      title(back) === 'overview' && back.includes('dashSorted')],
+      scoped.includes('branches') && scoped.includes('engineering') && !greeted(scoped)],
+    ['the line’s left end comes back out to every project', greeted(back)],
+    ['there is no project bar any more: the products are tiles on the page',
+      !/<ProjectBar/.test(dash) && !/ProjectBar/.test(src('src/components/shell.tsx').split('export function ProjectBar')[0])],
   );
-
-  // A card in the body enters the same project the chip does. Not the chip:
-  // that one's words are the name and nothing else, and a project card carries
-  // its monogram, its line and its state around the same name.
-  const row = R.presses().find((press) => press.text.includes('Kanji Daily')
-    && press.text !== 'Kanji Daily');
-  row.press();
-  checks.push(['a project in the body enters it too',
-    title(R.render('dark', h(Dashboard))) === 'Kanji Daily']);
   R.store.reset();
   R.params.reset();
 }
@@ -406,8 +368,7 @@ checks.push(
   const machineScreen = R.render('light', h(Machine));
   checks.push(
     ['a phone that has heard nothing still draws the Dashboard, and says so',
-      empty.includes('dashEmpty') && empty.includes('tabDashboard')],
-    ['\u2026with the project bar over it either way', empty.includes('allProjects')],
+      empty.includes('dashEmpty') && empty.includes('>divan<')],
     ['\u2026and no ticket queue on it, because no computer said it had one',
       !empty.includes('dashQueueNote')],
     ['the Machine list draws every row it names, under the frame\u2019s own two lines',
@@ -430,7 +391,7 @@ checks.push(
     ['\u2026and carries the queue with the count that needs a person',
       full.includes('dashQueueNote') && full.includes('queueRed')],
     ['\u2026and a machine that has gone quiet is not drawn as a machine that is working',
-      full.includes('pcStale') && full.includes('dashPartly')],
+      full.includes('pfLastSeen') && full.includes('dashStale')],
     ['the Machine list counts the machines it is a list of',
       machineFull.includes('mMachinesNote')],
   );

@@ -66,6 +66,7 @@ import { Branch } from './Branch';
 import { Branches } from './Branches';
 import { Project } from './Project';
 import { Ticket } from './Ticket';
+import { Dashboard } from './Dashboard';
 
 /** The tabs over a product (Web12 W2, Web14 W6): what is happening on it, the
  *  faces it has beside its code, its board, and — the frame's own fourth,
@@ -115,10 +116,15 @@ export interface OverviewProps {
    *  chat themselves. Handed in whole, because the chat is the Chat place's own
    *  surface and its handlers live above both. */
   chats?: { count: number; pane: React.ReactNode } | null;
+  /** The Composer the unscoped page is built round (HANDOVER §4.1). */
+  composer?: React.ReactNode;
+  /** A waiting card's Open: its own page, inside its product. */
+  onOpenCard?: (card: MergedCard) => void;
 }
 
 export function Overview({
   view, project, onProject, onAsk, askNote, tab, onTab, branch, onBranch, card, onCard, chats,
+  composer, onOpenCard,
 }: OverviewProps) {
   const old = staleness(view);
   const agents = agentRows(view);
@@ -146,6 +152,13 @@ export function Overview({
   // draft moves the tab itself, and an effect watching the tab would close the
   // card in the same commit that opened it.
   useEffect(() => { setDrafting(false); }, [project?.key, deep]);
+  if (!project) {
+    return (
+      <Dashboard view={view} onProject={onProject} composer={composer}
+        onCard={(c) => (onOpenCard ? onOpenCard(c) : onProject(c.projectKey))}
+        empty={<Nothing view={view} />} />
+    );
+  }
   const aside = project
     ? (project.machines.join(' · ') || 'no machine')
     : old

@@ -172,7 +172,17 @@ export function whereNote(
  *  takes a minute is a window with a chat opening in it rather than a bar that
  *  swallowed a sentence. A `chat.create` that fails throws with the computer's
  *  own words, and the bar keeps what was typed. */
-export async function tell(text: string, scope?: Scoped | null): Promise<Told> {
+/** What the Composer's chips were changed to for this one chat (`lib/compose.ts`).
+ *  Every field left out is the computer's own default; `agent: null` is a real
+ *  answer, no agent, and `undefined` is Hermes. */
+export interface ToldPicks {
+  provider?: Provider;
+  model?: string;
+  account_id?: string;
+  agent?: string | null;
+}
+
+export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks = {}): Promise<Told> {
   const words = (text || '').trim();
   if (!words) throw new Error('Nothing to send');
   const fleet = useFleet.getState();
@@ -187,15 +197,17 @@ export async function tell(text: string, scope?: Scoped | null): Promise<Told> {
   // of Divan is asking for. Claude because an agent is a Claude idea; a
   // computer that cannot open a Claude chat opens its usual one, plain.
   const prefs = usePrefs.getState().defaults;
-  const open = toldDefaults(slot, prefs, host, 'claude') ?? toldDefaults(slot, prefs, host);
+  const open = picks.provider
+    ? toldDefaults(slot, prefs, host, picks.provider)
+    : toldDefaults(slot, prefs, host, 'claude') ?? toldDefaults(slot, prefs, host);
   if (!open) {
     const name = slot.info?.name ?? slot.cfg?.name ?? host;
     throw new Error(`${name} has not said what it can open a chat on yet`);
   }
   const cwd = at.cwd ?? open.cwd;
-  const agent = open.provider === 'claude'
-    ? await hermesOn(host, open.account_id || null, cwd)
-    : null;
+  const account = picks.account_id ?? open.account_id;
+  const agent = picks.agent !== undefined ? picks.agent
+    : open.provider === 'claude' ? await hermesOn(host, account || null, cwd) : null;
   // The computer names a chat after the folder it is in (`with_project`), so a
   // chat that opened in the product's repository already says which product it
   // is about. One with no repository to open in says it here instead.
@@ -204,10 +216,10 @@ export async function tell(text: string, scope?: Scoped | null): Promise<Told> {
     : chatTitle(words);
   const chat = await createChat(host, {
     provider: open.provider,
-    model: open.model!,
+    model: picks.model ?? open.model!,
     effort: open.effort,
     perm_mode: open.perm_mode ?? undefined,
-    account_id: open.account_id || undefined,
+    account_id: account || undefined,
     cwd: cwd ?? undefined,
     title,
     ...(agent ? { agent_id: agent } : {}),
@@ -236,7 +248,7 @@ export async function tell(text: string, scope?: Scoped | null): Promise<Told> {
  *  way New chat finds it. Null when it is not installed there or the computer
  *  will not say: the chat still opens, without the agent, rather than not at
  *  all. */
-async function hermesOn(host: string, accountId: string | null, cwd: string | null): Promise<string | null> {
+export async function hermesOn(host: string, accountId: string | null, cwd: string | null): Promise<string | null> {
   try {
     const r: any = await listAgents(host, accountId, cwd ?? undefined);
     const hit = (r?.agents ?? []).find((a: any) => a.installed && (a.name === 'hermes' || a.id === 'hermes'));

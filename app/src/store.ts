@@ -9,7 +9,7 @@ import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, Diva
 import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, Polls, silent, type HostDivan } from './divan';
 import { missed, opening, took, type Open, type Say } from './card';
-import { filed, type Filing } from './compose';
+import { filed, NO_DRAFT, type ComposeDraft, type Filing } from './compose';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -214,6 +214,11 @@ interface State {
   checkUpdate: (refresh?: boolean) => Promise<void>;
   applyUpdate: () => Promise<{ ok: boolean; error?: string }>;
   setShowArchived: (v: boolean) => void;
+  /** What is typed into the Dashboard's Composer, and the mode and chips under
+   *  it. Here rather than in the screen so that leaving the Dashboard for a
+   *  moment does not lose a half-written sentence. */
+  compose: ComposeDraft;
+  setCompose: (patch: Partial<ComposeDraft>) => void;
   settleLive: (chatId: string) => void;
   loadProjects: () => Promise<void>;
   openChat: (id: string) => Promise<void>;
@@ -639,6 +644,7 @@ export const useStore = create<State>((set, get) => {
     projects: [], accounts: [], tools: [], npmAvailable: true, loginPrompt: null, loginDone: null,
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
+    compose: NO_DRAFT,
     chats: {}, groups: [], showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
     ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {}, openCard: null,
@@ -787,6 +793,7 @@ export const useStore = create<State>((set, get) => {
     },
 
     setShowArchived: (v) => { set({ showArchived: v }); },
+    setCompose: (patch) => { set({ compose: { ...get().compose, ...patch } }); },
 
     /** Drop a finished live segment once the chat screen has typed it out. */
     settleLive: (chatId) => {

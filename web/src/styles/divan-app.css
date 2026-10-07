@@ -1,0 +1,60 @@
+/* What the panel adds to the Divan sheets: the pieces HANDOVER §5 describes in
+   words and the component sheet has no class for (the chips under the
+   Composer and their menus), and the 44px reach every small control is given.
+   Values only from divan-tokens.css. Loaded after divan-components.css. */
+
+/* A control drawn smaller than a fingertip still answers one: the box it
+   draws stays, the area that takes the press is 44px tall. */
+.dv-hit{position:relative}
+.dv-hit::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;height:44px;margin-top:-22px}
+
+/* The page column every screen sits in. */
+.dv-page{max-width:1080px;margin:0 auto;padding:20px 32px 96px;display:flex;flex-direction:column;width:100%}
+.dv-topline{position:relative}
+.dv-topline .dv-back{appearance:none;border:0;background:transparent;color:var(--ink-2);font:inherit;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 6px;border-radius:var(--radius-pill);cursor:pointer}
+.dv-topline .dv-back:hover{color:var(--ink);background:var(--hairline)}
+.dv-topline .dv-back svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.dv-topline a.dv-word,.dv-topline button.dv-word{appearance:none;border:0;background:transparent;color:var(--ink);text-decoration:none;cursor:pointer;padding:0;font-family:inherit}
+.dv-topline .sys .dv-btn--ghost[aria-current="page"]{color:var(--ink)}
+
+/* The scope row holds its menu. */
+.dv-composer .dv-scope{position:relative}
+
+/* §5: the chips under the Composer. One row, scrolled sideways on a narrow
+   screen rather than wrapped. */
+.dv-pickers{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}
+.dv-picker .lbl{color:var(--ink-3);font-weight:500}
+.dv-picker .val{color:var(--ink-2)}
+.dv-picker[data-changed="true"] .val{color:var(--ink)}
+.dv-picker[data-changed="true"]{border-color:var(--ink-3)}
+.dv-picker .warn{color:var(--amber);font-weight:500}
+.dv-picker .dv-dot{width:6px;height:6px}
+.dv-picker-x{width:24px;height:24px;margin-left:-2px}
+.dv-picker-x svg{width:13px;height:13px}
+.dv-send:disabled{background:var(--hairline);color:var(--ink-3);cursor:default}
+
+/* The menu a chip opens: --glass-2, --radius-md. */
+.dv-menu{position:absolute;z-index:20;top:calc(100% + 6px);left:0;min-width:220px;max-height:320px;overflow-y:auto;padding:4px;background:var(--glass-2);border:1px solid var(--glass-edge);border-radius:var(--radius-md);box-shadow:var(--shadow-float);display:flex;flex-direction:column}
+.dv-menu button{appearance:none;border:0;background:transparent;color:var(--ink-2);font:inherit;font-size:13px;line-height:18px;text-align:left;min-height:36px;padding:8px 10px;border-radius:var(--radius-sm);display:flex;align-items:center;gap:10px;cursor:pointer}
+.dv-menu button span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-menu button:hover{background:var(--hairline);color:var(--ink)}
+.dv-menu button[aria-checked="true"]{color:var(--ink);font-weight:500}
+.dv-menu button[aria-checked="true"]::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--ink)}
+
+/* Tiles and wait cards are a link and an article; the tile's link keeps the
+   tile's own colour. */
+.dv-tile{cursor:pointer}
+.dv-tile-foot .count,.dv-tile-foot .when{white-space:nowrap}
+.dv-tile .count .w{font-family:var(--font-sans);font-weight:400;color:var(--ink-3)}
+.dv-wait .dv-btn{min-height:30px}
+.dv-live .dv-dot{flex:none}
+.dv-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+@media (max-width:720px){
+  .dv-page{padding:16px 16px 64px}
+  .dv-greet{font-size:38px;line-height:40px}
+  .dv-topline .sys{gap:6px}
+  .dv-topline .sys .sys-word{display:none}
+  .dv-seg button{white-space:nowrap;padding:0 10px}
+  .dv-composer-foot>.dv-meta{display:none}
+}
