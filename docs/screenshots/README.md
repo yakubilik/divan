@@ -34,7 +34,7 @@ A separate daemon, so nothing real is in the frame:
 
 ```bash
 mkdir -p ~/demo-projects && cd ~/demo-projects
-git clone https://github.com/yakubilik/remote-ai-chat.git      # a project to talk about
+git clone https://github.com/yakubilik/divan.git      # a project to talk about
 
 cd <this checkout>/daemon
 RAC_HOME=/tmp/rac-demo .venv312/bin/remote-ai-chat pair --name iPhone

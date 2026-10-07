@@ -34,9 +34,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yakubilik/remote-ai-chat"
-Source = "https://github.com/yakubilik/remote-ai-chat"
-Issues = "https://github.com/yakubilik/remote-ai-chat/issues"
+Homepage = "https://github.com/yakubilik/divan"
+Source = "https://github.com/yakubilik/divan"
+Issues = "https://github.com/yakubilik/divan/issues"
 
 [project.scripts]
 remote-ai-chat = "remote_ai_chat.__main__:main"

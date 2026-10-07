@@ -72,4 +72,4 @@ repository, with the date above updated.
 
 ## Contact
 
-Open an issue at <https://github.com/yakubilik/remote-ai-chat/issues>.
+Open an issue at <https://github.com/yakubilik/divan/issues>.
