@@ -367,6 +367,136 @@ try:
 finally:
     server_mod.acct.refresh, call.ClaudeSDKClient = real_refresh, real_client
 
+# ── 7 · a call from inside a chat ───────────────────────────────────────────
+# The phone sends each utterance with `chat.send`, exactly as a typed message,
+# and asks `call.reply` what to read aloud once the turn is over. A real chat
+# session runs the turn here, with only the CLI underneath swapped out.
+print("chat call")
+from remote_ai_chat import session as session_mod                # noqa: E402
+from remote_ai_chat.config import Config                         # noqa: E402
+from remote_ai_chat.providers.base import TurnResult             # noqa: E402
+
+LONG = ("I found it: the retry loop never resets its counter, so after three failures every "
+        "later webhook is dropped. I changed `retry.ts` and added a test.\n\n"
+        "```ts\nif (ok) attempts = 0;\n```\n\n"
+        "| file | change |\n|---|---|\n| src/retry.ts | reset counter |\n\n"
+        "See ~/projects/quire/src/retry.ts and https://example.com/pr/12 for the rest. "
+        "The full suite passes, the build is green, and nothing else needed touching today.")
+SHORT = "Done, all green."
+
+
+class ChatCLI:
+    """The chat's CLI: records what it was built with and what it was asked,
+    and answers with whatever `replies` holds next."""
+    built: list = []
+    replies: list[str] = []
+
+    def __init__(self, pc, emit, approval):
+        self.pc, self.emit, self.prompts = pc, emit, []
+        ChatCLI.built.append(self)
+
+    async def steer(self, prompt, attachments=None):
+        return False
+
+    async def run(self, prompt, attachments=None):
+        self.prompts.append(prompt)
+        await self.emit("message.assistant", {"text": ChatCLI.replies.pop(0)}, True)
+        return TurnResult(session_id="sess-chat", cost_usd=None, usage=None,
+                          duration_ms=1, num_turns=1)
+
+    def has_pending(self):
+        return False
+
+    async def interrupt(self):
+        pass
+
+    async def close(self):
+        pass
+
+
+class Phone:
+    """Enough of `Server` for `chat.send` and `call.reply` — and no concierge,
+    so a chat call that reached for it would fail here."""
+
+    def __init__(self):
+        self.db = DB(tmp / "chat-call.sqlite")
+        self.draining = False
+        self.live: dict[str, session_mod.ChatSession] = {}
+        host = self
+
+        async def broadcast(_ev):
+            pass
+
+        async def notify(_kind, _chat):
+            pass
+
+        def get(cid):
+            if cid not in host.live:
+                s = session_mod.ChatSession(host.db.get_chat(cid), host.db, Config(), broadcast, notify)
+                s.resolve_account = lambda chat: (
+                    str(tmp / "a2") if chat.get("account_id") == "acct-2" else None, {})
+                host.live[cid] = s
+            return host.live[cid]
+
+        self.sessions = types.SimpleNamespace(get=get, peek=lambda cid: host.live.get(cid))
+        for name in ("h_chat_send", "h_call_reply"):
+            setattr(self, name, getattr(Server, name).__get__(self))
+
+
+async def chat_call() -> dict:
+    phone = Phone()
+    chat = phone.db.create_chat(title="refunds", provider="claude", model="opus", effort="high",
+                                perm_mode="ask", cwd=str(root / "focus"), account_id="acct-2")
+    cid = chat["id"]
+    out: dict = {"chat": chat}
+    ChatCLI.built, ChatCLI.replies = [], [LONG, SHORT]
+    for n, said in enumerate(("why are webhooks failing", "ok thanks")):
+        await phone.h_chat_send(None, {"chat_id": cid, "text": said})
+        await phone.live[cid].running
+        out[f"spoken{n}"] = (await phone.h_call_reply(None, {"chat_id": cid, "lang": "en-US"}))["text"]
+    out["events"] = phone.db.events(cid, since_seq=0)
+    out["after"] = phone.db.get_chat(cid)
+    return out
+
+
+real_providers = dict(session_mod.PROVIDERS)
+session_mod.PROVIDERS["claude"] = ChatCLI
+try:
+    got = asyncio.run(chat_call())
+finally:
+    session_mod.PROVIDERS.clear()
+    session_mod.PROVIDERS.update(real_providers)
+said_user = [e["data"]["text"] for e in got["events"] if e["event"] == "message.user"]
+said_back = [e["data"]["text"] for e in got["events"] if e["event"] == "message.assistant"]
+check(said_user == ["why are webhooks failing", "ok thanks"],
+      "each utterance is stored as a user message of that chat", str(said_user))
+cli = ChatCLI.built
+check(len(cli) == 1 and cli[0].prompts[-1] == "ok thanks"
+      and not any("<state>" in p for p in cli[0].prompts),
+      "and answered by the chat's own session, one CLI for both, with no concierge snapshot",
+      f"built={len(cli)} prompts={[p[-40:] for c in cli for p in c.prompts]}")
+pc = cli[0].pc
+check(pc.model == "opus" and pc.account_id == "acct-2" and pc.account_home == str(tmp / "a2")
+      and pc.perm_mode == "ask" and pc.effort == "high",
+      "on the chat's model, account and permission mode",
+      str({k: getattr(pc, k) for k in ("model", "account_id", "account_home", "perm_mode")}))
+before, after = got["chat"], got["after"]
+check(all(after[k] == before[k] for k in ("model", "account_id", "perm_mode", "effort", "provider")),
+      "and the call changed none of them on the chat",
+      str({k: (before[k], after[k]) for k in ("model", "account_id", "perm_mode")}))
+check(said_back == [LONG, SHORT], "the long reply is stored whole in the chat")
+spoken = got["spoken0"]
+print("    " + spoken)
+check(len(spoken.split()) <= call.SPOKEN_WORDS + 6 and spoken.endswith("The rest is in the chat.")
+      and spoken.startswith("I found it"),
+      "while what is read aloud is its front, short, with a word that the rest is written", spoken)
+check(not any(bad in spoken for bad in ("```", "`", "|", "/", "~", "http", "attempts", "retry.ts")),
+      "and has no code, table, path or link in it", spoken)
+check(got["spoken1"] == SHORT, "a short plain reply is read as it is", got["spoken1"])
+check(call.spoken_reply("```py\nprint(1)\n```", "tr-TR") == "Cevabı sohbete yazdım."
+      and call.spoken_reply("| a | b |\n|---|---|\n| 1 | 2 |", "en-US") == "I wrote the answer in the chat.",
+      "a reply that is only code or a table says the answer is written, in the call's language")
+
 print()
 if failures:
     print(f"{len(failures)} failed")

@@ -504,7 +504,8 @@ checks.push(
   ['…and from neither of the other two places, the call aside',
     routes.every((route) => route === '/call' || (!fromDashboard.has(route) && !fromChat.has(route)))],
   ['a conversation can pick up the phone',
-    fromChat.has('/call') && /router\.push\('\/call'\)/.test(conversation)],
+    // …carrying the conversation's id, so the call talks to it (#143).
+    fromChat.has('/call') && /router\.push\(\{ pathname: '\/call', params: \{ chat: id \} \}\)/.test(conversation)],
 
   // Everything a conversation needs is inside its own place: the list, the
   // ones put away, and the form that starts a new one. None of it is a screen

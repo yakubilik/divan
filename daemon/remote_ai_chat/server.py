@@ -29,7 +29,8 @@ from . import accounts as acct
 from . import pool as poolmod
 from .errors import Err
 from . import agents, secrets, tools
-from .call import Concierge, NoRoom, hermes_installed, headline as call_headline, snapshot as call_snapshot
+from .call import (Concierge, NoRoom, hermes_installed, headline as call_headline, last_reply,
+                   snapshot as call_snapshot, spoken_reply)
 from .push import send_push
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .attachments import KINDS, normalize_image, peaks, sniff
@@ -1893,6 +1894,16 @@ class Server:
         else:
             await self._concierge_move()
         return await self.concierge.ask(text, d.get("lang"))
+
+    async def h_call_reply(self, dev: Device, d: dict) -> dict:
+        """What a call made from inside a chat reads aloud of the turn that just
+        ended. The turn itself went through `chat.send`, like a typed message:
+        same session, model, account and permission mode, and the whole reply
+        is already in the transcript. This only reads it back and cuts it to
+        something a person will listen to (see `spoken_reply`)."""
+        if self.db.get_chat(d["chat_id"]) is None:
+            raise Err("no_chat", "no such chat")
+        return {"text": spoken_reply(last_reply(self.db, d["chat_id"]), d.get("lang"))}
 
     async def h_call_digest(self, dev: Device, d: dict) -> dict:
         """The snapshot itself, with no model in the way. Answering a status
