@@ -370,6 +370,9 @@ export interface MergedQuota {
   spentMachines: string[];
   /** Nothing has ever been measured anywhere. */
   unknown: boolean;
+  /** The week of the subscription chats open on: the first machine that has
+   *  one to report. Null where none does. */
+  weekly: NonNullable<DivanQuota['weekly']> | null;
 }
 
 export interface DivanView {
@@ -734,6 +737,7 @@ function fleetQuota(hosts: HostView[]): MergedQuota {
     spent,
     spentMachines,
     unknown: live.length > 0 && !best && !spent,
+    weekly: live.map((h) => h.quota!.weekly).find((w) => !!w) ?? null,
   };
 }
 

@@ -552,8 +552,12 @@ class Server:
             # reports: the overage fields the pool reads off any window.
             old = slot.get(r["window"]) or {}
             row = {**old, **r, "at": now}
-            if row.get("status") != "allowed_warning" or r["utilization"] < float(old.get("utilization") or 0):
-                row["status"] = "rejected" if r["utilization"] >= 1.0 else "allowed"
+            # A turn that was refused is not refused for ever: the window it
+            # was refused on has room again once the service says so.
+            if r["utilization"] >= 1.0:
+                row["status"] = "rejected"
+            elif old.get("status") in (None, "rejected"):
+                row["status"] = "allowed"
             kept.append(row)
         self._learn_steps(slot, kept)
         for r in kept:

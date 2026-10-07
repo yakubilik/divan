@@ -633,18 +633,16 @@ group('the line over every page');
     new RegExp(`<b>${fresh.totals.reachable}/${fresh.totals.machines}</b><span class="sys-word"> machines`).test(home));
   ok('…and the place buttons are Chats and Machine, with no project chips beside them',
     home.includes('Chats') && home.includes('Machine') && !home.includes('Quire'));
-  const noQuota = renderToStaticMarkup(h(ShellUI.Shell, {
-    view: 'overview', onView() {}, fleet: { ...fresh, quota: { ...fresh.quota, left: null, unknown: true } },
+  const week = (used) => renderToStaticMarkup(h(ShellUI.Shell, {
+    view: 'overview', onView() {},
+    fleet: { ...fresh, quota: { ...fresh.quota, left: 0.89, weekly: used == null ? null
+      : { account: 'acct-1', used, resets_at: null, at: null } } },
   }));
-  const low = renderToStaticMarkup(h(ShellUI.Shell, {
-    view: 'overview', onView() {}, fleet: { ...fresh, quota: { ...fresh.quota, left: 0.1, unknown: false } },
-  }));
-  const ample = renderToStaticMarkup(h(ShellUI.Shell, {
-    view: 'overview', onView() {}, fleet: { ...fresh, quota: { ...fresh.quota, left: 0.64, unknown: false } },
-  }));
-  ok('a quota nothing measured draws no ring and no number', !noQuota.includes('dv-ring'));
-  ok('a measured one is the ring and its figure, amber with the word under the line',
-    /dv-ring"[^>]*--p:64%/.test(ample) && ample.includes('<b>64%</b>') && !ample.includes('dv-ring--low')
+  const noQuota = week(null), low = week(0.9), ample = week(0.52);
+  ok('with no week to report the bar draws no ring, whatever room another sign-in has',
+    !noQuota.includes('dv-ring') && !noQuota.includes('89%'));
+  ok('the week is said as its own settings page says it: how much is used, amber near the end',
+    /dv-ring"[^>]*--p:52%/.test(ample) && ample.includes('weekly </span><b>52%</b>') && !ample.includes('dv-ring--low')
     && low.includes('dv-ring dv-ring--low') && />low</.test(low));
   ok('the line draws no colour of its own', !COLOUR.test(src('src/components/Shell.tsx')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/const [A-Z]+ = '[^']*';/g, '')));

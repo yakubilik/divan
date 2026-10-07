@@ -43,6 +43,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { useFleet, type HostSlot } from './fleet';
+import { limitsKey } from './compose';
+import { usePrefs } from './prefs';
+import { toldDefaults } from './tell';
 import type {
   DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanMilestone, DivanOpenItem, DivanProject, DivanQuota,
   DivanSnapshot, RepoActivity,
@@ -317,6 +320,9 @@ export interface MergedQuota {
   spentMachines: string[];
   /** Nothing has ever been measured anywhere. */
   unknown: boolean;
+  /** The week of the subscription chats open on: the first machine that has
+   *  one to report. Null where none does. */
+  weekly: NonNullable<DivanQuota['weekly']> | null;
 }
 
 export interface DivanView {
@@ -678,6 +684,7 @@ function fleetQuota(hosts: HostView[]): MergedQuota {
     spent,
     spentMachines,
     unknown: live.length > 0 && !best && !spent,
+    weekly: live.map((h) => h.quota!.weekly).find((w) => !!w) ?? null,
   };
 }
 
@@ -701,6 +708,15 @@ export function entries(hosts: Record<string, HostSlot>, order: string[],
 }
 
 // ── the poll ────────────────────────────────────────────────────────────────
+
+/** The sign-in a chat opens on at this computer — the subscription the bar's
+ *  weekly figure is about. The Composer's own answer, so the two cannot name
+ *  different accounts. */
+function mainAccount(key: string): string {
+  const slot = useFleet.getState().hosts[key];
+  const told = toldDefaults(slot, usePrefs.getState().defaults, key, 'claude');
+  return limitsKey('claude', told?.account_id ?? '');
+}
 
 interface DivanStore {
   snaps: Record<string, HostDivan>;
@@ -728,7 +744,7 @@ export const useDivanStore = create<DivanStore>((set, get) => ({
       const put = (d: HostDivan) => set((s) => ({ snaps: { ...s.snaps, [key]: d } }));
       try {
         const snap = await withTimeout(
-          fleet.call<DivanSnapshot>(key, 'divan.snapshot', {}), DIVAN_TIMEOUT_MS);
+          fleet.call<DivanSnapshot>(key, 'divan.snapshot', { usage_for: mainAccount(key) }), DIVAN_TIMEOUT_MS);
         put(answered(snap, Date.now() / 1000));
       } catch (e: any) {
         // The last answer stays, and `silent` is where that rule lives.

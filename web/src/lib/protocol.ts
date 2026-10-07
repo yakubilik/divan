@@ -606,6 +606,10 @@ export interface DivanQuota {
   /** When `left` goes back up, or when a spent machine starts work again. */
   resets_at: number | null;
   unknown: boolean;
+  /** How much of its week the sign-in the snapshot was asked about has used —
+   *  the subscription's own figure, read from the service for this answer.
+   *  Absent from an older daemon, null where nothing current is known. */
+  weekly?: { account: string; used: number; resets_at: number | null; at: number | null } | null;
 }
 
 /** What git says about one repository: when it last moved, and how much landed

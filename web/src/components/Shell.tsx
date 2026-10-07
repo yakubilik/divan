@@ -57,9 +57,11 @@ function Sys({ fleet, here, dots, onView, inbox }: {
 }) {
   const warn = useThresholds((s) => s.thresholds.warn);
   const t = fleet?.totals;
-  const q = fleet?.quota;
-  const left = q && !q.unknown && q.left != null ? Math.max(0, Math.min(1, q.left)) : null;
-  const low = left != null && left <= warn;
+  // The subscription's own week, as its settings page says it: how much is
+  // used, not how much room the emptiest sign-in on the machine has.
+  const week = fleet?.quota?.weekly;
+  const used = week ? Math.max(0, Math.min(1, week.used)) : null;
+  const low = used != null && 1 - used <= warn;
   const all = !!t && t.machines > 0 && t.reachable === t.machines;
   return (
     <div className="sys">
@@ -69,13 +71,14 @@ function Sys({ fleet, here, dots, onView, inbox }: {
           <b>{t.reachable}/{t.machines}</b><span className="sys-word"> machines</span>
         </span>
       )}
-      {left != null && (
+      {used != null && (
         <>
           <span className="sep" />
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-sys="quota">
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-sys="quota"
+            title={week?.resets_at ? `Weekly limit · resets ${new Date(week.resets_at * 1000).toLocaleString()}` : 'Weekly limit'}>
             <span className={`dv-ring${low ? ' dv-ring--low' : ''}`} aria-hidden="true"
-              style={{ ['--p' as any]: `${Math.round(left * 100)}%` }} />
-            <span className="sys-word">quota </span><b>{Math.round(left * 100)}%</b>{low && <span style={{ color: 'var(--amber)' }}>low</span>}
+              style={{ ['--p' as any]: `${Math.round(used * 100)}%` }} />
+            <span className="sys-word">weekly </span><b>{Math.round(used * 100)}%</b><span className="sys-word"> used</span>{low && <span style={{ color: 'var(--amber)' }}>low</span>}
           </span>
         </>
       )}
