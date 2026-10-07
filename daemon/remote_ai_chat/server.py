@@ -347,7 +347,7 @@ class Server:
 
         self.app.mount("/", Deep(directory=str(panel), html=True), name="panel")
 
-    # ── tools (CLI kurulumu) ───────────────────────────────────────────────
+    # ── tools (installing a CLI) ───────────────────────────────────────────────
     async def h_tool_status(self, dev: Device, d: dict) -> dict:
         tools.forget()
         return {"tools": [{"provider": p, "version": tools.version(p),
@@ -1751,7 +1751,7 @@ class Server:
             if not hits:
                 raise Err("no_project", f"there is no project called {project}")
             cwd = hits[0]["path"]
-            # Work asked for on the phone goes to Hermes when the account the
+            # A request made on the phone goes to Hermes when the account the
             # call speaks as has it: a real agent with skills, so "add this to
             # my calendar" or "file a ticket for that" lands somewhere that can
             # do it. The concierge itself still has none of those.

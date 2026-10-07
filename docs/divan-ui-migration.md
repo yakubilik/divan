@@ -227,7 +227,7 @@ are only sample data are not listed.
 - On the web at 390px every press is at least 44px, side columns drop below the main one,
   a chat list sits above its chat, and the chat head's chips wrap.
 
-## Still needs Yakup's eyes
+## Still needs a person's eyes
 
 - The question windows open by themselves on project pages; at 390px wide they cover most
   of the page until put away (as on `main`).

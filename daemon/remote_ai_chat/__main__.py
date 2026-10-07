@@ -85,7 +85,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
                                 ws_ping_interval=None, ws_ping_timeout=None,
                                 timeout_graceful_shutdown=10)
             servers.append(uvicorn.Server(uc))
-        print(f"remote-ai-chat {cfg.host_name} dinliyor: " + ", ".join(f"ws://{h}:{cfg.port}/ws" for h in binds))
+        print(f"remote-ai-chat {cfg.host_name} listening on: " + ", ".join(f"ws://{h}:{cfg.port}/ws" for h in binds))
         reaper = asyncio.create_task(srv.reaper())
         updater = asyncio.create_task(srv.updater.loop())
         resumer = asyncio.create_task(srv.resume_interrupted())
@@ -583,7 +583,7 @@ def cmd_install(args: argparse.Namespace) -> None:
     if sys.platform == "linux":
         return _install_systemd()
     if sys.platform == "win32":
-        print("Windows'ta bunun yerine: powershell -ExecutionPolicy Bypass -File .\\daemon\\install.ps1",
+        print("On Windows, use this instead: powershell -ExecutionPolicy Bypass -File .\\daemon\\install.ps1",
               file=sys.stderr)
         sys.exit(2)
     import plistlib, subprocess
@@ -664,7 +664,7 @@ def cmd_uninstall(args: argparse.Namespace) -> None:
     if sys.platform == "linux":
         return _uninstall_systemd()
     if sys.platform == "win32":
-        print("Windows'ta: Unregister-ScheduledTask -TaskName remote-ai-chat", file=sys.stderr)
+        print("On Windows: Unregister-ScheduledTask -TaskName remote-ai-chat", file=sys.stderr)
         sys.exit(2)
     import subprocess
     if sys.platform == "win32":
