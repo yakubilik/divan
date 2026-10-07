@@ -1490,8 +1490,20 @@ class Server:
         return {}
 
     async def h_chat_list(self, dev: Device, d: dict) -> dict:
+        self.cfg.refresh_tunnel()
         return {"chats": self.db.list_chats(bool(d.get("include_archived"))),
-                "groups": self.db.list_groups()}
+                "groups": self.db.list_groups(),
+                # Who shares this computer, and which of them is asking. A chat
+                # with no owner written on it is the first person's.
+                "people": {"names": self.cfg.person_names(), "me": self.cfg.person_of(dev.id)}}
+
+    def _owner(self, dev: Device, asked: object = None) -> str | None:
+        """Whose a new chat is: the person named, if there is such a person,
+        else whoever's device opened it."""
+        self.cfg.refresh_tunnel()
+        if asked and str(asked) in self.cfg.person_names():
+            return str(asked)
+        return self.cfg.person_of(dev.id)
 
     async def h_chat_create(self, dev: Device, d: dict) -> dict:
         if self.cfg.demo:
@@ -1528,6 +1540,7 @@ class Server:
             title=with_project(d.get("title") or NEW_CHAT_TITLE,
                                self.policy.project_for(cwd)),
             max_turns=d.get("max_turns"), max_budget_usd=d.get("max_budget_usd"),
+            owner=self._owner(dev, d.get("owner")),
         )
         await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.created",
                               "data": chat, "ts": time.time()})
@@ -1614,6 +1627,8 @@ class Server:
         prev = self.db.get_chat(cid)
         if prev is None:
             raise Err("no_chat", "no such chat")
+        if "owner" in fields and fields["owner"] not in self.cfg.person_names():
+            raise Err("no_person", "nobody by that name shares this computer")
         # A rename keeps the project in front of it, and a chat that moves to
         # another folder takes the new project's name with it — the old prefix
         # is dropped first, or moving a chat twice would stack them.

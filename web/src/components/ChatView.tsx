@@ -11,6 +11,7 @@ import { duration, shortPath, toolSummary } from '../lib/format';
 import type { Field } from './FieldSheet';
 import type { Chat, Group, LimitWindow } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
+import { useFleet } from '../lib/fleet';
 
 function Header({ chat, groupName, count, accountLabel, accountLimits, context, now,
                  onEdit, onMenu, onDetails, detailsOpen }: {
@@ -196,6 +197,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   onDelete: () => void;
   onUpload: (file: File) => Promise<any>;
 }) {
+  const people = useFleet((f) => (hostKey ? f.hosts[hostKey]?.people?.names : undefined));
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const [menu, setMenu] = useState(false);
@@ -246,7 +248,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
         />
         {menu && (
           <ChatMenu
-            chat={chat} groups={groups}
+            chat={chat} groups={groups} people={people}
             onUpdate={onUpdate} onNewGroup={onNewGroup} onDelete={onDelete}
             onClose={() => setMenu(false)}
           />

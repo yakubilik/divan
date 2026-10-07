@@ -16,11 +16,13 @@ interface Entry {
   onPick: () => void;
 }
 
-function Sheet({ entries, groups, chat, onMove, onNewGroup, onClose }: {
+function Sheet({ entries, groups, people, chat, onMove, onOwner, onNewGroup, onClose }: {
   entries: Entry[];
   groups: Group[];
+  people: string[];
   chat: Chat;
   onMove: (groupId: string | null) => void;
+  onOwner: (name: string) => void;
   onNewGroup: () => void;
   onClose: () => void;
 }) {
@@ -82,6 +84,12 @@ function Sheet({ entries, groups, chat, onMove, onNewGroup, onClose }: {
           {entries.map((e) => row(e.label, e.icon, () => { e.onPick(); if (!e.keepOpen) onClose(); }, e.danger))}
           <div style={{ height: 1, background: C.border, margin: '6px 0' }} />
           {row('Move to group…', P.folder, () => setMoving(true))}
+          {/* On a computer two people use, a chat can be handed to the other
+              one — the only way a chat from before there were people gets to
+              whoever it was really for. */}
+          {people.length > 1 && people
+            .filter((p) => p !== (chat.owner && people.includes(chat.owner) ? chat.owner : people[0]))
+            .map((p) => row(`Give to ${p}`, P.users, () => { onOwner(p); onClose(); }))}
         </>
       )}
     </div>
@@ -112,9 +120,11 @@ export function DeleteChatDialog({ title, onDelete, onClose }: {
   );
 }
 
-export function ChatMenu({ chat, groups, onUpdate, onNewGroup, onDelete, onClose }: {
+export function ChatMenu({ chat, groups, people = [], onUpdate, onNewGroup, onDelete, onClose }: {
   chat: Chat;
   groups: Group[];
+  /** Who shares the computer this chat is on. */
+  people?: string[];
   onUpdate: (patch: Record<string, any>) => void;
   /** Make a group by this name and put this chat in it. */
   onNewGroup: (name: string) => Promise<unknown>;
@@ -177,8 +187,9 @@ export function ChatMenu({ chat, groups, onUpdate, onNewGroup, onDelete, onClose
 
   return (
     <Sheet
-      entries={entries} groups={groups} chat={chat}
+      entries={entries} groups={groups} people={people} chat={chat}
       onMove={(groupId) => onUpdate({ group_id: groupId })}
+      onOwner={(name) => onUpdate({ owner: name })}
       onNewGroup={() => setGrouping(true)}
       onClose={onClose}
     />
