@@ -1312,8 +1312,11 @@ void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(async () =>
   // …and the actions on screens that came over from main unchanged, pressed.
   const actions = require('./test-phone-actions.cjs');
   await actions.ready;
+  // …and the general call: the chat list's button and the pickup (#142).
+  const call = require('./test-call-pickup.cjs');
+  await call.ready;
   checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks, ...composer.checks, ...project.checks, ...ticket.checks,
-              ...machine.checks, ...every.checks, ...actions.checks);
+              ...machine.checks, ...every.checks, ...actions.checks, ...call.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

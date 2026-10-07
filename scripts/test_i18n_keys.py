@@ -87,7 +87,7 @@ def main() -> int:
     text = I18N.read_text(encoding="utf-8")
     keys = table_keys(text)
     check(len(keys) > 200, f"the table has {len(keys)} keys")
-    check("cancel" in keys and "callGreeting" in keys, "and it parsed as a table of keys",
+    check("cancel" in keys and "callStart" in keys, "and it parsed as a table of keys",
           f"sample missing from {sorted(keys)[:8]}")
 
     sources = [p for p in tracked("app/*.ts", "app/*.tsx", "app/**/*.ts", "app/**/*.tsx")

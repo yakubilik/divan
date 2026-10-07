@@ -290,8 +290,10 @@ checks.push(
     S.MACHINE_TABS.map((t) => t.key).join() === 'machines,executors,terminal,settings'
     && routes.filter((r) => r !== '/machines').every((r) => S.MACHINE_TAB_ROUTES.includes(r))
     && /<MachineTabs here="machines"/.test(machine) && /<UnderTab here="machines"/.test(machine)],
-  ['…and no other place leads to one of them',
-    routes.every((route) => !new RegExp(`'${route}'`).test(dash) && !new RegExp(`'${route}'`).test(chatPlace))],
+  // The call aside: the chat list has the general call in its header (#142).
+  ['…and no other place leads to one of them, the call aside',
+    routes.every((route) => !new RegExp(`'${route}'`).test(dash)
+      && (route === '/call' || !new RegExp(`'${route}'`).test(chatPlace)))],
   ['pairing is inside it too, behind the machines it adds one to',
     /'\/pair'|pathname: '\/pair'/.test(hostSheet) && /pathname: '\/pair'/.test(settings)],
 
