@@ -260,11 +260,18 @@ const camera = {
  *  of a plain object a check can fill in first (`store.set`). Left empty, every
  *  selector answers `undefined`, which is what it did before there was one. */
 const STATE = {};
+/** What `useT()` answers: the key, so a check reads the one thing a typo cannot
+ *  fake — unless a picture wants the sentences (`words.real()`). */
+const WORDS = { t: (key) => key };
+const words = {
+  real() { const { t } = require(path.join(root, 'src/i18n.ts')); WORDS.t = t; },
+  keys() { WORDS.t = (key) => key; },
+};
 const PARAMS = {};
 const PUSHED = [];
 const REPLACED = [];
 const STORE = {
-  useT: () => (key) => key,
+  useT: () => WORDS.t,
   // The two things screens import from the store that are not the store: the
   // permission mode a new chat starts on, and the reading of which account an
   // agent is installed under. Both are the real ones (`src/store.ts`) — they
@@ -386,4 +393,4 @@ function paint(markup) {
 }
 
 module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten,
-                   store, params, nav, camera, presses, pressOn, holds, buzzes, typeInto, menus };
+                   store, params, nav, camera, presses, pressOn, holds, buzzes, typeInto, menus, words };

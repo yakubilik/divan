@@ -319,6 +319,7 @@ const en = {
   cmNoComputer: 'No computer is connected.', cmNotOnHost: 'No paired computer has {project}.',
   cmAbout: '(This is about {project}.)',
   cmWorkingNow: 'Working now', cmQuiet: 'quiet {age}', cmQuietFor: 'Quiet for {age}. Nothing queued.',
+  cmAsking: 'asking', cmYourCall: 'your call', cmStuckWord: 'stuck', cmYours: 'yours',
   cmMachines: 'machines', cmQuota: 'quota', cmLow: 'low', cmBackTo: 'Back to {place}', cmOpen: 'Open',
   cmSent: 'sent · {text}', cmNotSent: 'not sent · {text}', cmProjectsMeta: '{n} · {q} quiet',
   allProjects: 'All', overview: 'Overview', projects: 'Projects', branches: 'Branches',

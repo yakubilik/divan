@@ -22,7 +22,7 @@ import {
   COLUMN_LABEL, OPENS_ON, faces, foot, items, spread, tabs, tally, type Face, type Item,
 } from '../src/board';
 import {
-  KIND_LABEL, KIND_TONE, actions, items as waitingItems, type Doing, type Item as WaitItem,
+  KIND_TONE, actions, items as waitingItems, type Doing, type Item as WaitItem,
 } from '../src/waiting';
 import {
   MODES, MODE_COLUMN, NO_DRAFT, accountValues, cardOf, draft as draftOf, filing, greeting, limitsKey,
@@ -253,7 +253,7 @@ function Waiting({ view }: { view: DivanView }) {
           <WaitCard key={`${item.card.host}:${item.card.id}`} project={item.project}
             index={item.index < 0 ? null : item.index}
             age={item.age == null ? null : short(item.age)}
-            question={item.said} word={T(KIND_LABEL[item.kind])} tone={KIND_TONE[item.kind]}
+            question={item.said} word={T(KIND_WORD[item.kind])} tone={KIND_TONE[item.kind]}
             actions={buttons}
             note={state?.sending ? T('waitSending') : state?.error != null ? T('cmNotSent', { text: state.error })
               : state?.sent ? T('cmSent', { text: state.sent }) : item.stale ? T('waitStale', { machine: item.machine }) : null}
@@ -263,6 +263,11 @@ function Waiting({ view }: { view: DivanView }) {
     </View>
   );
 }
+
+/** The word in a wait card's corner (`dv-status`): what this one is doing. */
+const KIND_WORD: Record<WaitItem['kind'], Key> = {
+  question: 'cmAsking', decision: 'cmYourCall', stuck: 'cmStuckWord', yours: 'cmYours',
+};
 
 /** One product's tile: its name, what it is doing now, and the counts under it. */
 function ProductTile({ project: p, index, now, ago, onPress }: {
