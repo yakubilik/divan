@@ -1639,6 +1639,158 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
     `${account.getAttribute('aria-label')} · ${asked.map((a) => a.type)}`);
 }
 
+group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
+{
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+  const now = Math.floor(Date.now() / 1000);
+  const base = boards(now).busy[0].snap;
+  const c = (id, over) => ({ ...base.cards[0], id, ustabasi_id: null, agent_status: null,
+    agent_status_at: null, agent_detail: '', summary: '', ...over });
+  const snap = { ...base, cards: [...base.cards,
+    c('q1', { column: 'queued', position: 0, title: 'Bulk invite' }),
+    c('q2', { column: 'queued', position: 1, title: 'Zapier hook' }),
+    c('q3', { column: 'queued', position: 2, title: 'Audit log' }),
+    c('r1', { column: 'review', title: 'Payment flow', agent_status: 'running', agent_status_at: now - 480 }),
+    c('i3', { column: 'in_progress', position: 2, title: 'Lesson search', agent_status: 'running', agent_status_at: now - 360 }),
+    c('i4', { column: 'in_progress', position: 3, title: 'Certificate PDF', agent_status: 'running', agent_status_at: now - 2460 }),
+    c('i5', { column: 'in_progress', position: 4, title: 'Exam timer', agent_status: 'blocked', agent_status_at: now - 4300,
+              agent_detail: 'Test fails on Safari 17.' }),
+    ...[1, 2, 3, 4, 5].map((n) => c(`d${n}`, { column: 'done', title: `Shipped ${n}`, moved_at: now - n * 86400 })),
+  ] };
+  await act(async () => {
+    seed(useDivanStore, { snaps: { studio: answered(snap, now) } });
+    useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS });
+    useDock.setState({ minimised: ['studio:k2', 'studio:h1', 'studio:i5'], closed: {}, raised: [] });
+  });
+  await press('0');
+  await click(tile('quire'));
+  const seg = (label) => find(label, doc.querySelector('[aria-label="View"]'));
+  const pressed = () => doc.querySelector('[aria-label="View"] [aria-pressed="true"]')?.textContent ?? null;
+  const reload = async (path) => {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+  };
+  const goBack = async () => {
+    await act(async () => {
+      const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+      w.history.back();
+      await landed;
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  };
+
+  // 2 · the head and the segment
+  const meta = doc.querySelector('.dv-phead [data-meta]')?.textContent ?? '';
+  const headOk = !!doc.querySelector('.dv-phead .dv-mono') && head() === 'Quire'
+    && doc.querySelector('.dv-phead [data-description]')?.textContent === 'client portals for studios'
+    && meta.startsWith('live since') && !doc.querySelector('.dv-stage')
+    && !/\bIdea\b[\s\S]*\bGrowth\b/.test(text());
+  await click(seg('Board'));
+  const onBoard = w.location.pathname === '/p/quire/board' && !!doc.querySelector('section.dv-col');
+  await click(seg('Chats'));
+  const onChats = w.location.pathname.startsWith('/p/quire/chat') && pressed() === 'Chats';
+  await click(seg('Overview'));
+  const onOverview = w.location.pathname === '/p/quire' && !!doc.querySelector('[data-counts]');
+  await click(seg('Board'));
+  await goBack();
+  const backed = w.location.pathname === '/p/quire' && pressed() === 'Overview';
+  const reloads = [];
+  for (const [path, word] of [['/p/quire/board', 'Board'], ['/p/quire/chat', 'Chats'], ['/p/quire', 'Overview']]) {
+    await reload(path);
+    reloads.push(pressed() === word && w.location.pathname.startsWith(path));
+  }
+  ok('the head is monogram, name, one sentence and a meta line with the stage as a word, no stage bar; the segment switches the view and each path survives reload and Back',
+    headOk && onBoard && onChats && onOverview && backed && reloads.every(Boolean),
+    JSON.stringify({ headOk, meta, onBoard, onChats, onOverview, backed, reloads }));
+
+  // 3 · the board summary
+  const counted = Object.fromEntries([...doc.querySelectorAll('[data-count]')]
+    .map((a) => [a.dataset.count, Number(a.querySelector('.n')?.textContent)]));
+  const rows = [...doc.querySelectorAll('[data-in-progress] [data-row]')]
+    .map((r) => [r.querySelector('.dv-status')?.textContent, r.querySelector('.t')?.textContent]);
+  await click(seg('Board'));
+  const columnCount = (name) => Number(doc.querySelector(`section.dv-col[aria-label="${name}"] .dv-sec .dv-meta`)?.textContent);
+  const fromColumns = { ice_box: columnCount('Ice Box'), queued: columnCount('Queued'),
+    in_progress: columnCount('In Progress'), done: columnCount('Done') };
+  ok('the board summary counts the four real columns, and In progress now lists five In Progress cards with their status words',
+    JSON.stringify(counted) === JSON.stringify(fromColumns)
+    && JSON.stringify(counted) === JSON.stringify({ ice_box: 1, queued: 3, in_progress: 6, done: 5 })
+    && rows.length === 5 && ['stuck', 'asking', 'testing', 'running'].every((w2) => rows.some((r) => r[0] === w2)),
+    JSON.stringify({ counted, fromColumns, rows }));
+
+  // 6 · asking edge, and Done this month
+  const card = (words) => [...doc.querySelectorAll('article.dv-card')].find((e) => (e.textContent ?? '').includes(words)) ?? null;
+  const doneCards = () => doc.querySelectorAll('section.dv-col[aria-label="Done"] article').length;
+  const css = readFileSync(join(web, 'src', 'styles', 'divan-app.css'), 'utf8');
+  const asking = card('Stripe keys');
+  const shownBefore = doneCards();
+  const more = find('Show 2 more');
+  if (more) await click(more);
+  ok('an asking card carries the amber edge and the word asking; Done shows this month with Show N more revealing the rest',
+    asking?.dataset.status === 'ask' && (asking.querySelector('.dv-status')?.textContent === 'asking')
+    && /\.dv-card\[data-status="ask"\]\{border-color:color-mix\(in srgb,var\(--amber\)/.test(css)
+    && shownBefore === 3 && !!more && doneCards() === 5 && !find('Show 2 more'),
+    `${asking?.dataset.status} · ${shownBefore} → ${doneCards()}`);
+
+  // 8 · Queued is the priority order
+  const column = (name) => doc.querySelector(`section.dv-col[aria-label="${name}"]`);
+  asked.length = 0;
+  const lift = new Transfer();
+  await drag(card('Audit log'), 'dragstart', lift);
+  await drag(card('Bulk invite'), 'dragover', lift);
+  await drag(card('Bulk invite'), 'drop', lift);
+  const reordered = asked.find((a) => a.type === 'divan.card.move');
+  ok('a Queued card dropped on another Queued card takes its place, which is the priority',
+    reordered?.data.card_id === 'q3' && reordered.data.column === 'queued' && reordered.data.position === 0,
+    JSON.stringify(reordered));
+
+  // 1 · Queued → In Progress starts it, asking nothing
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  asked.length = 0;
+  const start = new Transfer();
+  await drag(card('Bulk invite'), 'dragstart', start);
+  await drag(column('In Progress'), 'dragover', start);
+  await drag(column('In Progress'), 'drop', start);
+  await settle();
+  ok('dragging a card from Queued into In Progress issues divan.card.move with In Progress, and no confirmation appears',
+    asked.some((a) => a.type === 'divan.card.move' && a.data.card_id === 'q1' && a.data.column === 'in_progress')
+    && doc.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]').length === 0
+    && (column('In Progress').textContent ?? '').includes('Bulk invite'),
+    JSON.stringify(asked.map((a) => [a.type, a.data?.column])));
+
+  // 4 · branches
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  await click(seg('Overview'));
+  const seo = doc.querySelector('[data-branch="SEO"]');
+  const eng = doc.querySelector('[data-branch="Engineering"]');
+  const seoOk = seo?.dataset.connected === 'false'
+    && (seo.textContent ?? '').includes('Source not connected yet.') && !/\d/.test(seo.textContent ?? '');
+  await click(eng);
+  ok('a branch with no source says Source not connected yet. and no number; a connected one opens the branch page',
+    seoOk && eng?.dataset.connected === 'true' && w.location.pathname === '/p/quire/b/Engineering',
+    `${seo?.textContent} · ${w.location.pathname}`);
+  await goBack();
+
+  // 7 · the Composer at the foot is locked
+  const scope = doc.querySelector('.dv-composer .dv-scope');
+  const locked = scope?.querySelector('[data-locked]');
+  const removable = [...(scope?.querySelectorAll('button') ?? [])].length
+    + doc.querySelectorAll('.dv-composer [data-picker="Project"]').length;
+  await click(find('Ice Box', doc.querySelector('.dv-composer [aria-label="Mode"]')));
+  await type(doc.querySelector('#composer-in'), '@hush Write the changelog ');
+  asked.length = 0;
+  await click(doc.querySelector('.dv-composer button[aria-label="Send"]'));
+  await settle();
+  const sent = asked.find((a) => a.type === 'divan.card.create');
+  ok('the Composer at the foot of a project carries that project, and its chip cannot be removed',
+    (locked?.textContent ?? '').includes('Quire') && removable === 0
+    && sent?.data.project_id === 'p-quire' && sent.data.column === 'ice_box',
+    `${removable} · ${JSON.stringify(sent?.data)}`);
+}
+
 group('nothing was lost on the way');
 {
   ok('no screen the panel opened let a rejection go unhandled',

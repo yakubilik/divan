@@ -165,7 +165,7 @@ export function Overview({
   const writeNew = () => onTab?.('new');
   return (
     <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-      <div className="dv-page">
+      <div className={`dv-page${here === 'board' ? ' dv-page--wide' : ''}`}>
         {here !== 'new' && (
           <ProjectHead project={project} now={view.now} tab={here} onTab={to} onNew={writeNew}
             compact={here !== 'overview'} />

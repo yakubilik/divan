@@ -69,11 +69,13 @@
 .dv-count .l{font-size:12.5px;font-weight:500;color:var(--ink-2)}
 .dv-count .n{font:500 20px/24px var(--font-mono)}
 .dv-count--hot .l{font-weight:600;color:var(--ink)}
-.dv-live.press{appearance:none;border:0;background:transparent;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:44px}
+.dv-live.press{appearance:none;border-left:0;border-right:0;border-bottom:0;background:transparent;width:100%;text-align:left;font-family:inherit;color:inherit;cursor:pointer;min-height:44px}
+.dv-live.press:first-child{border-top:0}
 .dv-tile.dv-branch{min-height:120px;padding:16px}
 .dv-tile.dv-branch .dv-tile-name{font-size:15px}
 
 /* §4.3 Board: four columns, scrolled sideways on a narrow window. */
+.dv-page--wide{max-width:1180px}
 .dv-board{margin-top:24px;overflow-x:auto;padding-bottom:8px}
 .dv-board-cols{display:grid;grid-template-columns:repeat(4,minmax(260px,1fr));gap:16px;align-items:start;min-width:1088px}
 .dv-col{display:flex;flex-direction:column;gap:10px;min-height:120px;padding:4px;border-radius:var(--radius-md);outline:1px dashed transparent;outline-offset:2px}
