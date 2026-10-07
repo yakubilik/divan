@@ -91,15 +91,16 @@ export function ProjectRow({ projects, value, onPick, style }: {
 /** The title: `font:600 24px/1.25; letter-spacing:-.015em`, and the one thing
  *  on the screen that is required. It is the page's own heading as well as its
  *  field — there is no label over it, because the screen is nothing else. */
-export function TitleBox({ value, onChangeText, placeholder, editable }: {
+export function TitleBox({ value, onChangeText, placeholder, editable, label }: {
   value: string;
+  label?: string;
   onChangeText: (text: string) => void;
   placeholder: string;
   editable?: boolean;
 }) {
   const t = useTokens();
   return (
-    <TextInput value={value} onChangeText={onChangeText} editable={editable !== false}
+    <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} editable={editable !== false}
       autoFocus multiline placeholder={placeholder} placeholderTextColor={t.ink3}
       style={{ fontSize: 24, lineHeight: 24 * 1.25, fontWeight: '600',
                letterSpacing: em(24, -0.015), color: t.ink }} />
@@ -114,15 +115,16 @@ export function TitleBox({ value, onChangeText, placeholder, editable }: {
  *  The number under it counts and nothing else: the box takes what is typed
  *  into it and that is what is filed, which is what the desktop's composer
  *  does with the same field (`src/compose.ts` `SUMMARY_MAX`). */
-export function SentenceBox({ value, onChangeText, placeholder, editable }: {
+export function SentenceBox({ value, onChangeText, placeholder, editable, label }: {
   value: string;
+  label?: string;
   onChangeText: (text: string) => void;
   placeholder: string;
   editable?: boolean;
 }) {
   const t = useTokens();
   return (
-    <TextInput value={value} onChangeText={onChangeText} editable={editable !== false}
+    <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} editable={editable !== false}
       multiline placeholder={placeholder} placeholderTextColor={t.ink3}
       style={{ height: SUMMARY_LINES * LINE_HEIGHT, textAlignVertical: 'top',
                fontSize: 16, lineHeight: LINE_HEIGHT, color: t.ink2 }} />
@@ -177,8 +179,12 @@ export interface ComposeChip {
  *  sideways. A chip opens the app's own menu under it — never a sheet, never a
  *  system list — and nothing opens unless a chip is pressed. */
 export function Composer({ to, scope, onClearScope, clearLabel, addLabel, scopeOptions, emptyScope,
-  label, placeholder, text, onText, modes, mode, onMode, sendLabel, onSend, busy, chips, more, note, noteTone }: {
+  label, placeholder, text, onText, modes, mode, onMode, sendLabel, onSend, busy, chips, more, note, noteTone,
+  locked }: {
   to: string;
+  /** The scope is the page's product and cannot be taken off: the chip is
+   *  drawn with no × and is not a press. */
+  locked?: boolean;
   scope: { name: string; index: number | null } | null;
   onClearScope: () => void;
   clearLabel: string;
@@ -208,7 +214,14 @@ export function Composer({ to, scope, onClearScope, clearLabel, addLabel, scopeO
                    boxShadow: `0 16px 36px -20px ${t.sh}` }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
         <Text mono style={{ fontSize: 11.5, color: t.ink3 }}>{to}</Text>
-        {scope ? (
+        {scope && locked ? (
+          <View accessibilityLabel={scope.name}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, borderRadius: RADIUS.pill,
+                     paddingLeft: 6, paddingRight: 11, backgroundColor: t.ink }}>
+            <Monogram name={scope.name} index={scope.index} size={18} />
+            <Text style={{ fontSize: 12.5, fontWeight: '500', color: t.onInk }}>{scope.name}</Text>
+          </View>
+        ) : scope ? (
           <Tap onPress={onClearScope}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 }}>
             <View accessibilityLabel={clearLabel}
@@ -230,7 +243,7 @@ export function Composer({ to, scope, onClearScope, clearLabel, addLabel, scopeO
             </Tap>
           </View>
         )}
-        <Text mono style={{ marginLeft: 'auto', fontSize: 11.5, color: t.ink3 }}>{emptyScope}</Text>
+        {!locked && <Text mono style={{ marginLeft: 'auto', fontSize: 11.5, color: t.ink3 }}>{emptyScope}</Text>}
       </View>
       <TextInput accessibilityLabel={label} value={text} onChangeText={onText} placeholder={placeholder}
         placeholderTextColor={t.ink3} multiline

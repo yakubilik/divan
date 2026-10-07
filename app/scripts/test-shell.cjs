@@ -237,7 +237,7 @@ checks.push(
     text: m[2],
   }));
   /** The product's name at 26 pt over its page; on the Dashboard the greeting. */
-  const title = (markup) => (texts(markup).find((t) => t.style.fontSize === 26
+  const title = (markup) => (texts(markup).find((t) => t.style.fontSize === 28
     && t.style.fontFamily === 'Geist-SemiBold') ?? {}).text;
   const greeted = (markup) => texts(markup).some((t) => t.style.fontSize === 38);
 

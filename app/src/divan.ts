@@ -35,6 +35,7 @@
 import type {
   DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanProject, DivanQuota, DivanSnapshot,
   RepoActivity, RepoPulls,
+  DivanMilestone,
 } from './protocol';
 
 /** How often a screen that is open re-asks every machine. The board moves when
@@ -254,6 +255,12 @@ export interface MergedProject {
    *  predates the field; the project page then draws what it is *for* alone
    *  rather than a guessed word. */
   kind: string;
+  /** Where it is in its life (`idea`, `build`, `beta`, `live`, `growth`), as a
+   *  person wrote it; empty until somebody says. */
+  stage: string;
+  /** Its dated history, oldest first; the day it reached its stage is read off
+   *  this and nowhere else. */
+  milestones: DivanMilestone[];
   repos: string[];
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
@@ -503,6 +510,8 @@ export function merge(list: HostEntry[], now: number): DivanView {
           slug: p.slug,
           summary: p.summary || '',
           kind: p.kind || '',
+          stage: p.stage || '',
+          milestones: [...(p.milestones || [])].sort((a, b) => a.at - b.at),
           repos: [...(p.repos || [])],
           hosts: [h.id],
           machines: [h.machine],
@@ -534,6 +543,10 @@ export function merge(list: HostEntry[], now: number): DivanView {
       found.name = newer ? p.name : found.name;
       found.summary = newer && p.summary ? p.summary : (found.summary || p.summary || '');
       found.kind = newer && p.kind ? p.kind : (found.kind || p.kind || '');
+      found.stage = newer && p.stage ? p.stage : (found.stage || p.stage || '');
+      if (!found.milestones.length && p.milestones?.length) {
+        found.milestones = [...p.milestones].sort((a, b) => a.at - b.at);
+      }
       found.updated_at = Math.max(found.updated_at, p.updated_at || 0);
       found.repos = [...new Set([...found.repos, ...(p.repos || [])])].sort();
       found.hosts = [...new Set([...found.hosts, h.id])];
@@ -732,6 +745,16 @@ export function project(view: DivanView, key: string): MergedProject | null {
  *  then by machine name — which is arbitrary, and stable, and the only honest
  *  answer to "who is third" when two people arranged two lists. */
 export function column(p: MergedProject, col: DivanColumn): MergedCard[] {
-  return p.cards.filter((c) => c.column === col)
-    .sort((a, b) => (a.position - b.position) || a.machine.localeCompare(b.machine));
+  return p.cards.filter((c) => shown(c.column) === col)
+    .sort((a, b) => (review(a) - review(b)) || (a.position - b.position) || a.machine.localeCompare(b.machine));
 }
+
+/** The queue's own `review` column — a ticket a second agent is checking — is
+ *  In Progress to a person (HANDOVER §4.3: four columns), with `testing` as its
+ *  status. A daemon sends it; this phone's four columns do not have it. */
+export function shown(col: string): DivanColumn {
+  return (col === 'review' ? 'in_progress' : col) as DivanColumn;
+}
+
+/** 1 for a card under review, which is drawn after the ones being written. */
+const review = (c: MergedCard) => ((c.column as string) === 'review' ? 1 : 0);

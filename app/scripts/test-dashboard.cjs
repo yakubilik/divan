@@ -670,7 +670,7 @@ for (const scheme of ['dark', 'light']) {
       .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")),
     text: m[2],
   }));
-  const title = (markup) => (texts(markup).find((x) => x.style.fontSize === 26
+  const title = (markup) => (texts(markup).find((x) => x.style.fontSize === 28
     && x.style.fontFamily === 'Geist-SemiBold') ?? {}).text;
 
   draw('dark', [studio(), MINI]);

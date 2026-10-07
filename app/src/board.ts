@@ -75,8 +75,70 @@ export function tabs(p: MergedProject, now: number): { key: DivanColumn; label: 
   return COLUMNS.map((col) => ({
     key: col,
     label: COLUMN_LABEL[col],
-    count: Math.max(p.counts[col] || 0, cards(p, col, now).length),
+    // Done is this month's: all of Done a machine sends (DONE_WINDOW_S), so a
+    // tab never reads a total of work finished last March over this month's.
+    count: col === 'done' ? cards(p, col, now).length
+      : Math.max(p.counts[col] || 0, cards(p, col, now).length),
   }));
+}
+
+/** How many finished cards Done draws before `Show N more`. */
+export const DONE_SHOWN = 3;
+
+/** …and the most `In progress now` lists on a product's page. */
+export const NOW_MAX = 5;
+
+// ── the status word ─────────────────────────────────────────────────────────
+
+/** The `dv-status` a word is drawn with (HANDOVER §3): the dot's colour, and
+ *  the word beside it, which is always there. */
+export type StatusKind = 'run' | 'ask' | 'stuck' | 'review' | 'idle' | 'done';
+
+export interface Status { kind: StatusKind; word: Key }
+
+/** What is actually happening to a card, in one word, and only what the board
+ *  knows: no fraction follows `testing`, because nothing on the wire counts a
+ *  verifier's checks. A card in Ice Box carries none. */
+export function status(card: MergedCard): Status | null {
+  const col = card.column as string;
+  if (col === 'done') {
+    return card.agent_status === 'cancelled' ? { kind: 'idle', word: 'stCancelled' } : { kind: 'done', word: 'stDone' };
+  }
+  if (card.agent_status === 'failed') return { kind: 'stuck', word: 'stFailed' };
+  if (card.agent_status === 'blocked') return { kind: 'stuck', word: 'stStuck' };
+  if (card.agent_status === 'asking') return { kind: 'ask', word: 'stAsking' };
+  if (col === 'review') return { kind: 'review', word: 'stTesting' };
+  if (card.agent_status === 'running') return { kind: 'run', word: 'stRunning' };
+  if (card.agent_status === 'verified') return { kind: 'done', word: 'stPassed' };
+  if (card.agent_status === 'cancelled') return { kind: 'idle', word: 'stCancelled' };
+  if (col === 'in_progress' && card.executor === 'human') return { kind: 'idle', word: 'stYours' };
+  // Dropped into In Progress and filed with the queue, which has not started it.
+  if (col === 'in_progress' && card.ustabasi_id != null) return { kind: 'idle', word: 'stNextUp' };
+  if (col === 'queued') return { kind: 'idle', word: 'stWaiting' };
+  return null;
+}
+
+/** The one sentence under a card's title: what the agent asked, or why it
+ *  stopped. Empty on every other card. */
+export function line(card: MergedCard): string {
+  const st = status(card);
+  return st && (st.kind === 'ask' || st.kind === 'stuck') ? (card.agent_detail || '').trim() : '';
+}
+
+/** The four numbers of a product's board summary, off the tabs. */
+export function counts(p: MergedProject, now: number): { key: DivanColumn; label: Key; count: number }[] {
+  return tabs(p, now);
+}
+
+/** `In progress now`: the In Progress column with its real status, worst first,
+ *  at most five. */
+export function inProgress(p: MergedProject, now: number): MergedCard[] {
+  const rank = (c: MergedCard) => ({ stuck: 0, ask: 1, review: 2, run: 3 } as Record<string, number>)[status(c)?.kind ?? ''] ?? 4;
+  return cards(p, 'in_progress', now)
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i)
+    .slice(0, NOW_MAX)
+    .map((x) => x.c);
 }
 
 /** When a card was finished: the moment somebody moved it into Done, and
@@ -273,24 +335,18 @@ export function items(view: DivanView, p: MergedProject, col: DivanColumn, ago: 
 
 // ── the switch between the two faces of a product's page ────────────────────
 
-/** Which of the product's pages is open. The frames put three tabs over it —
- *  Overview, Board, Chats — and the chats a product owns are not filed yet, so
- *  there are two (Mobile2 V4). */
-export type Face = 'overview' | 'board';
+/** Which of the product's pages is open: the Overview / Board / Chats segment
+ *  (ProjectPhone), each at its own address (`?tab=board`, `?tab=chats`). */
+export type Face = 'overview' | 'board' | 'chats';
 
-export const FACES: Face[] = ['overview', 'board'];
+export const FACES: Face[] = ['overview', 'board', 'chats'];
 
-export const FACE_LABEL: Record<Face, Key> = { overview: 'overview', board: 'bdBoard' };
+export const FACE_LABEL: Record<Face, Key> = { overview: 'overview', board: 'bdBoard', chats: 'pjChats' };
 
-/** One of the two tabs, as the segmented control draws it. */
-export function faces(p: MergedProject): { key: Face; label: Key; mark: string; tone: Tone | null }[] {
-  const worst = boardMark(p);
-  return FACES.map((face) => ({
-    key: face,
-    label: FACE_LABEL[face],
-    mark: face === 'board' && worst ? worst.mark : '',
-    tone: face === 'board' && worst ? worst.tone : null,
-  }));
+/** The three segments. No coloured mark rides on them: colour is for state and
+ *  always comes with a word, and the word is on the page under them. */
+export function faces(_p: MergedProject): { key: Face; label: Key }[] {
+  return FACES.map((face) => ({ key: face, label: FACE_LABEL[face] }));
 }
 
 /** The mark on the Board tab: the worst thing on the board, in one character

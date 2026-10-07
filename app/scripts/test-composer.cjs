@@ -191,7 +191,7 @@ const checks = [];
   const entered = draw();
   const calmLine = stand(CALM);
   checks.push(['tiles open the project, the dormant one comes last as a dimmed row, and the line counts from the boards and says nothing is stuck at zero',
-    JSON.stringify(order) === '["Quire","Hush","Walk"]' && dim && entered.includes('>prNow<')
+    JSON.stringify(order) === '["Quire","Hush","Walk"]' && dim && entered.includes('>pjChats<')
     && tiles.includes('>cmNeedsOne<') && tiles.includes('>cmWorking<') && tiles.includes('>cmStuckNone<')
     && calmLine.includes('>cmNeedsNone<') && calmLine.includes('>cmStuckNone<')]);
 
@@ -214,7 +214,7 @@ const checks = [];
   R.render('dark', h(Waiting));
   const fromWaiting = wanted.every((w) => R.presses().some(label(w)));
   checks.push(['the line leads from a project back to the Dashboard, the address redraws the page it names, and Chat, Machine, Waiting, the chats and every new-chat option stay one press away',
-    inside.includes('>prNow<') && out.includes('>cmNeedsOne<') && relaunched.includes('>prNow<')
+    inside.includes('>pjChats<') && out.includes('>cmNeedsOne<') && relaunched.includes('>pjChats<')
     && reach && fromProject && fromWaiting]);
 
   // 8 · low quota
