@@ -52,11 +52,11 @@ The quoted words are the check's own name.
 | Machine pages by key | ⌘1–⌘8, ⌘, | Same keys | — | drive: "opens Machine › " |
 | Stop every session | Palette | Palette | `chat.interrupt` | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
 | Show every computer | Palette | Palette | — | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
-| Ask Divan something | Command bar | Composer, mode Ask | `chat.create`, `chat.send` | drive: "Ask: one press sends chat.create then chat.send" |
-| File a card without starting | Board draft (Ice Box) | Composer mode Ice Box; New ticket | `divan.card.create` | drive: "Ice Box writes the card into Ice Box and Start now into In Progress" |
-| Start a card now | Drag to In Progress | Composer Start now; New ticket Start now; drag | `divan.card.create`, `divan.card.move` | drive: "Create files divan.card.create into Ice Box by default, Queued or In Progress when chosen" |
+| Ask Divan something | Command bar | Composer | `chat.create`, `chat.send` | drive: "one press sends chat.create then chat.send" |
+| File a card without starting | Board draft (Ice Box) | New ticket; said to the agent in the Composer | `divan.card.create` | drive: "Create files divan.card.create into Ice Box by default, Queued or In Progress when chosen" |
+| Start a card now | Drag to In Progress | New ticket Start now; drag; said to the agent in the Composer | `divan.card.create`, `divan.card.move` | drive: "Create files divan.card.create into Ice Box by default, Queued or In Progress when chosen" |
 | Pick agent / account / model for one chat | NewChat dialog | Composer chips (§5), dialog behind More options | `agent.list`, `chat.create` | drive: "four chips show the defaults, list what the computer reports, mark a changed one with an ×" |
-| Scope by typing | — | `@project` in the Composer | `chat.create` | drive: "typing @quire makes the same scope chip as pressing it" |
+| Scope by typing | — | `@project` in the Composer | `chat.create` | drive: "typing @quire sets the same Project chip as its menu does" |
 | Answer an asking agent | Question window | Needs you card (amber answer); question window kept | `ustabasi.note` | drive: "Needs you answers in one press with the same note the question window sent" |
 | Put away / close / drag / open out a question window | Window corner | Same | — | drive: "a window can be put away" |
 | Reply in a question window | Window box | Same | `chat.send` | drive: "…and pressing it says it in that chat" |

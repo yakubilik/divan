@@ -46,7 +46,7 @@ const snap = { ...busy.snap, cards: [...busy.snap.cards,
 const view = merge([{ key: busy.key, name: busy.name,
   state: { snapshot: snap, at: NOW, reachable: true, error: null, old: false } as any }], NOW);
 const quire = project(view, 'quire');
-const composer = <Composer view={view} lock="quire" onAsk={async () => {}} onCard={async () => ''} onOptions={() => {}} />;
+const composer = <Composer view={view} lock="quire" onAsk={async () => {}} onOptions={() => {}} />;
 
 createRoot(root).render(
   <Shell view="overview" onView={() => {}} fleet={view} back={{ label: 'Dashboard', onBack: () => {} }}>

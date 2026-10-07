@@ -1611,7 +1611,6 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
   for (let i = 0; i < 3; i++) await act(async () => {});
   const field = () => doc.querySelector('#composer-in');
   const send = () => doc.querySelector('button.dv-send');
-  const mode = (label) => [...doc.querySelectorAll('.dv-seg button')].find((b) => b.textContent.trim() === label);
   const picker = (name) => doc.querySelector(`[data-picker="${name}"]`);
   const value = (name) => picker(name)?.querySelector('.val')?.textContent ?? null;
   const option = (label) => [...doc.querySelectorAll('[role="menu"] [role="menuitemradio"]')]
@@ -1648,7 +1647,7 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
     await settle();
   }
 
-  // 1 · Ask
+  // 1 · a send
   asked.length = 0;
   await type(field(), 'ship the beta tonight');
   await click(send());
@@ -1656,34 +1655,13 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
   const made = asked.findIndex((a) => a.type === 'chat.create');
   const said = asked.findIndex((a) => a.type === 'chat.send');
   const id = asked[made]?.data && asked[said]?.data?.chat_id;
-  ok('Ask: one press sends chat.create then chat.send with the words, and lands in that chat, with no dialog',
-    made >= 0 && said > made && asked[said].data.text === 'ship the beta tonight'
+  ok('one press sends chat.create then chat.send with the words, and lands in that chat, with no dialog and no mode to pick',
+    !doc.querySelector('.dv-composer [aria-label="Mode"]') && made >= 0 && said > made && asked[said].data.text === 'ship the beta tonight'
       && place() === 'Chat' && w.location.pathname === `/chats/${id}` && dialogs() === 0,
     `${asked.map((a) => a.type).join(',')} · ${place()} · ${w.location.pathname} · ${dialogs()}`);
 
-  // 2 · Ice Box and Start now
-  const cards = [];
-  for (const [label, column] of [['Ice Box', 'ice_box'], ['Start now', 'in_progress']]) {
-    await press('0');
-    await click(mode(label));
-    asked.length = 0;
-    await type(field(), '@quire write the retry doc');
-    await click(send());
-    await settle();
-    cards.push({ column, asked: asked.map((a) => ({ type: a.type, data: a.data })), dialogs: dialogs(),
-                 home: home() });
-  }
-  ok('Ice Box writes the card into Ice Box and Start now into In Progress, starting no chat and asking nothing',
-    cards.every((c) => c.asked.some((a) => a.type === 'divan.card.create' && a.data.column === c.column
-        && a.data.project_id === 'p-quire' && a.data.title === 'write the retry doc')
-      && !c.asked.some((a) => a.type === 'chat.create' || a.type === 'divan.card.move'
-        || a.type.startsWith('ustabasi.'))
-      && c.dialogs === 0 && c.home),
-    JSON.stringify(cards));
-
   // 3 · the four chips
   await press('0');
-  await click(mode('Ask'));
   const defaults = ['Project', 'Agent', 'Account', 'Model'].map((n) => value(n));
   await click(picker('Model').querySelector('button'));
   const listed = [...doc.querySelectorAll('[role="menu"] [role="menuitemradio"]')].map((b) => b.firstElementChild.textContent);
@@ -1706,20 +1684,20 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
       && create.agent_id === 'hermes' && reset === 'Opus 5',
     `${JSON.stringify(defaults)} ${JSON.stringify(listed)} ${changed} ${JSON.stringify(create)} ${reset}`);
 
-  // 4 · @project is the scope chip
+  // 4 · @project is the Project chip
   await type(field(), '@quire why is the retry policy like this ');
-  const typedChip = doc.querySelector('.dv-scope .dv-chip[aria-pressed="true"]')?.textContent ?? null;
+  const typedChip = value('Project');
   const left = field().value;
-  await click(doc.querySelector('.dv-scope .dv-chip'));
-  await click(doc.querySelector('.dv-scope .dv-chip--add'));
+  await click(picker('Project').querySelector('.dv-picker-x'));
+  await click(picker('Project').querySelector('button'));
   await click(option('Quire'));
-  const pressedChip = doc.querySelector('.dv-scope .dv-chip[aria-pressed="true"]')?.textContent ?? null;
+  const pressedChip = value('Project');
   asked.length = 0;
   await click(send());
   await settle();
   const scoped = asked.find((a) => a.type === 'chat.create')?.data ?? {};
-  ok('typing @quire makes the same scope chip as pressing it, and the call opens in that project',
-    typedChip === pressedChip && /Quire/.test(typedChip ?? '') && left === 'why is the retry policy like this '
+  ok('typing @quire sets the same Project chip as its menu does, the only place a project is chosen, and the call opens in that project',
+    typedChip === pressedChip && typedChip === 'Quire' && !doc.querySelector('.dv-composer .dv-scope') && left === 'why is the retry policy like this '
       && scoped.cwd === '/w/quire',
     `${typedChip} vs ${pressedChip} · «${left}» · ${scoped.cwd}`);
 
@@ -1936,16 +1914,13 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
   await goBack();
 
   // 7 · the Composer at the foot is locked
-  const scope = doc.querySelector('.dv-composer .dv-scope');
-  const locked = scope?.querySelector('[data-locked]');
-  const removable = [...(scope?.querySelectorAll('button') ?? [])].length
-    + doc.querySelectorAll('.dv-composer [data-picker="Project"]').length;
-  await click(find('Ice Box', doc.querySelector('.dv-composer [aria-label="Mode"]')));
+  const locked = doc.querySelector('.dv-composer [data-picker="Project"][data-locked]');
+  const removable = doc.querySelectorAll('.dv-composer [data-picker="Project"] button').length;
   await type(doc.querySelector('#composer-in'), '@hush Write the changelog ');
   asked.length = 0;
   await click(doc.querySelector('.dv-composer button[aria-label="Send"]'));
   await settle();
-  const sent = asked.find((a) => a.type === 'divan.card.create');
+  const sent = asked.find((a) => a.type === 'chat.create');
   // 8 · what the old page could do: Still open's thread, from the side column
   const post = [...doc.querySelectorAll('aside [role="button"]')]
     .find((e) => (e.textContent ?? '').includes('Payment provider keys')) ?? null;
@@ -1961,7 +1936,7 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
 
   ok('the Composer at the foot of a project carries that project, and its chip cannot be removed',
     (locked?.textContent ?? '').includes('Quire') && removable === 0
-    && sent?.data.project_id === 'p-quire' && sent.data.column === 'ice_box',
+    && sent?.data.cwd === '/w/quire',
     `${removable} · ${JSON.stringify(sent?.data)}`);
 }
 

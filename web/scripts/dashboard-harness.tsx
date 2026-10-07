@@ -33,6 +33,6 @@ const view = merge(boards(NOW).busy.map((b: any) => ({
 createRoot(root).render(
   <Shell view="overview" onView={() => {}} fleet={view}>
     <Overview view={view} project={null} onProject={() => {}}
-      composer={<Composer view={view} onAsk={async () => {}} onCard={async () => ''} onOptions={() => {}} />} />
+      composer={<Composer view={view} onAsk={async () => {}} onOptions={() => {}} />} />
   </Shell>,
 );

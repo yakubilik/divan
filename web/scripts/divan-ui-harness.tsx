@@ -150,7 +150,7 @@ const SCREENS: [string, React.ReactNode][] = [
   // the one screen here that can be shown with no machine answering as well.
   ['Shell', <Shell view="overview" onView={noop} fleet={board}>
     <Overview view={board} project={null} onProject={noop} onAsk={noop}
-      composer={<Composer view={board} onAsk={async () => {}} onCard={async () => ''} onOptions={noop} />} />
+      composer={<Composer view={board} onAsk={async () => {}} onOptions={noop} />} />
   </Shell>],
   // The chat place: the bar, the list and the chat, which is the composition
   // the panel is in most of the time and the one place the shell has to leave

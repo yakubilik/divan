@@ -19,9 +19,6 @@
 .dv-topline a.dv-word,.dv-topline button.dv-word{appearance:none;border:0;background:transparent;color:var(--ink);text-decoration:none;cursor:pointer;padding:0;font-family:inherit}
 .dv-topline .sys .dv-btn--ghost[aria-current="page"]{color:var(--ink)}
 
-/* The scope row holds its menu. */
-.dv-composer .dv-scope{position:relative}
-
 /* §5: the chips under the Composer. One row, scrolled sideways on a narrow
    screen rather than wrapped. */
 .dv-pickers{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}

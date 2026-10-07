@@ -14,8 +14,7 @@ import { Overview, type ProjectTab } from './screens/Overview';
 import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
-import { project as projectIn, useDivanStore, useDivanView } from './lib/divan';
-import { MODE_COLUMN, cardOf, writer } from './lib/compose';
+import { project as projectIn, useDivanView } from './lib/divan';
 import { idOf } from './lib/sessions';
 import {
   MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, placeOf,
@@ -27,7 +26,7 @@ import { InboxBell } from './components/Inbox';
 import { Report } from './components/Report';
 import { Modal, ModalHead } from './components/Modal';
 import { POLL_MS, announce, useInbox, type Notice } from './lib/inbox';
-import { createCard, createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
+import { createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
 import { idOfTold, tell, useTold, whereFor, whereNote, type Scoped, type ToldPicks } from './lib/tell';
 import type { Agent, Chat } from './lib/protocol';
 
@@ -362,17 +361,6 @@ export function App() {
     // It is read where chats are read, not as a window on the Dashboard.
     useTold.getState().close(idOfTold(told));
     open(told.host, told.chatId);
-  }, [divan]);
-
-  /** Ice Box and Start now: the card, written on a machine that has the product. */
-  const file = useCallback(async (text: string, key: string, mode: 'ice' | 'now') => {
-    const p = projectIn(divan, key);
-    const w = writer(divan, p);
-    if (!p || !w) throw new Error(`No paired computer has ${p?.name ?? 'that project'}`);
-    const { title, summary } = cardOf(text);
-    await createCard(w.host, { project_id: w.project, title, summary, column: MODE_COLUMN[mode] });
-    void useDivanStore.getState().load(w.host);
-    return `Filed in ${mode === 'ice' ? 'Ice Box' : 'In Progress'} on ${p.name}.`;
   }, [divan]);
 
   /** A notice from the queue, pressed: its ticket's page, under its product.
@@ -733,15 +721,15 @@ export function App() {
           <Overview
             view={divan} project={projectIn(divan, project)} onProject={chooseProject}
             composer={(
-              <Composer view={divan} onAsk={ask} onCard={file} inputRef={composerRef}
+              <Composer view={divan} onAsk={ask} inputRef={composerRef}
                 onOptions={() => setNewChat({})} />
             )}
             onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setBranch(null); setCard(idOf(c)); }}
             // The Composer at the foot of a product: everything it sends is
-            // about that product, and Ask opens the chat as a window on the
+            // about that product, and it opens the chat as a window on the
             // page, the way the bar it replaces did.
             projectComposer={scopedTo ? (
-              <Composer view={divan} lock={scopedTo.key} onCard={file}
+              <Composer view={divan} lock={scopedTo.key}
                 onAsk={(text, _key, picks, files) => tell(text, scope, picks, files)}
                 onOptions={() => {
                   const at = whereFor(scope, fleet.hosts, fleet.focus);
@@ -787,7 +775,7 @@ export function App() {
                       <p className="dv-meta" style={{ margin: 0, textAlign: 'center' }}>
                         New chat in {scopedTo.name}.
                       </p>
-                      <Composer view={divan} lock={scopedTo.key} onCard={file}
+                      <Composer view={divan} lock={scopedTo.key}
                         onAsk={async (text, _key, picks, files) => {
                           const told = await tell(text, scope, picks, files);
                           // Read here, in the pane, not as a window on the page.

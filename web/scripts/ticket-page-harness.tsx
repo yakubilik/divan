@@ -78,7 +78,7 @@ useDock.setState({ minimised: ['studio:k2', 'studio:h1', 'studio:dc'], closed: {
 const view = merge([{ key: busy.key, name: busy.name,
   state: { snapshot: snap, at: NOW, reachable: true, error: null, old: false } as any }], NOW);
 const quire = project(view, 'quire');
-const composer = <Composer view={view} lock="quire" onAsk={async () => {}} onCard={async () => ''} onOptions={() => {}} />;
+const composer = <Composer view={view} lock="quire" onAsk={async () => {}} onOptions={() => {}} />;
 
 createRoot(root).render(which === 'ticket' ? (
   <Shell view="overview" onView={() => {}} fleet={view} back={{ label: 'Quire · Board', onBack: () => {} }}>

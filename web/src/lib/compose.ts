@@ -1,12 +1,12 @@
 /** The Dashboard's Composer, decided away from the screen that draws it
  *  (HANDOVER §3, §5).
  *
- *  One field does what three screens used to: the command bar, the New chat
- *  dialog and the New ticket form. What a press of send does depends on the
- *  mode under the field — Ask opens a chat and says the words in it, Ice Box
- *  and Start now write a card — and none of the three asks anything first.
- *  Everything a chat opens with has a default, and the four chips under the
- *  field show it; a chip that was changed applies to that one send.
+ *  One field does what two screens used to: the command bar and the New chat
+ *  dialog. A press of send opens a chat and says the words in it, and asks
+ *  nothing first; what the words call for — an answer, a card, work started —
+ *  is the agent's to read. Everything a chat opens with has a default, and
+ *  the four chips under the field show it; a chip that was changed applies to
+ *  that one send.
  *
  *  No React and no store in here, so `scripts/test-overview.mjs` can hold the
  *  rules without a browser.
@@ -14,24 +14,6 @@
 import type { DivanView, MergedProject } from './divan';
 import type { CliAccount, LimitWindow, Provider, ProviderCatalog } from './protocol';
 import { accountName } from './fields';
-import { chatTitle } from './tell';
-
-// ── the three modes ─────────────────────────────────────────────────────────
-
-export type Mode = 'ask' | 'ice' | 'now';
-
-/** The segment under the field, in the order the frame draws it, with the
- *  meta line that says what each one does. */
-export const MODES: { key: Mode; label: string; hint: string }[] = [
-  { key: 'ask', label: 'Ask', hint: 'asks, starts nothing' },
-  { key: 'ice', label: 'Ice Box', hint: 'drops a card, starts nothing' },
-  { key: 'now', label: 'Start now', hint: 'card goes straight to In Progress' },
-];
-
-/** The column a card mode writes into. */
-export const MODE_COLUMN: Record<Exclude<Mode, 'ask'>, 'ice_box' | 'in_progress'> = {
-  ice: 'ice_box', now: 'in_progress',
-};
 
 // ── @project ────────────────────────────────────────────────────────────────
 
@@ -42,8 +24,8 @@ export function named(view: Pick<DivanView, 'projects'>, word: string): MergedPr
     .some((n) => (n || '').toLocaleLowerCase('en') === w)) ?? null;
 }
 
-/** An `@project` typed into the field becomes the scope chip, the same one the
- *  `+ project` menu sets, and leaves the sentence.
+/** An `@project` typed into the field becomes the Project chip, the same one
+ *  its menu sets, and leaves the sentence.
  *
  *  Only a finished word is taken — one followed by a space, or any word at all
  *  when `final` (the moment of sending) — so that `@isg` on its way to
@@ -69,15 +51,14 @@ export function mention(view: Pick<DivanView, 'projects'>, text: string, final =
   return { project, text: out };
 }
 
-// ── a card out of a sentence ────────────────────────────────────────────────
-
-/** A card's title is the sentence cut to a line; the whole sentence is its
- *  description where the title had to be cut. Nothing typed is lost. */
-export function cardOf(text: string): { title: string; summary: string } {
-  const words = (text || '').replace(/\s+/g, ' ').trim();
-  const title = chatTitle(words);
-  return { title, summary: title === words ? '' : words };
+/** The product the Project chip starts on where the page has none of its own:
+ *  Divan itself, on a computer that has it. Null, which the chip says as
+ *  `auto`, everywhere else. */
+export function defaultProject(view: Pick<DivanView, 'projects'>): string | null {
+  return named(view, 'divan')?.key ?? null;
 }
+
+// ── where a card is written ─────────────────────────────────────────────────
 
 /** The machine a card is written on and that machine's own id for the product:
  *  one that is answering, failing that the first that has it. */

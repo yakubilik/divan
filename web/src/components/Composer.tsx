@@ -1,13 +1,14 @@
-/** The one Composer (HANDOVER §3, §5): the command bar, the New chat dialog and
- *  the New ticket form, folded into a field with a mode under it.
+/** The one Composer (HANDOVER §3, §5): the command bar and the New chat dialog,
+ *  folded into a field. A send opens a chat and says the words in it; whether
+ *  that is a question, a card or work to start is read from the sentence by
+ *  the agent, not picked here.
  *
- *  Over the field is the scope — a product, or nothing, which is Hermes filing
- *  it — set by `+ project` or by typing `@name`. Under it, the mode (Ask · Ice
- *  Box · Start now), the microphone and send. Under that, four chips that say
+ *  Under the field, the microphone and send. Under that, four chips that say
  *  what a chat will open with: Project, Agent, Account, Model. Every one of
  *  them has a default and none of them is a step — a menu opens only when its
  *  chip is pressed, a changed chip is drawn in ink with an × back to the
- *  default, and it applies to this one send. The rules are `lib/compose.ts`.
+ *  default, and it applies to this one send. Typing `@name` sets the Project
+ *  chip. The rules are `lib/compose.ts`.
  *
  *  Files are dropped on it, pasted into it or picked with the + beside the
  *  microphone, the way they are in a chat's own box. They are held here and go
@@ -22,8 +23,8 @@ import { listAgents } from '../lib/actions';
 import { appendSpeech } from '../lib/dictate';
 import { toldDefaults, type ToldPicks } from '../lib/tell';
 import {
-  MODES, accountOptions, limitsKey, lowQuota, mention, modelOptions, modelValue, readModel,
-  type Mode, type Picks,
+  accountOptions, defaultProject, limitsKey, lowQuota, mention, modelOptions, modelValue, readModel,
+  type Picks,
 } from '../lib/compose';
 import type { Agent, Provider } from '../lib/protocol';
 import { MicButton, useMic } from './Mic';
@@ -38,27 +39,24 @@ const CROSS = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18
 
 export interface ComposerProps {
   view: DivanView;
-  /** Ask: open a chat with these words in it and go to it. */
+  /** Open a chat with these words in it and go to it. */
   onAsk: (text: string, project: string | null, picks: ToldPicks, files: File[]) => Promise<unknown>;
-  /** Ice Box and Start now: write the card. Answers the line to say after. */
-  onCard: (text: string, project: string, mode: Exclude<Mode, 'ask'>) => Promise<string>;
   /** Every other choice a new chat has (effort, permissions, a folder, caps):
    *  the full dialog, for the times a default is not the answer. */
   onOptions?: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement>;
   /** The product this Composer belongs to (the foot of a project page): every
-   *  send carries it, and its chip cannot be taken off or changed. */
+   *  send carries it, and its Project chip cannot be changed. */
   lock?: string | null;
 }
 
-export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null }: ComposerProps) {
+export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: ComposerProps) {
   const host = useFleet((s) => s.focus);
   const slot = useFleet((s) => (s.focus ? s.hosts[s.focus] : null));
   const prefs = usePrefs((s) => s.defaults);
   const warn = useThresholds((s) => s.thresholds.warn);
 
   const [text, setText] = useState('');
-  const [mode, setMode] = useState<Mode>('ask');
   const [picks, setPicks] = useState<Picks>({});
   const [menu, setMenu] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,7 +119,8 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
     ? (provider !== 'claude' ? 'No agent' : agents && !hermes ? 'No agent' : 'Hermes')
     : picks.agent === null ? 'No agent'
       : (agents?.find((a) => a.id === picks.agent)?.label ?? picks.agent);
-  const scoped = lock ?? picks.project ?? null;
+  const home = defaultProject(view);
+  const scoped = lock ?? (picks.project === undefined ? home : picks.project);
   const project = scoped ? view.projects.find((p) => p.key === scoped) ?? null : null;
   const low = lowQuota(slot?.limits?.[limitsKey(provider, account)], warn) === true;
 
@@ -150,35 +149,21 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
   const send = async () => {
     if (mic.state !== 'idle') { mic.stop(); return; }
     const m = lock ? { project: null, text } : mention(view, text, true);
-    const scope = lock ?? m.project ?? picks.project ?? null;
+    const scope = lock ?? m.project ?? (picks.project === undefined ? home : picks.project);
     const words = m.text.trim();
     if (m.project) { setPicks((p) => ({ ...p, project: m.project })); setText(m.text); }
     if ((!words && !files.length) || busy) return;
-    if (mode !== 'ask' && files.length) {
-      setSaid({ text: 'A card cannot carry files: send them with Ask, or take them off.', error: true });
-      return;
-    }
-    if (mode !== 'ask' && !scope) {
-      setSaid({ text: 'A card needs a project: type @name or press + project.', error: true });
-      return;
-    }
     setBusy(true);
     setSaid(null);
     try {
-      if (mode === 'ask') {
-        const m2 = readModel(picks.model);
-        await onAsk(words, scope, {
-          ...(m2 ? { provider: m2.provider, model: m2.model } : {}),
-          ...(picks.account !== undefined ? { account_id: picks.account } : {}),
-          ...(picks.agent !== undefined ? { agent: picks.agent } : m2 && m2.provider !== 'claude' ? { agent: null } : {}),
-        }, files);
-        setText('');
-        setFiles([]);
-      } else {
-        const line = await onCard(words, scope!, mode);
-        setText('');
-        setSaid({ text: line });
-      }
+      const m2 = readModel(picks.model);
+      await onAsk(words, scope, {
+        ...(m2 ? { provider: m2.provider, model: m2.model } : {}),
+        ...(picks.account !== undefined ? { account_id: picks.account } : {}),
+        ...(picks.agent !== undefined ? { agent: picks.agent } : m2 && m2.provider !== 'claude' ? { agent: null } : {}),
+      }, files);
+      setText('');
+      setFiles([]);
       // A changed chip was for that one send.
       setPicks({});
     } catch (e: any) {
@@ -199,7 +184,6 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
   const modelLabel = models.find((o) => o.value === model)?.label ?? (model ? readModel(model)?.model : null) ?? 'none offered';
   const accountLabel = accounts.find((o) => o.value === account)?.label
     ?? (account ? account : "This computer's account");
-  const hint = MODES.find((m) => m.key === mode)!.hint;
 
   return (
     <section className="dv-glass-strong dv-composer" ref={box} aria-label="Composer"
@@ -218,32 +202,6 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
         setDragging(false);
         if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
       }}>
-      <div className="dv-scope" data-menu-root="">
-        <span className="lbl">to</span>
-        {lock ? (
-          <span className="dv-chip dv-chip--locked" data-locked="true" aria-label={`Scope ${project?.name ?? lock}, fixed to this project`}>
-            <span className="dv-mono dv-mono--sm" aria-hidden="true">{(project?.name ?? lock).charAt(0).toUpperCase()}</span>
-            {project?.name ?? lock}
-          </span>
-        ) : project ? (
-          <button type="button" className="dv-chip dv-hit" aria-pressed="true"
-            aria-label={`Scope ${project.name}, press to clear`}
-            onClick={() => reset('project')}>
-            <span className="dv-mono dv-mono--sm" aria-hidden="true">{project.name.charAt(0).toUpperCase()}</span>
-            {project.name}<span className="x" aria-hidden="true">×</span>
-          </button>
-        ) : (
-          <button type="button" className="dv-chip dv-chip--add dv-hit" aria-haspopup="menu"
-            aria-expanded={menu === 'scope'} onClick={() => setMenu(menu === 'scope' ? null : 'scope')}>
-            + project
-          </button>
-        )}
-        {menu === 'scope' && (
-          <Menu label="Projects" options={projectOptions} value={null}
-            onPick={(v) => pick({ project: v })} empty="No project on any machine yet." />
-        )}
-        {!lock && <span className="dv-meta" style={{ marginLeft: 'auto' }}>empty = Hermes files it</span>}
-      </div>
       {files.length > 0 && (
         <ul className="dv-attached" aria-label="Attached files">
           {files.map((f, i) => (
@@ -259,7 +217,7 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
       <textarea
         id="composer-in" ref={field} rows={2}
         placeholder={mic.state === 'listening' ? 'Listening…'
-          : lock ? `Ask about ${project?.name ?? lock}, or drop a card.` : 'Tell Divan what to do, in which project.'}
+          : lock ? `Tell Divan what to do in ${project?.name ?? lock}.` : 'Tell Divan what to do.'}
         value={mic.interim ? appendSpeech(text, mic.interim) : text}
         onChange={(e) => change(e.target.value)}
         onPaste={onPaste}
@@ -268,13 +226,6 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
         }}
       />
       <div className="dv-composer-foot">
-        <div className="dv-seg" role="group" aria-label="Mode">
-          {MODES.map((m) => (
-            <button key={m.key} type="button" aria-pressed={mode === m.key}
-              onClick={() => { setMode(m.key); setSaid(null); }}>{m.label}</button>
-          ))}
-        </div>
-        <span className="dv-meta">{hint}</span>
         <span className="grow" />
         <span className="dv-meta" title="Search chats, folders and commands">⌘K</span>
         <input ref={picker} type="file" multiple name="attachments" style={{ display: 'none' }}
@@ -290,13 +241,22 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
         </button>
       </div>
       <div className="dv-pickers" role="group" aria-label="What a new chat opens with">
-        {!lock && <Picker name="Project" value={project ? project.name : 'auto'} changed={!!project}
-          open={menu === 'project'} onOpen={() => setMenu(menu === 'project' ? null : 'project')}
-          onReset={() => reset('project')}>
-          <Menu label="Projects" options={[{ value: '', label: 'auto' }, ...projectOptions]}
-            value={picks.project ?? ''} empty="No project on any machine yet."
-            onPick={(v) => (v ? pick({ project: v }) : (reset('project'), setMenu(null)))} />
-        </Picker>}
+        {lock ? (
+          <span className="dv-chip dv-picker" data-picker="Project" data-locked="true"
+            aria-label={`Project: ${project?.name ?? lock}, fixed to this project`}>
+            <span className="lbl">Project</span>
+            <span className="val">{project?.name ?? lock}</span>
+          </span>
+        ) : (
+          <Picker name="Project" value={project ? project.name : 'auto'}
+            changed={picks.project !== undefined && picks.project !== home}
+            open={menu === 'project'} onOpen={() => setMenu(menu === 'project' ? null : 'project')}
+            onReset={() => reset('project')}>
+            <Menu label="Projects" options={[{ value: '', label: 'auto' }, ...projectOptions]}
+              value={scoped ?? ''} empty="No project on any machine yet."
+              onPick={(v) => pick({ project: v || null })} />
+          </Picker>
+        )}
         <Picker name="Agent" value={agentLabel} changed={picks.agent !== undefined}
           open={menu === 'agent'} onOpen={() => setMenu(menu === 'agent' ? null : 'agent')}
           onReset={() => reset('agent')}>
@@ -325,7 +285,7 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
       </div>
       {(busy || !!said || !!mic.error) && (
         <p className="dv-meta" role="status" style={{ margin: '10px 4px 0', color: said?.error || mic.error ? 'var(--red)' : undefined }}>
-          {busy ? (mode === 'ask' ? 'starting a chat…' : 'filing the card…') : mic.error ?? said?.text}
+          {busy ? 'starting a chat…' : mic.error ?? said?.text}
         </p>
       )}
     </section>
