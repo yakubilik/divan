@@ -14,6 +14,7 @@
 import { setThemeChoice, useTheme } from '../lib/theme';
 import { placeOf, type Chip, type Place, type View } from '../lib/shell';
 import type { DivanView } from '../lib/divan';
+import { ago } from '../lib/format';
 import { useThresholds } from '../lib/machine';
 import type { State } from '../lib/theme';
 
@@ -62,6 +63,9 @@ function Sys({ fleet, here, dots, onView, inbox }: {
   const week = fleet?.quota?.weekly;
   const used = week ? Math.max(0, Math.min(1, week.used)) : null;
   const low = used != null && 1 - used <= warn;
+  // A sign-in the service would not answer for keeps what its last turn said,
+  // and a figure that old says how old it is.
+  const old = week?.at != null && !!fleet && fleet.now - week.at > 3600 ? ago(week.at) : null;
   const all = !!t && t.machines > 0 && t.reachable === t.machines;
   return (
     <div className="sys">
@@ -78,7 +82,7 @@ function Sys({ fleet, here, dots, onView, inbox }: {
             title={week?.resets_at ? `Weekly limit · resets ${new Date(week.resets_at * 1000).toLocaleString()}` : 'Weekly limit'}>
             <span className={`dv-ring${low ? ' dv-ring--low' : ''}`} aria-hidden="true"
               style={{ ['--p' as any]: `${Math.round(used * 100)}%` }} />
-            <span className="sys-word">weekly </span><b>{Math.round(used * 100)}%</b><span className="sys-word"> used</span>{low && <span style={{ color: 'var(--amber)' }}>low</span>}
+            <span className="sys-word">weekly </span><b>{Math.round(used * 100)}%</b><span className="sys-word"> used{old ? ` · ${old}` : ''}</span>{low && <span style={{ color: 'var(--amber)' }}>low</span>}
           </span>
         </>
       )}

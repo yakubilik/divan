@@ -742,9 +742,10 @@ export const useDivanStore = create<DivanStore>((set, get) => ({
       if (inFlight.has(key)) return;
       inFlight.add(key);
       const put = (d: HostDivan) => set((s) => ({ snaps: { ...s.snaps, [key]: d } }));
+      const asked = mainAccount(key);
       try {
         const snap = await withTimeout(
-          fleet.call<DivanSnapshot>(key, 'divan.snapshot', { usage_for: mainAccount(key) }), DIVAN_TIMEOUT_MS);
+          fleet.call<DivanSnapshot>(key, 'divan.snapshot', { usage_for: asked }), DIVAN_TIMEOUT_MS);
         put(answered(snap, Date.now() / 1000));
       } catch (e: any) {
         // The last answer stays, and `silent` is where that rule lives.
@@ -752,6 +753,10 @@ export const useDivanStore = create<DivanStore>((set, get) => ({
       } finally {
         inFlight.delete(key);
       }
+      // The list of sign-ins can arrive while this was out, and the week that
+      // came back is then another account's: ask again rather than show it
+      // for a minute.
+      if (mainAccount(key) !== asked) void get().load(key);
     }));
   },
 }));
@@ -789,6 +794,10 @@ export function useDivanView(): DivanView & { reload: () => void } {
   // them does not re-run the effect below: what it watches for is a machine
   // coming back, not the fleet store moving.
   const online = order.map((k) => (hosts[k]?.status === 'online' ? '1' : '0')).join('');
+  // …and which sign-in each one's chats open on, for the same reason: the bar's
+  // week is that account's, and it is not known until the accounts are listed.
+  const prefs = usePrefs((s) => s.defaults);
+  const mains = useMemo(() => order.map(mainAccount).join(' '), [order, hosts, prefs]);
 
   useEffect(() => {
     const tick = () => { setNow(Date.now() / 1000); void load(); };
@@ -804,7 +813,7 @@ export function useDivanView(): DivanView & { reload: () => void } {
       document.removeEventListener('visibilitychange', wake);
       window.removeEventListener('focus', wake);
     };
-  }, [online, load]);
+  }, [online, mains, load]);
 
   const view = useMemo(() => merge(entries(hosts, order, snaps), now), [hosts, order, snaps, now]);
   return { ...view, reload: () => { void load(); } };
