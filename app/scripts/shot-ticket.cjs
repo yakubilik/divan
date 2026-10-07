@@ -74,10 +74,10 @@ const stand = (params) => {
   R.params.set(params);
 };
 fs.mkdirSync(dir, { recursive: true });
+stand({});
+console.log(photograph(R.render(scheme, h(Waiting)), scheme, path.join(dir, `waiting-phone${suffix}.png`), 1500));
 stand({ id: 'a1', host: 'h1', from: 'board' });
 console.log(photograph(R.render(scheme, h(CardScreen)), scheme, path.join(dir, `ticket-phone${suffix}.png`), 2000));
 stand({ id: 'a1', host: 'h1', from: 'board', agent: 'open' });
 console.log(photograph(R.render(scheme, h(CardScreen)), scheme, path.join(dir, `ticket-phone-agent-face${suffix}.png`), 2400));
-stand({});
-console.log(photograph(R.render(scheme, h(Waiting)), scheme, path.join(dir, `waiting-phone${suffix}.png`), 1500));
 process.exit(0);
