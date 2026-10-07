@@ -4,7 +4,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
 import re
+import shlex
 import time
 from contextvars import ContextVar
 from pathlib import Path
@@ -16,17 +18,13 @@ from .secrets import FAMILIES, find as find_secrets
 
 log = logging.getLogger("rac.security")
 
+# What a regex can still say: these have one spelling, and no path to resolve.
+# `rm`, `git push`, `find`, `chmod`, the shutdown family and a download piped
+# into a shell are parsed instead, further down.
 DESTRUCTIVE_PATTERNS = [
-    re.compile(r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f?[a-zA-Z]*\s+(/|~|\$HOME|\*)(\s|$)"),
-    re.compile(r"\brm\s+-rf\s+\*"),
-    re.compile(r"\bsudo\s+rm\b"),
     re.compile(r"\bdd\s+[^|]*\bof=/dev/"),
     re.compile(r"\bmkfs\."),
     re.compile(r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:"),
-    re.compile(r"\bshutdown\b"),
-    re.compile(r"\breboot\b"),
-    re.compile(r"\bgit\s+push\s+[^|]*--force\b"),
-    re.compile(r"\bgit\s+push\s+[^|]*-f\b(?!\w)"),
     re.compile(r"\bgit\s+reset\s+--hard\b"),
     re.compile(r"security\s+delete-(keychain|generic-password|internet-password)"),
     re.compile(r">\s*/dev/(sd[a-z]|disk\d)"),
@@ -37,17 +35,262 @@ DESTRUCTIVE_PATTERNS = [
     # patterns, and `pkill -f x -u me -P 1` kills everything with "me" or "1" in it.
     re.compile(r"\bpkill(?:\s+(?:-[uUPgGtsF]\s+\S+|-[fvilnxaoqILN0-9]+|-[A-Z]{2,}))*"
                r"\s+(?:\"[^\"]*\"|'[^']*'|[^-\s]\S*)\s+-[A-Za-z]"),
-    re.compile(r"\.remote-ai-chat/(?!uploads/)"),   # daemon config / token store (uploads are fine)
+    # The daemon's config and token store. Uploads are fine, and so is the log:
+    # reading it is the first thing anybody debugging the daemon does.
+    re.compile(r"\.remote-ai-chat/(?!uploads/|logs/)"),
+    # Python deleting a tree is `rm -r` with the path hidden inside a string.
+    re.compile(r"\brmtree\s*\("),
+    # `sh -c "$(curl …)"` and `bash <(curl …)`: the pipe spelled another way.
+    re.compile(r"\b(?:sh|bash|zsh|dash|ksh)\b[^|;&\n]*[$<]\(\s*(?:curl|wget)\b"),
 ]
 
+_SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish"}
+_POWER = {"shutdown", "reboot", "halt", "poweroff"}
+# Words that run the command after them, so the command is the next word.
+_WRAPPERS = {"command", "builtin", "exec", "nohup", "time", "nice", "env", "noglob",
+             "xargs", "caffeinate"}
+_SUDO_TAKES_VALUE = {"-u", "-g", "-h", "-p", "-C", "-D", "-U", "-T", "-R"}
+_GIT_TAKES_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+_OPERATORS = frozenset(";<>|&\n")
+_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_SUBSTITUTION = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
+_GLOB = re.compile(r"[*?\[]|(?<!\$)\{")
+_EVERYTHING = {"*", ".*", "{*,.*}", "{.*,*}", "{,.}*", ".[!.]*"}
+_OPEN_MODE = re.compile(r"^(0?777|[ugoa]*a[ugoa]*[+=]rwx|ugo[+=]rwx)$")
 
-def destructive_reason(cmd: str) -> str | None:
+
+def _tokens(cmd: str) -> list[str]:
+    """Shell words, with the operators between commands as words of their own."""
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars="".join(_OPERATORS))
+    lex.whitespace = " \t\r"        # a newline ends a command, like `;`
+    lex.whitespace_split = True
+    lex.commenters = ""             # `fix#3` in a commit message is not a comment
+    try:
+        return list(lex)
+    except ValueError:
+        # An unclosed quote, usually a heredoc with an apostrophe in it. Read it
+        # the blunt way rather than not at all.
+        return [t.strip("\"'") for t in re.findall(r"[;<>|&\n]+|[^\s;<>|&]+", cmd)]
+
+
+def _segments(tokens: list[str]) -> list[tuple[list[str], bool]]:
+    """Each command of a pipeline or chain, and whether it is piped into."""
+    out: list[tuple[list[str], bool]] = []
+    cur: list[str] = []
+    piped = False
+    for t in tokens:
+        if t and set(t) <= _OPERATORS:
+            if cur:
+                out.append((cur, piped))
+            cur, piped = [], t in ("|", "|&")
+        else:
+            cur.append(t)
+    if cur:
+        out.append((cur, piped))
+    return out
+
+
+def _command(words: list[str]) -> tuple[str, list[str], bool]:
+    """The program a segment really runs, its arguments, and whether under sudo."""
+    words = list(words)
+    if words and words[-1] != ")":
+        words[-1] = words[-1].rstrip(")") or words[-1]
+    sudo = False
+    i = 0
+    while i < len(words):
+        w = words[i].lstrip("({") if i == 0 or words[i] in ("(", "{") else words[i]
+        name = os.path.basename(w)
+        if not w or _ASSIGNMENT.match(w):
+            i += 1
+        elif name in ("sudo", "doas"):
+            sudo = True
+            i += 1
+            while i < len(words) and words[i].startswith("-"):
+                i += 2 if words[i] in _SUDO_TAKES_VALUE else 1
+        elif name in _WRAPPERS:
+            i += 1
+            while i < len(words) and (words[i].startswith("-") or _ASSIGNMENT.match(words[i])):
+                i += 1
+        else:
+            return name, words[i + 1:], sudo
+    return "", [], sudo
+
+
+def _flags(args: list[str]) -> tuple[set[str], set[str], list[str]]:
+    """Short flags, long flags, and what is left, honouring `--`."""
+    short: set[str] = set()
+    long: set[str] = set()
+    rest: list[str] = []
+    for n, a in enumerate(args):
+        if a == "--":
+            rest.extend(args[n + 1:])
+            break
+        if a.startswith("--"):
+            long.add(a.split("=", 1)[0])
+        elif a.startswith("-") and len(a) > 1:
+            short.update(a[1:])
+        else:
+            rest.append(a)
+    return short, long, rest
+
+
+def _resolve(target: str, here: Path | None) -> Path | None:
+    """Where a path argument points, or None when that cannot be known."""
+    home = os.path.expanduser("~")
+    t = re.sub(r"\$\{?HOME\}?(?![A-Za-z0-9_])", lambda _: home, target)
+    if here is not None:
+        t = re.sub(r"\$\{?PWD\}?(?![A-Za-z0-9_])", lambda _: str(here), t)
+    if t == "~" or t.startswith("~/"):
+        t = home + t[1:]
+    if t.startswith(("$", "~")):
+        return None
+    if not os.path.isabs(t):
+        if here is None:
+            return None
+        t = os.path.join(here, t)
+    # normpath first: `..` is taken at face value, then links are followed.
+    return Path(os.path.realpath(os.path.normpath(t)))
+
+
+def _inside(p: Path, root: Path) -> bool:
+    return root in p.parents
+
+
+def _rm_reason(args: list[str], root: Path, here: Path | None) -> str | None:
+    short, long, targets = _flags(args)
+    if not ({"r", "R"} & short or "--recursive" in long):
+        return None
+    for t in targets:
+        # `build/*` empties build, so build is what must be inside; `*.pyc`
+        # only picks from the folder it is in, so that folder may be the root.
+        whole = True
+        m = _GLOB.search(t)
+        if m:
+            head, sep, _ = t[:m.start()].rpartition("/")
+            whole = t[len(head + sep):].split("/", 1)[0] in _EVERYTHING
+            t = head + sep or "."
+        p = _resolve(t, here)
+        if p is None:
+            return f"rm -r of a path that cannot be resolved: {t}"
+        if not (_inside(p, root) or (p == root and not whole)):
+            if p == root:
+                return "rm -r of the chat's whole folder"
+            return f"rm -r outside the chat's folder: {p}"
+    return None
+
+
+def _git_push_reason(args: list[str]) -> str | None:
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        i += 2 if args[i] in _GIT_TAKES_VALUE else 1
+    if i >= len(args) or args[i] != "push":
+        return None
+    short, long, rest = _flags(args[i + 1:])
+    if "f" in short or long & {"--force", "--force-with-lease", "--force-if-includes", "--mirror"}:
+        return "git push --force"
+    # rest[0] is the remote; a refspec with a leading + is a forced one.
+    if any(r.startswith("+") for r in rest[1:]):
+        return "git push with a forced (+) refspec"
+    return None
+
+
+def _find_reason(args: list[str], root: Path, here: Path | None) -> str | None:
+    deletes = "-delete" in args or any(
+        a in ("-exec", "-execdir", "-ok") and os.path.basename(args[n + 1]) == "rm"
+        for n, a in enumerate(args[:-1]))
+    if not deletes:
+        return None
+    i = 0
+    while i < len(args) and args[i] in ("-H", "-L", "-P"):
+        i += 1
+    paths = []
+    while i < len(args) and not args[i].startswith(("-", "(", "!")):
+        paths.append(args[i])
+        i += 1
+    for t in paths or ["."]:
+        p = _resolve(t, here)
+        if p is None or not (p == root or _inside(p, root)):
+            return f"find … -delete outside the chat's folder: {t}"
+    return None
+
+
+def _chmod_reason(args: list[str]) -> str | None:
+    short, long, rest = _flags(args)
+    if ("R" in short or "--recursive" in long) and any(_OPEN_MODE.match(a) for a in rest):
+        return "chmod -R 777"
+    return None
+
+
+def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> str | None:
+    if depth > 4:
+        return None
+    for inner in _SUBSTITUTION.findall(cmd):
+        reason = _parsed_reason(inner[0] or inner[1], root, here, depth + 1)
+        if reason:
+            return reason
+    downloading = False
+    for words, piped in _segments(_tokens(cmd)):
+        name, args, sudo = _command(words)
+        if piped and downloading and name in _SHELLS:
+            return "a download piped into a shell"
+        downloading = name in ("curl", "wget")
+        reason = None
+        if name == "cd":
+            # Where the commands after this one run. A `cd` that cannot be
+            # followed leaves every relative path after it unknown.
+            dest = next((a for a in args if a != "--"), "~")
+            here = _resolve(dest, here)
+        elif name == "rm":
+            reason = "sudo rm" if sudo else _rm_reason(args, root, here)
+        elif name == "git":
+            reason = _git_push_reason(args)
+        elif name == "find":
+            reason = _find_reason(args, root, here)
+        elif name == "chmod":
+            reason = _chmod_reason(args)
+        elif name in _POWER:
+            reason = name
+        elif name in _SHELLS or name == "eval":
+            # `bash -lc '…'` is how Codex hands over every command.
+            script = None
+            if name == "eval":
+                script = " ".join(args)
+            else:
+                for n, a in enumerate(args[:-1]):
+                    if a.startswith("-") and not a.startswith("--") and a.endswith("c"):
+                        script = args[n + 1]
+                        break
+            if script:
+                reason = _parsed_reason(script, root, here, depth + 1)
+        if reason:
+            return reason
+    return None
+
+
+def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None) -> str | None:
+    """Why this shell command must be put to the phone, or None if it need not be.
+
+    `cwd` is the chat's folder: deleting inside it is everyday work, deleting
+    outside it is not. `at` is where the shell stands when it differs — a
+    session that ran `cd` earlier resolves its relative paths from there.
+
+    The command is parsed, one command of a pipeline or chain at a time, so a
+    word in a commit message is not a command and `rm -r -f /` is the same
+    thing as `rm -rf /`.
+    """
     if not cmd:
         return None
     for pat in DESTRUCTIVE_PATTERNS:
         if pat.search(cmd):
             return pat.pattern
-    return None
+    root = Path(os.path.realpath(os.path.expanduser(cwd or os.getcwd())))
+    here = Path(os.path.realpath(os.path.expanduser(at))) if at else root
+    try:
+        return _parsed_reason(cmd, root, here)
+    except Exception:
+        # A classifier that falls over must not be the reason nobody was asked.
+        log.exception("could not parse a command; asking")
+        return "a command that could not be read"
 
 
 # The families live in secrets.py, which also keeps what a user pastes; here
