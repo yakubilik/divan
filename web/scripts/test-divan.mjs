@@ -1314,7 +1314,9 @@ group('every carried screen asks its computer for exactly what it did');
       changed.length === 0,
       changed.map(([f, before, after]) => `${f}:\n      was ${before}\n      now ${after}`).join('\n    '));
     ok('…over every file under src this branch touched, which git named rather than a list',
-      CARRIED.length >= 11 && was.every((t) => t.length > 200), CARRIED.join(', '));
+      // However many that is: a branch that touches two files is compared on
+      // two. What is held is that each was read from `main` and was a real file.
+      CARRIED.length > 0 && was.every((t) => t.length > 200), CARRIED.join(', '));
   }
 }
 
