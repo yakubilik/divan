@@ -15,9 +15,11 @@ const listBox: React.CSSProperties = {
   overflow: 'hidden', marginBottom: 20,
 };
 
-export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: {
+export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, onClose }: {
   hostKey: string;
   initialCwd?: string;
+  /** Started from a group's own + : the chat is filed there. */
+  groupId?: string;
   /** An agent's own card started this, so the dialog opens on that agent and on
    *  the account its definition was read from. */
   initialAgent?: { agent: Agent; accountId: string | null } | null;
@@ -169,6 +171,7 @@ export function NewChat({ hostKey, initialCwd, initialAgent, onDone, onClose }: 
         agent_id: agent ? agent.id : undefined,
         ...(agent ? { title: agent.label } : {}),
         cwd: cwd ?? undefined,
+        group_id: groupId,
         max_turns: maxTurns ? Number(maxTurns) : null,
         max_budget_usd: budget ? Number(budget) : null,
       });

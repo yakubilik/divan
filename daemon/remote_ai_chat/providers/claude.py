@@ -36,6 +36,10 @@ log = logging.getLogger("rac.claude")
 # of hanging for a stream that has stopped.
 _STREAM_BROKEN = object()
 
+# How the CLI exits when something else on the machine signals it: 128 + SIGTERM
+# or SIGKILL, or the negative signal number when the SDK reports it raw.
+KILLED_EXIT_CODES = (143, 137, -15, -9)
+
 # How long a turn nobody asked for may sit in total silence before it is
 # declared over. A turn that was asked for has no such ceiling — it may be
 # waiting on a ten-minute command — but an unasked one is opened on a guess,
@@ -226,6 +230,8 @@ class ClaudeProvider(Provider):
                     if k in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")})
         if c.account_home:
             env["CLAUDE_CONFIG_DIR"] = c.account_home
+        if c.chat_id:
+            env["RAC_CHAT_ID"] = c.chat_id
         kw: dict[str, Any] = dict(
             env=env,
             cwd=c.cwd,
@@ -427,10 +433,19 @@ class ClaudeProvider(Provider):
 
         try:
             await client.query(prompt)
-        except Exception as exc:
-            self._turn_active = False
+        except Exception as first:
+            # The CLI died while the chat sat idle — killed from outside, most
+            # often. The session is on disk: connect again and ask once more
+            # before calling it a failure.
+            log.warning("query failed (%s); reconnecting and asking again", first)
             await self.close()
-            return TurnResult(self._session_id, None, None, None, None, True, f"query failed: {exc}")
+            try:
+                client = await self._ensure_client()
+                await client.query(prompt)
+            except Exception as exc:
+                self._turn_active = False
+                await self.close()
+                return TurnResult(self._session_id, None, None, None, None, True, f"query failed: {exc}")
 
         return await self._drain(started)
 
@@ -681,7 +696,10 @@ class ClaudeProvider(Provider):
             await flush_segment()
             await release_tools()
             await self.close()
-            return TurnResult(self._session_id, None, None, None, None, True, f"stream failed: {exc}")
+            killed = (not self._interrupted
+                      and getattr(self._reader_error, "exit_code", None) in KILLED_EXIT_CODES)
+            return TurnResult(self._session_id, None, None, None, None, True, f"stream failed: {exc}",
+                              killed=killed)
 
         await flush_segment()
         await release_tools()

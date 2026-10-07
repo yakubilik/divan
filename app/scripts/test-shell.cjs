@@ -497,8 +497,8 @@ checks.push(
   ['…and pairing with it, one level further in',
     fromMachine.has('/pair')],
   // The call is the one exception: it is a way of talking, so a conversation
-  // has a phone in its header as well as the Machine list having a row — and
-  // the Dashboard opens conversations, so it is a press further from there too.
+  // has a phone in its header as well as the Machine list having a row.
+  // The Dashboard opens conversations, so it reaches the phone through them.
   ['…and from neither of the other two places, the call aside',
     routes.every((route) => route === '/call' || (!fromDashboard.has(route) && !fromChat.has(route)))],
   ['a conversation can pick up the phone',

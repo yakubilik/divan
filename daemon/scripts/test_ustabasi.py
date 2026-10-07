@@ -502,6 +502,27 @@ async def the_wire() -> None:
           [f["name"] for f in rep["files"]] == ["rotation.md"] and key not in rep["files"][0]["text"]
           and "[secret openai" in rep["files"][0]["text"], json.dumps(rep)[:300])
 
+    # Following: a ticket filed from a chat wakes that chat when it ends, and
+    # only those — not a reminder, not a ticket nobody filed from a chat.
+    db = sqlite3.connect(wire / "ustabasi.db")
+    db.execute("ALTER TABLE tickets ADD COLUMN ask TEXT")
+    db.execute("UPDATE tickets SET card=? WHERE id=2",
+               (json.dumps({"goal": "decide", "origin_chat": "chat-7"}),))
+    db.execute("UPDATE tickets SET ask='A mı, B mi?' WHERE id=2")
+    start = db.execute("SELECT MAX(id) FROM notifications").fetchone()[0]
+    db.executemany("INSERT INTO notifications (ticket_id, ts, kind, text) VALUES (?,?,?,?)",
+                   [(2, 3.0, "reminder", "#2 still waiting"), (2, 4.0, "blocked", "#2 ❓ stopped to ask\nWhich way?"),
+                    (3, 5.0, "done", "#3 ✅ turned down — bitti")])
+    db.commit()
+    db.close()
+    got, last = u.followed(start)
+    check("only the end of a ticket filed from a chat is delivered, to that chat",
+          [(f["chat"], f["ticket"], f["kind"]) for f in got], [("chat-7", 2, "blocked")])
+    msg = u.follow_message(got[0])
+    holds("the chat is told the plain question and that Yakup is waiting there",
+          "A mı, B mi?" in msg and "#2" in msg and "waiting here" in msg, msg)
+    check("and the follower moves past everything it looked at", last, start + 3)
+
     (wire / "ustabasi.db").unlink()
     holds("a queue that went away reads as no queue, not as an error",
           u.snapshot()["available"] is False)

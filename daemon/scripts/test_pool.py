@@ -33,7 +33,8 @@ from remote_ai_chat.db import DB                               # noqa: E402
 from remote_ai_chat.pool import Pool, Settings                 # noqa: E402
 from remote_ai_chat.providers.base import TurnResult           # noqa: E402
 from remote_ai_chat.server import Server                       # noqa: E402
-from remote_ai_chat.session import HANDOVER_NOTE, ChatSession  # noqa: E402
+from remote_ai_chat.session import (                           # noqa: E402
+    HANDOVER_NOTE, REVIVE_MAX, REVIVE_PROMPT, ChatSession)
 
 failures: list[str] = []
 HOUR = 3600
@@ -856,6 +857,39 @@ async def scenario_wait_it_out(db) -> None:
         session_mod.RESET_SLACK_S = real_slack
 
 
+async def scenario_killed(db) -> None:
+    print("\na CLI killed from outside mid-turn")
+    chat = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
+                          perm_mode="ask", cwd="/tmp", account_id="acct-2")
+    s, built, events, _ = make_session(db, chat)
+    real = FakeProvider.run
+    deaths = [1]
+
+    async def run(self, prompt, attachments=None):
+        if deaths[0]:
+            deaths[0] -= 1
+            self.prompts.append(prompt)
+            return TurnResult("sess-k", None, None, None, None, True, "stream failed: 143", killed=True)
+        return await real(self, prompt, attachments)
+
+    FakeProvider.run = run
+    try:
+        await s.send("hello", None)
+        await s.running
+        check(built[0].prompts == ["hello", REVIVE_PROMPT], "the turn is picked up again, not asked again",
+              str(built[0].prompts))
+        check(not [e for e, _ in events if e == "turn.error"] and
+              [e for e, _ in events if e == "turn.done"], "and the chat never sees an error")
+
+        deaths[0] = REVIVE_MAX + 1
+        await s.send("again", None)
+        await s.running
+        check(len([e for e, _ in events if e == "turn.error"]) == 1,
+              "a CLI that keeps dying is reported once, in the end")
+    finally:
+        FakeProvider.run = real
+
+
 async def main() -> None:
     scenario_reading()
     scenario_never_spend()
@@ -871,6 +905,7 @@ async def main() -> None:
         await scenario_stop_first(db)
         await scenario_nowhere_to_go(db)
         await scenario_wait_it_out(db)
+        await scenario_killed(db)
     print()
     if failures:
         print(f"{len(failures)} failed: " + ", ".join(failures))

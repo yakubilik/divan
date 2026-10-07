@@ -80,6 +80,8 @@ The quoted words are the check's own name.
 | Move back to Queued | Board drag only | Ticket side column (frame) and drag | `divan.card.move` | drive: "Move back to Queued on an in-progress ticket sends divan.card.move to queued" |
 | Stop / run next / restart / edit / delete a ticket | Wall ticket window | Wall window and ticket page | `ustabasi.cancel`, `ustabasi.priority`, `ustabasi.restart`, `ustabasi.edit`, `ustabasi.delete` | drive: "run next, stop, restart, edit and delete are on the ticket" |
 | The queue | Terminal place | Machine › Terminal | `ustabasi.list` | drive: "…and the queue’s tickets are on it" |
+| What the queue sent (bell) | Bell in the top bar (added on `main` after this branch was cut, 5736dcf) | Bell at the right end of the top line, before the theme switch | `ustabasi.notifications` | drive: "the bell is in the top line and the panel asks each computer what its queue sent (ustabasi.notifications)" |
+| A ticket's report | On the ticket page (added on `main`, 5736dcf) | Ticket page, between the question card and Live; in a window of its own for a ticket with no card | `ustabasi.report` | drive: "a ticket page asks for the report of its own ticket (ustabasi.report)" |
 | Type into a chat on the wall | Terminal peek | Machine › Terminal peek | `chat.send` | drive: "Terminal takes a command" |
 | Open a chat | Chat list | Earlier list; `/chats/<id>` | `chat.get` | drive: "the Chat place lands in a writable chat without a choice" |
 | Send, stream, stop, approve | Chat | Same | `chat.send`, `chat.interrupt`, `approval.respond` | drive: "a message sends chat.send and the reply streams in" |
@@ -129,6 +131,8 @@ The quoted words are the check's own name.
 | Move a card | Board long-press drag | Same, onto a column tab | `divan.card.move` | phone: "that move is divan.card.move with the In Progress column" |
 | New ticket | + ticket | Board + / project + New ticket | `divan.card.create` | phone: "Ice Box files the card into Ice Box and Start now into In Progress" |
 | Say something to the run | Card note box | Ticket › Live say box | `ustabasi.note` | phone: "a sentence typed into Say one sentence to the agent is sent as ustabasi.note" |
+| What the queue sent (inbox) | Inbox row on the dashboard (added on `main`, a50ee2c) | Inbox row on the Dashboard above the queue row; `/inbox` | `ustabasi.notifications` | phone: "the screens ask the computer for these and no more" — names the call only; the row itself is not pressed in a test |
+| A ticket's report | End of the ticket page (added on `main`, a50ee2c) | Same | `ustabasi.report` | phone: "the screens ask the computer for these and no more" — names the call only; the row itself is not pressed in a test |
 | Hand a card to someone | Card page | Ticket side rows › Executor | `divan.card.executor` | phone: "Executor sends divan.card.executor" |
 | Read a ticket cold | `/ticket/<n>`, `/card/<id>` | Same, one page; old run at `?run=1` | `divan.card.get`, `ustabasi.run` | phone: "a ticket link opened cold draws the ticket" |
 | Open a branch | Branch cards | Branch rows | — | phone: "a branch with no source says Source not connected yet. and no number" |

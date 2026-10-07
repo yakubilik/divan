@@ -245,6 +245,11 @@ export function TicketPage({
           </article>
         )}
 
+        {/* What the ticket came back with — the documents it wrote, read. */}
+        {card.ustabasi_id != null && (
+          <Report host={card.host} ticket={card.ustabasi_id} status={card.agent_status ?? ''} />
+        )}
+
         <section aria-labelledby="t-live" data-live="">
           <div className="dv-sec">
             <h3 id="t-live">Live</h3>
@@ -282,11 +287,6 @@ export function TicketPage({
             </details>
           )}
         </section>
-
-        {/* What the ticket came back with — the documents it wrote, read. */}
-        {card.ustabasi_id != null && (
-          <Report host={card.host} ticket={card.ustabasi_id} status={card.agent_status ?? ''} />
-        )}
 
         <AgentFace got={got} machine={card.machine} />
       </main>

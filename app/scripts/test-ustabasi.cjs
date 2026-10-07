@@ -1291,7 +1291,7 @@ checks.push(...require('./test-tts.cjs').checks);
 // who reads an answer, a stop in the middle of one, and a build without it.
 const ema = require('./test-ema.cjs');
 
-// …and the Dashboard's Composer, pressed once the three above have let go of
+// …and the Dashboard's Composer, pressed once the two above have let go of
 // the shared store: it types, presses send and waits for what comes back.
 void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(async () => {
   const composer = require('./test-composer.cjs');

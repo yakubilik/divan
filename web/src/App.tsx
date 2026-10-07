@@ -69,7 +69,7 @@ export function App() {
   const [card, setCard] = useState<string | null>(opened.current.card);
   const [sel, setSel] = useState<Selection | null>(null);
   const [newChat, setNewChat] = useState<{
-    cwd?: string; agent?: { agent: Agent; accountId: string | null };
+    cwd?: string; groupId?: string; agent?: { agent: Agent; accountId: string | null };
     /** Started from a product's own page: on the computer that product is on,
      *  and read where it was started rather than in the Chat place. */
     host?: string | null; stay?: boolean;
@@ -346,6 +346,35 @@ export function App() {
     setCard(null);
   }, []);
 
+  /** A new chat is written in the Composer: home, and the field focused. */
+  const compose = useCallback(() => {
+    setView('overview');
+    setProject(null);
+    setBranch(null);
+    setCard(null);
+    setTimeout(() => composerRef.current?.focus(), 0);
+  }, []);
+
+  /** Ask: a chat with these words in it, opened in the Chat place. */
+  const ask = useCallback(async (text: string, key: string | null, picks: ToldPicks) => {
+    const p = projectIn(divan, key);
+    const told = await tell(text, p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null, picks);
+    // It is read where chats are read, not as a window on the Dashboard.
+    useTold.getState().close(idOfTold(told));
+    open(told.host, told.chatId);
+  }, [divan]);
+
+  /** Ice Box and Start now: the card, written on a machine that has the product. */
+  const file = useCallback(async (text: string, key: string, mode: 'ice' | 'now') => {
+    const p = projectIn(divan, key);
+    const w = writer(divan, p);
+    if (!p || !w) throw new Error(`No paired computer has ${p?.name ?? 'that project'}`);
+    const { title, summary } = cardOf(text);
+    await createCard(w.host, { project_id: w.project, title, summary, column: MODE_COLUMN[mode] });
+    void useDivanStore.getState().load(w.host);
+    return `Filed in ${mode === 'ice' ? 'Ice Box' : 'In Progress'} on ${p.name}.`;
+  }, [divan]);
+
   /** A notice from the queue, pressed: its ticket's page, under its product.
    *  A ticket with no card on the board (filed before the board mirrored, or
    *  on a machine whose board has not answered) gets its report on its own. */
@@ -375,35 +404,6 @@ export function App() {
     const t = setInterval(() => { void tick(); }, POLL_MS);
     return () => { alive = false; clearInterval(t); };
   }, []);
-
-  /** A new chat is written in the Composer: home, and the field focused. */
-  const compose = useCallback(() => {
-    setView('overview');
-    setProject(null);
-    setBranch(null);
-    setCard(null);
-    setTimeout(() => composerRef.current?.focus(), 0);
-  }, []);
-
-  /** Ask: a chat with these words in it, opened in the Chat place. */
-  const ask = useCallback(async (text: string, key: string | null, picks: ToldPicks) => {
-    const p = projectIn(divan, key);
-    const told = await tell(text, p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null, picks);
-    // It is read where chats are read, not as a window on the Dashboard.
-    useTold.getState().close(idOfTold(told));
-    open(told.host, told.chatId);
-  }, [divan]);
-
-  /** Ice Box and Start now: the card, written on a machine that has the product. */
-  const file = useCallback(async (text: string, key: string, mode: 'ice' | 'now') => {
-    const p = projectIn(divan, key);
-    const w = writer(divan, p);
-    if (!p || !w) throw new Error(`No paired computer has ${p?.name ?? 'that project'}`);
-    const { title, summary } = cardOf(text);
-    await createCard(w.host, { project_id: w.project, title, summary, column: MODE_COLUMN[mode] });
-    void useDivanStore.getState().load(w.host);
-    return `Filed in ${mode === 'ice' ? 'Ice Box' : 'In Progress'} on ${p.name}.`;
-  }, [divan]);
 
   // The chat on screen catches itself up the moment its computer answers
   // again. Without this a panel that was asleep, or whose socket died quietly
@@ -797,7 +797,7 @@ export function App() {
               <Sidebar
                 selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
                 onNewChat={compose}
-                onNewChatIn={(host, cwd) => setNewChat({ host, cwd })}
+                onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
                 searchRef={searchRef}
                 collapsed={rail} onCollapse={setRailTo}
               />
@@ -893,6 +893,7 @@ export function App() {
         <NewChat
           hostKey={(newChat.host ?? fleet.focus)!}
           initialCwd={newChat.cwd}
+          groupId={newChat.groupId}
           initialAgent={newChat.agent ?? null}
           onDone={(c) => {
             const host = (newChat.host ?? fleet.focus)!;

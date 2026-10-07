@@ -156,6 +156,8 @@ const seed = (store, patch) => {
  *  what a pressed answer actually sends is the one thing about a session that a
  *  render cannot say. */
 const asked = [];
+/** The two reads the queue's inbox and a ticket's report make, kept for the whole run. */
+const queueReads = [];
 /** Every `ustabasi.run` this panel made, so a poll that asks for the same page
  *  twice — or never carries the cursor — is visible. */
 const runAsks = [];
@@ -177,6 +179,7 @@ seed(useFleet, {
   hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true,
   call: async (key, type, data) => {
     asked.push({ key, type, data });
+    if (type === 'ustabasi.notifications' || type === 'ustabasi.report') queueReads.push({ type, data });
     // The board is the one thing not answered from here: the snapshots are
     // seeded below, and a socket that answered `{}` would replace a fixture with
     // an empty board. A poll that fails is one of the states the panel has to
@@ -1395,7 +1398,8 @@ group('a chat dropped on a product is filed under it by hand');
       fakeChat({ id: 'h1', title: 'Hush pricing', project_id: 'p-hush', project: 'Hush', updated_at: at - 20 }),
     ] } } });
   });
-  await click(nav('Chats'));
+  await click(labelledBtn('Chats'));
+  if (find('Earlier')) await click(find('Earlier'));
   const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
   const section = (key) => doc.querySelector(`[data-section="${key}"]`);
   const row = (words) => [...doc.querySelectorAll('button[draggable="true"]')]
@@ -1414,14 +1418,23 @@ group('a chat dropped on a product is filed under it by hand');
     (section('project:Hush')?.textContent ?? '').includes('Webhook retry policy'),
     section('project:Hush')?.textContent?.slice(0, 200));
 
-  await click(find('Dashboard', header));
+  await click(find('Dashboard', doc.querySelector('header')));
   await click(tile('hush'));
   const tab = find('Chats', doc.querySelector('[aria-label="View"]'));
   await click(tab);
   const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
   ok('…and on that product’s own page', !!tab && shown('Webhook retry policy') && shown('Hush pricing'),
     `tab ${!!tab} · ${w.location.pathname}`);
-  await press('0');
+  await click(find('Dashboard', doc.querySelector('header')));
+}
+
+group('what the queue sent');
+{
+  const bell = [...(doc.querySelector('header')?.querySelectorAll('button') ?? [])]
+    .find((b) => /queue/.test(b.getAttribute('title') ?? '')) ?? null;
+  ok('the bell is in the top line and the panel asks each computer what its queue sent (ustabasi.notifications)',
+    !!bell && queueReads.some((r) => r.type === 'ustabasi.notifications'),
+    `bell ${!!bell} · ${queueReads.map((r) => r.type).join(',')}`);
 }
 
 group('the four things the panel could not do to a computer');
@@ -2418,6 +2431,10 @@ group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
 
 group('nothing was lost on the way');
 {
+  // Read here because the ticket pages are opened by the groups above.
+  ok('a ticket page asks for the report of its own ticket (ustabasi.report)',
+    queueReads.some((r) => r.type === 'ustabasi.report' && r.data?.id != null),
+    JSON.stringify(queueReads.filter((r) => r.type === 'ustabasi.report').slice(0, 2)));
   ok('no screen the panel opened let a rejection go unhandled',
     unhandled.length === 0, [...new Set(unhandled)].slice(0, 5).join('\n    '));
 }

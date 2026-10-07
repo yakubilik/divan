@@ -168,15 +168,15 @@ export default function Dashboard() {
           </View>
         )}
         {/* Work rather than infrastructure: the queue this computer is working
-            through, what that queue sent, and every conversation it has. */}
+            through, and every conversation it has. */}
+        <InboxRow onOpen={() => go(() => router.push('/inbox'))} />
         <View>
           {queue.available && (
             <ListRow first icon="terminal" title={T('ustabasi')} note={T('dashQueueNote')}
               meta={queue.red ? T('queueRed', { n: queue.red }) : undefined} tone={queue.red ? 'red' : undefined}
               onPress={() => go(() => router.push('/ustabasi'))} />
           )}
-          <InboxRow first={!queue.available} onOpen={() => go(() => router.push('/inbox'))} />
-          <ListRow icon="chat_bubble" title={T('conversations')}
+          <ListRow first={!queue.available} icon="chat_bubble" title={T('conversations')}
             note={T('dashChatsNote')} onPress={() => go(() => router.replace(PLACE_ROUTE.chat))} />
         </View>
       </ScrollView>
@@ -831,7 +831,7 @@ function Nothing() {
 /** The way in to what the queue sent: one row with the count of what came in
  *  since the list was last opened. The dashboard polls for it while it is on
  *  screen; the push is still how a result arrives, this is where it stays. */
-function InboxRow({ first, onOpen }: { first?: boolean; onOpen: () => void }) {
+function InboxRow({ onOpen }: { onOpen: () => void }) {
   const T = useT();
   const items = useInbox((s) => s.items);
   const seen = useInbox((s) => s.seen);
@@ -843,7 +843,7 @@ function InboxRow({ first, onOpen }: { first?: boolean; onOpen: () => void }) {
   }, [poll]);
   const n = unread(items, seen);
   return (
-    <ListRow first={first} icon="view_agenda" title={T('inboxTitle')}
+    <ListRow boxed first icon="view_agenda" title={T('inboxTitle')}
       note={items[0] ? (items[0].title || items[0].headline) : T('inboxNote')} noteLines={1}
       meta={n ? T('inboxNew', { n }) : T('inboxAllRead')} tone={n ? 'amber' : undefined}
       onPress={onOpen} />

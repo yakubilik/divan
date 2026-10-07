@@ -23,13 +23,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import __version__
 from .supervisor import supervisor
 from .updater import Updater
-from .config import Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
+from .config import CONFIG_DIR, Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
 from .db import DB
 from . import accounts as acct
 from . import pool as poolmod
 from .errors import Err
 from . import agents, secrets, tools
-from .call import Concierge, hermes_installed, headline as call_headline, snapshot as call_snapshot
+from .call import Concierge, NoRoom, hermes_installed, headline as call_headline, snapshot as call_snapshot
 from .push import send_push
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .attachments import KINDS, normalize_image, peaks, sniff
@@ -237,8 +237,13 @@ class Server:
         # starts when somebody actually asks it something.
         # The account the concierge last connected as; work it starts goes there.
         self._concierge_acct: acct.Account | None = None
+        # Accounts that refused a call's turn, and until when the call leaves
+        # them alone whatever the pool has on record for them.
+        self._concierge_skip: dict[str, float] = {}
         self.concierge = Concierge(self.call_snapshot, self._concierge_account,
-                                   self._concierge_actions())
+                                   self._concierge_actions(),
+                                   on_limits=self._concierge_limits,
+                                   on_limited=self._concierge_limited)
 
     def _allow_cross_origin(self) -> None:
         """Let a browser talk to a daemon that did not serve the page.
@@ -453,14 +458,18 @@ class Server:
         return a
 
     # ── fan-out ────────────────────────────────────────────────────────────
-    def _remember_limits(self, event: dict) -> str | None:
+    def _remember_limits(self, event: dict, key: str | None = None) -> str | None:
         """Keep the last word on every plan window, on disk as well as in
         memory. A report only arrives while a turn is running, so what was
         remembered is all there is to show between turns — and after a restart
-        it is all there is to show at all, until someone sends a message."""
+        it is all there is to show at all, until someone sends a message.
+
+        `key` names the account outright, for a report that came from a turn no
+        chat owns — the call's."""
         d = event.get("data") or {}
-        chat = self.db.get_chat(event.get("chat_id") or "") or {}
-        key = chat.get("account_id") or acct.DEFAULT_ID + "-" + (chat.get("provider") or "claude")
+        if key is None:
+            chat = self.db.get_chat(event.get("chat_id") or "") or {}
+            key = chat.get("account_id") or acct.DEFAULT_ID + "-" + (chat.get("provider") or "claude")
         rows = d.get("windows")
         # Whether this is the plan's whole answer or only the window the tool
         # singled out. Only the provider knows, so only the provider says: a
@@ -681,6 +690,50 @@ class Server:
     # the turn start again instead of finding it already under way.
     RESUME_DELAY_S = 3.0
 
+    FOLLOW_EVERY_S = 30.0
+    FOLLOW_STATE = CONFIG_DIR / "ustabasi-follow.json"
+
+    async def follow_tickets(self) -> None:
+        """Wake the chat that filed a ticket when the ticket ends.
+
+        An agent that files a ticket used to say "I will tell you when it is
+        done" and then could not: nothing woke it. This reads what the queue
+        sent, and for a ticket filed from a chat (`card.origin_chat`), sends the
+        result into that chat as a message — the agent there picks it up and
+        tells the person, who gets the chat's own notification for it.
+
+        The place in the queue's notifications is kept on disk. The first run
+        starts at the end: an old result is not news.
+        """
+        try:
+            after = int(json.loads(self.FOLLOW_STATE.read_text()).get("after", -1))
+        except Exception:
+            after = -1
+        while True:
+            try:
+                if after < 0:
+                    after = await asyncio.to_thread(ustabasimod.newest_notification)
+                    self.FOLLOW_STATE.write_text(json.dumps({"after": after}))
+                # A daemon on its way out starts no turns; what ended meanwhile
+                # is still there for the next one, which reads from the same place.
+                if self.draining:
+                    return
+                got, last = await asyncio.to_thread(ustabasimod.followed, after)
+                for f in got:
+                    if not self.db.get_chat(f["chat"]):
+                        continue
+                    try:
+                        await self.sessions.get(f["chat"]).send(ustabasimod.follow_message(f), None)
+                        log.info("ticket #%s %s: told chat %s", f["ticket"], f["kind"], f["chat"])
+                    except Exception:
+                        log.exception("could not tell chat %s about ticket #%s", f["chat"], f["ticket"])
+                if last != after:
+                    after = last
+                    self.FOLLOW_STATE.write_text(json.dumps({"after": after}))
+            except Exception:
+                log.exception("ticket follow pass failed")
+            await asyncio.sleep(self.FOLLOW_EVERY_S)
+
     async def resume_interrupted(self) -> None:
         """Carry on with the turns the process before this one was running.
 
@@ -844,16 +897,20 @@ class Server:
 
     async def broadcast(self, event: dict) -> None:
         if event.get("event") == "limits":
-            key = self._remember_limits(event)
-            if key and self.pool.settings.enabled:
-                task = asyncio.create_task(self._pool_sweep(key))
-                self._sweeps.add(task)
-                task.add_done_callback(self._sweeps.discard)
+            self._sweep_later(self._remember_limits(event))
         msg = json.dumps({"type": "event", "event": event["event"], "chat_id": event.get("chat_id"),
                           "seq": event.get("seq"), "data": event.get("data"), "ts": event.get("ts")},
                          ensure_ascii=False, default=str)
         for ws in list(self.outbox):
             self._enqueue(ws, msg)
+
+    def _sweep_later(self, key: str | None) -> None:
+        """A reading for this account was just written down; let the pool act
+        on it without making whoever reported it wait."""
+        if key and self.pool.settings.enabled:
+            task = asyncio.create_task(self._pool_sweep(key))
+            self._sweeps.add(task)
+            task.add_done_callback(self._sweeps.discard)
 
     def _enqueue(self, ws: WebSocket, msg: str) -> None:
         """Hand one message to a client's writer. Never waits on the socket."""
@@ -1446,8 +1503,21 @@ class Server:
         return {}
 
     async def h_chat_list(self, dev: Device, d: dict) -> dict:
+        self.cfg.refresh_tunnel()
         return {"chats": self.db.list_chats(bool(d.get("include_archived"))),
-                "groups": self.db.list_groups()}
+                "groups": self.db.list_groups(),
+                # Who shares this computer, and which of them is asking. A chat
+                # with no owner written on it is the first person's.
+                "people": {"names": self.cfg.person_names(), "me": self.cfg.person_of(dev.id)}}
+
+    def _owner(self, dev: Device | None, asked: object = None) -> str | None:
+        """Whose a new chat is: the person named, if there is such a person,
+        else whoever's device opened it. A chat no device opened — one started
+        from a call — has no owner written on it."""
+        self.cfg.refresh_tunnel()
+        if asked and str(asked) in self.cfg.person_names():
+            return str(asked)
+        return self.cfg.person_of(dev.id) if dev else None
 
     async def h_chat_create(self, dev: Device, d: dict) -> dict:
         if self.cfg.demo:
@@ -1484,6 +1554,7 @@ class Server:
             title=with_project(d.get("title") or NEW_CHAT_TITLE,
                                self.policy.project_for(cwd)),
             max_turns=d.get("max_turns"), max_budget_usd=d.get("max_budget_usd"),
+            owner=self._owner(dev, d.get("owner")),
         )
         await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.created",
                               "data": chat, "ts": time.time()})
@@ -1570,6 +1641,8 @@ class Server:
         prev = self.db.get_chat(cid)
         if prev is None:
             raise Err("no_chat", "no such chat")
+        if "owner" in fields and fields["owner"] not in self.cfg.person_names():
+            raise Err("no_person", "nobody by that name shares this computer")
         # A rename keeps the project in front of it, and a chat that moves to
         # another folder takes the new project's name with it — the old prefix
         # is dropped first, or moving a chat twice would stack them.
@@ -1717,6 +1790,11 @@ class Server:
 
         return {"send": send, "start": start, "approve": approve, "stop": stop}
 
+    # How long an account that refused a call's turn is left alone when the
+    # pool has no reading that says it is spent. A short limit's worth: long
+    # enough not to knock on it again during the same call.
+    CONCIERGE_SKIP_S = 900.0
+
     def _concierge_account(self) -> tuple[str | None, dict[str, str]]:
         """The concierge speaks as the computer, so it uses the computer's own
         Claude login rather than any one chat's account.
@@ -1726,23 +1804,74 @@ class Server:
         call that picked up and then answered "not logged in" out loud. Any
         signed-in Claude account is a better answer than none; which subscription
         pays for a status question matters far less than the call working, and
-        the concierge never touches a chat's files either way."""
+        the concierge never touches a chat's files either way.
+
+        The same goes for a login that is out of plan: the pool knows which
+        sign-ins are spent, and the call takes the first one that is not. With
+        none left it raises `NoRoom`, carrying when the earliest comes back."""
         a = self._account(None, "claude")
+        now = time.time()
+        skip = {k for k, t in self._concierge_skip.items() if t > now}
+
+        def spent(x: acct.Account) -> bool:
+            return x.id in skip or self.pool.state(x.id, "claude", now).blocked
+
         # `logged_in` is only true after a refresh, and this runs once per
         # concierge session rather than per turn, so the cost is paid while the
         # caller is still being greeted.
         acct.refresh(a)
-        if not a.logged_in:
-            for x in self.accounts.values():
-                if x.provider != "claude" or x is a:
-                    continue
+        if not a.logged_in or spent(a):
+            # The pool's own ranking of who has room, the same one a chat is
+            # moved by. Whether a sign-in is still valid only the CLI knows, so
+            # it is asked of them one at a time, best first.
+            for aid in self.pool.candidates("claude", skip | {a.id}, now):
+                x = self.accounts[aid]
                 acct.refresh(x)
                 if x.logged_in:
-                    log.info("concierge: no machine login, speaking as account=%s", x.id)
-                    a = x
-                    break
+                    log.info("concierge: %s, speaking as account=%s",
+                             "machine login is out of plan" if a.logged_in
+                             else "no machine login", x.id)
+                    self._concierge_acct = x
+                    return x.home, x.env()
+            # Nobody with room. If anybody is signed in at all, that is the
+            # thing to say; a machine with no sign-in keeps the old answer.
+            back: list[float] = []
+            signed_in = a.logged_in
+            for x in self.accounts.values():
+                if x.provider != "claude":
+                    continue
+                if x is not a:
+                    acct.refresh(x)
+                if not x.logged_in:
+                    continue
+                signed_in = True
+                until = self.pool.state(x.id, "claude", now).until
+                if until and until > now:
+                    back.append(until)
+            if signed_in:
+                raise NoRoom(min(back) if back else None)
         self._concierge_acct = a
         return a.home, a.env()
+
+    def _concierge_limits(self, data: dict) -> None:
+        """A plan reading from the call's own turn, filed like a chat's."""
+        a = self._concierge_acct
+        if a is not None:
+            self._sweep_later(self._remember_limits({"data": data}, key=a.id))
+
+    def _concierge_limited(self) -> None:
+        """The account the call was on refused a turn. Whatever the pool makes
+        of its last reading, the call does not go back to it for a while."""
+        a = self._concierge_acct
+        if a is not None:
+            self._concierge_skip[a.id] = time.time() + self.CONCIERGE_SKIP_S
+
+    async def _concierge_move(self) -> None:
+        """Drop a warm session whose account has run out since it connected,
+        so the next question opens on one that has room."""
+        a = self._concierge_acct
+        if a is not None and self.pool.state(a.id, "claude").blocked:
+            await self.concierge.reset()
 
     async def h_call_hello(self, dev: Device, d: dict) -> dict:
         """Picking up the phone.
@@ -1751,6 +1880,7 @@ class Server:
         model session in the background while the caller is being greeted. By
         the time they have finished saying what they want, the session that
         would have cost them five seconds is already open."""
+        await self._concierge_move()
         asyncio.create_task(self.concierge.warm())
         return call_headline(self.db, self.sessions)
 
@@ -1760,6 +1890,8 @@ class Server:
             raise Err("empty_message", "empty question")
         if d.get("reset"):
             await self.concierge.reset()
+        else:
+            await self._concierge_move()
         return await self.concierge.ask(text, d.get("lang"))
 
     async def h_call_digest(self, dev: Device, d: dict) -> dict:

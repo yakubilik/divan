@@ -89,6 +89,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         reaper = asyncio.create_task(srv.reaper())
         updater = asyncio.create_task(srv.updater.loop())
         resumer = asyncio.create_task(srv.resume_interrupted())
+        follower = asyncio.create_task(srv.follow_tickets())
         warmer = asyncio.create_task(srv.warm_models())
 
         async def stopper() -> None:
@@ -112,6 +113,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
             reaper.cancel()
             updater.cancel()
             resumer.cancel()
+            follower.cancel()
             warmer.cancel()
             stop.cancel()
             await srv.sessions.close_all()

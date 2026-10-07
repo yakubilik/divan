@@ -137,6 +137,8 @@ class CodexProvider(Provider):
         env.pop("CODEX_HOME", None)
         if self.cfg.account_home:
             env["CODEX_HOME"] = self.cfg.account_home
+        if self.cfg.chat_id:
+            env["RAC_CHAT_ID"] = self.cfg.chat_id
         self._proc = await asyncio.create_subprocess_exec(
             cli, "app-server",
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,

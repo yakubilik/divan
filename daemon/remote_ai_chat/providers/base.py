@@ -34,6 +34,9 @@ class ProviderConfig:
     # where this session is and how it is expected to sound. Built per session
     # by preamble.build, because the daemon is the only party that knows.
     preamble: str | None = None
+    # The chat this session belongs to, handed to the CLI as RAC_CHAT_ID so
+    # what it runs — `ustabasi add` — can say which chat asked for it.
+    chat_id: str | None = None
 
 
 @dataclass
@@ -46,6 +49,9 @@ class TurnResult:
     is_error: bool = False
     error: str | None = None
     stop_reason: str | None = None
+    # The CLI was killed by a signal from outside while the turn ran. Not the
+    # turn's own failure: the session is intact and can be picked up again.
+    killed: bool = False
 
 
 class Provider(ABC):
