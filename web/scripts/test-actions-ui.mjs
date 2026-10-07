@@ -76,6 +76,48 @@ try {
   ok('Sign in sends account.login, and leaving the sheet sends account.login.cancel',
     signIn && cancelled, JSON.stringify({ signIn, cancelled }));
 
+  console.log('── the keyboard, the palette and the chat window');
+  const key = (k) => b.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, metaKey: true, bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));`);
+  await b.cold('/');
+  await key('f');
+  const searching = await b.evaluate(`return location.pathname.startsWith('/chats') && document.activeElement?.name === 'chat-search';`);
+  await key('b');
+  const railed = await b.evaluate(`return localStorage.getItem('rac.sidebar') === 'rail';`);
+  ok('⌘F opens the chat list with its search focused, and ⌘B folds the list to a rail', searching && railed,
+    JSON.stringify({ searching, railed }));
+  await b.cold('/');
+  await key('k');
+  const stopAll = await press('Stop every session', '*')
+    && await sent('chat.interrupt', (d) => d.chat_id === 'c2');
+  await key('k');
+  const everyBefore = await b.evaluate(`return document.body.textContent.includes('Show every computer');`);
+  await press('Show every computer', '*');
+  await key('k');
+  const everyAfter = await b.evaluate(`return document.body.textContent.includes('Show one computer');`);
+  ok('the palette still stops every running session (chat.interrupt) and shows every computer',
+    stopAll && everyBefore && everyAfter, JSON.stringify({ stopAll, everyBefore, everyAfter }));
+  await b.cold('/chats/c1');
+  await b.evaluate(`window.open = (u) => { window.__opened = u; return null; };`);
+  await press('Details');
+  await press('Open in a new window');
+  const popped = await b.evaluate(`return window.__opened || '';`);
+  ok('a chat still opens in a window of its own from Details', /\?host=studio&chat=c1$/.test(popped), popped);
+
+  console.log('── Machine › Machines and Sessions');
+  await b.cold('/machine/fleet');
+  const stopped = await press('Stop') && await sent('chat.interrupt', (d) => d.chat_id === 'c2');
+  ok('Sessions and plan limits stops a running turn (chat.interrupt)', stopped);
+  await b.cold('/machine/machines');
+  b.drain();
+  const paired = await type('remoteaichat://pair?host=…', 'remoteaichat://pair?host=127.0.0.1&port=9&token=t0k3n&name=laptop')
+    && await press('Pair')
+    && await b.evaluate(`return JSON.parse(localStorage.getItem('rac.hosts') || '[]').some((h) => h.name === 'laptop' && h.port === 9);`);
+  ok('a pairing link pasted on Machines adds that computer to the panel', paired);
+  // The computer just paired does not exist, and a refused socket is what the
+  // browser logs about it.
+  b.drain();
+
   const bad = b.drain();
   ok('no console errors on the way', !bad.length, bad.join('\n    '));
 } finally {

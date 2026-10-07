@@ -33,7 +33,7 @@ const confirm = async () => {
   return true;
 };
 
-const METHODS = ['createAccount', 'renameAccount', 'logoutAccount', 'deleteAccount', 'installTool', 'removeAgent',
+const METHODS = ['installAgent', 'createAccount', 'renameAccount', 'logoutAccount', 'deleteAccount', 'installTool', 'removeAgent',
   'setPool', 'setDefaults', 'updateChat', 'deleteChat', 'createChat', 'setDevicePrefs', 'switchHost', 'removeHost',
   'createGroup', 'renameGroup', 'deleteGroup', 'setShowArchived', 'checkUpdate', 'applyUpdate', 'refreshHost'];
 let calls = [];
@@ -44,11 +44,14 @@ function stand(params) {
   R.store.set({
     ...rec,
     agents: [{ id: 'user:reviewer', name: 'reviewer', label: 'Reviewer', installed: true, scope: 'user', path: '/x' }],
-    agentsLoaded: true, loadAgents: async () => {}, storeSources: [], storeLoaded: true, loadStore: async () => {},
+    agentsLoaded: true, loadAgents: async () => {}, storeLoaded: true, loadStore: async () => {},
     pool: { enabled: false, threshold: 0.9 }, poolAccounts: [], loadPool: async () => {},
     tools: [{ provider: 'claude', version: '1.2.4', path: '/usr/local/bin/claude', login_methods: [{ id: 'subscription' }] },
             { provider: 'codex', version: null, path: null, login_methods: [] }],
-    loadTools: async () => {}, updateStatus: { repo: true, behind: 2, ahead: 0, busy: false, auto: false },
+    loadTools: async () => {}, updateStatus: { repo: true, behind: 2, ahead: 0, busy: false, auto: false,
+      local: { commit: 'a1b2c3d' }, remote: { commit: 'e4f5a6b' } },
+    storeSources: [{ id: 'src', label: 'src', repo: 'x/y', note: '', items: [
+      { id: 'src:reviewer', kind: 'agent', label: 'Reviewer', glyph: 'R', color: '#777777', repo: 'x/y' }] }],
   });
 }
 const screen = (file, params) => {
@@ -176,6 +179,24 @@ const ready = (async () => {
   screen('host-sheet.tsx');
   await press((p) => p.text.startsWith('mini'));
   checks.push(['phone: the computer picker switches computer (switchHost)', made('switchHost', (id) => id === 'h2')]);
+
+  // Software update, an agent from the store, the model sheet, and the way to
+  // move a sign-in over from another computer.
+  screen('settings.tsx');
+  await press('Update now');
+  const updated = made('applyUpdate');
+  screen('agent-install.tsx', { id: 'src:reviewer' });
+  await press('Install Reviewer');
+  const installed = made('installAgent', (id) => id === 'src:reviewer');
+  screen('model-sheet.tsx');
+  await press('Sonnet 5');
+  const sheet = made('setDefaults', (d) => d.model === 'sonnet');
+  screen('accounts.tsx');
+  R.nav.reset();
+  await press('Move from another computer');
+  const moving = R.nav.pushed().some((to) => (typeof to === 'string' ? to : to?.pathname) === '/move-signin');
+  checks.push([`phone: Update now sends applyUpdate, Install sends installAgent, the model sheet writes setDefaults, and Move a sign-in is one press from Accounts — ${JSON.stringify({ updated, installed, sheet, moving })}`,
+    updated && installed && sheet && moving]);
 
   // A new chat with every option still starts one.
   screen('new-chat.tsx');
