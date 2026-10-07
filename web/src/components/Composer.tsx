@@ -145,6 +145,8 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef }: ComposerP
         setText('');
         setSaid({ text: line });
       }
+      // A changed chip was for that one send.
+      setPicks({});
     } catch (e: any) {
       setSaid({ text: e?.message ?? 'That did not reach the computer', error: true });
     } finally {

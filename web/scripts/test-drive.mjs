@@ -237,6 +237,9 @@ seed(useFleet, {
                   name: 'onboarding', at: Date.now() / 1000, size: 40_000 }],
       };
     }
+    if (type === 'divan.card.create') {
+      return { id: `card${++made_n}`, ...data, executor: null, agent_status: null };
+    }
     if (type === 'agent.list') {
       return { agents: [{ id: 'hermes', name: 'hermes', label: 'Hermes', installed: true, scope: 'account' }] };
     }
@@ -285,7 +288,7 @@ seed(useFleet, {
 seed(useDivanStore, { snaps: { studio: answered(fixture.studio(), Date.now() / 1000) } });
 setThemeChoice('dark');
 
-const root = createRoot(w.document.getElementById('root'));
+let root = createRoot(w.document.getElementById('root'));
 await act(async () => { root.render(React.createElement(App)); });
 
 // ── what is on screen ───────────────────────────────────────────────────────
@@ -1481,6 +1484,180 @@ group('the four things the panel could not do to a computer');
   ok('…and the computer is gone from the panel',
     !Object.keys(useFleet.getState().hosts).length,
     Object.keys(useFleet.getState().hosts).join(', '));
+}
+
+group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
+{
+  const now = Math.floor(Date.now() / 1000);
+  // Every board on the one computer this panel is paired with.
+  const board = (name) => ({ studio: answered(boards(now)[name][0].snap, now) });
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true });
+    seed(useDivanStore, { snaps: board('busy') });
+  });
+  await press('0');
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const field = () => doc.querySelector('#composer-in');
+  const send = () => doc.querySelector('button.dv-send');
+  const mode = (label) => [...doc.querySelectorAll('.dv-seg button')].find((b) => b.textContent.trim() === label);
+  const picker = (name) => doc.querySelector(`[data-picker="${name}"]`);
+  const value = (name) => picker(name)?.querySelector('.val')?.textContent ?? null;
+  const option = (label) => [...doc.querySelectorAll('[role="menu"] [role="menuitemradio"]')]
+    .find((b) => b.firstElementChild?.textContent === label) ?? null;
+  const dialogs = () => doc.querySelectorAll('[role="dialog"], [aria-modal="true"]').length
+    + (find('Start chat') ? 1 : 0);
+  const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+
+  // 1 · Ask
+  asked.length = 0;
+  await type(field(), 'ship the beta tonight');
+  await click(send());
+  await settle();
+  const made = asked.findIndex((a) => a.type === 'chat.create');
+  const said = asked.findIndex((a) => a.type === 'chat.send');
+  const id = asked[made]?.data && asked[said]?.data?.chat_id;
+  ok('Ask: one press sends chat.create then chat.send with the words, and lands in that chat, with no dialog',
+    made >= 0 && said > made && asked[said].data.text === 'ship the beta tonight'
+      && place() === 'Chat' && w.location.pathname === `/chats/${id}` && dialogs() === 0,
+    `${asked.map((a) => a.type).join(',')} · ${place()} · ${w.location.pathname} · ${dialogs()}`);
+
+  // 2 · Ice Box and Start now
+  const cards = [];
+  for (const [label, column] of [['Ice Box', 'ice_box'], ['Start now', 'in_progress']]) {
+    await press('0');
+    await click(mode(label));
+    asked.length = 0;
+    await type(field(), '@quire write the retry doc');
+    await click(send());
+    await settle();
+    cards.push({ column, asked: asked.map((a) => ({ type: a.type, data: a.data })), dialogs: dialogs(),
+                 home: home() });
+  }
+  ok('Ice Box writes the card into Ice Box and Start now into In Progress, starting no chat and asking nothing',
+    cards.every((c) => c.asked.some((a) => a.type === 'divan.card.create' && a.data.column === c.column
+        && a.data.project_id === 'p-quire' && a.data.title === 'write the retry doc')
+      && !c.asked.some((a) => a.type === 'chat.create' || a.type === 'divan.card.move'
+        || a.type.startsWith('ustabasi.'))
+      && c.dialogs === 0 && c.home),
+    JSON.stringify(cards));
+
+  // 3 · the four chips
+  await press('0');
+  await click(mode('Ask'));
+  const defaults = ['Project', 'Agent', 'Account', 'Model'].map((n) => value(n));
+  await click(picker('Model').querySelector('button'));
+  const listed = [...doc.querySelectorAll('[role="menu"] [role="menuitemradio"]')].map((b) => b.firstElementChild.textContent);
+  await click(option('Sonnet 5'));
+  await click(picker('Account').querySelector('button'));
+  await click(option('yakup@…'));
+  const changed = ['Model', 'Account'].every((n) => picker(n).querySelector('[data-changed="true"]')
+    && picker(n).querySelector('.dv-picker-x'));
+  asked.length = 0;
+  await type(field(), 'which plan am I on');
+  await click(send());
+  await settle();
+  const create = asked.find((a) => a.type === 'chat.create')?.data ?? {};
+  await press('0');
+  const reset = value('Model');
+  ok('four chips show the defaults, list what the computer reports, mark a changed one with an ×, and that is what chat.create carries',
+    JSON.stringify(defaults) === JSON.stringify(['auto', 'Hermes', "This computer's account", 'Opus 5'])
+      && JSON.stringify(listed) === JSON.stringify(['Opus 5', 'Sonnet 5'])
+      && changed && create.model === 'claude-sonnet-5' && create.account_id === 'a2'
+      && create.agent_id === 'hermes' && reset === 'Opus 5',
+    `${JSON.stringify(defaults)} ${JSON.stringify(listed)} ${changed} ${JSON.stringify(create)} ${reset}`);
+
+  // 4 · @project is the scope chip
+  await type(field(), '@quire why is the retry policy like this ');
+  const typedChip = doc.querySelector('.dv-scope .dv-chip[aria-pressed="true"]')?.textContent ?? null;
+  const left = field().value;
+  await click(doc.querySelector('.dv-scope .dv-chip'));
+  await click(doc.querySelector('.dv-scope .dv-chip--add'));
+  await click(option('Quire'));
+  const pressedChip = doc.querySelector('.dv-scope .dv-chip[aria-pressed="true"]')?.textContent ?? null;
+  asked.length = 0;
+  await click(send());
+  await settle();
+  const scoped = asked.find((a) => a.type === 'chat.create')?.data ?? {};
+  ok('typing @quire makes the same scope chip as pressing it, and the call opens in that project',
+    typedChip === pressedChip && /Quire/.test(typedChip ?? '') && left === 'why is the retry policy like this '
+      && scoped.cwd === '/w/quire',
+    `${typedChip} vs ${pressedChip} · «${left}» · ${scoped.cwd}`);
+
+  // 5 · Needs you
+  await press('0');
+  const amber = doc.querySelector('[data-wait="studio:k2"] .dv-btn--amber');
+  asked.length = 0;
+  await click(amber);
+  await settle();
+  const note = asked.find((a) => a.type === 'ustabasi.note');
+  await click([...doc.querySelectorAll('[data-wait="studio:k2"] button')].find((b) => b.textContent === 'Open'));
+  const opened = w.location.pathname;
+  await act(async () => { seed(useDivanStore, { snaps: board('calm') }); });
+  await press('0');
+  ok('Needs you answers in one press with the same note the question window sent, Open goes to the ticket, and with nothing waiting the section is not in the DOM',
+    amber?.textContent === 'Use the live ones now' && note?.key === 'studio' && note?.data.id === 42
+      && note?.data.text === 'Use the live ones now' && opened === '/p/quire/c/k2'
+      && !doc.querySelector('#needs-you') && !text().includes('Needs you'),
+    `${amber?.textContent} ${JSON.stringify(note)} ${opened}`);
+
+  // 6 · tiles and the summary line
+  const calmLine = doc.querySelector('[data-summary]')?.textContent ?? '';
+  await act(async () => { seed(useDivanStore, { snaps: board('slow') }); });
+  const tiles = [...doc.querySelectorAll('a[data-tile]')];
+  const order = tiles.map((a) => `${a.dataset.tile}${a.classList.contains('dv-tile--dormant') ? '*' : ''}`);
+  await act(async () => { seed(useDivanStore, { snaps: board('busy') }); });
+  const busyLine = doc.querySelector('[data-summary]')?.textContent ?? '';
+  const totals = (await import(pathToFileURL(join(out, 'src/lib/divan.js')).href))
+    .merge([{ key: 'studio', name: 'studio', state: board('busy').studio }], now).totals;
+  await click(tile('quire'));
+  const tileWent = w.location.pathname;
+  ok('tiles open the project, dormant ones come last and dimmed, and the line counts off the boards and says nothing is stuck at zero',
+    tileWent === '/p/quire' && order.join(' ') === 'pebble the-long-walk*'
+      && /nothing needs you/.test(calmLine) && /nothing is stuck/.test(calmLine)
+      && busyLine.includes(`${totals.needsYou} things need you`) && busyLine.includes(`${totals.running} working`)
+      && (totals.stuck ? busyLine.includes(`${totals.stuck} stuck`) : busyLine.includes('nothing is stuck')),
+    `${tileWent} · ${order.join(' ')} · «${calmLine}» · «${busyLine}» · ${JSON.stringify(totals)}`);
+
+  // 7 · Back, reload, and every old destination
+  await act(async () => {
+    const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+    w.history.back();
+    await landed;
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  const backHome = home() && w.location.pathname === '/';
+  const reloads = [];
+  for (const path of ['/p/quire', '/machine/accounts', '/chats', '/']) {
+    await act(async () => { root.unmount(); });
+    w.history.replaceState(null, '', path);
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    await settle();
+    reloads.push(path === '/p/quire' ? head() === 'Quire' : path === '/' ? home()
+      : path === '/chats' ? place() === 'Chat' : page() === 'Accounts & sign-ins');
+  }
+  await press('k');
+  const offered = [...doc.querySelectorAll('[data-i]')].map((e) => e.textContent ?? '').join(' | ');
+  await press('k');
+  const wanted = ['New chat', 'Dashboard', 'Chat', 'Machine',
+    ...MACHINE_ROWS.map((r) => `Machine › ${r.label}`), 'Machine › Folders', 'Machine › Agents on this computer',
+    'Machine › Update', 'Machine › This computer', 'Machine › Sessions and plan limits', 'Light theme'];
+  ok('Back from a project is the Dashboard, a reload redraws the page it was on, and every old destination is offered',
+    backHome && reloads.every(Boolean) && wanted.every((x) => offered.includes(x))
+      && !!nav('Chats') && !!nav('Machine'),
+    `${backHome} ${JSON.stringify(reloads)} ${wanted.filter((x) => !offered.includes(x))}`);
+
+  // 8 · low quota on the account in use, and still nothing asked
+  const account = picker('Account').querySelector('button');
+  asked.length = 0;
+  await type(field(), 'is the plan nearly spent');
+  await click(send());
+  await settle();
+  ok('the account in use is under the line: its chip carries an amber dot and the words, and the send still asks nothing',
+    /low quota/.test(account.getAttribute('aria-label') ?? '') && !!account.querySelector('.dv-dot--ask')
+      && account.textContent.includes('low quota')
+      && asked.some((a) => a.type === 'chat.create') && dialogs() === 0,
+    `${account.getAttribute('aria-label')} · ${asked.map((a) => a.type)}`);
 }
 
 group('nothing was lost on the way');

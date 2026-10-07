@@ -15,6 +15,7 @@
 import { createRoot } from 'react-dom/client';
 import '../src/styles/divan-tokens.css';
 import '../src/styles/divan-components.css';
+import '../src/styles/divan-app.css';
 import { themeCss, type Scheme } from '../src/lib/theme';
 import { Gallery } from './divan-gallery';
 import { Onboarding } from '../src/screens/Onboarding';
