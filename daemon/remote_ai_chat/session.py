@@ -625,8 +625,8 @@ class ChatSession:
         chat back to idle and tells the phone it is done — otherwise the next
         queued message is about to start and the chat never stopped working."""
         self.turn_started = None
-        # A turn is when a chat's subject can have changed, so this is when it
-        # is filed again — before the status goes out, which carries the chat.
+        # A chat nothing has claimed yet is filed by the first turn that works
+        # on a product — before the status goes out, which carries the chat.
         self.db.file_chat(self.chat_id)
         if self.queued:
             await self._set_status("running", **fields)

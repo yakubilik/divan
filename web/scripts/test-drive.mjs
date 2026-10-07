@@ -259,7 +259,7 @@ seed(useFleet, {
     // Groups, answered the way the daemon answers them: the making of one with
     // the group, and all three with a new list broadcast beside the answer.
     // There is no socket, so the list is moved by hand — as it is for a chat.
-    if (type.startsWith('group.') || (type === 'chat.update' && 'group_id' in data)) {
+    if (type.startsWith('group.') || (type === 'chat.update' && ('group_id' in data || 'project_id' in data))) {
       const slot = useFleet.getState().hosts[key];
       const made = { id: `g-made${++made_n}`, name: data.name, sort: 99, created_at: 0 };
       const groups = type === 'group.create' ? [...slot.groups, made]
@@ -267,7 +267,12 @@ seed(useFleet, {
         : type === 'group.delete' ? slot.groups.filter((g) => g.id !== data.group_id)
         : slot.groups;
       const chats = slot.chats.map((c) => (
-        type === 'chat.update' && c.id === data.chat_id ? { ...c, group_id: data.group_id }
+        type === 'chat.update' && c.id === data.chat_id ? {
+          ...c,
+          ...('group_id' in data ? { group_id: data.group_id } : {}),
+          ...('project_id' in data ? { project_id: data.project_id,
+            project: fixture.studio().projects.find((p) => p.id === data.project_id)?.name ?? null } : {}),
+        }
         : type === 'group.delete' && c.group_id === data.group_id ? { ...c, group_id: null }
         : c));
       useFleet.setState({ hosts: { ...useFleet.getState().hosts, [key]: { ...slot, groups, chats } } });
@@ -1374,6 +1379,50 @@ group('a product has its own chats');
     made?.key === 'studio' && /\/quire$/.test(made?.data.cwd ?? '')
       && place() === 'Dashboard' && w.location.pathname.startsWith('/p/quire/chat/told'),
     `${JSON.stringify(made?.data?.cwd)} · ${place()} · ${w.location.pathname}`);
+  await click(find('All', header));
+}
+
+group('a chat dropped on a product is filed under it by hand');
+{
+  // `Webhook retry policy` sits in the Quire group and under no product; it is
+  // carried onto Hush's heading. What goes to the computer is that product's
+  // id, and the chat is then Hush's in the list and on Hush's own page.
+  const header = doc.querySelector('header');
+  const at = Date.now() / 1000;
+  const host = fakeHost();
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: { ...host, chats: [
+      ...host.chats.map((c) => (c.id === 'c1' ? { ...c, group_id: 'g1' } : c)),
+      fakeChat({ id: 'h1', title: 'Hush pricing', project_id: 'p-hush', project: 'Hush', updated_at: at - 20 }),
+    ] } } });
+  });
+  await click(find('Chat', header));
+  const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
+  const section = (key) => doc.querySelector(`[data-section="${key}"]`);
+  const row = (words) => [...doc.querySelectorAll('button[draggable="true"]')]
+    .find((b) => (b.textContent ?? '').includes(words));
+  const held = new Transfer();
+  asked.length = 0;
+  await drag(row('Webhook retry policy'), 'dragstart', held);
+  await drag(section('project:Hush'), 'dragover', held);
+  await drag(section('project:Hush'), 'drop', held);
+  await settle();
+  const sent = asked.filter((a) => a.type === 'chat.update').map((a) => a.data);
+  ok('dropping a chat on a product heading sends that product’s id, and takes it out of its group',
+    sent.length === 1 && sent[0].chat_id === 'c1' && sent[0].project_id === 'p-hush' && sent[0].group_id === null,
+    JSON.stringify(sent));
+  ok('…and the chat is then under that product in the list',
+    (section('project:Hush')?.textContent ?? '').includes('Webhook retry policy'),
+    section('project:Hush')?.textContent?.slice(0, 200));
+
+  await click(find('Dashboard', header));
+  await click(find('Hush', header));
+  const tab = [...doc.querySelectorAll('button')]
+    .find((b) => !header.contains(b) && /^Chat\s*2$/.test((b.textContent ?? '').trim()));
+  await click(tab);
+  const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
+  ok('…and on that product’s own page', !!tab && shown('Webhook retry policy') && shown('Hush pricing'),
+    `tab ${!!tab} · ${w.location.pathname}`);
   await click(find('All', header));
 }
 

@@ -196,7 +196,8 @@ class DB:
         """Additive column migrations for databases created by older versions."""
         have = {r[1] for r in self._c.execute("PRAGMA table_info(chats)")}
         for col, decl in (("account_id", "TEXT"), ("agent_id", "TEXT"),
-                          ("pool_pinned", "INTEGER DEFAULT 0"), ("project_id", "TEXT")):
+                          ("pool_pinned", "INTEGER DEFAULT 0"), ("project_id", "TEXT"),
+                          ("project_set", "INTEGER DEFAULT 0")):
             if col not in have:
                 self._c.execute(f"ALTER TABLE chats ADD COLUMN {col} {decl}")
         self._c.commit()
@@ -249,9 +250,14 @@ class DB:
         moved, lists sort and age by it, and being looked at is not moving.
         `''` is "looked, and nothing claims it", which is not the same as
         never having been looked at.
+
+        A chat is filed once: a product it already has is never taken away
+        by later work, and one a person put it under (`project_set`, Unfiled
+        included) is never the computer's to change.
         """
-        chat = self._c.execute("SELECT cwd FROM chats WHERE id=?", (cid,)).fetchone()
-        if not chat:
+        chat = self._c.execute("SELECT cwd, project_id, project_set FROM chats WHERE id=?",
+                               (cid,)).fetchone()
+        if not chat or chat["project_id"] or chat["project_set"]:
             return
         repos = [(r["path"], r["project_id"])
                  for r in self._c.execute("SELECT project_id, path FROM project_repos")]
@@ -260,8 +266,20 @@ class DB:
             "ORDER BY seq DESC LIMIT ?", (cid, filing.WINDOW)))
         pid = filing.pick(inputs, chat["cwd"], filing.matcher(repos))
         with self._lock:
-            self._c.execute("UPDATE chats SET project_id=? WHERE id=?", (pid, cid))
+            self._c.execute("UPDATE chats SET project_id=? WHERE id=? AND project_set=0",
+                            (pid, cid))
             self._c.commit()
+
+    def set_project(self, cid: str, pid: str | None) -> dict | None:
+        """A person files the chat under `pid` (None/'' = Unfiled), for good."""
+        pid = pid or ""
+        if pid and not self._c.execute("SELECT 1 FROM projects WHERE id=?", (pid,)).fetchone():
+            raise ValueError("no such project")
+        with self._lock:
+            self._c.execute("UPDATE chats SET project_id=?, project_set=1, updated_at=? WHERE id=?",
+                            (pid, time.time(), cid))
+            self._c.commit()
+        return self.get_chat(cid)
 
     def _file_unfiled(self) -> None:
         """File every chat nobody has looked at yet: the ones from before chats
@@ -275,7 +293,7 @@ class DB:
             "id": new_id(), "group_id": None, "title": "New chat",
             "provider": "claude", "model": "fable", "effort": "high",
             "perm_mode": "ask", "cwd": "", "provider_session_id": None, "account_id": None,
-            "agent_id": None, "pool_pinned": 0,
+            "agent_id": None, "pool_pinned": 0, "project_set": 0,
             "status": "idle", "last_preview": "", "max_turns": None,
             "max_budget_usd": None, "total_cost_usd": 0.0, "pinned": 0,
             "archived": 0, "created_at": now, "updated_at": now, "session_ids": "{}",

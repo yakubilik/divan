@@ -1537,6 +1537,12 @@ class Server:
                 ids[prev["provider"]] = prev["provider_session_id"]
             fields["provider_session_id"] = ids.get(fields["provider"])
             fields["session_ids"] = json.dumps(ids)
+        if "project_id" in fields:
+            # A person filing the chat by hand; the computer never refiles it after.
+            try:
+                self.db.set_project(cid, fields.pop("project_id"))
+            except ValueError:
+                raise Err("no_project", "no such project") from None
         chat = self.db.update_chat(cid, **fields)
         s = self.sessions.peek(cid)
         if s and PROVIDER_FIELDS & fields.keys():
