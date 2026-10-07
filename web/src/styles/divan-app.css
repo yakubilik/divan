@@ -44,6 +44,7 @@
 /* Tiles and wait cards are a link and an article; the tile's link keeps the
    tile's own colour. */
 .dv-tile{cursor:pointer}
+.dv-tile-foot .count,.dv-tile-foot .when{white-space:nowrap}
 .dv-tile .count .w{font-family:var(--font-sans);font-weight:400;color:var(--ink-3)}
 .dv-wait .dv-btn{min-height:30px}
 .dv-live .dv-dot{flex:none}
@@ -52,4 +53,8 @@
 @media (max-width:720px){
   .dv-page{padding:16px 16px 64px}
   .dv-greet{font-size:38px;line-height:40px}
+  .dv-topline .sys{gap:6px}
+  .dv-topline .sys .sys-word{display:none}
+  .dv-seg button{white-space:nowrap;padding:0 10px}
+  .dv-composer-foot>.dv-meta{display:none}
 }

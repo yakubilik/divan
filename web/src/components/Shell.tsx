@@ -65,7 +65,7 @@ function Sys({ fleet, here, dots, onView }: {
       {!!t && t.machines > 0 && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-sys="machines">
           <i className={`dv-dot ${all ? 'dv-dot--run' : t.reachable ? 'dv-dot--ask' : 'dv-dot--stuck'}`} aria-hidden="true" />
-          <b>{t.reachable}/{t.machines}</b> machines
+          <b>{t.reachable}/{t.machines}</b><span className="sys-word"> machines</span>
         </span>
       )}
       {left != null && (
@@ -74,7 +74,7 @@ function Sys({ fleet, here, dots, onView }: {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-sys="quota">
             <span className={`dv-ring${low ? ' dv-ring--low' : ''}`} aria-hidden="true"
               style={{ ['--p' as any]: `${Math.round(left * 100)}%` }} />
-            quota <b>{Math.round(left * 100)}%</b>{low && <span style={{ color: 'var(--amber)' }}>low</span>}
+            <span className="sys-word">quota </span><b>{Math.round(left * 100)}%</b>{low && <span style={{ color: 'var(--amber)' }}>low</span>}
           </span>
         </>
       )}
@@ -96,8 +96,8 @@ function PlaceButton({ label, icon, on, dot, onClick }: {
       // A place you are already in is not re-entered: it would drop the
       // Machine page you are reading for the first one in its list.
       onClick={() => { if (!on) onClick(); }}
-      title={on ? undefined : `Go to ${label}`}>
-      {SVG(icon)}{label}
+      title={on ? undefined : `Go to ${label}`} aria-label={label}>
+      {SVG(icon)}<span className="sys-word">{label}</span>
       {!!dot && <><i className="dv-dot dv-dot--ask" aria-hidden="true" /><span className="dv-hidden">needs you</span></>}
     </button>
   );

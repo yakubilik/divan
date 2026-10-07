@@ -351,7 +351,7 @@ group('nothing was dropped in the move');
   }));
   ok('…and the line draws each on the place it belongs to',
     (lit.match(/dv-dot dv-dot--ask/g) ?? []).length === 2
-    && /Chats<i class="dv-dot dv-dot--ask"/.test(lit) && /Machine<i class="dv-dot dv-dot--ask"/.test(lit));
+    && /Chats<\/span><i class="dv-dot dv-dot--ask"/.test(lit) && /Machine<\/span><i class="dv-dot dv-dot--ask"/.test(lit));
   seed({ hosts: { studio: withUpdate() }, order: ['studio'], focus: 'studio', ready: true });
   // The column, and not the screen beside it: the fleet panel on the right
   // draws dots of its own and counting those would say nothing.
@@ -630,7 +630,7 @@ group('the line over every page');
     />divan<\/a>/.test(home) && !home.includes('dv-back')
     && deep.includes('aria-label="Back to Dashboard"') && !/>divan<\/a>/.test(deep));
   ok('the right end counts the machines that answered out of the ones paired',
-    new RegExp(`<b>${fresh.totals.reachable}/${fresh.totals.machines}</b> machines`).test(home));
+    new RegExp(`<b>${fresh.totals.reachable}/${fresh.totals.machines}</b><span class="sys-word"> machines`).test(home));
   ok('…and the place buttons are Chats and Machine, with no project chips beside them',
     home.includes('Chats') && home.includes('Machine') && !home.includes('Quire'));
   const noQuota = renderToStaticMarkup(h(ShellUI.Shell, {
