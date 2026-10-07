@@ -584,7 +584,7 @@ const en = {
   stDefaultsChips: 'what the Composer opens with until its chip is changed for one chat',
   stOwnAccount: "This computer's account", stNoModel: 'none offered yet',
   // HANDOVER §4.8: one conversation, filed by Hermes.
-  chEarlier: 'Earlier', chFiled: 'filed under {project}', chTalk: 'Talk to Hermes', chNoneYet: 'No conversation yet.',
+  chFiled: 'filed under {project}', chTalk: 'Talk to Hermes', chNoneYet: 'No conversation yet.',
   chCardQueued: 'Queued',
   // HANDOVER §4.7: a branch's own page.
   brUpdated: 'Updated {d}.', brUpdatedNow: 'Updated just now.', brDid: 'What the agent did', brTickets: 'Tickets',

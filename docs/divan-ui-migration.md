@@ -40,14 +40,14 @@ The quoted words are the check's own name.
 | Action | Old place (main) | New place | Call | Proof |
 |---|---|---|---|---|
 | Go to the Dashboard | Top bar Dashboard, ⌘0 | `divan` word / Back on the top line, ⌘0 | — | drive: "⌘0 goes back to the Dashboard" |
-| Go to the Chat place | Top bar Chat | Top line Chats (lands in the newest chat) | `chat.get` | drive: "the Chat place is one press away and lands writable in a chat; Earlier opens the list" |
+| Go to the Chat place | Top bar Chat | Top line Chats (lands in the newest chat) | `chat.get` | drive: "the Chat place is one press away and lands writable in a chat, with the list and its search beside it" |
 | Go to Machine | Top bar Machine | Top line Machine | — | drive: "…and the Machine place opens on the first row of its list" |
 | Switch Night / Day | Top bar switch, palette | Top line switch, palette | — | drive: "pressing it moves the document’s theme, and nothing else says it" |
 | Scope to a product | Project chips in the bar | Project tiles on the Dashboard | `divan.snapshot` | drive: "pressing one writes it into the address, as a path a person can read" |
 | Browser Back / reload / cold open | Address per page | Same, every page type | — | walk: "cold open and reload land on" |
 | Command palette | ⌘K | ⌘K (also printed in the Composer) | — | drive: "⌘K still opens the palette" |
 | New chat | ⌘N, palette, sidebar pen | ⌘N and palette focus the Composer; "More options" and palette "New chat with every option" open the full dialog | `chat.create` | drive: "Back from a project is the Dashboard, a reload redraws the page it was on, and every old destination is offered" |
-| Search chats | ⌘F | ⌘F opens Earlier with search focused | — | actions: "⌘F opens the chat list with its search focused" |
+| Search chats | ⌘F | ⌘F focuses the list's search | — | actions: "⌘F opens the chat list with its search focused" |
 | Fold the chat list | ⌘B | ⌘B, same | — | actions: "⌘B folds the list to a rail" |
 | Machine pages by key | ⌘1–⌘8, ⌘, | Same keys | — | drive: "opens Machine › " |
 | Stop every session | Palette | Palette | `chat.interrupt` | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
@@ -83,14 +83,14 @@ The quoted words are the check's own name.
 | What the queue sent (bell) | Bell in the top bar (added on `main` after this branch was cut, 5736dcf) | Bell at the right end of the top line, before the theme switch | `ustabasi.notifications` | drive: "the bell is in the top line and the panel asks each computer what its queue sent (ustabasi.notifications)" |
 | A ticket's report | On the ticket page (added on `main`, 5736dcf) | Ticket page, between the question card and Live; in a window of its own for a ticket with no card | `ustabasi.report` | drive: "a ticket page asks for the report of its own ticket (ustabasi.report)" |
 | Type into a chat on the wall | Terminal peek | Machine › Terminal peek | `chat.send` | drive: "Terminal takes a command" |
-| Open a chat | Chat list | Earlier list; `/chats/<id>` | `chat.get` | drive: "the Chat place lands in a writable chat without a choice" |
+| Open a chat | Chat list | Chat list; `/chats/<id>` | `chat.get` | drive: "the Chat place lands in a writable chat without a choice" |
 | Send, stream, stop, approve | Chat | Same | `chat.send`, `chat.interrupt`, `approval.respond` | drive: "a message sends chat.send and the reply streams in" |
 | Attach a file | Chat box + | Same | `/upload` | refusal: "and the upload went out" |
 | Dictate | Mic | Same | `/dictate` | drive: "interrupt, approval, the picture and the mic are there and work" |
 | Change account / model / effort / mode / folder | Chat head chips | Same | `chat.update` | drive: "…and choosing one moves the chat to it, on the computer that holds it" |
 | Open a chat in its own window | Details | Same | — | actions: "a chat still opens in a window of its own from Details" |
-| Archive | Chat list | Earlier list | `chat.update` | drive: "a chat that has not moved for a day is out of the list" |
-| Groups: make, rename, delete, drag in and out | Chat list | Earlier list | `group.create`, `group.rename`, `group.delete`, `chat.update` | drive: "a chat dragged onto a group is filed in it, and dragged back out is unfiled" |
+| Archive | Chat list | Chat list | `chat.update` | drive: "a chat that has not moved for a day is out of the list" |
+| Groups: make, rename, delete, drag in and out | Chat list | Chat list | `group.create`, `group.rename`, `group.delete`, `chat.update` | drive: "a chat dragged onto a group is filed in it, and dragged back out is unfiled" |
 | Move a chat to a group from its menu | Chat menu | Same | `group.create`, `chat.update` | drive: "a chat’s menu makes a group and moves the chat into it" |
 | Delete a chat | Row bin, menu | Same | `chat.delete` | drive: "a chat’s row deletes it, after asking" |
 | New chat in a folder | Heading + | Same | `chat.create` | drive: "a heading’s + opens a chat in that folder, already on Hermes" |
@@ -137,9 +137,9 @@ The quoted words are the check's own name.
 | Read a ticket cold | `/ticket/<n>`, `/card/<id>` | Same, one page; old run at `?run=1` | `divan.card.get`, `ustabasi.run` | phone: "a ticket link opened cold draws the ticket" |
 | Open a branch | Branch cards | Branch rows | — | phone: "a branch with no source says Source not connected yet. and no number" |
 | Chat: send, stop, approve, picture, voice note | Conversation | Same | `chat.send`, `chat.interrupt`, `approval.respond` | phone: "Allow sends approval.respond, Stop sends chat.interrupt" |
-| The chat list | Chat tab | Earlier (`/chat?all=1`) | `chat.list` | phone: "the Chat place goes straight into the newest chat, Earlier opens the list" |
-| Archive / delete a chat | Chat list row | Earlier list row | `chat.update`, `chat.delete` | phone: "a row archives (updateChat) and deletes (deleteChat, after asking)" |
-| Groups | Chat list | Earlier list | `group.create`, `group.rename`, `group.delete` | phone: "a group is made (createGroup), renamed (renameGroup) and deleted (deleteGroup)" |
+| The chat list | Chat tab | Chat tab (`/chat`) | `chat.list` | phone: "the Chat place is the list of chats, a chat opened cold goes back to it" |
+| Archive / delete a chat | Chat list row | Chat list row | `chat.update`, `chat.delete` | phone: "a row archives (updateChat) and deletes (deleteChat, after asking)" |
+| Groups | Chat list | Chat list | `group.create`, `group.rename`, `group.delete` | phone: "a group is made (createGroup), renamed (renameGroup) and deleted (deleteGroup)" |
 | Chat settings, delete chat | Chat settings | Same | `chat.update`, `chat.delete` | phone: "chat settings save through updateChat and Delete chat asks, then deleteChat" |
 | Model sheet | Model sheet | Same | `chat.update` / local defaults | phone: "the model sheet writes setDefaults" |
 | Pair a computer | Machines + | Machine › Machines › + Pair | `hello` | phone: "pairing a phone still adds the computer and lands home" |
@@ -208,8 +208,9 @@ are only sample data are not listed.
   them; the repositories are the branch's own list instead.
 - **Chat.** The conversation keeps its head (title, account, model, effort, mode, folder,
   Details, menu) — the frame draws none, but each is a `chat.update` that `main` had. The
-  box is the frame's `dv-glass-strong dv-composer`, with attach, mic and send. "Earlier"
-  and "Hermes" sit on a quiet row under the top line, not in it.
+  box is the frame's `dv-glass-strong dv-composer`, with attach, mic and send. The
+  chat list is beside it on the web and is the Chat tab itself on the phone (the "Earlier"
+  button that hid it was taken out on 2026-10-07).
 - **Machine.** The executors list is per machine and per worker from the boards
   ("Coder · studio · busy"), not the frame's fixed four kinds. The quota ring says "left of
   the plan" — the data does not say which window. The old pages sit under each tab as a
@@ -223,7 +224,7 @@ are only sample data are not listed.
   side column dropped below and card grids turned into row lists (HANDOVER §4 intro).
 - §5's pickers on both platforms, the Machine sub-pages (Remote screen, Sessions, Folders,
   Admin, Update, Agents, Accounts, Quota thresholds, This computer), the palette, the
-  question windows, the chat list behind Earlier, and the narrow web layout (390px): kept
+  question windows, the chat list, and the narrow web layout (390px): kept
   as they were on `main`, in the design system's tokens.
 - On the web at 390px every press is at least 44px, side columns drop below the main one,
   a chat list sits above its chat, and the chat head's chips wrap.

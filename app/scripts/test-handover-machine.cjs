@@ -181,25 +181,24 @@ const ready = (async () => {
         rule && eq(went, ['/card/k1?host=h1&from=chat', '/ticket/99?from=chat'])]);
     }
 
-    // 3 · lands writable without a choice; every chat still reachable
+    // 3 · the Chat place is the list; a chat's back comes back to it
     {
       stand();
-      R.render('dark', h(ChatPlace));
-      const landed = R.nav.replaced();
-      stand({ params: { all: '1' } });
       const list = R.render('dark', h(ChatPlace));
+      const landed = R.nav.replaced();
       const rows = list.includes('Refunds') && list.includes('Safari login');
       stand();
       R.render('dark', h(Conversation, { id: 'c1' }));
-      one((p) => p.label === 'Earlier').press();
-      const earlier = R.nav.pushed();
+      R.nav.reset();
+      one((p) => p.label === 'Back').press();
+      const back = R.nav.replaced();
       stand();
       const cold = R.render('dark', h(Conversation, { id: 'c2' }));
       stand({ chats: {} });
       const none = R.render('dark', h(ChatPlace));
       R.typeInto('Talk to Hermes', 'hello');
-      checks.push(['phone: the Chat place goes straight into the newest chat, Earlier opens the list, /chat/<id> draws one cold, and with none there is a box to talk into',
-        eq(landed, ['/chat/c1']) && rows && eq(earlier, ['/chat?all=1']) && cold.includes('Safari login')
+      checks.push(['phone: the Chat place is the list of chats, a chat opened cold goes back to it, /chat/<id> draws one cold, and with none there is a box to talk into',
+        eq(landed, []) && rows && eq(back, ['/chat']) && cold.includes('Safari login')
         && none.includes('Talk to Hermes')]);
     }
 

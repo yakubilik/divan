@@ -516,7 +516,7 @@ export function Conversation({ id }: { id: string }) {
           The model moved down into the composer, where it is chosen. */}
       <View style={{ paddingTop: insets.top + 2, paddingHorizontal: 10, paddingBottom: 10, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
                      borderBottomWidth: 1, borderBottomColor: dim === 2 ? 'transparent' : c.line }}>
-        <Pressable accessibilityLabel={T('back')} onPress={() => go(() => { if (router.canGoBack()) router.back(); else router.replace(HOME); })} hitSlop={6} style={({ pressed }) => [sq40, pressed && { opacity: 0.5 }]}>
+        <Pressable accessibilityLabel={T('back')} onPress={() => go(() => { if (router.canGoBack()) router.back(); else router.replace(PLACE_ROUTE.chat); })} hitSlop={6} style={({ pressed }) => [sq40, pressed && { opacity: 0.5 }]}>
           <Icon name="chevron_left" size={26} />
         </Pressable>
         {/* The meta line may run a little under the two buttons: their glyphs
@@ -546,16 +546,12 @@ export function Conversation({ id }: { id: string }) {
 
       {conn !== 'online' && <ConnectionBanner text={T('wReconnecting')} />}
 
-      {/* One conversation at a time (HANDOVER §4.8); every other one is a press
-          away behind Earlier, and the rule says where Hermes filed this one. */}
-      <View style={{ paddingHorizontal: 14, paddingTop: 4, gap: 2 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel={T('chEarlier')} hitSlop={6}
-          onPress={() => go(() => router.push('/chat?all=1'))}
-          style={({ pressed }) => ({ alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', opacity: pressed ? 0.5 : 1 })}>
-          <Text style={{ fontSize: 13, fontWeight: '500', color: c.muted }}>{T('chEarlier')}</Text>
-        </Pressable>
-        {!!filed && <FiledRule project={filed} />}
-      </View>
+      {/* The rule says where Hermes filed this one. */}
+      {!!filed && (
+        <View style={{ paddingHorizontal: 14, paddingTop: 4 }}>
+          <FiledRule project={filed} />
+        </View>
+      )}
 
       <Animated.View style={{ flex: 1, opacity: dim === 1 ? 0.35 : dim === 2 ? 0.4 : 1 }}>
         <FlatList

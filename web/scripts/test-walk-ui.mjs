@@ -30,7 +30,6 @@ const OVER = [
   ['dashboard-picker', '/', `[...document.querySelectorAll('button')].find((e) => e.getAttribute('aria-label') === 'Agent: Hermes').click();`],
   ['dashboard-palette', '/', `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }));`],
   ['dashboard-more-options', '/', `[...document.querySelectorAll('button')].find((e) => e.textContent.trim() === 'More options').click();`],
-  ['chat-earlier', '/chats', `[...document.querySelectorAll('button')].find((e) => e.textContent.trim() === 'Earlier').click();`],
 ];
 const THEMES = [['dark', 'night'], ['light', 'day']];
 const WIDTHS = [1440, 390];

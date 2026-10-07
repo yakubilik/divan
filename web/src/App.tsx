@@ -85,9 +85,6 @@ export function App() {
   // hung off `sel` — the live token count, the approval queue, the field sheet
   // — works inside the overlay without a second copy of any of it.
   const [peek, setPeek] = useState(false);
-  /** The Chat place is one conversation (HANDOVER §4.8); every other chat is a
-   *  press away behind this quiet "Earlier", which opens the list beside it. */
-  const [earlier, setEarlier] = useState(false);
   /** A ticket a card link in a chat asked for, with no card on any board: it is
    *  read on the queue's wall under Machine › Terminal. */
   const [ticket, setTicket] = useState<number | null>(null);
@@ -686,7 +683,7 @@ export function App() {
       if (e.key === 'k') { e.preventDefault(); setPalette((p) => !p); }
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
       else if (e.key === 'n') { e.preventDefault(); compose(); }
-      else if (e.key === 'f') { e.preventDefault(); setView('chats'); setEarlier(true); setTimeout(() => searchRef.current?.focus(), 0); }
+      else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
       // The keys the panel already had open the pages they always did — they
       // are pages of the Machine place now, and nothing about where they land
       // has changed. ⌘0 is for the place the panel opens on; ⌘7 and ⌘8 are the
@@ -792,29 +789,18 @@ export function App() {
           />
         )}
 
-        {/* One conversation (HANDOVER §4.8): the newest, open and writable the
-            moment the place is entered. Every other chat is behind Earlier,
-            which opens the list beside it — nothing was deleted, and each is
-            still at its own address. */}
+        {/* The chat list down the left, and the newest conversation open and
+            writable beside it the moment the place is entered. */}
         {place === 'chat' && (
           <div className="dv-chatpane" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
-            {earlier && (
-              <Sidebar
-                selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
-                onNewChat={compose}
-                onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
-                searchRef={searchRef}
-                collapsed={rail} onCollapse={setRailTo}
-              />
-            )}
+            <Sidebar
+              selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
+              onNewChat={compose}
+              onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
+              searchRef={searchRef}
+              collapsed={rail} onCollapse={setRailTo}
+            />
             <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '4px 20px' }}>
-                <button type="button" className="dv-btn dv-btn--ghost dv-hit" aria-expanded={earlier}
-                  onClick={() => setEarlier((v) => !v)}>
-                  {earlier ? 'Hide earlier' : 'Earlier'}
-                </button>
-                <span className="dv-meta" style={{ marginLeft: 'auto' }}>Hermes</span>
-              </div>
               {chat ? <ChatView {...chatProps} /> : (
                 <FirstWord onSay={async (text) => {
                   const told = await tell(text, null);

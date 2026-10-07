@@ -421,10 +421,8 @@ group('the keyboard');
 group('the bar');
 {
   await click(nav('Chats'));
-  const landed = place() === 'Chat' && !!doc.querySelector('textarea')
-    && !doc.querySelector('input[name="chat-search"]');
-  await click(find('Earlier'));
-  ok('the Chat place is one press away and lands writable in a chat; Earlier opens the list',
+  const landed = place() === 'Chat' && !!doc.querySelector('textarea');
+  ok('the Chat place is one press away and lands writable in a chat, with the list and its search beside it',
     landed && !!doc.querySelector('input[name="chat-search"]')
     && text().includes('Webhook retry policy'), `${landed} · ${place()}`);
 
@@ -1402,7 +1400,6 @@ group('a chat dropped on a product is filed under it by hand');
     ] } } });
   });
   await click(labelledBtn('Chats'));
-  if (find('Earlier')) await click(find('Earlier'));
   const settle = async () => { for (let i = 0; i < 3; i++) await act(async () => {}); };
   const section = (key) => doc.querySelector(`[data-section="${key}"]`);
   const row = (words) => [...doc.querySelectorAll('button[draggable="true"]')]
@@ -2277,13 +2274,11 @@ group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
   await reload('/p/quire');
   const listed = [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('Webhook retry policy'));
   await reload('/chats');
-  await click(find('Earlier'));
   const row = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Invoice PDF'));
   if (row) await click(row);
   await settle();
   const fromEarlier = w.location.pathname === '/chats/c3';
-  await click(find('Hide earlier'));
-  ok('the Chat place lands in a writable chat without a choice; /p/<project>/chat/<id> draws one cold, the project’s page lists it, and Earlier opens any other',
+  ok('the Chat place lands in a writable chat without a choice; /p/<project>/chat/<id> draws one cold, the project’s page lists it, and the list beside it opens any other',
     landed && cold && listed && fromEarlier, JSON.stringify({ landed, cold, listed, fromEarlier }));
 
   // 1 · send, stream, bubble, interrupt, approval, picture, mic

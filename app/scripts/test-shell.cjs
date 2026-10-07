@@ -344,8 +344,8 @@ checks.push(
   ['the chat screen itself is untouched: it still draws its own everything',
     /KeyboardAvoidingView/.test(conversation) && /LimitsRing/.test(conversation)
     && !/components\/divan/.test(conversation) && !/components\/shell/.test(conversation)],
-  ['Back out of the conversation leaves for the Dashboard when nothing is under it',
-    /if \(router\.canGoBack\(\)\) router\.back\(\); else router\.replace\(HOME\);/.test(conversation)],
+  ['Back out of the conversation leaves for the chat list when nothing is under it',
+    /if \(router\.canGoBack\(\)\) router\.back\(\); else router\.replace\(PLACE_ROUTE\.chat\);/.test(conversation)],
 );
 
 // ── 5b · the three places that are made of data, standing up ───────────────
@@ -421,18 +421,14 @@ checks.push(
   const ChatPlace = require(path.join(root, 'app/chat/index.tsx')).default;
   R.nav.reset();
   R.params.reset();
-  R.render('dark', h(ChatPlace));
-  const went = R.nav.replaced();
-  // Earlier asks for the list by name.
-  R.params.set({ all: '1' });
   const list = R.render('dark', h(ChatPlace));
-  R.params.reset();
+  const went = R.nav.replaced();
   R.nav.reset();
   const row = R.presses().find((press) => press.text.includes('Babysee build'));
   if (row) row.press();
   checks.push(
-    ['the Chat place goes straight into the newest conversation (HANDOVER §4.8)', eq(went, ['/chat/a'])],
-    ['…and Earlier brings back every conversation, not just the newest',
+    ['the Chat place is the list of conversations, and goes nowhere by itself', eq(went, [])],
+    ['…with every conversation in it, not just the newest',
       list.includes('Babysee build') && list.includes('isghocam SEO')],
     ['…a row of it opens that conversation', eq(R.nav.pushed(), ['/chat/a'])],
     ['…and the three places are still under it', list.includes('tabChat') && list.includes('tabMachine')],
