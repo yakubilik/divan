@@ -2157,9 +2157,13 @@ group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
   const allowed = sent('approval.respond', (d) => d.request_id === 'r9' && d.decision === 'allow');
   const dictate = labelledBtn('Dictate');
   if (dictate) await click(dictate);
-  await settle();
-  const mic = !!dictate && (dictate.getAttribute('aria-pressed') === 'true' || !!labelledBtn('Stop dictating')
+  const listening = () => !!dictate && (dictate.getAttribute('aria-pressed') === 'true' || !!labelledBtn('Stop dictating')
     || dictate.disabled);
+  // Starting to listen is asynchronous; a loaded machine takes longer than one settle.
+  for (let i = 0; i < 30 && !listening(); i++) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+  }
+  const mic = listening();
   if (labelledBtn('Stop dictating')) await click(labelledBtn('Stop dictating'));
   delete w.SpeechRecognition;
   ok('a message sends chat.send and the reply streams in; the user is a right-hand --glass-2 bubble and Hermes plain text; interrupt, approval, the picture and the mic are there and work',
