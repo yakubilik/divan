@@ -3,8 +3,8 @@
  *  that is a question, a card or work to start is read from the sentence by
  *  the agent, not picked here.
  *
- *  Under the field, the microphone and send. Under that, four chips that say
- *  what a chat will open with: Project, Agent, Account, Model. Every one of
+ *  Under the field, one row: four chips that say what a chat will open with
+ *  (Project, Agent, Account, Model), and at its end the microphone and send. Every one of
  *  them has a default and none of them is a step — a menu opens only when its
  *  chip is pressed, a changed chip is drawn in ink with an × back to the
  *  default, and it applies to this one send. Typing `@name` sets the Project
@@ -14,7 +14,7 @@
  *  microphone, the way they are in a chat's own box. They are held here and go
  *  up with the send: the chat they belong to does not exist until then.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DivanView } from '../lib/divan';
 import { useFleet } from '../lib/fleet';
 import { hostDefaults, providerDefaults, usePrefs } from '../lib/prefs';
@@ -72,6 +72,16 @@ export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: Comp
   const field = inputRef ?? own;
   const box = useRef<HTMLDivElement>(null);
   const mic = useMic({ hostKey: host, onCommit: (chunk) => setText((prev) => appendSpeech(prev, chunk)) });
+  const shown = mic.interim ? appendSpeech(text, mic.interim) : text;
+
+  // The field is as tall as what is written in it; past the stylesheet's
+  // max-height it scrolls instead.
+  useLayoutEffect(() => {
+    const el = field.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    if (el.scrollHeight) el.style.height = `${el.scrollHeight}px`;
+  }, [shown, field]);
 
   // What a chat opens with on this computer, before any chip is touched.
   const base = useMemo(() => (slot && host
@@ -218,7 +228,7 @@ export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: Comp
         id="composer-in" ref={field} rows={2}
         placeholder={mic.state === 'listening' ? 'Listening…'
           : lock ? `Tell Divan what to do in ${project?.name ?? lock}.` : 'Tell Divan what to do.'}
-        value={mic.interim ? appendSpeech(text, mic.interim) : text}
+        value={shown}
         onChange={(e) => change(e.target.value)}
         onPaste={onPaste}
         onKeyDown={(e) => {
@@ -226,62 +236,63 @@ export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: Comp
         }}
       />
       <div className="dv-composer-foot">
-        <span className="grow" />
-        <span className="dv-meta" title="Search chats, folders and commands">⌘K</span>
-        <input ref={picker} type="file" multiple name="attachments" style={{ display: 'none' }}
-          onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
-        <button type="button" className="dv-icon-btn dv-attach dv-hit" aria-label="Attach a file" title="Attach a file"
-          onClick={() => picker.current?.click()}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-        </button>
-        <MicButton mic={mic} size={36} />
-        <button type="button" className="dv-send" aria-label="Send" disabled={busy || (!text.trim() && !files.length)}
-          onClick={() => void send()}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
-        </button>
-      </div>
-      <div className="dv-pickers" role="group" aria-label="What a new chat opens with">
-        {lock ? (
-          <span className="dv-chip dv-picker" data-picker="Project" data-locked="true"
-            aria-label={`Project: ${project?.name ?? lock}, fixed to this project`}>
-            <span className="lbl">Project</span>
-            <span className="val">{project?.name ?? lock}</span>
-          </span>
-        ) : (
-          <Picker name="Project" value={project ? project.name : 'auto'}
-            changed={picks.project !== undefined && picks.project !== home}
-            open={menu === 'project'} onOpen={() => setMenu(menu === 'project' ? null : 'project')}
-            onReset={() => reset('project')}>
-            <Menu label="Projects" options={[{ value: '', label: 'auto' }, ...projectOptions]}
-              value={scoped ?? ''} empty="No project on any machine yet."
-              onPick={(v) => pick({ project: v || null })} />
+        <div className="dv-pickers" role="group" aria-label="What a new chat opens with">
+          {lock ? (
+            <span className="dv-chip dv-picker" data-picker="Project" data-locked="true"
+              aria-label={`Project: ${project?.name ?? lock}, fixed to this project`}>
+              <span className="lbl">Project</span>
+              <span className="val">{project?.name ?? lock}</span>
+            </span>
+          ) : (
+            <Picker name="Project" value={project ? project.name : 'auto'}
+              changed={picks.project !== undefined && picks.project !== home}
+              open={menu === 'project'} onOpen={() => setMenu(menu === 'project' ? null : 'project')}
+              onReset={() => reset('project')}>
+              <Menu label="Projects" options={[{ value: '', label: 'auto' }, ...projectOptions]}
+                value={scoped ?? ''} empty="No project on any machine yet."
+                onPick={(v) => pick({ project: v || null })} />
+            </Picker>
+          )}
+          <Picker name="Agent" value={agentLabel} changed={picks.agent !== undefined}
+            open={menu === 'agent'} onOpen={() => setMenu(menu === 'agent' ? null : 'agent')}
+            onReset={() => reset('agent')}>
+            <Menu label="Agents" options={agentOptions}
+              value={picks.agent === undefined ? (hermes?.id ?? '') : (picks.agent ?? '')}
+              empty={agents === null ? 'Reading the agents…' : 'No agent installed.'}
+              onPick={(v) => pick({ agent: v || null })} />
           </Picker>
-        )}
-        <Picker name="Agent" value={agentLabel} changed={picks.agent !== undefined}
-          open={menu === 'agent'} onOpen={() => setMenu(menu === 'agent' ? null : 'agent')}
-          onReset={() => reset('agent')}>
-          <Menu label="Agents" options={agentOptions}
-            value={picks.agent === undefined ? (hermes?.id ?? '') : (picks.agent ?? '')}
-            empty={agents === null ? 'Reading the agents…' : 'No agent installed.'}
-            onPick={(v) => pick({ agent: v || null })} />
-        </Picker>
-        <Picker name="Account" value={accountLabel} changed={picks.account !== undefined}
-          open={menu === 'account'} onOpen={() => setMenu(menu === 'account' ? null : 'account')}
-          onReset={() => reset('account')}
-          warn={low ? 'low quota' : null}>
-          <Menu label="Accounts" options={accounts} value={account}
-            empty="No sign-in reported yet." onPick={(v) => pick({ account: v })} />
-        </Picker>
-        <Picker name="Model" value={modelLabel} changed={picks.model !== undefined}
-          open={menu === 'model'} onOpen={() => setMenu(menu === 'model' ? null : 'model')}
-          onReset={() => reset('model')}>
-          <Menu label="Models" options={models} value={model ?? ''}
-            empty="This computer has not said what it can open a chat on."
-            onPick={(v) => pick({ model: v })} />
-        </Picker>
-        {!!onOptions && (
-          <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={onOptions}>More options</button>
-        )}
+          <Picker name="Account" value={accountLabel} changed={picks.account !== undefined}
+            open={menu === 'account'} onOpen={() => setMenu(menu === 'account' ? null : 'account')}
+            onReset={() => reset('account')}
+            warn={low ? 'low quota' : null}>
+            <Menu label="Accounts" options={accounts} value={account}
+              empty="No sign-in reported yet." onPick={(v) => pick({ account: v })} />
+          </Picker>
+          <Picker name="Model" value={modelLabel} changed={picks.model !== undefined}
+            open={menu === 'model'} onOpen={() => setMenu(menu === 'model' ? null : 'model')}
+            onReset={() => reset('model')}>
+            <Menu label="Models" options={models} value={model ?? ''}
+              empty="This computer has not said what it can open a chat on."
+              onPick={(v) => pick({ model: v })} />
+          </Picker>
+          {!!onOptions && (
+            <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={onOptions}>More options</button>
+          )}
+        </div>
+        <div className="dv-composer-acts">
+          <span className="dv-meta" title="Search chats, folders and commands">⌘K</span>
+          <input ref={picker} type="file" multiple name="attachments" style={{ display: 'none' }}
+            onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
+          <button type="button" className="dv-icon-btn dv-attach dv-hit" aria-label="Attach a file" title="Attach a file"
+            onClick={() => picker.current?.click()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <MicButton mic={mic} size={36} />
+          <button type="button" className="dv-send" aria-label="Send" disabled={busy || (!text.trim() && !files.length)}
+            onClick={() => void send()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+          </button>
+        </div>
       </div>
       {(busy || !!said || !!mic.error) && (
         <p className="dv-meta" role="status" style={{ margin: '10px 4px 0', color: said?.error || mic.error ? 'var(--red)' : undefined }}>

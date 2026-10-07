@@ -19,8 +19,8 @@
 .dv-topline a.dv-word,.dv-topline button.dv-word{appearance:none;border:0;background:transparent;color:var(--ink);text-decoration:none;cursor:pointer;padding:0;font-family:inherit}
 .dv-topline .sys .dv-btn--ghost[aria-current="page"]{color:var(--ink)}
 
-/* §5: the chips under the Composer. One row, scrolled sideways on a narrow
-   screen rather than wrapped. */
+/* §5: the chips under the Composer, on one row with the microphone and send;
+   wrapped on a narrow screen. */
 .dv-pickers{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}
 .dv-picker .lbl{color:var(--ink-2);font-weight:400}
 .dv-picker .val{color:var(--ink-2)}
@@ -187,7 +187,11 @@
   .dv-topline .sys .sep,.dv-topline .sys [data-inbox] .dv-dot{display:none}
   .dv-topline .sys .dv-btn{padding:0 6px}
   .dv-seg button{white-space:nowrap;padding:0 10px}
-  .dv-composer-foot>.dv-meta{display:none}
+  .dv-composer-acts>.dv-meta{display:none}
+  /* The chips and the buttons wrap as one run, the buttons at its end. */
+  .dv-composer-foot{flex-wrap:wrap;align-items:center}
+  .dv-composer-foot .dv-pickers{display:contents}
+  .dv-composer-acts{margin-left:auto}
 }
 
 /* §4.9 Machine: the row of pages under a tab, and the machine cards. */
