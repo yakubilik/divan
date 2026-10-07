@@ -211,18 +211,17 @@ group('the panel and the phone say the same thing about the same board');
     return [r.agent.title, detail || when].filter(Boolean).join(' · ');
   };
 
-  // The two transcriptions above are the one part of this comparison that is a
-  // copy rather than a call, so they are held to the file they were copied from:
-  // a phone screen that changes how it writes those lines has to fail here
-  // rather than quietly compare the panel against something nobody draws.
+  // The Dashboard of HANDOVER §4.1 draws neither of the two lines above any
+  // more: a tile carries the worst card's own line, and Working now writes an
+  // agent as its title over `project · executor · machine · time`. Both
+  // screens are held to composing that row the same way.
   const phoneScreen = appSrc('app/app/dashboard.tsx');
-  ok('the two lines the phone composes in its screen are still composed that way',
-    phoneScreen.includes("latest={latest(p.cards)}")
-    && phoneScreen.includes("value: p.activity.week")
-    && phoneScreen.includes("T('pfMoved', { d: ago(Math.max(0, now - p.activity.at)) })")
-    && phoneScreen.includes("T('pfNeverMoved')")
-    && phoneScreen.includes("T('pfLastSeen', { time: clock(r.agent.since_contact) })")
-    && phoneScreen.includes("[r.agent.title, detail || when].filter(Boolean).join(' · ')"));
+  const panelScreen = readFileSync(join(web, 'src', 'screens', 'Dashboard.tsx'), 'utf8');
+  ok('the panel and the phone compose a Working now row and a tile’s line the same way',
+    phoneScreen.includes("[name, T(r.who), r.agent.machine || r.agent.hostName, when]")
+    && panelScreen.includes("[name, r.who, r.agent.machine || r.agent.hostName, when]")
+    && phoneScreen.includes("latest(p.cards) || p.summary")
+    && panelScreen.includes("latest(p.cards) || p.summary"));
 
   const said = (x) => (x ? t(x.key, x.params) : null);
   /** One of the phone's two lines as its screen composes it: every clause, with
