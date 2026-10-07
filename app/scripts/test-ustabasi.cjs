@@ -1221,8 +1221,11 @@ for (const f of ['src/store.ts', 'src/queue.ts', 'app/ustabasi.tsx', 'app/ticket
                  'app/ticket-about/[id].tsx', 'src/components/ticket.tsx', 'app/dashboard.tsx']) {
   for (const m of src(f).matchAll(/'(ustabasi\.[a-z.]+)'/g)) calls.add(m[1]);
 }
-checks.push([`the screens ask the computer for three things and no more (${[...calls].sort().join(', ')})`,
-  calls.size === 3 && calls.has('ustabasi.list') && calls.has('ustabasi.note') && calls.has('ustabasi.run')]);
+// Two more reads since 7 Oct 2026: the inbox (`ustabasi.notifications`) and a
+// ticket's report (`ustabasi.report`). Still one write, the note.
+const ASKED = ['ustabasi.list', 'ustabasi.note', 'ustabasi.notifications', 'ustabasi.report', 'ustabasi.run'];
+checks.push([`the screens ask the computer for these and no more (${[...calls].sort().join(', ')})`,
+  calls.size === ASKED.length && ASKED.every((c) => calls.has(c))]);
 
 // The Divan design system is checked next door, where its subject is — the
 // palette read off the artboards, and the parts the new screens are made of —

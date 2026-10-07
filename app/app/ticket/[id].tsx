@@ -1,3 +1,4 @@
+import { Report } from '../../src/components/report';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -198,6 +199,7 @@ export default function TicketScreen() {
           </View>
         ))}
         {hasDetails(t) && <Details t={t} />}
+        <Report id={t.id} status={t.status} />
       </ScrollView>
 
       {/* The box. It is offered whatever the ticket is doing, because a note is

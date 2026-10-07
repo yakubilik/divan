@@ -127,6 +127,20 @@ export interface StoreSource {
   error?: string;
 }
 
+/** What a ticket came back with (`ustabasi.report`): the worker's summary, the
+ *  verdict, and the documents it named, read and key-masked by the daemon. */
+export interface TicketReport {
+  id: number; title: string; status: string;
+  summary: string; verdict: string; verdict_summary: string;
+  files: { path: string; name: string; size: number; cut: boolean; text: string }[];
+}
+
+/** One thing the queue sent (`ustabasi.notifications`). */
+export interface QueueNotice {
+  id: number; ticket: number | null; ts: number; kind: string;
+  headline: string; body: string; title: string; status: string; project: string | null;
+}
+
 export interface Agent {
   id: string;
   name: string;
