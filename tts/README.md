@@ -4,7 +4,8 @@
 model: 5.6M acoustic + 3.0M decoder parameters, 48 kHz mono out. This folder turns its published weights
 ([canberkkkkkk/ema-lightning](https://huggingface.co/canberkkkkkk/ema-lightning), revision `7a6ba1a`) into
 ONNX files that onnxruntime runs on the iPhone, and keeps the test vectors later work checks against.
-The ONNX files are not used by `app/` or `daemon/` yet.
+The app reads Turkish call answers with them, on the phone (see *In the app* below); the daemon never sees
+the audio or the text being spoken.
 
 ## Regenerate
 
@@ -70,6 +71,36 @@ with case suffixes, money, percentages, units, abbreviations, symbols, prose) an
 writes `app/scripts/fixtures/tts-frontend.json`; `npm test` (`app/scripts/test-tts.cjs`) checks the port
 against it and against every sentence's `ids` here. The fixture is committed; regenerate it in the venv
 above with `.venv/bin/python frontend_fixture.py` after changing its inputs or upgrading ema-lightning.
+
+## In the app
+
+`app/src/tts/engine.ts` is this pipeline in TypeScript: the host steps of `common.py` (`words`, `plan`,
+`noise` — splitmix64 in 32-bit halves, bit-identical to `common.noise`, `windows`) and the three graphs
+behind a two-method runtime interface. `ortRuntime(ort, path)` wraps either onnxruntime-react-native (the
+phone) or onnxruntime-node (`app/scripts/test-ema.cjs`), so the test that holds every sentence here to the
+PyTorch reference — within 1 frame, correlation above 0.98; it gets 1.0000 — runs the code the phone runs.
+Answers are read sentence by sentence (`pieces`), so the first sentence plays while the next is made.
+
+Getting the files onto the phone:
+
+```sh
+tts/verify.sh                         # builds tts/models/
+cd app && npm run tts:models          # copies them to app/assets/tts/ema-{text,sound,decoder}.onnx (ignored by git)
+npx expo prebuild --platform ios      # plugins/with-tts-models.js adds them to the bundle; then build as usual
+```
+
+EAS builds prebuild themselves and `.easignore` does not exclude `assets/tts/`, so copying them before
+`eas build` is enough. Without the files, or in a build without onnxruntime's native module, `src/ema.ts`
+reports EMA unavailable and the call reads Turkish with the system voice (expo-speech).
+
+`src/tts/speaker.ts` picks the voice: Turkish with EMA loaded and switched on is EMA; anything else, or an
+EMA that throws or has not handed over audio within 1.5 s, is expo-speech for that answer. EMA loads when
+the call screen opens. Each sentence is written as a 16-bit WAV to the cache with the pause after it and
+played by its own expo-audio player; the next player starts inside that pause, so the seam between players
+falls in silence. The session is the call's (`playAndRecord`, `voiceChat`, speaker), set through the speech
+recogniser's `setCategoryIOS` — not expo-audio's `setAudioModeAsync`, which would drop `voiceChat` and the
+speaker. Timings (load + warm ms, first-sentence ms, RTF) are logged as `ema: ...` and shown under EMA in
+the call's voice picker, so the first real call says how fast the phone is.
 
 ## Operators and opset
 

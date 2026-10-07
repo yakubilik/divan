@@ -504,9 +504,14 @@ export function Conversation({ id }: { id: string }) {
             </Text>
           )}
         </View>
-        <Pressable ref={moreRef} accessibilityLabel={T('chatMenu')} onPress={() => void chatMenu()} hitSlop={6} style={({ pressed }) => [sq40, pressed && { opacity: 0.5 }]}>
-          <Icon name="more_horiz" size={24} />
-        </Pressable>
+        <View style={{ flexDirection: 'row' }}>
+          <Pressable accessibilityLabel={T('mCall')} onPress={() => go(() => router.push('/call'))} hitSlop={6} style={({ pressed }) => [sq40, { marginRight: -6 }, pressed && { opacity: 0.5 }]}>
+            <Icon name="call" size={21} />
+          </Pressable>
+          <Pressable ref={moreRef} accessibilityLabel={T('chatMenu')} onPress={() => void chatMenu()} hitSlop={6} style={({ pressed }) => [sq40, pressed && { opacity: 0.5 }]}>
+            <Icon name="more_horiz" size={24} />
+          </Pressable>
+        </View>
       </View>
 
       {conn !== 'online' && <ConnectionBanner text={T('wReconnecting')} />}
