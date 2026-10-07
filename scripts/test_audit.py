@@ -151,6 +151,26 @@ NAME_CONTROL_HITS = ["1: author-name 'lovelace-ledger'",
                      "2: author-name 'Ada'"]
 
 
+# Where another language is data. Adding a file to `audit.ALLOW` is a decision,
+# so it is made twice: there with its reason, and here.
+ALLOWED = [
+    "app/scripts/fixtures/tts-frontend.json",
+    "app/scripts/test-ema.cjs",
+    "app/scripts/test-waiting.cjs",
+    "daemon/remote_ai_chat/call.py",
+    "daemon/remote_ai_chat/secrets.py",
+    "daemon/remote_ai_chat/server.py",
+    "daemon/remote_ai_chat/transcribe.py",
+    "daemon/scripts/test_call.py",
+    "daemon/scripts/test_dictation.py",
+    "daemon/scripts/test_scrub.py",
+    "daemon/scripts/test_secrets.py",
+    "tts/export.py",
+    "tts/frontend_fixture.py",
+    "tts/vectors.json",
+]
+
+
 def unredacted(text: str, allowed: frozenset[str] | set[str] = REDACTED,
                rules: tuple[str, ...] = IDENTIFIER_RULES) -> list[str]:
     """Identifiers in a SELF file that are not one of the samples above."""
@@ -268,17 +288,29 @@ def main() -> int:
         print("  skip  RAC_AUDIT_NAMES is unset, so there is no list to read back"
               " for;\n        the release runs this with one, and records that it did")
 
-    print("\nthe language allowlist covers exactly one file")
+    print("\nthe language allowlist covers exactly these files")
     allowed = sorted(audit.ALLOW)
-    check("call.py is the only entry", allowed == ["daemon/remote_ai_chat/call.py"], repr(allowed))
+    check("the list is the one written down here", allowed == ALLOWED, repr(allowed))
+    check("and every entry says why", all(len(why.split()) >= 5 for why in audit.ALLOW.values()))
     turkish = "onay bekliyor için değil"
     check("a Turkish word there is data, not a finding",
           not audit.scan_text("daemon/remote_ai_chat/call.py", turkish, "test"))
     check("the same word anywhere else is a finding",
-          bool(audit.scan_text("daemon/remote_ai_chat/server.py", turkish, "test")))
+          bool(audit.scan_text("daemon/remote_ai_chat/config.py", turkish, "test")))
     check("the allowlist does not also excuse a secret",
           any(h["rule"] == "aws-access-key" for h in
               audit.scan_text("daemon/remote_ai_chat/call.py", "AKIAIOSFODNN7EXAMPLE", "test")))
+
+    print("\na pending file is reported, and only its language is let through")
+    later = audit.PENDING[0]
+    check("no pending file is under daemon/, docs/ or scripts/",
+          not [p for p in audit.PENDING if p.startswith(("daemon/", "docs/", "scripts/"))])
+    check("a Turkish word there is still a finding, marked pending",
+          [h["pending"] for h in audit.scan_text(later, "onay", "test")] == [True])
+    check("a secret there is not pending",
+          [h["pending"] for h in audit.scan_text(later, "AKIAIOSFODNN7EXAMPLE", "test")] == [False])
+    check("and a file that is not listed is not pending",
+          [h["pending"] for h in audit.scan_text("web/src/App.tsx", "onay", "test")] == [False])
 
     print("\nthe author's own names are given at scan time, not written down here")
     # This section is about what the scanner carries when no list is given, so a

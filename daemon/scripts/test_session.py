@@ -235,12 +235,12 @@ async def scenario_perm_modes():
     """What each permission mode actually interrupts.
 
     "bypass" is chosen by somebody who does not want to be asked, and it used
-    to ask anyway for anything the destructive list matched — a `tail` of the
-    daemon's own log woke the phone up with a DANGEROUS COMMAND card. The list
-    still guards the modes that mean "ask me": bypass answers for itself.
+    to ask about a `tail` of the daemon's own log. It no longer does: the log
+    is off the list, and bypass asks about nothing that is not on it. What is
+    on it — the destructive commands — asks in every mode, bypass included.
     """
     print("\npermission modes decide who is interrupted")
-    LOG_TAIL = "tail -n 40 ~/.remote-ai-chat/logs/daemon.log"   # on the list
+    LOG_TAIL = "tail -n 40 ~/.remote-ai-chat/logs/daemon.log"   # on nobody's list
     ORDINARY = "ls -la /tmp"                                    # on nobody's list
     NASTY = "sudo rm -rf /var/tmp"                              # on every list
 
@@ -266,10 +266,10 @@ async def scenario_perm_modes():
 
     asked, installed, decision = await run("bypass", LOG_TAIL)
     check(not asked, "bypass does not ask about reading the daemon's log")
-    check(not installed, "bypass installs no pre-tool hook at all")
+    check(installed, "bypass installs the pre-tool hook too")
     check(decision is None, "bypass leaves the decision to the tool", f"decision={decision}")
     asked, _, _ = await run("bypass", NASTY)
-    check(not asked, "bypass does not ask about sudo rm -rf either")
+    check(asked, "bypass still asks about sudo rm -rf")
 
     asked, installed, _ = await run("ask", ORDINARY)
     check(asked, "ask asks about an ordinary command")

@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import shlex
 import shutil
 import time
 import tomllib
@@ -223,10 +224,12 @@ class CodexProvider(Provider):
         try:
             if method == "item/commandExecution/requestApproval":
                 cmd = params.get("command") or ""
-                reason = destructive_reason(cmd)
-                # Bypass answers everything itself, destructive included: it is
-                # the mode picked to stop being interrupted.
-                if self.cfg.perm_mode == "bypass" or (reason is None and self._session_allow_cmds):
+                if isinstance(cmd, (list, tuple)):
+                    cmd = shlex.join(str(c) for c in cmd)
+                reason = destructive_reason(cmd, self.cfg.cwd, params.get("cwd"))
+                # Bypass answers everything itself except the destructive list,
+                # which goes to the phone in every mode.
+                if reason is None and (self.cfg.perm_mode == "bypass" or self._session_allow_cmds):
                     decision = "allow"
                 else:
                     decision = await self.approval("Bash", {"command": cmd, "cwd": params.get("cwd")}, reason)

@@ -3,7 +3,10 @@
 `secrets.capture` stops a key on its way into a chat. This is the same thing
 for everything written before that existed, and for what the CLIs keep writing
 on their own: the daemon's events table, and the transcripts and logs Claude
-Code and Codex leave on disk.
+Code and Codex leave on disk. Anywhere else this machine keeps such records —
+a folder of session notes, say — is listed in config.toml:
+
+    scrub_extra_paths = ["~/notes/sessions"]
 
     python -m remote_ai_chat.scrub            # dry run: report only
     python -m remote_ai_chat.scrub --apply    # keychain first, then rewrite
@@ -31,6 +34,7 @@ import re
 import sqlite3
 import sys
 import time
+import tomllib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,14 +59,47 @@ def _transcript(path: Path) -> bool:
     return path.suffix == ".txt" and path.parent.name == "tool-results"
 
 
+def _notes(path: Path) -> bool:
+    """A file in a directory somebody listed: a transcript, or notes kept as Markdown."""
+    return _transcript(path) or path.suffix == ".md"
+
+
+def extra_paths(home: Path) -> list[Path]:
+    """`scrub_extra_paths` from config.toml: directories this machine keeps logs in.
+
+    Read straight from the file rather than through `Config.load`, which
+    belongs to the running daemon and writes the file when it is missing. A
+    `~` is the home being scrubbed. Nothing is listed by default — where
+    somebody keeps their own session notes is theirs to say.
+    """
+    try:
+        raw = tomllib.loads((_rac(home) / "config.toml").read_text()).get("scrub_extra_paths", [])
+    except (OSError, ValueError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    out: list[Path] = []
+    for item in raw:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        item = item.strip()
+        if item == "~":
+            out.append(home)
+        elif item.startswith(("~/", "~\\")):
+            out.append(home / item[2:])
+        elif Path(item).is_absolute():
+            out.append(Path(item))
+    return out
+
+
 def targets(home: Path) -> list[Path]:
     """Every transcript and log, once each, symlinks not followed."""
     roots = [
         (_rac(home), _transcript, {"uploads", "agent-store"}),
         (home / ".claude" / "projects", _transcript, set()),
         (home / ".codex" / "sessions", lambda p: p.suffix == ".jsonl", set()),
-        (home / ".claude" / "memory" / "yakup" / "sessions", lambda p: p.suffix == ".md", set()),
     ]
+    roots += [(p, _notes, set()) for p in extra_paths(home)]
     seen: set[str] = set()
     out: list[Path] = []
     for root, wanted, skip_dirs in roots:

@@ -56,7 +56,7 @@ KEYS = {
     "stripe (sk_live_)": "sk_" + "live_" + A[:24],
     "stripe (rk_live_)": "rk_" + "live_" + A[:24],
     "jwt": "eyJhbGciOiJIUzI1NiJ9." + "eyJzdWIiOiJmYWtlIn0." + A[:20],
-    "pem": "-----BEGIN RSA PRIVATE KEY-----\nMIIEfake" + A + "\n" + A + "\n-----END RSA PRIVATE KEY-----",
+    "pem": "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEfake" + A + "\n" + A + "\n-----END RSA PRIVATE KEY-----",
 }
 # key=value: the name stays, only the value goes.
 ASSIGNMENTS = {
@@ -82,7 +82,7 @@ ORDINARY = {
     "turkish prose": "Kanka şu token sayısı neden arttı, şifre ekranını da düzelt: ödeme sayfası açılmıyor.",
     "identifier": "use re_compile_everything_here and sk-learn-style naming",
     "env reference": "password: process.env.DB_PASSWORD",
-    "key path": "EXPO_ASC_API_KEY_PATH=/Users/me/keys/AuthKey_AB12CD34EF.p8",
+    "key path": "EXPO_ASC_API_KEY_PATH=/Users/me/keys/AuthKey_" + "AB12CD34EF.p8",
     "talk about a password": "şifreni sıfırla, parola alanını gizle, that will pass the tests",
     "four short words": "what does this mean when then",
 }
