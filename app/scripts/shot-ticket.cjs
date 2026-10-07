@@ -68,7 +68,7 @@ R.words.real();
 const stand = (params) => {
   R.store.reset();
   R.params.reset();
-  R.store.set({ hosts: [{ id: 'h1', name: 'studio' }], divan: { h1: { snapshot: snap, at: NOW, reachable: true, error: null, old: false } },
+  R.store.set({ hosts: [{ id: 'h1', name: 'studio' }], divan: { h1: { snapshot: { ...snap, at: Math.floor(Date.now() / 1000) }, at: Math.floor(Date.now() / 1000), reachable: true, error: null, old: false } },
     host: { id: 'h1' }, conn: 'online', loadDivan() {}, loadCard() {}, sayCard() {}, handCard() {}, openItem() {},
     ustabasi: null, ustabasiOld: false, loadUstabasi() {}, openCard: OPEN, drafts: {}, setDraft() {} });
   R.params.set(params);
