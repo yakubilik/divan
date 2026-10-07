@@ -144,21 +144,29 @@ export default function ChatPlace() {
     // Chats nobody has filed fall into sections by the folder they work in.
     // One project is one section without anybody naming it, and a single
     // folder is not a grouping at all, so it stays as one plain list.
+    // A chat somebody moved to Daily stays there, whatever folder it is in;
+    // so does one with no folder at all.
     const loose = byGroup[''] ?? [];
     const byCwd: Record<string, Chat[]> = {};
-    for (const ch of loose) (byCwd[ch.cwd || ''] ||= []).push(ch);
+    const daily: Chat[] = [];
+    for (const ch of loose) {
+      if ((ch.project_set && !ch.project_id) || !ch.cwd) daily.push(ch);
+      else (byCwd[ch.cwd] ||= []).push(ch);
+    }
     const folders = Object.keys(byCwd);
     if (folders.length > 1) {
       folders
         .sort((a, b) => (byCwd[b][0]?.updated_at ?? 0) - (byCwd[a][0]?.updated_at ?? 0))
         .forEach((path) => {
           const id = `cwd:${path}`;
-          out.push({ id, title: path.replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/') || T('ungrouped'), mono: true,
+          out.push({ id, title: path.replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/'), mono: true,
                      data: collapsed[id] ? [] : byCwd[path], count: byCwd[path].length });
         });
-    } else if (loose.length || groups.length === 0) {
-      out.push({ id: '', title: groups.length ? T('ungrouped') : T('chats'), mono: false,
-                 data: collapsed[''] ? [] : loose, count: loose.length });
+    } else daily.push(...(byCwd[folders[0]] ?? []));
+    if (daily.length || (groups.length === 0 && out.length === 0)) {
+      daily.sort((a, b) => (b.pinned - a.pinned) || (b.updated_at - a.updated_at));
+      out.push({ id: '', title: out.length ? T('ungrouped') : T('chats'), mono: false,
+                 data: collapsed[''] ? [] : daily, count: daily.length });
     }
     return out;
   }, [chats, groups, q, collapsed, showArchived, chatView, T]);
@@ -205,7 +213,9 @@ export default function ChatPlace() {
       ...(back ? [{ kind: 'back' as const, label: T('moveToGroup'), onPress: back }] : []),
       ...groups.map((g) => ({ label: g.name, checked: g.id === chat.group_id, onPress: () => void updateChat(chat.id, { group_id: g.id } as any).catch(err) })),
       { kind: 'divider' as const },
-      { label: T('noGroup'), checked: false, onPress: () => void updateChat(chat.id, { group_id: null } as any).catch(err) },
+      // Daily is out of every group and every product, for good: a chat the
+      // computer filed under a product would otherwise stay there.
+      { label: T('noGroup'), checked: !chat.group_id && !chat.project_id, onPress: () => void updateChat(chat.id, { group_id: null, project_id: '' }).catch(err) },
       { label: T('newGroupAction'), icon: 'add', onPress: () => newGroup((id) => updateChat(chat.id, { group_id: id } as any)) },
     ];
   }

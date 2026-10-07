@@ -387,7 +387,7 @@ export function Conversation({ id }: { id: string }) {
       { kind: 'back', label: T('moveToGroup'), onPress: () => replaceMenu(menuItems()) },
       ...groups.map((g) => ({ label: g.name, checked: g.id === chat.group_id, onPress: () => void updateChat(chat.id, { group_id: g.id } as any).catch(err) })),
       { kind: 'divider' as const },
-      { label: T('noGroup'), onPress: () => void updateChat(chat.id, { group_id: null } as any).catch(err) },
+      { label: T('noGroup'), onPress: () => void updateChat(chat.id, { group_id: null, project_id: '' }).catch(err) },
       { label: T('newGroupAction'), icon: 'add', onPress: newGroup },
     ];
   }
