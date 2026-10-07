@@ -1,157 +1,160 @@
 import React from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { useDivanView } from '../src/queue';
-import { since } from '../src/tickets';
+import { short } from '../src/compose';
 import {
-  across, actions, executorFace, groups, items, source, type Doing, type Item,
+  actions, buckets, executorFace, headline, source, type Bucketed, type Doing, type Entry, type Item,
+  type OpenEntry,
 } from '../src/waiting';
-import { Button, EmptyState, Pill, SectionHeader } from '../src/components/divan';
+import { Button, Pill, SectionHeader } from '../src/components/divan';
 import { BackRow, WaitingCard } from '../src/components/waiting';
+import { SayBox } from '../src/components/card';
 import { Text } from '../src/components/text';
 import { useTokens } from '../src/theme';
 import { Shell } from '../src/components/shell';
 
-/** Everything that needs a person, across every project and every computer, in
- *  one place (Mobile6 S3).
+/** Waiting on you (HANDOVER §4.6): everything that needs a person, across every
+ *  project and every computer, on one page.
  *
- *  The Dashboard answers "how is everything". This answers the other question,
- *  the one that is actually keeping somebody awake at one in the morning: what
- *  is waiting on **me**. A question a worker asked on the mini at midnight, a
- *  ticket that fell over on the studio, a card that nothing runs on because it
- *  is his to write — four kinds of thing, four machines, one list.
+ *  The title says the counts (`2 answers, 1 task.`), and under it three groups,
+ *  oldest first: An agent is asking · A decision · On your plate. Everything
+ *  that can be answered in one press is: an answer the question offers in its
+ *  own words is a pill that sends the note to the queue that asked, on the
+ *  machine that asked; a card that is yours is `Mark done`; a Still open item
+ *  is `Mark done` and `Comment`. Every item can be opened as its ticket. With
+ *  nothing waiting the page is one sentence.
  *
- *  Three things are true of everything on it:
- *
- *  **It says where it came from.** Every card carries its product, its own
- *  title and the computer the work is on, because a list gathered off four
- *  machines is unreadable without it — and because the answer goes back to that
- *  machine, not to whichever one this phone happens to hold a socket to.
- *
- *  **What can be answered in one tap is answered here.** The pills on a card
- *  are the question's own words (`src/waiting.ts answers`), and tapping one
- *  sends it to the queue that asked as a note, which re-opens the ticket and
- *  takes the card off this screen. Nothing is invented: a question that offered
- *  no such words gets `Reply…` and the box, which is a screen away.
- *
- *  **The judgements are not in here.** Which kind an item is, what it offers,
- *  what a tap does — all of it is `src/waiting.ts`, so that
- *  `scripts/test-waiting.cjs` can hold this screen to it without a phone. What
- *  is left in this file is the arrangement, and what happens while a request is
- *  out.
- *
- *  It is pushed over the Dashboard rather than being a place of its own: it is
- *  the Needs-you counter opened up, and the frame draws it with the Dashboard
- *  tab still lit and `‹ Overview` at the top. */
+ *  What is in which group, what each item offers and the title are
+ *  `src/waiting.ts`, where `scripts/test-waiting.cjs` reaches them without a
+ *  phone. This file is the arrangement, and what happens while a request is
+ *  out. */
 export default function Waiting() {
   const router = useRouter();
   const go = useNavGuard();
   const T = useT();
   const t = useTokens();
   const view = useDivanView();
-  const host = useStore((s) => s.host);
   const answerCard = useStore((s) => s.answerCard);
   const moveCard = useStore((s) => s.moveCard);
+  const openItem = useStore((s) => s.openItem);
 
-  const list = items(view);
-  const blocks = groups(view);
-  const line = across(list);
+  const groups = buckets(view);
+  const title = headline(groups).map((p) => T(p.key, p.params)).join(', ');
+  const empty = !groups.length;
 
-  /** What a tap on one card is doing right now. Keyed by the card, because two
-   *  of them can be answered one after the other without waiting. */
-  const [busy, setBusy] = React.useState<Record<string, { sending?: boolean; error?: string }>>({});
+  /** What a press on one item is doing right now. Keyed by the item, because
+   *  two of them can be answered one after the other without waiting. */
+  const [busy, setBusy] = React.useState<Record<string, { sending?: boolean; error?: string; done?: string }>>({});
 
   const back = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/dashboard');
   };
 
-  const act = async (item: Item, doing: Doing) => {
-    if (doing.do === 'open') { go(() => router.push(`/ticket/${doing.ticket}`)); return; }
-    const id = item.card.id;
+  const run = async (id: string, machine: string, work: () => Promise<unknown>, done?: string) => {
     setBusy((had) => ({ ...had, [id]: { sending: true } }));
     try {
-      if (doing.do === 'note') await answerCard({ ticket: doing.ticket, host: doing.host }, doing.text);
-      else await moveCard(doing);
-      // The board was re-read by the write, so the card is about to leave this
-      // list on its own. Nothing to say; the row that said "sending…" goes.
-      setBusy((had) => { const next = { ...had }; delete next[id]; return next; });
+      await work();
+      // The board was re-read by the write, so the item is about to leave this
+      // list on its own; a comment stays, and says it went.
+      setBusy((had) => {
+        const next = { ...had };
+        if (done) next[id] = { done }; else delete next[id];
+        return next;
+      });
     } catch (e: any) {
-      // A machine that did not answer is the one thing this screen must say out
-      // loud. An answer that silently did not arrive is worse than no answer:
-      // the card stays, and nobody knows whether it was dealt with.
-      setBusy((had) => ({ ...had, [id]: { error: e?.message ?? '' } }));
+      // A machine that did not answer is the one thing this page must say out
+      // loud: an answer that silently did not arrive is worse than none.
+      setBusy((had) => ({ ...had, [id]: { error: e?.message ?? machine } }));
     }
+  };
+
+  const act = (entry: Entry, item: Item, doing: Doing) => {
+    if (doing.do === 'open') {
+      go(() => router.push(`/card/${doing.card}?host=${doing.host}&from=waiting`));
+      return;
+    }
+    void run(entry.id, item.machine, () => (doing.do === 'note'
+      ? answerCard({ ticket: doing.ticket, host: doing.host }, doing.text)
+      : moveCard(doing)));
   };
 
   return (
     <Shell place="dashboard" badge={view.totals.needsYou}>
-      {/* `flexGrow` so that the calm state, which centres itself in what it is
-          given, has the page to centre itself in. Mobile6 S3's own body:
-          `padding:8px 16px 12px` over a list at `0 16px` with `gap:8`. */}
-      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 16,
-                                           paddingBottom: 24, gap: 12 }}>
-        <View style={{ gap: 6 }}>
+      <ScrollView keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 16, paddingBottom: 24, gap: 24 }}>
+        <View style={{ gap: 8 }}>
           <BackRow label={T('overview')} onPress={back} style={{ paddingHorizontal: 4 }} />
-          <SectionHeader kind="page" title={T('waitTitle')}
-            right={list.length ? String(list.length) : null} tone="amber" />
-          {!!line && (
-            <Text style={{ fontSize: 13, lineHeight: 13 * 1.4, color: t.ink2, paddingHorizontal: 4 }}>
-              {T(line.key, line.params)}
-            </Text>
+          <Text style={{ fontSize: 30, lineHeight: 34, fontWeight: '500', letterSpacing: -1, paddingHorizontal: 4 }}>
+            {empty ? title : `${title}.`}
+          </Text>
+          {!empty && (
+            <Text style={{ fontSize: 15, lineHeight: 22, color: t.ink2, paddingHorizontal: 4 }}>{T('waitOldest')}</Text>
           )}
         </View>
-        {blocks.length === 0 ? <Calm view={view} /> : (
-          <View style={{ gap: 8 }}>
-            {blocks.map((block) => (
-              <React.Fragment key={block.kind}>
-                <SectionHeader kind="mark" tone={block.tone} count={block.items.length}
-                  title={`${block.mark} ${T(block.label)}`.trim()} />
-                {block.items.map((item) => (
-                  <Row key={item.card.id} item={item} activeHost={host?.id ?? null}
-                    state={busy[item.card.id]} onDo={act} />
-                ))}
-              </React.Fragment>
-            ))}
-          </View>
-        )}
+        {groups.map((g) => (
+          <Group key={g.bucket} group={g}>
+            {g.entries.map((entry) => (entry.kind === 'card' ? (
+              <CardRow key={entry.id} entry={entry} item={entry.item} state={busy[entry.id]} onDo={act} />
+            ) : (
+              <OpenRow key={entry.id} entry={entry.open} state={busy[entry.id]}
+                onDone={() => void run(entry.id, entry.open.project, () => openItem(
+                  { host: entry.open.host, project: entry.open.projectId, item: entry.open.id }, { set: { state: 'done' } }))}
+                onComment={(text) => run(entry.id, entry.open.project, () => openItem(
+                  { host: entry.open.host, project: entry.open.projectId, item: entry.open.id }, { comment: text }),
+                  T('waitCommented'))} />
+            )))}
+          </Group>
+        ))}
       </ScrollView>
     </Shell>
   );
 }
 
-/** One card, and whatever can be done about it.
- *
- *  The mono line under the buttons is the only thing on the card that is not
- *  read off a board: what a tap is doing right now, or why it did not happen.
- *  It comes before the note about a quiet machine, because a request that just
- *  failed is newer news than a machine that went quiet two hours ago. */
-function Row({ item, activeHost, state, onDo }: {
+function Group({ group, children }: { group: Bucketed; children: React.ReactNode }) {
+  const T = useT();
+  return (
+    <View style={{ gap: 8 }}>
+      <SectionHeader title={T(group.label)}
+        right={group.bucket === 'plate' ? T('wgPlateNote') : String(group.entries.length)} />
+      {children}
+    </View>
+  );
+}
+
+/** The mono line under a press: what it is doing, or why it did not happen. */
+function noteFor(T: ReturnType<typeof useT>, machine: string, stale: boolean,
+                 state?: { sending?: boolean; error?: string; done?: string }) {
+  return state?.sending ? { text: T('waitSending'), tone: 'ink3' as const }
+    : state?.error != null ? { text: T('waitNotSent', { machine }), tone: 'red' as const }
+    : state?.done ? { text: state.done, tone: 'ink3' as const }
+    : stale ? { text: T('waitStale', { machine }), tone: 'amber' as const }
+    : null;
+}
+
+/** A question, a decision, or a card that is yours. */
+function CardRow({ entry, item, state, onDo }: {
+  entry: Entry;
   item: Item;
-  activeHost: string | null;
-  state?: { sending?: boolean; error?: string };
-  onDo: (item: Item, doing: Doing) => void;
+  state?: { sending?: boolean; error?: string; done?: string };
+  onDo: (entry: Entry, item: Item, doing: Doing) => void;
 }) {
   const T = useT();
-  const ago = (seconds: number | null) => since(seconds, T);
-  const list = actions(item, activeHost);
-  const note = state?.sending ? { text: T('waitSending'), tone: 'ink3' as const }
-    : state?.error != null ? { text: T('waitNotSent', { machine: item.machine }), tone: 'red' as const }
-    // The card came off a machine that has stopped answering: what is on it was
-    // true when that machine last spoke, and may have been dealt with since.
-    : item.stale ? { text: T('waitStale', { machine: item.machine }), tone: 'amber' as const }
-    : null;
+  const list = actions(item);
+  const note = noteFor(T, item.machine, item.stale, state);
   return (
     <WaitingCard face={executorFace(item.card)} who={T(item.who)}
       from={T(source(item).key, source(item).params)}
-      age={item.age == null ? null : ago(item.age)}
-      said={item.said} asked={item.asked}
+      age={item.age == null ? null : short(item.age)}
+      said={item.kind === 'yours' ? item.card.title : item.said} asked={item.asked}
+      stuck={item.kind === 'stuck' ? T('stStuck') : null}
       note={note?.text} tone={note?.tone}
-      actions={list.length === 0 ? null : list.map((action, i) => {
+      actions={list.map((action, i) => {
         const label = action.label ?? T(action.key);
-        const press = state?.sending ? undefined : () => onDo(item, action.doing);
+        const press = state?.sending ? undefined : () => onDo(entry, item, action.doing);
         return action.pill
           ? <Pill key={`${action.key}${i}`} label={label} face={action.face} onPress={press} />
           : <Button key={`${action.key}${i}`} label={label} face={action.face} onPress={press}
@@ -160,19 +163,48 @@ function Row({ item, activeHost, state, onDo }: {
   );
 }
 
-/** Nothing is waiting on anybody. A designed state and not an absence: the
- *  structure of the screen stays — the title, the count, the line under it —
- *  and the middle says so in words, with what was finished today under it where
- *  anything can be counted.
- *
- *  It is the same sentence the Dashboard's calm block counts with
- *  (`calmDone`), because it is the same figure: every repository every product
- *  owns, since midnight on the machine that answered. */
-function Calm({ view }: { view: { totals: { doneToday: number | null } } }) {
+/** A Still open item that is yours: Mark done, and a line in its thread. */
+function OpenRow({ entry, state, onDone, onComment }: {
+  entry: OpenEntry;
+  state?: { sending?: boolean; error?: string; done?: string };
+  onDone: () => void;
+  onComment: (text: string) => Promise<void>;
+}) {
   const T = useT();
-  const { doneToday } = view.totals;
+  const router = useRouter();
+  // Which item's comment box is open is in the address, and what is typed in
+  // it is a draft in the store: neither is lost to a redraw.
+  const params = useLocalSearchParams<{ comment?: string }>();
+  const key = `${entry.host}:${entry.id}`;
+  const writing = params.comment === key;
+  const words = useStore((s) => s.drafts?.[`comment:${key}`]?.text ?? '');
+  const keep = useStore((s) => s.setDraft);
+  const setWords = (text: string) => keep(`comment:${key}`, { text });
+  const note = noteFor(T, entry.project, false, state);
   return (
-    <EmptyState title={T('waitCalm')} body={T('waitCalmBody')}
-      foot={doneToday ? T(doneToday === 1 ? 'calmDoneOne' : 'calmDone', { n: doneToday }) : undefined} />
+    <WaitingCard face="you" who={T('exYou')}
+      from={T('waitStillOpen', { project: entry.project })}
+      age={entry.age == null ? null : short(entry.age)}
+      said={entry.item.title} note={note?.text} tone={note?.tone}
+      body={entry.item.body || null}
+      actions={(
+        <>
+          <Button label={T('waitDone')} face="ink" onPress={state?.sending ? undefined : onDone}
+            style={{ flex: 1, minWidth: 120 }} />
+          <Button label={T('waitComment')} face="outline" onPress={() => router.setParams({ comment: writing ? '' : key })}
+            style={{ flex: 1, minWidth: 120 }} />
+        </>
+      )}
+      after={writing ? (
+        <SayBox value={words} onChangeText={setWords} busy={state?.sending}
+          placeholder={T('waitCommentBox')} foot="" label={T('waitCommentBox')}
+          onSend={() => {
+            const text = words.trim();
+            if (!text) return;
+            setWords('');
+            router.setParams({ comment: '' });
+            void onComment(text);
+          }} />
+      ) : null} />
   );
 }

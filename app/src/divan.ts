@@ -35,7 +35,7 @@
 import type {
   DivanAgent, DivanBranch, DivanCard, DivanColumn, DivanProject, DivanQuota, DivanSnapshot,
   RepoActivity, RepoPulls,
-  DivanMilestone,
+  DivanMilestone, DivanOpenItem,
 } from './protocol';
 
 /** How often a screen that is open re-asks every machine. The board moves when
@@ -261,6 +261,9 @@ export interface MergedProject {
   /** Its dated history, oldest first; the day it reached its stage is read off
    *  this and nowhere else. */
   milestones: DivanMilestone[];
+  /** What it is still waiting on, from every machine that has it, each with
+   *  the machine it is written on — which is where a change to it goes. */
+  open: (DivanOpenItem & { host: string })[];
   repos: string[];
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
@@ -512,6 +515,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           kind: p.kind || '',
           stage: p.stage || '',
           milestones: [...(p.milestones || [])].sort((a, b) => a.at - b.at),
+          open: (p.open_items || []).map((o) => ({ ...o, host: h.id })),
           repos: [...(p.repos || [])],
           hosts: [h.id],
           machines: [h.machine],
@@ -547,6 +551,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
       if (!found.milestones.length && p.milestones?.length) {
         found.milestones = [...p.milestones].sort((a, b) => a.at - b.at);
       }
+      found.open = [...found.open, ...(p.open_items || []).map((o) => ({ ...o, host: h.id }))];
       found.updated_at = Math.max(found.updated_at, p.updated_at || 0);
       found.repos = [...new Set([...found.repos, ...(p.repos || [])])].sort();
       found.hosts = [...new Set([...found.hosts, h.id])];

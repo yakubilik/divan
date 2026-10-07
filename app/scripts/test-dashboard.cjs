@@ -688,7 +688,7 @@ for (const scheme of ['dark', 'light']) {
   checks.push(['there is a line for every agent at work, and every one of them is pressable', rows.length === 3]);
   rows.find((p) => p.text.includes('Bulk CSV invite')).press();
   checks.push(['an agent on this phone’s own computer opens the run it is printing',
-    eq(R.nav.pushed(), ['/ticket/9'])]);
+    eq(R.nav.pushed(), ['/ticket/9?from=dashboard'])]);
 
   R.nav.reset();
   R.params.reset();

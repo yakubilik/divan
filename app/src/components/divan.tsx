@@ -46,8 +46,11 @@ const dim = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } :
  *
  *  Exported because a row inside a card is pressable too, and the feedback a
  *  press gets is the design system's to decide rather than each screen's. */
-export function Tap({ onPress, onLongPress, holdMs, onPressOut, style, children }: {
+export function Tap({ onPress, onLongPress, holdMs, onPressOut, label, style, children }: {
   onPress?: () => void;
+  /** What a control with no words in it is called, for a reader who cannot
+   *  see the icon. */
+  label?: string;
   onLongPress?: (e: GestureResponderEvent) => void;
   /** How long a hold is, where the design says: the board's drag is 350 ms
    *  (`src/drag.ts HOLD_MS`) against the half second a `Pressable` takes by
@@ -64,7 +67,7 @@ export function Tap({ onPress, onLongPress, holdMs, onPressOut, style, children 
   if (!onPress && !onLongPress) return <View style={style}>{children}</View>;
   return (
     <Pressable onPress={onPress} onLongPress={onLongPress} onPressOut={onPressOut}
-      delayLongPress={holdMs}
+      delayLongPress={holdMs} accessibilityRole="button" accessibilityLabel={label}
       style={(st) => [style as ViewStyle, dim(st) as ViewStyle]}>{children}</Pressable>
   );
 }

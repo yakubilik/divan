@@ -150,11 +150,9 @@ const CALM = view([EASY]);
       && BUSY.cards.every((c) => (W.kindOf(c) !== null) === M.waiting(c))],
     ['a card in Done is waiting on nobody, whatever its agent last said',
       W.kindOf({ ...of('q1'), column: 'done' }) === null],
-    ['the four groups are in the frame’s own order, with yours last',
-      eq(W.KINDS, ['question', 'decision', 'stuck', 'yours'])],
-    ['…each carrying a mark as well as a colour, except the one that is not about waiting',
-      eq(W.KINDS.map(W.kindMark), ['?', '○', '■', ''])
-      && eq(W.KINDS.map((k) => W.KIND_TONE[k]), ['amber', 'amber', 'red', 'ink2'])],
+    ['the three groups are An agent is asking, A decision and On your plate, a stopped agent among the asking',
+      eq(W.BUCKETS, ['asking', 'decision', 'plate'])
+      && eq(W.KINDS.map(W.bucketOf), ['asking', 'decision', 'asking', 'plate'])],
   );
 }
 
@@ -162,21 +160,21 @@ const CALM = view([EASY]);
 
 {
   const list = W.items(BUSY);
-  const blocks = W.groups(BUSY);
+  const blocks = W.buckets(BUSY);
   const byId = Object.fromEntries(list.map((i) => [i.card.id, i]));
   checks.push(
     ['the list is everything waiting on a person, across every computer',
       list.length === 5 && list.length === BUSY.totals.needsYou],
-    ['…grouped, in the frame’s order, with nothing in it twice',
-      eq(blocks.map((b) => b.kind), ['question', 'decision', 'stuck', 'yours'])
-      && blocks.reduce((n, b) => n + b.items.length, 0) === list.length],
-    ['…and a kind with nothing in it is not a head over an absence',
-      W.groups(view([paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
+    ['…grouped in the handover’s order, with nothing in it twice',
+      eq(blocks.map((b) => b.bucket), ['asking', 'decision', 'plate'])
+      && blocks.reduce((n, b) => n + b.entries.length, 0) === list.length],
+    ['…and a group with nothing in it is not a head over an absence',
+      W.buckets(view([paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
         projects: [project('Hush')],
         cards: [card('s2', { project: 'Hush-id', executor: 'human', title: 'Write the email' })] }) })]))
-        .map((b) => b.kind).join() === 'yours'],
-    ['oldest first within each kind, which is what the line under the title promises',
-      eq(W.groups(BUSY).find((b) => b.kind === 'question').items.map((i) => i.card.id), ['k1', 'q1'])],
+        .map((b) => b.bucket).join() === 'plate'],
+    ['oldest first within each group, which is what the line under the title promises',
+      eq(blocks[0].entries.map((e) => e.item.card.id), ['k1', 'q2', 'q1'])],
     ['…and a card nothing ever stamped sorts after one that was: not knowing when is not just now',
       (() => {
         const two = view([paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
@@ -229,12 +227,23 @@ const CALM = view([EASY]);
     ['…a branch agent being named by its branch, and an unknown one by nothing at all',
       W.executorFace({ executor: 'branch_agent', branch: 'SEO' }) === 'seo'
       && W.executorFace({ executor: null, branch: 'engineering' }) === 'unassigned'],
-    ['the line under the title counts the products the list reaches across',
-      eq(W.across(list), { key: 'waitAcross', params: { n: 3 } })],
-    ['…and says so differently when they are all one product',
-      eq(W.across(list.filter((i) => i.projectKey === 'quire')), { key: 'waitAcrossOne' })],
-    ['…and says nothing at all about an empty list, rather than "across 0 projects"',
-      W.across([]) === null],
+    ['the title says the counts: answers for the asking and the decisions, tasks for the plate',
+      eq(W.headline(blocks), [{ key: 'waitAnswers', params: { n: 4 } }, { key: 'waitTaskOne' }])
+      && eq(W.headline([]), [{ key: 'waitNothing' }])],
+    ['On your plate also holds the Still open items nobody else has been named for, oldest first',
+      (() => {
+        const item = (id, state, owner, age) => ({ id, project_id: 'Hush-id', title: id, body: '', state, owner,
+          area: '', sort: 0, comments: [], created_at: NOW - age, updated_at: NOW, closed_at: null });
+        const v = view([paired('h1', 'studio', { reachable: true, at: NOW, snapshot: snapshot('studio', {
+          projects: [{ ...project('Hush'), open_items: [item('o1', 'todo', '', HOUR), item('o2', 'waiting', 'Bedirhan', 9 * HOUR),
+                                                         item('o3', 'done', '', 9 * HOUR), item('o4', 'blocked', 'Yakup', 3 * HOUR)] }],
+          cards: [card('s2', { project: 'Hush-id', executor: 'human', moved: NOW - 2 * HOUR, title: 'Write the email' })] }) })]);
+        const plate = W.buckets(v)[0];
+        return plate.bucket === 'plate'
+          && eq(plate.entries.map((e) => (e.kind === 'open' ? e.open.id : e.item.card.id)), ['o4', 's2', 'o1'])
+          && eq(W.headline([plate]), [{ key: 'waitTasks', params: { n: 3 } }])
+          && plate.entries[0].open.projectId === 'Hush-id' && plate.entries[0].open.host === 'h1';
+      })()],
   );
 }
 
@@ -290,57 +299,42 @@ const CALM = view([EASY]);
 
 {
   const item = (id) => W.items(BUSY).find((i) => i.card.id === id);
-  const q1 = W.actions(item('q1'), 'h1');
-  const k1 = W.actions(item('k1'), 'h1');
-  const q2 = W.actions(item('q2'), 'h1');
-  const s2 = W.actions(item('s2'), 'h1');
+  const q1 = W.actions(item('q1'));
+  const k1 = W.actions(item('k1'));
+  const q2 = W.actions(item('q2'));
+  const s2 = W.actions(item('s2'));
   checks.push(
-    ['a question offers its two answers and then the box, the first one filled',
+    ['a question offers its two answers, the first one filled, and its ticket',
       eq(q1.map((a) => a.face), ['amber', 'outline', 'outline'])
       && eq(q1.map((a) => a.doing.do), ['note', 'note', 'open'])],
     ['…and the note goes to the ticket that asked, on the machine it asked from',
       eq(q1[0].doing, { do: 'note', ticket: 12, host: 'h1', text: 'Keep our 3 attempts' })],
-    ['a question with no choice in it offers the box alone, and that is the way in',
-      eq(W.actions(item('s1'), 'h1').map((a) => a.doing.do), ['note', 'note', 'open'])
-      && eq(W.actions({ ...item('s1'), answers: [] }, 'h1').map((a) => [a.key, a.face]),
-            [['waitReply', 'amber']])],
-    ['something stuck offers the run itself, which is the first thing anybody wants',
-      eq(q2.map((a) => [a.key, a.doing.do]), [['waitLook', 'open']]) && q2[0].doing.ticket === 7],
-    ['a card that is yours offers the one true thing about it: you did it',
-      eq(s2, [{ key: 'waitDone', face: 'outline',
-                doing: { do: 'move', card: 's2', host: 'h1', column: 'done' } }])],
-    ['…and every action there is takes the card off this screen',
+    ['a question with no choice in it offers its ticket alone, which is where the box is',
+      eq(W.actions({ ...item('s1'), answers: [] }).map((a) => [a.key, a.doing.do]), [['waitOpenTicket', 'open']])],
+    ['something stuck offers its ticket, on the machine it is on',
+      eq(q2.map((a) => a.doing), [{ do: 'open', card: 'q2', host: 'h1' }])],
+    ['a card that is yours offers Mark done, which moves it to Done, and its ticket',
+      eq(s2.map((a) => [a.key, a.face, a.doing.do]), [['waitDone', 'ink', 'move'], ['waitOpenTicket', 'outline', 'open']])
+      && eq(s2[0].doing, { do: 'move', card: 's2', host: 'h1', column: 'done' })],
+    ['…and every write there is takes the card off this screen',
       (() => {
         const done = { ...item('s2').card, column: 'done' };
         const answered = { ...item('q1').card, agent_status: 'queued' };
         return W.kindOf(done) === null && W.kindOf(answered) === null;
       })()],
-
-    // A queue on another computer has no page in this app, so there is nothing
-    // to open; and the mini's question opens on an auxiliary, so there are no
-    // words in it to quote and nothing to send either. Both guards have to hold
-    // for that card to end up with no buttons at all, which is what it has.
-    // That it is still *on* the screen is the point of the screen: it says who
-    // is waiting and where, and the way to answer it is the machine it is on.
-    // The cross-machine answer itself is checked further down, on the question
-    // that does offer words.
-    ['a question on another computer with no words to quote is offered nothing at all',
-      k1.length === 0 && item('k1').answers.length === 0],
-    ['…and is on the screen regardless, naming the machine that is waiting',
-      item('k1').machine === 'mini' && item('k1').kind === 'question'],
+    ['a question on another computer with no words to quote is offered its ticket and nothing to send',
+      eq(k1.map((a) => a.doing), [{ do: 'open', card: 'k1', host: 'h2' }]) && item('k1').answers.length === 0],
     ['…while one whose words do offer an answer is offered it, addressed to that machine',
       (() => {
         const quiet = view([STUDIO, MINI_ASKING]);
-        const acts = W.actions(W.items(quiet).find((i) => i.card.id === 'k2'), 'h1');
+        const acts = W.actions(W.items(quiet).find((i) => i.card.id === 'k2'));
         return eq(acts.map((a) => a.doing),
           [{ do: 'note', ticket: 4, host: 'h2', text: 'Bump to 8.7' },
-           { do: 'note', ticket: 4, host: 'h2', text: 'Pin 8.5' }]);
+           { do: 'note', ticket: 4, host: 'h2', text: 'Pin 8.5' },
+           { do: 'open', card: 'k2', host: 'h2' }]);
       })()],
-    ['…and is offered no run to open, because that screen reads this phone’s own queue',
-      W.actions(item('q1'), 'h2').length === 2
-      && W.actions(item('q1'), 'h2').every((a) => a.doing.do !== 'open')],
     ['a card no queue is holding is offered nothing to send a note to',
-      eq(W.actions({ ...item('q1'), card: { ...item('q1').card, ustabasi_id: null } }, 'h1'), [])],
+      eq(W.actions({ ...item('q1'), card: { ...item('q1').card, ustabasi_id: null } }).map((a) => a.doing.do), ['open'])],
   );
 }
 
@@ -350,14 +344,21 @@ const Waiting = require(path.join(root, 'app/waiting.tsx')).default;
 const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
 
 /** What the screen finds in the store, and what it did with it. */
-const sent = { notes: [], moves: [] };
+const sent = { notes: [], moves: [], open: [] };
 function draw(scheme, hosts, o = {}) {
   R.store.reset();
-  R.params.reset();
+  if (!o.keep) R.params.reset();
   R.nav.reset();
   sent.notes = [];
   sent.moves = [];
+  sent.open = [];
+  let drafts = o.drafts ?? {};
   R.store.set({
+    drafts, setDraft: (key, patch) => { drafts = { ...drafts, [key]: { ...(drafts[key] ?? {}), ...patch } }; R.store.set({ drafts }); },
+    openItem: async (what, d) => {
+      if (o.fail) throw new Error('wsTimeout');
+      sent.open.push({ ...what, ...d });
+    },
     hosts: hosts.map((e) => ({ id: e.id, name: e.name })),
     divan: Object.fromEntries(hosts.map((e) => [e.id, e.state])),
     host: hosts.length ? { id: hosts[0].id } : null,
@@ -391,17 +392,15 @@ for (const scheme of ['dark', 'light']) {
   const inked = (m, colour) => R.styles(m).some((s) => s.color === colour);
 
   checks.push(
-    [`${scheme}: the screen is the frame’s: a way back, a title, a count and the line under it`,
-      busy.includes('overview') && busy.includes('waitTitle') && busy.includes('>5<')
-      && busy.includes('waitAcross')],
-    [`${scheme}: …with a head per kind, in the frame's order, each carrying its mark`,
-      ['? wkQuestions', '○ wkDecisions', '■ wkStuck', 'wkYours'].every((w) => busy.includes(w))
-      && ['wkQuestions', 'wkDecisions', 'wkStuck', 'wkYours']
-        .every((w, i, all) => i === 0 || busy.indexOf(all[i - 1]) < busy.indexOf(w))],
-    [`${scheme}: …in its own colour, red over the one that fell over and amber over the questions`,
-      inked(busy, t.red) && inked(busy, t.amber)],
-    [`${scheme}: every card draws that line — the words are checked above, the drawing here`,
-      busy.includes('waitFrom') && (busy.match(/waitFrom/g) ?? []).length === 5
+    [`${scheme}: the page is a way back, a title that says the counts, and the line under it`,
+      busy.includes('overview') && busy.includes('>waitAnswers, waitTaskOne.<') && busy.includes('>waitOldest<')],
+    [`${scheme}: …with a head per group, in the handover’s order`,
+      ['wgAsking', 'wgDecision', 'wgPlate'].every((w, i, all) => busy.includes(`>${w}<`)
+        && (i === 0 || busy.indexOf(`>${all[i - 1]}<`) < busy.indexOf(`>${w}<`)))],
+    [`${scheme}: …colour only for state and with a word: red on the stopped one, amber on the answer`,
+      inked(busy, t.red) && busy.includes('>stStuck<') && inked(busy, t.amber)],
+    [`${scheme}: every card draws where it came from`,
+      (busy.match(/waitFrom/g) ?? []).length === 5
       && /from=\{T\(source\(item\)\.key, source\(item\)\.params\)\}/.test(src('app/waiting.tsx'))],
     [`${scheme}: …and what was asked, in the words it was asked in`,
       busy.includes('Keep our 3 attempts, or follow Stripe') && busy.includes('Safari 17 session')],
@@ -409,24 +408,15 @@ for (const scheme of ['dark', 'light']) {
       busy.includes('>Keep our 3 attempts<') && busy.includes("Follow Stripe&#x27;s schedule")],
     [`${scheme}: …and the card off a machine that stopped answering says so`,
       busy.includes('waitStale')],
-    [`${scheme}: nothing that is merely running is on this screen`,
+    [`${scheme}: nothing that is merely running is on this page`,
       !busy.includes('Bulk CSV invite')],
-    // The calm state, which is the whole of the fourth promise.
-    [`${scheme}: with nothing waiting the screen says so, and keeps its structure`,
-      calm.includes('>waitCalm<') && calm.includes('>waitCalmBody<')
-      && calm.includes('>waitTitle<') && /tabDashboard|>divan</.test(calm)],
-    [`${scheme}: …with what was finished today under it, because that is counted`,
-      calm.includes('calmDone') && CALM.totals.doneToday === 4],
-    [`${scheme}: …and no head over a kind with nothing in it`,
-      !calm.includes('wkQuestions') && !calm.includes('wkStuck') && !calm.includes('wkYours')],
-    [`${scheme}: …nor a line counting the products of an empty list`,
-      !calm.includes('waitAcross')],
-    [`${scheme}: …nor a count of zero beside the title`, !calm.includes('>0<')],
-    // …and the three states a screen made of other computers' answers is in.
-    [`${scheme}: a phone paired with nothing draws the whole screen without throwing`,
-      nothing.includes('>waitCalm<') && /tabDashboard|>divan</.test(nothing)],
-    [`${scheme}: every state this screen can be in renders`,
-      Object.entries(FLEETS).every(([, hosts]) => draw(scheme, hosts).includes('waitTitle'))],
+    [`${scheme}: with nothing waiting the page is one sentence`,
+      calm.includes('>waitNothing<') && !calm.includes('waitOldest')
+      && !['wgAsking', 'wgDecision', 'wgPlate'].some((w) => calm.includes(w)) && /tabDashboard|>divan</.test(calm)],
+    [`${scheme}: a phone paired with nothing draws the same sentence without throwing`,
+      nothing.includes('>waitNothing<') && /tabDashboard|>divan</.test(nothing)],
+    [`${scheme}: every state this page can be in renders`,
+      Object.entries(FLEETS).every(([, hosts]) => draw(scheme, hosts).includes('overview'))],
   );
 }
 
@@ -502,20 +492,15 @@ for (const scheme of ['dark', 'light']) {
   draw('dark', [STUDIO, MINI]);
   press('waitDone');
   checks.push(
-    ['tapping "done" on a card that is yours moves it to Done, on its own machine',
+    ['tapping Mark done on a card that is yours moves it to Done, on its own machine',
       eq(sent.moves, [{ do: 'move', card: 's2', host: 'h1', column: 'done' }])],
-    ['…and that is also without leaving the screen', eq(R.nav.pushed(), [])],
+    ['…and that is also without leaving the page', eq(R.nav.pushed(), [])],
   );
 
   draw('dark', [STUDIO, MINI]);
-  pressNth('waitReply', 0);
-  checks.push(['"Reply…" is the one that does leave: it opens the ticket and its box',
-    eq(R.nav.pushed(), ['/ticket/12']) && eq(sent.notes, [])]);
-
-  draw('dark', [STUDIO, MINI]);
-  press('waitLook');
-  checks.push(['…and a stuck card opens the run it stopped in',
-    eq(R.nav.pushed(), ['/ticket/7'])]);
+  pressNth('waitOpenTicket', 0);
+  checks.push(['Open ticket is the one that does leave: it opens the oldest question’s ticket, on its machine',
+    eq(R.nav.pushed(), ['/card/k1?host=h2&from=waiting']) && eq(sent.notes, [])]);
 
   // A computer that does not answer is the case this screen is in half the
   // time. What a press did about it cannot be read back out of the markup — the

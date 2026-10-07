@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { callOnce, client, httpBase, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, DivanColumn, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, DivanColumn, DivanExecutor, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, Polls, silent, type HostDivan } from './divan';
 import { missed, opening, took, type Open, type Say } from './card';
@@ -121,6 +121,14 @@ interface State {
    *  answering it has to reach the mini — so the machine is named rather than
    *  assumed, the same way a sign-in is read off a second computer. */
   answerCard: (what: { ticket: number; host: string }, text: string) => Promise<void>;
+  /** Hand a card to another executor, or to nobody, on the computer it is on
+   *  (`divan.card.executor`). */
+  handCard: (what: { card: string; host: string }, executor: DivanExecutor | null) => Promise<void>;
+  /** Close a product's Still open item, or add a line to its thread, on the
+   *  computer it is written on (`divan.project.open`, the project page's own
+   *  call on the panel). */
+  openItem: (what: { host: string; project: string; item: string },
+             d: { set?: Record<string, unknown>; comment?: string }) => Promise<void>;
   /** Move a card to a column, on whichever computer it is on, and to a place in
    *  that column where one was picked — position is priority on this board.
    *
@@ -1057,6 +1065,20 @@ export const useStore = create<State>((set, get) => {
       // from is that the card stops waiting once it has been answered. Only the
       // machine that was written to: asking the other three would be three
       // requests about a thing that did not change.
+      await get().loadDivan(what.host);
+    },
+
+    handCard: async (what, executor) => {
+      await onHost(what.host, 'divan.card.executor', { card_id: what.card, executor });
+      await get().loadDivan(what.host);
+    },
+
+    openItem: async (what, d) => {
+      await onHost(what.host, 'divan.project.open', {
+        project_id: what.project, item_id: what.item,
+        ...(d.set ? { set: d.set } : {}),
+        ...(d.comment != null ? { comment: d.comment, who: 'you' } : {}),
+      });
       await get().loadDivan(what.host);
     },
 

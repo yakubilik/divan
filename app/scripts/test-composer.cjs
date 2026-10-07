@@ -181,7 +181,7 @@ const checks = [];
   checks.push(['Needs you is absent with nothing waiting; the amber answer sends the Waiting screen’s note in one press, and Open goes to the ticket',
     !calm.includes('>needsYou<') && busy.includes('>needsYou<')
     && note && note[1].ticket === 42 && note[1].host === 'h1' && note[1].text === 'Use the live ones now'
-    && JSON.stringify(R.nav.pushed()) === '["/ticket/42"]']);
+    && JSON.stringify(R.nav.pushed()) === '["/card/k2?host=h1&from=dashboard"]']);
 
   // 6 · tiles and the line
   const tiles = stand(BUSY);

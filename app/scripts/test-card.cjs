@@ -1,6 +1,6 @@
-/** One card opened: the three faces of Mobile4 in both themes, the rule that no
- *  text an agent produced reaches the human one, the run streaming onto the live
- *  one with a sentence said into it, and the machine it all runs on.
+/** One card opened as the ticket page (HANDOVER §4.4) in both themes, the rule
+ *  that no text an agent produced reaches the human face, the run streaming onto
+ *  Live with a sentence said into it, and the machine it all runs on.
  *  Run: node scripts/test-card.cjs  (also folded into test-ustabasi.cjs.)
  */
 const fs = require('fs');
@@ -130,11 +130,11 @@ function draw(scheme, o = {}) {
     hosts: (o.hosts ?? [STUDIO, MINI]).map((e) => ({ id: e.id, name: e.name })),
     divan: Object.fromEntries((o.hosts ?? [STUDIO, MINI]).map((e) => [e.id, e.state])),
     host: { id: 'h1' }, conn: 'online',
-    loadDivan() {}, loadCard() {}, sayCard() {},
+    loadDivan() {}, loadCard() {}, sayCard() {}, handCard() {},
     openCard: o.open === undefined ? OPEN : o.open,
     ustabasi: null, ustabasiOld: false, loadUstabasi() {},
   });
-  R.params.set({ id: o.id ?? 'q3', host: o.host ?? 'h1', ...(o.face ? { face: o.face } : {}) });
+  R.params.set({ id: o.id ?? 'q3', host: o.host ?? 'h1', ...(o.agent ? { agent: 'open' } : {}) });
   return R.render(scheme, h(Screen));
 }
 
@@ -155,46 +155,41 @@ const paintOf = (markup) => {
   return out;
 };
 
-// ── 1 · the three faces, in both themes ─────────────────────────────────────
+/** Everything above Live: the human face, and the question where there is one. */
+const humanOf = (markup) => markup.slice(0, markup.indexOf('>caLive<'));
 
-const HEAD = ['Quire', 'Engineering', '#9', 'Bulk invite clients from a CSV',
-              'bdInProgress', 'caInColumn', 'caHuman', 'caAgent', 'caLive'];
+// ── 1 · the page, in both themes ────────────────────────────────────────────
 
 for (const scheme of ['dark', 'light']) {
   const t = K.tokensFor(scheme);
-  const human = draw(scheme);
-  const agent = draw(scheme, { face: 'agent' });
-  const live = draw(scheme, { face: 'live' });
+  const page = draw(scheme);
+  const open = draw(scheme, { agent: true });
 
   checks.push(
-    [`${scheme}: the head says which card this is, and says the same on all three faces`,
-      [human, agent, live].every((m) => HEAD.every((word) => m.includes(word)))
-      && styleOf(human, '● bdRunning · 3/5').color === t.run],
-    [`${scheme}: the human face is the card's own writing, its list and what has happened to it`,
-      human.includes(SUMMARY)
-      && ['caExecutor', 'caCreated', 'caUpdated', 'caBranch', 'caBrief', 'caActivity',
-          'caPickedUp', 'caMoved', 'caMade'].every((word) => human.includes(`>${word}<`))
-      && human.includes('caCriteria · caCommands · caFiles')],
-    [`${scheme}: the agent face is the brief, block by block, with the verifier's marks on it`,
-      ['caGoal', 'caTest', 'caConstraints', 'caFiles2', 'caNotes']
-        .every((word) => agent.includes(`>${word}<`))
-      && agent.includes('caDoneWhen · 3 / 5')
-      && agent.includes(BRIEF.goal) && agent.includes('npm run lint')
-      && stylesOf(agent, '✓').length === 3 && styleOf(agent, '✓').color === t.run
-      && stylesOf(agent, '×').length === 1 && styleOf(agent, '×').color === t.red
-      && stylesOf(agent, '○').length === 1 && styleOf(agent, '○').color === t.ink3],
-    [`${scheme}: the live face is the run as it is written, and the box that says one line into it`,
-      live.includes('Read /…/clients/import.ts')
-      && live.includes('Bash npm test clients/import')
-      && live.includes('>caNow ▍<') && live.includes('data-placeholder="caSay"')
-      && live.includes('>caSayFoot<')
-      && R.styles(live).some((s) => s.backgroundColor === t.runBg)],
-    [`${scheme}: nothing on any of the three is painted in a colour that is not this theme's`,
+    [`${scheme}: the page says which card this is: status, product · #no · column, the title and its sentences`,
+      page.includes('>stRunning<') && page.includes('Quire · #9 · bdInProgress')
+      && page.includes('>Bulk invite clients from a CSV<') && page.includes(SUMMARY)],
+    [`${scheme}: then Live, the Agent face shut, and the six rows of the side column under them`,
+      page.includes('>caLive<') && page.includes('>tkAgentFace<') && !page.includes(BRIEF.goal)
+      && ['tkColumn', 'caExecutor', 'tkMachine', 'caBranch', 'tkAlone', 'tkOpened']
+        .every((w, i, all) => page.includes(`>${w}<`) && (i === 0 || page.indexOf(`>${all[i - 1]}<`) < page.indexOf(`>${w}<`)))],
+    [`${scheme}: the Agent face opened is the brief, block by block, with the verifier's marks on it`,
+      ['tkGoal', 'tkTest', 'tkFiles', 'tkConstraints', 'tkNotes'].every((w) => open.includes(`>${w}<`))
+      && open.includes('>tkDoneWhen · 3 / 5<')
+      && open.includes(BRIEF.goal) && open.includes('npm run lint')
+      && stylesOf(open, '✓').length === 3 && styleOf(open, '✓').color === t.run
+      && stylesOf(open, '×').length === 1 && styleOf(open, '×').color === t.red
+      && stylesOf(open, '○').length === 1 && styleOf(open, '○').color === t.ink3],
+    [`${scheme}: Live is the run as it is written, and the box that says one line into it`,
+      page.includes('Read /…/clients/import.ts') && page.includes('Bash npm test clients/import')
+      && page.includes('>caNow ▍<') && page.includes('data-placeholder="tkSay"')
+      && page.includes('>caSayFoot<') && R.styles(page).some((s) => s.backgroundColor === t.runBg)],
+    [`${scheme}: nothing on it is painted in a colour that is not this theme's`,
       (() => {
         const own = new Set([...Object.values(t), K.ON_COLOUR,
                              K.EXEC_PENDING_LINE, K.EXEC_PENDING_INK,
                              ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean)]);
-        const stray = [human, agent, live].flatMap((m) => [...paintOf(m)].filter((c) => !own.has(c)));
+        const stray = [page, open].flatMap((m) => [...paintOf(m)].filter((c) => !own.has(c)));
         return stray.length === 0;
       })()],
   );
@@ -203,18 +198,16 @@ for (const scheme of ['dark', 'light']) {
 // ── 2 · no text an agent produced on the human face ─────────────────────────
 
 {
-  const human = draw('dark');
-  const agent = draw('dark', { face: 'agent' });
-  const live = draw('dark', { face: 'live' });
+  const page = draw('dark', { agent: true });
   const words = C.agentWords(detail(), OPEN.turns);
-  const leaked = words.filter((w) => human.includes(w));
+  const leaked = words.filter((w) => humanOf(page).includes(w));
   checks.push(
     [`the human face carries no string the agent side holds${leaked.length ? ` (${leaked[0]})` : ''}`,
       words.length >= 12 && leaked.length === 0],
-    ['…and every one of them is on the face it does belong to',
+    ['…and every one of them is on the part of the page it does belong to',
       [BRIEF.goal, BRIEF.notes, ...BRIEF.done_criteria, ...BRIEF.constraints, ...BRIEF.paths]
-        .every((w) => agent.includes(w))
-      && live.includes('AGENT SAID the dry run needs its own preview shape')],
+        .every((w) => page.includes(w))
+      && page.includes('AGENT SAID the dry run needs its own preview shape')],
   );
 }
 
@@ -237,7 +230,7 @@ for (const scheme of ['dark', 'light']) {
 
   const mine = { id: 's1', at: NOW - 30, text: 'batch the commit, 100 at a time', after: 2 };
   const said = C.live(OPEN.turns, [mine], OPEN.stamps, true);
-  const drawn = draw('dark', { face: 'live', open: { ...OPEN, said: [mine] } });
+  const drawn = draw('dark', { open: { ...OPEN, said: [mine] } });
   checks.push(
     ['a sentence said mid-run lands in the log where it was said, in the reader’s own colour',
       said.length === 5 && said[2].mine === true && said[2].tone === 'amber'
@@ -247,13 +240,13 @@ for (const scheme of ['dark', 'light']) {
     ['…and goes to the queue on the machine the card is on, not to the one the phone holds',
       eq(C.saying(M.merge([MINI], NOW).cards[0]), { ticket: 21, host: 'h2' })
       && C.saying(VIEW.cards.find((c) => c.id === 'q7')) === null
-      && /await sayCard\(to, text\);/.test(src('app/card/[id].tsx'))
-      && /const to = card \? saying\(card\) : null;/.test(src('app/card/[id].tsx'))],
+      && /await sayCard\(to, text\);/.test(src('src/components/ticket.tsx'))
+      && /const to = card \? saying\(card\) : null;/.test(src('src/components/ticket.tsx'))],
     ['a card with no worker on it is offered no box to say anything into',
       (() => {
-        const none = draw('dark', { id: 'q7', face: 'live',
+        const none = draw('dark', { id: 'q7',
           open: C.took(C.opening('q7', 'h1'), detail({ id: 'q7', ticket: null, run: null }), NOW) });
-        return none.includes('>caSayNobody<') && !none.includes('data-placeholder="caSay"');
+        return none.includes('>caSayNobody<') && !none.includes('data-placeholder="tkSay"');
       })()],
   );
 }
@@ -261,15 +254,14 @@ for (const scheme of ['dark', 'light']) {
 // ── 4 · which machine it runs on ────────────────────────────────────────────
 
 {
-  const human = draw('dark');
-  const live = draw('dark', { face: 'live' });
+  const page = draw('dark');
   const quiet = draw('dark', { id: 'm1', host: 'h2',
     open: C.missed(C.opening('m1', 'h2'), 'no answer', false) });
   checks.push(
-    ['which machine the work is on is on the card, on the face that describes it and on the live one',
-      human.includes('>studio<') && live.includes('>studio<')],
+    ['which machine the work is on is on the page, in Live’s head and in the side column',
+      page.includes('caLive') && (page.match(/>studio</g) ?? []).length >= 1 && page.includes('exCoder · studio')],
     ['…and a machine that has gone quiet says when it was last heard from, in amber',
-      styleOf(quiet, 'mini · pfLastSeen').color === K.DARK.amber
+      styleOf(quiet, 'pfLastSeen').color === K.DARK.amber
       && quiet.includes('Fix portal login on Safari 17')],
   );
 }
@@ -290,15 +282,15 @@ for (const scheme of ['dark', 'light']) {
   let bad = null;
   for (const scheme of ['dark', 'light']) {
     for (const [name, state] of Object.entries(STATES)) {
-      for (const face of ['human', 'agent', 'live']) {
+      for (const agent of [false, true]) {
         let markup = '';
-        try { markup = draw(scheme, { ...state, face }); }
-        catch (e) { bad = `${scheme} ${name} ${face}: ${e.message}`; }
-        if (!bad && !/tabDashboard|>divan</.test(markup)) bad = `${scheme} ${name} ${face}: nothing drawn`;
+        try { markup = draw(scheme, { ...state, agent }); }
+        catch (e) { bad = `${scheme} ${name} ${agent}: ${e.message}`; }
+        if (!bad && !/tabDashboard|>divan</.test(markup)) bad = `${scheme} ${name} ${agent}: nothing drawn`;
       }
     }
   }
-  checks.push([`every state of this page renders, on every face, in both themes${bad ? ` (${bad})` : ''}`,
+  checks.push([`every state of this page renders, with the Agent face shut and open, in both themes${bad ? ` (${bad})` : ''}`,
     bad === null]);
 }
 

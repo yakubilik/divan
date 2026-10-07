@@ -28,12 +28,12 @@
 // silent machine's last answer, so only the two faces that need the machine
 // itself say it is not answering.
 import { column, type DivanView, type MergedCard, type MergedProject } from './divan';
-import { executorKey, type Ago, type Said } from './dashboard';
-import { executorFace } from './waiting';
+import { clock, executorKey, type Ago, type Said } from './dashboard';
+import { answers, executorFace } from './waiting';
 import { arranged, mark, type Mark } from './board';
 import { marks } from './tickets';
 import { LOCALE, type Key } from './i18n';
-import type { DivanBrief, DivanCardDetail, DivanColumn, Ticket } from './protocol';
+import type { DivanBrief, DivanCardDetail, DivanColumn, DivanExecutor, Ticket } from './protocol';
 import { attach, silence as silenceOf, trim, turns, type RunSilence, type Turn } from './transcript';
 import type { Tone } from './tokens';
 
@@ -546,4 +546,86 @@ export const SILENCE: Record<Exclude<RunSilence, null>, { title: Key; body: Key 
  *  any queue has nobody to read a sentence, and the box is not offered. */
 export function saying(card: MergedCard): { ticket: number; host: string } | null {
   return card.ustabasi_id == null ? null : { ticket: card.ustabasi_id, host: card.host };
+}
+
+// ── one page (HANDOVER §4.4) ────────────────────────────────────────────────
+
+/** What the agent is asking, and the answers its question offers in its own
+ *  words — or why it stopped. Null where nobody is asking, and null again once
+ *  a sentence has been said from this phone since it asked: the card leaves the
+ *  asking state the moment the answer has gone, and comes back only if the
+ *  board stamps a new question. The question is the queue's plain-words `ask`
+ *  where it kept one, then its escalation, then what the mirror wrote on the
+ *  card — the wall's own order. */
+export function asking(card: MergedCard, ticket: Ticket | null | undefined, said: Say[]):
+    { text: string; answers: string[]; stuck: boolean } | null {
+  const down = card.agent_status === 'blocked' || card.agent_status === 'failed';
+  const asks = card.agent_status === 'asking';
+  if (!asks && !down) return null;
+  const at = card.agent_status_at ?? 0;
+  if (said.some((s) => s.at >= at)) return null;
+  const text = ((ticket?.ask || '').trim() || (ticket?.escalation || '').trim()
+    || (card.agent_detail || '').trim() || card.title).trim();
+  return { text, answers: card.ustabasi_id == null ? [] : answers(text), stuck: !asks };
+}
+
+/** A question that was answered from this phone, so the status word can say so
+ *  until the board catches up. */
+export function answered(card: MergedCard, said: Say[]): boolean {
+  const asks = card.agent_status === 'asking' || card.agent_status === 'blocked' || card.agent_status === 'failed';
+  return asks && said.some((s) => s.at >= (card.agent_status_at ?? 0));
+}
+
+/** One row of the side column, which on a phone sits under the page. */
+export interface SideRow {
+  key: 'column' | 'executor' | 'machine' | 'branch' | 'alone' | 'opened';
+  label: Key;
+  /** A word in the reader's language… */
+  word?: Key;
+  /** …or a value as it is: a machine's name, a branch's, a day. */
+  text?: string;
+  mono?: boolean;
+  /** Small, after the value. */
+  note?: { key: Key; params?: Record<string, string | number> } | null;
+  /** The note is a warning: the machine has gone quiet. */
+  warn?: boolean;
+}
+
+/** The six rows HANDOVER §4.4 names, in its order, every one read off the card.
+ *  `Runs alone` is a setting the daemon does not hold yet: it says off — what
+ *  every ticket does today — and the page offers no switch. */
+export function side(view: DivanView, card: MergedCard, project: MergedProject | null,
+                     ago: Ago): SideRow[] {
+  const branch = project?.branches.find((b) => b.kind === card.branch);
+  const list = project && arranged(card.column) ? column(project, card.column) : [];
+  const at = list.findIndex((c) => c.id === card.id && c.host === card.host);
+  const seen = view.hosts.find((h) => h.id === card.host);
+  return [
+    { key: 'column', label: 'tkColumn', word: COLUMN_KEY[card.column],
+      note: at < 0 ? null : { key: 'caInColumn', params: { n: at + 1 } } },
+    { key: 'executor', label: 'caExecutor', word: executorKey(card.executor) },
+    { key: 'machine', label: 'tkMachine', text: card.machine, mono: true, warn: card.stale,
+      note: card.stale && seen?.at != null ? { key: 'pfLastSeen', params: { time: clock(seen.at) } } : null },
+    { key: 'branch', label: 'caBranch', text: branch?.name || card.branch || '' },
+    { key: 'alone', label: 'tkAlone', word: 'tkOff', note: { key: 'tkNotYet' } },
+    { key: 'opened', label: 'tkOpened', text: card.created_at ? stamp(card.created_at).split(',')[0] : '', mono: true,
+      note: card.updated_at ? { key: 'pfMoved', params: { d: ago(Math.max(0, view.now - card.updated_at)) } } : null },
+  ];
+}
+
+/** How many of the latest steps Live shows before `Show all`. */
+export const STEPS_SHOWN = 6;
+
+/** Who a card can be handed to: the three a board offers, and nobody, which is
+ *  a value rather than the absence of one. A branch agent is named by its
+ *  branch and is handed from the branch page. */
+export const HANDS: (DivanExecutor | null)[] = ['coding_agent', 'assistant', 'human', null];
+
+/** The card a queue ticket number is, on the computer this phone holds a socket
+ *  to — which is the only queue a bare `/ticket/<n>` can be about. Null where
+ *  the board has no card for it (an older daemon, a ticket filed outside
+ *  Divan), and the route then draws the run as a conversation instead. */
+export function cardForTicket(view: DivanView, ticket: number, host: string | null | undefined): MergedCard | null {
+  if (!Number.isFinite(ticket) || !host) return null;
+  return view.cards.find((c) => c.ustabasi_id === ticket && c.host === host) ?? null;
 }
