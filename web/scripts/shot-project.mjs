@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-/** A picture of a product: its page, its board and New ticket, desktop and narrow.
+/** A picture of a product: its page and its board, desktop and narrow.
  *
  *     node scripts/shot-project.mjs [out-dir]
  *
  *  Not a check: what it leaves is the thing to hold up beside the frame
- *  (`Project`, `Board`, `NewTicket`, `ProjectPhone` .dc.html). Needs a browser, like `test-divan-ui.mjs`. */
+ *  (`Project`, `Board`, `ProjectPhone` .dc.html). Needs a browser, like `test-divan-ui.mjs`. */
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -55,7 +55,7 @@ const page = (m, p) => cdp(m, p, sessionId);
 try {
   for (const [name, view, width, height, mobile] of [
     ['project', 'overview', 1440, 1800, false], ['board', 'board', 1440, 1100, false],
-    ['new-ticket', 'new', 1440, 800, false], ['project-narrow', 'overview', 390, 2600, true],
+    ['project-narrow', 'overview', 390, 2600, true],
   ]) {
     for (const scheme of ['dark', 'light']) {
       await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });

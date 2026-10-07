@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RADIUS, SHADOW, T, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { KEYFRAMES, P, mono } from './ui/kit';
 import { Button } from './ui/divan';
-import { Sidebar, currentIn } from './components/Sidebar';
+import { Sidebar } from './components/Sidebar';
 import { Shell } from './components/Shell';
 import { ChatView } from './components/ChatView';
 import { NewChat } from './components/NewChat';
@@ -94,6 +94,8 @@ export function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   /** The Dashboard's Composer, which ⌘N and every "new chat" now lead to. */
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  /** …and the one at the foot of a product's page, where its New chat leads. */
+  const projectComposerRef = useRef<HTMLTextAreaElement>(null);
 
   // Whether the sidebar is a list or a rail. Remembered because it is a way of
   // working — terminal mode wants the width, the chat screen wants the list —
@@ -130,17 +132,28 @@ export function App() {
       .find((k) => useFleet.getState().hosts[k]?.chats.some((c) => c.id === id)) ?? null;
   }, []);
 
+  /** Set when a place opens its newest chat on its own: that chat is the place
+   *  arrived at, not a step from it, so it takes the entry over rather than
+   *  pushing one Back would land on and bounce off. */
+  const landing = useRef(false);
+
   // An address with a chat in it — "open in a new window", a link somebody
   // sent, or a reload of a chat that was open — is honoured once the computer
   // that owns it is connected. `select` rather than `open`: which page to be on
   // is the address's business too, and it already said.
+  // Once: closing that chat is not a reason to open it again.
+  const chatHonoured = useRef(false);
   useEffect(() => {
-    if (sel || !fleet.ready) return;
+    if (chatHonoured.current || !fleet.ready) return;
     const chatId = opened.current.chat;
-    if (!chatId) return;
+    if (!chatId || sel) { chatHonoured.current = true; return; }
     const wanted = opened.current.host;
     const key = wanted && fleet.hosts[wanted] ? wanted : hostOfChat(chatId);
-    if (key) select(key, chatId);
+    if (!key) return;
+    chatHonoured.current = true;
+    // The chat is the page that was opened, not a step from it.
+    landing.current = true;
+    select(key, chatId);
   }, [fleet.ready, fleet.hosts, sel, hostOfChat]);
 
   // …and the same for a card: a link to one is a link to a card on whichever
@@ -158,12 +171,17 @@ export function App() {
   /** Where the panel is, as one value: what goes in the address, and what the
    *  back button puts back. */
   const where: Place = useMemo(() => ({
-    view, project, tab, branch,
+    view, project, branch,
+    // A product's page with no chat open on it is the product's page, whatever
+    // was open a moment ago: one place, so one entry.
+    tab: tab === 'chat' && !sel ? 'overview' : tab,
     // A card is named in the address by its own id. `host:id` is how this
     // browser reaches it and is nobody else's business — the machine is looked
     // up on the way back in, the way anybody opening the link would.
     card: card ? (card.split(':').pop() ?? null) : null,
-    chat: sel?.chatId ?? null,
+    // A chat is part of where the panel is only where one is being read: the
+    // Chat place, or a product's page with one open on it.
+    chat: (view === 'chats' || (view === 'overview' && tab === 'chat')) ? sel?.chatId ?? null : null,
     // …and the computer is only in the address where a link carried one: a
     // popped-out window is told which machine, because it may be opened before
     // that machine has answered.
@@ -180,10 +198,6 @@ export function App() {
   const [cameFrom, setCameFrom] = useState<Place | null>(null);
   /** The opened address has been written back in this build's shape. */
   const settled = useRef(false);
-  /** Set when a place opens its newest chat on its own: that chat is the place
-   *  arrived at, not a step from it, so it takes the entry over rather than
-   *  pushing one Back would land on and bounce off. */
-  const landing = useRef(false);
 
   useEffect(() => {
     if (typeof history === 'undefined') return;
@@ -247,7 +261,9 @@ export function App() {
         : { label: `${scopedName ?? 'Project'} · Board`, onBack: () => { setCard(null); setBranch(null); setTab('board'); } })
       : project && branch
         ? { label: scopedName ?? 'Project', onBack: () => { setCard(null); setBranch(null); } }
-        : project
+        : project && (tab === 'board' || tab === 'branches' || (tab === 'chat' && sel))
+          ? { label: scopedName ?? 'Project', onBack: () => setTab('overview') }
+          : project
           ? { label: 'Dashboard', onBack: () => chooseProject(null) }
           : tab === 'waiting'
             ? { label: 'Dashboard', onBack: () => setTab('overview') }
@@ -290,25 +306,7 @@ export function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, [select]);
 
-  // A product's Chat tab is about that product's chats, so arriving on it
-  // puts the newest of them on screen — or none, rather than whichever chat
-  // was last open somewhere else. Once per arrival: a chat that is open is not
-  // taken away because a turn filed it under another product.
   const scopedTo = projectIn(divan, project);
-  const arrived = useRef<string | null>(null);
-  useEffect(() => {
-    if (view !== 'overview' || tab !== 'chat' || !scopedTo || !fleet.ready) { arrived.current = null; return; }
-    if (arrived.current === scopedTo.key) return;
-    arrived.current = scopedTo.key;
-    const mine = (k: string, c: Chat) => !!scopedTo.ids[k] && c.project_id === scopedTo.ids[k];
-    if (chat && sel && mine(sel.hostKey, chat)) return;
-    // An address that names a chat is honoured by the effect above.
-    if (!sel && opened.current.chat) return;
-    const newest = Object.keys(scopedTo.ids)
-      .flatMap((k) => (fleet.hosts[k]?.chats ?? []).filter((c) => !c.archived && mine(k, c)).map((c) => ({ k, c })))
-      .sort((a, b) => b.c.updated_at - a.c.updated_at)[0];
-    if (newest) { landing.current = true; select(newest.k, newest.c.id); } else setSel(null);
-  }, [view, tab, scopedTo?.key, fleet.ready]);
 
   // The Chat place opens writable, on the newest conversation, without anybody
   // choosing one. An address that names a chat is honoured instead (above).
@@ -345,6 +343,14 @@ export function App() {
     setCard(null);
   }, []);
 
+  /** One of a product's chats, read in the middle of that product's page. */
+  const openHere = useCallback((hostKey: string, chatId: string) => {
+    select(hostKey, chatId);
+    setBranch(null);
+    setCard(null);
+    setTab('chat');
+  }, [select]);
+
   /** A new chat is written in the Composer: home, and the field focused. */
   const compose = useCallback(() => {
     setView('overview');
@@ -354,11 +360,10 @@ export function App() {
     setTimeout(() => composerRef.current?.focus(), 0);
   }, []);
 
-  /** Ask: a chat with these words in it, read on its product's Chats tab —
-   *  the product's other chats beside it, its Board and Overview one tab away.
-   *  The product is the one the Project chip named, failing that the one the
-   *  computer filed the chat under; a chat that belongs to none has only the
-   *  Chat place to be read in. */
+  /** Ask: a chat with these words in it, read on its product's page — the
+   *  product's other chats beside it. The product is the one the Project chip
+   *  named, failing that the one the computer filed the chat under; a chat
+   *  that belongs to none has only the Chat place to be read in. */
   const ask = useCallback(async (text: string, key: string | null, picks: ToldPicks, files: File[] = []) => {
     const p = projectIn(divan, key);
     const told = await tell(text, p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null, picks, files);
@@ -367,14 +372,9 @@ export function App() {
     const home = p ?? (told.projectId
       ? divan.projects.find((q) => q.ids[told.host] === told.projectId) ?? null : null);
     if (!home) { open(told.host, told.chatId); return; }
-    // This chat is the arrival: the tab does not go looking for its newest.
-    arrived.current = home.key;
     setProject(home.key);
-    setTab('chat');
-    setBranch(null);
-    setCard(null);
-    select(told.host, told.chatId);
-  }, [divan, open, select]);
+    openHere(told.host, told.chatId);
+  }, [divan, open, openHere]);
 
   /** A notice from the queue, pressed: its ticket's page, under its product.
    *  A ticket with no card on the board (filed before the board mirrored, or
@@ -739,11 +739,15 @@ export function App() {
             )}
             onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setBranch(null); setCard(idOf(c)); }}
             // The Composer at the foot of a product: everything it sends is
-            // about that product, and it opens the chat as a window on the
-            // page, the way the bar it replaces did.
+            // about that product, and the chat it starts is read right here,
+            // in the middle of the product's page, with the list beside it.
             projectComposer={scopedTo ? (
-              <Composer view={divan} lock={scopedTo.key}
-                onAsk={(text, _key, picks, files) => tell(text, scope, picks, files)}
+              <Composer view={divan} lock={scopedTo.key} inputRef={projectComposerRef}
+                onAsk={async (text, _key, picks, files) => {
+                  const told = await tell(text, scope, picks, files);
+                  useTold.getState().close(idOfTold(told));
+                  openHere(told.host, told.chatId);
+                }}
                 onOptions={() => {
                   const at = whereFor(scope, fleet.hosts, fleet.focus);
                   setNewChat({ cwd: at.cwd ?? undefined, host: at.host, stay: true });
@@ -765,44 +769,26 @@ export function App() {
             // one you have to orient before it can do anything.
             onAsk={(text: string) => tell(text, scope)}
             askNote={whereNote(whereFor(scope, fleet.hosts, fleet.focus))}
-            // The product's own chats, as the chat screen: the list is only
-            // the ones filed under it, and a chat started here starts in its
-            // repository, on a computer that has it — which is what files it
-            // under the product from its first line.
+            // The product's own chats: the list is only the ones filed under
+            // it, down the left of every page of the product, and the one that
+            // is open is read in the middle. New chat is the product's page
+            // with its Composer in hand — no dialog, and nowhere else to go.
             chats={scopedTo ? {
-              count: currentIn(fleet.hosts, scopedTo.ids),
-              pane: (
-                <>
-                  <Sidebar
-                    project={scopedTo}
-                    selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={select}
-                    // No dialog: the pane empties into a box that is already
-                    // writable, and what a chat opens with is the chips under it.
-                    onNewChat={() => setSel(null)}
-                  />
-                  {chat ? <ChatView {...chatProps} /> : (
-                    <div className="dv-menus-up" data-new-chat style={{
-                      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-                      justifyContent: 'flex-end', gap: 12, padding: '20px 24px 24px',
-                    }}>
-                      <p className="dv-meta" style={{ margin: 0, textAlign: 'center' }}>
-                        New chat in {scopedTo.name}.
-                      </p>
-                      <Composer view={divan} lock={scopedTo.key}
-                        onAsk={async (text, _key, picks, files) => {
-                          const told = await tell(text, scope, picks, files);
-                          // Read here, in the pane, not as a window on the page.
-                          useTold.getState().close(idOfTold(told));
-                          select(told.host, told.chatId);
-                        }}
-                        onOptions={() => {
-                          const at = whereFor(scope, fleet.hosts, fleet.focus);
-                          setNewChat({ cwd: at.cwd ?? undefined, host: at.host, stay: true });
-                        }} />
-                    </div>
-                  )}
-                </>
+              list: (
+                <Sidebar
+                  project={scopedTo}
+                  selected={tab === 'chat' ? sel?.chatId ?? null : null}
+                  selectedHost={tab === 'chat' ? sel?.hostKey ?? null : null}
+                  onSelect={openHere}
+                  onNewChat={() => {
+                    setBranch(null); setCard(null); setTab('overview');
+                    setTimeout(() => projectComposerRef.current?.focus(), 0);
+                  }}
+                />
               ),
+              open: chat ? <ChatView {...chatProps} /> : null,
+              onOpen: openHere,
+              onClose: () => setTab('overview'),
             } : null}
           />
         )}
@@ -918,7 +904,7 @@ export function App() {
           onDone={(c) => {
             const host = (newChat.host ?? fleet.focus)!;
             setNewChat(null);
-            if (newChat.stay) select(host, c.id); else open(host, c.id);
+            if (newChat.stay) openHere(host, c.id); else open(host, c.id);
           }}
           onClose={() => setNewChat(null)}
         />
@@ -1012,6 +998,5 @@ function placeName(p: Place, view: ReturnType<typeof useDivanView>): string {
   if (p.card) return name;
   if (p.branch) return `${name} · ${p.branch}`;
   if (p.tab === 'board') return `${name} · Board`;
-  if (p.tab === 'chat') return `${name} · Chats`;
   return name;
 }

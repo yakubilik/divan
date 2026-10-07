@@ -264,12 +264,6 @@ function projectSections(
   return [...today, ...quiet];
 }
 
-/** How many of a product's chats are part of today: the number on its tab. */
-export function currentIn(hosts: Record<string, HostSlot>, ids: Record<string, string>): number {
-  return projectSections(hosts, ids, '', Date.now() / 1000)
-    .filter((s) => s.kind !== 'archive').reduce((n, s) => n + s.chats.length, 0);
-}
-
 const home = (path: string) => path
   .replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/');
 

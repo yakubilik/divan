@@ -1,5 +1,5 @@
 /** A product's page on its own, the way the panel draws it: the line over it,
- *  the Overview, the Board or New ticket (`?view=`), and the fixture's busy
+ *  its own page or its Board (`?view=`), and the fixture's busy
  *  board with a Queued column, a card under review and this month's Done.
  *  Built and photographed by `scripts/shot-project.mjs`. */
 import { createRoot } from 'react-dom/client';
@@ -9,6 +9,7 @@ import '../src/styles/divan-app.css';
 import { themeCss } from '../src/lib/theme';
 import { Shell } from '../src/components/Shell';
 import { Composer } from '../src/components/Composer';
+import { Sidebar } from '../src/components/Sidebar';
 import { Overview, type ProjectTab } from '../src/screens/Overview';
 import { merge, project } from '../src/lib/divan';
 import { useFleet } from '../src/lib/fleet';
@@ -28,7 +29,18 @@ sheet.textContent = themeCss();
 document.head.appendChild(sheet);
 
 const NOW = Math.floor(Date.now() / 1000);
-useFleet.setState({ hosts: { studio: host() as any }, order: ['studio'], focus: 'studio', ready: true });
+// The product's chats: two that moved today, one of them summed up and one
+// still working, and one from last week.
+const base = host() as any;
+const chat = (id: string, over: any) => ({ ...base.chats[0], id, group_id: null, project_id: 'p-quire',
+  project: 'Quire', status: 'idle', archived: 0, pinned: 0, ...over });
+const chats = [
+  chat('t1', { title: 'Quire · Webhook retries', updated_at: NOW - 900, task: 'Make webhook retries survive a restart',
+    done: 'Moved the retry queue from memory to the jobs table\nAdded a test that kills the worker mid-retry\nCapped retries at eight, with backoff' }),
+  chat('t2', { title: 'Quire · Invoice PDF', updated_at: NOW - 120, status: 'running', task: 'Put the studio logo on invoice PDFs', done: '' }),
+  chat('t3', { title: 'Quire · Pricing page copy', updated_at: NOW - 6 * 86400 }),
+];
+useFleet.setState({ hosts: { studio: { ...base, chats } }, order: ['studio'], focus: 'studio', ready: true });
 // The question windows are put away: the picture is of the page.
 useDock.setState({ minimised: ['studio:k2', 'studio:h1', 'studio:i5'], closed: {}, raised: [] });
 const busy = boards(NOW).busy[0];
@@ -51,6 +63,10 @@ const composer = <Composer view={view} lock="quire" onAsk={async () => {}} onOpt
 createRoot(root).render(
   <Shell view="overview" onView={() => {}} fleet={view} back={{ label: 'Dashboard', onBack: () => {} }}>
     <Overview view={view} project={quire} onProject={() => {}} tab={tab} onTab={() => {}}
-      projectComposer={composer} />
+      projectComposer={composer}
+      chats={{
+        list: <Sidebar project={quire!} selected={null} selectedHost={null} onSelect={() => {}} onNewChat={() => {}} />,
+        open: null, onOpen: () => {}, onClose: () => {},
+      }} />
   </Shell>,
 );

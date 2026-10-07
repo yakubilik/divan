@@ -53,8 +53,8 @@ The quoted words are the check's own name.
 | Stop every session | Palette | Palette | `chat.interrupt` | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
 | Show every computer | Palette | Palette | — | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
 | Ask Divan something | Command bar | Composer | `chat.create`, `chat.send` | drive: "one press sends chat.create then chat.send" |
-| File a card without starting | Board draft (Ice Box) | New ticket; said to the agent in the Composer | `divan.card.create` | drive: "Create files divan.card.create into Ice Box by default, Queued or In Progress when chosen" |
-| Start a card now | Drag to In Progress | New ticket Start now; drag; said to the agent in the Composer | `divan.card.create`, `divan.card.move` | drive: "Create files divan.card.create into Ice Box by default, Queued or In Progress when chosen" |
+| File a card without starting | Board draft (Ice Box) | Said to the agent in the product's Composer | `chat.create` | drive: "the Composer at the foot of a project carries that project, and its chip cannot be removed" |
+| Start a card now | Drag to In Progress | Drag; said to the agent in the Composer | `divan.card.move` | drive: "dragging a card from Queued into In Progress issues divan.card.move with In Progress" |
 | Pick agent / account / model for one chat | NewChat dialog | Composer chips (§5), dialog behind More options | `agent.list`, `chat.create` | drive: "four chips show the defaults, list what the computer reports, mark a changed one with an ×" |
 | Scope by typing | — | `@project` in the Composer | `chat.create` | drive: "typing @quire sets the same Project chip as its menu does" |
 | Answer an asking agent | Question window | Needs you card (amber answer); question window kept | `ustabasi.note` | drive: "Needs you answers in one press with the same note the question window sent" |
@@ -64,11 +64,11 @@ The quoted words are the check's own name.
 | See what is running | Agent roster (not pressable) | Working now (not pressable) | — | overview: "what is working now is a list row per agent" |
 | Everything waiting on you | Questions spread over pages | Waiting on you (`/waiting`, Needs you › See all) | `ustabasi.note`, `divan.card.move`, `divan.project.open` | drive: "Waiting on you: the title states the counts, three groups oldest first" |
 | Switch a product's view | Tabs Overview / Board / Branches / Chat | Segment Overview / Board / Chats; Repositories button | — | drive: "the head is monogram, name, one sentence and a meta line" |
-| Write a new ticket | Inline draft in Ice Box, N | + New ticket form, N on the board | `divan.card.create` | drive: "+ New ticket opens one form" |
+| Write a new ticket | Inline draft in Ice Box, N | Said to the agent in the product's Composer; there is no form | `chat.create` | drive: "no New ticket and no tabs on a product or its board" |
 | Still open: add, state, comment | Project page | Project side column; On your plate | `divan.project.open` | drive: "Still open sits in the side column and its thread still takes a comment" |
 | Ask about a product | Project command bar | Composer locked to the product | `chat.create`, `chat.send` | drive: "the Composer at the foot of a project carries that project" |
-| A product's chats | Chat tab | Chats segment | `chat.create` | drive: "a chat started there starts in the product’s repository" |
-| Open a branch | Branch cards | Branches section, branch page | — | drive: "a branch with no source says Source not connected yet. and no number" |
+| A product's chats | Chat tab | The list down the left of the product's page; one opens in the middle | `chat.create` | drive: "a chat started there starts in the product’s repository" |
+| Open a branch | Branch cards | Repositories, from the product page; branch page | — | drive: "the product’s page carries no branch tiles; its repositories are a page behind one word" |
 | Move a card | Board drag | Board drag (Queued reorders too) | `divan.card.move` | drive: "dragging a card from Queued into In Progress issues divan.card.move" |
 | Quota refusal on a drop | Board | Same | — | drive: "a card dropped where a worker would start is not started under the threshold you set" |
 | Answer from the board | Press an asking card | Same | `ustabasi.note` | drive: "answering it there is a note on that ticket" |

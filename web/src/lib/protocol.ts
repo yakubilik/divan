@@ -39,6 +39,11 @@ export interface Chat {
   project?: string | null;
   /** 1 once a person has put the chat under a product (or Unfiled) by hand. */
   project_set?: number;
+  /** What the chat is working on, in a line, and what has been done in it, a
+   *  line each — written by the computer as the chat goes. Absent from a
+   *  daemon older than the product's Today. */
+  task?: string | null;
+  done?: string | null;
 }
 
 export interface Group { id: string; name: string; sort: number; created_at: number }

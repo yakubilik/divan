@@ -7,10 +7,11 @@
  *  products two abreast on the left and the agent roster on the right, with the
  *  command bar across the bottom and the questions open over the corner.
  *
- *  Scoped to one product it is that product's page instead (HANDOVER §4.2,
- *  §4.3, §4.5): the head from `screens/Project.tsx` over the Overview, the
- *  Board or the Chats, or the New ticket form — each at its own path. A card's
- *  page and a branch's page keep their own heads until their own step.
+ *  Scoped to one product it is that product's page instead: its chats down
+ *  the left on every page of it, and in the middle the product's own page
+ *  (`screens/Project.tsx`) until one of those chats is opened, which is then
+ *  read there. Its board, a card and a branch are pages of their own in the
+ *  same middle, reached from what is on the page and not from a row of tabs.
  *
  *  Three things are true of everything on it:
  *
@@ -40,7 +41,7 @@
  *  against: no machine has answered yet, a machine answered and has since gone
  *  quiet, and a machine that cannot be reached at all.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { RADIUS, SHADOW, SIZE, T } from '../lib/theme';
 import { branchOf } from '../lib/project';
 import { idOf } from '../lib/sessions';
@@ -51,19 +52,19 @@ import { Sessions } from '../components/Sessions';
 import { MicButton, useMic } from '../components/Mic';
 import { appendSpeech } from '../lib/dictate';
 import { useFleet } from '../lib/fleet';
+import { today } from '../lib/today';
 import { Board } from './Board';
 import { Branch } from './Branch';
 import { Branches } from './Branches';
 import { Project, ProjectHead } from './Project';
-import { NewTicket } from './NewTicket';
 import { Ticket } from './Ticket';
 import { Waiting } from './Waiting';
 import { Dashboard } from './Dashboard';
 
-/** Where inside a product the page is: the three views of the segment, the
- *  branches with their repositories (reached from the Branches section), and a
- *  new ticket being written. Each is a path of its own (`lib/nav.ts`). */
-export type ProjectTab = 'overview' | 'board' | 'chat' | 'branches' | 'new' | 'waiting';
+/** Where inside a product the page is: its own page, one of its chats open on
+ *  it, its board, or the branches with their repositories. Each is a path of
+ *  its own (`lib/nav.ts`). */
+export type ProjectTab = 'overview' | 'board' | 'chat' | 'branches' | 'waiting';
 
 export interface OverviewProps {
   view: DivanView;
@@ -93,10 +94,16 @@ export interface OverviewProps {
   onBranch?: (kind: string | null) => void;
   card?: string | null;
   onCard?: (id: string | null) => void;
-  /** The product's chats: how many are part of today, and the list and the
-   *  chat themselves. Handed in whole, because the chat is the Chat place's own
-   *  surface and its handlers live above both. */
-  chats?: { count: number; pane: React.ReactNode } | null;
+  /** The product's chats: the list that stands down the left of every page of
+   *  it, the one that is open (or null), and what opening and closing one
+   *  does. Handed in whole, because the chat is the Chat place's own surface
+   *  and its handlers live above both. */
+  chats?: {
+    list: React.ReactNode;
+    open: React.ReactNode | null;
+    onOpen: (hostKey: string, chatId: string) => void;
+    onClose: () => void;
+  } | null;
   /** The Composer the unscoped page is built round (HANDOVER §4.1). */
   composer?: React.ReactNode;
   /** A waiting card's Open: its own page, inside its product. */
@@ -110,6 +117,15 @@ export function Overview({
   composer, onOpenCard, projectComposer,
 }: OverviewProps) {
   const here: ProjectTab = tab ?? 'overview';
+  // What this product's chats did today, off every computer that has it.
+  const hosts = useFleet((s) => s.hosts);
+  const day = useMemo(() => {
+    if (!project) return [];
+    const mine = Object.keys(project.ids).flatMap((k) => (hosts[k]?.chats ?? [])
+      .filter((c) => !!project.ids[k] && c.project_id === project.ids[k])
+      .map((chat) => ({ hostKey: k, chat })));
+    return today(mine, view.now);
+  }, [project, hosts, view.now]);
   // The two pages inside a product that have a head of their own. A key that is
   // no longer in the view — a card that has been finished, a machine that has
   // been unpaired — leaves the product's own page rather than a blank one.
@@ -134,8 +150,16 @@ export function Overview({
     );
   }
 
+  /** Every page of a product, with its chats down the left of it. */
+  const framed = (body: React.ReactNode) => (
+    <div className="dv-chatpane" data-project-page="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
+      {chats?.list}
+      {body}
+    </div>
+  );
+
   if (open) {
-    return (
+    return framed(
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         <div className="dv-page">
           <Ticket
@@ -146,14 +170,14 @@ export function Overview({
           {!!projectComposer && <div style={{ marginTop: 40 }}>{projectComposer}</div>}
         </div>
         <Sessions view={view} />
-      </div>
+      </div>,
     );
   }
 
   if (deep) {
     // A branch's page is the handover's own (§4.7); the bar that asks about the
     // product and the sessions running on it stay under it.
-    return (
+    return framed(
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: T.bg }}>
         <div className="dv-page" style={{ paddingBottom: BAR_ROW + 12 }}>
           {!!face && (
@@ -169,31 +193,43 @@ export function Overview({
             <Sessions view={view} />
           </div>
         </div>
-      </div>
+      </div>,
     );
   }
 
   const to = (key: string) => onTab?.(key as ProjectTab);
-  const writeNew = () => onTab?.('new');
-  return (
+
+  // One of the product's chats, read where the product's page was: the list
+  // stays where it is, and closing the chat is the page again.
+  if (here === 'chat' && chats?.open) {
+    return framed(
+      <div data-project-chat="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '4px 20px' }}>
+          <span className="dv-meta">{project.name}</span>
+          <button type="button" className="dv-btn dv-btn--ghost dv-hit" style={{ marginLeft: 'auto' }}
+            onClick={chats.onClose}>Close chat</button>
+        </div>
+        {chats.open}
+      </div>,
+    );
+  }
+
+  const board = here === 'board';
+  return framed(
     <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-      <div className={`dv-page${here === 'board' ? ' dv-page--wide' : ''}`}>
-        {here !== 'new' && (
-          <ProjectHead project={project} now={view.now} tab={here} onTab={to} onNew={writeNew}
-            compact={here !== 'overview'} />
-        )}
-        {here === 'overview' && (
+      <div className="dv-page dv-page--wide">
+        <ProjectHead project={project} now={view.now} compact={here === 'board' || here === 'branches'} />
+        {(here === 'overview' || here === 'chat') && (
           <Project view={view} project={project}
+            today={day} onChat={chats?.onOpen}
             onCard={(c) => onCard?.(idOf(c))}
             onBoard={() => to('board')}
-            onBranch={(kind) => onBranch?.(kind)}
             onBranches={() => to('branches')}
             composer={projectComposer} />
         )}
-        {here === 'board' && (
+        {board && (
           <>
-            <Board view={view} project={project} onNew={writeNew}
-              onCard={(t) => onCard?.(idOf(t.card))} />
+            <Board view={view} project={project} onCard={(t) => onCard?.(idOf(t.card))} />
             {!!projectComposer && <div style={{ marginTop: 32 }}>{projectComposer}</div>}
           </>
         )}
@@ -202,18 +238,9 @@ export function Overview({
             <Branches project={project} now={view.now} onBranch={(kind) => onBranch?.(kind)} />
           </div>
         )}
-        {here === 'chat' && (
-          <div className="dv-chatpane" style={{
-            marginTop: 24, height: 'calc(100vh - 220px)', minHeight: 420, display: 'flex', overflow: 'hidden',
-            border: '1px solid var(--glass-edge)', borderRadius: 'var(--radius-md)',
-          }}>{chats?.pane}</div>
-        )}
-        {here === 'new' && (
-          <NewTicket view={view} project={project} onClose={() => to('board')} onCreated={() => to('board')} />
-        )}
       </div>
       <Sessions view={view} />
-    </div>
+    </div>,
   );
 }
 

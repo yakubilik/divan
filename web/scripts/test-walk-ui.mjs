@@ -19,7 +19,7 @@ mkdirSync(shots, { recursive: true });
 const ROUTES = [
   ['dashboard', '/'], ['waiting', '/waiting'],
   ['project', '/p/quire'], ['project-dormant', '/p/hush'], ['board', '/p/quire/board'],
-  ['repositories', '/p/quire/branches'], ['new-ticket', '/p/quire/new'], ['project-chats', '/p/quire/chat'],
+  ['repositories', '/p/quire/branches'], ['project-chat', '/p/quire/chat/c1'],
   ['branch', '/p/quire/b/Engineering'], ['branch-unconnected', '/p/quire/b/SEO'], ['ticket', '/p/quire/c/k1'],
   ['chat', '/chats'],
   ...['machines', 'executors', 'terminal', 'settings', 'screen', 'accounts', 'quota', 'admin', 'fleet',
@@ -85,10 +85,11 @@ try {
   const PAGES = [
     // type, where it is, what says it is there, how it is reached, from where
     ['dashboard', '/', `document.querySelector('h1.dv-greet')`, null, null],
-    ['project', '/p/quire', `document.querySelector('h1')?.textContent.trim() === 'Quire' && document.querySelector('[aria-pressed="true"]')?.textContent.trim() === 'Overview'`, ['a[data-tile]', 'Q'], '/'],
-    ['board', '/p/quire/board', `document.querySelector('.dv-board-cols')`, ['button[aria-pressed]', 'Board'], '/p/quire'],
+    ['project', '/p/quire', `document.querySelector('h1')?.textContent.trim() === 'Quire' && !!document.querySelector('[data-counts]') && !!document.querySelector('[data-project-page] .dv-chatlist')`, ['a[data-tile]', 'Q'], '/'],
+    ['board', '/p/quire/board', `document.querySelector('.dv-board-cols')`, ['a[href="/p/quire/board"]', 'Open board'], '/p/quire'],
     ['ticket', '/p/quire/c/k1', `document.querySelector('h1')?.textContent.trim() === 'Webhook retry policy'`, ['.dv-board-cols button', 'Webhook retry policy'], '/p/quire/board'],
-    ['branch', '/p/quire/b/Engineering', `document.querySelector('h1')?.textContent.trim() === 'Engineering'`, ['a[href="/p/quire/b/Engineering"]', ''], '/p/quire'],
+    ['repositories', '/p/quire/branches', `!!document.querySelector('[title="Everything on Engineering"]')`, ['a[href="/p/quire/branches"]', 'Repositories'], '/p/quire'],
+    ['branch', '/p/quire/b/Engineering', `document.querySelector('h1')?.textContent.trim() === 'Engineering'`, ['[title="Everything on Engineering"]', ''], '/p/quire/branches'],
     ['chat', '/chats/c1', `document.querySelector('textarea[name="composer"]')`, ['.dv-topline button', 'Chats'], '/'],
     ['waiting', '/waiting', `/answer|task|Nothing/.test(document.querySelector('h1')?.textContent ?? '')`, ['a[href="/waiting"]', 'See all'], '/'],
     ['machine › machines', '/machine/machines', machineTab('Machines'), ['.dv-topline button', 'Machine'], '/'],

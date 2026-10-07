@@ -76,8 +76,7 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *  /p/quire                   one product
  *  /p/quire/branches          …the faces it has beside its code
  *  /p/quire/board             …its board
- *  /p/quire/new               …a new ticket being written
- *  /p/quire/chat/9f2c…        …its chats, and the one that is open
+ *  /p/quire/chat/9f2c…        …one of its chats, open in the middle of it
  *  /p/quire/b/engineering     …one of its faces
  *  /p/quire/c/0d2279020af7    …and one card, wherever that card lives
  *  ```
@@ -89,9 +88,10 @@ export function pathOf(place: Place): string {
   const head = `/p/${enc(place.project)}`;
   if (place.card) return `${head}/c/${enc(place.card)}`;
   if (place.branch) return `${head}/b/${enc(place.branch)}`;
-  if (place.tab === 'board' || place.tab === 'branches' || place.tab === 'new') return `${head}/${place.tab}`;
-  // The product's own chats, and the one that is open among them.
-  if (place.tab === 'chat') return place.chat ? `${head}/chat/${enc(place.chat)}` : `${head}/chat`;
+  if (place.tab === 'board' || place.tab === 'branches') return `${head}/${place.tab}`;
+  // One of the product's chats, open where its page is. With none open the
+  // page is the product's own.
+  if (place.tab === 'chat' && place.chat) return `${head}/chat/${enc(place.chat)}`;
   return head;
 }
 
@@ -137,8 +137,8 @@ export function readPlace(pathname: string, search = ''): Place {
   }
   if (parts[0] === 'p' && parts[1]) {
     const scoped: Place = { ...place, project: parts[1] };
-    if (parts[2] === 'board' || parts[2] === 'branches' || parts[2] === 'new') return { ...scoped, tab: parts[2] };
-    if (parts[2] === 'chat') return { ...scoped, tab: 'chat', chat: parts[3] ?? null };
+    if (parts[2] === 'board' || parts[2] === 'branches') return { ...scoped, tab: parts[2] };
+    if (parts[2] === 'chat' && parts[3]) return { ...scoped, tab: 'chat', chat: parts[3] };
     if (parts[2] === 'b' && parts[3]) return { ...scoped, branch: parts[3] };
     if (parts[2] === 'c' && parts[3]) return { ...scoped, card: parts[3], tab: 'board' };
     return scoped;

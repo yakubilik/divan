@@ -349,6 +349,9 @@ const press = async (key) => {
 /** The button whose label is this word, anywhere on the page. */
 const find = (label, within = doc) => [...within.querySelectorAll('button')]
   .find((b) => (b.textContent ?? '').trim() === label) ?? null;
+/** The link whose words are these, anywhere on the page. */
+const link = (label, within = doc) => [...within.querySelectorAll('a')]
+  .find((a) => (a.textContent ?? '').trim() === label) ?? null;
 /** An icon button, by the name it is read out as. */
 const labelledBtn = (label) => [...doc.querySelectorAll('button')]
   .find((b) => b.getAttribute('aria-label') === label) ?? null;
@@ -479,7 +482,7 @@ group('the back button steps through the panel instead of out of it');
   const from = w.history.length;
 
   await click(tile('quire'));
-  await click(find('Board'));
+  await click(link('Open board'));
   ok('two steps in, the address says both of them',
     w.location.pathname === '/p/quire/board', w.location.pathname);
   ok('…and each of them is its own entry in the browser’s history',
@@ -596,14 +599,16 @@ group('what needs a person opens itself as a conversation');
   ok('closing one takes it off the page, tab and all',
     !windows().includes('Use the live ones now') && named() === had - 1, windows().slice(0, 300));
 
-  // The bar across the bottom of every desktop frame, and what it does with a
-  // sentence. Found the way a person finds it — by what the field says it is —
-  // rather than by a `name` attribute nothing on screen carries.
-  const bar = () => doc.querySelector('#composer-in');
-  const arrow = () => {
-    const send = doc.querySelector('.dv-composer button[aria-label="Send"]');
-    return send && !send.disabled ? send : null;
-  };
+  // The bar across the bottom of a branch's page, and what it does with a
+  // sentence: the chat opens as a window over the page. (A product's own page
+  // reads the chat in its middle instead — `a product has its own chats`.)
+  // Found the way a person finds it — by what the field says it is — rather
+  // than by a `name` attribute nothing on screen carries.
+  await click(link('Repositories'));
+  await click(doc.querySelector('[title="Everything on Engineering"]'));
+  const bar = () => doc.querySelector('input[aria-label="Tell Divan anything…"]');
+  const arrow = () => [...doc.querySelectorAll('[title="Send"]')]
+    .find((e) => e.textContent.trim() === '↑') ?? null;
   const palette = () => [...doc.querySelectorAll('input')]
     .some((i) => (i.getAttribute('aria-label') ?? '').startsWith('Search folders'));
   /** The chat's own window, by the words it was started with. */
@@ -612,7 +617,8 @@ group('what needs a person opens itself as a conversation');
   const labelled = (label, within) => [...within.querySelectorAll('button')]
     .find((b) => b.getAttribute('aria-label') === label) ?? null;
 
-  ok('the Composer is at the foot of the product’s page, and it is the field it looks like', !!bar());
+  ok('a branch’s page has the bar across its foot, and it is the field it looks like',
+    !!bar() && w.location.pathname === '/p/quire/b/Engineering', w.location.pathname);
   ok('…whose send is not a button while there is nothing to send', arrow() === null);
   await type(bar(), 'ship the beta tonight');
   ok('…and is one the moment there is', !!arrow());
@@ -627,7 +633,7 @@ group('what needs a person opens itself as a conversation');
       && a.data.text === 'ship the beta tonight'),
     JSON.stringify(asked.filter((a) => a.type === 'chat.send').map((a) => a.data)));
   ok('…without leaving the page it was typed on',
-    place() === 'Dashboard' && head() === 'Quire', `${place()} · ${head()}`);
+    place() === 'Dashboard' && w.location.pathname === '/p/quire/b/Engineering', `${place()} · ${w.location.pathname}`);
   ok('…with the chat open on that page, in the corner the windows stand in',
     !!chatWindow(), windows().slice(0, 200));
   ok('…and the field empty again, because the sentence landed', bar().value === '');
@@ -810,8 +816,8 @@ group('what needs a person opens itself as a conversation');
     const words = (first?.textContent ?? '').trim();
     return !first || words.includes('⌘K') ? '' : words;
   };
-  ok('on a product’s page the Composer says which product the chat will be about',
-    (doc.querySelector('.dv-composer [data-locked]')?.textContent ?? '').includes('Quire'));
+  ok('on a page about one product the bar says where the chat will open',
+    overBar() !== '', `«${overBar()}»`);
   await type(bar(), 'why is the retry policy like this');
   asked.length = 0;
   await click(arrow());
@@ -824,7 +830,7 @@ group('what needs a person opens itself as a conversation');
   const opened = [...doc.querySelectorAll('section[data-panel]')]
     .find((e) => (e.textContent ?? '').includes('why is the retry policy')) ?? null;
   if (opened) await click(labelled('Close', opened));
-  await click(find('Dashboard', doc.querySelector('header')));
+  await press('0');
   ok('…and off that page the bar is not drawn: the open Composer is', overBar() === ''
     && !!doc.querySelector('#composer-in') && !doc.querySelector('.dv-composer [data-locked]'), `«${overBar()}»`);
 
@@ -844,7 +850,7 @@ group('the board, with the asking agent’s chat beside it');
   const chip = (label) => find(label, doc.querySelector('header'));
   await press('0');
   await click(tile('quire'));
-  await click(find('Board'));
+  await click(link('Open board'));
 
   /** A column of the board, by its name: the section that catches a drop. */
   const column = (name) => doc.querySelector(`section.dv-col[aria-label="${name}"]`);
@@ -1007,60 +1013,16 @@ group('a card can be corrected and handed to somebody');
     head() === 'Quire' && place() === 'Dashboard', `${head()} · ${place()}`);
 }
 
-group('New ticket: Title, the sentences, where it goes, Create (HANDOVER §4.5)');
+group('a product has one way to start anything: its Composer');
 {
-  const field = (label) => {
-    const l = [...doc.querySelectorAll('label')].find((e) => (e.textContent ?? '').trim() === label);
-    return l ? doc.getElementById(l.htmlFor) : null;
-  };
-  const create = () => find('Create');
-  const segment = (label) => [...(doc.querySelector('[aria-label="Put it in"]')?.querySelectorAll('button') ?? [])]
-    .find((b) => (b.textContent ?? '').trim() === label) ?? null;
-  const filed = () => asked.filter((a) => a.type === 'divan.card.create');
-  /** Open the form from the product's head, write a card, pick where, Create. */
-  const write = async (title, sentences, where) => {
-    await click(find('+ New ticket'));
-    await type(field('Title'), title);
-    if (sentences) await type(field('Two or three sentences'), sentences);
-    if (where) await click(segment(where));
-    asked.length = 0;
-    await click(create());
-  };
-
-  await click(find('Overview'));
-  await click(find('+ New ticket'));
-  ok('+ New ticket opens one form: the product, Title, the sentences, the segment and Create, nothing else to fill',
-    !!field('Title') && !!field('Two or three sentences') && !!create()
-    && segment('Ice Box')?.getAttribute('aria-pressed') === 'true'
-    && w.location.pathname === '/p/quire/new'
-    && doc.querySelectorAll('form[aria-label="New ticket"] input, form[aria-label="New ticket"] textarea, form[aria-label="New ticket"] select').length === 2,
-    w.location.pathname);
-  await click(labelledBtn('Close'));
-
-  await write('Export client list as CSV', 'Studios keep asking to download their client list.');
-  const ice = filed()[0]?.data;
-  await write('Invite by CSV', '', 'Queued');
-  const queued = filed()[0]?.data;
-  await write('Fix the webhook retries', 'They retry forever.', 'Start now');
-  const now = filed()[0]?.data;
-  ok('Create files divan.card.create into Ice Box by default, Queued or In Progress when chosen, with only a title required',
-    ice?.column === 'ice_box' && ice.project_id === 'p-quire' && ice.title === 'Export client list as CSV'
-    && ice.summary === 'Studios keep asking to download their client list.'
-    && queued?.column === 'queued' && queued.title === 'Invite by CSV' && queued.summary === ''
-    && now?.column === 'in_progress' && !('executor' in now) && !('agent' in now)
-    && w.location.pathname === '/p/quire/board',
-    JSON.stringify([ice, queued, now]));
-
-  // When the machine cannot be reached the form keeps what was typed and says why.
-  const call = useFleet.getState().call;
-  await act(async () => {
-    seed(useFleet, { call: async () => { throw new Error('That computer did not answer'); } });
-  });
-  await write('Invite by CSV', '', null);
-  ok('…and one that cannot be reached keeps what was typed and says why',
-    field('Title')?.value === 'Invite by CSV' && text().includes('That computer did not answer'));
-  await act(async () => { seed(useFleet, { call }); });
-  await click(labelledBtn('Close'));
+  const none = () => !find('+ New ticket') && !find('New ticket') && !doc.querySelector('[aria-label="View"]');
+  const onPage = none() && !!doc.querySelector('.dv-composer #composer-in');
+  await click(link('Open board'));
+  const onBoard = none() && w.location.pathname === '/p/quire/board';
+  ok('no New ticket and no tabs on a product or its board',
+    onPage && onBoard, JSON.stringify({ onPage, onBoard, path: w.location.pathname }));
+  await click(find('Quire', doc.querySelector('header')));
+  ok('…and the board’s way back is the product', w.location.pathname === '/p/quire', w.location.pathname);
 }
 
 group('the sign-in that is expiring is counted before that page is opened');
@@ -1363,29 +1325,52 @@ group('a product has its own chats');
   });
   await click(find('Dashboard', header));
   await click(tile('quire'));
-  const tab = find('Chats', doc.querySelector('[aria-label="View"]'));
-  await click(tab);
-  const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
-  ok('the product’s Chat tab lists the chats filed under it and no others, with the newest open',
+  const list = () => doc.querySelector('[data-project-page] .dv-chatlist');
+  const shown = (words) => [...(list()?.querySelectorAll('button') ?? [])].some((b) => (b.textContent ?? '').includes(words));
+  const rowOf = (words) => [...list().querySelectorAll('button')].find((b) => (b.textContent ?? '').includes(words));
+  const pageUp = () => !!doc.querySelector('[data-counts]') && !doc.querySelector('[data-project-chat]');
+  ok('a product’s page has its chats down the left and no others, with none of them open',
     shown('Quire invoices') && !shown('Hush pricing') && !shown('Safari login')
-      && w.location.pathname === '/p/quire/chat/q1',
-    `${w.location.pathname} · tab ${!!tab}`);
+      && pageUp() && w.location.pathname === '/p/quire',
+    w.location.pathname);
+  ok('…and says what was done on it today, a chat at a time',
+    !!doc.querySelector('[data-today] [data-today-chat="q1"]'));
+
+  await click(rowOf('Quire invoices'));
+  for (let i = 0; i < 4; i++) await act(async () => {});
+  ok('a chat pressed there is read in the middle of the same page, the list still beside it',
+    !!doc.querySelector('[data-project-chat] textarea[name="composer"]') && shown('Quire invoices')
+      && !doc.querySelector('[data-counts]') && w.location.pathname === '/p/quire/chat/q1',
+    w.location.pathname);
+  await click(find('Close chat'));
+  ok('closing it is the product’s page again',
+    pageUp() && shown('Quire invoices') && w.location.pathname === '/p/quire', w.location.pathname);
 
   asked.length = 0;
-  await click([...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim().startsWith('New chat')));
-  ok('New chat there opens no dialog: an empty chat, writable, with the chips under it',
-    !find('Start chat') && !!doc.querySelector('[data-new-chat] #composer-in')
-      && !!doc.querySelector('[data-new-chat] [data-picker="Agent"]')
-      && asked.every((a) => a.type !== 'chat.create'));
+  await click(rowOf('Quire invoices'));
+  await click([...list().querySelectorAll('button')].find((b) => (b.textContent ?? '').trim().startsWith('New chat')));
+  ok('New chat there opens no dialog and goes nowhere: the product’s page, its Composer writable',
+    !find('Start chat') && pageUp() && !!doc.querySelector('.dv-composer #composer-in')
+      && !!doc.querySelector('.dv-composer [data-picker="Agent"]')
+      && asked.every((a) => a.type !== 'chat.create') && w.location.pathname === '/p/quire');
   await type(doc.querySelector('#composer-in'), 'draft the invoice email');
-  await click(doc.querySelector('[data-new-chat] button.dv-send'));
+  await click(doc.querySelector('.dv-composer button[aria-label="Send"]'));
   for (let i = 0; i < 4; i++) await act(async () => {});
   const made = asked.find((a) => a.type === 'chat.create');
   ok('a chat started there starts in the product’s repository, and is read on the product’s page',
     // Whichever folder the board seeded above says Quire is checked out in.
     made?.key === 'studio' && /\/quire$/.test(made?.data.cwd ?? '')
-      && place() === 'Dashboard' && w.location.pathname.startsWith('/p/quire/chat/told'),
+      && place() === 'Dashboard' && w.location.pathname.startsWith('/p/quire/chat/told')
+      && !!list() && !!doc.querySelector('[data-project-chat]'),
     `${JSON.stringify(made?.data?.cwd)} · ${place()} · ${w.location.pathname}`);
+  await act(async () => {
+    const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+    w.history.back();
+    await landed;
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  ok('…and Back from it is the product’s page, not the way out of it',
+    pageUp() && w.location.pathname === '/p/quire', w.location.pathname);
   await press('0');
 }
 
@@ -1425,11 +1410,9 @@ group('a chat dropped on a product is filed under it by hand');
 
   await click(find('Dashboard', doc.querySelector('header')));
   await click(tile('hush'));
-  const tab = find('Chats', doc.querySelector('[aria-label="View"]'));
-  await click(tab);
-  const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
-  ok('…and on that product’s own page', !!tab && shown('Webhook retry policy') && shown('Hush pricing'),
-    `tab ${!!tab} · ${w.location.pathname}`);
+  const shown = (words) => [...doc.querySelectorAll('[data-project-page] .dv-chatlist button')].some((b) => (b.textContent ?? '').includes(words));
+  ok('…and on that product’s own page', shown('Webhook retry policy') && shown('Hush pricing'),
+    w.location.pathname);
   await click(find('Dashboard', doc.querySelector('header')));
 }
 
@@ -1701,7 +1684,7 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
     typedChip === pressedChip && typedChip === 'Quire' && !doc.querySelector('.dv-composer .dv-scope') && left === 'why is the retry policy like this '
       && scoped.cwd === '/w/quire',
     `${typedChip} vs ${pressedChip} · «${left}» · ${scoped.cwd}`);
-  ok('…and it is read on that project’s Chats tab, the project’s other chats beside it, not on a page of its own',
+  ok('…and it is read on that project’s page, the project’s other chats beside it, not on a page of its own',
     place() === 'Dashboard' && w.location.pathname === `/p/quire/chat/${scopedId}`
       && !!doc.querySelector('textarea[name="composer"]'),
     `${place()} · ${w.location.pathname}`);
@@ -1808,8 +1791,8 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
   });
   await press('0');
   await click(tile('quire'));
-  const seg = (label) => find(label, doc.querySelector('[aria-label="View"]'));
-  const pressed = () => doc.querySelector('[aria-label="View"] [aria-pressed="true"]')?.textContent ?? null;
+  const onBoardPage = () => !!doc.querySelector('section.dv-col');
+  const onProductPage = () => !!doc.querySelector('[data-counts]');
   const reload = async (path) => {
     await act(async () => { root.unmount(); });
     w.history.replaceState(null, '', path);
@@ -1826,36 +1809,34 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     });
   };
 
-  // 2 · the head and the segment
+  // 2 · the head, and the board from it
   const meta = doc.querySelector('.dv-phead [data-meta]')?.textContent ?? '';
   const headOk = !!doc.querySelector('.dv-phead .dv-mono') && head() === 'Quire'
     && doc.querySelector('.dv-phead [data-description]')?.textContent === 'client portals for studios'
     && meta.startsWith('live since') && !doc.querySelector('.dv-stage')
     && !/\bIdea\b[\s\S]*\bGrowth\b/.test(text());
-  await click(seg('Board'));
-  const onBoard = w.location.pathname === '/p/quire/board' && !!doc.querySelector('section.dv-col');
-  await click(seg('Chats'));
-  const onChats = w.location.pathname.startsWith('/p/quire/chat') && pressed() === 'Chats';
-  await click(seg('Overview'));
-  const onOverview = w.location.pathname === '/p/quire' && !!doc.querySelector('[data-counts]');
-  await click(seg('Board'));
+  await click(link('Open board'));
+  const onBoard = w.location.pathname === '/p/quire/board' && onBoardPage();
   await goBack();
-  const backed = w.location.pathname === '/p/quire' && pressed() === 'Overview';
+  const backed = w.location.pathname === '/p/quire' && onProductPage();
   const reloads = [];
-  for (const [path, word] of [['/p/quire/board', 'Board'], ['/p/quire/chat', 'Chats'], ['/p/quire', 'Overview']]) {
+  for (const [path, there] of [['/p/quire/board', onBoardPage], ['/p/quire', onProductPage]]) {
     await reload(path);
-    reloads.push(pressed() === word && w.location.pathname.startsWith(path));
+    reloads.push(there() && w.location.pathname === path && !!doc.querySelector('[data-project-page] .dv-chatlist'));
   }
-  ok('the head is monogram, name, one sentence and a meta line with the stage as a word, no stage bar; the segment switches the view and each path survives reload and Back',
-    headOk && onBoard && onChats && onOverview && backed && reloads.every(Boolean),
-    JSON.stringify({ headOk, meta, onBoard, onChats, onOverview, backed, reloads }));
+  await reload('/p/quire/new');
+  const noForm = w.location.pathname === '/p/quire' && onProductPage();
+  ok('the address the New ticket form had is the product’s page', noForm, w.location.pathname);
+  ok('the head is monogram, name, one sentence and a meta line with the stage as a word, no stage bar; the board is a page of its own that survives reload and Back, the chats beside both',
+    headOk && onBoard && backed && reloads.every(Boolean),
+    JSON.stringify({ headOk, meta, onBoard, backed, reloads }));
 
   // 3 · the board summary
   const counted = Object.fromEntries([...doc.querySelectorAll('[data-count]')]
     .map((a) => [a.dataset.count, Number(a.querySelector('.n')?.textContent)]));
   const rows = [...doc.querySelectorAll('[data-in-progress] [data-row]')]
     .map((r) => [r.querySelector('.dv-status')?.textContent, r.querySelector('.t')?.textContent]);
-  await click(seg('Board'));
+  await click(link('Open board'));
   const columnCount = (name) => Number(doc.querySelector(`section.dv-col[aria-label="${name}"] .dv-sec .dv-meta`)?.textContent);
   const fromColumns = { ice_box: columnCount('Ice Box'), queued: columnCount('Queued'),
     in_progress: columnCount('In Progress'), done: columnCount('Done') };
@@ -1907,25 +1888,14 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
 
   // 4 · branches
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
-  await click(seg('Overview'));
-  const seo = doc.querySelector('[data-branch="SEO"]');
-  const eng = doc.querySelector('[data-branch="Engineering"]');
-  const seoOk = seo?.dataset.connected === 'false'
-    && (seo.textContent ?? '').includes('Source not connected yet.') && !/\d/.test(seo.textContent ?? '');
-  await click(eng);
-  ok('a branch with no source says Source not connected yet. and no number; a connected one opens the branch page',
-    seoOk && eng?.dataset.connected === 'true' && w.location.pathname === '/p/quire/b/Engineering',
-    `${seo?.textContent} · ${w.location.pathname}`);
+  await reload('/p/quire');
+  const tiles = doc.querySelectorAll('[data-branch]').length;
+  await click(link('Repositories'));
+  ok('the product’s page carries no branch tiles; its repositories are a page behind one word',
+    tiles === 0 && w.location.pathname === '/p/quire/branches' && text().includes('Engineering'),
+    `${tiles} · ${w.location.pathname}`);
   await goBack();
 
-  // 7 · the Composer at the foot is locked
-  const locked = doc.querySelector('.dv-composer [data-picker="Project"][data-locked]');
-  const removable = doc.querySelectorAll('.dv-composer [data-picker="Project"] button').length;
-  await type(doc.querySelector('#composer-in'), '@hush Write the changelog ');
-  asked.length = 0;
-  await click(doc.querySelector('.dv-composer button[aria-label="Send"]'));
-  await settle();
-  const sent = asked.find((a) => a.type === 'chat.create');
   // 8 · what the old page could do: Still open's thread, from the side column
   const post = [...doc.querySelectorAll('aside [role="button"]')]
     .find((e) => (e.textContent ?? '').includes('Payment provider keys')) ?? null;
@@ -1939,6 +1909,15 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     !!post && asked.some((a) => a.type === 'divan.project.open' && a.data.comment === 'Bedirhan has the account'),
     JSON.stringify(asked.map((a) => [a.type, a.data?.comment])));
 
+
+  // 7 · the Composer at the foot is locked
+  const locked = doc.querySelector('.dv-composer [data-picker="Project"][data-locked]');
+  const removable = doc.querySelectorAll('.dv-composer [data-picker="Project"] button').length;
+  await type(doc.querySelector('#composer-in'), '@hush Write the changelog ');
+  asked.length = 0;
+  await click(doc.querySelector('.dv-composer button[aria-label="Send"]'));
+  await settle();
+  const sent = asked.find((a) => a.type === 'chat.create');
   ok('the Composer at the foot of a project carries that project, and its chip cannot be removed',
     (locked?.textContent ?? '').includes('Quire') && removable === 0
     && sent?.data.cwd === '/w/quire',
@@ -2282,7 +2261,7 @@ group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
   await reload('/p/quire/chat/c2');
   const cold = (doc.body.textContent ?? '').includes('Safari login') && w.location.pathname === '/p/quire/chat/c2'
     && !!doc.querySelector('textarea[name="composer"]');
-  await reload('/p/quire/chat');
+  await reload('/p/quire');
   const listed = [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('Webhook retry policy'));
   await reload('/chats');
   await click(find('Earlier'));
@@ -2291,7 +2270,7 @@ group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
   await settle();
   const fromEarlier = w.location.pathname === '/chats/c3';
   await click(find('Hide earlier'));
-  ok('the Chat place lands in a writable chat without a choice; /p/<project>/chat/<id> draws one cold, the project’s Chats lists it, and Earlier opens any other',
+  ok('the Chat place lands in a writable chat without a choice; /p/<project>/chat/<id> draws one cold, the project’s page lists it, and Earlier opens any other',
     landed && cold && listed && fromEarlier, JSON.stringify({ landed, cold, listed, fromEarlier }));
 
   // 1 · send, stream, bubble, interrupt, approval, picture, mic

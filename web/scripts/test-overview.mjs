@@ -106,6 +106,7 @@ const K = await load('web/src/lib/theme.js');
 const D = await load('web/src/lib/divan.js');
 const OV = await load('web/src/lib/overview.js');
 const PR = await load('web/src/lib/project.js');
+const TD = await load('web/src/lib/today.js');
 const TK = await load('web/src/lib/ticket.js');
 const S = await load('web/src/lib/sessions.js');
 const TL = await load('web/src/lib/tell.js');
@@ -866,20 +867,37 @@ group('Web14 W6, W7 and W8');
   const engineering = engineeringNow();
   const seo = scoped({ branch: 'SEO' });
 
-  // The product page answers what is going on and how it got here: the rail of
-  // five stages, the dates beside it, what is happening this minute and the
-  // history behind it. The faces are a tab of their own — how a product is
-  // organised is a thing a person looks up, not what they opened it for.
-  ok('the product page is where it stands, what is in progress, and how it got here',
-    product.includes('live since') && product.includes('In progress now')
-    && product.includes('Timeline') && product.includes('v1.0 live') && product.includes('Today'));
-  ok('…with its branches on it, and a branch nothing feeds saying so',
-    product.includes('data-branch="SEO"') && product.includes(PR.NOT_CONNECTED));
-  ok('the faces are their own tab, with their own numbers',
+  // The product page is one screen: what was done on it today, the board in
+  // four numbers and what is in progress. Nothing to switch between — no
+  // segment over it, and no second way to write a ticket beside the Composer.
+  ok('the product page is what it is, today, and what is in progress',
+    product.includes('live since') && product.includes('In progress now') && product.includes('id="p-today"'));
+  ok('…with no tabs over it and no New ticket',
+    !product.includes('dv-seg') && !product.includes('New ticket') && !product.includes('aria-pressed'));
+  ok('the faces are a page of their own, with their own numbers',
     faces.includes('Branches') && faces.includes('Engineering')
     && faces.includes('SEO') && faces.includes('open') && faces.includes('done'));
-  ok('…with the word that opens a new ticket at the end of its head',
-    product.includes('+ New ticket'));
+
+  // Today is the product's chats that moved since midnight, each under what
+  // it is working on, with what came of it as the computer wrote it down.
+  {
+    const at = busy.now;
+    const chat = (id, over) => ({ hostKey: 'm', chat: {
+      id, title: `quire · ${id}`, cwd: '/w/quire', project: 'quire', status: 'idle', archived: 0,
+      updated_at: at - 60, ...over } });
+    const rows = TD.today([
+      chat('old', { updated_at: at - 3 * 86_400 }),
+      chat('named', { task: 'Move mail to Resend', done: 'Added the DNS records\nSent a test\n' }),
+      chat('bare', { updated_at: at - 30 }),
+      chat('running', { updated_at: at - 3 * 86_400, status: 'running' }),
+    ], at, at - 3600);
+    ok('today is the chats that moved today or are still working, newest first',
+      rows.map((r) => r.id).join() === 'bare,named,running', rows.map((r) => r.id).join());
+    ok('…each under its task, with what was done a line each',
+      rows[1].task === 'Move mail to Resend' && rows[1].done.join('|') === 'Added the DNS records|Sent a test');
+    ok('…and one the computer has not summed up yet is still there, under its title',
+      rows[0].task === 'bare' && rows[0].done.length === 0);
+  }
 
   // The third panel: what the product is waiting for. The board holds work an
   // agent can be handed and these are the other kind — a key somebody has to

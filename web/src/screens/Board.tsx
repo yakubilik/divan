@@ -21,7 +21,7 @@
  *  are `lib/board.ts`, held without a browser by `scripts/test-board.mjs`; the
  *  pressing and the dragging are driven by `scripts/test-drive.mjs`.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { moveCard } from '../lib/actions';
 import { DONE_SHOWN, columns, settled, shown, takes, type Moves, type Ticket } from '../lib/board';
 import { useDivanStore, type DivanView, type MergedProject } from '../lib/divan';
@@ -36,13 +36,11 @@ import { EmptyState } from '../ui/divan';
  *  already in does not offer to take it. */
 interface Lift { id: string; host: string; from: DivanColumn }
 
-export function Board({ view, project, onCard, onNew }: {
+export function Board({ view, project, onCard }: {
   view: DivanView;
   project: MergedProject;
   /** A card that is not being answered opens its own page. */
   onCard?: (ticket: Ticket) => void;
-  /** `+ New ticket`, and the N key on the board. */
-  onNew?: () => void;
 }) {
   const raise = useDock((s) => s.raise);
   const { thresholds } = useThresholds();
@@ -56,20 +54,6 @@ export function Board({ view, project, onCard, onNew }: {
   const pending = settled(moved, project.cards);
   const cols = columns(project, view.now, uptime, pending);
   const empty = cols.every((c) => !c.count);
-
-  // N anywhere on the board writes a new card; not while something is being
-  // typed into, where N is a letter.
-  useEffect(() => {
-    if (!onNew) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const into = (e.target as HTMLElement | null)?.tagName;
-      if (into === 'INPUT' || into === 'TEXTAREA') return;
-      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); onNew(); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onNew]);
 
   const clear = () => { setLift(null); setOver(null); setOverCard(null); };
 
@@ -105,12 +89,8 @@ export function Board({ view, project, onCard, onNew }: {
     return (
       <EmptyState
         title="Nothing on this board yet"
-        body="A card is a line you wrote down or a brief an agent can pick up. Write one here, or
-              tell Divan about it in the chat — either way it lands in the Ice Box, which starts
-              nothing."
-        actions={onNew
-          ? <button type="button" className="dv-btn dv-btn--primary dv-hit" onClick={onNew}>New ticket</button>
-          : undefined}
+        body="A card is a line you wrote down or a brief an agent can pick up. Tell Divan about
+              one in a chat on this product and it lands in the Ice Box, which starts nothing."
         foot={project.machines.join(' · ') || 'no machine'}
       />
     );
