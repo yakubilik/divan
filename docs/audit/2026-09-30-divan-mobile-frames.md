@@ -22,7 +22,7 @@ Three things are worth a decision, and the first is a bug rather than a choice:
    C1 draws the tab bar under the conversation; the app's chat screen has none
    (`app/chat/[id].tsx`, which mounts no `Shell`).
 3. **Chat is the old screen, on purpose, and the two behaviours the frames asked
-   for are not there.** `docs/divan-uygulama-plani.md` says chat is not touched
+   for are not there.** The app plan (kept outside this repository) says chat is not touched
    and that two things would be taken from its frames: filing a message as a
    ticket in one gesture (Mobile10 S12) and voice mode (S13). Neither exists.
    The composer still reads `Message` where the frames read `Say it…`, and the
@@ -247,8 +247,8 @@ the same on T1, T2 and T3 and are listed once, on T1.
 **C1 — Chat · `farkli`** · `app/chat/[id].tsx`, dark · frame 21, app 21 · 10 / 10
 left
 
-Chat is deliberately the screen it was: `docs/divan-uygulama-plani.md` ("Chat.
-Ellenmiyor.") keeps its layout and takes two behaviours from these frames. This
+Chat is deliberately the screen it was: the app plan ("Chat. Not touched.")
+keeps its layout and takes two behaviours from these frames. This
 is the one screen no other check in the repository stands up, and standing it up
 is how this list was got.
 
@@ -473,7 +473,7 @@ frame 20, app 21 · 13 / 10 left
 message, no `Ice Box` target, no `filing under Quire` header, no card drawn back
 into the transcript, and no `Filed from your words. I drafted a brief; it's
 folded on the card.` The plan lists this as one of the two things to take from
-the chat frames (`docs/divan-uygulama-plani.md`, "Chat"); nothing in `app/chat/`
+the chat frames (the app plan, "Chat"); nothing in `app/chat/`
 or `src/` mentions filing a message.
 
 The ten app-side lines are the old screen's chrome, as C1.
