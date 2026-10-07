@@ -493,7 +493,7 @@ const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-steps={steps.length}>
       {gap && <Divider ts={steps[0].ts} />}
       <button
-        type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        type="button" className="dv-hit" onClick={() => setOpen((o) => !o)} aria-expanded={open}
         style={{
           display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '100%',
           minHeight: 28, padding: '0 8px 0 0', background: 'transparent', border: 'none',
