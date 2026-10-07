@@ -261,7 +261,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           placeholder={listening ? 'Listening…'
             : busy ? 'You can already type the next message…' : `Message ${folder}…`}
           style={{
-            flex: 1, boxSizing: 'border-box', minHeight: 0, maxHeight: compact ? 120 : 200, resize: 'none',
+            flex: 1, boxSizing: 'border-box', minHeight: compact ? 0 : 44, maxHeight: compact ? 120 : 200, resize: 'none',
             background: 'transparent', border: 'none', outline: 'none',
             fontSize: compact ? 13.5 : 15, lineHeight: compact ? '19px' : '22px',
             padding: compact ? '6px 4px' : '7px 6px', color: C.text, overflowY: 'auto',

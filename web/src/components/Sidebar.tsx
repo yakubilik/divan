@@ -512,7 +512,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         </div>
         {onCollapse && (
           <button
-            type="button" onClick={() => onCollapse(true)} title="Hide the chat list"
+            type="button" onClick={() => onCollapse(true)} title="Hide the chat list" aria-label="Hide the chat list"
             style={{
               width: 30, height: 30, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
               background: 'transparent', border: `1px solid ${C.border}`,

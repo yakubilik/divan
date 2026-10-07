@@ -53,8 +53,9 @@ try {
         const drawn = await b.evaluate(`return document.getElementById('root').dataset.theme === ${JSON.stringify(theme)}
           && !!document.querySelector('.dv-topline') && !document.body.textContent.includes('Something went wrong');`);
         if (!drawn) missing.push(`${name} ${word} ${width}`);
-        keep(`${name} ${word} ${width}`, await audit(phone));
+        // The picture first: the audit scrolls every press into view to hit-test it.
         await b.shot(join(shots, `web-${name}-${word}-${width}.png`), width, phone);
+        keep(`${name} ${word} ${width}`, await audit(phone));
         pictures++;
         for (const p of b.drain()) problems.push(`${name} ${word} ${width}: ${p}`);
       }
