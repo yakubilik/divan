@@ -1785,6 +1785,19 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
   await click(doc.querySelector('.dv-composer button[aria-label="Send"]'));
   await settle();
   const sent = asked.find((a) => a.type === 'divan.card.create');
+  // 8 · what the old page could do: Still open's thread, from the side column
+  const post = [...doc.querySelectorAll('aside [role="button"]')]
+    .find((e) => (e.textContent ?? '').includes('Payment provider keys')) ?? null;
+  if (post) await click(post);
+  const say = [...doc.querySelectorAll('aside input')]
+    .find((i) => (i.getAttribute('placeholder') ?? '').startsWith('Say something')) ?? null;
+  if (say) await type(say, 'Bedirhan has the account');
+  asked.length = 0;
+  if (say) await act(async () => { say.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  ok('Still open sits in the side column and its thread still takes a comment',
+    !!post && asked.some((a) => a.type === 'divan.project.open' && a.data.comment === 'Bedirhan has the account'),
+    JSON.stringify(asked.map((a) => [a.type, a.data?.comment])));
+
   ok('the Composer at the foot of a project carries that project, and its chip cannot be removed',
     (locked?.textContent ?? '').includes('Quire') && removable === 0
     && sent?.data.project_id === 'p-quire' && sent.data.column === 'ice_box',
