@@ -154,7 +154,8 @@ class Server:
                                        resolve_account=self._resolve_account_home,
                                        agent_prompt=self._agent_prompt,
                                        pool_pick=self._pool_pick,
-                                       pool_next=self._pool_next_for)
+                                       pool_next=self._pool_next_for,
+                                       naming_env=self._naming_env)
         self.clients: dict[WebSocket, Device] = {}
         # One queue per connected client, drained by that client's own writer.
         self.outbox: dict[WebSocket, asyncio.Queue[str]] = {}
@@ -444,6 +445,18 @@ class Server:
             return None, {}
         a = self._account(chat.get("account_id"), chat["provider"])
         return a.home, a.env()
+
+    def _naming_env(self, chat: dict) -> dict[str, str] | None:
+        """The Claude account a chat's title is asked for on: its own, or the
+        computer's where the chat runs on another tool. None where there is
+        no such account, and the chat keeps the name it has."""
+        if self.cfg.demo:
+            return None
+        try:
+            return self._account(chat.get("account_id") if chat["provider"] == "claude" else None,
+                                 "claude").env()
+        except (Err, KeyError):
+            return None
 
     def _account(self, account_id: str | None, provider: str) -> acct.Account:
         """Resolve a chat's account. A missing id is refused rather than falling
@@ -1656,6 +1669,8 @@ class Server:
                 if title.casefold().startswith(head.casefold()):
                     title = title[len(head):]
             fields["title"] = with_project(title, self.policy.project_for(moving))
+            if "title" in d:
+                fields["title_by"] = "user"      # a person's name for it; `naming` leaves it be
         if "provider" in fields and fields["provider"] != prev["provider"]:
             if fields["provider"] not in PROVIDERS:
                 raise Err("unknown_provider", "unknown tool")

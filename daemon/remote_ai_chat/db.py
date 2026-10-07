@@ -197,7 +197,10 @@ class DB:
         have = {r[1] for r in self._c.execute("PRAGMA table_info(chats)")}
         for col, decl in (("account_id", "TEXT"), ("agent_id", "TEXT"),
                           ("pool_pinned", "INTEGER DEFAULT 0"), ("project_id", "TEXT"),
-                          ("project_set", "INTEGER DEFAULT 0"), ("owner", "TEXT")):
+                          ("project_set", "INTEGER DEFAULT 0"), ("owner", "TEXT"),
+                          # who the title is by ('user' once a person renamed it) and how
+                          # many messages had been sent when it was last looked at (`naming`)
+                          ("title_by", "TEXT"), ("named_at", "INTEGER DEFAULT 0")):
             if col not in have:
                 self._c.execute(f"ALTER TABLE chats ADD COLUMN {col} {decl}")
         self._c.commit()
@@ -312,7 +315,7 @@ class DB:
         allowed = {"group_id", "title", "provider", "model", "effort", "perm_mode", "cwd",
                    "provider_session_id", "status", "last_preview", "max_turns",
                    "max_budget_usd", "total_cost_usd", "pinned", "archived", "session_ids",
-                   "account_id", "agent_id", "pool_pinned", "owner"}
+                   "account_id", "agent_id", "pool_pinned", "owner", "title_by", "named_at"}
         fields = {k: v for k, v in fields.items() if k in allowed}
         if not fields:
             return self.get_chat(cid)
@@ -402,6 +405,14 @@ class DB:
         ).fetchall()
         return [{"seq": r["seq"], "chat_id": r["chat_id"], "event": r["type"],
                  "data": json.loads(r["payload"]), "ts": r["ts"]} for r in rows]
+
+    def spoken(self, chat_id: str) -> list[dict]:
+        """What was said in a chat, by either side, oldest first: no tool
+        calls, no deltas. What `naming` reads."""
+        rows = self._c.execute(
+            "SELECT * FROM events WHERE chat_id=? AND type IN ('message.user','message.assistant') "
+            "ORDER BY seq", (chat_id,)).fetchall()
+        return [self._event_row(r) for r in rows]
 
     def last_seq(self, chat_id: str) -> int:
         r = self._c.execute("SELECT MAX(seq) FROM events WHERE chat_id=?", (chat_id,)).fetchone()

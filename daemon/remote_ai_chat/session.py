@@ -11,7 +11,7 @@ from typing import Awaitable, Callable
 from .config import Config
 from .db import DB, new_id
 from .errors import Err
-from . import attachments, preamble, secrets
+from . import attachments, naming, preamble, secrets
 from .pool import Wait
 from .security import PathPolicy
 from .providers.base import Provider, ProviderConfig
@@ -153,6 +153,10 @@ class ChatSession:
         self.dirty = False
         # transcript to hand a freshly opened CLI session, built once per provider
         self._recap: str | None = None
+        # The environment of a Claude account to ask for a title on, set by the
+        # manager; and the asking itself, while one is in the air.
+        self.naming_env = None
+        self._renaming: asyncio.Task | None = None
         # A move the pool asked for while this turn was running: the account it
         # goes to, and why. The turn is interrupted, and _run reads this once
         # the interrupt has come back, rather than tearing the provider down
@@ -595,11 +599,62 @@ class ChatSession:
             # No resume id means a session with no memory of this chat.
             self._recap = (None if chat.get("provider_session_id")
                            else self._build_recap(text))
-        if is_untitled(chat["title"]):
+        if is_untitled(chat["title"]) or self._named_for_agent(chat):
             self.db.update_chat(self.chat_id, title=with_project(
                 secrets.shown(text).strip().split("\n")[0], self.policy.project_for(chat["cwd"])))
         await self._set_status("running", last_preview=plain(secrets.shown(text))[:200])
         return chat
+
+    def _named_for_agent(self, chat: dict) -> bool:
+        """A chat still called what its agent is called, before a word is said
+        in it. A client that opens a chat with an agent titles it after the
+        agent, which names every chat with that agent the same thing."""
+        agent = (chat.get("agent_id") or "").strip().casefold()
+        if not agent or chat.get("title_by") == "user" or chat.get("named_at"):
+            return False
+        bare = (chat["title"] or "").split(TITLE_SEP)[-1].strip().casefold()
+        return bare == agent and not self.db.tail_events(self.chat_id, ("message.assistant",), 1)
+
+    def _rename_if_due(self) -> None:
+        """Look at the chat's name again if it has grown past a checkpoint.
+
+        Off the turn's own path: the answer is already on the screen, and a
+        name arriving three seconds later is still on time.
+        """
+        chat = self.db.get_chat(self.chat_id)
+        if (chat is None or self.cfg.demo or self.naming_env is None
+                or chat.get("title_by") == "user"
+                or (self._renaming and not self._renaming.done())):
+            return
+        events = self.db.spoken(self.chat_id)
+        said = sum(1 for e in events if e["event"] == "message.user")
+        if not naming.due(said, int(chat.get("named_at") or 0)):
+            return
+        self._renaming = asyncio.create_task(self._rename(chat, events, said))
+
+    async def _rename(self, chat: dict, events: list[dict], said: int) -> None:
+        try:
+            env = self.naming_env(chat)
+            if env is None:
+                return
+            project = self.policy.project_for(chat["cwd"])
+            head = f"{project}{TITLE_SEP}" if project else ""
+            current = chat["title"][len(head):] if head and chat["title"].startswith(head) else chat["title"]
+            for e in events:
+                e["data"]["text"] = secrets.shown(e["data"].get("text") or "")
+            title = await naming.ask(naming.brief(events, current, project), env)
+            now = self.db.get_chat(self.chat_id)
+            if now is None or now.get("title_by") == "user":
+                return          # deleted, or renamed by hand while the model was thinking
+            fields: dict = {"named_at": said}
+            if title and title != current:
+                fields["title"] = with_project(title, project)
+            chat = self.db.update_chat(self.chat_id, **fields)
+            if "title" in fields:
+                await self.broadcast({"seq": None, "chat_id": self.chat_id, "event": "chat.updated",
+                                      "data": chat, "ts": time.time()})
+        except Exception:
+            log.exception("naming chat %s failed", self.chat_id)
 
     async def _on_idle_output(self) -> None:
         """The model spoke with nothing asked of it — open a turn for it.
@@ -752,6 +807,8 @@ class ChatSession:
             if texts:
                 fields["last_preview"] = plain(texts[-1])[:200]
         await self._finish(**fields)
+        if not res.is_error:
+            self._rename_if_due()
 
     async def _finish(self, **fields) -> None:
         """End of one turn. Only a turn with nothing queued behind it puts the
@@ -793,9 +850,11 @@ class ChatSession:
 
 class SessionManager:
     def __init__(self, db: DB, cfg: Config, broadcast: BroadcastFn, notify: NotifyFn,
-                 resolve_account=None, agent_prompt=None, pool_pick=None, pool_next=None):
+                 resolve_account=None, agent_prompt=None, pool_pick=None, pool_next=None,
+                 naming_env=None):
         self.db, self.cfg, self.broadcast, self.notify = db, cfg, broadcast, notify
         self.resolve_account = resolve_account
+        self.naming_env = naming_env
         self.agent_prompt = agent_prompt
         self.pool_pick = pool_pick
         self.pool_next = pool_next
@@ -809,6 +868,7 @@ class SessionManager:
                 raise KeyError(chat_id)
             s = ChatSession(chat, self.db, self.cfg, self.broadcast, self.notify)
             s.resolve_account = self.resolve_account
+            s.naming_env = self.naming_env
             s.agent_prompt = self.agent_prompt
             s.pool_pick = self.pool_pick
             s.pool_next = self.pool_next
