@@ -131,7 +131,8 @@ export function status(card: MergedCard): Status | null {
   if (card.agent_status === 'verified') return { kind: 'done', word: 'passed' };
   if (card.agent_status === 'cancelled') return { kind: 'idle', word: 'cancelled' };
   if (card.column === 'in_progress' && card.executor === 'human') return { kind: 'idle', word: 'yours' };
-  if (card.column === 'in_progress') return { kind: 'idle', word: 'next up' };
+  // Dropped into In Progress and filed with the queue, which has not started it.
+  if (card.column === 'in_progress' && card.ustabasi_id != null) return { kind: 'idle', word: 'next up' };
   if (card.column === 'queued') return { kind: 'idle', word: 'waiting' };
   return null;
 }

@@ -312,11 +312,11 @@ function DashComposer({ view, lock = null }: {
   const router = useRouter();
   const go = useNavGuard();
   const host = useStore((s) => s.host);
-  const kept = useStore((s) => s.compose) ?? NO_DRAFT;
-  const store = useStore((s) => s.setCompose);
-  const [own, setOwn] = React.useState(NO_DRAFT);
-  const draft = lock ? own : kept;
-  const setCompose = (patch: Partial<typeof NO_DRAFT>) => (lock ? setOwn((d) => ({ ...d, ...patch })) : store(patch));
+  const kept = useStore((s) => (lock ? s.drafts?.[lock] : s.compose)) ?? NO_DRAFT;
+  const storeCompose = useStore((s) => s.setCompose);
+  const storeDraft = useStore((s) => s.setDraft);
+  const draft = kept;
+  const setCompose = (patch: Partial<typeof NO_DRAFT>) => (lock ? storeDraft(lock, patch) : storeCompose(patch));
   const catalog = useStore((s) => s.catalog);
   const defaults = useStore((s) => s.defaults);
   const accounts = useStore((s) => s.accounts) ?? [];

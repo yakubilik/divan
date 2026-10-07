@@ -219,6 +219,10 @@ interface State {
    *  moment does not lose a half-written sentence. */
   compose: ComposeDraft;
   setCompose: (patch: Partial<ComposeDraft>) => void;
+  /** …and the Composer at the foot of each product's page, by product: its own
+   *  draft, so a sentence about one product is not waiting on the Dashboard. */
+  drafts: Record<string, ComposeDraft>;
+  setDraft: (project: string, patch: Partial<ComposeDraft>) => void;
   settleLive: (chatId: string) => void;
   loadProjects: () => Promise<void>;
   openChat: (id: string) => Promise<void>;
@@ -644,7 +648,7 @@ export const useStore = create<State>((set, get) => {
     projects: [], accounts: [], tools: [], npmAvailable: true, loginPrompt: null, loginDone: null,
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
-    compose: NO_DRAFT,
+    compose: NO_DRAFT, drafts: {},
     chats: {}, groups: [], showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
     ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {}, openCard: null,
@@ -794,6 +798,9 @@ export const useStore = create<State>((set, get) => {
 
     setShowArchived: (v) => { set({ showArchived: v }); },
     setCompose: (patch) => { set({ compose: { ...get().compose, ...patch } }); },
+    setDraft: (project, patch) => {
+      set({ drafts: { ...get().drafts, [project]: { ...(get().drafts[project] ?? NO_DRAFT), ...patch } } });
+    },
 
     /** Drop a finished live segment once the chat screen has typed it out. */
     settleLive: (chatId) => {
