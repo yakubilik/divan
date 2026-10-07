@@ -208,7 +208,7 @@ SELF = (
 BINARY = (".png", ".jpg", ".jpeg", ".ico", ".ttf", ".otf", ".woff", ".woff2",
           ".wav", ".mp3", ".mp4", ".zip", ".pdf", ".icns")
 # Generated, enormous, and not written by a person.
-GENERATED = ("package-lock.json", "uv.lock", "OFL-Inter.txt", "OFL-JetBrainsMono.txt")
+GENERATED = ("package-lock.json", "uv.lock", "OFL-Geist.txt", "OFL-GeistMono.txt")
 
 # Names that must never be tracked at all, whatever is in them.
 FORBIDDEN_NAMES = re.compile(

@@ -108,6 +108,13 @@ class Config:
     tunnel_access_team: str = ""
     tunnel_access_aud: str = ""
     tunnel_access_emails: list[str] = field(default_factory=list)
+    # The people who share this computer, and which devices are whose: a name,
+    # and the ids of that person's devices. A chat belongs to whoever's device
+    # opened it, and the list of chats can be read one person at a time. The
+    # first name is whose everything else is — a phone nobody listed, a chat an
+    # agent opened. Empty is a computer with one person on it, and no picker.
+    # Written by hand and re-read like the tunnel's settings.
+    people: dict = field(default_factory=dict)
     allowed_roots: list[str] = field(default_factory=lambda: [str(Path.home() / "projects")])
     # Subtracted from allowed_roots. Anything that holds a credential, plus this
     # daemon's own state — a chat has no business opening in its own token store.
@@ -198,6 +205,7 @@ class Config:
             "tunnel_access_team": self.tunnel_access_team,
             "tunnel_access_aud": self.tunnel_access_aud,
             "tunnel_access_emails": self.tunnel_access_emails,
+            "people": self.people,
             "allowed_roots": self.allowed_roots,
             "denied_paths": self.denied_paths,
             "idle_disconnect_s": self.idle_disconnect_s,
@@ -318,7 +326,22 @@ class Config:
         emails = raw.get("tunnel_access_emails", [])
         if isinstance(emails, list):
             self.tunnel_access_emails = [str(x) for x in emails]
+        people = raw.get("people", {})
+        if isinstance(people, dict):
+            self.people = people
         return True
+
+    def person_names(self) -> list[str]:
+        return [str(n) for n in self.people]
+
+    def person_of(self, device_id: str | None) -> str | None:
+        """Whose device this is: the person who lists it, else the first one."""
+        names = self.person_names()
+        for name in names:
+            ids = self.people.get(name)
+            if device_id and isinstance(ids, list) and device_id in ids:
+                return name
+        return names[0] if names else None
 
     def record(self) -> None:
         """Write the devices' live fields down, on top of whatever the CLI wrote.

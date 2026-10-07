@@ -9,6 +9,9 @@ export interface Chat {
   agent_id?: string | null;
   id: string;
   group_id: string | null;
+  /** Whose chat this is, on a computer more than one person uses. Empty on a
+   *  chat from before there were people: that one is the first person's. */
+  owner?: string | null;
   title: string;
   provider: Provider;
   model: string;

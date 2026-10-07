@@ -142,7 +142,7 @@ export default function Pair() {
           <>
             {/* The viewfinder. Its reticle is white on both themes because what
                 is behind it is the camera's own picture and not the page —
-                `ON_COLOUR`, the same reason a monogram's letter is white. */}
+                `ON_COLOUR`, the same reason an executor's mark is white. */}
             <View style={{ marginTop: 16, height: 320, borderRadius: 20, overflow: 'hidden',
                            backgroundColor: t.s2, alignItems: 'center', justifyContent: 'center' }}>
               {showCamera && (

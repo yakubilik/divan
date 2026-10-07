@@ -626,6 +626,29 @@ export function since(p: MergedProject): string | null {
   return first ? `since ${month(first.at)}` : null;
 }
 
+/** The meta line under a product's name (HANDOVER §4.2): its stage as one
+ *  word — with the day it got there, where somebody wrote that day down — and
+ *  the machines it runs on. `live since 4 Jan 2026 · runs on mac-studio`. A
+ *  product nobody has given a stage says only where it runs. */
+export function metaLine(p: MergedProject): string {
+  const stage = (p.stage || '').trim().toLowerCase();
+  const reached = stage ? milestones(p).filter((m) => m.kind === stage).pop() : undefined;
+  return [
+    stage ? (reached ? `${stage} since ${day(reached.at)}` : stage) : '',
+    p.machines.length ? `runs on ${p.machines.join(', ')}` : '',
+  ].filter(Boolean).join(' · ');
+}
+
+/** The sentence a branch with no source behind it says instead of a number. */
+export const NOT_CONNECTED = 'Source not connected yet.';
+
+/** Whether anything feeds a branch: something has written its summary, or —
+ *  for engineering — the product has a repository to read. */
+export function connected(p: MergedProject, b: MergedBranch): boolean {
+  return !!(b.summary || '').trim() || b.summary_at != null
+    || (b.kind.toLowerCase() === 'engineering' && p.repos.length > 0);
+}
+
 // ── …and what it has not done yet ───────────────────────────────────────────
 
 /** What a product is still waiting on, as the page draws it.

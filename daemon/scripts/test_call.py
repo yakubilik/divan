@@ -24,10 +24,15 @@ os.environ["USTABASI_STATE_DIR"] = str(tmp / "nowhere")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from claude_agent_sdk import (                                    # noqa: E402
+    AssistantMessage, RateLimitEvent, RateLimitInfo, ResultMessage, TextBlock)
+
 from remote_ai_chat import call                                  # noqa: E402
+from remote_ai_chat import server as server_mod                  # noqa: E402
 from remote_ai_chat import ustabasi as u                         # noqa: E402
 from remote_ai_chat.accounts import Account                      # noqa: E402
 from remote_ai_chat.db import DB                                 # noqa: E402
+from remote_ai_chat.pool import Pool, Settings                   # noqa: E402
 from remote_ai_chat.security import PathPolicy                   # noqa: E402
 from remote_ai_chat.server import Server                         # noqa: E402
 
@@ -191,7 +196,9 @@ class Host:
     def __init__(self, home: Path):
         self.db = DB(tmp / f"hand-{home.name}.sqlite")
         self.policy = policy
-        self.cfg = types.SimpleNamespace(allowed_roots=[str(root)], host_name="mac")
+        self.cfg = types.SimpleNamespace(allowed_roots=[str(root)], host_name="mac", demo=False,
+                                         refresh_tunnel=lambda: None, person_names=lambda: [],
+                                         person_of=lambda _id: None)
         self.accounts = {
             "default-claude": Account(id="default-claude", provider="claude", label="m"),
             "claude-x": Account(id="claude-x", provider="claude", label="x", home=str(home)),
@@ -209,7 +216,7 @@ class Host:
                 return False
 
         self.sessions = types.SimpleNamespace(get=S)
-        for name in ("_concierge_actions", "h_chat_create", "_account"):
+        for name in ("_concierge_actions", "h_chat_create", "_account", "_owner"):
             setattr(self, name, getattr(Server, name).__get__(self))
 
     async def broadcast(self, _ev):
@@ -232,6 +239,133 @@ check(got["sent"][0][1] == "takvime yarın 10'u ekle", "and gets the instruction
 got = asyncio.run(hand_off(plain_home))
 check(got["chat"]["agent_id"] is None, "without it, a chat with no agent, as before",
       str(got["chat"].get("agent_id")))
+
+# ── 6 · the account ──────────────────────────────────────────────────────────
+print("account")
+QUESTION = "what is running?"
+LIMIT_LINE = "You've hit your limit · resets 3pm"
+
+
+def full(resets_in: float) -> list[dict]:
+    return [{"window": "five_hour", "status": "rejected", "utilization": 1.0,
+             "resets_at": time.time() + resets_in, "at": time.time()}]
+
+
+class Machine:
+    """Enough of `Server` for the call to choose, and change, its account."""
+
+    def __init__(self, limits: dict[str, list[dict]], signed_out: tuple[str, ...] = ()):
+        self.db = DB(tmp / "account.sqlite")
+        self.limits = {k: {r["window"]: r for r in rows} for k, rows in limits.items()}
+        self.accounts = {
+            "default-claude": Account(id="default-claude", provider="claude", label="m"),
+            "acct-2": Account(id="acct-2", provider="claude", label="two",
+                              home=str(tmp / "a2"), created_at=2),
+            "acct-3": Account(id="acct-3", provider="claude", label="three",
+                              home=str(tmp / "a3"), created_at=3),
+        }
+        self.signed_out = signed_out
+        self._concierge_acct = None
+        self._concierge_skip = {}
+        self._sweeps = set()
+        self.CONCIERGE_SKIP_S = Server.CONCIERGE_SKIP_S
+        self._learn_steps = Server._learn_steps
+        for name in ("_account", "_limit_rows", "_remember_limits", "_sweep_later",
+                     "_concierge_account", "_concierge_limits", "_concierge_limited"):
+            setattr(self, name, getattr(Server, name).__get__(self))
+        self.pool = Pool(Settings(), lambda: self.accounts, self._limit_rows)
+        self.concierge = call.Concierge(lambda: ("nothing is running", []),
+                                        self._concierge_account, {},
+                                        on_limits=self._concierge_limits,
+                                        on_limited=self._concierge_limited)
+
+    def home(self) -> str | None:
+        return self._concierge_account()[0]
+
+
+class FakeClient:
+    """A CLI session that refuses on the accounts in `spent` and answers on the
+    rest. Which account it is shows in the config dir it was started with."""
+    spent: set[str | None] = set()
+    asked: list[tuple[str | None, str]] = []
+
+    def __init__(self, options):
+        self.home = options.env.get("CLAUDE_CONFIG_DIR")
+
+    async def connect(self):
+        pass
+
+    async def disconnect(self):
+        pass
+
+    async def query(self, prompt):
+        FakeClient.asked.append((self.home, prompt))
+
+    async def receive_response(self):
+        if self.home in FakeClient.spent:
+            yield RateLimitEvent(rate_limit_info=RateLimitInfo(
+                status="rejected", rate_limit_type="five_hour", utilization=1.0,
+                resets_at=int(time.time()) + 7200), uuid="u", session_id="s")
+            yield AssistantMessage(content=[TextBlock(text=LIMIT_LINE)], model="m")
+            yield ResultMessage(subtype="success", duration_ms=1, duration_api_ms=1,
+                                is_error=True, num_turns=1, session_id="s", result=LIMIT_LINE)
+            return
+        yield AssistantMessage(content=[TextBlock(text="Nothing is running.")], model="m")
+        yield ResultMessage(subtype="success", duration_ms=1, duration_api_ms=1,
+                            is_error=False, num_turns=1, session_id="s")
+
+
+def signed_in(a):
+    a.logged_in = a.id not in machine.signed_out
+    return a
+
+
+real_refresh, real_client = server_mod.acct.refresh, call.ClaudeSDKClient
+server_mod.acct.refresh, call.ClaudeSDKClient = signed_in, FakeClient
+os.environ.pop("CLAUDE_CONFIG_DIR", None)
+try:
+    machine = Machine({})
+    check(machine.home() is None and machine._concierge_acct.id == "default-claude",
+          "with nothing limited the call is the machine's own login, as before")
+
+    machine = Machine({"default-claude": full(3600)})
+    check(machine.home() == str(tmp / "a2") and machine._concierge_acct.id == "acct-2",
+          "a machine login the pool calls spent sends the call to the next free account",
+          str(machine._concierge_acct.id))
+
+    machine = Machine({"default-claude": full(3600)}, signed_out=("acct-2",))
+    check(machine.home() == str(tmp / "a3"), "and past one that is not signed in")
+
+    machine = Machine({}, signed_out=("default-claude",))
+    check(machine.home() == str(tmp / "a2"), "no machine login still falls to another account")
+
+    # A turn refused mid-call: the pool had nothing on the account beforehand.
+    machine = Machine({})
+    FakeClient.spent, FakeClient.asked = {None}, []
+    got = asyncio.run(machine.concierge.ask(QUESTION, "en-US"))
+    homes = [h for h, _ in FakeClient.asked]
+    check(got["text"] == "Nothing is running." and "limit" not in got["text"],
+          "a turn refused for the usage limit comes back as one answer, not the refusal",
+          got["text"])
+    check(homes == [None, str(tmp / "a2")]
+          and all(QUESTION in prompt for _, prompt in FakeClient.asked),
+          "the same question, asked again on the next free account", str(homes))
+    check(machine.pool.state("default-claude", "claude").blocked,
+          "and the refusal's limit reading reached the pool")
+
+    for lang, words in (("tr-TR", "Hiçbir hesapta"), ("en-US", "No account"), (None, "No account")):
+        machine = Machine({"default-claude": full(3 * 3600), "acct-2": full(1800),
+                           "acct-3": full(2 * 3600)})
+        FakeClient.spent, FakeClient.asked = set(), []
+        got = asyncio.run(machine.concierge.ask(QUESTION, lang))
+        clock = time.strftime("%H:%M", time.localtime(time.time() + 1800))
+        check(got["text"].startswith(words) and clock in got["text"]
+              and len(call._SENTENCE.split(got["text"])) == 1 and not FakeClient.asked,
+              f"every account spent ({lang}): one sentence with the earliest reset, no model turn",
+              f"{got['text']!r} asked={len(FakeClient.asked)}")
+        print("    " + got["text"])
+finally:
+    server_mod.acct.refresh, call.ClaudeSDKClient = real_refresh, real_client
 
 print()
 if failures:

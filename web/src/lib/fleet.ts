@@ -18,6 +18,9 @@ export interface HostSlot {
   catalog: Catalog | null;
   chats: Chat[];
   groups: Group[];
+  /** Who shares that computer, and which of them this browser is. One name
+   *  or none is a computer with nobody to tell apart. */
+  people: { names: string[]; me: string | null };
   projects: Project[];
   accounts: CliAccount[];
   /** account id → the windows that account last reported */
@@ -86,7 +89,7 @@ interface FleetState {
 function emptySlot(cfg: HostConfig): HostSlot {
   return {
     cfg, status: 'idle', info: null, catalog: null,
-    chats: [], groups: [], projects: [], accounts: [], limits: {},
+    chats: [], groups: [], people: { names: [], me: null }, projects: [], accounts: [], limits: {},
     loading: {}, lastOnline: null,
   };
 }
@@ -223,6 +226,7 @@ export const useFleet = create<FleetState>((set, get) => ({
       ...slot,
       chats: list.status === 'fulfilled' ? list.value.chats : slot.chats,
       groups: list.status === 'fulfilled' ? list.value.groups : slot.groups,
+      people: list.status === 'fulfilled' && list.value.people ? list.value.people : slot.people,
       projects: projects.status === 'fulfilled' ? projects.value.projects : slot.projects,
       info: info.status === 'fulfilled' ? info.value : slot.info,
     }));

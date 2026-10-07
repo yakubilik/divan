@@ -1,61 +1,48 @@
-/** One card: what a person wrote, what is happening to it, and — a press away —
- *  what the agent was told.
+/** One ticket (HANDOVER §4.4).
  *
- *  Web14 W8 is this page, and the desktop is why it is one page: on a phone the
- *  human face, the agent brief and the live log are three screens you swipe
- *  between, and here they are the left column, a shut row under it and the right
- *  column. Left: what a person wrote, in the fixed box the frame draws, cut to a
- *  paragraph with the rest on a press. Right: the details panel and the live log
- *  with its one-line input.
+ *  Two columns. The main one is the human face in a ~560px column — the status,
+ *  `#no · column`, the title and the two or three sentences a person wrote —
+ *  then, when the agent is asking, its question in an amber-edged card with the
+ *  answers it offers; then Live, the latest steps of the run as a mono time and
+ *  a sentence, with the one line you can say into it; then the Agent face, shut
+ *  (`<details>`): Goal, Done when, Test, Files. The side column is Column,
+ *  Executor, Machine, Branch, Runs alone and Opened, and under it what can be
+ *  done to the queue's ticket — the buttons the wall's ticket window has.
  *
- *  **The agent's half is shut.** It used to be open, and the page that made was
- *  the same paragraph three times down one screen: the sentences a person wrote,
- *  the goal the worker was given, and the log repeating it back. The brief is
- *  written for the worker, so it is a detail of the card rather than the subject
- *  of the page, and it is behind `Agent instructions`.
+ *  **No agent text on the human face.** The title and the sentences are
+ *  `human()`, which reads those two fields and nothing else; the brief is
+ *  `brief()` and lives behind the Agent face. The agent's question is the one
+ *  thing an agent wrote that is on the page open, because it is addressed to
+ *  the reader and the page exists to answer it. Live is the run's own steps.
  *
- *  **No agent text on the human face.** The daemon keeps the two apart on the
- *  wire — the board's cards carry `title` and `summary` and the marks, and
- *  `divan.card.get` is the one answer with both faces — and this page keeps them
- *  apart on screen: the box is `human()`, which reads those two fields and
- *  nothing else, and the brief is `brief()`, which reads the other six. A card
- *  nobody has written sentences for says so in the box rather than borrowing the
- *  goal, because a box filled with the agent's goal reads perfectly well and is
- *  the wrong text. Both are `lib/ticket.ts`.
+ *  The brief and the queue's ticket come from the machine that holds the card,
+ *  asked for when the page opens and again when the board says the card has
+ *  changed. Until they come the page is what the board already holds.
  *
- *  The brief arrives from the machine that holds the card, so it is asked for
- *  when the page opens and again when the board says the card has changed. Until
- *  it comes the page is the human face and the details, which are already in
- *  hand: a screen that waited for a second request to draw the first sentence
- *  would be a spinner over a card you can already read. A machine that cannot be
- *  reached says so where the brief would have been.
- *
- *  Two things the frame draws and this page does not: the chevron on the column
- *  pill, because the column is what a *board* writes and dragging a card is how
- *  it is written (`divan.card.move` is the board's request, and a second place to
- *  move a card from would be a second place to keep in step), and the link and
- *  ellipsis in the corner, which stand for nothing this end can do yet.
+ *  `Runs alone` is drawn as `off` with no switch: the daemon keeps no such
+ *  setting on a card or a ticket yet, so there is nothing a switch could send.
  */
 import { useEffect, useRef, useState } from 'react';
-import { cardGet, setExecutor, ticketNote, updateCard } from '../lib/actions';
-import { COLUMN_LABEL, executorWord } from '../lib/overview';
+import {
+  cancelTicket, cardGet, deleteTicket, editTicket, moveCard, prioritiseTicket, restartTicket, setExecutor,
+  ticketNote, updateCard,
+} from '../lib/actions';
+import { clock, executorWord } from '../lib/overview';
+import { status as statusOf } from '../lib/board';
+import { short } from '../lib/compose';
 import { uptime } from '../lib/format';
 import {
-  SUMMARY_MAX, brief, details, human, live, liveHead, nowMark, sayTo,
+  QUEUE_WORD, STEPS_SHOWN, brief, human, question, queueActs, side, steps,
+  type QueueAct, type Said,
 } from '../lib/ticket';
-import { executorFace } from '../lib/sessions';
 import { useRun } from '../lib/run';
 import { RunLog } from '../components/RunLog';
 import { Report } from '../components/Report';
-import { DictatingComposer } from '../components/Mic';
-import { RADIUS, SHADOW, STATE_MARK, STATE_TONE, T, stateColour } from '../lib/theme';
+import { MicButton, MicNote, useMic } from '../components/Mic';
+import { appendSpeech } from '../lib/dictate';
 import { useDivanStore, type MergedCard, type MergedProject } from '../lib/divan';
 import type { DivanCardFull, DivanExecutor } from '../lib/protocol';
 import type { Ticket as QueueTicket } from '../lib/ustabasi';
-import {
-  Card, ExecutorBadge, FieldRow, Monogram, Pill, StampRow, StatusDot, Tag,
-} from '../ui/divan';
-import { mono } from '../ui/kit';
 
 /** What came back from the machine that holds the card, and nothing invented
  *  while it is on its way. */
@@ -67,10 +54,10 @@ export interface Opened {
 
 const NOTHING: Opened = { full: null, ticket: null, error: null };
 
-/** How much of the sentences under the title a page opens on. Seven lines is a
- *  paragraph — enough to be the subject of the page, short enough that what is
- *  under it is still on the screen. */
+/** How much of the sentences under the title a page opens on. */
 const SUMMARY_LINES = 7;
+
+const FAILED = 'That did not reach the computer';
 
 export interface TicketProps {
   card: MergedCard;
@@ -81,12 +68,13 @@ export interface TicketProps {
   onBranch: (kind: string) => void;
 }
 
-/** The page, and the one request it makes. Asked for when the page opens and
- *  again when the board says the card has moved on: the live half of a ticket
- *  goes stale in a minute, and the board is re-read on its own timer. */
+/** The page, and the one request it makes. Asked for when the page opens,
+ *  again when the board says the card has moved on, and after anything this
+ *  page did to the queue. */
 export function Ticket(props: TicketProps) {
   const { card } = props;
   const [got, setGot] = useState<Opened>(NOTHING);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let mine = true;
@@ -98,44 +86,38 @@ export function Ticket(props: TicketProps) {
       })
       .catch((e) => {
         if (!mine) return;
-        setGot({ full: null, ticket: null, error: e?.message ?? 'That did not reach the computer' });
+        setGot({ full: null, ticket: null, error: e?.message ?? FAILED });
       });
     return () => { mine = false; };
-  }, [card.host, card.id, card.updated_at]);
+  }, [card.host, card.id, card.updated_at, tick]);
 
-  return <TicketPage {...props} opened={got} />;
+  return <TicketPage {...props} opened={got} onChanged={() => setTick((n) => n + 1)} />;
 }
 
-/** …and the page itself, which is a render of what is in hand and nothing else:
- *  the human face and the marks are on the board's own card, and the brief and
- *  the live half are whatever the machine has handed over so far. Until it does,
- *  this is the card a person can already read rather than a spinner over it. */
+/** …and the page itself: a render of what is in hand and nothing else. */
 export function TicketPage({
-  card, project, index, now, onProject, onBranch, opened: got = NOTHING,
-}: TicketProps & { opened?: Opened }) {
-  /** The brief starts shut. It is six blocks of mono written for the worker,
-   *  and open by default it was the loudest thing on a page whose subject is
-   *  the sentence a person wrote at the top: three copies of the same text
-   *  down one screen. It is a detail of the card, so it is behind a press. */
-  const [open, setOpen] = useState(false);
-  const [sent, setSent] = useState<string | null>(null);
-  /** A card is written on from here now — the title, the sentences under it,
-   *  and who does it. What was typed is kept until the board comes back with
-   *  it: the boards are re-read on a slow timer, and a title that snapped back
-   *  to the old one for two seconds reads as an edit that did not take. */
+  card, project, now, onProject, onBranch, opened: got = NOTHING, onChanged,
+}: TicketProps & { opened?: Opened; onChanged?: () => void }) {
   const [wrote, setWrote] = useState<{ title?: string; summary?: string }>({});
-  const [handing, setHanding] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  /** The sentences under the title are what the page is *about*, and on a
-   *  well-written ticket they run to a screenful. Cut to a paragraph with the
-   *  rest a press away: a page that opens on six hundred characters of grey is
-   *  one nobody reads the first line of. `long` is what the box measured, so
-   *  the press is only there on a card that actually has more. */
   const [whole, setWhole] = useState(false);
   const [long, setLong] = useState(false);
+  /** What was said into the run from this page, in its place among the steps. */
+  const [said, setSaid] = useState<Said[]>([]);
+  const [sayError, setSayError] = useState<string | null>(null);
+  /** The question that was answered from here, by the moment it was asked: the
+   *  card leaves the asking state the moment the answer has gone, and comes
+   *  back only if the board stamps a new question. */
+  const [answered, setAnswered] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const say = useRef<HTMLInputElement | null>(null);
+  const run = useRun(card.host, card.ustabasi_id);
 
-  /** Write one face of the card, and ask that machine for the board again so
-   *  everything else drawn from it catches up. */
+  const refresh = () => {
+    void useDivanStore.getState().load(card.host);
+    onChanged?.();
+  };
+
   const write = async (fields: { title?: string; summary?: string }) => {
     setFailed(null);
     setWrote((was) => ({ ...was, ...fields }));
@@ -144,420 +126,484 @@ export function TicketPage({
       void useDivanStore.getState().load(card.host);
     } catch (e: any) {
       setWrote({});
-      setFailed(e?.message ?? 'That did not reach the computer');
+      setFailed(e?.message ?? FAILED);
     }
   };
 
   const hand = async (executor: DivanExecutor | null) => {
     setFailed(null);
-    setHanding(false);
     try {
       await setExecutor(card.host, card.id, executor);
       void useDivanStore.getState().load(card.host);
     } catch (e: any) {
-      setFailed(e?.message ?? 'That did not reach the computer');
+      setFailed(e?.message ?? FAILED);
+    }
+  };
+
+  /** The frame's one move off this page: the same drop the board makes into
+   *  Queued, for a card that is in progress. */
+  const requeue = async () => {
+    setFailed(null);
+    try {
+      await moveCard(card.host, card.id, 'queued');
+      refresh();
+    } catch (e: any) {
+      setFailed(e?.message ?? FAILED);
+    }
+  };
+
+  /** One sentence into the run: the queue's note, which is the live channel the
+   *  ticket chat has always used. It is on Live the moment it is sent, and off
+   *  it again if the machine would not take it. */
+  const tell = async (words: string): Promise<boolean> => {
+    if (card.ustabasi_id == null) return false;
+    const mine: Said = { id: `said-${Date.now()}`, at: Date.now() / 1000, text: words };
+    setSaid((list) => [...list, mine]);
+    setSayError(null);
+    setSending(true);
+    try {
+      await ticketNote(card.host, card.ustabasi_id, words);
+      refresh();
+      return true;
+    } catch (e: any) {
+      setSaid((list) => list.filter((s) => s.id !== mine.id));
+      setSayError(e?.message ?? FAILED);
+      return false;
+    } finally {
+      setSending(false);
     }
   };
 
   const face = human(card);
-  const said = brief(got.full, got.ticket);
-  const mark = nowMark(card.agent_status);
-  const column = COLUMN_LABEL.find((c) => c.key === card.column);
-  const placeholder = sayTo(card);
-
-  const say = async (words: string) => {
-    if (card.ustabasi_id == null) return;
-    setSent(null);
-    try {
-      const answer = await ticketNote(card.host, card.ustabasi_id, words);
-      setSent(answer?.message || 'Sent.');
-    } catch (e: any) {
-      setSent(e?.message ?? 'That did not reach the computer');
-    }
-  };
+  const ask = question(card, got.ticket);
+  const askedAt = `${card.agent_status}:${card.agent_status_at ?? ''}`;
+  const asking = !!ask && answered !== askedAt;
+  const st = statusOf(card);
+  const lines = steps(run.turns, said, run.stamps, run.live, got.ticket);
+  const rows = side(card, now, uptime);
+  const label = project?.name ?? card.machine;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1, minHeight: 0 }}>
-      {/* Where this card is: the product, its board, the face it is on. */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: T.ink2,
-      }}>
-        <Monogram name={project?.name ?? card.machine} index={index} size={20} />
-        <Crumb label={project?.name ?? card.machine} onClick={onProject} />
-        <span style={{ color: T.ink3 }}>/</span>
-        <Crumb label={card.branch || 'engineering'} onClick={() => onBranch(card.branch)} />
-        {/* The frame ends the crumb on the ticket's number. A card no ticket was
-            filed for has none, and the card's own id is a word nobody reads —
-            so the crumb ends on the face it is on. */}
-        {card.ustabasi_id != null && (
-          <>
-            <span style={{ color: T.ink3 }}>/</span>
-            <span style={{
-              ...mono, flex: 'none', fontSize: 12, fontWeight: 600, color: T.ink,
-              background: T.s2, padding: '3px 7px', borderRadius: 6, whiteSpace: 'nowrap',
-            }}>#{card.ustabasi_id}</span>
-          </>
-        )}
-        <span style={{ ...mono, marginLeft: 'auto', fontSize: 12, color: T.ink3 }}>
-          {card.machine}{card.stale ? ' · not answering' : ''}
-        </span>
-      </div>
-
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: 32,
-        flex: 1, minHeight: 0,
-      }}>
-        {/* ── the human face, and the brief under it ── */}
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, minHeight: 0,
-          overflowY: 'auto',
-        }}>
-          <Writable
-            value={wrote.title ?? face.title} label="the card's title"
-            onSave={(text) => write({ title: text })}
-            style={{ fontSize: 30, fontWeight: 600, lineHeight: 1.15, letterSpacing: '-.02em' }}
-          />
+    <div className="dv-cols2 dv-ticket" data-ticket={card.id}>
+      <main>
+        <section data-human="">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Pill face="ink" label={column?.label ?? card.column} />
-            {!!mark && <Tag mark={STATE_MARK[mark.state]} label={mark.label}
-              tone={STATE_TONE[mark.state]} />}
-            <span style={{ ...mono, fontSize: 12, color: T.ink3, whiteSpace: 'nowrap' }}>
-              #{card.position + 1} in column
+            {/* An answer sent from here is the end of the asking, whatever the
+                board says until it is read again. */}
+            {ask && !asking
+              ? <span className="dv-status dv-status--idle" data-status="answered"><i />answered</span>
+              : !!st && <span className={`dv-status dv-status--${st.kind}`} data-status={st.word}><i />{st.word}</span>}
+            <span className="dv-meta">
+              <a href={project ? `/p/${encodeURIComponent(project.key)}` : '#'} className="dv-link"
+                onClick={(e) => { e.preventDefault(); onProject(); }}>{label}</a>
+              {card.ustabasi_id != null ? ` · #${card.ustabasi_id}` : ''}
+              {` · ${rows[0].value}`}
             </span>
           </div>
-          {/* 660 and not 720: at seventeen point the wider box ran past eighty
-              characters a line, which is past where an eye finds the next one
-              without help. */}
-          {/* A box with no name on it is a box a person has to work out. This
-              one has a job — it is the description, in a person's words, of
-              what the ticket is — and the heading is where that is said. The
-              budget is said next to it rather than under it, and it goes red
-              when it is broken: `600 / 220` in the same grey as everything
-              else was a number nobody read as a limit. */}
-          <div style={{ maxWidth: 860, display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-.01em' }}>Description</div>
-            <div style={{ ...mono, fontSize: 11, color: T.ink3 }}>{face.label}</div>
-            <div style={{
-              ...mono, marginLeft: 'auto', fontSize: 11,
-              color: face.summary.length > SUMMARY_MAX ? T.red : T.ink3,
-            }}>{face.count}</div>
-          </div>
-          <Card radius={RADIUS.tile} style={{ maxWidth: 860, padding: '16px 18px 12px', marginTop: -8 }}>
+          <h1 className="dv-ticket-title">
+            <Writable value={wrote.title ?? face.title} label="the card's title"
+              onSave={(text) => void write({ title: text })} />
+          </h1>
+          <div className="dv-ticket-body">
             <Writable
               value={wrote.summary ?? (face.bare ? '' : face.summary)}
               placeholder="Nobody has written the sentences for this one yet."
               label="what this card is about" multiline
-              onSave={(text) => write({ summary: text })}
-              style={{ fontSize: 16.5, lineHeight: '27px', minHeight: 54 }}
-              clamp={whole ? null : SUMMARY_LINES}
-              onOverflow={setLong}
+              onSave={(text) => void write({ summary: text })}
+              clamp={whole ? null : SUMMARY_LINES} onOverflow={setLong}
             />
             {long && (
-              <div style={{
-                display: 'flex', ...mono, fontSize: 11,
-                borderTop: `1px solid ${T.line}`, paddingTop: 8, marginTop: 8,
-              }}>
-                <button type="button" onClick={() => setWhole((w) => !w)}
-                  style={{
-                    background: 'transparent', border: 'none', padding: 0,
-                    font: 'inherit', color: T.ink2, cursor: 'pointer',
-                  }}>{whole ? 'less' : 'read all'}</button>
+              <button type="button" className="dv-btn dv-btn--ghost dv-hit" style={{ marginTop: 4, paddingLeft: 0 }}
+                onClick={() => setWhole((w) => !w)}>{whole ? 'Show less' : 'Read all'}</button>
+            )}
+          </div>
+          {!!failed && <p className="dv-meta" style={{ margin: '8px 0 0', color: 'var(--red)' }}>not saved · {failed}</p>}
+        </section>
+
+        {asking && ask && (
+          <article className={`dv-glass dv-wait dv-ask${ask.stuck ? ' dv-ask--stuck' : ''}`} data-asking="">
+            <div className="dv-wait-head">
+              <span style={{ fontSize: 12.5, fontWeight: 500, color: ask.stuck ? 'var(--red)' : 'var(--amber)' }}>
+                {ask.stuck ? 'The agent stopped' : 'The agent is asking'}
+              </span>
+              {card.agent_status_at != null && (
+                <span className="dv-meta" style={{ marginLeft: 'auto' }}>{short(now - card.agent_status_at)}</span>
+              )}
+            </div>
+            <p className="dv-wait-q">{ask.text}</p>
+            {card.ustabasi_id != null && (
+              <div className="dv-wait-actions">
+                {ask.answers.map((words, i) => (
+                  <button key={words} type="button" disabled={sending}
+                    className={`dv-btn dv-hit${i === 0 ? ' dv-btn--amber' : ''}`}
+                    onClick={async () => { if (await tell(words)) setAnswered(askedAt); }}>{words}</button>
+                ))}
+                <button type="button" className={`dv-btn dv-hit${ask.answers.length ? ' dv-btn--ghost' : ''}`}
+                  onClick={() => say.current?.focus()}>Reply</button>
               </div>
             )}
-          </Card>
+          </article>
+        )}
 
-          {/* What the ticket came back with — the documents it wrote, read. */}
-          {card.ustabasi_id != null && (
-            <Report host={card.host} ticket={card.ustabasi_id} status={card.agent_status ?? ''} />
-          )}
+        {/* What the ticket came back with — the documents it wrote, read. */}
+        {card.ustabasi_id != null && (
+          <Report host={card.host} ticket={card.ustabasi_id} status={card.agent_status ?? ''} />
+        )}
 
-          {/* The agent's half of the card, shut. A card nobody wrote a brief for
-              and a machine that would not hand one over are both a quiet line
-              rather than a heading over an explanation: neither is something
-              the reader of this page has to do anything about. */}
-          {got.error ? (
-            <div style={{ ...mono, fontSize: 11.5, lineHeight: 1.5, color: T.ink3 }}>
-              {card.machine} did not hand the agent instructions over: {got.error}
-            </div>
-          ) : said.empty ? (
-            <div style={{ ...mono, fontSize: 11.5, lineHeight: 1.5, color: T.ink3 }}>
-              no agent instructions on this one yet
-            </div>
-          ) : (
-            <Disclosure
-              label="Agent instructions"
-              note={`${said.lines} line${said.lines === 1 ? '' : 's'}`}
-              open={open} onToggle={() => setOpen((o) => !o)}
-            />
-          )}
-          {open && !got.error && !said.empty && (
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16,
-              ...mono, fontSize: 12.5, lineHeight: 1.6,
-            }}>
-              {!!said.goal && <Block label="GOAL">{said.goal}</Block>}
-              {!!said.criteria.length && (
-                <Block label={`DONE WHEN${said.passed ? ` · ${said.passed}` : ''}`}>
-                  {said.criteria.map((c, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 6 }}>
-                      <span style={{
-                        flex: 'none',
-                        color: c.met == null ? T.ink3 : c.met ? T.run : T.red,
-                      }}>{c.met == null ? '○' : c.met ? '✓' : '✗'}</span>
-                      <span style={{ minWidth: 0 }}>{c.text}</span>
-                    </div>
-                  ))}
-                </Block>
-              )}
-              {!!said.verify && (
-                <Block label="TEST">
-                  <div style={{ background: T.s2, borderRadius: 9, padding: '8px 10px' }}>
-                    {said.verify}
-                  </div>
-                </Block>
-              )}
-              {(!!said.constraints.length || !!said.paths.length || !!said.notes) && (
-                <Block label="CONSTRAINTS · FILES">
-                  {said.constraints.map((c, i) => <div key={i}>{c}</div>)}
-                  {said.paths.map((f) => (
-                    <div key={f} style={{ color: T.ink2 }}>{f}</div>
-                  ))}
-                  {!!said.notes && <div style={{ color: T.ink2 }}>{said.notes}</div>}
-                </Block>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ── the details, and the live half ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
-          <Card radius={RADIUS.tile} inset={false} style={{ padding: '4px 16px', position: 'relative' }}>
-            {handing && <Hands current={card.executor} onPick={(x) => void hand(x)} />}
-            {details(card, project, now, uptime).map((d, i) => (
-              <FieldRow key={d.label} label={d.label} value={d.value} note={d.note}
-                first={i === 0}
-                lead={d.label === 'Executor'
-                  ? <ExecutorBadge executor={executorFace(card)} size={22} />
-                  : undefined}
-                onClick={d.label === 'Executor' ? () => setHanding((h) => !h) : undefined}
-                title={d.label === 'Executor' ? 'Hand this card to somebody else' : undefined} />
-            ))}
-            {!!failed && (
-              <div style={{ ...mono, fontSize: 11, color: T.red, padding: '0 0 10px' }}>{failed}</div>
-            )}
-          </Card>
-          <Live card={card} ticket={got.ticket} now={now} placeholder={placeholder} sent={sent}
-            onSay={say} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** A step of the breadcrumb that goes back up one. */
-function Crumb({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} title={`Everything on ${label}`}
-      style={{
-        background: 'transparent', border: 'none', padding: 0, font: 'inherit',
-        color: T.ink2, cursor: 'pointer', maxWidth: 240, overflow: 'hidden',
-        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{label}</button>
-  );
-}
-
-/** A shut thing, and the press that opens it.
- *
- *  Not a section heading with a button on the end: a heading is a claim that
- *  what follows is part of the page, and this is a part of the *card* that most
- *  readings of the page do not want. So it is one quiet row the width of its
- *  own words — a caret, what it is, and how much of it there is — and the page
- *  under it stays the sentence somebody wrote. */
-function Disclosure({ label, note, open, onToggle }: {
-  label: string;
-  note?: string;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button" onClick={onToggle} aria-expanded={open}
-      title={open ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start',
-        padding: '6px 12px 6px 10px', borderRadius: RADIUS.chip,
-        background: 'transparent', border: `1px solid ${T.line}`,
-        font: 'inherit', fontSize: 13, fontWeight: 500, color: T.ink2, cursor: 'pointer',
-      }}
-    >
-      <span style={{
-        ...mono, flex: 'none', fontSize: 9, color: T.ink3,
-        transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .12s',
-      }}>▶</span>
-      {label}
-      {!!note && <span style={{ ...mono, fontSize: 11, color: T.ink3 }}>{note}</span>}
-    </button>
-  );
-}
-
-/** One block of the brief: its name in mono capitals, and what it says under. */
-function Block({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ ...mono, fontSize: 10.5, fontWeight: 600, color: T.ink3, marginBottom: 4 }}>
-        {label}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/** The log in the corner, and the one line you can say into it.
- *
- *  Two things, in the order they are read in. First the conversation the wall
- *  reads (`lib/ustabasi.ts`), cut to what there is room for and stamped: what
- *  was asked for, what came back, where it stands. Then, under it, what the
- *  worker is printing *right now* — the model's own stream, the same reading
- *  the wall's ticket window and the phone both use (`lib/run.ts`), because a
- *  box labelled Live that said `running 1h 12m` and nothing else was a box that
- *  told you the one thing you already knew.
- *
- *  A card with no ticket behind it has no worker listening, and the box says so
- *  instead of pretending to send. */
-function Live({ card, ticket, now, placeholder, sent, onSay }: {
-  card: MergedCard;
-  ticket: QueueTicket | null;
-  now: number;
-  placeholder: string | null;
-  sent: string | null;
-  onSay: (words: string) => void;
-}) {
-  const head = liveHead(ticket, now, uptime);
-  const lines = live(ticket);
-  const [words, setWords] = useState('');
-  const run = useRun(card.host, card.ustabasi_id);
-  const scroller = useRef<HTMLDivElement | null>(null);
-  /** Whether the reader is at the end of the log.
-   *
-   *  True to begin with, because a log opens on its last line: what is
-   *  happening *now* is the bottom of it, and a box that opened on the first
-   *  thing the worker said an hour ago was a box nobody could use without
-   *  scrolling it first. False the moment somebody scrolls up — a line
-   *  arriving must not drag them away from what they went up to read. */
-  const pinned = useRef(true);
-  useEffect(() => { pinned.current = true; }, [card.id]);
-  // Every render and not a list of dependencies: the log grows by a turn, by a
-  // line of a turn, and by the model's own stream mid-sentence, and the last of
-  // those changes nothing this component could name.
-  useEffect(() => {
-    const el = scroller.current;
-    if (el && pinned.current) el.scrollTop = el.scrollHeight;
-  });
-  return (
-    <Card radius={RADIUS.tile} style={{ padding: '12px 14px', gap: 4, flex: 1, minHeight: 0 }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600,
-        marginBottom: 4,
-      }}>
-        <StatusDot state={head.state === 'quiet' ? T.line2 : head.state} />
-        Live
-        <span style={{
-          ...mono, marginLeft: 'auto', flex: 'none', fontSize: 11,
-          color: head.state === 'quiet' ? T.ink3 : stateColour(head.state),
-          whiteSpace: 'nowrap',
-        }}>{head.note}</span>
-      </div>
-      <div
-        ref={scroller}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-        }}
-        style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, overflowY: 'auto' }}
-      >
-        {lines.length ? lines.map((l, i) => (
-          <StampRow key={i} code at={l.at} text={l.text} tone={l.tone} />
-        )) : (
-          <div style={{ fontSize: 13, lineHeight: 1.45, color: T.ink2 }}>
-            {card.ustabasi_id == null
-              ? 'Nothing runs on this card yet. Moving it into In Progress with a coding agent on it'
-                + ' is what starts a worker.'
-              : `Nothing has come back from ${card.machine} about this ticket yet.`}
+        <section aria-labelledby="t-live" data-live="">
+          <div className="dv-sec">
+            <h3 id="t-live">Live</h3>
+            <span className="dv-meta">{[executorWord(card.executor), card.machine].filter(Boolean).join(' · ')}</span>
           </div>
+          <div className="dv-glass dv-livebox">
+            {lines.length ? lines.slice(-STEPS_SHOWN).map((l) => (
+              <div key={l.id} className="dv-live" data-step={l.mine ? 'mine' : l.now ? 'now' : ''}>
+                <span className="dv-meta dv-step-at">{l.at == null ? '' : clock(l.at)}</span>
+                <span className="t" style={{ color: l.now || l.mine ? 'var(--ink)' : 'var(--ink-2)' }}>
+                  {l.text}{l.now ? ' · now' : ''}
+                </span>
+              </div>
+            )) : (
+              <p className="dv-livebox-quiet">
+                {card.ustabasi_id == null
+                  ? 'Nothing runs on this card yet. Moving it into In Progress with a coding agent on it is what starts a worker.'
+                  : run.loading ? 'Reading the run…' : `Nothing has come back from ${card.machine} about this run yet.`}
+              </p>
+            )}
+            {card.ustabasi_id != null ? (
+              <SayBox inputRef={say} hostKey={card.host} busy={sending}
+                onSend={(text) => tell(text)} />
+            ) : (
+              <p className="dv-meta" style={{ margin: '10px 4px 0' }}>
+                no ticket behind this card, so there is nothing to send a sentence to
+              </p>
+            )}
+            {!!sayError && <p className="dv-meta" style={{ margin: '8px 4px 0', color: 'var(--red)' }}>not sent · {sayError}</p>}
+          </div>
+          {card.ustabasi_id != null && run.turns.length > 0 && (
+            <details className="dv-run" style={{ marginTop: 10 }}>
+              <summary className="dv-btn dv-btn--ghost dv-hit">The whole run</summary>
+              <div style={{ marginTop: 10 }}><RunLog run={run} hostKey={card.host} /></div>
+            </details>
+          )}
+        </section>
+
+        <AgentFace got={got} machine={card.machine} />
+      </main>
+
+      <aside>
+        <Side card={card} rows={rows} onHand={(x) => void hand(x)} onBranch={() => onBranch(card.branch)} />
+        {(card.column === 'in_progress' || card.column === 'review') && (
+          <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={() => void requeue()}>Move back to Queued</button>
         )}
         {card.ustabasi_id != null && (
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.line}` }}>
-            <RunLog run={run} />
-          </div>
+          <Queue host={card.host} id={card.ustabasi_id} ticket={got.ticket} onChanged={refresh} />
         )}
-      </div>
-      {!!sent && (
-        <div style={{ ...mono, fontSize: 11, color: T.ink3, paddingTop: 6 }}>{sent}</div>
-      )}
-      <div style={{ marginTop: 'auto', paddingTop: 8 }}>
-        {placeholder
-          ? (
-            <DictatingComposer
-              hostKey={card.host}
-              placeholder={placeholder} value={words} onChange={setWords}
-              // The box is inside the card the log is in, so it carries the
-              // card's padding rather than the panel's own margin.
-              style={{ margin: 0 }}
-              onSend={() => {
-                const text = words.trim();
-                if (!text) return;
-                setWords('');
-                onSay(text);
-              }}
-            />
-          )
-          : (
-            <div style={{ ...mono, fontSize: 11, lineHeight: 1.5, color: T.ink3 }}>
-              no ticket behind this card, so there is nothing to send an answer to
-            </div>
-          )}
-      </div>
-    </Card>
+      </aside>
+    </div>
   );
 }
 
-/** Make a field exactly as tall as what is in it.
- *
- *  A fixed three rows is what broke pressing the box: the read view is as tall
- *  as the text and the field under it was three lines with a scrollbar, so a
- *  press made the page jump and the sentences being corrected went half out of
- *  sight. A field that is the height of its own text does not move anything. */
+/** The one line you can say into a run: a labelled field, the microphone and
+ *  the send button, in the pill the frame draws. */
+function SayBox({ inputRef, hostKey, busy, onSend }: {
+  inputRef: React.MutableRefObject<HTMLInputElement | null>;
+  hostKey: string;
+  busy: boolean;
+  onSend: (text: string) => Promise<boolean>;
+}) {
+  const [words, setWords] = useState('');
+  const latest = useRef(words);
+  latest.current = words;
+  const mic = useMic({ hostKey, onCommit: (chunk) => setWords(appendSpeech(latest.current, chunk)) });
+  const shown = mic.interim ? appendSpeech(words, mic.interim) : words;
+  const send = async () => {
+    if (mic.state !== 'idle') { mic.stop(); return; }
+    const text = words.trim();
+    if (!text || busy) return;
+    setWords('');
+    if (!(await onSend(text))) setWords(text);
+  };
+  return (
+    <>
+      <form className="dv-say" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+        <label htmlFor="t-say" className="dv-hidden">Say one sentence to the agent</label>
+        <input id="t-say" ref={inputRef} value={shown} autoComplete="off"
+          placeholder={mic.state === 'listening' ? 'Listening…' : 'Say one sentence to the agent'}
+          onChange={(e) => setWords(e.target.value)} />
+        <MicButton mic={mic} size={34} />
+        <button type="submit" className="dv-send" aria-label="Send" disabled={busy || (!words.trim() && mic.state === 'idle')}
+          style={{ width: 34, height: 34 }}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+        </button>
+      </form>
+      <MicNote mic={mic} />
+    </>
+  );
+}
+
+/** The brief, shut: Goal, Done when, Test, Files — and the constraints and
+ *  notes where the card has any. A machine that would not hand it over and a
+ *  card with none both say so inside it. */
+function AgentFace({ got, machine }: { got: Opened; machine: string }) {
+  const said = brief(got.full, got.ticket);
+  const loading = !got.full && !got.error;
+  return (
+    <details className="dv-glass dv-agent" data-agent-face="">
+      <summary className="dv-hit">
+        <span>Agent face</span>
+        <span className="dv-meta" style={{ marginLeft: 'auto' }}>goal, done when, tests, files</span>
+      </summary>
+      {got.error ? (
+        <p className="dv-agent-quiet">{machine} did not hand the agent face over: {got.error}</p>
+      ) : loading ? (
+        <p className="dv-agent-quiet">Asking {machine} for it…</p>
+      ) : said.empty ? (
+        <p className="dv-agent-quiet">Nobody has written an agent face for this one yet.</p>
+      ) : (
+        <dl>
+          <dt>Goal</dt><dd>{said.goal || '—'}</dd>
+          <dt>Done when{said.passed ? ` · ${said.passed}` : ''}</dt>
+          <dd>
+            {said.criteria.length ? (
+              <ul>
+                {said.criteria.map((c, i) => (
+                  <li key={i}>
+                    {c.met != null && (
+                      <span className="dv-meta" style={{ color: c.met ? 'var(--run)' : 'var(--red)', marginRight: 6 }}>
+                        {c.met ? 'met' : 'not met'}
+                      </span>
+                    )}
+                    {c.text}
+                  </li>
+                ))}
+              </ul>
+            ) : '—'}
+          </dd>
+          <dt>Test</dt><dd className="mono">{said.verify || '—'}</dd>
+          <dt>Files</dt>
+          <dd className="mono">{said.paths.length ? said.paths.map((f) => <div key={f}>{f}</div>) : '—'}</dd>
+          {!!said.constraints.length && (
+            <><dt>Constraints</dt><dd>{said.constraints.map((c, i) => <div key={i}>{c}</div>)}</dd></>
+          )}
+          {!!said.notes && <><dt>Notes</dt><dd>{said.notes}</dd></>}
+        </dl>
+      )}
+    </details>
+  );
+}
+
+/** Who a card can be handed to: the three a board offers, and Nobody, which
+ *  is a value rather than the absence of one. A branch agent is named by its
+ *  branch and is handed from the branch page. */
+const HANDS: { executor: DivanExecutor | null }[] = [
+  { executor: 'coding_agent' }, { executor: 'assistant' }, { executor: 'human' }, { executor: null },
+];
+
+/** The side column: six rows, and Executor and Branch can be pressed. */
+function Side({ card, rows, onHand, onBranch }: {
+  card: MergedCard;
+  rows: ReturnType<typeof side>;
+  onHand: (executor: DivanExecutor | null) => void;
+  onBranch: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+  return (
+    <div className="dv-glass dv-side" data-side="">
+      {rows.map((r) => {
+        const value = (
+          <>
+            <span className={r.mono ? 'dv-meta v' : 'v'}>{r.value}</span>
+            {!!r.note && <span className="dv-meta n">{r.note}</span>}
+          </>
+        );
+        if (r.key === 'executor') {
+          return (
+            <div key={r.key} className="dv-side-row" style={{ position: 'relative' }}>
+              <span className="l" id="t-executor">{r.label}</span>
+              <button type="button" className="dv-side-press dv-hit" aria-haspopup="menu" aria-expanded={open}
+                aria-labelledby="t-executor t-executor-v" title="Hand this card to somebody else"
+                onClick={() => setOpen((o) => !o)}>
+                <span id="t-executor-v" className="v">{r.value}</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {open && (
+                <div className="dv-menu" role="menu" aria-label="Who does this one" style={{ left: 'auto', right: 0 }}>
+                  {HANDS.map((h) => (
+                    <button key={h.executor ?? 'nobody'} type="button" role="menuitemradio"
+                      aria-checked={h.executor === card.executor}
+                      onClick={() => { setOpen(false); onHand(h.executor); }}>
+                      <span>{executorWord(h.executor)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+        if (r.key === 'branch') {
+          return (
+            <div key={r.key} className="dv-side-row">
+              <span className="l">{r.label}</span>
+              <button type="button" className="dv-side-press dv-hit" onClick={onBranch}
+                title={`Everything on ${r.value}`}>{value}</button>
+            </div>
+          );
+        }
+        if (r.key === 'alone') {
+          return (
+            <div key={r.key} className="dv-side-row" data-row="alone">
+              <span className="l">{r.label}</span>
+              <span className="v">{r.value}</span>
+              <span className="dv-meta n">not settable yet</span>
+            </div>
+          );
+        }
+        return (
+          <div key={r.key} className="dv-side-row" data-row={r.key}>
+            <span className="l">{r.label}</span>
+            {value}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** What can be done to the queue's ticket behind the card: the wall's ticket
+ *  window's own buttons (`components/TicketChat.tsx`), by the same rule. Each
+ *  asks the queue and puts its sentence on the page, the refusal included.
+ *  Deleting asks first, on the page. */
+function Queue({ host, id, ticket, onChanged }: {
+  host: string; id: number; ticket: QueueTicket | null; onChanged: () => void;
+}) {
+  const [doing, setDoing] = useState<QueueAct | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const acts = queueActs(ticket?.status);
+  if (!ticket) return null;
+
+  const act = async (what: QueueAct, go: () => Promise<{ message?: string }>, after?: () => void) => {
+    if (doing) return;
+    setDoing(what);
+    setError(null);
+    setSaid(null);
+    try {
+      const r = await go();
+      setSaid((r?.message || '').trim() || `${QUEUE_WORD[what]} — done`);
+      after?.();
+      onChanged();
+    } catch (e: any) {
+      setError(e?.message || `the queue refused to ${QUEUE_WORD[what].toLowerCase()}`);
+    } finally {
+      setDoing(null);
+    }
+  };
+
+  const press = (what: QueueAct) => {
+    if (what === 'edit') { setDeleting(false); setEditing((e) => !e); return; }
+    if (what === 'delete') { setEditing(false); setDeleting((d) => !d); return; }
+    const go = what === 'stop' ? () => cancelTicket(host, id)
+      : what === 'next' ? () => prioritiseTicket(host, id)
+      : () => restartTicket(host, id);
+    void act(what, go);
+  };
+
+  return (
+    <section aria-labelledby="t-queue" data-queue="">
+      <div className="dv-sec"><h3 id="t-queue">The queue's ticket</h3><span className="dv-meta">#{id} · {ticket.status}</span></div>
+      <div className="dv-wait-actions">
+        {acts.map((a) => (
+          <button key={a} type="button" disabled={!!doing}
+            className={`dv-btn dv-hit${a === 'stop' || a === 'delete' ? ' dv-btn--ghost dv-btn--danger' : ''}`}
+            aria-expanded={a === 'edit' ? editing : a === 'delete' ? deleting : undefined}
+            onClick={() => press(a)}>{doing === a ? `${QUEUE_WORD[a]}…` : QUEUE_WORD[a]}</button>
+        ))}
+      </div>
+      {editing && (
+        <Editor ticket={ticket} busy={doing === 'edit'} onClose={() => setEditing(false)}
+          onSave={(card) => void act('edit', () => editTicket(host, id, card), () => setEditing(false))} />
+      )}
+      {deleting && (
+        <div className="dv-glass dv-confirm" role="group" aria-label={`Delete #${id}`}>
+          <p>Delete #{id} and everything the queue wrote down about it? A branch with work nobody merged is kept — the queue says so when it does.</p>
+          <div className="dv-wait-actions">
+            <button type="button" className="dv-btn dv-hit" onClick={() => setDeleting(false)}>Keep it</button>
+            <button type="button" className="dv-btn dv-btn--ghost dv-btn--danger dv-hit" disabled={!!doing}
+              onClick={() => void act('delete', () => deleteTicket(host, id), () => setDeleting(false))}>
+              {doing === 'delete' ? 'Deleting…' : 'Delete it'}
+            </button>
+          </div>
+        </div>
+      )}
+      {!!said && <p className="dv-meta" style={{ margin: '10px 4px 0' }}>{said}</p>}
+      {!!error && <p className="dv-meta" style={{ margin: '10px 4px 0', color: 'var(--red)' }}>{error}</p>}
+    </section>
+  );
+}
+
+/** What a ticket asks for, open for rewriting: one criterion a line, because a
+ *  verifier answers them one by one. */
+function Editor({ ticket, busy, onSave, onClose }: {
+  ticket: QueueTicket; busy: boolean;
+  onSave: (card: { title: string; goal: string; done_criteria: string[]; verify_cmd: string }) => void;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState(ticket.title);
+  const [goal, setGoal] = useState(ticket.goal);
+  const [criteria, setCriteria] = useState((ticket.done_criteria || []).join('\n'));
+  const [verify, setVerify] = useState(ticket.verify_cmd || '');
+  const lines = criteria.split('\n').map((c) => c.trim()).filter(Boolean);
+  return (
+    <form className="dv-glass dv-editor" onSubmit={(e) => {
+      e.preventDefault();
+      onSave({ title: title.trim(), goal: goal.trim(), done_criteria: lines, verify_cmd: verify.trim() });
+    }}>
+      <div className="dv-field"><label htmlFor="q-title">Ticket title</label>
+        <input id="q-title" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+      <div className="dv-field"><label htmlFor="q-goal">Goal</label>
+        <textarea id="q-goal" rows={3} value={goal} onChange={(e) => setGoal(e.target.value)} /></div>
+      <div className="dv-field"><label htmlFor="q-done">Done criteria, one a line</label>
+        <textarea id="q-done" rows={4} value={criteria} onChange={(e) => setCriteria(e.target.value)} /></div>
+      <div className="dv-field"><label htmlFor="q-verify">Verify command</label>
+        <input id="q-verify" value={verify} onChange={(e) => setVerify(e.target.value)} /></div>
+      <div className="dv-wait-actions" style={{ alignItems: 'center' }}>
+        <span className="dv-meta" style={{ marginRight: 'auto' }}>
+          {lines.length} {lines.length === 1 ? 'criterion' : 'criteria'}
+        </span>
+        <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={onClose}>Cancel</button>
+        <button type="submit" className="dv-btn dv-btn--primary dv-hit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+      </div>
+    </form>
+  );
+}
+
+/** Make a field exactly as tall as what is in it, so pressing the text to
+ *  correct it does not move the page. */
 function fit(el: HTMLTextAreaElement | HTMLInputElement | null): void {
   if (!el || !(el instanceof HTMLTextAreaElement)) return;
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
 }
 
-/** A card's face, written in place.
- *
- *  A board where a card can be dragged but not corrected is a board people keep
- *  a second list beside. So the title and the sentences under it are fields:
- *  press, type, Enter — or ⌘Enter where there are several lines — and Escape
- *  puts back what was there. Nothing else about a card is writable from here;
- *  the column is the drag and the executor is the row in the panel, each with a
- *  request of its own.
- *
- *  It reads as text until it is pressed, because that is what the frames draw:
- *  no box, no pencil, nothing that says "form". */
-function Writable({ value, placeholder, label, multiline, onSave, style, clamp, onOverflow }: {
+/** A card's face, written in place: press, type, Enter — or ⌘Enter where there
+ *  are several lines — and Escape puts back what was there. It reads as text
+ *  until it is pressed. */
+function Writable({ value, placeholder, label, multiline, onSave, clamp, onOverflow }: {
   value: string;
   placeholder?: string;
-  /** What is being written, for a reader who cannot see which line was
-   *  pressed: "the card's title". */
   label: string;
   multiline?: boolean;
   onSave: (text: string) => void;
-  style?: React.CSSProperties;
-  /** How many lines of it to draw before cutting it off. Only ever the read
-   *  view — what is being typed is never hidden from the person typing it. */
   clamp?: number | null;
-  /** Said when there is more text than `clamp` lines will hold, so whatever
-   *  drew this can offer the press that opens it. */
   onOverflow?: (over: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -574,8 +620,6 @@ function Writable({ value, placeholder, label, multiline, onSave, style, clamp, 
   useEffect(() => {
     if (!onOverflow || !clamp) return;
     const el = view.current;
-    // Measured rather than counted: where the cut lands depends on the width
-    // the column ended up at, which no length of string knows.
     onOverflow(!!el && el.scrollHeight - el.clientHeight > 1);
   }, [value, clamp, editing, onOverflow]);
 
@@ -587,106 +631,35 @@ function Writable({ value, placeholder, label, multiline, onSave, style, clamp, 
   };
   const stop = () => { setText(value); setEditing(false); };
 
-  const shared: React.CSSProperties = {
-    ...style, width: '100%', boxSizing: 'border-box', margin: 0,
-    background: T.s2, color: T.ink, borderRadius: 10, padding: '6px 8px',
-    border: 'none', outline: 'none', font: 'inherit', resize: 'none' as const,
-  };
-
   if (editing) {
     return multiline ? (
       <textarea
-        ref={field as any} value={text} aria-label={label}
+        ref={field as any} value={text} aria-label={label} className="dv-writing" rows={1}
         onChange={(e) => { setText(e.target.value); fit(e.currentTarget); }}
         onBlur={done}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.preventDefault(); stop(); }
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); done(); }
         }}
-        rows={1}
-        style={{ ...shared, overflow: 'hidden' }}
       />
     ) : (
       <input
-        ref={field as any} type="text" value={text} aria-label={label}
+        ref={field as any} type="text" value={text} aria-label={label} className="dv-writing"
         onChange={(e) => setText(e.target.value)}
         onBlur={done}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.preventDefault(); stop(); }
           if (e.key === 'Enter') { e.preventDefault(); done(); }
         }}
-        style={shared}
       />
     );
   }
 
   return (
     <button
-      ref={view}
-      type="button" onClick={() => setEditing(true)} title={`Write ${label}`}
-      style={{
-        ...style, width: '100%', textAlign: 'left', background: 'transparent',
-        border: 'none', padding: 0, font: 'inherit', cursor: 'text',
-        color: value ? (style?.color ?? T.ink) : T.ink3,
-        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        ...(clamp
-          ? {
-              display: '-webkit-box', WebkitLineClamp: clamp, WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            }
-          : null),
-      }}
+      ref={view} type="button" className="dv-writable" onClick={() => setEditing(true)} title={`Write ${label}`}
+      data-empty={value ? undefined : 'true'}
+      style={clamp ? { display: '-webkit-box', WebkitLineClamp: clamp, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : undefined}
     >{value || placeholder || `Write ${label}`}</button>
-  );
-}
-
-/** Who a card can be handed to. The five the board knows, and `Nobody`, which
- *  is a value rather than the absence of one: a card whose agent was the wrong
- *  guess goes back to having none, not to having a person on it.
- *
- *  A branch agent is named by its branch, so it is not offered here — that is
- *  what the branch page is for. */
-const HANDS: { executor: DivanExecutor | null; face: string }[] = [
-  { executor: 'coding_agent', face: 'coder' },
-  { executor: 'assistant', face: 'research' },
-  { executor: 'human', face: 'you' },
-  { executor: null, face: 'unassigned' },
-];
-
-function Hands({ current, onPick }: {
-  current: DivanExecutor | null;
-  onPick: (executor: DivanExecutor | null) => void;
-}) {
-  return (
-    <div
-      role="listbox" aria-label="Who does this one"
-      style={{
-        position: 'absolute', top: 44, left: 12, right: 12, zIndex: 5,
-        background: T.s2, borderRadius: RADIUS.tab, boxShadow: SHADOW.drawer,
-        padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
-      }}
-    >
-      {HANDS.map((h) => {
-        const on = h.executor === current;
-        return (
-          <button
-            key={h.face} type="button" role="option" aria-selected={on}
-            onClick={() => onPick(h.executor)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-              padding: '6px 8px', borderRadius: RADIUS.mark, border: 'none', font: 'inherit',
-              textAlign: 'left', cursor: 'pointer', color: T.ink,
-              background: on ? T.s1 : 'transparent',
-            }}
-          >
-            <ExecutorBadge executor={h.face} size={20} />
-            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: on ? 600 : 500 }}>
-              {executorWord(h.executor)}
-            </span>
-            {on && <span style={{ ...mono, fontSize: 11, color: T.ink3 }}>on</span>}
-          </button>
-        );
-      })}
-    </div>
   );
 }

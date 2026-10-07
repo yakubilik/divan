@@ -21,6 +21,7 @@ import { Icon } from './icon';
 import { Text, TextInput } from './text';
 import { Card, ExecutorBadge, Monogram, Tap } from './divan';
 import { RADIUS, toneColours, useTokens, em, type Tone } from '../theme';
+import { useT } from '../store';
 
 // ── 1 · the head every face wears ───────────────────────────────────────────
 
@@ -293,17 +294,20 @@ export function LiveRow({ time, text, tone, now }: {
  *  It is offered only where there is a worker to read it (`src/card.ts
  *  saying`); the screen draws the foot alone where there is not, because "the
  *  run doesn't stop" is not true of a card nothing is running on. */
-export function SayBox({ value, onChangeText, onSend, placeholder, foot, busy, error, style }: {
+export function SayBox({ value, onChangeText, onSend, placeholder, foot, label, busy, error, style }: {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
   placeholder: string;
   foot: string;
+  /** What the field is called, for a reader who cannot see the placeholder. */
+  label?: string;
   busy?: boolean;
   error?: string | null;
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTokens();
+  const T = useT();
   const ready = !!value.trim() && !busy;
   return (
     <View style={[{ gap: 6 }, style]}>
@@ -312,18 +316,19 @@ export function SayBox({ value, onChangeText, onSend, placeholder, foot, busy, e
                      borderRadius: 24, backgroundColor: t.s1, borderWidth: 1, borderColor: t.line2,
                      paddingLeft: 16, paddingRight: 6 }}>
         <TextInput value={value} onChangeText={onChangeText} editable={!busy} multiline
+          accessibilityLabel={label ?? placeholder}
           placeholder={placeholder} placeholderTextColor={t.ink3}
           style={{ flex: 1, fontSize: 15, color: t.ink, paddingVertical: 12, maxHeight: 120 }} />
         {/* Still the send colour while the sentence is in flight, at half
             strength: the box has already emptied by then, and a button that
             goes grey the moment it is pressed reads as a button that refused. */}
-        <Tap onPress={ready ? onSend : undefined}
+        <Tap onPress={ready ? onSend : undefined} label={T('send')}
           style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
                    backgroundColor: ready || busy ? t.ink : t.s2, opacity: busy ? 0.5 : 1 }}>
           <Icon name="arrow_upward" size={18} weight={500} color={ready || busy ? t.bg : t.ink3} />
         </Tap>
       </View>
-      <Text mono style={{ fontSize: 11, color: t.ink3, textAlign: 'center' }}>{foot}</Text>
+      {!!foot && <Text mono style={{ fontSize: 11, color: t.ink3, textAlign: 'center' }}>{foot}</Text>}
     </View>
   );
 }

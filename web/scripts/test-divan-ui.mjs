@@ -43,7 +43,7 @@ if (!chrome) {
 // Read out of the panel's own module, not transcribed again: what this check is
 // about is whether the browser resolved them, and `npm test` is what holds them
 // to the artboards.
-const { DARK, LIGHT, MEDIA, MONOGRAM, ON_COLOUR, EXECUTORS } =
+const { DARK, LIGHT, MEDIA, ON_COLOUR, EXECUTORS } =
   await (async () => {
     mkdirSync(out, { recursive: true });
     execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
@@ -70,7 +70,7 @@ execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
 
 writeFileSync(join(out, 'ui-harness.html'),
   '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-  + '<title>Divan · both themes</title><style>'
+  + '<title>Divan · both themes</title><link rel="stylesheet" href="./ui-harness.css"><style>'
   + 'html,body,#root{margin:0;background:Canvas;color:CanvasText;'
   + 'font-family:-apple-system,system-ui,sans-serif}</style></head>'
   + '<body><div id="root"></div><script src="./ui-harness.js"></script></body></html>');
@@ -141,13 +141,17 @@ function asRgb(value) {
   }
   const nums = value.match(/[\d.]+/g).map(Number);
   if (nums.length === 3) return `rgb(${nums.join(', ')})`;
-  const a = nums[3];
+  // Chrome keeps alpha as a byte and writes the shortest of two or three
+  // decimals that comes back to the same byte.
+  const byte = Math.round(nums[3] * 255);
+  const two = Number((byte / 255).toFixed(2));
+  const a = Math.round(two * 255) === byte ? two : Number((byte / 255).toFixed(3));
   return `rgba(${nums.slice(0, 3).join(', ')}, ${a})`;
 }
 
 /** Every colour a theme is allowed to have resolved to, as Chrome spells it. */
 function allowed(tokens) {
-  const own = [ON_COLOUR, ...MONOGRAM,
+  const own = [ON_COLOUR,
                ...Object.values(EXECUTORS).map((e) => e.fill).filter(Boolean),
                ...Object.values(MEDIA)];
   const set = new Set([...Object.entries(tokens).filter(([k]) => k !== 'scheme').map(([, v]) => asRgb(v)),

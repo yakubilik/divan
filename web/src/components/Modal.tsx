@@ -21,7 +21,8 @@ export function Modal({ children, onClose, width = 680, align = 'center' }: {
         justifyContent: 'center', paddingTop: align === 'top' ? 110 : 0,
       }}
     >
-      <div style={{
+      {/* A dialog stands on a raised surface, where ink-3 is under 4.5:1. */}
+      <div className="dv-tinted" style={{
         width, maxWidth: 'calc(100vw - 48px)', maxHeight: 'calc(100vh - 120px)',
         background: C.surface, border: `1px solid ${C.borderStrong}`, borderRadius: R.media,
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -45,7 +46,7 @@ export function ModalHead({ title, subtitle, onClose }: {
         {subtitle && <div style={{ fontSize: 12, color: C.mute, marginTop: 3 }}>{subtitle}</div>}
       </div>
       <button
-        type="button" onClick={onClose}
+        type="button" onClick={onClose} aria-label="Close"
         style={{
           width: 28, height: 28, borderRadius: R.btn, cursor: 'pointer', flexShrink: 0,
           background: C.surface2, border: `1px solid ${C.border}`,

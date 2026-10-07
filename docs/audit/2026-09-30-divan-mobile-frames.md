@@ -1,5 +1,7 @@
 # Divan mobile against its frames — 30 September 2026
 
+> **Retired, 7 Oct 2026.** This compared the panel and the app with the *old* frames (Web12–Web15, Mobile1–6). The handover of 7 Oct 2026 replaced those frames, and the script it describes was removed. The current comparison is `docs/divan-ui-migration.md`.
+
 ## The answer
 
 **Every screen the frames drew is there, in the right shape, and nothing on any

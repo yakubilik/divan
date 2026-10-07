@@ -65,6 +65,17 @@ const HOLDS = [];
  *  what reached this module. */
 const BUZZES = [];
 
+/** Every field that takes typing in the last render. A field's text is a prop,
+ *  and the only way to type into one here is to call what it calls. */
+const FIELDS = [];
+
+/** Every viewfinder's scan handler in the last render. */
+const SCANS = [];
+
+/** Every menu a press asked the app's own popover for (`components/overlay`),
+ *  newest last: what a chip offers is a claim about the menu it opens. */
+const MENUS = [];
+
 /** The words inside an element, however deep. A chip is a dot and a label; the
  *  label is what a check is looking for. */
 function textOf(node) {
@@ -92,6 +103,13 @@ function host(tag, kind) {
     if (typeof rest.onPress === 'function') {
       PRESSES.push({ text: textOf(children), label: rest.accessibilityLabel ?? null, press: rest.onPress });
     }
+    if (typeof rest.onChangeText === 'function') {
+      FIELDS.push({ label: rest.accessibilityLabel ?? null, placeholder: rest.placeholder ?? null,
+                    change: rest.onChangeText });
+    }
+    // The pairing screen's viewfinder: what it does with a code it reads is a
+    // claim about this handler, and a scan is how a check asks it.
+    if (typeof rest.onBarcodeScanned === 'function') SCANS.push(rest.onBarcodeScanned);
     if (typeof rest.onLongPress === 'function') {
       HOLDS.push({ text: textOf(children), hold: rest.onLongPress, out: rest.onPressOut,
                    delay: rest.delayLongPress ?? null });
@@ -174,6 +192,9 @@ const STUBS = {
     SafeAreaProvider: host('div', 'SafeAreaProvider'),
   },
   'expo-router': {
+    // The router a module reaches for outside a component (`src/incoming-call`
+    // pushes the call screen when a ringing phone is answered).
+    router: { push: (to) => { PUSHED.push(to); }, replace: (to) => { REPLACED.push(to); }, back() {} },
     useRouter: () => ({ back() {}, canGoBack: () => false,
                         // A screen that files something does not push the page
                         // it lands on, it replaces itself with it — so where
@@ -194,7 +215,9 @@ const STUBS = {
     // What is in the address. The Dashboard keeps the project being read
     // there, so a check can render it scoped by putting one in first.
     useLocalSearchParams: () => PARAMS,
-    Redirect: () => null,
+    // A screen that sends you on at once (the Chat place, to its newest
+    // conversation) says where in the same list a replace does.
+    Redirect: ({ href }) => { REPLACED.push(href); return null; },
     useFocusEffect: () => {},
     Stack: Object.assign(host('div', 'Stack'), { Screen: () => null }),
   },
@@ -250,11 +273,18 @@ const camera = {
  *  of a plain object a check can fill in first (`store.set`). Left empty, every
  *  selector answers `undefined`, which is what it did before there was one. */
 const STATE = {};
+/** What `useT()` answers: the key, so a check reads the one thing a typo cannot
+ *  fake — unless a picture wants the sentences (`words.real()`). */
+const WORDS = { t: (key) => key };
+const words = {
+  real() { const { t } = require(path.join(root, 'src/i18n.ts')); WORDS.t = t; },
+  keys() { WORDS.t = (key) => key; },
+};
 const PARAMS = {};
 const PUSHED = [];
 const REPLACED = [];
 const STORE = {
-  useT: () => (key) => key,
+  useT: () => WORDS.t,
   // The two things screens import from the store that are not the store: the
   // permission mode a new chat starts on, and the reading of which account an
   // agent is installed under. Both are the real ones (`src/store.ts`) — they
@@ -277,6 +307,8 @@ const store = {
 };
 const params = {
   set(patch) { Object.assign(PARAMS, patch); },
+  /** What the address says now: a press that writes into it is read here. */
+  get() { return { ...PARAMS }; },
   reset() { for (const k of Object.keys(PARAMS)) delete PARAMS[k]; },
 };
 /** Every route a press pushed, oldest first. Not cleared by `render`: a push
@@ -287,11 +319,25 @@ const nav = {
   reset() { PUSHED.length = 0; REPLACED.length = 0; },
 };
 
+let OVERLAY = null;
+let OVERLAY_LOADING = false;
 const realLoad = Module._load;
 Module._load = function (request, parent, isMain) {
   if (Object.prototype.hasOwnProperty.call(STUBS, request)) return STUBS[request];
   if (request.startsWith('.') && parent
       && path.resolve(path.dirname(parent.filename), request) === path.join(root, 'src/store')) return STORE;
+  if (request.startsWith('.') && parent && !OVERLAY_LOADING
+      && path.resolve(path.dirname(parent.filename), request) === path.join(root, 'src/components/overlay')) {
+    if (!OVERLAY) {
+      OVERLAY_LOADING = true;
+      try {
+        const real = realLoad.call(this, request, parent, isMain);
+        OVERLAY = { ...real, openMenu: (spec) => { MENUS.push(spec); },
+                    measure: () => Promise.resolve({ x: 0, y: 0, width: 0, height: 0 }) };
+      } finally { OVERLAY_LOADING = false; }
+    }
+    return OVERLAY;
+  }
   return realLoad.call(this, request, parent, isMain);
 };
 
@@ -313,6 +359,8 @@ function render(scheme, element) {
   PRESSES.length = 0;
   HOLDS.length = 0;
   BUZZES.length = 0;
+  FIELDS.length = 0;
+  SCANS.length = 0;
   return renderToStaticMarkup(React.createElement(theme.ForceScheme, { scheme }, element));
 }
 
@@ -333,6 +381,16 @@ function pressOn(text) {
   found[0].press();
 }
 
+/** Type into the field with this label, the way a keyboard would. */
+function typeInto(label, value) {
+  const found = FIELDS.filter((f) => f.label === label || f.placeholder === label);
+  if (found.length !== 1) throw new Error(`typeInto(${JSON.stringify(label)}): ${found.length} of them`);
+  found[0].change(value);
+}
+
+/** The menus pressed open so far, and forgetting them. */
+const menus = { all: () => MENUS.slice(), last: () => MENUS[MENUS.length - 1] ?? null, reset: () => { MENUS.length = 0; } };
+
 /** Every `data-style` in a piece of markup, as objects. */
 function styles(markup) {
   return [...markup.matchAll(/data-style="([^"]*)"/g)].map((m) => JSON.parse(
@@ -350,5 +408,8 @@ function paint(markup) {
   return out;
 }
 
+/** What the last render's viewfinders would do with a code they read. */
+function scans() { return SCANS.slice(); }
+
 module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten,
-                   store, params, nav, camera, presses, pressOn, holds, buzzes };
+                   store, params, nav, camera, presses, pressOn, holds, buzzes, typeInto, menus, words, scans };

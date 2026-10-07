@@ -41,10 +41,15 @@ export interface RunRead {
   silence: RunSilence;
   /** the reader had fallen more than a page behind and was moved to the end */
   jumped: boolean;
+  /** When this browser first saw each turn, by turn id. Empty for the page
+   *  that was already in the file when the run was opened: the log has no
+   *  clock in it, and a time on a line written before anybody looked would be
+   *  made up. */
+  stamps: Record<string, number>;
 }
 
 const EMPTY: RunRead = {
-  turns: [], shots: [], live: false, loading: false, silence: null, jumped: false,
+  turns: [], shots: [], live: false, loading: false, silence: null, jumped: false, stamps: {},
 };
 
 export function useRun(hostKey: string | null, ticketId: number | null): RunRead {
@@ -57,6 +62,7 @@ export function useRun(hostKey: string | null, ticketId: number | null): RunRead
   const [loading, setLoading] = useState(true);
   const [quiet, setQuiet] = useState<RunSilence>(null);
   const [jumped, setJumped] = useState(false);
+  const [stamps, setStamps] = useState<Record<string, number>>({});
   /** In a ref rather than in state: it changes on every poll and nothing draws
    *  it, so a render for it would be a render every two seconds for nothing. */
   const cursor = useRef<string | null>(null);
@@ -77,6 +83,7 @@ export function useRun(hostKey: string | null, ticketId: number | null): RunRead
     opened.current = false;
     setList([]);
     setShots([]);
+    setStamps({});
     setJumped(false);
     setLoading(true);
   }, [hostKey, ticketId]);
@@ -99,6 +106,10 @@ export function useRun(hostKey: string | null, ticketId: number | null): RunRead
       const { turns: more, answers, next } = turns(page.events || [], numbered.current);
       numbered.current = next;
       setList((had) => trim(attach([...(fresh ? [] : had), ...more], answers)));
+      // Only what arrived while somebody was watching gets a time.
+      const seen = opened.current && !fresh && more.length
+        ? Object.fromEntries(more.map((t) => [t.id, Date.now() / 1000])) : null;
+      setStamps((had) => (fresh ? {} : seen ? { ...had, ...seen } : had));
       if (fresh && opened.current) setJumped(true);
       opened.current = true;
       // Nothing is going to be appended to a run that has ended, and the file
@@ -125,5 +136,5 @@ export function useRun(hostKey: string | null, ticketId: number | null): RunRead
   }, [poll, ticketId]);
 
   if (ticketId == null) return EMPTY;
-  return { turns: list, shots, live, loading, silence: quiet, jumped };
+  return { turns: list, shots, live, loading, silence: quiet, jumped, stamps };
 }

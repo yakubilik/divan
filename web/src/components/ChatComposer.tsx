@@ -222,17 +222,20 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           {`Fetching the ${langName(dictateLang())} speech model. This happens once, and then it runs on this computer.`}
         </div>
       )}
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', gap: 8, padding: 6,
-        borderRadius: R.composer, background: C.surface,
-        border: `1px solid ${dragging ? C.accent : C.border}`,
+      {/* The chat's own box is the Composer of the frame (HANDOVER §4.8); the
+          small one in a question window keeps its pill. */}
+      <div className={compact ? undefined : 'dv-glass-strong dv-composer'} style={{
+        display: 'flex', alignItems: 'flex-end', gap: 8,
+        ...(compact
+          ? { padding: 6, borderRadius: R.composer, background: C.surface, border: `1px solid ${dragging ? C.accent : C.border}` }
+          : { padding: '10px 10px 10px 12px', ...(dragging ? { borderColor: C.accent } : null) }),
       }}>
         <input
           ref={file} type="file" multiple name="attachments" style={{ display: 'none' }}
           onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
         />
         <button
-          type="button" onClick={() => file.current?.click()} title="Attach a file"
+          type="button" onClick={() => file.current?.click()} title="Attach a file" aria-label="Attach a file"
           style={{
             width: disc, height: disc, borderRadius: disc / 2, flexShrink: 0, cursor: 'pointer',
             background: C.surface2, border: `1px solid ${C.border}`,
@@ -242,7 +245,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           <Icon path={P.plus} size={compact ? 15 : 18} color={C.text} />
         </button>
         <textarea
-          ref={ref} name="composer" value={shown} rows={1}
+          ref={ref} name="composer" aria-label="Message" value={shown} rows={1}
           onChange={(e) => setText(e.target.value)}
           onPaste={onPaste}
           onKeyDown={(e) => {
@@ -258,7 +261,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           placeholder={listening ? 'Listening…'
             : busy ? 'You can already type the next message…' : `Message ${folder}…`}
           style={{
-            flex: 1, boxSizing: 'border-box', maxHeight: compact ? 120 : 200, resize: 'none',
+            flex: 1, boxSizing: 'border-box', minHeight: compact ? 0 : 44, maxHeight: compact ? 120 : 200, resize: 'none',
             background: 'transparent', border: 'none', outline: 'none',
             fontSize: compact ? 13.5 : 15, lineHeight: compact ? '19px' : '22px',
             padding: compact ? '6px 4px' : '7px 6px', color: C.text, overflowY: 'auto',
@@ -268,7 +271,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
         <button
           type="button" onClick={busy && !ready ? onInterrupt : submit}
           disabled={!busy && !ready && mic.state === 'idle'}
-          title={busy && !ready ? 'Stop' : 'Send'}
+          title={busy && !ready ? 'Stop' : 'Send'} aria-label={busy && !ready ? 'Stop' : 'Send'}
           style={{
             width: disc, height: disc, borderRadius: disc / 2, flexShrink: 0,
             cursor: busy || ready ? 'pointer' : 'default',

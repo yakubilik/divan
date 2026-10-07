@@ -37,7 +37,7 @@ const card = (id, o = {}) => ({
   column: o.column || 'in_progress', position: o.position || 0, title: o.title || id,
   summary: o.summary || '', executor: o.executor ?? 'coding_agent', machine: o.machine ?? null,
   repo: null, ustabasi_id: o.ustabasi ?? null, agent_status: o.status ?? null,
-  agent_status_at: o.at ?? null, agent_detail: '', created_at: 0, updated_at: o.updated ?? 0,
+  agent_status_at: o.at ?? null, agent_detail: o.detail || '', created_at: 0, updated_at: o.updated ?? 0,
   moved_at: o.moved ?? null,
 });
 const snapshot = (machine, o) => ({ machine, os: 'Darwin', at: o.at ?? NOW, projects: o.projects || [],
@@ -59,7 +59,10 @@ const STUDIO = paired('h1', 'studio', {
   snapshot: snapshot('studio', { at: NOW - 10, projects: [QUIRE()],
     cards: [
       card('q1', { status: 'asking', ustabasi: 12, title: 'Webhook retry policy',
-                   summary: 'Failed Stripe webhooks are dropped after 3 tries.' }),
+                   summary: 'Failed Stripe webhooks are dropped after 3 tries.',
+                   detail: 'Retry five times, or ten?' }),
+      card('r1', { column: 'review', status: 'running', at: NOW - 8 * MIN, position: 5, ustabasi: 14,
+                   title: 'Payment flow with Stripe' }),
       card('q2', { status: 'failed', at: NOW - 9 * HOUR, position: 1, ustabasi: 7,
                    title: 'Price localisation for GBP' }),
       card('q3', { status: 'running', at: NOW - 12 * MIN, position: 2, ustabasi: 9,
@@ -109,12 +112,12 @@ const ids = (list) => list.map((i) => i.card.id).join(',');
     ['the four columns are the board’s own, left to right, with its counts',
       eq(four.map((c) => c.key), ['ice_box', 'queued', 'in_progress', 'done'])
       && eq(four.map((c) => c.label), ['bdIceBox', 'bdQueued', 'bdInProgress', 'bdDone'])
-      && eq(four.map((c) => c.count), [11, 3, 7, 48])],
+      && eq(four.map((c) => c.count), [11, 3, 7, 1])],
     ['…and a column with cards in it never reads zero, whatever the counts say',
-      B.tabs({ ...quire, counts: {} }, NOW).find((c) => c.key === 'in_progress').count === 6],
+      B.tabs({ ...quire, counts: {} }, NOW).find((c) => c.key === 'in_progress').count === 7],
     ['a board opens on In Progress, and every column holds the cards a person put in it',
       B.OPENS_ON === 'in_progress'
-      && ids(of('in_progress')) === 'm1,q1,q2,q3,q4,q5'
+      && ids(of('in_progress')) === 'm1,q1,q2,q3,q4,q5,r1'
       && ids(of('queued')) === 'q6' && ids(of('ice_box')) === 'q7'],
   );
 }
@@ -140,13 +143,9 @@ const ids = (list) => list.map((i) => i.card.id).join(',');
       && of('in_progress', ONE, alone).every((i) => i.machine === null)],
     ['…and the one on the machine that has gone quiet says when it was last heard from',
       by.m1.machine.seen === NOW - QUIET && by.q3.machine.seen === null],
-    ['the column says what is in it, and which machines it is spread over',
-      eq(B.tally(of('in_progress').map((i) => i.card), NOW, ago),
-         [{ mark: '?', n: 1, tone: 'amber' }, { mark: '■', n: 1, tone: 'red' },
-          { mark: '×', n: 1, tone: 'red' }, { mark: '●', n: 1, tone: 'run' },
-          { mark: '✓', n: 1, tone: 'run' }, { mark: '○', n: 1, tone: 'ink2' }])
-      && eq(B.spread(quire, of('in_progress').map((i) => i.card)),
-            [{ name: 'studio', n: 5 }, { name: 'mini', n: 1 }])
+    ['the column says which machines it is spread over',
+      eq(B.spread(quire, of('in_progress').map((i) => i.card)),
+            [{ name: 'studio', n: 6 }, { name: 'mini', n: 1 }])
       && eq(B.spread(alone, of('in_progress', ONE, alone).map((i) => i.card)), [])],
   );
 }
@@ -203,7 +202,8 @@ function draw(scheme, hosts, params) {
  *  The chip inside one wears its state's wash, and that is the point — this is
  *  about what the card does. */
 const surfaces = (markup) => R.styles(markup)
-  .filter((s) => s.borderRadius === K.RADIUS.tile && s.borderWidth != null);
+  .filter((s) => s.borderRadius === K.RADIUS.md && s.borderWidth != null && s.height !== K.SIZE.columnTab
+    && s.overflow === 'hidden');
 
 const styleOf = (markup, word) => [...markup.matchAll(/<span data-rn="Text"([^>]*)>([^<]*)<\/span>/g)]
   .filter((m) => m[2] === word)
@@ -232,36 +232,32 @@ for (const scheme of ['dark', 'light']) {
   const fresh = draw(scheme, [FRESH], { project: 'pebble', tab: 'board' });
 
   checks.push(
-    [`${scheme}: the four columns are on the page, each with its count`,
+    [`${scheme}: the four columns are four tabs on the page, each with its count`,
       ['bdIceBox', 'bdQueued', 'bdInProgress', 'bdDone'].every((k) => board.includes(`>${k}<`))
-      && board.includes('>11<') && board.includes('>48<')],
-    [`${scheme}: every card carries its state, in the tone that state takes`,
-      styleOf(board, '? bdAsking').color === t.amber
-      && styleOf(board, '× bdFailed').color === t.red
-      && styleOf(board, '■ bdStuck').color === t.red
-      && styleOf(board, '● bdRunning').color === t.run
-      && styleOf(board, '✓ bdReviewed').color === t.run
-      && styleOf(board, '○ bdYours').color === t.ink2],
-    [`${scheme}: …and the card itself stays quiet: one surface, one hairline, no wash`,
-      surfaces(board).length === 6
-      && surfaces(board).filter((s) => s.backgroundColor === t.s1 && s.borderColor === t.line).length === 5
-      && !surfaces(board).some((s) => [t.red, t.amber, t.run, t.amberRing].includes(s.borderColor)
-                                      || [t.redBg, t.amberBg, t.runBg].includes(s.backgroundColor))],
-    [`${scheme}: …except the one nothing runs on, which is drawn as an outline`,
+      && board.includes('>11<') && board.includes('>7<')],
+    [`${scheme}: every card carries its real status word, review folded in as testing`,
+      ['stAsking', 'stFailed', 'stStuck', 'stRunning', 'stPassed', 'stYours', 'stTesting']
+        .every((w) => board.includes(`>${w}<`))
+      && styleOf(board, 'stAsking').color === t.amber],
+    [`${scheme}: the asking card has an amber-toned edge, the only one`,
+      surfaces(board).filter((s) => s.borderColor === t.amberRing).length === 1
+      && board.includes('Retry five times, or ten?')],
+    [`${scheme}: the card nothing runs on is drawn as an outline`,
       surfaces(board).filter((s) => s.borderStyle === 'dashed' && s.borderColor === t.line2
                                     && s.backgroundColor === 'transparent').length === 1],
-    [`${scheme}: the machine a card runs on is grey, and amber where it has gone quiet`,
-      board.includes('>studio<') && styleOf(board, 'mini · pfLastSeen').color === t.amber],
-    [`${scheme}: Done draws yesterday’s card and not the one from March`,
-      done.includes('Pricing page A/B test') && !done.includes('Client comments on files')
-      && done.includes('bdDoneNote')],
+    [`${scheme}: the corner says the machine and how long, and a quiet machine says when it was heard from`,
+      board.includes('studio · ') && board.includes('mini · pfLastSeen')],
+    [`${scheme}: Done draws this month and not the card from March`,
+      done.includes('Pricing page A/B test') && !done.includes('Client comments on files')],
+    [`${scheme}: the line over the cards says how a card is moved`,
+      board.includes('>bdHint<')],
     [`${scheme}: a board with no card on it keeps its four tabs and says what to do`,
       fresh.includes('>bdInProgress<') && fresh.includes('>prNewTitle<') && fresh.includes('prNewFoot')],
-    [`${scheme}: the two faces of the page are a switch, and the board's own mark is on it`,
-      board.includes('>overview<') && board.includes('>bdBoard<')
-      && styleOf(board, '■').color === t.red],
+    [`${scheme}: the segment is Overview, Board and Chats, with no coloured mark riding on it`,
+      board.includes('>overview<') && board.includes('>bdBoard<') && board.includes('>pjChats<')
+      && !styleOf(board, '■')],
     [`${scheme}: every state of the board renders`,
-      Object.values(BOARDS).every(([hosts, params]) => draw(scheme, hosts, params).includes('tabDashboard'))],
+      Object.values(BOARDS).every(([hosts, params]) => /tabDashboard|>divan</.test(draw(scheme, hosts, params)))],
   );
 }
 
@@ -279,16 +275,16 @@ for (const scheme of ['dark', 'light']) {
   elsewhere[0].press();
   checks.push(
     ['tapping a card opens the card itself, on the machine it is on',
-      cards.length === 1 && eq(here, ['/card/q3?host=h1'])],
+      cards.length === 1 && eq(here, ['/card/q3?host=h1&from=board'])],
     ['…including one on a machine this phone is not holding a socket to',
-      elsewhere.length === 1 && eq(R.nav.pushed(), ['/card/m1?host=h2'])],
+      elsewhere.length === 1 && eq(R.nav.pushed(), ['/card/m1?host=h2&from=board'])],
   );
   const face = draw('dark', [STUDIO], { project: 'quire' });
   R.presses().filter((p) => p.text.includes('bdBoard'))[0].press();
   checks.push(
     ['the Overview is what a product opens on, and the Board is one tap away',
-      face.includes('>prNow<') && !face.includes('>bdIceBox<')
-      && draw('dark', [STUDIO], { project: 'quire', tab: 'board' }).includes('>bdIceBox<')]);
+      !face.includes('>bdHint<')
+      && draw('dark', [STUDIO], { project: 'quire', tab: 'board' }).includes('>bdHint<')]);
 }
 
 R.store.reset();
