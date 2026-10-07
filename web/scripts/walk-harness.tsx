@@ -40,7 +40,8 @@ const answer = async (key: string, type: string, data: any = {}) => {
   switch (type) {
     case 'divan.snapshot': return snapshot;
     case 'account.list': return { accounts: base.accounts };
-    case 'agent.list': return { agents: [{ id: 'hermes', name: 'hermes', label: 'Hermes', installed: true, scope: 'account' }] };
+    case 'agent.list': return { agents: [{ id: 'hermes', name: 'hermes', label: 'Hermes', installed: true, scope: 'account' },
+      { id: 'user:reviewer', name: 'reviewer', label: 'Reviewer', installed: true, scope: 'user', path: '/Users/x/.claude/agents/reviewer.md' }] };
     case 'agent.store': return { agents: [] };
     case 'ustabasi.list': return { available: !bare, tickets: bare ? [] : wall(), queue: { last_tick: at - 30 } };
     case 'ustabasi.run': return { available: true, reason: '', run: 'r-1', events: [], cursor: null, reset: true, live: false, caught_up: true, shots: [] };
@@ -48,9 +49,12 @@ const answer = async (key: string, type: string, data: any = {}) => {
       return { settings: { enabled: false, threshold: 0.9, thresholds: {}, use_overage: 'account', overage_by_account: {}, reserve: 0.05, order: {}, max_hops: 3 }, accounts: [] };
     case 'daemon.status':
       return { started_at: at - 1000, uptime_s: 1000, restarts: 0, pending: [], draining: null, last_restart: null, supervisor: { supervised: true, how: 'launchd', detail: null } };
-    case 'update.status': return { current: '0.9.0', available: null, checked_at: at - 60 };
-    case 'tool.status': return { tools: [] };
-    case 'screen.info': return { enabled: false, displays: [] };
+    case 'update.status': return { repo: true, auto: false, behind: 2, ahead: 0, busy: false, checked_at: at - 60,
+      local: { commit: 'a1b2c3d', subject: 'the running build' }, remote: { commit: 'e4f5a6b', subject: 'two newer commits' } };
+    case 'tool.status': return { tools: [{ provider: 'claude', version: '1.2.3', path: '/usr/local/bin/claude',
+      login_methods: [{ id: 'subscription', label: 'Subscription' }] }], npm: true };
+    case 'screen.info': return { view: true, control: true, enabled: false, os: 'darwin', displays: [] };
+    case 'account.login': return { needs_code: true };
     case 'divan.card.get': return { card: snapshot.cards.find((c: any) => c.id === data.card_id) ?? null };
     case 'divan.project.open': return { items: [] };
     case 'host.git': return { repos: [] };
