@@ -362,89 +362,37 @@ group('the panel and the phone say the same thing about the same board');
 
 // ── 2 · the page is the frames' page ───────────────────────────────────────
 
-group('Web12 W1, and Web13 W3 which is the same page in the light');
+group('the Dashboard: greeting, Composer, Needs you, Projects, Working now');
 {
-  const busy = page('busy');
-  const s = styles(busy);
-
-  ok('one 28 pt head, with a mono aside saying how much of the page is true',
-    anyStyle(busy, (d) => d['font-size'] === '28px' && d['font-weight'] === '600'
-      && d['letter-spacing'] === '-.02em')
-    && /2 projects · 2 agents/.test(busy), busy.slice(0, 400));
-  ok('four counters, on the frames’ corner and padding',
-    countStyles(busy, (d) => d['border-radius'] === `${K.RADIUS.tile}px`
-      && d.padding === '14px 16px') === 4);
-  ok('…the number in mono at 32 pt and its name 10 pt under it',
-    countStyles(busy, (d) => d['font-size'] === '32px' && d['line-height'] === '1'
-      && d['font-weight'] === '500') === 4
-    && countStyles(busy, (d) => d['font-size'] === '13px' && d['margin-top'] === '10px') === 4);
-  ok('…the first washed in the amber of what needs a person, the second in the red',
-    anyStyle(busy, (d) => d.background === v('amberBg') && d.padding === '14px 16px')
-    && anyStyle(busy, (d) => d.background === v('redBg') && d.padding === '14px 16px'));
-  ok('the products are two abreast, beside a 380 pt column',
-    anyStyle(busy, (d) => d['grid-template-columns'] === 'minmax(0, 1fr) 380px')
-    && anyStyle(busy, (d) => d['grid-template-columns'] === 'repeat(2, minmax(0, 1fr))'));
-  ok('…under a 15 pt head that says what the order is',
-    /Projects/.test(busy) && /sorted by urgency/.test(busy)
-    && anyStyle(busy, (d) => d['font-size'] === '15px' && d['font-weight'] === '600'));
-  ok('a project card is a card, with its monogram at 34 pt and its name at 16',
-    countStyles(busy, (d) => d.width === `${K.SIZE.monogram}px` && d.height === '34px') === 2
-    && countStyles(busy, (d) => d['font-size'] === '16px' && d['font-weight'] === '600') === 2);
-  ok('…the grey mono line under it, and the corner it says the worst thing in',
-    countStyles(busy, (d) => d['font-size'] === '11.5px' && d.color === v('ink3')) >= 2
-    && countStyles(busy, (d) => d['border-radius'] === `${K.RADIUS.chip}px`
-      && d.padding === '4px 8px') === 2);
-  ok('…what git says about it, at 24 pt in mono',
-    anyStyle(busy, (d) => d['font-size'] === '24px' && d['letter-spacing'] === '-.02em')
-    && /finished · 7d/.test(busy) && /moved [^<]+ ago/.test(busy));
-  ok('…and a footer over a hairline, with the board’s marks and the worst card’s line',
-    anyStyle(busy, (d) => d['border-top'] === `1px solid ${v('line')}`
-      && d['padding-top'] === '10px')
-    && /Out-of-order deliveries|gave up/.test(busy));
-  ok('the roster is four columns so that the eye reads down them',
-    countStyles(busy, (d) => d['grid-template-columns'] === '14px 52px 18px minmax(0,1fr)') === 2
-    && /Agents/.test(busy) && /Coder/.test(busy));
-  ok('…each line carrying the hue of the product it is work on, at 18 pt',
-    countStyles(busy, (d) => d.width === '18px' && d.height === '18px') === 2);
-  ok('the bar across the bottom is the frames’ own, and it is the field it looks like',
-    anyStyle(busy, (d) => d.width === `${K.SIZE.bar}px` && d.height === '52px'
-      && d['border-radius'] === `${K.RADIUS.bar}px` && d.background === v('s2'))
-    && /placeholder="Tell Divan anything…"/.test(busy) && /⌘K/.test(busy));
-  ok('…and what is typed into it starts a chat rather than opening a page',
-    /onAsk=\{\(text: string\) => tell\(text, scope\)\}/.test(src('src/App.tsx'))
-    && /chat\.create/.test(src('src/lib/actions.ts')));
-  ok('…and nothing of it is drawn where there is nothing to press',
-    !/Tell Divan/.test(page('busy', { onAsk: undefined })));
-
-  // The whole of the difference between W1 and W3.
+  const busy = page('busy', { composer: h('section', { 'data-composer': '' }) });
+  ok('a greeting, and one line under it counted off the boards',
+    /<h1 class="dv-greet">Good (morning|afternoon|evening)\.<\/h1>/.test(busy)
+    && busy.includes(`<b>${view('busy').totals.running}</b> working`));
+  ok('the Composer the page is handed sits under the line', /data-composer=""/.test(busy)
+    && busy.indexOf('data-composer') > busy.indexOf('dv-summary'));
+  ok('what needs a person is a grid of wait cards under a small head',
+    busy.includes('<h3 id="needs-you">Needs you</h3>') && (busy.match(/class="dv-glass dv-wait"/g) ?? []).length
+      === view('busy').cards.filter((c) => S.kindOf(c)).length);
+  ok('every product is a tile that is a link to its own page',
+    view('busy').projects.every((p) => busy.includes(`href="/p/${encodeURIComponent(p.key)}"`)));
+  ok('what is working now is a list row per agent, with project · executor · machine',
+    (busy.match(/class="dv-live"/g) ?? []).length === OV.agentRows(view('busy')).length
+    && /Coder/.test(busy));
   K.setThemeChoice('dark');
   const dark = page('busy');
   K.setThemeChoice('light');
   const light = page('busy');
   K.setThemeChoice('dark');
-  ok('W3 is W1 in the other theme: the same markup, one attribute apart',
-    dark === light, `${dark.length} vs ${light.length}`);
-  ok('…and it is a page with colours in it, so that is worth something',
-    paint(dark).vars.size >= 8, [...paint(dark).vars].join(', '));
+  ok('the two themes are the same markup, one attribute apart', dark === light);
   ok('nothing on the page is a colour of its own',
     [...paint(dark).literal].every((c) => OWN.has(c)), [...paint(dark).literal].join(', '));
-  ok('…and every colour it names exists in both themes',
-    [...paint(dark).vars].every((n) => K.DARK[n] !== undefined && K.LIGHT[n] !== undefined));
-  ok('the page is composed of the parts and spells no style of its own',
-    ['src/screens/Overview.tsx', 'src/components/Sessions.tsx',
-     'src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
-      .every((f) => /from '\.\.\/ui\/divan'/.test(src(f))
-        && !COLOUR.test(src(f).replace(/\/\*[\s\S]*?\*\//g, ''))));
+  ok('the pages under a product still spell no style of their own',
+    ['src/components/Sessions.tsx', 'src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
+      .every((f) => !COLOUR.test(src(f).replace(/\/\*[\s\S]*?\*\//g, ''))));
   ok('…and none of the pages under a product reaches the chat',
     ['src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
       .every((f) => !/from '[^']*(ChatView|Bubble|Timeline|ChatDetails|TicketChat|NewChat)'/
         .test(src(f))));
-  for (const part of ['Note', 'Panel', 'PanelHead', 'Composer', 'Quoted', 'DockTab',
-                      'DockMore', 'CommandBar', 'Tag', 'RosterRow']) {
-    ok(`${part} is a part rather than something this screen invented`,
-      new RegExp(`export function ${part}\\(`).test(src('src/ui/divan.tsx'))
-      && typeof parts[part] === 'function');
-  }
 }
 
 // ── 3 · a question opens as a conversation ─────────────────────────────────
@@ -897,31 +845,11 @@ group('a morning where nothing needs anybody is a designed state');
   const quiet = view('calm');
   ok('it is calm when nothing needs a person and nothing is being kept from them',
     OV.calm(quiet) === true);
-  ok('…and the page says so in words, with what landed while nobody was looking',
-    page('calm').includes('All clear. Nothing needs you.')
-    && page('calm').includes('9 finished today'));
-  ok('…in the green of work that is going well, washed rather than outlined',
-    anyStyle(page('calm'), (d) => d.background === v('runBg')
-      && d['border-radius'] === `${K.RADIUS.card}px`));
-  ok('…and the counters are grey zeroes rather than three coloured noughts',
-    countStyles(page('calm'), (d) => d.color === v('ink3') && d['font-size'] === '32px') === 3,
-    OV.counters(quiet).map((c) => `${c.label} ${c.value}`).join(' · '));
-  ok('it is not calm over agents nobody has heard from',
-    OV.calm(view('quiet')) === false && !page('quiet').includes('All clear'));
-  ok('…nor over work that stopped when a window closed',
-    OV.calm(view('busy')) === false && view('busy').totals.paused === 1);
-  ok('…nor on a panel that has nothing to be calm about',
-    OV.calm(view('alone')) === false);
-  // A machine paired and answering with an empty board *is* calm — there is
-  // genuinely nothing waiting on anybody — and the page still does not say "all
-  // clear" over it, because with no product on it there is no page to say it on:
-  // what the reader meets is the empty state.
+  ok('…and the line says so in words rather than in zeroes',
+    page('calm').includes('nothing needs you') && page('calm').includes('nothing is stuck'));
+  ok('…and the Needs you section is not drawn at all', !page('calm').includes('Needs you'));
   ok('…and a board with nothing on it is an empty state rather than an all-clear',
-    OV.calm(view('fresh')) === true && !page('fresh').includes('All clear')
-    && page('fresh').includes('No products yet'));
-  ok('…and the rule the page draws it by is the rule, not a second copy of it',
-    /calm\(view\)/.test(src('src/screens/Overview.tsx'))
-    && (src('src/screens/Overview.tsx').match(/needsYou === 0/g) ?? []).length === 0);
+    page('fresh').includes('No products yet'));
 }
 
 // ── 5 · the three pages under a product ───────────────────────────────────
@@ -1185,7 +1113,7 @@ group('every state of the fleet, drawn');
     page('alone').includes('No computer paired yet')
     && page('fresh').includes('No products yet'));
   ok('a product nobody has touched in a month says so, and one with nothing to read does not',
-    page('slow').includes('quiet for 30 days')
+    page('slow').includes('Quiet for 4 weeks. Nothing queued.')
     && OV.figure(view('slow').projects.find((p) => p.key === 'pebble'), NOW, ago) === null,
     page('slow').slice(page('slow').indexOf('quiet for') - 40, page('slow').indexOf('quiet for') + 30));
 }

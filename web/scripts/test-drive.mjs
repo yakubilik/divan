@@ -296,7 +296,20 @@ const text = () => doc.body.textContent ?? '';
  *  are on: both are `aria-current="page"`, which is how the frames' "filled"
  *  nav item and side panel row say the same thing to a reader who cannot see
  *  the fill. */
-const place = () => doc.querySelector('header [aria-current="page"]')?.textContent?.trim() ?? null;
+const place = () => {
+  const header = doc.querySelector('header');
+  if (!header) return null;
+  const cur = (header.querySelector('[aria-current="page"]')?.textContent ?? '').trim();
+  if (!cur || cur === 'divan') return 'Dashboard';
+  return cur.startsWith('Chats') ? 'Chat' : cur.startsWith('Machine') ? 'Machine' : cur;
+};
+/** On the Dashboard itself, unscoped: the page with the greeting on it. */
+const home = () => !!doc.querySelector('h1.dv-greet');
+/** A product's tile on the Dashboard. */
+const tile = (key) => doc.querySelector(`a[data-tile="${key}"]`);
+/** A place's button on the line, whatever light it carries after its name. */
+const nav = (label) => [...(doc.querySelector('header')?.querySelectorAll('button') ?? [])]
+  .find((b) => (b.textContent ?? '').trim().startsWith(label)) ?? null;
 // …read off the row's own name and not its whole line, which also carries the
 // count of what is waiting under it.
 const page = () => doc.querySelector('nav [aria-current="page"] span')?.textContent?.trim() ?? null;
@@ -350,9 +363,9 @@ const drag = async (el, type, dataTransfer) => {
 
 group('the panel comes up');
 {
-  ok('it mounted, with the bar over it', text().includes('Divan') && !!doc.querySelector('header'));
+  ok('it mounted, with the line over it', !!doc.querySelector('header .dv-topline'));
   ok('…on the Dashboard, which is the place it opens on',
-    place() === 'Dashboard' && head() === 'Overview', `${place()} · ${head()}`);
+    place() === 'Dashboard' && home(), `${place()} · ${head()}`);
   ok('…with the products of the machine it was seeded with',
     text().includes('Quire') && text().includes('Hush'));
   ok('…and the theme on the document before anything was pressed',
@@ -371,7 +384,7 @@ group('the keyboard');
       place() === 'Machine' && page() === row.label, `${place()} › ${page()}`);
   }
   await press('0');
-  ok('⌘0 goes back to the Dashboard', place() === 'Dashboard' && head() === 'Overview',
+  ok('⌘0 goes back to the Dashboard', place() === 'Dashboard' && home(),
     `${place()} · ${head()}`);
   await press('9');
   ok('…and a key nothing is bound to changes nothing', place() === 'Dashboard');
@@ -379,53 +392,36 @@ group('the keyboard');
 
 group('the bar');
 {
-  await click(find('Chat', doc.querySelector('header')));
+  await click(nav('Chats'));
   ok('the Chat place is one press away, and it is the chat and its list',
     place() === 'Chat' && !!doc.querySelector('input[name="chat-search"]')
     && text().includes('Webhook retry policy'), `${place()}`);
 
-  await click(find('Machine', doc.querySelector('header')));
+  await click(nav('Machine'));
   ok('…and the Machine place opens on the first row of its list',
     place() === 'Machine' && page() === MACHINE_ROWS[0].label, `${place()} › ${page()}`);
 
   await click(find('Dashboard', doc.querySelector('header')));
-  ok('…and the Dashboard comes back', place() === 'Dashboard' && head() === 'Overview');
+  ok('…and the Dashboard comes back', place() === 'Dashboard' && home());
 }
 
-group('the project bar scopes the page');
+group('a project tile opens the project');
 {
-  const chip = (label) => find(label, doc.querySelector('header'));
-  ok('the chips are All and the products, in the merge’s order',
-    [...doc.querySelectorAll('header button')].map((b) => b.textContent.trim())
-      .filter((t) => ['All', 'Quire', 'Hush'].includes(t)).join(' ') === 'All Quire Hush');
-
+  ok('the tiles are the products, in the merge’s order',
+    [...doc.querySelectorAll('a[data-tile]')].map((a) => a.dataset.tile).join(' ') === 'quire hush');
   const steps = w.history.length;
-  await click(chip('Quire'));
+  await click(tile('quire'));
   ok('pressing one writes it into the address, as a path a person can read',
     w.location.pathname === '/p/quire' && w.location.search === '',
     w.location.pathname + w.location.search);
-  // It used to replace the entry rather than push one, and that was the whole
-  // of the back button being broken: with one entry in the history, Back left
-  // the panel from wherever you were.
   ok('…and leaves an entry behind it, so that Back is a step and not the way out',
     w.history.length === steps + 1, `${steps} → ${w.history.length}`);
-  ok('…and the page under the bar comes back scoped to it',
+  ok('…and the page under the line comes back scoped to it',
     head() === 'Quire' && !body().includes('Hush'), `${head()}`);
-  await click(chip('All'));
-  ok('pressing All takes the product out of the address rather than emptying it',
-    w.location.pathname === '/' && w.location.search === '',
+  await click(find('Dashboard', doc.querySelector('header')));
+  ok('the left end of the line leads back to every product',
+    w.location.pathname === '/' && home() && body().includes('Hush'),
     w.location.pathname + w.location.search);
-  ok('…and the page is every product again', head() === 'Overview' && body().includes('Hush'));
-
-  // The chips are over the Dashboard and the pages under it, and nowhere else:
-  // Web15's bar, over the Machine pages, ends in what the fleet is doing
-  // instead. So the bar loses them on the way in and has them again on the way
-  // back — which is also why a chip can only ever be pressed from the place it
-  // scopes.
-  await press('4');
-  ok('the Machine place’s bar draws no chips', chip('Quire') === null && chip('All') === null);
-  await press('0');
-  ok('…and the Dashboard’s has them again', !!chip('Quire') && !!chip('All'));
 }
 
 group('the back button steps through the panel instead of out of it');
@@ -434,7 +430,6 @@ group('the back button steps through the panel instead of out of it');
   // every bit of where you were in memory, wrote one `replaceState` for the
   // product and nothing else, so the browser had a single entry in its history
   // and Back left the page — from three levels into a board.
-  const chip = (label) => find(label, doc.querySelector('header'));
   /** The browser's own Back. jsdom runs a traversal as a queued navigation and
    *  delivers `popstate` after it, so this waits for the event rather than for
    *  a number of ticks — a back that never arrived is a failed check below and
@@ -453,10 +448,9 @@ group('the back button steps through the panel instead of out of it');
   };
 
   await press('0');
-  await click(chip('All'));
   const from = w.history.length;
 
-  await click(chip('Quire'));
+  await click(tile('quire'));
   await click(find('Board'));
   ok('two steps in, the address says both of them',
     w.location.pathname === '/p/quire/board', w.location.pathname);
@@ -469,7 +463,7 @@ group('the back button steps through the panel instead of out of it');
     && place() === 'Dashboard', `${head()} · ${w.location.pathname}`);
   await back();
   ok('…and again puts the product back to every product',
-    head() === 'Overview' && w.location.pathname === '/',
+    home() && w.location.pathname === '/',
     `${head()} · ${w.location.pathname}`);
 
   // The pages of the Machine place are steps too, and so is a chat.
@@ -484,24 +478,24 @@ group('the back button steps through the panel instead of out of it');
 
   await press('0');
   ok('…all the way home, where the address is the bare path again',
-    w.location.pathname === '/' && w.location.search === '' && head() === 'Overview',
+    w.location.pathname === '/' && w.location.search === '' && home(),
     w.location.pathname + w.location.search);
 }
 
 group('the switch, in a document');
 {
-  const chip = () => find('Light', doc.querySelector('header')) ?? find('Dark', doc.querySelector('header'));
+  const chip = () => doc.querySelector('header button[title^="Switch to the"]');
   const before = body();
   const bar = doc.querySelector('header');
-  ok('in the dark, the bar offers the light theme', !!find('Light', doc.querySelector('header')));
+  ok('in the dark, the line offers the light theme', chip()?.title === 'Switch to the light theme');
   await click(chip());
   ok('pressing it moves the document’s theme, and nothing else says it',
     doc.documentElement.dataset.theme === 'light' && themeScheme() === 'light');
   ok('…the page under the bar is the same markup it was',
     body() === before, `${body().length} vs ${before.length}`);
   ok('…and it is a page with colours in it, so that means something',
-    before.includes('var(--dv-'));
-  ok('…and the bar now offers the other one', !!find('Dark', doc.querySelector('header')));
+    before.includes('class="dv-'));
+  ok('…and the line now offers the other one', chip()?.title === 'Switch to the dark theme');
   await click(chip());
   ok('and back again', doc.documentElement.dataset.theme === 'dark' && body() === before);
   ok('nothing reloaded: the bar is the same element it was before the switch',
@@ -518,7 +512,9 @@ group('what needs a person opens itself as a conversation');
   const board = boards(now);
   /** A button the words are somewhere inside, rather than all of it: a tab
    *  carries the square of whoever is in it as well as the card's name. */
-  const inside = (label) => [...doc.querySelectorAll('button')]
+  // The last such button: the dock is drawn after the page it stands over, and
+  // a product's page carries the same card names in its own rows.
+  const inside = (label) => [...doc.querySelectorAll('button')].reverse()
     .find((b) => (b.textContent ?? '').includes(label)) ?? null;
   /** What the open windows say, and not what the page under them says — a
    *  project card carries the worst card's own line, which is this very
@@ -528,6 +524,9 @@ group('what needs a person opens itself as a conversation');
   await act(async () => {
     seed(useDivanStore, { snaps: { studio: answered(board.busy[0].snap, now) } });
   });
+  // The windows stand over a product's page; the Dashboard answers in its
+  // Needs you cards instead.
+  await click(tile('quire'));
 
   ok('a question that is waiting opens by itself, with nobody pressing anything',
     windows().includes('asks you') && windows().includes('Use the live ones now'),
@@ -558,10 +557,13 @@ group('what needs a person opens itself as a conversation');
   await click(inside('Stripe keys'));
   ok('…which brings it back', windows().includes('Use the live ones now'));
 
+  const named = () => [...doc.querySelectorAll('button')]
+    .filter((b) => (b.textContent ?? '').includes('Stripe keys')).length;
+  const had = named();
   const shut = [...doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Close');
   await click(shut);
   ok('closing one takes it off the page, tab and all',
-    !windows().includes('Use the live ones now') && !inside('Stripe keys'), windows().slice(0, 300));
+    !windows().includes('Use the live ones now') && named() === had - 1, windows().slice(0, 300));
 
   // The bar across the bottom of every desktop frame, and what it does with a
   // sentence. Found the way a person finds it — by what the field says it is —
@@ -595,7 +597,7 @@ group('what needs a person opens itself as a conversation');
       && a.data.text === 'ship the beta tonight'),
     JSON.stringify(asked.filter((a) => a.type === 'chat.send').map((a) => a.data)));
   ok('…without leaving the page it was typed on',
-    place() === 'Dashboard' && head() === 'Overview', `${place()} · ${head()}`);
+    place() === 'Dashboard' && head() === 'Quire', `${place()} · ${head()}`);
   ok('…with the chat open on that page, in the corner the windows stand in',
     !!chatWindow(), windows().slice(0, 200));
   ok('…and the field empty again, because the sentence landed', bar().value === '');
@@ -766,8 +768,7 @@ group('what needs a person opens itself as a conversation');
 
   // …and the same bar, on a page about one product: the chat opens in that
   // product rather than in whatever folder this computer last used.
-  const bandChip = (label) => find(label, doc.querySelector('header'));
-  await click(bandChip('Quire'));
+
   /** The line over the command bar, if there is one: the bar stands in a fixed
    *  box in the middle of the bottom edge, and what is above it inside that box
    *  is the note. The bar itself carries the key on it, which is how the two
@@ -788,14 +789,14 @@ group('what needs a person opens itself as a conversation');
     asked.some((a) => a.key === 'studio' && a.type === 'chat.create'
       && a.data.cwd === '/w/quire'),
     JSON.stringify(asked.filter((a) => a.type === 'chat.create').map((a) => a.data?.cwd)));
-  await click(bandChip('All'));
-  ok('…and off that page it says nothing again', overBar() === '', `«${overBar()}»`);
-
   // …and the window it opened is put away again, so the board below is read
   // with nothing standing over it.
   const opened = [...doc.querySelectorAll('section')]
     .find((e) => (e.textContent ?? '').includes('why is the retry policy')) ?? null;
   if (opened) await click(labelled('Close', opened));
+  await click(find('Dashboard', doc.querySelector('header')));
+  ok('…and off that page the bar is not drawn: the Composer is', overBar() === ''
+    && !!doc.querySelector('#composer-in'), `«${overBar()}»`);
 
   // The key written on the bar is still the key: the bar is a composer, and the
   // palette is what ⌘K opens.
@@ -811,7 +812,8 @@ group('the board, with the asking agent’s chat beside it');
   const studio = boards(now).busy[0].snap;
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(studio, now) } }); });
   const chip = (label) => find(label, doc.querySelector('header'));
-  await click(chip('Quire'));
+  await press('0');
+  await click(tile('quire'));
   await click(find('Board'));
 
   /** A column of the board, by its name: the head is a tab and the column is
@@ -1220,7 +1222,7 @@ group('chats are filed into groups from the panel');
       fakeChat({ id: 'c6', title: 'Old thread', project_id: 'p-hush', project: 'Hush', updated_at: at - 2 * 86400 }),
     ] } } });
   });
-  await click(find('Chat', doc.querySelector('header')));
+  await click(nav('Chats'));
   const shown = (words) => [...doc.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(words));
   ok('a chat is under the product the computer filed it as, or the group of that name',
     !!find('Hush1') && doc.querySelector('button[aria-label="Group menu: Quire"]')
@@ -1240,8 +1242,8 @@ group('chats are filed into groups from the panel');
   await drag(doc.querySelector('[data-section="g1"]'), 'dragover', held);
   await drag(doc.querySelector('[data-section="g1"]'), 'drop', held);
   const now = order();
-  await click(find('Machine', doc.querySelector('header')));
-  await click(find('Chat', doc.querySelector('header')));
+  await click(nav('Machine'));
+  await click(nav('Chats'));
   ok('a heading dragged above another stays there, and the archive stays last',
     was[0] === 'g1' && now[0] === 'project:Hush' && now[1] === 'g1'
       && now.at(-1) === '__archive' && order().join() === now.join(),
@@ -1354,7 +1356,7 @@ group('a product has its own chats');
     ] } } });
   });
   await click(find('Dashboard', header));
-  await click(find('Quire', header));
+  await click(tile('quire'));
   const tab = [...doc.querySelectorAll('button')]
     .find((b) => !header.contains(b) && /^Chat\s*1$/.test((b.textContent ?? '').trim()));
   await click(tab);
@@ -1374,7 +1376,7 @@ group('a product has its own chats');
     made?.key === 'studio' && /\/quire$/.test(made?.data.cwd ?? '')
       && place() === 'Dashboard' && w.location.pathname.startsWith('/p/quire/chat/told'),
     `${JSON.stringify(made?.data?.cwd)} · ${place()} · ${w.location.pathname}`);
-  await click(find('All', header));
+  await press('0');
 }
 
 group('the four things the panel could not do to a computer');
@@ -1384,7 +1386,7 @@ group('the four things the panel could not do to a computer');
   // about what the page does with a computer that has them, codex among them —
   // the tool the fixture deliberately does not have installed.
   await act(async () => { seed(useFleet, { hosts: { studio: fakeHost() } }); });
-  await click(find('Machine', header));
+  await click(nav('Machine'));
   await press('7');
   ok('Accounts is a page of the Machine place', page() === 'Accounts & sign-ins', `${page()}`);
 

@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 // `dv-root dv-ambient` and `data-theme`, which is what they style.
 import './styles/divan-tokens.css';
 import './styles/divan-components.css';
+import './styles/divan-app.css';
 import { App } from './App';
 import { Fallback } from './components/Fallback';
 
