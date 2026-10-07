@@ -7,12 +7,10 @@
  *  products two abreast on the left and the agent roster on the right, with the
  *  command bar across the bottom and the questions open over the corner.
  *
- *  Scoped to one product by the bar, it is that product's page instead, and the
- *  head is the one Web12 W2 draws: the monogram, the name, what it is and where
- *  it is checked out, the tabs, and the states its board is in at the far end.
- *  The Board tab is `screens/Board.tsx`, drawn here rather than in a place of
- *  its own so that the questions in the corner stay on screen beside it — the
- *  whole point of W2 is the board and the asking agent's chat at once.
+ *  Scoped to one product it is that product's page instead (HANDOVER §4.2,
+ *  §4.3, §4.5): the head from `screens/Project.tsx` over the Overview, the
+ *  Board or the Chats, or the New ticket form — each at its own path. A card's
+ *  page and a branch's page keep their own heads until their own step.
  *
  *  Three things are true of everything on it:
  *
