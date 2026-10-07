@@ -40,7 +40,8 @@ Rules:
 - TASK names the goal in under fifteen words. No project name, no assistant name.
 - A bullet is something finished, in the past tense, concrete enough to mean \
 something to the person tomorrow: what was changed, found, decided or shipped. \
-Not a plan, not a question, not a step in progress.
+Not a plan, not a question, not a step in progress, and never something that \
+is missing, broken or still to do.
 - Keep the bullets already in the log unless they turned out untrue, add what \
 is new, and merge related ones so there are at most {MAX_DONE}.
 - If nothing has been finished yet, write the TASK line and no bullets.
