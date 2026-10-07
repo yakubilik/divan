@@ -20,6 +20,10 @@ import {
 } from './lib/shell';
 import { HOME, pathOf, readPlace, samePlace, searchOf, type Place } from './lib/nav';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
+import { InboxBell } from './components/Inbox';
+import { Report } from './components/Report';
+import { Modal, ModalHead } from './components/Modal';
+import { POLL_MS, announce, useInbox, type Notice } from './lib/inbox';
 import { createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
 import { tell, whereFor, whereNote, type Scoped } from './lib/tell';
 import type { Agent, Chat } from './lib/protocol';
@@ -276,6 +280,36 @@ export function App() {
     setTab('overview');
     setBranch(null);
     setCard(null);
+  }, []);
+
+  /** A notice from the queue, pressed: its ticket's page, under its product.
+   *  A ticket with no card on the board (filed before the board mirrored, or
+   *  on a machine whose board has not answered) gets its report on its own. */
+  const [reportOf, setReportOf] = useState<Notice | null>(null);
+  const openNotice = useCallback((n: Notice) => {
+    const found = n.ticket == null ? null
+      : divan.cards.find((c) => c.host === n.host && c.ustabasi_id === n.ticket);
+    if (!found) { setReportOf(n); return; }
+    setView('overview');
+    setProject(found.projectKey);
+    setTab('overview');
+    setBranch(null);
+    setCard(`${found.host}:${found.id}`);
+  }, [divan.cards]);
+  const openNoticeRef = useRef(openNotice);
+  openNoticeRef.current = openNotice;
+
+  // The inbox: every computer polled for what its queue sent since the last
+  // answer, and a browser notification for whatever arrives while this is open.
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      const news = await useInbox.getState().poll();
+      if (alive) for (const n of news) announce(n, (x) => openNoticeRef.current(x));
+    };
+    void tick();
+    const t = setInterval(() => { void tick(); }, POLL_MS);
+    return () => { alive = false; clearInterval(t); };
   }, []);
 
   // The chat on screen catches itself up the moment its computer answers
@@ -573,6 +607,7 @@ export function App() {
         // where the frames draw them and where they mean something.
         chips={place === 'dashboard' ? chips(divan, project) : null}
         onProject={chooseProject}
+        inbox={<InboxBell onOpen={openNotice} />}
       >
         {place === 'dashboard' && (
           <Overview
@@ -643,6 +678,16 @@ export function App() {
           />
         )}
       </Shell>
+
+      {reportOf?.ticket != null && (
+        <Modal onClose={() => setReportOf(null)} width={760}>
+          <ModalHead title={`#${reportOf.ticket} ${reportOf.title}`} subtitle={reportOf.project ?? undefined}
+            onClose={() => setReportOf(null)} />
+          <div style={{ overflowY: 'auto', padding: 20 }}>
+            <Report host={reportOf.host} ticket={reportOf.ticket} status={reportOf.status} />
+          </div>
+        </Modal>
+      )}
 
       {/* A chat answered without leaving the wall. It is the whole chat — the
           same timeline, the same composer, the same approvals — because half a

@@ -34,6 +34,23 @@ export const readRun = (key: string, id: number, cursor: string | null) =>
 /** An answer to a ticket in one computer's queue. The queue re-opens a stopped
  *  ticket the moment a note lands, which is why this is the whole of answering a
  *  question a worker asked: nothing else has to be moved or restarted. */
+/** What a ticket came back with: `daemon/remote_ai_chat/ustabasi.py:report`. */
+export interface TicketReport {
+  id: number; title: string; status: string;
+  summary: string; verdict: string; verdict_summary: string;
+  files: { path: string; name: string; size: number; cut: boolean; text: string }[];
+}
+export const ticketReport = (key: string, id: number) =>
+  call<TicketReport>(key, 'ustabasi.report', { id });
+
+/** One thing the queue sent: `daemon/remote_ai_chat/ustabasi.py:notifications`. */
+export interface QueueNotice {
+  id: number; ticket: number | null; ts: number; kind: string;
+  headline: string; body: string; title: string; status: string; project: string | null;
+}
+export const queueNotices = (key: string, after = 0) =>
+  call<{ available: boolean; items: QueueNotice[]; last: number }>(key, 'ustabasi.notifications', { after });
+
 export const ticketNote = (key: string, id: number, text: string) =>
   call<{ message?: string }>(key, 'ustabasi.note', { id, text });
 

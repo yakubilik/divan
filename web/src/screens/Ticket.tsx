@@ -46,6 +46,7 @@ import {
 import { executorFace } from '../lib/sessions';
 import { useRun } from '../lib/run';
 import { RunLog } from '../components/RunLog';
+import { Report } from '../components/Report';
 import { DictatingComposer } from '../components/Mic';
 import { RADIUS, SHADOW, STATE_MARK, STATE_TONE, T, stateColour } from '../lib/theme';
 import { useDivanStore, type MergedCard, type MergedProject } from '../lib/divan';
@@ -264,6 +265,11 @@ export function TicketPage({
               </div>
             )}
           </Card>
+
+          {/* What the ticket came back with — the documents it wrote, read. */}
+          {card.ustabasi_id != null && (
+            <Report host={card.host} ticket={card.ustabasi_id} status={card.agent_status ?? ''} />
+          )}
 
           {/* The agent's half of the card, shut. A card nobody wrote a brief for
               and a machine that would not hand one over are both a quiet line
