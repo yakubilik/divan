@@ -562,6 +562,11 @@ const en = {
   ticketOpen: 'open {d}', ticketTook: 'took {d}', ticketThisRound: '{d} in this round',
   ticketCommits: '{n} commits', ticketOneCommit: '1 commit',
   ticketAbout: 'What this ticket is doing',
+  reportTitle: 'Report', reportVerifier: 'verifier · {v}', reportCut: 'cut short', reportFailed: 'The report did not come: {e}',
+  inboxTitle: 'Inbox', inboxEmpty: 'Nothing from the queue yet.', inboxNew: '{n} new', inboxAllRead: 'all read',
+  inboxAgo: '{d} ago', inboxNote: 'What the queue sent',
+  kindDone: 'done', kindBlocked: 'asks you', kindFailed: 'failed', kindReminder: 'still waiting',
+  kindLimit: 'usage limit', kindDeadline: 'past its deadline', kindDeadman: 'queue stopped',
   groupCount: '{n}',
   // the ticket's own page: the steps, the criteria, and the rest of the card
   detailTitle: 'Ticket #{id}',

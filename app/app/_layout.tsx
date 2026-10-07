@@ -163,6 +163,7 @@ export default function RootLayout() {
             and the rest of the card. They replace each other rather than
             stacking, so Back leads to the wall from either. */}
         <Stack.Screen name="ustabasi" />
+        <Stack.Screen name="inbox" />
         <Stack.Screen name="ticket/[id]" />
         <Stack.Screen name="ticket-about/[id]" />
         <Stack.Screen name="login-method" options={{ presentation: 'fullScreenModal' }} />

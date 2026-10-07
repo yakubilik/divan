@@ -475,6 +475,33 @@ async def the_wire() -> None:
     except ValueError:
         holds("a missing CLI is refused", True)
 
+    # The inbox and a ticket's report: what was sent is readable again, and a
+    # document the ticket named comes back with its text, keys masked.
+    key = "sk-proj-" + "Zz9Yy8Xx7Ww6Vv5Uu4Tt3Ss2Rr1Qq0Pp9Oo8Nn7"
+    doc = wire / "rotation.md"
+    doc.write_text(f"# Rotate\n\n- {key}\n")
+    db = sqlite3.connect(wire / "ustabasi.db")
+    db.executescript("ALTER TABLE tickets ADD COLUMN report TEXT;"
+                     "CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER,"
+                     " ts REAL, kind TEXT, text TEXT, paths TEXT DEFAULT '{}', ok INTEGER DEFAULT 0);")
+    db.execute("UPDATE tickets SET report=? WHERE id=3",
+               (json.dumps({"summary": f"The list is in {doc}."}),))
+    db.executemany("INSERT INTO notifications (ticket_id, ts, kind, text) VALUES (?,?,?,?)",
+                   [(2, 1.0, "blocked", "#2 ❓ stopped to ask\nWhich way?\n\nustabasi show 2"),
+                    (3, 2.0, "failed", f"#3 ❌ turned down\nit printed {key}")])
+    db.commit()
+    db.close()
+    inbox = u.notifications()
+    check("the inbox is newest first, headline and body apart",
+          [(i["ticket"], i["headline"], i["body"]) for i in inbox["items"]][-1],
+          (2, "#2 ❓ stopped to ask", "Which way?"))
+    holds("a key a notification quoted is masked", key not in json.dumps(inbox))
+    check("asking after the newest one brings nothing", u.notifications(inbox["last"])["items"], [])
+    rep = u.report(3)
+    holds("the document a ticket named comes back, masked",
+          [f["name"] for f in rep["files"]] == ["rotation.md"] and key not in rep["files"][0]["text"]
+          and "[secret openai" in rep["files"][0]["text"], json.dumps(rep)[:300])
+
     (wire / "ustabasi.db").unlink()
     holds("a queue that went away reads as no queue, not as an error",
           u.snapshot()["available"] is False)

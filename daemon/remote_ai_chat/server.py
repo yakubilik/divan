@@ -1970,6 +1970,23 @@ class Server:
                 log.warning("divan mirror: %s", exc)
             return snap
 
+    async def h_ustabasi_notifications(self, dev: Device, d: dict) -> dict:
+        """The queue's messages, kept: the inbox behind the bell on both clients.
+        `after` is the newest id the asker has; only what is newer comes back."""
+        try:
+            after = int(d.get("after") or 0)
+        except (TypeError, ValueError):
+            after = 0
+        return await asyncio.to_thread(ustabasimod.notifications, after,
+                                       ustabasimod.INBOX_LIMIT, self.policy.project_for)
+
+    async def h_ustabasi_report(self, dev: Device, d: dict) -> dict:
+        """What a ticket came back with: summary, verdict and the documents it wrote."""
+        try:
+            return await asyncio.to_thread(ustabasimod.report, self._ticket_id(d))
+        except LookupError:
+            raise Err("bad_ticket", "no such ticket")
+
     async def h_ustabasi_run(self, dev: Device, d: dict) -> dict:
         """What the agent on a ticket has printed, a page at a time.
 

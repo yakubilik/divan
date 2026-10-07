@@ -76,7 +76,7 @@ export function ThemeSwitch() {
 }
 
 /** A place: the bar, and the place's own content under it. */
-export function Shell({ view, onView, now, chips, dots, onProject, children }: {
+export function Shell({ view, onView, now, chips, dots, onProject, inbox, children }: {
   view: View;
   onView: (view: View) => void;
   /** The clock the merged view was worked out at, so that the bar and the page
@@ -87,6 +87,8 @@ export function Shell({ view, onView, now, chips, dots, onProject, children }: {
   /** Which places have something in them that wants a person. */
   dots?: Partial<Record<Place, State>>;
   onProject?: (key: string | null) => void;
+  /** The bell: what the queue sent, and the ticket a press on one opens. */
+  inbox?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const here = placeOf(view);
@@ -108,6 +110,7 @@ export function Shell({ view, onView, now, chips, dots, onProject, children }: {
         {!!bar && <ProjectBar chips={bar} onSelect={(key) => onProject?.(key)} />}
         <span style={{ marginLeft: 'auto' }} />
         <BarStamp>{stamp(now)}</BarStamp>
+        {inbox}
         <ThemeSwitch />
       </TopBar>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
