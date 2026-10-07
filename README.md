@@ -194,7 +194,7 @@ Python 3.11–3.13, and 3.12 is what this is actually run on — the constraint
 has always been mlx-whisper, which does voice transcription on Apple silicon and
 whose own dependencies have been slow to follow new Python releases. The first
 voice message downloads
-`mlx-community/whisper-small-mlx` (~500 MB); on Windows and Linux it is
+`mlx-community/whisper-large-v3-turbo` (~1.5 GB); on Windows and Linux it is
 `faster-whisper` on the CPU instead (~480 MB). Audio is decoded with
 `afconvert`, so there is no ffmpeg dependency.
 
@@ -240,7 +240,9 @@ tells it to. The whole design is about that sentence being safe to say.
   cloud. Your phone reaches your computer or it reaches nothing.
 - **Tokens are hashed.** Only a sha256 lives in `config.toml`; the plaintext
   leaves exactly once, in the pairing QR. `revoke <id>` cuts a device off.
-  Five bad attempts from one IP in ten minutes earns a lockout.
+  Through the tunnel, five different wrong tokens from one IP in ten minutes
+  earn a lockout; on the tailnet and on localhost bad attempts are counted but
+  nothing is locked.
 - **Folders are fenced.** A chat can only open under `allowed_roots`, and
   `denied_paths` (`~/.ssh`, `~/.aws`, credential stores) is subtracted from
   that. The fence is enforced in the daemon, so it holds in `bypass` mode too.

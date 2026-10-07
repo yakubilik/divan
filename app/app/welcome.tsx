@@ -15,7 +15,7 @@ import { Text } from '../src/components/text';
 const REPO = 'https://github.com/yakubilik/divan';
 const TAILSCALE = 'https://tailscale.com/download';
 
-const INSTALL = 'git clone ' + REPO + '.git\ncd remote-ai-chat/daemon && ./install.sh';
+const INSTALL = 'git clone ' + REPO + '.git\ncd divan/daemon && ./install.sh';
 
 /** What the pairing screen used to assume you already knew: that the agent
  *  runs on a computer, that a daemon has to be installed there, and that

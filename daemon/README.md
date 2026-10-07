@@ -135,6 +135,7 @@ python scripts/test_stream.py
 python scripts/test_demo.py      # a demo daemon with no CLI on PATH, end to end
 python scripts/test_secrets.py
 python scripts/test_scrub.py
+python scripts/test_uninstall.py # both launchd labels go on uninstall
 ```
 
 `smoke.py` spends no model turns and is the one to run right after installing.

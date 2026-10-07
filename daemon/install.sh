@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # remote-ai-chat — set up the daemon on this computer.
 #
-#   curl -fsSL <repo>/daemon/install.sh | bash      (or: ./install.sh)
+#   ./install.sh        (from a clone: it installs the checkout it sits in)
 #
 # Installs into a venv next to this script, registers a login service
 # (launchd on macOS, systemd --user on Linux) and prints a pairing link.
