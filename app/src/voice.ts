@@ -1,7 +1,10 @@
+import { Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { ExpoSpeechRecognitionModule } from '@jamsch/expo-speech-recognition';
 import { getLocales } from 'expo-localization';
+import * as ema from './ema';
+import { createSpeaker, isTurkish } from './tts/speaker';
 
 /** Speech in and speech out, both on the phone.
  *
@@ -55,15 +58,27 @@ export function startListening(lang: string) {
     // Words the recogniser would otherwise spell as something else entirely.
     contextualStrings: ['Claude', 'Codex', 'daemon', 'commit', 'build', 'deploy',
                         'branch', 'merge', 'TestFlight', 'Xcode', 'Expo'],
-    // The session a phone call wants: speaker by default, and `voiceChat`,
-    // which is what turns on the echo cancellation. Without it the microphone
-    // hears the answer being read out and the call starts interrupting itself.
-    iosCategory: {
-      category: 'playAndRecord',
-      categoryOptions: ['defaultToSpeaker', 'allowBluetooth'],
-      mode: 'voiceChat',
-    },
+    iosCategory: CALL_SESSION,
   });
+}
+
+/** The session a phone call wants: speaker by default, and `voiceChat`,
+ *  which is what turns on the echo cancellation. Without it the microphone
+ *  hears the answer being read out and the call starts interrupting itself.
+ *  `playAndRecord` is also what keeps a call audible with the silent switch on. */
+const CALL_SESSION: Parameters<typeof ExpoSpeechRecognitionModule.setCategoryIOS>[0] = {
+  category: 'playAndRecord',
+  categoryOptions: ['defaultToSpeaker', 'allowBluetooth'],
+  mode: 'voiceChat',
+};
+
+/** Put the call's session in place before EMA plays. Through the recogniser
+ *  rather than expo-audio's setAudioModeAsync, which has no `voiceChat` or
+ *  `defaultToSpeaker` and resets every field it is not given — the answer
+ *  would come out of the earpiece, or not at all on silent. */
+function callSession() {
+  if (Platform.OS !== 'ios') return;
+  try { ExpoSpeechRecognitionModule.setCategoryIOS(CALL_SESSION); } catch {}
 }
 
 export function stopListening() {
@@ -183,6 +198,7 @@ function withGrade(v: Speech.Voice): string {
 }
 
 export function voiceName(lang: string): string | null {
+  if (emaWanted(lang)) return EMA_NAME;
   const v = picked[lang];
   return v ? withGrade(v) : null;
 }
@@ -191,7 +207,7 @@ export function label(v: Speech.Voice): string {
   return `${withGrade(v)} · ${v.language.replace('_', '-')}`;
 }
 
-export function speak(text: string, lang: string, onDone: () => void) {
+function systemSpeak(text: string, lang: string, onDone: () => void) {
   Speech.speak(text, {
     voice: picked[lang]?.identifier,
     language: locale(lang),
@@ -205,8 +221,49 @@ export function speak(text: string, lang: string, onDone: () => void) {
   });
 }
 
+// ── EMA, the Turkish voice made on the phone ─────────────────────────────────
+/** Turkish answers are read by EMA Lightning (src/ema.ts) once it is loaded,
+ *  and by the system voice when it is not, when the person has switched it off,
+ *  or — for that one answer — when it fails or has not made a sound within
+ *  1.5 s. Every other language is the system voice. The choice is
+ *  src/tts/speaker.ts; nothing of it leaves the phone. */
+export const EMA_NAME = 'EMA';
+/** Said when EMA is picked, in the language it speaks. */
+export const EMA_SAMPLE = 'Cevaplarını bu sesle okuyacağım.';
+
+let emaOn = true;
+
+export function setEmaEnabled(on: boolean) { emaOn = on; }
+
+/** This build can read Turkish with EMA (files and native module present, nothing failed). */
+export function emaAvailable(): boolean { return ema.available(); }
+
+/** Turkish, switched on and available: the voice the next answer is meant to be read in. */
+export function emaWanted(lang: string): boolean {
+  return isTurkish(locale(lang)) && emaOn && ema.available();
+}
+
+/** Load EMA ahead of the first answer. Never throws. */
+export function warmEma(): Promise<boolean> { return ema.warm(); }
+
+export function emaStats() { return { ...ema.status(), ...speaker.stats() }; }
+
+const speaker = createSpeaker({
+  ema: () => ema.voice(),
+  enabled: () => emaOn,
+  player: () => ema.player(callSession),
+  system: { speak: systemSpeak, stop: () => { try { Speech.stop(); } catch {} } },
+  log: (line) => console.log(line),
+});
+
+/** Read `text` aloud; `onDone` once, when it has been heard or was stopped. */
+export function speak(text: string, lang: string, onDone: () => void) {
+  speaker.speak(text, locale(lang), onDone);
+}
+
+/** Silence now, whichever voice is talking, and stop making what has not been made yet. */
 export function stopSpeaking() {
-  try { Speech.stop(); } catch {}
+  speaker.stop();
 }
 
 // ── the sound of a call ───────────────────────────────────────────────────────

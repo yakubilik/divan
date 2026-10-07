@@ -12,10 +12,12 @@ from .config import Config
 from .db import DB, new_id
 from .errors import Err
 from . import attachments, preamble, secrets
+from .pool import Wait
 from .security import PathPolicy
 from .providers.base import Provider, ProviderConfig
 from .providers.claude import ClaudeProvider
 from .providers.codex import CodexProvider
+from .providers.demo import DemoProvider
 
 log = logging.getLogger("rac.session")
 
@@ -54,6 +56,14 @@ def is_untitled(title: str) -> bool:
 # a chat that will not catch up for a very long time.
 MAX_QUEUED = 20
 
+# A turn whose CLI was killed from outside is picked up again this many times
+# before it is reported as failed.
+REVIVE_MAX = 2
+REVIVE_PROMPT = ("[Remote AI Chat] The process running this session was stopped from outside in the "
+                 "middle of your turn and has been started again. Nobody asked anything new. Carry on "
+                 "with what you were doing from where it stopped; do not start over, and do not "
+                 "mention this note unless it changes something for the person.")
+
 # Rebuilding a dropped CLI session from the chat's own event log.
 # A chat outlives the CLI session behind it: switching account or tool clears the
 # resume id, and the next turn opens a session that has never seen this chat.
@@ -64,6 +74,20 @@ RECAP_TOTAL_CHARS = 12000 # whole recap
 
 # Handed to the sign-in that picks a turn up after the pool moved it. The
 # transcript comes first (see _build_recap), this says what to do with it.
+RESUME_NOTE = (
+    "The account this chat runs on reached its plan limit part-way through that "
+    "last turn. The limit has reset and this is the same session, so nothing is "
+    "lost. Carry on from where it stopped: check what was already done before "
+    "redoing any of it, then finish what the user asked for."
+)
+
+# After a limit is said to reset, a little longer: the reset time is the
+# plan's, and the first request on the dot can still be refused.
+RESET_SLACK_S = 30.0
+# A wait that ends on another full account waits again; this many times, then
+# it gives the turn a try rather than sleep on a loop.
+MAX_WAITS = 4
+
 HANDOVER_NOTE = (
     "The account this chat was running on reached its plan limit part-way "
     "through that last turn, so the work has moved to the user's next sign-in "
@@ -134,6 +158,12 @@ class ChatSession:
         # the interrupt has come back, rather than tearing the provider down
         # underneath a coroutine that is still draining it.
         self._handover: tuple[str | None, str] | None = None
+        # A wait the pool asked for before the turn opened, done by `_run`
+        # rather than under the lock `_prepare` is called with.
+        self._pending_wait: Wait | None = None
+        # Set while the chat is waiting for a limit to reset; `interrupt` sets
+        # it to wake the wait up and stop.
+        self._wake: asyncio.Event | None = None
         # Where a key pasted into a message is kept; None is the login keychain.
         # A test hands in its own so it never writes to the real one.
         self.keychain = None
@@ -191,7 +221,9 @@ class ChatSession:
 
     # ── provider ───────────────────────────────────────────────────────────
     def _make_provider(self, chat: dict) -> Provider:
-        cls = PROVIDERS.get(chat["provider"], ClaudeProvider)
+        # A demo machine runs the script for every chat, including one made
+        # before the switch was turned on: it has no CLI to run anything else.
+        cls = DemoProvider if self.cfg.demo else PROVIDERS.get(chat["provider"], ClaudeProvider)
         home, env = self.resolve_account(chat) if self.resolve_account else (None, {})
         pc = ProviderConfig(
             account_home=home, account_id=chat.get("account_id"), account_env=env,
@@ -200,6 +232,7 @@ class ChatSession:
             agent_name=chat.get("agent_id"),
             cwd=chat["cwd"], session_id=chat.get("provider_session_id"),
             max_turns=chat.get("max_turns"), max_budget_usd=chat.get("max_budget_usd"),
+            chat_id=self.chat_id,
         )
         pc.preamble = preamble.build(self.cfg, pc, chat["provider"])
         provider = cls(pc, self.emit, self._approval)
@@ -320,9 +353,57 @@ class ChatSession:
         except Exception:
             log.exception("the pool could not choose an account")
             return chat
+        if isinstance(account_id, Wait):
+            self._pending_wait = account_id
+            return chat
         if not account_id or account_id == chat.get("account_id"):
             return chat
         return await self._rebind(chat, account_id, "limit")
+
+    async def _wait_for_reset(self, until: float, stay: bool) -> bool:
+        """Sleep until a plan limit resets. False when the user stopped it.
+
+        The chat stays `running` through it, with the time it will carry on at
+        in its preview, so the list says why nothing is happening and when it
+        will. Whatever is queued behind the turn waits with it.
+        """
+        at = time.strftime("%H:%M", time.localtime(until))
+        await self.emit("pool.waiting", {"until": until, "same_account": stay}, True)
+        await self._set_status("running", last_preview=f"Usage limit — carries on at {at}")
+        log.info("chat %s: waiting for the limit until %s (%s)", self.chat_id, at,
+                 "same account" if stay else "every account is spent")
+        self._wake = asyncio.Event()
+        try:
+            await asyncio.wait_for(self._wake.wait(), max(0.0, until - time.time()) + RESET_SLACK_S)
+            return False
+        except asyncio.TimeoutError:
+            return True
+        finally:
+            self._wake = None
+
+    async def _settle(self, chat: dict, plan, reason: str) -> dict | None:
+        """Follow the pool's answer until there is an account to run on.
+
+        Returns the chat — moved, or where it was once its limit reset — or
+        None when the user stopped the wait. After a wait the pool is asked
+        again: the account that came back may not be the one the chat is on.
+        """
+        for _ in range(MAX_WAITS):
+            if not isinstance(plan, Wait):
+                break
+            if not await self._wait_for_reset(plan.until, plan.stay):
+                return None
+            chat = self.db.get_chat(self.chat_id) or chat
+            # A CLI process that sat through a long sleep is not one to trust.
+            self.dirty = True
+            try:
+                plan = await self.pool_pick(chat) if self.pool_pick else None
+            except Exception:
+                log.exception("the pool could not choose an account after the wait")
+                plan = None
+        if isinstance(plan, str) and plan != chat.get("account_id"):
+            chat = await self._rebind(chat, plan, reason)
+        return chat
 
     async def _rebind(self, chat: dict, account_id: str, reason: str) -> dict:
         """Point the chat at another sign-in, and say so on the timeline.
@@ -389,6 +470,23 @@ class ChatSession:
             except Exception:
                 log.exception("the pool could not find another account")
                 account_id = None
+        if isinstance(account_id, Wait):
+            was = chat.get("account_id")
+            settled = await self._settle(chat, account_id, reason)
+            if settled is None:
+                await self._finish(last_preview="Stopped while waiting for the usage limit")
+                return None
+            chat = settled
+            await self._rebuild()
+            self.provider = self._make_provider(chat)
+            self._recap = None
+            await self._set_status("running")
+            # Same sign-in, same CLI session: it remembers the turn, so a
+            # line saying what happened is all it needs.
+            if chat.get("account_id") == was and chat.get("provider_session_id"):
+                return RESUME_NOTE
+            recap = self._build_recap(HANDOVER_NOTE, handover=True)
+            return f"{recap}{HANDOVER_NOTE}" if recap else HANDOVER_NOTE
         if account_id is None:
             # Every sign-in is spent. Say so where the reader is looking, and
             # do not leave messages queued for a chat that cannot run them.
@@ -499,8 +597,8 @@ class ChatSession:
                            else self._build_recap(text))
         if is_untitled(chat["title"]):
             self.db.update_chat(self.chat_id, title=with_project(
-                text.strip().split("\n")[0], self.policy.project_for(chat["cwd"])))
-        await self._set_status("running", last_preview=plain(text)[:200])
+                secrets.shown(text).strip().split("\n")[0], self.policy.project_for(chat["cwd"])))
+        await self._set_status("running", last_preview=plain(secrets.shown(text))[:200])
         return chat
 
     async def _on_idle_output(self) -> None:
@@ -524,6 +622,21 @@ class ChatSession:
     async def _run(self, text: str | None, attachments: list[dict] | None,
                    continuation: bool = False) -> None:
         """Run the turn, then keep running whatever was queued behind it."""
+        if self._pending_wait is not None:
+            # The account was spent before the turn opened. Wait here, in the
+            # turn's own task, rather than in `_prepare` under the send lock.
+            plan, self._pending_wait = self._pending_wait, None
+            chat = self.db.get_chat(self.chat_id) or {}
+            settled = await self._settle(chat, plan, "limit")
+            if settled is None:
+                await self._finish(last_preview="Stopped while waiting for the usage limit")
+                return
+            if self.dirty:
+                await self._rebuild()
+                self.provider = self._make_provider(settled)
+                self._recap = (None if settled.get("provider_session_id")
+                               else self._build_recap(text or ""))
+            await self._set_status("running", last_preview=plain(secrets.shown(text or ""))[:200])
         while True:
             await self._turn(text, attachments, continuation)
             continuation = False
@@ -585,6 +698,26 @@ class ChatSession:
             await self.emit("turn.error", {"message": str(exc)}, True)
             await self._finish(last_preview=f"Error: {exc}"[:200])
             return
+        # The CLI was killed under the turn — a stray pkill, not anything the
+        # turn did. Its session is on disk, so the turn is picked up again in a
+        # new process instead of ending as an error the person has to answer.
+        revived = 0
+        while res.killed and revived < REVIVE_MAX and self._handover is None:
+            revived += 1
+            log.warning("chat %s: the CLI was killed mid-turn; picking the turn up again (%d/%d)",
+                        self.chat_id, revived, REVIVE_MAX)
+            if res.session_id:
+                self.db.update_chat(self.chat_id, provider_session_id=res.session_id)
+            try:
+                # No session yet means nothing to pick up: the message is asked again.
+                res = await self.provider.run(
+                    REVIVE_PROMPT if res.session_id or prompt is None else prompt,
+                    None if res.session_id else attachments)
+            except Exception as exc:
+                log.exception("turn crashed while being picked up again")
+                await self.emit("turn.error", {"message": str(exc)}, True)
+                await self._finish(last_preview=f"Error: {exc}"[:200])
+                return
         self.last_active = time.monotonic()
         chat = self.db.get_chat(self.chat_id) or {}
         if self._handover is not None:
@@ -625,8 +758,8 @@ class ChatSession:
         chat back to idle and tells the phone it is done — otherwise the next
         queued message is about to start and the chat never stopped working."""
         self.turn_started = None
-        # A turn is when a chat's subject can have changed, so this is when it
-        # is filed again — before the status goes out, which carries the chat.
+        # A chat nothing has claimed yet is filed by the first turn that works
+        # on a product — before the status goes out, which carries the chat.
         self.db.file_chat(self.chat_id)
         if self.queued:
             await self._set_status("running", **fields)
@@ -642,6 +775,10 @@ class ChatSession:
         for fut in self.pending.values():
             if not fut.done():
                 fut.set_result("deny")
+        if self._wake is not None:
+            # Waiting out a limit: stopping is just waking it up.
+            self._wake.set()
+            return
         if self.provider:
             await self.provider.interrupt()
 

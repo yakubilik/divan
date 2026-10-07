@@ -37,6 +37,7 @@ import {
 } from '../lib/ticket';
 import { useRun } from '../lib/run';
 import { RunLog } from '../components/RunLog';
+import { Report } from '../components/Report';
 import { MicButton, MicNote, useMic } from '../components/Mic';
 import { appendSpeech } from '../lib/dictate';
 import { useDivanStore, type MergedCard, type MergedProject } from '../lib/divan';
@@ -242,6 +243,11 @@ export function TicketPage({
               </div>
             )}
           </article>
+        )}
+
+        {/* What the ticket came back with — the documents it wrote, read. */}
+        {card.ustabasi_id != null && (
+          <Report host={card.host} ticket={card.ustabasi_id} status={card.agent_status ?? ''} />
         )}
 
         <section aria-labelledby="t-live" data-live="">

@@ -166,7 +166,7 @@ const en = {
   host: 'Host', system: 'OS', daemon: 'Daemon', uptime: 'Uptime', activeSessions: 'Active sessions', roots: 'Allowed roots',
   call: 'Call',
   // lock
-  locked: 'Locked', unlockBtn: 'Unlock', unlockReason: 'Unlock Remote AI Chat',
+  locked: 'Locked', unlockBtn: 'Unlock', unlockReason: 'Unlock Divan',
   // errors from the computer, keyed by the daemon's error code
   errUnknownTool: 'Unknown tool', errUnknownProvider: 'Unknown tool', errUnknownPermMode: 'Unknown permission mode',
   errInstallRunning: 'An installation is already running', errNpmMissing: 'Node.js (npm) is not installed on the computer',
@@ -187,9 +187,10 @@ const en = {
   errNotRestarting: 'This computer is not restarting',
   // call (the concierge)
   callVoice: 'voice: {v}', callVoicePick: 'READING VOICE', callVoiceNone: 'No voices installed for this language.',
-  callVoiceTry: 'This is how I will read your answers.', callDialling: 'Calling…', callHintDialling: 'Ringing your computer.',
-  callGreeting: 'At your service.', callQuiet: 'All quiet here.',
-  callHeadWorking: '{n} running.', callHeadBlocked: '{n} waiting on you.',
+  callVoiceTry: 'This is how I will read your answers.',
+  callVoiceEma: 'EMA · Turkish, made on this phone', callVoiceEmaSwitch: 'Read Turkish with EMA',
+  callVoiceEmaLoading: 'Loading…', callVoiceEmaFailed: 'Could not load: {e}',
+  callVoiceEmaStats: 'load {load} · first sound {first} · RTF {rtf}', callDialling: 'Calling…', callHintDialling: 'Ringing your computer.',
   callTitle: 'Concierge', callStart: 'Call', callListening: 'Listening', callThinking: 'Asking…',
   callSpeaking: 'Speaking', callHangUp: 'End call', close: 'Close',
   callHintIdle: 'Ask what your computer is doing. Tap to start.',
@@ -637,6 +638,11 @@ const en = {
   ticketOpen: 'open {d}', ticketTook: 'took {d}', ticketThisRound: '{d} in this round',
   ticketCommits: '{n} commits', ticketOneCommit: '1 commit',
   ticketAbout: 'What this ticket is doing',
+  reportTitle: 'Report', reportVerifier: 'verifier · {v}', reportCut: 'cut short', reportFailed: 'The report did not come: {e}',
+  inboxTitle: 'Inbox', inboxEmpty: 'Nothing from the queue yet.', inboxNew: '{n} new', inboxAllRead: 'all read',
+  inboxAgo: '{d} ago', inboxNote: 'What the queue sent',
+  kindDone: 'done', kindBlocked: 'asks you', kindFailed: 'failed', kindReminder: 'still waiting',
+  kindLimit: 'usage limit', kindDeadline: 'past its deadline', kindDeadman: 'queue stopped',
   groupCount: '{n}',
   // the ticket's own page: the steps, the criteria, and the rest of the card
   detailTitle: 'Ticket #{id}',

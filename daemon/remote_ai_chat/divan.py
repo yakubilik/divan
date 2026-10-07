@@ -30,7 +30,7 @@ human face.
 
 And the rule everything else is built around: **a card the coding agent has
 follows its ticket; a card a person has follows the person.** Nobody drags a
-ticket across the board by hand (Yakup, 2026-09-30: "ben tek tek kaydırmayacağım").
+ticket across the board by hand (Yakup, 2026-09-30: "I am not going to move them one by one").
 The queue already knows where each ticket is — queued, running, blocked, failed,
 done, cancelled — and the mirror reads that into two things at once: the small
 status mark on the card, and the column the card sits in (`STATUS_COLUMN`). A

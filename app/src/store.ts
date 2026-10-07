@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { callOnce, client, httpBase, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
 import { dismissChatNotifications } from './push';
-import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, DivanColumn, DivanExecutor, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, RunPage, ToolStatus, UstabasiSnapshot } from './protocol';
+import type { Agent, Catalog, Chat, CliAccount, DivanCard, DivanCardDetail, DivanColumn, DivanExecutor, DivanSnapshot, LimitWindow, LimitsEvent, PoolAccount, PoolSettings, UpdateStatus, StoreSource, Provider, Defaults, Group, HostConfig, HostInfo, LoginDone, LoginPrompt, Project, RacEvent, QueueNotice, RunPage, TicketReport, ToolStatus, UstabasiSnapshot } from './protocol';
 import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, Polls, silent, type HostDivan } from './divan';
 import { missed, opening, took, type Open, type Say } from './card';
@@ -30,6 +30,9 @@ export interface Prefs {
   // screen; empty means "whatever the phone has that sounds best".
   /** Keyed by language tag, e.g. 'tr-TR'. */
   voiceIds?: Record<string, string>;
+  /** Turkish is read by the system voice even where EMA, the voice made on the
+   *  phone, could read it. Off (EMA) by default. */
+  emaOff?: boolean;
 }
 export interface DeviceInfo { id: string; name: string; push_approval: boolean; push_done: boolean; has_push_token: boolean }
 /** `path` is the file the message names — what a link opens, and what the text
@@ -155,6 +158,10 @@ interface State {
    *  here: the log is a river and only the page being read is worth holding,
    *  which is the screen's business and not the store's. */
   readRun: (id: number, cursor: string | null) => Promise<RunPage>;
+  /** What a ticket came back with: summary, verdict and the documents it wrote. */
+  ticketReport: (id: number) => Promise<TicketReport>;
+  /** What the queue sent since `after` (the newest id already held). */
+  queueNotices: (after: number) => Promise<{ available: boolean; items: QueueNotice[]; last: number }>;
   /** The card that is open, and everything the machine it is on has said about
    *  it: its two faces, its ticket, the run being written on it and whatever has
    *  been said into that run from here (`src/card.ts`).
@@ -1010,6 +1017,10 @@ export const useStore = create<State>((set, get) => {
     readRun: async (id, cursor) => {
       return await client.call<RunPage>('ustabasi.run', { id, ...(cursor ? { cursor } : {}) });
     },
+
+    ticketReport: async (id) => client.call<TicketReport>('ustabasi.report', { id }),
+
+    queueNotices: async (after) => client.call('ustabasi.notifications', { after }),
 
     loadCard: async ({ card, host }) => {
       const had = get().openCard;

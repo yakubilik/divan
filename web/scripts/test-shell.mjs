@@ -816,7 +816,7 @@ group('the address is a place, and one a person can read');
   // The panel wrote query-string addresses for a day. A link somebody kept is
   // still a link, so it is read — including a card named `host:id`, which is
   // exactly the spelling this replaced.
-  const old = nav.readPlace('/', '?project=babysee&tab=board&card=100.80.178.83%3A8790%3A0d2279020af7');
+  const old = nav.readPlace('/', '?project=babysee&tab=board&card=100.64.1.2%3A8790%3A0d2279020af7');
   ok('the addresses the panel used to write still open where they meant',
     old.project === 'babysee' && old.tab === 'board' && old.card === '0d2279020af7', JSON.stringify(old));
   ok('…and an old chat link too',

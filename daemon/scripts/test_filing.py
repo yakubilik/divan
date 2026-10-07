@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import tempfile
@@ -13,7 +14,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from remote_ai_chat.db import DB                                 # noqa: E402
+from remote_ai_chat.errors import Err                            # noqa: E402
 from remote_ai_chat.filing import matcher, pick                  # noqa: E402
+from remote_ai_chat.server import Server                         # noqa: E402
 
 fails: list[str] = []
 
@@ -60,6 +63,59 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a filed chat is listed with its product's name",
           (listed["project_id"], listed["project"]), (shop["id"], "Shop"))
     check("…and filing it is not the chat moving", listed["updated_at"], before)
+
+    # A chat is filed once. Work on another product later does not move it.
+    site = db.divan.create_project("Site", repos=[f"{tmp}/site"])
+
+    def work_in(cid: str, repo: str) -> None:
+        for _ in range(3):
+            db.append_event(cid, "tool.use", {"tool": "Edit", "input": {"file_path": f"{tmp}/{repo}/x.py"}})
+        db.file_chat(cid)
+
+    work_in(chat["id"], "site")
+    check("a chat that has a product keeps it when a turn works in another",
+          db.get_chat(chat["id"])["project_id"], shop["id"])
+
+    loose = db.create_chat(title="loose", cwd=tmp)
+    check("a chat opened outside every product has none yet", db.get_chat(loose["id"])["project_id"], "")
+    work_in(loose["id"], "site")
+    check("…and is filed by its first turn that works in one", db.get_chat(loose["id"])["project_id"], site["id"])
+
+    # By hand, through the real chat.update handler.
+    sent: list[dict] = []
+
+    class Host:
+        pass
+
+    host = Host()
+    host.db = db
+    host.sessions = type("S", (), {"peek": staticmethod(lambda _cid: None)})()
+    host.broadcast = lambda ev: (sent.append(ev), asyncio.sleep(0))[1]
+
+    async def update(cid: str, **fields):
+        return await Server.h_chat_update(host, None, {"chat_id": cid, **fields})
+
+    moved = asyncio.run(update(chat["id"], project_id=site["id"]))
+    check("chat.update files a chat under the product it is given",
+          (moved["project_id"], moved["project"]), (site["id"], "Site"))
+    check("…and says so to every device",
+          [(e["event"], e["data"]["project_id"]) for e in sent], [("chat.updated", site["id"])])
+    work_in(chat["id"], "shop")
+    check("…and later work elsewhere does not move it back", db.get_chat(chat["id"])["project_id"], site["id"])
+
+    try:
+        asyncio.run(update(chat["id"], project_id="nope"))
+        check("an unknown product is refused", "accepted", "Err")
+    except Err as e:
+        check("an unknown product is refused", e.code, "no_project")
+    check("…and leaves the chat where it was", db.get_chat(chat["id"])["project_id"], site["id"])
+
+    asyncio.run(update(chat["id"], project_id=None))
+    work_in(chat["id"], "shop")
+    check("a chat put under Unfiled by hand stays there through work on a product",
+          db.get_chat(chat["id"])["project_id"], "")
+    check("…and a restart's filing pass does not touch it either",
+          DB(Path(tmp) / "db.sqlite").get_chat(chat["id"])["project_id"], "")
 
 if fails:
     print(f"FAIL ({len(fails)})")

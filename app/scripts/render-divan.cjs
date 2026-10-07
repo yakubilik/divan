@@ -242,6 +242,8 @@ const STUBS = {
   // What they do is not a question a render can answer, so they are the
   // smallest things that answer at all.
   'expo-clipboard': { setStringAsync: () => Promise.resolve(true) },
+  // The inbox keeps which notice was seen last; nothing here reads it back.
+  'expo-secure-store': { getItemAsync: () => Promise.resolve(null), setItemAsync: () => Promise.resolve() },
   'expo-linking': { openURL: () => Promise.resolve(true), createURL: (p) => `remoteaichat://${p}` },
   // …and the camera, whose permission is not a stub but a state a check sets:
   // the pairing screen has three faces — the viewfinder, the form it falls back

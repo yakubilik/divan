@@ -42,7 +42,7 @@ export function UserBubble({ text, attachments }: { text: string; attachments?: 
         <View style={{ backgroundColor: c.bubble, borderWidth: 1, borderColor: c.line,
                        borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
                        paddingVertical: 10, paddingHorizontal: 13 }}>
-          <SelectableText style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{text}</SelectableText>
+          <SelectableText style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{withSecrets(text, c)}</SelectableText>
         </View>
       )}
     </View>
@@ -218,7 +218,37 @@ function keyTree(nodes: any[], path: string): any[] {
   return nodes;
 }
 
+/** What the daemon leaves where a key was pasted (`daemon/remote_ai_chat/
+ *  secrets.py`): the family, the keychain item and the command to read it. The
+ *  agent needs that; the person reading needs only to see that a key was there
+ *  and is safe, so the screen says `🔒 OpenAI key`. */
+const SECRET = /\[secret ([a-z]+) rac-secret-[a-z]+-[0-9a-f]{8}( — not saved)?[^\]]*\]/g;
+const SECRET_NAME: Record<string, string> = {
+  openai: 'OpenAI key', anthropic: 'Anthropic key', github: 'GitHub token', aws: 'AWS key',
+  google: 'Google key', stripe: 'Stripe key', resend: 'Resend key', posthog: 'PostHog key',
+  sentry: 'Sentry token', slack: 'Slack token', telegram: 'Telegram bot token', jwt: 'token',
+  pem: 'private key', secret: 'secret', password: 'password', apppassword: 'app password',
+};
+const secretLabel = (kind: string, unsaved?: string) =>
+  `🔒 ${SECRET_NAME[kind] ?? kind}${unsaved ? ' (not saved)' : ''}`;
+
+/** A user's own message, with each placeholder as a chip inside the text. */
+function withSecrets(text: string, c: Palette): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(SECRET)) {
+    if (m.index! > last) out.push(text.slice(last, m.index));
+    out.push(<Text key={m.index} style={{ backgroundColor: c.fill, color: m[2] ? c.danger : c.text2, fontSize: 15 }}>
+      {` ${secretLabel(m[1], m[2])} `}</Text>);
+    last = m.index! + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
 function renderMarkdown(src: string, c: Palette) {
+  // An answer that repeats a placeholder shows it the same way, as inline code.
+  src = src.replace(SECRET, (_m, kind, unsaved) => `\`${secretLabel(kind, unsaved)}\``);
   let tokens = stringToTokens(src, MD as any);
   tokens = (cleanupTokens as any)(tokens);
   tokens = (groupTextTokens as any)(tokens);

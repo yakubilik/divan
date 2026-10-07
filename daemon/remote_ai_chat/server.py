@@ -23,13 +23,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import __version__
 from .supervisor import supervisor
 from .updater import Updater
-from .config import Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
+from .config import CONFIG_DIR, Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
 from .db import DB
 from . import accounts as acct
 from . import pool as poolmod
 from .errors import Err
 from . import agents, secrets, tools
-from .call import Concierge, headline as call_headline, snapshot as call_snapshot
+from .call import Concierge, hermes_installed, headline as call_headline, snapshot as call_snapshot
 from .push import send_push
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .attachments import KINDS, normalize_image, peaks, sniff
@@ -40,6 +40,7 @@ from . import divan as divanmod
 from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager, with_project
 from .providers.claude_models import live_models as claude_live_models
 from .providers.codex import live_models as codex_live_models
+from .providers.demo import DemoProvider
 
 log = logging.getLogger("rac.server")
 
@@ -234,6 +235,8 @@ class Server:
         self._models_at: dict[str, float] = {}
         # The voice concierge. Built here but not connected — the CLI only
         # starts when somebody actually asks it something.
+        # The account the concierge last connected as; work it starts goes there.
+        self._concierge_acct: acct.Account | None = None
         self.concierge = Concierge(self.call_snapshot, self._concierge_account,
                                    self._concierge_actions())
 
@@ -397,7 +400,7 @@ class Server:
 
     def _agent_prompt(self, chat: dict) -> str | None:
         aid = chat.get("agent_id")
-        if not aid:
+        if not aid or self.cfg.demo:
             return None
         home = self._account(chat.get("account_id"), chat["provider"]).home
         if aid == agents.CREATOR_ID:
@@ -431,6 +434,8 @@ class Server:
     def _resolve_account_home(self, chat: dict) -> tuple[str | None, dict[str, str]]:
         """Where the account keeps its login, and the environment that carries
         it — an account signed in with a key has nothing on disk to point at."""
+        if self.cfg.demo:
+            return None, {}
         a = self._account(chat.get("account_id"), chat["provider"])
         return a.home, a.env()
 
@@ -539,7 +544,8 @@ class Server:
         raw = {**self.pool.settings.to_dict(),
                **{k: v for k, v in d.items()
                   if k in ("enabled", "threshold", "thresholds", "use_overage",
-                           "overage_by_account", "reserve", "order", "max_hops")}}
+                           "overage_by_account", "reserve", "order", "max_hops",
+                           "wait_under_s")}}
         self.pool.settings = poolmod.Settings.from_dict(raw)
         self.cfg.pool = self.pool.settings.to_dict()
         self.cfg.save()
@@ -566,9 +572,30 @@ class Server:
         current = chat.get("account_id") or acct.DEFAULT_ID + "-" + provider
         if not self.pool.state(current, provider).blocked:
             return None
-        return await self._pool_next(provider, {current})
+        return await self._pool_plan(provider, current)
 
-    async def _pool_next_for(self, chat: dict) -> str | None:
+    async def _pool_plan(self, provider: str, current: str) -> "str | poolmod.Wait | None":
+        """What a chat on a spent sign-in does next.
+
+        Three answers, in this order. A limit that comes back within
+        `wait_under_s` is waited out where it is — the session keeps its memory,
+        which a move would throw away. Otherwise the next sign-in with room.
+        With none left, the earliest moment any of them comes back, so the chat
+        picks itself up then instead of stopping for good. None only when no
+        account says when it will be back.
+        """
+        now = time.time()
+        st = self.pool.state(current, provider, now)
+        if st.blocked and st.until and 0 < st.until - now <= self.pool.settings.wait_under_s:
+            return poolmod.Wait(st.until, True)
+        nxt = await self._pool_next(provider, {current})
+        if nxt:
+            return nxt
+        back = [s.until for s in (self.pool.state(a, provider, now) for a in self.pool.order(provider))
+                if s.blocked and s.until and s.until > now]
+        return poolmod.Wait(min(back), False) if back else None
+
+    async def _pool_next_for(self, chat: dict) -> "str | poolmod.Wait | None":
         """Where a chat whose turn has just been stopped should carry on.
 
         Split from `_pool_pick` because it is asked at a different moment and
@@ -579,7 +606,7 @@ class Server:
             return None
         provider = chat.get("provider") or "claude"
         current = chat.get("account_id") or acct.DEFAULT_ID + "-" + provider
-        return await self._pool_next(provider, {current})
+        return await self._pool_plan(provider, current)
 
     async def _pool_next(self, provider: str, exclude: set[str]) -> str | None:
         """The next sign-in worth moving to, confirmed to still be signed in.
@@ -653,6 +680,50 @@ class Server:
     # Long enough for the clients to be back on their sockets, so they watch
     # the turn start again instead of finding it already under way.
     RESUME_DELAY_S = 3.0
+
+    FOLLOW_EVERY_S = 30.0
+    FOLLOW_STATE = CONFIG_DIR / "ustabasi-follow.json"
+
+    async def follow_tickets(self) -> None:
+        """Wake the chat that filed a ticket when the ticket ends.
+
+        An agent that files a ticket used to say "I will tell you when it is
+        done" and then could not: nothing woke it. This reads what the queue
+        sent, and for a ticket filed from a chat (`card.origin_chat`), sends the
+        result into that chat as a message — the agent there picks it up and
+        tells the person, who gets the chat's own notification for it.
+
+        The place in the queue's notifications is kept on disk. The first run
+        starts at the end: an old result is not news.
+        """
+        try:
+            after = int(json.loads(self.FOLLOW_STATE.read_text()).get("after", -1))
+        except Exception:
+            after = -1
+        while True:
+            try:
+                if after < 0:
+                    after = await asyncio.to_thread(ustabasimod.newest_notification)
+                    self.FOLLOW_STATE.write_text(json.dumps({"after": after}))
+                # A daemon on its way out starts no turns; what ended meanwhile
+                # is still there for the next one, which reads from the same place.
+                if self.draining:
+                    return
+                got, last = await asyncio.to_thread(ustabasimod.followed, after)
+                for f in got:
+                    if not self.db.get_chat(f["chat"]):
+                        continue
+                    try:
+                        await self.sessions.get(f["chat"]).send(ustabasimod.follow_message(f), None)
+                        log.info("ticket #%s %s: told chat %s", f["ticket"], f["kind"], f["chat"])
+                    except Exception:
+                        log.exception("could not tell chat %s about ticket #%s", f["chat"], f["ticket"])
+                if last != after:
+                    after = last
+                    self.FOLLOW_STATE.write_text(json.dumps({"after": after}))
+            except Exception:
+                log.exception("ticket follow pass failed")
+            await asyncio.sleep(self.FOLLOW_EVERY_S)
 
     async def resume_interrupted(self) -> None:
         """Carry on with the turns the process before this one was running.
@@ -1423,6 +1494,8 @@ class Server:
                 "groups": self.db.list_groups()}
 
     async def h_chat_create(self, dev: Device, d: dict) -> dict:
+        if self.cfg.demo:
+            return await self._demo_chat_create(d)
         provider = d.get("provider", "claude")
         if provider not in PROVIDERS:
             raise Err("unknown_provider", "unknown tool")
@@ -1455,6 +1528,33 @@ class Server:
             title=with_project(d.get("title") or NEW_CHAT_TITLE,
                                self.policy.project_for(cwd)),
             max_turns=d.get("max_turns"), max_budget_usd=d.get("max_budget_usd"),
+        )
+        await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.created",
+                              "data": chat, "ts": time.time()})
+        return chat
+
+    async def _demo_chat_create(self, d: dict) -> dict:
+        """A chat on a demo machine: the demo tool, whatever the client named.
+
+        A client that predates demo mode still offers Claude and Codex, and
+        asks for one of them. Refusing would leave a reviewer with no way to
+        start a chat at all, so the name is taken as "a chat" and the demo
+        script is what runs. No account and no agent: neither exists here.
+        """
+        cwd = d.get("cwd") or self.cfg.allowed_roots[0]
+        if err := self.policy.cwd_error(cwd):
+            raise Err(err, "that folder cannot be opened")
+        cat = DemoProvider.catalog()
+        models = [m["id"] for m in cat["models"]]
+        chat = self.db.create_chat(
+            account_id=None, agent_id=None, pool_pinned=0,
+            provider=DemoProvider.name,
+            model=d.get("model") if d.get("model") in models else models[0],
+            effort=None, perm_mode=cat["perm_modes"][0],
+            cwd=str(Path(cwd).expanduser().resolve()), group_id=d.get("group_id"),
+            title=with_project(d.get("title") or NEW_CHAT_TITLE,
+                               self.policy.project_for(cwd)),
+            max_turns=None, max_budget_usd=None,
         )
         await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.created",
                               "data": chat, "ts": time.time()})
@@ -1535,6 +1635,12 @@ class Server:
                 ids[prev["provider"]] = prev["provider_session_id"]
             fields["provider_session_id"] = ids.get(fields["provider"])
             fields["session_ids"] = json.dumps(ids)
+        if "project_id" in fields:
+            # A person filing the chat by hand; the computer never refiles it after.
+            try:
+                self.db.set_project(cid, fields.pop("project_id"))
+            except ValueError:
+                raise Err("no_project", "no such project") from None
         chat = self.db.update_chat(cid, **fields)
         s = self.sessions.peek(cid)
         if s and PROVIDER_FIELDS & fields.keys():
@@ -1585,7 +1691,15 @@ class Server:
     # for a session's turn — see call.py.
 
     def call_snapshot(self):
-        return call_snapshot(self.db, self.sessions, self.cfg.host_name)
+        # The queue, statuses only: one read of its database, no `git log` per
+        # worktree, because this runs before every question. A queue that is
+        # absent or locked is no section, never an error on a call.
+        try:
+            queue = ustabasimod.snapshot(self.policy.project_for, git=False)
+        except Exception as exc:
+            log.warning("call: could not read the ticket queue: %s", exc)
+            queue = None
+        return call_snapshot(self.db, self.sessions, self.cfg.host_name, queue)
 
     def _concierge_actions(self) -> dict:
         """The four things the concierge may do, as the daemon already does them.
@@ -1608,7 +1722,18 @@ class Server:
             if not hits:
                 raise Err("no_project", f"there is no project called {project}")
             cwd = hits[0]["path"]
-            chat = await self.h_chat_create(None, {"cwd": cwd, "title": secrets.mask(instruction)[:60]})
+            # Work asked for on the phone goes to Hermes when the account the
+            # call speaks as has it: a real agent with skills, so "add this to
+            # my calendar" or "file a ticket for that" lands somewhere that can
+            # do it. The concierge itself still has none of those.
+            want_chat = {"cwd": cwd, "title": secrets.mask(instruction)[:60]}
+            a = self._concierge_acct or self._account(None, "claude")
+            hermes = agents.find("hermes", a.home, cwd) if hermes_installed(a.home) else None
+            if hermes:
+                want_chat["agent_id"] = hermes["id"]
+                if a.home:
+                    want_chat["account_id"] = a.id
+            chat = await self.h_chat_create(None, want_chat)
             await self.sessions.get(chat["id"]).send(instruction.strip(), None)
             return hits[0]["name"]
 
@@ -1660,6 +1785,7 @@ class Server:
                     log.info("concierge: no machine login, speaking as account=%s", x.id)
                     a = x
                     break
+        self._concierge_acct = a
         return a.home, a.env()
 
     async def h_call_hello(self, dev: Device, d: dict) -> dict:
@@ -1909,6 +2035,23 @@ class Server:
                 # doing.
                 log.warning("divan mirror: %s", exc)
             return snap
+
+    async def h_ustabasi_notifications(self, dev: Device, d: dict) -> dict:
+        """The queue's messages, kept: the inbox behind the bell on both clients.
+        `after` is the newest id the asker has; only what is newer comes back."""
+        try:
+            after = int(d.get("after") or 0)
+        except (TypeError, ValueError):
+            after = 0
+        return await asyncio.to_thread(ustabasimod.notifications, after,
+                                       ustabasimod.INBOX_LIMIT, self.policy.project_for)
+
+    async def h_ustabasi_report(self, dev: Device, d: dict) -> dict:
+        """What a ticket came back with: summary, verdict and the documents it wrote."""
+        try:
+            return await asyncio.to_thread(ustabasimod.report, self._ticket_id(d))
+        except LookupError:
+            raise Err("bad_ticket", "no such ticket")
 
     async def h_ustabasi_run(self, dev: Device, d: dict) -> dict:
         """What the agent on a ticket has printed, a page at a time.
@@ -2359,6 +2502,9 @@ class Server:
 
     # ── info ───────────────────────────────────────────────────────────────
     def catalog(self) -> dict:
+        if self.cfg.demo:
+            # Only what a chat here can actually run.
+            return {DemoProvider.name: DemoProvider.catalog()}
         cat = {name: cls.catalog() for name, cls in PROVIDERS.items()}
         for name, models in self._models.items():
             if models and name in cat:
@@ -2379,6 +2525,8 @@ class Server:
         """Both live model lists, fetched side by side. Called at startup as well
         as from hello, so a chat that nobody opened a picker for still resolves
         its model the way the picker would have shown it."""
+        if self.cfg.demo:
+            return          # no CLI to ask, and none in the catalog
         await asyncio.gather(self._warm_models("codex", codex_live_models),
                              self._warm_models("claude", claude_live_models))
 
@@ -2414,7 +2562,10 @@ class Server:
 
     def host_info(self) -> dict:
         if self._versions is None:
-            self._versions = {p: tools.version(p) for p in ("claude", "codex")}
+            # A demo machine starts no CLI, not even to ask its version — the
+            # SDK carries a claude binary of its own that would answer.
+            self._versions = ({p: None for p in ("claude", "codex")} if self.cfg.demo
+                              else {p: tools.version(p) for p in ("claude", "codex")})
         return {
             "name": self.cfg.host_name, "os": platform.system(), "os_version": _os_version(),
             "daemon_version": __version__, "uptime_s": int(time.time() - self.started),

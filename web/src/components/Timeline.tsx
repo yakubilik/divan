@@ -3,7 +3,7 @@ import { C, R } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import { cost, duration, tokens, toolSummary, clock } from '../lib/format';
 import type { Item } from '../lib/timeline';
-import { Bubble, Prose } from './Bubble';
+import { Bubble, Prose, withSecrets } from './Bubble';
 import { Lightbox, type Shot } from './Lightbox';
 import { fileUrl } from '../lib/actions';
 import { filedBy, type Filed } from '../lib/filed';
@@ -169,7 +169,7 @@ function UserBubble({ item, hostKey }: { item: Extract<Item, { kind: 'user' }>; 
         <div style={{ ...mono, fontSize: 11, color: C.mute, marginBottom: 4 }}>queued</div>
       )}
       <Attachments list={item.attachments} hostKey={hostKey} />
-      {item.text}
+      {withSecrets(item.text)}
     </Bubble>
   );
 }

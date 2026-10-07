@@ -496,8 +496,13 @@ checks.push(
     routes.every((route) => fromMachine.has(route))],
   ['…and pairing with it, one level further in',
     fromMachine.has('/pair')],
-  ['…and from neither of the other two places',
-    routes.every((route) => !fromDashboard.has(route) && !fromChat.has(route))],
+  // The call is the one exception: it is a way of talking, so a conversation
+  // has a phone in its header as well as the Machine list having a row.
+  // The Dashboard opens conversations, so it reaches the phone through them.
+  ['…and from neither of the other two places, the call aside',
+    routes.every((route) => route === '/call' || (!fromDashboard.has(route) && !fromChat.has(route)))],
+  ['a conversation can pick up the phone',
+    fromChat.has('/call') && /router\.push\('\/call'\)/.test(conversation)],
 
   // Everything a conversation needs is inside its own place: the list, the
   // ones put away, and the form that starts a new one. None of it is a screen

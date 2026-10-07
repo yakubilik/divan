@@ -1,8 +1,8 @@
-# Privacy Policy — Remote AI Chat
+# Privacy Policy — Divan
 
 _Last updated: 27 September 2026_
 
-Remote AI Chat is a client for a daemon you run yourself. There is no account
+Divan is a client for a daemon you run yourself. There is no account
 to create, no server operated by the developer, and no analytics.
 
 ## What the app collects

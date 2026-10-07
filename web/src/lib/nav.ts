@@ -14,7 +14,7 @@
  *   · **an address you can go back through.** What pushes an entry is a place
  *     a person went to on purpose — a page, a product, a face, a card, a chat.
  *   · **an address a person can read.** `/p/babysee/board`, not
- *     `?project=babysee&tab=board&card=100.80.178.83%3A8790%3A0d2279020af7`.
+ *     `?project=babysee&tab=board&card=100.64.1.2%3A8790%3A0d2279020af7`.
  *     A card is named by its own id and the machine it is on is looked up, the
  *     way anybody reading the link would: the address is what the thing is,
  *     not how this browser happens to reach it.

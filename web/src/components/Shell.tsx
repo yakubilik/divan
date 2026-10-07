@@ -48,11 +48,12 @@ export function ThemeSwitch() {
 }
 
 /** The right-hand half: `● 2/2 machines · ◔ quota 64% · Chats · Machine`. */
-function Sys({ fleet, here, dots, onView }: {
+function Sys({ fleet, here, dots, onView, inbox }: {
   fleet?: DivanView | null;
   here: Place;
   dots?: Partial<Record<Place, State>>;
   onView: (view: View) => void;
+  inbox?: React.ReactNode;
 }) {
   const warn = useThresholds((s) => s.thresholds.warn);
   const t = fleet?.totals;
@@ -83,6 +84,7 @@ function Sys({ fleet, here, dots, onView }: {
         onClick={() => onView('chats')} />
       <PlaceButton label="Machine" icon={MACHINE} on={here === 'machine'} dot={dots?.machine}
         onClick={() => onView('machines')} />
+      {inbox}
       <ThemeSwitch />
     </div>
   );
@@ -105,7 +107,7 @@ function PlaceButton({ label, icon, on, dot, onClick }: {
 
 /** A page: the line, and the page's own content under it. `back` is where the
  *  left end leads; absent, it is the word, on the Dashboard. */
-export function Shell({ view, onView, fleet, dots, back, onHome, children }: {
+export function Shell({ view, onView, fleet, dots, back, onHome, inbox, children }: {
   view: View;
   onView: (view: View) => void;
   /** The merged view the system line counts off. */
@@ -118,6 +120,8 @@ export function Shell({ view, onView, fleet, dots, back, onHome, children }: {
   dots?: Partial<Record<Place, State>>;
   back?: { label: string; onBack: () => void } | null;
   onHome?: () => void;
+  /** The bell: what the queue sent, and the ticket a press on one opens. */
+  inbox?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const here = placeOf(view);
@@ -135,7 +139,7 @@ export function Shell({ view, onView, fleet, dots, back, onHome, children }: {
             <a className="dv-word" href="/" aria-current={home ? 'page' : undefined}
               onClick={(e) => { e.preventDefault(); onHome ? onHome() : onView('overview'); }}>divan</a>
           )}
-          <Sys fleet={fleet} here={here} dots={dots} onView={onView} />
+          <Sys fleet={fleet} here={here} dots={dots} onView={onView} inbox={inbox} />
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>

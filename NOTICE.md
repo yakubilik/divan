@@ -36,3 +36,13 @@ the user asks for them.
 - **Material Symbols Rounded** by Google is licensed under the Apache License
   2.0. The app does not ship the font: `app/scripts/gen-icons.py` cuts the
   glyphs it uses out of it and `app/src/icons.gen.ts` holds them as SVG paths.
+
+## Code ported from other projects
+
+- **normalizer-tr** by Erdem Tuna (<https://github.com/erdemtuna/normalizer-tr>,
+  version 0.4.0) and the text frontend and chunker of **EMA Lightning** by
+  canberk7 (<https://github.com/canberk7/ema-lightning>) are licensed under the
+  Apache License 2.0. `app/src/tts/` is a TypeScript translation of their rules
+  and word lists (numbers, dates, times, money, units, abbreviations, symbols,
+  the model's alphabet and the chunker), so that part of the app stays under
+  their licence; the files say which source each part comes from.

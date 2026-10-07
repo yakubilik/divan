@@ -44,6 +44,7 @@ import { BoardCard, statusDot } from '../src/components/board';
 import { Icon } from '../src/components/icon';
 import { DragHint, DropSlot, Float, useDrag } from '../src/components/drag';
 import { Text } from '../src/components/text';
+import { POLL_MS as INBOX_POLL_MS, unread, useInbox } from '../src/inbox';
 import { em, useTokens, type State } from '../src/theme';
 import { Shell } from '../src/components/shell';
 
@@ -168,6 +169,7 @@ export default function Dashboard() {
         )}
         {/* Work rather than infrastructure: the queue this computer is working
             through, and every conversation it has. */}
+        <InboxRow onOpen={() => go(() => router.push('/inbox'))} />
         <View>
           {queue.available && (
             <ListRow first icon="terminal" title={T('ustabasi')} note={T('dashQueueNote')}
@@ -824,4 +826,26 @@ function BoardRow({ item, now, onOpen, hold, held, flying, landed, onUndo }: {
 function Nothing() {
   const T = useT();
   return <EmptyState title={T('dashEmpty')} body={T('dashEmptyBody')} style={{ paddingTop: 60 }} />;
+}
+
+/** The way in to what the queue sent: one row with the count of what came in
+ *  since the list was last opened. The dashboard polls for it while it is on
+ *  screen; the push is still how a result arrives, this is where it stays. */
+function InboxRow({ onOpen }: { onOpen: () => void }) {
+  const T = useT();
+  const items = useInbox((s) => s.items);
+  const seen = useInbox((s) => s.seen);
+  const poll = useInbox((s) => s.poll);
+  React.useEffect(() => {
+    void poll();
+    const t = setInterval(() => { void poll(); }, INBOX_POLL_MS);
+    return () => clearInterval(t);
+  }, [poll]);
+  const n = unread(items, seen);
+  return (
+    <ListRow boxed first icon="view_agenda" title={T('inboxTitle')}
+      note={items[0] ? (items[0].title || items[0].headline) : T('inboxNote')} noteLines={1}
+      meta={n ? T('inboxNew', { n }) : T('inboxAllRead')} tone={n ? 'amber' : undefined}
+      onPress={onOpen} />
+  );
 }
