@@ -39,7 +39,8 @@ export function UserBubble({ text, attachments }: { text: string; attachments?: 
       {voices.map((v) => <VoiceBubble key={v.path} item={v} />)}
       {files.map((f) => <FileChip key={f.path} item={f} />)}
       {!!text && !textIsTranscript && (
-        <View style={{ backgroundColor: c.bubble, borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
+        <View style={{ backgroundColor: c.bubble, borderWidth: 1, borderColor: c.line,
+                       borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
                        paddingVertical: 10, paddingHorizontal: 13 }}>
           <SelectableText style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{text}</SelectableText>
         </View>
@@ -620,3 +621,33 @@ export function TranscriptSkeleton() {
   );
 }
 
+
+/** The thin rule a conversation is filed under (HANDOVER §4.8): Hermes files it,
+ *  the view only says where. */
+export function FiledRule({ project }: { project: string }) {
+  const c = useColors();
+  const T = useT();
+  return (
+    <View accessibilityRole="text" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}>
+      <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+      <Text mono style={{ fontSize: 11.5, color: c.muted }}>{T('chFiled', { project })}</Text>
+      <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+    </View>
+  );
+}
+
+/** A card this conversation filed, as the small link under the message: its
+ *  column and its title, and a press opens it. */
+export function CardLink({ column, title, onPress }: { column: string; title: string; onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={`${column}: ${title}`} onPress={onPress}
+      style={({ pressed }) => ({ alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10,
+                                 paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1,
+                                 borderColor: c.line, backgroundColor: c.card, opacity: pressed ? 0.6 : 1, maxWidth: '88%' })}>
+      <Text mono style={{ fontSize: 11.5, color: c.muted }}>{column}</Text>
+      <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500', color: c.ink, flexShrink: 1 }}>{title}</Text>
+      <Icon name="chevron_right" size={16} color={c.muted} />
+    </Pressable>
+  );
+}

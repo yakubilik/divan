@@ -20,7 +20,10 @@ import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '..
 import { Sheet, useSheet } from '../../src/components/sheet';
 import { GalleryProvider } from '../../src/components/media';
 import { tailCwd, tilde } from '../../src/components/pickers';
-import { ApprovalCard, AssistantText, ConnectionBanner, SwitchNote, ThinkingRow, ToolCard, ToolGroup, TranscriptSkeleton, TurnFooter, UserBubble, WorkingRow } from '../../src/components/chat';
+import { ApprovalCard, AssistantText, CardLink, ConnectionBanner, FiledRule, SwitchNote, ThinkingRow, ToolCard, ToolGroup, TranscriptSkeleton, TurnFooter, UserBubble, WorkingRow } from '../../src/components/chat';
+import { useDivanView } from '../../src/queue';
+import { filedBy, filedUnder, ticketRoute } from '../../src/filed';
+import { COLUMN_LABEL } from '../../src/board';
 
 /** What the tools call a tier, written the way the billing page writes it.
  *  Anything unrecognised is title-cased rather than dropped: a plan we have
@@ -448,6 +451,22 @@ export function Conversation({ id }: { id: string }) {
     return w ? WINDOW_WORDS[w.window] : undefined;
   };
 
+  // HANDOVER §4.8: where Hermes filed this conversation, and the cards it filed.
+  const view = useDivanView();
+  const filed = filedUnder(view.projects, host?.id, chat?.project_id);
+  const cardsNow = useRef(view.cards);
+  cardsNow.current = view.cards;
+  const links = (results: any[]) => results.map((r) => (r && !r.is_error ? filedBy(r.output) : null))
+    .filter((f): f is NonNullable<typeof f> => !!f)
+    .map((f) => {
+      const card = cardsNow.current.find((c) => c.ustabasi_id === f.id);
+      return (
+        <CardLink key={f.id} column={card ? T(COLUMN_LABEL[card.column] ?? 'chCardQueued') : T('chCardQueued')}
+          title={card?.title ?? f.title}
+          onPress={() => go(() => router.push(ticketRoute(cardsNow.current, f.id)))} />
+      );
+    });
+
   const renderItem = useCallback(({ item }: { item: TimelineItem }) => {
     switch (item.kind as string) {
       case 'working':
@@ -462,8 +481,18 @@ export function Conversation({ id }: { id: string }) {
       case 'assistant':
         if (item.data.thinking) return <ThinkingRow text={item.data.thinking.trim().slice(-240)} />;
         return <AssistantText text={item.data.text} streaming={item.data.live} attachments={item.data.attachments} />;
-      case 'tool': return <ToolCard id={item.data.id} tool={item.data.tool} input={item.data.input} result={item.result} />;
-      case 'tools': return <ToolGroup items={item.data} />;
+      case 'tool': return (
+        <View style={{ gap: 8 }}>
+          <ToolCard id={item.data.id} tool={item.data.tool} input={item.data.input} result={item.result} />
+          {links([item.result])}
+        </View>
+      );
+      case 'tools': return (
+        <View style={{ gap: 8 }}>
+          <ToolGroup items={item.data} />
+          {links((item.data as any[]).map((x) => x.result))}
+        </View>
+      );
       case 'approval': return (
         <ApprovalCard tool={item.data.tool} input={item.data.input} preview={item.data.preview} danger={item.data.danger} decision={item.decision ?? null} cwd={chat?.cwd}
           onDecide={(d) => respond(id!, item.data.request_id, d).catch((e) => alert(T('error'), e.message))} />
@@ -510,6 +539,17 @@ export function Conversation({ id }: { id: string }) {
       </View>
 
       {conn !== 'online' && <ConnectionBanner text={T('wReconnecting')} />}
+
+      {/* One conversation at a time (HANDOVER §4.8); every other one is a press
+          away behind Earlier, and the rule says where Hermes filed this one. */}
+      <View style={{ paddingHorizontal: 14, paddingTop: 4, gap: 2 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={T('chEarlier')} hitSlop={6}
+          onPress={() => go(() => router.push('/chat?all=1'))}
+          style={({ pressed }) => ({ alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', opacity: pressed ? 0.5 : 1 })}>
+          <Text style={{ fontSize: 13, fontWeight: '500', color: c.muted }}>{T('chEarlier')}</Text>
+        </Pressable>
+        {!!filed && <FiledRule project={filed} />}
+      </View>
 
       <Animated.View style={{ flex: 1, opacity: dim === 1 ? 0.35 : dim === 2 ? 0.4 : 1 }}>
         <FlatList

@@ -206,3 +206,15 @@ export const MACHINE_TABS: MachineTab[] = [
 
 /** Every route the four tabs reach, the tabs' own first. */
 export const MACHINE_TAB_ROUTES: string[] = MACHINE_TABS.flatMap((t) => [t.route, ...t.pages.map((p) => p.route)]);
+
+// ── the Chat place (HANDOVER §4.8) ──────────────────────────────────────────
+
+/** The conversation the Chat place opens on: the newest one that is not
+ *  archived, without anybody choosing it. Null when the list was asked for by
+ *  name (`/chat?all=1`, the conversation's own Earlier) or there is none. */
+export function landing(chats: Record<string, { id: string; archived: number | boolean; updated_at: number }>,
+                        all: boolean): string | null {
+  if (all) return null;
+  const newest = Object.values(chats).filter((c) => !c.archived).sort((a, b) => b.updated_at - a.updated_at)[0];
+  return newest?.id ?? null;
+}
