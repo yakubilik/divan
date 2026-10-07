@@ -1282,8 +1282,12 @@ const newTicket = require('./test-new-ticket.cjs');
 // for real, and play waits on the audio mode, so it too has a `ready`.
 const voicenote = require('./test-voicenote.cjs');
 
-void Promise.all([newTicket.ready, voicenote.ready]).then(() => {
-  checks.push(...newTicket.checks, ...voicenote.checks);
+// …and the Dashboard's Composer, pressed once the two above have let go of
+// the shared store: it types, presses send and waits for what comes back.
+void Promise.all([newTicket.ready, voicenote.ready]).then(async () => {
+  const composer = require('./test-composer.cjs');
+  await composer.ready();
+  checks.push(...newTicket.checks, ...voicenote.checks, ...composer.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

@@ -294,7 +294,7 @@ for (const scheme of ['dark', 'light']) {
         let markup = '';
         try { markup = draw(scheme, { ...state, face }); }
         catch (e) { bad = `${scheme} ${name} ${face}: ${e.message}`; }
-        if (!bad && !markup.includes('tabDashboard')) bad = `${scheme} ${name} ${face}: nothing drawn`;
+        if (!bad && !/tabDashboard|>divan</.test(markup)) bad = `${scheme} ${name} ${face}: nothing drawn`;
       }
     }
   }

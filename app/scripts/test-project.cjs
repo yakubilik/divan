@@ -760,8 +760,8 @@ for (const scheme of ['dark', 'light']) {
     [`${scheme}: the page is the product’s own: its name, what it is, and its monogram`,
       page.includes('>Quire<') && page.includes('SaaS · client portals for studios')
       && R.styles(page).some((s) => s.width === 44 && s.height === 44)],
-    [`${scheme}: …inside the place it is a page of, with the project bar still on it`,
-      page.includes('allProjects') && page.includes('tabDashboard')],
+    [`${scheme}: …inside the place it is a page of, with the way back to every project on the line over it`,
+      page.includes('tabDashboard') && page.includes('cmBackTo')],
     [`${scheme}: what is happening now, and what is waiting, are two labelled lines`,
       page.includes('>prNow<') && page.includes('>prWaiting<')
       && page.includes('prNowMany') && page.includes('prWaitMany')],
@@ -825,7 +825,7 @@ for (const scheme of ['dark', 'light']) {
     [`${scheme}: every state this page can be in renders`,
       Object.entries(PAGES).every(([, [hosts, key]]) => {
         const markup = draw(scheme, hosts, key);
-        return markup.includes('tabDashboard');
+        return /tabDashboard|>divan</.test(markup);
       })],
   );
 }
@@ -908,15 +908,12 @@ for (const scheme of ['dark', 'light']) {
     found[0].press();
     return R.render('dark', h(Dashboard));
   };
-  const viaChip = enter((p) => p.text === 'Quire');
-  const viaCard = enter((p) => p.text.startsWith('Quire') && p.text.includes('pcStuck'));
+  const viaTile = enter((p) => p.label === 'Quire');
   checks.push(
-    ['tapping a product in the project bar opens its page, and nothing is pushed',
-      viaChip.includes('>Quire<') && viaChip.includes('>prNow<') && eq(R.nav.pushed(), [])],
-    ['…and its card on the Dashboard is the other way to the same page',
-      viaCard.includes('>Quire<') && viaCard.includes('>branches<')],
-    ['…and the way back out is the All chip, which is on the page',
-      viaChip.includes('allProjects')],
+    ['tapping a product’s tile opens its page, and nothing is pushed',
+      viaTile.includes('>Quire<') && viaTile.includes('>prNow<') && eq(R.nav.pushed(), [])],
+    ['…and the way back out is the line’s left end, which is on the page',
+      R.presses().some((p) => p.label === 'cmBackTo')],
     ['nothing on the page leads to a screen that is about a computer',
       !/'\/host-sheet'|'\/pool'|'\/accounts'|'\/screen'|'\/agents'/.test(src('app/dashboard.tsx'))],
   );
@@ -1109,7 +1106,7 @@ for (const scheme of ['dark', 'light']) {
         && R.styles(quiet).some((s2) => s2.color === K.tokensFor(scheme).amber)],
       [`${scheme}: every state of the page renders, inside the place it is a page of`,
         Object.values(BRANCHES).every(([hosts, key, kind]) =>
-          drawBranch(scheme, hosts, key, kind).includes('tabDashboard'))
+          /tabDashboard|>divan</.test(drawBranch(scheme, hosts, key, kind)))
         && drawBranch(scheme, [STUDIO], 'quire', 'design').includes('>bpGone<')
         && drawBranch(scheme, [], 'quire', 'engineering').includes('>bpGone<')],
     );

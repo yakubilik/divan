@@ -65,6 +65,14 @@ const HOLDS = [];
  *  what reached this module. */
 const BUZZES = [];
 
+/** Every field that takes typing in the last render. A field's text is a prop,
+ *  and the only way to type into one here is to call what it calls. */
+const FIELDS = [];
+
+/** Every menu a press asked the app's own popover for (`components/overlay`),
+ *  newest last: what a chip offers is a claim about the menu it opens. */
+const MENUS = [];
+
 /** The words inside an element, however deep. A chip is a dot and a label; the
  *  label is what a check is looking for. */
 function textOf(node) {
@@ -91,6 +99,10 @@ function host(tag, kind) {
     // chevron — is findable by what it is called and by nothing else.
     if (typeof rest.onPress === 'function') {
       PRESSES.push({ text: textOf(children), label: rest.accessibilityLabel ?? null, press: rest.onPress });
+    }
+    if (typeof rest.onChangeText === 'function') {
+      FIELDS.push({ label: rest.accessibilityLabel ?? null, placeholder: rest.placeholder ?? null,
+                    change: rest.onChangeText });
     }
     if (typeof rest.onLongPress === 'function') {
       HOLDS.push({ text: textOf(children), hold: rest.onLongPress, out: rest.onPressOut,
@@ -285,11 +297,25 @@ const nav = {
   reset() { PUSHED.length = 0; REPLACED.length = 0; },
 };
 
+let OVERLAY = null;
+let OVERLAY_LOADING = false;
 const realLoad = Module._load;
 Module._load = function (request, parent, isMain) {
   if (Object.prototype.hasOwnProperty.call(STUBS, request)) return STUBS[request];
   if (request.startsWith('.') && parent
       && path.resolve(path.dirname(parent.filename), request) === path.join(root, 'src/store')) return STORE;
+  if (request.startsWith('.') && parent && !OVERLAY_LOADING
+      && path.resolve(path.dirname(parent.filename), request) === path.join(root, 'src/components/overlay')) {
+    if (!OVERLAY) {
+      OVERLAY_LOADING = true;
+      try {
+        const real = realLoad.call(this, request, parent, isMain);
+        OVERLAY = { ...real, openMenu: (spec) => { MENUS.push(spec); },
+                    measure: () => Promise.resolve({ x: 0, y: 0, width: 0, height: 0 }) };
+      } finally { OVERLAY_LOADING = false; }
+    }
+    return OVERLAY;
+  }
   return realLoad.call(this, request, parent, isMain);
 };
 
@@ -311,6 +337,7 @@ function render(scheme, element) {
   PRESSES.length = 0;
   HOLDS.length = 0;
   BUZZES.length = 0;
+  FIELDS.length = 0;
   return renderToStaticMarkup(React.createElement(theme.ForceScheme, { scheme }, element));
 }
 
@@ -331,6 +358,16 @@ function pressOn(text) {
   found[0].press();
 }
 
+/** Type into the field with this label, the way a keyboard would. */
+function typeInto(label, value) {
+  const found = FIELDS.filter((f) => f.label === label || f.placeholder === label);
+  if (found.length !== 1) throw new Error(`typeInto(${JSON.stringify(label)}): ${found.length} of them`);
+  found[0].change(value);
+}
+
+/** The menus pressed open so far, and forgetting them. */
+const menus = { all: () => MENUS.slice(), last: () => MENUS[MENUS.length - 1] ?? null, reset: () => { MENUS.length = 0; } };
+
 /** Every `data-style` in a piece of markup, as objects. */
 function styles(markup) {
   return [...markup.matchAll(/data-style="([^"]*)"/g)].map((m) => JSON.parse(
@@ -349,4 +386,4 @@ function paint(markup) {
 }
 
 module.exports = { React, theme, parts, ui, agentcard, gallery, render, styles, paint, flatten,
-                   store, params, nav, camera, presses, pressOn, holds, buzzes };
+                   store, params, nav, camera, presses, pressOn, holds, buzzes, typeInto, menus };
