@@ -45,6 +45,9 @@
    tile's own colour. */
 .dv-tile{cursor:pointer}
 .dv-tile-foot .count,.dv-tile-foot .when{white-space:nowrap}
+/* A busy tile (working, need you, stuck and a resume time) is wider than a
+   third of the page; the footer wraps inside the tile instead of running out. */
+.dv-tile-foot{flex-wrap:wrap;row-gap:4px;min-width:0}
 .dv-tile .count .w{font-family:var(--font-sans);font-weight:400;color:var(--ink-3)}
 .dv-wait .dv-btn{min-height:30px}
 .dv-live .dv-dot{flex:none}
