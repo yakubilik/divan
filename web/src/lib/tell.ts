@@ -20,7 +20,7 @@
  *  `scripts/test-drive.mjs` types into the bar in one.
  */
 import { create } from 'zustand';
-import { createChat, listAgents, send } from './actions';
+import { createChat, listAgents, send, upload } from './actions';
 import type { Provider } from './protocol';
 import { useFleet } from './fleet';
 import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from './prefs';
@@ -182,8 +182,11 @@ export interface ToldPicks {
   agent?: string | null;
 }
 
-export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks = {}): Promise<Told> {
-  const words = (text || '').trim();
+export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks = {},
+                           files: File[] = []): Promise<Told> {
+  // Files with nothing typed still say something: the line a chat's own box
+  // gives an attachment sent on its own.
+  const words = (text || '').trim() || (files.length ? 'Have a look at this.' : '');
   if (!words) throw new Error('Nothing to send');
   const fleet = useFleet.getState();
   // A page about one product opens the chat in that product; anywhere else it
@@ -238,9 +241,13 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
   // with no repository attached) is told in a line, because "which product is
   // this about" is the first thing the answer depends on and the agent cannot
   // see the chat's own title.
+  // The files go up once there is a chat to file them under: which computer
+  // that is depends on the scope, so the Composer cannot upload them itself.
+  const attached: any[] = [];
+  for (const f of files) attached.push(await upload(host, chat.id, f));
   await send(host, chat.id, at.project && !at.cwd
     ? `${words}\n\n(This is about ${at.project}.)`
-    : words);
+    : words, attached);
   return told;
 }
 

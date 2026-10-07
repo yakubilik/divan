@@ -1373,8 +1373,13 @@ group('a product has its own chats');
 
   asked.length = 0;
   await click([...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim().startsWith('New chat')));
-  await click(find('Start chat'));
-  for (let i = 0; i < 3; i++) await act(async () => {});
+  ok('New chat there opens no dialog: an empty chat, writable, with the chips under it',
+    !find('Start chat') && !!doc.querySelector('[data-new-chat] #composer-in')
+      && !!doc.querySelector('[data-new-chat] [data-picker="Agent"]')
+      && asked.every((a) => a.type !== 'chat.create'));
+  await type(doc.querySelector('#composer-in'), 'draft the invoice email');
+  await click(doc.querySelector('[data-new-chat] button.dv-send'));
+  for (let i = 0; i < 4; i++) await act(async () => {});
   const made = asked.find((a) => a.type === 'chat.create');
   ok('a chat started there starts in the product’s repository, and is read on the product’s page',
     // Whichever folder the board seeded above says Quire is checked out in.
@@ -1614,6 +1619,34 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
   const dialogs = () => doc.querySelectorAll('[role="dialog"], [aria-modal="true"]').length
     + (find('Start chat') ? 1 : 0);
   const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
+
+  // 0 · a file dropped on it goes up with the send, into the chat it opens
+  {
+    const ups = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      ups.push({ url: String(url), chat: init?.body?.get?.('chat_id') });
+      return { ok: true, status: 200, json: async () => ({ path: '/up/shot.png', name: 'shot.png', kind: 'image' }) };
+    };
+    const drop = new w.Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: {
+      types: ['Files'], files: [new File(['x'], 'shot.png', { type: 'image/png' })],
+    } });
+    asked.length = 0;
+    await act(async () => { doc.querySelector('.dv-composer').dispatchEvent(drop); });
+    const held = doc.querySelectorAll('.dv-attached li').length;
+    await click(send());
+    await settle();
+    globalThis.fetch = realFetch;
+    const made0 = asked.find((a) => a.type === 'chat.create');
+    const said0 = asked.find((a) => a.type === 'chat.send');
+    ok('a file dropped on the Composer is held, then uploaded to the new chat and sent as its attachment',
+      held === 1 && ups.length === 1 && /\/upload$/.test(ups[0].url) && !!made0
+        && ups[0].chat === said0?.data?.chat_id && said0?.data?.attachments?.[0]?.path === '/up/shot.png',
+      `${held} · ${JSON.stringify(ups)} · ${JSON.stringify(said0?.data)}`);
+    await press('0');
+    await settle();
+  }
 
   // 1 · Ask
   asked.length = 0;

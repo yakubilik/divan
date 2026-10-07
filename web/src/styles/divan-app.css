@@ -42,6 +42,17 @@
 .dv-menu button:hover{background:var(--hairline);color:var(--ink)}
 .dv-menu button[aria-checked="true"]{color:var(--ink);font-weight:500}
 .dv-menu button[aria-checked="true"]::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--ink)}
+/* A Composer at the foot of a pane opens its menus upward: under it there is
+   only the pane's edge, which clips them. */
+.dv-menus-up .dv-menu{top:auto;bottom:calc(100% + 6px)}
+/* Files waiting on the Composer, and the edge it takes while one is over it. */
+.dv-composer[data-dragging="true"]{outline:2px dashed var(--ink-3);outline-offset:-2px}
+.dv-attached{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.dv-attached li{position:relative;display:flex;align-items:center;min-height:32px;border:1px solid var(--glass-edge);border-radius:var(--radius-sm);background:var(--glass-2)}
+.dv-attached img{display:block;width:56px;height:56px;object-fit:cover;border-radius:var(--radius-sm)}
+.dv-attached .name{max-width:200px;padding:0 30px 0 10px;font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-attached .dv-icon-btn{position:absolute;top:-8px;right:-8px;width:20px;height:20px;background:var(--glass-2);border:1px solid var(--glass-edge)}
+.dv-attached .dv-icon-btn svg{width:11px;height:11px}
 
 /* Tiles and wait cards are a link and an article; the tile's link keeps the
    tile's own colour. */

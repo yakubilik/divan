@@ -356,9 +356,9 @@ export function App() {
   }, []);
 
   /** Ask: a chat with these words in it, opened in the Chat place. */
-  const ask = useCallback(async (text: string, key: string | null, picks: ToldPicks) => {
+  const ask = useCallback(async (text: string, key: string | null, picks: ToldPicks, files: File[] = []) => {
     const p = projectIn(divan, key);
-    const told = await tell(text, p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null, picks);
+    const told = await tell(text, p ? { name: p.name, repos: p.repos, hosts: p.hosts } : null, picks, files);
     // It is read where chats are read, not as a window on the Dashboard.
     useTold.getState().close(idOfTold(told));
     open(told.host, told.chatId);
@@ -742,7 +742,7 @@ export function App() {
             // page, the way the bar it replaces did.
             projectComposer={scopedTo ? (
               <Composer view={divan} lock={scopedTo.key} onCard={file}
-                onAsk={(text, _key, picks) => tell(text, scope, picks)}
+                onAsk={(text, _key, picks, files) => tell(text, scope, picks, files)}
                 onOptions={() => {
                   const at = whereFor(scope, fleet.hosts, fleet.focus);
                   setNewChat({ cwd: at.cwd ?? undefined, host: at.host, stay: true });
@@ -775,12 +775,31 @@ export function App() {
                   <Sidebar
                     project={scopedTo}
                     selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={select}
-                    onNewChat={() => {
-                      const at = whereFor(scope, fleet.hosts, fleet.focus);
-                      setNewChat({ cwd: at.cwd ?? undefined, host: at.host, stay: true });
-                    }}
+                    // No dialog: the pane empties into a box that is already
+                    // writable, and what a chat opens with is the chips under it.
+                    onNewChat={() => setSel(null)}
                   />
-                  <ChatView {...chatProps} />
+                  {chat ? <ChatView {...chatProps} /> : (
+                    <div className="dv-menus-up" data-new-chat style={{
+                      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+                      justifyContent: 'flex-end', gap: 12, padding: '20px 24px 24px',
+                    }}>
+                      <p className="dv-meta" style={{ margin: 0, textAlign: 'center' }}>
+                        New chat in {scopedTo.name}.
+                      </p>
+                      <Composer view={divan} lock={scopedTo.key} onCard={file}
+                        onAsk={async (text, _key, picks, files) => {
+                          const told = await tell(text, scope, picks, files);
+                          // Read here, in the pane, not as a window on the page.
+                          useTold.getState().close(idOfTold(told));
+                          select(told.host, told.chatId);
+                        }}
+                        onOptions={() => {
+                          const at = whereFor(scope, fleet.hosts, fleet.focus);
+                          setNewChat({ cwd: at.cwd ?? undefined, host: at.host, stay: true });
+                        }} />
+                    </div>
+                  )}
                 </>
               ),
             } : null}

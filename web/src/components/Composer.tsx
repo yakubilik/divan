@@ -8,6 +8,10 @@
  *  them has a default and none of them is a step — a menu opens only when its
  *  chip is pressed, a changed chip is drawn in ink with an × back to the
  *  default, and it applies to this one send. The rules are `lib/compose.ts`.
+ *
+ *  Files are dropped on it, pasted into it or picked with the + beside the
+ *  microphone, the way they are in a chat's own box. They are held here and go
+ *  up with the send: the chat they belong to does not exist until then.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DivanView } from '../lib/divan';
@@ -35,7 +39,7 @@ const CROSS = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18
 export interface ComposerProps {
   view: DivanView;
   /** Ask: open a chat with these words in it and go to it. */
-  onAsk: (text: string, project: string | null, picks: ToldPicks) => Promise<unknown>;
+  onAsk: (text: string, project: string | null, picks: ToldPicks, files: File[]) => Promise<unknown>;
   /** Ice Box and Start now: write the card. Answers the line to say after. */
   onCard: (text: string, project: string, mode: Exclude<Mode, 'ask'>) => Promise<string>;
   /** Every other choice a new chat has (effort, permissions, a folder, caps):
@@ -60,6 +64,12 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<{ text: string; error?: boolean } | null>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  // dragenter/dragleave also fire crossing between children, so the highlight
+  // follows a depth count rather than the first leave it sees.
+  const depth = useRef(0);
+  const picker = useRef<HTMLInputElement>(null);
   const own = useRef<HTMLTextAreaElement>(null);
   const field = inputRef ?? own;
   const box = useRef<HTMLDivElement>(null);
@@ -123,13 +133,31 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
     if (said?.error) setSaid(null);
   };
 
+  const addFiles = (list: FileList) => {
+    setFiles((was) => [...was, ...Array.from(list)]);
+    if (said?.error) setSaid(null);
+  };
+
+  // A screenshot on the clipboard is a file, not text. A rich copy carries
+  // both, and there the text is what was meant.
+  const onPaste = (e: React.ClipboardEvent) => {
+    const pasted = e.clipboardData?.files;
+    if (!pasted?.length || e.clipboardData.getData('text/plain').trim()) return;
+    e.preventDefault();
+    addFiles(pasted);
+  };
+
   const send = async () => {
     if (mic.state !== 'idle') { mic.stop(); return; }
     const m = lock ? { project: null, text } : mention(view, text, true);
     const scope = lock ?? m.project ?? picks.project ?? null;
     const words = m.text.trim();
     if (m.project) { setPicks((p) => ({ ...p, project: m.project })); setText(m.text); }
-    if (!words || busy) return;
+    if ((!words && !files.length) || busy) return;
+    if (mode !== 'ask' && files.length) {
+      setSaid({ text: 'A card cannot carry files: send them with Ask, or take them off.', error: true });
+      return;
+    }
     if (mode !== 'ask' && !scope) {
       setSaid({ text: 'A card needs a project: type @name or press + project.', error: true });
       return;
@@ -143,8 +171,9 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
           ...(m2 ? { provider: m2.provider, model: m2.model } : {}),
           ...(picks.account !== undefined ? { account_id: picks.account } : {}),
           ...(picks.agent !== undefined ? { agent: picks.agent } : m2 && m2.provider !== 'claude' ? { agent: null } : {}),
-        });
+        }, files);
         setText('');
+        setFiles([]);
       } else {
         const line = await onCard(words, scope!, mode);
         setText('');
@@ -173,7 +202,22 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
   const hint = MODES.find((m) => m.key === mode)!.hint;
 
   return (
-    <section className="dv-glass-strong dv-composer" ref={box} aria-label="Composer">
+    <section className="dv-glass-strong dv-composer" ref={box} aria-label="Composer"
+      data-dragging={dragging ? 'true' : undefined}
+      onDragEnter={(e) => {
+        if (!e.dataTransfer?.types.includes('Files')) return;
+        depth.current += 1;
+        setDragging(true);
+      }}
+      onDragOver={(e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); }}
+      onDragLeave={() => { depth.current = Math.max(0, depth.current - 1); if (!depth.current) setDragging(false); }}
+      onDrop={(e) => {
+        if (!e.dataTransfer?.types.includes('Files')) return;
+        e.preventDefault();
+        depth.current = 0;
+        setDragging(false);
+        if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+      }}>
       <div className="dv-scope" data-menu-root="">
         <span className="lbl">to</span>
         {lock ? (
@@ -200,6 +244,17 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
         )}
         {!lock && <span className="dv-meta" style={{ marginLeft: 'auto' }}>empty = Hermes files it</span>}
       </div>
+      {files.length > 0 && (
+        <ul className="dv-attached" aria-label="Attached files">
+          {files.map((f, i) => (
+            <li key={`${f.name}-${f.lastModified}-${i}`}>
+              {f.type.startsWith('image/') ? <Thumb file={f} /> : <span className="name">{f.name}</span>}
+              <button type="button" className="dv-icon-btn dv-hit" aria-label={`Remove ${f.name}`}
+                onClick={() => setFiles((was) => was.filter((_, at) => at !== i))}>{CROSS}</button>
+            </li>
+          ))}
+        </ul>
+      )}
       <label htmlFor="composer-in" style={HIDDEN}>Message to Divan</label>
       <textarea
         id="composer-in" ref={field} rows={2}
@@ -207,6 +262,7 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
           : lock ? `Ask about ${project?.name ?? lock}, or drop a card.` : 'Tell Divan what to do, in which project.'}
         value={mic.interim ? appendSpeech(text, mic.interim) : text}
         onChange={(e) => change(e.target.value)}
+        onPaste={onPaste}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
         }}
@@ -221,8 +277,14 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
         <span className="dv-meta">{hint}</span>
         <span className="grow" />
         <span className="dv-meta" title="Search chats, folders and commands">⌘K</span>
+        <input ref={picker} type="file" multiple name="attachments" style={{ display: 'none' }}
+          onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
+        <button type="button" className="dv-icon-btn dv-attach dv-hit" aria-label="Attach a file" title="Attach a file"
+          onClick={() => picker.current?.click()}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
         <MicButton mic={mic} size={36} />
-        <button type="button" className="dv-send" aria-label="Send" disabled={busy || !text.trim()}
+        <button type="button" className="dv-send" aria-label="Send" disabled={busy || (!text.trim() && !files.length)}
           onClick={() => void send()}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
         </button>
@@ -268,6 +330,18 @@ export function Composer({ view, onAsk, onCard, onOptions, inputRef, lock = null
       )}
     </section>
   );
+}
+
+/** A picture waiting to be sent, drawn from the file itself: nothing has been
+ *  uploaded yet, so there is no address on the computer to show it from. */
+function Thumb({ file }: { file: File }) {
+  const [src, setSrc] = useState('');
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  return src ? <img src={src} alt={file.name} /> : null;
 }
 
 /** One of the four: `Agent Hermes ⌄`, quiet while it is the default, in ink with
