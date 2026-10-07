@@ -280,7 +280,7 @@ function Tool({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
       <button
         type="button" onClick={() => setOpen((o) => !o)}
         style={{
-          display: 'flex', alignItems: 'center', gap: 8, width: '100%', minHeight: 40,
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%', minHeight: 44,
           padding: '0 12px', background: 'transparent', border: 'none', cursor: 'pointer',
         }}
       >

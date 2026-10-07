@@ -38,8 +38,8 @@ export type DragProps = Pick<React.HTMLAttributes<HTMLElement>,
  *  The frames draw no pressed or hovered state, so neither is invented here:
  *  what a press does is the screen's business, and what it looks like is the
  *  browser's default cursor and nothing else. */
-function Tap({ onClick, title, current, drag, style, children }: {
-  onClick?: () => void; title?: string;
+function Tap({ onClick, title, current, drag, className, style, children }: {
+  onClick?: () => void; title?: string; className?: string;
   /** The one of a set that is where you are. The frames say it with a fill;
    *  this says it to a reader who cannot see one, and to a check. */
   current?: boolean;
@@ -47,9 +47,9 @@ function Tap({ onClick, title, current, drag, style, children }: {
   style: React.CSSProperties; children?: React.ReactNode;
 }) {
   const here = current ? ('page' as const) : undefined;
-  if (!onClick) return <div style={style} title={title} aria-current={here} {...drag}>{children}</div>;
+  if (!onClick) return <div className={className} style={style} title={title} aria-current={here} {...drag}>{children}</div>;
   return (
-    <button type="button" onClick={onClick} title={title} aria-current={here} {...drag}
+    <button type="button" className={className} onClick={onClick} title={title} aria-current={here} {...drag}
       style={{ ...style, border: style.border ?? 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
       {children}
     </button>
@@ -186,7 +186,7 @@ export function Row({
 }) {
   const t = tone ? toneColours(tone) : null;
   return (
-    <Tap onClick={onClick} style={{
+    <Tap onClick={onClick} className={wash && t ? 'dv-tinted' : undefined} style={{
       display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px',
       borderTop: first ? undefined : `1px solid ${T.line}`,
       background: wash && t ? t.bg : 'transparent',
@@ -1135,7 +1135,7 @@ export function Composer({ placeholder, value, onChange, onSend, style, after }:
   const margin = '0 12px 12px';
   const field = (
     <input
-      type="text" value={value} placeholder={placeholder}
+      type="text" value={value} placeholder={placeholder} aria-label={placeholder}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' || !onSend) return;
@@ -1576,7 +1576,8 @@ export function Table({ columns, rows, empty, style }: {
         {columns.map((c, i) => <span key={i} style={{ minWidth: 0 }}>{c.label ?? ''}</span>)}
       </div>
       {rows.map((row) => (
-        <Tap key={row.key} onClick={row.onClick} title={row.title} style={{
+        <Tap key={row.key} onClick={row.onClick} title={row.title}
+          className={row.wash && row.tone ? 'dv-tinted' : undefined} style={{
           ...grid, alignItems: 'center', padding: '13px 18px', width: '100%',
           boxSizing: 'border-box', color: T.ink,
           borderTop: `1px solid ${T.line}`,

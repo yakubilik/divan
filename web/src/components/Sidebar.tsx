@@ -313,7 +313,7 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete }: {
       onFocus={() => setOver(true)} onBlur={() => setOver(false)}
     >
     <button
-      type="button" onClick={onPick}
+      type="button" onClick={onPick} className={selected ? 'dv-tinted' : undefined}
       draggable={!!onDrag} onDragStart={onDrag && ((e) => onDrag(e.dataTransfer))}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56,
@@ -463,13 +463,13 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   // whatever this does.
   if (railed) {
     return (
-      <div style={{
+      <div className="dv-chatlist" style={{
         width: RAIL, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`,
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         padding: '8px 0', height: '100%',
       }}>
         <button
-          type="button" onClick={() => onCollapse?.(false)} title="Show the chat list"
+          type="button" onClick={() => onCollapse?.(false)} title="Show the chat list" aria-label="Show the chat list"
           style={{
             width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
             background: 'transparent', border: `1px solid ${C.border}`,
@@ -480,7 +480,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         </button>
         <div style={{ flex: 1 }} />
         <button
-          type="button" onClick={onNewChat} title="New chat"
+          type="button" onClick={onNewChat} title="New chat" aria-label="New chat"
           style={{
             width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
             background: C.accent, border: `1px solid ${C.accent}`,
@@ -497,7 +497,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   }
 
   return (
-    <div style={{
+    <div className="dv-chatlist" style={{
       width: W, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`,
       display: 'flex', flexDirection: 'column', height: '100%',
     }}>
@@ -512,7 +512,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         </div>
         {onCollapse && (
           <button
-            type="button" onClick={() => onCollapse(true)} title="Hide the chat list"
+            type="button" onClick={() => onCollapse(true)} title="Hide the chat list" aria-label="Hide the chat list"
             style={{
               width: 30, height: 30, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
               background: 'transparent', border: `1px solid ${C.border}`,
@@ -553,7 +553,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         }}>
           <Icon path={P.search} size={14} color={C.mute} />
           <input
-            ref={searchRef} name="chat-search"
+            ref={searchRef} name="chat-search" aria-label="Search chats"
             value={query} onChange={(e) => setQuery(e.target.value)}
             placeholder="Search chats"
             style={{

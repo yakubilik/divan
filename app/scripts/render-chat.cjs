@@ -2,7 +2,7 @@
  *
  *  `render-divan.cjs` stubs what the Divan parts reach for; the conversation
  *  screen reaches for more — a `FlatList`, a dozen `Svg` shapes, eight Expo
- *  modules. These are the stand-ins `audit-frames.cjs` built for the same job,
+ *  modules. These are the stand-ins the retired `audit-frames.cjs` built for the same job,
  *  bar one: the text field keeps `render-divan`'s own, so that typing into it
  *  is still something a check can do. `buildTimeline` is the real one off
  *  `src/store.ts`: it is pure, and it is what turns a chat's events into rows.

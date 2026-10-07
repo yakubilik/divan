@@ -29,7 +29,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
   const running = chat.status === 'running';
   const awaiting = chat.status === 'awaiting_approval';
   return (
-    <div style={{
+    <div className="dv-chathead" style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
       borderBottom: `1px solid ${C.border}`, flexShrink: 0, position: 'relative',
     }}>
@@ -53,7 +53,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
           </>}
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <div className="dv-chatchips" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         {/* Which sign-in is being spent, and the way to another one: this is
             where a person looks when a plan's limit has run out mid-chat. */}
         <Chip onClick={() => onEdit('account_id')} title="Account running this chat" shrink>
@@ -103,7 +103,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
           Details
         </button>
         <button
-          type="button" onClick={onMenu} title="Chat menu"
+          type="button" onClick={onMenu} title="Chat menu" aria-label="Chat menu"
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, lineHeight: 0 }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill={C.mute}>

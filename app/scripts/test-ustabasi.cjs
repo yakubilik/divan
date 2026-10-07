@@ -1297,8 +1297,14 @@ void Promise.all([newTicket.ready, voicenote.ready]).then(async () => {
   // which adds stand-ins to the shared harness that nothing before it needs.
   const machine = require('./test-handover-machine.cjs');
   await machine.ready;
+  // …and every route in both schemes (#128), over the fleet that one stands up.
+  const every = require('./test-every-screen.cjs');
+  await every.ready;
+  // …and the actions on screens that came over from main unchanged, pressed.
+  const actions = require('./test-phone-actions.cjs');
+  await actions.ready;
   checks.push(...newTicket.checks, ...voicenote.checks, ...composer.checks, ...project.checks, ...ticket.checks,
-              ...machine.checks);
+              ...machine.checks, ...every.checks, ...actions.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

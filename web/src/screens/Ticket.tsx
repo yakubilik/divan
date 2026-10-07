@@ -24,7 +24,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import {
-  cancelTicket, cardGet, deleteTicket, editTicket, prioritiseTicket, restartTicket, setExecutor,
+  cancelTicket, cardGet, deleteTicket, editTicket, moveCard, prioritiseTicket, restartTicket, setExecutor,
   ticketNote, updateCard,
 } from '../lib/actions';
 import { clock, executorWord } from '../lib/overview';
@@ -134,6 +134,18 @@ export function TicketPage({
     try {
       await setExecutor(card.host, card.id, executor);
       void useDivanStore.getState().load(card.host);
+    } catch (e: any) {
+      setFailed(e?.message ?? FAILED);
+    }
+  };
+
+  /** The frame's one move off this page: the same drop the board makes into
+   *  Queued, for a card that is in progress. */
+  const requeue = async () => {
+    setFailed(null);
+    try {
+      await moveCard(card.host, card.id, 'queued');
+      refresh();
     } catch (e: any) {
       setFailed(e?.message ?? FAILED);
     }
@@ -275,6 +287,9 @@ export function TicketPage({
 
       <aside>
         <Side card={card} rows={rows} onHand={(x) => void hand(x)} onBranch={() => onBranch(card.branch)} />
+        {(card.column === 'in_progress' || card.column === 'review') && (
+          <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={() => void requeue()}>Move back to Queued</button>
+        )}
         {card.ustabasi_id != null && (
           <Queue host={card.host} id={card.ustabasi_id} ticket={got.ticket} onChanged={refresh} />
         )}

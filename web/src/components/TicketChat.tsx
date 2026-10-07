@@ -534,7 +534,7 @@ export function TicketChat({ t, tone, hostKey, onClose, onNote, onChanged }: {
             </div>
           )}
           <button
-            type="button" onClick={onClose} title="Back to the wall (Esc)"
+            type="button" onClick={onClose} title="Back to the wall (Esc)" aria-label="Back to the wall"
             style={{
               width: 28, height: 28, borderRadius: R.btn, cursor: 'pointer', flexShrink: 0,
               background: C.surface2, border: `1px solid ${C.border}`,

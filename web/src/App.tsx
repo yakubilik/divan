@@ -177,6 +177,10 @@ export function App() {
   const [cameFrom, setCameFrom] = useState<Place | null>(null);
   /** The opened address has been written back in this build's shape. */
   const settled = useRef(false);
+  /** Set when a place opens its newest chat on its own: that chat is the place
+   *  arrived at, not a step from it, so it takes the entry over rather than
+   *  pushing one Back would land on and bounce off. */
+  const landing = useRef(false);
 
   useEffect(() => {
     if (typeof history === 'undefined') return;
@@ -196,7 +200,9 @@ export function App() {
     // from, so its Back is the browser's own Back and lands there. A card the
     // panel was opened on has no such page, and its Back is its product's board.
     if (where.card && where.card !== shown.current.card) setCameFrom(shown.current);
-    history.pushState(where, '', url);
+    if (landing.current && where.chat && !shown.current.chat) history.replaceState(where, '', url);
+    else history.pushState(where, '', url);
+    landing.current = false;
     shown.current = where;
   }, [where]);
 
@@ -298,7 +304,7 @@ export function App() {
     const newest = Object.keys(scopedTo.ids)
       .flatMap((k) => (fleet.hosts[k]?.chats ?? []).filter((c) => !c.archived && mine(k, c)).map((c) => ({ k, c })))
       .sort((a, b) => b.c.updated_at - a.c.updated_at)[0];
-    if (newest) select(newest.k, newest.c.id); else setSel(null);
+    if (newest) { landing.current = true; select(newest.k, newest.c.id); } else setSel(null);
   }, [view, tab, scopedTo?.key, fleet.ready]);
 
   // The Chat place opens writable, on the newest conversation, without anybody
@@ -309,7 +315,7 @@ export function App() {
     const newest = fleet.order
       .flatMap((k) => (fleet.hosts[k]?.chats ?? []).filter((c) => !c.archived).map((c) => ({ k, c })))
       .sort((a, b) => b.c.updated_at - a.c.updated_at)[0];
-    if (newest) select(newest.k, newest.c.id);
+    if (newest) { landing.current = true; select(newest.k, newest.c.id); }
   }, [view, sel, fleet.ready, fleet.hosts, fleet.order]);
 
   // A ticket handed to the Terminal tab is for that one visit.
@@ -751,7 +757,7 @@ export function App() {
             which opens the list beside it — nothing was deleted, and each is
             still at its own address. */}
         {place === 'chat' && (
-          <>
+          <div className="dv-chatpane" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
             {earlier && (
               <Sidebar
                 selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
@@ -777,7 +783,7 @@ export function App() {
                 }} />
               )}
             </div>
-          </>
+          </div>
         )}
 
         {place === 'machine' && (
