@@ -227,6 +227,8 @@ class CodexProvider(Provider):
                 if isinstance(cmd, (list, tuple)):
                     cmd = shlex.join(str(c) for c in cmd)
                 reason = destructive_reason(cmd, self.cfg.cwd, params.get("cwd"))
+                if self.cfg.perm_mode == "bypass" and not self.cfg.bypass_asks:
+                    reason = None
                 # Bypass answers everything itself except the destructive list,
                 # which goes to the phone in every mode.
                 if reason is None and (self.cfg.perm_mode == "bypass" or self._session_allow_cmds):

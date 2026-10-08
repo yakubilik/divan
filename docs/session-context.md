@@ -86,6 +86,7 @@ behind or ahead of the other one while work is in flight.
 `PreToolUse` hook checks Bash commands and anything destructive — a recursive
 `rm` outside the chat's folder, a forced `git push` and the like — goes to the
 phone for approval. In `bypass` that is the only thing that asks.
+With `bypass_asks = false` in `config.toml`, `bypass` asks nothing at all.
 
 ## Where the session's own instructions come from
 

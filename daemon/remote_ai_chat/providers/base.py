@@ -37,6 +37,8 @@ class ProviderConfig:
     # The chat this session belongs to, handed to the CLI as RAC_CHAT_ID so
     # what it runs — `ustabasi add` — can say which chat asked for it.
     chat_id: str | None = None
+    # Config.bypass_asks, carried to the provider that enforces it.
+    bypass_asks: bool = True
 
 
 @dataclass

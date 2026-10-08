@@ -132,6 +132,8 @@ class ClaudeProvider(Provider):
         """
         if input_data.get("tool_name") != "Bash":
             return {}
+        if self.cfg.perm_mode == "bypass" and not self.cfg.bypass_asks:
+            return {}
         cmd = (input_data.get("tool_input") or {}).get("command", "") or ""
         reason = destructive_reason(cmd, self.cfg.cwd, input_data.get("cwd"))
         if not reason:

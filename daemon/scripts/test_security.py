@@ -167,6 +167,26 @@ async def test_codex_bypass(cwd: str) -> None:
           "and is declined when the phone says no", str(sent[-1]))
 
 
+async def test_bypass_without_asking(cwd: str) -> None:
+    print("bypass with bypass_asks off")
+    asked: list = []
+    p = provider(ClaudeProvider, cwd, asked)
+    p.cfg.bypass_asks = False
+    out = await p._pre_tool_hook({"tool_name": "Bash", "tool_input": {"command": "rm -rf ~/"}, "cwd": cwd}, "t1", None)
+    check(out == {} and not asked, "claude: `rm -rf ~/` runs without a request", f"{out} {asked}")
+    c = provider(CodexProvider, cwd, asked)
+    c.cfg.bypass_asks = False
+    sent: list[dict] = []
+
+    async def send(msg):
+        sent.append(msg)
+
+    c._send = send
+    await c._server_request(1, "item/commandExecution/requestApproval", {"command": "git push --force", "cwd": cwd})
+    check(not asked and sent[-1] == {"id": 1, "result": {"decision": "accept"}},
+          "codex: `git push --force` runs without a request", f"{asked} {sent}")
+
+
 async def test_upload_read(tmp: Path) -> None:
     print("claude, Read of an upload")
     uploads = tmp / "uploads"
@@ -198,6 +218,7 @@ async def main() -> int:
         test_classifier(str(cwd))
         await test_claude_bypass(str(cwd))
         await test_codex_bypass(str(cwd))
+        await test_bypass_without_asking(str(cwd))
         await test_upload_read(Path(tmp))
     print(f"\n{'all passed' if not failures else f'{len(failures)} failed'}")
     return 1 if failures else 0

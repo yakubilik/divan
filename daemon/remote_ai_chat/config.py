@@ -129,6 +129,9 @@ class Config:
     ])
     idle_disconnect_s: int = 1800
     approval_timeout_s: int = 900
+    # Whether a bypass chat still puts the destructive list to the phone. Off
+    # is bypass meaning bypass: nothing at all asks.
+    bypass_asks: bool = True
     # Letting a paired device drive the mouse and keyboard. Off until somebody
     # turns it on, and stored here rather than in memory so that "off" survives
     # a restart — a switch this size should never come back on by accident.
