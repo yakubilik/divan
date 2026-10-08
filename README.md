@@ -10,9 +10,9 @@ with your own account, reached over your own private network.
 https://github.com/user-attachments/assets/3d307479-29b1-4a1b-b280-6d381db8cfbc
 
 <p align="center">
-  <img src="docs/screenshots/chat.png" width="250" alt="A chat: the agent has read a file and answered">
+  <img src="docs/screenshots/dashboard.png" width="250" alt="The dashboard: a composer, the projects, the inbox">
+  <img src="docs/screenshots/chat.png" width="250" alt="A chat: the agent has read a file and is answering">
   <img src="docs/screenshots/approval.png" width="250" alt="An approval: rm -rf waiting for a decision">
-  <img src="docs/screenshots/chats.png" width="250" alt="The chat list, grouped by project">
 </p>
 
 ---
@@ -50,12 +50,14 @@ What that gets you, in practice:
 
 | | |
 |---|---|
+| <img src="docs/screenshots/dashboard.png" width="230"> | **The dashboard.** What needs you, what is working, what is stuck. Tell it what to do and it goes to a project's board; the projects, the inbox and every chat are one tap down. |
 | <img src="docs/screenshots/chats.png" width="230"> | **Chats, grouped by project.** One row per conversation, titled with the project it runs in. Group them by hand or let the folder do it, swipe a row aside to archive or delete it, search titles and messages. |
 | <img src="docs/screenshots/chat.png" width="230"> | **A turn, streaming.** Text arrives token by token; a run of tool calls folds into one line until you ask for it. The footer is what the turn actually cost. |
 | <img src="docs/screenshots/approval.png" width="230"> | **The approval.** In `ask` mode every shell command stops here. A dangerous one stops here even in `bypass`. |
 | <img src="docs/screenshots/new-chat.png" width="230"> | **Starting one.** Pick the tool, the model, how hard it should think, how much rope it gets, and which folder it opens in. |
 | <img src="docs/screenshots/call.png" width="230"> | **Calling it.** A voice line to a concierge that can see every chat on that computer and say what each one is doing. It answers out loud; when the computer wants you, the phone rings. |
 | <img src="docs/screenshots/settings.png" width="230"> | **Settings.** Several computers, several sign-ins per tool, and a daemon that follows `origin/main` on its own. |
+| <img src="docs/screenshots/machines.png" width="230"> | **Machines.** Which computers answer, how much of the plan is left and when it resets, and who is working on what. |
 
 ### And a desktop panel
 

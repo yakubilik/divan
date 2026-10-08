@@ -8,12 +8,14 @@ forever, and a real chat list is a list of what somebody is working on.
 
 | file | screen | taken on |
 |---|---|---|
-| `chats.png` | the chat list, grouped by project | iPhone 17 Pro Max simulator, 1320×2868 |
+| `dashboard.png` | the dashboard: composer, projects, inbox | iPhone 17 Pro Max simulator, 1320×2868 |
+| `chats.png` | the chat list, grouped by project, one waiting on an approval | same |
 | `chat.png` | a turn mid-stream, with the stop button | same |
 | `approval.png` | `rm -rf build` waiting for a decision | same |
 | `new-chat.png` | the new-chat sheet | same |
 | `settings.png` | settings: computers, software, defaults | same |
-| `call.png` | the concierge call, listening | same |
+| `machines.png` | Machines: the computer, the quota, the executors | same |
+| `call.png` | the concierge call, before it starts | same |
 | `agents.png` | the agents tab | same |
 | `pair.png` | adding a computer | same |
 | `panel-dashboard.png` | the panel's dashboard: what needs you, projects, what is running | headless Chrome, 1440 wide, from `web/scripts/shot-dashboard.mjs` |
@@ -55,8 +57,20 @@ allowed_roots = ["/Users/<you>/demo-projects"]
 ```
 
 ```bash
-RAC_HOME=/tmp/rac-demo .venv312/bin/remote-ai-chat serve
+mkdir -p /tmp/rac-demo/ustabasi
+RAC_HOME=/tmp/rac-demo USTABASI_STATE_DIR=/tmp/rac-demo/ustabasi \
+  USTABASI_CLI=/nonexistent .venv312/bin/remote-ai-chat serve
 ```
+
+The two `USTABASI_*` variables matter on a machine that runs the queue: without
+them the dashboard's inbox reads the real one, ticket titles and all. The phone
+keeps what it has read, so a phone that has already seen the real inbox has to
+have the app deleted and installed again.
+
+Word the prompts so they stay in the folder ("look only in this folder: …",
+"run `rm -rf build`, exactly as written"). Asked loosely, the agent goes looking
+in the real checkout, or writes the command with an absolute path that has a
+home directory in it.
 
 The phone:
 
