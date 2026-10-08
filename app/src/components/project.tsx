@@ -9,14 +9,11 @@
  *
  *  Colour never comes from here: a tone is asked of the token table through
  *  `toneColours`, and the parts these are built out of (`components/divan`)
- *  bring their own. There is no placeholder in this file — a branch card with
- *  nothing in its third number slot is drawn with the slot empty, which is what
- *  the frames do, and never with a dash standing in for a figure. */
+ *  bring their own. */
 import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './text';
 import { Card, Monogram, StatusDot, Tap } from './divan';
-import { SLOTS } from '../project';
 import { em, RADIUS, toneColours, useTokens, type State, type Tone } from '../theme';
 
 // ── 1 · whose page this is ──────────────────────────────────────────────────
@@ -81,34 +78,6 @@ export function BoardSummary({ counts, label, onPress, style }: {
   );
 }
 
-/** One branch as a row (ProjectPhone): its name, and either its numbers or —
- *  where nothing feeds it — the sentence that says so. The row opens the
- *  branch's own page. */
-export function BranchRow({ name, figures, note, first, onPress }: {
-  name: string;
-  figures: { value: number | string; label: string }[];
-  /** `Source not connected yet.`, in place of any number. */
-  note?: string | null;
-  first?: boolean;
-  onPress?: () => void;
-}) {
-  const t = useTokens();
-  return (
-    <Tap onPress={onPress}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingVertical: 10,
-               borderTopWidth: first ? 0 : 1, borderTopColor: t.line2 }}>
-      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13.5, fontWeight: '500', color: t.ink }}>{name}</Text>
-      {note
-        ? <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.ink3 }}>{note}</Text>
-        : figures.map((f) => (
-          <Text key={f.label} mono numberOfLines={1} style={{ fontSize: 11.5, color: t.ink3 }}>
-            {`${f.value} ${f.label}`}
-          </Text>
-        ))}
-    </Tap>
-  );
-}
-
 // ── 2 · what is happening, and what it is waiting for ───────────────────────
 
 /** Mobile7 S4's two-row block: `background:s1; border-radius:14px; padding:11px
@@ -162,91 +131,5 @@ export function QuietNote({ title, body, style }: {
         <Text style={{ fontSize: 13.5, lineHeight: 13.5 * 1.45, color: t.ink2 }}>{body}</Text>
       </View>
     </Card>
-  );
-}
-
-// ── 4 · a branch ────────────────────────────────────────────────────────────
-
-/** One face of a product (Mobile2 V4, Mobile7 S4 and S5): a dot and its name,
- *  when its source last spoke at the far end, one line of status, and two or
- *  three numbers in three fixed slots.
- *
- *  `background:s1; border-radius:14px; padding:11px 14px 12px; gap:8`, the name
- *  at 15 pt semibold, the status line 13.5 pt in `ink2`, each figure a 17 pt
- *  mono number over a 10.5 pt mono label. A branch whose source has been silent
- *  for a week is drawn at four fifths (S5), which is the frame's own way of
- *  saying "this is still here and it is not news".
- *
- *  The card is the way in: a branch has a page of its own (Mobile9 S10 and
- *  S11), and this is what opens it. */
-export function BranchCard({ name, state, line, figures, refreshed, tone, dim, onPress, style }: {
-  name: string;
-  state: State;
-  /** The line of status, already in the reader's language. */
-  line: string;
-  /** One to three numbers; the rest of the three slots stay empty. */
-  figures: { value: number | string; label: string }[];
-  /** `07:02`, `2 days old`. Absent where nothing has ever refreshed it. */
-  refreshed?: string | null;
-  /** …and what colour that is. Grey unless it is old enough to matter. */
-  tone?: Tone | null;
-  dim?: boolean;
-  /** Opens the branch's own page. */
-  onPress?: () => void;
-  style?: StyleProp<ViewStyle>;
-}) {
-  const t = useTokens();
-  return (
-    <Card radius={RADIUS.tile} inset={false} onPress={onPress} style={[dim ? { opacity: 0.8 } : null, style]}>
-      <View style={{ padding: 11, paddingHorizontal: 14, paddingBottom: 12, gap: 8 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {/* A branch with nothing on it is the frame's unfilled dot: `line2`,
-              which is quieter than the grey a state would give it. */}
-          <StatusDot size={7} state={state === 'quiet' ? t.line2 : state} />
-          <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 15, fontWeight: '600' }}>{name}</Text>
-          {!!refreshed && (
-            <Text mono numberOfLines={1}
-              style={{ marginLeft: 'auto', fontSize: 11,
-                       color: tone ? toneColours(t, tone).fg : t.ink3 }}>{refreshed}</Text>
-          )}
-        </View>
-        <Text numberOfLines={2} style={{ fontSize: 13.5, lineHeight: 13.5 * 1.35, color: t.ink2 }}>{line}</Text>
-        <Figures figures={figures} />
-      </View>
-    </Card>
-  );
-}
-
-/** The row of numbers itself, which is a block of its own: the branch's page
- *  draws the same three slots at the same sizes under its title (Mobile9 S10),
- *  and a second spelling of "three slots, whatever is in them" would be two
- *  screens that stop lining up the first time one of them changes.
- *
- *  A 17 pt mono number over a 10.5 pt mono label, three slots wide, and an
- *  empty slot stays empty — nothing stands in for a figure that is not there. */
-export function Figures({ figures, style }: {
-  figures: { value: number | string; label: string }[];
-  style?: StyleProp<ViewStyle>;
-}) {
-  const t = useTokens();
-  if (!figures.length) return null;
-  return (
-    <View style={[{ flexDirection: 'row', gap: 8 }, style]}>
-      {Array.from({ length: SLOTS }, (_, i) => figures[i]).map((figure, i) => (
-        <View key={i} style={{ flex: 1, minWidth: 0 }}>
-          {!!figure && (
-            <>
-              <Text mono numberOfLines={1}
-                style={{ fontSize: 17, fontWeight: '500', letterSpacing: em(17, -0.01) }}>
-                {figure.value}
-              </Text>
-              <Text mono numberOfLines={1} style={{ fontSize: 10.5, color: t.ink3, marginTop: 2 }}>
-                {figure.label}
-              </Text>
-            </>
-          )}
-        </View>
-      ))}
-    </View>
   );
 }

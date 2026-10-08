@@ -26,8 +26,7 @@ import type { State, Tone } from './tokens';
 /** A line that is sometimes the string table's and sometimes the machine's own.
  *  A worker's name is `Coder` where the vocabulary has a word for it and the
  *  branch's own name where only the branch says what it is; what it is doing is
- *  a card's title, which nothing here may translate. The same pair the branch
- *  page uses for its status line (`src/branch.ts`). */
+ *  a card's title, which nothing here may translate. */
 export interface Words {
   said: Said | null;
   text: string;
@@ -238,8 +237,8 @@ export function executorGroups(view: DivanView): ExecutorGroup[] {
   const house: ExecutorLine[] = [];
 
   // What a branch is called, where its product's own answer says. A branch
-  // agent is named by its branch, and the branch's display name is the one the
-  // branch page shows — the kind (`seo`) is how the merge folds it, not what
+  // agent is named by its branch, and the branch's display name is the one
+  // its product gave it — the kind (`seo`) is how the merge folds it, not what
   // anybody calls it.
   const named = new Map<string, string>();
   for (const p of view.projects) for (const b of p.branches) named.set(`${p.key}:${b.kind}`, b.name);

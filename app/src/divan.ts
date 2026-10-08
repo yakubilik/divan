@@ -311,9 +311,8 @@ export interface MergedProject {
   /** …and the same readings unfolded, by repository path: what git said about
    *  each of the repositories this product owns.
    *
-   *  The fold above is what a project card draws — one product, one history. A
-   *  branch page draws the repositories themselves (Mobile9 S11), and a sum
-   *  cannot be taken apart again. A path git would not answer about is absent
+   *  The fold above is what a project card draws — one product, one history —
+   *  and a sum cannot be taken apart again. A path git would not answer about is absent
    *  rather than zero, which is the same rule the wire is keyed by. */
   repoActivity: Record<string, RepoActivity>;
   /** …and what the code host says about them: the pull requests open on each,
@@ -321,8 +320,8 @@ export interface MergedProject {
    *
    *  A path with no entry is a repository nobody could be asked about — not a
    *  GitHub checkout, or a machine with no `gh` — and one whose entry has an
-   *  empty `open` is a repository with nothing open. The branch page draws the
-   *  two differently, so the difference has to survive the merge: this map holds
+   *  empty `open` is a repository with nothing open. The two are not the same
+   *  thing, so the difference has to survive the merge: this map holds
    *  only the paths that were actually answered for. */
   repoPulls: Record<string, RepoPulls>;
   /** One of the machines it lives on has gone quiet, so these numbers are not

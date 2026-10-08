@@ -261,7 +261,7 @@ checks.push(
       && ['Quire', 'Hush', 'Kanji Daily'].every((n) => all.includes(n))],
     ['pressing a tile enters that project: the title is its name', title(scoped) === 'Quire'],
     ['…the body is that project and not the list of them',
-      scoped.includes('branches') && scoped.includes('engineering') && !greeted(scoped)],
+      scoped.includes('>bdBoard<') && scoped.includes('>pjChats<') && !greeted(scoped)],
     ['the line’s left end comes back out to every project', greeted(back)],
     ['there is no project bar any more: the products are tiles on the page',
       !/<ProjectBar/.test(dash) && !/ProjectBar/.test(src('src/components/shell.tsx').split('export function ProjectBar')[0])],

@@ -120,14 +120,14 @@ const checks = [];
     && words[0] === 1 && words[1] === 1 && words[2] === 1 && words[3] === 2]);
 }
 
-// 4 · branches
+// 4 · branches: the product has two, and the page draws neither
 {
   const page = stand({ project: 'quire' });
-  const seo = page.slice(page.indexOf('>SEO<'), page.indexOf('>SEO<') + 400);
-  R.presses().find((p) => p.text.startsWith('Engineering')).press();
-  checks.push(['a branch with no source says Source not connected yet. and no number; a connected one opens the branch page',
-    seo.includes('>pjNotConnected<') && !/>\d/.test(seo.split('pjNotConnected')[0])
-    && JSON.stringify(R.nav.pushed()) === '["/branch/engineering?project=quire"]']);
+  checks.push(['a project with branch data has no Branches section, no branch row and no way into a branch page',
+    QUIRE.branches.length === 2
+    && !/>branches<|>Engineering<|>SEO<|pjNotConnected/.test(page)
+    && R.presses().every((p) => !/^(Engineering|SEO)/.test(p.text))
+    && JSON.stringify(R.nav.pushed()) === '[]']);
 }
 
 // 6 · the asking edge, and Done this month

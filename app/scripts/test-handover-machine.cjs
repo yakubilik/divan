@@ -1,5 +1,5 @@
-/** The phone's Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9), one check
- *  per criterion of ustabasi #127.
+/** The phone's Chat and Machine (HANDOVER §4.8, §4.9), one check per criterion
+ *  of ustabasi #127, and where a link to the Branch page it once had leads.
  *
  *  Run: node scripts/test-handover-machine.cjs  (also folded into test-ustabasi.cjs.)
  */
@@ -259,19 +259,14 @@ const ready = (async () => {
         dash.includes('data-label="Model: Sonnet 5"') && dash.includes('data-label="Account: yakup@"')]);
     }
 
-    // 7 · a branch page, connected and not
+    // 7 · a branch page is gone: a link kept to one lands on its project
     {
       stand({ params: { id: 'engineering', project: 'quire' } });
+      R.store.set({ ready: true });
       const page = R.render('dark', h(Branch));
-      const at = (w) => page.indexOf(w);
-      stand({ params: { id: 'seo', project: 'quire' } });
-      const bare = R.render('dark', h(Branch));
-      checks.push(['phone: a branch is its title, one sentence with Updated <ago>, two or three figures, its list and tickets, then What the agent did; an unconnected one says only Source not connected yet.',
-        page.includes('>Engineering<') && /Bulk invite is three checks in\. Updated (just now|.+ ago)\./.test(page)
-        && at('Repositories') > 0 && at('Repositories') < at('>Tickets<') && at('>Tickets<') < at('What the agent did')
-        && page.includes('Wrote the retry table.')
-        && bare.includes('Source not connected yet.') && !bare.includes('>Tickets<') && !bare.includes('What the agent did')
-        && !bare.includes('Open')]);
+      checks.push(['phone: a branch has no page of its own; a link kept to one lands on the project it named',
+        JSON.stringify(R.nav.replaced()) === '["/dashboard?project=quire"]'
+        && !page.includes('>Engineering<') && !page.includes('What the agent did')]);
     }
 
     // 8 · pairing, signing in, answering a call

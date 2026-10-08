@@ -119,10 +119,8 @@ export default function RootLayout() {
             rather than being a fourth place — it is one of the Dashboard's own
             numbers with the things behind it shown. */}
         <Stack.Screen name="waiting" />
-        {/* One branch of a product, opened: its status, its numbers, what its
-            agent did and the cards that belong to it (Mobile9 S10, S11).
-            Addressed by kind rather than by id — two computers give the same
-            branch two ids, and the kind is what the merge folds them by. */}
+        {/* A branch's own page is gone from the phone. The route stays so that
+            a link somebody kept lands on the product it named. */}
         <Stack.Screen name="branch/[id]" />
         {/* One card of a board, opened: what it is, what the machine was told,
             and what the worker on it is doing right now. Pushed over the

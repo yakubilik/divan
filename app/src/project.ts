@@ -2,21 +2,11 @@
 //
 // The Dashboard answers "how is everything". This answers the question a person
 // asks after tapping one chip in the project bar: **what is happening on this
-// one, and what is it waiting for.** Two sentences and then its branches — the
-// faces a product has beside its code (engineering, seo, analytics, marketing,
-// customers, and whatever else somebody named), each as a card with a line of
-// status, its numbers, and when it was last refreshed.
+// one, and what is it waiting for.** Two sentences, over its board.
 //
 // The same two rules the Dashboard is written under hold here, and they decide
 // most of this file:
 //
-//   * **no invented numbers.** The frames put a branch's own figures on its card
-//     — open PRs, crash-free sessions, clicks in 28 days, a newsletter list —
-//     and none of those sources is connected (the plan puts them after the
-//     screens). What exists is the board: how much is open on a branch, how much
-//     of it is in progress, how much is finished. Those are the numbers drawn,
-//     and a branch nobody has put a card on draws none at all rather than three
-//     zeros.
 //   * **a machine that has gone quiet is said out loud.** A product checked out
 //     on two computers has half its numbers from each; when one of them stops
 //     answering the page says which, and how old what is on it is.
@@ -25,31 +15,13 @@
 // Mobile7 S4), one nothing has touched in weeks (Mobile7 S5) and one whose board
 // is still empty (Mobile7 S6). None of them is the busy page with things taken
 // out of it — each is decided here, by name.
-import { COLUMNS, spent, stuck, waiting, type DivanView, type MergedBranch, type MergedCard,
-         type MergedProject } from './divan';
+import { COLUMNS, spent, stuck, waiting, type DivanView, type MergedProject } from './divan';
 import { age, asks, clock, dormant, executorKey, latest, staleFor,
          type Ago, type Said } from './dashboard';
 import type { Key } from './i18n';
 import type { State, Tone } from './tokens';
 
 const DAY = 24 * 3600;
-
-/** How many number slots a branch card has, whatever it has to put in them.
- *  Mobile7 S4's own note is explicit about it: the slots stay fixed at three
- *  columns, and a branch with only two numbers leaves the third empty "so the
- *  card still reads as complete rather than broken". */
-export const SLOTS = 3;
-
-/** A branch whose source last spoke longer ago than this says so in amber
- *  (Mobile7 S4's `2 days old`, S5's `23 days old`). Under a day it prints the
- *  clock and nothing else: a source that refreshed this morning is ordinary. */
-export const BRANCH_OLD_AFTER_S = DAY;
-
-/** …and one that has not been refreshed in a week is drawn faintly as well
- *  (Mobile7 S5 dims its SEO and Marketing cards and leaves Analytics, which ran
- *  overnight, at full strength). A fortnight is the product's own dormancy; a
- *  week is a branch's, because a branch is meant to be refreshed daily. */
-export const BRANCH_DIM_AFTER_S = 7 * DAY;
 
 /** The mono line under a product's name: what sort of thing it is and what it is
  *  for, as the two were written down (Mobile2 V4's `SaaS · client portals for
@@ -75,14 +47,6 @@ export function meta(p: MergedProject): { stage: string; since: string | null; m
 /** `4 Jan 2026`. */
 export function day(at: number): string {
   return new Date(at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-/** Whether anything feeds a branch: something has written its summary, or —
- *  for engineering — the product has a repository to read. A branch nothing
- *  feeds says `Source not connected yet.` and shows no number. */
-export function connected(p: MergedProject, b: MergedBranch): boolean {
-  return !!(b.summary || '').trim() || b.summary_at != null
-    || (b.kind.toLowerCase() === 'engineering' && p.repos.length > 0);
 }
 
 // ── the two lines at the top ────────────────────────────────────────────────
@@ -305,138 +269,7 @@ export function blank(p: MergedProject): boolean {
     && p.branches.every((b) => !(b.open || 0) && COLUMNS.every((col) => !(b.cards[col] || 0)));
 }
 
-/** …and what it says. The branches are named in it, because the frames' rule for
- *  an empty screen is that the structure stays visible: a product whose five
- *  faces are already made is not a blank page, and reading their names is how a
- *  person sees where the first card would go. */
-export function blankBody(p: MergedProject): Said {
-  const names = p.branches.map((b) => b.name || b.kind).filter(Boolean);
-  return names.length
-    ? { key: 'prNewBody', params: { branches: names.join(', ') } }
-    : { key: 'prNewBodyBare' };
-}
-
-// ── a branch card ───────────────────────────────────────────────────────────
-
-/** One number on a branch card: what it is, and what it is of. Always a count
- *  off the board — the frames' own figures (`99.2% crash-free`, `6,412 clicks
- *  28d`) come from sources nothing is connected to yet, and a made-up one is
- *  worse than a missing one. */
-export interface Figure {
-  value: number;
-  label: Key;
-}
-
-/** One card of the branch grid (Mobile2 V4, Mobile7 S4 and S5). */
-export interface BranchCard {
-  key: string;
-  /** What it is a face of — `engineering`, `seo` — which is how its own page is
-   *  addressed (`/branch/seo?project=quire`). Two computers give the same branch
-   *  two ids and the kind is what the merge folds them by, so it is the only
-   *  name a link can be written with (`src/branch.ts find`). */
-  kind: string;
-  name: string;
-  /** The 7 pt dot in front of the name: the worst thing true of its cards. */
-  state: State;
-  /** The line of status. `text` is words somebody or something else wrote — the
-   *  branch's own summary, or the line off the card that needs attention — and
-   *  `said` is ours, for a branch that has nothing to say. Exactly one of them. */
-  said: Said | null;
-  text: string;
-  /** Two or three numbers, left to right, in three fixed slots. */
-  figures: Figure[];
-  /** When its source last refreshed, and whether that is long enough ago to be
-   *  worth an amber word. Null where nothing has ever refreshed it. */
-  refreshed: { said: Said; tone: Tone | null } | null;
-  /** …and long enough to draw the whole card faintly. */
-  dim: boolean;
-}
-
-/** The branches of a product, in the order the computer keeps them, each as a
- *  card. The order is deliberately not by urgency: five branches are a fixed set
- *  of faces a person learns the position of, and a grid that reshuffles itself
- *  every time a card moves is one nobody can read at a glance. */
-export function branchCards(p: MergedProject, now: number): BranchCard[] {
-  return p.branches.map((b) => {
-    const mine = p.cards.filter((c) => c.branch === b.kind);
-    const wrote = (b.summary || '').trim();
-    const said = wrote ? '' : latest(mine);
-    return {
-      key: b.id || b.kind,
-      kind: b.kind,
-      name: b.name || b.kind,
-      state: branchState(mine),
-      said: wrote || said ? null : { key: 'branchNoSource' as Key },
-      text: wrote || said,
-      figures: figures(b),
-      refreshed: refreshed(b, now),
-      dim: dim(b, now),
-    };
-  });
-}
-
-/** The dot in front of a branch's name: the worst thing true of the cards on it.
- *  The same vocabulary the project chips use, read off the cards themselves
- *  through the merge's own two rules (`stuck`, `waiting`) rather than a second
- *  spelling of them. */
-export function branchState(cards: MergedCard[]): State {
-  if (cards.some(stuck)) return 'stuck';
-  if (cards.some(waiting)) return 'asking';
-  if (cards.some((c) => c.agent_status === 'running')) return 'running';
-  return 'quiet';
-}
-
-/** A branch's numbers: what is open on it, what is in progress, what is done.
- *
- *  `open` and `done` are always drawn, zero included — a branch with nothing
- *  open and eleven done is finished, and saying so in two honest zeros beats
- *  leaving the slot empty. `in progress` is drawn only when something is, which
- *  is the frames' two-number card (Mobile7 S4's App Store and Customers): the
- *  third slot stays empty and the card still reads as complete.
- *
- *  A branch nobody has ever put a card on has no numbers at all. Three zeros
- *  there would be a measurement of nothing. */
-export function figures(b: MergedBranch): Figure[] {
-  const held = COLUMNS.reduce((n, col) => n + (b.cards[col] || 0), 0);
-  if (!held && !(b.open || 0)) return [];
-  const progress = b.cards.in_progress || 0;
-  return [
-    { value: b.open || 0, label: 'bnOpen' as Key },
-    ...(progress > 0 ? [{ value: progress, label: 'bnProgress' as Key }] : []),
-    { value: b.cards.done || 0, label: 'bnDone' as Key },
-  ];
-}
-
-/** When a branch's source last said anything, in the corner of its card: the
- *  clock while it is today's (Mobile7 S4's `07:02`, `06:15`), and the age in
- *  amber once it is older than a day (`2 days old`, S5's `23 days old`).
- *
- *  Null where nothing has ever written a summary for that branch, which is most
- *  of them until the sources are connected — the card then says "no source
- *  connected yet" on its status line, and an invented `live` in the corner would
- *  contradict it. */
-export function refreshed(b: MergedBranch, now: number): { said: Said; tone: Tone | null } | null {
-  return when(b.summary_at, now);
-}
-
-/** …and the rule under it, which is about a moment and not about a branch: the
- *  clock while it is today's, the age in amber once it is older than a day.
- *
- *  Apart from `refreshed` because a branch's page ages a second kind of moment
- *  by it — when a repository of the product last moved (`src/branch.ts`) — and
- *  two spellings of "how old is too old" would drift apart on one screen. */
-export function when(at: number | null | undefined, now: number): { said: Said; tone: Tone | null } | null {
-  if (at == null) return null;
-  const since = Math.max(0, now - at);
-  if (since < BRANCH_OLD_AFTER_S) return { said: { key: 'bnAt', params: { time: clock(at) } }, tone: null };
-  const days = Math.floor(since / DAY);
-  return {
-    said: days <= 1 ? { key: 'bnYesterday' } : { key: 'bnDaysOld', params: { n: days } },
-    tone: 'amber',
-  };
-}
-
-/** …and whether the card is drawn faintly with it (Mobile7 S5). */
-export function dim(b: MergedBranch, now: number): boolean {
-  return b.summary_at != null && now - b.summary_at > BRANCH_DIM_AFTER_S;
+/** …and what it says: how a first card is begun. */
+export function blankBody(): Said {
+  return { key: 'prNewBodyBare' };
 }
