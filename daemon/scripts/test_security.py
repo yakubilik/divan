@@ -63,6 +63,8 @@ FLAGGED = [
     "sed -i '' s/a/b/ ~/.remote-ai-chat/config.toml",
     "cd ~/.remote-ai-chat && mv db.sqlite db.old",
     'sqlite3 ~/.remote-ai-chat/db.sqlite "delete from chats"',
+    "cd ~/.remote-ai-chat && sqlite3 db.sqlite \"select 1; update chats set title='x'\"",
+    "cd ~/.remote-ai-chat && sqlite3 db.sqlite < fix.sql",
     "cat ~/.remote-ai-chat/accounts/claude-1/.credentials.json",
 ]
 
@@ -84,6 +86,7 @@ ALLOWED = [
     "cd /tmp/clips && find . -name '*.mp3' -delete",
     'cd ~/.remote-ai-chat; sqlite3 -readonly db.sqlite "select 1" 2>&1 | cut -c1-40',
     "cd ~/.remote-ai-chat && ls > /dev/null",
+    'cd ~/.remote-ai-chat && sqlite3 -header db.sqlite ".schema chats" "select * from chats where updated_at > 1"',
 ]
 
 

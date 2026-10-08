@@ -65,6 +65,10 @@ _READS = {"cat", "head", "tail", "less", "grep", "egrep", "fgrep", "rg", "ls", "
           "echo", "printf", "test", "[", "readlink", "realpath", "basename", "dirname",
           "shasum", "md5", "xxd", "strings", "cd", "pwd"}
 _SINKS = {"/dev/null", "/dev/stdout", "/dev/stderr"}
+_SQL_WRITES = re.compile(
+    r"\b(insert|update|delete|replace|drop|alter|create|vacuum|attach|reindex|upsert)\b"
+    r"|\bpragma\b[^;]*=|^\s*\.(import|restore|save|output|once|shell|system)\b|;\s*\.",
+    re.I | re.M)
 
 
 def _tokens(cmd: str) -> list[str]:
@@ -247,7 +251,12 @@ def _reads_only(name: str, args: list[str]) -> bool:
     if name == "find":
         return not any(a == "-delete" or a.startswith(("-exec", "-ok", "-fprint")) for a in args)
     if name == "sqlite3":
-        return "-readonly" in args or any("mode=ro" in a for a in args)
+        if "-readonly" in args or any("mode=ro" in a for a in args):
+            return True
+        # A query in the arguments that writes nothing. Without one the SQL
+        # comes from stdin, which nobody here can read in advance.
+        words = [a for a in args if not a.startswith("-")]
+        return len(words) > 1 and not any(_SQL_WRITES.search(a) for a in words)
     return False
 
 
