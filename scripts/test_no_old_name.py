@@ -25,7 +25,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-OLD_NAME = re.compile(r"remote[-_ ]?ai[-_ ]?chat|\bRAC_", re.IGNORECASE)
+# The second half is spelled in two pieces so that this line is not a hit for a
+# plain grep of the same pattern.
+OLD_NAME = re.compile(r"remote[-_ ]?ai[-_ ]?chat|\b" + "RAC" + "_", re.IGNORECASE)
 
 HISTORY = ("CHANGELOG.md", "docs/audit/", "docs/night-watch/")
 WHOLE_FILES = {
