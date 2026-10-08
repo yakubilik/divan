@@ -1,8 +1,5 @@
 # Divan
 
-*Formerly divan. The CLI, the Python package and `~/.divan`
-keep the old name for now.*
-
 **Your own computer's coding agent, from your phone.** Not a hosted copy of it —
 the actual `claude` or `codex` process on your machine, in your repo, signed in
 with your own account, reached over your own private network.
@@ -217,8 +214,8 @@ There is no camera in the simulator, so pair with **"Enter IP and token"**:
 host `127.0.0.1`, port `8790`.
 
 `app.json` deliberately carries no account of its own: the bundle identifier is
-`com.example.remoteaichat` and there is no Apple team, Expo owner or EAS project
-in it. To ship a build, add your own:
+a `com.example.*` placeholder and there is no Apple team, Expo owner or EAS
+project in it. To ship a build, add your own:
 
 ```jsonc
 "ios":   { "bundleIdentifier": "com.you.divan", "appleTeamId": "…" },

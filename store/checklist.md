@@ -3,7 +3,7 @@
 ## Done
 - [x] Bundle id registered, Push Notifications capability on (the id itself
       lives in `app/identity.local.json`, which git does not carry)
-- [x] `Divan App Store` distribution profile created
+- [x] App Store distribution profile created
 - [x] Build identity restored locally (`app/app.config.js` + gitignored `app/identity.local.json`)
 - [x] App icon / splash / adaptive icon / favicon replaced (source: `design/icon.svg`)
 - [x] Release archive + signed IPA (1.0.0 build 1)

@@ -11,7 +11,7 @@ per chat — Claude Code through `claude_agent_sdk`, or Codex through its
 `app-server` — and relays the stream back to the phone.
 
 ```
-iPhone app  ──WebSocket /ws──▶  daemon (~/projects/divan/daemon)
+iPhone app  ──WebSocket /ws──▶  daemon (the `daemon/` folder of this repository)
                                    └── claude / codex CLI, one per chat
 ```
 

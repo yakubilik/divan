@@ -153,8 +153,8 @@ on `divan.snapshot` as `unfiled` so that it can be seen and filed. It moves onto
 a real board on the first poll after a product claims its path. Which product a
 ticket belongs to is read off the **path** before the name — the ticket in
 `~/projects/babysee/app` is babysee's because babysee owns that folder — and no
-name on a product is ever written from a folder: this product is called Divan and
-is checked out in `divan`.
+name on a product is ever written from a folder: a product called Atlas can be
+checked out in `backend-v2`.
 
 **Branches are the faces of a product**: `engineering`, `seo`, `analytics`,
 `marketing`, `customers`, one row per project per branch, seeded when the

@@ -104,6 +104,10 @@ jobs:
         # string the app asks for in a file `tsc` is not looking at. It needs
         # nothing installed, so it runs here rather than behind an npm install.
         run: python scripts/test_i18n_keys.py
+      - name: The product has one name
+        # The old name is allowed in the history files and in the marked legacy
+        # blocks, and nowhere else; the allowlist is in the test.
+        run: python scripts/test_no_old_name.py
 
   docs:
     name: docs · links

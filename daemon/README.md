@@ -28,6 +28,22 @@ Python 3.11–3.13; 3.12 is the version this is run on. Newer Pythons are
 usually held back by mlx-whisper's dependency chain rather than by anything
 here, so if you do not need voice transcription any supported version is fine.
 
+### Coming from before the rename
+
+An install made when the daemon had another name keeps working: its data home
+is still read while `~/.divan` does not exist. To move it over, stop the daemon
+and run
+
+```bash
+python3 scripts/migrate_to_divan.py --dry-run    # what it would do
+python3 scripts/migrate_to_divan.py
+```
+
+It moves the data home to `~/.divan`, leaves the old path behind as a symlink
+so recorded session paths keep resolving, rewrites the old home inside
+`config.toml`, and writes the launchd plist under the new label. It does not
+call `launchctl`; it prints the two commands to run.
+
 ## Commands
 
 ```
@@ -135,7 +151,9 @@ python scripts/test_stream.py
 python scripts/test_demo.py      # a demo daemon with no CLI on PATH, end to end
 python scripts/test_secrets.py
 python scripts/test_scrub.py
-python scripts/test_uninstall.py # both launchd labels go on uninstall
+python scripts/test_uninstall.py # the launchd label goes on uninstall, old ones too
+python scripts/test_rename.py    # the data home, the pairing link, a chat's environment
+python scripts/test_migrate_to_divan.py
 ```
 
 `smoke.py` spends no model turns and is the one to run right after installing.
