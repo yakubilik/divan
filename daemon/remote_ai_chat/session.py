@@ -59,7 +59,7 @@ MAX_QUEUED = 20
 # A turn whose CLI was killed from outside is picked up again this many times
 # before it is reported as failed.
 REVIVE_MAX = 2
-REVIVE_PROMPT = ("[Remote AI Chat] The process running this session was stopped from outside in the "
+REVIVE_PROMPT = ("[Divan] The process running this session was stopped from outside in the "
                  "middle of your turn and has been started again. Nobody asked anything new. Carry on "
                  "with what you were doing from where it stopped; do not start over, and do not "
                  "mention this note unless it changes something for the person.")
@@ -303,12 +303,12 @@ class ChatSession:
         kept.reverse()
         body = "\n".join(kept)
         opening = (
-            "[Remote AI Chat] This turn changed hands part-way through, so this "
+            "[Divan] This turn changed hands part-way through, so this "
             "chat's history is not in your context. It is still on the user's "
             "screen, and the instruction below continues it. What follows is the "
             "tail of this chat's own transcript.\n\n"
         ) if handover else (
-            "[Remote AI Chat] Your session was restarted, so this chat's history "
+            "[Divan] Your session was restarted, so this chat's history "
             "is not in your context. It is still on the user's screen, and the "
             "message below continues it. What follows is the tail of this chat's "
             "own transcript.\n\n"

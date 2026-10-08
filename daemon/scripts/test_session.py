@@ -355,7 +355,7 @@ async def scenario_dropped_session(db):
 
     s, built = make_session(db, chat)
     await turn(s, "first question")
-    check("[Remote AI Chat]" not in built[0].prompts[0],
+    check("[Divan]" not in built[0].prompts[0],
           "a brand new chat gets no recap")
     check(db.get_chat(cid)["provider_session_id"] == "sess-1",
           "the turn records the resume id")
@@ -363,7 +363,7 @@ async def scenario_dropped_session(db):
     # A second turn resumes, so there is nothing to catch up on.
     s2, built2 = make_session(db, db.get_chat(cid))
     await turn(s2, "second question")
-    check("[Remote AI Chat]" not in built2[0].prompts[0],
+    check("[Divan]" not in built2[0].prompts[0],
           "a resumed session is not handed the history it already has")
 
     # Now the account changes: the resume id goes, the chat history stays.
@@ -371,7 +371,7 @@ async def scenario_dropped_session(db):
     s3, built3 = make_session(db, db.get_chat(cid))
     await turn(s3, "Carry on")
     sent = built3[0].prompts[0]
-    check("[Remote AI Chat]" in sent, "a dropped session is handed the chat's history")
+    check("[Divan]" in sent, "a dropped session is handed the chat's history")
     check("first question" in sent and "second question" in sent,
           "the history is this chat's own, both turns of it")
     check(sent.count("Carry on") == 1, "the new message is not quoted back as history")
@@ -379,7 +379,7 @@ async def scenario_dropped_session(db):
 
     # The catch-up is a one-off: the turn that follows resumes normally.
     await turn(s3, "and now?")
-    check("[Remote AI Chat]" not in built3[0].prompts[1],
+    check("[Divan]" not in built3[0].prompts[1],
           "the next turn on the same session gets no second recap")
 
 
