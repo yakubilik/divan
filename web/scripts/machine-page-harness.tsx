@@ -53,7 +53,7 @@ const log = {
       output: '#41 queued: Refund policy page  (worker opus, verifier opus)', isError: false, running: false },
     { kind: 'user', id: 'u2', ts: NOW - 120, text: 'How did the paywall copy do last week?', attachments: [], queued: false },
     { kind: 'assistant', id: 'a2', ts: NOW - 110, segment: 1, done: true,
-      text: 'The analytics source for babysee is not connected yet, so I cannot give you a real number.' },
+      text: 'The analytics source for Quire is not connected yet, so I cannot give you a real number.' },
   ],
   seq: 5, truncated: false, busy: false, pending: [], loading: false, error: null,
 } as any;
@@ -66,7 +66,7 @@ const page = which === 'chat' ? (
         <span className="dv-meta" style={{ marginLeft: 'auto' }}>Hermes</span>
       </div>
       <ChatView chat={chat({ project_id: 'p-quire', title: 'Refund page' }) as any} hostKey="studio" log={log}
-        groupName={null} groups={[]} accountLabel="yakup@…" accountUsage={0.36} accountLimits={undefined}
+        groupName={null} groups={[]} accountLabel="you@…" accountUsage={0.36} accountLimits={undefined}
         now={NOW} liveTokens={null} liveContext={null} sending={false} filedUnder="Quire"
         tickets={{ open: () => {}, describe: () => ({ column: 'Ice Box', title: 'Refund policy page' }) }}
         onPopOut={() => {}} onSend={() => {}} onInterrupt={() => {}} onRespond={() => {}} onEdit={() => {}}

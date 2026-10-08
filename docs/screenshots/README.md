@@ -16,9 +16,15 @@ forever, and a real chat list is a list of what somebody is working on.
 | `call.png` | the concierge call, listening | same |
 | `agents.png` | the agents tab | same |
 | `pair.png` | adding a computer | same |
-| `panel-dashboard.png` | the panel's fleet view, one turn running | headless Chrome, 1600×900 |
-| `panel-chat.png` | a chat streaming in the panel, ids in the inspector | same |
-| `panel-terminal.png` | terminal mode: five chats on the wall | same |
+| `panel-dashboard.png` | the panel's dashboard: what needs you, projects, what is running | headless Chrome, 1440 wide, from `web/scripts/shot-dashboard.mjs` |
+| `panel-chat.png` | a chat in the panel | same, from `web/scripts/shot-machine.mjs` |
+| `panel-machine.png` | Machines: two computers, the quota, the executors | same |
+| `panel-terminal.png` | terminal mode: five chats on the wall | the earlier panel, 1600×900 |
+| `film.png` | the last frame of the film, with a play button drawn on it | 1280×720 |
+
+The film itself is not on `main`: 8 MB of video does not belong in every
+clone. It is the only file on the `media` branch, and the README links to it
+there.
 
 ## What is not here, and why
 
@@ -84,7 +90,10 @@ cd web && npm install && npm run build
 RAC_HOME=/tmp/rac-demo .venv312/bin/remote-ai-chat web     # prints a URL with a token in the fragment
 ```
 
-Open that URL at 1600×900 and screenshot the page. The token rides in the
+The dashboard, chat and Machines pictures do not need a daemon at all: the
+`shot-*.mjs` scripts in `web/scripts` draw the screens from made-up data and
+leave the pictures in the folder they are given. For anything else, open that
+URL at 1600×900 and screenshot the page. The token rides in the
 fragment and the panel wipes it out of the address bar, but check the picture
 anyway before committing it.
 

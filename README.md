@@ -8,6 +8,14 @@ the actual `claude` or `codex` process on your machine, in your repo, signed in
 with your own account, reached over your own private network.
 
 <p align="center">
+  <a href="https://github.com/yakubilik/divan/raw/media/divan-film.mp4">
+    <img src="docs/screenshots/film.png" width="760" alt="The film: Divan in 93 seconds">
+  </a>
+  <br>
+  <sub><a href="https://github.com/yakubilik/divan/raw/media/divan-film.mp4">Watch the film</a> · 93 seconds, with sound</sub>
+</p>
+
+<p align="center">
   <img src="docs/screenshots/chat.png" width="250" alt="A chat: the agent has read a file and answered">
   <img src="docs/screenshots/approval.png" width="250" alt="An approval: rm -rf waiting for a decision">
   <img src="docs/screenshots/chats.png" width="250" alt="The chat list, grouped by project">
@@ -61,9 +69,11 @@ The phone talks to one computer at a time. The panel talks to **all of them at
 once** — the answer to "what is running where". It ships with the daemon; no
 separate server.
 
-![The desktop panel](docs/screenshots/panel-dashboard.png)
+![The panel's dashboard: what needs you, what is running](docs/screenshots/panel-dashboard.png)
 
 ![A chat in the panel](docs/screenshots/panel-chat.png)
+
+![Machines: which computers are reachable, and how much of the plan is left](docs/screenshots/panel-machine.png)
 
 And terminal mode, for the other question — not "what have I got" but "what is
 happening". Every chat drawn as the terminal window it would be, on a wall you
