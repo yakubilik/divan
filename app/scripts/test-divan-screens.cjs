@@ -299,6 +299,10 @@ checks.push(
        { host: '100.64.1.2', port: 8791, token: 'tok/1', name: 'studio', device_id: 'd1' })
     && eq(P.parsePairCode('{"host":"100.64.1.3","token":"t2"}'),
           { host: '100.64.1.3', port: P.DEFAULT_PORT, token: 't2', name: '100.64.1.3', device_id: undefined })],
+  ['…and a link under the legacy scheme, off an old QR code, reads exactly as the divan:// one does',
+    P.SCHEME === 'divan' && P.LEGACY_SCHEME !== P.SCHEME
+    && eq(P.parsePairCode(P.LEGACY_SCHEME + '://pair?host=100.64.1.2&port=8791&token=tok%2F1&name=studio&device_id=d1'),
+          P.parsePairCode(P.SCHEME + '://pair?host=100.64.1.2&port=8791&token=tok%2F1&name=studio&device_id=d1'))],
   ['…and half a code is no code: a host with no token pairs with nothing, and neither does anything else',
     P.parsePairCode('divan://pair?host=100.64.1.2') === null
     && P.parsePairCode('{"host":"100.64.1.2"}') === null

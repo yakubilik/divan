@@ -190,5 +190,16 @@ group('each refusal is told apart');
     && lock.long.includes('divan unlock 2001:db8::/64'), lock.long);
 }
 
+
+console.log('── a pairing link, under the scheme and the legacy one');
+{
+  const rest = '://pair?host=100.64.1.2&port=8791&token=tok%2F1&name=studio&device_id=d1';
+  const now = actions.parsePairing(actions.SCHEME + rest);
+  const then = actions.parsePairing(actions.LEGACY_SCHEME + rest);
+  ok('a divan:// link is read', actions.SCHEME === 'divan' && JSON.stringify(now) === JSON.stringify(
+    { host: '100.64.1.2', port: 8791, token: 'tok/1', name: 'studio', device_id: 'd1' }), JSON.stringify(now));
+  ok('the same link under the legacy scheme reads the same',
+    actions.LEGACY_SCHEME !== actions.SCHEME && JSON.stringify(then) === JSON.stringify(now), JSON.stringify(then));
+}
 console.log(failures ? `\n${failures} failed` : '\nall good');
 process.exit(failures ? 1 : 0);

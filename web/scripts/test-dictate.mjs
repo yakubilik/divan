@@ -88,9 +88,9 @@ ok('a newline somebody typed stays a newline',
 
 group('the engine is told the names on the board');
 {
-  const words = D.phrasesFor(['isghocam', 'divan']);
+  const words = D.phrasesFor(['isghocam', 'night-watch']);
   ok('a dashed name is offered whole and as it is said',
-    ['isghocam', 'divan', 'remote', 'chat', 'commit'].every((w) => words.includes(w)),
+    ['isghocam', 'night-watch', 'night', 'watch', 'commit'].every((w) => words.includes(w)),
     words.join(' '));
 }
 

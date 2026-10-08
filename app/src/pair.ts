@@ -14,14 +14,29 @@ import type { HostConfig } from './protocol';
  *  the box as it was found. */
 export const DEFAULT_PORT = 8790;
 
-/** Accepts what `divan pair` prints: the `divan://` deep link,
- *  and the older JSON payload. Anything else is null — the screen says it does
+/** The scheme `divan pair` prints its link under. */
+export const SCHEME = 'divan';
+
+// ── LEGACY NAME BLOCK: begin ─────────────────────────────────────────────────
+// The scheme from before the product was called Divan. It is accepted on
+// input only, so an old QR code or a link out of an old build still pairs;
+// nothing writes it. This is the one place the app spells the old name.
+export const LEGACY_SCHEME = 'remoteaichat';
+// ── LEGACY NAME BLOCK: end ───────────────────────────────────────────────────
+
+/** Whether `text` is a pairing deep link, under the scheme or the legacy one. */
+export function isPairLink(text: string): boolean {
+  return [SCHEME, LEGACY_SCHEME].some((s) => text.startsWith(s + '://'));
+}
+
+/** Accepts what `divan pair` prints: the `divan://` deep link
+ *  (or the same link under the legacy scheme), and the older JSON payload. Anything else is null — the screen says it does
  *  not recognise the code rather than pairing with half of one, because a host
  *  without a token is a connection that will be refused and a token without a
  *  host is nothing at all. */
 export function parsePairCode(data: string): HostConfig | null {
   const text = (data || '').trim();
-  if (text.startsWith('divan://')) {
+  if (isPairLink(text)) {
     const q = text.slice(text.indexOf('?') + 1);
     const p: Record<string, string> = {};
     for (const pair of q.split('&')) {

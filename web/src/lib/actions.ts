@@ -311,6 +311,18 @@ export function screenUrl(cfg: HostConfig, w: number, display: string, tick: num
     + `&display=${encodeURIComponent(display)}&t=${tick}`;
 }
 
+/** The scheme `divan pair` prints its link under. */
+export const SCHEME = 'divan';
+
+// ── LEGACY NAME BLOCK: begin ─────────────────────────────────────────────────
+// The scheme from before the product was called Divan. It is accepted on
+// input only, so an old QR code or a link copied out of an old build still
+// pairs; nothing writes it. This is the one place the panel spells the old name.
+export const LEGACY_SCHEME = 'remoteaichat';
+// ── LEGACY NAME BLOCK: end ───────────────────────────────────────────────────
+
+const PAIR_LINK = new RegExp(`^(?:${SCHEME}|${LEGACY_SCHEME})://`);
+
 /** Pair this panel with another computer from a link the `pair` command printed
  *  — the same `divan://pair?…` the phone scans. */
 export function parsePairing(input: string): HostConfig | null {
@@ -324,7 +336,7 @@ export function parsePairing(input: string): HostConfig | null {
     }
   } catch { /* not the QR payload; try the link form */ }
   try {
-    const u = new URL(text.replace(/^divan:\/\//, 'https://rac/'));
+    const u = new URL(text.replace(PAIR_LINK, 'https://divan/'));
     const q = u.searchParams;
     const token = q.get('token');
     const host = q.get('host');
