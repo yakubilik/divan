@@ -7,13 +7,7 @@ keep the old name for now.*
 the actual `claude` or `codex` process on your machine, in your repo, signed in
 with your own account, reached over your own private network.
 
-<p align="center">
-  <a href="https://github.com/yakubilik/divan/raw/media/divan-film.mp4">
-    <img src="docs/screenshots/film.png" width="760" alt="The film: Divan in 93 seconds">
-  </a>
-  <br>
-  <sub><a href="https://github.com/yakubilik/divan/raw/media/divan-film.mp4">Watch the film</a> · 93 seconds, with sound</sub>
-</p>
+https://github.com/user-attachments/assets/3d307479-29b1-4a1b-b280-6d381db8cfbc
 
 <p align="center">
   <img src="docs/screenshots/chat.png" width="250" alt="A chat: the agent has read a file and answered">

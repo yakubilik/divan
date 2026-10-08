@@ -20,7 +20,6 @@ forever, and a real chat list is a list of what somebody is working on.
 | `panel-chat.png` | a chat in the panel | same, from `web/scripts/shot-machine.mjs` |
 | `panel-machine.png` | Machines: two computers, the quota, the executors | same |
 | `panel-terminal.png` | terminal mode: five chats on the wall | the earlier panel, 1600×900 |
-| `film.png` | the last frame of the film, with a play button drawn on it | 1280×720 |
 
 The film itself is not on `main`: 8 MB of video does not belong in every
 clone. It is the only file on the `media` branch, and the README links to it
