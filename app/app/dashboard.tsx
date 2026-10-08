@@ -1,3 +1,4 @@
+import { permissionFor } from '../src/permissions';
 import React from 'react';
 import { ScrollView, View, type GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -355,9 +356,9 @@ function DashComposer({ view, lock = null }: {
   React.useEffect(() => { if (!accountsLoaded && conn === 'online') void loadAccounts().catch(() => {}); },
     [accountsLoaded, conn, loadAccounts]);
   React.useEffect(() => {
-    if (provider !== 'claude' || conn !== 'online') { setAgents(null); return; }
+    if (conn !== 'online') { setAgents(null); return; }
     let alive = true;
-    listAgents(account || null, null)
+    listAgents(account || null, null, provider)
       .then((list) => { if (alive) setAgents(list.filter((a) => a.installed)); })
       .catch(() => { if (alive) setAgents([]); });
     return () => { alive = false; };
@@ -393,13 +394,12 @@ function DashComposer({ view, lock = null }: {
         const repo = p && p.ids[host.id] ? p.repos.find((r) => folders.some((f) => f.path === r)) ?? p.repos[0] ?? null : null;
         const cwd = repo ?? defaults?.cwd ?? folders[0]?.path ?? undefined;
         const agent = picks.agent !== undefined ? picks.agent
-          : mm.provider !== 'claude' ? null
-            : hermes?.id ?? (await listAgents(account || null, cwd ?? null).catch(() => [] as Agent[]))
+          : hermes?.id ?? (await listAgents(account || null, cwd ?? null, mm.provider).catch(() => [] as Agent[]))
               .find((a) => a.installed && (a.name === 'hermes' || a.id === 'hermes'))?.id ?? null;
         const pcm = catalog?.[mm.provider] ?? null;
         const pdm = defaults?.byProvider?.[mm.provider];
         const effort = [pdm?.effort, defaults?.effort].find((e) => e && pcm?.efforts.includes(e)) ?? pcm?.efforts[0] ?? null;
-        const perm = [pdm?.perm_mode, defaults?.perm_mode].find((x) => x && pcm?.perm_modes.includes(x)) ?? pcm?.perm_modes[0];
+        const perm = permissionFor(mm.provider, pcm, defaults);
         const title = cardOf(words).title;
         const chat = await createChat({
           provider: mm.provider, model: mm.model, effort, perm_mode: perm, cwd,
@@ -425,7 +425,7 @@ function DashComposer({ view, lock = null }: {
   };
 
   const agentLabel = picks.agent === undefined
-    ? (provider !== 'claude' || (agents && !hermes) ? T('cmNoAgent') : T('cmHermes'))
+    ? ((agents && !hermes) ? T('cmNoAgent') : T('cmHermes'))
     : picks.agent === null ? T('cmNoAgent') : (agents?.find((a) => a.id === picks.agent)?.label ?? picks.agent);
   const accountLabel = (v: string) => (v ? signIns.find((a) => a.value === v)?.label ?? v : T('cmOwnAccount'));
   const projectOptions = view.projects.map((p) => ({ value: p.key, label: p.name, checked: picks.project === p.key }));

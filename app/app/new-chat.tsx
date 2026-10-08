@@ -19,6 +19,7 @@ import { Button, Icon, Label, Rule, Segmented, Skeleton, Text, TextInput } from 
 import { alert, prompt } from '../src/components/overlay';
 import { FolderRadios, GroupChips, OptionCard, ProviderCards, accountOptions } from '../src/components/pickers';
 import { Sheet, SheetBar, useSheet } from '../src/components/sheet';
+import { permissionFor } from '../src/permissions';
 import type { Agent, Provider } from '../src/protocol';
 
 export default function NewChat() {
@@ -54,7 +55,7 @@ function Body() {
   const pd = defaults.byProvider?.[provider];
   const [model, setModel] = useState(pd?.model ?? defaults.model);
   const [effort, setEffort] = useState<string | null>(pd?.effort ?? defaults.effort);
-  const [perm, setPerm] = useState(pd?.perm_mode ?? defaults.perm_mode);
+  const [perm, setPerm] = useState(permissionFor(provider, catalog?.[provider], defaults));
   /** '' is the computer's own sign-in, the way `chat.create` reads "no account_id". */
   const [account, setAccount] = useState<string>(pd?.account_id ?? '');
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -85,7 +86,7 @@ function Body() {
     setEffort((e) => (e && cat.efforts.includes(e) ? e
       : d?.effort && cat.efforts.includes(d.effort) ? d.effort : cat.efforts[0] ?? null));
     setPerm((p) => (cat.perm_modes.includes(p) ? p
-      : d?.perm_mode && cat.perm_modes.includes(d.perm_mode) ? d.perm_mode : cat.perm_modes[0]));
+      : permissionFor(provider, cat, defaults)));
   }, [cat, provider]); // eslint-disable-line react-hooks/exhaustive-deps
   const efforts: string[] = (cat?.models.find((m: any) => m.id === model) as any)?.efforts ?? cat?.efforts ?? [];
 
@@ -105,12 +106,13 @@ function Body() {
 
   // Which agents exist depends on the account (its folder holds the installed
   // ones) and on the folder (a project can carry its own), so it is asked again
-  // when either changes. Codex reads no agent prompt, so it has none.
+  // when either changes. The daemon resolves shared agents for Codex.
   useEffect(() => {
-    if (provider !== 'claude' || conn !== 'online') { setAgents([]); return; }
+    if (conn !== 'online') { setAgents([]); return; }
     let alive = true;
+    setAgents([]);
     setAgentsLoading(true);
-    listAgents(account || null, effectiveCwd)
+    listAgents(account || null, effectiveCwd, provider)
       .then((list) => { if (alive) setAgents(list); })
       .catch(() => { if (alive) setAgents([]); })
       .finally(() => { if (alive) setAgentsLoading(false); });
@@ -172,7 +174,7 @@ function Body() {
       void setDefaults({
         provider, model, effort: effort ?? 'high', perm_mode: perm, cwd: effectiveCwd,
         byProvider: { ...defaults.byProvider, [provider]: { model, effort, perm_mode: perm, account_id: account || null } },
-        ...(provider === 'claude' && agentTouched ? { lastAgent: agent ? agent.id : null } : {}),
+        ...(agentTouched ? { lastAgent: agent ? agent.id : null } : {}),
       });
       close(() => router.push(`/chat/${chat.id}`));
     } catch (e: any) {
@@ -188,7 +190,7 @@ function Body() {
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, gap: 14, flexGrow: 1 }}>
         <View style={{ gap: 6 }}>
           <Label>{T('tool')}</Label>
-          <ProviderCards value={provider} onChange={(p) => { setProvider(p); if (p !== 'claude') setAgentId(null); }} />
+          <ProviderCards value={provider} onChange={(p) => { setProvider(p); setAgents([]); setPerm(permissionFor(p, catalog?.[p], defaults)); setAccount(defaults.byProvider?.[p]?.account_id ?? ''); }} />
         </View>
 
         {accountOpts.length > 1 && (
@@ -199,7 +201,7 @@ function Body() {
           </View>
         )}
 
-        {provider === 'claude' && (
+        {(
           <View style={{ gap: 6 }}>
             <Label>{T('ncAgent')}</Label>
             <OptionCard
@@ -297,7 +299,7 @@ function Body() {
         </View>
 
         <View style={{ marginTop: 'auto', paddingTop: 20, paddingBottom: insets.bottom + 6 }}>
-          <Button title={T('startChat')} onPress={() => void start()} disabled={busy || !cat || !effectiveCwd} />
+          <Button title={T('startChat')} onPress={() => void start()} disabled={busy || agentsLoading || !cat || !effectiveCwd} />
         </View>
       </ScrollView>
     </View>

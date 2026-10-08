@@ -15,7 +15,6 @@ const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
 const DEFAULTS_KEY = 'rac.defaults';
 const PREFS_KEY = 'rac.prefs';
-const PERM_MIGRATED_KEY = 'rac.defaults.perm.bypass';
 
 export interface LiveText { segment: number; text: string; final?: boolean }
 export interface TurnProgress { output_tokens: number; open_tools: number }
@@ -75,10 +74,10 @@ interface State {
   loadStore: () => Promise<void>;
   installAgent: (id: string, accountId?: string | null) => Promise<void>;
   removeAgent: (name: string, accountId?: string | null) => Promise<void>;
-  loadAgents: (accountId?: string | null, cwd?: string | null) => Promise<void>;
+  loadAgents: (accountId?: string | null, cwd?: string | null, provider?: Provider) => Promise<void>;
   /** The same list, handed back rather than stored: the new-chat sheet asks for
    *  the account and folder it is about without moving the Agents tab's list. */
-  listAgents: (accountId?: string | null, cwd?: string | null) => Promise<Agent[]>;
+  listAgents: (accountId?: string | null, cwd?: string | null, provider?: Provider) => Promise<Agent[]>;
   // account id -> the windows that account's plan reports
   limits: Record<string, LimitWindow[]>;
   // Several sign-ins of one tool, driven as one. Null until the computer has
@@ -246,7 +245,7 @@ interface State {
   deleteChat: (id: string) => Promise<void>;
   send: (id: string, text: string, attachments?: Attachment[]) => Promise<void>;
   interrupt: (id: string) => Promise<void>;
-  respond: (id: string, requestId: string, decision: 'allow' | 'allow_session' | 'deny') => Promise<void>;
+  respond: (id: string, requestId: string, decision: 'allow' | 'allow_session' | 'deny', response?: Record<string, unknown>) => Promise<void>;
   uploadAttachment: (chatId: string, uri: string, name: string) => Promise<Attachment>;
   loadAccounts: () => Promise<void>;
   createAccount: (provider: Provider, label: string) => Promise<CliAccount>;
@@ -270,31 +269,6 @@ interface State {
 // `perm_modes[0]` fallbacks elsewhere only fire for modes one provider lacks.
 export const DEFAULT_PERM = 'bypass';
 const DEFAULTS: Defaults = { provider: 'claude', model: 'opus', effort: 'high', perm_mode: DEFAULT_PERM, cwd: null };
-
-/** The stored per-host defaults, raised to `bypass` once.
- *
- *  Changing the constant above is not enough on a phone that has been used:
- *  `setDefaults` writes the mode back on every new chat, so an install that
- *  has ever created one carries its own copy and would never see the new
- *  default. Done once, behind a marker, and per provider too — the
- *  per-provider block is what model-sheet restores from when the provider
- *  changes, so leaving it behind would put the old mode back on the next
- *  switch.
- */
-async function raiseStoredPerm(byHost: DefaultsByHost): Promise<DefaultsByHost> {
-  if (await SecureStore.getItemAsync(PERM_MIGRATED_KEY).catch(() => null)) return byHost;
-  const out: DefaultsByHost = {};
-  for (const [id, d] of Object.entries(byHost)) {
-    const byProvider = Object.fromEntries(Object.entries(d.byProvider ?? {})
-      .map(([p, v]) => [p, { ...v!, perm_mode: DEFAULT_PERM }]));
-    out[id] = { ...d, perm_mode: DEFAULT_PERM, ...(d.byProvider ? { byProvider } : {}) };
-  }
-  await SecureStore.setItemAsync(PERM_MIGRATED_KEY, '1').catch(() => {});
-  if (Object.keys(out).length) {
-    await SecureStore.setItemAsync(DEFAULTS_KEY, JSON.stringify(out)).catch(() => {});
-  }
-  return out;
-}
 
 /** Defaults are about one computer — its folders, its accounts, the CLIs it has
  *  installed — so they are kept per host. Shared, the other computer's last
@@ -687,7 +661,7 @@ export const useStore = create<State>((set, get) => {
       // Builds before per-host defaults kept one flat blob: it was whatever the
       // last computer used, so it becomes that computer's entry and no other's.
       const stored = await loadJSON<any>(DEFAULTS_KEY, {});
-      const byHost: DefaultsByHost = await raiseStoredPerm(typeof stored?.provider === 'string'
+      const byHost: DefaultsByHost = (typeof stored?.provider === 'string'
         ? (active ? { [active]: stored as Defaults } : {})
         : (stored as DefaultsByHost));
       const prefs = await loadJSON(PREFS_KEY, PREFS);
@@ -916,8 +890,8 @@ export const useStore = create<State>((set, get) => {
 
     interrupt: async (id) => { await client.call('chat.interrupt', { chat_id: id }); },
 
-    respond: async (id, requestId, decision) => {
-      await client.call('approval.respond', { chat_id: id, request_id: requestId, decision });
+    respond: async (id, requestId, decision, response) => {
+      await client.call('approval.respond', { chat_id: id, request_id: requestId, decision, ...(decision === 'allow' && response ? { response } : {}) });
     },
 
     uploadAttachment: async (chatId, uri, name) => {
@@ -934,15 +908,15 @@ export const useStore = create<State>((set, get) => {
       return { ...att, localUri: uri };
     },
 
-    listAgents: async (accountId, cwd) => {
+    listAgents: async (accountId, cwd, provider) => {
       const r = await client.call<{ agents: Agent[] }>('agent.list',
-        { account_id: accountId ?? null, cwd: cwd ?? null });
+        { account_id: accountId ?? null, cwd: cwd ?? null, ...(provider ? { provider } : {}) });
       return r.agents ?? [];
     },
 
-    loadAgents: async (accountId, cwd) => {
+    loadAgents: async (accountId, cwd, provider) => {
       const r = await client.call<{ agents: Agent[] }>('agent.list',
-        { account_id: accountId ?? null, cwd: cwd ?? null });
+        { account_id: accountId ?? null, cwd: cwd ?? null, ...(provider ? { provider } : {}) });
       set({ agents: r.agents, agentsLoaded: true });
     },
 

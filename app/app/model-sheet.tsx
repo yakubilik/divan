@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { permissionFor } from '../src/permissions';
 import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -122,7 +123,7 @@ function Body() {
     const last = defaults.byProvider?.[pv];
     const m = last && cc.models.some((x) => x.id === last.model) ? last.model : (cc.models.find((x: any) => x.hint?.startsWith('default')) ?? cc.models[0]).id;
     const e = last && (last.effort == null || cc.efforts.includes(last.effort)) ? last.effort : (cc.efforts.includes('high') ? 'high' : cc.efforts.includes('medium') ? 'medium' : cc.efforts[0] ?? null);
-    const pm = last && cc.perm_modes.includes(last.perm_mode) ? last.perm_mode : cc.perm_modes[0];
+    const pm = permissionFor(pv, cc, defaults);
     setProvider(pv); setModel(m); setEffort(e); setPerm(pm);
     apply({ provider: pv, model: m, effort: e, perm_mode: pm });
   }

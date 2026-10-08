@@ -511,7 +511,7 @@ export function Agents({ onStartChat }: {
                         <AgentCard key={a.id} agent={a} busy={busyId === a.name}
                           onChat={online && onStartChat
                             ? () => onStartChat(a, argAccount) : null}
-                          onRemove={a.installed && a.scope !== 'builtin' && !!a.path
+                          onRemove={a.installed && !a.shared && a.scope !== 'builtin' && !!a.path
                             ? () => setDoomed(a) : null} />
                       ))}
                     </div>
@@ -529,7 +529,7 @@ export function Agents({ onStartChat }: {
                 // The built-in agent creator has no file behind it, and an
                 // agent this app did not write back is refused anyway
                 // (agent_not_removable) — so no button is offered for either.
-                onRemove={a.installed && a.scope !== 'builtin' && !!a.path
+                onRemove={a.installed && !a.shared && a.scope !== 'builtin' && !!a.path
                   ? () => setDoomed(a) : null}
               />
             );

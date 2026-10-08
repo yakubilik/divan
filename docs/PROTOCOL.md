@@ -53,7 +53,7 @@ other device watching it.
 | `chat.delete` | `{chat_id}` | – |
 | `chat.send` | `{chat_id, text, attachments?: [{path}]}` | `{accepted, queued}` — if a turn is running the message is queued (`queued: true`) and runs in order once the turn ends; `chat.interrupt` empties the queue. A full queue (20) returns `error: busy` |
 | `chat.interrupt` | `{chat_id}` | – |
-| `approval.respond` | `{chat_id, request_id, decision: allow \| allow_session \| deny}` | – |
+| `approval.respond` | `{chat_id, request_id, decision: allow \| allow_session \| deny \| cancel, response?}` | – |
 | `limits.get` | – | `{accounts: {<account_id>: [window, …]}}` — the last word on every plan, as the tool reported it |
 | `pool.get` | `{provider?}` | `{settings, accounts}` — see *The account pool* |
 | `pool.set` | any of `{enabled, threshold, thresholds, use_overage, overage_by_account, reserve, order, max_hops}` | `{settings, accounts}` — only the keys sent are changed |
@@ -558,3 +558,16 @@ Chat-to-account rules: an empty `chats.account_id` means the computer's own
 account. If the account was removed the turn is refused rather than quietly
 falling back to the default. Changing account resets `provider_session_id`,
 because the transcript store belongs to one account's folder.
+
+### Codex structured approvals
+
+An `approval.request` whose `input.kind` is `mcp_elicitation` or `user_input`
+requires a form, not a blanket command approval. MCP requests carry `mode: form`
+and `requestedSchema`, or `mode: url` and `url`. Question requests carry `questions`.
+Respond with `decision: allow` and `response: {content: {...}}` for MCP forms,
+`{content: null}` after completing a URL request, or
+`{answers: {questionId: {answers: ["chosen or typed answer"]}}}` for questions.
+`deny` and `cancel` require no response. `allow_session` is not valid for forms.
+Invalid answers leave the request pending so the client can correct them.
+Answer values are forwarded to Codex but omitted from persisted `approval.resolved`
+events. Unsupported forms produce a visible error and cancel the tool request.

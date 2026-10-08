@@ -198,14 +198,11 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
   const host = at.host;
   const slot = host ? fleet.hosts[host] : null;
   if (!host || !slot) throw new Error('No computer is paired');
-  // Every chat the bar starts is Hermes': the one agent that reads the skills
-  // and knows this person's work, which is what a sentence typed at the whole
-  // of Divan is asking for. Claude because an agent is a Claude idea; a
-  // computer that cannot open a Claude chat opens its usual one, plain.
+  // Use the selected provider and its account; Hermes can accompany either.
   const prefs = usePrefs.getState().defaults;
   const open = picks.provider
     ? toldDefaults(slot, prefs, host, picks.provider)
-    : toldDefaults(slot, prefs, host, 'claude') ?? toldDefaults(slot, prefs, host);
+    : toldDefaults(slot, prefs, host);
   if (!open) {
     const name = slot.info?.name ?? slot.cfg?.name ?? host;
     throw new Error(`${name} has not said what it can open a chat on yet`);
@@ -213,7 +210,7 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
   const cwd = at.cwd ?? open.cwd;
   const account = picks.account_id ?? open.account_id;
   const agent = picks.agent !== undefined ? picks.agent
-    : open.provider === 'claude' ? await hermesOn(host, account || null, cwd) : null;
+    : await hermesOn(host, account || null, cwd, open.provider);
   // The computer names a chat after the folder it is in (`with_project`), so a
   // chat that opened in the product's repository already says which product it
   // is about. One with no repository to open in says it here instead.
@@ -259,9 +256,9 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
  *  way New chat finds it. Null when it is not installed there or the computer
  *  will not say: the chat still opens, without the agent, rather than not at
  *  all. */
-export async function hermesOn(host: string, accountId: string | null, cwd: string | null): Promise<string | null> {
+export async function hermesOn(host: string, accountId: string | null, cwd: string | null, provider: Provider = 'claude'): Promise<string | null> {
   try {
-    const r: any = await listAgents(host, accountId, cwd ?? undefined);
+    const r: any = await listAgents(host, accountId, cwd ?? undefined, provider);
     const hit = (r?.agents ?? []).find((a: any) => a.installed && (a.name === 'hermes' || a.id === 'hermes'));
     return hit?.id ?? null;
   } catch {

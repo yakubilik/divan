@@ -23,6 +23,7 @@ dependencies = [
   "httpx[http2]>=0.27",                                  # HTTP/2 is not optional for APNs
   "pyjwt[crypto]>=2.8",                                  # the ES256 token every APNs request carries
   "tomli-w>=1.0",
+  "jsonschema>=4.23",                                   # MCP approval form validation
   "qrcode>=7.4",
   "websockets>=12",
   "pillow>=10",

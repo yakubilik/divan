@@ -34,16 +34,14 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
   const setDefaults = usePrefs((s) => s.setDefaults);
   const setProviderDefaults = usePrefs((s) => s.setProviderDefaults);
 
-  // An agent is a Claude idea — only that side reads an agent's prompt, codex
-  // ignores it — so an agent brings the provider with it.
-  const [provider, setProvider] = useState<Provider>(initialAgent ? 'claude' : defaults.provider);
+  const [provider, setProvider] = useState<Provider>(defaults.provider);
   const [model, setModel] = useState<string | null>(null);
   const [effort, setEffort] = useState<string | null>(null);
   const [perm, setPerm] = useState<string | null>(null);
   /** '' is the computer's own sign-in, the way `chat.create` reads "no
    *  account_id". Null is "not decided yet", before the account list arrives. */
   const [account, setAccount] = useState<string | null>(
-    initialAgent ? (initialAgent.accountId ?? '') : null);
+    initialAgent && defaults.provider === 'claude' ? (initialAgent.accountId ?? '') : null);
   /** Null is a plain chat; anything else is the `agent_id` chat.create carries. */
   const [agentId, setAgentId] = useState<string | null>(initialAgent?.agent.id ?? null);
   /** Whether anyone has picked an agent in this dialog. Until then the one the
@@ -106,10 +104,11 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
   // holds the ones installed under it, a project's folder holds its own — so
   // the list is asked for again whenever either of those changes.
   useEffect(() => {
-    if (provider !== 'claude' || slot?.status !== 'online') { setAgents([]); return; }
+    if (slot?.status !== 'online') { setAgents([]); return; }
     let alive = true;
     setAgentsLoading(true);
-    listAgents(hostKey, accountId || undefined, cwd ?? undefined)
+    setAgents([]);
+    listAgents(hostKey, accountId || undefined, cwd ?? undefined, provider)
       .then((r: any) => { if (alive) setAgents(r?.agents ?? []); })
       .catch(() => { if (alive) setAgents([]); })
       .finally(() => { if (alive) setAgentsLoading(false); });
@@ -122,9 +121,9 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
    *  handed to this dialog is kept whatever it is, because its own card asked. */
   const agentList = useMemo(() => {
     const list = agents.filter((a) => a.installed);
-    const pick = initialAgent?.agent;
+    const pick = provider === 'claude' ? initialAgent?.agent : undefined;
     return pick && !list.some((a) => a.id === pick.id) ? [pick, ...list] : list;
-  }, [agents, initialAgent?.agent]);
+  }, [agents, initialAgent?.agent, provider]);
 
   const agent = agentList.find((a) => a.id === agentId) ?? null;
 
@@ -159,7 +158,7 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
   }, [projects, query, recent]);
 
   const start = async () => {
-    if (!model || busy) return;
+    if (!model || busy || agentsLoading) return;
     setBusy(true);
     setError(null);
     try {
@@ -181,7 +180,7 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
       // that one chat. One picked here is, so the next chat opens on it.
       setDefaults(hostKey, {
         provider, cwd,
-        ...(provider === 'claude' && agentTouched && !initialAgent ? { lastAgent: agent ? agent.id : null } : {}),
+        ...(agentTouched && !initialAgent ? { lastAgent: agent ? agent.id : null } : {}),
       });
       setProviderDefaults(hostKey, provider, {
         model, effort, perm_mode: perm, account_id: accountId,
@@ -233,9 +232,7 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
             return (
               <button
                 key={p} type="button"
-                // codex never reads an agent's prompt, so leaving one selected
-                // here would promise a chat partner that does not arrive.
-                onClick={() => { setProvider(p); if (p !== 'claude') setAgentId(null); }}
+                onClick={() => { setProvider(p); }}
                 disabled={!catalog?.[p]}
                 style={{
                   flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
@@ -283,7 +280,7 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
           </>
         )}
 
-        {provider === 'claude' && (
+        {(
           <>
             <Label>Agent</Label>
             <div style={{ ...listBox, maxHeight: 216, overflowY: 'auto' }}>

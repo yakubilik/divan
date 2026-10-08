@@ -495,7 +495,10 @@ export function Conversation({ id }: { id: string }) {
       );
       case 'approval': return (
         <ApprovalCard tool={item.data.tool} input={item.data.input} preview={item.data.preview} danger={item.data.danger} decision={item.decision ?? null} cwd={chat?.cwd}
-          onDecide={(d) => respond(id!, item.data.request_id, d).catch((e) => alert(T('error'), e.message))} />
+          onDecide={(d, response) => respond(id!, item.data.request_id, d, response).catch((e) => {
+            if (item.data.input?.kind === 'mcp_elicitation' || item.data.input?.kind === 'user_input') throw e;
+            alert(T('error'), e.message);
+          })} />
       );
       case 'done': return <TurnFooter cost={item.data.cost_usd} duration={item.data.duration_ms} usage={item.data.usage} stopReason={item.data.stop_reason} />;
       case 'error': return <TurnFooter error={item.data.message} />;

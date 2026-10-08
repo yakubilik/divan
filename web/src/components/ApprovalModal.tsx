@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { ApprovalForm } from './ApprovalForm';
+import { structuredInput, type ApprovalResponse } from '../lib/approval-input';
 import { C, R } from '../lib/theme';
 import { Btn, Dot, Icon, P, mono } from '../ui/kit';
 import { Modal } from './Modal';
@@ -42,10 +45,14 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
   pending: Pending;
   chat: Chat | null;
   queued: number;
-  onRespond: (d: 'allow' | 'allow_session' | 'deny') => void;
+  onRespond: (d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => unknown;
   onOpenChat: () => void;
   onClose: () => void;
 }) {
+  const [error, setError] = useState('');
+  async function decide(d: 'allow' | 'allow_session' | 'deny') {
+    try { await onRespond(d); setError(''); } catch { setError('Could not send. Please try again.'); }
+  }
   const command = pending.preview || toolSummary(pending.tool, pending.input);
   return (
     <Modal onClose={onClose} width={560}>
@@ -119,10 +126,13 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
           </div>
         </div>
 
+        {error && <div role="alert">{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn kind="danger" onClick={() => onRespond('deny')}>Deny</Btn>
-          <Btn kind="primary" onClick={() => onRespond('allow')}>Allow</Btn>
-          <Btn onClick={() => onRespond('allow_session')}>Always allow this session</Btn>
+          {structuredInput(pending.input) ? <ApprovalForm key={pending.requestId} input={pending.input} onDecide={onRespond} /> : <>
+          <Btn kind="danger" onClick={() => void decide('deny')}>Deny</Btn>
+          <Btn kind="primary" onClick={() => void decide('allow')}>Allow</Btn>
+          <Btn onClick={() => void decide('allow_session')}>Always allow this session</Btn>
+          </>}
           <span style={{ flex: 1 }} />
           <Btn kind="quiet" onClick={onOpenChat}>Go to the chat</Btn>
         </div>

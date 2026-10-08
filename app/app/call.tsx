@@ -379,6 +379,11 @@ export default function Call() {
    *  app, the same rule the general call keeps. */
   const askApproval = useCallback(async (d: any) => {
     const lines = chatCallLines(lang);
+    if (d?.input?.kind === 'mcp_elicitation' || d?.input?.kind === 'user_input') {
+      approval.current = null;
+      await sayInTurn(lines.structured);
+      return;
+    }
     if (d?.danger) { await sayInTurn(lines.dangerous); return; }
     approval.current = { id: d?.request_id, asked: false };
     await sayInTurn(lines.approval(d?.tool || ''), 'speaking');

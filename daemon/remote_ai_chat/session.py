@@ -11,7 +11,7 @@ from typing import Awaitable, Callable
 from .config import Config
 from .db import DB, new_id
 from .errors import Err
-from . import attachments, naming, preamble, recap, secrets
+from . import attachments, naming, preamble, recap, secrets, structured_approval
 from .pool import Wait
 from .security import PathPolicy
 from .providers.base import Provider, ProviderConfig
@@ -142,6 +142,7 @@ class ChatSession:
         # agent just to get a word in.
         self.queued: list[tuple[str, list[dict]]] = []
         self.pending: dict[str, asyncio.Future] = {}
+        self._approval_inputs: dict[str, dict] = {}
         self.last_active = time.monotonic()
         # Wall clock at which the turn now running started, or None between
         # turns. `updated_at` cannot answer this — an approval moves it too —
@@ -198,10 +199,11 @@ class ChatSession:
                               "data": chat, "ts": time.time()})
 
     # ── approvals ──────────────────────────────────────────────────────────
-    async def _approval(self, tool: str, tool_input: dict, reason: str | None) -> str:
+    async def _approval(self, tool: str, tool_input: dict, reason: str | None) -> str | dict:
         req_id = new_id()
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self.pending[req_id] = fut
+        self._approval_inputs[req_id] = tool_input
         preview = _preview(tool, tool_input)
         await self.emit("approval.request", {
             "request_id": req_id, "tool": tool, "input": tool_input,
@@ -216,15 +218,24 @@ class ChatSession:
             decision = "deny"
         finally:
             self.pending.pop(req_id, None)
-        await self.emit("approval.resolved", {"request_id": req_id, "decision": decision}, True)
+            self._approval_inputs.pop(req_id, None)
+        # Answers may contain secrets. Only the decision belongs in history.
+        outcome = decision.get("decision", "deny") if isinstance(decision, dict) else decision
+        await self.emit("approval.resolved", {"request_id": req_id, "decision": outcome}, True)
         await self._set_status("running")
         return decision
 
-    def respond(self, request_id: str, decision: str) -> bool:
+    def respond(self, request_id: str, decision: str, response: object = None) -> bool:
         fut = self.pending.get(request_id)
         if fut is None or fut.done():
             return False
-        fut.set_result(decision if decision in ("allow", "allow_session", "deny") else "deny")
+        request = self._approval_inputs.get(request_id, {})
+        if request.get("kind") in ("mcp_elicitation", "user_input"):
+            # Validate before completion so a corrected answer can retry.
+            value = structured_approval.validate_response(request, decision, response)
+        else:
+            value = decision if decision in ("allow", "allow_session", "deny") else "deny"
+        fut.set_result(value)
         return True
 
     # ── provider ───────────────────────────────────────────────────────────

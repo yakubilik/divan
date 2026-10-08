@@ -85,7 +85,7 @@ export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: Comp
 
   // What a chat opens with on this computer, before any chip is touched.
   const base = useMemo(() => (slot && host
-    ? toldDefaults(slot, prefs, host, 'claude') ?? toldDefaults(slot, prefs, host) : null),
+    ? toldDefaults(slot, prefs, host) : null),
   [slot, prefs, host]);
   const chosen = readModel(picks.model);
   const provider: Provider = chosen?.provider ?? base?.provider ?? 'claude';
@@ -104,9 +104,10 @@ export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: Comp
 
   // Which agents exist depends on the sign-in: asked once per computer and account.
   useEffect(() => {
-    if (!host || provider !== 'claude' || slot?.status !== 'online') { setAgents(null); return; }
+    if (!host || slot?.status !== 'online') { setAgents(null); return; }
     let alive = true;
-    listAgents(host, account || null)
+    setAgents(null);
+    listAgents(host, account || null, undefined, provider)
       .then((r: any) => { if (alive) setAgents((r?.agents ?? []).filter((a: Agent) => a.installed)); })
       .catch(() => { if (alive) setAgents([]); });
     return () => { alive = false; };
@@ -126,7 +127,7 @@ export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: Comp
 
   const hermes = agents?.find((a) => a.name === 'hermes' || a.id === 'hermes') ?? null;
   const agentLabel = picks.agent === undefined
-    ? (provider !== 'claude' ? 'No agent' : agents && !hermes ? 'No agent' : 'Hermes')
+    ? (agents && !hermes ? 'No agent' : 'Hermes')
     : picks.agent === null ? 'No agent'
       : (agents?.find((a) => a.id === picks.agent)?.label ?? picks.agent);
   const home = defaultProject(view);
@@ -170,7 +171,7 @@ export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: Comp
       await onAsk(words, scope, {
         ...(m2 ? { provider: m2.provider, model: m2.model } : {}),
         ...(picks.account !== undefined ? { account_id: picks.account } : {}),
-        ...(picks.agent !== undefined ? { agent: picks.agent } : m2 && m2.provider !== 'claude' ? { agent: null } : {}),
+        ...(picks.agent !== undefined ? { agent: picks.agent } : {}),
       }, files);
       setText('');
       setFiles([]);

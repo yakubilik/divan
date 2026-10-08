@@ -1,3 +1,5 @@
+import { ApprovalForm } from './ApprovalForm';
+import { structuredInput, type ApprovalResponse } from '../lib/approval-input';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
@@ -328,8 +330,12 @@ function Tool({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
 
 function Approval({ item, onRespond }: {
   item: Extract<Item, { kind: 'approval' }>;
-  onRespond: (d: 'allow' | 'allow_session' | 'deny') => void;
+  onRespond: (d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => unknown;
 }) {
+  const [error, setError] = useState('');
+  async function decide(d: 'allow' | 'allow_session' | 'deny') {
+    try { await onRespond(d); setError(''); } catch { setError('Could not send. Please try again.'); }
+  }
   const settled = item.decision != null;
   const word = item.decision === 'allow' ? 'allowed'
     : item.decision === 'allow_session' ? 'always allowed this session'
@@ -364,11 +370,13 @@ function Approval({ item, onRespond }: {
       {item.reason && (
         <div style={{ fontSize: 12, color: C.mute, marginTop: 6 }}>{item.reason}</div>
       )}
-      {!settled && (
+      {error && <div role="alert">{error}</div>}
+      {!settled && structuredInput(item.input) && <ApprovalForm key={item.requestId} input={item.input} onDecide={onRespond} />}
+      {!settled && !structuredInput(item.input) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-          <button type="button" onClick={() => onRespond('deny')} style={btn('ghost')}>Deny</button>
-          <button type="button" onClick={() => onRespond('allow')} style={btn('primary')}>Allow</button>
-          <button type="button" onClick={() => onRespond('allow_session')} style={btn('ghost')}>
+          <button type="button" onClick={() => void decide('deny')} style={btn('ghost')}>Deny</button>
+          <button type="button" onClick={() => void decide('allow')} style={btn('primary')}>Allow</button>
+          <button type="button" onClick={() => void decide('allow_session')} style={btn('ghost')}>
             Always allow this session
           </button>
         </div>
@@ -419,7 +427,7 @@ function Failure({ item }: { item: Extract<Item, { kind: 'error' }> }) {
   );
 }
 
-type Respond = (requestId: string, d: 'allow' | 'allow_session' | 'deny') => void;
+type Respond = (requestId: string, d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => unknown;
 
 /** One thing in the conversation, and the only part of it that redraws.
  *
@@ -461,7 +469,7 @@ const Row = memo(function Row({ item, prevTs, hostKey, onRespond }: {
       {item.kind === 'user' && <UserBubble item={item} hostKey={hostKey} />}
       {item.kind === 'assistant' && <Assistant item={item} hostKey={hostKey} />}
       {item.kind === 'approval' && (
-        <Approval item={item} onRespond={(d) => onRespond(item.requestId, d)} />
+        <Approval item={item} onRespond={(d, response) => onRespond(item.requestId, d, response)} />
       )}
       {item.kind === 'turn' && <TurnSummary item={item} />}
       {item.kind === 'error' && <Failure item={item} />}
@@ -541,7 +549,7 @@ export function Timeline({ items, hostKey, onRespond, tickets, busy = false }: {
   // redraw because of that, so what the rows hold is a stable stand-in for it.
   const latest = useRef(onRespond);
   latest.current = onRespond;
-  const respond = useCallback<Respond>((rid, d) => latest.current(rid, d), []);
+  const respond = useCallback<Respond>((rid, d, response) => latest.current(rid, d, response), []);
 
   const rows = useMemo(() => blocks(items), [items]);
   const lang = useMemo(() => langOf(items), [items]);

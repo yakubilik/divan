@@ -9,6 +9,7 @@ import { BackBar, Icon, LargeTitle, Skeleton, Text } from '../src/components/ui'
 import { alert, measure, openMenu } from '../src/components/overlay';
 import { accountOptions } from '../src/components/pickers';
 import { AgentCard } from '../src/components/agentcard';
+import { permissionFor } from '../src/permissions';
 import type { Agent } from '../src/protocol';
 
 /** Two columns of squares, the way an app grid reads. */
@@ -18,23 +19,26 @@ export default function Agents() {
   const T = useT();
   const c = useColors();
   const { agents, agentsLoaded, loadAgents, defaults, projects, createChat, conn, removeAgent,
-          accounts, loadAccounts, setDefaults } = useStore();
+          accounts, loadAccounts, setDefaults, catalog } = useStore();
   const [opening, setOpening] = useState<string | null>(null);
   const [elsewhere, setElsewhere] = useState<{ label: string; n: number } | null>(null);
   const change = useRef<View>(null);
 
-  const account = agentAccountOf(defaults);
+  const provider = defaults.provider;
+  const selectedAccount = provider === 'claude' ? agentAccountOf(defaults)
+    : defaults.byProvider?.[provider]?.account_id ?? null;
+  const account = selectedAccount && accounts.some((a) => a.id === selectedAccount && a.provider === provider) ? selectedAccount : null;
 
   useFocusEffect(useCallback(() => {
     if (conn !== 'online') return;
-    void loadAgents(account, defaults.cwd ?? null).catch(() => {});
+    void loadAgents(account, defaults.cwd ?? null, provider).catch(() => {});
     void loadAccounts().catch(() => {});
-  }, [conn, loadAgents, loadAccounts, account, defaults.cwd]));
+  }, [conn, loadAgents, loadAccounts, account, defaults.cwd, provider]));
 
   // Agents belong to an account, so an empty grid can just mean the wrong one
   // is selected. Saying which one, and letting it be changed here, is the
   // difference between "you have no agents" and "not in this account".
-  const accountOpts = accountOptions(accounts, 'claude', T('useDefaultAccount'), T('notSignedIn'));
+  const accountOpts = accountOptions(accounts, provider, T('useDefaultAccount'), T('notSignedIn'));
   const current = accountOpts.find((o) => o.id === (account ?? ''));
   const accountLabel = current ? (current.id === '' ? T('ownShort') : current.label) : T('ownShort');
 
@@ -53,7 +57,7 @@ export default function Agents() {
     (async () => {
       for (const o of accountOpts.filter((x) => x.id !== (account ?? ''))) {
         try {
-          const r = await client.call<{ agents: Agent[] }>('agent.list', { account_id: o.id || null, cwd: defaults.cwd ?? null });
+          const r = await client.call<{ agents: Agent[] }>('agent.list', { account_id: o.id || null, cwd: defaults.cwd ?? null, provider });
           const n = r.agents.filter((a) => a.installed).length;
           if (n && alive) { setElsewhere({ label: o.id === '' ? T('ownShort') : o.label, n }); return; }
         } catch {}
@@ -73,20 +77,13 @@ export default function Agents() {
   async function open(a: Agent) {
     setOpening(a.id);
     try {
-      // Agents are a Claude idea, so the Claude half of the defaults is what
-      // this chat opens with. Sent explicitly: everything left out here is
-      // filled in by the daemon from the top of its catalog, which is how
-      // tapping an agent used to open on Fable in ask mode no matter what the
-      // defaults said. An agent's own `model` is a label, not a setting — it
-      // overrides nothing at run time.
-      const d = defaults.byProvider?.claude;
-      const mine = defaults.provider === 'claude';
+      const d = defaults.byProvider?.[provider];
       const chat = await createChat({
-        provider: 'claude', title: a.label, agent_id: a.id,
-        model: d?.model || (mine ? defaults.model : undefined),
-        effort: d?.effort ?? (mine ? defaults.effort : undefined),
+        provider, title: a.label, agent_id: a.id,
+        model: d?.model || defaults.model,
+        effort: d?.effort ?? defaults.effort,
         // Shared by both tools, so the general default is a fair fallback.
-        perm_mode: d?.perm_mode || defaults.perm_mode,
+        perm_mode: permissionFor(provider, catalog?.[provider], defaults),
         account_id: account ?? undefined,
         cwd: defaults.cwd ?? projects[0]?.path ?? null,
       } as any);
@@ -100,7 +97,7 @@ export default function Agents() {
     const anchor = await measure(change);
     openMenu({ anchor, align: 'right', width: 240, items: accountOpts.map((o) => ({
       label: o.id === '' ? T('useDefaultAccount') : o.label, checked: o.id === (account ?? ''),
-      onPress: () => void setDefaults({ agentAccountId: o.id || null }),
+      onPress: () => void setDefaults(provider === 'claude' ? { agentAccountId: o.id || null } : { byProvider: { ...defaults.byProvider, [provider]: { model: defaults.model, effort: defaults.effort, perm_mode: permissionFor(provider, catalog?.[provider], defaults), ...defaults.byProvider?.[provider], account_id: o.id || null } } }),
     })) });
   }
 
@@ -147,7 +144,7 @@ export default function Agents() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingTop: 12, paddingHorizontal: 16 }}>
             {loose.map((a) => (
               <AgentCard key={a.id} agent={a} busy={opening === a.id}
-                disabled={!!opening} onPress={() => void open(a)} onLongPress={() => remove(a)} />
+                disabled={!!opening} onPress={() => void open(a)} onLongPress={a.shared ? undefined : () => remove(a)} />
             ))}
           </View>
           {/* Out of the grid: as a tile it was left stranded half-width on a

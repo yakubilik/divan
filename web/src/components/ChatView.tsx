@@ -1,3 +1,4 @@
+import type { ApprovalResponse } from '../lib/approval-input';
 import { useEffect, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
 import { Chip, Dot, Icon, P, Pulse, Spinner, mono, Empty } from '../ui/kit';
@@ -193,7 +194,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   onPopOut: () => void;
   onSend: (text: string, attachments: any[]) => void;
   onInterrupt: () => void;
-  onRespond: (requestId: string, d: 'allow' | 'allow_session' | 'deny') => void;
+  onRespond: (requestId: string, d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => unknown;
   onEdit: (f: Field) => void;
   onUpdate: (patch: Record<string, any>) => void;
   onNewGroup: (name: string) => Promise<unknown>;

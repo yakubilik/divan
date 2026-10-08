@@ -1,3 +1,4 @@
+import { structuredInput } from '../lib/approval-input';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   MONO, RADIUS, SHADOW, T, toneFace, type State, type ToneFace,
@@ -284,8 +285,7 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
   const ph = PHASE[t.phase];
   const shown = conversation(chat, t, log).slice(-LINES);
 
-  const answer = (d: 'allow' | 'deny') => (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const answer = (d: 'allow' | 'deny') => {
     if (!t.approval) return;
     respond(hostKey, chat.id, t.approval.requestId, d).catch(() => {});
   };
@@ -437,12 +437,12 @@ function Tile({ chat, hostKey, hostName, log, tail: t, now, onPeek, onDelete, on
         }}>{metaLine(chat, t, now)}</span>
         {/* Answering from the tile is the point of the mode: the thing worth
             crossing the room for is a chat that stopped to ask. */}
-        {t.approval && (
+        {t.approval && (structuredInput(t.approval.input) ? <Button small face="amber" label="Answer request" onClick={onPeek} /> : (
           <span style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <Button small face="outline" label="Deny" onClick={() => answer('deny')} />
             <Button small face="amber" label="Allow" onClick={() => answer('allow')} />
           </span>
-        )}
+        ))}
       </div>
       </span>
     </Card>

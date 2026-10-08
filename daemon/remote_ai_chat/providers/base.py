@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable
 # emit(event_type, payload, persist) -> None
 EmitFn = Callable[[str, dict, bool], Awaitable[None]]
 # approval(tool_name, tool_input, reason) -> "allow" | "allow_session" | "deny"
-ApprovalFn = Callable[[str, dict, str | None], Awaitable[str]]
+ApprovalFn = Callable[[str, dict, str | None], Awaitable[str | dict]]
 
 
 @dataclass

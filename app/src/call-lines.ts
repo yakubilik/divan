@@ -45,6 +45,7 @@ export type ChatCallLines = {
   approval: (tool: string) => string;
   /** A destructive request is not approved by voice; it waits in the app. */
   dangerous: string;
+  structured: string;
   /** The answer to an approval question was neither a yes nor a no. */
   yesOrNo: string;
   allowed: string;
@@ -70,6 +71,7 @@ const CHAT_TR: ChatCallLines = {
     web: 'İnternette bir şeye bakmak istiyor. İzin vereyim mi?',
     other: 'Bir araç kullanmak istiyor. İzin vereyim mi?',
   })[kindOf(tool)],
+  structured: 'Bir form veya soru bekliyor. Lütfen sohbet ekranından yanıtla.',
   dangerous: 'Tehlikeli bir şey için izin istiyor. Onu uygulamadan onaylaman lazım.',
   yesOrNo: 'Evet mi, hayır mı?',
   allowed: 'Tamam.',
@@ -85,6 +87,7 @@ const CHAT_EN: ChatCallLines = {
     web: 'It wants to look something up online. Shall I allow it?',
     other: 'It wants to use a tool. Shall I allow it?',
   })[kindOf(tool)],
+  structured: 'It needs a form or question answered. Please use the chat screen.',
   dangerous: 'It is asking to do something destructive. That one has to be approved in the app.',
   yesOrNo: 'Yes or no?',
   allowed: 'Okay.',

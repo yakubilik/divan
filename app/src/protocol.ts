@@ -79,6 +79,7 @@ export interface ProviderCatalog {
   models: { id: string; label: string; hint: string; model_id?: string; efforts?: string[] }[];
   efforts: string[];
   perm_modes: string[];
+  default_perm_mode?: string;
 }
 export type Catalog = Record<Provider, ProviderCatalog>;
 
@@ -158,6 +159,7 @@ export interface Agent {
   family?: string | null;
   // put here by this app, rather than borrowed from the computer's own set
   installed?: boolean;
+  shared?: boolean;
   path: string;
 }
 

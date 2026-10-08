@@ -1609,7 +1609,7 @@ class Server:
         # screen for it — and a delegated turn that stops on the first prompt
         # has been stopped, not delegated. An explicit `perm_mode` still wins:
         # this is the default, not an override.
-        fallback = "bypass" if agent_id and "bypass" in cat["perm_modes"] else cat["perm_modes"][0]
+        fallback = cat.get("default_perm_mode") or ("bypass" if agent_id and "bypass" in cat["perm_modes"] else cat["perm_modes"][0])
         perm = d.get("perm_mode") or fallback
         if perm not in cat["perm_modes"]:
             raise Err("unknown_perm_mode", "unknown permission mode")
@@ -1781,7 +1781,7 @@ class Server:
 
     async def h_approval_respond(self, dev: Device, d: dict) -> dict:
         s = self.sessions.peek(d["chat_id"])
-        ok = bool(s and s.respond(d["request_id"], d.get("decision", "deny")))
+        ok = bool(s and s.respond(d["request_id"], d.get("decision", "deny"), d.get("response")))
         if not ok:
             raise Err("no_pending_approval", "no pending approval")
         return {}

@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { structuredInput, type ApprovalResponse } from '../approval-input';
+import { ApprovalForm } from './approval-form';
 import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import { AstRenderer, MarkdownIt, renderRules, stringToTokens, tokensToAST } from 'react-native-markdown-display';
 // @ts-ignore - exported at runtime, absent from the package's typings
@@ -455,7 +457,7 @@ export function ToolCard({ id, tool, input, result }: { id?: string; tool: strin
 
 export function ApprovalCard({ tool, input, preview, danger, decision, onDecide, cwd }: {
   tool: string; input?: any; preview: string; danger: boolean; decision: string | null; cwd?: string;
-  onDecide: (d: 'allow' | 'allow_session' | 'deny') => void;
+  onDecide: (d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => void | Promise<void>;
 }) {
   const T = useT();
   const c = useColors();
@@ -492,6 +494,10 @@ export function ApprovalCard({ tool, input, preview, danger, decision, onDecide,
       </View>
     );
   }
+
+  if (structuredInput(input)) return <View style={{ backgroundColor: c.card, borderWidth: 1, borderColor: c.lineStrong, borderRadius: 14, padding: 12, gap: 10 }}>
+    <Text>{tool}</Text><ApprovalForm input={input} onDecide={onDecide} />
+  </View>;
 
   const tone = danger ? c.danger : c.accentText;
   return (

@@ -1,3 +1,4 @@
+import type { ApprovalResponse } from './lib/approval-input';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RADIUS, SHADOW, T, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { KEYFRAMES, P, mono } from './ui/kit';
@@ -598,8 +599,9 @@ export function App() {
     onSend: doSend,
     onUpload: doUpload,
     onInterrupt: () => { if (sel) interrupt(sel.hostKey, sel.chatId).catch(() => {}); },
-    onRespond: (rid: string, d: 'allow' | 'allow_session' | 'deny') => {
-      if (sel) respond(sel.hostKey, sel.chatId, rid, d).catch(() => {});
+    onRespond: (rid: string, d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => {
+      if (!sel) return Promise.reject(new Error('Chat unavailable'));
+      return respond(sel.hostKey, sel.chatId, rid, d, response);
     },
     onEdit: setField,
     onUpdate: (patch: Record<string, any>) => {
@@ -910,8 +912,8 @@ export function App() {
           pending={blocking}
           queued={pending.length}
           chat={fleet.hosts[blocking.hostKey]?.chats.find((c) => c.id === blocking.chatId) ?? null}
-          onRespond={(d) => {
-            respond(blocking.hostKey, blocking.chatId, blocking.requestId, d).catch(() => {});
+          onRespond={async (d, response) => {
+            await respond(blocking.hostKey, blocking.chatId, blocking.requestId, d, response);
             setPending((q) => q.filter((p) => p.requestId !== blocking.requestId));
           }}
           onOpenChat={() => open(blocking.hostKey, blocking.chatId)}

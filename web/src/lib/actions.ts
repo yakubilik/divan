@@ -156,7 +156,9 @@ export const interrupt = (key: string, chatId: string) =>
 export const respond = (
   key: string, chatId: string, requestId: string,
   decision: 'allow' | 'allow_session' | 'deny',
-) => call(key, 'approval.respond', { chat_id: chatId, request_id: requestId, decision });
+  response?: Record<string, unknown>,
+) => call(key, 'approval.respond', { chat_id: chatId, request_id: requestId, decision,
+  ...(response !== undefined ? { response } : {}) });
 
 export const createChat = (key: string, data: {
   provider: Provider; model?: string; effort?: string | null; perm_mode?: string;
@@ -203,8 +205,8 @@ export const renameGroup = (key: string, group_id: string, name: string) =>
 export const deleteGroup = (key: string, group_id: string) =>
   call(key, 'group.delete', { group_id });
 
-export const listAgents = (key: string, account_id?: string | null, cwd?: string) =>
-  call(key, 'agent.list', { ...(account_id ? { account_id } : {}), ...(cwd ? { cwd } : {}) });
+export const listAgents = (key: string, account_id?: string | null, cwd?: string, provider: Provider = 'claude') =>
+  call(key, 'agent.list', { provider, ...(account_id ? { account_id } : {}), ...(cwd ? { cwd } : {}) });
 export const agentStore = (key: string) => call(key, 'agent.store', {});
 export const installAgent = (key: string, id: string, account_id?: string | null) =>
   call(key, 'agent.install', { id, ...(account_id ? { account_id } : {}) });

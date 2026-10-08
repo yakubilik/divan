@@ -19,7 +19,7 @@ from typing import Any
 
 from ..errors import Err
 from ..security import destructive_reason, redact
-from .. import tools
+from .. import tools, structured_approval
 from .base import Provider, ProviderConfig, TurnResult
 
 log = logging.getLogger("rac.codex")
@@ -104,6 +104,9 @@ class CodexProvider(Provider):
         super().__init__(cfg, emit, approval)
         self._proc: asyncio.subprocess.Process | None = None
         self._reader: asyncio.Task | None = None
+        self._stderr_reader: asyncio.Task | None = None
+        self._stderr_tail = ""
+        self._requests: set[asyncio.Task] = set()
         self._rid = 0
         self._pending: dict[int, asyncio.Future] = {}
         self._thread_id: str | None = cfg.session_id
@@ -125,7 +128,8 @@ class CodexProvider(Provider):
         d = _default_model()
         if not any(m["id"] == d for m in models):
             models.insert(0, {"id": d, "label": d, "hint": "from config.toml"})
-        return {"models": models, "efforts": EFFORTS, "perm_modes": list(PERM_MODES.keys())}
+        return {"models": models, "efforts": EFFORTS, "perm_modes": list(PERM_MODES.keys()),
+                "default_perm_mode": "auto-edit"}
 
     # ── process / rpc ──────────────────────────────────────────────────────
     async def _ensure(self) -> None:
@@ -135,6 +139,8 @@ class CodexProvider(Provider):
         if not cli:
             raise Err("cli_missing", "the codex CLI is not installed")
         env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "ANTHROPIC"))}
+        env.update({k: v for k, v in self.cfg.account_env.items()
+                    if not k.startswith(("CLAUDE", "ANTHROPIC"))})
         env.pop("CODEX_HOME", None)
         if self.cfg.account_home:
             env["CODEX_HOME"] = self.cfg.account_home
@@ -143,12 +149,20 @@ class CodexProvider(Provider):
         self._proc = await asyncio.create_subprocess_exec(
             cli, "app-server",
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL, env=env, cwd=self.cfg.cwd,
+            stderr=asyncio.subprocess.PIPE, env=env, cwd=self.cfg.cwd,
+            # A resumed thread includes history in one JSON line.
+            limit=32 * 1024 * 1024,
         )
+        self._stderr_tail = ""
+        self._stderr_reader = asyncio.create_task(self._read_stderr())
         self._reader = asyncio.create_task(self._read_loop())
         await self._call("initialize", {"clientInfo": {"name": "remote-ai-chat", "version": "0.1.0"}})
+        await self._send({"method": "initialized"})
         policy, sandbox = PERM_MODES.get(self.cfg.perm_mode, PERM_MODES["auto-edit"])
         base = {"cwd": self.cfg.cwd, "approvalPolicy": policy, "sandbox": sandbox, "model": self.cfg.model}
+        instructions = "\n\n".join(p for p in (self.cfg.preamble, self.cfg.agent_prompt) if p)
+        if instructions:
+            base["developerInstructions"] = instructions
         if self._thread_id:
             try:
                 r = await self._call("thread/resume", {"threadId": self._thread_id, **base})
@@ -156,10 +170,22 @@ class CodexProvider(Provider):
                 log.info("codex resumed thread %s", self._thread_id)
                 return
             except Exception as exc:
-                log.warning("codex resume failed (%s); starting new thread", exc)
+                # A new thread here would silently forget the visible chat.
+                raise RuntimeError("Codex could not resume this chat; its history was preserved. "
+                                   "Retry, or explicitly start a new chat. " + redact(str(exc))) from exc
         r = await self._call("thread/start", base)
         self._thread_id = r["thread"]["id"]
         log.info("codex started thread %s cwd=%s model=%s", self._thread_id, self.cfg.cwd, self.cfg.model)
+
+    async def _read_stderr(self) -> None:
+        assert self._proc and self._proc.stderr
+        while chunk := await self._proc.stderr.read(4096):
+            self._stderr_tail = (self._stderr_tail + chunk.decode(errors="replace"))[-8192:]
+
+    def _error_detail(self, message: str) -> str:
+        # Keep diagnostics bounded and redact before exposing or logging them.
+        detail = redact(self._stderr_tail).strip()[-2000:]
+        return redact(message) + (f"\nCodex diagnostic: {detail}" if detail else "")
 
     async def _send(self, msg: dict) -> None:
         assert self._proc and self._proc.stdin
@@ -171,9 +197,11 @@ class CodexProvider(Provider):
         rid = self._rid
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending[rid] = fut
-        await self._send({"id": rid, "method": method, "params": params})
         try:
+            await self._send({"id": rid, "method": method, "params": params})
             return await asyncio.wait_for(fut, timeout=timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError(f"Codex {method} timed out after {timeout:g}s") from None
         finally:
             self._pending.pop(rid, None)
 
@@ -192,10 +220,13 @@ class CodexProvider(Provider):
                     await self._handle(m)
                 except Exception:
                     log.exception("codex message handling failed")
+        except Exception as exc:
+            self._turn_error = f"Codex response reader failed: {redact(str(exc))}"
+            log.warning("%s", self._turn_error)
         finally:
             for fut in self._pending.values():
                 if not fut.done():
-                    fut.set_exception(RuntimeError("codex app-server exited"))
+                    fut.set_exception(RuntimeError(self._turn_error or "codex app-server exited"))
             if self._turn_done and not self._turn_done.is_set():
                 self._turn_error = self._turn_error or "codex app-server exited"
                 self._turn_done.set()
@@ -214,7 +245,9 @@ class CodexProvider(Provider):
         params = m.get("params") or {}
         # server → client request
         if "id" in m:
-            asyncio.create_task(self._server_request(m["id"], method, params))
+            task = asyncio.create_task(self._server_request(m["id"], method, params))
+            self._requests.add(task)
+            task.add_done_callback(self._requests.discard)
             return
         await self._notification(method, params)
 
@@ -250,15 +283,48 @@ class CodexProvider(Provider):
                     "Permissions", {"permissions": params.get("permissions"), "reason": params.get("reason")}, None)
                 granted = params.get("permissions") if decision in ("allow", "allow_session") else {}
                 result = {"permissions": granted or {}, "scope": "session" if decision == "allow_session" else "turn"}
-            elif method == "item/tool/requestUserInput":
-                result = {"answers": {}}
+            elif method in ("mcpServer/elicitation/request", "item/tool/requestUserInput"):
+                await self._structured_request(rid, method, params)
+                return
             else:
                 log.warning("unhandled codex server request %s", method)
-                result = {}
+                await self._send({"id": rid, "error": {"code": -32601,
+                                  "message": "Divan does not support this Codex request: " + method}})
+                return
         except Exception as exc:
             log.warning("approval handling failed: %s", exc)
             result = {"decision": "decline"}
         await self._send({"id": rid, "result": result})
+
+    async def _structured_request(self, rid: Any, method: str, params: dict) -> None:
+        mcp = method == "mcpServer/elicitation/request"
+        keys = ("mode", "message", "serverName", "requestedSchema", "url", "elicitationId") if mcp else ("questions",)
+        request = {k: params[k] for k in keys if k in params}
+        request["kind"] = "mcp_elicitation" if mcp else "user_input"
+        if mcp:
+            request.setdefault("mode", "form")
+        try:
+            structured_approval.check_request(request)
+            answered = await self.approval("MCP" if mcp else "Questions", request, None)
+            decision = answered.get("decision", "deny") if isinstance(answered, dict) else answered
+            payload = answered.get("response") if isinstance(answered, dict) else None
+            validated = structured_approval.validate_response(request, decision, payload)
+        except asyncio.CancelledError:
+            validated = {"decision": "cancel"}
+        except Exception as exc:
+            # Do not print request/response values (they can contain secrets).
+            message = str(exc) if isinstance(exc, Err) else "Divan could not collect this tool's requested input."
+            await self.emit("turn.error", {"message": message}, True)
+            validated = {"decision": "cancel"}
+        decision = validated["decision"]
+        if mcp:
+            action = {"allow": "accept", "deny": "decline"}.get(decision, "cancel")
+            result = {"action": action, "content": (validated.get("response") or {}).get("content") if action == "accept" else None}
+            await self._send({"id": rid, "result": result})
+        elif decision == "allow":
+            await self._send({"id": rid, "result": validated["response"]})
+        else:
+            await self._send({"id": rid, "error": {"code": -32000, "message": "User input was declined, cancelled, or expired."}})
 
     # ── notifications → events ─────────────────────────────────────────────
     async def _flush(self, final_text: str | None = None) -> None:
@@ -360,7 +426,7 @@ class CodexProvider(Provider):
             await self._ensure()
         except Exception as exc:
             await self.close()
-            return TurnResult(self._thread_id, None, None, None, None, True, f"codex could not start: {exc}")
+            return TurnResult(self._thread_id, None, None, None, None, True, self._error_detail(f"codex could not start: {exc}"))
 
         self._segment, self._seg_text, self._streamed = 0, [], 0
         self._started_items = set()
@@ -379,7 +445,7 @@ class CodexProvider(Provider):
             self._turn_id = (r or {}).get("turn", {}).get("id")
         except Exception as exc:
             await self.close()
-            return TurnResult(self._thread_id, None, None, None, None, True, f"turn/start failed: {exc}")
+            return TurnResult(self._thread_id, None, None, None, None, True, self._error_detail(f"turn/start failed: {exc}"))
 
         await self._turn_done.wait()
         await self._flush()
@@ -393,7 +459,7 @@ class CodexProvider(Provider):
             usage = {"input_tokens": last.get("inputTokens"), "output_tokens": last.get("outputTokens"),
                      "total_tokens": last.get("totalTokens")}
         return TurnResult(session_id=self._thread_id, cost_usd=None, usage=usage, duration_ms=dur,
-                          num_turns=None, is_error=is_err, error=self._turn_error if is_err else None,
+                          num_turns=None, is_error=is_err, error=self._error_detail(self._turn_error or "Codex turn failed") if is_err else None,
                           stop_reason=status)
 
     async def interrupt(self) -> None:
@@ -405,8 +471,15 @@ class CodexProvider(Provider):
             log.warning("codex interrupt failed: %s", exc)
 
     async def close(self) -> None:
+        requests = list(self._requests)
+        for task in requests:
+            task.cancel()
+        if requests:
+            await asyncio.gather(*requests, return_exceptions=True)
+        self._requests.clear()
         if self._reader:
             self._reader.cancel()
+            await asyncio.gather(self._reader, return_exceptions=True)
             self._reader = None
         if self._proc and self._proc.returncode is None:
             try:
@@ -415,6 +488,11 @@ class CodexProvider(Provider):
             except Exception:
                 try:
                     self._proc.kill()
+                    await self._proc.wait()
                 except Exception:
                     pass
         self._proc = None
+        if self._stderr_reader:
+            self._stderr_reader.cancel()
+            await asyncio.gather(self._stderr_reader, return_exceptions=True)
+            self._stderr_reader = None
