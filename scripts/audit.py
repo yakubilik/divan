@@ -13,7 +13,7 @@ machine this project is released from.
 Three kinds of finding, because three different things went wrong before:
 
   *secret*    a key-shaped string. The prefixes are the ones the daemon's own
-              redactor knows (`remote_ai_chat/security.py`) plus the rest of the
+              redactor knows (`divan/security.py`) plus the rest of the
               usual set, so a token this repository would scrub out of a chat
               cannot sit in the repository itself.
   *personal*  an author's home directory, e-mail address or tailnet hostname.
@@ -105,11 +105,11 @@ PERSONAL = {
 # itself the thing it guards. So they are supplied at scan time, as a regular
 # expression, and the release audit records which list was used:
 #
-#     RAC_AUDIT_NAMES='ada|lovelace|some-other-project' python scripts/audit.py
+#     DIVAN_AUDIT_NAMES='ada|lovelace|some-other-project' python scripts/audit.py
 #
 # Without the variable the rule is absent — which is why the shape-based
 # "personal-attribution" rule above exists as well.
-AUTHOR_NAMES = os.environ.get("RAC_AUDIT_NAMES", "").strip()
+AUTHOR_NAMES = os.environ.get("DIVAN_AUDIT_NAMES", "").strip()
 if AUTHOR_NAMES:
     PERSONAL["author-name"] = rf"(?i)\b(?:{AUTHOR_NAMES})\b"
 
@@ -135,14 +135,14 @@ LANGUAGE = {"turkish-letter": TURKISH_LETTERS, "turkish-word": TURKISH_WORDS}
 # entry is a path and the reason, and the reason is the whole justification for
 # the exception — see docs/audit/ for the audit that granted it.
 ALLOW = {
-    "daemon/remote_ai_chat/call.py":
+    "daemon/divan/call.py":
         "the concierge answers in the language it was asked in; the detector, the "
         "honorific mirror and the slang filter all have to name the words",
-    "daemon/remote_ai_chat/secrets.py":
+    "daemon/divan/secrets.py":
         "a password said in a Turkish sentence is found by the Turkish word for it",
-    "daemon/remote_ai_chat/server.py":
+    "daemon/divan/server.py":
         "a push is written in the phone's language, so the Turkish strings sit beside the English",
-    "daemon/remote_ai_chat/transcribe.py":
+    "daemon/divan/transcribe.py":
         "the phrases whisper makes up over silence are listed in the languages it makes them up in",
     "daemon/scripts/test_call.py":
         "test data: Turkish questions and answers for the language detector and the slang filter",

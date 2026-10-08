@@ -49,7 +49,7 @@ export function Machines({ view, onView, onFocus }: {
 
   const pair = () => {
     const cfg = parsePairing(link);
-    if (!cfg) { setPairError('That is not a pairing link. It starts remoteaichat://pair?'); return; }
+    if (!cfg) { setPairError('That is not a pairing link. It starts divan://pair?'); return; }
     setLink('');
     setPairError(null);
     addHost(cfg);
@@ -146,7 +146,7 @@ export function Machines({ view, onView, onFocus }: {
                   value={link} onChange={(v) => { setLink(v); setPairError(null); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') pair(); }}
                   label="The pairing link that command printed"
-                  placeholder="remoteaichat://pair?host=…"
+                  placeholder="divan://pair?host=…"
                 />
               </Quoted>
               <Button small label="Pair" onClick={pair} />
@@ -250,4 +250,4 @@ export function seenWords(h: HostView): string {
 /** What `pair` is run as on the computer being added. The panel does not print
  *  the token itself — the command does, on that computer — so there is nothing
  *  here to leak. */
-const PAIR_CMD = 'remote-ai-chat pair --name Panel';
+const PAIR_CMD = 'divan pair --name Panel';

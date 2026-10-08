@@ -28,6 +28,7 @@ from claude_agent_sdk import (
 
 from ..config import UPLOAD_DIR
 from ..security import destructive_reason, redact
+from .. import legacy
 from . import claude_models
 from .base import Provider, ProviderConfig, TurnResult
 
@@ -248,7 +249,8 @@ class ClaudeProvider(Provider):
         if c.account_home:
             env["CLAUDE_CONFIG_DIR"] = c.account_home
         if c.chat_id:
-            env["RAC_CHAT_ID"] = c.chat_id
+            env["DIVAN_CHAT_ID"] = c.chat_id
+            env.update(legacy.chat_env(c.chat_id))
         kw: dict[str, Any] = dict(
             env=env,
             cwd=c.cwd,

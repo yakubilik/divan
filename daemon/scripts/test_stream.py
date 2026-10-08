@@ -27,8 +27,8 @@ from claude_agent_sdk.types import (                            # noqa: E402
     AssistantMessage, ResultMessage, StreamEvent, TextBlock, ToolUseBlock,
 )
 
-from remote_ai_chat.providers.base import ProviderConfig        # noqa: E402
-from remote_ai_chat.providers.claude import ClaudeProvider      # noqa: E402
+from divan.providers.base import ProviderConfig        # noqa: E402
+from divan.providers.claude import ClaudeProvider      # noqa: E402
 
 failures = 0
 

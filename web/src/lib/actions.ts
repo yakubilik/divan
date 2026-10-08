@@ -34,7 +34,7 @@ export const readRun = (key: string, id: number, cursor: string | null) =>
 /** An answer to a ticket in one computer's queue. The queue re-opens a stopped
  *  ticket the moment a note lands, which is why this is the whole of answering a
  *  question a worker asked: nothing else has to be moved or restarted. */
-/** What a ticket came back with: `daemon/remote_ai_chat/ustabasi.py:report`. */
+/** What a ticket came back with: `daemon/divan/ustabasi.py:report`. */
 export interface TicketReport {
   id: number; title: string; status: string;
   summary: string; verdict: string; verdict_summary: string;
@@ -43,7 +43,7 @@ export interface TicketReport {
 export const ticketReport = (key: string, id: number) =>
   call<TicketReport>(key, 'ustabasi.report', { id });
 
-/** One thing the queue sent: `daemon/remote_ai_chat/ustabasi.py:notifications`. */
+/** One thing the queue sent: `daemon/divan/ustabasi.py:notifications`. */
 export interface QueueNotice {
   id: number; ticket: number | null; ts: number; kind: string;
   headline: string; body: string; title: string; status: string; project: string | null;
@@ -312,7 +312,7 @@ export function screenUrl(cfg: HostConfig, w: number, display: string, tick: num
 }
 
 /** Pair this panel with another computer from a link the `pair` command printed
- *  — the same `remoteaichat://pair?…` the phone scans. */
+ *  — the same `divan://pair?…` the phone scans. */
 export function parsePairing(input: string): HostConfig | null {
   const text = input.trim();
   if (!text) return null;
@@ -324,7 +324,7 @@ export function parsePairing(input: string): HostConfig | null {
     }
   } catch { /* not the QR payload; try the link form */ }
   try {
-    const u = new URL(text.replace(/^remoteaichat:\/\//, 'https://rac/'));
+    const u = new URL(text.replace(/^divan:\/\//, 'https://rac/'));
     const q = u.searchParams;
     const token = q.get('token');
     const host = q.get('host');

@@ -13,9 +13,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat import usage                                # noqa: E402
-from remote_ai_chat.accounts import Account                    # noqa: E402
-from remote_ai_chat.server import Server                       # noqa: E402
+from divan import usage                                # noqa: E402
+from divan.accounts import Account                    # noqa: E402
+from divan.server import Server                       # noqa: E402
 
 fails: list[str] = []
 

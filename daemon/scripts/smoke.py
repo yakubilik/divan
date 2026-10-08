@@ -15,9 +15,9 @@ ap.add_argument("--cwd", default=os.path.expanduser("~/projects"), help="a folde
 ap.add_argument("--audio", default=None, help="a short m4a/mp3 voice note; checks that /upload returns a transcript")
 a = ap.parse_args()
 HOME = pathlib.Path.home()
-# The daemon under test may be a second one on this machine; RAC_HOME is what
+# The daemon under test may be a second one on this machine; DIVAN_HOME is what
 # moves its config, database and uploads somewhere else.
-RAC_HOME = pathlib.Path(os.environ.get("RAC_HOME") or (HOME / ".remote-ai-chat")).expanduser()
+DIVAN_HOME = pathlib.Path(os.environ.get("DIVAN_HOME") or (HOME / ".divan")).expanduser()
 WIN = sys.platform == "win32"
 results = []
 
@@ -100,7 +100,7 @@ async def main():
             r = await hc.post("/upload", files={"file": ("note.txt", b"hello", "text/plain")}, data={"chat_id": cid}, headers=auth)
             ok("POST /upload", r.status_code == 200, r.text[:100])
             path = r.json().get("path", "")
-            # Checked by shape, not by path prefix: RAC_HOME is read from *this*
+            # Checked by shape, not by path prefix: DIVAN_HOME is read from *this*
             # process's environment, and the daemon under test may well have been
             # started with a different one. `<something>/uploads/<chat_id>/<file>`
             # is the property that actually matters, and it holds either way —
@@ -110,7 +110,7 @@ async def main():
             ok("upload lands in the chat's own uploads folder", shaped and os.path.isfile(path), path)
             r2 = await hc.get("/files", params={"path": path, "token": a.token})
             ok("GET /files round-trips", r2.status_code == 200 and r2.content == b"hello", str(r2.status_code))
-            r3 = await hc.get("/files", params={"path": str(RAC_HOME / "config.toml"), "token": a.token})
+            r3 = await hc.get("/files", params={"path": str(DIVAN_HOME / "config.toml"), "token": a.token})
             ok("GET /files refuses paths outside uploads", r3.status_code == 404, str(r3.status_code))
             r4 = await hc.get("/files", params={"path": path, "token": "wrong"})
             ok("GET /files refuses a bad token", r4.status_code == 401, str(r4.status_code))

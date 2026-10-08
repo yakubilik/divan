@@ -1,6 +1,6 @@
 // What the pairing screen is handed, read away from the screen that reads it.
 //
-// `remote-ai-chat pair` prints a QR code and a link, and the phone accepts the
+// `divan pair` prints a QR code and a link, and the phone accepts the
 // same thing typed, scanned or opened as a deep link. Which of those it is, and
 // whether it is one at all, is the only judgement on that screen — everything
 // else there is a camera and three boxes — and it is the judgement that decides
@@ -14,14 +14,14 @@ import type { HostConfig } from './protocol';
  *  the box as it was found. */
 export const DEFAULT_PORT = 8790;
 
-/** Accepts what `remote-ai-chat pair` prints: the `remoteaichat://` deep link,
+/** Accepts what `divan pair` prints: the `divan://` deep link,
  *  and the older JSON payload. Anything else is null — the screen says it does
  *  not recognise the code rather than pairing with half of one, because a host
  *  without a token is a connection that will be refused and a token without a
  *  host is nothing at all. */
 export function parsePairCode(data: string): HostConfig | null {
   const text = (data || '').trim();
-  if (text.startsWith('remoteaichat://')) {
+  if (text.startsWith('divan://')) {
     const q = text.slice(text.indexOf('?') + 1);
     const p: Record<string, string> = {};
     for (const pair of q.split('&')) {

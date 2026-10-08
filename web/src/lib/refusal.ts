@@ -1,7 +1,7 @@
 // Why a computer refused this panel's token, and what to say about it.
 //
 // The daemon puts the reason in the socket's close frame (code 4401) and in the
-// `detail` of a 401 — see `_admit` in daemon/remote_ai_chat/server.py. Every
+// `detail` of a 401 — see `_admit` in daemon/divan/server.py. Every
 // one of them used to be shown as "token revoked", including a tunnel that had
 // locked the household's own address out, which sent people looking for a
 // revocation nobody had made.
@@ -63,27 +63,27 @@ export const REFUSAL_TEXT: Record<'en' | 'tr', Table> = {
   en: {
     not_tunnel_device: {
       short: 'wrong door · this key is for the tailnet',
-      long: 'This browser holds a key made for the tailnet, and the tunnel only takes keys made for it. The key is fine. On the computer run `remote-ai-chat web --at <hostname>` and open the link it prints here.',
+      long: 'This browser holds a key made for the tailnet, and the tunnel only takes keys made for it. The key is fine. On the computer run `divan web --at <hostname>` and open the link it prints here.',
     },
     tunnel_only: {
       short: 'wrong door · this key is for the tunnel',
-      long: 'This key was made for the tunnel and only opens it. Open the panel by its tunnel address, or pair this browser on the tailnet with `remote-ai-chat web`.',
+      long: 'This key was made for the tunnel and only opens it. Open the panel by its tunnel address, or pair this browser on the tailnet with `divan web`.',
     },
     unknown_token: {
       short: 'key not recognised',
-      long: 'The computer does not know this key — it may be another computer\'s, or from before a reset. Pair again on the computer: `remote-ai-chat web` (or `web --at <hostname>` behind the tunnel).',
+      long: 'The computer does not know this key — it may be another computer\'s, or from before a reset. Pair again on the computer: `divan web` (or `web --at <hostname>` behind the tunnel).',
     },
     revoked: {
       short: 'access revoked',
-      long: 'This device was removed on the computer. Pair again to come back: `remote-ai-chat web`.',
+      long: 'This device was removed on the computer. Pair again to come back: `divan web`.',
     },
     no_token: {
       short: 'not paired',
-      long: 'This page has no key for the computer yet. On the computer run `remote-ai-chat web` and open the link it prints.',
+      long: 'This page has no key for the computer yet. On the computer run `divan web` and open the link it prints.',
     },
     locked: {
       short: 'address locked until {time}',
-      long: 'Too many different wrong keys came from {addr}, so the tunnel refuses it until {time}. To lift it now, on the computer: `remote-ai-chat unlock {addr}` — then reload this page.',
+      long: 'Too many different wrong keys came from {addr}, so the tunnel refuses it until {time}. To lift it now, on the computer: `divan unlock {addr}` — then reload this page.',
     },
     not_let_in: {
       short: 'not let through the tunnel',
@@ -91,33 +91,33 @@ export const REFUSAL_TEXT: Record<'en' | 'tr', Table> = {
     },
     unauthorized: {
       short: 'no access',
-      long: 'The computer refused this key. Pair again on the computer: `remote-ai-chat web`.',
+      long: 'The computer refused this key. Pair again on the computer: `divan web`.',
     },
   },
   tr: {
     not_tunnel_device: {
       short: 'yanlış kapı · bu anahtar tailnet için',
-      long: 'Bu tarayıcıdaki anahtar tailnet için yapılmış; tunnel sadece kendisi için yapılan anahtarları kabul eder. Anahtarda sorun yok. Bilgisayarda `remote-ai-chat web --at <hostname>` çalıştır ve verdiği linki burada aç.',
+      long: 'Bu tarayıcıdaki anahtar tailnet için yapılmış; tunnel sadece kendisi için yapılan anahtarları kabul eder. Anahtarda sorun yok. Bilgisayarda `divan web --at <hostname>` çalıştır ve verdiği linki burada aç.',
     },
     tunnel_only: {
       short: 'yanlış kapı · bu anahtar tunnel için',
-      long: 'Bu anahtar tunnel için yapılmış, sadece onu açar. Paneli tunnel adresinden aç ya da bu tarayıcıyı tailnet\'te `remote-ai-chat web` ile eşle.',
+      long: 'Bu anahtar tunnel için yapılmış, sadece onu açar. Paneli tunnel adresinden aç ya da bu tarayıcıyı tailnet\'te `divan web` ile eşle.',
     },
     unknown_token: {
       short: 'anahtar tanınmıyor',
-      long: 'Bilgisayar bu anahtarı tanımıyor — başka bir bilgisayarın olabilir ya da bir sıfırlamadan öncesine ait. Bilgisayarda yeniden eşle: `remote-ai-chat web` (tunnel arkasındaysan `web --at <hostname>`).',
+      long: 'Bilgisayar bu anahtarı tanımıyor — başka bir bilgisayarın olabilir ya da bir sıfırlamadan öncesine ait. Bilgisayarda yeniden eşle: `divan web` (tunnel arkasındaysan `web --at <hostname>`).',
     },
     revoked: {
       short: 'erişim kaldırıldı',
-      long: 'Bu cihaz bilgisayarda silinmiş. Geri gelmek için yeniden eşle: `remote-ai-chat web`.',
+      long: 'Bu cihaz bilgisayarda silinmiş. Geri gelmek için yeniden eşle: `divan web`.',
     },
     no_token: {
       short: 'eşlenmemiş',
-      long: 'Bu sayfanın bilgisayar için bir anahtarı yok. Bilgisayarda `remote-ai-chat web` çalıştır ve verdiği linki aç.',
+      long: 'Bu sayfanın bilgisayar için bir anahtarı yok. Bilgisayarda `divan web` çalıştır ve verdiği linki aç.',
     },
     locked: {
       short: 'adres {time}\'e kadar kilitli',
-      long: '{addr} adresinden çok fazla farklı yanlış anahtar geldi, tunnel bu adresi {time}\'e kadar kabul etmiyor. Hemen açmak için bilgisayarda: `remote-ai-chat unlock {addr}` — sonra bu sayfayı yenile.',
+      long: '{addr} adresinden çok fazla farklı yanlış anahtar geldi, tunnel bu adresi {time}\'e kadar kabul etmiyor. Hemen açmak için bilgisayarda: `divan unlock {addr}` — sonra bu sayfayı yenile.',
     },
     not_let_in: {
       short: 'tunnel içeri almadı',
@@ -125,7 +125,7 @@ export const REFUSAL_TEXT: Record<'en' | 'tr', Table> = {
     },
     unauthorized: {
       short: 'erişim yok',
-      long: 'Bilgisayar bu anahtarı reddetti. Bilgisayarda yeniden eşle: `remote-ai-chat web`.',
+      long: 'Bilgisayar bu anahtarı reddetti. Bilgisayarda yeniden eşle: `divan web`.',
     },
   },
 };

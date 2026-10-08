@@ -32,7 +32,7 @@ interface Probe {
 }
 
 const INSTALL = 'cd daemon && ./install.sh';
-const PAIR = 'remote-ai-chat pair --name Panel';
+const PAIR = 'divan pair --name Panel';
 
 /** Alive, and the version if the browser is allowed to read the answer.
  *  A `no-cors` request still resolves when the daemon replies and only
@@ -195,7 +195,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
     const cfg = parsePairing(text);
     if (!cfg) {
       setFromLink(false);
-      setError('Could not read that pairing link — it should be remoteaichat://pair?… or the QR’s JSON.');
+      setError('Could not read that pairing link — it should be divan://pair?… or the QR’s JSON.');
       return;
     }
     setHost(cfg.host);
@@ -307,7 +307,7 @@ export function Onboarding({ onPaired }: { onPaired: () => void }) {
             }}>
               <Write
                 value={paste} onChange={onPaste} lines={3} label="Pairing link"
-                placeholder="remoteaichat://pair?host=…&port=8790&token=…"
+                placeholder="divan://pair?host=…&port=8790&token=…"
               />
             </Quoted>
             <div style={{

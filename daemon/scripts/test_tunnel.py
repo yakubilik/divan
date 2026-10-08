@@ -3,7 +3,7 @@
 
     python scripts/test_tunnel.py
 
-A real `Server` over a temporary `RAC_HOME`, driven through a test client.
+A real `Server` over a temporary `DIVAN_HOME`, driven through a test client.
 `send_push` is replaced by a recorder, so nothing reaches Expo, and the Access
 keys come from a fetcher that hands back ones made here.
 """
@@ -25,7 +25,7 @@ import tomllib
 from pathlib import Path
 
 HOME = tempfile.mkdtemp(prefix="rac-tunnel-")
-os.environ["RAC_HOME"] = HOME
+os.environ["DIVAN_HOME"] = HOME
 atexit.register(shutil.rmtree, HOME, ignore_errors=True)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -37,12 +37,12 @@ from cryptography.hazmat.primitives.asymmetric import rsa        # noqa: E402
 from fastapi.testclient import TestClient                        # noqa: E402
 from starlette.websockets import WebSocketDisconnect             # noqa: E402
 
-import remote_ai_chat.__main__ as cli                            # noqa: E402
-import remote_ai_chat.config as config_mod                       # noqa: E402
-import remote_ai_chat.server as server_mod                       # noqa: E402
-from remote_ai_chat.config import CONFIG_PATH, UPLOAD_DIR, Config  # noqa: E402
-from remote_ai_chat.security import TunnelLock                   # noqa: E402
-from remote_ai_chat.server import Server                         # noqa: E402
+import divan.__main__ as cli                            # noqa: E402
+import divan.config as config_mod                       # noqa: E402
+import divan.server as server_mod                       # noqa: E402
+from divan.config import CONFIG_PATH, UPLOAD_DIR, Config  # noqa: E402
+from divan.security import TunnelLock                   # noqa: E402
+from divan.server import Server                         # noqa: E402
 
 HOUSE, ELSEWHERE, GUESSER = "203.0.113.4", "203.0.113.9", "198.51.100.7"
 # A household whose browser holds a token that does not open the tunnel.
@@ -277,7 +277,7 @@ def main() -> None:
         check(got == [(4401, f"locked:{until}:{RETRIER}")] * 2 + [(401, f"locked:{until}:{RETRIER}")],
               "a locked address is told so, and when it lifts", repr(got))
         settle(srv, client)
-        check(sent and all("remote-ai-chat unlock " + RETRIER in s["body"] for s in sent),
+        check(sent and all("divan unlock " + RETRIER in s["body"] for s in sent),
               "the lock's push says how to lift it", repr([s["body"] for s in sent]))
 
         print("\n3c. a lock lifted without a restart")
@@ -377,7 +377,7 @@ def main() -> None:
               "keys that cannot be fetched refuse the tunnel, not the tailnet, and are asked for again later",
               repr(down))
 
-    print("\n8. `remote-ai-chat unlock`, against a daemon that is running")
+    print("\n8. `divan unlock`, against a daemon that is running")
     srv, _ = start()
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

@@ -44,7 +44,7 @@ mkdir -p ~/demo-projects && cd ~/demo-projects
 git clone https://github.com/yakubilik/divan.git      # a project to talk about
 
 cd <this checkout>/daemon
-RAC_HOME=/tmp/rac-demo .venv312/bin/remote-ai-chat pair --name iPhone
+DIVAN_HOME=/tmp/rac-demo .venv312/bin/divan pair --name iPhone
 ```
 
 Then edit `/tmp/rac-demo/config.toml` so nothing personal can reach a picture:
@@ -58,8 +58,8 @@ allowed_roots = ["/Users/<you>/demo-projects"]
 
 ```bash
 mkdir -p /tmp/rac-demo/ustabasi
-RAC_HOME=/tmp/rac-demo USTABASI_STATE_DIR=/tmp/rac-demo/ustabasi \
-  USTABASI_CLI=/nonexistent .venv312/bin/remote-ai-chat serve
+DIVAN_HOME=/tmp/rac-demo USTABASI_STATE_DIR=/tmp/rac-demo/ustabasi \
+  USTABASI_CLI=/nonexistent .venv312/bin/divan serve
 ```
 
 The two `USTABASI_*` variables matter on a machine that runs the queue: without
@@ -89,18 +89,18 @@ UDID=$(xcrun simctl list devices | awk '/iPhone 17 Pro Max/{print $NF}' | tr -d 
 xcrun simctl ui $UDID appearance dark
 xcrun simctl status_bar $UDID override --time "09:41" --wifiBars 3 \
   --cellularBars 4 --batteryState charged --batteryLevel 100
-xcrun simctl openurl $UDID "remoteaichat://pair?host=127.0.0.1&port=8791&token=<token>&name=MacBook"
+xcrun simctl openurl $UDID "divan://pair?host=127.0.0.1&port=8791&token=<token>&name=MacBook"
 xcrun simctl io $UDID screenshot docs/screenshots/chats.png
 ```
 
-`remoteaichat:///new-chat`, `remoteaichat:///settings`, `remoteaichat:///call`
-and `remoteaichat:///agents` open those screens without hunting for the button.
+`divan:///new-chat`, `divan:///settings`, `divan:///call`
+and `divan:///agents` open those screens without hunting for the button.
 
 The panel is the same daemon, built and served by it:
 
 ```bash
 cd web && npm install && npm run build
-RAC_HOME=/tmp/rac-demo .venv312/bin/remote-ai-chat web     # prints a URL with a token in the fragment
+DIVAN_HOME=/tmp/rac-demo .venv312/bin/divan web     # prints a URL with a token in the fragment
 ```
 
 The dashboard, chat and Machines pictures do not need a daemon at all: the

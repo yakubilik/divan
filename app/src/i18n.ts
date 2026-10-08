@@ -19,7 +19,7 @@ const en = {
   pairTitle: 'Pair computer', pairAddTitle: 'Add computer',
   pairSubtitle: 'Run this on your computer:',
   pairConnect: 'Connect', pairManualBtn: 'Enter IP and token',
-  pairBadCode: 'Unrecognized code', pairBadCodeBody: 'This is not a remote-ai-chat pairing code.',
+  pairBadCode: 'Unrecognized code', pairBadCodeBody: 'This is not a divan pairing code.',
   // chats
   chats: 'Chats', search: 'Search', archive: 'Archive', ungrouped: 'Daily', computer: 'Computer',
   active: '{n} active', connecting: 'connecting', unauthorized: 'no access', offline: 'offline',

@@ -11,7 +11,7 @@ per chat — Claude Code through `claude_agent_sdk`, or Codex through its
 `app-server` — and relays the stream back to the phone.
 
 ```
-iPhone app  ──WebSocket /ws──▶  daemon (~/projects/remote-ai-chat/daemon)
+iPhone app  ──WebSocket /ws──▶  daemon (~/projects/divan/daemon)
                                    └── claude / codex CLI, one per chat
 ```
 
@@ -29,7 +29,7 @@ Two things this is **not**, both of which sessions have confused it with:
 ## Runtime
 
 * Port **8790**, bound to `auto` (the LAN/tailnet address) plus `127.0.0.1`.
-* Config and state: `~/.remote-ai-chat/` — `config.toml`, `db.sqlite`
+* Config and state: `~/.divan/` — `config.toml`, `db.sqlite`
   (`chats`, `events`, `groups`, `limits`), `logs/daemon.log`, `uploads/`,
   `accounts/`, `agent-store/`.
 * Devices are paired by token; only the hash is stored. Each has its own push
@@ -50,7 +50,7 @@ Two things this is **not**, both of which sessions have confused it with:
 
 ## Accounts
 
-Each signed-in account gets `~/.remote-ai-chat/accounts/<tool>-<hex>/` and the
+Each signed-in account gets `~/.divan/accounts/<tool>-<hex>/` and the
 session runs with `CLAUDE_CONFIG_DIR` (or `CODEX_HOME`) pointed at it. That is
 what makes one subscription distinct from another on the same computer.
 
@@ -82,7 +82,7 @@ behind or ahead of the other one while work is in flight.
 
 `allowed_roots` in `config.toml` is what the app will open (default
 `~/projects`). `denied_paths` covers `~/.ssh`, `~/server` and
-`~/.remote-ai-chat` itself. In every permission mode, `bypass` included, a
+`~/.divan` itself. In every permission mode, `bypass` included, a
 `PreToolUse` hook checks Bash commands and anything destructive — a recursive
 `rm` outside the chat's folder, a forced `git push` and the like — goes to the
 phone for approval. In `bypass` that is the only thing that asks.
@@ -90,9 +90,9 @@ With `bypass_asks = false` in `config.toml`, `bypass` asks nothing at all.
 
 ## Where the session's own instructions come from
 
-* `daemon/remote_ai_chat/preamble.py` — builds the `<session-context>` block
+* `daemon/divan/preamble.py` — builds the `<session-context>` block
   from live values, per session.
-* `daemon/remote_ai_chat/house_style.md` — the register, read fresh each time,
+* `daemon/divan/house_style.md` — the register, read fresh each time,
   so an edit lands on the next chat rather than the next restart.
 * This file — the detail, read only when asked for.
 

@@ -1479,7 +1479,7 @@ wheels = [
 ]
 
 [[package]]
-name = "remote-ai-chat"
+name = "divan"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [

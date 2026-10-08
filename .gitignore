@@ -34,7 +34,7 @@ __pycache__/
 
 # local machine state: the daemon's home holds the token store, the chat
 # database, the APNs key and every uploaded file.
-.remote-ai-chat/
+.divan/
 uploads/
 *.sqlite*
 *.db
@@ -45,14 +45,14 @@ uploads/
 *.log
 
 # desktop panel: build output
-daemon/remote_ai_chat/webui/
+daemon/divan/webui/
 
 # local build identity (Apple team, EAS project) — never committed
 app/IDENTITY.local.md
 app/identity.local.json
 
 # scratch: web panel build backups
-daemon/remote_ai_chat/webui.bak-*/
+daemon/divan/webui.bak-*/
 
 # the Divan drawings. They live in a working copy on the machine they were
 # made on and stay there: they are private and this repository is public. The

@@ -26,14 +26,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat import accounts as acct                     # noqa: E402
-from remote_ai_chat.accounts import Account                    # noqa: E402
-from remote_ai_chat.config import Config                       # noqa: E402
-from remote_ai_chat.db import DB                               # noqa: E402
-from remote_ai_chat.pool import Pool, Settings                 # noqa: E402
-from remote_ai_chat.providers.base import TurnResult           # noqa: E402
-from remote_ai_chat.server import Server                       # noqa: E402
-from remote_ai_chat.session import (                           # noqa: E402
+from divan import accounts as acct                     # noqa: E402
+from divan.accounts import Account                    # noqa: E402
+from divan.config import Config                       # noqa: E402
+from divan.db import DB                               # noqa: E402
+from divan.pool import Pool, Settings                 # noqa: E402
+from divan.providers.base import TurnResult           # noqa: E402
+from divan.server import Server                       # noqa: E402
+from divan.session import (                           # noqa: E402
     HANDOVER_NOTE, REVIVE_MAX, REVIVE_PROMPT, ChatSession)
 
 failures: list[str] = []
@@ -505,7 +505,7 @@ async def scenario_wiring(db) -> None:
 
     # The CLI is the only thing that knows whether a sign-in is still valid,
     # and asking it is a subprocess. Here it always says yes.
-    import remote_ai_chat.server as server_mod
+    import divan.server as server_mod
     real_refresh = server_mod.acct.refresh
 
     def signed_in(a):
@@ -634,7 +634,7 @@ async def scenario_stop_first(db) -> None:
     """
     print("\nstopping comes before choosing")
 
-    import remote_ai_chat.server as server_mod
+    import divan.server as server_mod
     real_refresh = server_mod.acct.refresh
     order: list[str] = []
 
@@ -716,7 +716,7 @@ async def scenario_nowhere_to_go(db) -> None:
     """
     print("\nwhen there is nowhere left to go")
 
-    import remote_ai_chat.server as server_mod
+    import divan.server as server_mod
     real_refresh = server_mod.acct.refresh
     server_mod.acct.refresh = lambda a: (setattr(a, "logged_in", True), a)[1]
     try:
@@ -776,8 +776,8 @@ async def scenario_wait_it_out(db) -> None:
     every sign-in spent, the chat waits for the first one back and carries on
     there, queue and all, instead of stopping for good."""
     print("\nwaiting a limit out")
-    import remote_ai_chat.server as server_mod
-    import remote_ai_chat.session as session_mod
+    import divan.server as server_mod
+    import divan.session as session_mod
     real_refresh, real_slack = server_mod.acct.refresh, session_mod.RESET_SLACK_S
     server_mod.acct.refresh = lambda a: (setattr(a, "logged_in", True), a)[1]
     session_mod.RESET_SLACK_S = 0.0

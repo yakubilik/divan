@@ -1,12 +1,12 @@
 # web — the desktop panel
 
 A control panel that runs in a browser. The daemon serves the built files
-itself (`daemon/remote_ai_chat/webui/`); there is no separate server.
+itself (`daemon/divan/webui/`); there is no separate server.
 
 ```
 npm install
 npm run dev      # http://localhost:5177 (pairs through public/dev-host.json)
-npm run build    # -> daemon/remote_ai_chat/webui/
+npm run build    # -> daemon/divan/webui/
 ```
 
 `public/dev-host.json` holds a real pairing token and is for `npm run dev` only.
@@ -19,7 +19,7 @@ The bundle is not in git and the daemon is, so without that note nothing can
 tell whether the panel in the browser still matches the code behind it. The
 Admin screen shows the answer, and the daemon's updater rebuilds when it is no.
 
-On the computer, `remote-ai-chat web` hands the panel its own device token and
+On the computer, `divan web` hands the panel its own device token and
 opens the browser. The panel shows up in `devices` and `revoke <id>` cuts it off
 like it cuts off a phone.
 

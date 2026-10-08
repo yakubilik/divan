@@ -6,7 +6,7 @@ import websockets
 
 ap = argparse.ArgumentParser(); ap.add_argument("--token", required=True); ap.add_argument("--host", default="127.0.0.1"); ap.add_argument("--port", type=int, default=8790)
 ap.add_argument("--image", default=None)
-ap.add_argument("--cwd", default=os.path.expanduser("~/projects/remote-ai-chat"), help="an allowed project folder on the daemon's machine")
+ap.add_argument("--cwd", default=os.path.expanduser("~/projects/divan"), help="an allowed project folder on the daemon's machine")
 a = ap.parse_args()
 CWD = a.cwd
 results = []

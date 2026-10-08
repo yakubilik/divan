@@ -12,7 +12,7 @@ your files, not your identifiers, not crash reports, not usage statistics.
 
 ## Where your data goes
 
-The app talks to one thing: the `remote-ai-chat` daemon running on a computer
+The app talks to one thing: the `divan` daemon running on a computer
 you own, over your local network or your own private network (for example a
 Tailscale tailnet). Everything you type, record or attach goes there and only
 there. Chats, transcripts and attachments are stored on that computer, under

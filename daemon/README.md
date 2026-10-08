@@ -31,31 +31,31 @@ here, so if you do not need voice transcription any supported version is fine.
 ## Commands
 
 ```
-remote-ai-chat pair --name iPhone   # QR + token + deep link
-remote-ai-chat serve                # ws://<tailscale-ip>:8790/ws and 127.0.0.1
-remote-ai-chat web                  # open the desktop panel, paired
-remote-ai-chat devices              # every paired device: tunnel or not, last seen, last address
-remote-ai-chat revoke <id>          # cut one off
-remote-ai-chat unlock <ip>          # lift a tunnel lock on an address, no restart (docs/TUNNEL.md)
-remote-ai-chat project list         # the board's products, and what is unclaimed
-remote-ai-chat project create NAME --repo PATH --kind app --purpose "..." --started 2026-03-01
-remote-ai-chat project update NAME --purpose "..." --repo PATH   # or an id, or a slug
-remote-ai-chat demo-seed            # a demo machine's sample product, cards and chat
-remote-ai-chat status
-remote-ai-chat install | uninstall  # the login service
-python -m remote_ai_chat.scrub [--apply]   # keys already in chat history, into the keychain
+divan pair --name iPhone   # QR + token + deep link
+divan serve                # ws://<tailscale-ip>:8790/ws and 127.0.0.1
+divan web                  # open the desktop panel, paired
+divan devices              # every paired device: tunnel or not, last seen, last address
+divan revoke <id>          # cut one off
+divan unlock <ip>          # lift a tunnel lock on an address, no restart (docs/TUNNEL.md)
+divan project list         # the board's products, and what is unclaimed
+divan project create NAME --repo PATH --kind app --purpose "..." --started 2026-03-01
+divan project update NAME --purpose "..." --repo PATH   # or an id, or a slug
+divan demo-seed            # a demo machine's sample product, cards and chat
+divan status
+divan install | uninstall  # the login service
+python -m divan.scrub [--apply]   # keys already in chat history, into the keychain
 ```
 
 `scrub` reads the events table and the transcripts Claude Code and Codex keep
-(`~/.remote-ai-chat`, `~/.claude/projects`, `~/.codex/sessions`), plus any
+(`~/.divan`, `~/.claude/projects`, `~/.codex/sessions`), plus any
 directory listed under `scrub_extra_paths` in `config.toml` — a folder of
-session notes, say; none by default. Without `--apply` it only writes `~/.remote-ai-chat/secret-report.md`:
+session notes, say; none by default. Without `--apply` it only writes `~/.divan/secret-report.md`:
 each key's kind, fingerprint and keychain service, how many files held it and
 when — the list to rotate, never a value. With `--apply` every key goes into the
 login keychain first and the file is then rewritten with the placeholder; a file
 written in the last ten minutes is left for the next run.
 `../scripts/install-secret-scrub.sh` runs it hourly under launchd
-(`com.remote-ai-chat.secret-scrub`), so what the CLIs write later is masked too.
+(`com.divan.secret-scrub`), so what the CLIs write later is masked too.
 
 `project` is the entrance to the board's products: the Divan clients have no form
 for making one and are not getting one, so a product is created and edited by
@@ -64,7 +64,7 @@ running daemon over its own socket — the same `divan.project.create` and
 `divan.project.update` the phone would call — rather than writing to the database
 behind it, so a repository path goes through the allowed roots either way.
 
-`RAC_HOME` and `RAC_PORT` give one machine a second, fully separate daemon —
+`DIVAN_HOME` and `DIVAN_PORT` give one machine a second, fully separate daemon —
 its own config, database, uploads and port. That is what the tests run against.
 
 ## Demo machine
@@ -77,7 +77,7 @@ for lending a computer to somebody with no subscription of their own: App
 Review. The demo provider (`providers/demo.py`) starts no process, writes no
 file and opens no connection; the edit it shows is never made.
 
-Turn it on in `~/.remote-ai-chat/config.toml` (or `$RAC_HOME/config.toml`) and
+Turn it on in `~/.divan/config.toml` (or `$DIVAN_HOME/config.toml`) and
 restart the daemon:
 
 ```toml
@@ -91,7 +91,7 @@ daemon starts on a machine with neither CLI installed.
 Seed it, with the daemon running, so Divan is not empty on first pairing:
 
 ```bash
-remote-ai-chat demo-seed
+divan demo-seed
 ```
 
 That makes one product, "Sample app", with cards in several columns, and one
@@ -103,9 +103,9 @@ adds nothing. It refuses to run unless `demo = true`.
 Pair the reviewer's device as any other, and revoke it when the review is over:
 
 ```bash
-remote-ai-chat pair --name "App Review"    # QR, token and deep link
-remote-ai-chat devices
-remote-ai-chat revoke <id>
+divan pair --name "App Review"    # QR, token and deep link
+divan devices
+divan revoke <id>
 ```
 
 For a reviewer outside the tailnet the daemon has to be reachable some other

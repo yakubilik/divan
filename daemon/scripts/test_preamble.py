@@ -23,10 +23,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat import preamble                             # noqa: E402
-from remote_ai_chat.config import Config                        # noqa: E402
-from remote_ai_chat.providers.base import ProviderConfig        # noqa: E402
-from remote_ai_chat.providers.claude import ClaudeProvider      # noqa: E402
+from divan import preamble                             # noqa: E402
+from divan.config import Config                        # noqa: E402
+from divan.providers.base import ProviderConfig        # noqa: E402
+from divan.providers.claude import ClaudeProvider      # noqa: E402
 
 failures = 0
 
@@ -60,7 +60,7 @@ def offline() -> None:
     text = preamble.build(a_config(), a_provider_config(), "claude")
     for label, needle in [
         ("the host it runs on", "Test-Machine.local"),
-        ("the app it is reached through", "remote-ai-chat"),
+        ("the app it is reached through", "divan"),
         ("the account it opened", "claude-abc123"),
         ("the model", "opus"),
         ("the working directory", "/Users/test/projects/thing"),
@@ -105,7 +105,7 @@ def offline() -> None:
           "no agent is not a reason to leave a session lost")
 
     print("\nthe session builds one for every chat it starts")
-    src = (Path(__file__).resolve().parents[1] / "remote_ai_chat/session.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[1] / "divan/session.py").read_text(encoding="utf-8")
     check("preamble.build(self.cfg, pc" in src, "session._make_provider fills it in")
 
 

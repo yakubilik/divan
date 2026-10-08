@@ -142,7 +142,7 @@ group('a 401 over HTTP stops the socket too');
   try { await actions.upload(key, 'c1', file); } catch (e) { said = e.message; }
   answer = { status: 200, body: {} };
   ok('the upload names the lock and the command that lifts it',
-    said.includes('remote-ai-chat unlock 203.0.113.5'), said);
+    said.includes('divan unlock 203.0.113.5'), said);
   const n = sockets.length;
   const c = new RacClient();
   c.connect(cfg.host, cfg.port, cfg.token);
@@ -187,7 +187,7 @@ group('each refusal is told apart');
     !== refusalText({ kind: 'not_tunnel_device' }, 'en').short);
   const lock = refusalText(parsed[3], 'en');
   ok('a lock says until when, and the command', /\d\d:\d\d/.test(lock.short)
-    && lock.long.includes('remote-ai-chat unlock 2001:db8::/64'), lock.long);
+    && lock.long.includes('divan unlock 2001:db8::/64'), lock.long);
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');

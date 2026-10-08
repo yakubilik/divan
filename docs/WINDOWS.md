@@ -27,25 +27,25 @@ one does need administrator.
 
 Task Scheduler first. Where group policy forbids it, the installer falls back to
 an `HKCU\…\Run` entry pointing at a hidden watchdog,
-`%USERPROFILE%\.remote-ai-chat\start.ps1`, which restarts the daemon if it dies
+`%USERPROFILE%\.divan\start.ps1`, which restarts the daemon if it dies
 (measured at about two seconds).
 
 Undo all of it:
 
 ```powershell
-.venv\Scripts\python.exe -m remote_ai_chat uninstall
+.venv\Scripts\python.exe -m divan uninstall
 ```
 
 ## Managed / corporate machines
 
-- **AppLocker blocks the shims.** The `remote-ai-chat.exe` entry point and npm's
+- **AppLocker blocks the shims.** The `divan.exe` entry point and npm's
   `.cmd` shims are usually blocked. Everything works through
-  `python -m remote_ai_chat ...` instead — use that form. `tools.find_cli` tries
+  `python -m divan ...` instead — use that form. `tools.find_cli` tries
   each candidate with `--version`, so the daemon finds the Claude Agent SDK's
   bundled `claude.exe` on its own.
 - **Codex will not run there.** `codex.cmd` is a shim too, and there is no
   bundled fallback.
-- **npm may be blocked outright.** `RAC_NO_CLIS=1` skips the CLI install step.
+- **npm may be blocked outright.** `DIVAN_NO_CLIS=1` skips the CLI install step.
 - **Symlinking shared config into account folders needs administrator.** Without
   it the step is skipped silently: accounts still work, but `CLAUDE.md` and
   skills are not carried across.

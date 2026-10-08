@@ -1,4 +1,4 @@
-# remote-ai-chat — design tokens
+# divan — design tokens
 
 Two sets: the phone app, drawn in a light and a dark theme, and the desktop
 panel, which is still on the earlier dark-only palette. The phone's is Divan's

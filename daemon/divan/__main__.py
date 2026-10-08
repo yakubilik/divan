@@ -52,14 +52,14 @@ def cmd_serve(args: argparse.Namespace) -> None:
         # Windows lets a second process bind the same port (SO_REUSEADDR), so a
         # duplicate daemon does not fail loudly — it quietly shares the SQLite
         # file and config.toml with the first one and they overwrite each other.
-        print(f"remote-ai-chat is already running (127.0.0.1:{cfg.port}).", file=sys.stderr)
+        print(f"divan is already running (127.0.0.1:{cfg.port}).", file=sys.stderr)
         return
     binds = cfg.resolve_bind()
     if not binds:
         print("No address to bind to (is Tailscale down?). Try --bind 127.0.0.1.", file=sys.stderr)
         sys.exit(2)
     if not cfg.devices:
-        print("No paired device yet. Run: remote-ai-chat pair", file=sys.stderr)
+        print("No paired device yet. Run: divan pair", file=sys.stderr)
 
     srv = Server(cfg)
 
@@ -85,7 +85,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
                                 ws_ping_interval=None, ws_ping_timeout=None,
                                 timeout_graceful_shutdown=10)
             servers.append(uvicorn.Server(uc))
-        print(f"remote-ai-chat {cfg.host_name} listening on: " + ", ".join(f"ws://{h}:{cfg.port}/ws" for h in binds))
+        print(f"divan {cfg.host_name} listening on: " + ", ".join(f"ws://{h}:{cfg.port}/ws" for h in binds))
         reaper = asyncio.create_task(srv.reaper())
         updater = asyncio.create_task(srv.updater.loop())
         resumer = asyncio.create_task(srv.resume_interrupted())
@@ -141,7 +141,7 @@ def cmd_pair(args: argparse.Namespace) -> None:
     except Exception:
         pass
     from urllib.parse import urlencode
-    link = "remoteaichat://pair?" + urlencode({"host": host, "port": cfg.port, "token": token,
+    link = "divan://pair?" + urlencode({"host": host, "port": cfg.port, "token": token,
                                               "name": cfg.host_name, "device_id": dev.id})
     print(f"\nDevice: {dev.name} ({dev.id})  Host: {host}:{cfg.port}")
     print("Token for manual entry (shown once):")
@@ -164,7 +164,7 @@ def cmd_web(args: argparse.Namespace) -> None:
         print("The panel is not built. Run: cd web && npm install && npm run build")
         return
     if not _already_serving(cfg.port):
-        print(f"Nothing answers on port {cfg.port}. Start it first: remote-ai-chat serve")
+        print(f"Nothing answers on port {cfg.port}. Start it first: divan serve")
         return
     # `--at` is the panel behind a tunnel (docs/TUNNEL.md): the browser is
     # somewhere else, so the address it dials is the tunnel's hostname on 443
@@ -183,7 +183,7 @@ def cmd_web(args: argparse.Namespace) -> None:
     if args.at and not cfg.tunnel_allow_ips:
         print("\nNote: tunnel_allow_ips is empty, so the tunnel will refuse this"
               "\naddress along with every other. Add the browser's address to"
-              "\n~/.remote-ai-chat/config.toml first — see docs/TUNNEL.md.")
+              "\n~/.divan/config.toml first — see docs/TUNNEL.md.")
     if not args.no_open and not args.at:
         import webbrowser
         webbrowser.open(url)
@@ -268,7 +268,7 @@ async def _protocol(cfg: Config, typ: str, data: dict) -> dict:
                 except asyncio.TimeoutError:
                     raise SystemExit(
                         "the daemon did not answer. It may have done the work"
-                        " anyway — check `remote-ai-chat project list` before"
+                        " anyway — check `divan project list` before"
                         " trying again.")
                 msg = json.loads(raw)
                 if msg.get("id") != 1:
@@ -328,7 +328,7 @@ def _project_line(p: dict) -> str:
 def cmd_project(args: argparse.Namespace) -> None:
     cfg = Config.load()
     if not _already_serving(cfg.port):
-        print(f"Nothing answers on port {cfg.port}. Start it first: remote-ai-chat serve",
+        print(f"Nothing answers on port {cfg.port}. Start it first: divan serve",
               file=sys.stderr)
         sys.exit(2)
     fields = _project_fields(args)
@@ -518,7 +518,7 @@ def cmd_demo_seed(args: argparse.Namespace) -> None:
               " (daemon/README.md, 'Demo machine').", file=sys.stderr)
         sys.exit(2)
     if not _already_serving(cfg.port):
-        print(f"Nothing answers on port {cfg.port}. Start it first: remote-ai-chat serve",
+        print(f"Nothing answers on port {cfg.port}. Start it first: divan serve",
               file=sys.stderr)
         sys.exit(2)
     # The chat needs a folder to sit in, inside the roots a chat may open. The
@@ -536,7 +536,7 @@ def cmd_demo_seed(args: argparse.Namespace) -> None:
           f" {made['chat']} chat — in {folder}")
 
 
-PLIST_LABEL = "com.remote-ai-chat.daemon"
+PLIST_LABEL = "com.yakup.divan"
 
 
 def _plist_path():
@@ -546,8 +546,9 @@ def _plist_path():
 
 def _plist_labels(user: str) -> list[str]:
     """Every label this daemon has been registered under on macOS: the one
-    `install` writes, and the one daemon/install.sh writes."""
-    return [PLIST_LABEL, f"com.{user}.remote-ai-chat"]
+    `install` and daemon/install.sh write, and the ones from before the rename."""
+    from . import legacy
+    return [PLIST_LABEL, *legacy.plist_labels(user)]
 
 
 def _uninstall_launchd(home: Path, uid: str, user: str, run) -> list[str]:
@@ -566,7 +567,7 @@ def _uninstall_launchd(home: Path, uid: str, user: str, run) -> list[str]:
 
 
 WIN_RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
-WIN_TASK = "remote-ai-chat"
+WIN_TASK = "divan"
 
 
 def _win_uninstall() -> None:
@@ -582,12 +583,12 @@ def _win_uninstall() -> None:
         if r.returncode == 0:
             break
     # The supervisor (start.ps1) restarts the daemon on exit, so stop it first.
-    # Only the daemon (python -m remote_ai_chat serve) and its launcher
+    # Only the daemon (python -m divan serve) and its launcher
     # (powershell -File ...\start.ps1): match name + exact argument shape so a
     # shell or editor that merely mentions these strings is never killed.
     import os
     ps = ("Get-CimInstance Win32_Process | Where-Object { "
-          "(($_.Name -match '^python' -and $_.CommandLine -match '-m remote_ai_chat serve') -or "
+          "(($_.Name -match '^python' -and $_.CommandLine -match '-m divan serve') -or "
           "($_.Name -match '^powershell' -and $_.CommandLine -match '-File .*\\\\start\\.ps1')) "
           f"-and $_.ProcessId -ne {os.getpid()} }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}")
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
@@ -642,7 +643,7 @@ def cmd_install(args: argparse.Namespace) -> None:
     print(f"Installed and started: {path}\nLogs: {LOG_DIR}/launchd.*.log")
 
 
-SYSTEMD_UNIT = Path.home() / ".config" / "systemd" / "user" / "remote-ai-chat.service"
+SYSTEMD_UNIT = Path.home() / ".config" / "systemd" / "user" / "divan.service"
 
 
 def _install_systemd() -> None:
@@ -651,12 +652,12 @@ def _install_systemd() -> None:
     SYSTEMD_UNIT.parent.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     SYSTEMD_UNIT.write_text(f"""[Unit]
-Description=remote-ai-chat daemon
+Description=divan daemon
 After=network-online.target
 
 [Service]
 ExecStart={exe} serve
-Environment=RAC_HOME={CONFIG_DIR}
+Environment=DIVAN_HOME={CONFIG_DIR}
 Restart=always
 RestartSec=3
 
@@ -664,7 +665,7 @@ RestartSec=3
 WantedBy=default.target
 """)
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
-    r = subprocess.run(["systemctl", "--user", "enable", "--now", "remote-ai-chat.service"],
+    r = subprocess.run(["systemctl", "--user", "enable", "--now", "divan.service"],
                        capture_output=True, text=True)
     if r.returncode != 0:
         print("systemctl failed:", r.stderr.strip(), file=sys.stderr)
@@ -675,7 +676,7 @@ WantedBy=default.target
 
 def _uninstall_systemd() -> None:
     import subprocess
-    subprocess.run(["systemctl", "--user", "disable", "--now", "remote-ai-chat.service"], capture_output=True)
+    subprocess.run(["systemctl", "--user", "disable", "--now", "divan.service"], capture_output=True)
     if SYSTEMD_UNIT.exists():
         SYSTEMD_UNIT.unlink()
     print("Removed.")
@@ -685,7 +686,7 @@ def cmd_uninstall(args: argparse.Namespace) -> None:
     if sys.platform == "linux":
         return _uninstall_systemd()
     if sys.platform == "win32":
-        print("On Windows: Unregister-ScheduledTask -TaskName remote-ai-chat", file=sys.stderr)
+        print("On Windows: Unregister-ScheduledTask -TaskName divan", file=sys.stderr)
         sys.exit(2)
     import getpass, subprocess
     uid = subprocess.run(["id", "-u"], capture_output=True, text=True).stdout.strip()
@@ -700,7 +701,7 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="remote-ai-chat")
+    p = argparse.ArgumentParser(prog="divan")
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("serve"); s.add_argument("--bind", nargs="*"); s.add_argument("--port", type=int)
     s.set_defaults(fn=cmd_serve)

@@ -11,7 +11,7 @@ const en = {
   pairSubtitle: 'Run this in a terminal on your computer, then scan the code.',
   pairTapScan: 'Tap to scan QR', pairManual: 'MANUAL ENTRY', pairConnect: 'Connect', pairManualBtn: 'Enter IP and token',
   pairTailscale: 'Connection only over your Tailscale network',
-  pairBadCode: 'Unrecognized code', pairBadCodeBody: 'This is not a remote-ai-chat pairing code.',
+  pairBadCode: 'Unrecognized code', pairBadCodeBody: 'This is not a divan pairing code.',
   // chats
   chats: 'Chats', search: 'Search', archive: 'Archive', archiveOn: 'Archive shown', ungrouped: 'Daily', computer: 'Computer',
   active: '{n} active', connecting: 'connecting', unauthorized: 'no access', offline: 'offline',

@@ -22,11 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from claude_agent_sdk import PermissionResultAllow              # noqa: E402
 
-from remote_ai_chat.providers import claude as claude_mod       # noqa: E402
-from remote_ai_chat.providers.base import ProviderConfig        # noqa: E402
-from remote_ai_chat.providers.claude import ClaudeProvider      # noqa: E402
-from remote_ai_chat.providers.codex import CodexProvider        # noqa: E402
-from remote_ai_chat.security import destructive_reason          # noqa: E402
+from divan.providers import claude as claude_mod       # noqa: E402
+from divan.providers.base import ProviderConfig        # noqa: E402
+from divan.providers.claude import ClaudeProvider      # noqa: E402
+from divan.providers.codex import CodexProvider        # noqa: E402
+from divan.security import destructive_reason          # noqa: E402
 
 failures: list[str] = []
 
@@ -56,16 +56,16 @@ FLAGGED = [
     "rm -rf /tmp",
     "rm -rf /tmp/*",
     "find ~/projects/other -name '*.mp3' -delete",
-    "cd ~/.remote-ai-chat && ls > config.toml",
+    "cd ~/.divan && ls > config.toml",
     "bash -lc 'rm -rf ~/projects'",
     "sudo reboot",
-    "echo x >> ~/.remote-ai-chat/config.toml",
-    "sed -i '' s/a/b/ ~/.remote-ai-chat/config.toml",
-    "cd ~/.remote-ai-chat && mv db.sqlite db.old",
-    'sqlite3 ~/.remote-ai-chat/db.sqlite "delete from chats"',
-    "cd ~/.remote-ai-chat && sqlite3 db.sqlite \"select 1; update chats set title='x'\"",
-    "cd ~/.remote-ai-chat && sqlite3 db.sqlite < fix.sql",
-    "cat ~/.remote-ai-chat/accounts/claude-1/.credentials.json",
+    "echo x >> ~/.divan/config.toml",
+    "sed -i '' s/a/b/ ~/.divan/config.toml",
+    "cd ~/.divan && mv db.sqlite db.old",
+    'sqlite3 ~/.divan/db.sqlite "delete from chats"',
+    "cd ~/.divan && sqlite3 db.sqlite \"select 1; update chats set title='x'\"",
+    "cd ~/.divan && sqlite3 db.sqlite < fix.sql",
+    "cat ~/.divan/accounts/claude-1/.credentials.json",
 ]
 
 ALLOWED = [
@@ -77,16 +77,16 @@ ALLOWED = [
     "rm -rf build/*",
     "find . -name '*.pyc' -delete",
     "bash -lc 'git status'",
-    "sed -n 3,16p ~/.remote-ai-chat/config.toml",
-    'sqlite3 -readonly ~/.remote-ai-chat/db.sqlite "select 1"',
-    "M=~/.remote-ai-chat/accounts/claude-1/projects/x/memory; cat $M/a.md; ls ~/projects",
-    'echo "- [A](a.md)" >> ~/.remote-ai-chat/accounts/claude-1/projects/x/memory/MEMORY.md',
-    "bash -lc 'tail -50 ~/.remote-ai-chat/logs/daemon.log'",
+    "sed -n 3,16p ~/.divan/config.toml",
+    'sqlite3 -readonly ~/.divan/db.sqlite "select 1"',
+    "M=~/.divan/accounts/claude-1/projects/x/memory; cat $M/a.md; ls ~/projects",
+    'echo "- [A](a.md)" >> ~/.divan/accounts/claude-1/projects/x/memory/MEMORY.md',
+    "bash -lc 'tail -50 ~/.divan/logs/daemon.log'",
     "rm -rf /tmp/shots; mkdir -p /tmp/shots",
     "cd /tmp/clips && find . -name '*.mp3' -delete",
-    'cd ~/.remote-ai-chat; sqlite3 -readonly db.sqlite "select 1" 2>&1 | cut -c1-40',
-    "cd ~/.remote-ai-chat && ls > /dev/null",
-    'cd ~/.remote-ai-chat && sqlite3 -header db.sqlite ".schema chats" "select * from chats where updated_at > 1"',
+    'cd ~/.divan; sqlite3 -readonly db.sqlite "select 1" 2>&1 | cut -c1-40',
+    "cd ~/.divan && ls > /dev/null",
+    'cd ~/.divan && sqlite3 -header db.sqlite ".schema chats" "select * from chats where updated_at > 1"',
 ]
 
 

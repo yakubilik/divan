@@ -1,4 +1,4 @@
-"""Config + device registry at ~/.remote-ai-chat/config.toml.
+"""Config + device registry at ~/.divan/config.toml.
 
 Tokens are stored as sha256 hashes; the plaintext only ever leaves via the
 pairing QR. Nothing here is logged.
@@ -19,9 +19,27 @@ from pathlib import Path
 
 import tomli_w
 
-# RAC_HOME lets a machine host a second, fully separate daemon (own config,
+from . import legacy
+
+# DIVAN_HOME lets a machine host a second, fully separate daemon (own config,
 # database, uploads and port) — used for testing and for per-user installs.
-CONFIG_DIR = Path(os.environ.get("RAC_HOME") or (Path.home() / ".remote-ai-chat")).expanduser()
+HOME_NAME = ".divan"
+
+
+def resolve_home(env=None, home: Path | None = None) -> Path:
+    """Where this daemon keeps its state: DIVAN_HOME when it is set, else
+    ~/.divan — and the pre-rename folder only while ~/.divan does not exist."""
+    env = os.environ if env is None else env
+    if env.get("DIVAN_HOME"):
+        return Path(env["DIVAN_HOME"]).expanduser()
+    home = Path.home() if home is None else home
+    new = home / HOME_NAME
+    if not new.exists():
+        return legacy.fallback_home(home) or new
+    return new
+
+
+CONFIG_DIR = resolve_home()
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 DB_PATH = CONFIG_DIR / "db.sqlite"
 LOG_DIR = CONFIG_DIR / "logs"
@@ -162,7 +180,7 @@ class Config:
     # it names, and no CLI is ever started. For lending a computer to somebody
     # who has no subscription of their own — App Review. See daemon/README.md.
     demo: bool = False
-    # More directories for `python -m remote_ai_chat.scrub` to look for keys in,
+    # More directories for `python -m divan.scrub` to look for keys in,
     # beside the daemon's own and the CLIs' transcripts: wherever this machine
     # keeps session notes. Absolute, or starting with `~`. Empty by default.
     scrub_extra_paths: list[str] = field(default_factory=list)
@@ -172,8 +190,8 @@ class Config:
     def load(cls) -> "Config":
         if not CONFIG_PATH.exists():
             cfg = cls()
-            if os.environ.get("RAC_PORT"):
-                cfg.port = int(os.environ["RAC_PORT"])
+            if os.environ.get("DIVAN_PORT"):
+                cfg.port = int(os.environ["DIVAN_PORT"])
             cfg.save()
             return cfg
         raw = tomllib.loads(CONFIG_PATH.read_text())
@@ -187,9 +205,9 @@ class Config:
         cfg.accounts = accounts
         cfg.pool = pool if isinstance(pool, dict) else {}
         cfg._devices_mtime = _mtime(CONFIG_PATH)
-        # The port of a second daemon on the same machine, beside RAC_HOME.
-        if os.environ.get("RAC_PORT"):
-            cfg.port = int(os.environ["RAC_PORT"])
+        # The port of a second daemon on the same machine, beside DIVAN_HOME.
+        if os.environ.get("DIVAN_PORT"):
+            cfg.port = int(os.environ["DIVAN_PORT"])
         return cfg
 
     def save(self) -> None:

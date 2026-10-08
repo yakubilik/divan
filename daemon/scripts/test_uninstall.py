@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""`remote-ai-chat uninstall` removes the service whichever way it was installed.
+"""`divan uninstall` removes the service whichever way it was installed.
 
     .venv312/bin/python scripts/test_uninstall.py
 
-`remote-ai-chat install` registers launchd label `com.remote-ai-chat.daemon`;
-`daemon/install.sh`, the path the README gives, registers
-`com.<user>.remote-ai-chat`. Uninstall has to find either. Nothing here calls
+`divan install` and `daemon/install.sh` register one launchd label; an
+install from before the rename sits under one of two older ones
+(`divan/legacy.py`). Uninstall has to find any of them. Nothing here calls
 launchctl: the runner is a stub and the home directory is a temporary one.
 """
 import sys
@@ -14,7 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat.__main__ import PLIST_LABEL, _uninstall_launchd  # noqa: E402
+from divan import legacy  # noqa: E402
+from divan.__main__ import PLIST_LABEL, _uninstall_launchd  # noqa: E402
 
 failures = 0
 
@@ -38,15 +39,15 @@ def run_with(labels: list[str]) -> tuple[list[str], list[list[str]], list[str]]:
     return removed, calls, left
 
 
-SCRIPT = "com.ada.remote-ai-chat"
+SCRIPT = legacy.plist_labels("ada")[1]
 
 removed, calls, left = run_with([SCRIPT])
-ok("a plist from install.sh is booted out and deleted",
+ok("a plist from before the rename is booted out and deleted",
    removed == [SCRIPT] and calls == [["launchctl", "bootout", f"gui/501/{SCRIPT}"]] and not left,
    f"{removed} {calls} {left}")
 
 removed, calls, left = run_with([PLIST_LABEL])
-ok("a plist from `remote-ai-chat install` is booted out and deleted",
+ok("a plist from `divan install` is booted out and deleted",
    removed == [PLIST_LABEL] and calls == [["launchctl", "bootout", f"gui/501/{PLIST_LABEL}"]] and not left,
    f"{removed} {calls} {left}")
 

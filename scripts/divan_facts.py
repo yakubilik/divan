@@ -35,8 +35,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "daemon"))
 
-from remote_ai_chat import config  # noqa: E402
-from remote_ai_chat.db import DB  # noqa: E402
+from divan import config  # noqa: E402
+from divan.db import DB  # noqa: E402
 
 HOME = Path.home()
 
@@ -45,14 +45,14 @@ HOME = Path.home()
 #: began at, which is the first one unless a product outgrew the repository it
 #: started in.
 FACTS: dict[str, dict] = {
-    "remote-ai-chat": {
+    "divan": {
         "name": "Divan",
         "kind": "app",
         "summary": "This Mac's coding agents, from a phone: chats, queue, one board.",
         # Used every day by the person who wrote it and by nobody else yet: the
         # phone app is not on any store and the panel is served off this Mac.
         "stage": "build",
-        "repo": "~/projects/remote-ai-chat",
+        "repo": str(Path(__file__).resolve().parent.parent),
         "milestones": [
             {"first": True, "title": "Project started", "kind": "start",
              "note": "first commit: a phone talking to the Mac's coding agent"},

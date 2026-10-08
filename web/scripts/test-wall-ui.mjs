@@ -180,7 +180,7 @@ try {
   ok('the window is the phone-sized one', phone.width === 390, String(phone.width));
   ok('three projects, three columns', phone.columns === 3, String(phone.columns));
   ok('each column is titled with its project',
-    phone.headings.map((h) => h.replace(/\d+$/, '')).join('|') === 'remote-ai-chat|babysee|ustabasi',
+    phone.headings.map((h) => h.replace(/\d+$/, '')).join('|') === 'divan|babysee|ustabasi',
     phone.headings.join('|'));
   ok('the columns are stacked, one across',
     phone.widths.every((w) => w >= phone.room - 8), JSON.stringify(phone.widths));

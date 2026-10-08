@@ -294,13 +294,13 @@ const wentTo = (p) => R.nav.pushed().find((x) => x && x.pathname === p);
 }
 
 checks.push(
-  ['a pairing code is still read the way `remote-ai-chat pair` prints it, link and payload alike',
-    eq(P.parsePairCode('remoteaichat://pair?host=100.64.1.2&port=8791&token=tok%2F1&name=studio&device_id=d1'),
+  ['a pairing code is still read the way `divan pair` prints it, link and payload alike',
+    eq(P.parsePairCode('divan://pair?host=100.64.1.2&port=8791&token=tok%2F1&name=studio&device_id=d1'),
        { host: '100.64.1.2', port: 8791, token: 'tok/1', name: 'studio', device_id: 'd1' })
     && eq(P.parsePairCode('{"host":"100.64.1.3","token":"t2"}'),
           { host: '100.64.1.3', port: P.DEFAULT_PORT, token: 't2', name: '100.64.1.3', device_id: undefined })],
   ['…and half a code is no code: a host with no token pairs with nothing, and neither does anything else',
-    P.parsePairCode('remoteaichat://pair?host=100.64.1.2') === null
+    P.parsePairCode('divan://pair?host=100.64.1.2') === null
     && P.parsePairCode('{"host":"100.64.1.2"}') === null
     && P.parsePairCode('https://example.com') === null
     && P.parsePairCode('') === null],

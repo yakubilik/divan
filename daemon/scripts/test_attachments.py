@@ -16,9 +16,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat import attachments as att        # noqa: E402
-from remote_ai_chat.attachments import extract      # noqa: E402
-from remote_ai_chat.security import PathPolicy       # noqa: E402
+from divan import attachments as att        # noqa: E402
+from divan.attachments import extract      # noqa: E402
+from divan.security import PathPolicy       # noqa: E402
 
 
 def main() -> int:

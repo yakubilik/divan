@@ -190,7 +190,7 @@ def _get(url: str, timeout: int = 25, cap: int = MAX_AGENT_BYTES + 1,
     import urllib.request
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
-        "User-Agent": "remote-ai-chat",
+        "User-Agent": "divan",
     })
     for attempt in range(1, tries + 1):
         try:

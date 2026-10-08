@@ -24,8 +24,8 @@ a phone on a bus.
 cd daemon
 uv --no-config venv --python 3.12 .venv312
 uv --no-config pip install --python .venv312/bin/python -e .
-.venv312/bin/remote-ai-chat pair --name dev     # prints a token
-.venv312/bin/remote-ai-chat serve
+.venv312/bin/divan pair --name dev     # prints a token
+.venv312/bin/divan serve
 ```
 
 ```bash
@@ -41,7 +41,7 @@ gitignored, and it stands in for the token the daemon normally hands over:
 {"host": "127.0.0.1", "port": 8790, "token": "…", "name": "This computer", "device_id": "…"}
 ```
 
-`RAC_HOME=/tmp/rac-dev RAC_PORT=8791` gives you a second daemon with its own
+`DIVAN_HOME=/tmp/rac-dev DIVAN_PORT=8791` gives you a second daemon with its own
 config, database and devices — useful when you do not want to disturb the one
 you actually use.
 
@@ -136,7 +136,7 @@ because the middle is what everybody develops on and the ends are where it
 breaks. `scripts/audit.py` runs there as well, on the tracked files only — the
 history is a report for a person, not a build step (see `docs/audit/`).
 
-If you changed the panel, commit the rebuilt `daemon/remote_ai_chat/webui/`?
+If you changed the panel, commit the rebuilt `daemon/divan/webui/`?
 **No** — it is gitignored. The daemon builds it, or the installer does.
 
 ## Releasing
@@ -170,12 +170,12 @@ on a release and `v0.2.0+7` seven commits past one, so a machine following
 **Language.** Everything is English — code, comments, commit messages,
 documentation and every string either client shows. `python scripts/audit.py`
 fails on anything else, so this is checked rather than asked for. The one place
-another language is allowed is `daemon/remote_ai_chat/call.py`, where it is data
+another language is allowed is `daemon/divan/call.py`, where it is data
 a language detector cannot work without; that exception is listed in the script.
 
 The app and the panel each keep their strings in one table (`app/src/i18n.ts`,
 `web/src/lib/i18n.ts`) rather than inline. The daemon tags every user-visible
-error with a stable `code` in `daemon/remote_ai_chat/errors.py`; a new code
+error with a stable `code` in `daemon/divan/errors.py`; a new code
 means a new entry in `ERR_KEYS` in both clients.
 
 **Comments explain why.** The codebase leans on comments that say what a piece
@@ -186,7 +186,7 @@ comment that restates the code is worse than no comment.
 turn`, not `fix: client.py`. Say what is now true that was not true before.
 
 **No secrets, ever.** Tokens are stored as sha256. Paths under
-`~/.remote-ai-chat/` are machine state and are gitignored. `security.py` has a
+`~/.divan/` are machine state and are gitignored. `security.py` has a
 redaction list for anything key-shaped that reaches a log or a bubble; if you
 add a credential format, add the pattern.
 
@@ -198,9 +198,9 @@ or tokens. Small, readable, and on its own.
 
 - Android. The protocol is platform-neutral and `app/` is Expo; the work is
   real but nothing in the design is in the way.
-- More provider adapters — `daemon/remote_ai_chat/providers/` is a small
+- More provider adapters — `daemon/divan/providers/` is a small
   interface and Claude Code and Codex are both implementations of it.
-- Bug reports with the daemon log (`~/.remote-ai-chat/logs/daemon.log`) and what
+- Bug reports with the daemon log (`~/.divan/logs/daemon.log`) and what
   the phone showed. Scrub paths you would rather not publish.
 
 ## What is not

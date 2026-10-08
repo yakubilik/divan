@@ -218,7 +218,7 @@ function keyTree(nodes: any[], path: string): any[] {
   return nodes;
 }
 
-/** What the daemon leaves where a key was pasted (`daemon/remote_ai_chat/
+/** What the daemon leaves where a key was pasted (`daemon/divan/
  *  secrets.py`): the family, the keychain item and the command to read it. The
  *  agent needs that; the person reading needs only to see that a key was there
  *  and is safe, so the screen says `🔒 OpenAI key`. */

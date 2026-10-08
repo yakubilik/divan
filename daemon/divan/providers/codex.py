@@ -19,7 +19,7 @@ from typing import Any
 
 from ..errors import Err
 from ..security import destructive_reason, redact
-from .. import tools
+from .. import legacy, tools
 from .base import Provider, ProviderConfig, TurnResult
 
 log = logging.getLogger("rac.codex")
@@ -64,7 +64,7 @@ async def live_models(timeout: float = 12) -> list[dict] | None:
     assert proc.stdin and proc.stdout
 
     async def go() -> list[dict] | None:
-        proc.stdin.write((json.dumps({"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "remote-ai-chat", "version": "0.1.0"}}}) + "\n").encode())
+        proc.stdin.write((json.dumps({"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "divan", "version": "0.1.0"}}}) + "\n").encode())
         proc.stdin.write((json.dumps({"id": 2, "method": "model/list", "params": {}}) + "\n").encode())
         await proc.stdin.drain()
         while True:
@@ -139,14 +139,15 @@ class CodexProvider(Provider):
         if self.cfg.account_home:
             env["CODEX_HOME"] = self.cfg.account_home
         if self.cfg.chat_id:
-            env["RAC_CHAT_ID"] = self.cfg.chat_id
+            env["DIVAN_CHAT_ID"] = self.cfg.chat_id
+            env.update(legacy.chat_env(self.cfg.chat_id))
         self._proc = await asyncio.create_subprocess_exec(
             cli, "app-server",
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL, env=env, cwd=self.cfg.cwd,
         )
         self._reader = asyncio.create_task(self._read_loop())
-        await self._call("initialize", {"clientInfo": {"name": "remote-ai-chat", "version": "0.1.0"}})
+        await self._call("initialize", {"clientInfo": {"name": "divan", "version": "0.1.0"}})
         policy, sandbox = PERM_MODES.get(self.cfg.perm_mode, PERM_MODES["auto-edit"])
         base = {"cwd": self.cfg.cwd, "approvalPolicy": policy, "sandbox": sandbox, "model": self.cfg.model}
         if self._thread_id:

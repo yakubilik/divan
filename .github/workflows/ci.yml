@@ -46,7 +46,7 @@ jobs:
         # The same check the updater runs before it lets a pulled commit
         # restart a daemon: a syntax error here is one a supervisor would
         # otherwise discover by restarting forever.
-        run: python -c "import remote_ai_chat, remote_ai_chat.server"
+        run: python -c "import divan, divan.server"
       - name: Tests
         working-directory: daemon
         # Every script that spends no model turns and touches no network.
@@ -150,11 +150,11 @@ jobs:
         # build; the daemon then serves that build with no auth of its own.
         # vite.config.ts strips it. This is the check that it still does.
         run: |
-          if [ -e ../daemon/remote_ai_chat/webui/dev-host.json ]; then
+          if [ -e ../daemon/divan/webui/dev-host.json ]; then
             echo "dev-host.json shipped in the panel build" >&2
             exit 1
           fi
         working-directory: web
       - name: The build says which commit it came from
-        run: test -s ../daemon/remote_ai_chat/webui/build.json
+        run: test -s ../daemon/divan/webui/build.json
         working-directory: web

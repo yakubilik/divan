@@ -23,8 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat import scrub, secrets                       # noqa: E402
-from remote_ai_chat.db import DB                               # noqa: E402
+from divan import scrub, secrets                       # noqa: E402
+from divan.db import DB                               # noqa: E402
 
 failures: list[str] = []
 
@@ -76,7 +76,7 @@ def jsonl(path: Path, rows: list[dict]) -> None:
 
 
 def plant(home: Path, configured: bool = True) -> tuple[DB, Path]:
-    rac = home / ".remote-ai-chat"
+    rac = home / ".divan"
     db = DB(rac / "db.sqlite")
     if configured:
         (rac / "config.toml").write_text(f'scrub_extra_paths = ["~/{NOTES}"]\n')
@@ -149,7 +149,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)
         db, live = plant(home)
-        report = home / ".remote-ai-chat" / scrub.REPORT
+        report = home / ".divan" / scrub.REPORT
         services = {name: secrets.service_for(kind, value) for name, (kind, value) in PLANTED.items()}
 
         print("\ndry run")
@@ -159,7 +159,7 @@ def main() -> int:
         check(code == 0 and snapshot(home) == before, "no file in the tree changes")
         missing = [n for n, s in services.items() if s not in text]
         check(not missing, "every planted key is in the report", f"missing {missing}")
-        check(not (home / ".remote-ai-chat" / scrub.STATE).exists(), "a dry run keeps no state")
+        check(not (home / ".divan" / scrub.STATE).exists(), "a dry run keeps no state")
 
         print("\na file written in the last ten minutes")
         check(str(live) in text.split("## Skipped")[-1], "it is listed as skipped")
@@ -183,9 +183,9 @@ def main() -> int:
                 except ValueError:
                     bad.append(f"{p.name}:{i + 1}")
         check(not bad, "every JSONL line still parses", f"{bad}")
-        check(sqlite3.connect(home / ".remote-ai-chat" / "db.sqlite").execute(
+        check(sqlite3.connect(home / ".divan" / "db.sqlite").execute(
             "PRAGMA integrity_check").fetchone()[0] == "ok", "the database passes integrity_check")
-        rows = [json.loads(r[0]) for r in sqlite3.connect(home / ".remote-ai-chat" / "db.sqlite").execute(
+        rows = [json.loads(r[0]) for r in sqlite3.connect(home / ".divan" / "db.sqlite").execute(
             "SELECT payload FROM events ORDER BY seq")]
         inner = json.loads(rows[1]["output"])
         check(services["db-user"] in rows[0]["text"] and services["db-tool"] in inner["config"]["api_key"]
@@ -193,7 +193,7 @@ def main() -> int:
               "the events say where each key went and keep everything else")
         check(db.list_chats()[0]["title"] == "New chat", "the daemon's own connection still reads the database")
         claude = [json.loads(line) for line in
-                  (home / ".remote-ai-chat/accounts/claude-abc123/projects/-Users-x-proj/s1.jsonl").read_text().splitlines()]
+                  (home / ".divan/accounts/claude-abc123/projects/-Users-x-proj/s1.jsonl").read_text().splitlines()]
         check(claude[1]["message"]["content"][1]["source"]["data"].startswith("iVBORw0KGgo")
               and claude[2]["message"]["content"][0]["text"] == "Türkçe, sorun yok ✓",
               "an inline image and plain text come back as they were")
@@ -239,7 +239,7 @@ def main() -> int:
         db._c.close()
         before = snapshot(home)
         code = quiet(scrub.main, ["--apply", "--home", str(home)], keychain=RefusingKeychain())
-        text = (home / ".remote-ai-chat" / scrub.REPORT).read_text()
+        text = (home / ".divan" / scrub.REPORT).read_text()
         check(code == 1 and snapshot(home) == before, "nothing is masked that is not kept")
         check("keychain refused" in text and not any(V[n] in text for n in PLANTED),
               "the report says so, by service")
@@ -254,7 +254,7 @@ def main() -> int:
         quiet(scrub.main, ["--apply", "--home", str(home)], keychain=kc)
         check(log.read_bytes() == before and secrets.service_for(*PLANTED["session-log"]) not in kc.items,
               "a folder config.toml does not name is not read")
-        roots = (home / ".remote-ai-chat", home / ".claude" / "projects", home / ".codex" / "sessions")
+        roots = (home / ".divan", home / ".claude" / "projects", home / ".codex" / "sessions")
         stray = [str(p) for p in scrub.targets(home) if not any(p.is_relative_to(r) for r in roots)]
         check(not stray, "only the daemon's and the CLIs' own folders are walked", f"{stray}")
         db._c.close()

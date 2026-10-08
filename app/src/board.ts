@@ -10,7 +10,7 @@
 //   * **the column follows the ticket.** Ice Box, Queued, In Progress, Done: a
 //     card with a coding agent on it is put there by the daemon, from the
 //     ticket's own status — picked up means In Progress, verified or cancelled
-//     means Done (`daemon/remote_ai_chat/divan.py`, `STATUS_COLUMN`). Nobody
+//     means Done (`daemon/divan/divan.py`, `STATUS_COLUMN`). Nobody
 //     drags forty tickets by hand. A card with no ticket is where a person put
 //     it, and only a person moves it.
 //   * **the status is reality**, and it is the small mark on the card: running,
