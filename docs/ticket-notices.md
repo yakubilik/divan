@@ -42,3 +42,14 @@ in `web/scripts/notice-fixture.js` are copied from stored events (#157, #139,
 The native client should read the same format and keep the same rules:
 recognize a notice only when both ends match, never show the instruction, and
 show the person's trailing words.
+
+## The phone
+
+`app/src/notice.ts` is the same reader, and `scripts/test-notice.cjs` (in the
+app's `npm test`) holds it to the web's answers on the fixtures above.
+`UserBubble` in `app/src/components/chat.tsx` draws a recognized notice with
+`TicketNoticeRow`:
+
+- **Collapsed:** one full-width row: state icon, state word (same words and tones as the web), mono `#N`, the title on one truncated line, `queued` when queued, and a chevron. The row is one `Pressable` with `accessibilityState.expanded`.
+- **Expanded:** under the row, the report as selectable text, then the fact lines in mono. A second tap collapses it. Each mount starts collapsed.
+- The agent instruction is never drawn; the person's trailing words are their own bubble; a message with attachments stays a plain bubble.

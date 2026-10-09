@@ -117,7 +117,7 @@ const ready = (async () => {
     && /^(Done|Needs an answer|Failed) #\d+: /.test(n.props.accessibilityLabel ?? '') && typeof n.type !== 'string');
   const row = (n) => rows().find((r) => r.props.accessibilityLabel.includes(`#${n}:`));
   const details = () => hosts(json(), (n) => /^Ticket #\d+ report$/.test(n.props['data-label'] ?? ''));
-  const tap = async (n) => { await act(async () => { row(n).props.onPress(); }); };
+  const tap = async (n) => { await act(async () => { row(n)?.props.onPress(); }); };
 
   // Collapsed, from history.
   const first = words(json());
@@ -146,7 +146,7 @@ const ready = (async () => {
   const open = words(json());
   const shown = details().map(words).join(' ');
   checks.push(['notice (phone): tapping #157 opens its report inline with the build and install limits and the facts',
-    details().length === 1 && row(157).props.accessibilityState?.expanded === true
+    details().length === 1 && row(157)?.props.accessibilityState?.expanded === true
     && shown.includes('the delivered .ipa was built before those merges, so it does not contain the #150 voice work')
     && shown.includes('It was delivered but not installed because the phone was unreachable.')
     && shown.includes('🔀 merged into main (1664073)') && shown.includes('branch ustabasi/157-match-mobile-chat-grouping-to-the-web')]);
@@ -156,7 +156,7 @@ const ready = (async () => {
     && !INSTRUCTION.test(own(open))]);
   await tap(157);
   checks.push(['notice (phone): tapping #157 again closes it',
-    details().length === 0 && row(157).props.accessibilityState?.expanded === false
+    details().length === 0 && row(157)?.props.accessibilityState?.expanded === false
     && !/phone was unreachable/.test(own(words(json())))]);
   await tap(139);
   await tap(161);
