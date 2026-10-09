@@ -79,7 +79,8 @@ function Body() {
   useEffect(() => { void loadAccounts().catch(() => {}); }, [loadAccounts]);
 
   const initial = editingDefaults
-    ? { provider: defaults.provider, model: defaults.model, effort: defaults.effort as string | null, perm: defaults.perm_mode }
+    ? { provider: defaults.provider, model: defaults.model, effort: defaults.effort as string | null,
+        perm: permissionFor(defaults.provider, catalog?.[defaults.provider], defaults) }
     : { provider: chat?.provider ?? 'claude', model: chat?.model ?? '', effort: chat?.effort ?? null, perm: chat?.perm_mode ?? DEFAULT_PERM };
   const [provider, setProvider] = useState<Provider>(initial.provider);
   const [model, setModel] = useState(initial.model);
@@ -186,9 +187,15 @@ function Body() {
           )}
           <View style={{ gap: 6 }}>
             <SectionHeader kind="mark" title={T('permMode')} style={{ paddingHorizontal: 4 }} />
-            <Segments value={perm} onChange={(p) => void onPerm(p)}
-              segments={cat.perm_modes.map((p) => ({ key: p, label: p }))} />
-            {prefs.faceIdBypass && cat.perm_modes.includes('bypass') && (
+            {editingDefaults && cat.default_perm_mode
+              // The computer decides the default, and a control that changed a
+              // word nothing reads would be a lie: the mode is picked per chat.
+              ? <Text style={{ fontSize: 13, color: t.ink3, paddingHorizontal: 4 }}>
+                  {T('permDefaultFixed', { mode: cat.default_perm_mode })}
+                </Text>
+              : <Segments value={perm} onChange={(p) => void onPerm(p)}
+                  segments={cat.perm_modes.map((p) => ({ key: p, label: p }))} />}
+            {!(editingDefaults && cat.default_perm_mode) && prefs.faceIdBypass && cat.perm_modes.includes('bypass') && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
                 <Icon name="face" size={15} color={t.ink3} />
                 <Text style={{ fontSize: 12, color: t.ink3 }}>{T('faceIdForBypass')}</Text>

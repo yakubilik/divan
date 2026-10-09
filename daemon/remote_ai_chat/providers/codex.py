@@ -128,8 +128,10 @@ class CodexProvider(Provider):
         d = _default_model()
         if not any(m["id"] == d for m in models):
             models.insert(0, {"id": d, "label": d, "hint": "from config.toml"})
+        # Bypass by default, the same as Claude: a chat opened from a phone is
+        # meant to run on its own, and the picker is there for the exceptions.
         return {"models": models, "efforts": EFFORTS, "perm_modes": list(PERM_MODES.keys()),
-                "default_perm_mode": "auto-edit"}
+                "default_perm_mode": "bypass"}
 
     # ── process / rpc ──────────────────────────────────────────────────────
     async def _ensure(self) -> None:

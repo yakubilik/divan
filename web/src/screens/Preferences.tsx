@@ -928,11 +928,18 @@ function DefaultsSection({ hostKey, slot }: { hostKey: string; slot: HostSlot })
         </Card>
         <Card style={{ flex: 1, minWidth: 260 }}>
           <Mark>permission mode</Mark>
-          <Choice
-            label="Permission mode" value={now.perm_mode ?? ''}
-            options={(pc?.perm_modes ?? []).map((m) => ({ key: m, label: m }))}
-            onChange={(m) => setProviderDefaults(hostKey, provider, { perm_mode: m })}
-          />
+          {pc?.default_perm_mode
+            // The computer decides this one, and a control that changed a word
+            // nothing reads would be a lie: the mode is picked per chat, in New chat.
+            ? <div style={{ fontSize: 13, color: T.ink3 }}>
+                new chats open in <span style={{ ...mono, color: T.ink }}>{pc.default_perm_mode}</span> — this
+                computer's default. Another mode is picked per chat, in New chat.
+              </div>
+            : <Choice
+                label="Permission mode" value={now.perm_mode ?? ''}
+                options={(pc?.perm_modes ?? []).map((m) => ({ key: m, label: m }))}
+                onChange={(m) => setProviderDefaults(hostKey, provider, { perm_mode: m })}
+              />}
         </Card>
       </div>
       {now.perm_mode === 'bypass' && (

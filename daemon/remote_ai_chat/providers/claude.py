@@ -113,6 +113,11 @@ class ClaudeProvider(Provider):
             # Kept for a phone older than this daemon, which reads only this one.
             "efforts": EFFORTS,
             "perm_modes": list(PERM_MODES.keys()),
+            # What a new chat opens in when nobody picks: bypass. The point of
+            # running a session from a phone is not being at the screen for
+            # it, and a chat that stops on its first command has not started.
+            # Both clients read this before any remembered word of their own.
+            "default_perm_mode": "bypass",
         }
 
     # ── permission plumbing ────────────────────────────────────────────────

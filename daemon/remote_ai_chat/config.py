@@ -218,6 +218,9 @@ class Config:
             # back on the next time they add a device.
             "auto_update": self.auto_update,
             "remote_control": self.remote_control,
+            # Left out once, and `bypass_asks = false` set by hand was gone
+            # after the next pairing — the exact trap the comment above names.
+            "bypass_asks": self.bypass_asks,
             "update_interval_s": self.update_interval_s,
             "apns_key_path": self.apns_key_path,
             "apns_key_id": self.apns_key_id,

@@ -187,6 +187,29 @@ async def test_bypass_without_asking(cwd: str) -> None:
           "codex: `git push --force` runs without a request", f"{asked} {sent}")
 
 
+def test_bypass_asks_persists(tmp: Path) -> None:
+    """`bypass_asks = false` set by hand survives the next save().
+
+    It once did not: every pairing writes config.toml back, and a field the
+    writer left out came back as its default. In a subprocess, because the
+    config module reads RAC_HOME at import.
+    """
+    print("bypass_asks survives a save")
+    import os
+    import subprocess
+    home = tmp / "rac-home"
+    home.mkdir()
+    code = ("from remote_ai_chat.config import Config\n"
+            "c = Config(); c.bypass_asks = False; c.save()\n"
+            "Config.load().save()\n"
+            "print(Config.load().bypass_asks)\n")
+    env = {**os.environ, "RAC_HOME": str(home)}
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env,
+                       cwd=str(Path(__file__).resolve().parents[1]))
+    check(r.returncode == 0 and r.stdout.strip() == "False",
+          "bypass_asks is written back and read again", f"{r.stdout!r} {r.stderr[-300:]}")
+
+
 async def test_upload_read(tmp: Path) -> None:
     print("claude, Read of an upload")
     uploads = tmp / "uploads"
@@ -219,6 +242,7 @@ async def main() -> int:
         await test_claude_bypass(str(cwd))
         await test_codex_bypass(str(cwd))
         await test_bypass_without_asking(str(cwd))
+        test_bypass_asks_persists(Path(tmp))
         await test_upload_read(Path(tmp))
     print(f"\n{'all passed' if not failures else f'{len(failures)} failed'}")
     return 1 if failures else 0

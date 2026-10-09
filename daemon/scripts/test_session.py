@@ -282,6 +282,23 @@ async def scenario_perm_modes():
     check(decision == "allow", "an approved command comes back allowed", f"decision={decision}")
 
 
+def scenario_default_mode():
+    """What a chat opens in when nobody picks: bypass, for every tool.
+
+    Both clients read `default_perm_mode` before any word they remembered, and
+    `chat.create` without a mode falls back to the same field — so one
+    declaration decides, and it is the same for Claude and Codex.
+    """
+    print("\na new chat opens in bypass unless somebody picks otherwise")
+    from remote_ai_chat.providers.codex import CodexProvider
+    for prov in (ClaudeProvider, CodexProvider):
+        cat = prov.catalog()
+        check(cat.get("default_perm_mode") == "bypass", f"{prov.name} declares bypass as the default")
+        check("bypass" in cat["perm_modes"], f"{prov.name} offers the mode it declares")
+    src = inspect.getsource(Server.h_chat_create)
+    check('cat.get("default_perm_mode")' in src, "chat.create falls back to the declared default")
+
+
 def scenario_coverage():
     print("\nevery setting the provider reads can be changed")
     src = inspect.getsource(ChatSession._make_provider)
@@ -393,6 +410,7 @@ async def main() -> int:
         await scenario_queue(db)
         await scenario_queue_interrupt(db)
         await scenario_perm_modes()
+        scenario_default_mode()
         scenario_coverage()
     print(f"\n{'FAILED: ' + ', '.join(failures) if failures else 'all checks passed'}")
     return 1 if failures else 0

@@ -104,8 +104,11 @@ export function resolveDefaults(
     // Not the first effort but the third: they run low to high, and a tool that
     // offers fewer takes the highest it has.
     effort: pick(pd.effort, efforts, efforts.length ? efforts[Math.min(2, efforts.length - 1)] : null),
-    perm_mode: pick(pd.perm_mode, perms,
-      pc?.default_perm_mode && perms.includes(pc.default_perm_mode) ? pc.default_perm_mode : perms[0] ?? null),
+    // The computer's declared default first — `bypass`, for both tools — and
+    // the stored word only for a daemon old enough to declare none. A stored
+    // word that won had turned one `ask` into every chat after it.
+    perm_mode: pc?.default_perm_mode && perms.includes(pc.default_perm_mode)
+      ? pc.default_perm_mode : pick(pd.perm_mode, perms, perms[0] ?? null),
     // An account this computer no longer has falls back to its own sign-in,
     // never to whichever other account happens to be there.
     account_id: accounts.some((a) => !a.is_default && a.id === pd.account_id) ? pd.account_id : '',
