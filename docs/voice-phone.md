@@ -107,6 +107,9 @@ nothing outside the Mac. The private recording attached to the ticket was not us
 
 ## Follow-ups (bounded)
 
+#151 measured this client end to end on real models in the laboratory and kept the device run open:
+[voice-quality-results.md](voice-quality-results.md).
+
 - **#151, on the device**: barge-in stop time and false barges with the phone's real canceller on
   speaker, headset and Bluetooth; speech end → audible with EMA; the 300 ms budget and the 2.5 s / 3.5 s
   targets on the phone.

@@ -189,7 +189,7 @@ class Scripted:
 
     async def reply(self, text, lang, intend):
         self.asked.append(text)
-        await asyncio.sleep(0.15)                       # a warm model's first token
+        await asyncio.sleep(3.2 if self.mode == "late" else 0.15)   # a slow or a warm model's first token
         if self.mode == "brain-fail":
             raise RuntimeError("model unavailable")
         if self.mode == "act" and REQUEST.search(text):
@@ -201,6 +201,9 @@ class Scripted:
         if self.mode == "claim":
             for piece in ("Tamam, testleri çalıştırdım. ", "Şu an bir sohbet çalışıyor. "):
                 yield piece
+            return
+        if self.mode == "promise":
+            yield "Hemen bakıyorum. "
             return
         for piece in (LONG if self.mode == "slow" else SHORT):
             yield piece
@@ -348,13 +351,25 @@ def no_stale_audio(events: list[dict]) -> str | None:
 
 
 # ── the daemon ───────────────────────────────────────────────────────────────
+E2E_ACCOUNT = "claude-voice-e2e"
+SLOW_START = [0.0]                    # seconds the general call's "start work" takes, set by a test
+
+
+class SlowHub(voice.Hub):
+    async def start_work(self, project, instruction):
+        await asyncio.sleep(SLOW_START[0])
+        return await super().start_work(project, instruction)
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
-async def daemon(real: bool, account_home: str | None):
+async def daemon(real: bool, account_home: str | None, agent_home: str | None = None):
+    """`agent_home`: chats run a real Claude agent on that existing account
+    (`E2E_ACCOUNT`) instead of the scripted demo; only the end-to-end run asks."""
     import uvicorn
     from remote_ai_chat.server import Server
     projects = TMP / "projects"
@@ -364,7 +379,10 @@ async def daemon(real: bool, account_home: str | None):
     cfg.bind = ["127.0.0.1"]
     cfg.allowed_roots = [str(projects)]
     cfg.auto_update = False
-    cfg.demo = True                           # chats run the scripted demo agent, never a CLI
+    cfg.demo = agent_home is None             # chats run the scripted demo agent, never a CLI
+    if agent_home:
+        cfg.accounts = {E2E_ACCOUNT: {"provider": "claude", "label": "voice e2e",
+                                      "home": os.path.expanduser(agent_home)}}
     _, token = cfg.add_device("test")
     port = free_port()
     srv = Server(cfg)
@@ -383,7 +401,7 @@ async def daemon(real: bool, account_home: str | None):
 
         def brain(s, d):
             return Scripted((d.get("client") or {}).get("mode", "talk"), s.chat_id)
-        srv.voice = voice.Hub(srv, recognizer_factory=rec, brain_factory=brain)
+        srv.voice = SlowHub(srv, recognizer_factory=rec, brain_factory=brain)
     uc = uvicorn.Config(srv.app, host="127.0.0.1", port=port, log_level="warning",
                         ws_ping_interval=None, ws_ping_timeout=None)
     server = uvicorn.Server(uc)
@@ -577,7 +595,42 @@ async def chat_bridge(phone: Phone, fx: dict, projects: Path) -> None:
     await phone.call("voice.stop", {"session_id": g.sid})
 
 
-# ── 4 · errors and reconnecting ──────────────────────────────────────────────
+# ── 4 · acknowledgements ─────────────────────────────────────────────────────
+async def acks(phone: Phone, fx: dict) -> None:
+    print("acknowledgements: only while a slow action runs, never repeated, never over the caller")
+    SLOW_START[0] = 2.5
+    try:
+        c = Caller(phone, "ack")
+        await c.start(client={"build": "test", "device": "ack", "mode": "act"})
+        await phone.tell("voice.ready", {"session_id": c.sid, "t_client_ms": int(time.time() * 1000)})
+        for sid in ("long-request", "tech-names"):
+            await c.say(fx[sid])
+            await c.quiet(3.0)
+        says = [e["data"] for e in phone.voice(c.sid, "voice.say") if e["data"]["text"]]
+        turns = sorted({d["turn_id"] for d in says})
+        per = [[(d["kind"], d["text"]) for d in says if d["turn_id"] == t] for t in turns]
+        check(len(per) == 2 and all(len(p) == 2 and p[0][0] == "ack" and p[1][1].startswith("app ") for p in per),
+              "a slow action gets one acknowledgement, then the bridge's own line", str(per))
+        check(len(per) == 2 and per[0][0][1] != per[1][0][1], "the next acknowledgement is a different line",
+              str([p[0] for p in per]))
+        await phone.call("voice.stop", {"session_id": c.sid})
+
+        c = Caller(phone, "ack-over")
+        await c.start(client={"build": "test", "device": "ack-over", "mode": "act"})
+        await phone.tell("voice.ready", {"session_id": c.sid, "t_client_ms": int(time.time() * 1000)})
+        await c.say(fx["long-request"])           # the commit is inside its 3 s tail; the ack would be 1.2 s after
+        info = await c.say(fx["short-greeting"])
+        await c.quiet(3.0)
+        start = info["wall0"] + fx["short-greeting"]["spans"][0]["start_ms"] / 1000
+        over = [e["data"]["text"] for e in phone.voice(c.sid, "voice.say")
+                if e["data"]["kind"] == "ack" and start <= e["_at"] <= info["speech_end_wall"] + 0.7]
+        check(not over, "no acknowledgement is said while the caller is talking again", str(over))
+        await phone.call("voice.stop", {"session_id": c.sid})
+    finally:
+        SLOW_START[0] = 0.0
+
+
+# ── 5 · errors and reconnecting ──────────────────────────────────────────────
 async def errors(phone: Phone, fx: dict, port, token) -> None:
     print("errors: bounded, and said")
     for mode, code, line in (("stt-fail", voice.E_STT, "unheard"), ("brain-fail", voice.E_REPLY, "no_reply")):
@@ -592,12 +645,29 @@ async def errors(phone: Phone, fx: dict, port, token) -> None:
               f"{mode}: {code}, a spoken notice and back to listening", f"{errs} {said} {states}")
         await phone.call("voice.stop", {"session_id": c.sid})
 
+    c = Caller(phone, "late")
+    await c.start(client={"build": "test", "device": "late", "mode": "late"})
+    await c.say(fx["short-greeting"])
+    await c.quiet(3.0)
+    stop = await phone.call("voice.stop", {"session_id": c.sid})
+    t = [x["after_speech_end_ms"] for x in stop["turns"] if x["text"]]
+    check(len(t) == 1 and t[0]["commit"] < t[0]["first_say"] <= t[0]["final_stt_start"],
+          "an answer slower than the commit is not raced by the commit's transcription", str(t))
+
     c = Caller(phone, "claim")
     await c.start(client={"build": "test", "device": "claim", "mode": "claim"})
     await c.say(fx["short-greeting"])
     said = [e["data"]["text"] for e in phone.voice(c.sid, "voice.say") if e["data"]["text"]]
     check(said == ["Şu an bir sohbet çalışıyor."],
           "a reply that claims an action nobody took has that sentence dropped", str(said))
+    await phone.call("voice.stop", {"session_id": c.sid})
+
+    c = Caller(phone, "promise")
+    await c.start(client={"build": "test", "device": "promise", "mode": "promise"})
+    await c.say(fx["short-greeting"])
+    said = [e["data"]["text"] for e in phone.voice(c.sid, "voice.say") if e["data"]["text"]]
+    check(said == [voice.LINES["tr"]["offer"]],
+          "a reply that was only a dropped promise is not silence: the offer is said instead", str(said))
     await phone.call("voice.stop", {"session_id": c.sid})
 
     print("reconnecting")
@@ -747,10 +817,19 @@ async def main() -> None:
     check(voice.cut("biri onay bekliyor, diğeri boşta. Son", False) == ("biri onay bekliyor, diğeri boşta.", "Son"),
           "later pieces are whole sentences")
     check(voice.cut("Toplam 3,5", True) == (None, "Toplam 3,5"), "a mark with no space after it is not an end yet")
-    check(all(voice.claims_action(t) for t in ("Testleri çalıştırdım.", "Sohbete ilettim.", "I've sent it."))
+    check(all(voice.claims_action(t) for t in ("Testleri çalıştırdım.", "Sohbete ilettim.", "I've sent it.",
+                                                "Hangisini deploy edeyim?", "check edeyim", "Build ettim."))
           and not any(voice.claims_action(t) for t in ("Testler bitti mi?", "İki sohbet çalışıyor.",
-                                                        "It is running the tests.")),
+                                                        "It is running the tests.", "Merak ediyorum.",
+                                                        "Test edildi mi?")),
           "the fast layer's own claims of having acted are recognised, statuses are not")
+    check(all(voice.is_request(t) for t in ("Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+                                             "Giriş ekranındaki hatayı bir kontrol eder misin?",
+                                             "Ödeme sayfasına bir bakar mısın?", "README dosyasını düzeltin."))
+          and not any(voice.is_request(t) for t in ("Testler bitti mi?", "Selam, nasılsın?", "Derleme bitti mi?",
+                                                     "Çalıştırdın mı testleri?", "Bakalım ne olacak.",
+                                                     "Test ettin mi?")),
+          "on a chat call a plain Turkish request is recognised as one, a question is not")
     check(voice.HANGING == bench.HANGING and (voice.REPLY_MS, voice.UNFINISHED_MS, voice.COMMIT_MS)
           == (bench.Plan().reply_ms, bench.Plan().unfinished_ms, bench.Plan().commit_ms),
           "the daemon's turn rule is the one the bench measured")
@@ -765,6 +844,7 @@ async def main() -> None:
             await replay(port, token, fx)
             await barge(phone, fx)
             await chat_bridge(phone, fx, projects)
+            await acks(phone, fx)
             await errors(phone, fx, port, token)
         check(not phone.replies or all(m["type"] == "error" for m in phone.replies),
               "audio, playback and barge-in messages get no receipts", str(phone.replies[:2]))
