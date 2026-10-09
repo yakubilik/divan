@@ -2701,13 +2701,15 @@ class Server:
         if card is None:
             raise Err("no_such_card", "no such card")
         out = {"card": card, "project": self.db.divan.get_project(card["project_id"]),
-               "run": None, "ticket": None}
+               "run": None, "ticket": None, "usage": None}
         if card["ustabasi_id"]:
             snap = await asyncio.to_thread(ustabasimod.snapshot, self.policy.project_for)
             out["ticket"] = next((t for t in snap["tickets"]
                                   if t["id"] == card["ustabasi_id"]), None)
             out["run"] = await asyncio.to_thread(
                 ustabasimod.run, card["ustabasi_id"], d.get("cursor"))
+            out["usage"] = await asyncio.to_thread(
+                ustabasimod.telemetry, card["ustabasi_id"])
         return out
 
     async def _release_chats(self, account_id: str) -> None:
