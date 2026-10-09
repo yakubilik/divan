@@ -84,14 +84,28 @@ def _decode(src: Path):
     return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
 
 
-def _mlx(audio, prompt: str | None, language: str | None = None) -> dict | None:
+# mlx-whisper keeps exactly one model loaded and reloads it whenever another is
+# asked for, which is seconds each time. The voice session alternates between
+# two (voice.py), so every model used is kept here and handed back to it.
+_mlx_models: dict[str, object] = {}
+
+
+def _mlx(audio, prompt: str | None, language: str | None = None,
+         model: str | None = None) -> dict | None:
     import mlx_whisper
+    from mlx_whisper.transcribe import ModelHolder
+    path = model or MODEL
+    if ModelHolder.model is not None and ModelHolder.model_path not in _mlx_models:
+        _mlx_models[ModelHolder.model_path] = ModelHolder.model
+    if path in _mlx_models:
+        ModelHolder.model, ModelHolder.model_path = _mlx_models[path], path
     # A voice note passes no `language`: whisper detects it, and forcing one
     # makes it *translate* a note spoken in another language instead of
     # transcribing it. Dictation does pass one — see `pcm`.
-    out = mlx_whisper.transcribe(audio, path_or_hf_repo=MODEL,
+    out = mlx_whisper.transcribe(audio, path_or_hf_repo=path,
                                  **({"initial_prompt": prompt} if prompt else {}),
                                  **({"language": language} if language else {}))
+    _mlx_models[path] = ModelHolder.model
     text = (out.get("text") or "").strip()
     return {"text": text, "language": out.get("language")} if text else None
 
@@ -182,21 +196,29 @@ def said(text: str) -> bool:
     return bool(words) and " ".join(words) not in _NOTHING
 
 
-def pcm(data: bytes, prompt: str | None = None, language: str | None = None) -> dict | None:
+def pcm(data: bytes, prompt: str | None = None, language: str | None = None,
+        model: str | None = None) -> dict | None:
     """One stretch of 16 kHz mono s16le PCM, as words. Runs on a thread.
 
     `language` is the one the panel was set to dictate in. A voice note is left
     to detection; a phrase cut out of somebody talking is two seconds long, and
     detection on two seconds is a guess — "tamam, commit at" was heard as
     English often enough to matter. Being told also skips the detection pass,
-    which on a short phrase is a third of the time."""
+    which on a short phrase is a third of the time.
+
+    `model` picks another mlx model for this one call (the live voice session
+    answers on a small one and hands agents the default's words); the
+    faster-whisper backend has one model and ignores it."""
     import numpy as np
     if len(data) < SAMPLE_RATE // 5:                 # under a tenth of a second
         return None
     audio = np.frombuffer(data[:len(data) // 2 * 2], dtype=np.int16).astype(np.float32) / 32768.0
     backend = _backend()
-    run = _mlx if backend == "mlx" else _transcribe_faster_array if backend == "faster" else None
-    if run is None:
+    if backend == "mlx":
+        run = (lambda a, p, lang: _mlx(a, p, lang, model)) if model else _mlx  # noqa: E731
+    elif backend == "faster":
+        run = _transcribe_faster_array
+    else:
         return None
     with _run_lock:
         try:

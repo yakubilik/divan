@@ -33,6 +33,7 @@ from . import agents, secrets, tools
 from .call import (Concierge, NoRoom, hermes_installed, headline as call_headline, last_reply,
                    snapshot as call_snapshot, spoken_reply)
 from .push import send_push
+from . import voice as voicemod
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .attachments import KINDS, normalize_image, peaks, sniff
 from .security import ACCESS_EMAIL, PathPolicy, TunnelAccess, TunnelGate, TunnelLock
@@ -90,6 +91,8 @@ TUNNEL_PUSH_TEXT = {
 # that cannot keep up is closed rather than waited for: it reconnects and asks
 # for what it missed, which is a round trip, not a dead chat.
 OUTBOX_MAX = 1024
+# Requests that are answered only when they fail, if sent without an id.
+QUIET_TYPES = {"voice.audio", "voice.playback", "voice.barge", "voice.ready"}
 SEND_TIMEOUT_S = 20.0
 
 # ── git status (for the panel) ───────────────────────────────────────────────
@@ -249,6 +252,9 @@ class Server:
                                    self._concierge_actions(),
                                    on_limits=self._concierge_limits,
                                    on_limited=self._concierge_limited)
+        # The streaming voice session (voice.py): one per call, each with its
+        # own warm fast layer, all following the chats they handed work to.
+        self.voice = voicemod.Hub(self)
 
     def _allow_cross_origin(self) -> None:
         """Let a browser talk to a daemon that did not serve the page.
@@ -974,6 +980,9 @@ class Server:
                          ensure_ascii=False, default=str)
         for ws in list(self.outbox):
             self._enqueue(ws, msg)
+        # After the event itself, so a call never says a turn is done before
+        # the phone has been told that it is.
+        self.voice.observe(event)
 
     def _sweep_later(self, key: str | None) -> None:
         """A reading for this account was just written down; let the pool act
@@ -1015,6 +1024,7 @@ class Server:
         """
         self.clients.pop(ws, None)
         self.outbox.pop(ws, None)
+        self.voice.detach(ws)
         t = self.writers.pop(ws, None)
         if t is not None:
             t.cancel()
@@ -1476,6 +1486,8 @@ class Server:
                 result = await handler(dev, data, ws)
             else:
                 result = await handler(dev, data)
+            if rid is None and typ in QUIET_TYPES:
+                return              # ten audio messages a second need no receipts
             out = {"id": rid, "type": "ok", "data": result}
         except Exception as exc:
             log.warning("%s failed: %s", typ, exc)
@@ -1983,6 +1995,42 @@ class Server:
         and this is how you find out which."""
         return {"digest": self.call_snapshot()[0]}
 
+
+    # ── the voice session ──────────────────────────────────────────────────
+    # The streaming call (voice.py, docs/PROTOCOL.md "Voice session"). Audio,
+    # playback reports and barge-ins are fire and forget: sent without an id,
+    # they get no answer unless they fail.
+
+    async def h_voice_start(self, dev: Device, d: dict, ws: WebSocket) -> dict:
+        return await self.voice.start(dev, ws, d)
+
+    async def h_voice_audio(self, dev: Device, d: dict) -> dict:
+        # Taken in before anything is awaited: these handlers run as tasks in
+        # the order the messages arrived, and that is the order of the audio.
+        s = self.voice.get(dev, d)
+        seq = d.get("seq")
+        s.feed(int(seq) if seq is not None else None, voicemod.decode_audio(d))
+        return {}
+
+    async def h_voice_playback(self, dev: Device, d: dict) -> dict:
+        self.voice.get(dev, d).playback(d)
+        return {}
+
+    async def h_voice_barge(self, dev: Device, d: dict) -> dict:
+        self.voice.get(dev, d).barge(d)
+        return {}
+
+    async def h_voice_ready(self, dev: Device, d: dict) -> dict:
+        self.voice.get(dev, d).ready()
+        return {}
+
+    async def h_voice_ping(self, dev: Device, d: dict) -> dict:
+        return {"t_client_ms": d.get("t_client_ms"), "t_server_ms": int(time.time() * 1000)}
+
+    async def h_voice_stop(self, dev: Device, d: dict) -> dict:
+        s = self.voice.get(dev, d)
+        await self.voice.stop_session(s)
+        return {"ok": True, "turns": s.metrics, "audio_gaps": s.gaps}
 
     # ── accounts ───────────────────────────────────────────────────────────
     async def h_account_list(self, dev: Device, d: dict) -> dict:
