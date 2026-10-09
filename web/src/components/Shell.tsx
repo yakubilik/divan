@@ -144,7 +144,9 @@ export function Shell({ view, onView, fleet, dots, back, onHome, inbox, children
             </button>
           ) : (
             <a className="dv-word" href="/" aria-current={home ? 'page' : undefined}
-              onClick={(e) => { e.preventDefault(); onHome ? onHome() : onView('overview'); }}>divan</a>
+              onClick={(e) => { e.preventDefault(); onHome ? onHome() : onView('overview'); }}>
+              <img src="/divan-seal.png" width={34} height={34} alt="" aria-hidden="true" />divan
+            </a>
           )}
           <Sys fleet={fleet} here={here} dots={dots} onView={onView} inbox={inbox} />
         </div>
