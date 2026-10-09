@@ -39,7 +39,7 @@ The quoted words are the check's own name.
 
 | Action | Old place (main) | New place | Call | Proof |
 |---|---|---|---|---|
-| Go to the Dashboard | Top bar Dashboard, ⌘0 | `divan` word / Back on the top line, ⌘0 | — | drive: "⌘0 goes back to the Dashboard" |
+| Go to the Dashboard | Top bar Dashboard, ⌘0 | `divan` word / Back on the top line (⌘0 is the browser's zoom again) | — | drive: "…all the way home, where the address is the bare path again" |
 | Go to the Chat place | Top bar Chat | Top line Chats (lands in the newest chat) | `chat.get` | drive: "the Chat place is one press away and lands writable in a chat, with the list and its search beside it" |
 | Go to Machine | Top bar Machine | Top line Machine | — | drive: "…and the Machine place opens on the first row of its list" |
 | Switch Night / Day | Top bar switch, palette | Top line switch, palette | — | drive: "pressing it moves the document’s theme, and nothing else says it" |
@@ -49,7 +49,7 @@ The quoted words are the check's own name.
 | New chat | ⌘N, palette, sidebar pen | ⌘N and palette focus the Composer; "More options" and palette "New chat with every option" open the full dialog | `chat.create` | drive: "Back from a project is the Dashboard, a reload redraws the page it was on, and every old destination is offered" |
 | Search chats | ⌘F | ⌘F focuses the list's search | — | actions: "⌘F opens the chat list with its search focused" |
 | Fold the chat list | ⌘B | ⌘B, same | — | actions: "⌘B folds the list to a rail" |
-| Machine pages by key | ⌘1–⌘8, ⌘, | Same keys | — | drive: "opens Machine › " |
+| Machine pages by key | ⌘1–⌘8, ⌘, | ⌘, only; ⌘/Ctrl with a digit is left to the browser's tabs, and the pages are on the Machine tabs and in the palette | — | drive: "⌘ and Ctrl with a digit open no page and are left for the browser" |
 | Stop every session | Palette | Palette | `chat.interrupt` | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
 | Show every computer | Palette | Palette | — | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
 | Ask Divan something | Command bar | Composer | `chat.create`, `chat.send` | drive: "one press sends chat.create then chat.send" |

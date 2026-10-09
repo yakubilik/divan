@@ -159,10 +159,12 @@ function Composer({ t, hostKey, busy, error, onSend }: {
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
           placeholder={mic.state === 'listening' ? 'Listening…' : `Answer #${t.id}…`}
           style={{
-            flex: 1, minWidth: 0, boxSizing: 'border-box', maxHeight: 160, resize: 'none',
+            flex: 1, minWidth: 0, alignSelf: 'center', boxSizing: 'border-box', maxHeight: 160, resize: 'none',
             background: 'transparent', border: 'none', outline: 'none',
-            fontSize: 15, lineHeight: '22px', padding: '7px 6px', color: C.text,
-            overflowY: 'auto',
+            // One line and its padding are as tall as the disc beside it, which
+            // is 44 on the phone layout (`--dv-press`): the line stays level.
+            fontSize: 15, lineHeight: '22px', padding: 'calc((var(--dv-press, 36px) - 22px) / 2) 6px',
+            color: C.text, overflowY: 'auto',
           }}
         />
         <MicButton mic={mic} />

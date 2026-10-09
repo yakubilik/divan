@@ -333,10 +333,9 @@ group('nothing was dropped in the move');
       .every((s) => app.includes(s)));
   // What each key actually does is not read here: `test-drive.mjs` mounts the
   // panel and presses them, because a handler's source says nothing about
-  // whether the effect that registers it ever ran. What is held here is that
-  // every page has a way in that does not go through the mouse.
-  ok('…and every page of the Machine list advertises a shortcut',
-    shell.MACHINE_ROWS.every((r) => !!r.shortcut));
+  // whether the effect that registers it ever ran.
+  ok('…and no page of the Machine list is offered on a digit, which is the browser’s',
+    shell.MACHINE_ROWS.every((r) => !/\d/.test(r.shortcut ?? '')) && !/e\.key === '\d'/.test(app));
   ok('the chat list no longer carries a second navigation',
     !/const NAV|NavRow/.test(src('src/components/Sidebar.tsx')));
 
@@ -870,9 +869,10 @@ group('the chat is untouched');
     && /app\/src\/transcript\.ts/.test(src('src/lib/transcript.ts')));
 
   const app = src('src/App.tsx');
-  // The chat place, the chat held over the wall, and a product's own Chat tab.
+  // The chat place, the chat held over the wall, and a product's own Chat tab —
+  // where it is also handed the X that puts it away again.
   ok('the chat is handed the same props it always was, in the three places it is drawn',
-    (app.match(/<ChatView \{\.\.\.chatProps\} \/>/g) ?? []).length === 3);
+    (app.match(/<ChatView \{\.\.\.chatProps\}( onCloseView=\{[^{}]*\})? \/>/g) ?? []).length === 3);
   ok('…and the chat place is the chat and the list it is picked from',
     /place === 'chat' && \(/.test(app) && /<Sidebar/.test(app));
 }

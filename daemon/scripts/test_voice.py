@@ -186,6 +186,7 @@ class Scripted:
         self.mode, self.chat_id = mode, chat_id
         self.asked: list[str] = []
         self.cancels = 0
+        self.closes = 0
 
     async def reply(self, text, lang, intend):
         self.asked.append(text)
@@ -216,7 +217,7 @@ class Scripted:
         pass
 
     async def close(self):
-        pass
+        self.closes += 1
 
 
 # ── the phone ────────────────────────────────────────────────────────────────
@@ -414,7 +415,10 @@ async def daemon(real: bool, account_home: str | None, agent_home: str | None = 
 
 
 async def connect(port, token):
-    ws = await websockets.connect(f"ws://127.0.0.1:{port}/ws?token={token}", max_size=8 * 1024 * 1024)
+    # A long open timeout: on a loaded Mac (the ticket runner sits in the
+    # background band) the first handshake has taken longer than the default 10 s.
+    ws = await websockets.connect(f"ws://127.0.0.1:{port}/ws?token={token}", max_size=8 * 1024 * 1024,
+                                  open_timeout=60)
     phone = Phone(ws)
     await phone.call("hello", {"device_name": "test", "lang": "tr"})
     return phone
@@ -700,6 +704,50 @@ async def errors(phone: Phone, fx: dict, port, token) -> None:
     await phone2.ws.close()
 
 
+# ── 6 · the fast layer kept warm between calls ───────────────────────────────
+async def keep_warm(srv, port, token, fx: dict, projects: Path) -> None:
+    print("keeping warm: the next call of the same kind reuses the hung-up call's fast layer")
+    hub = srv.voice
+    phones = [await connect(port, token) for _ in range(3)]       # one session per socket
+    phone, phone2, phone3 = phones
+    hub.keep_warm, keep = True, voice.KEEP_WARM_S
+    try:
+        a = Caller(phone, "warm-a")
+        await a.start()
+        await a.say(fx["short-greeting"])
+        await phone.call("voice.stop", {"session_id": a.sid})
+        first = hub.parked[""][0]
+        b = Caller(phone, "warm-b")
+        await b.start()
+        info = await b.say(fx["short-greeting"])
+        said = [e for e in phone.voice(b.sid, "voice.say") if e["data"]["text"] and e["_at"] > info["wall0"]]
+        check(hub.sessions[b.sid].brain is first and first.closes == 0 and said and len(first.asked) == 2,
+              "the next general call answers on the same, still open fast layer", f"{first.closes} {len(first.asked)}")
+        c = Caller(phone2, "warm-c")
+        await c.start()
+        check(hub.sessions[c.sid].brain is not first, "a call made while it is in use gets its own")
+        chat = await phone.call("chat.create", {"provider": "claude", "cwd": str(projects / "app")})
+        d = Caller(phone3, "warm-d")
+        await d.start(chat_id=chat["id"])
+        check(hub.sessions[d.sid].brain is not first, "a chat call never takes the general call's")
+        other = hub.sessions[c.sid].brain
+        for x in (b, c, d):
+            await x.phone.call("voice.stop", {"session_id": x.sid})
+        check(hub.parked[""][0] is first and other.closes == 1 and hub.parked[chat["id"]][0].closes == 0,
+              "one is kept per kind of call, a second of the same kind is closed",
+              f"{[k for k in hub.parked]} {other.closes}")
+        voice.KEEP_WARM_S = 0.2
+        await asyncio.sleep(0.4)
+        hub._expire()
+        await asyncio.sleep(0.1)
+        check(not hub.parked and first.closes == 1, "and after the keep-warm window it is closed", str(hub.parked))
+    finally:
+        hub.keep_warm, voice.KEEP_WARM_S = False, keep
+        for p in phones:
+            p.reader.cancel()
+            await p.ws.close()
+
+
 # ── the measured run ─────────────────────────────────────────────────────────
 MEASURED = ["short-greeting", "short-status", "long-request", "pause-500", "pause-1000", "pause-1500",
             "pause-2000", "two-pauses", "correction", "correction-pause", "tech-agents", "silence"]
@@ -846,6 +894,7 @@ async def main() -> None:
             await chat_bridge(phone, fx, projects)
             await acks(phone, fx)
             await errors(phone, fx, port, token)
+            await keep_warm(srv, port, token, fx, projects)
         check(not phone.replies or all(m["type"] == "error" for m in phone.replies),
               "audio, playback and barge-in messages get no receipts", str(phone.replies[:2]))
         phone.reader.cancel()
