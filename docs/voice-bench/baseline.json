@@ -1,0 +1,2155 @@
+{
+ "generated": "2026-10-09 09:54",
+ "voice": "Yelda",
+ "summary": {
+  "fixtures": 14,
+  "apple_pooled_wer": 0.1640625,
+  "whisper_pooled_wer": 0.078125,
+  "whisper_vocab_pooled_wer": 0.0390625,
+  "current_segmentation_ok": 9,
+  "current_cut_early": [
+   "long-request",
+   "pause-1500",
+   "pause-2000",
+   "two-pauses",
+   "barge-in"
+  ],
+  "planned_segmentation_ok": 14,
+  "planned_failures": [],
+  "apple_partial_lag_ms_median": 154.5,
+  "current_end_to_send_ms_median": 1881.0,
+  "whisper_compute_ms_median": 2232,
+  "whisper_compute_ms_max": 2689
+ },
+ "rows": [
+  {
+   "id": "short-greeting",
+   "kind": "short",
+   "reference": "selam nasılsın",
+   "spans": [
+    {
+     "text": "Selam, nasılsın?",
+     "start_ms": 300,
+     "end_ms": 1740,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 1740,
+   "apple_events": [
+    {
+     "final": false,
+     "text": "Selam",
+     "t_ms": 1398,
+     "audio_end_ms": 1020
+    },
+    {
+     "audio_end_ms": 1860,
+     "text": "Selam nasılsın",
+     "t_ms": 2014,
+     "final": false
+    },
+    {
+     "final": true,
+     "text": "Selam nasılsın",
+     "audio_end_ms": 1770,
+     "t_ms": 4891
+    },
+    {
+     "done_ms": 4893
+    }
+   ],
+   "final_text": "Selam nasılsın",
+   "final_wer": 0.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 2814,
+      "text": "Selam nasılsın"
+     }
+    ],
+    "lost": "",
+    "sent_wer": 0.0,
+    "speech_end_to_send_ms": 1074,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      400,
+      820
+     ],
+     [
+      1020,
+      1740
+     ]
+    ],
+    "soft_ends_ms": [
+     2440
+    ],
+    "cancelled": 0,
+    "committed_ms": 4240,
+    "first_reply_after_end_ms": 700,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    274
+   ],
+   "whisper": {
+    "text": "Selam, nasılsın?",
+    "compute_ms": 2107,
+    "audio_ms": 1940,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Selam, nasılsın?",
+    "compute_ms": 1497,
+    "audio_ms": 1940,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "short-status",
+   "kind": "short",
+   "reference": "testler bitti mi",
+   "spans": [
+    {
+     "text": "Testler bitti mi?",
+     "start_ms": 300,
+     "end_ms": 1440,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 1440,
+   "apple_events": [
+    {
+     "t_ms": 4745,
+     "audio_end_ms": 1200,
+     "text": "Test",
+     "final": false
+    },
+    {
+     "t_ms": 4815,
+     "audio_end_ms": 1440,
+     "text": "Testler",
+     "final": false
+    },
+    {
+     "text": "Testler bitti",
+     "final": false,
+     "audio_end_ms": 1680,
+     "t_ms": 4859
+    },
+    {
+     "text": "Testler bitti mi",
+     "final": false,
+     "audio_end_ms": 1800,
+     "t_ms": 4926
+    },
+    {
+     "final": true,
+     "audio_end_ms": 1500,
+     "t_ms": 5445,
+     "text": "Testler bitti mi"
+    },
+    {
+     "done_ms": 5449
+    }
+   ],
+   "final_text": "Testler bitti mi",
+   "final_wer": 0.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 6245,
+      "text": "Testler bitti mi"
+     }
+    ],
+    "lost": "",
+    "sent_wer": 0.0,
+    "speech_end_to_send_ms": 4805,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      500
+     ],
+     [
+      660,
+      1440
+     ]
+    ],
+    "soft_ends_ms": [
+     2140
+    ],
+    "cancelled": 0,
+    "committed_ms": 3940,
+    "first_reply_after_end_ms": 700,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    3305
+   ],
+   "whisper": {
+    "text": "Testler bitti mi?",
+    "compute_ms": 2146,
+    "audio_ms": 1640,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Testler bitti mi?",
+    "compute_ms": 1487,
+    "audio_ms": 1640,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "long-request",
+   "kind": "long",
+   "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+   "spans": [
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+     "start_ms": 300,
+     "end_ms": 13310,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 13310,
+   "apple_events": [
+    {
+     "final": false,
+     "t_ms": 2690,
+     "audio_end_ms": 960,
+     "text": "Bugün"
+    },
+    {
+     "audio_end_ms": 1680,
+     "t_ms": 2819,
+     "text": "Bugün akşama",
+     "final": false
+    },
+    {
+     "t_ms": 2881,
+     "final": false,
+     "audio_end_ms": 1920,
+     "text": "Bugün akşama kadar"
+    },
+    {
+     "audio_end_ms": 2340,
+     "t_ms": 2969,
+     "text": "Bugün akşama kadar yeni",
+     "final": false
+    },
+    {
+     "audio_end_ms": 2880,
+     "t_ms": 3023,
+     "text": "Bugün akşama kadar yeni ekranı",
+     "final": false
+    },
+    {
+     "audio_end_ms": 3120,
+     "t_ms": 3247,
+     "text": "Bugün akşama kadar yeni ekranı bitir",
+     "final": false
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmem",
+     "audio_end_ms": 3480,
+     "t_ms": 3764,
+     "final": false
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım",
+     "final": false,
+     "audio_end_ms": 3840,
+     "t_ms": 4015
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden",
+     "final": false,
+     "audio_end_ms": 4800,
+     "t_ms": 4954
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce",
+     "final": false,
+     "audio_end_ms": 5280,
+     "t_ms": 5362
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş",
+     "final": false,
+     "audio_end_ms": 5520,
+     "t_ms": 5581
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş giriş",
+     "final": false,
+     "audio_end_ms": 6060,
+     "t_ms": 6360
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayf",
+     "final": false,
+     "audio_end_ms": 6180,
+     "t_ms": 6367
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasın",
+     "final": false,
+     "audio_end_ms": 6480,
+     "t_ms": 6631
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki",
+     "final": false,
+     "audio_end_ms": 6720,
+     "t_ms": 6830
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki sayfasındaki",
+     "final": false,
+     "audio_end_ms": 6960,
+     "t_ms": 7076
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hat",
+     "final": false,
+     "audio_end_ms": 6960,
+     "t_ms": 7082
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı",
+     "final": false,
+     "audio_end_ms": 7440,
+     "t_ms": 7656
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt",
+     "final": false,
+     "audio_end_ms": 7680,
+     "t_ms": 7845
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra",
+     "final": false,
+     "audio_end_ms": 8400,
+     "t_ms": 8569
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra sonra",
+     "final": false,
+     "audio_end_ms": 8880,
+     "t_ms": 9043
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar",
+     "final": false,
+     "audio_end_ms": 8880,
+     "t_ms": 9049
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekran",
+     "final": false,
+     "audio_end_ms": 9540,
+     "t_ms": 9763
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki",
+     "final": false,
+     "audio_end_ms": 9840,
+     "t_ms": 10054
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazı",
+     "final": false,
+     "audio_end_ms": 10080,
+     "t_ms": 10280
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları",
+     "final": false,
+     "audio_end_ms": 10560,
+     "t_ms": 10756
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol",
+     "final": false,
+     "audio_end_ms": 10800,
+     "t_ms": 10976
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol kontrol",
+     "final": false,
+     "audio_end_ms": 11280,
+     "t_ms": 11398
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol kontrol ve",
+     "final": false,
+     "audio_end_ms": 11340,
+     "t_ms": 11655
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve",
+     "final": false,
+     "audio_end_ms": 11460,
+     "t_ms": 11670
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol ve ve",
+     "final": false,
+     "audio_end_ms": 11520,
+     "t_ms": 11724
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en",
+     "final": false,
+     "audio_end_ms": 11580,
+     "t_ms": 11925
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son",
+     "final": false,
+     "audio_end_ms": 11640,
+     "t_ms": 12008
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana",
+     "final": false,
+     "audio_end_ms": 12000,
+     "t_ms": 12120
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa",
+     "final": false,
+     "audio_end_ms": 12480,
+     "t_ms": 12674
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir",
+     "final": false,
+     "audio_end_ms": 12720,
+     "t_ms": 12812
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir öz",
+     "final": false,
+     "audio_end_ms": 12900,
+     "t_ms": 13154
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet",
+     "final": false,
+     "audio_end_ms": 13200,
+     "t_ms": 13361
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+     "final": false,
+     "audio_end_ms": 13440,
+     "t_ms": 13635
+    },
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+     "final": true,
+     "audio_end_ms": 13350,
+     "t_ms": 16498
+    },
+    {
+     "done_ms": 16518
+    }
+   ],
+   "final_text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+   "final_wer": 0.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 4815,
+      "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım"
+     }
+    ],
+    "lost": "o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+    "sent_wer": 0.75,
+    "speech_end_to_send_ms": -8495,
+    "cut_early": true,
+    "segmentation_ok": false
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      3620
+     ],
+     [
+      3820,
+      7360
+     ],
+     [
+      7600,
+      13320
+     ]
+    ],
+    "soft_ends_ms": [
+     14020
+    ],
+    "cancelled": 0,
+    "committed_ms": 15820,
+    "first_reply_after_end_ms": 710,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    51
+   ],
+   "whisper": {
+    "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "compute_ms": 2689,
+    "audio_ms": 13510,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "compute_ms": 1947,
+    "audio_ms": 13510,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "pause-500",
+   "kind": "thinking-pause",
+   "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+   "spans": [
+    {
+     "text": "Şimdi şeyi",
+     "start_ms": 300,
+     "end_ms": 1120,
+     "pause_after_ms": 500
+    },
+    {
+     "text": "giriş ekranındaki hatayı bir kontrol eder misin?",
+     "start_ms": 1620,
+     "end_ms": 4940,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 4940,
+   "apple_events": [
+    {
+     "t_ms": 4547,
+     "audio_end_ms": 1080,
+     "text": "Şimdi",
+     "final": false
+    },
+    {
+     "t_ms": 4679,
+     "audio_end_ms": 1860,
+     "text": "Şimdi şeyi",
+     "final": false
+    },
+    {
+     "t_ms": 4765,
+     "audio_end_ms": 2400,
+     "text": "Şimdi şeyi giriş",
+     "final": false
+    },
+    {
+     "t_ms": 4859,
+     "audio_end_ms": 2760,
+     "text": "Şimdi şeyi giriş ekran",
+     "final": false
+    },
+    {
+     "t_ms": 4946,
+     "audio_end_ms": 3180,
+     "text": "Şimdi şeyi giriş ekranındaki",
+     "final": false
+    },
+    {
+     "t_ms": 5030,
+     "audio_end_ms": 3600,
+     "text": "Şimdi şeyi giriş ekranındaki hat",
+     "final": false
+    },
+    {
+     "t_ms": 5060,
+     "audio_end_ms": 3840,
+     "text": "Şimdi şeyi giriş ekranındaki hatayı",
+     "final": false
+    },
+    {
+     "t_ms": 5101,
+     "audio_end_ms": 4080,
+     "text": "Şimdi şeyi giriş ekranındaki hatayı bir",
+     "final": false
+    },
+    {
+     "t_ms": 5195,
+     "final": false,
+     "text": "Şimdi şeyi giriş ekranındaki hatayı bir kontrol",
+     "audio_end_ms": 4560
+    },
+    {
+     "t_ms": 5245,
+     "final": false,
+     "text": "Şimdi şeyi giriş ekranındaki hatayı bir kontrol eder",
+     "audio_end_ms": 4800
+    },
+    {
+     "t_ms": 5452,
+     "final": false,
+     "text": "Şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+     "audio_end_ms": 5280
+    },
+    {
+     "t_ms": 8143,
+     "final": true,
+     "text": "Şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+     "audio_end_ms": 4980
+    },
+    {
+     "done_ms": 8151
+    }
+   ],
+   "final_text": "Şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+   "final_wer": 0.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 6252,
+      "text": "Şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin"
+     }
+    ],
+    "lost": "",
+    "sent_wer": 0.0,
+    "speech_end_to_send_ms": 1312,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      1120
+     ],
+     [
+      1620,
+      4940
+     ]
+    ],
+    "soft_ends_ms": [
+     5640
+    ],
+    "cancelled": 0,
+    "committed_ms": 7440,
+    "first_reply_after_end_ms": 700,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    3427,
+    6
+   ],
+   "whisper": {
+    "text": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "compute_ms": 2035,
+    "audio_ms": 5140,
+    "wer": 0.1111111111111111
+   },
+   "whisper_vocab": {
+    "text": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "compute_ms": 1579,
+    "audio_ms": 5140,
+    "wer": 0.1111111111111111
+   }
+  },
+  {
+   "id": "pause-1000",
+   "kind": "thinking-pause",
+   "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+   "spans": [
+    {
+     "text": "Bana bir özet çıkar, yani",
+     "start_ms": 300,
+     "end_ms": 2410,
+     "pause_after_ms": 1000
+    },
+    {
+     "text": "bugün neler yapıldı onu merak ediyorum.",
+     "start_ms": 3410,
+     "end_ms": 5890,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 5890,
+   "apple_events": [
+    {
+     "t_ms": 3192,
+     "audio_end_ms": 960,
+     "text": "Bana",
+     "final": false
+    },
+    {
+     "t_ms": 3239,
+     "audio_end_ms": 1200,
+     "final": false,
+     "text": "Bana bir"
+    },
+    {
+     "t_ms": 3281,
+     "audio_end_ms": 1440,
+     "final": false,
+     "text": "Bana bir öz"
+    },
+    {
+     "t_ms": 3333,
+     "audio_end_ms": 1680,
+     "final": false,
+     "text": "Bana bir özet"
+    },
+    {
+     "t_ms": 3423,
+     "audio_end_ms": 2160,
+     "final": false,
+     "text": "Bana bir özet çıkar"
+    },
+    {
+     "final": false,
+     "audio_end_ms": 2580,
+     "t_ms": 3519,
+     "text": "Bana bir özet çıkar yani"
+    },
+    {
+     "final": false,
+     "audio_end_ms": 4080,
+     "t_ms": 4272,
+     "text": "Bana bir özet çıkar yani bugün"
+    },
+    {
+     "audio_end_ms": 4560,
+     "final": false,
+     "t_ms": 4829,
+     "text": "Bana bir özet çıkar yani bugün neler"
+    },
+    {
+     "audio_end_ms": 4860,
+     "final": false,
+     "t_ms": 5335,
+     "text": "Bana bir özet çıkar yani bugün neler yapıl"
+    },
+    {
+     "audio_end_ms": 5040,
+     "final": false,
+     "t_ms": 5363,
+     "text": "Bana bir özet çıkar yani bugün neler yapıldı"
+    },
+    {
+     "audio_end_ms": 5460,
+     "final": false,
+     "t_ms": 5576,
+     "text": "Bana bir özet çıkar yani bugün neler yapıldığını"
+    },
+    {
+     "audio_end_ms": 5760,
+     "final": false,
+     "t_ms": 6065,
+     "text": "Bana bir özet çıkar yani bugün neler yapıldığını merak"
+    },
+    {
+     "audio_end_ms": 6000,
+     "final": false,
+     "t_ms": 6268,
+     "text": "Bana bir özet çıkar yani bugün neler yapıldığını merak ediyorum"
+    },
+    {
+     "audio_end_ms": 5940,
+     "final": true,
+     "t_ms": 9122,
+     "text": "Bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum"
+    },
+    {
+     "done_ms": 9129
+    }
+   ],
+   "final_text": "Bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+   "final_wer": 0.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 7068,
+      "text": "Bana bir özet çıkar yani bugün neler yapıldığını merak ediyorum"
+     }
+    ],
+    "lost": "",
+    "sent_wer": 0.18181818181818182,
+    "speech_end_to_send_ms": 1178,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      1720
+     ],
+     [
+      1960,
+      2400
+     ],
+     [
+      3420,
+      5880
+     ]
+    ],
+    "soft_ends_ms": [
+     3100,
+     6580
+    ],
+    "cancelled": 1,
+    "committed_ms": 8380,
+    "first_reply_after_end_ms": 690,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    782,
+    175
+   ],
+   "whisper": {
+    "text": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+    "compute_ms": 2232,
+    "audio_ms": 6090,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+    "compute_ms": 1613,
+    "audio_ms": 6090,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "pause-1500",
+   "kind": "thinking-pause",
+   "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+   "spans": [
+    {
+     "text": "Ödeme sayfasında bir sorun vardı ama",
+     "start_ms": 300,
+     "end_ms": 2870,
+     "pause_after_ms": 1500
+    },
+    {
+     "text": "sanırım dün akşam düzeldi, bir bakar mısın?",
+     "start_ms": 4370,
+     "end_ms": 7520,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 7520,
+   "apple_events": [
+    {
+     "t_ms": 2888,
+     "audio_end_ms": 1080,
+     "final": false,
+     "text": "Ödeme"
+    },
+    {
+     "final": false,
+     "t_ms": 2999,
+     "text": "Ödeme sayf",
+     "audio_end_ms": 1680
+    },
+    {
+     "final": false,
+     "text": "Ödeme sayfasında",
+     "audio_end_ms": 2100,
+     "t_ms": 3082
+    },
+    {
+     "final": false,
+     "text": "Ödeme sayfasında bir",
+     "audio_end_ms": 2340,
+     "t_ms": 3143
+    },
+    {
+     "final": false,
+     "text": "Ödeme sayfasında bir sorun",
+     "audio_end_ms": 2520,
+     "t_ms": 3206
+    },
+    {
+     "final": false,
+     "text": "Ödeme sayfasında bir sorun vardır",
+     "audio_end_ms": 3120,
+     "t_ms": 3306
+    },
+    {
+     "final": false,
+     "text": "Ödeme sayfasında bir sorun vardır ama",
+     "audio_end_ms": 3360,
+     "t_ms": 3484
+    },
+    {
+     "final": false,
+     "text": "Ödeme sayfasında bir sorun vardır ama sanırım",
+     "audio_end_ms": 5040,
+     "t_ms": 5264
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardır ama sanırım dün",
+     "audio_end_ms": 5520,
+     "t_ms": 5642,
+     "final": false
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardır ama sanırım dün akşam",
+     "audio_end_ms": 6000,
+     "t_ms": 6179,
+     "final": false
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardır ama sanırım dün akşam düzel",
+     "audio_end_ms": 6480,
+     "t_ms": 6665,
+     "final": false
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardır ama sanırım dün akşam düzeldi",
+     "audio_end_ms": 6720,
+     "t_ms": 6946,
+     "final": false
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardır ama sanırım dün akşam düzeldi bir",
+     "audio_end_ms": 7200,
+     "t_ms": 7342,
+     "final": false
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardır ama sanırım dün akşam düzeldi bir bakar",
+     "audio_end_ms": 7440,
+     "t_ms": 7654,
+     "final": false
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardır ama sanırım dün akşam düzeldi bir bakar mısın",
+     "audio_end_ms": 7680,
+     "t_ms": 7866,
+     "final": false
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+     "audio_end_ms": 9600,
+     "t_ms": 9853,
+     "final": false
+    },
+    {
+     "text": "Ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+     "audio_end_ms": 7560,
+     "t_ms": 10749,
+     "final": true
+    },
+    {
+     "done_ms": 10760
+    }
+   ],
+   "final_text": "Ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+   "final_wer": 0.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 4284,
+      "text": "Ödeme sayfasında bir sorun vardır ama"
+     }
+    ],
+    "lost": "sanırım dün akşam düzeldi bir bakar mısın",
+    "sent_wer": 0.6153846153846154,
+    "speech_end_to_send_ms": -3236,
+    "cut_early": true,
+    "segmentation_ok": false
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      2860
+     ],
+     [
+      4480,
+      6280
+     ],
+     [
+      6500,
+      7520
+     ]
+    ],
+    "soft_ends_ms": [
+     8220
+    ],
+    "cancelled": 0,
+    "committed_ms": 10020,
+    "first_reply_after_end_ms": 700,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    18,
+    134
+   ],
+   "whisper": {
+    "text": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "compute_ms": 2351,
+    "audio_ms": 7720,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "compute_ms": 1714,
+    "audio_ms": 7720,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "pause-2000",
+   "kind": "thinking-pause",
+   "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+   "spans": [
+    {
+     "text": "Peki şu yeni özellik için",
+     "start_ms": 300,
+     "end_ms": 2060,
+     "pause_after_ms": 2000
+    },
+    {
+     "text": "hangi dosyaları değiştirmemiz gerekiyor?",
+     "start_ms": 4060,
+     "end_ms": 6820,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 6820,
+   "apple_events": [
+    {
+     "audio_end_ms": 900,
+     "text": "Peki",
+     "t_ms": 3116,
+     "final": false
+    },
+    {
+     "t_ms": 3212,
+     "audio_end_ms": 1140,
+     "text": "Peki şu",
+     "final": false
+    },
+    {
+     "t_ms": 3230,
+     "audio_end_ms": 1500,
+     "text": "Peki şu yeni",
+     "final": false
+    },
+    {
+     "t_ms": 3279,
+     "audio_end_ms": 1920,
+     "text": "Peki şu yeni özel",
+     "final": false
+    },
+    {
+     "t_ms": 3372,
+     "audio_end_ms": 2220,
+     "text": "Peki şu yeni özellik",
+     "final": false
+    },
+    {
+     "t_ms": 3387,
+     "audio_end_ms": 2400,
+     "text": "Peki şu yeni özellik için",
+     "final": false
+    },
+    {
+     "t_ms": 4907,
+     "final": false,
+     "audio_end_ms": 4800,
+     "text": "Peki şu yeni özellik için hangi"
+    },
+    {
+     "t_ms": 5554,
+     "text": "Peki şu yeni özellik için hangi dos",
+     "audio_end_ms": 5280,
+     "final": false
+    },
+    {
+     "t_ms": 5774,
+     "text": "Peki şu yeni özellik için hangi dosyaları",
+     "audio_end_ms": 5520,
+     "final": false
+    },
+    {
+     "t_ms": 6245,
+     "text": "Peki şu yeni özellik için hangi dosyaları değiştir",
+     "audio_end_ms": 5940,
+     "final": false
+    },
+    {
+     "t_ms": 6640,
+     "text": "Peki şu yeni özellik için hangi dosyaları değiştirme",
+     "audio_end_ms": 6360,
+     "final": false
+    },
+    {
+     "t_ms": 6660,
+     "text": "Peki şu yeni özellik için hangi dosyaları değiştirmemiz",
+     "audio_end_ms": 6480,
+     "final": false
+    },
+    {
+     "t_ms": 6877,
+     "text": "Peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+     "audio_end_ms": 6720,
+     "final": false
+    },
+    {
+     "t_ms": 10160,
+     "text": "Peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+     "audio_end_ms": 6870,
+     "final": true
+    },
+    {
+     "done_ms": 10164
+    }
+   ],
+   "final_text": "Peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+   "final_wer": 0.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 4187,
+      "text": "Peki şu yeni özellik için"
+     }
+    ],
+    "lost": "hangi dosyaları değiştirmemiz gerekiyor",
+    "sent_wer": 0.4444444444444444,
+    "speech_end_to_send_ms": -2633,
+    "cut_early": true,
+    "segmentation_ok": false
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      2060
+     ],
+     [
+      4080,
+      6820
+     ]
+    ],
+    "soft_ends_ms": [
+     2760,
+     7520
+    ],
+    "cancelled": 1,
+    "committed_ms": 9320,
+    "first_reply_after_end_ms": 700,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    1056,
+    57
+   ],
+   "whisper": {
+    "text": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "compute_ms": 2203,
+    "audio_ms": 7020,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "compute_ms": 1654,
+    "audio_ms": 7020,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "two-pauses",
+   "kind": "thinking-pause",
+   "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+   "spans": [
+    {
+     "text": "Bir de",
+     "start_ms": 300,
+     "end_ms": 700,
+     "pause_after_ms": 800
+    },
+    {
+     "text": "geçen hafta açtığımız iş vardı ya",
+     "start_ms": 1500,
+     "end_ms": 3960,
+     "pause_after_ms": 1200
+    },
+    {
+     "text": "o ne durumda?",
+     "start_ms": 5160,
+     "end_ms": 6000,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 6000,
+   "apple_events": [
+    {
+     "t_ms": 1293,
+     "audio_end_ms": 960,
+     "text": "Bir",
+     "final": false
+    },
+    {
+     "text": "Bir de",
+     "t_ms": 1501,
+     "audio_end_ms": 1080,
+     "final": false
+    },
+    {
+     "text": "Bir de geçen",
+     "t_ms": 2534,
+     "audio_end_ms": 2400,
+     "final": false
+    },
+    {
+     "text": "Bir de geçen hafta",
+     "t_ms": 3009,
+     "audio_end_ms": 2880,
+     "final": false
+    },
+    {
+     "text": "Bir de geçen hafta hafta",
+     "t_ms": 3529,
+     "audio_end_ms": 3180,
+     "final": false
+    },
+    {
+     "t_ms": 3963,
+     "audio_end_ms": 3780,
+     "text": "Bir de geçen hafta açtığımız iş",
+     "final": false
+    },
+    {
+     "t_ms": 4259,
+     "audio_end_ms": 4080,
+     "text": "Bir de geçen hafta açtığımız iş vardı",
+     "final": false
+    },
+    {
+     "t_ms": 4722,
+     "audio_end_ms": 4560,
+     "text": "Bir de geçen hafta açtığımız iş vardı ya",
+     "final": false
+    },
+    {
+     "audio_end_ms": 5640,
+     "t_ms": 5998,
+     "text": "Bir de geçen hafta açtığımız iş vardı ya o",
+     "final": false
+    },
+    {
+     "audio_end_ms": 6000,
+     "t_ms": 6133,
+     "text": "Bir de geçen hafta açtığımız iş vardı ya o ne",
+     "final": false
+    },
+    {
+     "audio_end_ms": 6240,
+     "t_ms": 6526,
+     "text": "Bir de geçen hafta açtığımız iş vardı ya o ne durum",
+     "final": false
+    },
+    {
+     "audio_end_ms": 6480,
+     "t_ms": 6769,
+     "text": "Bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+     "final": false
+    },
+    {
+     "audio_end_ms": 6000,
+     "t_ms": 9329,
+     "text": "Bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+     "final": true
+    },
+    {
+     "done_ms": 9335
+    }
+   ],
+   "final_text": "Bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+   "final_wer": 0.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 2301,
+      "text": "Bir de"
+     }
+    ],
+    "lost": "geçen hafta açtığımız iş vardı ya o ne durumda",
+    "sent_wer": 0.8181818181818182,
+    "speech_end_to_send_ms": -3699,
+    "cut_early": true,
+    "segmentation_ok": false
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      700
+     ],
+     [
+      1500,
+      3960
+     ],
+     [
+      5160,
+      5980
+     ]
+    ],
+    "soft_ends_ms": [
+     1400,
+     4660,
+     6680
+    ],
+    "cancelled": 2,
+    "committed_ms": 8480,
+    "first_reply_after_end_ms": 680,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    593,
+    3,
+    133
+   ],
+   "whisper": {
+    "text": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "compute_ms": 2294,
+    "audio_ms": 6200,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "compute_ms": 1614,
+    "audio_ms": 6200,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "correction",
+   "kind": "correction",
+   "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+   "spans": [
+    {
+     "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+     "start_ms": 300,
+     "end_ms": 4830,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 4830,
+   "apple_events": [
+    {
+     "t_ms": 2113,
+     "final": false,
+     "text": "Mobil",
+     "audio_end_ms": 960
+    },
+    {
+     "audio_end_ms": 1680,
+     "text": "Mobil uygulama",
+     "t_ms": 2144,
+     "final": false
+    },
+    {
+     "audio_end_ms": 2160,
+     "text": "Mobil uygulamada",
+     "t_ms": 2449,
+     "final": false
+    },
+    {
+     "audio_end_ms": 2400,
+     "text": "Mobil uygulamada yok",
+     "t_ms": 2706,
+     "final": false
+    },
+    {
+     "audio_end_ms": 2640,
+     "text": "Mobil uygulamada yok pardon",
+     "t_ms": 2842,
+     "final": false
+    },
+    {
+     "audio_end_ms": 3360,
+     "text": "Mobil uygulamada yok pardon ve",
+     "t_ms": 3632,
+     "final": false
+    },
+    {
+     "audio_end_ms": 3540,
+     "text": "Mobil uygulamada yok pardon ve pan",
+     "t_ms": 3675,
+     "final": false
+    },
+    {
+     "text": "Mobil uygulamada yok pardon ve panel",
+     "final": false,
+     "t_ms": 4224,
+     "audio_end_ms": 3900
+    },
+    {
+     "text": "Mobil uygulamada yok pardon ve panelinde",
+     "final": false,
+     "t_ms": 4240,
+     "audio_end_ms": 4080
+    },
+    {
+     "text": "Mobil uygulamada yok pardon ve panelinde son",
+     "final": false,
+     "t_ms": 4450,
+     "audio_end_ms": 4320
+    },
+    {
+     "text": "Mobil uygulamada yok pardon ve panelinde son değişik",
+     "final": false,
+     "t_ms": 4960,
+     "audio_end_ms": 4800
+    },
+    {
+     "text": "Mobil uygulamada yok pardon ve panelindesın değişik",
+     "final": false,
+     "t_ms": 5221,
+     "audio_end_ms": 4860
+    },
+    {
+     "text": "Mobil uygulamada yok pardon ve panelinde son değişiklik",
+     "final": false,
+     "t_ms": 5396,
+     "audio_end_ms": 5160
+    },
+    {
+     "text": "Mobil uygulamada yok pardon ve panelinde son değişiklik ne",
+     "final": false,
+     "t_ms": 5427,
+     "audio_end_ms": 5220
+    },
+    {
+     "text": "Mobil uygulamada yok pardon ve panelinde son değişiklik ne",
+     "final": true,
+     "t_ms": 8155,
+     "audio_end_ms": 4830
+    },
+    {
+     "done_ms": 8164
+    }
+   ],
+   "final_text": "Mobil uygulamada yok pardon ve panelinde son değişiklik ne",
+   "final_wer": 0.1111111111111111,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 6227,
+      "text": "Mobil uygulamada yok pardon ve panelinde son değişiklik ne"
+     }
+    ],
+    "lost": "",
+    "sent_wer": 0.1111111111111111,
+    "speech_end_to_send_ms": 1397,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      1460
+     ],
+     [
+      1680,
+      2560
+     ],
+     [
+      2760,
+      4820
+     ]
+    ],
+    "soft_ends_ms": [
+     5520
+    ],
+    "cancelled": 0,
+    "committed_ms": 7320,
+    "first_reply_after_end_ms": 690,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    130
+   ],
+   "whisper": {
+    "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "compute_ms": 2052,
+    "audio_ms": 5030,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "compute_ms": 1609,
+    "audio_ms": 5030,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "correction-pause",
+   "kind": "correction",
+   "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+   "spans": [
+    {
+     "text": "Testleri çalıştır",
+     "start_ms": 300,
+     "end_ms": 1690,
+     "pause_after_ms": 900
+    },
+    {
+     "text": "hayır dur, önce derlemeyi bitir.",
+     "start_ms": 2590,
+     "end_ms": 4950,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 4950,
+   "apple_events": [
+    {
+     "final": false,
+     "text": "Test",
+     "t_ms": 6418,
+     "audio_end_ms": 1200
+    },
+    {
+     "final": false,
+     "text": "Testleri",
+     "t_ms": 6419,
+     "audio_end_ms": 1440
+    },
+    {
+     "final": false,
+     "text": "Testleri çalış",
+     "t_ms": 6499,
+     "audio_end_ms": 1800
+    },
+    {
+     "final": false,
+     "text": "Testleri çalıştır",
+     "t_ms": 6517,
+     "audio_end_ms": 1920
+    },
+    {
+     "final": false,
+     "t_ms": 6957,
+     "audio_end_ms": 4320,
+     "text": "Testleri çalıştır önce"
+    },
+    {
+     "text": "Testleri çalıştır önce der",
+     "final": false,
+     "audio_end_ms": 4560,
+     "t_ms": 7099
+    },
+    {
+     "text": "Testleri çalıştır önce Derlem",
+     "final": false,
+     "audio_end_ms": 4800,
+     "t_ms": 7139
+    },
+    {
+     "text": "Testleri çalıştır önce derlemeyi",
+     "final": false,
+     "audio_end_ms": 5040,
+     "t_ms": 7160
+    },
+    {
+     "audio_end_ms": 5280,
+     "final": false,
+     "text": "Testleri çalıştır önce derlemeyi bitir",
+     "t_ms": 7214
+    },
+    {
+     "audio_end_ms": 4980,
+     "final": true,
+     "text": "Testleri çalıştır önce derlemeyi bitir",
+     "t_ms": 8236
+    },
+    {
+     "done_ms": 8240
+    }
+   ],
+   "final_text": "Testleri çalıştır önce derlemeyi bitir",
+   "final_wer": 0.2857142857142857,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 8014,
+      "text": "Testleri çalıştır önce derlemeyi bitir"
+     }
+    ],
+    "lost": "",
+    "sent_wer": 0.2857142857142857,
+    "speech_end_to_send_ms": 3064,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      1680
+     ],
+     [
+      2600,
+      3200
+     ],
+     [
+      3420,
+      4960
+     ]
+    ],
+    "soft_ends_ms": [
+     2380,
+     5660
+    ],
+    "cancelled": 1,
+    "committed_ms": 7460,
+    "first_reply_after_end_ms": 710,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    4728,
+    1468
+   ],
+   "whisper": {
+    "text": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+    "compute_ms": 2259,
+    "audio_ms": 5150,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+    "compute_ms": 1574,
+    "audio_ms": 5150,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "tech-names",
+   "kind": "technical",
+   "reference": "testflight buildini expo ile deploy et sonra main branche merge et",
+   "spans": [
+    {
+     "text": "TestFlight build'ini Expo ile deploy et, sonra main branch'e merge et.",
+     "start_ms": 300,
+     "end_ms": 5240,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 5240,
+   "apple_events": [
+    {
+     "t_ms": 3321,
+     "final": false,
+     "text": "Test",
+     "audio_end_ms": 1020
+    },
+    {
+     "audio_end_ms": 1260,
+     "t_ms": 3415,
+     "final": false,
+     "text": "Test form"
+    },
+    {
+     "audio_end_ms": 1620,
+     "t_ms": 4056,
+     "final": false,
+     "text": "Test full"
+    },
+    {
+     "audio_end_ms": 1920,
+     "t_ms": 4338,
+     "final": false,
+     "text": "Test full bildiğini"
+    },
+    {
+     "audio_end_ms": 2100,
+     "t_ms": 4509,
+     "final": false,
+     "text": "Test flt bildiğini"
+    },
+    {
+     "audio_end_ms": 2340,
+     "t_ms": 4886,
+     "final": false,
+     "text": "Test flt bildiğini EXPO"
+    },
+    {
+     "audio_end_ms": 2580,
+     "t_ms": 5048,
+     "final": false,
+     "text": "Test flt bildiğini EXPO ile"
+    },
+    {
+     "audio_end_ms": 2940,
+     "t_ms": 5147,
+     "final": false,
+     "text": "Test flt bildiğini EXPO ile Def"
+    },
+    {
+     "final": false,
+     "t_ms": 5489,
+     "audio_end_ms": 3300,
+     "text": "Test flt bildiğini EXPO ile defne"
+    },
+    {
+     "final": false,
+     "t_ms": 5646,
+     "audio_end_ms": 3900,
+     "text": "Test flt bildiğini EXPO ile defnelet"
+    },
+    {
+     "final": false,
+     "t_ms": 5658,
+     "audio_end_ms": 4140,
+     "text": "Test flt bildiğini EXPO ile Deflet"
+    },
+    {
+     "final": false,
+     "t_ms": 5812,
+     "audio_end_ms": 4200,
+     "text": "Test flt bildiğini EXPO ile Deflet sonra"
+    },
+    {
+     "final": false,
+     "t_ms": 5876,
+     "audio_end_ms": 4260,
+     "text": "Test flt bildiğini EXPO ile Deflet sonra my"
+    },
+    {
+     "final": false,
+     "t_ms": 6108,
+     "audio_end_ms": 4380,
+     "text": "Test flt bildiğini EXPO ile defne et sonra my"
+    },
+    {
+     "final": false,
+     "t_ms": 6718,
+     "audio_end_ms": 4740,
+     "text": "Test flt bildiğini EXPO ile defne et sonra my Gran"
+    },
+    {
+     "final": false,
+     "t_ms": 6772,
+     "audio_end_ms": 4920,
+     "text": "Test flt bildiğini EXPO ile defne et sonra my Grand"
+    },
+    {
+     "final": false,
+     "t_ms": 7381,
+     "audio_end_ms": 5400,
+     "text": "Test flt bildiğini EXPO ile defne et sonra my Grand Çerge"
+    },
+    {
+     "final": false,
+     "t_ms": 8318,
+     "audio_end_ms": 7440,
+     "text": "Test Flt bildiğini EXPO ile Defne et sonra my Grand Cerg"
+    },
+    {
+     "final": true,
+     "t_ms": 8485,
+     "audio_end_ms": 4500,
+     "text": "Test Flt bildiğini EXPO ile Defne et sonra my Grand Cerg"
+    },
+    {
+     "done_ms": 8543
+    }
+   ],
+   "final_text": "Test Flt bildiğini EXPO ile Defne et sonra my Grand Cerg",
+   "final_wer": 0.7272727272727273,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 8181,
+      "text": "Test flt bildiğini EXPO ile defne et sonra my Grand Çerge"
+     }
+    ],
+    "lost": "",
+    "sent_wer": 0.7272727272727273,
+    "speech_end_to_send_ms": 2941,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      2940
+     ],
+     [
+      3180,
+      5240
+     ]
+    ],
+    "soft_ends_ms": [
+     5940
+    ],
+    "cancelled": 0,
+    "committed_ms": 7740,
+    "first_reply_after_end_ms": 700,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    249
+   ],
+   "whisper": {
+    "text": "Testflip bildiğini Expo ile deploy et, sonra main branch'a merge et.",
+    "compute_ms": 2312,
+    "audio_ms": 5440,
+    "wer": 0.2727272727272727
+   },
+   "whisper_vocab": {
+    "text": "TestFlight, bildiğini Expo ile deploy et, sonra main branch'a merge et.",
+    "compute_ms": 1632,
+    "audio_ms": 5440,
+    "wer": 0.18181818181818182
+   }
+  },
+  {
+   "id": "tech-agents",
+   "kind": "technical",
+   "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+   "spans": [
+    {
+     "text": "Claude ile Codex hangi ticket üzerinde çalışıyor, commit attılar mı?",
+     "start_ms": 300,
+     "end_ms": 4990,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 4990,
+   "apple_events": [
+    {
+     "audio_end_ms": 1380,
+     "final": false,
+     "t_ms": 3279,
+     "text": "Coe"
+    },
+    {
+     "final": false,
+     "text": "Coe Codex",
+     "audio_end_ms": 1680,
+     "t_ms": 3536
+    },
+    {
+     "text": "Coe Codex hangi",
+     "t_ms": 3732,
+     "final": false,
+     "audio_end_ms": 1980
+    },
+    {
+     "t_ms": 4130,
+     "text": "Coe Codex hangi ticket",
+     "final": false,
+     "audio_end_ms": 2700
+    },
+    {
+     "t_ms": 4155,
+     "text": "Coe Codex hangi ticket üzer",
+     "final": false,
+     "audio_end_ms": 2940
+    },
+    {
+     "t_ms": 4189,
+     "text": "Coe Codex hangi ticket üzerinde",
+     "final": false,
+     "audio_end_ms": 3480
+    },
+    {
+     "t_ms": 4209,
+     "text": "Coe Codex hangi ticket üzerinde çalışıyor",
+     "final": false,
+     "audio_end_ms": 3540
+    },
+    {
+     "t_ms": 4678,
+     "text": "Coe Codex hangi ticket üzerinde çalışıyor John",
+     "final": false,
+     "audio_end_ms": 4500
+    },
+    {
+     "final": false,
+     "t_ms": 5070,
+     "text": "Coe Codex hangi ticket üzerinde çalışıyor John me",
+     "audio_end_ms": 4620
+    },
+    {
+     "final": false,
+     "t_ms": 5835,
+     "text": "Coe Codex hangi ticket üzerinde çalışıyor John me tak",
+     "audio_end_ms": 4920
+    },
+    {
+     "final": false,
+     "t_ms": 6100,
+     "text": "Coe Codex hangi ticket üzerinde çalışıyor John me taktı",
+     "audio_end_ms": 5100
+    },
+    {
+     "final": false,
+     "t_ms": 6408,
+     "text": "Coe Codex hangi ticket üzerinde çalışıyor John me taktılar",
+     "audio_end_ms": 5340
+    },
+    {
+     "final": false,
+     "t_ms": 6555,
+     "text": "Coe Codex hangi ticket üzerinde çalışıyor John me taktılar mı",
+     "audio_end_ms": 5400
+    },
+    {
+     "final": false,
+     "t_ms": 7497,
+     "text": "Chloe Codex hangi ticket üzerinde çalışıyor John me taktılar mı",
+     "audio_end_ms": 7200
+    },
+    {
+     "final": true,
+     "t_ms": 8259,
+     "text": "Chloe Codex hangi ticket üzerinde çalışıyor John me taktılar mı",
+     "audio_end_ms": 4980
+    },
+    {
+     "done_ms": 8289
+    }
+   ],
+   "final_text": "Chloe Codex hangi ticket üzerinde çalışıyor John me taktılar mı",
+   "final_wer": 0.5,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 7355,
+      "text": "Coe Codex hangi ticket üzerinde çalışıyor John me taktılar mı"
+     }
+    ],
+    "lost": "",
+    "sent_wer": 0.5,
+    "speech_end_to_send_ms": 2365,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      300,
+      3480
+     ],
+     [
+      3740,
+      4980
+     ]
+    ],
+    "soft_ends_ms": [
+     5680
+    ],
+    "cancelled": 0,
+    "committed_ms": 7480,
+    "first_reply_after_end_ms": 690,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    80
+   ],
+   "whisper": {
+    "text": "Klo'dyla Jodex hangi tıkıt üzerinde çalışıyor? John Mitha attılar mı?",
+    "compute_ms": 2276,
+    "audio_ms": 5190,
+    "wer": 0.6
+   },
+   "whisper_vocab": {
+    "text": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mith'a attılar mı?",
+    "compute_ms": 1671,
+    "audio_ms": 5190,
+    "wer": 0.2
+   }
+  },
+  {
+   "id": "barge-in",
+   "kind": "barge-in",
+   "reference": "tamam tamam sadece ilkini anlat",
+   "spans": [
+    {
+     "text": "Tamam tamam, sadece ilkini anlat.",
+     "start_ms": 2500,
+     "end_ms": 5290,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 5290,
+   "apple_events": [
+    {
+     "t_ms": 987,
+     "audio_end_ms": 720,
+     "text": "Şu",
+     "final": false
+    },
+    {
+     "text": "Şu anda",
+     "audio_end_ms": 960,
+     "t_ms": 1597,
+     "final": false
+    },
+    {
+     "text": "Şu anda müthiş",
+     "audio_end_ms": 1440,
+     "t_ms": 1694,
+     "final": false
+    },
+    {
+     "t_ms": 2065,
+     "final": false,
+     "text": "Şu anda müthiş çalışıyor",
+     "audio_end_ms": 1920
+    },
+    {
+     "t_ms": 4876,
+     "final": false,
+     "text": "Şu anda müthiş çalışıyor sadece",
+     "audio_end_ms": 4500
+    },
+    {
+     "t_ms": 5375,
+     "final": false,
+     "text": "Şu anda müthiş çalışıyor sadece ilk",
+     "audio_end_ms": 4860
+    },
+    {
+     "t_ms": 5620,
+     "final": false,
+     "text": "Şu anda müthiş çalışıyor sadece ilk sadece ilkini",
+     "audio_end_ms": 5220
+    },
+    {
+     "text": "Şu anda müthiş çalışıyor tamam tamam sadece ilkini",
+     "audio_end_ms": 5400,
+     "t_ms": 5649,
+     "final": false
+    },
+    {
+     "text": "Şu anda müthiş çalışıyor tamam tamam sadece ilkini anlat",
+     "audio_end_ms": 5520,
+     "t_ms": 5667,
+     "final": false
+    },
+    {
+     "text": "Şu anda müthiş çalışıyor tamam tamam sadece ilkini anlat yazılar",
+     "audio_end_ms": 9060,
+     "t_ms": 9364,
+     "final": false
+    },
+    {
+     "text": "Şu anda müthiş çalışıyor tamam tamam sadece ilkini anlat yazılar",
+     "audio_end_ms": 8370,
+     "t_ms": 11942,
+     "final": true
+    },
+    {
+     "done_ms": 11955
+    }
+   ],
+   "final_text": "Şu anda müthiş çalışıyor tamam tamam sadece ilkini anlat yazılar",
+   "final_wer": 1.0,
+   "current": {
+    "turns": [
+     {
+      "sent_ms": 2865,
+      "text": "Şu anda müthiş çalışıyor"
+     }
+    ],
+    "lost": "tamam tamam sadece ilkini anlat yazılar",
+    "sent_wer": 1.0,
+    "speech_end_to_send_ms": -2425,
+    "cut_early": true,
+    "segmentation_ok": false
+   },
+   "planned": {
+    "vad_spans": [
+     [
+      140,
+      840
+     ],
+     [
+      1020,
+      1600
+     ],
+     [
+      2000,
+      5580
+     ],
+     [
+      5840,
+      8540
+     ]
+    ],
+    "soft_ends_ms": [
+     9240
+    ],
+    "cancelled": 0,
+    "committed_ms": 11040,
+    "first_reply_after_end_ms": 3950,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": [
+    85
+   ],
+   "whisper": {
+    "text": "Tamam tamam, sadece ilkini anlat.",
+    "compute_ms": 1877,
+    "audio_ms": 3290,
+    "wer": 0.0
+   },
+   "whisper_vocab": {
+    "text": "Tamam tamam, sadece ilkini anlat.",
+    "compute_ms": 1499,
+    "audio_ms": 3290,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "silence",
+   "kind": "silence",
+   "reference": "",
+   "spans": [],
+   "speech_end_ms": null,
+   "apple_events": [
+    {
+     "done_ms": 8606
+    }
+   ],
+   "final_text": "",
+   "final_wer": null,
+   "current": {
+    "turns": [],
+    "lost": "",
+    "sent_wer": null,
+    "speech_end_to_send_ms": null,
+    "cut_early": false,
+    "segmentation_ok": true
+   },
+   "planned": {
+    "vad_spans": [],
+    "soft_ends_ms": [],
+    "cancelled": 0,
+    "committed_ms": null,
+    "first_reply_after_end_ms": null,
+    "segmentation_ok": true
+   },
+   "partial_lag_ms": []
+  }
+ ]
+}

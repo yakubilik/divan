@@ -1,0 +1,19 @@
+{
+ "days": 14,
+ "turns": 1355,
+ "turn_s": {
+  "median": 47.7,
+  "p25": 16.9,
+  "p75": 134.5,
+  "p95": 616.1
+ },
+ "first_assistant_text_s": {
+  "median": 19.6,
+  "p95": 159.4
+ },
+ "no_tool_turns": {
+  "n": 319,
+  "median_s": 9.8,
+  "p95_s": 47.7
+ }
+}

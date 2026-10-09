@@ -1,0 +1,704 @@
+{
+ "generated": "2026-10-09 09:58",
+ "summary": {
+  "turns": 24,
+  "first_audio_after_speech_end_ms": {
+   "median": 3566.0,
+   "p95": 4367,
+   "n": 22
+  },
+  "stage_medians_after_speech_end_ms": {
+   "soft_end": 700.0,
+   "transcript": 1314.0,
+   "llm_first_token": 2013.0,
+   "llm_first_clause": 2225.0,
+   "llm_first_sentence": 2517.5,
+   "first_audio": 3566.0
+  },
+  "ema_first_piece_ms_median": 1151.0,
+  "pooled_wer": 0.044642857142857144,
+  "silence_replies": 0,
+  "turns_with_cancelled_reply": [
+   "pause-1000",
+   "pause-1500",
+   "pause-2000",
+   "two-pauses",
+   "correction-pause",
+   "pause-1000",
+   "pause-1500",
+   "pause-2000",
+   "two-pauses",
+   "correction-pause"
+  ],
+  "barge_in": {
+   "id": "barge-in",
+   "user_onset_ms": 2500,
+   "detected_after_onset_ms": 162,
+   "stop_after_detect_ms": 0.01,
+   "false_trigger_before_onset": false,
+   "note": "level detector over -24 dB echo; on the phone the stop also includes the player's own latency"
+  },
+  "audible_playback": "unavailable: no phone; add the player start and the network hop on the device",
+  "whisper_model": "mlx-community/whisper-small-mlx"
+ },
+ "rows": [
+  {
+   "id": "short-greeting",
+   "speech_end_ms": 1740,
+   "said": "Selam, nasılsın?",
+   "reference": "selam nasılsın",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 4240,
+   "reply": "Naber, iyi. Şu anda dört ayrı işin durumu var: login hatası 12 dakika testleri çalıştırırken devam ediyor, ödeme sayfası sabitlenmiş, ayarlar kopyası onay bekliyor, ve release notes iki saattir boş duruyor — hangisine bakayım?",
+   "first_piece": "Naber, iyi.",
+   "tts_wav": "/tmp/divan-voice-bench/ema/short-greeting-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1138,
+    "llm_first_token": 1885,
+    "llm_first_clause": 2026,
+    "llm_first_sentence": 2026,
+    "first_audio": 2727
+   },
+   "ema_first_piece_ms": 409,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "short-status",
+   "speech_end_ms": 1440,
+   "said": "Testler bitti mi?",
+   "reference": "testler bitti mi",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 3940,
+   "reply": "Login hatası testleri henüz bitmedi, 12 dakika çalışıyor hâlâ — sonuç bekleyelim.",
+   "first_piece": "Login hatası testleri henüz bitmedi,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/short-status-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1133,
+    "llm_first_token": 1736,
+    "llm_first_clause": 1896,
+    "llm_first_sentence": 2194,
+    "first_audio": 2925
+   },
+   "ema_first_piece_ms": 1018,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "long-request",
+   "speech_end_ms": 13310,
+   "said": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+   "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 15820,
+   "reply": "Tamam, giriş hatası testlerinin bitmesini bekletirim, sonra ayarlar yazısını onaylayıp özet gönderim — yaklaşık otuz dakika yeter mi?",
+   "first_piece": "Tamam, giriş hatası testlerinin bitmesini bekletirim,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/long-request-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 710,
+    "transcript": 1761,
+    "llm_first_token": 2381,
+    "llm_first_clause": 2650,
+    "llm_first_sentence": 3137,
+    "first_audio": 4237
+   },
+   "ema_first_piece_ms": 1575,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "pause-500",
+   "speech_end_ms": 4940,
+   "said": "Şimdi şeyi, giriş ekranındaki hatayı bir kontrol eder misin?",
+   "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 7440,
+   "reply": "Giriş sayfasını hemen kontrol ediyorum, test sonuçlarını al ve hatanın ne olduğunu görürüm.",
+   "first_piece": "Giriş sayfasını hemen kontrol ediyorum,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/pause-500-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1287,
+    "llm_first_token": 1908,
+    "llm_first_clause": 2084,
+    "llm_first_sentence": 2402,
+    "first_audio": 3302
+   },
+   "ema_first_piece_ms": 1212,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "pause-1000",
+   "speech_end_ms": 5890,
+   "said": "Bana bir özet çıkar, yani. Bugün neler yapıldı olduğunu merak ediyorum.",
+   "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+   "wer": 0.09090909090909091,
+   "replies_started": 2,
+   "replies_cancelled": 1,
+   "cancel_log": [
+    {
+     "cancel_at": 3480,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 8380,
+   "reply": "Bugün login hatası üzerinde çalışıldı (testler hâlâ devam ediyor), ödeme sayfası sabitlendi, ayarlar yazısı onay bekliyor, release notes hâlâ boş — login testleri bitince tam rapor gönderim.",
+   "first_piece": "Bugün login hatası üzerinde çalışıldı (testler hâlâ devam ediyor),",
+   "tts_wav": "/tmp/divan-voice-bench/ema/pause-1000-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 690,
+    "transcript": 1277,
+    "llm_first_token": 1934,
+    "llm_first_clause": 2272,
+    "llm_first_sentence": 2994,
+    "first_audio": 4338
+   },
+   "ema_first_piece_ms": 2055,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "pause-1500",
+   "speech_end_ms": 7520,
+   "said": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+   "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+   "wer": 0.0,
+   "replies_started": 2,
+   "replies_cancelled": 1,
+   "cancel_log": [
+    {
+     "cancel_at": 4540,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 10020,
+   "reply": "Ödeme sayfasını hemen kontrol ediyorum, dün düzeltilen kısım okey mi diye bakacağım.",
+   "first_piece": "Ödeme sayfasını hemen kontrol ediyorum,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/pause-1500-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1477,
+    "llm_first_token": 2574,
+    "llm_first_clause": 2791,
+    "llm_first_sentence": 3075,
+    "first_audio": 3991
+   },
+   "ema_first_piece_ms": 1189,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "pause-2000",
+   "speech_end_ms": 6820,
+   "said": "Peki şu yeni özellik için? Hangi dosyaları değiştirmemiz gerekiyor?",
+   "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+   "wer": 0.0,
+   "replies_started": 2,
+   "replies_cancelled": 1,
+   "cancel_log": [
+    {
+     "cancel_at": 4140,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 9320,
+   "reply": "Yeni özellik için hangi dosyaları değiştireceğimizi söyle, ben de listeyi hazırlayıp başlarız.",
+   "first_piece": "Yeni özellik için hangi dosyaları değiştireceğimizi söyle,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/pause-2000-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1334,
+    "llm_first_token": 2038,
+    "llm_first_clause": 2286,
+    "llm_first_sentence": 2554,
+    "first_audio": 3977
+   },
+   "ema_first_piece_ms": 1681,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "two-pauses",
+   "speech_end_ms": 6000,
+   "said": "Bir de. Geçen hafta açtığımız iş vardı ya. O ne durumda?",
+   "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+   "wer": 0.0,
+   "replies_started": 3,
+   "replies_cancelled": 2,
+   "cancel_log": [
+    {
+     "cancel_at": 1560,
+     "cancel_ms": 0
+    },
+    {
+     "cancel_at": 5220,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 8480,
+   "reply": "Geçen haftanın işini hatırlamıyorum, hangi projeydi — paylaşır mısın?",
+   "first_piece": "Geçen haftanın işini hatırlamıyorum,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/two-pauses-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 680,
+    "transcript": 1303,
+    "llm_first_token": 1960,
+    "llm_first_clause": 2153,
+    "llm_first_sentence": 2447,
+    "first_audio": 2887
+   },
+   "ema_first_piece_ms": 724,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "correction",
+   "speech_end_ms": 4830,
+   "said": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+   "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 7320,
+   "reply": "Web panelde son değişiklik release notes — ama iki saattir hiç kımıldanmadı, bakayım ne oldu.",
+   "first_piece": "Web panelde son değişiklik release notes —",
+   "tts_wav": "/tmp/divan-voice-bench/ema/correction-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 690,
+    "transcript": 1279,
+    "llm_first_token": 1996,
+    "llm_first_clause": 2129,
+    "llm_first_sentence": 2474,
+    "first_audio": 3501
+   },
+   "ema_first_piece_ms": 1360,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "correction-pause",
+   "speech_end_ms": 4950,
+   "said": "Testleri çalıştır. Hayır dur, önce değerlemeyi bitir.",
+   "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+   "wer": 0.14285714285714285,
+   "replies_started": 2,
+   "replies_cancelled": 1,
+   "cancel_log": [
+    {
+     "cancel_at": 2660,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 7460,
+   "reply": "Tamam, login hatası için değerlemeyi bitirip sonra testleri çalıştırırım.",
+   "first_piece": "Tamam, login hatası için değerlemeyi bitirip sonra testleri çalıştırırım.",
+   "tts_wav": "/tmp/divan-voice-bench/ema/correction-pause-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 710,
+    "transcript": 1262,
+    "llm_first_token": 1938,
+    "llm_first_clause": 2235,
+    "llm_first_sentence": 2235,
+    "first_audio": 4304
+   },
+   "ema_first_piece_ms": 2056,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "tech-agents",
+   "speech_end_ms": 4990,
+   "said": "Claude ile Codex hangi ticket üzerinde çalışıyor? John M. Tatlılar mı?",
+   "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+   "wer": 0.3,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 7480,
+   "reply": "Şu anda durumu görmüyorum, ama dört işin hepsi de takip ettiğimiz — login hatası, ödeme sayfası, ayarlar yazısı ve release notes — John M. Tatlılar'la ilgili mi?",
+   "first_piece": "Şu anda durumu görmüyorum,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/tech-agents-0.wav",
+   "after_speech_end_ms": {
+    "soft_end": 690,
+    "transcript": 1320,
+    "llm_first_token": 2030,
+    "llm_first_clause": 2170,
+    "llm_first_sentence": 2700,
+    "first_audio": 3091
+   },
+   "ema_first_piece_ms": 729,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "silence",
+   "speech_end_ms": null,
+   "said": "",
+   "reference": "",
+   "wer": null,
+   "replies_started": 0,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": null,
+   "reply": null,
+   "first_piece": null,
+   "tts_wav": null,
+   "after_speech_end_ms": {
+    "soft_end": null,
+    "transcript": null,
+    "llm_first_token": null,
+    "llm_first_clause": null,
+    "llm_first_sentence": null,
+    "first_audio": null
+   },
+   "ema_first_piece_ms": null,
+   "audible_playback_ms": null,
+   "round": 0
+  },
+  {
+   "id": "short-greeting",
+   "speech_end_ms": 1740,
+   "said": "Selam, nasılsın?",
+   "reference": "selam nasılsın",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 4240,
+   "reply": "Naber, iyi. Login hatası testleri çalışıyor, ödeme sayfası tamam, ayarlar yazısı onay bekliyor, release notes boş — ne yapayım?",
+   "first_piece": "Naber, iyi.",
+   "tts_wav": "/tmp/divan-voice-bench/ema/short-greeting-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1120,
+    "llm_first_token": 1794,
+    "llm_first_clause": 1995,
+    "llm_first_sentence": 1995,
+    "first_audio": 2655
+   },
+   "ema_first_piece_ms": 406,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "short-status",
+   "speech_end_ms": 1440,
+   "said": "Testler bitti mi?",
+   "reference": "testler bitti mi",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 3940,
+   "reply": "Login testleri henüz bitmedi, hâlâ çalışıyor — birazdan kontrol ederim.",
+   "first_piece": "Login testleri henüz bitmedi,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/short-status-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1116,
+    "llm_first_token": 1769,
+    "llm_first_clause": 1908,
+    "llm_first_sentence": 2153,
+    "first_audio": 2877
+   },
+   "ema_first_piece_ms": 959,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "long-request",
+   "speech_end_ms": 13310,
+   "said": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+   "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 15820,
+   "reply": "Tamam, login hatası testlerini takip ediyorum, sonra ayarlar yazısını onaylayıp akşama kadar özet göndereceğim.",
+   "first_piece": "Tamam, login hatası testlerini takip ediyorum,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/long-request-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 710,
+    "transcript": 2489,
+    "llm_first_token": 3065,
+    "llm_first_clause": 3263,
+    "llm_first_sentence": 3572,
+    "first_audio": 4367
+   },
+   "ema_first_piece_ms": 1094,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "pause-500",
+   "speech_end_ms": 4940,
+   "said": "Şimdi şeyi, giriş ekranındaki hatayı bir kontrol eder misin?",
+   "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 7440,
+   "reply": "Giriş sayfasını hemen kontrol ediyorum, test sonuçlarını görüp hatanın ne olduğunu bulacağım.",
+   "first_piece": "Giriş sayfasını hemen kontrol ediyorum,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/pause-500-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1525,
+    "llm_first_token": 2120,
+    "llm_first_clause": 2338,
+    "llm_first_sentence": 2517,
+    "first_audio": 3324
+   },
+   "ema_first_piece_ms": 976,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "pause-1000",
+   "speech_end_ms": 5890,
+   "said": "Bana bir özet çıkar, yani. Bugün neler yapıldı olduğunu merak ediyorum.",
+   "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+   "wer": 0.09090909090909091,
+   "replies_started": 2,
+   "replies_cancelled": 1,
+   "cancel_log": [
+    {
+     "cancel_at": 3480,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 8380,
+   "reply": "Login hatası üzerinde çalışılıyor (testler devam ediyor), ödeme sayfası sabitlenmiş, ayarlar yazısı onay bekliyor, release notes boş — testler bitince full rapor göndereceğim.",
+   "first_piece": "Login hatası üzerinde çalışılıyor (testler devam ediyor),",
+   "tts_wav": "/tmp/divan-voice-bench/ema/pause-1000-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 690,
+    "transcript": 1285,
+    "llm_first_token": 1932,
+    "llm_first_clause": 2212,
+    "llm_first_sentence": 2836,
+    "first_audio": 3968
+   },
+   "ema_first_piece_ms": 1744,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "pause-1500",
+   "speech_end_ms": 7520,
+   "said": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+   "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+   "wer": 0.0,
+   "replies_started": 2,
+   "replies_cancelled": 1,
+   "cancel_log": [
+    {
+     "cancel_at": 4540,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 10020,
+   "reply": "Ödeme sayfasını kontrol ediyorum, dün düzeltilen kısım sorun yok mu diye bakacağım.",
+   "first_piece": "Ödeme sayfasını kontrol ediyorum,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/pause-1500-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1432,
+    "llm_first_token": 2130,
+    "llm_first_clause": 2260,
+    "llm_first_sentence": 2602,
+    "first_audio": 3222
+   },
+   "ema_first_piece_ms": 949,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "pause-2000",
+   "speech_end_ms": 6820,
+   "said": "Peki şu yeni özellik için? Hangi dosyaları değiştirmemiz gerekiyor?",
+   "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+   "wer": 0.0,
+   "replies_started": 2,
+   "replies_cancelled": 1,
+   "cancel_log": [
+    {
+     "cancel_at": 4140,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 9320,
+   "reply": "Yeni özellik için hangi dosyaları değiştireceğini söyle, ben de plan yapıp başlayım.",
+   "first_piece": "Yeni özellik için hangi dosyaları değiştireceğini söyle,",
+   "tts_wav": "/tmp/divan-voice-bench/ema/pause-2000-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "transcript": 1384,
+    "llm_first_token": 2210,
+    "llm_first_clause": 2388,
+    "llm_first_sentence": 2518,
+    "first_audio": 4097
+   },
+   "ema_first_piece_ms": 1694,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "two-pauses",
+   "speech_end_ms": 6000,
+   "said": "Bir de. Geçen hafta açtığımız iş vardı ya. O ne durumda?",
+   "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+   "wer": 0.0,
+   "replies_started": 3,
+   "replies_cancelled": 2,
+   "cancel_log": [
+    {
+     "cancel_at": 1560,
+     "cancel_ms": 0
+    },
+    {
+     "cancel_at": 5220,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 8480,
+   "reply": "Geçen hafta açılan işi bana hatırlatır mısın — hangi projeydi, neyle ilgiliydi?",
+   "first_piece": "Geçen hafta açılan işi bana hatırlatır mısın —",
+   "tts_wav": "/tmp/divan-voice-bench/ema/two-pauses-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 680,
+    "transcript": 1308,
+    "llm_first_token": 1947,
+    "llm_first_clause": 2215,
+    "llm_first_sentence": 2440,
+    "first_audio": 3631
+   },
+   "ema_first_piece_ms": 1403,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "correction",
+   "speech_end_ms": 4830,
+   "said": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+   "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+   "wer": 0.0,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 7320,
+   "reply": "Web panelde son değişiklik release notes — ama iki saat hiç kımıldanmadı, kontrol etmem lazım ne oldu.",
+   "first_piece": "Web panelde son değişiklik release notes —",
+   "tts_wav": "/tmp/divan-voice-bench/ema/correction-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 690,
+    "transcript": 1827,
+    "llm_first_token": 2456,
+    "llm_first_clause": 2591,
+    "llm_first_sentence": 2992,
+    "first_audio": 3717
+   },
+   "ema_first_piece_ms": 1113,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "correction-pause",
+   "speech_end_ms": 4950,
+   "said": "Testleri çalıştır. Hayır dur, önce değerlemeyi bitir.",
+   "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+   "wer": 0.14285714285714285,
+   "replies_started": 2,
+   "replies_cancelled": 1,
+   "cancel_log": [
+    {
+     "cancel_at": 2660,
+     "cancel_ms": 0
+    }
+   ],
+   "committed_ms": 7460,
+   "reply": "Tamam, login hatası için değerlemeyi bitirip sonra testleri çalıştırırım.",
+   "first_piece": "Tamam, login hatası için değerlemeyi bitirip sonra testleri çalıştırırım.",
+   "tts_wav": "/tmp/divan-voice-bench/ema/correction-pause-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 710,
+    "transcript": 1812,
+    "llm_first_token": 2440,
+    "llm_first_clause": 2765,
+    "llm_first_sentence": 2765,
+    "first_audio": 5309
+   },
+   "ema_first_piece_ms": 2511,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "tech-agents",
+   "speech_end_ms": 4990,
+   "said": "Claude ile Codex hangi ticket üzerinde çalışıyor? John M. Tatlılar mı?",
+   "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+   "wer": 0.3,
+   "replies_started": 1,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": 7480,
+   "reply": "Dört iş var şu anda — login hatası, ödeme sayfası, ayarlar yazısı, release notes — John M. Tatlılar'la ilgili mi, yoksa başka ticket mi?",
+   "first_piece": "Dört iş var şu anda —",
+   "tts_wav": "/tmp/divan-voice-bench/ema/tech-agents-1.wav",
+   "after_speech_end_ms": {
+    "soft_end": 690,
+    "transcript": 1379,
+    "llm_first_token": 2039,
+    "llm_first_clause": 2203,
+    "llm_first_sentence": 2459,
+    "first_audio": 3131
+   },
+   "ema_first_piece_ms": 919,
+   "audible_playback_ms": null,
+   "round": 1
+  },
+  {
+   "id": "silence",
+   "speech_end_ms": null,
+   "said": "",
+   "reference": "",
+   "wer": null,
+   "replies_started": 0,
+   "replies_cancelled": 0,
+   "cancel_log": [],
+   "committed_ms": null,
+   "reply": null,
+   "first_piece": null,
+   "tts_wav": null,
+   "after_speech_end_ms": {
+    "soft_end": null,
+    "transcript": null,
+    "llm_first_token": null,
+    "llm_first_clause": null,
+    "llm_first_sentence": null,
+    "first_audio": null
+   },
+   "ema_first_piece_ms": null,
+   "audible_playback_ms": null,
+   "round": 1
+  }
+ ]
+}

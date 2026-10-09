@@ -146,6 +146,32 @@ ALLOW = {
         "the phrases whisper makes up over silence are listed in the languages it makes them up in",
     "daemon/scripts/test_call.py":
         "test data: Turkish questions and answers for the language detector and the slang filter",
+    "daemon/scripts/voice_bench/scenarios.json":
+        "test data: the synthetic Turkish call scenarios the live-voice bench speaks and scores",
+    "daemon/scripts/voice_bench/bench.py":
+        "the joining words a Turkish speaker trails off on, which the turn-end rule has to name",
+    "daemon/scripts/voice_bench/llm_latency.py":
+        "test data: synthetic Turkish questions a call asks",
+    "daemon/scripts/voice_bench/ema_worker.py":
+        "the Turkish voice model is warmed up on a Turkish word",
+    "daemon/scripts/test_voice_bench.py":
+        "test data: Turkish transcripts the bench's WER and turn-end judgements are checked on",
+    "docs/voice-bench/baseline.json":
+        "measured output: what the recognisers heard in the Turkish scenarios",
+    "docs/voice-bench/llm.json":
+        "measured output: the Turkish questions and the model's Turkish answers",
+    "docs/voice-bench/proof.json":
+        "measured output: Turkish transcripts and answers of the streaming proof",
+    "docs/voice-bench/whisper-small.json":
+        "measured output: what whisper small heard in the Turkish scenarios",
+    "docs/voice-bench/whisper-turbo-q4.json":
+        "measured output: what quantised whisper turbo heard in the Turkish scenarios",
+    "docs/voice-bench/tts-roundtrip.json":
+        "measured output: Turkish text the voice was given and what whisper heard back",
+    "docs/voice-bench/baseline-run2.json":
+        "measured output: a second pass of the recogniser over the Turkish scenarios",
+    "docs/voice-bench/baseline-run3.json":
+        "measured output: a third pass of the recogniser over the Turkish scenarios",
     "daemon/scripts/test_dictation.py":
         "test data: Turkish dictation and the phrases whisper invents over silence",
     "daemon/scripts/test_scrub.py":
