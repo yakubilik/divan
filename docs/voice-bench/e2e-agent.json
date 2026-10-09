@@ -1,0 +1,88 @@
+{
+ "generated": "2026-10-09T11:29:44.101Z",
+ "simulated": "microphone and speaker (FakeEngine, −24 dB echo); everything else real",
+ "agent": {
+  "chat": {
+   "id": "e63984321fd0",
+   "model": "sonnet",
+   "perm_mode": "bypass",
+   "account": "claude-voice-e2e"
+  },
+  "request": {
+   "committed": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+   "routed": "chat:e63984321fd0",
+   "audible_after_speech_end_ms": 3900
+  },
+  "status_question": {
+   "committed": "Testler bitti mi?",
+   "routed": "conversation",
+   "said": "Hâlâ çalışıyor, henüz bitmedi.",
+   "audible_after_speech_end_ms": 4010,
+   "chat_status_then": "running"
+  },
+  "finished": true,
+  "turn_done_after_request_s": 69.1,
+  "users": [
+   "Testleri çalıştır. Hayır dur, önce derlemeyi bitir."
+  ],
+  "tools": [
+   {
+    "tool": "Bash",
+    "input": "{\"command\":\"ls -la && cat package.json 2>/dev/null | head -40\",\"description\":\"List project files and package scripts\"}"
+   },
+   {
+    "tool": "Bash",
+    "input": "{\"command\":\"cat README.md build.sh test.sh\",\"description\":\"Read README and scripts\"}"
+   },
+   {
+    "tool": "Bash",
+    "input": "{\"command\":\"sh build.sh && sh test.sh\",\"description\":\"Run build, then tests\",\"timeout\":120000}"
+   }
+  ],
+  "spoken": [
+   {
+    "at_s": 8.5,
+    "kind": "reply",
+    "turn": 2,
+    "text": "Sohbete ilettim."
+   },
+   {
+    "at_s": 19.5,
+    "kind": "progress",
+    "turn": 3,
+    "text": "Bir komut çalıştırıyor."
+   },
+   {
+    "at_s": 28.7,
+    "kind": "reply",
+    "turn": 4,
+    "text": "Hâlâ çalışıyor, henüz bitmedi."
+   },
+   {
+    "at_s": 69.1,
+    "kind": "reply",
+    "turn": 5,
+    "text": "Build bitti (12 modül), arkasından testleri de çalıştırdım: 8 test geçti."
+   }
+  ],
+  "chats_made": 0
+ },
+ "checks": [
+  [
+   "agent: the corrected request reached the chat once and whole ([\"Testleri çalıştır. Hayır dur, önce derlemeyi bitir.\"])",
+   true
+  ],
+  [
+   "agent: no other chat was made",
+   true
+  ],
+  [
+   "agent: the status question was answered while the chat was running, 4010 ms after speech end, not routed to the chat",
+   true
+  ],
+  [
+   "agent: the finished turn was spoken after turn.done",
+   true
+  ]
+ ]
+}

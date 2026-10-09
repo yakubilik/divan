@@ -5,7 +5,7 @@ import * as ema from './ema';
 import { client } from './ws';
 import { isTurkish } from './tts/speaker';
 import { locale, pickVoice } from './voice';
-import { fromBase64, pcmBase64, toPcm16, VoiceSession, type Engine, type EngineEvent, type Voice, type Wire } from './voice-session';
+import { emaVoice, fromBase64, pcmBase64, VoiceSession, type Engine, type EngineEvent, type Voice, type Wire } from './voice-session';
 
 /** The streaming call, wired to the phone: the app's socket, the native engine (VoiceEngine.swift) and
  *  the call's one voice. The rules live in src/voice-session.ts; this is only the plumbing, and `live` is
@@ -61,26 +61,9 @@ function engine(): Engine {
   };
 }
 
-/** EMA for the whole call: each piece's sentences made one after another, every one handed over as soon
- *  as it is made, with the pause the model asked for after it. */
-function emaVoice(): Voice | null {
+function emaCallVoice(): Voice | null {
   const v = ema.voice();
-  if (!v) return null;
-  return {
-    name: 'EMA',
-    async *synth(text, cancelled) {
-      const parts = v.prepare(text);
-      for (let i = 0; i < parts.length; i++) {
-        if (cancelled()) return;
-        const wave = await v.synthesise(parts[i].text, { seed: i, cancelled });
-        if (cancelled()) return;
-        const pause = Math.round(parts[i].pause * 48000);
-        const out = new Float32Array(wave.length + (i < parts.length - 1 ? pause : 0));
-        out.set(wave);
-        yield { pcm: toPcm16(out), rate: 48000 };
-      }
-    },
-  };
+  return v ? emaVoice(v) : null;
 }
 
 /** The system voice, synthesised into the call's own player so it is echo-cancelled like EMA. */
@@ -104,7 +87,7 @@ function systemVoice(lang: string, id: string | null, name: string): Voice {
  *  voice from the first word to the last. Never a switch half way through a call. */
 export async function callVoice(lang: string, emaOn: boolean): Promise<{ voice: Voice; ema: boolean }> {
   if (isTurkish(locale(lang)) && emaOn && ema.available() && (await ema.warm())) {
-    const v = emaVoice();
+    const v = emaCallVoice();
     if (v) return { voice: v, ema: true };
   }
   const sys = await pickVoice(lang);

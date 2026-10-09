@@ -205,7 +205,8 @@ verified on a device are in [voice-phone.md](voice-phone.md) (`app/modules/call`
 - Build and install through the existing runbook (local Release build, `xcrun devicectl device install
   app`), only if the phone is reachable; otherwise the build stays at a stable path.
 
-**#151: measure and tune end to end**
+**#151: measure and tune end to end** — done in the laboratory; results, the remaining gap and the
+phone's open half are in [voice-quality-results.md](voice-quality-results.md)
 - Rerun the bench against the integrated build with at least 20 Turkish utterances. Report median and
   p95 speech-end → audible first clause (from `voice.playback started` and the clock offset), barge
   stop time on the device, WER, and cut-offs on the pause scenarios. Compare against
