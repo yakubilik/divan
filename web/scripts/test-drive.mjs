@@ -1320,9 +1320,39 @@ group('a product has its own chats');
     !!doc.querySelector('[data-project-chat] textarea[name="composer"]') && shown('Quire invoices')
       && !doc.querySelector('[data-counts]') && w.location.pathname === '/p/quire/chat/q1',
     w.location.pathname);
-  await click(find('Close chat'));
-  ok('closing it is the product’s page again',
-    pageUp() && shown('Quire invoices') && w.location.pathname === '/p/quire', w.location.pathname);
+  {
+    // Closing is an X in the chat's own head, right after its menu — no row of
+    // its own above the head pushing the title down, and no word "Close chat".
+    const chatHead = doc.querySelector('[data-project-chat] .dv-chathead');
+    const x = labelledBtn('Close chat');
+    const menuBtn = labelledBtn('Chat menu');
+    ok('the open chat closes from an X beside its menu, in its own head, with no row above it',
+      !!x && chatHead?.contains(x) && menuBtn?.nextElementSibling === x && x.title === 'Close chat'
+        && !find('Close chat') && doc.querySelector('[data-project-chat]').firstElementChild?.contains(chatHead));
+    // The menu beside it still opens.
+    await click(menuBtn);
+    ok('…and the menu beside it still opens', !!doc.querySelector('[data-project-chat]') && /Delete/.test(
+      doc.querySelector('[data-project-chat] .dv-chathead')?.parentElement?.textContent ?? ''));
+  }
+  const { useLogs: logsOf, logKey: keyOf } = await load('src/lib/timeline.js');
+  await act(async () => {
+    seed(logsOf, { logs: { ...logsOf.getState().logs, [keyOf('studio', 'q1')]: {
+      items: [{ kind: 'user', id: 'qu1', ts: at - 40, text: 'Draft the March invoices.', queued: false, attachments: [] }],
+      seq: 3, truncated: false, busy: false, pending: [], loading: false, error: null,
+    } } });
+  });
+  asked.length = 0;
+  await click(labelledBtn('Close chat'));
+  ok('closing it is the product’s page again, and nothing was asked of the chat or its agent',
+    pageUp() && shown('Quire invoices') && w.location.pathname === '/p/quire'
+      && !asked.some((a) => /delete|archive|interrupt|stop/.test(a.type)),
+    `${w.location.pathname} · ${asked.map((a) => a.type).join(',')}`);
+  await click(rowOf('Quire invoices'));
+  ok('reopened, the chat is as it was left: its history is still there',
+    w.location.pathname === '/p/quire/chat/q1'
+      && (doc.querySelector('[data-project-chat]')?.textContent ?? '').includes('Draft the March invoices.'),
+    w.location.pathname);
+  await click(labelledBtn('Close chat'));
 
   asked.length = 0;
   await click(rowOf('Quire invoices'));

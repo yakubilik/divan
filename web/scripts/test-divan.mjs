@@ -1254,7 +1254,9 @@ group('every carried screen asks its computer for exactly what it did');
     'src/screens/Ustabasi.tsx': ['MouseEnter', 'MouseLeave'],
     // The command bar stood only on a branch's page, and went with it
     // (ustabasi #147): its field was the one `onChange` on the Dashboard.
-    'src/screens/Overview.tsx': ['Change'],
+    // …and its one press, the worded Close chat over a product's chat, became
+    // the X in the chat's own head (ustabasi #183): same close, other file.
+    'src/screens/Overview.tsx': ['Change', 'Click'],
   };
   const allow = (f, before) => {
     const [reqs, drives] = JSON.parse(before);

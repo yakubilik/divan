@@ -870,9 +870,10 @@ group('the chat is untouched');
     && /app\/src\/transcript\.ts/.test(src('src/lib/transcript.ts')));
 
   const app = src('src/App.tsx');
-  // The chat place, the chat held over the wall, and a product's own Chat tab.
+  // The chat place, the chat held over the wall, and a product's own Chat tab —
+  // where it is also handed the X that puts it away again.
   ok('the chat is handed the same props it always was, in the three places it is drawn',
-    (app.match(/<ChatView \{\.\.\.chatProps\} \/>/g) ?? []).length === 3);
+    (app.match(/<ChatView \{\.\.\.chatProps\}( onCloseView=\{[^{}]*\})? \/>/g) ?? []).length === 3);
   ok('…and the chat place is the chat and the list it is picked from',
     /place === 'chat' && \(/.test(app) && /<Sidebar/.test(app));
 }
