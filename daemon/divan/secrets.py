@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 log = logging.getLogger("rac.secrets")
 
 SERVICE_PREFIX = "rac-secret-"
-ACCOUNT = "remote-ai-chat"
+ACCOUNT = "divan"
 
 # A key does not start in the middle of a word or end in one. `-` counts as
 # part of a word because most of these keys use it inside.

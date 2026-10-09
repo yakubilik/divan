@@ -28,7 +28,7 @@ tmp = Path(tempfile.mkdtemp(prefix="rac-ustabasi-usage-"))
 os.environ["USTABASI_STATE_DIR"] = str(tmp / "state")
 (tmp / "state").mkdir()
 
-from remote_ai_chat import ustabasi as u                          # noqa: E402
+from divan import ustabasi as u                          # noqa: E402
 
 fails: list[str] = []
 

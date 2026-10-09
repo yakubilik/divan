@@ -6,7 +6,7 @@
 # Env overrides (used by scripts/test_mac_audit.sh):
 #   AUDIT_HOME     home dir            (default $HOME)
 #   AUDIT_ROOTS    scan roots, colon-separated (default $HOME/projects:$HOME/server)
-#   AUDIT_REPORT   report path         (default $AUDIT_HOME/.remote-ai-chat/mac-audit.md)
+#   AUDIT_REPORT   report path         (default $AUDIT_HOME/.divan/mac-audit.md)
 #   AUDIT_SYSTEM=0 skip FileVault/firewall/sharing/port checks
 #   AUDIT_HISTORY=0 skip git history scan
 set -u
@@ -16,7 +16,7 @@ FIX=0
 [ "${1:-}" = "--fix" ] && FIX=1
 H="${AUDIT_HOME:-$HOME}"
 ROOTS="${AUDIT_ROOTS:-$H/projects:$H/server}"
-RAC="$H/.remote-ai-chat"
+RAC="$H/.divan"
 REPORT="${AUDIT_REPORT:-$RAC/mac-audit.md}"
 ME="$(id -un)"
 OUT="$(mktemp)"
@@ -53,8 +53,8 @@ say ""
 say "Mode: $([ $FIX = 1 ] && echo '--fix' || echo 'read-only') — $(date '+%Y-%m-%d %H:%M')"
 say ""
 
-# 1. ~/.remote-ai-chat
-say "## ~/.remote-ai-chat permissions"
+# 1. ~/.divan
+say "## ~/.divan permissions"
 mark=$(wc -l < "$OUT")
 if [ -d "$RAC" ]; then
   ensure "$RAC" 700
@@ -102,7 +102,7 @@ say "- checked $NSEC secret files"
 [ "$(wc -l < "$OUT")" = "$mark" ] && say "- ok"
 say ""
 
-# 3. key-like strings in tracked files / history (patterns from daemon/remote_ai_chat/secrets.py)
+# 3. key-like strings in tracked files / history (patterns from daemon/divan/secrets.py)
 say "## Key-like strings in git repos (path + kind only)"
 KINDS=(
   'pem|-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----'

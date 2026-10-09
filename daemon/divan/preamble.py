@@ -64,8 +64,7 @@ def build(cfg, pc, tool: str = "claude") -> str:
 
     lines = [
         "<session-context>",
-        f"You are running inside Divan, a daemon on {cfg.host_name}. Call it Divan;",
-        "its repository and folders still carry the old name, remote-ai-chat.",
+        f"You are running inside Divan, a daemon on {cfg.host_name}.",
         "The person you are talking to is on their phone, in the Divan app;",
         "their messages reach you over a WebSocket on the local network or tailnet.",
         "",

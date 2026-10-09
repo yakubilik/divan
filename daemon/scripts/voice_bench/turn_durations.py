@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """How long a chat's turn takes, from the daemon's own event table. Read-only.
 
-    python3 daemon/scripts/voice_bench/turn_durations.py [--db ~/.remote-ai-chat/db.sqlite] [--days 14]
+    python3 daemon/scripts/voice_bench/turn_durations.py [--db ~/.divan/db.sqlite] [--days 14]
 
 A call placed from inside a chat (`app/app/call.tsx`, `askChat`) sends the
 utterance with `chat.send` and says nothing until the chat goes idle, then reads
@@ -27,7 +27,7 @@ def q(xs: list[float], p: float) -> float:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default=os.path.expanduser("~/.remote-ai-chat/db.sqlite"))
+    ap.add_argument("--db", default=os.path.expanduser("~/.divan/db.sqlite"))
     ap.add_argument("--days", type=int, default=14)
     a = ap.parse_args()
     db = sqlite3.connect(f"file:{a.db}?mode=ro", uri=True)

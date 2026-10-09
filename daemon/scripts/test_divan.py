@@ -75,13 +75,13 @@ QUEUE = tmp / "queue"
 QUEUE.mkdir()
 os.environ["USTABASI_STATE_DIR"] = str(QUEUE)
 
-from remote_ai_chat import divan                                   # noqa: E402
-from remote_ai_chat.accounts import Account                        # noqa: E402
-from remote_ai_chat.pool import Pool, Settings as PoolSettings     # noqa: E402
-from remote_ai_chat import ustabasi as u                           # noqa: E402
-from remote_ai_chat.db import DB, SCHEMA as CHAT_SCHEMA            # noqa: E402
-from remote_ai_chat.security import PathPolicy                     # noqa: E402
-from remote_ai_chat.server import Server                           # noqa: E402
+from divan import divan                                   # noqa: E402
+from divan.accounts import Account                        # noqa: E402
+from divan.pool import Pool, Settings as PoolSettings     # noqa: E402
+from divan import ustabasi as u                           # noqa: E402
+from divan.db import DB, SCHEMA as CHAT_SCHEMA            # noqa: E402
+from divan.security import PathPolicy                     # noqa: E402
+from divan.server import Server                           # noqa: E402
 
 # Two of the checks below are a queue declining to take a card, and the handler
 # says so in the log on its way to saying so in the answer. That is the
@@ -114,13 +114,13 @@ def refuses(what: str, fn, *args, **kw) -> None:
 # ── a machine with projects on it ────────────────────────────────────────────
 
 ROOT = tmp / "projects"
-for name in ("babysee", "isghocam", "a-new-product", "secrets", "remote-ai-chat",
+for name in ("babysee", "isghocam", "a-new-product", "secrets", "divan",
              "yatak-kontrol"):
     (ROOT / name).mkdir(parents=True)
 (ROOT / "babysee" / "app").mkdir()
 # The case the folder's name cannot answer: the product checked out here is
 # called Divan, and nothing about the board may rename it back.
-(ROOT / "remote-ai-chat" / "app").mkdir()
+(ROOT / "divan" / "app").mkdir()
 
 # babysee is a real repository, because "is this product alive at all" is a
 # question only git can answer and the answer travels on the snapshot. Two
@@ -379,7 +379,7 @@ CREATE TABLE projects (
   created_at REAL, updated_at REAL);
 """)
 conn.execute("INSERT INTO projects (id,name,slug,summary,sort,archived,created_at,"
-             "updated_at) VALUES ('p1','Divan','remote-ai-chat','',0,0,1.0,2.0)")
+             "updated_at) VALUES ('p1','Divan','divan','',0,0,1.0,2.0)")
 conn.execute("INSERT INTO projects (id,name,slug,summary,sort,archived,created_at,"
              "updated_at) VALUES ('p2','tutor-v3','tutor-v3','',0,1,1.0,2.0)")
 conn.commit()
@@ -391,15 +391,15 @@ check("…and so does the table its history lives in",
       bool(conn.execute("SELECT name FROM sqlite_master WHERE type='table'"
                         " AND name='milestones'").fetchone()), True)
 older_board = divan.Board(conn, threading.Lock())
-kept = older_board.find_project("remote-ai-chat")
+kept = older_board.find_project("divan")
 check("and the product that was there is word for word what it was",
-      (kept["name"], kept["slug"], kept["summary"]), ("Divan", "remote-ai-chat", ""))
+      (kept["name"], kept["slug"], kept["summary"]), ("Divan", "divan", ""))
 check("with the new fields simply empty",
       (kept["kind"], kept["started_at"], kept["stage"]), ("", None, ""))
 check("a product that was archived is still archived",
       older_board.find_project("tutor-v3")["archived"], True)
 check("…and the migration did not put it back on the board",
-      [p["slug"] for p in older_board.list_projects()], ["remote-ai-chat"])
+      [p["slug"] for p in older_board.list_projects()], ["divan"])
 check("the holding place arrives with the migration, once",
       len(conn.execute("SELECT id FROM projects WHERE hidden=1").fetchall()), 1)
 divan.migrate(conn)
@@ -560,10 +560,10 @@ check("none of it is required: the four products that predate it still open",
 
 # The name is what a screen says; the slug is what two computers match the same
 # product by (`app/src/divan.ts projectKey`). They are separate for one real
-# product — Divan, in ~/projects/remote-ai-chat — so the slug can be given.
-divan_p = board.create_project("Divan", slug="remote-ai-chat")
+# product — Divan, in ~/projects/divan — so the slug can be given.
+divan_p = board.create_project("Divan", slug="divan")
 check("a product's key can be the checkout every machine knows it by",
-      (divan_p["name"], divan_p["slug"]), ("Divan", "remote-ai-chat"))
+      (divan_p["name"], divan_p["slug"]), ("Divan", "divan"))
 
 edited = board.update_project(divan_p["id"], name="Divan board", kind="web",
                              purpose="The board every project is run from.",
@@ -571,7 +571,7 @@ edited = board.update_project(divan_p["id"], name="Divan board", kind="web",
                              repos=[str(ROOT / "babysee" / "app")])
 check("a product can be renamed", edited["name"], "Divan board")
 check("…and the key does not move with the name, or two machines stop agreeing",
-      edited["slug"], "remote-ai-chat")
+      edited["slug"], "divan")
 check("its kind rewritten", edited["kind"], "web")
 check("what it is for, said as a purpose, is the same field as the summary",
       edited["summary"], "The board every project is run from.")
@@ -586,11 +586,11 @@ check("a date can be cleared", board.update_project(
     divan_p["id"], started_at=None)["started_at"], None)
 board.update_project(divan_p["id"], archived=True)
 check("a product can be taken off the board",
-      [p["slug"] for p in board.list_projects() if p["slug"] == "remote-ai-chat"], [])
+      [p["slug"] for p in board.list_projects() if p["slug"] == "divan"], [])
 check("…and put back", board.update_project(divan_p["id"], archived=False)["archived"],
       False)
 holds("…where it is listed again",
-      "remote-ai-chat" in [p["slug"] for p in board.list_projects()],
+      "divan" in [p["slug"] for p in board.list_projects()],
       repr([p["slug"] for p in board.list_projects()]))
 
 check("a start date can be a year", time.strftime("%Y-%m-%d", time.localtime(
@@ -666,9 +666,9 @@ check("…and an empty history is a list, not a missing field",
       board.set_milestones(bare["id"], []), [])
 
 check("a product is found by its id", board.find_project(bare["id"])["id"], bare["id"])
-check("…by its key", board.find_project("remote-ai-chat")["name"], "Divan board")
+check("…by its key", board.find_project("divan")["name"], "Divan board")
 check("…and by the name on the screen, which is what a person says out loud",
-      board.find_project("Divan board")["slug"], "remote-ai-chat")
+      board.find_project("Divan board")["slug"], "divan")
 check("and a product nobody has is nobody's", board.find_project("nothing"), None)
 
 # ── 2c · the row in `projects` that is not a product ─────────────────────────
@@ -969,8 +969,8 @@ async def wire() -> None:
     # machine knows it by.
     board.create_project("babysee", repos=[str(ROOT / "babysee")])
     board.create_project("isghocam", repos=[str(ROOT / "isghocam")])
-    board.create_project("Divan", slug="remote-ai-chat",
-                         repos=[str(ROOT / "remote-ai-chat")])
+    board.create_project("Divan", slug="divan",
+                         repos=[str(ROOT / "divan")])
 
     run_dir = tmp / "run-1"
     run_dir.mkdir()
@@ -992,7 +992,7 @@ async def wire() -> None:
                  escalation="Which account should the beta use?")
     queue_ticket(5, "a job on a repository nobody registered", "/elsewhere/ledger", "done")
     queue_ticket(6, "the board draws nothing on the second wall",
-                 str(ROOT / "remote-ai-chat" / "app"), "queued")
+                 str(ROOT / "divan" / "app"), "queued")
     queue_ticket(7, "rank tracking shipped", str(ROOT / "isghocam"), "done")
 
     rows = lambda: sqlite3.connect(str(tmp / "wire.sqlite")).execute(
@@ -1014,7 +1014,7 @@ async def wire() -> None:
           board.get_project(by_ticket[6]["project_id"])["name"], "Divan")
     check("and the name the person gave it is untouched by having work under it",
           [(p["name"], p["slug"]) for p in board.list_projects()
-           if p["slug"] == "remote-ai-chat"], [("Divan", "remote-ai-chat")])
+           if p["slug"] == "divan"], [("Divan", "divan")])
     check("a ticket out of a folder no product owns is not lost",
           bool(by_ticket[5]), True)
     check("…it is in the holding place",
@@ -1822,13 +1822,13 @@ asyncio.run(wire())
 #
 # The requests above are reached from the phone over a socket. The thing that has
 # to be able to make a product is the agent in the app's chat, which has a shell
-# on this computer and no screen — so `remote-ai-chat project` is that entrance,
+# on this computer and no screen — so `divan project` is that entrance,
 # and it speaks the same two requests over the daemon's own socket rather than
 # writing to the database behind it. What is checked here is the part that can be
 # wrong quietly: which flags become which fields, and that a flag nobody passed
 # is not a field set to nothing.
 
-from remote_ai_chat.__main__ import _project_fields, _project_line   # noqa: E402
+from divan.__main__ import _project_fields, _project_line   # noqa: E402
 
 
 def flags(**kw) -> dict:
@@ -1840,9 +1840,9 @@ def flags(**kw) -> dict:
 
 check("a command that gives nothing sends nothing", flags(), {})
 check("every field a product has can be given",
-      flags(name="Divan", slug="remote-ai-chat", kind="app", purpose="The board.",
+      flags(name="Divan", slug="divan", kind="app", purpose="The board.",
             started="2026-09-28", sort=2, repo=["/w/rac"], branch=["finance"]),
-      {"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+      {"name": "Divan", "slug": "divan", "kind": "app",
        "purpose": "The board.", "started_at": "2026-09-28", "sort": 2,
        "repos": ["/w/rac"], "branches": ["finance"]})
 check("a repeated repository is the list", flags(repo=["/a", "/b"])["repos"], ["/a", "/b"])
@@ -1854,11 +1854,11 @@ check("taking a product off the board is one flag", flags(archive=True),
       {"archived": True})
 check("and putting it back is the other", flags(unarchive=True), {"archived": False})
 holds("a product reads back as one line saying what it is and where it stands",
-      _project_line({"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+      _project_line({"name": "Divan", "slug": "divan", "kind": "app",
                      "started_at": 1_759_000_000, "summary_line": "2 running"})
-      == "Divan (app)  [remote-ai-chat] since "
+      == "Divan (app)  [divan] since "
       + time.strftime("%Y-%m-%d", time.localtime(1_759_000_000)) + "  — 2 running",
-      _project_line({"name": "Divan", "slug": "remote-ai-chat", "kind": "app",
+      _project_line({"name": "Divan", "slug": "divan", "kind": "app",
                      "started_at": 1_759_000_000, "summary_line": "2 running"}))
 check("and a product with none of it still reads",
       _project_line({"name": "an old product", "slug": "an-old-product"}),

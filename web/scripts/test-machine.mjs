@@ -152,7 +152,7 @@ group('each page is the frame’s page');
     words(machines.body).slice(0, 200));
   ok('…with the quota and the executors beside them, and pairing and the quiet machine under them',
     has(machines.body, 'Quota', 'warn 20%', 'stop 5%', 'Executors',
-      'Pair a new machine', 'remote-ai-chat pair', 'When a machine goes quiet'));
+      'Pair a new machine', 'divan pair', 'When a machine goes quiet'));
 
   const executors = page('executors');
   ok('Executors is W13’s table without the column its `···` stood in, and everyone who can do work is on it',

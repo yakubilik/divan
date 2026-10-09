@@ -9,10 +9,10 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from remote_ai_chat.providers.base import ProviderConfig
-from remote_ai_chat.providers.codex import CodexProvider
-from remote_ai_chat.structured_approval import validate_response
-from remote_ai_chat.errors import Err
+from divan.providers.base import ProviderConfig
+from divan.providers.codex import CodexProvider
+from divan.structured_approval import validate_response
+from divan.errors import Err
 
 
 class CodexTests(unittest.IsolatedAsyncioTestCase):
@@ -39,7 +39,7 @@ for line in sys.stdin:
 ''')
             cli.chmod(0o700)
             p = self.provider()
-            with patch('remote_ai_chat.providers.codex.tools.find_cli', return_value=str(cli)):
+            with patch('divan.providers.codex.tools.find_cli', return_value=str(cli)):
                 try:
                     await asyncio.wait_for(p._ensure(), 5)
                     self.assertEqual(p._thread_id, 'existing')
@@ -57,7 +57,7 @@ for line in sys.stdin:
         async def send(*args): pass
         p._call = rpc
         p._send = send
-        with patch('remote_ai_chat.providers.codex.tools.find_cli', return_value='/usr/bin/false'):
+        with patch('divan.providers.codex.tools.find_cli', return_value='/usr/bin/false'):
             try:
                 with self.assertRaisesRegex(RuntimeError, 'history was preserved'):
                     await p._ensure()
@@ -93,7 +93,7 @@ for line in sys.stdin:
         self.assertIn('error',sent[-1])
 
     async def test_session_validates_before_resolving_without_saving_answers(self):
-        from remote_ai_chat.session import ChatSession
+        from divan.session import ChatSession
         s = ChatSession.__new__(ChatSession)
         request = {'kind':'mcp_elicitation','mode':'form','requestedSchema':{
             'type':'object','properties':{'confirmed':{'type':'boolean'}},'required':['confirmed']}}

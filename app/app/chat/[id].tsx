@@ -756,7 +756,7 @@ function AttachBody({ host, actions, onPick }: { host: string; actions: AttachAc
       <View style={{ height: 1, backgroundColor: c.line }} />
       <View style={{ gap: 4, paddingHorizontal: 2 }}>
         <Text style={{ fontSize: 13, color: c.muted }}>{T('uploadsNote', { host })}</Text>
-        <Text mono style={{ fontSize: 12.5 }}>~/.remote-ai-chat/uploads</Text>
+        <Text mono style={{ fontSize: 12.5 }}>~/.divan/uploads</Text>
       </View>
       <Text style={{ fontSize: 12, color: c.faint, paddingHorizontal: 2 }}>{T('uploadsLimits')}</Text>
     </View>

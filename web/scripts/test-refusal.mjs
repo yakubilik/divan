@@ -142,7 +142,7 @@ group('a 401 over HTTP stops the socket too');
   try { await actions.upload(key, 'c1', file); } catch (e) { said = e.message; }
   answer = { status: 200, body: {} };
   ok('the upload names the lock and the command that lifts it',
-    said.includes('remote-ai-chat unlock 203.0.113.5'), said);
+    said.includes('divan unlock 203.0.113.5'), said);
   const n = sockets.length;
   const c = new RacClient();
   c.connect(cfg.host, cfg.port, cfg.token);
@@ -187,8 +187,19 @@ group('each refusal is told apart');
     !== refusalText({ kind: 'not_tunnel_device' }, 'en').short);
   const lock = refusalText(parsed[3], 'en');
   ok('a lock says until when, and the command', /\d\d:\d\d/.test(lock.short)
-    && lock.long.includes('remote-ai-chat unlock 2001:db8::/64'), lock.long);
+    && lock.long.includes('divan unlock 2001:db8::/64'), lock.long);
 }
 
+
+console.log('── a pairing link, under the scheme and the legacy one');
+{
+  const rest = '://pair?host=100.64.1.2&port=8791&token=tok%2F1&name=studio&device_id=d1';
+  const now = actions.parsePairing(actions.SCHEME + rest);
+  const then = actions.parsePairing(actions.LEGACY_SCHEME + rest);
+  ok('a divan:// link is read', actions.SCHEME === 'divan' && JSON.stringify(now) === JSON.stringify(
+    { host: '100.64.1.2', port: 8791, token: 'tok/1', name: 'studio', device_id: 'd1' }), JSON.stringify(now));
+  ok('the same link under the legacy scheme reads the same',
+    actions.LEGACY_SCHEME !== actions.SCHEME && JSON.stringify(then) === JSON.stringify(now), JSON.stringify(then));
+}
 console.log(failures ? `\n${failures} failed` : '\nall good');
 process.exit(failures ? 1 : 0);

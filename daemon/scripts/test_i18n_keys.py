@@ -42,7 +42,7 @@ def main() -> None:
     check(app.returncode == 0, "scripts/test_i18n_keys.py passes", app.stdout[-400:] + app.stderr[-400:])
 
     print("\n2. the panel's refusals")
-    server = (DAEMON / "remote_ai_chat" / "server.py").read_text()
+    server = (DAEMON / "divan" / "server.py").read_text()
     sent = set(re.findall(r'"(\w+)"', server)) & {
         "not_tunnel_device", "tunnel_only", "revoked", "no_token", "unknown_token"}
     sent |= {"locked"} if 'f"locked:' in server else set()
@@ -52,7 +52,7 @@ def main() -> None:
     check(en == tr, "and the two tables name the same kinds", repr(en ^ tr))
 
     print("\n3. the lock's push")
-    from remote_ai_chat.server import TUNNEL_PUSH_TEXT
+    from divan.server import TUNNEL_PUSH_TEXT
     langs = sorted(TUNNEL_PUSH_TEXT)
     check({"en", "tr"} <= set(langs), "English and Turkish", repr(langs))
     check(all(TUNNEL_PUSH_TEXT[lang].keys() == TUNNEL_PUSH_TEXT["en"].keys() for lang in langs),
@@ -60,7 +60,7 @@ def main() -> None:
     holes = {lang: {k: set(re.findall(r"\{(\w+)\}", v)) for k, v in TUNNEL_PUSH_TEXT[lang].items()}
              for lang in langs}
     check(all(holes[lang] == holes["en"] for lang in langs), "with the same placeholders", repr(holes))
-    check(all("remote-ai-chat unlock {addr}" in TUNNEL_PUSH_TEXT[lang]["locked"] for lang in langs),
+    check(all("divan unlock {addr}" in TUNNEL_PUSH_TEXT[lang]["locked"] for lang in langs),
           "the lock says how to lift it, in each")
 
     print(f"\n{'all good' if not failures else str(len(failures)) + ' failed'}")

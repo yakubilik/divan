@@ -22,12 +22,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat.config import Config                       # noqa: E402
-from remote_ai_chat.db import DB                               # noqa: E402
-from remote_ai_chat.providers.base import ProviderConfig, TurnResult  # noqa: E402
-from remote_ai_chat.providers.claude import ClaudeProvider     # noqa: E402
-from remote_ai_chat.server import Server                        # noqa: E402
-from remote_ai_chat.session import PROVIDER_FIELDS, ChatSession  # noqa: E402
+from divan.config import Config                       # noqa: E402
+from divan.db import DB                               # noqa: E402
+from divan.providers.base import ProviderConfig, TurnResult  # noqa: E402
+from divan.providers.claude import ClaudeProvider     # noqa: E402
+from divan.server import Server                        # noqa: E402
+from divan.session import PROVIDER_FIELDS, ChatSession  # noqa: E402
 
 failures: list[str] = []
 
@@ -240,7 +240,7 @@ async def scenario_perm_modes():
     on it — the destructive commands — asks in every mode, bypass included.
     """
     print("\npermission modes decide who is interrupted")
-    LOG_TAIL = "tail -n 40 ~/.remote-ai-chat/logs/daemon.log"   # on nobody's list
+    LOG_TAIL = "tail -n 40 ~/.divan/logs/daemon.log"   # on nobody's list
     ORDINARY = "ls -la /tmp"                                    # on nobody's list
     NASTY = "sudo rm -rf /var/tmp"                              # on every list
 
@@ -290,7 +290,7 @@ def scenario_default_mode():
     declaration decides, and it is the same for Claude and Codex.
     """
     print("\na new chat opens in bypass unless somebody picks otherwise")
-    from remote_ai_chat.providers.codex import CodexProvider
+    from divan.providers.codex import CodexProvider
     for prov in (ClaudeProvider, CodexProvider):
         cat = prov.catalog()
         check(cat.get("default_perm_mode") == "bypass", f"{prov.name} declares bypass as the default")

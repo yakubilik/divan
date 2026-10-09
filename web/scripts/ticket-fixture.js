@@ -88,9 +88,9 @@ export function card(over = {}) {
 export function wall() {
   const long = 'a-long-commit-subject-with-no-spaces-in-it-at-all-'.repeat(4);
   return [
-    card({ id: 1, project: 'remote-ai-chat', git: { commits: 12, subject: long } }),
+    card({ id: 1, project: 'divan', git: { commits: 12, subject: long } }),
     card({
-      id: 2, project: 'remote-ai-chat', status: 'blocked', round: 2,
+      id: 2, project: 'divan', status: 'blocked', round: 2,
       escalation: '- Which account should the beta bill to?',
       git: { commits: 3, subject: 'The wall is a column per project' },
     }),

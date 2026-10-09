@@ -18,7 +18,7 @@ asked is in a header, `CF-Connecting-IP`, written by Cloudflare's edge and not
 by whoever connected to it.
 
 So the door moves into the daemon, and it is `tunnel_allow_ips` in
-`~/.remote-ai-chat/config.toml`:
+`~/.divan/config.toml`:
 
 ```toml
 tunnel_allow_ips = ["203.0.113.4"]        # addresses or CIDR, v4 or v6
@@ -27,7 +27,7 @@ tunnel_allow_ips = ["203.0.113.4"]        # addresses or CIDR, v4 or v6
 A request that carries `CF-Connecting-IP` is served only if that address is in
 the list. **An empty list refuses every one of them** — which is the point:
 running a tunnel in front of this daemon opens nothing on its own. Nothing else
-changes: a phone on the tailnet and `remote-ai-chat web` on the machine itself
+changes: a phone on the tailnet and `divan web` on the machine itself
 never send that header and never meet the list.
 
 The list is re-read when the file changes, so editing it costs nothing. A
@@ -90,7 +90,7 @@ tunnel id it used.
 Then the address the browser gets:
 
 ```bash
-remote-ai-chat web --at divan.example.com --name "laptop"
+divan web --at divan.example.com --name "laptop"
 ```
 
 It prints a link. The token is in the fragment, the part of a URL a browser
@@ -106,7 +106,7 @@ with `tunnel = true`, and the two kinds of token do not cross.
 
 - A request that carries `CF-Connecting-IP` is answered only for a tunnel
   device's token. A phone's token, or the token of a panel opened with plain
-  `remote-ai-chat web`, is refused there — the socket closes with 4401 and
+  `divan web`, is refused there — the socket closes with 4401 and
   `/upload`, `/files` and `/screen.jpg` answer 401. It is refused but not
   counted towards the lock below: it is one of your own tokens at the wrong
   door, not a guess.
@@ -134,7 +134,7 @@ header has no address of its own to hold to account, only the socket's.
 What counts is a guess, and a browser retrying is not one:
 
 - **A token the daemon knows but that does not open the tunnel** — a phone's,
-  or a panel's from plain `remote-ai-chat web` — is refused and not counted.
+  or a panel's from plain `divan web` — is refused and not counted.
 - **The same unknown token again** inside the window is counted once. A tab
   holding a stale token and reconnecting every few seconds is one strike, not
   five; it takes five *different* wrong tokens to lock.
@@ -144,7 +144,7 @@ The lock is in the daemon's memory and lifts by itself after ten minutes. To
 lift it now, without a restart, on the computer:
 
 ```sh
-remote-ai-chat unlock 203.0.113.4     # a v6 address may be given whole; its /64 is unlocked
+divan unlock 203.0.113.4     # a v6 address may be given whole; its /64 is unlocked
 ```
 
 It asks the running daemon over loopback, as a device minted for the call and
@@ -183,7 +183,7 @@ Two things send a notification to every paired device that takes them:
 Neither is behind a switch. If the first one arrives and it was not you,
 `revoke` the device it names.
 
-`remote-ai-chat devices` shows the same thing at rest:
+`divan devices` shows the same thing at rest:
 
 ```
 3f9c2a81d0b4  iPhone                push=yes          seen=2026-10-01 09:12
@@ -221,7 +221,7 @@ the time of writing):
    application's *Application Audience (AUD) Tag* — a long hex string on the
    application's overview page.
 
-Then `~/.remote-ai-chat/config.toml`:
+Then `~/.divan/config.toml`:
 
 ```toml
 tunnel_access_team = "your-team"                  # of your-team.cloudflareaccess.com
@@ -298,7 +298,7 @@ In order:
    to be one made with `--at`: no other device's token is answered here.
 5. **The lock.** Five different wrong tokens from one address in ten minutes
    and that address is refused for ten more — and your phone is told, with
-   the `remote-ai-chat unlock <ip>` that lifts it early.
+   the `divan unlock <ip>` that lifts it early.
 
 Without Access, what is *not* standing is any notion of a person: the address
 list is the cheap version, and it is the one that needs nothing but a tunnel.

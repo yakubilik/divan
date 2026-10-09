@@ -27,7 +27,7 @@ export function Bubble({ children }: { children: ReactNode }) {
   );
 }
 
-/** What the daemon leaves where a key was pasted (`daemon/remote_ai_chat/
+/** What the daemon leaves where a key was pasted (`daemon/divan/
  *  secrets.py`): the family, the keychain item, and how to read it back. The
  *  agent needs all of that; a person reading the chat needs only to see that a
  *  key was there and is safe, so it is drawn as one locked chip. */

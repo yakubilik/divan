@@ -57,7 +57,7 @@ export interface Ticket {
   note_count: number;
   last_event: Event | null;
   /** Every run of every stage this ticket has been through, oldest first: what
-   *  the queue's own events add up to (`daemon/remote_ai_chat/ustabasi.py`).
+   *  the queue's own events add up to (`daemon/divan/ustabasi.py`).
    *  What a ticket *is* on a board is this — the steps, ticking off. */
   steps?: {
     stage: string; round: number; at: number; ended_at?: number | null;

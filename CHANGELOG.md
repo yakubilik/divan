@@ -8,6 +8,27 @@ The tag is the version. `scripts/release.py` writes this file, the three places
 the number is copied to, and the tag itself, in one commit; the release
 workflow refuses a tag whose copies disagree with it.
 
+## Renamed to Divan — 2026-10-08
+
+The product, the Python package, the command and the data home are all called
+Divan now. What changes for an existing install:
+
+- The command is `divan` and the package is `divan` (`python -m divan`). The
+  old package was `remote_ai_chat` and its command `remote-ai-chat`.
+- The data home is `~/.divan`, and `DIVAN_HOME` moves it. `~/.remote-ai-chat` is
+  still used when `~/.divan` does not exist and `DIVAN_HOME` is unset.
+- Every `RAC_*` environment variable is `DIVAN_*`: `DIVAN_HOME`, `DIVAN_PORT`,
+  `DIVAN_WHISPER_MODEL`, `DIVAN_YES`, `DIVAN_NO_CLIS`, and the app's build
+  identity (`DIVAN_BUNDLE_ID`, `DIVAN_APPLE_TEAM_ID`, `DIVAN_OWNER`,
+  `DIVAN_EAS_PROJECT_ID` — set them again on EAS). A chat's process is given
+  `DIVAN_CHAT_ID`, and `RAC_CHAT_ID` beside it for now.
+- Pairing links are `divan://pair?…`. The app and the panel still read a
+  `remoteaichat://` link, so an old QR code pairs.
+- The launchd label is `com.yakup.divan`. `divan uninstall` still removes a
+  service registered under the old labels.
+- `python3 daemon/scripts/migrate_to_divan.py` moves an existing install over:
+  run it with `--dry-run` first, and with the daemon stopped.
+
 <!-- releases -->
 
 ## v0.2.0 — 2026-09-27

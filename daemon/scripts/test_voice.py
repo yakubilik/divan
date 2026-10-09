@@ -2,11 +2,11 @@
 """The streaming voice session, driven over a real socket with the bench's audio.
 
     python scripts/test_voice.py                     # stand-ins: no model, no network (CI)
-    PY=~/projects/remote-ai-chat/daemon/.venv312/bin/python
-    $PY scripts/test_voice.py --real --account-home ~/.remote-ai-chat/accounts/<claude-id> \\
+    PY=~/projects/divan/daemon/.venv312/bin/python
+    $PY scripts/test_voice.py --real --account-home ~/.divan/accounts/<claude-id> \\
         [--rounds 2] [--out ../docs/voice-bench/voice-session.json]
 
-A daemon of its own (RAC_HOME and a free port under a temporary folder, the
+A daemon of its own (DIVAN_HOME and a free port under a temporary folder, the
 demo provider for chats, so no chat ever reaches a real CLI) runs in this
 process, and a phone made of `websockets` talks to it with `voice.start` and
 `voice.audio`, releasing each fixture in 100 ms messages on the wall clock the
@@ -49,7 +49,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = Path(__file__).resolve().parent / "voice_bench"
 TMP = Path(tempfile.mkdtemp(prefix="rac-voice-"))
-os.environ["RAC_HOME"] = str(TMP / "rac")
+os.environ["DIVAN_HOME"] = str(TMP / "rac")
 os.environ["USTABASI_STATE_DIR"] = str(TMP / "nowhere")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(BENCH))
@@ -57,8 +57,8 @@ sys.path.insert(0, str(BENCH))
 import bench                                                    # noqa: E402
 import websockets                                               # noqa: E402
 
-from remote_ai_chat import voice                               # noqa: E402
-from remote_ai_chat.config import Config                       # noqa: E402
+from divan import voice                               # noqa: E402
+from divan.config import Config                       # noqa: E402
 
 RATE = 16000
 CHUNK = RATE // 10                    # 100 ms per voice.audio
@@ -372,7 +372,7 @@ async def daemon(real: bool, account_home: str | None, agent_home: str | None = 
     """`agent_home`: chats run a real Claude agent on that existing account
     (`E2E_ACCOUNT`) instead of the scripted demo; only the end-to-end run asks."""
     import uvicorn
-    from remote_ai_chat.server import Server
+    from divan.server import Server
     projects = TMP / "projects"
     (projects / "app").mkdir(parents=True, exist_ok=True)
     (projects / "app" / "README.md").write_text("# Sample app\n\nA small exmaple project.\n")
@@ -759,7 +759,7 @@ def pct(xs, q):
 
 
 async def measured(phone: Phone, fx: dict, rounds: int, out: Path) -> None:
-    from remote_ai_chat import transcribe
+    from divan import transcribe
     print(f"measured: real whisper ({voice.FAST_STT_MODEL} / {transcribe.MODEL}) and the real fast layer")
     c = Caller(phone, "real")
     await c.start()

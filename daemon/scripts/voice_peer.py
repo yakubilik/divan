@@ -2,9 +2,9 @@
 """An isolated daemon for the phone's voice-session test (app/scripts/test-voice-session.cjs).
 
     python scripts/voice_peer.py [--fixtures /tmp/divan-voice-bench/fixtures] [--synthetic]
-    $PY scripts/voice_peer.py --real --account-home ~/.remote-ai-chat/accounts/<claude-id> [--agent]
+    $PY scripts/voice_peer.py --real --account-home ~/.divan/accounts/<claude-id> [--agent]
 
-The daemon of `test_voice.py` — its own RAC_HOME and free loopback port under a
+The daemon of `test_voice.py` — its own DIVAN_HOME and free loopback port under a
 temporary folder, demo chats, the replaying recogniser and the scripted fast
 layer — served until stdin closes. The running daemon is never touched.
 
@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import test_voice as tv                                         # noqa: E402
-from remote_ai_chat import voice                               # noqa: E402
+from divan import voice                               # noqa: E402
 
 
 class FileTimelines(dict):

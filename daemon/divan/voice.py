@@ -101,12 +101,12 @@ SPOKEN_WORDS = callmod.SPOKEN_WORDS
 
 # Small for the reply, the default model for what an agent receives (§5.4 of
 # the plan): 7.0% and 3.9% WER on the fixtures with the vocabulary prompt.
-FAST_STT_MODEL = os.environ.get("RAC_VOICE_STT_MODEL", "").strip() or "mlx-community/whisper-small-mlx"
+FAST_STT_MODEL = os.environ.get("DIVAN_VOICE_STT_MODEL", "").strip() or "mlx-community/whisper-small-mlx"
 VOCAB = "Claude, Codex, daemon, commit, build, deploy, branch, merge, TestFlight, Xcode, Expo, ticket."
 
 # The fast layer: Haiku with thinking off, first sentence 1.17 s median against
 # Sonnet's 3 s (docs/voice-bench/llm.json).
-FAST_MODEL = os.environ.get("RAC_VOICE_MODEL", "").strip() or "haiku"
+FAST_MODEL = os.environ.get("DIVAN_VOICE_MODEL", "").strip() or "haiku"
 
 
 

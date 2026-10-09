@@ -130,7 +130,7 @@ try {
   ok('Sessions and plan limits stops a running turn (chat.interrupt)', stopped);
   await b.cold('/machine/machines');
   b.drain();
-  const paired = await type('remoteaichat://pair?host=…', 'remoteaichat://pair?host=127.0.0.1&port=9&token=t0k3n&name=laptop')
+  const paired = await type('divan://pair?host=…', 'divan://pair?host=127.0.0.1&port=9&token=t0k3n&name=laptop')
     && await press('Pair')
     && await b.evaluate(`return JSON.parse(localStorage.getItem('rac.hosts') || '[]').some((h) => h.name === 'laptop' && h.port === 9);`);
   ok('a pairing link pasted on Machines adds that computer to the panel', paired);

@@ -8,7 +8,7 @@
 2. The reason the phone gives in its next `hello` is logged.
 3. An event loop held up past the threshold is logged, with where it was held.
 
-A real `Server` over a temporary `RAC_HOME`, driven through a test client.
+A real `Server` over a temporary `DIVAN_HOME`, driven through a test client.
 """
 from __future__ import annotations
 
@@ -27,17 +27,17 @@ import time
 from pathlib import Path
 
 HOME = tempfile.mkdtemp(prefix="rac-reconnect-")
-os.environ["RAC_HOME"] = HOME
+os.environ["DIVAN_HOME"] = HOME
 atexit.register(shutil.rmtree, HOME, ignore_errors=True)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient                        # noqa: E402
 
-import remote_ai_chat.__main__ as cli                            # noqa: E402
-import remote_ai_chat.config as config_mod                       # noqa: E402
-from remote_ai_chat.config import CONFIG_PATH, Config            # noqa: E402
-from remote_ai_chat.looplag import LoopWatch                     # noqa: E402
-from remote_ai_chat.server import Server                         # noqa: E402
+import divan.__main__ as cli                            # noqa: E402
+import divan.config as config_mod                       # noqa: E402
+from divan.config import CONFIG_PATH, Config            # noqa: E402
+from divan.looplag import LoopWatch                     # noqa: E402
+from divan.server import Server                         # noqa: E402
 
 TUNNEL_IP = "203.0.113.4"
 failures: list[str] = []

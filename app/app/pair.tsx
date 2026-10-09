@@ -16,7 +16,7 @@ import { Text } from '../src/components/text';
 import { alert } from '../src/components/overlay';
 import type { HostConfig } from '../src/protocol';
 
-const PAIR_CMD = 'remote-ai-chat pair';
+const PAIR_CMD = 'divan pair';
 
 /** The one screen that has to work before anything else does: this phone has
  *  never spoken to a computer, and this is where it is handed the address and
@@ -49,7 +49,7 @@ export default function Pair() {
   const denied = perm ? !perm.granted && !perm.canAskAgain : false;
   const showCamera = !manual && !denied && !!perm?.granted;
 
-  // Deep link: remoteaichat://pair?host=..&port=..&token=..  (QR alternative)
+  // Deep link: divan://pair?host=..&port=..&token=..  (QR alternative)
   useEffect(() => {
     if (params.host && params.token && !busy) {
       void finish({ host: String(params.host), port: Number(params.port) || DEFAULT_PORT, token: String(params.token), name: String(params.name || params.host), device_id: params.device_id ? String(params.device_id) : undefined });

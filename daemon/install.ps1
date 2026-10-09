@@ -1,4 +1,4 @@
-﻿# remote-ai-chat — set up the daemon on this Windows PC.
+﻿# divan — set up the daemon on this Windows PC.
 #
 #   powershell -ExecutionPolicy Bypass -File .\daemon\install.ps1
 #
@@ -8,16 +8,16 @@
 #     daemon on 127.0.0.1 (no firewall rule needed). Without the Tailscale CLI it falls
 #     back to a firewall rule for the Tailscale range, which does need an elevated shell.
 #   * autostart: a Scheduled Task at logon when allowed, else an HKCU Run entry. Both run
-#     %USERPROFILE%\.remote-ai-chat\start.ps1, a hidden supervisor that restarts the daemon
+#     %USERPROFILE%\.divan\start.ps1, a hidden supervisor that restarts the daemon
 #     if it crashes.
 #   * prints a pairing link/QR for the phone.
 #
-# Undo everything:  .venv\Scripts\python.exe -m remote_ai_chat uninstall
+# Undo everything:  .venv\Scripts\python.exe -m divan uninstall
 $ErrorActionPreference = "Stop"
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $env:RAC_HOME) { $env:RAC_HOME = Join-Path $env:USERPROFILE ".remote-ai-chat" }
-$Port = if ($env:RAC_PORT) { $env:RAC_PORT } else { "8790" }
-$TaskName = "remote-ai-chat"
+if (-not $env:DIVAN_HOME) { $env:DIVAN_HOME = Join-Path $env:USERPROFILE ".divan" }
+$Port = if ($env:DIVAN_PORT) { $env:DIVAN_PORT } else { "8790" }
+$TaskName = "divan"
 $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 
 function Say($m) { Write-Host "-> $m" -ForegroundColor Cyan }
@@ -34,8 +34,8 @@ $ver = (Quiet { & $py.Source -c "import sys; print('%d.%d' % sys.version_info[:2
 if ($ver -notmatch '^\d+\.\d+$') { throw "'$($py.Source)' is not a working Python (Microsoft Store alias?). Install Python 3.11-3.13 from python.org." }
 if ($ver -notmatch '^3\.(11|12|13)$') { Warn "python $ver - 3.11-3.13 is what this is tested on" }
 
-function Ask($q) {                       # $env:RAC_YES = "1" answers yes
-  if ($env:RAC_YES -eq "1") { return $true }
+function Ask($q) {                       # $env:DIVAN_YES = "1" answers yes
+  if ($env:DIVAN_YES -eq "1") { return $true }
   $a = Read-Host "$q [Y/n]"
   return ($a -eq "" -or $a -match '^[yY]')
 }
@@ -69,7 +69,7 @@ function Ensure-Cli($bin, $pkg) {
   else { Warn "$bin installed by npm but not on PATH — the daemon finds it anyway" }
 }
 
-if ($env:RAC_NO_CLIS -ne "1") {
+if ($env:DIVAN_NO_CLIS -ne "1") {
   Ensure-Cli "claude" "@anthropic-ai/claude-code"
   Ensure-Cli "codex"  "@openai/codex"
 }
@@ -88,10 +88,10 @@ if (-not (Test-Path $Py)) {
 Say "installing the daemon"
 & $Py -m pip install --quiet --upgrade pip | Out-Host
 & $Py -m pip install --quiet -e $Dir | Out-Host
-# Always go through `python -m`: the generated remote-ai-chat.exe is an unsigned
+# Always go through `python -m`: the generated divan.exe is an unsigned
 # launcher that AppLocker-managed PCs refuse to run.
-Quiet { & $Py -c "import remote_ai_chat" } | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "install finished but 'import remote_ai_chat' fails" }
+Quiet { & $Py -c "import divan" } | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "install finished but 'import divan' fails" }
 
 # Claude Code login is per-machine; the SDK ships its own CLI so PATH does not matter.
 $ClaudeCli = (& $Py -c "import claude_agent_sdk, pathlib; p = pathlib.Path(claude_agent_sdk.__file__).parent / '_bundled' / 'claude.exe'; print(p if p.is_file() else '')" | Out-String).Trim()
@@ -118,12 +118,12 @@ if ($Tailscale) {
   } else { Warn "tailscale serve failed - falling back to a firewall rule" }
 }
 if (-not $Reach) {
-  $RuleName = "remote-ai-chat (Tailscale only)"
+  $RuleName = "divan (Tailscale only)"
   try {
     Remove-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue
     New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Action Allow `
       -Protocol TCP -LocalPort $Port -RemoteAddress 100.64.0.0/10 `
-      -Profile Any -Description "Lets paired phones reach the remote-ai-chat daemon over Tailscale" | Out-Null
+      -Profile Any -Description "Lets paired phones reach the divan daemon over Tailscale" | Out-Null
     $Reach = "firewall rule for 100.64.0.0/10"
     Say "firewall rule added for port $Port (Tailscale addresses only)"
   } catch {
@@ -133,21 +133,21 @@ if (-not $Reach) {
 }
 
 # --- supervisor script ------------------------------------------------------
-$Logs = Join-Path $env:RAC_HOME "logs"
+$Logs = Join-Path $env:DIVAN_HOME "logs"
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
-$Launcher = Join-Path $env:RAC_HOME "start.ps1"
+$Launcher = Join-Path $env:DIVAN_HOME "start.ps1"
 $BindLine = ""
 if ($BindArgs.Count -gt 0) { $BindLine = ', "' + ($BindArgs -join '", "') + '"' }
 $launcherBody = @"
-# remote-ai-chat supervisor - written by install.ps1, runs hidden at logon.
+# divan supervisor - written by install.ps1, runs hidden at logon.
 # Starts the daemon and restarts it if it exits; quits if another instance is already healthy.
 `$Py   = "$Py"
 `$Dir  = "$Dir"
 `$Port = "$Port"
 `$Logs = "$Logs"
-`$env:RAC_HOME = "$($env:RAC_HOME)"
+`$env:DIVAN_HOME = "$($env:DIVAN_HOME)"
 `$env:PYTHONUTF8 = "1"
-`$DaemonArgs = @("-m", "remote_ai_chat", "serve"$BindLine)
+`$DaemonArgs = @("-m", "divan", "serve"$BindLine)
 function Healthy { try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "http://127.0.0.1:`$Port/health" | Out-Null; `$true } catch { `$false } }
 if (Healthy) { exit 0 }
 # Cmdlets only (no .NET method calls): corporate PCs run PowerShell in ConstrainedLanguage mode.
@@ -171,7 +171,7 @@ try {
                 -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
   Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
-    -Description "remote-ai-chat daemon" -ErrorAction Stop | Out-Null
+    -Description "divan daemon" -ErrorAction Stop | Out-Null
   Remove-ItemProperty -Path $RunKey -Name $TaskName -ErrorAction SilentlyContinue
   $registered = "scheduled task '$TaskName'"
 } catch {
@@ -183,7 +183,7 @@ Say "autostart registered: $registered"
 
 # Stop a daemon/supervisor from a previous install so the new bind settings take effect, then start.
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-  Where-Object { $_.ProcessId -ne $PID -and $_.Name -match '^(python|powershell)' -and $_.CommandLine -match 'remote_ai_chat serve|\\\.remote-ai-chat\\start\.ps1' } |
+  Where-Object { $_.ProcessId -ne $PID -and $_.Name -match '^(python|powershell)' -and $_.CommandLine -match 'divan serve|\\\.divan\\start\.ps1' } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Process -FilePath $LaunchCmd -ArgumentList $LaunchArgs -WindowStyle Hidden
 
@@ -199,4 +199,4 @@ Say "reachability: $Reach"
 Say "pair your phone (open this link on the phone, or scan the QR):"
 Write-Host ""
 $env:PYTHONUTF8 = "1"
-& $Py -m remote_ai_chat pair --name "$env:COMPUTERNAME phone"
+& $Py -m divan pair --name "$env:COMPUTERNAME phone"

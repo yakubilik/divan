@@ -538,13 +538,13 @@ function HostsSection() {
 
       <Head
         title="Add a computer"
-        hint="Run `remote-ai-chat pair` on that computer, then paste the link it prints here."
+        hint="Run `divan pair` on that computer, then paste the link it prints here."
       />
       <Card>
         <Field
           value={text} lines={3}
           onChange={(v) => { setText(v); setProblem(null); }}
-          placeholder="remoteaichat://pair?host=…&port=8790&token=…"
+          placeholder="divan://pair?host=…&port=8790&token=…"
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ flex: 1, fontSize: 12.5, color: problem ? T.red : T.ink3 }}>

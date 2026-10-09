@@ -1,7 +1,7 @@
 # Live voice: the daemon's streaming session (#149)
 
 The daemon half of option B in [voice-quality-plan.md](voice-quality-plan.md):
-`daemon/remote_ai_chat/voice.py`, its handlers in `server.py`, and the protocol in
+`daemon/divan/voice.py`, its handlers in `server.py`, and the protocol in
 [PROTOCOL.md § Voice session](PROTOCOL.md#voice-session). The phone half is
 ticket 150 and the end-to-end tuning is 151; neither is done here.
 
@@ -59,12 +59,12 @@ ticket 150 and the end-to-end tuning is 151; neither is done here.
 cd daemon
 python scripts/test_voice.py                # stand-ins, ~100 s, in CI
 python scripts/test_voice.py --synthetic    # the same with level-only audio, as CI on Linux gets
-PY=~/projects/remote-ai-chat/daemon/.venv312/bin/python
-$PY scripts/test_voice.py --real --account-home ~/.remote-ai-chat/accounts/<claude-id> \
+PY=~/projects/divan/daemon/.venv312/bin/python
+$PY scripts/test_voice.py --real --account-home ~/.divan/accounts/<claude-id> \
     [--rounds 2] [--out ../docs/voice-bench/voice-session.json]
 ```
 
-All of them start a daemon of their own in the test process (`RAC_HOME` under a
+All of them start a daemon of their own in the test process (`DIVAN_HOME` under a
 temporary folder, a free loopback port, `demo = true` so a chat is the scripted
 demo agent and never a CLI) and talk to it over a real WebSocket with
 `voice.start`/`voice.audio`, releasing each fixture in 100 ms messages on the

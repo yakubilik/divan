@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Was every word of each answer heard? Read the end-to-end run's audio back.
 
-    PY=~/projects/remote-ai-chat/daemon/.venv312/bin/python
+    PY=~/projects/divan/daemon/.venv312/bin/python
     $PY daemon/scripts/voice_bench/e2e_audio.py --run docs/voice-bench/e2e.json [--out docs/voice-bench/e2e-audio.json]
 
 `app/scripts/voice-e2e.cjs` writes each answer as the caller would have heard it
@@ -59,7 +59,7 @@ def main() -> int:
     ap.add_argument("--run", default=str(ROOT / "docs" / "voice-bench" / "e2e.json"))
     ap.add_argument("--out", default=str(ROOT / "docs" / "voice-bench" / "e2e-audio.json"))
     a = ap.parse_args()
-    from remote_ai_chat import transcribe
+    from divan import transcribe
     run = json.loads(Path(a.run).read_text())
     rows = [r for r in run["conversation"]["rows"] if r.get("audio") and Path(r["audio"]["wav"]).exists()]
     out = []

@@ -41,10 +41,10 @@ function stampBuild(): Plugin {
   };
 }
 
-const outDir = '../daemon/remote_ai_chat/webui';
+const outDir = '../daemon/divan/webui';
 
 // The daemon serves the built files itself, from
-// daemon/remote_ai_chat/webui/, mounted at the root — and it answers any path
+// daemon/divan/webui/, mounted at the root — and it answers any path
 // that is not a file with index.html, so that a reload of /p/quire/board comes
 // back as the panel rather than as a 404.
 //

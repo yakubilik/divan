@@ -1,7 +1,7 @@
 # Ticket notices
 
 When a ticket filed from a chat ends, the daemon (`follow_tickets` in
-`daemon/remote_ai_chat/server.py`) sends `ustabasi.follow_message(f)` into that
+`daemon/divan/server.py`) sends `ustabasi.follow_message(f)` into that
 chat through `sessions.send`. It is stored and replayed as an ordinary
 `message.user` event (`{text, attachments: []}`, plus `queued: true` when it
 arrived during a running turn). That is what wakes the agent, and the stored

@@ -3,10 +3,10 @@
 
     python scripts/test_demo.py
 
-Starts a second daemon (its own RAC_HOME and RAC_PORT, `demo = true`) with a
+Starts a second daemon (its own DIVAN_HOME and DIVAN_PORT, `demo = true`) with a
 PATH on which neither claude nor codex can be found, and drives it over the
 WebSocket the way the phone does: one turn allowed, one denied. Then seeds it
-twice with `remote-ai-chat demo-seed`. No model turns, no network beyond
+twice with `divan demo-seed`. No model turns, no network beyond
 loopback.
 """
 from __future__ import annotations
@@ -28,17 +28,17 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 TMP = Path(tempfile.mkdtemp(prefix="rac-demo-"))
-os.environ["RAC_HOME"] = str(TMP / "rac")
+os.environ["DIVAN_HOME"] = str(TMP / "rac")
 sys.path.insert(0, str(ROOT))
 
 import websockets                                               # noqa: E402
 
-from remote_ai_chat.config import Config                       # noqa: E402
-from remote_ai_chat.server import Server                       # noqa: E402
-from remote_ai_chat.session import PROVIDERS                   # noqa: E402
-from remote_ai_chat.providers.claude import ClaudeProvider     # noqa: E402
-from remote_ai_chat.providers.codex import CodexProvider       # noqa: E402
-from remote_ai_chat.providers.demo import DemoProvider         # noqa: E402
+from divan.config import Config                       # noqa: E402
+from divan.server import Server                       # noqa: E402
+from divan.session import PROVIDERS                   # noqa: E402
+from divan.providers.claude import ClaudeProvider     # noqa: E402
+from divan.providers.codex import CodexProvider       # noqa: E402
+from divan.providers.demo import DemoProvider         # noqa: E402
 
 failures: list[str] = []
 
@@ -144,7 +144,7 @@ async def counts(phone: Phone) -> dict:
 
 
 def seed(env: dict) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "-m", "remote_ai_chat", "demo-seed"],
+    return subprocess.run([sys.executable, "-m", "divan", "demo-seed"],
                           cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
 
 
@@ -207,7 +207,7 @@ async def drive(port: int, token: str, cwd: Path, env: dict) -> None:
 
 
 def source_is_inert() -> None:
-    src = (ROOT / "remote_ai_chat" / "providers" / "demo.py").read_text()
+    src = (ROOT / "divan" / "providers" / "demo.py").read_text()
     banned = [r"\bsubprocess\b", r"os\.system", r"\bsocket\b", r"\bopen\(", r"write_text",
               r"write_bytes", r"create_subprocess", r"\burllib\b", r"\bhttpx\b",
               r"\bwebsockets\b", r"^import os\b", r"^from os\b", r"\bshutil\b", r"\bpathlib\b"]
@@ -244,11 +244,11 @@ def main() -> None:
     cfg.demo = True
     _, token = cfg.add_device("test")
 
-    env = {"RAC_HOME": str(TMP / "rac"), "RAC_PORT": str(port), "PATH": str(bare),
+    env = {"DIVAN_HOME": str(TMP / "rac"), "DIVAN_PORT": str(port), "PATH": str(bare),
            "HOME": str(TMP / "home"), "PYTHONPATH": str(ROOT)}
     (TMP / "home").mkdir()
     log = open(TMP / "daemon.log", "w")
-    proc = subprocess.Popen([sys.executable, "-m", "remote_ai_chat", "serve"],
+    proc = subprocess.Popen([sys.executable, "-m", "divan", "serve"],
                             cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
     try:
         for _ in range(150):

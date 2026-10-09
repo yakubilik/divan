@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary        = 'A view that accepts files dragged in from another app.'
   s.description    = s.summary
   s.license        = 'MIT'
-  s.author         = 'remote-ai-chat'
+  s.author         = 'divan'
   s.homepage       = 'https://github.com/yakubilik/divan'
   s.platforms      = { :ios => '15.1' }
   s.swift_version  = '5.9'

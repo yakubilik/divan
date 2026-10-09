@@ -9,7 +9,7 @@ labels: bug
 **Where**
 
 - Computer: macOS / Linux / Windows, version
-- Daemon: output of `remote-ai-chat status`
+- Daemon: output of `divan status`
 - Tool: `claude` or `codex`, and its version
 - Client: the iOS app, or the desktop panel
 
@@ -20,6 +20,6 @@ labels: bug
 
 **Logs**
 
-`~/.remote-ai-chat/logs/daemon.log` around the moment it happened, and what the
+`~/.divan/logs/daemon.log` around the moment it happened, and what the
 client showed. Please scrub paths, tokens and transcripts you would rather not
 publish — a reduced example is more useful than a real one anyway.

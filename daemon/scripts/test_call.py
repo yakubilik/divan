@@ -27,14 +27,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from claude_agent_sdk import (                                    # noqa: E402
     AssistantMessage, RateLimitEvent, RateLimitInfo, ResultMessage, TextBlock)
 
-from remote_ai_chat import call                                  # noqa: E402
-from remote_ai_chat import server as server_mod                  # noqa: E402
-from remote_ai_chat import ustabasi as u                         # noqa: E402
-from remote_ai_chat.accounts import Account                      # noqa: E402
-from remote_ai_chat.db import DB                                 # noqa: E402
-from remote_ai_chat.pool import Pool, Settings                   # noqa: E402
-from remote_ai_chat.security import PathPolicy                   # noqa: E402
-from remote_ai_chat.server import Server                         # noqa: E402
+from divan import call                                  # noqa: E402
+from divan import server as server_mod                  # noqa: E402
+from divan import ustabasi as u                         # noqa: E402
+from divan.accounts import Account                      # noqa: E402
+from divan.db import DB                                 # noqa: E402
+from divan.pool import Pool, Settings                   # noqa: E402
+from divan.security import PathPolicy                   # noqa: E402
+from divan.server import Server                         # noqa: E402
 
 failures: list[str] = []
 
@@ -161,7 +161,7 @@ rows = [
 ]
 for tid, title, status, started, ask in rows:
     conn.execute("INSERT INTO tickets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                 (tid, f"t{tid}", title, "{}", "/Users/x/projects/remote-ai-chat", "main",
+                 (tid, f"t{tid}", title, "{}", "/Users/x/projects/divan", "main",
                   status, "worker", 1, NOW - 99000, NOW, started, None, None, "b", "[]",
                   None, "", ask))
 conn.commit()
@@ -372,9 +372,9 @@ finally:
 # and asks `call.reply` what to read aloud once the turn is over. A real chat
 # session runs the turn here, with only the CLI underneath swapped out.
 print("chat call")
-from remote_ai_chat import session as session_mod                # noqa: E402
-from remote_ai_chat.config import Config                         # noqa: E402
-from remote_ai_chat.providers.base import TurnResult             # noqa: E402
+from divan import session as session_mod                # noqa: E402
+from divan.config import Config                         # noqa: E402
+from divan.providers.base import TurnResult             # noqa: E402
 
 LONG = ("I found it: the retry loop never resets its counter, so after three failures every "
         "later webhook is dropped. I changed `retry.ts` and added a test.\n\n"

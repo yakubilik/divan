@@ -12,7 +12,7 @@ It is what an honest reader says about a Windows scheduled task or a container
 init it cannot see into, and it lets the restart through with the doubt
 recorded rather than stranding a machine that was fine all along.
 
-Nothing here looks for the label `remote-ai-chat install` writes. A daemon
+Nothing here looks for the label `divan install` writes. A daemon
 started from a hand-written plist under somebody else's label is supervised
 just as well, and asking "is this process a launchd job" rather than "is it
 *our* launchd job" is the difference between reading the machine and reading
@@ -66,7 +66,7 @@ def _launchd() -> dict:
 
 def _systemd() -> dict:
     """Linux. A --user unit answers for itself; anything else is a guess."""
-    rc, out = _run("systemctl", "--user", "show", "remote-ai-chat",
+    rc, out = _run("systemctl", "--user", "show", "divan",
                    "--property=Restart", "--property=MainPID")
     if rc != 0:
         return {"supervised": None if os.getppid() == 1 else False, "how": None,
@@ -76,7 +76,7 @@ def _systemd() -> dict:
         return {"supervised": None, "how": None,
                 "detail": "a unit exists but this is not the process it runs"}
     restart = (fields.get("Restart") or "no").strip()
-    how = "systemd:remote-ai-chat"
+    how = "systemd:divan"
     if restart in ("no", ""):
         return {"supervised": False, "how": how,
                 "detail": f"the unit's Restart is {restart!r}, so it would not come back"}

@@ -34,7 +34,7 @@ class ProviderConfig:
     # where this session is and how it is expected to sound. Built per session
     # by preamble.build, because the daemon is the only party that knows.
     preamble: str | None = None
-    # The chat this session belongs to, handed to the CLI as RAC_CHAT_ID so
+    # The chat this session belongs to, handed to the CLI as DIVAN_CHAT_ID so
     # what it runs — `ustabasi add` — can say which chat asked for it.
     chat_id: str | None = None
     # Config.bypass_asks, carried to the provider that enforces it.

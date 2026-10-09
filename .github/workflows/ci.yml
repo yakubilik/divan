@@ -46,14 +46,14 @@ jobs:
         # The same check the updater runs before it lets a pulled commit
         # restart a daemon: a syntax error here is one a supervisor would
         # otherwise discover by restarting forever.
-        run: python -c "import remote_ai_chat, remote_ai_chat.server"
+        run: python -c "import divan, divan.server"
       - name: Tests
         working-directory: daemon
         # Every script that spends no model turns and touches no network.
         # scripts/e2e.py and scripts/smoke.py need a running daemon and a real
         # sign-in, so they stay a human's job.
         run: |
-          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments test_agents test_titles test_push test_ustabasi test_ustabasi_run test_ustabasi_usage test_divan test_model_catalog test_dictation test_filing test_tunnel test_security test_secrets test_scrub test_call test_demo test_peaks test_panel_paths test_uninstall test_voice_bench test_voice; do
+          for t in test_pool test_preamble test_replay test_session test_stream test_fanout test_attachments test_agents test_titles test_push test_ustabasi test_ustabasi_run test_ustabasi_usage test_divan test_model_catalog test_dictation test_filing test_tunnel test_security test_secrets test_scrub test_call test_demo test_peaks test_panel_paths test_uninstall test_voice_bench test_voice test_rename test_migrate_to_divan; do
             echo "── $t"
             python "scripts/$t.py"
           done
@@ -104,6 +104,10 @@ jobs:
         # string the app asks for in a file `tsc` is not looking at. It needs
         # nothing installed, so it runs here rather than behind an npm install.
         run: python scripts/test_i18n_keys.py
+      - name: The product has one name
+        # The old name is allowed in the history files and in the marked legacy
+        # blocks, and nowhere else; the allowlist is in the test.
+        run: python scripts/test_no_old_name.py
 
   docs:
     name: docs · links
@@ -150,11 +154,11 @@ jobs:
         # build; the daemon then serves that build with no auth of its own.
         # vite.config.ts strips it. This is the check that it still does.
         run: |
-          if [ -e ../daemon/remote_ai_chat/webui/dev-host.json ]; then
+          if [ -e ../daemon/divan/webui/dev-host.json ]; then
             echo "dev-host.json shipped in the panel build" >&2
             exit 1
           fi
         working-directory: web
       - name: The build says which commit it came from
-        run: test -s ../daemon/remote_ai_chat/webui/build.json
+        run: test -s ../daemon/divan/webui/build.json
         working-directory: web

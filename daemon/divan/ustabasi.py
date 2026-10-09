@@ -1147,7 +1147,7 @@ def followed(after: int) -> tuple[list[dict], int]:
     """The ends of tickets that were filed from a chat, newer than `after`.
 
     A ticket knows its chat through `card.origin_chat`, which `ustabasi add`
-    writes from the RAC_CHAT_ID the daemon puts in every agent's environment.
+    writes from the DIVAN_CHAT_ID the daemon puts in every agent's environment.
     Returns what to deliver and the newest notification id looked at.
     """
     if not available():

@@ -459,8 +459,8 @@ export interface DivanOpenItem {
 
 export interface DivanProject {
   /** `name` is what a screen says and `slug` is what two machines match the same
-   *  product by, so they are not always the same word: this product is called
-   *  Divan and is matched as `remote-ai-chat`. `summary` is what it is *for*. */
+   *  product by, so they are not always the same word: a product called
+   *  Atlas can be matched as `backend-v2`. `summary` is what it is *for*. */
   id: string; name: string; slug: string; summary: string;
   /** What sort of thing it is — `app`, `web`, `library`, `client-work`,
    *  `research`… an open set, as the branch kinds are. Empty where nobody said,

@@ -8,8 +8,8 @@ a folder of session notes, say — is listed in config.toml:
 
     scrub_extra_paths = ["~/notes/sessions"]
 
-    python -m remote_ai_chat.scrub            # dry run: report only
-    python -m remote_ai_chat.scrub --apply    # keychain first, then rewrite
+    python -m divan.scrub            # dry run: report only
+    python -m divan.scrub --apply    # keychain first, then rewrite
 
 A file is rewritten only after every key in it is in the keychain, through a
 temp file and a rename, so a reader sees the old file or the new one and never
@@ -49,7 +49,7 @@ STATE = "secret-scrub.json"
 # ── where to look ─────────────────────────────────────────────────────────────
 
 def _rac(home: Path) -> Path:
-    return home / ".remote-ai-chat"
+    return home / ".divan"
 
 
 def _transcript(path: Path) -> bool:
@@ -549,7 +549,7 @@ def run(home: Path, apply: bool, keychain=None, now: float | None = None) -> Run
 
 
 def main(argv: list[str] | None = None, keychain=None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m remote_ai_chat.scrub",
+    ap = argparse.ArgumentParser(prog="python -m divan.scrub",
                                  description="Find keys in chat history; with --apply, keep them "
                                              "in the keychain and mask them.")
     ap.add_argument("--apply", action="store_true", help="store and rewrite (default: dry run)")

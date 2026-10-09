@@ -4,7 +4,7 @@
 
 Open a [private security advisory](https://github.com/yakubilik/divan/security/advisories/new)
 rather than a public issue. Include what the daemon was doing, what the phone
-sent, and the version (`remote-ai-chat status`). You will get an answer; this is
+sent, and the version (`divan status`). You will get an answer; this is
 a small project run by one person, so the honest estimate is days, not hours.
 
 Please do not include real tokens, real paths or real transcripts in a report —
@@ -41,10 +41,10 @@ That is the product. What the design does is bound it.
   required again before a chat enters bypass mode.
 - *`/files` being used to read the disk.* It answers only with a valid device
   token, and only for two kinds of path: something the phone itself uploaded,
-  under `~/.remote-ai-chat/uploads`, or a file the agent wants you to see — a
+  under `~/.divan/uploads`, or a file the agent wants you to see — a
   screenshot, a built PDF — which has to pass the same `allowed_roots` /
   `denied_paths` check as everything else, including the secret-name list in
-  `daemon/remote_ai_chat/security.py`. Anything else is a 404.
+  `daemon/divan/security.py`. Anything else is a 404.
 
 **What it does not**
 
@@ -66,7 +66,7 @@ That is the product. What the design does is bound it.
   write the line. What it does *not* defend is anybody sharing the address you
   allowed — a home address is a household, not a laptop, and the device token
   is what tells one machine there from another. Three things narrow that:
-  the tunnel answers only a device made for it (`remote-ai-chat web --at`,
+  the tunnel answers only a device made for it (`divan web --at`,
   `tunnel = true` in `config.toml`) and such a device is answered nowhere
   else, so a phone's token is worth nothing through the tunnel; five
   *different* wrong tokens from one `CF-Connecting-IP` address inside ten
@@ -79,7 +79,7 @@ That is the product. What the design does is bound it.
   tailnet panel's, through the tunnel) is refused but not counted, and the
   same wrong token repeated inside the window counts once — a browser
   retrying a stale token cannot lock its own household out. The lock lives in
-  the daemon's memory; `remote-ai-chat unlock <ip>` on the computer (or the
+  the daemon's memory; `divan unlock <ip>` on the computer (or the
   `tunnel.unlock` request from a paired phone, never from a tunnel device)
   lifts it without a restart. A refusal names its reason to the client
   (wrong door, unknown, revoked, locked and until when) — see
@@ -109,7 +109,7 @@ That is the product. What the design does is bound it.
 - *The CLIs it drives.* `claude` and `codex` are installed from npm and run with
   your sign-in. Their security is theirs.
 - *Agent definitions you install.* The agent store downloads markdown from
-  public GitHub repositories listed in `daemon/remote_ai_chat/agents.py`.
+  public GitHub repositories listed in `daemon/divan/agents.py`.
   Nothing is executed at install time, but an agent definition is an instruction
   that later runs with your tools. Read one before you install it.
 - *The self-updater.* `auto_update` is on by default: every 15 minutes the
@@ -123,19 +123,19 @@ That is the product. What the design does is bound it.
 Three credentials exist, and only the first two let anything in.
 
 - **The device token.** One per paired client, 32 random bytes, kept as a sha256
-  hash in `~/.remote-ai-chat/config.toml` (mode 600). The phone gets it by
-  scanning the QR that `remote-ai-chat pair` prints; it is sent back on every
+  hash in `~/.divan/config.toml` (mode 600). The phone gets it by
+  scanning the QR that `divan pair` prints; it is sent back on every
   connection, as `?token=` on the WebSocket or a `Bearer` header on `/upload`
   and `/files`.
 - **The panel's token.** The desktop panel is not a second kind of client: it is
-  a device like any other, and `remote-ai-chat web` registers one and hands the
+  a device like any other, and `divan web` registers one and hands the
   token over in the URL *fragment* — the part of a URL a browser never sends to
   a server. The panel stores it and wipes it out of the address bar. It shows up
   in `devices` and `revoke <id>` cuts it off exactly like a phone.
 - **The APNs key.** Not a way in, only a way out: an `.p8` signing key that lets
   this computer send a push to Apple. `config.toml` holds pointers to it — key
   id, team id, bundle id, and a path — never the key, which lives under
-  `~/.remote-ai-chat/` at mode 600 and is covered by `denied_paths` so a chat
+  `~/.divan/` at mode 600 and is covered by `denied_paths` so a chat
   cannot open the folder it is in. Ordinary notifications do not use it at all;
   those go through Expo's push service, which sees a title and a body and no
   message text.
@@ -151,8 +151,8 @@ against — there is no account, no relay and no server of ours.
 ## If you think you are exposed
 
 ```bash
-remote-ai-chat devices          # every paired device
-remote-ai-chat revoke <id>      # delete its token
+divan devices          # every paired device
+divan revoke <id>      # delete its token
 ```
 
 The token hash is deleted straight away, and nothing can connect with it again.

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """The proposed voice turn, end to end on one Mac, against the bench fixtures.
 
-    PY=~/projects/remote-ai-chat/daemon/.venv312/bin/python
-    RAC_WHISPER_MODEL=mlx-community/whisper-small-mlx $PY daemon/scripts/voice_bench/proof.py \
-        --account-home ~/.remote-ai-chat/accounts/<claude-id> [--rounds 2] [--out docs/voice-bench/proof.json]
+    PY=~/projects/divan/daemon/.venv312/bin/python
+    DIVAN_WHISPER_MODEL=mlx-community/whisper-small-mlx $PY daemon/scripts/voice_bench/proof.py \
+        --account-home ~/.divan/accounts/<claude-id> [--rounds 2] [--out docs/voice-bench/proof.json]
 
 What is real here: the fixture audio is released in 20 ms frames on the wall
 clock, the way a microphone delivers it; turn ending is decided online by the
@@ -62,7 +62,7 @@ FRAME = bench.RATE * bench.FRAME_MS // 1000
 SPEECH_DB = -45.0          # level that counts as speech while nothing is playing
 BARGE_DB = -35.0           # while the answer plays: above its echo, below a voice
 BARGE_MIN_MS = 120         # this much speech over the echo is the caller, not a click
-TTS_PY = Path.home() / "projects" / "remote-ai-chat" / "tts" / ".venv" / "bin" / "python"
+TTS_PY = Path.home() / "projects" / "divan" / "tts" / ".venv" / "bin" / "python"
 SIMPLE = ["short-greeting", "short-status", "long-request", "pause-500", "pause-1000", "pause-1500",
           "pause-2000", "two-pauses", "correction", "correction-pause", "tech-agents", "silence"]
 
@@ -164,7 +164,7 @@ class Llm:
 
 async def one_turn(fx: dict, wav: Path, llm: Llm, ema: Ema, tag: str) -> dict:
     """Release the fixture in real time and run the proposed turn over it."""
-    from remote_ai_chat import transcribe
+    from divan import transcribe
     samples = bench.read_wav(wav)
     plan = bench.Plan()
     t0 = time.perf_counter()
@@ -308,7 +308,7 @@ async def main() -> int:
     a = ap.parse_args()
     fdir = Path(a.fixtures)
     fx = {f["id"]: f for f in json.loads((fdir / "manifest.json").read_text())["fixtures"]}
-    from remote_ai_chat import transcribe
+    from divan import transcribe
     transcribe.pcm(bench.read_wav(fdir / "short-status.wav").tobytes(), None, "tr")     # load, untimed
     llm = Llm(os.path.expanduser(a.account_home))
     await llm.start()

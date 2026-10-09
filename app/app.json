@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Divan",
-    "slug": "remote-ai-chat",
+    "slug": "divan",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -57,7 +57,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "remoteaichat",
+    "scheme": "divan",
     "plugins": [
       "./plugins/with-call-background-modes.js",
       "expo-router",

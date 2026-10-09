@@ -73,11 +73,11 @@ TUNNEL_PUSH_TEXT = {
     "en": {"new_address": "Tunnel: {name} connected from a new address, {addr}",
            "new_address_as": "Tunnel: {name} ({email}) connected from a new address, {addr}",
            "locked": "Tunnel: {addr} is locked out for 10 minutes after {n} wrong tokens."
-                     " To lift it now, on the computer: remote-ai-chat unlock {addr}"},
+                     " To lift it now, on the computer: divan unlock {addr}"},
     "tr": {"new_address": "Tunnel: {name} yeni bir adresten bağlandı, {addr}",
            "new_address_as": "Tunnel: {name} ({email}) yeni bir adresten bağlandı, {addr}",
            "locked": "Tunnel: {addr} {n} yanlış token'dan sonra 10 dakikalığına kilitlendi."
-                     " Hemen açmak için bilgisayarda: remote-ai-chat unlock {addr}"},
+                     " Hemen açmak için bilgisayarda: divan unlock {addr}"},
 }
 
 # How far a client may fall behind before it is cut loose, and how long one
@@ -256,7 +256,7 @@ class Server:
         # Pushes about the tunnel, in flight. Not awaited where they are raised:
         # a handshake must not wait on Expo to be told it was refused.
         self._alerts: set[asyncio.Task] = set()
-        self.app = FastAPI(title="remote-ai-chat")
+        self.app = FastAPI(title="divan")
         self._allow_cross_origin()
         # Added after CORS and therefore outermost: an address that is not
         # allowed in gets its 403 before anything here looks at the request.
@@ -1461,7 +1461,7 @@ class Server:
                            ws.client.host if ws.client else "?")
 
     async def h_tunnel_unlock(self, dev: Device, d: dict) -> dict:
-        """Lift a tunnel lock on the running daemon. `remote-ai-chat unlock <ip>`
+        """Lift a tunnel lock on the running daemon. `divan unlock <ip>`
         sends this, and so can a paired phone.
 
         Not from the tunnel: the one door a lock is about is not the one that

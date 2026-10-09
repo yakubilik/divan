@@ -4,7 +4,7 @@
 // They are read from two places, in this order:
 //
 //   1. identity.local.json, uncommitted, for a build run on this machine.
-//   2. RAC_* environment variables, for a build run on EAS — where the file
+//   2. DIVAN_* environment variables, for a build run on EAS — where the file
 //      cannot follow, because .gitignore keeps it out of the uploaded archive
 //      and a build with the placeholder bundle id fails signing against a
 //      provisioning profile for the real one. Set them once with
@@ -18,10 +18,10 @@ function identity() {
   const local = path.join(__dirname, 'identity.local.json');
   if (fs.existsSync(local)) return JSON.parse(fs.readFileSync(local, 'utf8'));
   const env = {
-    bundleIdentifier: process.env.RAC_BUNDLE_ID,
-    appleTeamId: process.env.RAC_APPLE_TEAM_ID,
-    owner: process.env.RAC_OWNER,
-    easProjectId: process.env.RAC_EAS_PROJECT_ID,
+    bundleIdentifier: process.env.DIVAN_BUNDLE_ID,
+    appleTeamId: process.env.DIVAN_APPLE_TEAM_ID,
+    owner: process.env.DIVAN_OWNER,
+    easProjectId: process.env.DIVAN_EAS_PROJECT_ID,
   };
   return Object.values(env).some(Boolean) ? env : null;
 }

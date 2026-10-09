@@ -16,7 +16,7 @@ is the code that runs. Dependencies are the exception, and only when
 `pyproject.toml` actually changed.
 
 The browser panel is the other exception, and a worse one. `web/` is in git;
-`daemon/remote_ai_chat/webui/`, the bundle the daemon actually serves, is build
+`daemon/divan/webui/`, the bundle the daemon actually serves, is build
 output and is not. So a pull moves the daemon's Python and leaves the browser on
 whatever was built here last — on a machine nobody sits in front of, a panel
 drifting weeks behind the daemon serving it, with nothing on screen to say so.
@@ -569,7 +569,7 @@ class Updater:
                 # included. Naming modules individually would make the check
                 # fail the day one of them is renamed — which is exactly the
                 # kind of change worth shipping.
-                "import remote_ai_chat, remote_ai_chat.server",
+                "import divan, divan.server",
                 cwd=str(self.root / "daemon"),
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             )

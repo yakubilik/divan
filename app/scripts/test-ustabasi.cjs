@@ -534,9 +534,9 @@ checks.push(
     p(1, 'babysee', 'running', 900),
     p(2, 'ustabasi', 'done', 800),
     p(3, 'babysee', 'queued', 700),
-    p(4, 'remote-ai-chat', 'blocked', 100),
+    p(4, 'divan', 'blocked', 100),
     p(5, 'ustabasi', 'running', 600),
-    p(6, 'remote-ai-chat', 'done', 500),
+    p(6, 'divan', 'done', 500),
   ];
   const groups = T.groupByProject(wall);
   const names = groups.map((g) => g.project);
@@ -544,13 +544,13 @@ checks.push(
   checks.push(
     ['a group per project and no more', names.length === 3],
     ['the group holding the ticket that is waiting on you comes first',
-      names[0] === 'remote-ai-chat'],
-    ['the rest follow their own best ticket', names.join(',') === 'remote-ai-chat,babysee,ustabasi'],
+      names[0] === 'divan'],
+    ['the rest follow their own best ticket', names.join(',') === 'divan,babysee,ustabasi'],
     ['every ticket is in exactly one group',
       groups.reduce((n, g) => n + g.tickets.length, 0) === wall.length
       && new Set(groups.flatMap((g) => g.tickets.map((t) => t.id))).size === wall.length],
     ['the order inside a group is the order it always was',
-      groups.find((g) => g.project === 'remote-ai-chat').tickets.map((t) => t.id).join(',') === '4,6'
+      groups.find((g) => g.project === 'divan').tickets.map((t) => t.id).join(',') === '4,6'
       && groups.find((g) => g.project === 'babysee').tickets.map((t) => t.id).join(',') === '1,3'],
     ['a group with nothing in it cannot be drawn, because it is not made',
       groups.every((g) => g.tickets.length > 0)],

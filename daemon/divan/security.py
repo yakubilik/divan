@@ -15,7 +15,12 @@ from pathlib import Path
 import httpx
 import jwt
 
+from . import legacy
 from .secrets import FAMILIES, find as find_secrets
+
+# The daemon's data home by name, now and before the rename: the migration
+# leaves the old path as a symlink, so it reaches the same files.
+_HOME_NAMES = r"(?:\.divan|" + re.escape(legacy.HOME_NAME) + ")"
 
 log = logging.getLogger("rac.security")
 
@@ -31,13 +36,13 @@ DESTRUCTIVE_PATTERNS = [
     re.compile(r">\s*/dev/(sd[a-z]|disk\d)"),
     re.compile(r"\blaunchctl\s+(unload|bootout|disable|remove)\b"),
     re.compile(r"\bkillall\s+-9\b"),
-    re.compile(r"\bpkill\s+-9?\s*-f\s+remote[-_]ai[-_]chat"),
+    re.compile(r"\bpkill\s+-9?\s*-f\s+(?:divan|" + legacy.PROCESS_PATTERN + ")"),
     # Options after the pattern are not options on macOS: they become more
     # patterns, and `pkill -f x -u me -P 1` kills everything with "me" or "1" in it.
     re.compile(r"\bpkill(?:\s+(?:-[uUPgGtsF]\s+\S+|-[fvilnxaoqILN0-9]+|-[A-Z]{2,}))*"
                r"\s+(?:\"[^\"]*\"|'[^']*'|[^-\s]\S*)\s+-[A-Za-z]"),
     # The sign-ins and the push key: even reading these puts a token in a chat.
-    re.compile(r"\.credentials\.json|\.remote-ai-chat/apns/"),
+    re.compile(r"\.credentials\.json|" + _HOME_NAMES + r"/apns/"),
     # Python deleting a tree is `rm -r` with the path hidden inside a string.
     re.compile(r"\brmtree\s*\("),
     # `sh -c "$(curl …)"` and `bash <(curl …)`: the pipe spelled another way.
@@ -59,7 +64,7 @@ _EVERYTHING = {"*", ".*", "{*,.*}", "{.*,*}", "{,.}*", ".[!.]*"}
 _OPEN_MODE = re.compile(r"^(0?777|[ugoa]*a[ugoa]*[+=]rwx|ugo[+=]rwx)$")
 # The daemon's own folder: its config, its database. Uploads, the log and the
 # accounts' memory and skills are what a chat works in all day.
-_DAEMON_HOME = re.compile(r"\.remote-ai-chat(?:/(?!(?:uploads|logs|accounts)/)|$)")
+_DAEMON_HOME = re.compile(_HOME_NAMES + r"(?:/(?!(?:uploads|logs|accounts)/)|$)")
 _READS = {"cat", "head", "tail", "less", "grep", "egrep", "fgrep", "rg", "ls", "wc", "stat",
           "file", "cut", "sort", "uniq", "diff", "du", "jq", "awk", "nl", "tr", "tree",
           "echo", "printf", "test", "[", "readlink", "realpath", "basename", "dirname",
@@ -375,7 +380,7 @@ UNSERVABLE_NAMES = re.compile(
     r"^(\.env(\..*)?|\.npmrc|\.netrc|\.pypirc|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|.*\.(pem|key|p12|pfx|keychain(-db)?|jks))$",
     re.IGNORECASE,
 )
-UNSERVABLE_DIRS = {".git", ".ssh", ".aws", ".gnupg", ".config", ".remote-ai-chat", ".claude", ".codex"}
+UNSERVABLE_DIRS = {".git", ".ssh", ".aws", ".gnupg", ".config", ".divan", legacy.HOME_NAME, ".claude", ".codex"}
 
 
 class PathPolicy:
@@ -429,7 +434,7 @@ class PathPolicy:
 
         A project is what `list_projects` says it is: a folder one level under
         an allowed root. Anything deeper belongs to the project above it —
-        `~/projects/remote-ai-chat/app` is still remote-ai-chat — and a folder
+        `~/projects/divan/app` is still divan — and a folder
         that is a root itself, or outside every root, has no project to name.
         """
         try:
@@ -712,7 +717,7 @@ class TunnelLock:
     tailnet client has no such header and never meets this.
 
     The lock lives in memory, and `unlock` lifts it on the running daemon —
-    `remote-ai-chat unlock <ip>`, or the same request from a paired phone.
+    `divan unlock <ip>`, or the same request from a paired phone.
 
     The clock is passed in so a test can move it.
     """

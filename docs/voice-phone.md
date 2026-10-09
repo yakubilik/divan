@@ -61,7 +61,7 @@ node scripts/test-call-live.cjs [--shot <dir>]           # the call screen on it
 node scripts/test-ustabasi.cjs                           # everything, both of the above included
 ```
 
-Both start `daemon/scripts/voice_peer.py`: the daemon of `test_voice.py` (own `RAC_HOME`, free loopback
+Both start `daemon/scripts/voice_peer.py`: the daemon of `test_voice.py` (own `DIVAN_HOME`, free loopback
 port, demo chats, the replaying recogniser and the scripted fast layer), never the running one. The
 phone is the real `voice-session.ts` over the app's real socket client. The native engine is a fake on
 the wall clock: its microphone releases the bench's Turkish fixtures (`/tmp/divan-voice-bench/fixtures`,

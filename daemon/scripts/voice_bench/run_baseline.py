@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Replay the bench fixtures through today's turn-taking and two recognisers.
 
-    PY=~/projects/remote-ai-chat/daemon/.venv312/bin/python    # any venv with mlx-whisper + numpy
+    PY=~/projects/divan/daemon/.venv312/bin/python    # any venv with mlx-whisper + numpy
     $PY daemon/scripts/voice_bench/run_baseline.py [--fixtures DIR] [--out FILE] [--only ID]
 
 Needs the fixtures (`make_fixtures.py`) and the Swift helper built once:
@@ -46,7 +46,7 @@ def apple(wav: Path) -> list[dict]:
 
 
 def whisper(wav: Path, start_ms: int, end_ms: int, prompt: str | None) -> dict:
-    from remote_ai_chat import transcribe
+    from divan import transcribe
     s = bench.read_wav(wav)
     a = max(0, (start_ms - 200) * bench.RATE // 1000)
     b = min(len(s), (end_ms + 300) * bench.RATE // 1000)
@@ -109,7 +109,7 @@ def main() -> int:
     ap.add_argument("--rejudge", metavar="JSON",
                     help="recompute the judgements of an earlier run from its recorded events, no audio")
     ap.add_argument("--whisper-only", action="store_true",
-                    help="skip Apple and the endpointers; compare whisper models via RAC_WHISPER_MODEL")
+                    help="skip Apple and the endpointers; compare whisper models via DIVAN_WHISPER_MODEL")
     a = ap.parse_args()
     fdir = Path(a.fixtures)
     manifest = json.loads((fdir / "manifest.json").read_text())
@@ -127,7 +127,7 @@ def main() -> int:
         sys.exit(f"build the Swift helper first: swiftc -O {HERE / 'apple_stt.swift'} -o {APPLE}")
 
     if not a.no_whisper:
-        from remote_ai_chat import transcribe
+        from divan import transcribe
         transcribe.pcm(bench.read_wav(fdir / "short-status.wav").tobytes(), None, "tr")   # load once, untimed
 
     rows = []
@@ -165,7 +165,7 @@ def main() -> int:
                  f" {row['whisper']['compute_ms']}ms" if "whisper" in row else ""))
 
     if a.whisper_only:
-        from remote_ai_chat import transcribe
+        from divan import transcribe
         wc = [r["whisper_vocab"]["compute_ms"] for r in rows]
         summary = {"model": transcribe.MODEL, "fixtures": len(rows),
                    "whisper_vocab_pooled_wer": bench.pooled_wer(

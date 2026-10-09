@@ -23,9 +23,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import remote_ai_chat.server as server_mod                      # noqa: E402
-from remote_ai_chat.config import Device                         # noqa: E402
-from remote_ai_chat.server import PUSH_TEXT, Server              # noqa: E402
+import divan.server as server_mod                      # noqa: E402
+from divan.config import Device                         # noqa: E402
+from divan.server import PUSH_TEXT, Server              # noqa: E402
 
 failures: list[str] = []
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Is the synthesised Turkish intelligible? Read EMA's output back with whisper.
 
-    PY=~/projects/remote-ai-chat/daemon/.venv312/bin/python
+    PY=~/projects/divan/daemon/.venv312/bin/python
     $PY daemon/scripts/voice_bench/tts_roundtrip.py [--proof docs/voice-bench/proof.json]
 
 Every first piece `proof.py` had EMA say is transcribed by whisper-large-v3-turbo
@@ -31,7 +31,7 @@ def main() -> int:
     ap.add_argument("--proof", default=str(ROOT / "docs" / "voice-bench" / "proof.json"))
     ap.add_argument("--out", default=str(ROOT / "docs" / "voice-bench" / "tts-roundtrip.json"))
     a = ap.parse_args()
-    from remote_ai_chat import transcribe
+    from divan import transcribe
     rows = [r for r in json.loads(Path(a.proof).read_text())["rows"]
             if r.get("first_piece") and r.get("tts_wav") and Path(r["tts_wav"]).exists()]
     out = []

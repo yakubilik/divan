@@ -54,8 +54,8 @@ lands in the single hidden holding place instead — in no list and no count a
 dashboard draws — and it moves onto a real board the moment a product claims its
 path. Which product that is comes off the **path** first and the name second:
 the ticket in `~/projects/babysee/app` is babysee's because babysee owns that
-folder, and a product whose name is nothing like its folder — Divan, checked out
-in `remote-ai-chat` — must be neither matched nor renamed by a folder name.
+folder, and a product whose name is nothing like its folder — Atlas, checked out
+in `backend-v2` — must be neither matched nor renamed by a folder name.
 """
 from __future__ import annotations
 
@@ -686,8 +686,8 @@ class Board:
 
         `slug` is the cross-machine key and is normally the name, slugged. It is
         given by hand for the one case that needs it: a product whose visible
-        name has moved away from the checkout every machine knows it by — Divan,
-        in `remote-ai-chat`.
+        name has moved away from the checkout every machine knows it by — Atlas,
+        in `backend-v2`.
 
         The branch list is the default five plus whatever else was asked for: a
         product with a support desk gets a support branch here rather than in a
@@ -734,7 +734,7 @@ class Board:
         told where its repositories are now. `slug` is absent on purpose. It is
         the key two machines fold the same product under, so a rename moves the
         name and leaves the key — which is exactly how a product can be called
-        Divan while every computer still knows it as `remote-ai-chat`.
+        Atlas while every computer still knows it as `backend-v2`.
         """
         project = self.get_project(project_id)
         if project is None:
@@ -791,8 +791,8 @@ class Board:
 
         Asked **before** any name, because the path is the fact and the name is
         a label. `~/projects/babysee/app` is work on babysee because babysee owns
-        that folder; and the product checked out in `remote-ai-chat` is called
-        Divan, which no rule about folder names would ever have guessed and
+        that folder; and the product checked out in `backend-v2` is called
+        Atlas, which no rule about folder names would ever have guessed and
         which the old mirror used to overwrite.
 
         The longest registered path containing it wins, so a product that owns

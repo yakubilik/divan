@@ -5,7 +5,7 @@
 What a merge to main does to the web panel: the daemon's self-update runs
 `updater.build_panel`, which builds `web/` to a sibling directory and swaps it
 in under `webui/` while the server keeps running. This does the same thing on
-a throwaway daemon — its own RAC_HOME, its own port, this checkout's code — so
+a throwaway daemon — its own DIVAN_HOME, its own port, this checkout's code — so
 it can be checked before the merge:
 
   1. the panel built from <old-sha> is served, and `/build.json` names it;
@@ -30,12 +30,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRATCH = Path(tempfile.mkdtemp(prefix="rac-panel-swap-"))
-os.environ["RAC_HOME"] = str(SCRATCH / "home")
+os.environ["DIVAN_HOME"] = str(SCRATCH / "home")
 sys.path.insert(0, str(ROOT / "daemon"))
 
 import uvicorn  # noqa: E402
-from remote_ai_chat import updater  # noqa: E402
-from remote_ai_chat.config import Config  # noqa: E402
+from divan import updater  # noqa: E402
+from divan.config import Config  # noqa: E402
 
 PORT = int(os.environ.get("REHEARSE_PORT", "8796"))
 MARK = os.environ.get("REHEARSE_MARK", "Go details")
@@ -73,7 +73,7 @@ def main() -> int:
     cfg = Config.load()
     cfg.bind = ["127.0.0.1"]; cfg.port = PORT; cfg.auto_update = False
     cfg.allowed_roots = [str(SCRATCH)]
-    from remote_ai_chat.server import Server
+    from divan.server import Server
     server = uvicorn.Server(uvicorn.Config(Server(cfg).app, host="127.0.0.1", port=PORT, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

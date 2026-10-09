@@ -9,14 +9,14 @@ of the shape it exists for, and against a string it must *not* fire on — the
 placeholders this repository does use on purpose (`/Users/you/…`,
 `you@example.com`) were the first false positives the scan produced.
 
-The allowlist is checked too: a Turkish word in `remote_ai_chat/call.py` is data
+The allowlist is checked too: a Turkish word in `divan/call.py` is data
 the language detector cannot work without, and anywhere else it is a bug.
 
 And the scanner's blind spot is covered here rather than left to a person's
 eyes: the three files `audit.SELF` exempts are read back and checked for a home
 directory, an address or a machine name that is not one of the samples written
 down below. An audit report is where such a string is most at hand and least
-noticed. Run with `RAC_AUDIT_NAMES` set, the read-back checks those files for
+noticed. Run with `DIVAN_AUDIT_NAMES` set, the read-back checks those files for
 the author's own names as well — the one identifier shape that has no shape, and
 so the one the samples cannot stand in for.
 """
@@ -34,7 +34,7 @@ import audit                                                   # noqa: E402
 # The list the release is scanning with, read once and before any reload below
 # changes it. Given one, the read-back at the end checks the exempt files for
 # these names too; given none, it says so and checks the four shapes only.
-GIVEN_NAMES = os.environ.get("RAC_AUDIT_NAMES", "").strip()
+GIVEN_NAMES = os.environ.get("DIVAN_AUDIT_NAMES", "").strip()
 
 # One string per rule, in the shape the rule is for. None of these is real: the
 # key-shaped ones are the documented prefix plus filler of the right length.
@@ -111,7 +111,7 @@ QUIET = [
 # Those four are shapes, and a shape can be sampled. The fifth identifier in the
 # scan — the author's own name, and the names of the author's other projects —
 # is not: `author-name` is whatever list the release supplies in
-# `RAC_AUDIT_NAMES`, so it cannot be checked against samples written down here
+# `DIVAN_AUDIT_NAMES`, so it cannot be checked against samples written down here
 # and it cannot be checked at all unless a list is given. When one is, every
 # exempt file is read back for it too, with nothing allowed to match. That pass
 # is what the private skill name quoted verbatim in the first draft of the
@@ -166,11 +166,11 @@ ALLOWED = [
     "app/src/tts/words.ts",
     "app/src/voice.ts",
     "app/src/waiting.ts",
-    "daemon/remote_ai_chat/call.py",
-    "daemon/remote_ai_chat/secrets.py",
-    "daemon/remote_ai_chat/server.py",
-    "daemon/remote_ai_chat/transcribe.py",
-    "daemon/remote_ai_chat/voice.py",
+    "daemon/divan/call.py",
+    "daemon/divan/secrets.py",
+    "daemon/divan/server.py",
+    "daemon/divan/transcribe.py",
+    "daemon/divan/voice.py",
     "daemon/scripts/test_call.py",
     "daemon/scripts/test_dictation.py",
     "daemon/scripts/test_scrub.py",
@@ -215,21 +215,21 @@ def unredacted(text: str, allowed: frozenset[str] | set[str] = REDACTED,
 def names_in(text: str, names: str) -> list[str]:
     """The same read-back for `author-name`, with `names` supplied as at scan time.
 
-    That rule exists only while `RAC_AUDIT_NAMES` is set, so the module is
+    That rule exists only while `DIVAN_AUDIT_NAMES` is set, so the module is
     reloaded around the call and reloaded back afterwards. Nothing is allowed to
     match: a private name has no synthetic sample to be confused with, which is
     the whole reason it needs its own pass.
     """
-    before = os.environ.get("RAC_AUDIT_NAMES")
-    os.environ["RAC_AUDIT_NAMES"] = names
+    before = os.environ.get("DIVAN_AUDIT_NAMES")
+    os.environ["DIVAN_AUDIT_NAMES"] = names
     try:
         importlib.reload(audit)
         return unredacted(text, allowed=frozenset(), rules=("author-name",))
     finally:
         if before is None:
-            os.environ.pop("RAC_AUDIT_NAMES", None)
+            os.environ.pop("DIVAN_AUDIT_NAMES", None)
         else:
-            os.environ["RAC_AUDIT_NAMES"] = before
+            os.environ["DIVAN_AUDIT_NAMES"] = before
         importlib.reload(audit)
 
 
@@ -260,7 +260,7 @@ def main() -> int:
                  "docs/audit/2026-09-27-security-audit.md"):
         check(f"{path} is exempt",
               not audit.scan_text(path, "AKIAIOSFODNN7EXAMPLE onay bekliyor", "test"))
-    for path in ("scripts/release.py", "docs/PROTOCOL.md", "daemon/remote_ai_chat/push.py"):
+    for path in ("scripts/release.py", "docs/PROTOCOL.md", "daemon/divan/push.py"):
         check(f"{path} is not",
               bool(audit.scan_text(path, "AKIAIOSFODNN7EXAMPLE", "test")))
 
@@ -279,7 +279,7 @@ def main() -> int:
               "1: local-hostname 'Adas-MacBook.local'"])
     check("the placeholders the reports are written in are not identifiers",
           not unredacted("/Users/<name>, <name>@gmail.com, <Name>-MacBook-Air.local,"
-                         " com.<name>.remoteaichat", allowed=frozenset()))
+                         " com.<name>.divan", allowed=frozenset()))
 
     # ── the fixture, by name ────────────────────────────────────────────────
     #
@@ -314,7 +314,7 @@ def main() -> int:
             hits = names_in(Path(path).read_text(encoding="utf-8"), GIVEN_NAMES)
             check(f"{path} names none of them", not hits, "; ".join(hits))
     else:
-        print("  skip  RAC_AUDIT_NAMES is unset, so there is no list to read back"
+        print("  skip  DIVAN_AUDIT_NAMES is unset, so there is no list to read back"
               " for;\n        the release runs this with one, and records that it did")
 
     print("\nthe language allowlist covers exactly these files")
@@ -323,12 +323,12 @@ def main() -> int:
     check("and every entry says why", all(len(why.split()) >= 5 for why in audit.ALLOW.values()))
     turkish = "onay bekliyor için değil"
     check("a Turkish word there is data, not a finding",
-          not audit.scan_text("daemon/remote_ai_chat/call.py", turkish, "test"))
+          not audit.scan_text("daemon/divan/call.py", turkish, "test"))
     check("the same word anywhere else is a finding",
-          bool(audit.scan_text("daemon/remote_ai_chat/config.py", turkish, "test")))
+          bool(audit.scan_text("daemon/divan/config.py", turkish, "test")))
     check("the allowlist does not also excuse a secret",
           any(h["rule"] == "aws-access-key" for h in
-              audit.scan_text("daemon/remote_ai_chat/call.py", "AKIAIOSFODNN7EXAMPLE", "test")))
+              audit.scan_text("daemon/divan/call.py", "AKIAIOSFODNN7EXAMPLE", "test")))
 
     print("\nno client file is left pending")
     check("the pending list is empty", audit.PENDING == (), repr(audit.PENDING))
@@ -338,15 +338,15 @@ def main() -> int:
     print("\nthe author's own names are given at scan time, not written down here")
     # This section is about what the scanner carries when no list is given, so a
     # list the release did give is taken away again for the length of it.
-    supplied = os.environ.pop("RAC_AUDIT_NAMES", None)
+    supplied = os.environ.pop("DIVAN_AUDIT_NAMES", None)
     importlib.reload(audit)
     try:
         check("no name list in the scanner by default", "author-name" not in audit.PERSONAL,
               repr(sorted(audit.PERSONAL)))
-        os.environ["RAC_AUDIT_NAMES"] = NAME_CONTROL_NAMES
+        os.environ["DIVAN_AUDIT_NAMES"] = NAME_CONTROL_NAMES
         try:
             importlib.reload(audit)
-            check("RAC_AUDIT_NAMES adds the rule", "author-name" in audit.PERSONAL)
+            check("DIVAN_AUDIT_NAMES adds the rule", "author-name" in audit.PERSONAL)
             check("a name given at scan time is found",
                   any(h["rule"] == "author-name" for h in
                       audit.scan_text("t.py", 'project = "lovelace-ledger"', "test")))
@@ -356,13 +356,13 @@ def main() -> int:
             check("a word that merely contains one is not a name",
                   not audit.scan_text("t.py", "# adapters and ledgers are fine", "test"))
         finally:
-            os.environ.pop("RAC_AUDIT_NAMES", None)
+            os.environ.pop("DIVAN_AUDIT_NAMES", None)
             importlib.reload(audit)
         check("and the rule is gone again once it is not given",
               "author-name" not in audit.PERSONAL)
     finally:
         if supplied is not None:
-            os.environ["RAC_AUDIT_NAMES"] = supplied
+            os.environ["DIVAN_AUDIT_NAMES"] = supplied
         importlib.reload(audit)
 
     print("\nthe forbidden-name list covers what the release checklist forbids")
@@ -370,7 +370,7 @@ def main() -> int:
                  "certs/server.pem", "release.jks", "uploads/photo.png", "db.sqlite",
                  "chats.db", "app/identity.local.json"):
         check(f"{path} would be refused", bool(audit.FORBIDDEN_NAMES.search(path)))
-    for path in ("README.md", "daemon/remote_ai_chat/server.py", "web/src/App.tsx",
+    for path in ("README.md", "daemon/divan/server.py", "web/src/App.tsx",
                  "app/assets/icon.png"):
         check(f"{path} is fine", not audit.FORBIDDEN_NAMES.search(path))
 

@@ -20,10 +20,10 @@ the user asks for them.
   (`@anthropic-ai/claude-code`, `@openai/codex`) and run under the user's own
   sign-in. Their licences are their own.
 - **The agent store** lists definitions from public GitHub repositories —
-  `daemon/remote_ai_chat/agents.py` holds the list of sources. Installing one
+  `daemon/divan/agents.py` holds the list of sources. Installing one
   downloads markdown into the tool's agents folder; nothing is executed at
   install time, and the text carries whatever licence its source repository
-  gives it. `daemon/remote_ai_chat/agent-store-snapshot.json` is a cached
+  gives it. `daemon/divan/agent-store-snapshot.json` is a cached
   *listing* of file paths from those repositories, used so that the store is not
   empty when GitHub's API is rate-limited. It contains no third-party content.
 

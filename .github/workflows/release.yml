@@ -49,7 +49,7 @@ jobs:
             fi
           }
           check daemon/pyproject.toml                 "version = \"$V\""
-          check daemon/remote_ai_chat/__init__.py     "__version__ = \"$V\""
+          check daemon/divan/__init__.py     "__version__ = \"$V\""
           check web/package.json                      "\"version\": \"$V\""
           check CHANGELOG.md                          "## v$V —"
           if [ "$fail" != 0 ]; then
@@ -85,7 +85,7 @@ jobs:
       - name: Daemon installs and imports
         run: |
           uv pip install --system -e daemon
-          python -c "import remote_ai_chat, remote_ai_chat.server as s; print(remote_ai_chat.__version__)"
+          python -c "import divan, divan.server as s; print(divan.__version__)"
       - name: Daemon tests
         working-directory: daemon
         run: |
@@ -98,8 +98,8 @@ jobs:
         working-directory: web
       - name: The panel build is clean
         run: |
-          test ! -e daemon/remote_ai_chat/webui/dev-host.json
-          test -s daemon/remote_ai_chat/webui/build.json
+          test ! -e daemon/divan/webui/dev-host.json
+          test -s daemon/divan/webui/build.json
 
       - name: Wheel and sdist
         # Not published anywhere — attached to the release so a version can be

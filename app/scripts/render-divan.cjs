@@ -244,7 +244,7 @@ const STUBS = {
   'expo-clipboard': { setStringAsync: () => Promise.resolve(true) },
   // The inbox keeps which notice was seen last; nothing here reads it back.
   'expo-secure-store': { getItemAsync: () => Promise.resolve(null), setItemAsync: () => Promise.resolve() },
-  'expo-linking': { openURL: () => Promise.resolve(true), createURL: (p) => `remoteaichat://${p}` },
+  'expo-linking': { openURL: () => Promise.resolve(true), createURL: (p) => `divan://${p}` },
   // …and the camera, whose permission is not a stub but a state a check sets:
   // the pairing screen has three faces — the viewfinder, the form it falls back
   // to when the camera was refused, and the wait while the phone is deciding —

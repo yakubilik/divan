@@ -1,6 +1,6 @@
 /** A ticket's end, as the queue tells the chat that filed it.
  *
- *  The daemon (`daemon/remote_ai_chat/ustabasi.py` `follow_message`) sends it
+ *  The daemon (`daemon/divan/ustabasi.py` `follow_message`) sends it
  *  into that chat as an ordinary `message.user`, so the agent there wakes up
  *  and tells the person. There is no other marker on the event: the text is
  *  the record, and it has one fixed shape —

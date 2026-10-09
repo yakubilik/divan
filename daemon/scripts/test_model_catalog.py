@@ -16,8 +16,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat.providers import claude_models as cm       # noqa: E402
-from remote_ai_chat.providers.claude import ClaudeProvider     # noqa: E402
+from divan.providers import claude_models as cm       # noqa: E402
+from divan.providers.claude import ClaudeProvider     # noqa: E402
 
 failures = 0
 

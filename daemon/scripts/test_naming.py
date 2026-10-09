@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat import naming                                # noqa: E402
+from divan import naming                                # noqa: E402
 
 fails: list[str] = []
 

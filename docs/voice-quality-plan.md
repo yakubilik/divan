@@ -175,7 +175,7 @@ Each is about three hours. Each ends with its own tests passing and leaves the l
 Updates reach the Macs only through the merge and the daemon's own updater (`updater.py` pulls
 `origin/main` and asks launchd to restart it); no worker restarts a daemon by hand.
 
-**#149: daemon: streaming voice session** — done; results in [voice-session.md](voice-session.md), the medkit comparison in §8 (`daemon/remote_ai_chat/voice.py`, `server.py` handlers,
+**#149: daemon: streaming voice session** — done; results in [voice-session.md](voice-session.md), the medkit comparison in §8 (`daemon/divan/voice.py`, `server.py` handlers,
 `PROTOCOL.md`)
 - `VoiceSession`: audio ring buffer, energy VAD (the bench's `speech_spans` thresholds), the `Plan`
   rule, incremental whisper (small for replies, turbo at commit), turn ids, the events of §3.
@@ -184,7 +184,7 @@ Updates reach the Macs only through the merge and the daemon's own updater (`upd
 - Bridge: commit-gated `Actions` / `chat.send`; progress from real events; one ack at commit for agent
   turns.
 - Tests: replay `scenarios.json` fixtures through a real `voice.start`/`voice.audio` socket on an
-  isolated daemon (`RAC_HOME=/tmp/... RAC_PORT=8791`). Assert one committed turn per speech scenario,
+  isolated daemon (`DIVAN_HOME=/tmp/... DIVAN_PORT=8791`). Assert one committed turn per speech scenario,
   none for silence, no `voice.say` of an old `turn_id` after `voice.barge` or resumed speech, a task
   request reaching the right chat exactly once, and an approval still answerable. Use a fake model for
   CI and one real run with timings written next to `proof.json`.

@@ -13,10 +13,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat.db import DB                                 # noqa: E402
-from remote_ai_chat.errors import Err                            # noqa: E402
-from remote_ai_chat.filing import matcher, pick                  # noqa: E402
-from remote_ai_chat.server import Server                         # noqa: E402
+from divan.db import DB                                 # noqa: E402
+from divan.errors import Err                            # noqa: E402
+from divan.filing import matcher, pick                  # noqa: E402
+from divan.server import Server                         # noqa: E402
 
 fails: list[str] = []
 

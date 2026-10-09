@@ -7,10 +7,10 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 H="$T/home"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-mkdir -p "$H/.remote-ai-chat" "$H/.ssh" "$H/projects/app/secrets" "$H/projects/repo"
+mkdir -p "$H/.divan" "$H/.ssh" "$H/projects/app/secrets" "$H/projects/repo"
 echo 'X=1' > "$H/projects/app/.env"; chmod 644 "$H/projects/app/.env"
-chmod 755 "$H/projects/app/secrets" "$H/.remote-ai-chat"
-echo x > "$H/.remote-ai-chat/db.sqlite"; chmod 644 "$H/.remote-ai-chat/db.sqlite"
+chmod 755 "$H/projects/app/secrets" "$H/.divan"
+echo x > "$H/.divan/db.sqlite"; chmod 644 "$H/.divan/db.sqlite"
 chmod 755 "$H/.ssh"
 # tracked secret file + key-like string in a repo
 git -C "$H/projects/repo" init -q
@@ -42,8 +42,8 @@ done
 bash "$S" --fix >/dev/null
 [ "$(stat -f %Lp "$H/projects/app/.env")" = 600 ] || fail ".env not 600"
 [ "$(stat -f %Lp "$H/projects/app/secrets")" = 700 ] || fail "secrets not 700"
-[ "$(stat -f %Lp "$H/.remote-ai-chat")" = 700 ] || fail "rac dir not 700"
-[ "$(stat -f %Lp "$H/.remote-ai-chat/db.sqlite")" = 600 ] || fail "db not 600"
+[ "$(stat -f %Lp "$H/.divan")" = 700 ] || fail "rac dir not 700"
+[ "$(stat -f %Lp "$H/.divan/db.sqlite")" = 600 ] || fail "db not 600"
 [ "$(stat -f %Lp "$H/.ssh")" = 700 ] || fail ".ssh not 700"
 grep -q 'Needs a person' "$T/report.md" || fail "report lacks needs section"
 echo "ok"

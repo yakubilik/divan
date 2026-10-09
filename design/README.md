@@ -27,7 +27,7 @@ approval appearing — none of those may reflow what is already on screen. The
 list grows downward and the eye stays where it was.
 
 [app-design.zip](app-design.zip) is the drawing the phone app was rebuilt
-from: every screen and state, light and dark (`Remote AI Chat - Full Design
+from: every screen and state, light and dark (`… Full Design
 Light.dc.html` / `… Dark.dc.html`; open them next to `support.js`). The
 `Screens.dc.html` in it is the earlier round of directions, kept for reference.
 

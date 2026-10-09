@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# remote-ai-chat — set up the daemon on this computer.
+# divan — set up the daemon on this computer.
 #
 #   ./install.sh        (from a clone: it installs the checkout it sits in)
 #
@@ -8,9 +8,9 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NAME="remote-ai-chat"
-PORT="${RAC_PORT:-8790}"
-export RAC_HOME="${RAC_HOME:-$HOME/.remote-ai-chat}"
+NAME="divan"
+PORT="${DIVAN_PORT:-8790}"
+export DIVAN_HOME="${DIVAN_HOME:-$HOME/.divan}"
 
 say() { printf "\033[1m→\033[0m %s\n" "$*"; }
 die() { printf "\033[31m✗\033[0m %s\n" "$*" >&2; exit 1; }
@@ -19,8 +19,8 @@ die() { printf "\033[31m✗\033[0m %s\n" "$*" >&2; exit 1; }
 command -v python3 >/dev/null || die "python3 not found"
 PYV=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
 case "$PYV" in 3.1[1-3]) ;; *) say "warning: python $PYV — 3.11-3.13 is what this is tested on";; esac
-ask() {                      # ask() "question" -> 0 yes, 1 no. RAC_YES=1 answers yes.
-  [ "${RAC_YES:-}" = "1" ] && return 0
+ask() {                      # ask() "question" -> 0 yes, 1 no. DIVAN_YES=1 answers yes.
+  [ "${DIVAN_YES:-}" = "1" ] && return 0
   [ -t 0 ] || return 1       # non-interactive: never assume yes
   printf "\033[1m?\033[0m %s [Y/n] " "$1" >&2
   read -r a </dev/tty || return 1
@@ -51,7 +51,7 @@ ensure_cli() {               # ensure_cli <binary> <npm package>
   npm install -g "$2" && say "$1 installed ($("$1" --version 2>&1 | head -1))"
 }
 
-if [ "${RAC_NO_CLIS:-}" != "1" ]; then
+if [ "${DIVAN_NO_CLIS:-}" != "1" ]; then
   ensure_cli claude @anthropic-ai/claude-code || true
   ensure_cli codex  @openai/codex || true
 fi
@@ -73,12 +73,12 @@ else
 fi
 
 # ── service ───────────────────────────────────────────────────────────────────
-BIN="$VENV/bin/remote-ai-chat"
+BIN="$VENV/bin/divan"
 case "$(uname -s)" in
   Darwin)
-    LABEL="com.$(id -un).remote-ai-chat"
+    LABEL="com.yakup.divan"
     PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-    mkdir -p "$HOME/Library/LaunchAgents" "$RAC_HOME/logs"
+    mkdir -p "$HOME/Library/LaunchAgents" "$DIVAN_HOME/logs"
     cat > "$PLIST" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -86,13 +86,13 @@ case "$(uname -s)" in
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key><array><string>$BIN</string><string>serve</string></array>
   <key>EnvironmentVariables</key><dict>
-    <key>RAC_HOME</key><string>$RAC_HOME</string>
+    <key>DIVAN_HOME</key><string>$DIVAN_HOME</string>
     <key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>$RAC_HOME/logs/stdout.log</string>
-  <key>StandardErrorPath</key><string>$RAC_HOME/logs/stderr.log</string>
+  <key>StandardOutPath</key><string>$DIVAN_HOME/logs/stdout.log</string>
+  <key>StandardErrorPath</key><string>$DIVAN_HOME/logs/stderr.log</string>
 </dict></plist>
 PLIST_EOF
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
@@ -105,15 +105,15 @@ PLIST_EOF
       SKIP_SERVICE=1
     fi
     UNIT="$HOME/.config/systemd/user/$NAME.service"
-    mkdir -p "$(dirname "$UNIT")" "$RAC_HOME/logs"
+    mkdir -p "$(dirname "$UNIT")" "$DIVAN_HOME/logs"
     cat > "$UNIT" <<UNIT_EOF
 [Unit]
-Description=remote-ai-chat daemon
+Description=divan daemon
 After=network-online.target
 
 [Service]
 ExecStart=$BIN serve
-Environment=RAC_HOME=$RAC_HOME
+Environment=DIVAN_HOME=$DIVAN_HOME
 Restart=always
 RestartSec=3
 
@@ -121,7 +121,7 @@ RestartSec=3
 WantedBy=default.target
 UNIT_EOF
     if [ "${SKIP_SERVICE:-}" = "1" ]; then
-      "$BIN" serve >"$RAC_HOME/logs/daemon.log" 2>&1 &
+      "$BIN" serve >"$DIVAN_HOME/logs/daemon.log" 2>&1 &
       say "started in the background (pid $!)"
     else
     systemctl --user daemon-reload

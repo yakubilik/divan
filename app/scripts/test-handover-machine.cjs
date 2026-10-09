@@ -275,7 +275,7 @@ const ready = (async () => {
       stand();
       R.camera.granted();
       R.render('dark', h(Pair));
-      R.scans()[0]({ data: 'remoteaichat://pair?host=100.64.1.2&port=8791&token=tok&name=studio' });
+      R.scans()[0]({ data: 'divan://pair?host=100.64.1.2&port=8791&token=tok&name=studio' });
       await flush();
       const paired = calls.some(([t, d]) => t === 'addHost' && d.host === '100.64.1.2' && d.token === 'tok')
         && R.nav.replaced().includes('/dashboard');

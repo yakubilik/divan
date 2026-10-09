@@ -56,8 +56,8 @@ const PY = `
 import json, sys, time
 from pathlib import Path
 sys.path.insert(0, ${JSON.stringify(path.join(repo, 'daemon'))})
-from remote_ai_chat import ustabasi as u
-from remote_ai_chat.security import PathPolicy
+from divan import ustabasi as u
+from divan.security import PathPolicy
 out = {"caps": {"events": u.MAX_RUN_EVENTS, "bytes": u.MAX_RUN_BYTES, "tail": u.RUN_TAIL_BYTES}}
 
 # The same argument the server hands it (server.py, h_ustabasi_list). Without
@@ -70,7 +70,7 @@ out = {"caps": {"events": u.MAX_RUN_EVENTS, "bytes": u.MAX_RUN_BYTES, "tail": u.
 # the config itself uses. Which root list was used is reported, because a
 # different one is a different set of headings.
 try:
-    from remote_ai_chat.config import Config
+    from divan.config import Config
     cfg = Config.load()
     roots, denied = cfg.allowed_roots, cfg.denied_paths
     out["roots_from"] = "config"
@@ -104,12 +104,12 @@ out["runs"] = runs
 print(json.dumps(out))
 `;
 
-/** Which interpreter to ask. `RAC_PYTHON` first, then the daemon's own
+/** Which interpreter to ask. `DIVAN_PYTHON` first, then the daemon's own
  *  virtualenv if this checkout has one, then whatever `python3` is — the
  *  snapshot itself needs nothing but the standard library, and the fallback
  *  above covers the one import that does not. */
 function interpreter() {
-  const tried = [process.env.RAC_PYTHON,
+  const tried = [process.env.DIVAN_PYTHON,
                  path.join(repo, 'daemon', '.venv312', 'bin', 'python3'),
                  path.join(repo, 'daemon', '.venv', 'bin', 'python3')];
   for (const p of tried) if (p && fs.existsSync(p)) return p;
@@ -282,7 +282,7 @@ if (process.argv.some((a) => a.startsWith('--watch')) && ids.length) {
     const py = `
 import json, sys
 sys.path.insert(0, ${JSON.stringify(path.join(repo, 'daemon'))})
-from remote_ai_chat import ustabasi as u
+from divan import ustabasi as u
 print(json.dumps(u.run(${Number(id)}, ${cursor == null ? 'None' : JSON.stringify(cursor)})))
 `;
     return JSON.parse(execFileSync(interpreter(), ['-c', py], { maxBuffer: 64 * 1024 * 1024 }).toString());

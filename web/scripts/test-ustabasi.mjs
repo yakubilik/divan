@@ -294,9 +294,9 @@ group('the columns');
   const groups = groupByProject(wall());
 
   ok('one column per project, and none for a project with nothing in it',
-    groups.map((g) => g.project).join('|') === 'remote-ai-chat|babysee|ustabasi',
+    groups.map((g) => g.project).join('|') === 'divan|babysee|ustabasi',
     groups.map((g) => g.project).join('|'));
-  ok('the column holding the stopped ticket is first', groups[0].project === 'remote-ai-chat');
+  ok('the column holding the stopped ticket is first', groups[0].project === 'divan');
   ok('a column is titled with the project the daemon named, not the folder',
     projectName(card({ project: 'babysee', repo: '/Users/x/projects/babysee/app' })) === 'babysee');
   ok('a daemon too old to name it leaves the folder to stand in',

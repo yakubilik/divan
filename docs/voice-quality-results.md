@@ -16,7 +16,7 @@ reachable**, so nothing here is verified on the iPhone; the signed build is kept
 `app/scripts/voice-e2e.cjs` (new). The phone is `src/voice-session.ts`, the code the call screen runs,
 over the app's own socket client. It speaks with the app's own EMA pipeline (`src/tts/engine.ts` on
 onnxruntime-node, wrapped by `emaVoice`, now the same function `live-call.ts` uses on the phone). The
-daemon is isolated (`daemon/scripts/voice_peer.py --real`: its own `RAC_HOME`, a loopback port, never
+daemon is isolated (`daemon/scripts/voice_peer.py --real`: its own `DIVAN_HOME`, a loopback port, never
 the running daemon). It uses the daemon's whisper (small for the reply, large-v3-turbo at commit) and
 the real fast layer: Haiku 4.5 through the Claude Code CLI, thinking off, on an existing signed-in
 Claude account, answering from that daemon's own snapshot as the product does.
@@ -154,8 +154,8 @@ owner's decision. No key was used or created.
 
 ```sh
 cd app && npm ci
-PY=~/projects/remote-ai-chat/daemon/.venv312/bin/python      # daemon venv with mlx-whisper
-ACC=~/.remote-ai-chat/accounts/<claude-account>              # an existing signed-in Claude account
+PY=~/projects/divan/daemon/.venv312/bin/python      # daemon venv with mlx-whisper
+ACC=~/.divan/accounts/<claude-account>              # an existing signed-in Claude account
 # tts/models from tts/verify.sh (or TTS_MODELS=...); fixtures are made on first use
 PY=$PY node scripts/voice-e2e.cjs --account-home $ACC --rounds 2 --barges 3 \
     --out ../docs/voice-bench/e2e.json --audio /tmp/divan-voice-e2e/final       # ~8 min

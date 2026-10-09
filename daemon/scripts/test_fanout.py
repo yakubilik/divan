@@ -25,8 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat.server import OUTBOX_MAX, Server
-from remote_ai_chat.voice import Hub
+from divan.server import OUTBOX_MAX, Server
+from divan.voice import Hub
 
 failures = 0
 

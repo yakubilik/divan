@@ -63,7 +63,7 @@ def save(path: Path, audio: np.ndarray) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--models", default=str(Path.home() / "projects" / "remote-ai-chat" / "tts" / "models"))
+    ap.add_argument("--models", default=str(Path.home() / "projects" / "divan" / "tts" / "models"))
     ap.add_argument("--out", default="/tmp/divan-voice-bench/ema")
     a = ap.parse_args()
     vocab = json.loads(common.VECTORS.read_text())["vocab"]

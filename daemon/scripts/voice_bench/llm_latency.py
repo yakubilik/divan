@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """How soon a conversational Claude turn has its first speakable sentence.
 
-    PY=~/projects/remote-ai-chat/daemon/.venv312/bin/python
-    $PY daemon/scripts/voice_bench/llm_latency.py --account-home ~/.remote-ai-chat/accounts/<claude-id> \
+    PY=~/projects/divan/daemon/.venv312/bin/python
+    $PY daemon/scripts/voice_bench/llm_latency.py --account-home ~/.divan/accounts/<claude-id> \
         [--rounds 2] [--out docs/voice-bench/llm.json]
 
-The concierge (`remote_ai_chat/call.py`) waits for the whole answer
+The concierge (`divan/call.py`) waits for the whole answer
 (`include_partial_messages=False`) and lets the model think. This measures, on a
 warm session in its own CLI process, three things per simple non-tool question:
 the first text token, the first complete sentence (what a sentence-streaming

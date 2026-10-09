@@ -1,12 +1,12 @@
 /** The live call end to end, on real models, without the phone: what #151 measures.
  *
- *    node scripts/voice-e2e.cjs --account-home ~/.remote-ai-chat/accounts/<claude-id> \
+ *    node scripts/voice-e2e.cjs --account-home ~/.divan/accounts/<claude-id> \
  *        [--rounds 2] [--barges 3] [--agent] [--out ../docs/voice-bench/e2e.json] [--audio /tmp/divan-voice-e2e]
  *
  *  The phone is `src/voice-session.ts` — the code the call screen runs — over the app's socket client,
  *  speaking with the app's own EMA pipeline (`src/tts/engine.ts` on onnxruntime-node, wrapped by
  *  `emaVoice`, the function the call uses on the phone). The daemon is an isolated one
- *  (`daemon/scripts/voice_peer.py --real`: own RAC_HOME and loopback port) with the daemon's whisper and
+ *  (`daemon/scripts/voice_peer.py --real`: own DIVAN_HOME and loopback port) with the daemon's whisper and
  *  the real fast layer (Haiku through the Claude Code CLI on the given, already signed-in account). The
  *  running daemon is never touched.
  *
@@ -20,8 +20,8 @@
  *  in a throwaway project whose build takes ~30 s; a correction, a status question while it works,
  *  progress, and the finished turn spoken.
  *
- *  Needs: the daemon's Python with mlx-whisper (PY, else ~/projects/remote-ai-chat/daemon/.venv312),
- *  tts/models (TTS_MODELS, else this checkout's, else ~/projects/remote-ai-chat/tts/models), `npm ci`.
+ *  Needs: the daemon's Python with mlx-whisper (PY, else ~/projects/divan/daemon/.venv312),
+ *  tts/models (TTS_MODELS, else this checkout's, else ~/projects/divan/tts/models), `npm ci`.
  */
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -51,12 +51,12 @@ const SPEECH = ['short-greeting', 'short-status', 'long-request', 'pause-500', '
 
 // ── models ──────────────────────────────────────────────────────────────────
 function python() {
-  return [process.env.PY, path.join(os.homedir(), 'projects/remote-ai-chat/daemon/.venv312/bin/python')]
+  return [process.env.PY, path.join(os.homedir(), 'projects/divan/daemon/.venv312/bin/python')]
     .find((c) => c && fs.existsSync(c)) || 'python3';
 }
 
 function models() {
-  return [process.env.TTS_MODELS, path.join(repo, 'tts/models'), path.join(os.homedir(), 'projects/remote-ai-chat/tts/models')]
+  return [process.env.TTS_MODELS, path.join(repo, 'tts/models'), path.join(os.homedir(), 'projects/divan/tts/models')]
     .find((d) => d && E.STAGES.every((s) => fs.existsSync(path.join(d, `${s}.onnx`))));
 }
 

@@ -1,7 +1,7 @@
 /** The phone's half of the streaming call (#150), driven against a real daemon.
  *
  *  `src/voice-session.ts` — the code the call screen runs — talks over the app's own socket client
- *  (`src/ws.ts`) to an isolated daemon (`daemon/scripts/voice_peer.py`: its own RAC_HOME and loopback
+ *  (`src/ws.ts`) to an isolated daemon (`daemon/scripts/voice_peer.py`: its own DIVAN_HOME and loopback
  *  port, the replaying recogniser and the scripted fast layer of `test_voice.py`). The native engine is a
  *  fake that runs on the wall clock: its microphone releases the bench's Turkish fixtures (synthetic, the
  *  Mac's Yelda voice; nothing recorded from a person) in 50 ms frames, mixed with what its player is
@@ -12,7 +12,7 @@
  *  resource handling; it says nothing about how the iPhone's own canceller or speaker sound.
  *
  *  Run: node scripts/test-voice-session.cjs [--json out.json]   (also folded into test-ustabasi.cjs).
- *  Needs the daemon's Python (PY, else ~/projects/remote-ai-chat/daemon/.venv312/bin/python, else
+ *  Needs the daemon's Python (PY, else ~/projects/divan/daemon/.venv312/bin/python, else
  *  python3); without one the checks say SKIP, and `--require-daemon` makes that a failure.
  */
 const { transform } = require('sucrase');
@@ -242,7 +242,7 @@ function staleFree(p) {
 
 // ── the peer ────────────────────────────────────────────────────────────────
 function python() {
-  const cands = [process.env.PY, path.join(os.homedir(), 'projects/remote-ai-chat/daemon/.venv312/bin/python'), 'python3'];
+  const cands = [process.env.PY, path.join(os.homedir(), 'projects/divan/daemon/.venv312/bin/python'), 'python3'];
   return cands.find((c) => c && (c === 'python3' || fs.existsSync(c)));
 }
 

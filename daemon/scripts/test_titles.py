@@ -16,8 +16,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat.security import PathPolicy                   # noqa: E402
-from remote_ai_chat.session import (                             # noqa: E402
+from divan.security import PathPolicy                   # noqa: E402
+from divan.session import (                             # noqa: E402
     NEW_CHAT_TITLE, TITLE_MAX, is_untitled, with_project,
 )
 
@@ -31,7 +31,7 @@ def check(what: str, got, want) -> None:
 
 root = Path(__file__).resolve().parents[2].parent          # the folder holding this repo
 policy = PathPolicy([str(root)], [])
-here = Path(__file__).resolve().parents[2]                 # …/remote-ai-chat
+here = Path(__file__).resolve().parents[2]                 # …/divan
 project = here.name
 
 # ── which project a folder belongs to ────────────────────────────────────

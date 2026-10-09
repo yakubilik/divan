@@ -12,7 +12,7 @@ first voice note therefore takes a while (~500 MB model download). ``warm()``
 is how the panel pays that cost before anybody is waiting on it: pressing the
 microphone warms the model while the person is still drawing breath.
 
-``RAC_WHISPER_MODEL`` overrides which model that is — an ``mlx-community`` repo
+``DIVAN_WHISPER_MODEL`` overrides which model that is — an ``mlx-community`` repo
 on Apple silicon, a faster-whisper size or path everywhere else. On Apple
 silicon the default is ``whisper-large-v3-turbo``: the difference from the small
 model it replaced is not subtle — a Turkish sentence with "branch" and "commit
@@ -34,7 +34,7 @@ import wave
 from pathlib import Path
 
 log = logging.getLogger("rac.transcribe")
-_OVERRIDE = os.environ.get("RAC_WHISPER_MODEL", "").strip()
+_OVERRIDE = os.environ.get("DIVAN_WHISPER_MODEL", "").strip()
 MODEL = _OVERRIDE or "mlx-community/whisper-large-v3-turbo"   # mlx backend
 FW_MODEL = _OVERRIDE or "small"                 # faster-whisper backend (Systran/faster-whisper-small)
 

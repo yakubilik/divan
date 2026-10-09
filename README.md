@@ -1,8 +1,5 @@
 # Divan
 
-*Formerly remote-ai-chat. The CLI, the Python package and `~/.remote-ai-chat`
-keep the old name for now.*
-
 **Your own computer's coding agent, from your phone.** Not a hosted copy of it —
 the actual `claude` or `codex` process on your machine, in your repo, signed in
 with your own account, reached over your own private network.
@@ -146,9 +143,9 @@ Run` entry where there is no permission), offers to install the `claude` and
 Then install the app on your phone (`app/`, Expo — see below), scan the QR, and
 you are connected.
 
-**Requirements:** Python 3.11–3.13, and Tailscale connected. `RAC_NO_CLIS=1`
-skips the CLI install, `RAC_YES=1` answers every prompt with yes, and
-`RAC_HOME` + `RAC_PORT` let one machine host a second, fully separate daemon.
+**Requirements:** Python 3.11–3.13, and Tailscale connected. `DIVAN_NO_CLIS=1`
+skips the CLI install, `DIVAN_YES=1` answers every prompt with yes, and
+`DIVAN_HOME` + `DIVAN_PORT` let one machine host a second, fully separate daemon.
 
 Sign-ins are not the installer's job: you add accounts from the phone
 (Settings → Accounts) and it walks you through the browser flow.
@@ -171,14 +168,14 @@ The phone app is iOS. Both CLIs install through npm on every platform.
 phone (Expo / React Native)  ─┐
                               ├─ WebSocket ─→  daemon (Python)  ─→  claude / codex CLI
 desktop panel (React/Vite)   ─┘                      │
-                                                     └─ SQLite + uploads in ~/.remote-ai-chat
+                                                     └─ SQLite + uploads in ~/.divan
 ```
 
 | | |
 |---|---|
 | `daemon/` | The Python daemon: WebSocket server, session manager, permission policy, provider adapters for Claude Code and Codex, push, transcription, self-update. |
 | `app/` | The iOS app (Expo Router, zustand). English, with every string it shows in one table (`app/src/i18n.ts`). |
-| `web/` | The desktop panel (React + Vite). Built into `daemon/remote_ai_chat/webui/` and served by the daemon itself. |
+| `web/` | The desktop panel (React + Vite). Built into `daemon/divan/webui/` and served by the daemon itself. |
 | `design/` | The artboards the interface was drawn from, as standalone HTML. |
 | `docs/PROTOCOL.md` | Every request and every event on the wire. Read this before changing either client. |
 
@@ -189,11 +186,11 @@ cd daemon
 uv --no-config venv --python 3.12 .venv312
 uv --no-config pip install --python .venv312/bin/python -e . "mlx-whisper>=0.4"
 
-.venv312/bin/remote-ai-chat pair --name iPhone   # QR + token + deep link
-.venv312/bin/remote-ai-chat serve                # ws://<tailscale-ip>:8790/ws
-.venv312/bin/remote-ai-chat web                  # open the desktop panel, paired
-.venv312/bin/remote-ai-chat devices | revoke <id> | status | install | uninstall
-.venv312/bin/remote-ai-chat project list | create | update   # the board's products
+.venv312/bin/divan pair --name iPhone   # QR + token + deep link
+.venv312/bin/divan serve                # ws://<tailscale-ip>:8790/ws
+.venv312/bin/divan web                  # open the desktop panel, paired
+.venv312/bin/divan devices | revoke <id> | status | install | uninstall
+.venv312/bin/divan project list | create | update   # the board's products
 ```
 
 Python 3.11–3.13, and 3.12 is what this is actually run on — the constraint
@@ -217,11 +214,11 @@ There is no camera in the simulator, so pair with **"Enter IP and token"**:
 host `127.0.0.1`, port `8790`.
 
 `app.json` deliberately carries no account of its own: the bundle identifier is
-`com.example.remoteaichat` and there is no Apple team, Expo owner or EAS project
-in it. To ship a build, add your own:
+a `com.example.*` placeholder and there is no Apple team, Expo owner or EAS
+project in it. To ship a build, add your own:
 
 ```jsonc
-"ios":   { "bundleIdentifier": "com.you.remoteaichat", "appleTeamId": "…" },
+"ios":   { "bundleIdentifier": "com.you.divan", "appleTeamId": "…" },
 "owner": "your-expo-account",
 "extra": { "eas": { "projectId": "…" } }
 ```
@@ -231,7 +228,7 @@ in it. To ship a build, add your own:
 ```bash
 cd web && npm install
 npm run dev      # http://localhost:5177
-npm run build    # → daemon/remote_ai_chat/webui/
+npm run build    # → daemon/divan/webui/
 ```
 
 ---
@@ -272,7 +269,7 @@ asks its supervisor to restart it. That is how a laptop you are not sitting in
 front of stays on the same commit as the one you are. It refuses to touch a
 checkout with uncommitted work, only ever fast-forwards, never interrupts a
 running turn, and never waits on a credential prompt. Set `auto_update = false`
-in `~/.remote-ai-chat/config.toml` and it never touches git at all.
+in `~/.divan/config.toml` and it never touches git at all.
 
 It does not defend against someone who already has your unlocked phone, or
 against the model being wrong in a way you approve. Read what you approve.
@@ -293,7 +290,7 @@ upload/`/files`, archive, delete. Run it right after installing; `--audio` adds
 the transcription round-trip.
 
 ```bash
-.venv312/bin/python scripts/e2e.py --token TOKEN --image ~/.remote-ai-chat/uploads/<chat>/<img>.jpg
+.venv312/bin/python scripts/e2e.py --token TOKEN --image ~/.divan/uploads/<chat>/<img>.jpg
 ```
 
 End-to-end checks — resume, deny, interrupt, attachments, groups, archive,
@@ -319,20 +316,20 @@ which is what makes that checkable — and what a second language would start
 from, if there is ever a reason for one.
 
 The daemon tags every error the phone can see with a stable `code`
-(`daemon/remote_ai_chat/errors.py`) and sends English text next to it; the
+(`daemon/divan/errors.py`) and sends English text next to it; the
 client turns the code into its own wording (`app/src/ws.ts`) and falls back to
 that text for a code it does not know. Adding a code means adding it to
 `ERR_KEYS` in both clients.
 
 One exception, and it is data rather than copy: a voice call is answered in the
-language it was made in, so `daemon/remote_ai_chat/call.py` carries the words a
+language it was made in, so `daemon/divan/call.py` carries the words a
 language detector needs. It is the only file in the project that does.
 
 ## Media
 
 - Photos, camera, video and files go through `+`. The file is uploaded with
   `POST /upload` and rendered from `GET /files?path&token`, which only ever
-  serves out of `~/.remote-ai-chat/uploads`.
+  serves out of `~/.divan/uploads`.
 - A voice message is recorded as m4a, transcribed on the computer, and reaches
   the model as text. The bubble keeps both the player and the transcript.
 - The agent reads uploaded files with `Read` — no approval is asked for the

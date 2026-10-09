@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 COPIES: list[tuple[Path, re.Pattern[str], str]] = [
     (ROOT / "daemon" / "pyproject.toml",
      re.compile(r'^version = "[^"]*"$', re.M), 'version = "{v}"'),
-    (ROOT / "daemon" / "remote_ai_chat" / "__init__.py",
+    (ROOT / "daemon" / "divan" / "__init__.py",
      re.compile(r'^__version__ = "[^"]*"$', re.M), '__version__ = "{v}"'),
     (ROOT / "web" / "package.json",
      re.compile(r'^  "version": "[^"]*",$', re.M), '  "version": "{v}",'),
@@ -67,7 +67,7 @@ def current(tag: str | None) -> str:
     """
     if tag:
         return tag[1:]
-    init = (ROOT / "daemon" / "remote_ai_chat" / "__init__.py").read_text(encoding="utf-8")
+    init = (ROOT / "daemon" / "divan" / "__init__.py").read_text(encoding="utf-8")
     m = re.search(r'^__version__ = "(\d+\.\d+\.\d+)"$', init, re.M)
     return m.group(1) if m else "0.0.0"
 

@@ -19,12 +19,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat import secrets                              # noqa: E402
-from remote_ai_chat.config import Config                       # noqa: E402
-from remote_ai_chat.db import DB                               # noqa: E402
-from remote_ai_chat.providers.base import TurnResult           # noqa: E402
-from remote_ai_chat.server import Server                        # noqa: E402
-from remote_ai_chat.session import ChatSession                  # noqa: E402
+from divan import secrets                              # noqa: E402
+from divan.config import Config                       # noqa: E402
+from divan.db import DB                               # noqa: E402
+from divan.providers.base import TurnResult           # noqa: E402
+from divan.server import Server                        # noqa: E402
+from divan.session import ChatSession                  # noqa: E402
 
 failures: list[str] = []
 

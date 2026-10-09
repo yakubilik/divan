@@ -14,11 +14,11 @@ build next is in [voice-quality-plan.md](voice-quality-plan.md).
 
 | | **Live call** (this ticket) | **Voice note / dictation** (not this ticket) |
 |---|---|---|
-| Entry | `app/app/call.tsx` (call button on the chat list = general call; call button inside a chat = chat call). Incoming rings through CallKit (`app/modules/call`, `app/src/incoming-call.ts`, `daemon/remote_ai_chat/voip.py`). | Record button in `app/app/chat/[id].tsx` (`expo-audio` recorder), or panel dictation |
-| Speech to text | **On the phone**: `@jamsch/expo-speech-recognition` → iOS `SFSpeechRecognizer`, `continuous`, `interimResults`, `requiresOnDeviceRecognition: false` (Apple's servers), `contextualStrings` with 11 product words (`app/src/voice.ts`) | **On the Mac**: `POST /upload` stores the m4a, then `transcribe.transcribe()` runs mlx-whisper large-v3-turbo (`daemon/remote_ai_chat/transcribe.py`); dictation is `POST /dictate` with 16 kHz PCM → `transcribe.pcm()` |
+| Entry | `app/app/call.tsx` (call button on the chat list = general call; call button inside a chat = chat call). Incoming rings through CallKit (`app/modules/call`, `app/src/incoming-call.ts`, `daemon/divan/voip.py`). | Record button in `app/app/chat/[id].tsx` (`expo-audio` recorder), or panel dictation |
+| Speech to text | **On the phone**: `@jamsch/expo-speech-recognition` → iOS `SFSpeechRecognizer`, `continuous`, `interimResults`, `requiresOnDeviceRecognition: false` (Apple's servers), `contextualStrings` with 11 product words (`app/src/voice.ts`) | **On the Mac**: `POST /upload` stores the m4a, then `transcribe.transcribe()` runs mlx-whisper large-v3-turbo (`daemon/divan/transcribe.py`); dictation is `POST /dictate` with 16 kHz PCM → `transcribe.pcm()` |
 | What crosses the network | Text only, on the app's existing WebSocket | The whole recording, uploaded after it ends |
 | Turn end | App timer: 800 ms after the last recogniser result (`SILENCE_MS`) | The person presses stop |
-| Answer | General call: `call.ask` → `Concierge` (`daemon/remote_ai_chat/call.py`), a warm Claude Code session (Sonnet, no built-in tools, four action verbs over in-process MCP), **not streamed** (`include_partial_messages=False`). Chat call: `chat.send` into that chat's real agent, wait for `chat.updated status=idle`, then `call.reply` returns the trimmed last reply (`spoken_reply`, 260 chars) | The transcript becomes a normal chat message |
+| Answer | General call: `call.ask` → `Concierge` (`daemon/divan/call.py`), a warm Claude Code session (Sonnet, no built-in tools, four action verbs over in-process MCP), **not streamed** (`include_partial_messages=False`). Chat call: `chat.send` into that chat's real agent, wait for `chat.updated status=idle`, then `call.reply` returns the trimmed last reply (`spoken_reply`, 260 chars) | The transcript becomes a normal chat message |
 | Speech out | On the phone: EMA Lightning ONNX for Turkish (`app/src/ema.ts`, `app/src/tts/*`), first piece must sound within 1.5 s or the system voice (`expo-speech`) reads that answer | — |
 | Duplex | **Half duplex**: `BARGE_IN = false`; the mic is stopped before speaking and reopened `AFTER_SPEECH_MS = 600` ms after playback ends; cutting in is a tap | — |
 
@@ -205,14 +205,14 @@ python3 daemon/scripts/voice_bench/make_fixtures.py              # → /tmp/diva
 swiftc -O daemon/scripts/voice_bench/apple_stt.swift -o /tmp/divan-voice-bench/apple_stt
 $PY daemon/scripts/voice_bench/run_baseline.py                   # → docs/voice-bench/baseline.json (~3 min)
 $PY daemon/scripts/voice_bench/run_baseline.py --no-whisper --out docs/voice-bench/baseline-run2.json
-RAC_WHISPER_MODEL=mlx-community/whisper-small-mlx $PY daemon/scripts/voice_bench/run_baseline.py \
+DIVAN_WHISPER_MODEL=mlx-community/whisper-small-mlx $PY daemon/scripts/voice_bench/run_baseline.py \
     --whisper-only --out docs/voice-bench/whisper-small.json
-RAC_WHISPER_MODEL=mlx-community/whisper-large-v3-turbo-q4 $PY daemon/scripts/voice_bench/run_baseline.py \
+DIVAN_WHISPER_MODEL=mlx-community/whisper-large-v3-turbo-q4 $PY daemon/scripts/voice_bench/run_baseline.py \
     --whisper-only --out docs/voice-bench/whisper-turbo-q4.json
-$PY daemon/scripts/voice_bench/llm_latency.py --account-home ~/.remote-ai-chat/accounts/<claude-account>
+$PY daemon/scripts/voice_bench/llm_latency.py --account-home ~/.divan/accounts/<claude-account>
 python3 daemon/scripts/voice_bench/turn_durations.py > docs/voice-bench/turn-durations.json
-RAC_WHISPER_MODEL=mlx-community/whisper-small-mlx $PY daemon/scripts/voice_bench/proof.py \
-    --account-home ~/.remote-ai-chat/accounts/<claude-account>  # ~6 min, → docs/voice-bench/proof.json
+DIVAN_WHISPER_MODEL=mlx-community/whisper-small-mlx $PY daemon/scripts/voice_bench/proof.py \
+    --account-home ~/.divan/accounts/<claude-account>  # ~6 min, → docs/voice-bench/proof.json
 $PY daemon/scripts/voice_bench/tts_roundtrip.py                  # → docs/voice-bench/tts-roundtrip.json
 ```
 

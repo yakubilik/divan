@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from remote_ai_chat.db import DB
+from divan.db import DB
 
 TOTAL = 1200
 PAGE = 500
@@ -52,7 +52,7 @@ class FakeServer:
 
 
 async def main() -> int:
-    from remote_ai_chat.server import Server
+    from divan.server import Server
 
     with tempfile.TemporaryDirectory() as tmp:
         db = DB(Path(tmp) / "t.sqlite")
