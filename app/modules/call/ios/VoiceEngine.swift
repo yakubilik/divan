@@ -311,7 +311,9 @@ final class VoiceEngine {
     do {
       try build()
       observe()
-      emit("onAudioRoute", ["reason": "rebuilt", "output": AVAudioSession.sharedInstance().currentRoute.outputs.first?.portName ?? ""])
+      // The old player went with the old engine, items and all, without a completion: say so.
+      emit("onAudioRoute", ["reason": "rebuilt", "flushed": true,
+                            "output": AVAudioSession.sharedInstance().currentRoute.outputs.first?.portName ?? ""])
     } catch {
       emit("onAudioFailed", ["reason": "\(reason): \(error.localizedDescription)"])
     }

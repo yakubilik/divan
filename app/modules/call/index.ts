@@ -22,7 +22,7 @@ export type CallEvent =
   /** 50 ms of echo-cancelled microphone, 16 kHz mono PCM16, base64; `t_ms` is when it was heard. */
   | { event: 'onMicFrame'; pcm: string; t_ms: number }
   | { event: 'onPlayback'; id: string; state: 'started' | 'done'; t_ms: number }
-  | { event: 'onAudioRoute'; reason: string; output: string }
+  | { event: 'onAudioRoute'; reason: string; output: string; flushed?: boolean }
   | { event: 'onAudioInterruption'; began: boolean }
   | { event: 'onAudioFailed'; reason: string };
 

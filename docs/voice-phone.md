@@ -34,7 +34,7 @@ session of [voice-session.md](voice-session.md) and the protocol in
   audio stay on the one authenticated WebSocket (see plan §8.2 for why).
 - **Resources.** Permission is asked before anything opens; a refusal starts no session. An audio
   interruption (a phone call, Siri) or a dead engine releases the microphone and player and takes them
-  back afterwards in the same session; a route change rebuilds the engine in place. In the background
+  back afterwards in the same session; a route change rebuilds the engine in place, and the answer that was on the old player is reported stopped (the rebuilt engine says `flushed`), so the daemon never waits on a piece that can no longer finish. In the background
   the call keeps its microphone (the app has the `audio` background mode, as a phone call does); if iOS
   stopped the engine, it is restarted when the app comes back. Hang-up silences and releases at once,
   then sends `voice.stop`. A call screen opened while a call is up joins it rather than placing a second.

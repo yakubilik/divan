@@ -51,8 +51,10 @@ export interface Wire {
 export type EngineEvent =
   | { kind: 'frame'; pcm: Int16Array; t_ms: number }
   | { kind: 'playback'; id: string; state: 'started' | 'done'; t_ms: number }
-  /** The output changed (headset in or out, Bluetooth, speaker). The engine has already reconnected itself. */
-  | { kind: 'route'; reason: string; output: string }
+  /** The output changed (headset in or out, Bluetooth, speaker). The engine has already reconnected itself.
+   *  `flushed` (reason `rebuilt`): the engine was rebuilt for the new hardware format and everything that
+   *  was on its player is gone without a `done`. */
+  | { kind: 'route'; reason: string; output: string; flushed?: boolean }
   /** Another app or a phone call took the audio session, or gave it back. */
   | { kind: 'interruption'; began: boolean }
   /** The engine died under us (media services reset, a restart that failed). */
@@ -413,6 +415,9 @@ export class VoiceSession {
       // The engine reconnected itself on the new route; the echo there is a different echo.
       this.log(`voice: route ${e.reason} → ${e.output}`);
       this.barge.reset();
+      // A rebuilt engine has an empty player: the piece that was playing will never report done, so it is
+      // reported stopped now with what was heard of it, and the turn's queued pieces go with it.
+      if (e.flushed || e.reason === 'rebuilt') this.dropPlayback(null);
     } else if (e.kind === 'interruption') {
       if (e.began) this.pause();
       else void this.resume();

@@ -34,7 +34,7 @@ function engine(): Engine {
         send({ kind: 'frame', pcm: new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1), t_ms });
       }),
       onCallEvent('onPlayback', ({ id, state, t_ms }) => send({ kind: 'playback', id, state, t_ms })),
-      onCallEvent('onAudioRoute', ({ reason, output }) => send({ kind: 'route', reason, output })),
+      onCallEvent('onAudioRoute', ({ reason, output, flushed }) => send({ kind: 'route', reason, output, flushed })),
       onCallEvent('onAudioInterruption', ({ began }) => send({ kind: 'interruption', began })),
       onCallEvent('onAudioFailed', ({ reason }) => send({ kind: 'failed', reason })),
     ];

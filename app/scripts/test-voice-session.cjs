@@ -104,6 +104,14 @@ class FakeEngine {
     this.plays.push({ id, t: Date.now() });
     this.queue.push({ id, pcm: out, pos: 0 });
   }
+  /** What VoiceEngine.swift's rebuild() does on AVAudioEngineConfigurationChange (a headset plugged in):
+   *  the old player and everything on it is gone with no done, and only a route 'rebuilt' is said. */
+  rebuild(output = 'Headphones') {
+    this.queue = [];
+    this.current = null;
+    this.rebuilds = (this.rebuilds || 0) + 1;
+    this.emit({ kind: 'route', reason: 'rebuilt', flushed: true, output });
+  }
   flush() {
     this.flushes.push(Date.now());
     this.queue = [];
@@ -342,17 +350,35 @@ async function barge(peer, fx) {
       && !p.told.some((t) => t.type === 'voice.playback' && t.data.turn_id === answered && t.data.state === 'started' && t.at > b.stopped));
     report.barge = { onsetToStopMs: budget, spanOnsetToStopMs: flushAt - cut.spanOnset, detectToStopMs: b ? b.stopped - b.detected : null, playedMs: told?.data.played_ms };
 
-    // A headset goes in mid-call: the engine reconnects itself, the session carries on.
+    // A headset goes in while an answer is playing. The engine rebuilds itself the way VoiceEngine.swift
+    // does: the player is emptied with no done, and all that is said is route 'rebuilt'.
     const starts = p.s.starts.length;
-    p.engine.emit({ kind: 'route', reason: 'newDeviceAvailable', output: 'Headphones' });
-    // …and the engine dies under a route change once: the phone takes it back by itself.
-    p.engine.emit({ kind: 'failed', reason: 'configuration change' });
-    await p.until(() => p.engine.running(), 2000);
-    const after = await p.say(fx['short-status']);
-    await p.until(() => p.of('voice.turn').length === 3, 12000);
-    check(`route change: the engine is restarted in place, the same session hears the next utterance, no second voice.start (${p.s.starts.length - starts} new)`,
-      p.engine.running() && p.engine.stopCount >= 1 && p.s.starts.length === starts && after.began > 0
-      && norm(p.of('voice.turn')[2]?.data.committed_text) === norm(fx['short-status'].spans[0].text));
+    const stops = p.engine.stopCount;
+    await p.say(fx['short-status']);
+    await p.until(() => p.s.playingNow(), 12000);
+    const playing = p.s.playingNow();
+    const routeTurn = turnOf(p.engine.plays[p.engine.plays.length - 1].id);
+    const rebuiltAt = Date.now();
+    p.engine.rebuild();
+    const quietNow = !p.s.playingNow();
+    const stoppedTold = p.told.some((t) => t.type === 'voice.playback' && t.data.turn_id === routeTurn
+      && t.data.state === 'stopped' && t.at >= rebuiltAt);
+    await p.until(() => p.s.state === 'listening', 8000);
+    const settled = p.s.state;
+    const turnsBefore = p.of('voice.turn').length;
+    await wait(300);
+    await p.say(fx['short-greeting']);
+    await p.until(() => p.of('voice.turn').length > turnsBefore, 12000);
+    const last = p.of('voice.turn').slice(-1)[0];
+    check(`route change (engine rebuilt mid-answer, no done from the player): the piece is reported stopped, nothing counts as playing, the daemon leaves "speaking" (${settled}), the same session hears the next utterance, no second voice.start (${p.s.starts.length - starts} new)`,
+      playing && quietNow && stoppedTold && settled === 'listening' && p.s.starts.length === starts
+      && p.engine.stopCount === stops && p.engine.running()
+      && norm(last?.data.committed_text) === norm(fx['short-greeting'].spans[0].text));
+    // The engine dying outright (media services reset) is taken back by the phone itself.
+    p.engine.emit({ kind: 'failed', reason: 'media services were reset' });
+    await p.until(() => p.engine.running() && p.engine.stopCount > stops, 2000);
+    check('engine failure: released and started again in the same session, no second voice.start',
+      p.engine.running() && p.engine.stopCount > stops && p.s.starts.length === starts);
   } finally { await p.close(); }
 }
 
