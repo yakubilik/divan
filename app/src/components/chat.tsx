@@ -21,10 +21,16 @@ import { useStore, useT } from '../store';
 import { Icon, SelectableText, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
 import type { Attachment } from '../store';
+import { ticketNotice, type TicketNotice } from '../notice';
 
-export function UserBubble({ text, attachments }: { text: string; attachments?: Attachment[] }) {
+export function UserBubble({ text, attachments, queued, onTicket }: {
+  text: string; attachments?: Attachment[]; queued?: boolean; onTicket?: (n: number) => void;
+}) {
   const c = useColors();
   const atts = attachments ?? [];
+  // A ticket filed from this chat ended: one line, with the report behind it.
+  // Read from the stored text, so a replayed history shows it the same way.
+  const notice = React.useMemo(() => (atts.length ? null : ticketNotice(text)), [text, atts.length]);
   const images = atts.filter((a) => a.kind === 'image' || (!a.kind && /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name || a.path || '')));
   const videos = atts.filter((a) => a.kind === 'video');
   const voices = atts.filter((a) => a.kind === 'audio');
@@ -34,6 +40,14 @@ export function UserBubble({ text, attachments }: { text: string; attachments?: 
   const T = useT();
   const textIsTranscript = voices.length > 0 && (text === T('voiceMessage') || voices.some((v) => v.transcript && v.transcript === text));
   const media = images.length > 0 || videos.length > 0;
+  if (notice) {
+    return (
+      <View style={{ gap: 6 }}>
+        <TicketNoticeRow notice={notice} queued={!!queued} onTicket={onTicket} />
+        {!!notice.after && <UserBubble text={notice.after} />}
+      </View>
+    );
+  }
   return (
     <View style={{ alignSelf: 'flex-end', maxWidth: '80%', alignItems: 'flex-end', gap: media ? 4 : 6 }}>
       {images.length > 0 && <ImageGroup items={images} />}
@@ -45,6 +59,52 @@ export function UserBubble({ text, attachments }: { text: string; attachments?: 
                        borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
                        paddingVertical: 10, paddingHorizontal: 13 }}>
           <SelectableText style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{withSecrets(text, c)}</SelectableText>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const NOTICE_TONE = {
+  done: { icon: 'check', color: 'ok', word: 'tnDone' },
+  blocked: { icon: 'info', color: 'warn', word: 'tnBlocked' },
+  failed: { icon: 'warning', color: 'danger', word: 'tnFailed' },
+} as const;
+
+/** A ticket that ended, told to the chat that filed it (`src/notice.ts`).
+ *
+ *  One line — state, number, title — and a tap opens the report under it, the
+ *  same as the web's. The paragraph that tells the agent what to do is part of
+ *  the stored message and of what the agent read; it is not drawn at all. */
+export function TicketNoticeRow({ notice, queued, onTicket }: { notice: TicketNotice; queued?: boolean; onTicket?: (n: number) => void }) {
+  const c = useColors();
+  const T = useT();
+  const [open, setOpen] = useState(false);
+  const tone = NOTICE_TONE[notice.state];
+  const color = c[tone.color];
+  const word = T(tone.word);
+  return (
+    <View style={{ alignSelf: 'stretch', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 12, overflow: 'hidden' }}>
+      <Pressable onPress={() => setOpen((o) => !o)} accessibilityRole="button" accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${word} #${notice.ticket}: ${notice.title}`}
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}>
+        <Icon name={tone.icon} size={16} color={color} />
+        <Text style={{ fontSize: 13, fontWeight: '600', color }}>{word}</Text>
+        <Text mono style={{ fontSize: 12, color: c.muted }}>#{notice.ticket}</Text>
+        <Text numberOfLines={1} style={{ flex: 1, fontSize: 13.5, color: c.ink }}>{notice.title}</Text>
+        {queued && <Text mono style={{ fontSize: 11, color: c.faint }}>{T('tnQueued')}</Text>}
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={16} color={c.faint} />
+      </Pressable>
+      {open && (
+        <View accessibilityLabel={T('tnReport', { n: notice.ticket })}
+          style={{ borderTopWidth: 1, borderTopColor: c.line, paddingTop: 10, paddingBottom: 12, paddingHorizontal: 12, gap: 8 }}>
+          {notice.report
+            ? <SelectableText style={{ color: c.ink, fontSize: 15, lineHeight: 22 }}>{withSecrets(notice.report, c)}</SelectableText>
+            : <Text style={{ fontSize: 15, color: c.muted }}>{T('tnNoReport')}</Text>}
+          {notice.facts.length > 0 && (
+            <SelectableText mono style={{ fontSize: 12, lineHeight: 18, color: c.muted }}>{notice.facts.join('\n')}</SelectableText>
+          )}
+          {onTicket && <GoDetails ticket={notice.ticket} onPress={() => onTicket(notice.ticket)} />}
         </View>
       )}
     </View>
@@ -672,18 +732,50 @@ export function FiledRule({ project }: { project: string }) {
   );
 }
 
-/** A card this conversation filed, as the small link under the message: its
- *  column and its title, and a press opens it. */
-export function CardLink({ column, title, onPress }: { column: string; title: string; onPress: () => void }) {
+/** A card this conversation filed, as the small chip under the message: its
+ *  column and its title. A tap opens the card inline, in the chat; only its
+ *  Go details button leaves for the ticket. */
+export function CardLink({ ticket, column, title, detail, onPress }: {
+  ticket: number; column: string; title: string; detail?: string; onPress: () => void;
+}) {
   const c = useColors();
+  const T = useT();
+  const [open, setOpen] = useState(false);
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel={`${column}: ${title}`} onPress={onPress}
-      style={({ pressed }) => ({ alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10,
-                                 paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1,
-                                 borderColor: c.line, backgroundColor: c.card, opacity: pressed ? 0.6 : 1, maxWidth: '88%' })}>
-      <Text mono style={{ fontSize: 11.5, color: c.muted }}>{column}</Text>
-      <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500', color: c.ink, flexShrink: 1 }}>{title}</Text>
-      <Icon name="chevron_right" size={16} color={c.muted} />
+    <View style={{ alignSelf: open ? 'stretch' : 'flex-start', maxWidth: open ? '100%' : '88%', borderRadius: 12, borderWidth: 1,
+                   borderColor: c.line, backgroundColor: c.card, overflow: 'hidden' }}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={`${column}: ${title}`}
+        onPress={() => setOpen((o) => !o)}
+        style={({ pressed }) => ({ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10,
+                                   paddingVertical: 10, paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}>
+        <Text mono style={{ fontSize: 11.5, color: c.muted, flexShrink: 0 }}>{column}</Text>
+        <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500', color: c.ink, flexShrink: 1, flexGrow: open ? 1 : 0 }}>{title}</Text>
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={16} color={c.muted} />
+      </Pressable>
+      {open && (
+        <View accessibilityLabel={T('chCardOpen', { n: ticket })}
+          style={{ borderTopWidth: 1, borderTopColor: c.line, paddingTop: 10, paddingBottom: 12, paddingHorizontal: 12, gap: 8 }}>
+          <Text mono style={{ fontSize: 12, color: c.muted }}>#{ticket} · {column}</Text>
+          <SelectableText style={{ color: c.ink, fontSize: 15, lineHeight: 22 }}>{title}</SelectableText>
+          {!!detail && <SelectableText style={{ color: c.text2, fontSize: 14, lineHeight: 20 }}>{detail}</SelectableText>}
+          <GoDetails ticket={ticket} onPress={onPress} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** The one control in an opened ticket that leaves the chat for it. */
+function GoDetails({ ticket, onPress }: { ticket: number; onPress: () => void }) {
+  const c = useColors();
+  const T = useT();
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={T('chGoDetailsOf', { n: ticket })} onPress={onPress} hitSlop={6}
+      style={({ pressed }) => ({ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32,
+                                 paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1,
+                                 borderColor: c.lineStrong, opacity: pressed ? 0.6 : 1 })}>
+      <Text style={{ fontSize: 13.5, fontWeight: '600', color: c.ink }}>{T('chGoDetails')}</Text>
+      <Icon name="chevron_right" size={16} color={c.ink} />
     </Pressable>
   );
 }

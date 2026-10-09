@@ -820,6 +820,235 @@ def run(ticket_id: int, cursor=None) -> dict:
     }
 
 
+# ── what a ticket has used: time, tokens, cost ───────────────────────────────
+#
+# The queue records none of this. What it does keep is a folder per ticket with
+# a directory per run in it — `runs/<id>-<slug>/r<round>-<stage>-<epoch>` — and
+# in each the model's own stream-json, whose closing `result` lines say what
+# the session has used. So the figures are read off those, by three rules:
+#
+#   * a run's time is the run's: from the moment in its directory's name to the
+#     moment its `exit.code` was written. Never the ticket's age — a ticket
+#     waits in a queue, waits on a person and waits between a worker and its
+#     verifier, and none of that is anybody running.
+#   * a `result` line's `total_cost_usd` and `modelUsage` are totals for the
+#     *session*, and a session outlives a run: round 2 resumes round 1's, and
+#     its first line starts where round 1 ended. Adding the lines up would count
+#     round 1 twice, so each line is worth what it says **beyond the last one of
+#     the same session** — and a session whose totals went down started again
+#     from nothing, so that line is worth all of itself.
+#   * the `usage` on every streamed `assistant` line is not read at all. It is
+#     repeated per block of one message and its output count is whatever had
+#     been written when the block was sent; the `result` line is the one figure
+#     the provider stands behind.
+#
+# A run with no `result` line has no figures: null, which is not zero. A run
+# that reported nothing used reports zeros, which is not null.
+
+#: `r2-verifier-1791561066`: the round, whose hands it was in, and when.
+RUN_DIR = re.compile(r"^r(\d+)-([a-z_]+)-(\d+)$")
+
+#: The stages that are not a model: a shell running the ticket's verify_cmd.
+#: They take time and use no tokens, and are not a run that failed to report.
+SHELL_STAGES = ("check",)
+
+TOKEN_KEYS = (("input", "inputTokens", "input_tokens"),
+              ("output", "outputTokens", "output_tokens"),
+              ("cache_read", "cacheReadInputTokens", "cache_read_input_tokens"),
+              ("cache_write", "cacheCreationInputTokens", "cache_creation_input_tokens"))
+
+#: A finished run's reading, by its log's path, size and mtime: the file never
+#: changes again, and a ticket's page asks every few seconds while one is open.
+_usage_cache: dict[str, tuple[tuple[int, int], dict]] = {}
+
+
+def _num(v) -> float | None:
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _result_lines(path: Path) -> dict:
+    """What one run's log says was used: its `result` lines, in order, and
+    whether the session was paid for by an API key or by a subscription."""
+    try:
+        st = path.stat()
+    except OSError:
+        return {"results": [], "key_source": None, "session": ""}
+    stamp = (st.st_size, st.st_mtime_ns)
+    hit = _usage_cache.get(str(path))
+    if hit and hit[0] == stamp:
+        return hit[1]
+
+    results: list[dict] = []
+    seen: set[str] = set()
+    key_source = None
+    session = ""
+    try:
+        with path.open("rb") as fh:
+            for raw in fh:
+                # Two kinds of line out of thousands, and neither is a big one:
+                # looked for as bytes first so the tool output is never parsed.
+                if b'"result"' not in raw and b'"init"' not in raw:
+                    continue
+                try:
+                    d = json.loads(raw)
+                except (ValueError, TypeError):
+                    continue          # the line still being written, among others
+                if not isinstance(d, dict):
+                    continue
+                if d.get("type") == "system" and d.get("subtype") == "init":
+                    key_source = d.get("apiKeySource") or key_source
+                    session = d.get("session_id") or session
+                    continue
+                if d.get("type") != "result":
+                    continue
+                uid = d.get("uuid")
+                if isinstance(uid, str) and uid:
+                    if uid in seen:
+                        continue
+                    seen.add(uid)
+                models = d.get("modelUsage")
+                turn = d.get("usage")
+                results.append({
+                    "session": d.get("session_id") or "",
+                    "cost": _num(d.get("total_cost_usd")),
+                    "models": {
+                        name: {out: _num(m.get(camel)) or 0.0 for out, camel, _ in TOKEN_KEYS}
+                        for name, m in models.items() if isinstance(m, dict)
+                    } if isinstance(models, dict) and models else None,
+                    "turn": {out: _num(turn.get(snake)) or 0.0 for out, _, snake in TOKEN_KEYS}
+                    if isinstance(turn, dict) and turn else None,
+                })
+    except OSError:
+        return {"results": [], "key_source": None, "session": ""}
+    got = {"results": results, "key_source": key_source, "session": session}
+    _usage_cache[str(path)] = (stamp, got)
+    return got
+
+
+def _mtime(path: Path) -> float | None:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _ticket_runs(row: sqlite3.Row) -> list[tuple[Path, int, str, float]]:
+    """Every run directory this ticket has, oldest first. Only the ticket's own
+    folder is looked in, and only if it is named for this ticket."""
+    run_dir = _col(row, "run_dir")
+    folder = Path(run_dir).parent if run_dir else None
+    slug = _col(row, "slug")
+    if folder is None and slug:
+        folder = STATE_DIR / "runs" / f"{row['id']}-{slug}"
+    if folder is None or not folder.name.startswith(f"{row['id']}-"):
+        return []
+    out = []
+    try:
+        for p in folder.iterdir():
+            m = RUN_DIR.match(p.name)
+            if m and p.is_dir():
+                out.append((p, int(m.group(1)), m.group(2), float(m.group(3))))
+    except OSError:
+        return []
+    return sorted(out, key=lambda r: (r[3], r[0].name))
+
+
+def telemetry(ticket_id: int) -> dict | None:
+    """How long this ticket's runs took and what they used, run by run and
+    added up. None where there is no queue, no such ticket, or no run of it
+    left on disk — nothing to say, which is not the same as nothing used."""
+    if not available():
+        return None
+    row = _run_row(ticket_id)
+    if row is None:
+        return None
+    found = _ticket_runs(row)
+    if not found:
+        return None
+
+    current = _col(row, "run_dir")
+    # What each session had reported by the end of the run before, so a line is
+    # only ever worth what it adds.
+    seen_cost: dict[str, float] = {}
+    seen_tokens: dict[tuple[str, str], dict[str, float]] = {}
+    runs: list[dict] = []
+    basis: set[str] = set()
+
+    for path, round_no, stage, started in found:
+        ended = _mtime(path / "exit.code")
+        live = ended is None and row["status"] == "running" and str(path) == str(current)
+        if ended is None and not live:
+            # Stopped without the queue getting to write how: the last thing it
+            # printed is the last moment anybody knows it was running.
+            ended = _mtime(path / "stdout.log")
+        shell = stage in SHELL_STAGES
+        log = ({"results": [], "key_source": None, "session": ""} if shell
+               else _result_lines(path / "stdout.log"))
+        if log["key_source"]:
+            basis.add("api" if log["key_source"] != "none" else "estimate")
+
+        cost: float | None = None
+        tokens: dict[str, float] | None = None
+        for r in log["results"]:
+            sid = r["session"]
+            if r["cost"] is not None:
+                before = seen_cost.get(sid, 0.0)
+                cost = (cost or 0.0) + (r["cost"] - before if r["cost"] >= before else r["cost"])
+                seen_cost[sid] = r["cost"]
+            if r["models"] is not None:
+                tokens = tokens or dict.fromkeys((k for k, _, _ in TOKEN_KEYS), 0.0)
+                for name, now in r["models"].items():
+                    before_m = seen_tokens.get((sid, name))
+                    # One model's totals going down is that model starting over.
+                    fresh = before_m is None or any(now[k] < before_m[k] for k in now)
+                    for k in now:
+                        tokens[k] += now[k] if fresh else now[k] - before_m[k]
+                    seen_tokens[(sid, name)] = now
+            elif r["turn"] is not None:
+                # No per-session totals on this line: what the turn itself used.
+                tokens = tokens or dict.fromkeys((k for k, _, _ in TOKEN_KEYS), 0.0)
+                for k, v in r["turn"].items():
+                    tokens[k] += v
+
+        runs.append({
+            "run": path.name, "stage": stage, "round": round_no,
+            "started_at": started, "ended_at": ended, "live": live,
+            "model": not shell, "session": log["session"],
+            "tokens": {k: int(v) for k, v in tokens.items()} if tokens is not None else None,
+            "cost_usd": round(cost, 6) if cost is not None else None,
+        })
+
+    # A run that was cut off before its closing line is not lost if its session
+    # was picked up again: the next run's first line carries what it had used.
+    reported = {r["session"] for r, (path, *_) in zip(runs, found)
+                for line in _result_lines(path / "stdout.log")["results"]
+                if r["tokens"] is not None and line["session"] == r["session"]}
+    unreported = sum(1 for r in runs if r["model"] and not r["live"] and r["tokens"] is None
+                     and not (r["session"] and r["session"] in reported))
+    for r in runs:
+        del r["session"]
+    counted = [r for r in runs if r["tokens"] is not None]
+    priced = [r for r in runs if r["cost_usd"] is not None]
+    return {
+        "runs": runs,
+        # The time somebody was actually running: finished runs only. The one
+        # still going is added by whoever holds a clock.
+        "active_seconds": sum(max(0.0, r["ended_at"] - r["started_at"])
+                              for r in runs if r["ended_at"] is not None),
+        "tokens": {k: sum(r["tokens"][k] for r in counted) for k, _, _ in TOKEN_KEYS}
+        if counted else None,
+        "cost_usd": round(sum(r["cost_usd"] for r in priced), 6) if priced else None,
+        # `estimate`: no API key behind the session, so the figure is what the
+        # same tokens would have cost at list price and nobody was charged it.
+        # `api`: an API key paid. `mixed` where a ticket has had both, and null
+        # where no run said.
+        "cost_basis": (basis.pop() if len(basis) == 1 else "mixed") if basis else None,
+        # Model runs that are over and left no figures: their use is in nobody's
+        # total, and the page says so rather than showing a total as whole.
+        "unreported": unreported,
+    }
+
+
 # ── what the queue told the owner, and what a ticket left behind ───────────
 
 #: How far back the inbox reaches. Older than that is history, not news.

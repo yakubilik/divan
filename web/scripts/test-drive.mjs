@@ -1694,7 +1694,7 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
   const calmLine = doc.querySelector('[data-summary]')?.textContent ?? '';
   await act(async () => { seed(useDivanStore, { snaps: board('slow') }); });
   const tiles = [...doc.querySelectorAll('a[data-tile]')];
-  const order = tiles.map((a) => `${a.dataset.tile}${a.classList.contains('dv-tile--dormant') ? '*' : ''}`);
+  const order = tiles.map((a) => `${a.dataset.tile}${a.closest('[data-project-card]')?.classList.contains('dv-tile--dormant') ? '*' : ''}`);
   await act(async () => { seed(useDivanStore, { snaps: board('busy') }); });
   const busyLine = doc.querySelector('[data-summary]')?.textContent ?? '';
   const totals = (await import(pathToFileURL(join(out, 'src/lib/divan.js')).href))
@@ -2642,6 +2642,123 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
     seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'] });
   });
   await reload('/');
+}
+
+group('a project card says where its product stands, live (#179)');
+{
+  const now = Math.floor(Date.now() / 1000);
+  const studio = () => boards(now).busy[0].snap;
+  const put = async (snap, at = now) => {
+    await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, at) } }); });
+    for (let i = 0; i < 2; i++) await act(async () => {});
+  };
+  const card = (key) => doc.querySelector(`[data-project-card="${key}"]`);
+  const said = (key) => (card(key)?.textContent ?? '');
+  const line = (key, id) => card(key)?.querySelector(`[data-active-ticket="${id}"]`) ?? null;
+  const back = async () => {
+    await act(async () => {
+      const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+      w.history.back();
+      await landed;
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  };
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true });
+  });
+  await put(studio());
+  await press('0');
+  for (let i = 0; i < 3; i++) await act(async () => {});
+
+  // 1 · the cards replace both rows of badges
+  ok('the Running row is gone and every product is a card in the grid under the Composer',
+    !doc.querySelector('#running-now') && !doc.querySelector('[data-running]')
+      && !!doc.querySelector('.dv-pcards') && !!card('quire') && !!card('hush')
+      && !!(doc.querySelector('#composer-in')
+        ?.compareDocumentPosition(doc.querySelector('.dv-pcards')) & w.Node.DOCUMENT_POSITION_FOLLOWING),
+    `${[...doc.querySelectorAll('[data-project-card]')].map((e) => e.dataset.projectCard).join(' ')} · ${!!doc.querySelector('#running-now')} ${!!doc.querySelector('[data-running]')} ${!!doc.querySelector('#composer-in')} ${w.location.pathname}`);
+
+  // 2 · stage, summary, tickets and their stage, without opening anything
+  const quire = said('quire');
+  ok('a card shows its product’s own stage and summary, and says so where nobody wrote one',
+    card('quire').querySelector('[data-stage]')?.textContent === 'Live'
+      && quire.includes('client portals for studios')
+      && card('hush').querySelector('[data-stage]')?.textContent === 'stage not set',
+    quire);
+  ok('…its open tickets by number and title, at the stage each one is at, worst first',
+    line('quire', 'k2')?.textContent.includes('#42Stripe keys') && line('quire', 'k2')?.textContent.includes('asks you')
+      && line('quire', 'k1')?.textContent.includes('#41Webhook retry policy') && line('quire', 'k1')?.textContent.includes('working')
+      && [...card('quire').querySelectorAll('[data-active-ticket]')].map((e) => e.dataset.activeTicket).join(' ') === 'k2 k1'
+      && said('hush').includes('App Review reply') && line('hush', 'h1')?.textContent.includes('your call'),
+    [...card('quire').querySelectorAll('[data-active-ticket]')].map((e) => e.textContent).join(' | '));
+  ok('…its blockers, and never the question itself — that is read in the floating chat',
+    card('quire').querySelector('[data-blocker="o1"]')?.textContent.includes('Payment provider keys')
+      && card('quire').querySelector('[data-blocker="o1"]')?.textContent.includes('blocked')
+      && !quire.includes('Use the live ones now') && !quire.includes('Write the onboarding mail'),
+    quire);
+  ok('…and nothing of one product is on the other’s card',
+    !said('hush').includes('Stripe keys') && !said('hush').includes('Webhook') && !quire.includes('App Review reply'));
+
+  // 3 · a stage change and a new queued ticket arrive with the next poll
+  const moved = studio();
+  moved.cards = moved.cards.map((c) => (c.id === 'k1' ? { ...c, column: 'review' } : c));
+  moved.cards.push({ ...moved.cards[0], id: 'k5', title: 'Rate limits for the public API', column: 'queued',
+                     agent_status: 'queued', ustabasi_id: 45 });
+  await put(moved);
+  ok('a ticket that moved to review and one that was queued redraw the right card, with no reload',
+    line('quire', 'k1')?.dataset.ticketStage === 'review' && line('quire', 'k1')?.textContent.includes('in review')
+      && line('quire', 'k5')?.textContent.includes('queued') && !line('hush', 'k5')
+      && card('quire').querySelector('[data-project-status]')?.textContent.includes('1 queued')
+      && card('quire').querySelector('[data-project-status]')?.textContent.includes('1 working')
+      && card('hush').querySelector('[data-project-status]')?.textContent.includes('1 needs you'),
+    `${card('quire').querySelector('[data-project-status]')?.textContent} · ${line('quire', 'k1')?.textContent}`);
+
+  // 4 · many tickets stay discoverable
+  const many = studio();
+  for (let i = 0; i < 4; i++) {
+    many.cards.push({ ...many.cards[0], id: `q${i}`, title: `Queued work number ${i}`, column: 'queued',
+                      agent_status: 'queued', ustabasi_id: 60 + i });
+  }
+  await put(many);
+  const shown = card('quire').querySelectorAll('[data-active-ticket]').length;
+  const more = find('+3 more', card('quire'));
+  await click(more);
+  ok('beyond three tickets the rest are behind "+N more", which opens in place',
+    shown === 3 && !!more && card('quire').querySelectorAll('[data-active-ticket]').length === 6
+      && find('Show fewer', card('quire'))?.getAttribute('aria-expanded') === 'true'
+      && w.location.pathname === '/',
+    `${shown} · ${w.location.pathname}`);
+
+  // 5 · the ticket link opens that ticket, the card opens the product, Back comes home
+  await put(studio());
+  await click(card('quire').querySelector('[data-ticket-link="k1"]'));
+  const toTicket = w.location.pathname;
+  await back();
+  const homeAgain = home() && w.location.pathname === '/';
+  await click(card('quire').querySelector('[data-project-status]'));
+  const toProject = w.location.pathname;
+  await back();
+  ok('a ticket link opens exactly that ticket and not the project, the card opens the project, and Back returns each time',
+    toTicket === '/p/quire/c/k1' && homeAgain && toProject === '/p/quire' && home() && w.location.pathname === '/',
+    `${toTicket} · ${homeAgain} · ${toProject} · ${w.location.pathname}`);
+
+  // 6 · no active work, and a machine that has gone quiet
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(boards(now).slow[0].snap, now) } }); });
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  ok('a product with nothing open says so, with what was last known and no ticket list',
+    said('the-long-walk').includes('No active work · last commit 4w ago')
+      && !card('the-long-walk').querySelector('[data-active-ticket]')
+      && said('pebble').includes('No active work') && said('pebble').includes('No summary written yet.'),
+    `${said('the-long-walk')} · ${said('pebble')}`);
+  await act(async () => {
+    seed(useDivanStore, { snaps: { studio: silent(answered(studio(), now - 600), 'That computer did not answer') } });
+  });
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  ok('…and a card from a machine that went quiet says when it was last seen, not that work is live',
+    card('quire').querySelector('[data-stale]')?.textContent.startsWith('last seen')
+      && line('quire', 'k1')?.textContent.includes('last seen working'),
+    said('quire'));
+  await put(studio());
 }
 
 group('nothing was lost on the way');
