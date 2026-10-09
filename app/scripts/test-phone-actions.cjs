@@ -188,6 +188,102 @@ const ready = (async () => {
   checks.push([`phone: Daily in the move sheet sends updateChat with group_id null and project_id '', and a chat put in Daily is listed under Daily — ${JSON.stringify({ sent, listed })}`,
     sent.length === 1 && sent[0][0] === 'c1' && sent[0][1].group_id === null && sent[0][1].project_id === '' && listed]);
 
+  // Placement, read the way the web's sidebar reads it: a group that exists,
+  // then the product the chat is saved under (by name, or by id through the
+  // board), and only then the folder or Daily. Never the title.
+  {
+    const { chatSections } = require(path.join(root, 'src/chat-sections.ts'));
+    const FREYA = '62d17d0a16ab';
+    const fixture = () => ({
+      freya: chat('Judging rubric', '/Users/x/projects/freya-agent', { id: 'freya', project_id: FREYA, project: 'Freya Hackathon' }),
+      // Only the id came with it: the name is the board's.
+      pitch: chat('Pitch deck', '/Users/x/projects/scratch', { id: 'pitch', project_id: FREYA, project: null }),
+      reel: chat('Reel notes', '/Users/x/projects/DevTrace-main', { id: 'reel', project_id: 'pdivan', project: 'Divan' }),
+      ledger: chat('Ledger fix', '/r/quire', { id: 'ledger', group_id: 'g1', project_id: FREYA, project: 'Freya Hackathon' }),
+      orphan: chat('Orphan', '/r/hush', { id: 'orphan', group_id: 'gone' }),
+      mail: chat('Mail search', '/r/mailbox', { id: 'mail', project_id: '', project_set: 1 }),
+      decoy: chat('Divan pitch', '/r/alpha', { id: 'decoy' }),
+    });
+    const quire = { id: 'g1', name: 'Quire', sort: 0 };
+    const stage = (chats, groups, view = 'grouped') => {
+      machine.stand({ params: { all: '1' } });
+      R.store.set({ prefs: { chatView: view, voiceIds: {} }, groups, chats, updateChat: rec('updateChat'),
+        divan: { h1: { at: 0, reachable: true, error: null, old: false, snapshot: { machine: 'studio', at: 0, quota: null, queue: {}, activity: {},
+          projects: [{ id: FREYA, name: 'Freya Hackathon', slug: 'freya', summary: '' }, { id: 'pdivan', name: 'Divan', slug: 'divan', summary: '' }],
+          cards: [], agents: [] } } } });
+      R.render('dark', h(Chats, { all: '1' }));
+    };
+    // Heading → the chats drawn under it, off what the render left holdable:
+    // a row starts with its chat's title, and anything else held is a heading
+    // (its title, then its count).
+    const layout = () => {
+      const at = {}; let cur = null;
+      for (const { text } of R.holds()) {
+        const row = Object.values(fixture()).find((c) => text.startsWith(c.title));
+        if (row) (at[cur] ||= []).push(row.title);
+        else if (text) cur = text.replace(/\d+$/, '');
+      }
+      return at;
+    };
+    const once = (at) => Object.values(fixture()).every((c) => Object.values(at).flat().filter((t) => t === c.title).length === 1);
+
+    stage(fixture(), [quire]);
+    const a = layout();
+    const products = a['Freya Hackathon']?.join() === 'Judging rubric,Pitch deck' && a.Divan?.join() === 'Reel notes'
+      && !a['~/projects/DevTrace-main'] && a['/r/alpha']?.join() === 'Divan pitch';
+    checks.push([`phone: a Freya chat is listed under Freya Hackathon (by name, and by id through the board) and a Divan chat opened in DevTrace-main under Divan, never by title — ${JSON.stringify(a)}`,
+      products && once(a)]);
+
+    const merged = { id: 'g2', name: 'divan', sort: 1 };
+    stage(fixture(), [quire, merged]);
+    const b = layout();
+    const headings = R.holds().filter((x) => /^divan\d+$/i.test(x.text)).length;
+    const rules = a.Quire?.join() === 'Ledger fix' && b.divan?.join() === 'Reel notes' && headings === 1
+      && a['/r/hush']?.join() === 'Orphan' && a.Daily?.join() === 'Mail search';
+    checks.push([`phone: an existing group wins over the product, a product shares the heading of a group with its name, a deleted group's chat falls to its folder, and no chat is listed twice — ${JSON.stringify({ a, b, headings })}`,
+      rules && once(a) && once(b)]);
+
+    // Search and the flat view answer with the same conversations.
+    const ids = (s) => s.flatMap((x) => x.data.map((c) => c.id)).sort().join();
+    const read = (q, flat) => chatSections({ chats: fixture(), groups: [quire], productNames: { [FREYA]: 'Freya Hackathon' }, q, collapsed: {},
+      showArchived: false, flat, daily: 'Daily', only: 'Chats' });
+    const same = ['', 'notes', 'pitch', 'ok'].every((q) => ids(read(q, true)) === ids(read(q, false)))
+      && ids(read('pitch', false)) === 'decoy,pitch';
+    stage(fixture(), [quire], 'flat');
+    const flatRows = R.holds().filter((x) => Object.values(fixture()).some((c) => x.text.startsWith(c.title))).length;
+    checks.push([`phone: the flat view and every search list the same conversations grouped or not — ${JSON.stringify({ same, flatRows })}`,
+      same && flatRows === Object.keys(fixture()).length]);
+
+    // A row opens its own chat; Daily takes a product's chat out of it; and the
+    // computer's echo (`chat.updated`, which replaces the one record) moves the
+    // row rather than copying it.
+    stage(fixture(), [quire]);
+    R.nav.reset();
+    await press((p) => (p.text ?? '').startsWith('Reel notes'));
+    const opened = R.nav.pushed().includes('/chat/reel');
+    calls = [];
+    R.menus.reset();
+    const held = R.holds().find((x) => x.text.startsWith('Reel notes'));
+    const sheets = [];
+    const realReplace = overlay.replaceMenu;
+    overlay.replaceMenu = (items) => { sheets.push(items); };
+    if (held) { held.hold(); await flush(); }
+    await choose('Move to group');
+    (sheets.at(-1) ?? []).find((i) => i.label === 'Daily')?.onPress?.();
+    await flush();
+    overlay.replaceMenu = realReplace;
+    const moved = calls.filter(([m]) => m === 'updateChat').map(([, x]) => x);
+    const live = fixture();
+    live.reel = { ...live.reel, group_id: null, project_id: '', project: null, project_set: 1 };
+    live.decoy = { ...live.decoy, project_id: FREYA, project: 'Freya Hackathon' };
+    stage(live, [quire]);
+    const c = layout();
+    const echoed = c.Daily?.includes('Reel notes') && !c.Divan && c['Freya Hackathon']?.includes('Divan pitch') && !c['/r/alpha'];
+    checks.push([`phone: a row opens its chat, Daily sends updateChat with group_id null and project_id '', and a live update moves the row without a copy — ${JSON.stringify({ opened, moved, c })}`,
+      opened && moved.length === 1 && moved[0][0] === 'reel' && moved[0][1].group_id === null && moved[0][1].project_id === ''
+        && echoed && once(c)]);
+  }
+
   // Settings: notifications, the default model, and removing a computer.
   screen('settings.tsx');
   await press((p) => p.label === 'Approval requests');
