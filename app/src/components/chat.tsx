@@ -21,10 +21,14 @@ import { useStore, useT } from '../store';
 import { Icon, SelectableText, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
 import type { Attachment } from '../store';
+import { ticketNotice, type TicketNotice } from '../notice';
 
-export function UserBubble({ text, attachments }: { text: string; attachments?: Attachment[] }) {
+export function UserBubble({ text, attachments, queued }: { text: string; attachments?: Attachment[]; queued?: boolean }) {
   const c = useColors();
   const atts = attachments ?? [];
+  // A ticket filed from this chat ended: one line, with the report behind it.
+  // Read from the stored text, so a replayed history shows it the same way.
+  const notice = React.useMemo(() => (atts.length ? null : ticketNotice(text)), [text, atts.length]);
   const images = atts.filter((a) => a.kind === 'image' || (!a.kind && /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name || a.path || '')));
   const videos = atts.filter((a) => a.kind === 'video');
   const voices = atts.filter((a) => a.kind === 'audio');
@@ -34,6 +38,14 @@ export function UserBubble({ text, attachments }: { text: string; attachments?: 
   const T = useT();
   const textIsTranscript = voices.length > 0 && (text === T('voiceMessage') || voices.some((v) => v.transcript && v.transcript === text));
   const media = images.length > 0 || videos.length > 0;
+  if (notice) {
+    return (
+      <View style={{ gap: 6 }}>
+        <TicketNoticeRow notice={notice} queued={!!queued} />
+        {!!notice.after && <UserBubble text={notice.after} />}
+      </View>
+    );
+  }
   return (
     <View style={{ alignSelf: 'flex-end', maxWidth: '80%', alignItems: 'flex-end', gap: media ? 4 : 6 }}>
       {images.length > 0 && <ImageGroup items={images} />}
@@ -45,6 +57,51 @@ export function UserBubble({ text, attachments }: { text: string; attachments?: 
                        borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
                        paddingVertical: 10, paddingHorizontal: 13 }}>
           <SelectableText style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{withSecrets(text, c)}</SelectableText>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const NOTICE_TONE = {
+  done: { icon: 'check', color: 'ok', word: 'tnDone' },
+  blocked: { icon: 'info', color: 'warn', word: 'tnBlocked' },
+  failed: { icon: 'warning', color: 'danger', word: 'tnFailed' },
+} as const;
+
+/** A ticket that ended, told to the chat that filed it (`src/notice.ts`).
+ *
+ *  One line — state, number, title — and a tap opens the report under it, the
+ *  same as the web's. The paragraph that tells the agent what to do is part of
+ *  the stored message and of what the agent read; it is not drawn at all. */
+export function TicketNoticeRow({ notice, queued }: { notice: TicketNotice; queued?: boolean }) {
+  const c = useColors();
+  const T = useT();
+  const [open, setOpen] = useState(false);
+  const tone = NOTICE_TONE[notice.state];
+  const color = c[tone.color];
+  const word = T(tone.word);
+  return (
+    <View style={{ alignSelf: 'stretch', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 12, overflow: 'hidden' }}>
+      <Pressable onPress={() => setOpen((o) => !o)} accessibilityRole="button" accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${word} #${notice.ticket}: ${notice.title}`}
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}>
+        <Icon name={tone.icon} size={16} color={color} />
+        <Text style={{ fontSize: 13, fontWeight: '600', color }}>{word}</Text>
+        <Text mono style={{ fontSize: 12, color: c.muted }}>#{notice.ticket}</Text>
+        <Text numberOfLines={1} style={{ flex: 1, fontSize: 13.5, color: c.ink }}>{notice.title}</Text>
+        {queued && <Text mono style={{ fontSize: 11, color: c.faint }}>{T('tnQueued')}</Text>}
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={16} color={c.faint} />
+      </Pressable>
+      {open && (
+        <View accessibilityLabel={T('tnReport', { n: notice.ticket })}
+          style={{ borderTopWidth: 1, borderTopColor: c.line, paddingTop: 10, paddingBottom: 12, paddingHorizontal: 12, gap: 8 }}>
+          {notice.report
+            ? <SelectableText style={{ color: c.ink, fontSize: 15, lineHeight: 22 }}>{withSecrets(notice.report, c)}</SelectableText>
+            : <Text style={{ fontSize: 15, color: c.muted }}>{T('tnNoReport')}</Text>}
+          {notice.facts.length > 0 && (
+            <SelectableText mono style={{ fontSize: 12, lineHeight: 18, color: c.muted }}>{notice.facts.join('\n')}</SelectableText>
+          )}
         </View>
       )}
     </View>

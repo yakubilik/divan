@@ -477,7 +477,7 @@ export function Conversation({ id }: { id: string }) {
       // starts a text selection, and a Pressable takes it first. Copying the
       // whole message is still one tap away — iOS offers Select All beside Copy
       // in the selection menu — and now part of a message can be taken too.
-      case 'user': return <UserBubble text={item.data.text} attachments={item.data.attachments} />;
+      case 'user': return <UserBubble text={item.data.text} attachments={item.data.attachments} queued={item.data.queued} />;
       case 'assistant':
         if (item.data.thinking) return <ThinkingRow text={item.data.thinking.trim().slice(-240)} />;
         return <AssistantText text={item.data.text} streaming={item.data.live} attachments={item.data.attachments} />;

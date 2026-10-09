@@ -564,6 +564,9 @@ const en = {
   // HANDOVER §4.8: one conversation, filed by Hermes.
   chFiled: 'filed under {project}', chTalk: 'Talk to Hermes', chNoneYet: 'No conversation yet.',
   chCardQueued: 'Queued',
+  // A ticket filed from this chat ended (docs/ticket-notices.md); the words match the web.
+  tnDone: 'Done', tnBlocked: 'Needs an answer', tnFailed: 'Failed', tnQueued: 'queued',
+  tnNoReport: 'No report came with it.', tnReport: 'Ticket #{n} report',
   dayToday: 'today', dayYesterday: 'yesterday',
   // Machine › Machines (Mobile11 S15): one card per computer, and the quota
   // that belongs to the account rather than to any of them over the top.
