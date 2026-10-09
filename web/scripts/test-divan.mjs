@@ -1182,7 +1182,8 @@ group('design/divan/TOKENS.md');
  *  and after a merge. */
 function carried() {
   try {
-    const out = execFileSync('git', ['diff', '--name-only', 'main...HEAD', '--', 'web/src'],
+    // `d`: a file this branch deleted has nothing left to carry or to read.
+    const out = execFileSync('git', ['diff', '--name-only', '--diff-filter=d', 'main...HEAD', '--', 'web/src'],
       { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     const list = out.split('\n').filter(Boolean).map((f) => f.replace(/^web\//, ''));
     if (list.length) return list;
@@ -1241,7 +1242,12 @@ group('every carried screen asks its computer for exactly what it did');
    *  wall's tiles stopped lighting up under the pointer when they became
    *  `Card`s. Nothing a person can do changed; a colour that appeared under
    *  the mouse did not. */
-  const ON_PURPOSE = { 'src/screens/Ustabasi.tsx': ['MouseEnter', 'MouseLeave'] };
+  const ON_PURPOSE = {
+    'src/screens/Ustabasi.tsx': ['MouseEnter', 'MouseLeave'],
+    // The command bar stood only on a branch's page, and went with it
+    // (ustabasi #147): its field was the one `onChange` on the Dashboard.
+    'src/screens/Overview.tsx': ['Change'],
+  };
   const allow = (f, before) => {
     const [reqs, drives] = JSON.parse(before);
     const dropped = ON_PURPOSE[f] ?? [];
