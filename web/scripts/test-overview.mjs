@@ -58,7 +58,7 @@ mkdirSync(out, { recursive: true });
 execFileSync(join(web, 'node_modules', '.bin', 'tsc'), [
   'web/src/App.tsx', 'web/src/lib/divan.ts', 'web/src/lib/overview.ts', 'web/src/lib/sessions.ts',
   'web/src/lib/project.ts', 'web/src/lib/ticket.ts',
-  'web/src/screens/Overview.tsx', 'web/src/screens/Project.tsx', 'web/src/screens/Branch.tsx',
+  'web/src/screens/Overview.tsx', 'web/src/screens/Project.tsx',
   'web/src/screens/Ticket.tsx', 'web/src/components/Sessions.tsx',
   'web/src/lib/tell.ts', 'web/src/components/ChatPanel.tsx', 'web/src/vite-env.d.ts',
   'web/src/lib/transcript.ts', 'app/src/transcript.ts', 'web/src/lib/ustabasi.ts',
@@ -280,19 +280,12 @@ group('the panel and the phone say the same thing about the same board');
       note(`${card} · its faces`,
         p.branches.map((b) => [b.kind, b.summary, b.summary_at, b.cards, b.open, b.machines]),
         q.branches.map((b) => [b.kind, b.summary, b.summary_at, b.cards, b.open, b.machines]));
-      note(`${card} · what each face says`,
-        PR.branchCards(p, mine.now).map((b) => [b.key, b.name, b.state, b.line,
-          b.figures, b.refreshed]),
-        PP.branchCards(q, theirs.now).map((b) => [b.key, b.name, b.state,
-          b.said ? said(b.said) : b.text,
-          b.figures.map((f) => ({ value: f.value, label: t(f.label) })),
-          b.refreshed ? { text: said(b.refreshed.said), tone: b.refreshed.tone } : null]));
       note(`${card} · the two lines at the top`,
         [PR.nowLine(mine, p), PR.waitingLine(p)],
         [line(PP.nowWords(theirs, q)), line(PP.waitingWords(theirs, q))]);
       note(`${card} · whether its board has never been used`,
-        [PR.blank(p), PR.blank(p) ? PR.blankBody(p) : null],
-        [PP.blank(q), PP.blank(q) ? said(PP.blankBody(q)) : null]);
+        [PR.blank(p), PR.blank(p) ? PR.blankBody() : null],
+        [PP.blank(q), PP.blank(q) ? said(PP.blankBody()) : null]);
     }
 
     const rows = OV.agentRows(mine);
@@ -388,10 +381,10 @@ group('the Dashboard: greeting, Composer, Needs you, Projects, Working now');
   ok('nothing on the page is a colour of its own',
     [...paint(dark).literal].every((c) => OWN.has(c)), [...paint(dark).literal].join(', '));
   ok('the pages under a product still spell no style of their own',
-    ['src/components/Sessions.tsx', 'src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
+    ['src/components/Sessions.tsx', 'src/screens/Project.tsx', 'src/screens/Ticket.tsx']
       .every((f) => !COLOUR.test(src(f).replace(/\/\*[\s\S]*?\*\//g, ''))));
   ok('…and none of the pages under a product reaches the chat',
-    ['src/screens/Project.tsx', 'src/screens/Branch.tsx', 'src/screens/Ticket.tsx']
+    ['src/screens/Project.tsx', 'src/screens/Ticket.tsx']
       .every((f) => !/from '[^']*(ChatView|Bubble|Timeline|ChatDetails|TicketChat|NewChat)'/
         .test(src(f))));
 }
@@ -855,7 +848,7 @@ group('a morning where nothing needs anybody is a designed state');
 
 // ── 5 · the three pages under a product ───────────────────────────────────
 
-group('Web14 W6, W7 and W8');
+group('Web14 W6 and W8, with no branch on either');
 {
   const busy = view('busy');
   const quire = busy.projects.find((p) => p.key === 'quire');
@@ -863,10 +856,6 @@ group('Web14 W6, W7 and W8');
     view: busy, project: quire, onProject() {}, ...props,
   }));
   const product = scoped({});
-  const faces = scoped({ tab: 'branches' });
-  const engineeringNow = () => scoped({ branch: 'Engineering' });
-  const engineering = engineeringNow();
-  const seo = scoped({ branch: 'SEO' });
 
   // The product page is one screen: what was done on it today, the board in
   // four numbers and what is in progress. Nothing to switch between — no
@@ -875,9 +864,26 @@ group('Web14 W6, W7 and W8');
     product.includes('live since') && product.includes('In progress now') && product.includes('id="p-today"'));
   ok('…with no tabs over it and no New ticket',
     !product.includes('dv-seg') && !product.includes('New ticket') && !product.includes('aria-pressed'));
-  ok('the faces are a page of their own, with their own numbers',
-    faces.includes('Branches') && faces.includes('Engineering')
-    && faces.includes('SEO') && faces.includes('open') && faces.includes('done'));
+  // Branches are gone from the panel (ustabasi #147). Quire has four of them,
+  // with a summary written on one, and the page names none of them — no
+  // section, no way to a branch's page, nothing to pick one with.
+  ok('a product with branches draws no Branches section, branch link or branch picker',
+    quire.branches.length === 4
+    && !product.includes('Branches') && !product.includes('Everything on')
+    && !product.includes('/branches"') && !/href="[^"]*\/b\//.test(product)
+    && !product.includes('Bulk invite is three checks in.')
+    && !quire.branches.some((b) => product.includes(`>${b.name}<`)),
+    quire.branches.map((b) => b.name).join(' '));
+  // …and what the branches tab used to be the way to — the repositories — is
+  // on the product page itself, next to Still open.
+  ok('…and its repositories are on the product page, beside Still open',
+    product.includes('id="p-repos"') && quire.repos.length > 0
+    && quire.repos.every((r) => product.includes(`data-repo="${r}"`))
+    && product.indexOf('Still open') < product.indexOf('id="p-repos"'));
+  ok('…while its board, chats, status and Still open are all still reachable',
+    product.includes(`href="/p/quire/board"`) && product.includes('data-counts')
+    && product.includes('data-project-page') && product.includes('data-meta')
+    && product.includes('Still open'));
 
   // Today is what was done, not who did it: the lines the computer wrote on
   // the chats that moved since midnight, latest first, and no row for a chat
@@ -933,24 +939,6 @@ group('Web14 W6, W7 and W8');
     PR.rail(hush) === null && PR.timeline(hush, busy.now).length === 0
     && PR.facts(hush, busy.now).length === 0);
 
-  // A branch with no source connected says so — on the grid, and on the page
-  // the grid opens.
-  ok('a branch with nothing connected behind it says so',
-    faces.includes(PR.NO_SOURCE) && seo.includes(PR.NOT_CONNECTED) && !seo.includes('data-figures')
-    && !seo.includes('What the agent did') && PR.branchCards(quire, busy.now).find((b) => b.kind === 'SEO').sourceless === true);
-  ok('…and one that has a source says what it said instead',
-    engineering.includes('Bulk invite is three checks in.')
-    && !engineering.slice(engineering.indexOf('Engineering'), engineering.indexOf('Repositories'))
-      .includes(PR.NO_SOURCE)
-    && PR.branchCards(quire, busy.now).find((b) => b.kind === 'Engineering').sourceless === false);
-  ok('…and one nothing is connected to but something was said on quotes that',
-    PR.branchCards(quire, busy.now).find((b) => b.kind === 'API').line
-      === 'The provider replays events out of order and I gave up.');
-  ok('a branch page is its figures, its repositories and tickets, and what the agent did beside them',
-    engineering.includes('Repositories') && engineering.includes('Tickets') && engineering.includes('data-figures')
-    && engineering.includes('What the agent did') && engineering.includes('quire')
-    // …and it is the branch's page rather than the product's with a name on it.
-    && !engineering.includes('Branches'));
   ok('…and a card opens its own page under the same product',
     scoped({ card: 'studio:k2' }).includes('in column')
     && !scoped({ card: 'studio:k2' }).includes('Branches'));
@@ -982,7 +970,7 @@ group('Web14 W6, W7 and W8');
   };
   const opened = { full: { ...card, agent: AGENT }, ticket: QUEUE, error: null };
   const draw = (over = {}) => renderToStaticMarkup(h(TicketUI.TicketPage, {
-    card, project: quire, index: 0, now: busy.now, onProject() {}, onBranch() {},
+    card, project: quire, index: 0, now: busy.now, onProject() {},
     opened, ...over,
   }));
   const page = draw();
@@ -1030,10 +1018,9 @@ group('Web14 W6, W7 and W8');
       .includes(card.title));
   // The whole of the difference between a frame and its light twin, which is
   // the claim "in both themes" makes: one attribute on <html>, and not a line
-  // of any of these four pages.
+  // of any of these three pages.
   const twins = {
     'W6 · the product': () => scoped({}),
-    'W7 · a branch': () => engineeringNow(),
     'W8 · a ticket': () => draw(),
     'W9 · the board': () => scoped({ tab: 'board' }),
   };
@@ -1045,7 +1032,7 @@ group('Web14 W6, W7 and W8');
     return dark !== light;
   }).map(([what]) => what);
   K.setThemeChoice('dark');
-  ok('each of the four is the same page in the light: the same markup, one attribute apart',
+  ok('each of the three is the same page in the light: the same markup, one attribute apart',
     differ.length === 0, differ.join(', '));
 
   ok('…and a card with no ticket behind it offers no box to answer one',
@@ -1066,7 +1053,6 @@ group('every state of the fleet, drawn');
       K.setThemeChoice(scheme);
       const fleet = view(name);
       const p = fleet.projects[0] ?? null;
-      const face = p?.branches[0]?.kind ?? null;
       const one = p?.cards[0] ?? null;
       const screens = {
         Overview: [OverviewUI.Overview, { view: fleet, project: null, onProject() {}, onAsk() {} }],
@@ -1077,9 +1063,6 @@ group('every state of the fleet, drawn');
         }],
         'W9 · the board a card is written on': [OverviewUI.Overview, {
           view: fleet, project: p, tab: 'board', onProject() {}, onAsk() {},
-        }],
-        'W7 · a branch': [OverviewUI.Overview, {
-          view: fleet, project: p, branch: face, onProject() {}, onAsk() {},
         }],
         'W8 · a ticket': [OverviewUI.Overview, {
           view: fleet, project: p, card: one ? `${one.host}:${one.id}` : null,
@@ -1102,7 +1085,7 @@ group('every state of the fleet, drawn');
   ok('the page stands up on every board, in both themes', broken.length === 0,
     [...new Set(broken)].slice(0, 6).join('\n    '));
   ok('…and there were enough of them for that to mean something',
-    drawn === NAMES.length * 2 * 6, `${drawn} renders`);
+    drawn === NAMES.length * 2 * 5, `${drawn} renders`);
   ok('…none of them painting a value of its own', strayed.length === 0,
     [...new Set(strayed)].slice(0, 6).join(', '));
   ok('…so every colour on every one of them exists in both themes',

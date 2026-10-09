@@ -65,7 +65,6 @@ export interface TicketProps {
   index: number;
   now: number;
   onProject: () => void;
-  onBranch: (kind: string) => void;
 }
 
 /** The page, and the one request it makes. Asked for when the page opens,
@@ -96,7 +95,7 @@ export function Ticket(props: TicketProps) {
 
 /** …and the page itself: a render of what is in hand and nothing else. */
 export function TicketPage({
-  card, project, now, onProject, onBranch, opened: got = NOTHING, onChanged,
+  card, project, now, onProject, opened: got = NOTHING, onChanged,
 }: TicketProps & { opened?: Opened; onChanged?: () => void }) {
   const [wrote, setWrote] = useState<{ title?: string; summary?: string }>({});
   const [failed, setFailed] = useState<string | null>(null);
@@ -292,7 +291,7 @@ export function TicketPage({
       </main>
 
       <aside>
-        <Side card={card} rows={rows} onHand={(x) => void hand(x)} onBranch={() => onBranch(card.branch)} />
+        <Side card={card} rows={rows} onHand={(x) => void hand(x)} />
         {(card.column === 'in_progress' || card.column === 'review') && (
           <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={() => void requeue()}>Move back to Queued</button>
         )}
@@ -395,17 +394,17 @@ function AgentFace({ got, machine }: { got: Opened; machine: string }) {
 
 /** Who a card can be handed to: the three a board offers, and Nobody, which
  *  is a value rather than the absence of one. A branch agent is named by its
- *  branch and is handed from the branch page. */
+ *  branch and is not one of them. */
 const HANDS: { executor: DivanExecutor | null }[] = [
   { executor: 'coding_agent' }, { executor: 'assistant' }, { executor: 'human' }, { executor: null },
 ];
 
-/** The side column: six rows, and Executor and Branch can be pressed. */
-function Side({ card, rows, onHand, onBranch }: {
+/** The side column: six rows, and Executor can be pressed. Branch is the
+ *  card's own label and nothing more — a branch has no page to open. */
+function Side({ card, rows, onHand }: {
   card: MergedCard;
   rows: ReturnType<typeof side>;
   onHand: (executor: DivanExecutor | null) => void;
-  onBranch: () => void;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -444,15 +443,6 @@ function Side({ card, rows, onHand, onBranch }: {
                   ))}
                 </div>
               )}
-            </div>
-          );
-        }
-        if (r.key === 'branch') {
-          return (
-            <div key={r.key} className="dv-side-row">
-              <span className="l">{r.label}</span>
-              <button type="button" className="dv-side-press dv-hit" onClick={onBranch}
-                title={`Everything on ${r.value}`}>{value}</button>
             </div>
           );
         }

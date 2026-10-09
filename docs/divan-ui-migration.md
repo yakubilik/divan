@@ -63,12 +63,12 @@ The quoted words are the check's own name.
 | Read the counters | Dashboard counters | One summary line | — | drive: "tiles open the project, dormant ones come last and dimmed" |
 | See what is running | Agent roster (not pressable) | Running: a badge per agent and per chat in a turn, each opens what it names | — | overview: "what is running is a badge per agent" |
 | Everything waiting on you | Questions spread over pages | Waiting on you (`/waiting`, Needs you › See all) | `ustabasi.note`, `divan.card.move`, `divan.project.open` | drive: "Waiting on you: the title states the counts, three groups oldest first" |
-| Switch a product's view | Tabs Overview / Board / Branches / Chat | Segment Overview / Board / Chats; Repositories button | — | drive: "the head is monogram, name, one sentence and a meta line" |
+| Switch a product's view | Tabs Overview / Board / Branches / Chat | Segment Overview / Board / Chats; Repositories in the side column | — | drive: "the head is monogram, name, one sentence and a meta line" |
 | Write a new ticket | Inline draft in Ice Box, N | Said to the agent in the product's Composer; there is no form | `chat.create` | drive: "no New ticket and no tabs on a product or its board" |
 | Still open: add, state, comment | Project page | Project side column; On your plate | `divan.project.open` | drive: "Still open sits in the side column and its thread still takes a comment" |
 | Ask about a product | Project command bar | Composer locked to the product | `chat.create`, `chat.send` | drive: "the Composer at the foot of a project carries that project" |
 | A product's chats | Chat tab | The list down the left of the product's page; one opens in the middle | `chat.create` | drive: "a chat started there starts in the product’s repository" |
-| Open a branch | Branch cards | Repositories, from the product page; branch page | — | drive: "the product’s page carries no branch tiles; its repositories are a page behind one word" |
+| Open a branch | Branch cards | The card's Branch label; a kept branch link opens its product (ustabasi #147) | — | drive: "a product with branches draws no Branches section, branch link or branch picker" |
 | Move a card | Board drag | Board drag (Queued reorders too) | `divan.card.move` | drive: "dragging a card from Queued into In Progress issues divan.card.move" |
 | Quota refusal on a drop | Board | Same | — | drive: "a card dropped where a worker would start is not started under the threshold you set" |
 | Answer from the board | Press an asking card | Same | `ustabasi.note` | drive: "answering it there is a note on that ticket" |
@@ -135,7 +135,7 @@ The quoted words are the check's own name.
 | A ticket's report | End of the ticket page (added on `main`, a50ee2c) | Same | `ustabasi.report` | phone: "the screens ask the computer for these and no more" — names the call only; the row itself is not pressed in a test |
 | Hand a card to someone | Card page | Ticket side rows › Executor | `divan.card.executor` | phone: "Executor sends divan.card.executor" |
 | Read a ticket cold | `/ticket/<n>`, `/card/<id>` | Same, one page; old run at `?run=1` | `divan.card.get`, `ustabasi.run` | phone: "a ticket link opened cold draws the ticket" |
-| Open a branch | Branch cards | Branch rows | — | phone: "a branch with no source says Source not connected yet. and no number" |
+| Open a branch | Branch cards | The card's branch label; a kept branch link lands on its product (ustabasi #146) | — | phone: "a branch has no page of its own; a link kept to one lands on the project it named" |
 | Chat: send, stop, approve, picture, voice note | Conversation | Same | `chat.send`, `chat.interrupt`, `approval.respond` | phone: "Allow sends approval.respond, Stop sends chat.interrupt" |
 | The chat list | Chat tab | Chat tab (`/chat`) | `chat.list` | phone: "the Chat place is the list of chats, a chat opened cold goes back to it" |
 | Archive / delete a chat | Chat list row | Chat list row | `chat.update`, `chat.delete` | phone: "a row archives (updateChat) and deletes (deleteChat, after asking)" |
@@ -194,9 +194,9 @@ are only sample data are not listed.
   reading. The scope chip says "+ project" (the frame: "+ project, branch or executor") —
   branches and executors are not scopes the daemon takes. The four §5 pickers sit under
   the mode segment (§5 is not drawn).
-- **Project.** No "+ branch" chip: the daemon has no request that makes a branch. The
-  Repositories button keeps the old Branches tab reachable. Still open sits in the side
-  column under the Timeline (kept from `main`).
+- **Project.** No "+ branch" chip: the daemon has no request that makes a branch. Branches
+  are not drawn at all since ustabasi #146 (phone) and #147 (web); the repositories the
+  old Branches tab listed sit in the side column under Still open (kept from `main`).
 - **Board.** Executor names left In Progress and Done cards; review cards show inside In
   Progress as "testing" (four columns are drawn, the daemon has five). "testing 3/4" is
   "testing" — nothing counts a verifier's checks.
@@ -204,8 +204,8 @@ are only sample data are not listed.
   side column — they had to go somewhere and the frame has none. "Runs alone" says
   "off · not settable yet": the daemon stores no such setting.
 - **Waiting.** A group with nothing in it is not drawn (the frame shows all three full).
-- **Branch.** No pull-request or red-check figures on the web: there is no data source for
-  them; the repositories are the branch's own list instead.
+- **Branch.** No page on either client any more (ustabasi #146, #147). A link kept to one
+  opens the product it named.
 - **Chat.** The conversation keeps its head (title, account, model, effort, mode, folder,
   Details, menu) — the frame draws none, but each is a `chat.update` that `main` had. The
   box is the frame's `dv-glass-strong dv-composer`, with attach, mic and send. The
@@ -220,7 +220,7 @@ are only sample data are not listed.
 
 ## Derived, because no frame draws it
 
-- The phone's Ticket, Waiting, Branch, Chat, Machine and New ticket: the web layout with the
+- The phone's Ticket, Waiting, Chat, Machine and New ticket: the web layout with the
   side column dropped below and card grids turned into row lists (HANDOVER §4 intro).
 - §5's pickers on both platforms, the Machine sub-pages (Remote screen, Sessions, Folders,
   Admin, Update, Agents, Accounts, Quota thresholds, This computer), the palette, the

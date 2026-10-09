@@ -1,19 +1,13 @@
-/** What one product's page and one branch's page say, kept out of the screens
- *  that draw them so `scripts/test-overview.mjs` can hold them to a board
- *  without a browser.
+/** What one product's page says, kept out of the screen that draws it so
+ *  `scripts/test-overview.mjs` can hold it to a board without a browser.
  *
- *  The Dashboard answers "how is everything". This answers the two questions
- *  after it: **what is happening on this product** (Web14 W6) and **what is
- *  happening on this face of it** (Web14 W7).
+ *  The Dashboard answers "how is everything". This answers the question after
+ *  it: **what is happening on this product** (Web14 W6). A product's branches
+ *  are not drawn in the panel any more, so nothing here judges one.
  *
  *  Two rules, and they are `lib/overview.ts`'s own:
  *
- *   · **no invented numbers.** The frames put a branch's own figures on its card
- *     — open PRs, 212/214 tests, `v3.18 deployed`, clicks in 28 days — and none
- *     of those sources is connected. What exists is the board: how much is open
- *     on a branch, how much is in progress, how much is finished. A branch
- *     nobody has put a card on draws none at all rather than three zeros, and a
- *     branch with no source behind it says so in words.
+ *   · **no invented numbers.** Every figure is a count off the board.
  *   · **a machine that has gone quiet is said out loud**, and its numbers are
  *     kept as what they were.
  *
@@ -21,27 +15,16 @@
  *  `lib/overview.ts` is the phone's dashboard: the phone keeps its sentences in
  *  a string table and every sentence here is that table's entry for the same
  *  key, character for character (`prNowIdle: 'Nothing is running on {on}.'`,
- *  `branchNoSource: 'no source connected yet'`, …). `scripts/test-overview.mjs`
- *  compiles both and compares them on the same board.
+ *  …). `scripts/test-overview.mjs` compiles both and compares them on the same
+ *  board.
  */
 import { COLUMNS, spent, stuck, waiting } from './divan';
-import type { DivanView, MergedBranch, MergedCard, MergedProject } from './divan';
+import type { DivanView, MergedCard, MergedProject } from './divan';
 import type { DivanComment, DivanMilestone, DivanOpenState } from './protocol';
-import { age, clock, dormant, executorWord, latest, staleFor, type Ago } from './overview';
-import type { State, Tone } from './theme';
+import { age, clock, dormant, executorWord, staleFor, type Ago } from './overview';
+import type { Tone } from './theme';
 
 const DAY = 24 * 3600;
-
-/** How many number slots a branch card has, whatever it has to put in them.
- *  Mobile7 S4's own note is explicit about it, and Web14 W6 draws the same three
- *  columns: the slots stay fixed, and a branch with two numbers leaves the third
- *  empty so the card still reads as complete rather than broken. */
-export const SLOTS = 3;
-
-/** A branch whose source last spoke longer ago than this says so in amber
- *  (Web14 W6's `3 days old`). Under a day it prints the clock and nothing else
- *  (`07:02 overnight`): a source that refreshed this morning is ordinary. */
-export const BRANCH_OLD_AFTER_S = DAY;
 
 // ── the two lines at the top ────────────────────────────────────────────────
 
@@ -214,183 +197,10 @@ export function blank(p: MergedProject): boolean {
     && p.branches.every((b) => !(b.open || 0) && COLUMNS.every((col) => !(b.cards[col] || 0)));
 }
 
-/** …and what it says. The branches are named in it: a product whose five faces
- *  are already made is not a blank page, and reading their names is how a person
- *  sees where the first card would go. */
-export function blankBody(p: MergedProject): string {
-  const names = p.branches.map((b) => b.name || b.kind).filter(Boolean);
-  return names.length
-    ? `Nothing is on it yet. The branches are ready — ${names.join(', ')} — and a card needs a`
-      + ' title and a couple of sentences to begin.'
-    : 'Nothing is on it yet. A card needs a title and a couple of sentences to begin.';
-}
-
-// ── a branch ────────────────────────────────────────────────────────────────
-
-/** What a branch says when nothing is connected behind it, which is every
- *  branch but engineering until the sources arrive. */
-export const NO_SOURCE = 'no source connected yet';
-
-/** One number on a branch card: what it is, and what it is of. Always a count
- *  off the board. */
-export interface Figure {
-  value: number;
-  label: string;
-}
-
-/** One card of the branch grid (Web14 W6), and the head of a branch's own page
- *  (Web14 W7). */
-export interface BranchCard {
-  key: string;
-  /** The kind, which is what a card carries and what a branch is addressed by. */
-  kind: string;
-  name: string;
-  /** The 8 pt dot in front of the name: the worst thing true of its cards. */
-  state: State;
-  /** The line of status: the branch's own summary, or the line off the card that
-   *  needs attention, or — with neither — that nothing is connected to it. */
-  line: string;
-  /** …and whether that line is ours rather than something somebody wrote, which
-   *  is what a screen needs to know before it quotes it. */
-  sourceless: boolean;
-  /** Two or three numbers, left to right, in three fixed slots. */
-  figures: Figure[];
-  /** When its source last refreshed, and whether that is long enough ago to be
-   *  worth an amber word. Null where nothing has ever refreshed it.
-   *
-   *  The phone draws a card whose source has been silent for a week at four
-   *  fifths as well (Mobile7 S5); no desktop frame draws a faded card, and the
-   *  panel's own rule is grey rather than faint — a fade is the one thing the
-   *  palette cannot make legible — so the age is said in the amber word and
-   *  nowhere else. */
-  refreshed: { text: string; tone: Tone | null } | null;
-}
-
-/** The branches of a product, in the order the computer keeps them, each as a
- *  card. The order is deliberately not by urgency: five branches are a fixed set
- *  of faces a person learns the position of, and a grid that reshuffles itself
- *  every time a card moves is one nobody can read at a glance. */
-export function branchCards(p: MergedProject, now: number): BranchCard[] {
-  return p.branches.map((b) => {
-    const mine = cardsOn(p, b.kind);
-    const wrote = (b.summary || '').trim();
-    const said = wrote ? '' : latest(mine);
-    return {
-      key: b.id || b.kind,
-      kind: b.kind,
-      name: b.name || b.kind,
-      state: branchState(mine),
-      line: wrote || said || NO_SOURCE,
-      sourceless: !wrote && !said,
-      figures: figures(b),
-      refreshed: refreshed(b, now),
-    };
-  });
-}
-
-/** The cards of a product that are on one of its faces. The card carries the
- *  branch's kind and not its id — two machines give one face two ids — so this
- *  is the one join between the two. */
-export function cardsOn(p: MergedProject, kind: string): MergedCard[] {
-  return p.cards.filter((c) => c.branch === kind);
-}
-
-/** One branch of a product by the kind a screen is holding, or null where the
- *  product no longer has that face — a machine that has been unpaired. */
-export function branchOf(p: MergedProject, kind: string | null): MergedBranch | null {
-  if (!kind) return null;
-  return p.branches.find((b) => b.kind === kind || b.id === kind) ?? null;
-}
-
-/** The dot in front of a branch's name: the worst thing true of the cards on it.
- *  The same vocabulary the project chips use, read off the cards through the
- *  merge's own two rules (`stuck`, `waiting`) rather than a second spelling. */
-export function branchState(cards: MergedCard[]): State {
-  if (cards.some(stuck)) return 'stuck';
-  if (cards.some(waiting)) return 'asking';
-  if (cards.some((c) => c.agent_status === 'running')) return 'running';
-  return 'quiet';
-}
-
-/** A branch's numbers: what is open on it, what is in progress, what is done.
- *
- *  `open` and `done` are always drawn, zero included — a branch with nothing
- *  open and eleven done is finished, and saying so in two honest zeros beats an
- *  empty slot. `in progress` is drawn only when something is, which is the
- *  frames' two-number card: the third slot stays empty and the card still reads
- *  as complete. A branch nobody has ever put a card on has no numbers at all;
- *  three zeros there would be a measurement of nothing. */
-export function figures(b: MergedBranch): Figure[] {
-  const held = COLUMNS.reduce((n, col) => n + (b.cards[col] || 0), 0);
-  if (!held && !(b.open || 0)) return [];
-  const progress = b.cards.in_progress || 0;
-  return [
-    { value: b.open || 0, label: 'open' },
-    ...(progress > 0 ? [{ value: progress, label: 'in progress' }] : []),
-    { value: b.cards.done || 0, label: 'done' },
-  ];
-}
-
-/** When a branch's source last said anything, in the corner of its card: the
- *  clock while it is today's (`07:02`), and the age in amber once it is older
- *  than a day (`3 days old`).
- *
- *  Null where nothing has ever written a summary for that branch, which is most
- *  of them until the sources are connected — the card then says so on its status
- *  line, and an invented `live` in the corner would contradict it. */
-export function refreshed(b: MergedBranch, now: number): { text: string; tone: Tone | null } | null {
-  if (b.summary_at == null) return null;
-  const since = Math.max(0, now - b.summary_at);
-  if (since < BRANCH_OLD_AFTER_S) return { text: clock(b.summary_at), tone: null };
-  const days = Math.floor(since / DAY);
-  return { text: days <= 1 ? 'yesterday' : `${days} days old`, tone: 'amber' };
-}
-
-// ── a branch's own page ─────────────────────────────────────────────────────
-
-/** The repositories a branch's work happens in (Web14 W7's first block).
- *
- *  A card names the repository it runs in and the machine it runs on; the
- *  product's own list is what is left where no card on this face names one. Git
- *  is read per repository by the daemon and folded per *product* by the merge,
- *  so there is no per-repository figure to put at the end of these rows and none
- *  is drawn — the frame's `✓ checks` and `× 2 failing` have no source. */
-export interface RepoRow {
-  path: string;
-  /** The last segment, which is what a screen shows: this page is a screenshot
-   *  away from being public. */
-  name: string;
-  machines: string[];
-}
-
-export function repoRows(p: MergedProject, kind: string): RepoRow[] {
-  const mine = cardsOn(p, kind);
-  const paths = new Set(mine.map((c) => (c.repo || '').trim()).filter(Boolean));
-  const list = paths.size ? [...paths] : p.repos.filter(Boolean);
-  return list.sort().map((path) => ({
-    path,
-    name: path.split(/[/\\]/).filter(Boolean).pop() || path,
-    machines: [...new Set(mine.filter((c) => c.repo === path).map((c) => c.machine))]
-      .filter(Boolean).sort(),
-  }));
-}
-
-/** What has been said on a branch lately, newest first: the line the mirror
- *  wrote on each of its cards, with the moment it wrote it. A card nothing has
- *  been said about is not a line — the point of the list is what happened, not
- *  which cards exist. `kind` null is the whole product, which is the same
- *  question asked of every face at once. */
-export interface Happened {
-  at: number | null;
-  text: string;
-  card: MergedCard;
-}
-
-export function happened(p: MergedProject, kind: string | null): Happened[] {
-  return (kind == null ? p.cards : cardsOn(p, kind))
-    .filter((c) => (c.agent_detail || '').trim())
-    .sort((a, b) => (b.agent_status_at ?? 0) - (a.agent_status_at ?? 0))
-    .map((c) => ({ at: c.agent_status_at, text: (c.agent_detail || '').trim(), card: c }));
+/** …and what it says. The branches used to be named in it; with no branch
+ *  drawn anywhere, naming them would point at something the page does not show. */
+export function blankBody(): string {
+  return 'Nothing is on it yet. A card needs a title and a couple of sentences to begin.';
 }
 
 // ── where a product is in its life ──────────────────────────────────────────
@@ -637,16 +447,6 @@ export function metaLine(p: MergedProject): string {
     stage ? (reached ? `${stage} since ${day(reached.at)}` : stage) : '',
     p.machines.length ? `runs on ${p.machines.join(', ')}` : '',
   ].filter(Boolean).join(' · ');
-}
-
-/** The sentence a branch with no source behind it says instead of a number. */
-export const NOT_CONNECTED = 'Source not connected yet.';
-
-/** Whether anything feeds a branch: something has written its summary, or —
- *  for engineering — the product has a repository to read. */
-export function connected(p: MergedProject, b: MergedBranch): boolean {
-  return !!(b.summary || '').trim() || b.summary_at != null
-    || (b.kind.toLowerCase() === 'engineering' && p.repos.length > 0);
 }
 
 // ── …and what it has not done yet ───────────────────────────────────────────

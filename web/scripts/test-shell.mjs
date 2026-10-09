@@ -534,16 +534,11 @@ group('the page is scoped, not a second screen');
     one.includes('Quire') && one.includes('runs on studio, mini') && !one.includes('Hush'));
   ok('…and it is the same screen rather than a second one',
     all !== one && one.length > 200 && all.length > 200);
-  // The faces of a product are their own tab now. `done` in their numbers is
-  // the machines' count rather than the cards in hand — the daemon leaves
-  // finished cards out of a snapshot.
-  const faces = renderToStaticMarkup(h(OverviewUI.Overview, {
-    view: fresh, project: D.project(fresh, 'quire'), tab: 'branches', onProject() {},
-  }));
-  ok('a product says what each of its faces holds, the finished ones included',
-    faces.includes('Engineering') && faces.includes('open') && faces.includes('done')
-    && faces.includes('>3<'),
-    faces.slice(faces.indexOf('Branches'), faces.indexOf('Branches') + 300));
+  // A product's branches are not drawn (ustabasi #147): the product has some,
+  // and its page names none of them.
+  ok('a product with branches draws no Branches section and no branch',
+    D.project(fresh, 'quire').branches.length > 0 && !one.includes('Branches')
+    && D.project(fresh, 'quire').branches.every((b) => !one.includes(`>${b.name || b.kind}<`)));
   ok('…and which states its cards are in, as words and not only as colour',
     ['asking', 'stuck'].every((w) => one.includes(`</i>${w}</span>`)));
   // …and the page you land on is the other question: what is happening on the
@@ -778,10 +773,9 @@ group('the address is a place, and one a person can read');
   const at = (place) => nav.pathOf({ ...nav.HOME, ...place }) + nav.searchOf({ ...nav.HOME, ...place });
   ok('the Dashboard is the bare path, and nothing hangs off it',
     at({}) === '/');
-  ok('a product, its board, one of its faces and one card are all paths',
+  ok('a product, its board and one card are all paths',
     at({ project: 'babysee' }) === '/p/babysee'
     && at({ project: 'babysee', tab: 'board' }) === '/p/babysee/board'
-    && at({ project: 'babysee', branch: 'engineering' }) === '/p/babysee/b/engineering'
     && at({ project: 'babysee', card: '0d2279020af7' }) === '/p/babysee/c/0d2279020af7',
     at({ project: 'babysee', card: '0d2279020af7' }));
   ok('…and the machine a card happens to be on is not in it',
@@ -800,7 +794,6 @@ group('the address is a place, and one a person can read');
   };
   ok('every one of them reads back as what it was written from',
     [{}, { project: 'babysee' }, { project: 'babysee', tab: 'board' },
-     { project: 'babysee', branch: 'engineering' },
      { project: 'babysee', card: '0d2279020af7', tab: 'board' },
      { view: 'chats' }, { view: 'chats', chat: 'c1' },
      { view: 'chats', chat: 'c1', host: 'studio' },
@@ -820,6 +813,21 @@ group('the address is a place, and one a person can read');
   ok('…and an old chat link too',
     nav.readPlace('/', '?chat=c1&host=studio').chat === 'c1'
     && nav.readPlace('/', '?chat=c1&host=studio').host === 'studio');
+
+  // A product's branches had a tab and a page each. A link kept to either is
+  // the product's own page, written back at the product's own path; a history
+  // entry that still says so is the same on the way back.
+  const product = { ...nav.HOME, project: 'babysee' };
+  ok('an old branch tab or branch page address opens the product it named',
+    [nav.readPlace('/p/babysee/branches'), nav.readPlace('/p/babysee/b/engineering'),
+     nav.readPlace('/p/babysee/b/App%20Review'),
+     nav.readPlace('/', '?project=babysee&tab=branches'),
+     nav.readPlace('/', '?project=babysee&branch=engineering')]
+      .every((p) => nav.samePlace(p, product) && nav.pathOf(p) === '/p/babysee'));
+  ok('…and so does a history entry written while they existed',
+    nav.samePlace(nav.placeOfState({ ...product, tab: 'branches' }), product)
+    && nav.samePlace(nav.placeOfState({ ...product, branch: 'engineering' }), product)
+    && !('branch' in nav.placeOfState({ ...product, branch: 'engineering' })));
 }
 
 group('the chat is untouched');

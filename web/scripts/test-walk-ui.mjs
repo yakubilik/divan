@@ -19,8 +19,7 @@ mkdirSync(shots, { recursive: true });
 const ROUTES = [
   ['dashboard', '/'], ['waiting', '/waiting'],
   ['project', '/p/quire'], ['project-dormant', '/p/hush'], ['board', '/p/quire/board'],
-  ['repositories', '/p/quire/branches'], ['project-chat', '/p/quire/chat/c1'],
-  ['branch', '/p/quire/b/Engineering'], ['branch-unconnected', '/p/quire/b/SEO'], ['ticket', '/p/quire/c/k1'],
+  ['project-chat', '/p/quire/chat/c1'], ['ticket', '/p/quire/c/k1'],
   ['chat', '/chats'],
   ...['machines', 'executors', 'terminal', 'settings', 'screen', 'accounts', 'quota', 'admin', 'fleet',
       'projects', 'agents', 'update', 'preferences'].map((v) => [`machine-${v}`, `/machine/${v}`]),
@@ -87,8 +86,6 @@ try {
     ['project', '/p/quire', `document.querySelector('h1')?.textContent.trim() === 'Quire' && !!document.querySelector('[data-counts]') && !!document.querySelector('[data-project-page] .dv-chatlist')`, ['a[data-tile]', 'Q'], '/'],
     ['board', '/p/quire/board', `document.querySelector('.dv-board-cols')`, ['a[href="/p/quire/board"]', 'Open board'], '/p/quire'],
     ['ticket', '/p/quire/c/k1', `document.querySelector('h1')?.textContent.trim() === 'Webhook retry policy'`, ['.dv-board-cols button', 'Webhook retry policy'], '/p/quire/board'],
-    ['repositories', '/p/quire/branches', `!!document.querySelector('[title="Everything on Engineering"]')`, ['a[href="/p/quire/branches"]', 'Repositories'], '/p/quire'],
-    ['branch', '/p/quire/b/Engineering', `document.querySelector('h1')?.textContent.trim() === 'Engineering'`, ['[title="Everything on Engineering"]', ''], '/p/quire/branches'],
     ['chat', '/chats/c1', `document.querySelector('textarea[name="composer"]')`, ['.dv-topline button', 'Chats'], '/'],
     ['waiting', '/waiting', `/answer|task|Nothing/.test(document.querySelector('h1')?.textContent ?? '')`, ['a[href="/waiting"]', 'See all'], '/'],
     ['machine › machines', '/machine/machines', machineTab('Machines'), ['.dv-topline button', 'Machine'], '/'],
@@ -116,6 +113,51 @@ try {
     ok(`${type}: cold open and reload land on ${path}${via ? `, and Back from it returns to ${from}` : ''}`,
       coldOk && reloadOk && backOk, `cold ${coldOk}, reload ${reloadOk}, ${detail}`);
   }
+  // Branches are gone from the panel (ustabasi #147). The product page names
+  // none of Quire's branches and links to no branch page, its repositories
+  // are on it, and an address kept to the old branch tab or a branch's page
+  // opens the product instead — cold, on reload, and with Back behind it.
+  const noBranch = `!document.querySelector('a[href*="/branches"], a[href*="/b/"], [data-branch], [title^="Everything on"]')
+    && !document.body.innerText.includes('Branches')
+    && ![...document.querySelectorAll('a')].some((a) => a.textContent.trim() === 'Repositories')`;
+  const product = `${where['/p/quire']} && document.querySelectorAll('aside [data-repos] [data-repo]').length > 0
+    && document.querySelector('aside').innerText.includes('Still open') && ${noBranch}`;
+  await b.cold('/p/quire');
+  ok('the product page draws no branch section, link or picker, and keeps its board, chats, Still open and repositories',
+    await mark(product));
+  for (const old of ['/p/quire/branches', '/p/quire/b/Engineering', '/p/quire/b/SEO']) {
+    await b.cold(old);
+    const coldOk = (await at()) === '/p/quire' && await mark(product);
+    await b.reload();
+    const reloadOk = (await at()) === '/p/quire' && await mark(product);
+    ok(`an old branch address ${old} opens the product page, and a reload keeps it there`,
+      coldOk && reloadOk, `cold ${coldOk}, reload ${reloadOk}, at ${await at()}`);
+  }
+  // …and from it, the board and a task on it are reached and left as before.
+  // Pressed as a person presses (`userGesture`): Chrome skips, on Back, an
+  // entry whose page pushed history with nobody touching it, so presses made
+  // by script alone would walk Back past the product page.
+  const tap = async (css, text) => {
+    const r = await b.page('Runtime.evaluate', { userGesture: true, returnByValue: true, expression: `(() => {
+      const el = [...document.querySelectorAll(${JSON.stringify(css)})].find((e) =>
+        (e.getAttribute('aria-label') || e.textContent).trim().startsWith(${JSON.stringify(text)}));
+      if (!el) return false; el.click(); return true; })()` });
+    await new Promise((res) => setTimeout(res, 500));
+    await b.settle();
+    return r.result?.value === true;
+  };
+  await b.cold('/p/quire/b/Engineering');
+  const toBoard = await tap('a[href="/p/quire/board"]', 'Open board') && (await at()) === '/p/quire/board';
+  const toTask = await tap('.dv-board-cols button', 'Webhook retry policy') && (await at()) === '/p/quire/c/k1'
+    && await mark(where['/p/quire/c/k1']);
+  await back();
+  const backBoard = (await at()) === '/p/quire/board';
+  await back();
+  const backAt = await at();
+  const backProduct = backAt === '/p/quire' && await mark(product);
+  ok('from an old branch link: product → board → task, and Back walks it back to the product page',
+    toBoard && toTask && backBoard && backProduct, JSON.stringify({ toBoard, toTask, backBoard, backProduct, backAt }));
+
   const bad = b.drain();
   ok('no console errors while going back and forth', !bad.length, bad.join('\n    '));
 

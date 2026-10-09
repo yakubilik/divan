@@ -1042,6 +1042,9 @@ group('the fades that are left are the ones that were decided');
     // its second and third lines are quietened with opacity rather than with
     // `ink2` and `ink3`.
     'src/components/Fallback.tsx': ['0.75', '0.8'],
+    // An approval form's submit while it is sending or has nothing to send —
+    // the disabled control, the same as the chat's own send.
+    'src/components/ApprovalForm.tsx': ['busy || !response ? 0.5 : 1'],
   };
   const undecided = [];
   const walk = (dir) => {

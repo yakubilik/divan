@@ -18,7 +18,7 @@ import { chat, host } from './panel-fixture.js';
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('theme') === 'light' ? 'light' : 'dark';
-const which = q.get('view') || 'branch';
+const which = q.get('view') || 'machine';
 document.documentElement.dataset.theme = scheme;
 const root = document.getElementById('root')!;
 root.className = 'dv-root dv-ambient';
@@ -81,7 +81,7 @@ const page = which === 'chat' ? (
 ) : (
   <Shell view="overview" onView={() => {}} fleet={view} back={{ label: 'Quire', onBack: () => {} }}>
     <Overview view={view} project={project(view, 'quire')} onProject={() => {}} tab="overview" onTab={() => {}}
-      branch={q.get('branch') || 'Engineering'} onBranch={() => {}} card={null} onCard={() => {}} />
+      card={null} onCard={() => {}} />
   </Shell>
 );
 createRoot(root).render(page);

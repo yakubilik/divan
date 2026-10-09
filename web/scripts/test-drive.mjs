@@ -121,6 +121,8 @@ process.on('unhandledRejection', (e) => unhandled.push(String(e?.message ?? e)))
 
 const load = (p) => import(pathToFileURL(join(out, p)).href);
 const { App } = await load('src/App.js');
+const { tell } = await load('src/lib/tell.js');
+const { HOME: HOME_PLACE } = await load('src/lib/nav.js');
 const { useFleet } = await load('src/lib/fleet.js');
 const { useDivanStore, answered, silent } = await load('src/lib/divan.js');
 const { useDock } = await load('src/lib/sessions.js');
@@ -597,16 +599,14 @@ group('what needs a person opens itself as a conversation');
   ok('closing one takes it off the page, tab and all',
     !windows().includes('Use the live ones now') && named() === had - 1, windows().slice(0, 300));
 
-  // The bar across the bottom of a branch's page, and what it does with a
-  // sentence: the chat opens as a window over the page. (A product's own page
-  // reads the chat in its middle instead — `a product has its own chats`.)
-  // Found the way a person finds it — by what the field says it is — rather
-  // than by a `name` attribute nothing on screen carries.
-  await click(link('Repositories'));
-  await click(doc.querySelector('[title="Everything on Engineering"]'));
-  const bar = () => doc.querySelector('input[aria-label="Tell Divan anything…"]');
-  const arrow = () => [...doc.querySelectorAll('[title="Send"]')]
-    .find((e) => e.textContent.trim() === '↑') ?? null;
+  // A sentence said to the computer in focus (`lib/tell.ts`) opens its chat
+  // as a window over the page. The command bar that used to say it stood at
+  // the foot of a branch's page and went with it (ustabasi #147); the windows
+  // are the same windows, so they are opened here the way the bar opened them.
+  const say = async (words) => {
+    await act(async () => { await tell(words, null); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  };
   const palette = () => [...doc.querySelectorAll('input')]
     .some((i) => (i.getAttribute('aria-label') ?? '').startsWith('Search folders'));
   /** The chat's own window, by the words it was started with. */
@@ -615,14 +615,9 @@ group('what needs a person opens itself as a conversation');
   const labelled = (label, within) => [...within.querySelectorAll('button')]
     .find((b) => b.getAttribute('aria-label') === label) ?? null;
 
-  ok('a branch’s page has the bar across its foot, and it is the field it looks like',
-    !!bar() && w.location.pathname === '/p/quire/b/Engineering', w.location.pathname);
-  ok('…whose send is not a button while there is nothing to send', arrow() === null);
-  await type(bar(), 'ship the beta tonight');
-  ok('…and is one the moment there is', !!arrow());
   asked.length = 0;
-  await click(arrow());
-  ok('pressing it opens a chat on the computer in focus, named after the words',
+  await say('ship the beta tonight');
+  ok('a sentence said opens a chat on the computer in focus, named after the words',
     asked.some((a) => a.key === 'studio' && a.type === 'chat.create'
       && a.data.title === 'ship the beta tonight'),
     JSON.stringify(asked.map((a) => a.type)));
@@ -630,13 +625,10 @@ group('what needs a person opens itself as a conversation');
     asked.some((a) => a.type === 'chat.send' && a.data.chat_id === 'told1'
       && a.data.text === 'ship the beta tonight'),
     JSON.stringify(asked.filter((a) => a.type === 'chat.send').map((a) => a.data)));
-  ok('…without leaving the page it was typed on',
-    place() === 'Dashboard' && w.location.pathname === '/p/quire/b/Engineering', `${place()} · ${w.location.pathname}`);
+  ok('…without leaving the page it was said on',
+    place() === 'Dashboard' && w.location.pathname === '/p/quire', `${place()} · ${w.location.pathname}`);
   ok('…with the chat open on that page, in the corner the windows stand in',
     !!chatWindow(), windows().slice(0, 200));
-  ok('…and the field empty again, because the sentence landed', bar().value === '');
-  ok('…with the send back to the quiet fill of a bar with nothing in it',
-    arrow() === null && !!bar() && bar().value === '');
 
   // What the chat is set to, and the way to change it: the same five settings
   // the chat screen puts in its head, in the room this window has.
@@ -752,8 +744,7 @@ group('what needs a person opens itself as a conversation');
 
   // Two windows, and one of them moved. The other one is furniture too: it
   // stands where it stood, whatever happens to the one being dragged.
-  await type(bar(), 'second chat');
-  await click(arrow());
+  await say('second chat');
   ok('a second chat opens beside the first rather than on top of it',
     !!windowFor('second chat') && boxOf('second chat').right !== box().right,
     JSON.stringify([boxOf('ship the beta tonight'), boxOf('second chat')]));
@@ -771,10 +762,8 @@ group('what needs a person opens itself as a conversation');
   // …and the same two windows with nothing placed by hand at all, which is how
   // a person actually meets them: open one, open another, drag one of them.
   await click(labelled('Close', windowFor('ship the beta tonight')));
-  await type(bar(), 'first one');
-  await click(arrow());
-  await type(bar(), 'second one');
-  await click(arrow());
+  await say('first one');
+  await say('second one');
   ok('two fresh windows stand side by side, neither of them placed by hand',
     !!windowFor('first one') && !!windowFor('second one')
     && boxOf('first one').right !== boxOf('second one').right,
@@ -786,8 +775,7 @@ group('what needs a person opens itself as a conversation');
     `${JSON.stringify(other)} -> ${JSON.stringify(boxOf('first one'))}`);
   await click(labelled('Close', windowFor('second one')));
   await click(labelled('Close', windowFor('first one')));
-  await type(bar(), 'ship the beta tonight');
-  await click(arrow());
+  await say('ship the beta tonight');
 
   await click(labelled('Put this away', chatWindow()));
   ok('a chat can be put away, and what is left of it is a tab along the bottom',
@@ -800,40 +788,7 @@ group('what needs a person opens itself as a conversation');
     && !asked.some((a) => a.type === 'chat.delete'),
     windows().slice(0, 200));
 
-  // …and the same bar, on a page about one product: the chat opens in that
-  // product rather than in whatever folder this computer last used.
-
-  /** The line over the command bar, if there is one: the bar stands in a fixed
-   *  box in the middle of the bottom edge, and what is above it inside that box
-   *  is the note. The bar itself carries the key on it, which is how the two
-   *  are told apart when there is no note at all. */
-  const overBar = () => {
-    const box = [...doc.querySelectorAll('div')]
-      .find((e) => e.style.position === 'fixed' && e.style.left === '50%') ?? null;
-    const first = box?.firstElementChild;
-    const words = (first?.textContent ?? '').trim();
-    return !first || words.includes('⌘K') ? '' : words;
-  };
-  ok('on a page about one product the bar says where the chat will open',
-    overBar() !== '', `«${overBar()}»`);
-  await type(bar(), 'why is the retry policy like this');
-  asked.length = 0;
-  await click(arrow());
-  ok('…and it opens there, on the machine that holds that product',
-    asked.some((a) => a.key === 'studio' && a.type === 'chat.create'
-      && a.data.cwd === '/w/quire'),
-    JSON.stringify(asked.filter((a) => a.type === 'chat.create').map((a) => a.data?.cwd)));
-  // …and the window it opened is put away again, so the board below is read
-  // with nothing standing over it.
-  const opened = [...doc.querySelectorAll('section[data-panel]')]
-    .find((e) => (e.textContent ?? '').includes('why is the retry policy')) ?? null;
-  if (opened) await click(labelled('Close', opened));
-  await press('0');
-  ok('…and off that page the bar is not drawn: the open Composer is', overBar() === ''
-    && !!doc.querySelector('#composer-in') && !doc.querySelector('.dv-composer [data-locked]'), `«${overBar()}»`);
-
-  // The key written on the bar is still the key: the bar is a composer, and the
-  // palette is what ⌘K opens.
+  // ⌘K is the palette, with or without a bar to write it on.
   await press('k');
   ok('⌘K still opens the palette', palette());
   await press('k');
@@ -1896,15 +1851,70 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     && (column('In Progress').textContent ?? '').includes('Bulk invite'),
     JSON.stringify(asked.map((a) => [a.type, a.data?.column])));
 
-  // 4 · branches
+  // 4 · branches are gone (ustabasi #147). Quire's snapshot carries branches,
+  // and the page draws none of them and offers no way to one; its repositories
+  // are on the page itself.
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
   await reload('/p/quire');
-  const tiles = doc.querySelectorAll('[data-branch]').length;
-  await click(link('Repositories'));
-  ok('the product’s page carries no branch tiles; its repositories are a page behind one word',
-    tiles === 0 && w.location.pathname === '/p/quire/branches' && text().includes('Engineering'),
-    `${tiles} · ${w.location.pathname}`);
+  const branchy = () => [...doc.querySelectorAll('a[href*="/branches"], a[href*="/b/"], [data-branch], [title^="Everything on"]')].length
+    + (text().includes('Branches') ? 1 : 0) + (link('Repositories') ? 1 : 0);
+  const repos = () => [...doc.querySelectorAll('aside [data-repos] [data-repo]')].map((e) => e.getAttribute('data-repo'));
+  const projectPage = () => !!doc.querySelector('[data-project-head]')
+    && (doc.querySelector('[data-project-head]')?.textContent ?? '') === 'Quire'
+    && !!doc.querySelector('#p-board') && !!link('Open board') && !!doc.querySelector('aside')
+    && (doc.querySelector('aside')?.textContent ?? '').includes('Still open');
+  ok('a product with branches draws no Branches section, branch link or branch picker',
+    (snap.projects.find((p) => p.slug === 'quire')?.branches ?? []).length > 0 && branchy() === 0,
+    `${branchy()} branch things`);
+  ok('…and its board, chats, status, Still open and repositories are all on the page',
+    projectPage() && !!doc.querySelector('[data-meta]') && !!doc.querySelector('[data-project-page]')
+    && repos().length > 0 && repos().every((r) => snap.projects.find((p) => p.slug === 'quire').repos.includes(r)),
+    JSON.stringify(repos()));
+
+  // An address kept to the branches tab or a branch's page is the product's
+  // own page, written back at the product's own path.
+  for (const old of ['/p/quire/branches', '/p/quire/b/Engineering', '/p/quire/b/App%20Review',
+                     '/?project=quire&tab=branches', '/?project=quire&branch=Engineering']) {
+    await reload(old);
+    ok(`a cold old branch address (${old}) opens the product page`,
+      w.location.pathname === '/p/quire' && w.location.search === '' && projectPage() && branchy() === 0,
+      `${w.location.pathname}${w.location.search}`);
+  }
+  // …and a history entry written while the branch pages existed, gone back
+  // to, is the product's page as well.
+  await act(async () => {
+    w.history.pushState({ ...HOME_PLACE, project: 'quire', tab: 'branches', branch: 'Engineering' }, '', '/p/quire/branches');
+    w.dispatchEvent(new w.PopStateEvent('popstate', {
+      state: { ...HOME_PLACE, project: 'quire', tab: 'branches', branch: 'Engineering' } }));
+  });
+  await settle();
+  ok('…and so does going Back to a history entry that named a branch',
+    projectPage() && branchy() === 0, text().slice(0, 200));
+  await reload('/p/quire');
+  // Back and reload on the pages that are left.
+  await click(link('Open board'));
+  const boardPath = w.location.pathname;
   await goBack();
+  ok('Back from the board returns to the product page',
+    boardPath === "/p/quire/board" && w.location.pathname === "/p/quire" && projectPage(),
+    `${boardPath} → ${w.location.pathname}`);
+  await reload(w.location.pathname);
+  ok('…and a reload of it is the product page again', w.location.pathname === '/p/quire' && projectPage());
+  // From the product to a task, with the branch pages gone: a card pressed on
+  // the board is that card's page, and Back is the board again.
+  await click(link('Open board'));
+  const first = doc.querySelector('article.dv-card[data-card]');
+  const firstId = first?.getAttribute('data-card');
+  const firstTitle = (first?.querySelector('.dv-card-title')?.textContent ?? '').trim();
+  await click(first.querySelector('.dv-card-title'));
+  await settle();
+  const cardPath = w.location.pathname;
+  const cardShown = text().includes(firstTitle) && !!doc.querySelector('[data-side]');
+  await goBack();
+  ok('a card pressed on the board opens that card, and Back is the board',
+    !!firstId && cardPath === `/p/quire/c/${firstId}` && cardShown && w.location.pathname === '/p/quire/board',
+    `${firstId} · ${cardPath} · ${cardShown} · ${w.location.pathname}`);
+  await reload('/p/quire');
 
   // 8 · what the old page could do: Still open's thread, from the side column
   const post = [...doc.querySelectorAll('aside [role="button"]')]
@@ -2207,7 +2217,7 @@ group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
   await act(async () => { useFleet.setState({ call: prior }); });
 }
 
-group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
+group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads');
 {
   const { useLogs, logKey } = await load('src/lib/timeline.js');
   const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => {}); };
@@ -2454,24 +2464,17 @@ group('Branch, Chat and Machine (HANDOVER §4.7, §4.8, §4.9)');
   ok('the default account and model set in Machine › Settings are what the composer’s chips show for the next chat',
     chips.some((c) => c.includes('Sonnet 5')) && chips.some((c) => c.includes('yakup@')), JSON.stringify(chips));
 
-  // 7 · a branch page, connected and not
+  // 7 · a branch has no page any more (ustabasi #147): a cold link to one is
+  // the product it named, with nothing of the branch's on it.
   await reload('/p/quire/b/Engineering');
-  const page7 = doc.querySelector('[data-branch="Engineering"]');
-  const figs = page7?.querySelectorAll('[data-figures] .dv-count').length ?? 0;
-  const line7 = page7?.querySelector('[data-branch-line]')?.textContent ?? '';
-  const main7 = page7?.querySelector('.dv-cols2 > main')?.textContent ?? '';
-  const side7 = page7?.querySelector('.dv-cols2 > aside')?.textContent ?? '';
+  const cold7 = w.location.pathname;
+  const page7 = !!doc.querySelector('[data-branch]') || (doc.body.textContent ?? '').includes('What the agent did');
   await reload('/p/hush/b/App%20Review');
-  const bare = doc.querySelector('[data-branch="App Review"]');
-  const bareText = bare?.textContent ?? '';
-  ok('a branch is its title, one status sentence with Updated <ago>, two or three figures, its list and tickets, What the agent did beside them; an unconnected one only says Source not connected yet.',
-    page7?.querySelector('h1')?.textContent === 'Engineering' && line7.includes('Bulk invite is three checks in.')
-    && /Updated .+ ago\.|Updated just now\./.test(line7) && figs >= 2 && figs <= 3
-    && main7.includes('Repositories') && main7.includes('Tickets') && main7.includes('Webhook retry policy')
-    && side7.includes('What the agent did')
-    && bare?.dataset.connected === 'false' && bareText === 'App ReviewSource not connected yet.'
-    && !bare.querySelector('[data-figures], .dv-cols2'),
-    JSON.stringify({ figs, line7, main7: main7.slice(0, 120), side7: side7.slice(0, 80), bareText }));
+  ok('a link kept to a branch page opens the product it named, and no branch page',
+    cold7 === '/p/quire' && !page7 && w.location.pathname === '/p/hush'
+    && !doc.querySelector('[data-branch]')
+    && (doc.querySelector('[data-project-head]')?.textContent ?? '') === 'Hush',
+    `${cold7} · ${w.location.pathname}`);
 
   await act(async () => {
     useFleet.setState({ call: prior });
