@@ -174,6 +174,44 @@ const ready = (async () => {
   checks.push(['notice (phone): reopening the chat starts with every notice collapsed',
     rows().length === 5 && details().length === 0]);
   await act(async () => { page.unmount(); });
+
+  // A ticket the chat filed (#177's note): the first tap opens it in the chat,
+  // and only Go details leaves, for that ticket. #41 has a card on the board.
+  const tool = (seq, id, n, title) => [
+    { event: 'tool.use', chat_id: 'c1', seq, ts: NOW, data: { id, tool: 'Bash', input: { command: `ustabasi add ${n}.json` } } },
+    { event: 'tool.result', chat_id: 'c1', seq: seq + 1, ts: NOW, data: { id, output: `#${n} queued: ${title}  (worker opus, verifier opus)` } }];
+  R.store.set({ events: { c1: [
+    ...tool(1, 't1', 177, 'Show pending agent questions as a floating chat on the dashboard'),
+    said(3, 'Filed it.'),
+    ...tool(4, 't2', 41, 'Webhook retry policy'),
+    ev(6, { text: F.DONE_157, attachments: [] }),
+  ], c2: [] } });
+  const pressAll = (label) => page.root.findAll((n) => n.props.accessibilityLabel === label && typeof n.props.onPress === 'function'
+    && typeof n.type !== 'string');
+  const press = async (label) => { const [p] = pressAll(label); await act(async () => { p?.props.onPress(); }); return !!p; };
+  const opened = (n) => hosts(json(), (x) => x.props['data-label'] === `Ticket #${n}` || x.props['data-label'] === `Ticket #${n} report`);
+  /** Mount the chat, tap `open`, then press ticket `n`'s Go details. */
+  const leave = async (open, n) => {
+    const label = `Go to ticket #${n} details`;
+    await act(async () => { page = TR.create(screen()); });
+    R.nav.reset();
+    const tapped = await press(open);
+    const after = { pushed: R.nav.pushed().length, card: opened(n).length };
+    const went = await press(label) ? R.nav.pushed() : null;
+    await act(async () => { page.unmount(); });
+    return { tapped, after, went };
+  };
+  const q177 = await leave('Queued: Show pending agent questions as a floating chat on the dashboard', 177);
+  checks.push([`ticket link (phone): the first tap on Queued #177 opens its card in the chat and goes nowhere — ${JSON.stringify(q177.after)}`,
+    q177.tapped && q177.after.pushed === 0 && q177.after.card === 1]);
+  checks.push([`ticket link (phone): Go details on #177 opens that ticket — ${JSON.stringify(q177.went)}`,
+    JSON.stringify(q177.went) === JSON.stringify(['/ticket/177?from=chat'])]);
+  const k41 = await leave('In Progress: Webhook retry policy', 41);
+  checks.push([`ticket link (phone): a ticket with a board card stays in the chat on tap, and Go details opens its card — ${JSON.stringify(k41)}`,
+    k41.after.pushed === 0 && k41.after.card === 1 && JSON.stringify(k41.went) === JSON.stringify(['/card/k1?host=h1&from=chat'])]);
+  const n157 = await leave('Done #157: Match mobile chat grouping to the web', 157);
+  checks.push([`notice (phone): an opened notice's Go details opens ticket #157, and the tap that opened it went nowhere — ${JSON.stringify(n157)}`,
+    n157.after.pushed === 0 && n157.after.card === 1 && JSON.stringify(n157.went) === JSON.stringify(['/ticket/157?from=chat'])]);
 })();
 
 if (require.main === module) {

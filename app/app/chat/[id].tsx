@@ -456,14 +456,15 @@ export function Conversation({ id }: { id: string }) {
   const filed = filedUnder(view.projects, host?.id, chat?.project_id);
   const cardsNow = useRef(view.cards);
   cardsNow.current = view.cards;
+  const openTicket = (n: number) => go(() => router.push(ticketRoute(cardsNow.current, n)));
   const links = (results: any[]) => results.map((r) => (r && !r.is_error ? filedBy(r.output) : null))
     .filter((f): f is NonNullable<typeof f> => !!f)
     .map((f) => {
       const card = cardsNow.current.find((c) => c.ustabasi_id === f.id);
       return (
-        <CardLink key={f.id} column={card ? T(COLUMN_LABEL[card.column] ?? 'chCardQueued') : T('chCardQueued')}
-          title={card?.title ?? f.title}
-          onPress={() => go(() => router.push(ticketRoute(cardsNow.current, f.id)))} />
+        <CardLink key={f.id} ticket={f.id} column={card ? T(COLUMN_LABEL[card.column] ?? 'chCardQueued') : T('chCardQueued')}
+          title={card?.title ?? f.title} detail={card?.agent_detail || card?.summary || undefined}
+          onPress={() => openTicket(f.id)} />
       );
     });
 
@@ -477,7 +478,7 @@ export function Conversation({ id }: { id: string }) {
       // starts a text selection, and a Pressable takes it first. Copying the
       // whole message is still one tap away — iOS offers Select All beside Copy
       // in the selection menu — and now part of a message can be taken too.
-      case 'user': return <UserBubble text={item.data.text} attachments={item.data.attachments} queued={item.data.queued} />;
+      case 'user': return <UserBubble text={item.data.text} attachments={item.data.attachments} queued={item.data.queued} onTicket={openTicket} />;
       case 'assistant':
         if (item.data.thinking) return <ThinkingRow text={item.data.thinking.trim().slice(-240)} />;
         return <AssistantText text={item.data.text} streaming={item.data.live} attachments={item.data.attachments} />;

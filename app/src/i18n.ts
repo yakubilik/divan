@@ -563,7 +563,7 @@ const en = {
   stOwnAccount: "This computer's account", stNoModel: 'none offered yet',
   // HANDOVER §4.8: one conversation, filed by Hermes.
   chFiled: 'filed under {project}', chTalk: 'Talk to Hermes', chNoneYet: 'No conversation yet.',
-  chCardQueued: 'Queued',
+  chCardQueued: 'Queued', chGoDetails: 'Go details', chGoDetailsOf: 'Go to ticket #{n} details', chCardOpen: 'Ticket #{n}',
   // A ticket filed from this chat ended (docs/ticket-notices.md); the words match the web.
   tnDone: 'Done', tnBlocked: 'Needs an answer', tnFailed: 'Failed', tnQueued: 'queued',
   tnNoReport: 'No report came with it.', tnReport: 'Ticket #{n} report',

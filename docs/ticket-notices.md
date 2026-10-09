@@ -53,3 +53,11 @@ app's `npm test`) holds it to the web's answers on the fixtures above.
 - **Collapsed:** one full-width row: state icon, state word (same words and tones as the web), mono `#N`, the title on one truncated line, `queued` when queued, and a chevron. The row is one `Pressable` with `accessibilityState.expanded`.
 - **Expanded:** under the row, the report as selectable text, then the fact lines in mono. A second tap collapses it. Each mount starts collapsed.
 - The agent instruction is never drawn; the person's trailing words are their own bubble; a message with attachments stays a plain bubble.
+
+### Tickets the chat filed
+
+The chip under a tool call that filed a ticket (`#N queued: …`, `CardLink`)
+and an opened notice behave the same way on the phone: the first tap opens the
+ticket inline in the chat (number, column, title, the card's latest detail), and
+only its **Go details** button navigates — to the card on the board when there
+is one, otherwise to the bare ticket (`ticketRoute`).
