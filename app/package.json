@@ -49,6 +49,7 @@
     "@types/react": "~19.1.0",
     "onnxruntime-node": "^1.24.3",
     "react-dom": "^19.1.0",
+    "react-test-renderer": "19.1.0",
     "sucrase": "^3.35.1",
     "typescript": "~5.9.2"
   },
