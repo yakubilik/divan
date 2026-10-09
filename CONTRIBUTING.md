@@ -67,6 +67,7 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 .venv312/bin/python scripts/test_ustabasi.py   # the queue's snapshot, its one write, its readings
 .venv312/bin/python scripts/test_ustabasi_run.py  # a run's log, read a page at a time
 .venv312/bin/python scripts/test_divan.py      # the board, the mirror, and one answer per machine
+python scripts/test_voice_bench.py             # the live-voice bench's WER and turn-end judgements
 
 cd app && npx tsc --noEmit
 node scripts/test-login-web.cjs                # the sign-in WebView's two judgements

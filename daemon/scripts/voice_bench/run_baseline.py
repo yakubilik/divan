@@ -79,12 +79,13 @@ def judge(fx: dict, events: list[dict]) -> dict:
         "final_wer": bench.wer(fx["reference"], final),
         "current": {
             "turns": [{"sent_ms": t.sent_at, "text": t.text} for t in cur.turns],
-            "lost": cur.lost,
+            # Only a send before the speech ended loses words; after it, a longer
+            # final transcript is the recogniser revising, not the caller unheard.
+            "lost": cur.lost if (sent and end and sent.sent_at < end) else "",
             "sent_wer": bench.wer(fx["reference"], sent.text) if sent else None,
             "speech_end_to_send_ms": (sent.sent_at - end) if (sent and end) else None,
             "cut_early": bool(sent and end and sent.sent_at < end),
-            "segmentation_ok": (len(cur.turns) == want_turns) and not cur.lost
-                               and not (sent and end and sent.sent_at < end),
+            "segmentation_ok": (len(cur.turns) == want_turns) and not (sent and end and sent.sent_at < end),
         },
         "planned": {
             "vad_spans": spans,
@@ -105,11 +106,23 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "docs" / "voice-bench" / "baseline.json"))
     ap.add_argument("--only", action="append", default=[])
     ap.add_argument("--no-whisper", action="store_true")
+    ap.add_argument("--rejudge", metavar="JSON",
+                    help="recompute the judgements of an earlier run from its recorded events, no audio")
     ap.add_argument("--whisper-only", action="store_true",
                     help="skip Apple and the endpointers; compare whisper models via RAC_WHISPER_MODEL")
     a = ap.parse_args()
     fdir = Path(a.fixtures)
     manifest = json.loads((fdir / "manifest.json").read_text())
+    if a.rejudge:
+        old = json.loads(Path(a.rejudge).read_text())
+        fx = {f["id"]: f for f in manifest["fixtures"]}
+        for r in old["rows"]:
+            f = dict(fx[r["id"]], _wav=str(fdir / f"{r['id']}.wav"))
+            r.update(judge(f, r["apple_events"]))
+        old["summary"] = summarise(old["rows"])
+        Path(a.rejudge).write_text(json.dumps(old, ensure_ascii=False, indent=1))
+        print(json.dumps(old["summary"], indent=1))
+        return 0
     if not APPLE.exists() and not a.whisper_only:
         sys.exit(f"build the Swift helper first: swiftc -O {HERE / 'apple_stt.swift'} -o {APPLE}")
 
@@ -186,7 +199,7 @@ def summarise(rows: list[dict]) -> dict:
         "whisper_pooled_wer": bench.pooled_wer(pairs("whisper")),
         "whisper_vocab_pooled_wer": bench.pooled_wer(pairs("whisper_vocab")),
         "current_segmentation_ok": sum(r["current"]["segmentation_ok"] for r in rows),
-        "current_cut_early": [r["id"] for r in rows if r["current"]["cut_early"] or r["current"]["lost"]],
+        "current_cut_early": [r["id"] for r in rows if r["current"]["cut_early"]],
         "planned_segmentation_ok": sum(r["planned"]["segmentation_ok"] for r in rows),
         "planned_failures": [r["id"] for r in rows if not r["planned"]["segmentation_ok"]],
         "apple_partial_lag_ms_median": statistics.median(lags) if lags else None,

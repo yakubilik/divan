@@ -168,6 +168,10 @@ ALLOW = {
         "measured output: what quantised whisper turbo heard in the Turkish scenarios",
     "docs/voice-bench/tts-roundtrip.json":
         "measured output: Turkish text the voice was given and what whisper heard back",
+    "docs/voice-bench/baseline-run2.json":
+        "measured output: a second pass of the recogniser over the Turkish scenarios",
+    "docs/voice-bench/baseline-run3.json":
+        "measured output: a third pass of the recogniser over the Turkish scenarios",
     "daemon/scripts/test_dictation.py":
         "test data: Turkish dictation and the phrases whisper invents over silence",
     "daemon/scripts/test_scrub.py":

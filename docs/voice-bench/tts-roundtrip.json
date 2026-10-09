@@ -1,0 +1,161 @@
+{
+ "model": "mlx-community/whisper-large-v3-turbo",
+ "pieces": 22,
+ "pooled_wer": 0.04838709677419355,
+ "rows": [
+  {
+   "id": "short-greeting",
+   "round": 0,
+   "said": "Naber, iyi.",
+   "heard": "Naber iyi.",
+   "wer": 0.0
+  },
+  {
+   "id": "short-status",
+   "round": 0,
+   "said": "Login hatası testleri henüz bitmedi,",
+   "heard": "Login hatası testleri henüz bitmedi.",
+   "wer": 0.0
+  },
+  {
+   "id": "long-request",
+   "round": 0,
+   "said": "Tamam, giriş hatası testlerinin bitmesini bekletirim,",
+   "heard": "Tamam giriş hatası testlerinin bitmesini bekletirim.",
+   "wer": 0.0
+  },
+  {
+   "id": "pause-500",
+   "round": 0,
+   "said": "Giriş sayfasını hemen kontrol ediyorum,",
+   "heard": "Giriş sayfasını hemen kontrol ediyorum.",
+   "wer": 0.0
+  },
+  {
+   "id": "pause-1000",
+   "round": 0,
+   "said": "Bugün login hatası üzerinde çalışıldı (testler hâlâ devam ediyor),",
+   "heard": "Bugün login hatası üzerinde çalışıldı. Testler hala devam ediyor.",
+   "wer": 0.1111111111111111
+  },
+  {
+   "id": "pause-1500",
+   "round": 0,
+   "said": "Ödeme sayfasını hemen kontrol ediyorum,",
+   "heard": "Ödeme sayfasını hemen kontrol ediyorum.",
+   "wer": 0.0
+  },
+  {
+   "id": "pause-2000",
+   "round": 0,
+   "said": "Yeni özellik için hangi dosyaları değiştireceğimizi söyle,",
+   "heard": "Yeni özellik için hangi dosyaları değiştireceğimizi söyle.",
+   "wer": 0.0
+  },
+  {
+   "id": "two-pauses",
+   "round": 0,
+   "said": "Geçen haftanın işini hatırlamıyorum,",
+   "heard": "Geçen haftanın işini hatırlamıyorum.",
+   "wer": 0.0
+  },
+  {
+   "id": "correction",
+   "round": 0,
+   "said": "Web panelde son değişiklik release notes —",
+   "heard": "ve panelde son değişiklik reliyase notes.",
+   "wer": 0.3333333333333333
+  },
+  {
+   "id": "correction-pause",
+   "round": 0,
+   "said": "Tamam, login hatası için değerlemeyi bitirip sonra testleri çalıştırırım.",
+   "heard": "Tamam login hatası için değerlemeyi bitirip sonra testleri çalıştırırım.",
+   "wer": 0.0
+  },
+  {
+   "id": "tech-agents",
+   "round": 0,
+   "said": "Şu anda durumu görmüyorum,",
+   "heard": "Şu anda durumu görmüyorum.",
+   "wer": 0.0
+  },
+  {
+   "id": "short-greeting",
+   "round": 1,
+   "said": "Naber, iyi.",
+   "heard": "Naber iyi.",
+   "wer": 0.0
+  },
+  {
+   "id": "short-status",
+   "round": 1,
+   "said": "Login testleri henüz bitmedi,",
+   "heard": "login testleri henüz bitmedi.",
+   "wer": 0.0
+  },
+  {
+   "id": "long-request",
+   "round": 1,
+   "said": "Tamam, login hatası testlerini takip ediyorum,",
+   "heard": "Tamam login hatası testlerini takip ediyorum.",
+   "wer": 0.0
+  },
+  {
+   "id": "pause-500",
+   "round": 1,
+   "said": "Giriş sayfasını hemen kontrol ediyorum,",
+   "heard": "Giriş sayfasını hemen kontrol ediyorum.",
+   "wer": 0.0
+  },
+  {
+   "id": "pause-1000",
+   "round": 1,
+   "said": "Login hatası üzerinde çalışılıyor (testler devam ediyor),",
+   "heard": "Login hatası üzerinde çalışılıyor. Testler devam ediyor.",
+   "wer": 0.0
+  },
+  {
+   "id": "pause-1500",
+   "round": 1,
+   "said": "Ödeme sayfasını kontrol ediyorum,",
+   "heard": "Ödeme sayfasını kontrol ediyorum.",
+   "wer": 0.0
+  },
+  {
+   "id": "pause-2000",
+   "round": 1,
+   "said": "Yeni özellik için hangi dosyaları değiştireceğini söyle,",
+   "heard": "Yeni özellik için hangi dosyaları değiştireceğini söyle.",
+   "wer": 0.0
+  },
+  {
+   "id": "two-pauses",
+   "round": 1,
+   "said": "Geçen hafta açılan işi bana hatırlatır mısın —",
+   "heard": "Geçen hafta açılan işi bana hatırlatır mısın?",
+   "wer": 0.0
+  },
+  {
+   "id": "correction",
+   "round": 1,
+   "said": "Web panelde son değişiklik release notes —",
+   "heard": "ve panelde son değişiklik reliyase notes.",
+   "wer": 0.3333333333333333
+  },
+  {
+   "id": "correction-pause",
+   "round": 1,
+   "said": "Tamam, login hatası için değerlemeyi bitirip sonra testleri çalıştırırım.",
+   "heard": "Tamam login hatası için değerlemeyi bitirip sonra testleri çalıştırırım.",
+   "wer": 0.0
+  },
+  {
+   "id": "tech-agents",
+   "round": 1,
+   "said": "Dört iş var şu anda —",
+   "heard": "4 iş var şu anda.",
+   "wer": 0.2
+  }
+ ]
+}
