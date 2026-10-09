@@ -618,7 +618,7 @@ export const STEPS_SHOWN = 6;
 
 /** Who a card can be handed to: the three a board offers, and nobody, which is
  *  a value rather than the absence of one. A branch agent is named by its
- *  branch and is handed from the branch page. */
+ *  branch and is not one of them. */
 export const HANDS: (DivanExecutor | null)[] = ['coding_agent', 'assistant', 'human', null];
 
 /** The card a queue ticket number is, on the computer this phone holds a socket

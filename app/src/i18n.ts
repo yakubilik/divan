@@ -325,7 +325,7 @@ const en = {
   cmAsking: 'asking', cmYourCall: 'your call', cmStuckWord: 'stuck', cmYours: 'yours',
   cmMachines: 'machines', cmQuota: 'quota', cmLow: 'low', cmBackTo: 'Back to {place}', cmOpen: 'Open',
   cmSent: 'sent · {text}', cmNotSent: 'not sent · {text}', cmProjectsMeta: '{n} · {q} quiet',
-  allProjects: 'All', overview: 'Overview', projects: 'Projects', branches: 'Branches',
+  allProjects: 'All', overview: 'Overview', projects: 'Projects',
   dashProjects: '{n} projects', dashSorted: 'sorted by urgency',
   dashQueueNote: 'what this computer is working through',
   conversations: 'Conversations',
@@ -396,12 +396,10 @@ const en = {
   waitCalm: 'Nothing is waiting on you',
   waitCalmBody: 'Every agent is either working or finished. A question, something that fell over, or a card that is yours to do lands here the moment it happens.',
   waitStale: '{machine} is not answering. This is the last thing it said.',
-  branchNoSource: 'no source connected yet',
   // One product's own page (src/project.ts): the two lines at the top, the
   // block a product nothing has touched in weeks gets instead of them, the one
-  // whose board is still empty, and a branch card. Every number in here is a
-  // count off the board — the branch figures the frames draw come from sources
-  // nothing is connected to yet, and there is no string for an invented one.
+  // whose board is still empty. Every number in here is a count off the board,
+  // and there is no string for an invented one.
   prNow: 'now', prWaiting: 'waiting',
   prNowOne: '{who} is on {title}, running on {machine}.',
   prNowOneBare: '1 agent is running on {on}.',
@@ -428,36 +426,8 @@ const en = {
   prQuietBodyOne: 'No agents are running. One card is waiting on the board, and the last commit was {d} ago.',
   prQuietBodyCards: 'No agents are running. {n} cards are waiting on the board, and the last commit was {d} ago.',
   prNewTitle: 'A new board.',
-  prNewBody: 'Nothing is on it yet. The branches are ready — {branches} — and a card needs a title and a couple of sentences to begin.',
   prNewBodyBare: 'Nothing is on it yet. A card needs a title and a couple of sentences to begin.',
   prNewFoot: 'Nothing starts by itself: a card runs when it is moved into In Progress.',
-  bnOpen: 'open', bnProgress: 'in progress', bnDone: 'done',
-  bnAt: '{time}', bnYesterday: 'yesterday', bnDaysOld: '{n} days old',
-  // One branch's page (src/branch.ts): the same layout for every face of a
-  // product, with three more blocks on the one that owns the code. Every figure
-  // in here is a count off the board or something git said; the blocks whose
-  // source is not connected have a string that says so, and no string for a
-  // number.
-  bpLog: 'What the agent did', bpLogMany: 'What the agents did',
-  bpLogNothing: 'Nothing has run on this branch yet, so there is nothing to log.',
-  bpDid: '{who}: {what}',
-  bpSeen: 'as of {time}',
-  bpOverTime: 'over time · 30 days',
-  bpOverTimeBody: 'A figure a day needs a source that measures this branch daily. None is connected yet, so there is no chart — the numbers above are the board’s own.',
-  bpRepos: 'Repositories', bpReposNone: 'No repository is attached to this product.',
-  bpCommits: 'Recent commits',
-  bpCommitsNone: 'Git could not be read on any of these repositories, so nothing is said about what landed.',
-  bpLanded: '{n} · 7d', bpLandedToday: '{today} today · {n} · 7d', bpLandedNone: 'nothing in 7 days',
-  bpPulls: 'Pull requests',
-  bpPullsBody: 'Nothing has answered about these repositories yet. The code host is read through the gh signed in on the computer that holds the checkout, and only where the origin is on GitHub — so this is a gap and not an empty list.',
-  bpPullsNone: 'Nothing is open on the repositories of this branch.',
-  bpChecksFailing: '× {n} checks', bpChecksPassing: '✓ checks', bpChecksPending: '◐ checks',
-  bpDraft: 'draft',
-  bpTickets: 'Tickets', bpNoTickets: 'No cards on this branch yet.',
-  bpBareTitle: 'Nothing on this branch yet.',
-  bpBare: 'No card has been filed here, and no source writes to it. It keeps its place so that work has somewhere to go.',
-  bpGone: 'That branch is not on this phone.',
-  bpGoneBody: 'Nothing that has answered has a branch by this name on this product. It may be on a computer that is not paired.',
   // …and its board (src/board.ts): the four columns, and the mark on a card.
   // The column is where a person put the card; the mark is what the agent on it
   // is actually doing, which is why "Stuck" carries how long and "Done" says
@@ -478,7 +448,7 @@ const en = {
   bdShowMore: 'Show {n} more',
   // A product's page (HANDOVER §4.2).
   pjChats: 'Chats', pjOpen: 'Open', pjInProgressNow: 'In progress now',
-  pjNotConnected: 'Source not connected yet.', pjSince: '{stage} since {date}', pjRunsOn: 'runs on {machines}',
+  pjSince: '{stage} since {date}', pjRunsOn: 'runs on {machines}',
   pjNoChats: 'No chat is filed under this project yet.',
   bdNothing: 'Nothing in this column.',
   bdDoneNote: 'The last month of finished work, out of {n}.',
@@ -586,12 +556,6 @@ const en = {
   // HANDOVER §4.8: one conversation, filed by Hermes.
   chFiled: 'filed under {project}', chTalk: 'Talk to Hermes', chNoneYet: 'No conversation yet.',
   chCardQueued: 'Queued',
-  // HANDOVER §4.7: a branch's own page.
-  brUpdated: 'Updated {d}.', brUpdatedNow: 'Updated just now.', brDid: 'What the agent did', brTickets: 'Tickets',
-  brOnBoard: 'On the board', brRepos: 'Repositories', brNoSource: 'Source not connected yet.',
-  brNothingDone: 'Nothing done here yet.', brNoTickets: 'No ticket on the board names this branch.',
-  brNoRepos: 'Nothing on this branch names a repository.',
-  brOpen: 'Open tickets', brInProgress: 'In progress', brDone: 'Done',
   dayToday: 'today', dayYesterday: 'yesterday',
   // Machine › Machines (Mobile11 S15): one card per computer, and the quota
   // that belongs to the account rather than to any of them over the top.

@@ -17,7 +17,7 @@ import {
   type Ago, type Said,
 } from '../src/dashboard';
 import {
-  blank, blankBody, branchCards, connected, day, meta, nowWords, oldWords, quiet, subtitle, waitingWords,
+  blank, blankBody, day, meta, nowWords, oldWords, quiet, subtitle, waitingWords,
   type Line,
 } from '../src/project';
 import {
@@ -40,7 +40,7 @@ import {
   Greeting, LiveRow, Note, NoteFoot, QuietRow, Rows, Tile, WaitCard,
 } from '../src/components/dashboard';
 import { Composer } from '../src/components/compose';
-import { BoardSummary, BranchRow, ProjectHead, QuietNote, StateLines } from '../src/components/project';
+import { BoardSummary, ProjectHead, QuietNote, StateLines } from '../src/components/project';
 import { BoardCard, statusDot } from '../src/components/board';
 import { Icon } from '../src/components/icon';
 import { DragHint, DropSlot, Float, useDrag } from '../src/components/drag';
@@ -544,7 +544,7 @@ function AddTicket({ project }: { project: string }) {
 }
 
 /** The Overview face (ProjectPhone): what in this product needs you, the board
- *  in four numbers with In progress now under it, and the branches as rows. A
+ *  in four numbers with In progress now under it. A
  *  product nothing has touched in weeks says so first; one whose board is
  *  empty says that instead of the numbers. */
 function Overview({ project: p, view, now, ago, onBoard, onOpen }: {
@@ -556,9 +556,8 @@ function Overview({ project: p, view, now, ago, onBoard, onOpen }: {
   const router = useRouter();
   const go = useNavGuard();
   const asleep = quiet(p, now, ago);
-  const body = blankBody(p);
+  const body = blankBody();
   const rows = inProgress(p, now);
-  const branches = branchCards(p, now);
   const happening = nowWords(view, p);
   const pending = waitingWords(view, p);
   /** One of the two sentences said where nothing is in progress: every clause
@@ -604,22 +603,6 @@ function Overview({ project: p, view, now, ago, onBoard, onOpen }: {
           </Rows>
         )}
       </View>
-      {!!branches.length && (
-        <View style={{ gap: 12 }}>
-          <SectionHeader title={T('branches')} count={branches.length} />
-          <Rows>
-            {branches.map((b, i) => {
-              const fed = connected(p, p.branches.find((x) => x.kind === b.kind)!);
-              return (
-                <BranchRow key={b.key} first={i === 0} name={b.name}
-                  note={fed ? null : T('pjNotConnected')}
-                  figures={fed ? b.figures.map((f) => ({ value: f.value, label: T(f.label) })) : []}
-                  onPress={() => go(() => router.push(`/branch/${b.kind}?project=${p.key}`))} />
-              );
-            })}
-          </Rows>
-        </View>
-      )}
     </View>
   );
 }
@@ -674,7 +657,7 @@ function Board({ project: p, view, ago, column, allDone, onColumn, onAllDone, on
   const list = column === 'done' && !allDone ? every.slice(0, DONE_SHOWN) : every;
   const rest = every.length - list.length;
   const said = foot(p, column, view.now);
-  const empty = blankBody(p);
+  const empty = blankBody();
 
   /** The card that has just been put down, for the five seconds it says so. */
   const [landed, setLanded] = React.useState<Landed | null>(null);

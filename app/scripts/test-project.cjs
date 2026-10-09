@@ -5,12 +5,11 @@
  *  rather than a variation on the busy page:
  *
  *    * **a product at work says what is happening and what it is waiting for**,
- *      in two sentences, over its branches as cards — a line of status, two or
- *      three numbers, and when the branch last refreshed (Mobile2 V4, and
- *      Mobile7 S4 with another product's numbers in the same slots);
- *    * **a branch with no third number still looks finished.** The three slots
- *      are fixed; a branch with nothing in progress leaves the middle one empty
- *      and is not drawn as broken (Mobile7 S4's own note);
+ *      in two sentences, over its board (Mobile2 V4, and Mobile7 S4 with
+ *      another product's numbers in the same slots);
+ *    * **its branches are not on the page.** The Branches section and a
+ *      branch's own page are gone from the phone; the data is still on the
+ *      wire, and a link somebody kept to a branch lands on its product;
  *    * **a product nothing has touched in weeks says so** rather than showing a
  *      page of zeros (Mobile7 S5);
  *    * **a product whose board is still empty is a designed state** with its
@@ -216,20 +215,6 @@ const MINI = paired('h2', 'mini', {
 
 /** …and a computer that has never answered at all. */
 const NEVER = paired('h3', 'cloud', { reachable: false, at: null, snapshot: null });
-
-/** The studio with Quire's repositories asked and nothing open on either of
- *  them, and the same studio where nobody could be asked: no `gh`, or no code
- *  host. The two are the pull-request block's two empty states and the page must
- *  not draw them alike. */
-const quireOnly = (pulls) => paired('h1', 'studio', {
-  reachable: true, at: NOW - 10,
-  snapshot: snapshot('studio', { at: NOW - 10, projects: [QUIRE],
-    cards: [card('q1', { project: 'Quire-id', status: 'asking', ustabasi: 12, at: NOW - 12 * MIN,
-                         title: 'Webhook retry policy', detail: 'Keep 3 retries, or follow Stripe?' })],
-    activity: { '/r/quire': { at: NOW - 3 * HOUR, week: 14, today: 3 } }, pulls }) });
-const NOTHING_OPEN = quireOnly({ '/r/quire': { at: NOW - 200, open: [] },
-                                 '/r/quire-web': { at: NOW - 200, open: [] } });
-const UNASKED = quireOnly({});
 
 /** The studio again, out of quota: its agents are stopped where they were and
  *  pick up again on their own (Mobile5 S2, on a product's own page). */
@@ -602,70 +587,8 @@ const ago = (s) => (s == null ? '' : `${Math.round(s)}s`);
       && !P.blank({ ...pebble, branches: [branch('seo', 'SEO', { open: 1 })] })],
     ['…nor is a product that has stopped: that one has a history',
       !P.blank(walk) && P.quiet(walk, NOW, ago) !== null],
-    ['what it says names the branches, so the structure is legible from the first minute',
-      eq(P.blankBody(pebble), { key: 'prNewBody',
-        params: { branches: 'Engineering, Seo, Analytics, Marketing, Customers' } })],
-    ['…and a product with no branches at all still has something to say',
-      eq(P.blankBody({ ...pebble, branches: [] }), { key: 'prNewBodyBare' })],
-  );
-}
-
-// ── 7 · a branch card ───────────────────────────────────────────────────────
-
-{
-  const cards = P.branchCards(quire, NOW);
-  const by = Object.fromEntries(cards.map((c) => [c.name, c]));
-  const kanjiCards = P.branchCards(kanji, NOW);
-  const walkCards = P.branchCards(walk, NOW);
-  checks.push(
-    ['every branch of the product is a card, in the order the computer keeps them',
-      eq(cards.map((c) => c.name), ['Engineering', 'SEO', 'Analytics', 'Marketing', 'Customers'])],
-    ['the numbers are three slots, and never more',
-      P.SLOTS === 3 && [...cards, ...kanjiCards, ...walkCards].every((c) => c.figures.length <= P.SLOTS)],
-    ['a branch with work in progress has three numbers',
-      eq(by.Engineering.figures, [{ value: 9, label: 'bnOpen' }, { value: 3, label: 'bnProgress' },
-                                  { value: 31, label: 'bnDone' }])],
-    ['…and one with nothing in progress has two, which is a finished card and not a broken one',
-      eq(by.SEO.figures, [{ value: 4, label: 'bnOpen' }, { value: 12, label: 'bnDone' }])
-      && eq(by.Customers.figures, [{ value: 0, label: 'bnOpen' }, { value: 8, label: 'bnDone' }])],
-    ['…and a branch nobody has ever put a card on has none, rather than three zeros',
-      eq(kanjiCards.find((c) => c.name === 'Marketing').figures, [])],
-    ['the numbers are the board’s own: they are what the machine counted',
-      by.Engineering.figures[0].value === quire.branches[0].open
-      && by.Engineering.figures[2].value === quire.branches[0].cards.done],
-    ['the dot in front of a branch is the worst thing true of its cards',
-      by.Engineering.state === 'stuck' && by.SEO.state === 'quiet'
-      && by.Analytics.state === 'running'],
-    ['…and a card that is waiting on a person makes its branch amber',
-      P.branchState([card('x', { executor: 'human', column: 'in_progress' })]) === 'asking'
-      && P.branchState([card('y', { status: 'asking' })]) === 'asking'],
-    ['…read through the merge’s own two rules rather than a second spelling of them',
-      P.branchState(quire.cards.filter((c) => c.branch === 'engineering')) === 'stuck'
-      && quire.cards.filter((c) => c.branch === 'engineering').some(M.stuck)],
-    ['the line of status is the branch’s own summary where something wrote one',
-      by.Engineering.text === 'v3.18 deployed, Safari login still red' && by.Engineering.said === null],
-    ['…the worst card’s own line where nothing has, which is the Dashboard’s rule again',
-      by.Analytics.text === D.latest(quire.cards.filter((c) => c.branch === 'analytics'))
-      && by.Analytics.text === 'Pricing test read-out'],
-    ['…and "no source connected yet" where there is neither, never an invented sentence',
-      kanjiCards.find((c) => c.name === 'Customers').said.key === 'branchNoSource'
-      && kanjiCards.find((c) => c.name === 'Customers').text === ''],
-    ['when a branch last refreshed is the clock while it is today’s',
-      by.Engineering.refreshed.tone === null
-      && /^\d{2}:\d{2}$/.test(by.Engineering.refreshed.said.params.time)],
-    ['…its age in amber once it is older than a day',
-      by.Marketing.refreshed.said.key === 'bnYesterday' && by.Marketing.refreshed.tone === 'amber'
-      && eq(by.Customers.refreshed.said, { key: 'bnDaysOld', params: { n: 3 } })],
-    ['…and nothing at all where no source has ever refreshed it',
-      by.Analytics.refreshed === null && P.dim(quire.branches[2], NOW) === false],
-    ['a branch quiet for a week is drawn faintly as well',
-      walkCards.find((c) => c.name === 'SEO').dim === true
-      && walkCards.find((c) => c.name === 'Marketing').dim === true],
-    ['…and one that refreshed overnight is not',
-      walkCards.find((c) => c.name === 'Analytics').dim === false
-      && by.Customers.dim === false],
-    ['the thresholds are the frames’: a day in amber, a week faint',
-      P.BRANCH_OLD_AFTER_S === DAY && P.BRANCH_DIM_AFTER_S === 7 * DAY],
+    ['what it says is how a first card is begun, and names no branch',
+      eq(P.blankBody(), { key: 'prNewBodyBare' })],
   );
 }
 
@@ -708,37 +631,23 @@ const PAGES = {
 
 const Branch = require(path.join(root, 'app/branch/[id].tsx')).default;
 
-/** …and one branch of one of those products, which is a route of its own. */
-function drawBranch(scheme, hosts, key, kind) {
+/** …and a link somebody kept to one branch of one of those products, which
+ *  used to be a page and is now the way to the product. Returns where it led. */
+function openBranch(hosts, key, kind, o = {}) {
   R.store.reset();
   R.params.reset();
   R.nav.reset();
   R.store.set({
+    ready: o.ready !== false,
     hosts: hosts.map((e) => ({ id: e.id, name: e.name })),
     divan: Object.fromEntries(hosts.map((e) => [e.id, e.state])),
     host: hosts.length ? { id: hosts[0].id } : null,
     conn: 'online', loadDivan() {}, ustabasi: null, ustabasiOld: false, loadUstabasi() {},
   });
-  R.params.set({ project: key, id: kind });
-  return R.render(scheme, h(Branch));
+  R.params.set({ ...(key ? { project: key } : {}), id: kind });
+  R.render('dark', h(Branch));
+  return R.nav.replaced();
 }
-
-/** Every state the branch page can be in. */
-const BRANCHES = {
-  'the generic layout': [[STUDIO], 'quire', 'seo'],
-  'the densest branch': [[STUDIO], 'quire', 'engineering'],
-  'a branch whose source has never written anything': [[STUDIO], 'quire', 'analytics'],
-  'a branch nobody has put a card on': [[STUDIO], 'kanji-daily', 'marketing'],
-  'a branch nothing has touched in weeks': [[STUDIO], 'the-long-walk', 'seo'],
-  'a branch of a brand-new product': [[STUDIO], 'pebble', 'engineering'],
-  'a branch on a machine that has gone quiet': [[MINI], 'kanji-daily', 'engineering'],
-  'a branch spread over an answering machine and a quiet one': [[STUDIO, MINI], 'kanji-daily', 'engineering'],
-  'a branch of a product out of quota': [[SPENT], 'kanji-daily', 'engineering'],
-  'a branch beside a machine that never answered': [[STUDIO, NEVER], 'quire', 'engineering'],
-  'a branch this product does not have': [[STUDIO], 'quire', 'design'],
-  'a branch of a project that is no longer in the view': [[STUDIO], 'gone', 'engineering'],
-  'nothing paired at all': [[], 'quire', 'engineering'],
-};
 
 /** The style the given word came out in, where a check is about a colour on one
  *  particular word rather than a colour being on the page at all. */
@@ -769,18 +678,16 @@ for (const scheme of ['dark', 'light']) {
     [`${scheme}: the board is four numbers off the columns, with In progress now under them in status words`,
       ['>bdIceBox<', '>bdQueued<', '>bdInProgress<', '>bdDone<'].every((w) => page.includes(w))
       && page.includes('>stRunning<')],
-    [`${scheme}: every branch is a row under a count of them; one nothing feeds says so and shows no number`,
-      page.includes('>branches<') && page.includes('>5<')
-      && ['Engineering', 'SEO', 'Analytics', 'Marketing', 'Customers'].every((name) => page.includes(`>${name}<`))
-      && page.includes('>pjNotConnected<')],
+    [`${scheme}: a product with five branches of data draws no Branches section and no row for any of them`,
+      quire.branches.length === 5
+      && [page, four, asleep, fresh].every((m) => !/>branches<|>Branches<|pjNotConnected/.test(m))
+      && ['Engineering', 'SEO', 'Analytics', 'Marketing', 'Customers'].every((name) => !page.includes(`>${name}<`))],
     [`${scheme}: another product draws the same page with its own numbers`,
-      four.includes('>Kanji Daily<') && four.includes('iOS · Android · five kanji a day')
-      && (four.match(/>pjNotConnected</g) ?? []).length === 2],
+      four.includes('>Kanji Daily<') && four.includes('iOS · Android · five kanji a day')],
     [`${scheme}: a product nothing has touched in weeks says so`,
       asleep.includes('prQuietTitle') && asleep.includes('prQuietBodyCards')],
     [`${scheme}: a brand-new product is a designed state and not an empty page, with no number in place of the cards`,
-      fresh.includes('>prNewTitle<') && fresh.includes('prNewBody') && !fresh.includes('prNewBodyBare')
-      && !fresh.includes('>bnOpen<')],
+      fresh.includes('>prNewTitle<') && fresh.includes('>prNewBodyBare<')],
     [`${scheme}: a product with a quiet machine under it says which, and how old this is`,
       quiet.includes('prStale')],
     [`${scheme}: the colour on the page is a state with its word beside it`,
@@ -807,8 +714,7 @@ for (const scheme of ['dark', 'light']) {
                          ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                          K.EXEC_PENDING_INK, K.EXEC_PENDING_LINE, 'transparent']);
     const strayed = new Set();
-    const every = [...Object.values(PAGES).map(([hosts, key]) => () => draw(scheme, hosts, key)),
-                   ...Object.values(BRANCHES).map(([hosts, key, kind]) => () => drawBranch(scheme, hosts, key, kind))];
+    const every = Object.values(PAGES).map(([hosts, key]) => () => draw(scheme, hosts, key));
     for (const page of every) {
       for (const v of R.paint(page())) {
         const inside = v.match(COLOUR) ?? [];
@@ -820,41 +726,6 @@ for (const scheme of ['dark', 'light']) {
     checks.push([`${scheme}: the whole page is drawn in the design's own colours${
       strayed.size ? ` (${[...strayed].join(', ')})` : ''}`, strayed.size === 0]);
   }
-}
-
-// ── 9 · the three fixed slots, drawn ────────────────────────────────────────
-//
-// "A branch with no third number still looks finished" is a claim about the
-// layout and not about the data: the slots are three whatever is in them, so the
-// numbers on two cards line up under each other. The part is rendered on its own
-// to count them.
-
-{
-  const Parts = require(path.join(root, 'src/components/project.tsx'));
-  const cell = (m) => R.styles(m).filter((s) => s.flex === 1 && s.minWidth === 0).length;
-  const SLOTS = P.SLOTS;
-  const three = R.render('dark', h(Parts.BranchCard, {
-    name: 'Engineering', state: 'running', line: 'v3.18 deployed', refreshed: '07:02',
-    figures: [{ value: 9, label: 'open' }, { value: 3, label: 'in progress' }, { value: 31, label: 'done' }],
-  }));
-  const two = R.render('dark', h(Parts.BranchCard, {
-    name: 'Customers', state: 'quiet', line: 'Both answered by agent', refreshed: '3 days old',
-    tone: 'amber', figures: [{ value: 0, label: 'open' }, { value: 8, label: 'done' }],
-  }));
-  const none = R.render('dark', h(Parts.BranchCard, {
-    name: 'Marketing', state: 'quiet', line: 'no source connected yet', figures: [],
-  }));
-  checks.push(
-    ['a branch card is three number slots wide, with two numbers in it',
-      cell(two) === SLOTS && cell(three) === SLOTS],
-    ['…and the card is whole without the third: a name, a status line and its age',
-      two.includes('>Customers<') && two.includes('Both answered by agent')
-      && two.includes('>3 days old<') && two.includes('>0<') && two.includes('>8<')],
-    ['…with nothing standing in for the number that is not there',
-      !two.includes('—') && !two.includes('&mdash;') && !two.includes('n/a')],
-    ['a branch with no numbers draws no slots rather than three empty ones',
-      cell(none) === 0 && none.includes('no source connected yet')],
-  );
 }
 
 // ── 10 · the way in, and the way back out ───────────────────────────────────
@@ -890,7 +761,7 @@ for (const scheme of ['dark', 'light']) {
   const judgement = src('src/project.ts');
   const table = src('src/i18n.ts');
   const known = new Set([...table.matchAll(/([A-Za-z0-9_]+):\s*['"]/g)].map((m) => m[1]));
-  const used = new Set([...judgement.matchAll(/'((?:pr|bn)[A-Za-z0-9]+|branchNoSource)'/g)].map((m) => m[1]));
+  const used = new Set([...judgement.matchAll(/'(pr[A-Za-z0-9]+)'/g)].map((m) => m[1]));
   const missing = [...used].filter((k) => !known.has(k));
   checks.push(
     ['the page is built out of the design system and nothing else',
@@ -900,7 +771,7 @@ for (const scheme of ['dark', 'light']) {
       /useTokens\(\)/.test(parts) && /toneColours\(/.test(parts)],
     ['what the page says is decided where a check can reach it, with no React in it',
       !/\brequire\(|from 'react/.test(judgement)
-      && /export function nowWords/.test(judgement) && /export function branchCards/.test(judgement)],
+      && /export function nowWords/.test(judgement) && /export function waitingWords/.test(judgement)],
     [`every string it names is in the i18n table${missing.length ? ` (${missing.join(', ')})` : ''}`,
       used.size >= 20 && missing.length === 0],
     ['…and none of it was typed into the block that draws it',
@@ -948,150 +819,78 @@ for (const scheme of ['dark', 'light']) {
     bad.length === 0]);
 }
 
-// ── 12 · the branch page (Mobile9 S10, S11) ─────────────────────────────────
+// ── 12 · the branches are gone from the phone ───────────────────────────────
 //
-// One layout for every branch: S10 is the layout and S11 is the same layout
-// with Engineering's three blocks inside it. Covered here: that the two are one
-// page in both themes, that a block with no source says so instead of showing a
-// figure, that Engineering's repositories and commits are git's own, and that
-// the branch's cards are listed and open.
+// The Branches section and a branch's own page were taken off the phone. What
+// is held here is that nothing on a product's page leads to one any more, that
+// what was there beside them still works, and that a link somebody kept to a
+// branch lands somewhere real: the product it named, or the Dashboard.
 
 {
-  const B = require(path.join(root, 'src/branch.ts'));
-  const engineering = quire.branches[0];
-  const seo = quire.branches[1];
+  const layout = src('app/_layout.tsx');
+  const every = fs.readdirSync(path.join(root, 'app'), { recursive: true })
+    .filter((f) => /\.tsx$/.test(f) && !/^branch[\\/]/.test(f))
+    .map((f) => src(path.join('app', f)));
+  const components = fs.readdirSync(path.join(root, 'src'), { recursive: true })
+    .filter((f) => /\.tsx?$/.test(f)).map((f) => src(path.join('src', f)));
 
   checks.push(
-    ['the log is the mirror\u2019s own words about this branch, newest first and cut at six',
-      (() => {
-        const list = B.log(ONE, quire, engineering);
-        return list.length === 2 && list[0].at > list[1].at
-          && list[0].text === 'Keep 3 retries, or follow Stripe?' && list[0].who === 'exCoder'
-          && B.log(ONE, quire, seo).length === 0
-          // Two cards, two coders: one worker is started per card, so the
-          // heading over them is the plural one (S11 against S10).
-          && B.logTitle(list) === 'bpLogMany'
-          && B.logTitle(list.slice(0, 1)) === 'bpLog';
-      })()],
-    ['\u2026and a line off a machine that has gone quiet is marked as one',
-      (() => {
-        const p = of(GONE, 'kanji-daily');
-        const [first] = B.log(GONE, p, p.branches[0]);
-        return first.stale === true && first.text === 'Merging two decks';
-      })()],
-    ['what landed in a repository is git\u2019s own figure, and a repository it would not answer about has none',
-      (() => {
-        const list = B.commits(quire, NOW);
-        return list.length === 1 && list[0].name === 'quire'
-          && list[0].week === 14 && list[0].today === 3
-          && list[0].said.key === 'bnAt'
-          && B.repos(quire).map((r) => r.name).join(',') === 'quire,quire-web';
-      })()],
-    ['the pull requests of a branch are every repository\u2019s, newest first, with what is failing',
-      (() => {
-        const list = B.pulls(quire);
-        return list.map((x) => x.number).join(',') === '410,412,409'
-          && eq(B.checkWords(list[0]), { said: { key: 'bpChecksFailing', params: { n: 2 } }, tone: 'red' })
-          && B.checkWords(list[1]).tone === 'ink3' && B.checkWords(list[2]).tone === 'run'
-          && list[0].repo === 'quire' && list[2].draft === true;
-      })()],
-    ['\u2026a repository with none open is an answer, and one nobody could ask is not',
-      (() => {
-        const asked = { ...quire, repoPulls: { '/r/quire-web': { at: NOW, open: [] } } };
-        const neither = { ...quire, repoPulls: {} };
-        return eq(B.pulls(asked), []) && B.pulls(neither) === null
-          // …and a pull request with no checks at all is not drawn as passing.
-          && B.checkWords({ checks: null, failing: 0 }) === null;
-      })()],
-    ['a branch is found by the kind two machines agree on, not by either\u2019s id for it',
-      (() => {
-        const two = B.find(TWO, 'kanji-daily', 'engineering');
-        return two.branch.machines.join(', ') === 'studio, mini'
-          && B.find(ONE, 'quire', engineering.id) === null
-          && B.find(ONE, 'quire', 'design') === null
-          && B.dense(engineering) === true && B.dense(seo) === false;
-      })()],
-  );
-
-  for (const scheme of ['dark', 'light']) {
-    const generic = drawBranch(scheme, [STUDIO], 'quire', 'seo');
-    const densest = drawBranch(scheme, [STUDIO], 'quire', 'engineering');
-    const unused = drawBranch(scheme, [STUDIO], 'kanji-daily', 'marketing');
-    const quiet = drawBranch(scheme, [MINI], 'kanji-daily', 'engineering');
-    /** Which of the page's blocks are in this markup, in the order they appear.
-     *  The log's heading is singular or plural by what ran (`logTitle`). */
-    const at = (m, k) => m.indexOf(`>${k}<`);
-    const order = (m) => ['bpOverTime', 'bpRepos', 'bpCommits', 'bpPulls', 'brTickets', 'brDid']
-      .filter((k) => at(m, k) >= 0)
-      .sort((a, b) => at(m, a) - at(m, b));
-
-    checks.push(
-      [`${scheme}: S10 and S11 are one page: the same blocks, in the same order`,
-        eq(order(generic), ['brTickets', 'brDid'])
-        && eq(order(densest), ['bpRepos', 'bpCommits', 'bpPulls', 'brTickets', 'brDid'])
-        && ['>SEO<', '>Quire<', 'Pages 9 of 14 rewritten'].every((x) => generic.includes(x))
-        && ['>Engineering<', '>Quire<', 'v3.18 deployed'].every((x) => densest.includes(x))],
-      [`${scheme}: \u2026over the same numbers, which are the board\u2019s own counts`,
-        [['>4<', '>bnOpen<'], ['>12<', '>bnDone<']].every(([n, l]) => generic.includes(n) && generic.includes(l))
-        && ['>9<', '>3<', '>31<', '>bnProgress<'].every((x) => densest.includes(x))],
-      [`${scheme}: the sentence under the title says how long ago it was true, and no chart nothing feeds is drawn`,
-        /brUpdated(Now)?/.test(generic) && /brUpdated(Now)?/.test(densest)
-        && !generic.includes('>bpOverTimeBody<') && !densest.includes('>bpOverTimeBody<')],
-      [`${scheme}: Engineering lists what is open on the branch and the checks failing on it`,
-        ['>bpPulls<', '>#410<', 'GBP price localisation', '>bpChecksFailing<', '>bpChecksPassing<',
-         '>bpChecksPending<', 'bpDraft<'].every((x) => densest.includes(x))
-        && !densest.includes('>bpPullsBody<') && !densest.includes('>bpPullsNone<')
-        && !generic.includes('>bpPulls<')],
-      [`${scheme}: \u2026nothing open and nobody to ask are two different blocks`,
-        (() => {
-          const none = drawBranch(scheme, [NOTHING_OPEN], 'quire', 'engineering');
-          const gap = drawBranch(scheme, [UNASKED], 'quire', 'engineering');
-          return none.includes('>bpPullsNone<') && !none.includes('>bpPullsBody<')
-            && gap.includes('>bpPullsBody<') && !gap.includes('>bpPullsNone<')
-            && !none.includes('>#410<') && !gap.includes('>#410<');
-        })()],
-      [`${scheme}: a branch nothing writes to says so, and draws no number nobody counted`,
-        unused.includes('>brNoSource<')
-        && !unused.includes('>bnOpen<') && !unused.includes('>bnDone<')
-        && !unused.includes('>brTickets<') && !unused.includes('>brDid<') && !unused.includes('>bpRepos<')],
-      [`${scheme}: Engineering lists the repositories the product owns and what landed in them`,
-        ['>quire<', '>quire-web<', '>bpCommits<', '>bnAt<', '>bpLandedToday<'].every((x) => densest.includes(x))
-        && !generic.includes('>quire-web<')],
-      [`${scheme}: the branch\u2019s own cards are listed, each with the column it is in`,
-        generic.includes('Comparison page: Quire vs Notion') && generic.includes('>bdQueued<')
-        && ['Webhook retry policy', 'Fix portal login on Safari 17', 'Bulk CSV invite']
-          .every((t) => densest.includes(t))
-        && densest.includes('>bdInProgress<') && densest.includes('? bdAsking')
-        // …and nothing from another branch of the same product.
-        && !densest.includes('Comparison page: Quire vs Notion')],
-      [`${scheme}: a branch on a machine that has gone quiet says so and still draws what it said`,
-        quiet.includes('prStale') && quiet.includes('>bpDid<')
-        && R.styles(quiet).some((s2) => s2.color === K.tokensFor(scheme).amber)],
-      [`${scheme}: every state of the page renders, inside the place it is a page of`,
-        Object.values(BRANCHES).every(([hosts, key, kind]) =>
-          /tabDashboard|>divan</.test(drawBranch(scheme, hosts, key, kind)))
-        && drawBranch(scheme, [STUDIO], 'quire', 'design').includes('>bpGone<')
-        && drawBranch(scheme, [], 'quire', 'engineering').includes('>bpGone<')],
-    );
-  }
-
-  checks.push(
-    ['tapping a card on a branch page opens that card, on the machine it is on',
-      (() => {
-        drawBranch('dark', [STUDIO], 'quire', 'seo');
-        const found = R.presses().filter((x) => x.text.includes('Comparison page: Quire vs Notion'));
-        if (found.length !== 1) throw new Error(`${found.length} of them`);
-        found[0].press();
-        return eq(R.nav.pushed(), ['/card/q4?host=h1']);
-      })()],
-    ['\u2026and a branch card on the product\u2019s page is the way into that branch',
-      (() => {
+    ['no screen and no part of one pushes, replaces or links to a branch route',
+      [...every, ...components].every((text) => !/['"`]\/branch\b/.test(text))],
+    ['…and nothing pressable on any face of a product leads to one',
+      ['', 'board', 'chats'].every((tab) => {
         draw('dark', [STUDIO], 'quire');
-        const found = R.presses().filter((x) => x.text.startsWith('SEO'));
-        if (found.length !== 1) throw new Error(`${found.length} of them`);
-        found[0].press();
-        return eq(R.nav.pushed(), ['/branch/seo?project=quire']);
+        if (tab) R.params.set({ tab });
+        R.render('dark', h(Dashboard));
+        const labels = R.presses().map((x) => `${x.label ?? ''} ${x.text ?? ''}`);
+        return labels.length > 0 && labels.every((l) => !/branches|pjNotConnected/.test(l));
+      })],
+    ['what was beside the branches is still there to press: the board, a card at work and the segment',
+      (() => {
+        const page = draw('dark', [STUDIO], 'quire');
+        const pressed = (find) => {
+          draw('dark', [STUDIO], 'quire');
+          const found = R.presses().filter(find);
+          if (!found.length) throw new Error('nothing to press');
+          found[0].press();
+          return { pushed: R.nav.pushed(), params: R.params.get() };
+        };
+        const row = quire.cards.find((c) => page.includes(`>${c.title}<`));
+        return !!row
+          && pressed((x) => x.text === 'pjOpen').params.tab === 'board'
+          && pressed((x) => x.text === 'pjChats').params.tab === 'chats'
+          && eq(pressed((x) => x.text.includes(row.title)).pushed, [`/card/${row.id}?host=h1&from=project`]);
       })()],
+    ['a link somebody kept to a branch lands on the product it named',
+      eq(openBranch([STUDIO], 'quire', 'seo'), ['/dashboard?project=quire'])
+      && eq(openBranch([STUDIO, MINI], 'kanji-daily', 'engineering'), ['/dashboard?project=kanji-daily'])],
+    ['…whether or not the product still has a branch by that name',
+      eq(openBranch([STUDIO], 'quire', 'design'), ['/dashboard?project=quire'])],
+    ['…on the Dashboard where it named no product',
+      eq(openBranch([STUDIO], null, 'seo'), ['/dashboard'])],
+    ['…and a product that is no longer on this phone is the Dashboard as well, not a crash',
+      (() => {
+        const to = openBranch([STUDIO], 'gone', 'engineering');
+        const landed = draw('dark', [STUDIO], 'gone');
+        return eq(to, ['/dashboard?project=gone']) && landed.includes('>projects<') && landed.includes('>Quire<');
+      })()],
+    ['a phone with nothing paired is sent to pair, and one still reading its settings waits',
+      eq(openBranch([], 'quire', 'engineering'), ['/welcome'])
+      && eq(openBranch([STUDIO], 'quire', 'engineering', { ready: false }), [])],
+    ['from the product a link led to, the line\u2019s left end is the Dashboard',
+      (() => {
+        const [to] = openBranch([STUDIO], 'quire', 'seo');
+        draw('dark', [STUDIO], new URL(to, 'divan://x').searchParams.get('project'));
+        const back = R.presses().filter((x) => x.label === 'cmBackTo');
+        if (back.length !== 1) throw new Error(`${back.length} ways back`);
+        back[0].press();
+        const out = R.render('dark', h(Dashboard));
+        return !R.params.get().project && out.includes('>projects<') && eq(R.nav.pushed(), []);
+      })()],
+    ['the route is still registered, so the link is not an unmatched one',
+      /name="branch\/\[id\]"/.test(layout)],
+    ['the branch page\u2019s own judgements and parts went with it',
+      !fs.existsSync(path.join(root, 'src/branch.ts')) && !fs.existsSync(path.join(root, 'src/components/branch.tsx'))],
   );
 }
 

@@ -452,9 +452,8 @@ export function marks(p: MergedProject): { mark: State; n: number }[] {
  *  the queue said rather than a sentence composed here — and empty where nothing
  *  has been said, in which case the corner says nothing.
  *
- *  Takes the cards and not the product, because a branch card asks the same
- *  question of its own share of them (`src/project.ts`) and two spellings of
- *  "the worst card" would drift apart. */
+ *  Takes the cards and not the product, so that it can be asked of any share
+ *  of them. */
 export function latest(cards: MergedCard[]): string {
   const worst = cards.filter(stuck)[0]
     ?? cards.find((c) => c.agent_status === 'asking')
