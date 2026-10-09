@@ -1,6 +1,6 @@
-/** A branch, the chat and Machine on their own, the way the panel draws them
- *  (`?view=branch|chat|machine`). Built and photographed by
- *  `scripts/shot-machine.mjs`. */
+/** The chat and Machine on their own, the way the panel draws them
+ *  (`?view=chat|machine`; anything else is Quire's own page). Built and
+ *  photographed by `scripts/shot-machine.mjs`. */
 import { createRoot } from 'react-dom/client';
 import '../src/styles/divan-tokens.css';
 import '../src/styles/divan-components.css';
