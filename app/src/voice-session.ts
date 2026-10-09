@@ -80,6 +80,47 @@ export interface Voice {
   synth(text: string, cancelled: () => boolean): AsyncIterable<{ pcm: Int16Array; rate: number }>;
 }
 
+/** What the call needs of EMA (`ema.voice()` on the phone, the same engine on onnxruntime-node in the
+ *  end-to-end bench). */
+export type PieceSynth = {
+  prepare(text: string): { text: string; pause: number }[];
+  synthesise(spoken: string, o: { seed: number; cancelled: () => boolean }): Promise<Float32Array>;
+};
+
+/** EMA's pieces can start or stop on a non-zero sample (up to 5% of full scale in the #151 run), which
+ *  is a click on a speaker; 4 ms ramps at both ends of the voiced part remove it. */
+const FADE_S = 0.004;
+
+export function fadeEdges(a: Float32Array, voiced: number, n: number): void {
+  const k = Math.min(n, Math.floor(voiced / 2));
+  for (let i = 0; i < k; i++) {
+    const g = i / k;
+    a[i] *= g;
+    a[voiced - 1 - i] *= g;
+  }
+}
+
+/** EMA for the whole call: each piece's sentences made one after another, every one handed over as soon
+ *  as it is made, with the pause the model asked for after it. */
+export function emaVoice(v: PieceSynth, rate = 48000): Voice {
+  return {
+    name: 'EMA',
+    async *synth(text, cancelled) {
+      const parts = v.prepare(text);
+      for (let i = 0; i < parts.length; i++) {
+        if (cancelled()) return;
+        const wave = await v.synthesise(parts[i].text, { seed: i, cancelled });
+        if (cancelled()) return;
+        const pause = Math.round(parts[i].pause * rate);
+        const out = new Float32Array(wave.length + (i < parts.length - 1 ? pause : 0));
+        out.set(wave);
+        fadeEdges(out, wave.length, Math.round(rate * FADE_S));
+        yield { pcm: toPcm16(out), rate };
+      }
+    },
+  };
+}
+
 export type Clock = {
   now: () => number;
   setTimeout: (f: () => void, ms: number) => any;

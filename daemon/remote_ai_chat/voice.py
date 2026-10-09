@@ -167,6 +167,10 @@ _CLAIM = re.compile(
     # Turkish: an action verb in the first person, done, doing or about to do.
     r"\b(?:gönder|ilet|başlat|çalıştır|bitirt|bitir|durdur|onayla|halled|hallet|düzelt|ekle|yolla|"
     r"kontrol ed|kontrol et|incele|bak|söyle|izin ver|reddet)\w*?(?:d[ıiuü]m|t[ıiuü]m|[ıiuü]?yorum|ece[ğk]im|aca[ğk][ıi]m|y?eyim|y?ayım)\b"
+    # An English verb made Turkish with "etmek", the way the model mixes them
+    # ("check edeyim", "deploy ettim"); seen in the #149 and #151 runs.
+    r"|\b(?:check|deploy|merge|commit|push|build|test|run|restart|review|fix|start|stop|send)\s+"
+    r"(?:ed(?:eyim|iyorum|eceğim)|et(?:tim|eyim))\b"
     # English: the same, in the forms a model uses for it.
     r"|\bi(?:'ve| have|'ll| will|'m| am)? (?:sent|started|stopped|approved|denied|told|asked|fixed|ran|"
     r"forwarded|send|start|stop|forward|tell|ask|check|look|sending|starting|stopping|forwarding|"
@@ -176,6 +180,27 @@ _CLAIM = re.compile(
 
 def claims_action(text: str) -> bool:
     return bool(_CLAIM.search(text))
+
+
+# On a chat call a request goes to that chat (plan §5). Haiku with thinking off
+# usually calls forward_to_chat for one, but in the #151 end-to-end run it took
+# a self-correction ("testleri çalıştır, hayır dur, önce derlemeyi bitir") for
+# a status and answered it, three runs out of three, and the chat never heard
+# it. So a plain Turkish request is forwarded by rule, without asking the
+# model: an action verb as a command ("bitir", "kontrol et", "düzeltin") or as
+# a polite question ("bakar mısın"). It only decides *where* the caller's own
+# words go; the chat's agent still runs them under its own permission mode.
+_ACT = (r"(?:çalıştır|bitir|başlat|düzelt|ekle|sil|yaz|gönder|yolla|derle|güncelle|kur|kaldır|"
+        r"değiştir|incele|oku|hazırla|yap|bak|"
+        r"(?:devam|tekrar|kontrol|test|deploy|merge|commit|push|build|review|restart) e[td])")
+_REQUEST = re.compile(
+    rf"\b{_ACT}(?:[ıiuü]n|[ıiuü]n[ıiuü]z|sana|sene)?(?=$|[\s.,!;:…])"
+    rf"|\b{_ACT}\w*?(?:[ae]r|[ıiuü]r|r)\s+m[ıiuü]s[ıiuü]n(?:[ıiuü]z)?\b",
+    re.I)
+
+
+def is_request(text: str) -> bool:
+    return bool(_REQUEST.search(text.replace("I", "ı").replace("İ", "i").lower()))
 
 
 LINES = {
@@ -199,6 +224,7 @@ LINES = {
                           "Write": "bir dosya yazmak", "*": "bir adım"},
         "turn_error": "Sohbet bir hatayla durdu.",
         "unheard": "Seni duyamadım, tekrar söyler misin?",
+        "offer": "Bunu bir sohbete vermemi ister misin?",
         "no_reply": "Şu an cevap veremiyorum, birazdan tekrar dener misin?",
     },
     "en": {
@@ -222,6 +248,7 @@ LINES = {
                           "*": "take a step"},
         "turn_error": "The chat stopped with an error.",
         "unheard": "I couldn't make that out, could you say it again?",
+        "offer": "Shall I hand that to a chat?",
         "no_reply": "I can't answer right now, try again in a moment.",
     },
 }
@@ -287,7 +314,8 @@ writing it, so the first few words have to be the answer.
 
 Every question is preceded by a <state> block: a live snapshot of the coding \
 sessions on this computer. Answer from it and nothing else; if it does not say, \
-say you do not know.
+say you do not know. Never say a session is doing something the state does not \
+show, and never mention the state block itself.
 
 When the caller asks for something to be done — an instruction for a session, \
 new work, an answer to an approval, stopping something — call the tool and \
@@ -307,6 +335,13 @@ This call was made from inside one chat, whose state is in the <state> block. \
 A request for that chat to do something goes to it with forward_to_chat: the \
 caller's own words are sent, not yours. A question about how it is doing is \
 answered from the state, without forwarding."""
+
+# Repeated with every question on a chat call. With thinking off and the rule
+# only in the system prompt, Haiku answered "testleri çalıştır, hayır dur, önce
+# derlemeyi bitir" in the #151 end-to-end run with "Derlemesi devam ediyor"
+# about an idle chat instead of forwarding it.
+CHAT_TURN_RULE = ("If this asks the chat to do anything, call forward_to_chat and write nothing. "
+                  "Otherwise answer only from the state.")
 
 
 def _ok(text: str) -> dict:
@@ -430,6 +465,8 @@ class FastLayer(Concierge):
             self._drain = None
         timing["drain_ms"] = int((time.monotonic() - t0) * 1000)
         want = {"tr": "Answer in Turkish.", "en": "Answer in English."}.get(lang, "")
+        if self.chat_id:
+            want = f"{CHAT_TURN_RULE} {want}"
         async with self._lock:
             timing["lock_ms"] = int((time.monotonic() - t0) * 1000)
             for _ in range(3):              # the account, and at most two that replace it
@@ -812,6 +849,11 @@ class VoiceSession:
                     return
         if self.live(turn):
             self.set_state("thinking")
+        if self.chat_id and is_request(text):
+            turn.asked = True
+            turn.intents.append(("forward", {}))
+            turn.marks["routed_by_rule"] = True
+            return
         await self._speak_reply(turn, text)
 
     async def _speak_reply(self, turn: Turn, text: str) -> None:
@@ -867,6 +909,10 @@ class VoiceSession:
                     stream = self.brain.reply(text, self.lang, intend)
             if not turn.intents and buf.strip():
                 self._speak_piece(turn, buf.strip())
+            if not turn.intents and not turn.pieces and turn.marks.get("claims_dropped"):
+                # Everything it said was a promise nobody will keep ("bakayım"):
+                # an answer that is only dropped sentences would be silence.
+                self.say(turn, LINES[self.lang]["offer"], "reply", False)
             if not turn.intents:
                 self.close_turn(turn)
         finally:
@@ -894,11 +940,25 @@ class VoiceSession:
         turn.marks["commit_wall"] = time.time()
         task = self.finals.get(end)
         if task is None:
-            task = self._spawn(self._recognize(self.clip(turn.start, end, True)))
+            task = self._spawn(self._final_after_reply(turn, self.clip(turn.start, end, True)))
         self.finals = {}
         self.partials = {}
         self.utt = None
         turn.commit = self._spawn(self._finish(turn, task, end))
+
+    async def _final_after_reply(self, turn: Turn, clip: Clip) -> str | None:
+        """The commit's transcription, held while the reply is still waiting
+        for its first words — the rule `_frame` keeps before the commit, now
+        kept after it too. In the end-to-end run (#151) every answer slower
+        than the 2.5 s commit had the large model decoding beside it, and the
+        slow ones got slower. An action turn has no words to wait for: its
+        intent is enough. The clip is cut now, before the audio is trimmed."""
+        deadline = time.monotonic() + FIRST_TOKEN_TIMEOUT_S
+        while (turn.reply is not None and not turn.reply.done() and not turn.pieces
+               and not turn.intents and not turn.withdrawn and time.monotonic() < deadline):
+            await asyncio.sleep(0.05)
+        turn.marks["final_stt_start_wall"] = time.time()
+        return await self._recognize(clip)
 
     async def _finish(self, turn: Turn, final_task: asyncio.Task, end: int) -> None:
         final = await final_task
@@ -1021,7 +1081,7 @@ class VoiceSession:
             "cancelled": m.get("cancelled"), "empty": bool(m.get("empty")), "brain": m.get("brain"),
             "after_speech_end_ms": {k[:-5]: rel(k) for k in ("soft_end_wall", "fast_stt_wall",
                                     "first_token_wall", "first_say_wall", "commit_wall",
-                                    "final_stt_wall", "executed_wall")}})
+                                    "final_stt_start_wall", "final_stt_wall", "executed_wall")}})
 
     # ── what the agents are doing ────────────────────────────────────────────
     def observe(self, event: dict) -> None:
