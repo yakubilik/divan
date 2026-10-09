@@ -2255,6 +2255,12 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
         if (key === 'studio') return studioSnap;
         throw new Error('That computer did not answer');
       }
+      if (type === 'ustabasi.list') {
+        return { available: true, queue: { last_tick: Date.now() / 1000 }, tickets: [
+          queueTicket({ id: 177, title: 'Show pending agent questions as a floating chat on the dashboard',
+            status: 'queued', stage: '', round: 0, escalation: '', ask: '' }),
+        ] };
+      }
       if (type === 'agent.store') {
         asked.push({ key, type, data });
         return { sources: [{ id: 'hermes', label: 'Hermes', repo: 'x/hermes', note: '',
@@ -2280,7 +2286,12 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
         { kind: 'tool', id: 't1', ts: now - 280, tool: 'Bash', input: { command: 'ustabasi add retry.json' },
           output: '#41 queued: Webhook retry policy  (worker opus, verifier opus)', isError: false, running: false },
         { kind: 'tool', id: 't2', ts: now - 270, tool: 'Bash', input: { command: 'ustabasi add refund.json' },
-          output: '#99 queued: Refund policy page  (worker opus, verifier opus)', isError: false, running: false },
+          output: '#177 queued: Show pending agent questions as a floating chat on the dashboard  (worker opus, verifier opus)',
+          isError: false, running: false },
+        // The same filing read twice — a replay handing the output back — is one entry.
+        { kind: 'tool', id: 't3', ts: now - 265, tool: 'Bash', input: { command: 'ustabasi show 177' },
+          output: '#177 queued: Show pending agent questions as a floating chat on the dashboard  (worker opus, verifier opus)',
+          isError: false, running: false },
         { kind: 'approval', id: 'p1', ts: now - 260, requestId: 'r9', tool: 'Bash', input: { command: 'git push' },
           preview: 'git push', danger: false, reason: null, decision: null },
       ],
@@ -2353,20 +2364,78 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
     said && half && whole && bubble && plainText && stopped && allowed && picture && mic,
     JSON.stringify({ said, half, whole, bubble, plainText, stopped, allowed, picture, mic }));
 
-  // 2 · filed under, and the card it filed
+  // 2 · filed under, and the card it filed: a press opens the card in the
+  // chat, and only its Go details leaves for that ticket's own page.
   const rule = doc.querySelector('.dv-filed')?.textContent?.trim();
-  const link41 = doc.querySelector('.dv-cardlink[data-ticket="41"]');
-  const linkText = link41?.textContent ?? '';
-  await click(link41);
+  const entry = (id) => doc.querySelector(`.dv-cardlink[data-ticket="${id}"]`);
+  const cardOf = (id) => doc.querySelector(`[data-ticket-card="${id}"]`);
+  const linkText = entry(41)?.textContent ?? '';
+  // #177, the shape the person pressed: queued, no card on any board.
+  await click(entry(177));
+  await settle();
+  const card177 = cardOf(177);
+  const stayed = w.location.pathname === '/chats/c1' && place() === 'Chat'
+    && !!doc.querySelector('textarea[name="composer"]')
+    && (doc.body.textContent ?? '').includes('Students keep asking about refunds.');
+  const inline = !!card177 && entry(177).getAttribute('aria-expanded') === 'true'
+    && entry(177).getAttribute('aria-controls') === card177.id
+    && (card177.textContent ?? '').includes('#177')
+    && (card177.textContent ?? '').includes('Show pending agent questions as a floating chat on the dashboard')
+    && !cardOf(41) && doc.querySelectorAll('[data-ticket-card]').length === 1;
+  const go177 = card177?.querySelector('button[data-go-details="177"]');
+  const goWord = go177?.textContent;
+  await click(go177);
+  await settle();
+  for (let i = 0; i < 10 && !labelledBtn('Back to the wall'); i++) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+  }
+  const toQueue = w.location.pathname === '/machine/terminal' && !!labelledBtn('Back to the wall')
+    && (labelledBtn('Back to the wall').closest('div[style]')?.parentElement?.textContent ?? doc.body.textContent ?? '')
+      .includes('Show pending agent questions as a floating chat on the dashboard');
+  const backWord = doc.querySelector('header .dv-back')?.textContent ?? '';
+  await act(async () => {
+    const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+    doc.querySelector('header .dv-back').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await landed;
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  await settle();
+  const returned = w.location.pathname === '/chats/c1' && place() === 'Chat'
+    && (doc.body.textContent ?? '').includes('Students keep asking about refunds.');
+  // #41 has a card on Quire's board: Go details is that card's page.
+  await click(entry(41));
+  await settle();
+  const one41 = doc.querySelectorAll('[data-ticket-card="41"]').length === 1
+    && w.location.pathname === '/chats/c1' && (cardOf(41)?.textContent ?? '').includes('In Progress');
+  await click(cardOf(41).querySelector('button[data-go-details="41"]'));
   await settle();
   const toCard = w.location.pathname === '/p/quire/c/k1';
-  await reload('/chats');
-  await click(doc.querySelector('.dv-cardlink[data-ticket="99"]'));
+  await act(async () => {
+    const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+    doc.querySelector('header .dv-back').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await landed;
+    await new Promise((r) => setTimeout(r, 0));
+  });
   await settle();
-  const toQueue = w.location.pathname === '/machine/terminal';
-  ok('a chat filed under a project shows the thin rule, and a card it filed is a small link under the message that opens the ticket',
+  const backFromCard = w.location.pathname === '/chats/c1' && place() === 'Chat';
+  ok('a filed card is an entry under its message: a press opens the card in the chat and stays, Go details opens that ticket, Back returns to the chat',
     rule === 'filed under Quire' && linkText.includes('In Progress') && linkText.includes('Webhook retry policy')
-    && toCard && toQueue, JSON.stringify({ rule, linkText, toCard, toQueue }));
+    && stayed && inline && goWord === 'Go details' && toQueue && backWord.includes('Chats') && returned
+    && one41 && toCard && backFromCard,
+    JSON.stringify({ rule, linkText, stayed, inline, goWord, toQueue, backWord, returned, one41, toCard, backFromCard }));
+
+  // …a second press folds it away, the keyboard drives the same two steps,
+  // and a plain link in a message is still a plain link.
+  await reload('/chats/c1');
+  const once = doc.querySelectorAll('.dv-cardlink[data-ticket="177"]').length === 1
+    && doc.querySelectorAll('.dv-cardlink[data-ticket="41"]').length === 1 && !doc.querySelector('[data-ticket-card]');
+  await click(entry(177));
+  await click(entry(177));
+  const folded = !cardOf(177) && entry(177).getAttribute('aria-expanded') === 'false'
+    && w.location.pathname === '/chats/c1';
+  const isButton = entry(177).tagName === 'BUTTON' && entry(177).getAttribute('type') === 'button';
+  ok('a reload draws each filed ticket once and closed; a second press folds the card away; the entry is a real button',
+    once && folded && isButton, JSON.stringify({ once, folded, isButton }));
 
   // 4 · four tabs, each at its own path; every page under one; the calls
   await reload('/machine/machines');

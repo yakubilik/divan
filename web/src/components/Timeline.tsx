@@ -512,23 +512,42 @@ type Respond = (requestId: string, d: 'allow' | 'allow_session' | 'deny', respon
  *  "freezes" and wants a refresh: the refresh does not fix anything, it just
  *  gives it a shorter conversation to redraw.
  */
-/** A card the conversation filed, as the small link under the message that
- *  filed it: which column it is in and its title, and a press opens it. */
+/** A card the conversation filed, as the small entry under the message that
+ *  filed it: which column it is in and its title. A press opens the card in
+ *  place, under the entry; leaving the chat is a second, explicit press. */
 export interface TicketLink {
   open: (id: number) => void;
   /** What the board says about that ticket now, where it has a card for it. */
-  describe: (id: number) => { column: string; title: string } | null;
+  describe: (id: number) => { column: string; title: string; project?: string | null } | null;
 }
 
 function CardLink({ filed, link }: { filed: Filed; link: TicketLink }) {
+  const [open, setOpen] = useState(false);
   const known = link.describe(filed.id);
+  const title = known?.title ?? filed.title;
+  const column = known?.column ?? 'Queued';
+  const detail = `ticket-card-${filed.id}-${useId()}`;
   return (
-    <a href={`#ticket-${filed.id}`} className="dv-glass dv-cardlink" data-ticket={filed.id}
-      onClick={(e) => { e.preventDefault(); link.open(filed.id); }}>
-      <span className="dv-meta">{known?.column ?? 'Queued'}</span>
-      <span className="t">{known?.title ?? filed.title}</span>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-    </a>
+    <div className="dv-filedcard" data-filed={filed.id}>
+      <button type="button" className="dv-glass dv-cardlink" data-ticket={filed.id}
+        aria-expanded={open} aria-controls={detail} title={`#${filed.id} ${title}`}
+        onClick={() => setOpen((o) => !o)}>
+        <span className="dv-meta">{column}</span>
+        <span className="t">{title}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d={open ? 'M6 9l6 6 6-6' : 'M9 6l6 6-6 6'} /></svg>
+      </button>
+      {open && (
+        <div id={detail} role="region" aria-label={`Ticket #${filed.id}`}
+          className="dv-glass dv-ticketcard" data-ticket-card={filed.id}>
+          <div className="dv-meta">
+            #{filed.id} · {column}{known?.project ? ` · ${known.project}` : ''}
+          </div>
+          <div className="t">{title}</div>
+          <button type="button" className="dv-btn dv-btn--primary dv-hit" data-go-details={filed.id}
+            onClick={() => link.open(filed.id)}>Go details</button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -566,10 +585,12 @@ const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
   const [open, setOpen] = useState(false);
   const told = tell(steps, live, lang);
   const gap = prevTs == null || steps[0].ts - prevTs > 1800;
+  // One entry per ticket: a command run twice over the same card, or a replay
+  // that hands the same output back, is still one card.
   const filed = link ? steps.flatMap((s) => {
     const f = s.kind === 'tool' && !s.isError ? filedBy(s.output) : null;
     return f ? [f] : [];
-  }) : [];
+  }).filter((f, i, all) => all.findIndex((g) => g.id === f.id) === i) : [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-steps={steps.length}>
       {gap && <Divider ts={steps[0].ts} />}
