@@ -1,0 +1,315 @@
+{
+ "generated": "2026-10-09 09:27",
+ "voice": "Yelda",
+ "summary": {
+  "model": "mlx-community/whisper-small-mlx",
+  "fixtures": 13,
+  "whisper_vocab_pooled_wer": 0.0703125,
+  "whisper_compute_ms_median": 566,
+  "whisper_compute_ms_max": 1137
+ },
+ "rows": [
+  {
+   "id": "short-greeting",
+   "kind": "short",
+   "reference": "selam nasılsın",
+   "spans": [
+    {
+     "text": "Selam, nasılsın?",
+     "start_ms": 300,
+     "end_ms": 1740,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 1740,
+   "whisper_vocab": {
+    "text": "Selam nasılsın?",
+    "compute_ms": 365,
+    "audio_ms": 1940,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "short-status",
+   "kind": "short",
+   "reference": "testler bitti mi",
+   "spans": [
+    {
+     "text": "Testler bitti mi?",
+     "start_ms": 300,
+     "end_ms": 1440,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 1440,
+   "whisper_vocab": {
+    "text": "Testler bitti mi?",
+    "compute_ms": 410,
+    "audio_ms": 1640,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "long-request",
+   "kind": "long",
+   "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+   "spans": [
+    {
+     "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+     "start_ms": 300,
+     "end_ms": 13310,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 13310,
+   "whisper_vocab": {
+    "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "compute_ms": 1137,
+    "audio_ms": 13510,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "pause-500",
+   "kind": "thinking-pause",
+   "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+   "spans": [
+    {
+     "text": "Şimdi şeyi",
+     "start_ms": 300,
+     "end_ms": 1120,
+     "pause_after_ms": 500
+    },
+    {
+     "text": "giriş ekranındaki hatayı bir kontrol eder misin?",
+     "start_ms": 1620,
+     "end_ms": 4940,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 4940,
+   "whisper_vocab": {
+    "text": "Şimdi şeyi, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "compute_ms": 566,
+    "audio_ms": 5140,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "pause-1000",
+   "kind": "thinking-pause",
+   "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+   "spans": [
+    {
+     "text": "Bana bir özet çıkar, yani",
+     "start_ms": 300,
+     "end_ms": 2410,
+     "pause_after_ms": 1000
+    },
+    {
+     "text": "bugün neler yapıldı onu merak ediyorum.",
+     "start_ms": 3410,
+     "end_ms": 5890,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 5890,
+   "whisper_vocab": {
+    "text": "Bana bir özet çıkar, yani. Bugün neler yapıldı olduğunu merak ediyorum.",
+    "compute_ms": 535,
+    "audio_ms": 6090,
+    "wer": 0.09090909090909091
+   }
+  },
+  {
+   "id": "pause-1500",
+   "kind": "thinking-pause",
+   "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+   "spans": [
+    {
+     "text": "Ödeme sayfasında bir sorun vardı ama",
+     "start_ms": 300,
+     "end_ms": 2870,
+     "pause_after_ms": 1500
+    },
+    {
+     "text": "sanırım dün akşam düzeldi, bir bakar mısın?",
+     "start_ms": 4370,
+     "end_ms": 7520,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 7520,
+   "whisper_vocab": {
+    "text": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "compute_ms": 679,
+    "audio_ms": 7720,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "pause-2000",
+   "kind": "thinking-pause",
+   "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+   "spans": [
+    {
+     "text": "Peki şu yeni özellik için",
+     "start_ms": 300,
+     "end_ms": 2060,
+     "pause_after_ms": 2000
+    },
+    {
+     "text": "hangi dosyaları değiştirmemiz gerekiyor?",
+     "start_ms": 4060,
+     "end_ms": 6820,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 6820,
+   "whisper_vocab": {
+    "text": "Peki şu yeni özellik için? Hangi dosyaları değiştirmemiz gerekiyor?",
+    "compute_ms": 609,
+    "audio_ms": 7020,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "two-pauses",
+   "kind": "thinking-pause",
+   "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+   "spans": [
+    {
+     "text": "Bir de",
+     "start_ms": 300,
+     "end_ms": 700,
+     "pause_after_ms": 800
+    },
+    {
+     "text": "geçen hafta açtığımız iş vardı ya",
+     "start_ms": 1500,
+     "end_ms": 3960,
+     "pause_after_ms": 1200
+    },
+    {
+     "text": "o ne durumda?",
+     "start_ms": 5160,
+     "end_ms": 6000,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 6000,
+   "whisper_vocab": {
+    "text": "Bir de. Geçen hafta açtığımız iş vardı ya. O ne durumda?",
+    "compute_ms": 603,
+    "audio_ms": 6200,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "correction",
+   "kind": "correction",
+   "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+   "spans": [
+    {
+     "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+     "start_ms": 300,
+     "end_ms": 4830,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 4830,
+   "whisper_vocab": {
+    "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "compute_ms": 543,
+    "audio_ms": 5030,
+    "wer": 0.0
+   }
+  },
+  {
+   "id": "correction-pause",
+   "kind": "correction",
+   "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+   "spans": [
+    {
+     "text": "Testleri çalıştır",
+     "start_ms": 300,
+     "end_ms": 1690,
+     "pause_after_ms": 900
+    },
+    {
+     "text": "hayır dur, önce derlemeyi bitir.",
+     "start_ms": 2590,
+     "end_ms": 4950,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 4950,
+   "whisper_vocab": {
+    "text": "Testleri çalıştır. Hayır dur, önce değerlemeyi bitir.",
+    "compute_ms": 517,
+    "audio_ms": 5150,
+    "wer": 0.14285714285714285
+   }
+  },
+  {
+   "id": "tech-names",
+   "kind": "technical",
+   "reference": "testflight buildini expo ile deploy et sonra main branche merge et",
+   "spans": [
+    {
+     "text": "TestFlight build'ini Expo ile deploy et, sonra main branch'e merge et.",
+     "start_ms": 300,
+     "end_ms": 5240,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 5240,
+   "whisper_vocab": {
+    "text": "TestFlight Bildini Expo ile Deploy et, sonra main branch'a merget.",
+    "compute_ms": 566,
+    "audio_ms": 5440,
+    "wer": 0.36363636363636365
+   }
+  },
+  {
+   "id": "tech-agents",
+   "kind": "technical",
+   "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+   "spans": [
+    {
+     "text": "Claude ile Codex hangi ticket üzerinde çalışıyor, commit attılar mı?",
+     "start_ms": 300,
+     "end_ms": 4990,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 4990,
+   "whisper_vocab": {
+    "text": "Claude ile Codex hangi ticket üzerinde çalışıyor? John M. Tatlılar mı?",
+    "compute_ms": 569,
+    "audio_ms": 5190,
+    "wer": 0.3
+   }
+  },
+  {
+   "id": "barge-in",
+   "kind": "barge-in",
+   "reference": "tamam tamam sadece ilkini anlat",
+   "spans": [
+    {
+     "text": "Tamam tamam, sadece ilkini anlat.",
+     "start_ms": 2500,
+     "end_ms": 5290,
+     "pause_after_ms": 0
+    }
+   ],
+   "speech_end_ms": 5290,
+   "whisper_vocab": {
+    "text": "Tamam tamam, sadece ilkini anlat.",
+    "compute_ms": 434,
+    "audio_ms": 3290,
+    "wer": 0.0
+   }
+  }
+ ]
+}

@@ -1,0 +1,403 @@
+{
+ "generated": "2026-10-09 09:25",
+ "summary": {
+  "sonnet-default-thinking": {
+   "first_token_ms": {
+    "median": 2042.5,
+    "p95": 2777
+   },
+   "first_sentence_ms": {
+    "median": 3222.0,
+    "p95": 4064
+   },
+   "total_ms": {
+    "median": 3476.0,
+    "p95": 4334
+   },
+   "n": 12
+  },
+  "sonnet-no-thinking": {
+   "first_token_ms": {
+    "median": 1861.5,
+    "p95": 2251
+   },
+   "first_sentence_ms": {
+    "median": 2947.0,
+    "p95": 3324
+   },
+   "total_ms": {
+    "median": 3139.5,
+    "p95": 3507
+   },
+   "n": 12
+  },
+  "haiku-no-thinking": {
+   "first_token_ms": {
+    "median": 857.5,
+    "p95": 1394
+   },
+   "first_sentence_ms": {
+    "median": 1165.0,
+    "p95": 1718
+   },
+   "total_ms": {
+    "median": 1367.0,
+    "p95": 1918
+   },
+   "n": 12
+  }
+ },
+ "rows": [
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Warm-up. Reply OK.",
+   "warmup": true,
+   "first_token_ms": 5208,
+   "first_sentence_ms": 5923,
+   "total_ms": 6201,
+   "answer": "Tamam."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Selam, şu an neler çalışıyor?",
+   "warmup": false,
+   "first_token_ms": 2777,
+   "first_sentence_ms": 4064,
+   "total_ms": 4334,
+   "answer": "Dört sohbet var: login screen error testleri 12 dakikadır çalışıyor, payment page'de fix merge edilmiş ve bekliyor, settings copy bir shell komutu için onayını bekliyor, release notes ise 2 saattir boş duruyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Beni bekleyen bir şey var mı?",
+   "warmup": false,
+   "first_token_ms": 2735,
+   "first_sentence_ms": 3636,
+   "total_ms": 3863,
+   "answer": "Evet, settings copy sohbeti bir shell komutunu çalıştırmak için senin onayını bekliyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Ödeme sayfası ne durumda?",
+   "warmup": false,
+   "first_token_ms": 3221,
+   "first_sentence_ms": 4387,
+   "total_ms": 4603,
+   "answer": "Payment page sohbeti şu an boşta, son olarak fix'in merge edildiğini söylemişti."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Tamam, teşekkürler. En son ne yapıldı?",
+   "warmup": false,
+   "first_token_ms": 2130,
+   "first_sentence_ms": 3245,
+   "total_ms": 3451,
+   "answer": "Payment page'de en son fix merge edilmişti, şu an o sohbet boşta duruyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Giriş ekranındaki iş ne zamandır sürüyor?",
+   "warmup": false,
+   "first_token_ms": 1637,
+   "first_sentence_ms": 2582,
+   "total_ms": 2847,
+   "answer": "12 dakikadır çalışıyor, şu an testleri çalıştırıyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Peki ayarlar ekranı neden bekliyor?",
+   "warmup": false,
+   "first_token_ms": 2124,
+   "first_sentence_ms": 3173,
+   "total_ms": 3352,
+   "answer": "Settings copy sohbeti bir shell komutu çalıştırmak için senin onayını bekliyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Selam, şu an neler çalışıyor?",
+   "warmup": false,
+   "first_token_ms": 1661,
+   "first_sentence_ms": 3507,
+   "total_ms": 3840,
+   "answer": "Dört sohbet var: login screen error testleri 12 dakikadır çalışıyor, payment page'de fix merge edilmiş ve boşta, settings copy bir shell komutu için onayını bekliyor, release notes ise 2 saattir boş duruyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Beni bekleyen bir şey var mı?",
+   "warmup": false,
+   "first_token_ms": 1961,
+   "first_sentence_ms": 3199,
+   "total_ms": 3501,
+   "answer": "Evet, settings copy sohbeti bir shell komutunu çalıştırmak için senin onayını bekliyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Ödeme sayfası ne durumda?",
+   "warmup": false,
+   "first_token_ms": 1608,
+   "first_sentence_ms": 2996,
+   "total_ms": 3237,
+   "answer": "Payment page sohbeti şu an boşta, son olarak fix'in merge edildiğini söylemişti."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Tamam, teşekkürler. En son ne yapıldı?",
+   "warmup": false,
+   "first_token_ms": 2165,
+   "first_sentence_ms": 3628,
+   "total_ms": 3817,
+   "answer": "Payment page'de en son fix merge edilmişti, şu an o sohbet boşta duruyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Giriş ekranındaki iş ne zamandır sürüyor?",
+   "warmup": false,
+   "first_token_ms": 1810,
+   "first_sentence_ms": 2880,
+   "total_ms": 3074,
+   "answer": "12 dakikadır çalışıyor, şu an testleri çalıştırıyor."
+  },
+  {
+   "config": "sonnet-default-thinking",
+   "question": "Peki ayarlar ekranı neden bekliyor?",
+   "warmup": false,
+   "first_token_ms": 1747,
+   "first_sentence_ms": 2679,
+   "total_ms": 2932,
+   "answer": "Settings copy sohbeti bir shell komutu çalıştırmak için senin onayını bekliyor."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Warm-up. Reply OK.",
+   "warmup": true,
+   "first_token_ms": 5306,
+   "first_sentence_ms": 6212,
+   "total_ms": 6434,
+   "answer": "Tamam, dört sohbeti de görüyorum, hazırım."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Selam, şu an neler çalışıyor?",
+   "warmup": false,
+   "first_token_ms": 5527,
+   "first_sentence_ms": 6625,
+   "total_ms": 6946,
+   "answer": "Selam, dört farklı iş var: login screen error testleri koşuyor, payment page'de fix merge edilmiş, settings copy bir shell komutu için onay bekliyor, release notes ise 2 saattir sessiz duruyor."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Beni bekleyen bir şey var mı?",
+   "warmup": false,
+   "first_token_ms": 1884,
+   "first_sentence_ms": 2665,
+   "total_ms": 2844,
+   "answer": "Evet, settings copy sohbeti bir shell komutunu çalıştırmak için senin onayını bekliyor."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Ödeme sayfası ne durumda?",
+   "warmup": false,
+   "first_token_ms": 1839,
+   "first_sentence_ms": 2943,
+   "total_ms": 3149,
+   "answer": "Payment page şu an boşta duruyor, son olarak fix'in merge edildiğini söylemişti."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Tamam, teşekkürler. En son ne yapıldı?",
+   "warmup": false,
+   "first_token_ms": 1713,
+   "first_sentence_ms": 2894,
+   "total_ms": 3092,
+   "answer": "Payment page sohbetinde en son yapılan şey fix'in merge edilmesiydi, ondan sonra sessiz kaldı."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Giriş ekranındaki iş ne zamandır sürüyor?",
+   "warmup": false,
+   "first_token_ms": 1989,
+   "first_sentence_ms": 2951,
+   "total_ms": 3137,
+   "answer": "Login screen error işi 12 dakikadır çalışıyor, şu an testleri koşturuyor."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Peki ayarlar ekranı neden bekliyor?",
+   "warmup": false,
+   "first_token_ms": 1808,
+   "first_sentence_ms": 3091,
+   "total_ms": 3285,
+   "answer": "Settings copy sohbeti bir shell komutu çalıştırmak istiyor ama senden onay bekliyor, onu vermeden ilerlemiyor."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Selam, şu an neler çalışıyor?",
+   "warmup": false,
+   "first_token_ms": 1776,
+   "first_sentence_ms": 3324,
+   "total_ms": 3507,
+   "answer": "Selam, aynı dört iş duruyor: login screen error hâlâ test koşturuyor, payment page fix merge olduktan sonra boşta, settings copy onay bekliyor, release notes de 2 saattir sessiz."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Beni bekleyen bir şey var mı?",
+   "warmup": false,
+   "first_token_ms": 1806,
+   "first_sentence_ms": 2789,
+   "total_ms": 2973,
+   "answer": "Evet, settings copy hâlâ shell komutu için onayını bekliyor."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Ödeme sayfası ne durumda?",
+   "warmup": false,
+   "first_token_ms": 1911,
+   "first_sentence_ms": 2961,
+   "total_ms": 3142,
+   "answer": "Payment page hâlâ boşta, son durum fix'in merge edilmiş olması."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Tamam, teşekkürler. En son ne yapıldı?",
+   "warmup": false,
+   "first_token_ms": 2251,
+   "first_sentence_ms": 3168,
+   "total_ms": 3357,
+   "answer": "Payment page'de en son fix merge edilmişti, o andan sonra bir değişiklik yok."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Giriş ekranındaki iş ne zamandır sürüyor?",
+   "warmup": false,
+   "first_token_ms": 1807,
+   "first_sentence_ms": 2641,
+   "total_ms": 2958,
+   "answer": "Login screen error hâlâ 12 dakikadır çalışıyor, testler devam ediyor."
+  },
+  {
+   "config": "sonnet-no-thinking",
+   "question": "Peki ayarlar ekranı neden bekliyor?",
+   "warmup": false,
+   "first_token_ms": 1890,
+   "first_sentence_ms": 2940,
+   "total_ms": 3081,
+   "answer": "Settings copy bir shell komutu çalıştırmak için senin onayını istiyor, onaylamadan devam edemiyor."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Warm-up. Reply OK.",
+   "warmup": true,
+   "first_token_ms": 3856,
+   "first_sentence_ms": 3962,
+   "total_ms": 4382,
+   "answer": "Tamam, hazırım. Ne yapacağız?"
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Selam, şu an neler çalışıyor?",
+   "warmup": false,
+   "first_token_ms": 859,
+   "first_sentence_ms": 1520,
+   "total_ms": 1725,
+   "answer": "Login screen error on web-panel çalışıyor 12 dakikadır testler koşuyor, payment page bitmiş sadece merge bekleniyor, settings copy onay bekliyor, release notes 2 saattir boş duruyor."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Beni bekleyen bir şey var mı?",
+   "warmup": false,
+   "first_token_ms": 1954,
+   "first_sentence_ms": 2263,
+   "total_ms": 2486,
+   "answer": "Settings copy onay bekliyor, release notes 2 saattir boş — ikisine de baksan iyi olur."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Ödeme sayfası ne durumda?",
+   "warmup": false,
+   "first_token_ms": 988,
+   "first_sentence_ms": 1196,
+   "total_ms": 1373,
+   "answer": "Payment page fix zaten merge olmuş, deploy için hazır."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Tamam, teşekkürler. En son ne yapıldı?",
+   "warmup": false,
+   "first_token_ms": 1152,
+   "first_sentence_ms": 1718,
+   "total_ms": 1918,
+   "answer": "Login screen hata testi koşuluyor web-panel'de, settings copy onay bekliyor, release notes 2 saattir beklemede duruyor."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Giriş ekranındaki iş ne zamandır sürüyor?",
+   "warmup": false,
+   "first_token_ms": 890,
+   "first_sentence_ms": 1173,
+   "total_ms": 1447,
+   "answer": "Login screen error 12 dakikadır testler koşuyor, hala devam ediyor."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Peki ayarlar ekranı neden bekliyor?",
+   "warmup": false,
+   "first_token_ms": 777,
+   "first_sentence_ms": 1127,
+   "total_ms": 1316,
+   "answer": "Settings copy onay bekliyor, shell command çalıştırmak için senin izni gerekli."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Selam, şu an neler çalışıyor?",
+   "warmup": false,
+   "first_token_ms": 791,
+   "first_sentence_ms": 1092,
+   "total_ms": 1275,
+   "answer": "Login screen test koşuyor, payment page bitti, settings copy onay bekliyor, release notes 2 saattir boş."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Beni bekleyen bir şey var mı?",
+   "warmup": false,
+   "first_token_ms": 820,
+   "first_sentence_ms": 1157,
+   "total_ms": 1361,
+   "answer": "Settings copy onay bekliyor, release notes 2 saattir boş — iki şey de senin dikkatini çekiyor."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Ödeme sayfası ne durumda?",
+   "warmup": false,
+   "first_token_ms": 1394,
+   "first_sentence_ms": 1549,
+   "total_ms": 1732,
+   "answer": "Payment page merge olmuş, deploy hazır."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Tamam, teşekkürler. En son ne yapıldı?",
+   "warmup": false,
+   "first_token_ms": 856,
+   "first_sentence_ms": 1100,
+   "total_ms": 1307,
+   "answer": "Login screen testi devam ediyor, settings copy beklemede, release notes boş duruyor."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Giriş ekranındaki iş ne zamandır sürüyor?",
+   "warmup": false,
+   "first_token_ms": 772,
+   "first_sentence_ms": 991,
+   "total_ms": 1160,
+   "answer": "Login screen 12 dakikadır testler koşuyor, hala gidiyor."
+  },
+  {
+   "config": "haiku-no-thinking",
+   "question": "Peki ayarlar ekranı neden bekliyor?",
+   "warmup": false,
+   "first_token_ms": 778,
+   "first_sentence_ms": 1035,
+   "total_ms": 1227,
+   "answer": "Settings copy shell command onayı bekliyor, senin izni gerekli."
+  }
+ ]
+}
