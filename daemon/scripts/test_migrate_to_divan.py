@@ -7,6 +7,7 @@ Nothing here touches the real home, LaunchAgents or launchctl: every path the
 script takes is an argument, and all of them point into a temporary folder.
 """
 import hashlib
+import importlib.util
 import os
 import plistlib
 import re
@@ -38,7 +39,9 @@ def make_home(root: Path) -> Path:
     (old / "accounts" / "claude-1" / "projects" / "session.jsonl").write_text(f'{{"cwd":"{old}/uploads"}}\n')
     (old / "config.toml").write_text(
         f'port = 8790\nallowed_roots = ["{home}/projects"]\n'
-        f'scrub_extra_paths = ["{old}/accounts/claude-1/memory"]\n')
+        f'scrub_extra_paths = ["{old}/accounts/claude-1/memory"]\n'
+        f'[accounts.claude-1]\nprovider = "claude"\nhome = "{old}/accounts/claude-1"\n'
+        f'[accounts.codex-1]\nprovider = "codex"\nhome = "{old}/accounts/codex-1"\n')
     (old / "ustabasi-follow.json").write_text(f'{{"log": "{old}/logs/daemon.log"}}')
     (old / "db.sqlite").write_bytes(b"SQLite format 3\x00" + bytes(range(64)))
     agents = home / "Library" / "LaunchAgents"
@@ -118,8 +121,10 @@ with tempfile.TemporaryDirectory() as tmp:
     ok("a path recorded under the old home still resolves",
        (old / "accounts" / "claude-1" / "projects" / "session.jsonl").is_file())
     config = (new / "config.toml").read_text()
-    ok("config.toml names the new home and no longer the old one",
-       f'"{new}/accounts/claude-1/memory"' in config and str(old) not in config
+    ok("config paths migrate while Claude credential identity is preserved",
+       f'"{new}/accounts/claude-1/memory"' in config
+       and f'home = "{old}/accounts/claude-1"' in config
+       and f'home = "{new}/accounts/codex-1"' in config
        and f'"{home}/projects"' in config, config)
     ok("another text config beside it is rewritten too",
        (new / "ustabasi-follow.json").read_text() == f'{{"log": "{new}/logs/daemon.log"}}')
@@ -150,6 +155,38 @@ with tempfile.TemporaryDirectory() as tmp:
     ok("it exits 0 and says there is nothing to do", r.returncode == 0 and "Nothing to do" in r.stdout,
        r.stdout + r.stderr)
     ok("and changes nothing", snapshot(root) == after)
+
+    print("repair an earlier migration without replacing working accounts")
+    spec = importlib.util.spec_from_file_location("migration", SCRIPT)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    rewritten = config.replace(str(old), str(new))
+    rewritten += (f'[accounts.claude-new]\nprovider = "claude"\nhome = "{new}/accounts/claude-new"\n'
+                  f'[accounts.claude-relogin]\nprovider = "claude"\nhome = "{new}/accounts/claude-relogin"\n')
+    (new / "accounts/claude-relogin").mkdir()
+    backup = (new / "config.toml.bak-credential-identity")
+    backup.write_text(backup.read_text() +
+                     f'[accounts.claude-relogin]\nprovider = "claude"\nhome = "{old}/accounts/claude-relogin"\n')
+    calls = []
+    def auth_status(home):
+        calls.append(home)
+        return home != str(new / "accounts/claude-1")
+    homes = migration.preserved_claude_homes(rewritten, migration.parse(["--home", str(home)]),
+                                            new, auth_status)
+    repaired = migration.replace_account_homes(rewritten, homes)
+    ok("broken migrated login returns to its working old identity",
+       migration.claude_homes(repaired)["claude-1"] == str(old / "accounts/claude-1"))
+    ok("new accounts and working re-logins retain their identity",
+       migration.claude_homes(repaired)["claude-new"] == str(new / "accounts/claude-new")
+       and migration.claude_homes(repaired)["claude-relogin"] == str(new / "accounts/claude-relogin")
+       and str(new / "accounts/claude-new") not in calls)
+    unknown = migration.preserved_claude_homes(rewritten, migration.parse(["--home", str(home)]),
+                                              new, lambda _: None)
+    ok("unknown auth status never redirects an account", unknown == {})
+    quoted = '[accounts."claude-quoted"]\nprovider = "claude"\nhome = "/new"\n'
+    ok("quoted account IDs preserve credential identity",
+       migration.claude_homes(migration.replace_account_homes(quoted, {"claude-quoted": "/old"}))
+       == {"claude-quoted": "/old"})
 
 print("\nall good" if not failures else f"\n{failures} failed")
 sys.exit(1 if failures else 0)

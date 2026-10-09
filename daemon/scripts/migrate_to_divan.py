@@ -16,7 +16,10 @@ second run changes nothing:
     dir is an absolute path, and its projects are keyed by one), and those
     have to keep resolving;
  3. rewrites the old home's absolute path inside config.toml and the other
-    text configs at the top of the folder;
+    text configs at the top of the folder, preserving Claude account homes
+    because their literal paths identify the macOS Keychain login. On a repeat
+    run, a backup plus CLI auth status can identify and repair a broken login
+    from an earlier migration; working new logins are preserved;
  4. writes ~/Library/LaunchAgents/com.yakup.divan.plist from the old plist,
     with the label, the program and the log paths updated, and sets the old
     plist aside so launchd does not start both at the next login.
@@ -29,12 +32,15 @@ Plain Python, standard library only: it runs before the new package is installed
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import plistlib
 import re
 import shutil
 import socket
+import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 OLD_HOME_NAME = ".remote-ai-chat"
@@ -150,6 +156,79 @@ def old_names_in(value) -> list[str]:
     return []
 
 
+def claude_homes(text: str) -> dict[str, str]:
+    try:
+        accounts = tomllib.loads(text).get("accounts", {})
+        return {aid: acc["home"] for aid, acc in accounts.items()
+                if isinstance(acc, dict) and acc.get("provider") == "claude"
+                and isinstance(acc.get("home"), str)}
+    except (ValueError, AttributeError):
+        return {}
+
+
+def replace_account_homes(text: str, homes: dict[str, str]) -> str:
+    # Keep ordering and unrelated settings as written. Parse each
+    # table header with TOML itself so quoted account IDs work too.
+    account = None
+    lines = []
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("["):
+            account = None
+            try:
+                section = tomllib.loads(line.strip()).get("accounts", {})
+                if len(section) == 1 and next(iter(section.values())) == {}:
+                    account = next(iter(section))
+            except (ValueError, AttributeError):
+                pass
+        if account in homes and re.match(r"^\s*home\s*=", line):
+            line = re.sub(r"^(\s*home\s*=).*", lambda m: m[1] + " " + json.dumps(homes[account], ensure_ascii=False), line)
+        lines.append(line)
+    return "".join(lines)
+
+
+def signed_in(home: str) -> bool | None:
+    cli = shutil.which("claude")
+    if not cli:
+        candidate = Path.home() / ".local/bin/claude"
+        cli = str(candidate) if candidate.is_file() else None
+    if not cli:
+        return None
+    env = dict(os.environ, CLAUDE_CONFIG_DIR=home)
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"):
+        env.pop(key, None)
+    try:
+        result = subprocess.run([cli, "auth", "status"], env=env,
+                                capture_output=True, text=True, timeout=25)
+        data = json.loads(result.stdout)
+        return data.get("loggedIn") if isinstance(data.get("loggedIn"), bool) else None
+    except (OSError, ValueError, AttributeError, subprocess.TimeoutExpired):
+        return None
+
+
+def preserved_claude_homes(text: str, a: argparse.Namespace, directory: Path,
+                          auth_status=signed_in) -> dict[str, str]:
+    current = claude_homes(text)
+    old_prefix, new_prefix = str(a.old_home) + "/", str(a.new_home) + "/"
+    homes = {aid: home for aid, home in current.items() if home.startswith(old_prefix)}
+    # Earlier migrations rewrote these identities. Restore only accounts proven
+    # to predate the rename, with a working old login and a broken new login.
+    # Newly created accounts and successful re-logins keep their new identity.
+    historical = {}
+    for backup in sorted(directory.glob("config.toml.bak*")):
+        try:
+            historical.update({aid: home for aid, home in claude_homes(backup.read_text()).items()
+                               if home.startswith(old_prefix)})
+        except (OSError, UnicodeDecodeError):
+            continue
+    for aid, home in current.items():
+        old = historical.get(aid)
+        if (home.startswith(new_prefix) and old == old_prefix + home[len(new_prefix):]
+                and Path(old).is_dir() and auth_status(home) is False
+                and auth_status(old) is True):
+            homes[aid] = old
+    return homes
+
+
 def main(argv: list[str] | None = None) -> int:
     a = parse(argv)
     dry = a.dry_run
@@ -210,15 +289,22 @@ def main(argv: list[str] | None = None) -> int:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        fixed, n = old_path.subn(str(a.new_home), text)
-        if not n:
+        fixed = old_path.sub(str(a.new_home), text)
+        if path.name == "config.toml":
+            homes = preserved_claude_homes(text, a, home_now)
+            fixed = replace_account_homes(fixed, homes)
+        if fixed == text:
             continue
         rewritten += 1
-        step(f"rewrite {n} path(s) in {a.new_home / path.name}")
+        step(f"update paths in {a.new_home / path.name}")
         if not dry:
+            if path.name == "config.toml":
+                backup = path.with_name("config.toml.bak-credential-identity")
+                if not backup.exists():
+                    shutil.copy2(path, backup)
             path.write_text(fixed, encoding="utf-8")
     if not rewritten:
-        skip("no config names the old home")
+        skip("config paths already preserve the expected homes")
 
     # 4. the launchd plist
     target = a.launch_agents / f"{a.label}.plist"

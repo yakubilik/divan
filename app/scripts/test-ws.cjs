@@ -200,8 +200,8 @@ const ready = (async () => {
     s.sockets[1].open();
     await flush();
     const why = client.takeReconnect();
-    check("ws: …with reason 'foreground' and the code it was closed with",
-      why?.reason === 'foreground' && why.code === 1006 && why.offline_s === 0.5);
+    check("ws: …preserving the original socket failure and close code",
+      why?.reason === 'socket' && why.code === 1006 && why.offline_s === 0.5);
   }
   {
     const s = sandbox();
@@ -221,6 +221,35 @@ const ready = (async () => {
     s.sockets[1].open();
     await flush();
     check("ws: a daemon restart comes back with reason 'restart'", client.takeReconnect()?.reason === 'restart');
+  }
+
+  {
+    const s = sandbox(), client = new s.RacClient();
+    client.connect('100.64.0.1', 8790, 't');
+    const first = s.sockets[0], lateOpen = first.onopen;
+    await s.c.advance(10000);
+    check('ws: a stalled handshake is closed after ten seconds', first.closed && client.status === 'offline');
+    await s.c.advance(1000);
+    check('ws: a stalled handshake is retried', s.sockets.length === 2);
+    lateOpen();
+    check('ws: a stale open cannot revive the abandoned socket', client.status === 'connecting');
+    s.sockets[1].open();
+    await flush();
+    check('ws: the next attempt can recover', client.status === 'online');
+    client.disconnect();
+    await s.c.advance(30000);
+    check('ws: disconnect cancels handshake and retry work', s.sockets.length === 2 && client.status === 'idle');
+  }
+  {
+    const s = sandbox(), client = new s.RacClient();
+    client.connect('100.64.0.1', 8790, 't');
+    await s.c.advance(5000);
+    client.connect('100.64.0.2', 8790, 'other');
+    await s.c.advance(5000);
+    check('ws: switching hosts cancels the old handshake deadline', !s.sockets[1].closed);
+    client.disconnect();
+    await s.c.advance(20000);
+    check('ws: cancelling a pending connection does not redial', s.sockets.length === 2);
   }
 
   const store = fs.readFileSync(path.join(root, 'src/store.ts'), 'utf8');

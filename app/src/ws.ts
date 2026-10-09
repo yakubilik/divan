@@ -97,6 +97,8 @@ const QUIET_RECONNECT_MS = 1000;
  *  because it covers a computer that is busy rather than one that is gone: a
  *  turn's worth of work can sit in front of an answer. */
 const DEFAULT_TIMEOUT_MS = 30000;
+// Bound the handshake too: iOS may leave a dead dial in CONNECTING.
+const CONNECT_TIMEOUT_MS = 10000;
 
 export class RacClient {
   private ws: WebSocket | null = null;
@@ -107,6 +109,7 @@ export class RacClient {
   private url = '';
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
   private wanted = false;
   private hb: ReturnType<typeof setInterval> | null = null;
   private beating = false;
@@ -134,9 +137,10 @@ export class RacClient {
 
   private closeSocket() {
     const old = this.ws;
+    this.clearConnectTimer();
     this.ws = null;
     this.stopHeartbeat();
-    if (old) { try { old.onclose = null; old.onmessage = null; old.close(); } catch {} }
+    if (old) { try { old.onopen = null; old.onerror = null; old.onclose = null; old.onmessage = null; old.close(); } catch {} }
   }
 
   disconnect() {
@@ -144,6 +148,11 @@ export class RacClient {
     if (this.timer) clearTimeout(this.timer);
     this.closeSocket();
     this.setStatus('idle');
+  }
+
+  private clearConnectTimer() {
+    if (this.connectTimer) clearTimeout(this.connectTimer);
+    this.connectTimer = null;
   }
 
   private open() {
@@ -154,15 +163,35 @@ export class RacClient {
     try {
       ws = new WebSocket(this.url);
     } catch {
+      this.setStatus('offline');
       this.scheduleRetry();
       return;
     }
     this.ws = ws;
-    ws.onopen = () => { this.retry = 0; this.missed = 0; this.setStatus('online'); this.startHeartbeat(); };
-    ws.onmessage = (m) => { this.lastRx = Date.now(); this.missed = 0; this.handle(String(m.data)); };
-    ws.onerror = () => {};
+    this.connectTimer = setTimeout(() => {
+      if (this.ws !== ws || ws.readyState !== WebSocket.CONNECTING) return;
+      console.warn('ws: connection handshake timed out; retrying');
+      this.markLost('socket', null);
+      this.closeSocket();
+      this.setStatus('offline');
+      this.scheduleRetry();
+    }, CONNECT_TIMEOUT_MS);
+    ws.onopen = () => {
+      if (this.ws !== ws) return;
+      this.clearConnectTimer();
+      this.retry = 0; this.missed = 0; this.lastRx = 0;
+      this.setStatus('online'); this.startHeartbeat();
+    };
+    ws.onmessage = (m) => {
+      if (this.ws !== ws) return;
+      this.lastRx = Date.now(); this.missed = 0; this.handle(String(m.data));
+    };
+    // Native errors can contain the credential-bearing URL. Keep diagnostics
+    // free of that payload; the close event records the numeric code.
+    ws.onerror = () => { if (this.ws === ws) console.warn('ws: native socket error'); };
     ws.onclose = (e) => {
       if (this.ws !== ws) return;
+      this.clearConnectTimer();
       this.ws = null;
       this.stopHeartbeat();
       for (const p of this.pending.values()) p.reject(connError('wsDropped'));
@@ -225,6 +254,7 @@ export class RacClient {
 
   /** Note why the connection went, keeping when it first went. */
   private markLost(reason: ReconnectReason, code: number | null) {
+    if (this.lost && reason !== 'restart') return;
     this.lost = { reason, code: code ?? this.lost?.code ?? null, at: this.lost?.at ?? Date.now() };
   }
 

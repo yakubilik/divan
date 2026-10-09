@@ -1794,19 +1794,23 @@ class Server:
     async def h_chat_update(self, dev: Device, d: dict) -> dict:
         cid = d["chat_id"]
         fields = {k: v for k, v in d.items() if k != "chat_id"}
+        prev = self.db.get_chat(cid)
+        if prev is None:
+            raise Err("no_chat", "no such chat")
+        provider = fields.get("provider", prev["provider"])
+        switching_provider = provider != prev["provider"]
+        if switching_provider and provider not in PROVIDERS:
+            raise Err("unknown_provider", "unknown tool")
+        if switching_provider or "account_id" in fields:
+            # Resolve against the destination tool before mutating anything.
+            # An omitted account on a tool switch means that tool's default.
+            account = self._account(fields.get("account_id"), provider)
+            fields["account_id"] = account.id
         if "cwd" in fields:
             if err := self.policy.cwd_error(fields["cwd"]):
                 raise Err(err, "that folder cannot be opened")
             # Same canonical form as chat.create (case/slash-insensitive on Windows).
             fields["cwd"] = str(Path(fields["cwd"]).expanduser().resolve())
-        if "account_id" in fields:
-            current = self.db.get_chat(cid)
-            self._account(fields["account_id"], (current or {}).get("provider", "claude"))
-            # a resume id belongs to one account's transcript store
-            fields["provider_session_id"] = None
-        prev = self.db.get_chat(cid)
-        if prev is None:
-            raise Err("no_chat", "no such chat")
         if "owner" in fields and fields["owner"] not in self.cfg.person_names():
             raise Err("no_person", "nobody by that name shares this computer")
         # A rename keeps the project in front of it, and a chat that moves to
@@ -1823,14 +1827,20 @@ class Server:
             fields["title"] = with_project(title, self.policy.project_for(moving))
             if "title" in d:
                 fields["title_by"] = "user"      # a person's name for it; `naming` leaves it be
-        if "provider" in fields and fields["provider"] != prev["provider"]:
-            if fields["provider"] not in PROVIDERS:
-                raise Err("unknown_provider", "unknown tool")
-            # Each tool keeps its own session; remember the old one and restore the new one's.
+        previous_account = prev.get("account_id") or acct.DEFAULT_ID + "-" + prev["provider"]
+        switching_account = ("account_id" in fields
+                             and fields["account_id"] != previous_account)
+        if switching_provider or switching_account:
+            # A resume id belongs to both a tool and an account. Old entries
+            # keyed only by tool have no proven owner and cannot be restored.
             ids = json.loads(prev.get("session_ids") or "{}")
+            old_key = f"{prev['provider']}:{previous_account}"
             if prev.get("provider_session_id"):
-                ids[prev["provider"]] = prev["provider_session_id"]
-            fields["provider_session_id"] = ids.get(fields["provider"])
+                ids[old_key] = prev["provider_session_id"]
+            else:
+                ids.pop(old_key, None)
+            new_key = f"{provider}:{fields['account_id']}"
+            fields["provider_session_id"] = ids.get(new_key) if switching_provider else None
             fields["session_ids"] = json.dumps(ids)
         if "project_id" in fields:
             # A person filing the chat by hand; the computer never refiles it after.

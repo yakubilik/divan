@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import re
 import sys
 import tempfile
@@ -155,6 +156,34 @@ async def scenario_mid_turn(db):
           "and it carries the setting changed mid-turn",
           f"mode={built[-1].cfg.perm_mode} account={built[-1].cfg.account_id}")
     check(not s.dirty, "the flag is cleared once applied")
+
+
+async def scenario_switch_ownership(db):
+    print("\na turn finishing after a switch keeps its original session owner")
+    for destination in ("claude", "codex"):
+        chat = db.create_chat(provider="claude", account_id="claude-one", cwd="/tmp")
+        s, built = make_session(db, chat)
+        gate = asyncio.Event()
+        original = s._make_provider
+
+        def gated(c):
+            p = original(c)
+            p.gate = gate
+            return p
+
+        s._make_provider = gated
+        await s.send("long turn", None)
+        db.update_chat(chat["id"], provider=destination, account_id=destination + "-two",
+                       provider_session_id="destination-transcript")
+        await s.reconfigure()
+        gate.set()
+        await s.running
+        updated = db.get_chat(chat["id"])
+        check(updated["provider_session_id"] == "destination-transcript",
+              f"switch to {destination} does not inherit the old turn's session")
+        check(json.loads(updated["session_ids"])["claude:claude-one"] == "sess-1",
+              "the completed transcript stays resumable by its original account")
+        await s.close()
 
 
 async def scenario_queue(db):
@@ -335,7 +364,7 @@ async def scenario_update_routing(db):
     host = Host()
     host.db = db
     host.sessions = type("S", (), {"peek": staticmethod(lambda _cid: s)})()
-    host._account = lambda *a, **k: None
+    host._account = lambda account_id, provider: type("Account", (), {"id": account_id})()
     host.broadcast = lambda _ev: asyncio.sleep(0)
     host.policy = type("P", (), {"is_allowed_cwd": staticmethod(lambda _p: True),
                                  "cwd_error": staticmethod(lambda _p: None),
@@ -405,6 +434,7 @@ async def main() -> int:
         db = DB(Path(tmp) / "test.sqlite")
         await scenario_idle(db)
         await scenario_mid_turn(db)
+        await scenario_switch_ownership(db)
         await scenario_update_routing(db)
         await scenario_dropped_session(db)
         await scenario_queue(db)

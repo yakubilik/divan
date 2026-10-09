@@ -8,6 +8,7 @@ import re
 import time
 from typing import Awaitable, Callable
 
+from .accounts import DEFAULT_ID
 from .config import Config
 from .db import DB, new_id
 from .errors import Err
@@ -136,6 +137,7 @@ class ChatSession:
         self.notify = notify
         self.policy = PathPolicy(cfg.allowed_roots, cfg.denied_paths)
         self.provider: Provider | None = None
+        self._provider_owner: str | None = None
         self.running: asyncio.Task | None = None
         # Messages typed while a turn was still going. The running turn drains
         # them one by one when it finishes, so the phone never has to stop the
@@ -239,6 +241,27 @@ class ChatSession:
         return True
 
     # ── provider ───────────────────────────────────────────────────────────
+    @staticmethod
+    def _session_owner(chat: dict) -> str:
+        provider = chat["provider"]
+        return f"{provider}:{chat.get('account_id') or DEFAULT_ID + '-' + provider}"
+
+    def _build_provider(self, chat: dict) -> Provider:
+        provider = self._make_provider(chat)
+        self._provider_owner = self._session_owner(chat)
+        return provider
+
+    def _remember_session(self, owner: str, session_id: str) -> None:
+        chat = self.db.get_chat(self.chat_id)
+        if chat is None:
+            return
+        ids = json.loads(chat.get("session_ids") or "{}")
+        ids[owner] = session_id
+        fields = {"session_ids": json.dumps(ids)}
+        if self._session_owner(chat) == owner:
+            fields["provider_session_id"] = session_id
+        self.db.update_chat(self.chat_id, **fields)
+
     def _make_provider(self, chat: dict) -> Provider:
         # A demo machine runs the script for every chat, including one made
         # before the switch was turned on: it has no CLI to run anything else.
@@ -497,7 +520,7 @@ class ChatSession:
                 return None
             chat = settled
             await self._rebuild()
-            self.provider = self._make_provider(chat)
+            self.provider = self._build_provider(chat)
             self._recap = None
             await self._set_status("running")
             # Same sign-in, same CLI session: it remembers the turn, so a
@@ -518,7 +541,7 @@ class ChatSession:
             return None
         chat = await self._rebind(chat, account_id, reason)
         await self._rebuild()
-        self.provider = self._make_provider(chat)
+        self.provider = self._build_provider(chat)
         self._recap = None
         await self._set_status("running")
         recap = self._build_recap(HANDOVER_NOTE, handover=True)
@@ -610,7 +633,7 @@ class ChatSession:
         if self.dirty:
             await self._rebuild()
         if self.provider is None:
-            self.provider = self._make_provider(chat)
+            self.provider = self._build_provider(chat)
             # No resume id means a session with no memory of this chat.
             self._recap = (None if chat.get("provider_session_id")
                            else self._build_recap(text))
@@ -740,7 +763,7 @@ class ChatSession:
                 return
             if self.dirty:
                 await self._rebuild()
-                self.provider = self._make_provider(settled)
+                self.provider = self._build_provider(settled)
                 self._recap = (None if settled.get("provider_session_id")
                                else self._build_recap(text or ""))
             await self._set_status("running", last_preview=plain(secrets.shown(text or ""))[:200])
@@ -787,6 +810,7 @@ class ChatSession:
     async def _turn(self, text: str | None, attachments: list[dict] | None,
                     continuation: bool = False) -> None:
         assert self.provider is not None
+        owner = self._provider_owner
         self.turn_started = time.time()
         await self.emit("turn.started", {}, False)
         prompt = None
@@ -813,8 +837,8 @@ class ChatSession:
             revived += 1
             log.warning("chat %s: the CLI was killed mid-turn; picking the turn up again (%d/%d)",
                         self.chat_id, revived, REVIVE_MAX)
-            if res.session_id:
-                self.db.update_chat(self.chat_id, provider_session_id=res.session_id)
+            if res.session_id and owner:
+                self._remember_session(owner, res.session_id)
             try:
                 # No session yet means nothing to pick up: the message is asked again.
                 res = await self.provider.run(
@@ -838,11 +862,10 @@ class ChatSession:
                                     float(chat.get("total_cost_usd") or 0) + res.cost_usd)
             return
         fields: dict = {}
-        if res.session_id:
-            fields["provider_session_id"] = res.session_id
-            ids = json.loads(chat.get("session_ids") or "{}")
-            ids[chat["provider"]] = res.session_id
-            fields["session_ids"] = json.dumps(ids)
+        if res.session_id and owner:
+            # The user may have changed account while this turn was running.
+            # Save under the provider's original owner before yielding again.
+            self._remember_session(owner, res.session_id)
         if res.cost_usd:
             fields["total_cost_usd"] = float(chat.get("total_cost_usd") or 0) + res.cost_usd
         if res.is_error:
