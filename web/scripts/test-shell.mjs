@@ -549,9 +549,9 @@ group('the page is scoped, not a second screen');
     ['asking', 'stuck'].every((w) => one.includes(`</i>${w}</span>`)));
   // …and the page you land on is the other question: what is happening on the
   // product and how it got here, with no grid of faces on it.
-  ok('the product page is today, its board in four numbers and what is in progress, with no stage rail and no tabs',
-    one.includes('In progress now') && one.includes('id="p-today"')
-    && !one.includes('dv-stage') && !one.includes('dv-seg') && !one.includes('New ticket'));
+  ok('the product page is its stage card, today, its board in four numbers and what is in progress, with no tabs',
+    one.includes('In progress now') && one.includes('id="p-today"') && one.includes('data-stage-card')
+    && !one.includes('dv-seg') && !one.includes('New ticket'));
   ok('a page built partly out of a quiet machine says how old it is',
     renderToStaticMarkup(h(OverviewUI.Overview, { view: view('stale'), project: null, onProject() {} }))
       .includes('quiet for'));

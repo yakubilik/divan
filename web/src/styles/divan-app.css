@@ -108,6 +108,28 @@
 .dv-cols2{margin-top:32px;display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
 .dv-cols2>main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:32px}
 .dv-cols2>aside{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:32px}
+/* §4.2 The stage card: the rail of a product's five stages and its dates. */
+.dv-life{border-radius:var(--radius-md);padding:16px 18px;display:flex;flex-wrap:wrap;gap:16px 28px;align-items:stretch}
+.dv-life-rail{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.dv-life-now{margin:0;font-size:14px;line-height:20px;color:var(--ink-2)}
+.dv-life-now b{color:var(--ink);font-weight:600;margin-right:4px}
+.dv-life-steps{margin:0;padding:0;list-style:none;display:flex;gap:6px}
+.dv-life-steps li{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:7px}
+.dv-life-steps i{display:block;height:4px;border-radius:2px;background:var(--hairline)}
+.dv-life-steps li[data-state="on"] i{background:var(--ink-2)}
+.dv-life-steps li[data-state="now"] i{background:var(--ink)}
+.dv-life-steps span{font-size:12px;line-height:16px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-life-steps li[data-state="now"] span{color:var(--ink);font-weight:600}
+.dv-life-facts{margin:0;flex:0 1 auto;display:flex;flex-wrap:wrap;gap:12px 28px;padding-left:28px;border-left:1px solid var(--hairline)}
+.dv-life-facts div{display:flex;flex-direction:column;gap:3px}
+.dv-life-facts dt{font:400 10.5px var(--font-mono);color:var(--ink-3)}
+.dv-life-facts dd{margin:0;font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.dv-life-facts dd.n{font:400 11px var(--font-mono);letter-spacing:0;color:var(--ink-3)}
+.dv-life-facts dd.dv-said--amber{color:var(--amber)}
+@media (max-width:720px){
+  .dv-life-facts{padding-left:0;border-left:none;padding-top:12px;border-top:1px solid var(--hairline);flex-basis:100%}
+  .dv-life-facts dd{white-space:normal}
+}
 .dv-count{text-decoration:none;color:inherit;border-radius:var(--radius-md);padding:14px 16px;display:flex;flex-direction:column;gap:4px}
 .dv-count .l{font-size:12.5px;font-weight:500;color:var(--ink-2)}
 .dv-count .n{font:500 20px/24px var(--font-mono)}
