@@ -333,10 +333,9 @@ group('nothing was dropped in the move');
       .every((s) => app.includes(s)));
   // What each key actually does is not read here: `test-drive.mjs` mounts the
   // panel and presses them, because a handler's source says nothing about
-  // whether the effect that registers it ever ran. What is held here is that
-  // every page has a way in that does not go through the mouse.
-  ok('…and every page of the Machine list advertises a shortcut',
-    shell.MACHINE_ROWS.every((r) => !!r.shortcut));
+  // whether the effect that registers it ever ran.
+  ok('…and no page of the Machine list is offered on a digit, which is the browser’s',
+    shell.MACHINE_ROWS.every((r) => !/\d/.test(r.shortcut ?? '')) && !/e\.key === '\d'/.test(app));
   ok('the chat list no longer carries a second navigation',
     !/const NAV|NavRow/.test(src('src/components/Sidebar.tsx')));
 
