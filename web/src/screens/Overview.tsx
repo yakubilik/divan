@@ -74,12 +74,12 @@ export interface OverviewProps {
   card?: string | null;
   onCard?: (id: string | null) => void;
   /** The product's chats: the list that stands down the left of every page of
-   *  it, the one that is open (or null), and what closing it does. Handed in whole, because the chat is the Chat place's own surface
-   *  and its handlers live above both. */
+   *  it, and the one that is open (or null) — which carries its own close, the
+   *  X in its head, back to the product's page. Handed in whole, because the
+   *  chat is the Chat place's own surface and its handlers live above both. */
   chats?: {
     list: React.ReactNode;
     open: React.ReactNode | null;
-    onClose: () => void;
   } | null;
   /** The Composer the unscoped page is built round (HANDOVER §4.1). */
   composer?: React.ReactNode;
@@ -142,7 +142,8 @@ export function Overview({
             card={open} project={project} index={view.projects.indexOf(project)} now={view.now}
             onProject={() => { onCard?.(null); onTab?.('overview'); }}
           />
-          {!!projectComposer && <div style={{ marginTop: 40 }}>{projectComposer}</div>}
+          {/* No Composer here: a ticket's page talks to that ticket, through
+              the line in Live, and starting a chat is the product's page. */}
         </div>
         <Sessions view={view} />
       </div>,
@@ -152,15 +153,11 @@ export function Overview({
   const to = (key: string) => onTab?.(key as ProjectTab);
 
   // One of the product's chats, read where the product's page was: the list
-  // stays where it is, and closing the chat is the page again.
+  // stays where it is, and closing the chat — the X in its own head — is the
+  // page again.
   if (here === 'chat' && chats?.open) {
     return framed(
       <div data-project-chat="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '4px 20px' }}>
-          <span className="dv-meta">{project.name}</span>
-          <button type="button" className="dv-btn dv-btn--ghost dv-hit" style={{ marginLeft: 'auto' }}
-            onClick={chats.onClose}>Close chat</button>
-        </div>
         {chats.open}
       </div>,
     );

@@ -26,7 +26,7 @@ document.head.appendChild(sheet);
 
 const NOW = Math.floor(Date.now() / 1000);
 useFleet.setState({ hosts: { studio: host() as any }, order: ['studio'], focus: 'studio', ready: true });
-const view = merge(boards(NOW).busy.map((b: any) => ({
+const view = merge([...boards(NOW).busy, ...boards(NOW).slow].map((b: any) => ({
   key: b.key, name: b.name, state: { snapshot: b.snap, at: NOW, reachable: true, error: null, old: false },
 })), NOW);
 

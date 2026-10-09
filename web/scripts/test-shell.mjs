@@ -70,6 +70,12 @@ for (const f of readdirSync(out, { recursive: true, withFileTypes: true })) {
     )));
 }
 
+// A picture is a URL to the bundler; to node it is a module that says which.
+mkdirSync(join(out, 'src', 'assets'), { recursive: true });
+for (const f of readdirSync(join(web, 'src', 'assets'))) {
+  if (f.endsWith('.png')) writeFileSync(join(out, 'src', 'assets', `${f}.js`), `export default ${JSON.stringify(`/assets/${f}`)};\n`);
+}
+
 // ── a browser, as far as a static render needs one ──────────────────────────
 
 /** The three things the shell reads off a browser: a stored theme, what the
@@ -543,9 +549,9 @@ group('the page is scoped, not a second screen');
     ['asking', 'stuck'].every((w) => one.includes(`</i>${w}</span>`)));
   // …and the page you land on is the other question: what is happening on the
   // product and how it got here, with no grid of faces on it.
-  ok('the product page is today, its board in four numbers and what is in progress, with no stage rail and no tabs',
-    one.includes('In progress now') && one.includes('id="p-today"')
-    && !one.includes('dv-stage') && !one.includes('dv-seg') && !one.includes('New ticket'));
+  ok('the product page is its stage card, today, its board in four numbers and what is in progress, with no tabs',
+    one.includes('In progress now') && one.includes('id="p-today"') && one.includes('data-stage-card')
+    && !one.includes('dv-seg') && !one.includes('New ticket'));
   ok('a page built partly out of a quiet machine says how old it is',
     renderToStaticMarkup(h(OverviewUI.Overview, { view: view('stale'), project: null, onProject() {} }))
       .includes('quiet for'));
@@ -864,9 +870,10 @@ group('the chat is untouched');
     && /app\/src\/transcript\.ts/.test(src('src/lib/transcript.ts')));
 
   const app = src('src/App.tsx');
-  // The chat place, the chat held over the wall, and a product's own Chat tab.
+  // The chat place, the chat held over the wall, and a product's own Chat tab —
+  // where it is also handed the X that puts it away again.
   ok('the chat is handed the same props it always was, in the three places it is drawn',
-    (app.match(/<ChatView \{\.\.\.chatProps\} \/>/g) ?? []).length === 3);
+    (app.match(/<ChatView \{\.\.\.chatProps\}( onCloseView=\{[^{}]*\})? \/>/g) ?? []).length === 3);
   ok('…and the chat place is the chat and the list it is picked from',
     /place === 'chat' && \(/.test(app) && /<Sidebar/.test(app));
 }

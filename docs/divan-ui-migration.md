@@ -57,11 +57,11 @@ The quoted words are the check's own name.
 | Start a card now | Drag to In Progress | Drag; said to the agent in the Composer | `divan.card.move` | drive: "dragging a card from Queued into In Progress issues divan.card.move with In Progress" |
 | Pick agent / account / model for one chat | NewChat dialog | Composer chips (§5), dialog behind More options | `agent.list`, `chat.create` | drive: "four chips show the defaults, list what the computer reports, mark a changed one with an ×" |
 | Scope by typing | — | `@project` in the Composer | `chat.create` | drive: "typing @quire sets the same Project chip as its menu does" |
-| Answer an asking agent | Question window | Needs you card (amber answer); question window kept | `ustabasi.note` | drive: "Needs you answers in one press with the same note the question window sent" |
+| Answer an asking agent | Question window | Floating chat on the Dashboard (one-line Needs you row reopens it); question window kept | `ustabasi.note` | drive: "Needs you: the asking card is a one-line row" |
 | Put away / close / drag / open out a question window | Window corner | Same | — | drive: "a window can be put away" |
 | Reply in a question window | Window box | Same | `chat.send` | drive: "…and pressing it says it in that chat" |
 | Read the counters | Dashboard counters | One summary line | — | drive: "tiles open the project, dormant ones come last and dimmed" |
-| See what is running | Agent roster (not pressable) | Running: a badge per agent and per chat in a turn, each opens what it names | — | overview: "what is running is a badge per agent" |
+| See what is running | Agent roster (not pressable) | On its project card: each agent is a ticket line and each chat in a turn a chat line, each opens what it names | — | overview: "there is no Running row: every agent at work is a ticket line" |
 | Everything waiting on you | Questions spread over pages | Waiting on you (`/waiting`, Needs you › See all) | `ustabasi.note`, `divan.card.move`, `divan.project.open` | drive: "Waiting on you: the title states the counts, three groups oldest first" |
 | Switch a product's view | Tabs Overview / Board / Branches / Chat | Segment Overview / Board / Chats; Repositories in the side column | — | drive: "the head is monogram, name, one sentence and a meta line" |
 | Write a new ticket | Inline draft in Ice Box, N | Said to the agent in the product's Composer; there is no form | `chat.create` | drive: "no New ticket and no tabs on a product or its board" |

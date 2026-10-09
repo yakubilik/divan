@@ -235,6 +235,42 @@ export function rail(p: MergedProject): Step[] | null {
   }));
 }
 
+/** What each step means in the words people use for it: `build` is the product
+ *  in development and `beta` is it being tried by people before it is live.
+ *  Said under the rail so that the daemon's one-word stages read without a
+ *  glossary — and kept off the ticket words (`running`, `testing`, `review`),
+ *  which are where one card is, not where the product is. */
+export const STAGE_MEANS: Record<Stage, string> = {
+  idea: 'Not built yet',
+  build: 'In development',
+  beta: 'In beta, tried by people before launch',
+  live: 'Live for its users',
+  growth: 'Live and growing',
+};
+
+/** Where a product stands, as the stage card draws it: on the rail, with
+ *  nobody having said, or with a word the rail does not have. The last two draw
+ *  no bars at all — five empty steps would claim the product has got nowhere,
+ *  and a guessed step would be a stage nobody gave it. */
+export type Standing =
+  | { kind: 'set'; stage: Stage; label: string; means: string; steps: Step[];
+      /** `3 of 5`: which step, not how complete the product is. */
+      position: string }
+  | { kind: 'unset' }
+  | { kind: 'unknown'; word: string };
+
+export function standing(p: MergedProject): Standing {
+  const word = (p.stage || '').trim().toLowerCase();
+  if (!word) return { kind: 'unset' };
+  const steps = rail({ ...p, stage: word });
+  const here = steps?.find((s) => s.here);
+  if (!steps || !here) return { kind: 'unknown', word };
+  return {
+    kind: 'set', stage: here.key, label: here.label, means: STAGE_MEANS[here.key], steps,
+    position: `step ${STAGES.indexOf(here.key) + 1} of ${STAGES.length}`,
+  };
+}
+
 /** `14 Mar 2026`, the way the frame writes a date: short month, no comma. */
 export function day(at: number | null | undefined): string {
   if (at == null || !Number.isFinite(at)) return '';

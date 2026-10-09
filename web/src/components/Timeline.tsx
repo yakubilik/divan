@@ -1,6 +1,6 @@
 import { ApprovalForm } from './ApprovalForm';
 import { structuredInput, type ApprovalResponse } from '../lib/approval-input';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { C, R } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import { cost, duration, tokens, toolSummary, clock } from '../lib/format';
@@ -9,6 +9,7 @@ import { Bubble, Prose, withSecrets } from './Bubble';
 import { Lightbox, type Shot } from './Lightbox';
 import { fileUrl } from '../lib/actions';
 import { filedBy, type Filed } from '../lib/filed';
+import { NOTICE_WORD, ticketNotice, type TicketNotice } from '../lib/notice';
 import { blocks, counted, langOf, tell, type Lang, type Step } from '../lib/steps';
 
 const OK_BG = C.okBg;
@@ -166,6 +167,16 @@ function Attachments({ list, hostKey }: { list: any[]; hostKey: string }) {
 }
 
 function UserBubble({ item, hostKey }: { item: Extract<Item, { kind: 'user' }>; hostKey: string }) {
+  const notice = useMemo(
+    () => (item.attachments?.length ? null : ticketNotice(item.text)), [item.text, item.attachments]);
+  if (notice) {
+    return (
+      <>
+        <Notice notice={notice} queued={item.queued} />
+        {notice.after && <Bubble>{withSecrets(notice.after)}</Bubble>}
+      </>
+    );
+  }
   return (
     <Bubble>
       {item.queued && (
@@ -174,6 +185,68 @@ function UserBubble({ item, hostKey }: { item: Extract<Item, { kind: 'user' }>; 
       <Attachments list={item.attachments} hostKey={hostKey} />
       {withSecrets(item.text)}
     </Bubble>
+  );
+}
+
+const NOTICE_TONE = {
+  done: { color: C.ok, icon: P.check },
+  blocked: { color: C.warn, icon: P.info },
+  failed: { color: C.danger, icon: P.warn },
+} as const;
+
+/** A ticket that ended, told to the chat that filed it (`lib/notice.ts`).
+ *
+ *  One quiet line — state, number, title — and the report behind it. The
+ *  paragraph that tells the agent what to do is part of the stored message and
+ *  of what the agent read; it is not drawn here at all. */
+function Notice({ notice, queued }: { notice: TicketNotice; queued: boolean }) {
+  const [open, setOpen] = useState(false);
+  const tone = NOTICE_TONE[notice.state];
+  const detail = `ticket-notice-${notice.ticket}-${useId()}`;
+  return (
+    <div
+      data-notice={notice.ticket} data-state={notice.state}
+      style={{
+        alignSelf: 'stretch', minWidth: 0, background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: R.card, overflow: 'hidden',
+      }}
+    >
+      <button
+        type="button" className="dv-hit" onClick={() => setOpen((o) => !o)}
+        aria-expanded={open} aria-controls={detail}
+        title={`#${notice.ticket} ${NOTICE_WORD[notice.state]}: ${notice.title}`}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%', minHeight: 36,
+          padding: '0 12px', background: 'transparent', border: 'none', cursor: 'pointer',
+          textAlign: 'left', fontSize: 13, lineHeight: '19px', color: C.text2,
+        }}
+      >
+        <Icon path={tone.icon} size={13} color={tone.color} width={2.6} />
+        <span style={{ flexShrink: 0, color: tone.color, fontWeight: 600 }}>{NOTICE_WORD[notice.state]}</span>
+        <span style={{ ...mono, flexShrink: 0, fontSize: 12, color: C.mute }}>#{notice.ticket}</span>
+        <span data-notice-title style={{
+          flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          color: C.text,
+        }}>{notice.title}</span>
+        {queued && <span style={{ ...mono, flexShrink: 0, fontSize: 11, color: C.mute }}>queued</span>}
+        <Icon path={open ? P.chevronDown : P.chevronRight} size={12} color={C.faint} />
+      </button>
+      {open && (
+        <div id={detail} role="region" aria-label={`Ticket #${notice.ticket} report`} style={{
+          borderTop: `1px solid ${C.border}`, padding: '10px 12px 12px',
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ fontSize: 14, lineHeight: '21px', whiteSpace: 'pre-wrap', color: C.text }}>
+            {notice.report ? withSecrets(notice.report) : <span style={{ color: C.mute }}>No report came with it.</span>}
+          </div>
+          {notice.facts.length > 0 && (
+            <div style={{ ...mono, fontSize: 12, lineHeight: '18px', color: C.mute, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {notice.facts.map((f, i) => <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{withSecrets(f, `f${i}`)}</div>)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -439,23 +512,42 @@ type Respond = (requestId: string, d: 'allow' | 'allow_session' | 'deny', respon
  *  "freezes" and wants a refresh: the refresh does not fix anything, it just
  *  gives it a shorter conversation to redraw.
  */
-/** A card the conversation filed, as the small link under the message that
- *  filed it: which column it is in and its title, and a press opens it. */
+/** A card the conversation filed, as the small entry under the message that
+ *  filed it: which column it is in and its title. A press opens the card in
+ *  place, under the entry; leaving the chat is a second, explicit press. */
 export interface TicketLink {
   open: (id: number) => void;
   /** What the board says about that ticket now, where it has a card for it. */
-  describe: (id: number) => { column: string; title: string } | null;
+  describe: (id: number) => { column: string; title: string; project?: string | null } | null;
 }
 
 function CardLink({ filed, link }: { filed: Filed; link: TicketLink }) {
+  const [open, setOpen] = useState(false);
   const known = link.describe(filed.id);
+  const title = known?.title ?? filed.title;
+  const column = known?.column ?? 'Queued';
+  const detail = `ticket-card-${filed.id}-${useId()}`;
   return (
-    <a href={`#ticket-${filed.id}`} className="dv-glass dv-cardlink" data-ticket={filed.id}
-      onClick={(e) => { e.preventDefault(); link.open(filed.id); }}>
-      <span className="dv-meta">{known?.column ?? 'Queued'}</span>
-      <span className="t">{known?.title ?? filed.title}</span>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-    </a>
+    <div className="dv-filedcard" data-filed={filed.id}>
+      <button type="button" className="dv-glass dv-cardlink" data-ticket={filed.id}
+        aria-expanded={open} aria-controls={detail} title={`#${filed.id} ${title}`}
+        onClick={() => setOpen((o) => !o)}>
+        <span className="dv-meta">{column}</span>
+        <span className="t">{title}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d={open ? 'M6 9l6 6 6-6' : 'M9 6l6 6-6 6'} /></svg>
+      </button>
+      {open && (
+        <div id={detail} role="region" aria-label={`Ticket #${filed.id}`}
+          className="dv-glass dv-ticketcard" data-ticket-card={filed.id}>
+          <div className="dv-meta">
+            #{filed.id} · {column}{known?.project ? ` · ${known.project}` : ''}
+          </div>
+          <div className="t">{title}</div>
+          <button type="button" className="dv-btn dv-btn--primary dv-hit" data-go-details={filed.id}
+            onClick={() => link.open(filed.id)}>Go details</button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -493,10 +585,12 @@ const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
   const [open, setOpen] = useState(false);
   const told = tell(steps, live, lang);
   const gap = prevTs == null || steps[0].ts - prevTs > 1800;
+  // One entry per ticket: a command run twice over the same card, or a replay
+  // that hands the same output back, is still one card.
   const filed = link ? steps.flatMap((s) => {
     const f = s.kind === 'tool' && !s.isError ? filedBy(s.output) : null;
     return f ? [f] : [];
-  }) : [];
+  }).filter((f, i, all) => all.findIndex((g) => g.id === f.id) === i) : [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-steps={steps.length}>
       {gap && <Divider ts={steps[0].ts} />}

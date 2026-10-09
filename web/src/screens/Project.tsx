@@ -8,7 +8,9 @@
  *
  *  Under it, first, the Composer, locked to this product — the one way to
  *  start anything here, a ticket included, and so the first thing in reach.
- *  Then what was done on the product today, as a short list of work
+ *  Then the stage card: the five-step rail of where the product is in its life
+ *  (`lib/project.ts STAGES`, the daemon's own), the dates that back it, and an
+ *  honest line where nobody has given it a stage. Then what was done on the product today, as a short list of work
  *  (`lib/today.ts`); what needs you; the board in four numbers with the In
  *  Progress cards under them; and beside those what the product is still
  *  waiting on (`components/StillOpen.tsx`) and the repositories it owns.
@@ -22,7 +24,9 @@
  */
 import { uptime } from '../lib/format';
 import { counts, inProgress } from '../lib/board';
-import { blank, blankBody, metaLine, oldLine, quiet } from '../lib/project';
+import {
+  blank, blankBody, facts, metaLine, oldLine, quiet, standing, timeline, STAGES, type Step,
+} from '../lib/project';
 import { useState } from 'react';
 import { TODAY_SHOWN, type Did } from '../lib/today';
 import { figure, summaryOf } from '../lib/overview';
@@ -79,6 +83,7 @@ export function Project({ view, project: p, today, onCard, onBoard, composer }: 
   return (
     <>
       {!!composer && <div style={{ marginTop: 28 }}>{composer}</div>}
+      <StageCard project={p} now={view.now} />
       {!!old && <p className="dv-meta" style={{ margin: '16px 0 0' }}>{old}</p>}
       {!!asleep && (
         <p style={{ margin: '16px 0 0', fontSize: 15, lineHeight: '22px', color: 'var(--ink-2)' }}>
@@ -104,6 +109,77 @@ export function Project({ view, project: p, today, onCard, onBoard, composer }: 
         </aside>
       </div>
     </>
+  );
+}
+
+/** Where the product is in its life: the stage the daemon keeps for it
+ *  (`divan.project.update --stage`), drawn as the rail it always was — the
+ *  steps behind it filled, the one it is on darkest, the ones ahead empty — with
+ *  the dates that say it in numbers beside it.
+ *
+ *  This is the product's stage and nothing else. Which tickets are running or
+ *  being tested is the board below; nothing on it moves the rail, and the rail
+ *  is no percentage: `step 3 of 5` is which step, not how much is finished. A
+ *  product nobody has given a stage, or one with a word the rail does not have,
+ *  says so instead of drawing bars. */
+function StageCard({ project: p, now }: { project: MergedProject; now: number }) {
+  const at = standing(p);
+  const dates = facts(p, now);
+  const last = timeline(p, now).find((m) => !m.future && !m.today);
+  return (
+    <section aria-labelledby="p-stage" data-stage-card="" data-stage={at.kind === 'set' ? at.stage : at.kind}
+      style={{ marginTop: 28 }}>
+      <div className="dv-sec">
+        <h3 id="p-stage">Stage</h3>
+        {at.kind === 'set' && <span className="dv-meta" data-stage-position="">{at.position}</span>}
+      </div>
+      <div className="dv-glass dv-life">
+        <div className="dv-life-rail">
+          {at.kind === 'set' ? (
+            <>
+              <p className="dv-life-now" data-stage-now="">
+                <b>{at.label}</b> <span>{at.means}</span>
+              </p>
+              <ol className="dv-life-steps" aria-label={`Stage: ${at.label}, ${at.position}`}>
+                {at.steps.map((s) => <Bar key={s.key} step={s} />)}
+              </ol>
+            </>
+          ) : (
+            <p className="dv-life-now" data-stage-now="">
+              {at.kind === 'unset'
+                ? <><b>No stage set</b> <span>Nobody has said where this product is yet. Tell an agent in a chat, for example “set its stage to build”.</span></>
+                : <><b>{`“${at.word}”`}</b> <span>{`is not a stage on the rail (${STAGES.join(', ')}), so none is drawn.`}</span></>}
+            </p>
+          )}
+          {!!last && (
+            <p className="dv-meta" data-stage-last="" style={{ margin: 0 }}>{`${last.title} · ${last.date}`}</p>
+          )}
+        </div>
+        {dates.length > 0 && (
+          <dl className="dv-life-facts">
+            {dates.map((f) => (
+              <div key={f.key} data-fact={f.key}>
+                <dt>{f.label}</dt>
+                <dd>{f.value}</dd>
+                {!!f.note && <dd className={`n${f.tone === 'amber' ? ' dv-said--amber' : ''}`}>{f.note}</dd>}
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** One step of the rail: a bar, filled up to where the product is, and its
+ *  name under it. */
+function Bar({ step }: { step: Step }) {
+  const state = step.here ? 'now' : step.passed ? 'on' : 'ahead';
+  return (
+    <li data-step={step.key} data-state={state} aria-current={step.here ? 'step' : undefined}>
+      <i aria-hidden="true" />
+      <span>{step.label}</span>
+    </li>
   );
 }
 

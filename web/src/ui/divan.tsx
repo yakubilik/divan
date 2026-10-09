@@ -797,33 +797,18 @@ export function TopBar({ children, style }: {
   );
 }
 
-/** The mark: a divan seen from the front — a back, a seat and two feet, in one
- *  ink.
- *
- *  Geometry and nothing else, for the reason every other mark on this panel is:
- *  it is drawn in `currentColor`, so the same file is the logo in both themes,
- *  on an amber chip and inside a favicon, and there is no second asset anywhere
- *  that can fall out of step with the first. No gradient, no shadow — at 22 pt
- *  in a 58 pt bar a gradient is a smudge.
- *
- *  The proportions are the bar's: a 24-unit square, the seat at two-thirds of
- *  the height so the mark sits on the same optical line the wordmark's baseline
- *  does rather than floating over it. */
+/** The mark: the turquoise Divan seal, the same file the top line, the tab
+ *  and the home-screen icon show (`public/divan-seal.png`, cut out of the
+ *  supplied artwork with its paper made transparent). It is artwork, not
+ *  geometry, so it keeps its own ink in both themes; the turquoise reads on the
+ *  light and the dark canvas alike. */
 export function DivanMark({ size = SIZE.mark, style }: {
   size?: number;
   style?: React.CSSProperties;
 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"
-      aria-hidden="true" focusable="false" style={{ flex: 'none', display: 'block', ...style }}>
-      {/* the back */}
-      <rect x="3.5" y="5" width="17" height="5.2" rx="2.6" opacity=".55" />
-      {/* the seat, which is the widest thing and the one the eye reads */}
-      <rect x="1.8" y="10.2" width="20.4" height="5.6" rx="2.4" />
-      {/* two feet */}
-      <rect x="4.2" y="16.2" width="2.6" height="3.2" rx="1.1" />
-      <rect x="17.2" y="16.2" width="2.6" height="3.2" rx="1.1" />
-    </svg>
+    <img src="/divan-seal.png" width={size} height={size} alt="" aria-hidden="true"
+      style={{ flex: 'none', display: 'block', ...style }} />
   );
 }
 
@@ -1009,7 +994,7 @@ export function Panel({ tone = 'amber', head, foot, width = SIZE.panel, height =
       {head}
       {/* Pushed down by a margin rather than `justify-content: flex-end`: what
           that overflows goes off the top, where no scrollbar reaches it. */}
-      <div style={{
+      <div data-panel-body="" style={{
         flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
         padding: 14, overflowY: 'auto',
       }}>
