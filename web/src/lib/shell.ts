@@ -63,7 +63,8 @@ export interface MachineRow {
   note: string;
   /** A path out of `P`. */
   icon: string;
-  /** The shortcut it kept from the old sidebar. */
+  /** The key that opens it, where it has one. Never a digit: ⌘/Ctrl with a
+   *  number is the browser's way between its own tabs. */
   shortcut?: string;
 }
 
@@ -77,31 +78,31 @@ export interface MachineRow {
  *  the half of "findable, forgettable" a list of bare words is missing. */
 export const MACHINE_ROWS: MachineRow[] = [
   {
-    view: 'machines', label: 'Machines', icon: 'cpu', shortcut: '⌘1',
+    view: 'machines', label: 'Machines', icon: 'cpu',
     note: 'every paired computer, what it is running and how full its plans are',
   },
   {
-    view: 'executors', label: 'Executors', icon: 'users', shortcut: '⌘3',
+    view: 'executors', label: 'Executors', icon: 'users',
     note: 'who can do work, where they are and what they are on',
   },
   {
-    view: 'terminal', label: 'Terminal', icon: 'terminal', shortcut: '⌘4',
+    view: 'terminal', label: 'Terminal', icon: 'terminal',
     note: 'every chat at once, and the ticket queue',
   },
   {
-    view: 'screen', label: 'Remote screen', icon: 'monitor', shortcut: '⌘5',
+    view: 'screen', label: 'Remote screen', icon: 'monitor',
     note: "this computer's own screen, watched and driven",
   },
   {
-    view: 'accounts', label: 'Accounts & sign-ins', icon: 'key', shortcut: '⌘7',
+    view: 'accounts', label: 'Accounts & sign-ins', icon: 'key',
     note: 'what the agents work through, and which of them is expiring',
   },
   {
-    view: 'quota', label: 'Quota thresholds', icon: 'gauge', shortcut: '⌘8',
+    view: 'quota', label: 'Quota thresholds', icon: 'gauge',
     note: 'when a thin plan is said in amber, and when new work stops being started',
   },
   {
-    view: 'admin', label: 'Admin', icon: 'shield', shortcut: '⌘6',
+    view: 'admin', label: 'Admin', icon: 'shield',
     note: 'the update, the logs, the keys and what an agent may open',
   },
   {

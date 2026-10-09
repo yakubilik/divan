@@ -42,9 +42,9 @@ reason you went and looked at the board.
 The Chat is the conversation and the list it is picked from, unchanged.
 Machine is where everything that was about a computer went: the fleet panel, the
 agents, the wall of sessions with the ticket queue in it, the computer's screen,
-its folders, Admin and Settings, each a page of one side panel. The six keyboard
-shortcuts the panel already had still open the six pages they always did; ⌘0 is
-the Dashboard.
+its folders, Admin and Settings, each a page of one side panel. None of them is
+on ⌘ or Ctrl with a digit: those switch the browser's own tabs, and the panel
+leaves them to it.
 
 `lib/shell.ts` is the whole of that arrangement with no React in it, and
 `app/src/shell.ts` is the same file for the phone. `npm test` holds the two ends
@@ -139,8 +139,9 @@ the connection.
 `scripts/test-drive.mjs` is the sixth, and it is the only one that presses
 anything. It mounts the whole panel into a document (jsdom, the one dependency
 these checks add) with the renderer the panel actually ships with, and then uses
-it: ⌘0 and the six keys the panel already had are dispatched at the window and
-the page that comes up is read off the Machine list's own selected row; a place
+it: ⌘, is dispatched at the window and the page that comes up is read off the
+Machine list's own selected row, and ⌘ and Ctrl with a digit are dispatched and
+nothing moves; a place
 and a project chip are clicked and the place, the address and the scoped page are
 read back; the switch is clicked and the document's theme moves while the markup
 under the bar does not; and a question that opened itself in the corner is

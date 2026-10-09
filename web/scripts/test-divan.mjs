@@ -1104,11 +1104,10 @@ group('the keyboard and the palette still work');
 {
   const app = src('src/App.tsx');
   for (const [key, what] of [["'k'", 'the palette'], ["'b'", 'the rail'], ["'n'", 'a new chat'],
-                             ["'f'", 'search'], ["','", 'settings'], ["'1'", 'the dashboard'],
-                             ["'2'", 'projects'], ["'3'", 'agents'], ["'4'", 'terminal mode'],
-                             ["'5'", 'the screen'], ["'6'", 'admin']]) {
+                             ["'f'", 'search'], ["','", 'settings']]) {
     ok(`⌘${key.replaceAll("'", '')} still opens ${what}`, app.includes(`e.key === ${key}`));
   }
+  ok('…and no digit is bound: ⌘ and Ctrl with a number are the browser’s tabs', !/e\.key === '\d'/.test(app));
   ok('the palette is still mounted', /<Palette$|<Palette\b/m.test(app));
   ok('…and it offers the theme that is not on screen',
     /theme\.scheme === 'dark' \? 'Light theme' : 'Dark theme'/.test(app));

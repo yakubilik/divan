@@ -236,5 +236,8 @@
   .dv-root :is(button, a[href], select, textarea, summary, [role=button], [role=tab],
     input:not([type=hidden]):not([type=checkbox]):not([type=radio])){min-height:44px;box-sizing:border-box}
   .dv-root :is(button, a[href], summary, [role=button], [role=tab]){min-width:44px}
+  /* A chat's field pads its one line out to the same 44, so the line stays level
+     with the discs beside it (`ChatComposer`, a ticket's answer box). */
+  .dv-root{--dv-press:44px}
   :where(.dv-root) :where(a[href]){display:inline-flex;align-items:center}
 }
