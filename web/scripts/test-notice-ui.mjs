@@ -40,7 +40,7 @@ execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
   '--define:process.env.NODE_ENV="development"',
   // timeline.ts reaches fleet.ts, whose dev-only branch reads import.meta.env.
   '--define:import.meta.env={"DEV":false}',
-  '--log-level=warning',
+  '--loader:.png=dataurl', '--log-level=warning',
 ], { cwd: web, stdio: 'inherit' });
 
 writeFileSync(join(out, 'harness.html'),
