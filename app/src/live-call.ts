@@ -88,7 +88,11 @@ function systemVoice(lang: string, id: string | null, name: string): Voice {
   return {
     name,
     async *synth(text, cancelled) {
-      const r = await voiceEngine!.synthesize(text, locale(lang), id, 0.96);
+      // A synthesiser that never delivers its last buffer must not hold up every piece after it.
+      const r = await Promise.race([
+        voiceEngine!.synthesize(text, locale(lang), id, 0.96),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('system voice timed out')), 8000)),
+      ]);
       if (cancelled()) return;
       const b = fromBase64(r.pcm);
       yield { pcm: new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1), rate: r.rate };

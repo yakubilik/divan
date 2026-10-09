@@ -170,14 +170,19 @@ export function toBase64(bytes: Uint8Array): string {
   return out;
 }
 
+const B64_INDEX = (() => {
+  const t = new Int16Array(128).fill(-1);
+  for (let i = 0; i < B64.length; i++) t[B64.charCodeAt(i)] = i;
+  return t;
+})();
+
 export function fromBase64(s: string): Uint8Array {
   const clean = s.replace(/[^A-Za-z0-9+/]/g, '');
   const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  const at = (i: number) => (i < clean.length ? B64_INDEX[clean.charCodeAt(i)] : 0);
   let o = 0;
   for (let i = 0; i < clean.length; i += 4) {
-    const a = B64.indexOf(clean[i]), b = B64.indexOf(clean[i + 1]);
-    const c = i + 2 < clean.length ? B64.indexOf(clean[i + 2]) : 0;
-    const d = i + 3 < clean.length ? B64.indexOf(clean[i + 3]) : 0;
+    const a = at(i), b = at(i + 1), c = at(i + 2), d = at(i + 3);
     const n = (a << 18) | (b << 12) | (c << 6) | d;
     if (o < out.length) out[o++] = n >> 16;
     if (o < out.length) out[o++] = (n >> 8) & 255;
