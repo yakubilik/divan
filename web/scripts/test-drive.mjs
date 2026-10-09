@@ -11,9 +11,10 @@
  *  whole panel mounted into it, and the three things a shell is for driven
  *  through the same events a person would produce:
  *
- *   · **the keyboard.** ⌘0 and the six keys the panel already had are dispatched
- *     at the window, and what is asserted is the page that came up — the
- *     Machine list's own selected row, by name.
+ *   · **the keyboard.** ⌘, is dispatched at the window, and what is asserted is
+ *     the page that came up — the Machine list's own selected row, by name.
+ *     ⌘ and Ctrl with a digit are dispatched too, and what is asserted is that
+ *     nothing moved and nothing was cancelled: those are the browser's.
  *   · **the bar.** A place is clicked and the place changes; a project chip is
  *     clicked and the address gains `?project=<key>` while the page under it
  *     comes back scoped to that product.
@@ -62,6 +63,12 @@ for (const f of readdirSync(out, { recursive: true, withFileTypes: true })) {
     .replace(/(from\s+['"])(\.[^'"]*?)(['"])/g, (m, a, spec, z) => (
       spec.endsWith('.js') ? m : `${a}${spec}.js${z}`
     )));
+}
+
+// A picture is a URL to the bundler; to node it is a module that says which.
+mkdirSync(join(out, 'src', 'assets'), { recursive: true });
+for (const f of readdirSync(join(web, 'src', 'assets'))) {
+  if (f.endsWith('.png')) writeFileSync(join(out, 'src', 'assets', `${f}.js`), `export default ${JSON.stringify(`/assets/${f}`)};\n`);
 }
 
 // ── a document ──────────────────────────────────────────────────────────────
@@ -126,8 +133,9 @@ const { HOME: HOME_PLACE } = await load('src/lib/nav.js');
 const { useFleet } = await load('src/lib/fleet.js');
 const { useDivanStore, answered, silent } = await load('src/lib/divan.js');
 const { useDock } = await load('src/lib/sessions.js');
+const { useAsking } = await load('src/lib/asking.js');
 const { themeScheme, setThemeChoice } = await load('src/lib/theme.js');
-const { MACHINE_ROWS } = await load('src/lib/shell.js');
+const { MACHINE_ROWS, MACHINE_TABS } = await load('src/lib/shell.js');
 const { useThresholds, DEFAULT_THRESHOLDS } = await load('src/lib/machine.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
 const { boards } = await import(pathToFileURL(join(web, 'scripts', 'overview-fixture.js')).href);
@@ -177,6 +185,8 @@ let pool = {
 /** Set while the computer is to refuse the one request a page in here makes of
  *  it: an older daemon that has never heard of it, or one that times out. */
 let accountsFail = false;
+/** The board this computer answers `divan.snapshot` with, where a group gives one. */
+let snapshotAnswer = null;
 seed(useFleet, {
   hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true,
   call: async (key, type, data) => {
@@ -186,6 +196,9 @@ seed(useFleet, {
     // seeded below, and a socket that answered `{}` would replace a fixture with
     // an empty board. A poll that fails is one of the states the panel has to
     // survive anyway, and it is the state the groups above are read in.
+    // …except where a group sets one: what the daemon answers after a product
+    // was changed on it (`divan.project.update`), read back by the real poll.
+    if (type === 'divan.snapshot' && snapshotAnswer) return snapshotAnswer;
     if (type === 'divan.snapshot') throw new Error('That computer did not answer');
     // The one other request a page in here makes of a computer. Answered from
     // the same fixture the slot is seeded with, so what the panel does with the
@@ -360,6 +373,31 @@ const labelledBtn = (label) => [...doc.querySelectorAll('button')]
 const click = async (el) => {
   await act(async () => { el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); });
 };
+/** Home, by the top line: the word at its head, or — from a page that shows
+ *  Back in its place — Back until the word is there again. */
+const goHome = async () => {
+  for (let i = 0; i < 6 && !(home() && w.location.pathname === '/'); i++) {
+    const header = doc.querySelector('header');
+    const was = w.location.pathname;
+    const word = header?.querySelector('a.dv-word');
+    if (!word && !header?.querySelector('button.dv-back')) await click(nav('Dashboard') ?? find('Dashboard', header));
+    else await click(word ?? header.querySelector('button.dv-back'));
+    // Back from a card is the browser's own, which jsdom delivers some turns
+    // later: the address is waited for rather than a number of ticks.
+    await act(async () => {
+      for (let n = 0; n < 50 && w.location.pathname === was; n++) await new Promise((r) => setTimeout(r, 10));
+    });
+  }
+};
+/** A page of the Machine place, by the name on its row: the place, the tab the
+ *  page is under, and the page's own link where the tab has more than one. */
+const goMachine = async (label) => {
+  const view = MACHINE_ROWS.find((r) => r.label === label).view;
+  const tab = MACHINE_TABS.find((t) => t.pages.includes(view));
+  if (place() !== 'Machine') await click(nav('Machine'));
+  await click(machineTab(tab.label));
+  if (tab.pages[0] !== view) await click(doc.querySelector(`nav a[href="/machine/${view}"]`));
+};
 /** Typing, as a controlled field sees it. React listens for `input` and reads
  *  the value off the element, so the value goes in through the prototype's own
  *  setter: assigning `el.value` on a React-managed input is the one thing it
@@ -407,17 +445,24 @@ group('the keyboard');
   // Every one of these is a listener registered by an effect. If the effect
   // never ran — which is exactly what a source-reading check cannot tell — the
   // page does not move and every line below fails.
-  for (const row of MACHINE_ROWS) {
-    if (!row.shortcut) continue;
-    await press(row.shortcut.replace('⌘', ''));
-    ok(`⌘${row.shortcut.replace('⌘', '')} opens Machine › ${row.label}`,
-      place() === 'Machine' && page() === row.label, `${place()} › ${page()}`);
+  await press(',');
+  ok('⌘, opens Machine › Settings', place() === 'Machine' && page() === 'Settings', `${place()} › ${page()}`);
+  await goHome();
+  // ⌘ and Ctrl with a digit are the browser's — its tabs, and its zoom at 0.
+  // The panel used to open a page on eight of them and cancel the browser's
+  // own answer; now it does neither, from the page or from a field.
+  const digits = [];
+  for (const mod of ['metaKey', 'ctrlKey']) {
+    for (const key of '0123456789') {
+      const e = new w.KeyboardEvent('keydown', { key, [mod]: true, bubbles: true, cancelable: true });
+      await act(async () => { w.dispatchEvent(e); });
+      if (e.defaultPrevented || !home() || w.location.pathname !== '/') digits.push(`${mod} ${key}`);
+    }
   }
-  await press('0');
-  ok('⌘0 goes back to the Dashboard', place() === 'Dashboard' && home(),
-    `${place()} · ${head()}`);
-  await press('9');
-  ok('…and a key nothing is bound to changes nothing', place() === 'Dashboard');
+  ok('⌘ and Ctrl with a digit open no page and are left for the browser', digits.length === 0, digits.join(', '));
+  ok('…and no row of the Machine list offers one',
+    MACHINE_ROWS.every((r) => !/\d/.test(r.shortcut ?? '')),
+    MACHINE_ROWS.map((r) => r.shortcut).join(' '));
 }
 
 group('the bar');
@@ -478,7 +523,7 @@ group('the back button steps through the panel instead of out of it');
     });
   };
 
-  await press('0');
+  await goHome();
   const from = w.history.length;
 
   await click(tile('quire'));
@@ -498,16 +543,19 @@ group('the back button steps through the panel instead of out of it');
     `${head()} · ${w.location.pathname}`);
 
   // The pages of the Machine place are steps too, and so is a chat.
-  await press('4');
-  await press('7');
+  await goMachine('Terminal');
+  await goMachine('Accounts & sign-ins');
   ok('the drawer’s pages are in the address, one word each',
     w.location.pathname === '/machine/accounts', w.location.pathname);
+  await back();
+  ok('…a tab and the page under it are a step each',
+    w.location.pathname === '/machine/executors', w.location.pathname);
   await back();
   ok('…and Back walks them one at a time',
     w.location.pathname === '/machine/terminal' && page() === 'Terminal',
     `${page()} · ${w.location.pathname}`);
 
-  await press('0');
+  await goHome();
   ok('…all the way home, where the address is the bare path again',
     w.location.pathname === '/' && w.location.search === '' && home(),
     w.location.pathname + w.location.search);
@@ -801,7 +849,7 @@ group('the board, with the asking agent’s chat beside it');
   const studio = boards(now).busy[0].snap;
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(studio, now) } }); });
   const chip = (label) => find(label, doc.querySelector('header'));
-  await press('0');
+  await goHome();
   await click(tile('quire'));
   await click(link('Open board'));
 
@@ -1003,7 +1051,7 @@ group('the sign-in that is expiring is counted before that page is opened');
     marked && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
     && !!row('Accounts & sign-ins')?.querySelector('.dv-badge'),
     `${marked} · ${row('Accounts & sign-ins')?.textContent}`);
-  await press('6');
+  await goMachine('Admin');
   ok('…and Admin says the same thing about them, on a page nobody asked twice',
     page() === 'Admin' && text().includes('2 want you')
     && asked.filter((a) => a.type === 'account.list').length === 1,
@@ -1020,7 +1068,7 @@ group('the sign-in that is expiring is counted before that page is opened');
   ok('a computer that refuses the question is asked once and not again',
     asked.filter((a) => a.type === 'account.list').length === 1,
     `${asked.filter((a) => a.type === 'account.list').length} asks`);
-  await press('6');
+  await goMachine('Admin');
   for (let i = 0; i < 4; i++) await act(async () => {});
   ok('…and the place goes on being used, saying nothing about sign-ins rather than none of them',
     page() === 'Admin' && text().includes('not read yet') && !text().includes('0 connected')
@@ -1031,8 +1079,8 @@ group('the sign-in that is expiring is counted before that page is opened');
 
 group('a ticket shows what the worker is doing right now');
 {
-  await press('4');
-  ok('the terminal place is one key away', page() === 'Terminal', `${page()}`);
+  await goMachine('Terminal');
+  ok('the terminal place is two presses away', page() === 'Terminal', `${page()}`);
   const toggle = [...doc.querySelectorAll('[role="radio"]')]
     .find((b) => (b.textContent ?? '').trim() === 'Ustabasi') ?? null;
   ok('…with the queue as one of the two things the wall shows', !!toggle);
@@ -1308,9 +1356,39 @@ group('a product has its own chats');
     !!doc.querySelector('[data-project-chat] textarea[name="composer"]') && shown('Quire invoices')
       && !doc.querySelector('[data-counts]') && w.location.pathname === '/p/quire/chat/q1',
     w.location.pathname);
-  await click(find('Close chat'));
-  ok('closing it is the product’s page again',
-    pageUp() && shown('Quire invoices') && w.location.pathname === '/p/quire', w.location.pathname);
+  {
+    // Closing is an X in the chat's own head, right after its menu — no row of
+    // its own above the head pushing the title down, and no word "Close chat".
+    const chatHead = doc.querySelector('[data-project-chat] .dv-chathead');
+    const x = labelledBtn('Close chat');
+    const menuBtn = labelledBtn('Chat menu');
+    ok('the open chat closes from an X beside its menu, in its own head, with no row above it',
+      !!x && chatHead?.contains(x) && menuBtn?.nextElementSibling === x && x.title === 'Close chat'
+        && !find('Close chat') && doc.querySelector('[data-project-chat]').firstElementChild?.contains(chatHead));
+    // The menu beside it still opens.
+    await click(menuBtn);
+    ok('…and the menu beside it still opens', !!doc.querySelector('[data-project-chat]') && /Delete/.test(
+      doc.querySelector('[data-project-chat] .dv-chathead')?.parentElement?.textContent ?? ''));
+  }
+  const { useLogs: logsOf, logKey: keyOf } = await load('src/lib/timeline.js');
+  await act(async () => {
+    seed(logsOf, { logs: { ...logsOf.getState().logs, [keyOf('studio', 'q1')]: {
+      items: [{ kind: 'user', id: 'qu1', ts: at - 40, text: 'Draft the March invoices.', queued: false, attachments: [] }],
+      seq: 3, truncated: false, busy: false, pending: [], loading: false, error: null,
+    } } });
+  });
+  asked.length = 0;
+  await click(labelledBtn('Close chat'));
+  ok('closing it is the product’s page again, and nothing was asked of the chat or its agent',
+    pageUp() && shown('Quire invoices') && w.location.pathname === '/p/quire'
+      && !asked.some((a) => /delete|archive|interrupt|stop/.test(a.type)),
+    `${w.location.pathname} · ${asked.map((a) => a.type).join(',')}`);
+  await click(rowOf('Quire invoices'));
+  ok('reopened, the chat is as it was left: its history is still there',
+    w.location.pathname === '/p/quire/chat/q1'
+      && (doc.querySelector('[data-project-chat]')?.textContent ?? '').includes('Draft the March invoices.'),
+    w.location.pathname);
+  await click(labelledBtn('Close chat'));
 
   asked.length = 0;
   await click(rowOf('Quire invoices'));
@@ -1337,7 +1415,7 @@ group('a product has its own chats');
   });
   ok('…and Back from it is the product’s page, not the way out of it',
     pageUp() && w.location.pathname === '/p/quire', w.location.pathname);
-  await press('0');
+  await goHome();
 }
 
 group('a chat dropped on a product is filed under it by hand');
@@ -1449,8 +1527,7 @@ group('the four things the panel could not do to a computer');
   // about what the page does with a computer that has them, codex among them —
   // the tool the fixture deliberately does not have installed.
   await act(async () => { seed(useFleet, { hosts: { studio: fakeHost() } }); });
-  await click(nav('Machine'));
-  await press('7');
+  await goMachine('Accounts & sign-ins');
   ok('Accounts is a page of the Machine place', page() === 'Accounts & sign-ins', `${page()}`);
 
   // 1 · a tool that is not installed is installed from here, rather than being
@@ -1491,9 +1568,9 @@ group('the four things the panel could not do to a computer');
     JSON.stringify(asked.map((a) => [a.type, a.data])));
 
   // 3 · what a restart would cost, before it is pressed rather than after.
-  // Update sits under Admin, which is the page ⌘6 opens.
+  // Update sits under Admin.
   asked.length = 0;
-  await press('6');
+  await goMachine('Admin');
   // The row about the update, by what it is about: its button says `Open`,
   // like three others on that page.
   const updateRow = [...doc.querySelectorAll('div')]
@@ -1555,7 +1632,7 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
     seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true });
     seed(useDivanStore, { snaps: board('busy') });
   });
-  await press('0');
+  await goHome();
   for (let i = 0; i < 3; i++) await act(async () => {});
   const field = () => doc.querySelector('#composer-in');
   const send = () => doc.querySelector('button.dv-send');
@@ -1591,7 +1668,7 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
       held === 1 && ups.length === 1 && /\/upload$/.test(ups[0].url) && !!made0
         && ups[0].chat === said0?.data?.chat_id && said0?.data?.attachments?.[0]?.path === '/up/shot.png',
       `${held} · ${JSON.stringify(ups)} · ${JSON.stringify(said0?.data)}`);
-    await press('0');
+    await goHome();
     await settle();
   }
 
@@ -1609,7 +1686,7 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
     `${asked.map((a) => a.type).join(',')} · ${place()} · ${w.location.pathname} · ${dialogs()}`);
 
   // 3 · the four chips
-  await press('0');
+  await goHome();
   const defaults = ['Project', 'Agent', 'Account', 'Model'].map((n) => value(n));
   await click(picker('Model').querySelector('button'));
   const listed = [...doc.querySelectorAll('[role="menu"] [role="menuitemradio"]')].map((b) => b.firstElementChild.textContent);
@@ -1623,7 +1700,7 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
   await click(send());
   await settle();
   const create = asked.find((a) => a.type === 'chat.create')?.data ?? {};
-  await press('0');
+  await goHome();
   const reset = value('Model');
   ok('four chips show the defaults, list what the computer reports, mark a changed one with an ×, and that is what chat.create carries',
     JSON.stringify(defaults) === JSON.stringify(['auto', 'Hermes', "This computer's account", 'Opus 5'])
@@ -1654,28 +1731,35 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
       && !!doc.querySelector('textarea[name="composer"]'),
     `${place()} · ${w.location.pathname}`);
 
-  // 5 · Needs you
-  await press('0');
-  const amber = doc.querySelector('[data-wait="studio:k2"] .dv-btn--amber');
+  // 5 · Needs you: the question is a conversation in the floating chat, and
+  // the row under Needs you only brings it back
+  await goHome();
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const win = doc.querySelector('[data-asking-window="studio:k2"]');
+  const pill = win && [...win.querySelectorAll('button')].find((b) => b.textContent === 'Use the live ones now');
+  const askedOnce = (text() .split('Use the live ones now, or wait for the review?').length - 1);
   asked.length = 0;
-  await click(amber);
+  await click(pill);
   await settle();
-  const note = asked.find((a) => a.type === 'ustabasi.note');
-  await click([...doc.querySelectorAll('[data-wait="studio:k2"] button')].find((b) => b.textContent === 'Open'));
+  const notes = asked.filter((a) => a.type === 'ustabasi.note');
+  const stillOpen = !!doc.querySelector('[data-asking-window="studio:k2"]');
+  await click([...doc.querySelectorAll('[data-wait="studio:h1"] button')].find((b) => b.textContent === 'Open'));
   const opened = w.location.pathname;
   await act(async () => { seed(useDivanStore, { snaps: board('calm') }); });
-  await press('0');
-  ok('Needs you answers in one press with the same note the question window sent, Open goes to the ticket, and with nothing waiting the section is not in the DOM',
-    amber?.textContent === 'Use the live ones now' && note?.key === 'studio' && note?.data.id === 42
-      && note?.data.text === 'Use the live ones now' && opened === '/p/quire/c/k2'
+  await goHome();
+  ok('Needs you: the asking card is a one-line row, its question is whole once in the floating chat, a pill there sends the note once and the chat stays, Open on the rest goes to the card, and with nothing waiting the section is not in the DOM',
+    !!doc.defaultView && askedOnce === 1 && notes.length === 1 && notes[0].key === 'studio' && notes[0].data.id === 42
+      && notes[0].data.text === 'Use the live ones now' && stillOpen && opened === '/p/hush/c/h1'
       && !doc.querySelector('#needs-you') && !text().includes('Needs you'),
-    `${amber?.textContent} ${JSON.stringify(note)} ${opened}`);
+    `${askedOnce} ${JSON.stringify(notes)} ${stillOpen} ${opened}`);
+  // What this group opened is put back, so the groups after it start clean.
+  await act(async () => { useAsking.setState({ threads: [], minimised: [], closed: {}, selected: null }); });
 
   // 6 · tiles and the summary line
   const calmLine = doc.querySelector('[data-summary]')?.textContent ?? '';
   await act(async () => { seed(useDivanStore, { snaps: board('slow') }); });
   const tiles = [...doc.querySelectorAll('a[data-tile]')];
-  const order = tiles.map((a) => `${a.dataset.tile}${a.classList.contains('dv-tile--dormant') ? '*' : ''}`);
+  const order = tiles.map((a) => `${a.dataset.tile}${a.closest('[data-project-card]')?.classList.contains('dv-tile--dormant') ? '*' : ''}`);
   await act(async () => { seed(useDivanStore, { snaps: board('busy') }); });
   const busyLine = doc.querySelector('[data-summary]')?.textContent ?? '';
   const totals = (await import(pathToFileURL(join(out, 'src/lib/divan.js')).href))
@@ -1754,7 +1838,7 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS });
     useDock.setState({ minimised: ['studio:k2', 'studio:h1', 'studio:i5'], closed: {}, raised: [] });
   });
-  await press('0');
+  await goHome();
   await click(tile('quire'));
   const onBoardPage = () => !!doc.querySelector('section.dv-col');
   const onProductPage = () => !!doc.querySelector('[data-counts]');
@@ -1778,8 +1862,7 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
   const meta = doc.querySelector('.dv-phead [data-meta]')?.textContent ?? '';
   const headOk = !!doc.querySelector('.dv-phead .dv-mono') && head() === 'Quire'
     && doc.querySelector('.dv-phead [data-description]')?.textContent === 'client portals for studios'
-    && meta.startsWith('live since') && !doc.querySelector('.dv-stage')
-    && !/\bIdea\b[\s\S]*\bGrowth\b/.test(text());
+    && meta.startsWith('live since');
   await click(link('Open board'));
   const onBoard = w.location.pathname === '/p/quire/board' && onBoardPage();
   await goBack();
@@ -1792,7 +1875,7 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
   await reload('/p/quire/new');
   const noForm = w.location.pathname === '/p/quire' && onProductPage();
   ok('the address the New ticket form had is the product’s page', noForm, w.location.pathname);
-  ok('the head is monogram, name, one sentence and a meta line with the stage as a word, no stage bar; the board is a page of its own that survives reload and Back, the chats beside both',
+  ok('the head is monogram, name, one sentence and a meta line with the stage as a word; the board is a page of its own that survives reload and Back, the chats beside both',
     headOk && onBoard && backed && reloads.every(Boolean),
     JSON.stringify({ headOk, meta, onBoard, backed, reloads }));
 
@@ -1942,6 +2025,79 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     (locked?.textContent ?? '').includes('Quire') && removable === 0
     && sent?.data.cwd === '/w/quire',
     `${removable} · ${JSON.stringify(sent?.data)}`);
+
+  // The stage card (ustabasi #180): the product's own stage, off the snapshot.
+  group('the stage card on a product’s page');
+  const stageCard = () => doc.querySelector('[data-stage-card]');
+  const rail = () => ({
+    of: head(), stage: stageCard()?.dataset.stage ?? null,
+    now: stageCard()?.querySelector('[data-stage-now] b')?.textContent ?? null,
+    steps: [...(stageCard()?.querySelectorAll('[data-step]') ?? [])].map((li) => `${li.dataset.step}:${li.dataset.state}`).join(' '),
+    percent: /%/.test(stageCard()?.textContent ?? ''),
+  });
+  const working = () => [...doc.querySelectorAll('[data-in-progress] [data-row]')]
+    .map((r) => `${r.querySelector('.dv-status')?.textContent}·${r.querySelector('.t')?.textContent}`).join(' | ');
+  const answer = async (next) => {
+    snapshotAnswer = next;
+    asked.length = 0;
+    await act(async () => { await useDivanStore.getState().load('studio'); });
+    await settle();
+    return asked.some((a) => a.type === 'divan.snapshot');
+  };
+  const staged = (stage, cards = snap.cards) => ({ ...snap, cards,
+    projects: snap.projects.map((p) => (p.slug === 'quire' ? { ...p, stage } : p)) });
+
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  await reload('/p/quire');
+  const live = rail();
+  const facts = [...stageCard().querySelectorAll('[data-fact]')].map((f) => f.dataset.fact).join(' ');
+  ok('the product page carries the stage card: Quire is on Live, the steps behind it filled and Growth ahead, with its dates and no percentage',
+    live.of === 'Quire' && live.stage === 'live' && live.now === 'Live' && !live.percent
+    && live.steps === 'idea:on build:on beta:on live:now growth:ahead' && facts === 'started live next',
+    JSON.stringify({ live, facts }));
+
+  await reload('/p/hush');
+  const unset = rail();
+  ok('a product nobody gave a stage says so, and draws no steps',
+    unset.of === 'Hush' && unset.stage === 'unset' && unset.now === 'No stage set' && unset.steps === '' && !unset.percent,
+    JSON.stringify(unset));
+
+  await reload('/p/quire');
+  const rowsBefore = working();
+  const polled = await answer(staged('beta'));
+  const beta = rail();
+  ok('the stage changed on the daemon arrives with the next snapshot: the card moves to Beta, and the tickets in progress are what they were',
+    polled && beta.of === 'Quire' && beta.stage === 'beta' && beta.now === 'Beta'
+    && beta.steps === 'idea:on build:on beta:now live:ahead growth:ahead'
+    && (stageCard().textContent ?? '').includes('In beta') && rowsBefore !== '' && working() === rowsBefore,
+    JSON.stringify({ polled, beta, rowsBefore, rowsAfter: working() }));
+
+  await answer(staged('build'));
+  const build = rail();
+  await answer(staged('build', snap.cards.map((k) => (k.column === 'in_progress'
+    ? { ...k, column: 'done', agent_status: null, moved_at: now } : k))));
+  ok('Build reads as in development, and every ticket finishing moves the board but not the stage',
+    build.stage === 'build' && build.steps === 'idea:on build:now beta:ahead live:ahead growth:ahead'
+    && (stageCard().textContent ?? '').includes('In development')
+    && working() !== rowsBefore && JSON.stringify(rail()) === JSON.stringify(build),
+    JSON.stringify({ build, after: rail(), rows: working() }));
+
+  await answer(staged('beta'));
+  await reload('/p/quire');
+  const reloaded = rail();
+  await click(link('Open board'));
+  await goBack();
+  ok('the card is the same after a reload and after going to the board and back',
+    reloaded.stage === 'beta' && JSON.stringify(rail()) === JSON.stringify(reloaded), JSON.stringify({ reloaded, back: rail() }));
+
+  await answer(staged('paused'));
+  const odd = rail();
+  ok('a stage word the rail does not have is named as it is, with no steps drawn',
+    odd.stage === 'unknown' && odd.now === '“paused”' && odd.steps === '' && !odd.percent, JSON.stringify(odd));
+
+  snapshotAnswer = null;
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  await reload('/p/quire');
 }
 
 group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
@@ -2241,6 +2397,12 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
         if (key === 'studio') return studioSnap;
         throw new Error('That computer did not answer');
       }
+      if (type === 'ustabasi.list') {
+        return { available: true, queue: { last_tick: Date.now() / 1000 }, tickets: [
+          queueTicket({ id: 177, title: 'Show pending agent questions as a floating chat on the dashboard',
+            status: 'queued', stage: '', round: 0, escalation: '', ask: '' }),
+        ] };
+      }
       if (type === 'agent.store') {
         asked.push({ key, type, data });
         return { sources: [{ id: 'hermes', label: 'Hermes', repo: 'x/hermes', note: '',
@@ -2266,7 +2428,12 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
         { kind: 'tool', id: 't1', ts: now - 280, tool: 'Bash', input: { command: 'ustabasi add retry.json' },
           output: '#41 queued: Webhook retry policy  (worker opus, verifier opus)', isError: false, running: false },
         { kind: 'tool', id: 't2', ts: now - 270, tool: 'Bash', input: { command: 'ustabasi add refund.json' },
-          output: '#99 queued: Refund policy page  (worker opus, verifier opus)', isError: false, running: false },
+          output: '#177 queued: Show pending agent questions as a floating chat on the dashboard  (worker opus, verifier opus)',
+          isError: false, running: false },
+        // The same filing read twice — a replay handing the output back — is one entry.
+        { kind: 'tool', id: 't3', ts: now - 265, tool: 'Bash', input: { command: 'ustabasi show 177' },
+          output: '#177 queued: Show pending agent questions as a floating chat on the dashboard  (worker opus, verifier opus)',
+          isError: false, running: false },
         { kind: 'approval', id: 'p1', ts: now - 260, requestId: 'r9', tool: 'Bash', input: { command: 'git push' },
           preview: 'git push', danger: false, reason: null, decision: null },
       ],
@@ -2339,20 +2506,78 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
     said && half && whole && bubble && plainText && stopped && allowed && picture && mic,
     JSON.stringify({ said, half, whole, bubble, plainText, stopped, allowed, picture, mic }));
 
-  // 2 · filed under, and the card it filed
+  // 2 · filed under, and the card it filed: a press opens the card in the
+  // chat, and only its Go details leaves for that ticket's own page.
   const rule = doc.querySelector('.dv-filed')?.textContent?.trim();
-  const link41 = doc.querySelector('.dv-cardlink[data-ticket="41"]');
-  const linkText = link41?.textContent ?? '';
-  await click(link41);
+  const entry = (id) => doc.querySelector(`.dv-cardlink[data-ticket="${id}"]`);
+  const cardOf = (id) => doc.querySelector(`[data-ticket-card="${id}"]`);
+  const linkText = entry(41)?.textContent ?? '';
+  // #177, the shape the person pressed: queued, no card on any board.
+  await click(entry(177));
+  await settle();
+  const card177 = cardOf(177);
+  const stayed = w.location.pathname === '/chats/c1' && place() === 'Chat'
+    && !!doc.querySelector('textarea[name="composer"]')
+    && (doc.body.textContent ?? '').includes('Students keep asking about refunds.');
+  const inline = !!card177 && entry(177).getAttribute('aria-expanded') === 'true'
+    && entry(177).getAttribute('aria-controls') === card177.id
+    && (card177.textContent ?? '').includes('#177')
+    && (card177.textContent ?? '').includes('Show pending agent questions as a floating chat on the dashboard')
+    && !cardOf(41) && doc.querySelectorAll('[data-ticket-card]').length === 1;
+  const go177 = card177?.querySelector('button[data-go-details="177"]');
+  const goWord = go177?.textContent;
+  await click(go177);
+  await settle();
+  for (let i = 0; i < 10 && !labelledBtn('Back to the wall'); i++) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+  }
+  const toQueue = w.location.pathname === '/machine/terminal' && !!labelledBtn('Back to the wall')
+    && (labelledBtn('Back to the wall').closest('div[style]')?.parentElement?.textContent ?? doc.body.textContent ?? '')
+      .includes('Show pending agent questions as a floating chat on the dashboard');
+  const backWord = doc.querySelector('header .dv-back')?.textContent ?? '';
+  await act(async () => {
+    const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+    doc.querySelector('header .dv-back').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await landed;
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  await settle();
+  const returned = w.location.pathname === '/chats/c1' && place() === 'Chat'
+    && (doc.body.textContent ?? '').includes('Students keep asking about refunds.');
+  // #41 has a card on Quire's board: Go details is that card's page.
+  await click(entry(41));
+  await settle();
+  const one41 = doc.querySelectorAll('[data-ticket-card="41"]').length === 1
+    && w.location.pathname === '/chats/c1' && (cardOf(41)?.textContent ?? '').includes('In Progress');
+  await click(cardOf(41).querySelector('button[data-go-details="41"]'));
   await settle();
   const toCard = w.location.pathname === '/p/quire/c/k1';
-  await reload('/chats');
-  await click(doc.querySelector('.dv-cardlink[data-ticket="99"]'));
+  await act(async () => {
+    const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+    doc.querySelector('header .dv-back').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await landed;
+    await new Promise((r) => setTimeout(r, 0));
+  });
   await settle();
-  const toQueue = w.location.pathname === '/machine/terminal';
-  ok('a chat filed under a project shows the thin rule, and a card it filed is a small link under the message that opens the ticket',
+  const backFromCard = w.location.pathname === '/chats/c1' && place() === 'Chat';
+  ok('a filed card is an entry under its message: a press opens the card in the chat and stays, Go details opens that ticket, Back returns to the chat',
     rule === 'filed under Quire' && linkText.includes('In Progress') && linkText.includes('Webhook retry policy')
-    && toCard && toQueue, JSON.stringify({ rule, linkText, toCard, toQueue }));
+    && stayed && inline && goWord === 'Go details' && toQueue && backWord.includes('Chats') && returned
+    && one41 && toCard && backFromCard,
+    JSON.stringify({ rule, linkText, stayed, inline, goWord, toQueue, backWord, returned, one41, toCard, backFromCard }));
+
+  // …a second press folds it away, the keyboard drives the same two steps,
+  // and a plain link in a message is still a plain link.
+  await reload('/chats/c1');
+  const once = doc.querySelectorAll('.dv-cardlink[data-ticket="177"]').length === 1
+    && doc.querySelectorAll('.dv-cardlink[data-ticket="41"]').length === 1 && !doc.querySelector('[data-ticket-card]');
+  await click(entry(177));
+  await click(entry(177));
+  const folded = !cardOf(177) && entry(177).getAttribute('aria-expanded') === 'false'
+    && w.location.pathname === '/chats/c1';
+  const isButton = entry(177).tagName === 'BUTTON' && entry(177).getAttribute('type') === 'button';
+  ok('a reload draws each filed ticket once and closed; a second press folds the card away; the entry is a real button',
+    once && folded && isButton, JSON.stringify({ once, folded, isButton }));
 
   // 4 · four tabs, each at its own path; every page under one; the calls
   await reload('/machine/machines');
@@ -2482,6 +2707,123 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
     seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'] });
   });
   await reload('/');
+}
+
+group('a project card says where its product stands, live (#179)');
+{
+  const now = Math.floor(Date.now() / 1000);
+  const studio = () => boards(now).busy[0].snap;
+  const put = async (snap, at = now) => {
+    await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, at) } }); });
+    for (let i = 0; i < 2; i++) await act(async () => {});
+  };
+  const card = (key) => doc.querySelector(`[data-project-card="${key}"]`);
+  const said = (key) => (card(key)?.textContent ?? '');
+  const line = (key, id) => card(key)?.querySelector(`[data-active-ticket="${id}"]`) ?? null;
+  const back = async () => {
+    await act(async () => {
+      const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+      w.history.back();
+      await landed;
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  };
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true });
+  });
+  await put(studio());
+  await press('0');
+  for (let i = 0; i < 3; i++) await act(async () => {});
+
+  // 1 · the cards replace both rows of badges
+  ok('the Running row is gone and every product is a card in the grid under the Composer',
+    !doc.querySelector('#running-now') && !doc.querySelector('[data-running]')
+      && !!doc.querySelector('.dv-pcards') && !!card('quire') && !!card('hush')
+      && !!(doc.querySelector('#composer-in')
+        ?.compareDocumentPosition(doc.querySelector('.dv-pcards')) & w.Node.DOCUMENT_POSITION_FOLLOWING),
+    `${[...doc.querySelectorAll('[data-project-card]')].map((e) => e.dataset.projectCard).join(' ')} · ${!!doc.querySelector('#running-now')} ${!!doc.querySelector('[data-running]')} ${!!doc.querySelector('#composer-in')} ${w.location.pathname}`);
+
+  // 2 · stage, summary, tickets and their stage, without opening anything
+  const quire = said('quire');
+  ok('a card shows its product’s own stage and summary, and says so where nobody wrote one',
+    card('quire').querySelector('[data-stage]')?.textContent === 'Live'
+      && quire.includes('client portals for studios')
+      && card('hush').querySelector('[data-stage]')?.textContent === 'stage not set',
+    quire);
+  ok('…its open tickets by number and title, at the stage each one is at, worst first',
+    line('quire', 'k2')?.textContent.includes('#42Stripe keys') && line('quire', 'k2')?.textContent.includes('asks you')
+      && line('quire', 'k1')?.textContent.includes('#41Webhook retry policy') && line('quire', 'k1')?.textContent.includes('working')
+      && [...card('quire').querySelectorAll('[data-active-ticket]')].map((e) => e.dataset.activeTicket).join(' ') === 'k2 k1'
+      && said('hush').includes('App Review reply') && line('hush', 'h1')?.textContent.includes('your call'),
+    [...card('quire').querySelectorAll('[data-active-ticket]')].map((e) => e.textContent).join(' | '));
+  ok('…its blockers, and never the question itself — that is read in the floating chat',
+    card('quire').querySelector('[data-blocker="o1"]')?.textContent.includes('Payment provider keys')
+      && card('quire').querySelector('[data-blocker="o1"]')?.textContent.includes('blocked')
+      && !quire.includes('Use the live ones now') && !quire.includes('Write the onboarding mail'),
+    quire);
+  ok('…and nothing of one product is on the other’s card',
+    !said('hush').includes('Stripe keys') && !said('hush').includes('Webhook') && !quire.includes('App Review reply'));
+
+  // 3 · a stage change and a new queued ticket arrive with the next poll
+  const moved = studio();
+  moved.cards = moved.cards.map((c) => (c.id === 'k1' ? { ...c, column: 'review' } : c));
+  moved.cards.push({ ...moved.cards[0], id: 'k5', title: 'Rate limits for the public API', column: 'queued',
+                     agent_status: 'queued', ustabasi_id: 45 });
+  await put(moved);
+  ok('a ticket that moved to review and one that was queued redraw the right card, with no reload',
+    line('quire', 'k1')?.dataset.ticketStage === 'review' && line('quire', 'k1')?.textContent.includes('in review')
+      && line('quire', 'k5')?.textContent.includes('queued') && !line('hush', 'k5')
+      && card('quire').querySelector('[data-project-status]')?.textContent.includes('1 queued')
+      && card('quire').querySelector('[data-project-status]')?.textContent.includes('1 working')
+      && card('hush').querySelector('[data-project-status]')?.textContent.includes('1 needs you'),
+    `${card('quire').querySelector('[data-project-status]')?.textContent} · ${line('quire', 'k1')?.textContent}`);
+
+  // 4 · many tickets stay discoverable
+  const many = studio();
+  for (let i = 0; i < 4; i++) {
+    many.cards.push({ ...many.cards[0], id: `q${i}`, title: `Queued work number ${i}`, column: 'queued',
+                      agent_status: 'queued', ustabasi_id: 60 + i });
+  }
+  await put(many);
+  const shown = card('quire').querySelectorAll('[data-active-ticket]').length;
+  const more = find('+3 more', card('quire'));
+  await click(more);
+  ok('beyond three tickets the rest are behind "+N more", which opens in place',
+    shown === 3 && !!more && card('quire').querySelectorAll('[data-active-ticket]').length === 6
+      && find('Show fewer', card('quire'))?.getAttribute('aria-expanded') === 'true'
+      && w.location.pathname === '/',
+    `${shown} · ${w.location.pathname}`);
+
+  // 5 · the ticket link opens that ticket, the card opens the product, Back comes home
+  await put(studio());
+  await click(card('quire').querySelector('[data-ticket-link="k1"]'));
+  const toTicket = w.location.pathname;
+  await back();
+  const homeAgain = home() && w.location.pathname === '/';
+  await click(card('quire').querySelector('[data-project-status]'));
+  const toProject = w.location.pathname;
+  await back();
+  ok('a ticket link opens exactly that ticket and not the project, the card opens the project, and Back returns each time',
+    toTicket === '/p/quire/c/k1' && homeAgain && toProject === '/p/quire' && home() && w.location.pathname === '/',
+    `${toTicket} · ${homeAgain} · ${toProject} · ${w.location.pathname}`);
+
+  // 6 · no active work, and a machine that has gone quiet
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(boards(now).slow[0].snap, now) } }); });
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  ok('a product with nothing open says so, with what was last known and no ticket list',
+    said('the-long-walk').includes('No active work · last commit 4w ago')
+      && !card('the-long-walk').querySelector('[data-active-ticket]')
+      && said('pebble').includes('No active work') && said('pebble').includes('No summary written yet.'),
+    `${said('the-long-walk')} · ${said('pebble')}`);
+  await act(async () => {
+    seed(useDivanStore, { snaps: { studio: silent(answered(studio(), now - 600), 'That computer did not answer') } });
+  });
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  ok('…and a card from a machine that went quiet says when it was last seen, not that work is live',
+    card('quire').querySelector('[data-stale]')?.textContent.startsWith('last seen')
+      && line('quire', 'k1')?.textContent.includes('last seen working'),
+    said('quire'));
+  await put(studio());
 }
 
 group('nothing was lost on the way');

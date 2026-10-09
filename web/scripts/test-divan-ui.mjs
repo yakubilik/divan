@@ -48,7 +48,7 @@ const { DARK, LIGHT, MEDIA, ON_COLOUR, EXECUTORS } =
     mkdirSync(out, { recursive: true });
     execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
       'src/lib/theme.ts', '--bundle', '--format=esm', '--target=es2022',
-      `--outfile=${join(out, 'theme.mjs')}`, '--log-level=warning',
+      `--outfile=${join(out, 'theme.mjs')}`, '--loader:.png=dataurl', '--log-level=warning',
     ], { cwd: web, stdio: 'inherit' });
     return import(`file://${join(out, 'theme.mjs')}`);
   })();
@@ -65,7 +65,7 @@ execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
   // The panel is built by vite, which gives it `import.meta.env`; a bundle that
   // has to be a plain script has to be told what that is.
   '--define:import.meta.env.DEV=false',
-  '--log-level=warning',
+  '--loader:.png=dataurl', '--log-level=warning',
 ], { cwd: web, stdio: 'inherit' });
 
 writeFileSync(join(out, 'ui-harness.html'),

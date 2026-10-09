@@ -42,9 +42,9 @@ reason you went and looked at the board.
 The Chat is the conversation and the list it is picked from, unchanged.
 Machine is where everything that was about a computer went: the fleet panel, the
 agents, the wall of sessions with the ticket queue in it, the computer's screen,
-its folders, Admin and Settings, each a page of one side panel. The six keyboard
-shortcuts the panel already had still open the six pages they always did; ⌘0 is
-the Dashboard.
+its folders, Admin and Settings, each a page of one side panel. None of them is
+on ⌘ or Ctrl with a digit: those switch the browser's own tabs, and the panel
+leaves them to it.
 
 `lib/shell.ts` is the whole of that arrangement with no React in it, and
 `app/src/shell.ts` is the same file for the phone. `npm test` holds the two ends
@@ -65,6 +65,8 @@ Machine list, and the old list is read out of git rather than typed out again.
 | `lib/shell.ts` | The three places, the Machine list, the project chips and where the chosen product is kept. No React, no store, no palette. |
 | `lib/overview.ts` | What the Dashboard says: how old the page is, which four counters are across the top, what a project card says about itself (its corner, the line under its name, how fresh it is, what git says, the board's marks, the worst card's line), who is at work, and whether this is a morning where nothing needs anybody. Every sentence is the phone's string table's entry for the same key. |
 | `lib/board.ts` | What one product's board says: the four columns and what is in each, what a ticket says about itself (whose square, what the mirror last wrote, whether it needs a person), which columns would take the card in the air, and where a card that was dropped is until the machine that holds the board agrees. Every column says how much of itself it is not carrying — on Done that is all of it, because the daemon sends the open board and the number. |
+| `lib/usage.ts` | What a ticket's runs took and used, as the rows its page draws under the side column: the current or last run's duration, the time the ticket's runs add up to, and the whole ticket's tokens and cost. It counts nothing — the daemon sends `usage` on `divan.card.get` — and decides what each figure is called: a duration is a run's and never the ticket's age, a figure nobody reported is `unavailable` and not zero, and a cost with no API key behind it is an estimate nobody was charged. A ticket's page has no Composer; the line in Live talks to the ticket. `scripts/test-usage.mjs` checks the reading, `scripts/test-usage-ui.mjs` drives a running and a finished ticket in a browser. |
+| `lib/asking.ts`, `components/Asking.tsx` | What agents are asking, as a floating chat on the Dashboard: a ticket's question (answered with `ustabasi.note`) or a chat holding an approval or structured question (the chat itself, `approval.respond`). An answer keeps the window open for the follow-up; it closes by itself only when the ticket is verified, otherwise only by hand, and a closed question stays as a one-line row under Needs you. `scripts/test-asking.mjs` drives it in jsdom, `scripts/test-asking-ui.mjs` measures it at phone and desktop widths. |
 | `lib/sessions.ts` | What needs a person, as the conversations the desktop opens by itself: which cards are sessions and of which kind, who is asking, the answers quoted out of the question itself, and how many windows open before the rest are tabs — including the one asked for by name, which is how a card pressed on the board takes a window over two that opened themselves. The phone's `app/src/waiting.ts` rules, drawn as windows instead of a list. |
 | `lib/theme.ts` | Divan's palette in **both themes**, the `--dv-*` rules, the switch, the marks, the radii and the shadows — and `C`, the older vocabulary the screens speak, pointed at the same table. No colour exists outside this file. `T.ink3` is a reference (`var(--dv-ink3)`), not a value, so one render is correct in either theme. |
 | `ui/divan.tsx` | The parts the new desktop screens are made of: `Card`, `Row`, `Pill`, `Button`, `Tabs`, `ColumnTab`, `StatusDot`, `StateMark`, `ExecutorBadge`, `Monogram`, `Counter`, `SectionHeader`, `EmptyState`, `SidePanel`, `Note`, `Tag`, `RosterRow`, the window a question opens in — `Panel`, `PanelHead`, `Quoted`, `Composer` — the dock (`DockTab`, `DockMore`), the `CommandBar`, and the top bar: `TopBar`, `NavItem`, `BarDivider`, `BarChip`, `BarStamp`. Each names the frame it was measured off. |
@@ -138,8 +140,9 @@ the connection.
 `scripts/test-drive.mjs` is the sixth, and it is the only one that presses
 anything. It mounts the whole panel into a document (jsdom, the one dependency
 these checks add) with the renderer the panel actually ships with, and then uses
-it: ⌘0 and the six keys the panel already had are dispatched at the window and
-the page that comes up is read off the Machine list's own selected row; a place
+it: ⌘, is dispatched at the window and the page that comes up is read off the
+Machine list's own selected row, and ⌘ and Ctrl with a digit are dispatched and
+nothing moves; a place
 and a project chip are clicked and the place, the address and the scoped page are
 read back; the switch is clicked and the document's theme moves while the markup
 under the bar does not; and a question that opened itself in the corner is

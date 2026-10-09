@@ -39,7 +39,7 @@ The quoted words are the check's own name.
 
 | Action | Old place (main) | New place | Call | Proof |
 |---|---|---|---|---|
-| Go to the Dashboard | Top bar Dashboard, ⌘0 | `divan` word / Back on the top line, ⌘0 | — | drive: "⌘0 goes back to the Dashboard" |
+| Go to the Dashboard | Top bar Dashboard, ⌘0 | `divan` word / Back on the top line (⌘0 is the browser's zoom again) | — | drive: "…all the way home, where the address is the bare path again" |
 | Go to the Chat place | Top bar Chat | Top line Chats (lands in the newest chat) | `chat.get` | drive: "the Chat place is one press away and lands writable in a chat, with the list and its search beside it" |
 | Go to Machine | Top bar Machine | Top line Machine | — | drive: "…and the Machine place opens on the first row of its list" |
 | Switch Night / Day | Top bar switch, palette | Top line switch, palette | — | drive: "pressing it moves the document’s theme, and nothing else says it" |
@@ -49,7 +49,7 @@ The quoted words are the check's own name.
 | New chat | ⌘N, palette, sidebar pen | ⌘N and palette focus the Composer; "More options" and palette "New chat with every option" open the full dialog | `chat.create` | drive: "Back from a project is the Dashboard, a reload redraws the page it was on, and every old destination is offered" |
 | Search chats | ⌘F | ⌘F focuses the list's search | — | actions: "⌘F opens the chat list with its search focused" |
 | Fold the chat list | ⌘B | ⌘B, same | — | actions: "⌘B folds the list to a rail" |
-| Machine pages by key | ⌘1–⌘8, ⌘, | Same keys | — | drive: "opens Machine › " |
+| Machine pages by key | ⌘1–⌘8, ⌘, | ⌘, only; ⌘/Ctrl with a digit is left to the browser's tabs, and the pages are on the Machine tabs and in the palette | — | drive: "⌘ and Ctrl with a digit open no page and are left for the browser" |
 | Stop every session | Palette | Palette | `chat.interrupt` | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
 | Show every computer | Palette | Palette | — | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
 | Ask Divan something | Command bar | Composer | `chat.create`, `chat.send` | drive: "one press sends chat.create then chat.send" |
@@ -57,11 +57,11 @@ The quoted words are the check's own name.
 | Start a card now | Drag to In Progress | Drag; said to the agent in the Composer | `divan.card.move` | drive: "dragging a card from Queued into In Progress issues divan.card.move with In Progress" |
 | Pick agent / account / model for one chat | NewChat dialog | Composer chips (§5), dialog behind More options | `agent.list`, `chat.create` | drive: "four chips show the defaults, list what the computer reports, mark a changed one with an ×" |
 | Scope by typing | — | `@project` in the Composer | `chat.create` | drive: "typing @quire sets the same Project chip as its menu does" |
-| Answer an asking agent | Question window | Needs you card (amber answer); question window kept | `ustabasi.note` | drive: "Needs you answers in one press with the same note the question window sent" |
+| Answer an asking agent | Question window | Floating chat on the Dashboard (one-line Needs you row reopens it); question window kept | `ustabasi.note` | drive: "Needs you: the asking card is a one-line row" |
 | Put away / close / drag / open out a question window | Window corner | Same | — | drive: "a window can be put away" |
 | Reply in a question window | Window box | Same | `chat.send` | drive: "…and pressing it says it in that chat" |
 | Read the counters | Dashboard counters | One summary line | — | drive: "tiles open the project, dormant ones come last and dimmed" |
-| See what is running | Agent roster (not pressable) | Running: a badge per agent and per chat in a turn, each opens what it names | — | overview: "what is running is a badge per agent" |
+| See what is running | Agent roster (not pressable) | On its project card: each agent is a ticket line and each chat in a turn a chat line, each opens what it names | — | overview: "there is no Running row: every agent at work is a ticket line" |
 | Everything waiting on you | Questions spread over pages | Waiting on you (`/waiting`, Needs you › See all) | `ustabasi.note`, `divan.card.move`, `divan.project.open` | drive: "Waiting on you: the title states the counts, three groups oldest first" |
 | Switch a product's view | Tabs Overview / Board / Branches / Chat | Segment Overview / Board / Chats; Repositories in the side column | — | drive: "the head is monogram, name, one sentence and a meta line" |
 | Write a new ticket | Inline draft in Ice Box, N | Said to the agent in the product's Composer; there is no form | `chat.create` | drive: "no New ticket and no tabs on a product or its board" |

@@ -17,6 +17,8 @@
 .dv-topline .dv-back:hover{color:var(--ink);background:var(--hairline)}
 .dv-topline .dv-back svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .dv-topline a.dv-word,.dv-topline button.dv-word{appearance:none;border:0;background:transparent;color:var(--ink);text-decoration:none;cursor:pointer;padding:0;font-family:inherit}
+.dv-topline a.dv-word{display:inline-flex;align-items:center;gap:8px}
+.dv-topline a.dv-word img{display:block;flex:none;width:34px;height:34px}
 .dv-topline .sys .dv-btn--ghost[aria-current="page"]{color:var(--ink)}
 
 /* §5: the chips under the Composer, on one row with the microphone and send;
@@ -61,18 +63,36 @@
 .dv-tile .count .w{font-family:var(--font-sans);font-weight:400;color:var(--ink-3)}
 .dv-wait .dv-btn{min-height:30px}
 .dv-live .dv-dot{flex:none}
-/* The Dashboard's two rows of badges: products, and what is running. Side by
-   side on a desk, one under the other where there is no room. */
-.dv-rows{display:flex;flex-wrap:wrap;align-items:flex-start;gap:28px 40px;margin-top:40px}
-.dv-rows>section{flex:1 1 320px;min-width:0}
-.dv-chips{display:flex;flex-wrap:wrap;gap:8px}
+/* Badges: the Composer's pickers and the Machine page's links. */
 .dv-chip{appearance:none;display:inline-flex;align-items:center;gap:8px;height:34px;max-width:100%;padding:0 12px 0 8px;border-radius:var(--radius-pill);color:var(--ink);font:500 13px/18px var(--font-sans);text-decoration:none;cursor:pointer;transition:background .18s ease}
 .dv-chip:hover{background:var(--glass-2)}
 .dv-chip .t{min-width:0;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dv-chip .dv-dot{flex:none}
 .dv-chip-meta{font:400 11.5px var(--font-mono);color:var(--ink-3);white-space:nowrap}
 .dv-chip .count{display:inline-flex;align-items:center;gap:4px;font:500 11.5px var(--font-mono);color:var(--ink-2)}
-.dv-chip.dv-tile--dormant,.dv-chip.dv-tile--dormant .dv-mono{color:var(--ink-3)}
+/* The Dashboard's project cards: a grid on a desk, one column on a phone.
+   Titles wrap rather than clip; a long list is cut by the card's own
+   "+N more", not by the card's height. */
+.dv-pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:16px}
+.dv-pcard{min-height:0;gap:10px}
+.dv-pcard:hover{transform:none}
+.dv-pcard .dv-tile-head{min-width:0}
+.dv-pcard-name{color:var(--ink);text-decoration:none;min-width:0;overflow-wrap:anywhere}
+.dv-pcard-name:hover{text-decoration:underline;text-underline-offset:3px}
+.dv-pcard .dv-tile-stage{white-space:nowrap}
+.dv-pcard-status{margin:0;display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font:500 12px/18px var(--font-mono);color:var(--ink-2)}
+.dv-pcard-status .dv-dot{flex:none}
+.dv-pcard-list,.dv-pcard-blockers{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.dv-pcard-list li,.dv-pcard-blockers li{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--hairline)}
+.dv-pcard-list a,.dv-pcard-list button{appearance:none;background:none;border:0;padding:0;font:500 13px/19px var(--font-sans);color:var(--ink);text-align:left;text-decoration:none;cursor:pointer;display:flex;gap:6px;min-width:0;flex:1}
+.dv-pcard-list a:hover .t,.dv-pcard-list button:hover .t{text-decoration:underline;text-underline-offset:3px}
+.dv-pcard-list .n{font:500 12px/19px var(--font-mono);color:var(--ink-3);flex:none}
+.dv-pcard-list .t,.dv-pcard-blockers .t{min-width:0;overflow-wrap:anywhere}
+.dv-pcard-list .dv-status,.dv-pcard-blockers .dv-status{flex:none}
+.dv-pcard-blockers li{justify-content:flex-start;font-size:12.5px;line-height:19px;color:var(--ink-2)}
+.dv-pcard-more{align-self:flex-start;height:28px}
+.dv-pcard.dv-tile--dormant .dv-pcard-name{color:var(--ink-3)}
+@media (max-width:720px){.dv-pcards{grid-template-columns:1fr}}
 .dv-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* The status a second agent is checking (HANDOVER §2: grey dot + word). */
@@ -90,6 +110,28 @@
 .dv-cols2{margin-top:32px;display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
 .dv-cols2>main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:32px}
 .dv-cols2>aside{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:32px}
+/* §4.2 The stage card: the rail of a product's five stages and its dates. */
+.dv-life{border-radius:var(--radius-md);padding:16px 18px;display:flex;flex-wrap:wrap;gap:16px 28px;align-items:stretch}
+.dv-life-rail{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.dv-life-now{margin:0;font-size:14px;line-height:20px;color:var(--ink-2)}
+.dv-life-now b{color:var(--ink);font-weight:600;margin-right:4px}
+.dv-life-steps{margin:0;padding:0;list-style:none;display:flex;gap:6px}
+.dv-life-steps li{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:7px}
+.dv-life-steps i{display:block;height:4px;border-radius:2px;background:var(--hairline)}
+.dv-life-steps li[data-state="on"] i{background:var(--ink-2)}
+.dv-life-steps li[data-state="now"] i{background:var(--ink)}
+.dv-life-steps span{font-size:12px;line-height:16px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-life-steps li[data-state="now"] span{color:var(--ink);font-weight:600}
+.dv-life-facts{margin:0;flex:0 1 auto;display:flex;flex-wrap:wrap;gap:12px 28px;padding-left:28px;border-left:1px solid var(--hairline)}
+.dv-life-facts div{display:flex;flex-direction:column;gap:3px}
+.dv-life-facts dt{font:400 10.5px var(--font-mono);color:var(--ink-3)}
+.dv-life-facts dd{margin:0;font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.dv-life-facts dd.n{font:400 11px var(--font-mono);letter-spacing:0;color:var(--ink-3)}
+.dv-life-facts dd.dv-said--amber{color:var(--amber)}
+@media (max-width:720px){
+  .dv-life-facts{padding-left:0;border-left:none;padding-top:12px;border-top:1px solid var(--hairline);flex-basis:100%}
+  .dv-life-facts dd{white-space:normal}
+}
 .dv-count{text-decoration:none;color:inherit;border-radius:var(--radius-md);padding:14px 16px;display:flex;flex-direction:column;gap:4px}
 .dv-count .l{font-size:12.5px;font-weight:500;color:var(--ink-2)}
 .dv-count .n{font:500 20px/24px var(--font-mono)}
@@ -172,6 +214,23 @@
 .dv-side-press{appearance:none;border:0;background:transparent;font:inherit;color:inherit;padding:6px 8px;margin-right:-8px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .dv-side-press:hover{background:var(--hairline)}
 .dv-side-press svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;color:var(--ink-3)}
+/* Time and usage: a label with its scope under it, the figure at the end of
+   the line, and the small print under both. */
+.dv-usage{padding:4px 18px 10px}
+.dv-usage-row{padding:10px 0;border-top:1px solid var(--hairline);font-size:13px;line-height:18px}
+.dv-usage-row:first-child{border-top:0}
+.dv-usage-top{display:flex;align-items:baseline;gap:8px}
+.dv-usage-top .l{flex:1;min-width:0;display:flex;flex-direction:column;color:var(--ink-3)}
+.dv-usage-top .v{color:var(--ink);font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dv-usage-row[data-missing] .v{color:var(--ink-3)}
+.dv-usage-top .n{white-space:nowrap}
+.dv-usage .f{margin:6px 0 0;overflow-wrap:anywhere}
+.dv-usage-caveat{padding-top:10px;border-top:1px solid var(--hairline)}
+.dv-usage-runs{margin-top:10px;padding-top:6px;border-top:1px solid var(--hairline)}
+.dv-usage-runs summary{cursor:pointer;display:flex;align-items:center}
+.dv-usage-runs table{width:100%;border-collapse:collapse;font:11.5px/16px var(--font-mono);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.dv-usage-runs th{text-align:left;font-weight:400;padding:3px 8px 3px 0}
+.dv-usage-runs td{text-align:right;padding:3px 0 3px 8px;white-space:nowrap}
 .dv-btn--danger{color:var(--red)}
 .dv-confirm,.dv-editor{margin-top:12px;border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:12px}
 .dv-confirm p{margin:0;font-size:13.5px;line-height:20px}
@@ -221,10 +280,13 @@
 /* §4.8 Chat: the rule a conversation is filed under, and the card it filed. */
 .dv-filed{display:flex;align-items:center;gap:10px}
 .dv-filed::before,.dv-filed::after{content:"";flex:1;height:1px;background:var(--hairline)}
-.dv-cardlink{align-self:flex-start;text-decoration:none;color:var(--ink);border-radius:12px;padding:10px 12px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;gap:10px;max-width:100%}
+.dv-filedcard{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:100%;min-width:0}
+.dv-cardlink{align-self:flex-start;text-decoration:none;color:var(--ink);font:inherit;text-align:left;border:none;cursor:pointer;border-radius:12px;padding:10px 12px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;gap:10px;max-width:100%}
 .dv-cardlink .t{font-size:13.5px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dv-cardlink svg{width:16px;height:16px;stroke:var(--ink-3);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.dv-cardlink:focus-visible,.dv-subnav a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.dv-ticketcard{border-radius:12px;padding:12px;box-sizing:border-box;width:320px;max-width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.dv-ticketcard .t{font-size:14px;line-height:20px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
+.dv-cardlink:focus-visible,.dv-ticketcard .dv-btn:focus-visible,.dv-subnav a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 
 /* §2: on the phone layout every press is a 44px target. Last in the sheet so it
    outranks a part's own min-height; a min-size wins over any height. The display
@@ -233,5 +295,8 @@
   .dv-root :is(button, a[href], select, textarea, summary, [role=button], [role=tab],
     input:not([type=hidden]):not([type=checkbox]):not([type=radio])){min-height:44px;box-sizing:border-box}
   .dv-root :is(button, a[href], summary, [role=button], [role=tab]){min-width:44px}
+  /* A chat's field pads its one line out to the same 44, so the line stays level
+     with the discs beside it (`ChatComposer`, a ticket's answer box). */
+  .dv-root{--dv-press:44px}
   :where(.dv-root) :where(a[href]){display:inline-flex;align-items:center}
 }

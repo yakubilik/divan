@@ -157,14 +157,25 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
     if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
   };
 
+  /** The two discs at either end of the box. The frames draw them at 36; a
+   *  window 350 wide has room for 30 and not for 36. */
+  const disc = compact ? 30 : 36;
+  /** One line of the field and its padding are exactly as tall as a disc, so a
+   *  single line of text sits on the discs' centre; a field taller than that
+   *  leaves the line at the top of the gap. On the phone layout a disc is a
+   *  44 px press, which `divan-app.css` says in `--dv-press`. */
+  const line = compact ? 19 : 22;
+  const press = `var(--dv-press, ${disc}px)`;
+  const tallest = compact ? 120 : 200;
+
   // Grow with the text, up to a point. Measured from 0 rather than 'auto' so a
   // second pass cannot read back the height the first pass just set.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = '0px';
-    el.style.height = `${Math.max(36, Math.min(200, el.scrollHeight))}px`;
-  }, [shown]);
+    el.style.height = `${Math.max(disc, Math.min(tallest, el.scrollHeight))}px`;
+  }, [shown, disc, tallest]);
 
   const submit = () => {
     // Pressing send with the microphone open means "that was the message":
@@ -190,9 +201,6 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
   // opacity on `surface2`, which in the light theme is white on off-white: the
   // send button looked empty until you typed.)
   const armed = busy || ready || sending || mic.state !== 'idle';
-  /** The two discs at either end of the box. The frames draw them at 36; a
-   *  window 350 wide has room for 30 and not for 36. */
-  const disc = compact ? 30 : 36;
   const sendFace = busy && !ready ? C.danger : armed ? C.accent : C.surface2;
   const sendGlyph = armed ? C.onAccent : C.mute;
   return (
@@ -261,10 +269,10 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           placeholder={listening ? 'Listening…'
             : busy ? 'You can already type the next message…' : `Message ${folder}…`}
           style={{
-            flex: 1, boxSizing: 'border-box', minHeight: compact ? 0 : 44, maxHeight: compact ? 120 : 200, resize: 'none',
+            flex: 1, minWidth: 0, alignSelf: 'center', boxSizing: 'border-box', minHeight: press, maxHeight: tallest, resize: 'none',
             background: 'transparent', border: 'none', outline: 'none',
-            fontSize: compact ? 13.5 : 15, lineHeight: compact ? '19px' : '22px',
-            padding: compact ? '6px 4px' : '7px 6px', color: C.text, overflowY: 'auto',
+            fontSize: compact ? 13.5 : 15, lineHeight: `${line}px`,
+            padding: `calc((${press} - ${line}px) / 2) ${compact ? 4 : 6}px`, color: C.text, overflowY: 'auto',
           }}
         />
         <MicButton mic={mic} size={disc} />

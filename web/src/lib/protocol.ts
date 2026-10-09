@@ -1,6 +1,7 @@
 // Mirrors docs/PROTOCOL.md
 
 import type { Ticket } from './ustabasi';
+import type { TicketUsage } from './usage';
 
 export type Provider = 'claude' | 'codex';
 export type ChatStatus = 'idle' | 'running' | 'awaiting_approval';
@@ -580,6 +581,9 @@ export interface DivanCardGet {
    *  this page draws the conversation and not the stream — so nothing here
    *  unpacks it. */
   run: unknown;
+  /** What the ticket's runs took and used (`lib/usage.ts`). Null where there
+   *  is no run of it on disk, and absent from a daemon that predates it. */
+  usage?: TicketUsage | null;
 }
 
 /** An agent at work right now, as a line on a dashboard. Only the running ones:

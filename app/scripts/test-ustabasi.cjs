@@ -1327,9 +1327,12 @@ void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(async () =>
   await voiceSession.run();
   const liveCall = require('./test-call-live.cjs');
   await liveCall.ready;
+  // …and ticket notices in a chat (#159): one line, tapped open and shut.
+  const notice = require('./test-notice.cjs');
+  await notice.ready;
   checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks, ...composer.checks, ...project.checks, ...ticket.checks,
               ...machine.checks, ...every.checks, ...actions.checks, ...call.checks, ...chatCall.checks, ...fresh.checks,
-              ...voiceSession.checks, ...liveCall.checks);
+              ...voiceSession.checks, ...liveCall.checks, ...notice.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

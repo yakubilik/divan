@@ -86,6 +86,8 @@ export function App() {
   /** A ticket a card link in a chat asked for, with no card on any board: it is
    *  read on the queue's wall under Machine › Terminal. */
   const [ticket, setTicket] = useState<number | null>(null);
+  /** …and the chat that ticket was asked for from, so the way back is to it. */
+  const [ticketFrom, setTicketFrom] = useState<Place | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   /** The Dashboard's Composer, which ⌘N and every "new chat" now lead to. */
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -248,7 +250,9 @@ export function App() {
    *  nowhere — it is the word. */
   const scopedName = projectIn(divan, project)?.name ?? project;
   const from = card ? cameFrom : null;
-  const back = view !== 'overview'
+  const back = view === 'terminal' && ticket != null && ticketFrom
+    ? { label: placeName(ticketFrom, divan), onBack: () => history.back() }
+    : view !== 'overview'
     ? { label: 'Dashboard', onBack: () => setView('overview') }
     : project && card
       ? (from
@@ -565,11 +569,15 @@ export function App() {
         return;
       }
       setTicket(id);
+      setTicketFrom(where);
       setView('terminal');
     },
     describe: (id: number) => {
       const found = divan.cards.find((c) => c.ustabasi_id === id);
-      return found ? { column: COLUMN_WORD[found.column] ?? found.column, title: found.title } : null;
+      return found ? {
+        column: COLUMN_WORD[found.column] ?? found.column, title: found.title,
+        project: divan.projects.find((p) => p.key === found.projectKey)?.name ?? null,
+      } : null;
     },
   };
 
@@ -635,7 +643,6 @@ export function App() {
       ...MACHINE_ASIDE.map((aside) => ({
         id: aside.view,
         label: `${PLACE_LABEL.machine} › ${aside.label}`,
-        shortcut: aside.view === 'projects' ? '⌘2' : undefined,
         run: () => setView(aside.view),
       })),
       {
@@ -676,24 +683,10 @@ export function App() {
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
       else if (e.key === 'n') { e.preventDefault(); compose(); }
       else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
-      // The keys the panel already had open the pages they always did — they
-      // are pages of the Machine place now, and nothing about where they land
-      // has changed. ⌘0 is for the place the panel opens on; ⌘7 and ⌘8 are the
-      // two rows the drawer gained, and ⌘2 still opens a computer's folders,
-      // which is a page under the first row rather than a row of its own.
-      else if (e.key === '0') {
-        e.preventDefault();
-        setView('overview'); setProject(null); setTab('overview'); setCard(null);
-      }
       else if (e.key === ',') { e.preventDefault(); setView('settings'); }
-      else if (e.key === '1') { e.preventDefault(); setView('machines'); }
-      else if (e.key === '2') { e.preventDefault(); setView('projects'); }
-      else if (e.key === '3') { e.preventDefault(); setView('executors'); }
-      else if (e.key === '4') { e.preventDefault(); setView('terminal'); }
-      else if (e.key === '5') { e.preventDefault(); setView('screen'); }
-      else if (e.key === '6') { e.preventDefault(); setView('admin'); }
-      else if (e.key === '7') { e.preventDefault(); setView('accounts'); }
-      else if (e.key === '8') { e.preventDefault(); setView('quota'); }
+      // No digit is taken. ⌘/Ctrl with 1–9 picks a tab and with 0 resets the
+      // zoom, and those are the browser's: the pages they used to open here are
+      // in the palette and on the Machine place's own tabs.
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -762,8 +755,7 @@ export function App() {
                   }}
                 />
               ),
-              open: chat ? <ChatView {...chatProps} /> : null,
-              onClose: () => setTab('overview'),
+              open: chat ? <ChatView {...chatProps} onCloseView={() => setTab('overview')} /> : null,
             } : null}
           />
         )}
