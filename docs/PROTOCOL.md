@@ -40,7 +40,7 @@ other device watching it.
 | `hello` | `{device_name?, push_token?}` | `{host, catalog, device}` |
 | `ping` | – | `{ts}` — the client's heartbeat. A socket can die without either end being told (the computer slept, a NAT dropped an idle flow) and the client goes on reporting it open while the turn it is watching silently stops arriving. Both clients ask every 15 s and give up on the socket after 10 s of silence |
 | `host.info` | – | host information |
-| `host.models` | – | `{claude: {models, efforts, perm_modes}, codex: {...}}` |
+| `host.models` | – | `{claude: {models, efforts, perm_modes, default_perm_mode}, codex: {...}}` — `default_perm_mode` is what a chat opens in when `chat.create` names none, and what both clients offer first; it is `bypass` for every tool |
 | `host.projects` | – | `{projects: [{path,name,is_git}], roots}` |
 | `host.git` | `{paths?}` | `{repos: {<path>: {is_git, branch, dirty, staged, untracked, subject, author, committed_at}}}` — read-only git status, for the desktop panel's project grid. Without `paths`, every allowed project. Runs in a thread pool behind a 20 s cache. `host.projects` does not carry this: the phone's folder picker would have to wait on dozens of git calls every time it opened. |
 | `device.prefs` | `{push_approval?, push_done?, push_token?}` | the device's current preferences |

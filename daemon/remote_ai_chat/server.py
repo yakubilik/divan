@@ -1603,13 +1603,13 @@ class Server:
         agent_id = d.get("agent_id") or None
         model = d.get("model") or cat["models"][0]["id"]
         effort = d.get("effort") or ("high" if cat["efforts"] else None)
-        # An agent chat nobody gave a mode opens in `bypass`; any other chat
-        # opens in the first mode the tool offers, which is the one that asks.
-        # An agent is work handed over — the whole point is not being at the
-        # screen for it — and a delegated turn that stops on the first prompt
-        # has been stopped, not delegated. An explicit `perm_mode` still wins:
-        # this is the default, not an override.
-        fallback = cat.get("default_perm_mode") or ("bypass" if agent_id and "bypass" in cat["perm_modes"] else cat["perm_modes"][0])
+        # A chat nobody gave a mode opens in the tool's declared default, which
+        # is `bypass` for both tools: a chat run from a phone is work handed
+        # over, and a turn that stops on its first prompt has been stopped, not
+        # delegated. An explicit `perm_mode` still wins: this is the default,
+        # not an override. The first listed mode is only for a tool that
+        # declares none.
+        fallback = cat.get("default_perm_mode") or cat["perm_modes"][0]
         perm = d.get("perm_mode") or fallback
         if perm not in cat["perm_modes"]:
             raise Err("unknown_perm_mode", "unknown permission mode")

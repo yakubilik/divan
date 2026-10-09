@@ -9,6 +9,7 @@ import { Group, ListRow, RowButton, StatusDot, Switch } from '../src/components/
 import { MachineTabs, PageHead, UnderTab } from '../src/components/machine';
 import { Shell } from '../src/components/shell';
 import { composerProvider, withDefault } from '../src/compose';
+import { permissionFor } from '../src/permissions';
 import { Icon } from '../src/components/icon';
 import { Text } from '../src/components/text';
 import { alert, measure, openMenu } from '../src/components/overlay';
@@ -158,7 +159,8 @@ export default function Settings() {
             meta={defaults.provider === 'codex' ? 'Codex' : 'Claude'} monoMeta={false} onPress={openDefaults} />
           <ListRow boxed title={T('modelRow')}
             meta={[modelLabel, defaults.effort].filter(Boolean).join(' · ')} onPress={openDefaults} />
-          <ListRow boxed title={T('permRow')} meta={defaults.perm_mode} onPress={openDefaults} />
+          <ListRow boxed title={T('permRow')}
+            meta={permissionFor(defaults.provider, catalog?.[defaults.provider], defaults)} onPress={openDefaults} />
         </Group>
 
         <Group label={T('sgSecurity')}>

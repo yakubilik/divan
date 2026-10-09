@@ -82,7 +82,9 @@ behind or ahead of the other one while work is in flight.
 
 `allowed_roots` in `config.toml` is what the app will open (default
 `~/projects`). `denied_paths` covers `~/.ssh`, `~/server` and
-`~/.remote-ai-chat` itself. In every permission mode, `bypass` included, a
+`~/.remote-ai-chat` itself. A new chat opens in `bypass` unless whoever opened
+it picked another mode: the daemon declares that default for every tool, and
+both clients offer it first. In every permission mode, `bypass` included, a
 `PreToolUse` hook checks Bash commands and anything destructive — a recursive
 `rm` outside the chat's folder, a forced `git push` and the like — goes to the
 phone for approval. In `bypass` that is the only thing that asks.

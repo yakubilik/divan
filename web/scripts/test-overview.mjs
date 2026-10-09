@@ -560,6 +560,14 @@ group('a sentence in the bar starts a chat on the page it was typed on');
   ok('it opens on what that computer says a new chat opens on',
     opens.provider === 'claude' && opens.model === slot.catalog.claude.models[0].id
     && opens.perm_mode === 'default' && opens.account_id === '', JSON.stringify(opens));
+  // The computer's declared default outranks a remembered word: one `default`
+  // picked once must not become every chat after it.
+  const declared = { ...fakeHost(), catalog: { claude: { ...slot.catalog.claude, default_perm_mode: 'bypass' } } };
+  ok('…and a computer that declares a default opens in it, whatever was remembered',
+    TL.toldDefaults(declared,
+      { studio: { provider: 'claude', cwd: null,
+                  byProvider: { claude: { model: null, effort: null, perm_mode: 'default', account_id: '' } } } },
+      'studio').perm_mode === 'bypass');
   ok('…and a computer that has not said what it has yet is not sent a chat at all',
     TL.toldDefaults({ catalog: null }, {}, 'studio') === null
     && TL.toldDefaults(null, {}, 'studio') === null);
