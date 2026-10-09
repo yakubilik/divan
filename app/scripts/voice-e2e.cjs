@@ -201,8 +201,12 @@ const median = (xs) => pct(xs, 0.5);
 async function conversation(peer, fx, v) {
   const p = await phone(peer, 'e2e', v.voice);
   await wait(6000);                                // the call's greeting: models load, the CLI warms
-  const warm = await p.say(fx['short-greeting']);   // one turn nobody measures, as in the proof
+  const warm = await p.say(fx['short-greeting']);   // the call's cold first turn: kept apart from the stats
   await p.until(() => p.of('voice.turn').length >= 1, 20000);
+  const coldTid = p.of('voice.turn')[0]?.data.turn_id;
+  const coldPlay = [...p.engine.items.values()].find((it) => turnOf(it.id) === coldTid && it.started != null);
+  const cold = { turn_id: coldTid, true_end_to_audible_ms: coldPlay && warm.speechEnd ? Math.round(coldPlay.started - warm.speechEnd) : null,
+    timings: coldTid != null ? (p.s.timings.get(coldTid) ?? null) : null };
   await p.until(() => p.s.state === 'listening' && !p.s.playingNow(), 20000);
   await wait(1500);
   const rows = [];
@@ -248,7 +252,7 @@ async function conversation(peer, fx, v) {
   const report = p.s.timingReport();
   const stop = await p.s.stop();
   p.client.disconnect();
-  return { rows, report, daemonTurns: stop?.turns ?? [], warm };
+  return { rows, report, daemonTurns: stop?.turns ?? [], warm, cold };
 }
 
 // ── 2 · barge-in on real answers ────────────────────────────────────────────
@@ -407,6 +411,7 @@ async function agentCall(peer, fx, v) {
         ema_synth: { pieces: v.timings.length, median_ms: median(v.timings.map((t) => t.ms)),
           rtf: +(v.timings.reduce((a, t) => a + t.ms, 0) / Math.max(1, v.timings.reduce((a, t) => a + t.audio_ms, 0))).toFixed(3) },
         voice: v.voice.name,
+        cold_first_turn_true_end_to_audible_ms: result.conversation.cold?.true_end_to_audible_ms ?? null,
       };
       result.ema_timings = v.timings;
       const s = result.summary;
