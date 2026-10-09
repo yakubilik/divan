@@ -132,6 +132,7 @@ const { HOME: HOME_PLACE } = await load('src/lib/nav.js');
 const { useFleet } = await load('src/lib/fleet.js');
 const { useDivanStore, answered, silent } = await load('src/lib/divan.js');
 const { useDock } = await load('src/lib/sessions.js');
+const { useAsking } = await load('src/lib/asking.js');
 const { themeScheme, setThemeChoice } = await load('src/lib/theme.js');
 const { MACHINE_ROWS } = await load('src/lib/shell.js');
 const { useThresholds, DEFAULT_THRESHOLDS } = await load('src/lib/machine.js');
@@ -1660,22 +1661,29 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
       && !!doc.querySelector('textarea[name="composer"]'),
     `${place()} · ${w.location.pathname}`);
 
-  // 5 · Needs you
+  // 5 · Needs you: the question is a conversation in the floating chat, and
+  // the row under Needs you only brings it back
   await press('0');
-  const amber = doc.querySelector('[data-wait="studio:k2"] .dv-btn--amber');
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const win = doc.querySelector('[data-asking-window="studio:k2"]');
+  const pill = win && [...win.querySelectorAll('button')].find((b) => b.textContent === 'Use the live ones now');
+  const askedOnce = (text() .split('Use the live ones now, or wait for the review?').length - 1);
   asked.length = 0;
-  await click(amber);
+  await click(pill);
   await settle();
-  const note = asked.find((a) => a.type === 'ustabasi.note');
-  await click([...doc.querySelectorAll('[data-wait="studio:k2"] button')].find((b) => b.textContent === 'Open'));
+  const notes = asked.filter((a) => a.type === 'ustabasi.note');
+  const stillOpen = !!doc.querySelector('[data-asking-window="studio:k2"]');
+  await click([...doc.querySelectorAll('[data-wait="studio:h1"] button')].find((b) => b.textContent === 'Open'));
   const opened = w.location.pathname;
   await act(async () => { seed(useDivanStore, { snaps: board('calm') }); });
   await press('0');
-  ok('Needs you answers in one press with the same note the question window sent, Open goes to the ticket, and with nothing waiting the section is not in the DOM',
-    amber?.textContent === 'Use the live ones now' && note?.key === 'studio' && note?.data.id === 42
-      && note?.data.text === 'Use the live ones now' && opened === '/p/quire/c/k2'
+  ok('Needs you: the asking card is a one-line row, its question is whole once in the floating chat, a pill there sends the note once and the chat stays, Open on the rest goes to the card, and with nothing waiting the section is not in the DOM',
+    !!doc.defaultView && askedOnce === 1 && notes.length === 1 && notes[0].key === 'studio' && notes[0].data.id === 42
+      && notes[0].data.text === 'Use the live ones now' && stillOpen && opened === '/p/hush/c/h1'
       && !doc.querySelector('#needs-you') && !text().includes('Needs you'),
-    `${amber?.textContent} ${JSON.stringify(note)} ${opened}`);
+    `${askedOnce} ${JSON.stringify(notes)} ${stillOpen} ${opened}`);
+  // What this group opened is put back, so the groups after it start clean.
+  await act(async () => { useAsking.setState({ threads: [], minimised: [], closed: {}, selected: null }); });
 
   // 6 · tiles and the summary line
   const calmLine = doc.querySelector('[data-summary]')?.textContent ?? '';
