@@ -353,6 +353,19 @@ Skills available to you: {SKILLS}
 # Per-source prompt, by source id. Anything without one gets the default.
 PROMPTS: dict[str, str] = {"hermes": HERMES_AGENT}
 
+# A skill the agent should reach for by situation, not by name, gets one line
+# saying when. Only for a skill actually on disk: the line must not send the
+# agent looking for something it cannot read. The skill itself stays the place
+# that knows its contents, so no catalog is pasted into the prompt.
+SKILL_HINTS: dict[str, str] = {
+    "shared-tool-pool": (
+        "When a task might be done better with an outside tool (a product or demo "
+        "video, the change impact of a refactor, a security audit, web charts or "
+        "animation), or someone shares a link about a tool to keep, read the "
+        "shared-tool-pool skill and look the task up there. It is not for every "
+        "task, and nothing in it is installed just because it is listed."),
+}
+
 
 def bundle_file(src: dict, names: list[str],
                 skills_root: Path | None = None) -> str:
@@ -367,8 +380,10 @@ def bundle_file(src: dict, names: list[str],
     if skills_root and skills_root.is_dir():
         listed |= {d.name for d in skills_root.iterdir()
                    if d.is_dir() and (d / "SKILL.md").is_file()}
+    hints = "".join(SKILL_HINTS[n] + "\n\n" for n in sorted(listed) if n in SKILL_HINTS)
     body = (PROMPTS.get(src["id"], BUNDLE_AGENT)
             .replace("{NAME}", src["label"])
+            .replace("Skills available to you:", hints + "Skills available to you:")
             .replace("{SKILLS}", ", ".join(sorted(listed))))
     return (f"---\nname: {src['id']}\n"
             f"description: {src.get('about') or src['label']}\n"
