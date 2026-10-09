@@ -70,6 +70,12 @@ for (const f of readdirSync(out, { recursive: true, withFileTypes: true })) {
     )));
 }
 
+// A picture is a URL to the bundler; to node it is a module that says which.
+mkdirSync(join(out, 'src', 'assets'), { recursive: true });
+for (const f of readdirSync(join(web, 'src', 'assets'))) {
+  if (f.endsWith('.png')) writeFileSync(join(out, 'src', 'assets', `${f}.js`), `export default ${JSON.stringify(`/assets/${f}`)};\n`);
+}
+
 // ── a browser, as far as a static render needs one ──────────────────────────
 
 /** The three things the shell reads off a browser: a stored theme, what the

@@ -71,6 +71,12 @@ for (const f of readdirSync(out, { recursive: true, withFileTypes: true })) {
     )));
 }
 
+// A picture is a URL to the bundler; to node it is a module that says which.
+mkdirSync(join(out, 'src', 'assets'), { recursive: true });
+for (const f of readdirSync(join(web, 'src', 'assets'))) {
+  if (f.endsWith('.png')) writeFileSync(join(out, 'src', 'assets', `${f}.js`), `export default ${JSON.stringify(`/assets/${f}`)};\n`);
+}
+
 // ── a browser, as far as a static render needs one ──────────────────────────
 
 /** The panel reads three things off the browser before React mounts: a stored
@@ -881,10 +887,12 @@ group('the panels the screens open over themselves');
     (drawn['overlay:AppearanceSection'] ?? '').includes('system')
     && (drawn['overlay:AppearanceSection'] ?? '').includes('theme'));
   ok('…and the mark the panel dims is drawn in both of its states',
-    (drawn['overlay:ProviderMarkDim'] ?? '').includes('&lt;&gt;')
-    && (drawn['overlay:ProviderMarkDim'] ?? '') !== (drawn['overlay:ProviderMarkLive'] ?? ''));
+    (drawn['overlay:ProviderMarkDim'] ?? '').includes('data-provider-icon="codex"')
+    && (drawn['overlay:ProviderMarkDim'] ?? '').includes('grayscale(1)')
+    && (drawn['overlay:ProviderMarkLive'] ?? '').includes('data-provider-icon="claude"')
+    && !(drawn['overlay:ProviderMarkLive'] ?? '').includes('grayscale'));
   ok('…and a paired preferences page draws that dim mark itself, where the real one is',
-    (drawn['screen:Preferences·accounts paired'] ?? '').includes('&lt;&gt;'));
+    (drawn['screen:Preferences·accounts paired'] ?? '').includes('grayscale(1)'));
 }
 
 group('white belongs on a filled colour and nowhere else');

@@ -36,10 +36,11 @@ import { T } from '../lib/theme';
 import type { View } from '../lib/shell';
 import type { PoolView, Provider } from '../lib/protocol';
 import {
-  Button, Card, Cell, Choice, EmptyState, NameCell, SectionHeader, Table, Tag, Well, type Column,
+  Button, Card, Cell, Choice, EmptyState, NameCell, SectionHeader, Table, Tag, type Column,
 } from '../ui/divan';
 import { mono } from '../ui/kit';
 import { Ring } from '../components/LimitsRing';
+import { ProviderMark } from '../components/Sidebar';
 
 /** How long a sign-in has left, said the way W16 says it — `12 days` — and in
  *  the panel's own `2h 14m` once there are hours rather than days left, which
@@ -147,7 +148,7 @@ export function Accounts({ now, onView, onFocus }: {
           tone: s.tone,
           wash: s.state === 'expiring' || s.state === 'expired',
           cells: [
-            <Well mark={s.mark} size={34} />,
+            <ProviderMark provider={s.provider} size={34} dim={s.state === 'missing' || s.state === 'signedOut'} />,
             <NameCell title={s.title} note={s.note} />,
             <Tag label={s.says} tone={s.tone} />,
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

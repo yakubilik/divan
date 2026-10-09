@@ -44,6 +44,12 @@ for (const f of readdirSync(out, { recursive: true, withFileTypes: true })) {
     )));
 }
 
+// Images are imported as modules; under Node each is its path, as in test-drive.mjs.
+mkdirSync(join(out, 'src', 'assets'), { recursive: true });
+for (const f of readdirSync(join(web, 'src', 'assets'))) {
+  if (f.endsWith('.png')) writeFileSync(join(out, 'src', 'assets', `${f}.js`), `export default ${JSON.stringify(`/assets/${f}`)};\n`);
+}
+
 // ── a document ──────────────────────────────────────────────────────────────
 
 const { JSDOM } = await import('jsdom');
