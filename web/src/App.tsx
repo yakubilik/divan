@@ -86,6 +86,8 @@ export function App() {
   /** A ticket a card link in a chat asked for, with no card on any board: it is
    *  read on the queue's wall under Machine › Terminal. */
   const [ticket, setTicket] = useState<number | null>(null);
+  /** …and the chat that ticket was asked for from, so the way back is to it. */
+  const [ticketFrom, setTicketFrom] = useState<Place | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   /** The Dashboard's Composer, which ⌘N and every "new chat" now lead to. */
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -248,7 +250,9 @@ export function App() {
    *  nowhere — it is the word. */
   const scopedName = projectIn(divan, project)?.name ?? project;
   const from = card ? cameFrom : null;
-  const back = view !== 'overview'
+  const back = view === 'terminal' && ticket != null && ticketFrom
+    ? { label: placeName(ticketFrom, divan), onBack: () => history.back() }
+    : view !== 'overview'
     ? { label: 'Dashboard', onBack: () => setView('overview') }
     : project && card
       ? (from
@@ -565,11 +569,15 @@ export function App() {
         return;
       }
       setTicket(id);
+      setTicketFrom(where);
       setView('terminal');
     },
     describe: (id: number) => {
       const found = divan.cards.find((c) => c.ustabasi_id === id);
-      return found ? { column: COLUMN_WORD[found.column] ?? found.column, title: found.title } : null;
+      return found ? {
+        column: COLUMN_WORD[found.column] ?? found.column, title: found.title,
+        project: divan.projects.find((p) => p.key === found.projectKey)?.name ?? null,
+      } : null;
     },
   };
 
