@@ -142,7 +142,8 @@ export function Overview({
             card={open} project={project} index={view.projects.indexOf(project)} now={view.now}
             onProject={() => { onCard?.(null); onTab?.('overview'); }}
           />
-          {!!projectComposer && <div style={{ marginTop: 40 }}>{projectComposer}</div>}
+          {/* No Composer here: a ticket's page talks to that ticket, through
+              the line in Live, and starting a chat is the product's page. */}
         </div>
         <Sessions view={view} />
       </div>,

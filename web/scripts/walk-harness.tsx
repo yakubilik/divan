@@ -3,8 +3,10 @@
  *  Built and driven by `scripts/test-walk-ui.mjs`. The address decides the page,
  *  exactly as it does in the shipped panel, so a reload and a cold open of any
  *  path are the panel's own. `sessionStorage['walk.fixture'] = 'empty'` swaps the
- *  busy computer for one that has nothing on it yet. Every request a screen makes
- *  of the computer is answered here and recorded on `window.__asked`.
+ *  busy computer for one that has nothing on it yet; `'running'` and `'done'` put
+ *  a ticket with runs behind the card at `/p/quire/c/k1`, and `window.__runEnds()`
+ *  ends the run that is going. Every request a screen makes of the computer is
+ *  answered here and recorded on `window.__asked`.
  */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -18,10 +20,37 @@ import { useFleet } from '../src/lib/fleet';
 import { useLogs } from '../src/lib/timeline';
 import { empty, mini, studio } from './divan-fixture.js';
 import { chat, host, items } from './panel-fixture.js';
-import { wall } from './ticket-fixture.js';
+import { ticket, wall } from './ticket-fixture.js';
 
-const bare = sessionStorage.getItem('walk.fixture') === 'empty';
+const fixture = sessionStorage.getItem('walk.fixture');
+const bare = fixture === 'empty';
 const at = Date.now() / 1000;
+
+/** The ticket behind k1 and what its runs used: a worker and a check behind it
+ *  and, until it ends, a second worker going — whose figures arrive with its
+ *  closing line and not before. The ticket was opened a day ago. */
+let runEnded: number | null = fixture === 'done' ? at - 600 : null;
+(window as any).__runEnds = () => { runEnded = Date.now() / 1000; };
+const SECOND_RUN = at - 600 - 125;
+const usageNow = () => {
+  const first = { input: 100, output: 1000, cache_read: 50000, cache_write: 2000 };
+  const second = { input: 40, output: 2500, cache_read: 30000, cache_write: 500 };
+  const over = runEnded != null;
+  return {
+    runs: [
+      { run: 'r1-worker-1', stage: 'worker', round: 1, started_at: at - 7200, ended_at: at - 6600, live: false,
+        model: true, tokens: first, cost_usd: 1 },
+      { run: 'r1-check-2', stage: 'check', round: 1, started_at: at - 6590, ended_at: at - 6560, live: false,
+        model: false, tokens: null, cost_usd: null },
+      { run: 'r2-worker-3', stage: 'worker', round: 2, started_at: fixture === 'done' ? SECOND_RUN : at - 125,
+        ended_at: runEnded, live: !over, model: true, tokens: over ? second : null, cost_usd: over ? 0.5 : null },
+    ],
+    active_seconds: 630 + (over ? runEnded! - (fixture === 'done' ? SECOND_RUN : at - 125) : 0),
+    tokens: over ? { input: 140, output: 3500, cache_read: 80000, cache_write: 2500 } : first,
+    cost_usd: over ? 1.5 : 1, cost_basis: 'estimate', unreported: 0,
+  };
+};
+const withRuns = fixture === 'running' || fixture === 'done';
 const asked: { key: string; type: string; data: any }[] = [];
 (window as any).__asked = asked;
 
@@ -66,7 +95,14 @@ const answer = async (key: string, type: string, data: any = {}) => {
     case 'account.login': return { needs_code: true };
     case 'screen.enable': return { enabled: !!data.enabled };
     case 'daemon.restart': return { draining: true, pending: [{ chat_id: 'c2', busy: true, queued: 0 }] };
-    case 'divan.card.get': return { card: snapshot.cards.find((c: any) => c.id === data.card_id) ?? null };
+    case 'divan.card.get': {
+      const card = snapshot.cards.find((c: any) => c.id === data.card_id) ?? null;
+      if (!withRuns || data.card_id !== 'k1') return { card };
+      return { card, usage: usageNow(), ticket: ticket({
+        id: 41, title: 'Webhook retry policy', status: runEnded != null ? 'done' : 'running', escalation: '',
+        notes: [], note_count: 0, verdict: null, last_event: null, created_at: at - 86400, updated_at: at - 60,
+        started_at: at - 7200, round_started_at: at - 125 }) };
+    }
     case 'divan.project.open': return { items: [] };
     case 'host.git': return { repos: [] };
     default: return {};
