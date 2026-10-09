@@ -27,8 +27,10 @@ const PROVIDER_ICONS: Record<string, string> = { claude: claudeIcon, codex: code
 export function ProviderMark({ provider, dim, size = 30 }: { provider: string; dim?: boolean; size?: number }) {
   const claude = provider === 'claude';
   // `dim` is "this one is not there": an account not signed in, a tool not
-  // installed. The icon loses its colour and half its weight — Codex's has no
-  // colour to lose — the way the phone draws an archived chat.
+  // installed. The icon loses its colour and some contrast rather than fading
+  // toward the page: Codex's has no colour to lose, and a fade is what put
+  // the old letter mark at 2.2:1 on a light page. Its ends stay at 20% and
+  // 80% grey, so the mark still reads in both themes.
   const live = !dim;
   const icon = PROVIDER_ICONS[provider];
   if (icon) {
@@ -39,7 +41,7 @@ export function ProviderMark({ provider, dim, size = 30 }: { provider: string; d
         style={{
           width: size, height: size, borderRadius: R.btn, flexShrink: 0, display: 'block',
           boxSizing: 'border-box', border: `1px solid ${C.border}`, objectFit: 'cover',
-          filter: live ? undefined : 'grayscale(1)', opacity: live ? 1 : 0.5,
+          filter: live ? undefined : 'grayscale(1) contrast(0.6)',
         }}
       />
     );
