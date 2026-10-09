@@ -103,7 +103,7 @@ function AskRow({ session: s, view }: { session: Session; view: DivanView }) {
       <p className="dv-meta" style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         title={s.card.title}>{s.who} · {s.card.title}</p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button type="button" className="dv-btn dv-btn--amber dv-hit" disabled={open}
+        <button type="button" className={`dv-btn dv-hit${open ? ' dv-btn--ghost' : ' dv-btn--amber'}`} disabled={open}
           onClick={() => {
             const p = pending(view, hosts).find((x) => x.id === s.id);
             if (p) useAsking.getState().raise(p);

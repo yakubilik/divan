@@ -135,9 +135,22 @@ function TicketThread({ thread: t, place, view, live }: {
   const tone = TONE[p];
   const card = view.cards.find((c) => c.host === t.host && c.id === t.cardId);
   const machine = card?.machine ?? view.hosts.find((h) => h.key === t.host)?.machine ?? t.host;
-  const offered = p === 'asking' ? live?.session?.answers ?? [] : [];
+  // A pill is one answer to one question. A question that makes several points
+  // has no single answer to put on a button, so it gets the box alone.
+  const offered = p === 'asking' && points(t.asked).length <= 1 ? live?.session?.answers ?? [] : [];
 
-  useEffect(() => { end.current?.scrollIntoView({ block: 'nearest' }); }, [t.lines.length, p]);
+  // What is being read is the end of the conversation. Scrolled after a frame,
+  // when the lines have their height, and on the window's own body only.
+  useEffect(() => {
+    const go = () => {
+      const body = end.current?.closest('[data-panel-body]') as HTMLElement | null;
+      if (body) body.scrollTop = body.scrollHeight;
+    };
+    go();
+    if (typeof requestAnimationFrame === 'undefined') return;
+    const f = requestAnimationFrame(go);
+    return () => cancelAnimationFrame(f);
+  }, [t.lines.length, p, place.height, place.width]);
 
   const answer = async (words: string) => {
     if (t.ticket == null || busy) return;

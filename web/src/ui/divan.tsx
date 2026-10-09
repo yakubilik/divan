@@ -1009,7 +1009,7 @@ export function Panel({ tone = 'amber', head, foot, width = SIZE.panel, height =
       {head}
       {/* Pushed down by a margin rather than `justify-content: flex-end`: what
           that overflows goes off the top, where no scrollbar reaches it. */}
-      <div style={{
+      <div data-panel-body="" style={{
         flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
         padding: 14, overflowY: 'auto',
       }}>
