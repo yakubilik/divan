@@ -15,6 +15,7 @@ Modes (`Fake.mode`, or the `x-fake-mode` of the test that set it):
   act      a request (by its verb) is a tool call, a question is answered
   forward  every question is forward_to_chat (a chat call)
   approve  every question is answer_approval allow=true (a chat call)
+  late-act every question is start_work, after 5 s (a general call)
   429      HTTP 429 with retry-after: 30
   529      HTTP 529 overloaded_error
   401      HTTP 401 authentication_error
@@ -91,14 +92,14 @@ class Fake:
                     if mode == "stall":
                         await asyncio.sleep(60)
                         return
-                    await asyncio.sleep(0.12)                   # a warm first token
+                    await asyncio.sleep(5.0 if mode == "late-act" else 0.12)   # a slow or a warm first token
                     tool = None
                     if mode == "forward" or (mode == "act" and REQUEST.search(question) and body["tools"]
                                              and body["tools"][0]["name"] == "forward_to_chat"):
                         tool = ("forward_to_chat", {})
                     elif mode == "approve":
                         tool = ("answer_approval", {"allow": True})
-                    elif mode == "act" and REQUEST.search(question):
+                    elif mode == "late-act" or (mode == "act" and REQUEST.search(question)):
                         tool = ("start_work", {"project": "app", "instruction": question})
                     if tool:
                         name, args = tool

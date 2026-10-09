@@ -414,7 +414,10 @@ async def daemon(real: bool, account_home: str | None, agent_home: str | None = 
 
 
 async def connect(port, token):
-    ws = await websockets.connect(f"ws://127.0.0.1:{port}/ws?token={token}", max_size=8 * 1024 * 1024)
+    # A long open timeout: on a loaded Mac (the ticket runner sits in the
+    # background band) the first handshake has taken longer than the default 10 s.
+    ws = await websockets.connect(f"ws://127.0.0.1:{port}/ws?token={token}", max_size=8 * 1024 * 1024,
+                                  open_timeout=60)
     phone = Phone(ws)
     await phone.call("hello", {"device_name": "test", "lang": "tr"})
     return phone
@@ -782,10 +785,19 @@ async def api_layer(srv, port, token, fx: dict, projects: Path) -> None:
               f"{len(later)} chunks after it")
         await phone.call("voice.stop", {"session_id": c.sid})
         n0 = len(fake.log)
+        c = Caller(phone, "api-resumed")
+        await c.start()
+        await c.say(fx["pause-2000"])               # an early reply starts, then speech resumes
+        await c.quiet(1.0)
+        cancels = [e["data"]["reason"] for e in phone.voice(c.sid, "voice.cancel")]
+        early = fake.log[n0] if len(fake.log) > n0 else {}
+        check(cancels == ["resumed"] and early.get("aborted") and early.get("done_at") is None,
+              "a reply withdrawn before its commit has its HTTP stream closed, not read to the end",
+              f"{cancels} {len(early.get('sent', []))} chunks")
+        check(no_stale_audio(phone.voice(c.sid)) is None, "and no piece of it after its cancel",
+              no_stale_audio(phone.voice(c.sid)) or "")
+        await phone.call("voice.stop", {"session_id": c.sid})
         await barge(phone, fx)
-        cancelled = fake.log[n0]
-        check(cancelled["aborted"] and cancelled["done_at"] is None,
-              "the interrupted answer's HTTP stream is closed, not read to the end", str(len(cancelled["sent"])))
 
         print("the API layer: execution keeps its authority and happens once")
         fake.mode = "act"
@@ -821,6 +833,28 @@ async def api_layer(srv, port, token, fx: dict, projects: Path) -> None:
         check(all(after[k] == chat[k] for k in ("provider", "account_id", "perm_mode", "model")),
               "on the chat's own provider, account and permission mode")
         await phone.call("voice.stop", {"session_id": c.sid})
+
+        print("the API layer: a committed turn's late tool call survives the next turn")
+        fake.mode = "late-act"
+        voice_api.READ_S = read_s                   # the production read timeout: the call comes 5 s late
+        before = {x["id"] for x in (await phone.call("chat.list", {}))["chats"]}
+        c = Caller(phone, "api-late")
+        await c.start()
+        await phone.tell("voice.ready", {"session_id": c.sid, "t_client_ms": int(time.time() * 1000)})
+        await c.say(fx["short-status"])             # committed at 2.5 s; its tool call comes at ~5.8 s
+        await c.say(fx["short-greeting"])           # whose reply starts before that
+        await c.quiet(9.0)
+        made = [x for x in (await phone.call("chat.list", {}))["chats"] if x["id"] not in before]
+        firsts = []
+        for x in made:
+            ev = (await phone.call("chat.get", {"chat_id": x["id"]}))["events"]
+            firsts += [norm(e["data"]["text"]) for e in ev if e["event"] == "message.user"]
+        check(sorted(firsts) == sorted([norm(fx["short-status"]["reference"]), norm(fx["short-greeting"]["reference"])]),
+              "both turns' work was started, each once, though the first turn's tool call came after the second began",
+              f"{firsts} made={len(made)} turns={[e['data']['routed'] for e in phone.voice(c.sid, 'voice.turn')]} "
+              f"errors={[e['data'] for e in phone.voice(c.sid, 'voice.error')]}")
+        await phone.call("voice.stop", {"session_id": c.sid})
+        voice_api.READ_S = 1.0
 
         print("the API layer: failures are bounded and said")
         for mode, requests, label in (("429", 1, "rate limit: one request, then it waits as told"),

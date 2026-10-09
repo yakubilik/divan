@@ -34,11 +34,15 @@ or never if the turn was withdrawn. The default remains the CLI path on the subs
 
 Differences from the CLI layer, on purpose:
 
-- **One HTTP request per question, no lock held across the stream.** Each reply and each cancel bumps a
-  generation number. A stream from an older generation gives no more text and its HTTP response is
-  closed: a late chunk of a cancelled turn is dropped before the session's turn-id rule would drop it
-  anyway. The CLI had to *drain* a cancelled turn's tail before the next question (#149 measured that
-  wait). Here a new question simply closes the old stream.
+- **One HTTP request per question, no lock held across the stream.** A turn withdrawn before its commit
+  (speech resumed, barge-in on an uncommitted reply) has its reply task cancelled by the session. The
+  cancellation lands inside the stream's generator, which closes that request's HTTP response, so nothing
+  more of it is read or said. Tested: the stand-in sees the connection dropped. The CLI had to *drain* a
+  cancelled turn's tail before the next question (#149 measured that wait). Here the next question never
+  waits. A **committed** turn's reply is never cut by the next turn: its stream runs on beside it, as on
+  the CLI, so a tool call that arrives late is still executed at that turn's commit. That is tested too,
+  with a tool call arriving 5 s late while the next turn is already answering. A first draft closed the
+  previous stream on every new question and would have lost exactly that call.
 - **History without old state blocks.** Only the current question carries `<state>`. Earlier exchanges
   are kept as question/answer text (8 at most, as medkit prunes), so the prompt does not grow with every
   turn. A cancelled reply leaves nothing in the history. A reply the session cut at its word limit keeps
@@ -163,7 +167,8 @@ loopback port). It answers from that daemon's own synthetic snapshot and **leave
 notes out of the API prompt**. The live daemon is not touched.
 
 **Dry run, free (done).** The whole harness with real whisper and real EMA, the fast layer pointed at the
-stand-in: `e2e-api-dryrun.json` (`--rounds 1`). 12/12 utterances committed once and whole. Silence was silent.
+stand-in: `e2e-api-dryrun.json` (`--rounds 1`, run before the cancellation correction in §1, which
+`test_voice.py` covers). 12/12 utterances committed once and whole. Silence was silent.
 Committed WER was 4.9 %, with no clicks. Every cut-in became the next turn and nothing played after the stop.
 There were 20 stand-in requests, all counted in the run's ledger. One barge-in stop took 1,029 ms from voice
 onset (the other two took 137 and 131 ms). The phone-side detector fired late on that one, which is code

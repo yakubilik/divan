@@ -303,12 +303,19 @@ def intent_for(name: str, args: dict, index: list[str], chat_call: bool) -> tupl
 class ApiFastLayer:
     """`Brain` over the Messages API: one streaming request per question.
 
-    No lock is held across the stream: every reply and every `cancel` bumps a
-    generation number, and a stream whose number is no longer current stops
-    giving text at once — a late chunk of a cancelled turn is dropped here,
-    before the session's own turn-id rule would drop it again. The history
-    keeps only finished exchanges, without their state blocks, so a cancelled
-    reply leaves nothing behind and the prompt stays small."""
+    No lock is held across the stream, and replies are independent requests:
+    a committed turn's reply that is still streaming runs on beside the next
+    one, so a tool call that arrives late is still recorded (the session
+    executes it at that turn's commit), as on the CLI.
+
+    A withdrawn turn's reply is stopped by the session cancelling its task;
+    the cancellation lands inside this generator, which closes that request's
+    HTTP response on the way out, so nothing more of it is read or said. That
+    is why `cancel` here has nothing to do: unlike the CLI's one shared
+    stream there is no tail to drain, and closing "the" stream from outside
+    could only guess which turn it belongs to. The history keeps only
+    finished exchanges, without their state blocks, so a cancelled reply
+    leaves nothing behind and the prompt stays small."""
 
     def __init__(self, snapshot_fn, key: str, model: str = DEFAULT_MODEL, chat_id: str | None = None,
                  home: str | None = None, budget: Budget | None = None,
@@ -326,8 +333,9 @@ class ApiFastLayer:
         self._index: list[str] = []
         self.history: list[dict] = []
         self._results: list[dict] = []      # tool results owed to the model, sent with the next question
-        self._gen = 0
-        self._response: httpx.Response | None = None
+        self._seq = 0
+        self._live: dict[int, httpx.Response | None] = {}   # replies in flight, by number
+        self._dead: set[int] = set()                         # ... and those cancelled
         self._cooldown_until = 0.0
         self._refused: ApiError | None = None   # the key was refused: no more requests this call
         self.timing: dict = {}
@@ -356,17 +364,21 @@ class ApiFastLayer:
         except Exception as exc:
             log.warning("voice api: could not warm up: %s", type(exc).__name__)
 
-    async def cancel(self) -> None:
-        self._gen += 1
-        r, self._response = self._response, None
+    async def _stop(self, n: int) -> None:
+        self._dead.add(n)
+        r = self._live.pop(n, None)
         if r is not None:
             try:
                 await r.aclose()
             except Exception:
                 pass
 
+    async def cancel(self) -> None:
+        """Nothing to drain (see the class): each reply owns its stream."""
+
     async def close(self) -> None:
-        await self.cancel()
+        for n in list(self._live):
+            await self._stop(n)
         c, self._client = self._client, None
         if c is not None:
             await c.aclose()
@@ -388,9 +400,8 @@ class ApiFastLayer:
     async def reply(self, text: str, lang: str, intend: Callable[[str, dict], None]) -> AsyncIterator[str]:
         t0 = time.monotonic()
         self.timing = timing = {}
-        await self.cancel()                  # a previous stream still open is stale now
-        self._gen += 1
-        gen = self._gen
+        self._seq += 1
+        me = self._seq
         if self._refused is not None:
             raise self._refused
         now = time.monotonic()
@@ -413,9 +424,12 @@ class ApiFastLayer:
         usage = {"input_tokens": 0, "output_tokens": 0}
         finished = False
         self.requests += 1
+        self._live[me] = None
         try:
             async with self._http().stream("POST", "/v1/messages", json=body) as r:
-                self._response = r
+                if me in self._dead:
+                    return
+                self._live[me] = r
                 timing["status_ms"] = int((time.monotonic() - t0) * 1000)
                 if r.status_code != 200:
                     err = _error(r.status_code, await r.aread())
@@ -429,7 +443,7 @@ class ApiFastLayer:
                         self._cooldown_until = time.monotonic() + min(max(wait, 1.0), COOLDOWN_MAX_S)
                     raise err
                 async for line in r.aiter_lines():
-                    if gen != self._gen:
+                    if me in self._dead:
                         return               # cancelled: whatever is still on its way is dropped
                     if not line.startswith("data:"):
                         continue
@@ -481,14 +495,14 @@ class ApiFastLayer:
                     elif kind == "error":
                         e = ev.get("error") or {}
                         raise ApiError(_KINDS.get(e.get("type"), "provider"), str(e.get("message") or "")[:160])
-                if not finished and gen == self._gen:
+                if not finished and me not in self._dead:
                     raise ApiError("provider", "the stream ended before message_stop")
         except httpx.TimeoutException:
             raise ApiError("timeout", f"no data for {READ_S:.0f} s") from None
         except httpx.StreamClosed:
             return                           # closed by cancel()
         except httpx.TransportError as exc:
-            if gen != self._gen:
+            if me in self._dead:
                 return
             raise ApiError("network", type(exc).__name__) from None
         except GeneratorExit:
@@ -497,12 +511,13 @@ class ApiFastLayer:
             finished = True
             raise
         finally:
-            if self._response is not None and gen == self._gen:
-                self._response = None
+            self._live.pop(me, None)
+            cancelled = me in self._dead
+            self._dead.discard(me)
             if usage["input_tokens"] or usage["output_tokens"]:
                 self._count(usage)
             timing["total_ms"] = int((time.monotonic() - t0) * 1000)
-            if finished and gen == self._gen:
+            if finished and not cancelled:
                 text_out = "".join(said).strip()
                 answer = ([{"type": "text", "text": text_out}] if text_out else []) + blocks
                 if answer:
