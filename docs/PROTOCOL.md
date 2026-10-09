@@ -424,7 +424,7 @@ Events (daemon → phone). Every one carries `session_id` and `turn_id`, and
 | `voice.say` | `{piece, text, last, kind}` — one piece to synthesise and play, in `piece` order. `kind` is `reply`, `ack`, `progress`, `question` (an approval the agent is waiting on) or `notice` (something went wrong; it says what). A `last: true` piece may have empty `text`: it only closes the turn's speech |
 | `voice.cancel` | `{reason: "barge" \| "resumed" \| "superseded" \| "error"}` — drop every queued and playing piece of this `turn_id` |
 | `voice.turn` | `{committed_text, routed, t_speech_end_ms}` — the turn is final. `routed` is `conversation` (nothing was handed on), `chat:<id>` (sent to, approved or stopped in that chat) or `new:<id>` (a new chat was started). `t_speech_end_ms` is on the session's audio timeline (ms since `voice.start`) |
-| `voice.error` | `{code, message, retry_in_ms?}` — `voice_stt_failed`, `voice_reply_failed`; the requests above fail with `voice_no_session`, `voice_bad_audio`, `voice_no_transcriber` or `no_chat`. A failure is retried once, then reported, then said aloud as a `notice`, and the session goes back to `listening`: it is never silent about it. The phone's `ERR_KEYS` entries for these arrive with its call screen (ticket 150); until then it shows the English `message` |
+| `voice.error` | `{code, message, retry_in_ms?}` — `voice_stt_failed`, `voice_reply_failed`; the requests above fail with `voice_no_session`, `voice_bad_audio`, `voice_no_transcriber` or `no_chat`. A failure is retried once, then reported, then said aloud as a `notice`, and the session goes back to `listening`: it is never silent about it. The phone shows them through its `ERR_KEYS` |
 
 The phone's rules:
 
@@ -440,6 +440,19 @@ The phone's rules:
 * **Barge-in is detected on the phone**, over its echo-cancelled input, because
   that is where 300 ms can be met: stop the player first, then send
   `voice.barge`.
+* **The phone's own line is turn 0.** A greeting said before anyone has spoken
+  is reported with `voice.playback` under `turn_id: 0`, so the daemon listens
+  over it with the barge-in threshold; its `done` ends that.
+* **`done` trails the player by 250 ms.** The last of a piece's echo is still in
+  microphone audio the phone has not sent yet; reporting `done` after it keeps
+  the daemon on the over-playback threshold until that audio has arrived.
+* **Audio keeps its `seq` across a dropped socket.** Messages captured while the
+  socket was down are not sent; on resume the daemon fills the gap with silence,
+  so the timeline stays the phone's. A fresh session starts again at 0.
+
+The phone's side is `app/src/voice-session.ts` (what is described here) on
+`app/modules/call/ios/VoiceEngine.swift` (the echo-cancelled engine); see
+`docs/voice-phone.md`.
 
 How the daemon treats a turn:
 

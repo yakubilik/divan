@@ -190,8 +190,9 @@ Updates reach the Macs only through the merge and the daemon's own updater (`upd
   CI and one real run with timings written next to `proof.json`.
 - Out of scope: the phone, binary frames, option C.
 
-**#150: iPhone: full-duplex call screen** (`app/modules/call` Swift, `app/src/voice.ts`,
-`app/app/call.tsx`)
+**#150: iPhone: full-duplex call screen** — built; what it does, its tests and what is not yet
+verified on a device are in [voice-phone.md](voice-phone.md) (`app/modules/call` Swift,
+`app/src/voice-session.ts`, `app/src/live-call.ts`, `app/app/call.tsx`)
 - Native: an `AVAudioEngine` input with voice processing (echo cancellation) on the existing
   `playAndRecord` / `voiceChat` session, 16 kHz PCM out to JS (or straight to the socket) every
   100 ms; a local barge detector (threshold above the echo, 120 ms); an EMA player that stops and

@@ -381,10 +381,19 @@ export class VoiceSession {
     try { this.engine.stop(); } catch {}
   }
 
+  /** The call's timing as the phone measured it: per turn, speech end → first audible piece on the
+   *  phone's clock (and on the daemon's, through the `voice.ping` offset); every barge-in's stop. */
+  timingReport() {
+    const turns = [...this.timings.values()];
+    return { session_id: this.snap.sessionId, voice: this.voice.name, clock_offset: this.offset,
+             end_to_audible: latencySummary(turns), turns, barges: this.barges, starts: this.starts };
+  }
+
   /** Hang up: silence and the microphone released at once, then the daemon told. Safe to call twice. */
   async stop(reason: EndReason = 'hangup'): Promise<any> {
     if (!this.live()) return null;
     const sid = this.snap.sessionId;
+    this.log(`voice: report ${JSON.stringify(this.timingReport())}`);
     this.release();
     this.set({ state: 'ended', ended: reason });
     if (!sid || !this.wire.online()) return null;
