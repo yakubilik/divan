@@ -91,6 +91,12 @@ signed (team from `identity.local.json`, automatic signing) for `generic/platfor
 `Divan.app` there. Installing is the existing runbook:
 `xcrun devicectl device install app --device 4A493A86-2B04-52F2-9B9C-64C93E275180 <path>/Divan.app`.
 
+Built 2026-10-09 from this branch: `** BUILD SUCCEEDED **`, signed `Apple Development` for team
+23N6H4HW39, its provisioning profile includes the iPhone 17 Pro Max (`00008150-000139622E68C01C`), and
+the bundle carries the EMA models and the final JS. Not installed: `devicectl` lists the phone as
+`unavailable` and the install fails with "unable to locate a device". The build stays at
+`~/projects/.ustabasi/builds/150-divan-voice/Divan.app` until the phone is on the network.
+
 ## Provider, cost, data flow
 
 No new provider, account or spend. Microphone audio goes from the phone to the owner's own Mac over the
