@@ -1080,14 +1080,16 @@ class VoiceSession:
 
     # ── phone reports ────────────────────────────────────────────────────────
     def playback(self, d: dict) -> None:
-        if int(d.get("turn_id") or -1) != self.turn_id:
+        tid = d.get("turn_id")
+        if int(-1 if tid is None else tid) != self.turn_id:
             return
         state = d.get("state")
         if state == "started":
             self.playing = True
         elif state in ("done", "stopped"):
             t = self.turn
-            if state == "stopped" or (t is not None and t.closed and d.get("piece") == t.pieces - 1):
+            # A line of the phone's own before any turn (its greeting, turn 0) ends with its done.
+            if state == "stopped" or t is None or (t.closed and d.get("piece") == t.pieces - 1):
                 self.playing = False
                 if self.utt is None and self.turn_quiet():
                     self.set_state(self._resting())

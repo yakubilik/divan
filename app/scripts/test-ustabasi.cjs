@@ -1318,8 +1318,15 @@ void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(async () =>
   // …and a call placed from inside a chat, which talks to that chat (#143).
   const chatCall = require('./test-call-chat.cjs');
   await chatCall.ready;
+  // …and the streaming call (#150): the phone's session against an isolated daemon, then the call screen
+  // on it, its buttons pressed.
+  const voiceSession = require('./test-voice-session.cjs');
+  await voiceSession.run();
+  const liveCall = require('./test-call-live.cjs');
+  await liveCall.ready;
   checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks, ...composer.checks, ...project.checks, ...ticket.checks,
-              ...machine.checks, ...every.checks, ...actions.checks, ...call.checks, ...chatCall.checks);
+              ...machine.checks, ...every.checks, ...actions.checks, ...call.checks, ...chatCall.checks,
+              ...voiceSession.checks, ...liveCall.checks);
 
   let bad = 0;
   for (const [name, ok] of checks) {

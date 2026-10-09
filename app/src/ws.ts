@@ -268,6 +268,14 @@ export class RacClient {
     });
   }
 
+  /** A message with no id, which the daemon answers only if it fails (`voice.audio` and the other
+   *  fire-and-forget voice messages). Dropped when the socket is not open: audio is only worth its moment. */
+  tell(type: string, data: Record<string, any> = {}): boolean {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    try { ws.send(JSON.stringify({ type, data })); return true; } catch { return false; }
+  }
+
   on(l: (ev: RacEvent) => void) { this.listeners.add(l); return () => { this.listeners.delete(l); }; }
   onStatus(l: (s: ConnStatus) => void) { this.statusListeners.add(l); return () => { this.statusListeners.delete(l); }; }
 
