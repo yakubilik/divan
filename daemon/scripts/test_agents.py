@@ -65,6 +65,15 @@ with tempfile.TemporaryDirectory() as td:
     check("gamma" in line, "names what this install fetched", line)
     check("synced" not in line, "leaves a folder that is not a skill out", line)
     check("alpha" not in agents.bundle_file(SRC, ["gamma"]), "reads disk only when given it")
+    check("shared-tool-pool skill" not in agents.bundle_file(SRC, ["gamma"], root),
+          "says nothing about a tool pool the account does not have")
+    skill(root, "shared-tool-pool")
+    text = agents.bundle_file(SRC, ["gamma"], root)
+    hint = text.find("read the shared-tool-pool skill")
+    check(0 < hint < text.find("Skills available to you:"),
+          "routes outside-tool tasks to the pool when it is on disk", text[-600:])
+    check(text.count("shared-tool-pool") == 2, "with one line, not the catalog",
+          str(text.count("shared-tool-pool")))
 
 print("a fetch that keeps failing")
 tries = {"n": 0}
