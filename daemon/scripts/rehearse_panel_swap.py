@@ -90,7 +90,7 @@ def main() -> int:
     # 3 · same process, same server, new bundle.
     after = served()
     alive = thread.is_alive() and server.started and not server.should_exit
-    deep = "<div id=\"root\">" in get("/chats/c1")
+    deep = get("/chats/c1") == get("/")
     print(f"after swap:  pid {os.getpid()} serves {after[0]}  has {MARK!r}: {after[1]}  server never restarted: {alive}  /chats/c1 is the panel: {deep}")
     good = (before[0] == old and not before[1] and ok and after[0] == head and after[1] and alive and deep)
     server.should_exit = True
