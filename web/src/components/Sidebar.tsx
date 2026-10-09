@@ -9,6 +9,8 @@ import { DeleteChatDialog } from './ChatMenu';
 import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
 import type { Chat, Group } from '../lib/protocol';
 import { refusalText } from '../lib/refusal';
+import claudeIcon from '../assets/provider-claude.png';
+import codexIcon from '../assets/provider-codex.png';
 
 const W = 260;
 /** Collapsed, the sidebar is a strip with the way back to the list on it and
@@ -17,24 +19,39 @@ const RAIL = 48;
 const ALL_LABEL = 'All computers';
 const NOBODY: string[] = [];
 
-export function ProviderMark({ provider, dim }: { provider: string; dim?: boolean }) {
+/** The tools' own app icons — the same files the phone draws its rows with
+ *  (`app/assets/`), so a chat says at a glance which tool it talks to. (Their
+ *  trademarks; used to identify them.) */
+const PROVIDER_ICONS: Record<string, string> = { claude: claudeIcon, codex: codexIcon };
+
+export function ProviderMark({ provider, dim, size = 30 }: { provider: string; dim?: boolean; size?: number }) {
   const claude = provider === 'claude';
   // `dim` is "this one is not there": an account not signed in, a tool not
-  // installed. It goes grey rather than faint — fading the whole tile toward
-  // the page put its mark at 2.2:1 on a light one, and whether the tool is
-  // there is the one thing the tile has to say.
+  // installed. The icon loses its colour and half its weight — Codex's has no
+  // colour to lose — the way the phone draws an archived chat.
   const live = !dim;
+  const icon = PROVIDER_ICONS[provider];
+  if (icon) {
+    return (
+      <img
+        src={icon} alt={claude ? 'Claude' : 'Codex'} draggable={false}
+        data-provider-icon={provider}
+        style={{
+          width: size, height: size, borderRadius: R.btn, flexShrink: 0, display: 'block',
+          boxSizing: 'border-box', border: `1px solid ${C.border}`, objectFit: 'cover',
+          filter: live ? undefined : 'grayscale(1)', opacity: live ? 1 : 0.5,
+        }}
+      />
+    );
+  }
   return (
     <div style={{
-      width: 30, height: 30, borderRadius: R.btn, flexShrink: 0,
+      width: size, height: size, borderRadius: R.btn, flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: claude && live ? C.accentTint : C.surface2,
-      border: `1px solid ${claude && live ? C.accentRing : C.border}`,
-      color: claude && live ? C.accentSoft : C.mute,
-      fontSize: claude ? 13 : 11, fontWeight: 600,
-      ...(claude ? {} : mono),
+      background: C.surface2, border: `1px solid ${C.border}`, color: C.mute,
+      fontSize: 11, fontWeight: 600, ...mono,
     }}>
-      {claude ? 'A' : '<>'}
+      {provider.slice(0, 2).toUpperCase()}
     </div>
   );
 }

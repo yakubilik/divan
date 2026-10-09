@@ -28,7 +28,7 @@ export async function launch(name) {
   execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
     'scripts/walk-harness.tsx', '--bundle', '--format=iife', '--jsx=automatic', '--target=es2022',
     `--outfile=${join(build, 'harness.js')}`, '--define:process.env.NODE_ENV="production"',
-    '--define:import.meta.env.DEV=false', '--loader:.svg=dataurl', '--log-level=warning',
+    '--define:import.meta.env.DEV=false', '--loader:.svg=dataurl', '--loader:.png=dataurl', '--log-level=warning',
   ], { cwd: web, stdio: 'inherit' });
   const head = readFileSync(join(web, 'index.html'), 'utf8').match(/<head>([\s\S]*?)<\/head>/)[1];
   writeFileSync(join(build, 'index.html'),
