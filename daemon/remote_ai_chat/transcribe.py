@@ -63,8 +63,24 @@ def _backend() -> str | None:
         return None
 
 
+_known: bool | None = None
+
+
 def available() -> bool:
-    return _backend() is not None
+    """Whether either backend is installed. Worked out once and kept: the
+    answer is an import of mlx_whisper, which on a Mac at load 40 took six to
+    seventeen seconds, and asked on the event loop that is every connected
+    phone's ping going unanswered for as long. The daemon asks it on a thread
+    at startup (Server.learn_transcription) and reads `known()` on the loop."""
+    global _known
+    if _known is None:
+        _known = _backend() is not None
+    return _known
+
+
+def known() -> bool | None:
+    """`available()` if it has been worked out yet, else None. Never imports."""
+    return _known
 
 
 # ── mlx-whisper (macOS) ────────────────────────────────────────────────────

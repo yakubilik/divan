@@ -41,6 +41,7 @@ def _panel_built() -> bool:
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
     _sanitize_env()
+    from .looplag import LoopWatch
     from .server import Server
 
     cfg = Config.load()
@@ -91,6 +92,9 @@ def cmd_serve(args: argparse.Namespace) -> None:
         resumer = asyncio.create_task(srv.resume_interrupted())
         follower = asyncio.create_task(srv.follow_tickets())
         warmer = asyncio.create_task(srv.warm_models())
+        # A loop that wakes seconds late is a phone that gives up on its ping.
+        watch = asyncio.create_task(LoopWatch().run())
+        learner = asyncio.create_task(srv.learn_transcription())
 
         async def stopper() -> None:
             """Stand down once an update has been staged.
@@ -115,6 +119,8 @@ def cmd_serve(args: argparse.Namespace) -> None:
             resumer.cancel()
             follower.cancel()
             warmer.cancel()
+            watch.cancel()
+            learner.cancel()
             stop.cancel()
             await srv.sessions.close_all()
             await srv.concierge.close()
