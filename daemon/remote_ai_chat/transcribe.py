@@ -84,12 +84,13 @@ def _decode(src: Path):
     return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
 
 
-def _mlx(audio, prompt: str | None, language: str | None = None) -> dict | None:
+def _mlx(audio, prompt: str | None, language: str | None = None,
+         model: str | None = None) -> dict | None:
     import mlx_whisper
     # A voice note passes no `language`: whisper detects it, and forcing one
     # makes it *translate* a note spoken in another language instead of
     # transcribing it. Dictation does pass one — see `pcm`.
-    out = mlx_whisper.transcribe(audio, path_or_hf_repo=MODEL,
+    out = mlx_whisper.transcribe(audio, path_or_hf_repo=model or MODEL,
                                  **({"initial_prompt": prompt} if prompt else {}),
                                  **({"language": language} if language else {}))
     text = (out.get("text") or "").strip()
@@ -182,21 +183,29 @@ def said(text: str) -> bool:
     return bool(words) and " ".join(words) not in _NOTHING
 
 
-def pcm(data: bytes, prompt: str | None = None, language: str | None = None) -> dict | None:
+def pcm(data: bytes, prompt: str | None = None, language: str | None = None,
+        model: str | None = None) -> dict | None:
     """One stretch of 16 kHz mono s16le PCM, as words. Runs on a thread.
 
     `language` is the one the panel was set to dictate in. A voice note is left
     to detection; a phrase cut out of somebody talking is two seconds long, and
     detection on two seconds is a guess — "tamam, commit at" was heard as
     English often enough to matter. Being told also skips the detection pass,
-    which on a short phrase is a third of the time."""
+    which on a short phrase is a third of the time.
+
+    `model` picks another mlx model for this one call (the live voice session
+    answers on a small one and hands agents the default's words); the
+    faster-whisper backend has one model and ignores it."""
     import numpy as np
     if len(data) < SAMPLE_RATE // 5:                 # under a tenth of a second
         return None
     audio = np.frombuffer(data[:len(data) // 2 * 2], dtype=np.int16).astype(np.float32) / 32768.0
     backend = _backend()
-    run = _mlx if backend == "mlx" else _transcribe_faster_array if backend == "faster" else None
-    if run is None:
+    if backend == "mlx":
+        run = lambda a, p, lang: _mlx(a, p, lang, model)  # noqa: E731
+    elif backend == "faster":
+        run = _transcribe_faster_array
+    else:
         return None
     with _run_lock:
         try:
