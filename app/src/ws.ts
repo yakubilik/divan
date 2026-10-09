@@ -60,11 +60,38 @@ function connError(key: 'wsNotConnected' | 'wsDropped' | 'wsTimeout'): Error & {
 
 export type ConnStatus = 'idle' | 'connecting' | 'online' | 'offline' | 'unauthorized';
 
+/** Why the last socket went away, told to the daemon in the next `hello` so its
+ *  log can say which side gave up. `heartbeat`: pings went unanswered; `socket`:
+ *  the OS closed it (a network change lands here, as a 1006); `foreground`: the
+ *  app came back and found it dead or gone; `restart`: the daemon said it was
+ *  restarting. */
+export type ReconnectReason = 'heartbeat' | 'socket' | 'foreground' | 'restart';
+export type Reconnect = { reason: ReconnectReason; code: number | null; offline_s: number };
+
 /** How often to prove the socket is still there, and how long to wait for the
  *  proof. Short enough that a dead connection is noticed within a turn, long
  *  enough to ride out a burst of streamed text on a slow phone. */
 const HEARTBEAT_MS = 15000;
 const HEARTBEAT_TIMEOUT_MS = 10000;
+/** Unanswered pings in a row before the socket is buried. One was too few: a
+ *  Mac at load 40 stalls every process on it for three to eight seconds at a
+ *  time — a server doing nothing at all stalls as long as the daemon does — so
+ *  a single late answer is a busy computer, not a dead socket. Anything that
+ *  arrives on the socket in between counts as an answer. */
+const HEARTBEAT_MISSES = 2;
+/** How long a foreground check waits. Coming back is when the socket is most
+ *  likely gone and a person is looking at the screen; ten seconds of "online"
+ *  that is not is the worst of both. */
+const FOREGROUND_PROBE_MS = 2000;
+/** What a timed-out ping waits before it is believed. A timer can run before
+ *  frames that already arrived are handed over — a JS thread busy rendering a
+ *  long chat for seconds, or an app just woken whose expired timers fire
+ *  first — and on 2026-10-09 the daemon saw the old socket's close frame 9 to
+ *  130 ms before the new socket: the phone was burying sockets that worked. */
+const HEARTBEAT_GRACE_MS = 250;
+/** A reconnect the app starts itself and finishes within this is not shown:
+ *  no "reconnecting" for a blink nobody would have noticed. */
+const QUIET_RECONNECT_MS = 1000;
 
 /** How long a request is given to be answered when nobody said otherwise. Long,
  *  because it covers a computer that is busy rather than one that is gone: a
@@ -83,6 +110,13 @@ export class RacClient {
   private wanted = false;
   private hb: ReturnType<typeof setInterval> | null = null;
   private beating = false;
+  private missed = 0;
+  /** When anything last arrived on the socket: proof it is alive. */
+  private lastRx = 0;
+  /** Until when 'offline'/'connecting' are kept from the listeners. */
+  private hushUntil = 0;
+  private hushTimer: ReturnType<typeof setTimeout> | null = null;
+  private lost: { reason: ReconnectReason; code: number | null; at: number } | null = null;
   status: ConnStatus = 'idle';
 
   connect(host: string, port: number, token: string) {
@@ -92,6 +126,7 @@ export class RacClient {
     this.url = url;
     this.wanted = true;
     this.retry = 0;
+    this.lost = null;
     if (this.timer) clearTimeout(this.timer);
     this.closeSocket();
     this.open();
@@ -123,8 +158,8 @@ export class RacClient {
       return;
     }
     this.ws = ws;
-    ws.onopen = () => { this.retry = 0; this.setStatus('online'); this.startHeartbeat(); };
-    ws.onmessage = (m) => this.handle(String(m.data));
+    ws.onopen = () => { this.retry = 0; this.missed = 0; this.setStatus('online'); this.startHeartbeat(); };
+    ws.onmessage = (m) => { this.lastRx = Date.now(); this.missed = 0; this.handle(String(m.data)); };
     ws.onerror = () => {};
     ws.onclose = (e) => {
       if (this.ws !== ws) return;
@@ -133,6 +168,7 @@ export class RacClient {
       for (const p of this.pending.values()) p.reject(connError('wsDropped'));
       this.pending.clear();
       if (e.code === 4401 || e.code === 1008) { this.setStatus('unauthorized'); this.wanted = false; return; }
+      this.markLost('socket', e.code ?? null);
       this.setStatus('offline');
       this.scheduleRetry();
     };
@@ -160,41 +196,68 @@ export class RacClient {
     if (this.hb) { clearInterval(this.hb); this.hb = null; }
   }
 
-  private async beat(): Promise<boolean> {
+  /** One ping. The interval's beat forgives a miss; a foreground check does
+   *  not, and waits only FOREGROUND_PROBE_MS, because coming back is when a
+   *  socket is most likely dead and a person is looking at the screen. Either
+   *  way a socket that delivered anything since the ping went out is alive. */
+  private async beat(reason: ReconnectReason = 'heartbeat'): Promise<boolean> {
     if (this.beating) return true;
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     this.beating = true;
+    const sent = Date.now();
     try {
-      await this.request('ping', {}, HEARTBEAT_TIMEOUT_MS);
+      await this.request('ping', {}, reason === 'heartbeat' ? HEARTBEAT_TIMEOUT_MS : FOREGROUND_PROBE_MS);
+      this.missed = 0;
       return true;
     } catch {
-      // Same socket, and it did not answer: it is gone whatever iOS says.
-      if (this.ws === ws) this.dropDead();
+      await new Promise((r) => setTimeout(r, HEARTBEAT_GRACE_MS));
+      if (this.ws !== ws) return false;
+      if (this.lastRx >= sent) { this.missed = 0; return true; }
+      // Same socket, and nothing at all came back: it is gone whatever iOS
+      // says — once it has failed to answer often enough.
+      if (reason !== 'heartbeat' || ++this.missed >= HEARTBEAT_MISSES) this.dropDead(reason);
       return false;
     } finally {
       this.beating = false;
     }
   }
 
+  /** Note why the connection went, keeping when it first went. */
+  private markLost(reason: ReconnectReason, code: number | null) {
+    this.lost = { reason, code: code ?? this.lost?.code ?? null, at: this.lost?.at ?? Date.now() };
+  }
+
+  /** Why the last connection was lost, once: `hello` carries it to the daemon. */
+  takeReconnect(): Reconnect | null {
+    const l = this.lost;
+    this.lost = null;
+    return l && { reason: l.reason, code: l.code, offline_s: Math.round((Date.now() - l.at) / 100) / 10 };
+  }
+
   /** Bury a socket the OS still believes in, and start reconnecting now. */
-  private dropDead() {
-    console.warn('ws: no answer to heartbeat, reconnecting');
+  private dropDead(reason: ReconnectReason) {
+    console.warn(`ws: no answer to heartbeat (${reason}), reconnecting`);
+    this.markLost(reason, null);
     this.closeSocket();
     for (const p of this.pending.values()) p.reject(connError('wsDropped'));
     this.pending.clear();
+    this.hushUntil = Date.now() + QUIET_RECONNECT_MS;
     this.setStatus('offline');
     if (this.timer) clearTimeout(this.timer);
     this.retry = 0;
     this.open();
   }
 
-  /** Force an immediate reconnect attempt (e.g. app came to foreground). */
-  poke() {
+  /** Force an immediate reconnect attempt (e.g. app came to foreground). The
+   *  reason is what the daemon is told if this is what brought the socket back;
+   *  a request waiting on a reconnect passes none, it only hurries one along. */
+  poke(reason: 'foreground' | 'restart' | null = 'foreground') {
     if (!this.wanted || this.status === 'connecting') return;
     // Coming back from the background is precisely when "online" is most likely
     // to be a stale belief, so check it instead of trusting it.
-    if (this.status === 'online') { void this.beat(); return; }
+    if (this.status === 'online') { if (reason) void this.beat(reason); return; }
+    if (reason) this.markLost(reason, null);
     if (this.timer) clearTimeout(this.timer);
     this.retry = 0;
     this.open();
@@ -224,7 +287,7 @@ export class RacClient {
   private ready(ms = 6000): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
     if (!this.wanted) return Promise.reject(connError('wsNotConnected'));
-    this.poke();
+    this.poke(null);
     return new Promise<void>((resolve, reject) => {
       const done = (fn: () => void) => { clearTimeout(timer); off(); fn(); };
       const timer = setTimeout(() => done(() => reject(connError('wsNotConnected'))), ms);
@@ -279,8 +342,21 @@ export class RacClient {
   on(l: (ev: RacEvent) => void) { this.listeners.add(l); return () => { this.listeners.delete(l); }; }
   onStatus(l: (s: ConnStatus) => void) { this.statusListeners.add(l); return () => { this.statusListeners.delete(l); }; }
 
+  /** Listeners hear every state but the in-between ones of a reconnect still
+   *  inside its quiet window; if that runs out, they hear where it got to. */
   private setStatus(s: ConnStatus) {
     this.status = s;
+    if (this.hushTimer) { clearTimeout(this.hushTimer); this.hushTimer = null; }
+    const wait = this.hushUntil - Date.now();
+    if ((s === 'offline' || s === 'connecting') && wait > 0) {
+      this.hushTimer = setTimeout(() => { this.hushTimer = null; this.hushUntil = 0; this.announce(this.status); }, wait);
+      return;
+    }
+    this.hushUntil = 0;
+    this.announce(s);
+  }
+
+  private announce(s: ConnStatus) {
     for (const l of this.statusListeners) l(s);
   }
 }

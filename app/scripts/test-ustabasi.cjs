@@ -1290,10 +1290,13 @@ checks.push(...require('./test-tts.cjs').checks);
 // …and that voice running: the ONNX pipeline against the PyTorch reference,
 // who reads an answer, a stop in the middle of one, and a build without it.
 const ema = require('./test-ema.cjs');
+// …and the socket's reconnect path: two missed heartbeats, a foreground return,
+// and the reason each one hands to the next `hello` (#188).
+const wsReconnect = require('./test-ws.cjs');
 
 // …and the Dashboard's Composer, pressed once the two above have let go of
 // the shared store: it types, presses send and waits for what comes back.
-void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(async () => {
+void Promise.all([newTicket.ready, voicenote.ready, ema.ready, wsReconnect.ready]).then(async () => {
   const composer = require('./test-composer.cjs');
   await composer.ready();
   // …and the project page, its board and the locked Composer (#125).
@@ -1327,7 +1330,7 @@ void Promise.all([newTicket.ready, voicenote.ready, ema.ready]).then(async () =>
   // …and ticket notices in a chat (#159): one line, tapped open and shut.
   const notice = require('./test-notice.cjs');
   await notice.ready;
-  checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks, ...composer.checks, ...project.checks, ...ticket.checks,
+  checks.push(...newTicket.checks, ...voicenote.checks, ...ema.checks, ...wsReconnect.checks, ...composer.checks, ...project.checks, ...ticket.checks,
               ...machine.checks, ...every.checks, ...actions.checks, ...call.checks, ...chatCall.checks,
               ...voiceSession.checks, ...liveCall.checks, ...notice.checks);
 
