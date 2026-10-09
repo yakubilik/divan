@@ -700,6 +700,179 @@ async def errors(phone: Phone, fx: dict, port, token) -> None:
     await phone2.ws.close()
 
 
+# ── 6 · the opt-in API fast layer, against a stand-in API ────────────────────
+FAKE_KEY = "sk-ant-" + "fake0voice0test0" * 3        # not a key; built so no key-shaped literal sits here
+
+
+async def api_layer(srv, port, token, fx: dict, projects: Path) -> None:
+    """voice_api.ApiFastLayer, chosen the way the daemon chooses it
+    (`Hub._fast_layer`), over a real HTTP stream from fake_anthropic.py. The
+    stand-in's timing is scripted: this proves the plumbing, never the real
+    API's latency."""
+    import fake_anthropic as fa
+    from types import SimpleNamespace
+    from remote_ai_chat import voice_api
+    print("the API fast layer: off by default, refused without a key")
+    saved = {k: os.environ.pop(k, None) for k in (voice_api.PROVIDER_ENV, voice_api.KEY_ENV)}
+    hub, factory = srv.voice, srv.voice.brain_factory
+    keychain, home, read_s, url = voice_api.keychain_key, voice_api.profile_home, voice_api.READ_S, voice_api.API_URL
+    fake = fa.Fake(FAKE_KEY)
+    server, task, voice_api.API_URL = await fa.serve(fake)
+    voice_api.keychain_key = lambda: None              # never this Mac's keychain in a test
+    voice_api.profile_home = lambda resolve: None       # nor the owner's notes
+    voice_api.READ_S = 1.0
+    hub.brain_factory = hub._fast_layer                 # the daemon's own choice from here on
+    phone = await connect(port, token)
+    try:
+        chat_call, general = SimpleNamespace(chat_id="x"), SimpleNamespace(chat_id=None)
+        check(voice_api.settings(srv.cfg).provider == voice_api.CLI
+              and type(hub._fast_layer(general, {})) is voice.FastLayer,
+              "with nothing configured the fast layer is the subscription CLI")
+        os.environ[voice_api.KEY_ENV] = FAKE_KEY
+        check(type(hub._fast_layer(chat_call, {})) is voice.FastLayer,
+              "a stored key alone opts nothing in")
+        del os.environ[voice_api.KEY_ENV]
+        os.environ[voice_api.PROVIDER_ENV] = voice_api.API
+        c = Caller(phone, "api-nokey")
+        try:
+            await c.start()
+            check(False, "the API layer without a key refuses the call")
+        except RuntimeError as exc:
+            check(voice_api.E_KEY in str(exc) and "set-key" in str(exc) and 'voice_fast_layer = "cli"' in str(exc),
+                  "the API layer without a key refuses the call, saying how to store one or switch back", str(exc))
+        os.environ[voice_api.PROVIDER_ENV] = "openai-realtime"
+        try:
+            await c.start()
+            check(False, "an unknown fast layer is refused")
+        except RuntimeError as exc:
+            check(voice_api.E_PROVIDER in str(exc), "an unknown fast layer is refused by name", str(exc))
+        check(not fake.log and not fake.lookups, "and none of that sent a single request", str(len(fake.log)))
+
+        os.environ[voice_api.PROVIDER_ENV] = voice_api.API
+        os.environ[voice_api.KEY_ENV] = FAKE_KEY
+        layer = hub._fast_layer(general, {})
+        check(isinstance(layer, voice_api.ApiFastLayer) and FAKE_KEY not in repr(layer),
+              "opted in with a key: the API layer, whose repr does not show the key")
+        await layer.close()
+
+        print("the API layer over the socket: every scenario")
+        fake.mode = "talk"
+        await replay(port, token, fx)
+        check(fake.log and all(e["key_ok"] and e["version"] == voice_api.API_VERSION
+                               and e["body"]["stream"] and e["body"]["model"] == voice_api.DEFAULT_MODEL
+                               and e["body"]["thinking"] == {"type": "disabled"} for e in fake.log),
+              "streamed requests to the measured model, thinking off, with the stored key and API version")
+        check(all("<state>" in e["body"]["messages"][-1]["content"][-1]["text"]
+                  and all("<state>" not in str(m["content"]) for m in e["body"]["messages"][:-1]) for e in fake.log),
+              "only the current question carries the state; the history does not repeat it")
+        check(fake.lookups >= 1, "a call warms the connection with the unbilled model lookup", str(fake.lookups))
+
+        print("the API layer: early pieces, and a barge-in closes the stream")
+        fake.mode = "slow"
+        n0 = len(fake.log)
+        c = Caller(phone, "api-early")
+        await c.start()
+        await c.say(fx["short-status"])
+        first = await phone.until(lambda e: e["event"] == "voice.say" and e["data"]["session_id"] == c.sid
+                                  and e["data"]["text"], 10, "the first piece")
+        await c.quiet(5.0)
+        entry = fake.log[n0]
+        later = [t for t, _ in entry["sent"] if t > first["_at"]]
+        check(len(later) >= 3, "the first piece is spoken while the API is still streaming the rest",
+              f"{len(later)} chunks after it")
+        await phone.call("voice.stop", {"session_id": c.sid})
+        n0 = len(fake.log)
+        await barge(phone, fx)
+        cancelled = fake.log[n0]
+        check(cancelled["aborted"] and cancelled["done_at"] is None,
+              "the interrupted answer's HTTP stream is closed, not read to the end", str(len(cancelled["sent"])))
+
+        print("the API layer: execution keeps its authority and happens once")
+        fake.mode = "act"
+        await chat_bridge(phone, fx, projects)
+        chat = await phone.call("chat.create", {"provider": "claude", "cwd": str(projects / "app")})
+        cid = chat["id"]
+        fake.mode = "forward"
+        c = Caller(phone, "api-forward")
+        await c.start(chat_id=cid)
+        await phone.tell("voice.ready", {"session_id": c.sid, "t_client_ms": int(time.time() * 1000)})
+        await c.say(fx["pause-2000"])               # its early reply asks to forward, then speech resumes
+        turn = await phone.until(lambda e: e["event"] == "voice.turn" and e["data"]["session_id"] == c.sid, 15,
+                                 "the committed turn")
+        await phone.until(lambda e: e["event"] == "approval.request" and e["chat_id"] == cid, 20, "its approval")
+        users = [e["data"]["text"] for e in (await phone.call("chat.get", {"chat_id": cid}))["events"]
+                 if e["event"] == "message.user"]
+        cancels = [e["data"]["reason"] for e in phone.voice(c.sid, "voice.cancel")]
+        check(turn["data"]["routed"] == f"chat:{cid}" and cancels == ["resumed"] and len(users) == 1
+              and norm(users[0]) == norm(fx["pause-2000"]["reference"]),
+              "a tool call on a reply cancelled before its commit is void; the whole turn is forwarded once",
+              f"{turn['data']['routed']} {cancels} {users}")
+        fake.mode = "approve"
+        await c.say(fx["short-status"])
+        done = await phone.until(lambda e: e["event"] == "turn.done" and e["chat_id"] == cid, 20, "turn.done")
+        await c.quiet(0.5)
+        events = (await phone.call("chat.get", {"chat_id": cid}))["events"]
+        resolved = [e for e in events if e["event"] == "approval.resolved"]
+        said = [e["data"]["text"] for e in phone.voice(c.sid, "voice.say") if e["data"]["kind"] == "reply"]
+        check(len(resolved) == 1 and voice.LINES["tr"]["allowed"] in said and done is not None,
+              "an approval answered by voice goes through the server's own approval, once, after the commit",
+              f"{len(resolved)} {said}")
+        after = (await phone.call("chat.get", {"chat_id": cid}))["chat"]
+        check(all(after[k] == chat[k] for k in ("provider", "account_id", "perm_mode", "model")),
+              "on the chat's own provider, account and permission mode")
+        await phone.call("voice.stop", {"session_id": c.sid})
+
+        print("the API layer: failures are bounded and said")
+        for mode, requests, label in (("429", 1, "rate limit: one request, then it waits as told"),
+                                      ("401", 1, "refused key: one request, and the error says how to fix it"),
+                                      ("529", 4, "overloaded: one retry per turn"),
+                                      ("midfail", 4, "an error event mid-stream: one retry per turn"),
+                                      ("stall", 4, "a stalled stream: read timeout, one retry per turn")):
+            fake.mode = mode
+            n0 = len(fake.log)
+            c = Caller(phone, f"api-{mode}")
+            await c.start()
+            info = await c.say(fx["short-greeting"])
+            await c.quiet(1.0)
+            err = await phone.until(lambda e: e["event"] == "voice.error" and e["data"]["session_id"] == c.sid,
+                                    10, f"the {mode} error")
+            await c.say(fx["short-greeting"])        # the next turn, while the provider is still failing
+            await c.quiet(1.5)
+            ev = phone.voice(c.sid)
+            said = [e["data"]["text"] for e in ev if e["event"] == "voice.say"]
+            states = [e["data"]["state"] for e in ev if e["event"] == "voice.state"]
+            sent = len(fake.log) - n0
+            took = err["_at"] - info["speech_end_wall"]
+            check(err["data"]["code"] == voice.E_REPLY and voice.LINES["tr"]["no_reply"] in said
+                  and states[-1] == "listening" and took < 5.0 and FAKE_KEY not in json.dumps(ev),
+                  f"{label} ({took:.1f}s, said, back to listening)", f"{err['data']} {said} {states}")
+            check(sent == requests, f"{mode}: {requests} request(s) for two failing turns", str(sent))
+            if mode == "401":
+                check("set-key" in err["data"]["message"], "the refused key's error says how to store another",
+                      err["data"]["message"])
+            await phone.call("voice.stop", {"session_id": c.sid})
+        ledger = voice_api.Budget(1.0)
+        check(0 < ledger.spent() < 0.25,
+              "usage is counted into the day's ledger from the stream's own figures", f"{ledger.spent():.4f}")
+        cap = voice_api.Budget(ledger.spent())
+        try:
+            cap.check()
+            check(False, "a spent budget refuses the next request")
+        except voice_api.BudgetSpent as exc:
+            check("voice_api_daily_usd" in str(exc), "a spent budget refuses the next request, naming the setting")
+    finally:
+        phone.reader.cancel()
+        await phone.ws.close()
+        hub.brain_factory = factory
+        voice_api.keychain_key, voice_api.profile_home, voice_api.READ_S, voice_api.API_URL = keychain, home, read_s, url
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+        server.should_exit = True
+        await asyncio.wait_for(task, 10)
+
+
 # ── the measured run ─────────────────────────────────────────────────────────
 MEASURED = ["short-greeting", "short-status", "long-request", "pause-500", "pause-1000", "pause-1500",
             "pause-2000", "two-pauses", "correction", "correction-pause", "tech-agents", "silence"]
@@ -846,6 +1019,7 @@ async def main() -> None:
             await chat_bridge(phone, fx, projects)
             await acks(phone, fx)
             await errors(phone, fx, port, token)
+            await api_layer(srv, port, token, fx, projects)
         check(not phone.replies or all(m["type"] == "error" for m in phone.replies),
               "audio, playback and barge-in messages get no receipts", str(phone.replies[:2]))
         phone.reader.cancel()

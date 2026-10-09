@@ -344,6 +344,29 @@ CHAT_TURN_RULE = ("If this asks the chat to do anything, call forward_to_chat an
                   "Otherwise answer only from the state.")
 
 
+def voice_system(home: str | None, chat_call: bool) -> tuple[str, bool]:
+    """The fast layer's system prompt, whichever transport carries it (the CLI
+    here, the Messages API in voice_api.py), and whether Hermes speaks."""
+    hermes = callmod.hermes_installed(home)
+    extra = "\n\n" + CHAT_SYSTEM_EXTRA if chat_call else ""
+    system = f"{VOICE_SYSTEM}{extra}\n\n{callmod.manner(hermes)}"
+    prof = callmod.profile(home)
+    if prof:
+        system += "\n\n" + prof
+    return system, hermes
+
+
+def turn_prompt(snap: str | None, text: str, lang: str, chat_call: bool) -> str:
+    """One question as the fast layer receives it: the live state, the words,
+    and the reminder of language (and, on a chat call, of routing). Without a
+    snapshot it is the question as kept in an API layer's history."""
+    want = {"tr": "Answer in Turkish.", "en": "Answer in English."}.get(lang, "")
+    if chat_call:
+        want = f"{CHAT_TURN_RULE} {want}"
+    state = "" if snap is None else f"<state>\n{snap}\n</state>\n\n"
+    return f"{state}{text}\n\n({want})"
+
+
 def _ok(text: str) -> dict:
     return {"content": [{"type": "text", "text": text}]}
 
@@ -416,17 +439,13 @@ class FastLayer(Concierge):
                     if k in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")})
         if home:
             env["CLAUDE_CONFIG_DIR"] = home
-        self._hermes = callmod.hermes_installed(home)
+        system, self._hermes = voice_system(home, bool(self.chat_id))
         ref = lambda: self._intend  # noqa: E731
         if self.chat_id:
-            tools, names, extra = chat_tools(ref), CHAT_TOOL_NAMES, "\n\n" + CHAT_SYSTEM_EXTRA
+            tools, names = chat_tools(ref), CHAT_TOOL_NAMES
         else:
             tools = callmod.build_tools(lambda: self._index, deferred_actions(ref))
-            names, extra = callmod.TOOL_NAMES, ""
-        system = f"{VOICE_SYSTEM}{extra}\n\n{callmod.manner(self._hermes)}"
-        prof = callmod.profile(home)
-        if prof:
-            system += "\n\n" + prof
+            names = callmod.TOOL_NAMES
         return ClaudeAgentOptions(
             env=env, cwd=str(Path.home()), model=MODEL_ALIASES.get(FAST_MODEL, FAST_MODEL),
             system_prompt=system, tools=[],
@@ -464,9 +483,6 @@ class FastLayer(Concierge):
             await self._drain
             self._drain = None
         timing["drain_ms"] = int((time.monotonic() - t0) * 1000)
-        want = {"tr": "Answer in Turkish.", "en": "Answer in English."}.get(lang, "")
-        if self.chat_id:
-            want = f"{CHAT_TURN_RULE} {want}"
         async with self._lock:
             timing["lock_ms"] = int((time.monotonic() - t0) * 1000)
             for _ in range(3):              # the account, and at most two that replace it
@@ -481,7 +497,7 @@ class FastLayer(Concierge):
                 self._inflight = True
                 refused, failed, said = False, None, False
                 try:
-                    await client.query(f"<state>\n{snap}\n</state>\n\n{text}\n\n({want})")
+                    await client.query(turn_prompt(snap, text, lang, bool(self.chat_id)))
                     async for msg in client.receive_response():
                         if isinstance(msg, StreamEvent):
                             ev = msg.event
@@ -1185,8 +1201,16 @@ class Hub:
         self.brain_factory = brain_factory or self._fast_layer
 
     def _fast_layer(self, s: VoiceSession, d: dict) -> Brain:
+        from . import voice_api
         srv = self.server
         snap = (lambda: chat_state(srv.db, srv.sessions, s.chat_id)) if s.chat_id else srv.call_snapshot
+        chosen = voice_api.settings(srv.cfg)
+        if chosen.provider == voice_api.API:
+            # Opted in: the Messages API on its own key. A missing key is an
+            # error the caller sees (voice_api.E_KEY), never a quiet fallback.
+            return voice_api.ApiFastLayer(snap, voice_api.require_key(), chosen.model, chat_id=s.chat_id,
+                                          home=voice_api.profile_home(srv._concierge_account),
+                                          budget=voice_api.Budget(chosen.daily_usd))
         return FastLayer(snap, srv._concierge_account, chat_id=s.chat_id,
                          on_limits=srv._concierge_limits, on_limited=srv._concierge_limited)
 
