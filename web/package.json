@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "node scripts/test-ustabasi.mjs && node scripts/test-divan.mjs && node scripts/test-shell.mjs && node scripts/test-board.mjs && node scripts/test-overview.mjs && node scripts/test-machine.mjs && node scripts/test-drive.mjs && node scripts/test-dictate.mjs && node scripts/test-refusal.mjs && node scripts/test-steps.mjs && node scripts/test-inventory.mjs && node scripts/test-approval.mjs && node scripts/test-notice.mjs && node scripts/test-asking.mjs && node scripts/test-usage.mjs",
-    "test:ui": "node scripts/test-divan-ui.mjs && node scripts/test-theme-ui.mjs && node scripts/test-ticket-ui.mjs && node scripts/test-wall-ui.mjs && node scripts/test-actions-ui.mjs && node scripts/test-walk-ui.mjs && node scripts/test-notice-ui.mjs && node scripts/test-icons-ui.mjs && node scripts/test-asking-ui.mjs && node scripts/test-filed-ui.mjs && node scripts/test-usage-ui.mjs && node scripts/test-chathead-ui.mjs",
+    "test:ui": "node scripts/test-divan-ui.mjs && node scripts/test-theme-ui.mjs && node scripts/test-ticket-ui.mjs && node scripts/test-wall-ui.mjs && node scripts/test-actions-ui.mjs && node scripts/test-walk-ui.mjs && node scripts/test-notice-ui.mjs && node scripts/test-icons-ui.mjs && node scripts/test-asking-ui.mjs && node scripts/test-filed-ui.mjs && node scripts/test-usage-ui.mjs && node scripts/test-brand-ui.mjs && node scripts/test-chathead-ui.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },

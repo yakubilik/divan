@@ -184,6 +184,8 @@ let pool = {
 /** Set while the computer is to refuse the one request a page in here makes of
  *  it: an older daemon that has never heard of it, or one that times out. */
 let accountsFail = false;
+/** The board this computer answers `divan.snapshot` with, where a group gives one. */
+let snapshotAnswer = null;
 seed(useFleet, {
   hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', ready: true,
   call: async (key, type, data) => {
@@ -193,6 +195,9 @@ seed(useFleet, {
     // seeded below, and a socket that answered `{}` would replace a fixture with
     // an empty board. A poll that fails is one of the states the panel has to
     // survive anyway, and it is the state the groups above are read in.
+    // …except where a group sets one: what the daemon answers after a product
+    // was changed on it (`divan.project.update`), read back by the real poll.
+    if (type === 'divan.snapshot' && snapshotAnswer) return snapshotAnswer;
     if (type === 'divan.snapshot') throw new Error('That computer did not answer');
     // The one other request a page in here makes of a computer. Answered from
     // the same fixture the slot is seeded with, so what the panel does with the
@@ -1822,8 +1827,7 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
   const meta = doc.querySelector('.dv-phead [data-meta]')?.textContent ?? '';
   const headOk = !!doc.querySelector('.dv-phead .dv-mono') && head() === 'Quire'
     && doc.querySelector('.dv-phead [data-description]')?.textContent === 'client portals for studios'
-    && meta.startsWith('live since') && !doc.querySelector('.dv-stage')
-    && !/\bIdea\b[\s\S]*\bGrowth\b/.test(text());
+    && meta.startsWith('live since');
   await click(link('Open board'));
   const onBoard = w.location.pathname === '/p/quire/board' && onBoardPage();
   await goBack();
@@ -1836,7 +1840,7 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
   await reload('/p/quire/new');
   const noForm = w.location.pathname === '/p/quire' && onProductPage();
   ok('the address the New ticket form had is the product’s page', noForm, w.location.pathname);
-  ok('the head is monogram, name, one sentence and a meta line with the stage as a word, no stage bar; the board is a page of its own that survives reload and Back, the chats beside both',
+  ok('the head is monogram, name, one sentence and a meta line with the stage as a word; the board is a page of its own that survives reload and Back, the chats beside both',
     headOk && onBoard && backed && reloads.every(Boolean),
     JSON.stringify({ headOk, meta, onBoard, backed, reloads }));
 
@@ -1986,6 +1990,79 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     (locked?.textContent ?? '').includes('Quire') && removable === 0
     && sent?.data.cwd === '/w/quire',
     `${removable} · ${JSON.stringify(sent?.data)}`);
+
+  // The stage card (ustabasi #180): the product's own stage, off the snapshot.
+  group('the stage card on a product’s page');
+  const stageCard = () => doc.querySelector('[data-stage-card]');
+  const rail = () => ({
+    of: head(), stage: stageCard()?.dataset.stage ?? null,
+    now: stageCard()?.querySelector('[data-stage-now] b')?.textContent ?? null,
+    steps: [...(stageCard()?.querySelectorAll('[data-step]') ?? [])].map((li) => `${li.dataset.step}:${li.dataset.state}`).join(' '),
+    percent: /%/.test(stageCard()?.textContent ?? ''),
+  });
+  const working = () => [...doc.querySelectorAll('[data-in-progress] [data-row]')]
+    .map((r) => `${r.querySelector('.dv-status')?.textContent}·${r.querySelector('.t')?.textContent}`).join(' | ');
+  const answer = async (next) => {
+    snapshotAnswer = next;
+    asked.length = 0;
+    await act(async () => { await useDivanStore.getState().load('studio'); });
+    await settle();
+    return asked.some((a) => a.type === 'divan.snapshot');
+  };
+  const staged = (stage, cards = snap.cards) => ({ ...snap, cards,
+    projects: snap.projects.map((p) => (p.slug === 'quire' ? { ...p, stage } : p)) });
+
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  await reload('/p/quire');
+  const live = rail();
+  const facts = [...stageCard().querySelectorAll('[data-fact]')].map((f) => f.dataset.fact).join(' ');
+  ok('the product page carries the stage card: Quire is on Live, the steps behind it filled and Growth ahead, with its dates and no percentage',
+    live.of === 'Quire' && live.stage === 'live' && live.now === 'Live' && !live.percent
+    && live.steps === 'idea:on build:on beta:on live:now growth:ahead' && facts === 'started live next',
+    JSON.stringify({ live, facts }));
+
+  await reload('/p/hush');
+  const unset = rail();
+  ok('a product nobody gave a stage says so, and draws no steps',
+    unset.of === 'Hush' && unset.stage === 'unset' && unset.now === 'No stage set' && unset.steps === '' && !unset.percent,
+    JSON.stringify(unset));
+
+  await reload('/p/quire');
+  const rowsBefore = working();
+  const polled = await answer(staged('beta'));
+  const beta = rail();
+  ok('the stage changed on the daemon arrives with the next snapshot: the card moves to Beta, and the tickets in progress are what they were',
+    polled && beta.of === 'Quire' && beta.stage === 'beta' && beta.now === 'Beta'
+    && beta.steps === 'idea:on build:on beta:now live:ahead growth:ahead'
+    && (stageCard().textContent ?? '').includes('In beta') && rowsBefore !== '' && working() === rowsBefore,
+    JSON.stringify({ polled, beta, rowsBefore, rowsAfter: working() }));
+
+  await answer(staged('build'));
+  const build = rail();
+  await answer(staged('build', snap.cards.map((k) => (k.column === 'in_progress'
+    ? { ...k, column: 'done', agent_status: null, moved_at: now } : k))));
+  ok('Build reads as in development, and every ticket finishing moves the board but not the stage',
+    build.stage === 'build' && build.steps === 'idea:on build:now beta:ahead live:ahead growth:ahead'
+    && (stageCard().textContent ?? '').includes('In development')
+    && working() !== rowsBefore && JSON.stringify(rail()) === JSON.stringify(build),
+    JSON.stringify({ build, after: rail(), rows: working() }));
+
+  await answer(staged('beta'));
+  await reload('/p/quire');
+  const reloaded = rail();
+  await click(link('Open board'));
+  await goBack();
+  ok('the card is the same after a reload and after going to the board and back',
+    reloaded.stage === 'beta' && JSON.stringify(rail()) === JSON.stringify(reloaded), JSON.stringify({ reloaded, back: rail() }));
+
+  await answer(staged('paused'));
+  const odd = rail();
+  ok('a stage word the rail does not have is named as it is, with no steps drawn',
+    odd.stage === 'unknown' && odd.now === '“paused”' && odd.steps === '' && !odd.percent, JSON.stringify(odd));
+
+  snapshotAnswer = null;
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
+  await reload('/p/quire');
 }
 
 group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
