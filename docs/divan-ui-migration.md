@@ -61,7 +61,7 @@ The quoted words are the check's own name.
 | Put away / close / drag / open out a question window | Window corner | Same | — | drive: "a window can be put away" |
 | Reply in a question window | Window box | Same | `chat.send` | drive: "…and pressing it says it in that chat" |
 | Read the counters | Dashboard counters | One summary line | — | drive: "tiles open the project, dormant ones come last and dimmed" |
-| See what is running | Agent roster (not pressable) | Running: a badge per agent and per chat in a turn, each opens what it names | — | overview: "what is running is a badge per agent" |
+| See what is running | Agent roster (not pressable) | On its project card: each agent is a ticket line and each chat in a turn a chat line, each opens what it names | — | overview: "there is no Running row: every agent at work is a ticket line" |
 | Everything waiting on you | Questions spread over pages | Waiting on you (`/waiting`, Needs you › See all) | `ustabasi.note`, `divan.card.move`, `divan.project.open` | drive: "Waiting on you: the title states the counts, three groups oldest first" |
 | Switch a product's view | Tabs Overview / Board / Branches / Chat | Segment Overview / Board / Chats; Repositories in the side column | — | drive: "the head is monogram, name, one sentence and a meta line" |
 | Write a new ticket | Inline draft in Ice Box, N | Said to the agent in the product's Composer; there is no form | `chat.create` | drive: "no New ticket and no tabs on a product or its board" |
