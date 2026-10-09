@@ -80,5 +80,15 @@ function markup(node) {
     && typeof n.type !== 'string')[0];
   await act(async () => { row.props.onPress(); });
   shot('chat-notice-open.png');
+  // A ticket the chat filed, tapped open: it stays in the chat, Go details leaves.
+  const { CardLink } = require(path.join(root, 'src/components/chat.tsx'));
+  await act(async () => { page.update(h(R.theme.ForceScheme, { scheme: 'dark' },
+    h(View, { style: { paddingHorizontal: 16, paddingVertical: 20, gap: 14 } },
+      h(AssistantText, { text: 'Filed it as #177.' }),
+      h(CardLink, { ticket: 177, column: 'Queued', title: 'Show pending agent questions as a floating chat on the dashboard', onPress() {} })))); });
+  const chip = page.root.findAll((n) => typeof n.props.onPress === 'function' && /^Queued: /.test(n.props.accessibilityLabel ?? '')
+    && typeof n.type !== 'string')[0];
+  await act(async () => { chip.props.onPress(); });
+  shot('chat-ticket-link-open.png');
   process.exit(0);
 })();

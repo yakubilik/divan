@@ -748,7 +748,7 @@ export function CardLink({ ticket, column, title, detail, onPress }: {
         onPress={() => setOpen((o) => !o)}
         style={({ pressed }) => ({ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10,
                                    paddingVertical: 10, paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}>
-        <Text mono style={{ fontSize: 11.5, color: c.muted }}>{column}</Text>
+        <Text mono style={{ fontSize: 11.5, color: c.muted, flexShrink: 0 }}>{column}</Text>
         <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '500', color: c.ink, flexShrink: 1, flexGrow: open ? 1 : 0 }}>{title}</Text>
         <Icon name={open ? 'expand_less' : 'expand_more'} size={16} color={c.muted} />
       </Pressable>
