@@ -1,0 +1,1897 @@
+{
+ "generated": "2026-10-09T10:59:34.274Z",
+ "simulated": "microphone and speaker (FakeEngine, −24 dB echo); everything else real",
+ "conversation": {
+  "rows": [
+   {
+    "id": "short-greeting",
+    "round": 0,
+    "reference": "selam nasılsın",
+    "turns": 1,
+    "committed": "Selam, nasılsın?",
+    "routed": "conversation",
+    "fast_transcript": "Selam nasılsın?",
+    "cancels": [],
+    "said": "İyi, teşekkür ederim. Ne var ne yok?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2720,
+    "true_end_to_audible_ms": 2710,
+    "first_say_ms": 2690,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-short-greeting.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "short-status",
+    "round": 0,
+    "reference": "testler bitti mi",
+    "turns": 1,
+    "committed": "Testler bitti mi?",
+    "routed": "conversation",
+    "fast_transcript": "Testler bitti mi?",
+    "cancels": [],
+    "said": "Hangi testlerden bahsediyorsun? Bilemiyorum, söyle.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 3620,
+    "true_end_to_audible_ms": 3610,
+    "first_say_ms": 3463,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-short-status.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "long-request",
+    "round": 0,
+    "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+    "turns": 1,
+    "committed": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "routed": "conversation",
+    "fast_transcript": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "cancels": [],
+    "said": "Hangi proje? Babysee mi, aristo mu, başka bir şey mi?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 4540,
+    "true_end_to_audible_ms": 4540,
+    "first_say_ms": 4242,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-long-request.wav",
+     "gaps_ms": [
+      250
+     ],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "pause-500",
+    "round": 0,
+    "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+    "turns": 1,
+    "committed": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "routed": "conversation",
+    "fast_transcript": "Şimdi şeyi, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "cancels": [],
+    "said": "Hangi projenin giriş ekranı? Söylesen başlayabilirim.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 4170,
+    "true_end_to_audible_ms": 4160,
+    "first_say_ms": 3939,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-pause-500.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "pause-1000",
+    "round": 0,
+    "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+    "turns": 1,
+    "committed": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+    "routed": "conversation",
+    "fast_transcript": "Bana bir özet çıkar, yani. Bugün neler yapıldı olduğunu merak ediyorum.",
+    "cancels": [],
+    "said": "Bugün hiç bir çalışma kaydı yok, makine sakin. Dün ne yaptık, onu mu görmek istiyorsun?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 7820,
+    "true_end_to_audible_ms": 7810,
+    "first_say_ms": 7699,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-pause-1000.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "pause-1500",
+    "round": 0,
+    "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+    "turns": 1,
+    "committed": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "routed": "conversation",
+    "fast_transcript": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "cancels": [],
+    "said": "Hangi projenin ödeme sayfası?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 3580,
+    "true_end_to_audible_ms": 3580,
+    "first_say_ms": 3322,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-pause-1500.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 1
+    }
+   },
+   {
+    "id": "pause-2000",
+    "round": 0,
+    "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+    "turns": 1,
+    "committed": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "routed": "conversation",
+    "fast_transcript": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "cancels": [
+     "resumed"
+    ],
+    "said": "Hangi proje, hangi özellik? Yine söylemedin. Bana net ver.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 8890,
+    "true_end_to_audible_ms": 8880,
+    "first_say_ms": 8726,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-pause-2000.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "two-pauses",
+    "round": 0,
+    "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+    "turns": 1,
+    "committed": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "routed": "conversation",
+    "fast_transcript": "Bir de. Geçen hafta açtığımız iş vardı ya. O ne durumda?",
+    "cancels": [],
+    "said": "Hangi işten bahsediyorsun, hatırlamıyorum. Detay ver veya geçmiş sohbetleri okumam gerekirse söyle.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 8410,
+    "true_end_to_audible_ms": 8400,
+    "first_say_ms": 8222,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-two-pauses.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "correction",
+    "round": 0,
+    "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+    "turns": 1,
+    "committed": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "routed": "conversation",
+    "fast_transcript": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "cancels": [],
+    "said": "Hangi web paneli? İsghocam, skolalabs, babysee, portfolio — hangisi?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 3430,
+    "true_end_to_audible_ms": 3420,
+    "first_say_ms": 3188,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-correction.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "correction-pause",
+    "round": 0,
+    "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+    "turns": 1,
+    "committed": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+    "routed": "conversation",
+    "fast_transcript": "Testleri çalıştır. Hayır dur, önce değerlemeyi bitir.",
+    "cancels": [
+     "resumed"
+    ],
+    "said": "Hangi projenin testleri? Repo adını söyle başlayabilirim.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2800,
+    "true_end_to_audible_ms": 2800,
+    "first_say_ms": 2697,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-correction-pause.wav",
+     "gaps_ms": [],
+     "clicks": [
+      {
+       "id": "17:1:0",
+       "edge": 0.055,
+       "jump": 0.227
+      }
+     ],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "tech-names",
+    "round": 0,
+    "reference": "testflight buildini expo ile deploy et sonra main branche merge et",
+    "turns": 1,
+    "committed": "TestFlight, bildiğini Expo ile deploy et, sonra main branch'a merge et.",
+    "routed": "conversation",
+    "fast_transcript": "TestFlight, build'ini Xcode'yla deploy et, sonra main branch'a merget.",
+    "cancels": [],
+    "said": "Projeyi söyle. Babysee mi, başka mı? Hangisini deploy edeyim?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2810,
+    "true_end_to_audible_ms": 2810,
+    "first_say_ms": 2740,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-tech-names.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "tech-agents",
+    "round": 0,
+    "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+    "turns": 1,
+    "committed": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mith'a attılar mı?",
+    "routed": "conversation",
+    "fast_transcript": "Claude ile Codex hangi ticket üzerinde çalışıyor? John M. Tatlılar mı?",
+    "cancels": [],
+    "said": "Kimse çalışmıyor şu anda, makine sakin. John M. Tatlılar diye birini tanımıyorum — kim o?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2470,
+    "true_end_to_audible_ms": 2460,
+    "first_say_ms": 2390,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r0-tech-agents.wav",
+     "gaps_ms": [],
+     "clicks": [
+      {
+       "id": "19:2:0",
+       "edge": 0.054,
+       "jump": 0.181
+      }
+     ],
+     "pieces": 4
+    }
+   },
+   {
+    "id": "silence",
+    "round": 0,
+    "reference": "",
+    "turns": 0,
+    "committed": "",
+    "routed": null,
+    "fast_transcript": "",
+    "cancels": [],
+    "said": "",
+    "kinds": [],
+    "end_to_audible_ms": null,
+    "true_end_to_audible_ms": null,
+    "first_say_ms": null,
+    "errors": [],
+    "audio": null
+   },
+   {
+    "id": "short-greeting",
+    "round": 1,
+    "reference": "selam nasılsın",
+    "turns": 1,
+    "committed": "Selam, nasılsın?",
+    "routed": "conversation",
+    "fast_transcript": "Selam, nasılsın?",
+    "cancels": [],
+    "said": "İyiyim. Naber?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1560,
+    "true_end_to_audible_ms": 1560,
+    "first_say_ms": 1548,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-short-greeting.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "short-status",
+    "round": 1,
+    "reference": "testler bitti mi",
+    "turns": 1,
+    "committed": "Testler bitti mi?",
+    "routed": "conversation",
+    "fast_transcript": "Testler bitti mi?",
+    "cancels": [],
+    "said": "Hangi testler? Söyle.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1510,
+    "true_end_to_audible_ms": 1510,
+    "first_say_ms": 1464,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-short-status.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "long-request",
+    "round": 1,
+    "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+    "turns": 1,
+    "committed": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "routed": "conversation",
+    "fast_transcript": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "cancels": [],
+    "said": "Proje adını söyle başlayabilirim — babysee mi, aristo mi?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2690,
+    "true_end_to_audible_ms": 2690,
+    "first_say_ms": 2517,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-long-request.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "pause-500",
+    "round": 1,
+    "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+    "turns": 1,
+    "committed": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "routed": "conversation",
+    "fast_transcript": "Şimdi şeyi, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "cancels": [],
+    "said": "Hangi projenin giriş ekranı? Söyle başlayabilirim.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2060,
+    "true_end_to_audible_ms": 2060,
+    "first_say_ms": 1861,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-pause-500.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "pause-1000",
+    "round": 1,
+    "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+    "turns": 1,
+    "committed": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+    "routed": "conversation",
+    "fast_transcript": "Bana bir özet çıkar, yani. Bugün neler yapıldı olduğunu merak ediyorum.",
+    "cancels": [],
+    "said": "Bugün hiç çalışma yok. Dün ne yaptık onu mı görmek istiyorsun?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1910,
+    "true_end_to_audible_ms": 1910,
+    "first_say_ms": 1822,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-pause-1000.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "pause-1500",
+    "round": 1,
+    "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+    "turns": 1,
+    "committed": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "routed": "conversation",
+    "fast_transcript": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "cancels": [],
+    "said": "Hangi projenin ödeme sayfası? Söyle.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2140,
+    "true_end_to_audible_ms": 2130,
+    "first_say_ms": 1937,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-pause-1500.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "pause-2000",
+    "round": 1,
+    "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+    "turns": 1,
+    "committed": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "routed": "conversation",
+    "fast_transcript": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "cancels": [
+     "resumed"
+    ],
+    "said": "Proje ve özellik adını söyle net bir şekilde.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2790,
+    "true_end_to_audible_ms": 2780,
+    "first_say_ms": 2623,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-pause-2000.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 1
+    }
+   },
+   {
+    "id": "two-pauses",
+    "round": 1,
+    "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+    "turns": 1,
+    "committed": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "routed": "conversation",
+    "fast_transcript": "Bir de. Geçen hafta açtığımız iş vardı ya. O ne durumda?",
+    "cancels": [],
+    "said": "Hangi iş? Detay ver.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1960,
+    "true_end_to_audible_ms": 1950,
+    "first_say_ms": 1924,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-two-pauses.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "correction",
+    "round": 1,
+    "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+    "turns": 1,
+    "committed": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "routed": "conversation",
+    "fast_transcript": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "cancels": [],
+    "said": "Hangi web paneli? isghocam, skolalabs, babysee — hangisi?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2180,
+    "true_end_to_audible_ms": 2170,
+    "first_say_ms": 2105,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-correction.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "correction-pause",
+    "round": 1,
+    "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+    "turns": 1,
+    "committed": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+    "routed": "conversation",
+    "fast_transcript": "Testleri çalıştır. Hayır dur, önce değerlemeyi bitir.",
+    "cancels": [
+     "resumed"
+    ],
+    "said": "Hangi projenin testleri? Söyle.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 2000,
+    "true_end_to_audible_ms": 2000,
+    "first_say_ms": 1920,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-correction-pause.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "tech-names",
+    "round": 1,
+    "reference": "testflight buildini expo ile deploy et sonra main branche merge et",
+    "turns": 1,
+    "committed": "TestFlight, bildiğini Expo ile deploy et, sonra main branch'a merge et.",
+    "routed": "conversation",
+    "fast_transcript": "TestFlight bildiğini Xcode ile deploy et, sonra main branch'a merget.",
+    "cancels": [],
+    "said": "Anlaşıldı. TestFlight'a deploy et, sonra main'e merge. Hangi proje?",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 10870,
+    "true_end_to_audible_ms": 10860,
+    "first_say_ms": 10771,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-tech-names.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "tech-agents",
+    "round": 1,
+    "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+    "turns": 1,
+    "committed": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mita attılar mı?",
+    "routed": "conversation",
+    "fast_transcript": "Claude ile Codex hangi ticket üzerinde çalışıyor, John M. Tatlılar mı?",
+    "cancels": [],
+    "said": "Bilmiyorum. Hiç session çalışmıyor şu anda.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 5360,
+    "true_end_to_audible_ms": 5360,
+    "first_say_ms": 5301,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-e2e/before/r1-tech-agents.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 2
+    }
+   },
+   {
+    "id": "silence",
+    "round": 1,
+    "reference": "",
+    "turns": 0,
+    "committed": "",
+    "routed": null,
+    "fast_transcript": "",
+    "cancels": [],
+    "said": "",
+    "kinds": [],
+    "end_to_audible_ms": null,
+    "true_end_to_audible_ms": null,
+    "first_say_ms": null,
+    "errors": [],
+    "audio": null
+   }
+  ],
+  "report": {
+   "session_id": "a8d3f013d7204274",
+   "voice": "EMA",
+   "clock_offset": {
+    "rtt": 1,
+    "ms": 0.5
+   },
+   "end_to_audible": {
+    "n": 25,
+    "median": 2800,
+    "p95": 10870
+   },
+   "turns": [
+    {
+     "turn": 1,
+     "speechEnd": 1791543586021,
+     "firstSay": 1791543597436,
+     "firstAudible": 1791543597531,
+     "endToAudible": 11510,
+     "firstAudibleServer": 1791543597531
+    },
+    {
+     "turn": 2,
+     "speechEnd": 1791543602661,
+     "firstSay": 1791543605361,
+     "firstAudible": 1791543605381,
+     "endToAudible": 2720,
+     "firstAudibleServer": 1791543605381
+    },
+    {
+     "turn": 3,
+     "speechEnd": 1791543610461,
+     "firstSay": 1791543613934,
+     "firstAudible": 1791543614081,
+     "endToAudible": 3620,
+     "firstAudibleServer": 1791543614081
+    },
+    {
+     "turn": 4,
+     "speechEnd": 1791543631441,
+     "firstSay": 1791543635683,
+     "firstAudible": 1791543635981,
+     "endToAudible": 4540,
+     "firstAudibleServer": 1791543635982
+    },
+    {
+     "turn": 5,
+     "speechEnd": 1791543645861,
+     "firstSay": 1791543649810,
+     "firstAudible": 1791543650031,
+     "endToAudible": 4170,
+     "firstAudibleServer": 1791543650032
+    },
+    {
+     "turn": 7,
+     "speechEnd": 1791543660061,
+     "firstSay": 1791543667770,
+     "firstAudible": 1791543667881,
+     "endToAudible": 7820,
+     "firstAudibleServer": 1791543667882
+    },
+    {
+     "turn": 9,
+     "speechEnd": 1791543681701,
+     "firstSay": 1791543685023,
+     "firstAudible": 1791543685281,
+     "endToAudible": 3580,
+     "firstAudibleServer": 1791543685282
+    },
+    {
+     "turn": 11,
+     "speechEnd": 1791543695141,
+     "firstSay": 1791543703877,
+     "firstAudible": 1791543704031,
+     "endToAudible": 8890,
+     "firstAudibleServer": 1791543704031
+    },
+    {
+     "turn": 14,
+     "speechEnd": 1791543715021,
+     "firstSay": 1791543723253,
+     "firstAudible": 1791543723431,
+     "endToAudible": 8410,
+     "firstAudibleServer": 1791543723431
+    },
+    {
+     "turn": 15,
+     "speechEnd": 1791543734901,
+     "firstSay": 1791543738099,
+     "firstAudible": 1791543738331,
+     "endToAudible": 3430,
+     "firstAudibleServer": 1791543738331
+    },
+    {
+     "turn": 17,
+     "speechEnd": 1791543748681,
+     "firstSay": 1791543751378,
+     "firstAudible": 1791543751481,
+     "endToAudible": 2800,
+     "firstAudibleServer": 1791543751481
+    },
+    {
+     "turn": 18,
+     "speechEnd": 1791543761121,
+     "firstSay": 1791543763861,
+     "firstAudible": 1791543763931,
+     "endToAudible": 2810,
+     "firstAudibleServer": 1791543763931
+    },
+    {
+     "turn": 19,
+     "speechEnd": 1791543773761,
+     "firstSay": 1791543776161,
+     "firstAudible": 1791543776231,
+     "endToAudible": 2470,
+     "firstAudibleServer": 1791543776231
+    },
+    {
+     "turn": 20,
+     "speechEnd": 1791543793221,
+     "firstSay": 1791543794769,
+     "firstAudible": 1791543794781,
+     "endToAudible": 1560,
+     "firstAudibleServer": 1791543794782
+    },
+    {
+     "turn": 21,
+     "speechEnd": 1791543798921,
+     "firstSay": 1791543800385,
+     "firstAudible": 1791543800431,
+     "endToAudible": 1510,
+     "firstAudibleServer": 1791543800432
+    },
+    {
+     "turn": 22,
+     "speechEnd": 1791543816641,
+     "firstSay": 1791543819158,
+     "firstAudible": 1791543819331,
+     "endToAudible": 2690,
+     "firstAudibleServer": 1791543819332
+    },
+    {
+     "turn": 23,
+     "speechEnd": 1791543828721,
+     "firstSay": 1791543830582,
+     "firstAudible": 1791543830781,
+     "endToAudible": 2060,
+     "firstAudibleServer": 1791543830782
+    },
+    {
+     "turn": 25,
+     "speechEnd": 1791543840621,
+     "firstSay": 1791543842443,
+     "firstAudible": 1791543842531,
+     "endToAudible": 1910,
+     "firstAudibleServer": 1791543842532
+    },
+    {
+     "turn": 27,
+     "speechEnd": 1791543854741,
+     "firstSay": 1791543856688,
+     "firstAudible": 1791543856881,
+     "endToAudible": 2140,
+     "firstAudibleServer": 1791543856882
+    },
+    {
+     "turn": 29,
+     "speechEnd": 1791543867141,
+     "firstSay": 1791543869774,
+     "firstAudible": 1791543869931,
+     "endToAudible": 2790,
+     "firstAudibleServer": 1791543869932
+    },
+    {
+     "turn": 32,
+     "speechEnd": 1791543879821,
+     "firstSay": 1791543881755,
+     "firstAudible": 1791543881781,
+     "endToAudible": 1960,
+     "firstAudibleServer": 1791543881782
+    },
+    {
+     "turn": 33,
+     "speechEnd": 1791543889401,
+     "firstSay": 1791543891516,
+     "firstAudible": 1791543891581,
+     "endToAudible": 2180,
+     "firstAudibleServer": 1791543891582
+    },
+    {
+     "turn": 35,
+     "speechEnd": 1791543901281,
+     "firstSay": 1791543903201,
+     "firstAudible": 1791543903281,
+     "endToAudible": 2000,
+     "firstAudibleServer": 1791543903282
+    },
+    {
+     "turn": 36,
+     "speechEnd": 1791543911661,
+     "firstSay": 1791543922442,
+     "firstAudible": 1791543922531,
+     "endToAudible": 10870,
+     "firstAudibleServer": 1791543922532
+    },
+    {
+     "turn": 37,
+     "speechEnd": 1791543932921,
+     "firstSay": 1791543938222,
+     "firstAudible": 1791543938281,
+     "endToAudible": 5360,
+     "firstAudibleServer": 1791543938282
+    }
+   ],
+   "barges": [],
+   "starts": [
+    {
+     "resumed": false,
+     "at": 1791543578286
+    }
+   ]
+  },
+  "daemonTurns": [
+   {
+    "turn_id": 1,
+    "t_speech_end_ms": 7740,
+    "text": "Selam, nasılsın?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 6916,
+     "ready_ms": 6916,
+     "first_token_ms": 9186
+    },
+    "after_speech_end_ms": {
+     "soft_end": 419,
+     "fast_stt": 1814,
+     "first_token": 11006,
+     "first_say": 11066,
+     "commit": 2230,
+     "final_stt": 4401,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 2,
+    "t_speech_end_ms": 24380,
+    "text": "Selam, nasılsın?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 1849
+    },
+    "after_speech_end_ms": {
+     "soft_end": 696,
+     "fast_stt": 715,
+     "first_token": 2565,
+     "first_say": 2668,
+     "commit": 2500,
+     "final_stt": 4186,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 3,
+    "t_speech_end_ms": 32180,
+    "text": "Testler bitti mi?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 2563
+    },
+    "after_speech_end_ms": {
+     "soft_end": 700,
+     "fast_stt": 719,
+     "first_token": 3283,
+     "first_say": 3445,
+     "commit": 2504,
+     "final_stt": 4284,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 4,
+    "t_speech_end_ms": 53160,
+    "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 2331
+    },
+    "after_speech_end_ms": {
+     "soft_end": 694,
+     "fast_stt": 1858,
+     "first_token": 4190,
+     "first_say": 4193,
+     "commit": 2501,
+     "final_stt": 5577,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 5,
+    "t_speech_end_ms": 67580,
+    "text": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 2706
+    },
+    "after_speech_end_ms": {
+     "soft_end": 703,
+     "fast_stt": 965,
+     "first_token": 3673,
+     "first_say": 3921,
+     "commit": 2508,
+     "final_stt": 4708,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 7,
+    "t_speech_end_ms": 81780,
+    "text": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 6792
+    },
+    "after_speech_end_ms": {
+     "soft_end": 703,
+     "fast_stt": 888,
+     "first_token": 7681,
+     "first_say": 7685,
+     "commit": 2506,
+     "final_stt": 4864,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 9,
+    "t_speech_end_ms": 103420,
+    "text": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 1982
+    },
+    "after_speech_end_ms": {
+     "soft_end": 699,
+     "fast_stt": 1045,
+     "first_token": 3027,
+     "first_say": 3226,
+     "commit": 2498,
+     "final_stt": 4745,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 11,
+    "t_speech_end_ms": 116860,
+    "text": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 7483
+    },
+    "after_speech_end_ms": {
+     "soft_end": 874,
+     "fast_stt": 1191,
+     "first_token": 8675,
+     "first_say": 8687,
+     "commit": 2503,
+     "final_stt": 4971,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 14,
+    "t_speech_end_ms": 136740,
+    "text": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 7179
+    },
+    "after_speech_end_ms": {
+     "soft_end": 697,
+     "fast_stt": 953,
+     "first_token": 8133,
+     "first_say": 8148,
+     "commit": 2494,
+     "final_stt": 6297,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 15,
+    "t_speech_end_ms": 156620,
+    "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 1497
+    },
+    "after_speech_end_ms": {
+     "soft_end": 707,
+     "fast_stt": 1438,
+     "first_token": 2937,
+     "first_say": 3099,
+     "commit": 2498,
+     "final_stt": 4954,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 17,
+    "t_speech_end_ms": 170400,
+    "text": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 1604
+    },
+    "after_speech_end_ms": {
+     "soft_end": 703,
+     "fast_stt": 979,
+     "first_token": 2584,
+     "first_say": 2683,
+     "commit": 2501,
+     "final_stt": 4333,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 18,
+    "t_speech_end_ms": 182840,
+    "text": "TestFlight, bildiğini Expo ile deploy et, sonra main branch'a merge et.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 1582
+    },
+    "after_speech_end_ms": {
+     "soft_end": 695,
+     "fast_stt": 932,
+     "first_token": 2515,
+     "first_say": 2667,
+     "commit": 2495,
+     "final_stt": 4300,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 19,
+    "t_speech_end_ms": 195480,
+    "text": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mith'a attılar mı?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 1224
+    },
+    "after_speech_end_ms": {
+     "soft_end": 696,
+     "fast_stt": 911,
+     "first_token": 2136,
+     "first_say": 2370,
+     "commit": 2796,
+     "final_stt": 4311,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 20,
+    "t_speech_end_ms": 214940,
+    "text": "Selam, nasılsın?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 673
+    },
+    "after_speech_end_ms": {
+     "soft_end": 703,
+     "fast_stt": 725,
+     "first_token": 1399,
+     "first_say": 1479,
+     "commit": 2494,
+     "final_stt": 3196,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 21,
+    "t_speech_end_ms": 220640,
+    "text": "Testler bitti mi?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 568
+    },
+    "after_speech_end_ms": {
+     "soft_end": 708,
+     "fast_stt": 729,
+     "first_token": 1297,
+     "first_say": 1400,
+     "commit": 2499,
+     "final_stt": 3327,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 22,
+    "t_speech_end_ms": 238360,
+    "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 731
+    },
+    "after_speech_end_ms": {
+     "soft_end": 699,
+     "fast_stt": 1571,
+     "first_token": 2303,
+     "first_say": 2472,
+     "commit": 2518,
+     "final_stt": 4928,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 23,
+    "t_speech_end_ms": 250440,
+    "text": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 702
+    },
+    "after_speech_end_ms": {
+     "soft_end": 702,
+     "fast_stt": 901,
+     "first_token": 1603,
+     "first_say": 1789,
+     "commit": 2792,
+     "final_stt": 3615,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 25,
+    "t_speech_end_ms": 262340,
+    "text": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 722
+    },
+    "after_speech_end_ms": {
+     "soft_end": 699,
+     "fast_stt": 875,
+     "first_token": 1598,
+     "first_say": 1751,
+     "commit": 2619,
+     "final_stt": 3722,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 27,
+    "t_speech_end_ms": 276460,
+    "text": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 659
+    },
+    "after_speech_end_ms": {
+     "soft_end": 691,
+     "fast_stt": 1132,
+     "first_token": 1792,
+     "first_say": 1894,
+     "commit": 3628,
+     "final_stt": 4329,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 29,
+    "t_speech_end_ms": 288860,
+    "text": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 1086
+    },
+    "after_speech_end_ms": {
+     "soft_end": 701,
+     "fast_stt": 1034,
+     "first_token": 2120,
+     "first_say": 2586,
+     "commit": 2504,
+     "final_stt": 4349,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 32,
+    "t_speech_end_ms": 301540,
+    "text": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 891
+    },
+    "after_speech_end_ms": {
+     "soft_end": 697,
+     "fast_stt": 914,
+     "first_token": 1806,
+     "first_say": 1864,
+     "commit": 2512,
+     "final_stt": 3705,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 33,
+    "t_speech_end_ms": 311120,
+    "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 884
+    },
+    "after_speech_end_ms": {
+     "soft_end": 698,
+     "fast_stt": 902,
+     "first_token": 1787,
+     "first_say": 2021,
+     "commit": 2494,
+     "final_stt": 3934,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 35,
+    "t_speech_end_ms": 323000,
+    "text": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 969
+    },
+    "after_speech_end_ms": {
+     "soft_end": 702,
+     "fast_stt": 835,
+     "first_token": 1805,
+     "first_say": 1908,
+     "commit": 2596,
+     "final_stt": 3750,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 36,
+    "t_speech_end_ms": 333380,
+    "text": "TestFlight, bildiğini Expo ile deploy et, sonra main branch'a merge et.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 3553,
+     "first_token_ms": 9665
+    },
+    "after_speech_end_ms": {
+     "soft_end": 702,
+     "fast_stt": 882,
+     "first_token": 10547,
+     "first_say": 10750,
+     "commit": 2502,
+     "final_stt": 4545,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 37,
+    "t_speech_end_ms": 354640,
+    "text": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mita attılar mı?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "drain_ms": 0,
+     "lock_ms": 0,
+     "ready_ms": 0,
+     "first_token_ms": 4228
+    },
+    "after_speech_end_ms": {
+     "soft_end": 707,
+     "fast_stt": 1001,
+     "first_token": 5230,
+     "first_say": 5235,
+     "commit": 2506,
+     "final_stt": 4360,
+     "executed": null
+    }
+   }
+  ],
+  "warm": {
+   "began": 1791543584281,
+   "speechEnd": 1791543586021,
+   "ms": 4740
+  }
+ },
+ "barges": [
+  {
+   "ask": "tech-agents",
+   "answered_turn": 1,
+   "barged": true,
+   "onset_to_stop_ms": 142,
+   "detect_to_stop_ms": 0,
+   "played_ms": 1462,
+   "committed": [
+    "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mitha attılar mı?",
+    "Selam, nasılsın?"
+   ],
+   "played_after_stop": 0
+  },
+  {
+   "ask": "two-pauses",
+   "answered_turn": 5,
+   "barged": true,
+   "onset_to_stop_ms": 130,
+   "detect_to_stop_ms": 0,
+   "played_ms": 1950,
+   "committed": [
+    "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "Selam, nasılsın?"
+   ],
+   "played_after_stop": 0
+  },
+  {
+   "ask": "short-status",
+   "answered_turn": 7,
+   "barged": true,
+   "onset_to_stop_ms": 139,
+   "detect_to_stop_ms": 0,
+   "played_ms": 1939,
+   "committed": [
+    "Testler bitti mi?",
+    "Selam, nasılsın?"
+   ],
+   "played_after_stop": 0
+  }
+ ],
+ "summary": {
+  "utterances": 24,
+  "simple_turns": 24,
+  "true_end_to_audible_ms": {
+   "median": 2800,
+   "p95": 8880,
+   "n": 24
+  },
+  "daemon_end_to_audible_ms": {
+   "median": 2800,
+   "p95": 8890
+  },
+  "first_say_ms": {
+   "median": 2697,
+   "p95": 8726
+  },
+  "action_turns_end_to_audible_ms": [],
+  "wer_committed": 0.0528,
+  "wer_fast": 0.0894,
+  "segmentation_ok": 24,
+  "silence_events": 0,
+  "errors": 0,
+  "gaps": [
+   250
+  ],
+  "clicks": [
+   {
+    "id": "17:1:0",
+    "edge": 0.055,
+    "jump": 0.227
+   },
+   {
+    "id": "19:2:0",
+    "edge": 0.054,
+    "jump": 0.181
+   }
+  ],
+  "barge_onset_to_stop_ms": [
+   142,
+   130,
+   139
+  ],
+  "ema_synth": {
+   "pieces": 67,
+   "median_ms": 502,
+   "rtf": 0.417
+  },
+  "voice": "EMA"
+ },
+ "ema_timings": [
+  {
+   "spoken": "selam, iyiyim.",
+   "ms": 475,
+   "audio_ms": 880
+  },
+  {
+   "spoken": "naber sen?",
+   "ms": 183,
+   "audio_ms": 760
+  },
+  {
+   "spoken": "iyi, teşekkür ederim.",
+   "ms": 502,
+   "audio_ms": 1240
+  },
+  {
+   "spoken": "ne var ne yok?",
+   "ms": 368,
+   "audio_ms": 1120
+  },
+  {
+   "spoken": "hangi testlerden bahsediyorsun?",
+   "ms": 696,
+   "audio_ms": 1680
+  },
+  {
+   "spoken": "bilemiyorum, söyle.",
+   "ms": 229,
+   "audio_ms": 1080
+  },
+  {
+   "spoken": "hangi proje?",
+   "ms": 744,
+   "audio_ms": 840
+  },
+  {
+   "spoken": "babysee mi, aristo mu, başka bir şey mi?",
+   "ms": 703,
+   "audio_ms": 2640
+  },
+  {
+   "spoken": "hangi projenin giriş ekranı?",
+   "ms": 710,
+   "audio_ms": 1640
+  },
+  {
+   "spoken": "söylesen başlayabilirim.",
+   "ms": 330,
+   "audio_ms": 1240
+  },
+  {
+   "spoken": "bugün hiç bir çalışma kaydı yok.",
+   "ms": 883,
+   "audio_ms": 1880
+  },
+  {
+   "spoken": "makine sakin.",
+   "ms": 331,
+   "audio_ms": 920
+  },
+  {
+   "spoken": "dün ne yaptık, onu mu görmek istiyorsun?",
+   "ms": 506,
+   "audio_ms": 2240
+  },
+  {
+   "spoken": "hangi projenin ödeme sayfası?",
+   "ms": 1147,
+   "audio_ms": 1760
+  },
+  {
+   "spoken": "hangi proje, hangi özellik?",
+   "ms": 726,
+   "audio_ms": 1720
+  },
+  {
+   "spoken": "yine söylemedin.",
+   "ms": 308,
+   "audio_ms": 960
+  },
+  {
+   "spoken": "bana net ver.",
+   "ms": 404,
+   "audio_ms": 1040
+  },
+  {
+   "spoken": "hangi işten bahsediyorsun.",
+   "ms": 622,
+   "audio_ms": 1400
+  },
+  {
+   "spoken": "hatırlamıyorum.",
+   "ms": 885,
+   "audio_ms": 800
+  },
+  {
+   "spoken": "detay ver veya geçmiş sohbetleri okumam gerekirse söyle.",
+   "ms": 2058,
+   "audio_ms": 3160
+  },
+  {
+   "spoken": "hangi web paneli?",
+   "ms": 874,
+   "audio_ms": 1120
+  },
+  {
+   "spoken": "isghocam, skolalabs, babysee, portfolio - hangisi?",
+   "ms": 1391,
+   "audio_ms": 3000
+  },
+  {
+   "spoken": "hangi projenin testleri?",
+   "ms": 675,
+   "audio_ms": 1440
+  },
+  {
+   "spoken": "repo adını söyle başlayabilirim.",
+   "ms": 839,
+   "audio_ms": 1680
+  },
+  {
+   "spoken": "projeyi söyle.",
+   "ms": 294,
+   "audio_ms": 920
+  },
+  {
+   "spoken": "babysee mi, başka mı?",
+   "ms": 428,
+   "audio_ms": 1400
+  },
+  {
+   "spoken": "hangisini deploy edeyim?",
+   "ms": 276,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "kimse çalışmıyor şu anda.",
+   "ms": 406,
+   "audio_ms": 1480
+  },
+  {
+   "spoken": "makine sakin.",
+   "ms": 335,
+   "audio_ms": 920
+  },
+  {
+   "spoken": "john me nokta.",
+   "ms": 294,
+   "audio_ms": 960
+  },
+  {
+   "spoken": "tatlılar diye birini tanımıyorum - kim o?",
+   "ms": 540,
+   "audio_ms": 2320
+  },
+  {
+   "spoken": "iyiyim.",
+   "ms": 213,
+   "audio_ms": 440
+  },
+  {
+   "spoken": "naber?",
+   "ms": 180,
+   "audio_ms": 440
+  },
+  {
+   "spoken": "hangi testler?",
+   "ms": 269,
+   "audio_ms": 960
+  },
+  {
+   "spoken": "söyle.",
+   "ms": 192,
+   "audio_ms": 440
+  },
+  {
+   "spoken": "proje adını söyle başlayabilirim.",
+   "ms": 803,
+   "audio_ms": 1720
+  },
+  {
+   "spoken": "babysee mi, aristo mi?",
+   "ms": 1028,
+   "audio_ms": 1440
+  },
+  {
+   "spoken": "hangi projenin giriş ekranı?",
+   "ms": 979,
+   "audio_ms": 1640
+  },
+  {
+   "spoken": "söyle başlayabilirim.",
+   "ms": 632,
+   "audio_ms": 1040
+  },
+  {
+   "spoken": "bugün hiç çalışma yok.",
+   "ms": 831,
+   "audio_ms": 1360
+  },
+  {
+   "spoken": "dün ne yaptık onu mı görmek istiyorsun?",
+   "ms": 548,
+   "audio_ms": 2080
+  },
+  {
+   "spoken": "hangi projenin ödeme sayfası?",
+   "ms": 1716,
+   "audio_ms": 1760
+  },
+  {
+   "spoken": "söyle.",
+   "ms": 461,
+   "audio_ms": 440
+  },
+  {
+   "spoken": "proje ve özellik adını söyle net bir şekilde.",
+   "ms": 743,
+   "audio_ms": 2640
+  },
+  {
+   "spoken": "hangi iş?",
+   "ms": 297,
+   "audio_ms": 760
+  },
+  {
+   "spoken": "detay ver.",
+   "ms": 220,
+   "audio_ms": 760
+  },
+  {
+   "spoken": "hangi web paneli?",
+   "ms": 438,
+   "audio_ms": 1120
+  },
+  {
+   "spoken": "isghocam, skolalabs, babysee - hangisi?",
+   "ms": 444,
+   "audio_ms": 2360
+  },
+  {
+   "spoken": "hangi projenin testleri?",
+   "ms": 454,
+   "audio_ms": 1440
+  },
+  {
+   "spoken": "söyle.",
+   "ms": 212,
+   "audio_ms": 440
+  },
+  {
+   "spoken": "anlaşıldı.",
+   "ms": 432,
+   "audio_ms": 760
+  },
+  {
+   "spoken": "testflight'a deploy et, sonra main'e merge.",
+   "ms": 833,
+   "audio_ms": 2520
+  },
+  {
+   "spoken": "hangi proje?",
+   "ms": 316,
+   "audio_ms": 840
+  },
+  {
+   "spoken": "bilmiyorum.",
+   "ms": 278,
+   "audio_ms": 600
+  },
+  {
+   "spoken": "hiç session çalışmıyor şu anda.",
+   "ms": 521,
+   "audio_ms": 1800
+  },
+  {
+   "spoken": "hiç sessiy çalışmıyor şu an.",
+   "ms": 579,
+   "audio_ms": 1680
+  },
+  {
+   "spoken": "kimse ticket üzerinde değil.",
+   "ms": 425,
+   "audio_ms": 1520
+  },
+  {
+   "spoken": "selam, iyiyim.",
+   "ms": 600,
+   "audio_ms": 880
+  },
+  {
+   "spoken": "sen naber?",
+   "ms": 224,
+   "audio_ms": 680
+  },
+  {
+   "spoken": "hangi işten bahsediyorsun?",
+   "ms": 908,
+   "audio_ms": 1400
+  },
+  {
+   "spoken": "biraz daha detay ver, neyi kastediyorsun?",
+   "ms": 682,
+   "audio_ms": 2320
+  },
+  {
+   "spoken": "selam, iyiyim.",
+   "ms": 311,
+   "audio_ms": 880
+  },
+  {
+   "spoken": "sen naber?",
+   "ms": 173,
+   "audio_ms": 680
+  },
+  {
+   "spoken": "hangi testlerden bahsediyorsun?",
+   "ms": 520,
+   "audio_ms": 1680
+  },
+  {
+   "spoken": "şu an çalışan bir iş yok, detay ver.",
+   "ms": 523,
+   "audio_ms": 2280
+  },
+  {
+   "spoken": "selam, iyiyim.",
+   "ms": 524,
+   "audio_ms": 880
+  },
+  {
+   "spoken": "naber sen?",
+   "ms": 225,
+   "audio_ms": 760
+  }
+ ],
+ "checks": [
+  [
+   "24 Turkish utterances, every one committed once and whole (24/24)",
+   true
+  ],
+  [
+   "silence makes no turn and says nothing",
+   true
+  ],
+  [
+   "barge-in: the player stops within 300 ms of the voice starting ([142,130,139])",
+   true
+  ],
+  [
+   "barge-in: each cut-in is the next turn, whole ([[\"Claude ile Codex hangi ticket üzerinde çalışıyor? John Mitha attılar mı?\",\"Selam, nasılsın?\"],[\"Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?\",\"Selam, nasılsın?\"],[\"Testler bitti mi?\",\"Selam, nasılsın?\"]])",
+   true
+  ],
+  [
+   "Turkish WER of what agents receive ≤ 15% (5.3%)",
+   true
+  ],
+  [
+   "no clicks at piece edges (2)",
+   false
+  ]
+ ]
+}

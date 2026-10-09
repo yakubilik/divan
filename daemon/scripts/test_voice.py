@@ -352,6 +352,13 @@ def no_stale_audio(events: list[dict]) -> str | None:
 
 # ── the daemon ───────────────────────────────────────────────────────────────
 E2E_ACCOUNT = "claude-voice-e2e"
+SLOW_START = [0.0]                    # seconds the general call's "start work" takes, set by a test
+
+
+class SlowHub(voice.Hub):
+    async def start_work(self, project, instruction):
+        await asyncio.sleep(SLOW_START[0])
+        return await super().start_work(project, instruction)
 
 
 def free_port() -> int:
@@ -394,7 +401,7 @@ async def daemon(real: bool, account_home: str | None, agent_home: str | None = 
 
         def brain(s, d):
             return Scripted((d.get("client") or {}).get("mode", "talk"), s.chat_id)
-        srv.voice = voice.Hub(srv, recognizer_factory=rec, brain_factory=brain)
+        srv.voice = SlowHub(srv, recognizer_factory=rec, brain_factory=brain)
     uc = uvicorn.Config(srv.app, host="127.0.0.1", port=port, log_level="warning",
                         ws_ping_interval=None, ws_ping_timeout=None)
     server = uvicorn.Server(uc)
@@ -588,7 +595,42 @@ async def chat_bridge(phone: Phone, fx: dict, projects: Path) -> None:
     await phone.call("voice.stop", {"session_id": g.sid})
 
 
-# ── 4 · errors and reconnecting ──────────────────────────────────────────────
+# ── 4 · acknowledgements ─────────────────────────────────────────────────────
+async def acks(phone: Phone, fx: dict) -> None:
+    print("acknowledgements: only while a slow action runs, never repeated, never over the caller")
+    SLOW_START[0] = 2.5
+    try:
+        c = Caller(phone, "ack")
+        await c.start(client={"build": "test", "device": "ack", "mode": "act"})
+        await phone.tell("voice.ready", {"session_id": c.sid, "t_client_ms": int(time.time() * 1000)})
+        for sid in ("long-request", "tech-names"):
+            await c.say(fx[sid])
+            await c.quiet(3.0)
+        says = [e["data"] for e in phone.voice(c.sid, "voice.say") if e["data"]["text"]]
+        turns = sorted({d["turn_id"] for d in says})
+        per = [[(d["kind"], d["text"]) for d in says if d["turn_id"] == t] for t in turns]
+        check(len(per) == 2 and all(len(p) == 2 and p[0][0] == "ack" and p[1][1].startswith("app ") for p in per),
+              "a slow action gets one acknowledgement, then the bridge's own line", str(per))
+        check(len(per) == 2 and per[0][0][1] != per[1][0][1], "the next acknowledgement is a different line",
+              str([p[0] for p in per]))
+        await phone.call("voice.stop", {"session_id": c.sid})
+
+        c = Caller(phone, "ack-over")
+        await c.start(client={"build": "test", "device": "ack-over", "mode": "act"})
+        await phone.tell("voice.ready", {"session_id": c.sid, "t_client_ms": int(time.time() * 1000)})
+        await c.say(fx["long-request"])           # the commit is inside its 3 s tail; the ack would be 1.2 s after
+        info = await c.say(fx["short-greeting"])
+        await c.quiet(3.0)
+        start = info["wall0"] + fx["short-greeting"]["spans"][0]["start_ms"] / 1000
+        over = [e["data"]["text"] for e in phone.voice(c.sid, "voice.say")
+                if e["data"]["kind"] == "ack" and start <= e["_at"] <= info["speech_end_wall"] + 0.7]
+        check(not over, "no acknowledgement is said while the caller is talking again", str(over))
+        await phone.call("voice.stop", {"session_id": c.sid})
+    finally:
+        SLOW_START[0] = 0.0
+
+
+# ── 5 · errors and reconnecting ──────────────────────────────────────────────
 async def errors(phone: Phone, fx: dict, port, token) -> None:
     print("errors: bounded, and said")
     for mode, code, line in (("stt-fail", voice.E_STT, "unheard"), ("brain-fail", voice.E_REPLY, "no_reply")):
@@ -802,6 +844,7 @@ async def main() -> None:
             await replay(port, token, fx)
             await barge(phone, fx)
             await chat_bridge(phone, fx, projects)
+            await acks(phone, fx)
             await errors(phone, fx, port, token)
         check(not phone.replies or all(m["type"] == "error" for m in phone.replies),
               "audio, playback and barge-in messages get no receipts", str(phone.replies[:2]))
