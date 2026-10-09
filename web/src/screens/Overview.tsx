@@ -10,8 +10,8 @@
  *  Scoped to one product it is that product's page instead: its chats down
  *  the left on every page of it, and in the middle the product's own page
  *  (`screens/Project.tsx`) until one of those chats is opened, which is then
- *  read there. Its board, a card and a branch are pages of their own in the
- *  same middle, reached from what is on the page and not from a row of tabs.
+ *  read there. Its board and a card are pages of their own in the same middle,
+ *  reached from what is on the page and not from a row of tabs.
  *
  *  Three things are true of everything on it:
  *
@@ -41,57 +41,36 @@
  *  against: no machine has answered yet, a machine answered and has since gone
  *  quiet, and a machine that cannot be reached at all.
  */
-import { useMemo, useState } from 'react';
-import { RADIUS, SHADOW, SIZE, T } from '../lib/theme';
-import { branchOf } from '../lib/project';
+import { useMemo } from 'react';
 import { idOf } from '../lib/sessions';
 import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
-import { CommandBar, EmptyState } from '../ui/divan';
-import { mono } from '../ui/kit';
+import { EmptyState } from '../ui/divan';
 import { Sessions } from '../components/Sessions';
-import { MicButton, useMic } from '../components/Mic';
-import { appendSpeech } from '../lib/dictate';
 import { useFleet } from '../lib/fleet';
 import { today } from '../lib/today';
 import { Board } from './Board';
-import { Branch } from './Branch';
-import { Branches } from './Branches';
 import { Project, ProjectHead } from './Project';
 import { Ticket } from './Ticket';
 import { Waiting } from './Waiting';
 import { Dashboard } from './Dashboard';
 
 /** Where inside a product the page is: its own page, one of its chats open on
- *  it, its board, or the branches with their repositories. Each is a path of
- *  its own (`lib/nav.ts`). */
-export type ProjectTab = 'overview' | 'board' | 'chat' | 'branches' | 'waiting';
+ *  it, or its board. Each is a path of its own (`lib/nav.ts`). */
+export type ProjectTab = 'overview' | 'board' | 'chat' | 'waiting';
 
 export interface OverviewProps {
   view: DivanView;
   /** The product the bar is scoped to, or null for all of them. */
   project: MergedProject | null;
   onProject: (key: string | null) => void;
-  /** What the command bar across the bottom does with a sentence: start a chat
-   *  on the computer in focus and say it there (`lib/tell.ts`). The page does
-   *  not move — the chat opens as a window on this one — so the bar is a
-   *  composer and not a way out of the Dashboard. */
-  onAsk?: (text: string) => Promise<unknown> | unknown;
-  /** What the bar will do that is not the obvious thing — the folder a chat
-   *  would open in on a page about one product. Said over the bar, because a
-   *  chat that opens somewhere you did not expect is worse than one you had to
-   *  point at a folder. */
-  askNote?: string | null;
   /** Which tab of a scoped product is open. Held above this screen, beside the
    *  product it belongs to, so that scoping to another product lands on its
    *  Overview rather than on whichever tab the last one was left on. */
   tab?: ProjectTab;
   onTab?: (tab: ProjectTab) => void;
-  /** Which face of the product is open (Web14 W7), by kind, and which card
-   *  (Web14 W8), by `host:id`. Both are held above this screen beside the
-   *  product, for the same reason the tab is: they are places inside one
-   *  product, and choosing another product leaves them. */
-  branch?: string | null;
-  onBranch?: (kind: string | null) => void;
+  /** Which card is open (Web14 W8), by `host:id`. Held above this screen
+   *  beside the product, for the same reason the tab is: it is a place inside
+   *  one product, and choosing another product leaves it. */
   card?: string | null;
   onCard?: (id: string | null) => void;
   /** The product's chats: the list that stands down the left of every page of
@@ -113,7 +92,7 @@ export interface OverviewProps {
 }
 
 export function Overview({
-  view, project, onProject, onAsk, askNote, tab, onTab, branch, onBranch, card, onCard, chats,
+  view, project, onProject, tab, onTab, card, onCard, chats,
   composer, onOpenCard, projectComposer, onOpenChat,
 }: OverviewProps) {
   const here: ProjectTab = tab ?? 'overview';
@@ -125,7 +104,7 @@ export function Overview({
       .filter((c) => !!project.ids[k] && c.project_id === project.ids[k]));
     return today(mine, view.now);
   }, [project, hosts, view.now]);
-  // The two pages inside a product that have a head of their own. A key that is
+  // The page inside a product that has a head of its own. A key that is
   // no longer in the view — a card that has been finished, a machine that has
   // been unpaired — leaves the product's own page rather than a blank one.
   // By the card's own id as well as by `host:id`, because those are the two
@@ -137,8 +116,6 @@ export function Overview({
   const open = project && card
     ? view.cards.find((c) => idOf(c) === card || c.id === card) ?? null
     : null;
-  const face = project && !open ? branchOf(project, branch ?? null) : null;
-  const deep = !!open || !!face;
   if (!project) {
     const openCard = (c: MergedCard) => (onOpenCard ? onOpenCard(c) : onProject(c.projectKey));
     if (here === 'waiting') return <Waiting view={view} onCard={openCard} />;
@@ -163,35 +140,11 @@ export function Overview({
         <div className="dv-page">
           <Ticket
             card={open} project={project} index={view.projects.indexOf(project)} now={view.now}
-            onProject={() => { onCard?.(null); onBranch?.(null); onTab?.('overview'); }}
-            onBranch={(kind) => { onCard?.(null); onBranch?.(kind); }}
+            onProject={() => { onCard?.(null); onTab?.('overview'); }}
           />
           {!!projectComposer && <div style={{ marginTop: 40 }}>{projectComposer}</div>}
         </div>
         <Sessions view={view} />
-      </div>,
-    );
-  }
-
-  if (deep) {
-    // A branch's page is the handover's own (§4.7); the bar that asks about the
-    // product and the sessions running on it stay under it.
-    return framed(
-      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: T.bg }}>
-        <div className="dv-page" style={{ paddingBottom: BAR_ROW + 12 }}>
-          {!!face && (
-            <Branch
-              project={project} branch={face} index={view.projects.indexOf(project)} now={view.now}
-              onProject={() => onBranch?.(null)}
-              onCard={(c: MergedCard) => onCard?.(idOf(c))}
-              onBoard={() => { onBranch?.(null); onTab?.('board'); }}
-            />
-          )}
-          <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {!!onAsk && <Bar onAsk={onAsk} note={askNote ?? null} />}
-            <Sessions view={view} />
-          </div>
-        </div>
       </div>,
     );
   }
@@ -217,13 +170,12 @@ export function Overview({
   return framed(
     <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
       <div className="dv-page dv-page--wide">
-        <ProjectHead project={project} now={view.now} compact={here === 'board' || here === 'branches'} />
+        <ProjectHead project={project} now={view.now} compact={here === 'board'} />
         {(here === 'overview' || here === 'chat') && (
           <Project view={view} project={project}
             today={day}
             onCard={(c) => onCard?.(idOf(c))}
             onBoard={() => to('board')}
-            onBranches={() => to('branches')}
             composer={projectComposer} />
         )}
         {board && (
@@ -232,93 +184,11 @@ export function Overview({
             {!!projectComposer && <div style={{ marginTop: 32 }}>{projectComposer}</div>}
           </>
         )}
-        {here === 'branches' && (
-          <div style={{ marginTop: 32 }}>
-            <Branches project={project} now={view.now} onBranch={(kind) => onBranch?.(kind)} />
-          </div>
-        )}
       </div>
       <Sessions view={view} />
     </div>,
   );
 }
-
-/** The command bar, with what it is for in it.
- *
- *  A sentence typed here is said to a new chat on the computer in focus, and
- *  the page it was typed on is the page it is read on: the chat opens as a
- *  window in the corner beside the questions (`components/Sessions.tsx`). So
- *  the bar keeps only what a composer has to keep — the words, whether they are
- *  in flight, and what the computer said if they did not land. The words are
- *  kept on a failure rather than cleared: a sentence a screen swallowed is a
- *  sentence somebody has to type again.
- *
- *  ⌘K still opens the palette. It is written on the bar because that is where
- *  the frame writes it, and because a bar you can reach from the keyboard is
- *  the point of the key. */
-function Bar({ onAsk, note }: {
-  onAsk: (text: string) => Promise<unknown> | unknown;
-  note: string | null;
-}) {
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // The computer in focus listens, the one the chat is going to open on.
-  const focus = useFleet((s) => s.focus);
-  const mic = useMic({ hostKey: focus, onCommit: (chunk) => setText((prev) => appendSpeech(prev, chunk)) });
-
-  const say = async () => {
-    // Send with the microphone open means "that was it": stop first, then send.
-    if (mic.state !== 'idle') { mic.stop(); return; }
-    const words = text.trim();
-    if (!words || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await onAsk(words);
-      setText('');
-    } catch (e: any) {
-      setError(e?.message ?? 'That did not reach the computer');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <>
-    {/* The bar floats, and nothing is drawn for the row it floats in. A strip
-        of the page's colour with a hairline over it kept cards from passing
-        under the bar, and cut the page in two to do it. The page is open on
-        both sides of the bar instead, and ends a row early (`padding` above):
-        scrolled to its end, nothing is left behind the bar. */}
-    <div style={{
-      position: 'fixed', left: '50%', bottom: 22, transform: 'translateX(-50%)', zIndex: 10,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-    }}>
-      {(busy || !!error || !!note || !!mic.error || mic.state === 'installing') && (
-        <div style={{
-          ...mono, maxWidth: 420, fontSize: 11, color: error ? T.red : T.ink3,
-          background: T.s2, padding: '6px 10px', borderRadius: RADIUS.well, boxShadow: SHADOW.pop,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{error ?? mic.error ?? (busy ? 'starting a chat…'
-          : mic.state === 'installing' ? 'fetching the speech model, once' : note)}</div>
-      )}
-      <CommandBar
-        placeholder={mic.state === 'listening' ? 'Listening…' : 'Tell Divan anything…'}
-        value={mic.interim ? appendSpeech(text, mic.interim) : text} onChange={setText}
-        onSend={() => { void say(); }}
-        after={<MicButton mic={mic} size={SIZE.send} />}
-      />
-    </div>
-    </>
-  );
-}
-
-/** How tall the row the command bar sits in is: the 22 pt it floats off the
- *  bottom edge, the bar, and the one-line note that stands over it (which
- *  product a sentence will be said about). It is also what the page leaves
- *  empty at its foot, so the two are one number. */
-const BAR_ROW = 118;
 
 /** Nothing to draw, in whichever of its four ways. A page with no products on
  *  it is not the same thing as a page whose machines have not answered. */

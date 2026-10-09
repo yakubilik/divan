@@ -2,7 +2,7 @@
  *  undo.
  *
  *  The panel held every bit of where you were in `useState`: which page, which
- *  product, which tab of it, which face, which card, which chat. One of those
+ *  product, which tab of it, which card, which chat. One of those
  *  reached the address (`?project=`) and it was written with `replaceState`, so
  *  the browser's history had exactly one entry the whole time you were using
  *  the panel. Pressing Back did what Back does with one entry: it left.
@@ -12,7 +12,7 @@
  *  was only the first:
  *
  *   · **an address you can go back through.** What pushes an entry is a place
- *     a person went to on purpose — a page, a product, a face, a card, a chat.
+ *     a person went to on purpose — a page, a product, a card, a chat.
  *   · **an address a person can read.** `/p/quire/board`, not
  *     `?project=quire&tab=board&card=100.64.1.2%3A8790%3A0d2279020af7`.
  *     A card is named by its own id and the machine it is on is looked up, the
@@ -36,12 +36,9 @@ export interface Place {
   view: View;
   /** The product the Dashboard is scoped to, by its slug, or null for all. */
   project: string | null;
-  /** Which tab of a scoped product: what is happening on it, the faces it has,
-   *  or its board. */
+  /** Which tab of a scoped product: what is happening on it, or its board. */
   tab: string;
-  /** Which face of that product is open, by kind. */
-  branch: string | null;
-  /** …and which card, by the card's own id — never `host:id`, which is an
+  /** Which card, by the card's own id — never `host:id`, which is an
    *  address of this browser's and not of the card. */
   card: string | null;
   /** The chat being read. The computer that holds it is looked up, except
@@ -51,7 +48,7 @@ export interface Place {
 }
 
 export const HOME: Place = {
-  view: 'overview', project: null, tab: 'overview', branch: null, card: null,
+  view: 'overview', project: null, tab: 'overview', card: null,
   chat: null, host: null,
 };
 
@@ -74,12 +71,14 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *  /chats                     the Chat place · /chats/<id> one chat
  *  /machine/accounts          a page of the Machine place
  *  /p/quire                   one product
- *  /p/quire/branches          …the faces it has beside its code
  *  /p/quire/board             …its board
  *  /p/quire/chat/9f2c…        …one of its chats, open in the middle of it
- *  /p/quire/b/engineering     …one of its faces
  *  /p/quire/c/0d2279020af7    …and one card, wherever that card lives
  *  ```
+ *
+ *  A product's branches had a tab (`/p/quire/branches`) and a page each
+ *  (`/p/quire/b/engineering`). Both are gone from the panel; an address kept
+ *  to either is read as the product's own page (`readPlace`).
  */
 export function pathOf(place: Place): string {
   if (place.view === 'chats') return place.chat ? `/chats/${enc(place.chat)}` : '/chats';
@@ -87,8 +86,7 @@ export function pathOf(place: Place): string {
   if (!place.project) return place.tab === 'waiting' ? '/waiting' : '/';
   const head = `/p/${enc(place.project)}`;
   if (place.card) return `${head}/c/${enc(place.card)}`;
-  if (place.branch) return `${head}/b/${enc(place.branch)}`;
-  if (place.tab === 'board' || place.tab === 'branches') return `${head}/${place.tab}`;
+  if (place.tab === 'board') return `${head}/board`;
   // One of the product's chats, open where its page is. With none open the
   // page is the product's own.
   if (place.tab === 'chat' && place.chat) return `${head}/chat/${enc(place.chat)}`;
@@ -118,9 +116,8 @@ export function readPlace(pathname: string, search = ''): Place {
     return {
       view: view === 'chats' || MACHINE.includes(view) ? view : 'overview',
       project: (q.get('project') || '').trim() || null,
-      tab: q.get('tab') === 'board' || q.get('tab') === 'branches'
-        ? (q.get('tab') as string) : 'overview',
-      branch: (q.get('branch') || '').trim() || null,
+      // A branch's tab or page named here is the product's own page now.
+      tab: q.get('tab') === 'board' ? 'board' : 'overview',
       // …including a card named the old way, `host:id`, whose tail is the id.
       card: ((q.get('card') || '').trim().split(':').pop() || null),
       chat: (q.get('chat') || '').trim() || null,
@@ -137,9 +134,10 @@ export function readPlace(pathname: string, search = ''): Place {
   }
   if (parts[0] === 'p' && parts[1]) {
     const scoped: Place = { ...place, project: parts[1] };
-    if (parts[2] === 'board' || parts[2] === 'branches') return { ...scoped, tab: parts[2] };
+    if (parts[2] === 'board') return { ...scoped, tab: 'board' };
     if (parts[2] === 'chat' && parts[3]) return { ...scoped, tab: 'chat', chat: parts[3] };
-    if (parts[2] === 'b' && parts[3]) return { ...scoped, branch: parts[3] };
+    // `/p/quire/branches` and `/p/quire/b/<kind>` were the branch tab and a
+    // branch's page; both fall through to the product's own page.
     if (parts[2] === 'c' && parts[3]) return { ...scoped, card: parts[3], tab: 'board' };
     return scoped;
   }
@@ -150,6 +148,16 @@ export function readPlace(pathname: string, search = ''): Place {
  *  second history entry for a state change that moved nothing — a board poll
  *  answering, a chat being renamed under you. */
 export function samePlace(a: Place, b: Place): boolean {
-  return (['view', 'project', 'tab', 'branch', 'card', 'chat', 'host'] as (keyof Place)[])
+  return (['view', 'project', 'tab', 'card', 'chat', 'host'] as (keyof Place)[])
     .every((k) => a[k] === b[k]);
+}
+
+/** A place a history entry carries, as this build draws it. An entry written
+ *  before the branch pages went can still say `tab: 'branches'` or name a
+ *  branch; Back to it is the product's own page. */
+export function placeOfState(state: Partial<Place> & { branch?: unknown }): Place {
+  const { branch: _gone, ...rest } = state;
+  const to: Place = { ...HOME, ...rest };
+  if (to.tab === 'branches') to.tab = 'overview';
+  return to;
 }

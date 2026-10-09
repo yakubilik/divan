@@ -21,14 +21,14 @@ import {
   MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, placeOf,
   updateWaiting, type View,
 } from './lib/shell';
-import { HOME, pathOf, readPlace, samePlace, searchOf, type Place } from './lib/nav';
+import { HOME, pathOf, placeOfState, readPlace, samePlace, searchOf, type Place } from './lib/nav';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
 import { InboxBell } from './components/Inbox';
 import { Report } from './components/Report';
 import { Modal, ModalHead } from './components/Modal';
 import { POLL_MS, announce, useInbox, type Notice } from './lib/inbox';
 import { createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
-import { idOfTold, tell, useTold, whereFor, whereNote, type Scoped, type ToldPicks } from './lib/tell';
+import { idOfTold, tell, useTold, whereFor, type Scoped, type ToldPicks } from './lib/tell';
 import type { Agent, Chat } from './lib/protocol';
 
 interface Selection { hostKey: string; chatId: string }
@@ -60,12 +60,9 @@ export function App() {
   // inside the page, so that choosing another product lands on its Overview:
   // "the board" is a thing about one product, not a mode the panel is in.
   const [tab, setTab] = useState<ProjectTab>(opened.current.tab as ProjectTab);
-  // Which face of that product is open, and which card. Beside the product for
-  // the same reason the tab is: both are places inside one product, and choosing
-  // another product leaves them. Not in the address — a branch and a card are
-  // reached by pressing something on the page above them, and the product is the
-  // scope worth sending to somebody.
-  const [branch, setBranch] = useState<string | null>(opened.current.branch);
+  // Which card of that product is open. Beside the product for the same reason
+  // the tab is: it is a place inside one product, and choosing another product
+  // leaves it.
   const [card, setCard] = useState<string | null>(opened.current.card);
   const [sel, setSel] = useState<Selection | null>(null);
   const [newChat, setNewChat] = useState<{
@@ -169,7 +166,7 @@ export function App() {
   /** Where the panel is, as one value: what goes in the address, and what the
    *  back button puts back. */
   const where: Place = useMemo(() => ({
-    view, project, branch,
+    view, project,
     // A product's page with no chat open on it is the product's page, whatever
     // was open a moment ago: one place, so one entry.
     tab: tab === 'chat' && !sel ? 'overview' : tab,
@@ -184,7 +181,7 @@ export function App() {
     // popped-out window is told which machine, because it may be opened before
     // that machine has answered.
     host: opened.current.host && opened.current.chat === sel?.chatId ? opened.current.host : null,
-  }), [view, project, tab, branch, card, sel?.chatId]);
+  }), [view, project, tab, card, sel?.chatId]);
 
   /** The entry the browser is on. Compared rather than trusted: a render for a
    *  board poll must not push a second copy of the page you are already on. */
@@ -256,10 +253,8 @@ export function App() {
     : project && card
       ? (from
         ? { label: placeName(from, divan), onBack: () => history.back() }
-        : { label: `${scopedName ?? 'Project'} · Board`, onBack: () => { setCard(null); setBranch(null); setTab('board'); } })
-      : project && branch
-        ? { label: scopedName ?? 'Project', onBack: () => { setCard(null); setBranch(null); } }
-        : project && (tab === 'board' || tab === 'branches' || (tab === 'chat' && sel))
+        : { label: `${scopedName ?? 'Project'} · Board`, onBack: () => { setCard(null); setTab('board'); } })
+        : project && (tab === 'board' || (tab === 'chat' && sel))
           ? { label: scopedName ?? 'Project', onBack: () => setTab('overview') }
           : project
           ? { label: 'Dashboard', onBack: () => chooseProject(null) }
@@ -286,14 +281,13 @@ export function App() {
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
       const to: Place = (e.state && typeof e.state === 'object' && 'view' in e.state)
-        ? { ...HOME, ...(e.state as Place) }
+        ? placeOfState(e.state as Partial<Place>)
         : readPlace(location.pathname, location.search);
       going.current = true;
       shown.current = to;
       setView(to.view);
       setProject(to.project);
       setTab(to.tab as ProjectTab);
-      setBranch(to.branch);
       setCard(cardKey(to.card));
       setPeek(false);
       const host = to.host ?? hostOfChat(to.chat);
@@ -337,14 +331,12 @@ export function App() {
   const chooseProject = useCallback((key: string | null) => {
     setProject(key);
     setTab('overview');
-    setBranch(null);
     setCard(null);
   }, []);
 
   /** One of a product's chats, read in the middle of that product's page. */
   const openHere = useCallback((hostKey: string, chatId: string) => {
     select(hostKey, chatId);
-    setBranch(null);
     setCard(null);
     setTab('chat');
   }, [select]);
@@ -353,7 +345,6 @@ export function App() {
   const compose = useCallback(() => {
     setView('overview');
     setProject(null);
-    setBranch(null);
     setCard(null);
     setTimeout(() => composerRef.current?.focus(), 0);
   }, []);
@@ -385,7 +376,6 @@ export function App() {
     setView('overview');
     setProject(found.projectKey);
     setTab('overview');
-    setBranch(null);
     setCard(`${found.host}:${found.id}`);
   }, [divan.cards]);
   const openNoticeRef = useRef(openNotice);
@@ -570,7 +560,7 @@ export function App() {
       const found = divan.cards.find((c) => c.ustabasi_id === id);
       setPeek(false);
       if (found) {
-        setView('overview'); setProject(found.projectKey); setTab('board'); setBranch(null);
+        setView('overview'); setProject(found.projectKey); setTab('board');
         setCard(`${found.host}:${found.id}`);
         return;
       }
@@ -693,7 +683,7 @@ export function App() {
       // which is a page under the first row rather than a row of its own.
       else if (e.key === '0') {
         e.preventDefault();
-        setView('overview'); setProject(null); setTab('overview'); setBranch(null); setCard(null);
+        setView('overview'); setProject(null); setTab('overview'); setCard(null);
       }
       else if (e.key === ',') { e.preventDefault(); setView('settings'); }
       else if (e.key === '1') { e.preventDefault(); setView('machines'); }
@@ -736,7 +726,7 @@ export function App() {
               <Composer view={divan} onAsk={ask} inputRef={composerRef}
                 onOptions={() => setNewChat({})} />
             )}
-            onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setBranch(null); setCard(idOf(c)); }}
+            onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setCard(idOf(c)); }}
             onOpenChat={open}
             // The Composer at the foot of a product: everything it sends is
             // about that product, and the chat it starts is read right here,
@@ -754,21 +744,7 @@ export function App() {
                 }} />
             ) : null}
             tab={tab} onTab={setTab}
-            branch={branch} onBranch={setBranch}
             card={card} onCard={setCard}
-            // The bar across the bottom of every desktop frame, and it is the
-            // composer it looks like: what is typed into it starts a chat and
-            // says it there, without leaving this page — the chat opens as a
-            // window on it, and is in the Chat place's list like any other.
-            // ⌘K still opens the palette.
-            //
-            // On a page about one product it opens *in* that product: on a
-            // machine that has it, in its repository. Asking Divan something
-            // while looking at Quire is asking about Quire, and a chat
-            // that opened in the last folder this computer happened to use is
-            // one you have to orient before it can do anything.
-            onAsk={(text: string) => tell(text, scope)}
-            askNote={whereNote(whereFor(scope, fleet.hosts, fleet.focus))}
             // The product's own chats: the list is only the ones filed under
             // it, down the left of every page of the product, and the one that
             // is open is read in the middle. New chat is the product's page
@@ -781,7 +757,7 @@ export function App() {
                   selectedHost={tab === 'chat' ? sel?.hostKey ?? null : null}
                   onSelect={openHere}
                   onNewChat={() => {
-                    setBranch(null); setCard(null); setTab('overview');
+                    setCard(null); setTab('overview');
                     setTimeout(() => projectComposerRef.current?.focus(), 0);
                   }}
                 />
@@ -984,7 +960,6 @@ function placeName(p: Place, view: ReturnType<typeof useDivanView>): string {
   if (!p.project) return p.tab === 'waiting' ? 'Waiting on you' : 'Dashboard';
   const name = projectIn(view, p.project)?.name ?? p.project;
   if (p.card) return name;
-  if (p.branch) return `${name} · ${p.branch}`;
   if (p.tab === 'board') return `${name} · Board`;
   return name;
 }

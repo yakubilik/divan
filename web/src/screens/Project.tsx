@@ -11,7 +11,11 @@
  *  Then what was done on the product today, as a short list of work
  *  (`lib/today.ts`); what needs you; the board in four numbers with the In
  *  Progress cards under them; and beside those what the product is still
- *  waiting on (`components/StillOpen.tsx`).
+ *  waiting on (`components/StillOpen.tsx`) and the repositories it owns.
+ *
+ *  A product's branches are not drawn here, or anywhere else in the panel: they
+ *  had a tab and a page each, and both went. The repositories, which used to be
+ *  read off the branches tab, are in the side column instead.
  *
  *  Every figure is counted off the board (`lib/board.ts`) and every sentence is
  *  decided in `lib/project.ts`; what is left here is the arrangement.
@@ -21,7 +25,7 @@ import { counts, inProgress } from '../lib/board';
 import { blank, blankBody, metaLine, oldLine, quiet } from '../lib/project';
 import { useState } from 'react';
 import { TODAY_SHOWN, type Did } from '../lib/today';
-import { summaryOf } from '../lib/overview';
+import { figure, summaryOf } from '../lib/overview';
 import { sessions } from '../lib/sessions';
 import type { DivanView, MergedCard, MergedProject } from '../lib/divan';
 import { StillOpen } from '../components/StillOpen';
@@ -57,7 +61,7 @@ export function ProjectHead({ project: p, now, compact }: {
   );
 }
 
-export function Project({ view, project: p, today, onCard, onBoard, onBranches, composer }: {
+export function Project({ view, project: p, today, onCard, onBoard, composer }: {
   view: DivanView;
   project: MergedProject;
   /** What was done on this product today, latest first. */
@@ -66,8 +70,6 @@ export function Project({ view, project: p, today, onCard, onBoard, onBranches, 
   onCard?: (card: MergedCard) => void;
   /** The board, from its summary. */
   onBoard?: () => void;
-  /** The branches with their repositories. */
-  onBranches?: () => void;
   /** The Composer, locked to this product. */
   composer?: React.ReactNode;
 }) {
@@ -94,10 +96,11 @@ export function Project({ view, project: p, today, onCard, onBoard, onBranches, 
               </div>
             </section>
           )}
-          <BoardSummary view={view} project={p} onCard={onCard} onBoard={onBoard} onBranches={onBranches} />
+          <BoardSummary view={view} project={p} onCard={onCard} onBoard={onBoard} />
         </main>
         <aside>
           <StillOpen project={p} now={view.now} />
+          <Repositories project={p} now={view.now} />
         </aside>
       </div>
     </>
@@ -105,9 +108,9 @@ export function Project({ view, project: p, today, onCard, onBoard, onBranches, 
 }
 
 /** Four numbers off the real columns, and the In Progress cards under them. */
-function BoardSummary({ view, project: p, onCard, onBoard, onBranches }: {
+function BoardSummary({ view, project: p, onCard, onBoard }: {
   view: DivanView; project: MergedProject;
-  onCard?: (card: MergedCard) => void; onBoard?: () => void; onBranches?: () => void;
+  onCard?: (card: MergedCard) => void; onBoard?: () => void;
 }) {
   const href = `/p/${encodeURIComponent(p.key)}/board`;
   const go = (e: React.MouseEvent) => { if (onBoard) { e.preventDefault(); onBoard(); } };
@@ -117,10 +120,6 @@ function BoardSummary({ view, project: p, onCard, onBoard, onBranches }: {
       <div className="dv-sec">
         <h3 id="p-board">Board</h3>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: 12.5, fontWeight: 500 }}>
-          {!!onBranches && (
-            <a href={`/p/${encodeURIComponent(p.key)}/branches`} style={{ color: 'var(--ink-2)' }}
-              onClick={(e) => { e.preventDefault(); onBranches(); }}>Repositories</a>
-          )}
           <a href={href} onClick={go} style={{ color: 'var(--ink-2)' }}>Open board</a>
         </span>
       </div>
@@ -136,7 +135,7 @@ function BoardSummary({ view, project: p, onCard, onBoard, onBranches }: {
       </div>
       {blank(p) ? (
         <p style={{ margin: '16px 4px 0', fontSize: 13.5, lineHeight: '20px', color: 'var(--ink-2)' }}>
-          A new board. {blankBody(p)}
+          A new board. {blankBody()}
         </p>
       ) : rows.length > 0 && (
         <>
@@ -155,6 +154,37 @@ function BoardSummary({ view, project: p, onCard, onBoard, onBranches }: {
           </div>
         </>
       )}
+    </section>
+  );
+}
+
+/** The repositories the product owns, by folder name, and what git says about
+ *  them. A product with no repository says so; one whose history no machine
+ *  could read says that rather than a zero. */
+function Repositories({ project: p, now }: { project: MergedProject; now: number }) {
+  const git = figure(p, now, uptime);
+  return (
+    <section aria-labelledby="p-repos" data-repos="" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, marginTop: 24 }}>
+      <div className="dv-sec" style={{ margin: 0 }}>
+        <h3 id="p-repos">Repositories</h3>
+        {p.repos.length > 0 && <span className="dv-meta">{p.repos.length}</span>}
+      </div>
+      <div className="dv-glass" style={{ borderRadius: 'var(--radius-md)', padding: '12px 16px' }}>
+        {p.repos.length ? (
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', font: '400 12.5px/1.7 var(--font-mono)', color: 'var(--ink-2)' }}>
+            {p.repos.map((r) => (
+              <li key={r} title={r} data-repo={r} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {r.split(/[/\\]/).filter(Boolean).pop()}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--ink-2)' }}>No repository attached yet.</p>
+        )}
+        <p className="dv-meta" style={{ margin: '10px 0 0', paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+          {git ? `${git.value} ${git.label} · ${git.moved}` : 'no machine could read its history'}
+        </p>
+      </div>
     </section>
   );
 }

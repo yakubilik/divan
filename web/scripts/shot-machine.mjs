@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-/** A picture of a branch, the chat and Machine, desktop and narrow.
+/** A picture of the chat and Machine, desktop and narrow. (A branch had a page
+ *  here too; it went with ustabasi #147.)
  *
  *     node scripts/shot-machine.mjs [out-dir]
  *
  *  Not a check: what it leaves is the thing to hold up beside the frame
- *  (`Branch`, `Chat`, `Machine` .dc.html). Needs a browser, like `test-divan-ui.mjs`. */
+ *  (`Chat`, `Machine` .dc.html). Needs a browser, like `test-divan-ui.mjs`. */
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -54,7 +55,6 @@ const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: tr
 const page = (m, p) => cdp(m, p, sessionId);
 try {
   for (const [name, view, width, height, mobile] of [
-    ['branch', 'branch', 1440, 1100, false], ['branch-unconnected', 'branch&branch=SEO', 1440, 500, false],
     ['chat', 'chat', 1440, 1000, false], ['machine', 'machine', 1440, 1300, false],
     ['machine-narrow', 'machine', 390, 2200, true],
   ]) {

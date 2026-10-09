@@ -1,6 +1,6 @@
-/** A branch, the chat and Machine on their own, the way the panel draws them
- *  (`?view=branch|chat|machine`). Built and photographed by
- *  `scripts/shot-machine.mjs`. */
+/** The chat and Machine on their own, the way the panel draws them
+ *  (`?view=chat|machine`; anything else is Quire's own page). Built and
+ *  photographed by `scripts/shot-machine.mjs`. */
 import { createRoot } from 'react-dom/client';
 import '../src/styles/divan-tokens.css';
 import '../src/styles/divan-components.css';
@@ -18,7 +18,7 @@ import { chat, host } from './panel-fixture.js';
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('theme') === 'light' ? 'light' : 'dark';
-const which = q.get('view') || 'branch';
+const which = q.get('view') || 'machine';
 document.documentElement.dataset.theme = scheme;
 const root = document.getElementById('root')!;
 root.className = 'dv-root dv-ambient';
@@ -81,7 +81,7 @@ const page = which === 'chat' ? (
 ) : (
   <Shell view="overview" onView={() => {}} fleet={view} back={{ label: 'Quire', onBack: () => {} }}>
     <Overview view={view} project={project(view, 'quire')} onProject={() => {}} tab="overview" onTab={() => {}}
-      branch={q.get('branch') || 'Engineering'} onBranch={() => {}} card={null} onCard={() => {}} />
+      card={null} onCard={() => {}} />
   </Shell>
 );
 createRoot(root).render(page);
