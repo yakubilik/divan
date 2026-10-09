@@ -15,6 +15,8 @@ import { useFleet } from '../lib/fleet';
 import { sessions, type Session } from '../lib/sessions';
 import { greeting, quietFor, short, summary } from '../lib/compose';
 import { uptime } from '../lib/format';
+import { pending, useAsking } from '../lib/asking';
+import { Asking } from '../components/Asking';
 
 export function Dashboard({ view, onProject, onCard, onChat, onWaiting, composer, empty }: {
   view: DivanView;
@@ -62,7 +64,9 @@ export function Dashboard({ view, onProject, onCard, onChat, onWaiting, composer
               )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-              {waiting.map((s) => <Wait key={s.id} session={s} onOpen={() => onCard(s.card)} />)}
+              {waiting.map((s) => (s.kind === 'question' || s.kind === 'decision'
+                ? <AskRow key={s.id} session={s} view={view} />
+                : <Wait key={s.id} session={s} onOpen={() => onCard(s.card)} />))}
             </div>
           </section>
         )}
@@ -72,7 +76,43 @@ export function Dashboard({ view, onProject, onCard, onChat, onWaiting, composer
           <Running view={view} onCard={onCard} onChat={onChat} />
         </div>
       </div>
+      <Asking view={view} />
     </div>
+  );
+}
+
+/** A question that is a conversation in the floating chat: one line here, so
+ *  the page does not say the question a second time, and one press to bring
+ *  its window back when it was put away or closed. */
+function AskRow({ session: s, view }: { session: Session; view: DivanView }) {
+  const hosts = useFleet((x) => x.hosts);
+  const selected = useAsking((x) => x.selected);
+  const minimised = useAsking((x) => x.minimised);
+  const open = selected === s.id && !minimised.includes(s.id);
+  const st = STATUS[s.kind];
+  return (
+    <article className="dv-glass dv-wait" data-asking-row={s.id}>
+      <div className="dv-wait-head">
+        <span className="dv-mono dv-mono--sm" aria-hidden="true">{(s.project || '?').charAt(0).toUpperCase()}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink-2)', minWidth: 0,
+                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {[s.project, s.card.branch].filter(Boolean).join(' · ')}
+        </span>
+        <span className={`dv-status ${st.cls}`} style={{ marginLeft: 'auto' }}><i />{st.word}</span>
+      </div>
+      <p className="dv-meta" style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        title={s.card.title}>{s.who} · {s.card.title}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button type="button" className="dv-btn dv-btn--amber dv-hit" disabled={open}
+          onClick={() => {
+            const p = pending(view, hosts).find((x) => x.id === s.id);
+            if (p) useAsking.getState().raise(p);
+          }}>{open ? 'Open in chat' : 'Reply'}</button>
+        <span className="dv-meta" style={{ marginLeft: 'auto' }}>
+          {[s.age == null ? '' : short(s.age), s.machine].filter(Boolean).join(' · ')}
+        </span>
+      </div>
+    </article>
   );
 }
 
