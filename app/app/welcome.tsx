@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Image, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
@@ -11,6 +11,8 @@ import { Button, Card, SectionHeader, Tap } from '../src/components/divan';
 import { PageHead } from '../src/components/machine';
 import { Icon } from '../src/components/icon';
 import { Text } from '../src/components/text';
+
+const SEAL = require('../assets/divan-seal.png');
 
 const REPO = 'https://github.com/yakubilik/divan';
 const TAILSCALE = 'https://tailscale.com/download';
@@ -58,6 +60,9 @@ export default function Welcome() {
       </View>
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 8 }}>
         <View style={{ paddingTop: 24, paddingHorizontal: 20, gap: 8 }}>
+          {/* The seal, once, where the app first says its name. */}
+          <Image source={SEAL} accessibilityLabel="Divan" testID="welcome-seal"
+            style={{ width: 96, height: 96, marginBottom: 10 }} />
           <SectionHeader kind="mark" title={T(step === 0 ? 'welStep1' : 'welStep2')}
             style={{ paddingTop: 0, paddingHorizontal: 0 }} />
           <PageHead lines={3} title={T(step === 0 ? 'welTitle1' : 'welTitle2')} style={{ paddingHorizontal: 0 }} />
