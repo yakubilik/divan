@@ -243,10 +243,13 @@
 /* §4.8 Chat: the rule a conversation is filed under, and the card it filed. */
 .dv-filed{display:flex;align-items:center;gap:10px}
 .dv-filed::before,.dv-filed::after{content:"";flex:1;height:1px;background:var(--hairline)}
-.dv-cardlink{align-self:flex-start;text-decoration:none;color:var(--ink);border-radius:12px;padding:10px 12px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;gap:10px;max-width:100%}
+.dv-filedcard{align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:100%;min-width:0}
+.dv-cardlink{align-self:flex-start;text-decoration:none;color:var(--ink);font:inherit;text-align:left;border:none;cursor:pointer;border-radius:12px;padding:10px 12px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;gap:10px;max-width:100%}
 .dv-cardlink .t{font-size:13.5px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dv-cardlink svg{width:16px;height:16px;stroke:var(--ink-3);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.dv-cardlink:focus-visible,.dv-subnav a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.dv-ticketcard{border-radius:12px;padding:12px;box-sizing:border-box;width:320px;max-width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.dv-ticketcard .t{font-size:14px;line-height:20px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
+.dv-cardlink:focus-visible,.dv-ticketcard .dv-btn:focus-visible,.dv-subnav a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 
 /* §2: on the phone layout every press is a 44px target. Last in the sheet so it
    outranks a part's own min-height; a min-size wins over any height. The display
