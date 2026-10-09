@@ -1,0 +1,1285 @@
+{
+ "generated": "2026-10-09T12:46:56.660Z",
+ "fast_layer": {
+  "provider": "anthropic-api",
+  "model": "claude-haiku-4-5",
+  "cap_usd": 0.5,
+  "ledger": "/var/folders/xz/rj8h30t94h9bgmqhbw5p238r0000gn/T/rac-voice-xj8t2rvj/rac/voice-api-usage.json",
+  "url": "http://127.0.0.1:59509"
+ },
+ "simulated": "microphone and speaker, AND the fast layer (a scripted stand-in API: no latency or quality evidence)",
+ "conversation": {
+  "rows": [
+   {
+    "id": "short-greeting",
+    "round": 0,
+    "reference": "selam nasılsın",
+    "turns": 1,
+    "committed": "Selam, nasılsın?",
+    "routed": "conversation",
+    "fast_transcript": "Selam nasılsın?",
+    "cancels": [],
+    "said": "Şu an bir sohbet çalışıyor, biri de onay bekliyor. Başka bir şey yok.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1270,
+    "true_end_to_audible_ms": 1260,
+    "first_say_ms": 1179,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-short-greeting.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "short-status",
+    "round": 0,
+    "reference": "testler bitti mi",
+    "turns": 1,
+    "committed": "Testler bitti mi?",
+    "routed": "conversation",
+    "fast_transcript": "Testler bitti mi?",
+    "cancels": [],
+    "said": "Şu an bir sohbet çalışıyor, biri de onay bekliyor. Başka bir şey yok.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1020,
+    "true_end_to_audible_ms": 1010,
+    "first_say_ms": 924,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-short-status.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "long-request",
+    "round": 0,
+    "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+    "turns": 1,
+    "committed": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "routed": "new:2f480a590a5d",
+    "fast_transcript": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "cancels": [],
+    "said": "app projesinde yeni bir sohbet başlattım.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 4080,
+    "true_end_to_audible_ms": 4090,
+    "first_say_ms": 4027,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-long-request.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 1
+    }
+   },
+   {
+    "id": "pause-500",
+    "round": 0,
+    "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+    "turns": 1,
+    "committed": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "routed": "new:2d2824b76be9",
+    "fast_transcript": "Şimdi şeyi, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "cancels": [],
+    "said": "app projesinde yeni bir sohbet başlattım.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 3610,
+    "true_end_to_audible_ms": 3610,
+    "first_say_ms": 3448,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-pause-500.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 1
+    }
+   },
+   {
+    "id": "pause-1000",
+    "round": 0,
+    "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+    "turns": 1,
+    "committed": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+    "routed": "conversation",
+    "fast_transcript": "Bana bir özet çıkar, yani. Bugün neler yapıldı olduğunu merak ediyorum.",
+    "cancels": [
+     "barge"
+    ],
+    "said": "Şu an bir sohbet çalışıyor, biri de onay bekliyor. Başka bir şey yok.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1220,
+    "true_end_to_audible_ms": 1210,
+    "first_say_ms": 1140,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-pause-1000.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "pause-1500",
+    "round": 0,
+    "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+    "turns": 1,
+    "committed": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "routed": "new:b1c961bd927e",
+    "fast_transcript": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "cancels": [],
+    "said": "app projesinde yeni bir sohbet başlattım.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 3180,
+    "true_end_to_audible_ms": 3180,
+    "first_say_ms": 3134,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-pause-1500.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 1
+    }
+   },
+   {
+    "id": "pause-2000",
+    "round": 0,
+    "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+    "turns": 1,
+    "committed": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "routed": "conversation",
+    "fast_transcript": "Peki şu yeni özellik için? Hangi dosyaları değiştirmemiz gerekiyor?",
+    "cancels": [
+     "resumed"
+    ],
+    "said": "Şu an bir sohbet çalışıyor, biri de onay bekliyor. Başka bir şey yok.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1930,
+    "true_end_to_audible_ms": 1930,
+    "first_say_ms": 1669,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-pause-2000.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "two-pauses",
+    "round": 0,
+    "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+    "turns": 1,
+    "committed": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "routed": "conversation",
+    "fast_transcript": "Bir de. Geçen hafta açtığımız iş vardı ya. O ne durumda?",
+    "cancels": [],
+    "said": "Şu an bir sohbet çalışıyor, biri de onay bekliyor. Başka bir şey yok.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1460,
+    "true_end_to_audible_ms": 1450,
+    "first_say_ms": 1233,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-two-pauses.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "correction",
+    "round": 0,
+    "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+    "turns": 1,
+    "committed": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "routed": "conversation",
+    "fast_transcript": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "cancels": [],
+    "said": "Şu an bir sohbet çalışıyor, biri de onay bekliyor. Başka bir şey yok.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 1380,
+    "true_end_to_audible_ms": 1370,
+    "first_say_ms": 1213,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-correction.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "correction-pause",
+    "round": 0,
+    "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+    "turns": 1,
+    "committed": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+    "routed": "new:2b5b74a5f1f8",
+    "fast_transcript": "Testleri çalıştır. Hayır dur, önce değerlemeyi bitir.",
+    "cancels": [],
+    "said": "app projesinde yeni bir sohbet başlattım.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 4790,
+    "true_end_to_audible_ms": 4800,
+    "first_say_ms": 4490,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-correction-pause.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 1
+    }
+   },
+   {
+    "id": "tech-names",
+    "round": 0,
+    "reference": "testflight buildini expo ile deploy et sonra main branche merge et",
+    "turns": 1,
+    "committed": "TestFlight, bildiğini Expo ile deploy et, sonra main branch'a merge et.",
+    "routed": "new:d6e86a80f4d3",
+    "fast_transcript": "TestFlight bildiğini Xcode ile deploy et, sonra main branch'a merget.",
+    "cancels": [],
+    "said": "app projesinde yeni bir sohbet başlattım.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 5060,
+    "true_end_to_audible_ms": 5060,
+    "first_say_ms": 4912,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-tech-names.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 1
+    }
+   },
+   {
+    "id": "tech-agents",
+    "round": 0,
+    "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+    "turns": 1,
+    "committed": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mita attılar mı?",
+    "routed": "conversation",
+    "fast_transcript": "Claude ile Codex hangi ticket üzerinde çalışıyor? John M. Tatlılar mı?",
+    "cancels": [
+     "barge"
+    ],
+    "said": "Şu an bir sohbet çalışıyor, biri de onay bekliyor. Başka bir şey yok.",
+    "kinds": [
+     "reply"
+    ],
+    "end_to_audible_ms": 3410,
+    "true_end_to_audible_ms": 3410,
+    "first_say_ms": 2492,
+    "errors": [],
+    "audio": {
+     "wav": "/tmp/divan-voice-160/dryrun/r0-tech-agents.wav",
+     "gaps_ms": [],
+     "clicks": [],
+     "pieces": 3
+    }
+   },
+   {
+    "id": "silence",
+    "round": 0,
+    "reference": "",
+    "turns": 0,
+    "committed": "",
+    "routed": null,
+    "fast_transcript": "",
+    "cancels": [],
+    "said": "",
+    "kinds": [],
+    "end_to_audible_ms": null,
+    "true_end_to_audible_ms": null,
+    "first_say_ms": null,
+    "errors": [],
+    "audio": null
+   }
+  ],
+  "report": {
+   "session_id": "251846daecb346a7",
+   "voice": "EMA",
+   "clock_offset": {
+    "rtt": 1,
+    "ms": -0.5
+   },
+   "end_to_audible": {
+    "n": 13,
+    "median": 3180,
+    "p95": 4790
+   },
+   "turns": [
+    {
+     "turn": 1,
+     "speechEnd": 1791550028758,
+     "firstSay": 1791550032103,
+     "firstAudible": 1791550032468,
+     "endToAudible": 3710,
+     "firstAudibleServer": 1791550032472
+    },
+    {
+     "turn": 2,
+     "speechEnd": 1791550039998,
+     "firstSay": 1791550041187,
+     "firstAudible": 1791550041268,
+     "endToAudible": 1270,
+     "firstAudibleServer": 1791550041270
+    },
+    {
+     "turn": 3,
+     "speechEnd": 1791550047998,
+     "firstSay": 1791550048932,
+     "firstAudible": 1791550049018,
+     "endToAudible": 1020,
+     "firstAudibleServer": 1791550049020
+    },
+    {
+     "turn": 4,
+     "speechEnd": 1791550067638,
+     "firstSay": 1791550071655,
+     "firstAudible": 1791550071718,
+     "endToAudible": 4080,
+     "firstAudibleServer": 1791550071718
+    },
+    {
+     "turn": 5,
+     "speechEnd": null,
+     "firstSay": 1791550073485,
+     "firstAudible": 1791550073518,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550073518
+    },
+    {
+     "turn": 6,
+     "speechEnd": null,
+     "firstSay": 1791550074686,
+     "firstAudible": 1791550074768,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550074768
+    },
+    {
+     "turn": 7,
+     "speechEnd": 1791550084458,
+     "firstSay": 1791550087906,
+     "firstAudible": 1791550088068,
+     "endToAudible": 3610,
+     "firstAudibleServer": 1791550088068
+    },
+    {
+     "turn": 8,
+     "speechEnd": null,
+     "firstSay": 1791550090976,
+     "firstAudible": 1791550091068,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550091068
+    },
+    {
+     "turn": 10,
+     "speechEnd": 1791550097398,
+     "firstSay": 1791550098548,
+     "firstAudible": 1791550098618,
+     "endToAudible": 1220,
+     "firstAudibleServer": 1791550098618
+    },
+    {
+     "turn": 12,
+     "speechEnd": 1791550111438,
+     "firstSay": 1791550114572,
+     "firstAudible": 1791550114618,
+     "endToAudible": 3180,
+     "firstAudibleServer": 1791550114618
+    },
+    {
+     "turn": 13,
+     "speechEnd": null,
+     "firstSay": 1791550116415,
+     "firstAudible": 1791550116468,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550116468
+    },
+    {
+     "turn": 14,
+     "speechEnd": null,
+     "firstSay": 1791550117620,
+     "firstAudible": 1791550117718,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550117718
+    },
+    {
+     "turn": 15,
+     "speechEnd": null,
+     "firstSay": 1791550126731,
+     "firstAudible": 1791550127068,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550127068
+    },
+    {
+     "turn": 16,
+     "speechEnd": 1791550129338,
+     "firstSay": 1791550131007,
+     "firstAudible": 1791550131268,
+     "endToAudible": 1930,
+     "firstAudibleServer": 1791550131268
+    },
+    {
+     "turn": 19,
+     "speechEnd": 1791550142558,
+     "firstSay": 1791550143802,
+     "firstAudible": 1791550144018,
+     "endToAudible": 1460,
+     "firstAudibleServer": 1791550144018
+    },
+    {
+     "turn": 20,
+     "speechEnd": 1791550154138,
+     "firstSay": 1791550155362,
+     "firstAudible": 1791550155518,
+     "endToAudible": 1380,
+     "firstAudibleServer": 1791550155518
+    },
+    {
+     "turn": 22,
+     "speechEnd": 1791550165778,
+     "firstSay": 1791550170258,
+     "firstAudible": 1791550170568,
+     "endToAudible": 4790,
+     "firstAudibleServer": 1791550170568
+    },
+    {
+     "turn": 23,
+     "speechEnd": null,
+     "firstSay": 1791550172286,
+     "firstAudible": 1791550172468,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550172468
+    },
+    {
+     "turn": 24,
+     "speechEnd": null,
+     "firstSay": 1791550173647,
+     "firstAudible": 1791550173918,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550173918
+    },
+    {
+     "turn": 25,
+     "speechEnd": 1791550183958,
+     "firstSay": 1791550188870,
+     "firstAudible": 1791550189018,
+     "endToAudible": 5060,
+     "firstAudibleServer": 1791550189018
+    },
+    {
+     "turn": 26,
+     "speechEnd": null,
+     "firstSay": 1791550191957,
+     "firstAudible": 1791550192068,
+     "endToAudible": null,
+     "firstAudibleServer": 1791550192068
+    },
+    {
+     "turn": 27,
+     "speechEnd": 1791550197758,
+     "firstSay": 1791550200250,
+     "firstAudible": 1791550201168,
+     "endToAudible": 3410,
+     "firstAudibleServer": 1791550201168
+    }
+   ],
+   "barges": [
+    {
+     "turn": 8,
+     "detected": 1791550091975,
+     "stopped": 1791550091976,
+     "playedMs": 907
+    },
+    {
+     "turn": 15,
+     "detected": 1791550127728,
+     "stopped": 1791550127728,
+     "playedMs": 660
+    },
+    {
+     "turn": 26,
+     "detected": 1791550193272,
+     "stopped": 1791550193272,
+     "playedMs": 1204
+    }
+   ],
+   "starts": [
+    {
+     "resumed": false,
+     "at": 1791550021033
+    }
+   ]
+  },
+  "daemonTurns": [
+   {
+    "turn_id": 1,
+    "t_speech_end_ms": 7740,
+    "text": "Selam, nasılsın?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 96,
+     "first_token_ms": 216,
+     "total_ms": 450
+    },
+    "after_speech_end_ms": {
+     "soft_end": 824,
+     "fast_stt": 2967,
+     "first_token": 3188,
+     "first_say": 3271,
+     "commit": 2497,
+     "final_stt_start": 3298,
+     "final_stt": 5578,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 2,
+    "t_speech_end_ms": 18980,
+    "text": "Selam, nasılsın?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 19,
+     "first_token_ms": 140,
+     "total_ms": 364
+    },
+    "after_speech_end_ms": {
+     "soft_end": 701,
+     "fast_stt": 941,
+     "first_token": 1082,
+     "first_say": 1165,
+     "commit": 2505,
+     "final_stt_start": null,
+     "final_stt": 2922,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 3,
+    "t_speech_end_ms": 26980,
+    "text": "Testler bitti mi?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 4,
+     "first_token_ms": 125,
+     "total_ms": 345
+    },
+    "after_speech_end_ms": {
+     "soft_end": 688,
+     "fast_stt": 688,
+     "first_token": 814,
+     "first_say": 898,
+     "commit": 2491,
+     "final_stt_start": null,
+     "final_stt": 2843,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 4,
+    "t_speech_end_ms": 46620,
+    "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+    "routed": "new:2f480a590a5d",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 19,
+     "first_token_ms": 141,
+     "total_ms": 144
+    },
+    "after_speech_end_ms": {
+     "soft_end": 709,
+     "fast_stt": 1418,
+     "first_token": null,
+     "first_say": 3931,
+     "commit": 2506,
+     "final_stt_start": null,
+     "final_stt": 3923,
+     "executed": 3931
+    }
+   },
+   {
+    "turn_id": 7,
+    "t_speech_end_ms": 63440,
+    "text": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+    "routed": "new:2d2824b76be9",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 25,
+     "first_token_ms": 147,
+     "total_ms": 149
+    },
+    "after_speech_end_ms": {
+     "soft_end": 694,
+     "fast_stt": 966,
+     "first_token": null,
+     "first_say": 3377,
+     "commit": 2502,
+     "final_stt_start": null,
+     "final_stt": 3363,
+     "executed": 3377
+    }
+   },
+   {
+    "turn_id": 10,
+    "t_speech_end_ms": 76380,
+    "text": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 15,
+     "first_token_ms": 136,
+     "total_ms": 354
+    },
+    "after_speech_end_ms": {
+     "soft_end": 698,
+     "fast_stt": 904,
+     "first_token": 1040,
+     "first_say": 1123,
+     "commit": 2534,
+     "final_stt_start": null,
+     "final_stt": 3411,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 12,
+    "t_speech_end_ms": 90420,
+    "text": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+    "routed": "new:b1c961bd927e",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 17,
+     "first_token_ms": 139,
+     "total_ms": 142
+    },
+    "after_speech_end_ms": {
+     "soft_end": 703,
+     "fast_stt": 1044,
+     "first_token": null,
+     "first_say": 3048,
+     "commit": 2508,
+     "final_stt_start": null,
+     "final_stt": 3040,
+     "executed": 3048
+    }
+   },
+   {
+    "turn_id": 16,
+    "t_speech_end_ms": 108320,
+    "text": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 35,
+     "first_token_ms": 156,
+     "total_ms": 382
+    },
+    "after_speech_end_ms": {
+     "soft_end": 697,
+     "fast_stt": 1343,
+     "first_token": 1500,
+     "first_say": 1583,
+     "commit": 2656,
+     "final_stt_start": null,
+     "final_stt": 4157,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 19,
+    "t_speech_end_ms": 121540,
+    "text": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 15,
+     "first_token_ms": 136,
+     "total_ms": 381
+    },
+    "after_speech_end_ms": {
+     "soft_end": 692,
+     "fast_stt": 952,
+     "first_token": 1089,
+     "first_say": 1172,
+     "commit": 2502,
+     "final_stt_start": null,
+     "final_stt": 3233,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 20,
+    "t_speech_end_ms": 133120,
+    "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 13,
+     "first_token_ms": 134,
+     "total_ms": 357
+    },
+    "after_speech_end_ms": {
+     "soft_end": 705,
+     "fast_stt": 915,
+     "first_token": 1050,
+     "first_say": 1133,
+     "commit": 2784,
+     "final_stt_start": null,
+     "final_stt": 3080,
+     "executed": null
+    }
+   },
+   {
+    "turn_id": 22,
+    "t_speech_end_ms": 144760,
+    "text": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+    "routed": "new:2b5b74a5f1f8",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 51,
+     "first_token_ms": 172,
+     "total_ms": 176
+    },
+    "after_speech_end_ms": {
+     "soft_end": 724,
+     "fast_stt": 1922,
+     "first_token": null,
+     "first_say": 4430,
+     "commit": 2529,
+     "final_stt_start": null,
+     "final_stt": 4417,
+     "executed": 4430
+    }
+   },
+   {
+    "turn_id": 25,
+    "t_speech_end_ms": 162940,
+    "text": "TestFlight, bildiğini Expo ile deploy et, sonra main branch'a merge et.",
+    "routed": "new:d6e86a80f4d3",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 44,
+     "first_token_ms": 166,
+     "total_ms": 168
+    },
+    "after_speech_end_ms": {
+     "soft_end": 715,
+     "fast_stt": 1424,
+     "first_token": null,
+     "first_say": 4834,
+     "commit": 2496,
+     "final_stt_start": null,
+     "final_stt": 4746,
+     "executed": 4834
+    }
+   },
+   {
+    "turn_id": 27,
+    "t_speech_end_ms": 176740,
+    "text": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mita attılar mı?",
+    "routed": "conversation",
+    "cancelled": null,
+    "empty": false,
+    "brain": {
+     "status_ms": 33,
+     "first_token_ms": 165,
+     "total_ms": 423
+    },
+    "after_speech_end_ms": {
+     "soft_end": 700,
+     "fast_stt": 2169,
+     "first_token": 2335,
+     "first_say": 2416,
+     "commit": 2522,
+     "final_stt_start": null,
+     "final_stt": 6060,
+     "executed": null
+    }
+   }
+  ],
+  "warm": {
+   "began": 1791550027018,
+   "speechEnd": 1791550028758,
+   "ms": 4740
+  },
+  "cold": {
+   "turn_id": 1,
+   "true_end_to_audible_ms": 3710,
+   "timings": {
+    "turn": 1,
+    "speechEnd": 1791550028758,
+    "firstSay": 1791550032103,
+    "firstAudible": 1791550032468,
+    "endToAudible": 3710,
+    "firstAudibleServer": 1791550032472
+   }
+  }
+ },
+ "barges": [
+  {
+   "ask": "tech-agents",
+   "answered_turn": 1,
+   "barged": true,
+   "onset_to_stop_ms": 137,
+   "detect_to_stop_ms": 1,
+   "played_ms": 2217,
+   "committed": [
+    "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mith'a attılar mı?",
+    "Selam, nasılsın?"
+   ],
+   "played_after_stop": 0
+  },
+  {
+   "ask": "two-pauses",
+   "answered_turn": 5,
+   "barged": true,
+   "onset_to_stop_ms": 1029,
+   "detect_to_stop_ms": 0,
+   "played_ms": 2840,
+   "committed": [
+    "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+    "Selam, nasılsın?"
+   ],
+   "played_after_stop": 0
+  },
+  {
+   "ask": "short-status",
+   "answered_turn": 7,
+   "barged": true,
+   "onset_to_stop_ms": 131,
+   "detect_to_stop_ms": 0,
+   "played_ms": 2261,
+   "committed": [
+    "Testler bitti mi?",
+    "Selam, nasılsın?"
+   ],
+   "played_after_stop": 0
+  }
+ ],
+ "summary": {
+  "utterances": 12,
+  "simple_turns": 7,
+  "true_end_to_audible_ms": {
+   "median": 1370,
+   "p95": 3410,
+   "n": 7
+  },
+  "daemon_end_to_audible_ms": {
+   "median": 1380,
+   "p95": 3410
+  },
+  "first_say_ms": {
+   "median": 1213,
+   "p95": 2492
+  },
+  "action_turns_end_to_audible_ms": [
+   4090,
+   3610,
+   3180,
+   4800,
+   5060
+  ],
+  "wer_committed": 0.0488,
+  "wer_fast": 0.0813,
+  "segmentation_ok": 12,
+  "silence_events": 0,
+  "errors": 0,
+  "gaps": [],
+  "clicks": [],
+  "barge_onset_to_stop_ms": [
+   137,
+   1029,
+   131
+  ],
+  "ema_synth": {
+   "pieces": 61,
+   "median_ms": 565,
+   "rtf": 0.437
+  },
+  "voice": "EMA",
+  "cold_first_turn_true_end_to_audible_ms": 3710
+ },
+ "ema_timings": [
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 1082,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 747,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 674,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 549,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 365,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 321,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 358,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 439,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 482,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "app projesinde yeni bir sohbet başlattım.",
+   "ms": 524,
+   "audio_ms": 2400
+  },
+  {
+   "spoken": "bir komut çalıştırıyor.",
+   "ms": 249,
+   "audio_ms": 1240
+  },
+  {
+   "spoken": "sohbet bir dosyayı değiştirmek için onay bekliyor.",
+   "ms": 576,
+   "audio_ms": 2560
+  },
+  {
+   "spoken": "izin vereyim mi?",
+   "ms": 258,
+   "audio_ms": 960
+  },
+  {
+   "spoken": "app projesinde yeni bir sohbet başlattım.",
+   "ms": 729,
+   "audio_ms": 2400
+  },
+  {
+   "spoken": "sohbet bir dosyayı değiştirmek için onay bekliyor.",
+   "ms": 579,
+   "audio_ms": 2560
+  },
+  {
+   "spoken": "izin vereyim mi?",
+   "ms": 354,
+   "audio_ms": 960
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 605,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 348,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 415,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "app projesinde yeni bir sohbet başlattım.",
+   "ms": 557,
+   "audio_ms": 2400
+  },
+  {
+   "spoken": "bir komut çalıştırıyor.",
+   "ms": 263,
+   "audio_ms": 1240
+  },
+  {
+   "spoken": "sohbet bir dosyayı değiştirmek için onay bekliyor.",
+   "ms": 568,
+   "audio_ms": 2560
+  },
+  {
+   "spoken": "izin vereyim mi?",
+   "ms": 253,
+   "audio_ms": 960
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 977,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 1054,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 652,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 703,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 824,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 448,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 410,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 634,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 565,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 404,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "app projesinde yeni bir sohbet başlattım.",
+   "ms": 1235,
+   "audio_ms": 2400
+  },
+  {
+   "spoken": "bir komut çalıştırıyor.",
+   "ms": 922,
+   "audio_ms": 1240
+  },
+  {
+   "spoken": "sohbet bir dosyayı değiştirmek için onay bekliyor.",
+   "ms": 915,
+   "audio_ms": 2560
+  },
+  {
+   "spoken": "izin vereyim mi?",
+   "ms": 419,
+   "audio_ms": 960
+  },
+  {
+   "spoken": "app projesinde yeni bir sohbet başlattım.",
+   "ms": 723,
+   "audio_ms": 2400
+  },
+  {
+   "spoken": "sohbet bir dosyayı değiştirmek için onay bekliyor.",
+   "ms": 791,
+   "audio_ms": 2560
+  },
+  {
+   "spoken": "izin vereyim mi?",
+   "ms": 406,
+   "audio_ms": 960
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 2141,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 617,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 315,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 634,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 457,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 468,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 488,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 444,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 512,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 1376,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 1333,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 1408,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 1200,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 557,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 1406,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 666,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 447,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 468,
+   "audio_ms": 1200
+  },
+  {
+   "spoken": "şu an bir sohbet çalışıyor.",
+   "ms": 448,
+   "audio_ms": 1560
+  },
+  {
+   "spoken": "biri de onay bekliyor.",
+   "ms": 631,
+   "audio_ms": 1280
+  },
+  {
+   "spoken": "başka bir şey yok.",
+   "ms": 571,
+   "audio_ms": 1200
+  }
+ ],
+ "api_usage": {
+  "day": "2026-10-09",
+  "usd": 0.021805,
+  "requests": 20,
+  "input_tokens": 18000,
+  "output_tokens": 761
+ },
+ "checks": [
+  [
+   "12 Turkish utterances, every one committed once and whole (12/12)",
+   false
+  ],
+  [
+   "silence makes no turn and says nothing",
+   true
+  ],
+  [
+   "barge-in: the player stops within 300 ms of the voice starting ([137,1029,131])",
+   false
+  ],
+  [
+   "barge-in: each cut-in is the next turn, whole ([[\"Claude ile Codex hangi ticket üzerinde çalışıyor? John Mith'a attılar mı?\",\"Selam, nasılsın?\"],[\"Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?\",\"Selam, nasılsın?\"],[\"Testler bitti mi?\",\"Selam, nasılsın?\"]])",
+   true
+  ],
+  [
+   "Turkish WER of what agents receive ≤ 15% (4.9%)",
+   true
+  ],
+  [
+   "no clicks at piece edges (0)",
+   true
+  ]
+ ]
+}

@@ -16,6 +16,12 @@
  *  cancellation that the bench assumed), and it plays in real time. Every piece it plays is kept, so each
  *  answer is written out as the WAV the caller would have heard, with its real gaps.
  *
+ *  `--fast-layer anthropic-api [--api-model claude-haiku-4-5] [--api-cap-usd 0.50]` runs the same bench with
+ *  the fast layer on the Anthropic Messages API (daemon/remote_ai_chat/voice_api.py) instead of the CLI: a
+ *  PAID request per turn, on the key stored for Divan's voice, capped for the run. `--api-url <stand-in>`
+ *  (daemon/scripts/fake_anthropic.py) is a free dry run of the plumbing and measures nothing about the API.
+ *  See docs/voice-api-proposal.md before running it for real.
+ *
  *  With `--agent` it runs the long-task part instead: a chat call into a real Claude agent (same account)
  *  in a throwaway project whose build takes ~30 s; a correction, a status question while it works,
  *  progress, and the finished turn spoken.
@@ -42,6 +48,9 @@ const BARGES = Number(arg('--barges', 3));
 const AGENT = process.argv.includes('--agent');
 const OUT = arg('--out', path.join(repo, 'docs/voice-bench', AGENT ? 'e2e-agent.json' : 'e2e.json'));
 const AUDIO = arg('--audio', '/tmp/divan-voice-e2e');
+const FAST_LAYER = arg('--fast-layer', 'cli');
+const LAYER_ARGS = ['--fast-layer', FAST_LAYER,
+  ...['--api-model', '--api-cap-usd', '--api-url'].flatMap((k) => (arg(k) ? [k, arg(k)] : []))];
 const { wait, norm } = T;
 const checks = [];
 const check = (name, ok, detail = '') => { checks.push([name, !!ok]); console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${name}${ok ? '' : `  — ${detail}`}`); };
@@ -81,7 +90,8 @@ async function ema() {
 
 function startPeer(extra) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(python(), [path.join(repo, 'daemon/scripts/voice_peer.py'), '--real', '--account-home', ACCOUNT_HOME, ...extra],
+    const proc = spawn(python(), [path.join(repo, 'daemon/scripts/voice_peer.py'), '--real',
+      ...(ACCOUNT_HOME ? ['--account-home', ACCOUNT_HOME] : []), ...LAYER_ARGS, ...extra],
       { stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '', err = '';
     proc.stdout.on('data', (d) => {
@@ -201,8 +211,12 @@ const median = (xs) => pct(xs, 0.5);
 async function conversation(peer, fx, v) {
   const p = await phone(peer, 'e2e', v.voice);
   await wait(6000);                                // the call's greeting: models load, the CLI warms
-  const warm = await p.say(fx['short-greeting']);   // one turn nobody measures, as in the proof
+  const warm = await p.say(fx['short-greeting']);   // the call's cold first turn: kept apart from the stats
   await p.until(() => p.of('voice.turn').length >= 1, 20000);
+  const coldTid = p.of('voice.turn')[0]?.data.turn_id;
+  const coldPlay = [...p.engine.items.values()].find((it) => turnOf(it.id) === coldTid && it.started != null);
+  const cold = { turn_id: coldTid, true_end_to_audible_ms: coldPlay && warm.speechEnd ? Math.round(coldPlay.started - warm.speechEnd) : null,
+    timings: coldTid != null ? (p.s.timings.get(coldTid) ?? null) : null };
   await p.until(() => p.s.state === 'listening' && !p.s.playingNow(), 20000);
   await wait(1500);
   const rows = [];
@@ -248,7 +262,7 @@ async function conversation(peer, fx, v) {
   const report = p.s.timingReport();
   const stop = await p.s.stop();
   p.client.disconnect();
-  return { rows, report, daemonTurns: stop?.turns ?? [], warm };
+  return { rows, report, daemonTurns: stop?.turns ?? [], warm, cold };
 }
 
 // ── 2 · barge-in on real answers ────────────────────────────────────────────
@@ -364,13 +378,16 @@ async function agentCall(peer, fx, v) {
 
 // ── main ────────────────────────────────────────────────────────────────────
 (async () => {
-  if (!ACCOUNT_HOME) { console.error('--account-home is required'); process.exit(2); }
+  if (!ACCOUNT_HOME && (FAST_LAYER === 'cli' || AGENT)) { console.error('--account-home is required'); process.exit(2); }
   fs.mkdirSync(AUDIO, { recursive: true });
   const v = await ema();
   console.log(`ema: ${v.dir}, loaded ${v.load.loadMs} ms, warmed ${v.load.warmMs} ms`);
   const peer = await startPeer(AGENT ? ['--agent'] : []);
   const { fx } = T.fixtures(peer.fixtures);
-  const result = { generated: new Date().toISOString(), simulated: 'microphone and speaker (FakeEngine, −24 dB echo); everything else real' };
+  const result = { generated: new Date().toISOString(), fast_layer: peer.fast_layer,
+    simulated: peer.fast_layer?.url && !peer.fast_layer.url.startsWith('https://api.anthropic.com')
+      ? 'microphone and speaker, AND the fast layer (a scripted stand-in API: no latency or quality evidence)'
+      : 'microphone and speaker (FakeEngine, −24 dB echo); everything else real' };
   try {
     if (AGENT) {
       result.agent = await agentCall(peer, fx, v);
@@ -407,6 +424,7 @@ async function agentCall(peer, fx, v) {
         ema_synth: { pieces: v.timings.length, median_ms: median(v.timings.map((t) => t.ms)),
           rtf: +(v.timings.reduce((a, t) => a + t.ms, 0) / Math.max(1, v.timings.reduce((a, t) => a + t.audio_ms, 0))).toFixed(3) },
         voice: v.voice.name,
+        cold_first_turn_true_end_to_audible_ms: result.conversation.cold?.true_end_to_audible_ms ?? null,
       };
       result.ema_timings = v.timings;
       const s = result.summary;
@@ -426,6 +444,9 @@ async function agentCall(peer, fx, v) {
   } finally {
     peer.proc.stdin.end();
     await new Promise((r) => { peer.proc.on('exit', r); setTimeout(r, 8000); });
+  }
+  if (peer.fast_layer?.ledger) {
+    try { result.api_usage = JSON.parse(fs.readFileSync(peer.fast_layer.ledger, 'utf8')); } catch { result.api_usage = null; }
   }
   fs.writeFileSync(OUT, JSON.stringify({ ...result, checks }, null, 1));
   const bad = checks.filter(([, ok]) => !ok).length;
