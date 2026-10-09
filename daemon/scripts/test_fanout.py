@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from remote_ai_chat.server import OUTBOX_MAX, Server
+from remote_ai_chat.voice import Hub
 
 failures = 0
 
@@ -67,6 +68,7 @@ class Fanout:
         self.clients: dict = {}
         self.outbox: dict = {}
         self.writers: dict = {}
+        self.voice = Hub(self)              # no calls on it; broadcast and _drop tell it
 
     def attach(self, ws: Sock) -> None:
         self.clients[ws] = object()

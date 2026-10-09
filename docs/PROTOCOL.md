@@ -386,6 +386,101 @@ The timeline is the durable events, in `seq` order. Live `text.delta`s go into a
 temporary "streaming segment" bubble; when `message.assistant` arrives, that
 segment becomes permanent. A `tool.use` closes the segment before it.
 
+## Voice session
+
+A phone call that streams both ways (`daemon/remote_ai_chat/voice.py`; the design
+and its measurements are `docs/voice-quality-plan.md` and
+`docs/voice-session.md`). The phone sends microphone audio and plays what it is
+told; **the daemon owns turns**: it decides when the caller has finished, hands
+out turn ids, and is the only side that lets anything reach an agent. One
+voice session per socket; a second `voice.start` on the same socket ends the
+first.
+
+Audio is 16 kHz mono signed 16-bit little-endian PCM, base64 in the JSON
+envelope (the socket is text-only), about 100 ms per message.
+`voice.audio`, `voice.playback`, `voice.barge` and `voice.ready` are fire and forget: sent
+**without an `id`** they get no reply unless they fail (an error still comes
+back, with `id: null`).
+
+Requests (phone → daemon):
+
+| type | data | returns |
+|---|---|---|
+| `voice.start` | `{chat_id?, lang: "tr-TR", sample_rate: 16000, client: {build, device}, session_id?}` | `{session_id, turn_id}`. With `chat_id` the call is about that chat (a *chat call*); without, it is about the whole computer (the *general call*). With the `session_id` of a session this device lost less than 30 s ago it is resumed instead: `{session_id, turn_id, resumed: true}`, under a new turn id, and nothing of the interrupted turn is replayed |
+| `voice.ready` | `{session_id, t_client_ms}` | – . The phone's player is running (it has produced audible output once). Until then, or for 3 s after `voice.start`, the daemon says nothing on its own (progress, questions, a finished agent's reply); its answers to the caller are not held, since the caller cannot have spoken before the phone was listening. The same handshake as medkit's `client_ready` |
+| `voice.audio` | `{session_id, seq, t_client_ms, pcm_b64}` | – . `seq` counts from 0 with no gaps; a gap is filled with silence of the same length (the time passed) and counted, a repeat is dropped |
+| `voice.playback` | `{session_id, turn_id, piece, state: "started" \| "done" \| "stopped", played_ms, t_client_ms}` | – . While the current turn is playing the daemon listens over it with the barge-in threshold (−35 dBFS for 120 ms) instead of the speech threshold (−45 dBFS for 60 ms) |
+| `voice.barge` | `{session_id, turn_id, played_ms, t_client_ms}` | – . The phone heard the caller over playback and has already stopped its player. Answered with `voice.cancel {reason: "barge"}` for that turn |
+| `voice.ping` | `{t_client_ms}` | `{t_client_ms, t_server_ms}` — for the clock offset in timing reports |
+| `voice.stop` | `{session_id}` | `{ok, turns: [{turn_id, t_speech_end_ms, text, routed, cancelled, empty, after_speech_end_ms: {soft_end, fast_stt, first_token, first_say, commit, final_stt, executed}, brain}], audio_gaps}` — the session's own timing of every turn, in ms after the arrival of the audio that held the last speech |
+
+Events (daemon → phone). Every one carries `session_id` and `turn_id`, and
+`chat_id` is the chat call's chat (or `null`):
+
+| event | data |
+|---|---|
+| `voice.state` | `{state, t_server_ms}`; `state` is `listening` (nobody is talking, nothing is running), `hearing` (the caller is talking), `thinking` (a reply has been asked for and has said nothing yet), `speaking` (pieces are going out), `working` (a chat this call handed work to is running) or `reconnecting` |
+| `voice.transcript` | `{text, final}` — `final: false` is the fast recognition the reply is built on; `final: true` is the commit's, and what an agent receives |
+| `voice.say` | `{piece, text, last, kind}` — one piece to synthesise and play, in `piece` order. `kind` is `reply`, `ack`, `progress`, `question` (an approval the agent is waiting on) or `notice` (something went wrong; it says what). A `last: true` piece may have empty `text`: it only closes the turn's speech |
+| `voice.cancel` | `{reason: "barge" \| "resumed" \| "superseded" \| "error"}` — drop every queued and playing piece of this `turn_id` |
+| `voice.turn` | `{committed_text, routed, t_speech_end_ms}` — the turn is final. `routed` is `conversation` (nothing was handed on), `chat:<id>` (sent to, approved or stopped in that chat) or `new:<id>` (a new chat was started). `t_speech_end_ms` is on the session's audio timeline (ms since `voice.start`) |
+| `voice.error` | `{code, message, retry_in_ms?}` — `voice_stt_failed`, `voice_reply_failed`; the requests above fail with `voice_no_session`, `voice_bad_audio`, `voice_no_transcriber` or `no_chat`. A failure is retried once, then reported, then said aloud as a `notice`, and the session goes back to `listening`: it is never silent about it. The phone shows them through its `ERR_KEYS` |
+
+The phone's rules:
+
+* **Play by turn id.** Play the `voice.say` pieces of the newest `turn_id` in
+  order; drop any piece whose `turn_id` is older than the newest seen in any
+  `voice.*` event, and everything of a turn named by `voice.cancel`. The
+  daemon already never sends a piece of a cancelled or superseded turn after
+  the fact; the rule is for pieces that were in flight.
+* **Never decide a turn has ended.** There is no "send now": the daemon commits
+  after 2.5 s of quiet (or 1.8 s/2.5 s after a trailing joining word). It may
+  start answering after 0.7 s; if the caller goes on, it cancels that answer
+  (`resumed`) and the turn grows under a new id.
+* **Barge-in is detected on the phone**, over its echo-cancelled input, because
+  that is where 300 ms can be met: stop the player first, then send
+  `voice.barge`.
+* **The phone's own line is turn 0.** A greeting said before anyone has spoken
+  is reported with `voice.playback` under `turn_id: 0`, so the daemon listens
+  over it with the barge-in threshold; its `done` ends that.
+* **`done` trails the player by 250 ms.** The last of a piece's echo is still in
+  microphone audio the phone has not sent yet; reporting `done` after it keeps
+  the daemon on the over-playback threshold until that audio has arrived.
+* **Audio keeps its `seq` across a dropped socket.** Messages captured while the
+  socket was down are not sent; on resume the daemon fills the gap with silence,
+  so the timeline stays the phone's. A fresh session starts again at 0.
+
+The phone's side is `app/src/voice-session.ts` (what is described here) on
+`app/modules/call/ios/VoiceEngine.swift` (the echo-cancelled engine); see
+`docs/voice-phone.md`.
+
+How the daemon treats a turn:
+
+* **Commit is the only gate to execution.** The conversational layer may ask for
+  an action at any time, but its tools only record an intent; nothing reaches a
+  chat until the turn is committed, and then it goes through the same server
+  actions the phone's own buttons use (`chat.send` into the chat, a new chat in
+  a project, an approval, a stop) — same account, model and permission mode.
+  A turn withdrawn before its commit (`resumed`, or a barge into a speculative
+  answer) does nothing. A committed turn that is barged into still runs; only
+  its words stop.
+* What is said about an action is a fixed line built from what the action
+  returned; the model's own words on that turn are discarded, and any sentence
+  of its that claims an action it never took is dropped.
+* A chat this call handed work to is followed: a tool call becomes at most one
+  `progress` line per 20 s, an approval request becomes a `question`, and the
+  turn's end becomes the spoken form of the agent's reply (`kind: reply`), only
+  after that chat's `turn.done` has been sent. None of it is said while the
+  caller is talking or a turn of theirs is still being answered; it waits.
+* An ordinary question is answered while a chat works; it does not wait on it.
+
+The older half-duplex call stays until the phone no longer uses it:
+`call.hello` (`{working, blocked, idle}`, and warms the concierge), `call.ask`
+`{text, lang?, reset?}` (`{text, ms, first_token_ms, did, ...}`: one whole
+answer), `call.reply` `{chat_id, lang?}` (`{text}`: what a chat call reads
+aloud of the turn that just ended) and `call.digest` (`{digest}`: the snapshot
+the concierge answers from).
+
 ## HTTP: uploads
 
 `POST /upload` (multipart: `file`, `chat_id`), `Authorization: Bearer <token>`.

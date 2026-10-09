@@ -175,7 +175,7 @@ Each is about three hours. Each ends with its own tests passing and leaves the l
 Updates reach the Macs only through the merge and the daemon's own updater (`updater.py` pulls
 `origin/main` and asks launchd to restart it); no worker restarts a daemon by hand.
 
-**#149: daemon: streaming voice session** (`daemon/remote_ai_chat/voice.py`, `server.py` handlers,
+**#149: daemon: streaming voice session** — done; results in [voice-session.md](voice-session.md), the medkit comparison in §8 (`daemon/remote_ai_chat/voice.py`, `server.py` handlers,
 `PROTOCOL.md`)
 - `VoiceSession`: audio ring buffer, energy VAD (the bench's `speech_spans` thresholds), the `Plan`
   rule, incremental whisper (small for replies, turbo at commit), turn ids, the events of §3.
@@ -190,8 +190,9 @@ Updates reach the Macs only through the merge and the daemon's own updater (`upd
   CI and one real run with timings written next to `proof.json`.
 - Out of scope: the phone, binary frames, option C.
 
-**#150: iPhone: full-duplex call screen** (`app/modules/call` Swift, `app/src/voice.ts`,
-`app/app/call.tsx`)
+**#150: iPhone: full-duplex call screen** — built; what it does, its tests and what is not yet
+verified on a device are in [voice-phone.md](voice-phone.md) (`app/modules/call` Swift,
+`app/src/voice-session.ts`, `app/src/live-call.ts`, `app/app/call.tsx`)
 - Native: an `AVAudioEngine` input with voice processing (echo cancellation) on the existing
   `playAndRecord` / `voiceChat` session, 16 kHz PCM out to JS (or straight to the socket) every
   100 ms; a local barge detector (threshold above the echo, 120 ms); an EMA player that stops and
@@ -215,3 +216,104 @@ Updates reach the Macs only through the merge and the daemon's own updater (`upd
 - `docs/voice-quality-results.md` with before/after numbers and artifact paths.
 - If the owner has provided a realtime key by then, a bounded C spike behind the same protocol is
   a separate ticket, not part of 151.
+
+## 8. After #149: the daemon measured, and medkit's live voice as the reference
+
+#149 built the daemon half (`docs/voice-session.md`). On the bench fixtures with
+real whisper and real Haiku it commits every Turkish utterance once and whole
+across thinking pauses (22/22), stays silent on silence, cancels a reply when
+speech resumes, recognises at 2.7% WER for agents and 4.9% for the reply, and
+gets its first text piece out **1.90 s** after speech end in the best run and
+**3.45 s** in the committed one. Every stage except one is inside the budget.
+The one outside it is the fast layer's first token through the Claude Code CLI:
+0.72 s in the best run and 1.35–2.03 s median (6 s p95) in others, from the same
+code on the same morning.
+
+The owner pointed at medkit's live voice as the quality reference. It was read
+on 2026-10-09 (read-only: `apps/voice-worker/voice_agent.py`, `providers.py`,
+`apps/frontend/src/voice/conversation.ts`, `apps/backend/server.py`'s
+`/voice/token`, `docker-compose.yml`). The entry skill still describes the stack
+correctly, with one addition: the worker's LLM can now go through a LiteLLM
+gateway and falls back to the Anthropic plugin directly.
+
+### 8.1 Side by side
+
+| | medkit (working, high quality) | Divan after #149 |
+|---|---|---|
+| Transport | **WebRTC** through a self-hosted LiveKit server (Docker, plus egress for recordings); the browser joins a room with `livekit-client` (`adaptiveStream`, `dynacast`); the API mints a short-lived room token (`/voice/token`) | The daemon's existing authenticated **WebSocket**, PCM16 base64 in JSON, 100 ms messages; pairing token, LAN/Tailscale or the Cloudflare tunnel |
+| Echo | The browser's WebRTC capture (echo cancellation in the audio stack) | The phone's voice-processing input (#150), the same kind of canceller |
+| Endpointing / VAD | `livekit-agents` `AgentSession` with Silero VAD; its turn detector decides | Level detector + the measured `Plan` rule (0.7 s / 1.8 s after a joining word / 2.5 s commit), in the daemon |
+| Turn ownership | The worker's `AgentSession` | The daemon's `VoiceSession`, by turn id |
+| Recognition | Deepgram Nova-3 streaming (cloud, `tr`), partials while speaking; faster-whisper behind a Silero `StreamAdapter` in the local profile | whisper small eagerly at 0.3 s pauses, turbo at commit, on the Mac; partials at pauses |
+| LLM | **Haiku 4.5 through the Anthropic Messages API directly** (the `livekit.plugins.anthropic` streaming plugin, an API key), temperature 0.8; history pruned to a fixed number of items | Haiku 4.5 through the **Claude Code CLI** on a subscription account (no API key), via the SDK, thinking off, streaming partial messages |
+| TTS | Cartesia sonic-3 for Turkish, a **fallback chain** to ElevenLabs (a sunset model once silenced every patient), Piper locally; per-locale voice tables | EMA on the phone; whole call on the system voice if EMA cannot run |
+| Interruption | `turn_handling={"interruption": {"mode": "vad"}}` — local VAD, because LiveKit's adaptive interruption is a cloud service unavailable in some regions; `session.interrupt()` | Phone-side barge detection → `voice.barge` → `voice.cancel{barge}`; the daemon also detects over the echo while the phone reports playing |
+| Interrupted answer | `commitInterruptedAgentTurn`: the part of the patient's line that was spoken is saved into the thread before the next reply overwrites it | The unplayed rest is never spoken; the fast layer's own history still holds the whole reply (the CLI has no truncate) |
+| First line | **`client_ready` RPC**: the worker waits (3 s cap) until the browser's audio element is actually playing, because a line produced into an unsubscribed track is later played back time-compressed | No greeting is spoken by the daemon yet |
+| Goodbye | `farewell` RPC: interrupt, say a fixed line non-interruptibly, resolve when played out, then tear down | `voice.stop` |
+| Reconnect | On an unexpected disconnect, re-init with **three retries, then text-only mode**; duplicate finals de-duplicated by segment id | `voice.start {session_id}` resumes within 30 s under a new turn id; nothing replayed |
+| Observability | Per-stage latency (STT/LLM/TTS) per locale into Prometheus; usage per turn | Per-turn stage timings in `voice.stop`, the bench report |
+
+### 8.2 What medkit's quality actually rests on, and what is reusable
+
+The speed medkit has comes from two things Divan does not have today: an LLM
+reached **directly over the API** (no CLI process, warm HTTP connection; this is
+exactly the stage #149 found over budget) and **cloud streaming STT/TTS** (Deepgram
+and Cartesia keys belong to medkit's own accounts and are not authorised for
+Divan). The WebRTC transport is the third difference; it matters on bad networks
+(jitter buffer, Opus, packet loss) more than on the LAN the bench ran on.
+
+Reused now, as protocol and state patterns (no medkit code or secret is copied;
+its stack is Python + browser and Divan's is Python + Swift):
+
+1. **`voice.ready` before the first spoken line (from `client_ready`)** — in the protocol since #149; #150
+   sends it once its EMA player has produced audible output (or after a 3 s cap);
+   the daemon must not speak a greeting before it. Until then the protocol's
+   `voice.playback started` serves as the same signal for every later piece.
+2. **Local VAD interruption, not a cloud service** — already the design; medkit
+   took the same turn for availability, and it is what keeps barge-in inside 300 ms.
+3. **Save what was actually spoken of an interrupted answer** — `voice.barge`
+   already carries `played_ms`; #150 reports it and #151 decides whether the
+   fast layer is told what the caller heard (on the CLI that is one line in the
+   next prompt, since there is no truncate).
+4. **Three reconnect attempts, then fall back to the chat as text** — #150's
+   client policy on top of the daemon's 30 s resume.
+5. **A voice fallback chain** — EMA → the system voice for the whole call, as
+   §6 says; never silence because one engine failed.
+6. **Per-stage latency per call** — `voice.stop` returns it; #151 reports it.
+7. **A non-interruptible goodbye** — `voice.stop` gets an optional spoken
+   farewell in #150 if the screen needs one.
+
+Not reused now, and why:
+
+- **LiveKit/WebRTC transport.** The self-hosted server runs free on the Mac and
+  has an iOS SDK, but a WebRTC media path needs UDP: it works over Tailscale and
+  on the LAN, not through the Cloudflare tunnel that is Divan's remote door
+  without adding a TURN server. It would also add a second auth (room tokens)
+  next to pairing. The WebSocket session keeps one door and one auth; the
+  protocol is transport-independent above `voice.audio`, so if #151 measures
+  jitter or loss on a phone network, a LiveKit transport behind the same turn
+  logic is a bounded follow-up ticket (Tailscale only).
+- **Deepgram / Cartesia / ElevenLabs.** New paid accounts for Divan; not
+  authorised. Local whisper already beats the WER target.
+
+### 8.3 The quality goal stays, and what reaching it needs
+
+The original targets (1.5 s median / 3 s p95 to audible first clause) are not
+dropped. On #149's numbers the floor of the current path is 0.7 s (turn rule) +
+0.2 s (recognition) + **first token** + 0.2 s (clause) + EMA + playback. With the
+first token at medkit's direct-API level (≈ 0.4–0.7 s) the daemon share is
+≈ 1.5–1.8 s and the B target (2.5 s / 3.5 s audible) is met with margin; 1.5 s
+audible still needs speech-to-speech (option C) or a turn rule that commits
+earlier, which the baseline says Turkish pauses do not allow.
+
+The fast layer is one class behind the `Brain` interface in `voice.py`, so
+putting it on the Messages API directly (medkit's arrangement) is a contained
+change: the same prompt, tools-as-intents, guard and commit gate; execution
+still only through Divan's Claude/Codex chats and their permission modes. It
+needs **one owner decision**: an Anthropic API key for Divan's voice layer
+(Haiku 4.5, a few hundred tokens per turn; billed per token, unlike the
+subscription), or a realtime provider key for option C. medkit's key is not
+used for this: it is medkit's, and the ticket forbids moving credentials.
+Without that decision #151 measures the CLI path as it is and reports the
+first-token spread above as the remaining gap.
