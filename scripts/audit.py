@@ -144,6 +144,13 @@ ALLOW = {
         "a push is written in the phone's language, so the Turkish strings sit beside the English",
     "daemon/remote_ai_chat/transcribe.py":
         "the phrases whisper makes up over silence are listed in the languages it makes them up in",
+    "daemon/remote_ai_chat/voice.py":
+        "the live call speaks Turkish: its fixed lines, the joining words the turn rule waits "
+        "through and the first-person verbs the action guard drops have to be named",
+    "daemon/scripts/test_voice.py":
+        "test data: the scripted Turkish replies and requests the voice session is driven with",
+    "docs/voice-bench/voice-session.json":
+        "measured output: Turkish transcripts and answers of the streaming voice session",
     "daemon/scripts/test_call.py":
         "test data: Turkish questions and answers for the language detector and the slang filter",
     "daemon/scripts/voice_bench/scenarios.json":

@@ -92,7 +92,7 @@ TUNNEL_PUSH_TEXT = {
 # for what it missed, which is a round trip, not a dead chat.
 OUTBOX_MAX = 1024
 # Requests that are answered only when they fail, if sent without an id.
-QUIET_TYPES = {"voice.audio", "voice.playback", "voice.barge"}
+QUIET_TYPES = {"voice.audio", "voice.playback", "voice.barge", "voice.ready"}
 SEND_TIMEOUT_S = 20.0
 
 # ── git status (for the panel) ───────────────────────────────────────────────
@@ -2018,6 +2018,10 @@ class Server:
 
     async def h_voice_barge(self, dev: Device, d: dict) -> dict:
         self.voice.get(dev, d).barge(d)
+        return {}
+
+    async def h_voice_ready(self, dev: Device, d: dict) -> dict:
+        self.voice.get(dev, d).ready()
         return {}
 
     async def h_voice_ping(self, dev: Device, d: dict) -> dict:

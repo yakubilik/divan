@@ -88,6 +88,7 @@ PREROLL_MS = 300        # audio kept before the first loud frame: a soft onset i
 PAD_MS = 200            # audio kept after the last loud frame, for the same reason at the end
 MAX_TURN_MS = 60_000    # an utterance longer than this is committed where it stands
 
+READY_CAP_S = 3.0       # the daemon says nothing on its own until the phone's player is live, or this long
 RESUME_S = 30.0         # a dropped session can be picked up again for this long
 PROGRESS_GAP_S = 20.0   # at most one progress line this often
 ACK_AFTER_S = 1.2       # an action that has not answered by now gets an "OK" first
@@ -105,6 +106,7 @@ VOCAB = "Claude, Codex, daemon, commit, build, deploy, branch, merge, TestFlight
 # The fast layer: Haiku with thinking off, first sentence 1.17 s median against
 # Sonnet's 3 s (docs/voice-bench/llm.json).
 FAST_MODEL = os.environ.get("RAC_VOICE_MODEL", "").strip() or "haiku"
+
 
 
 def frame_db(samples) -> float:
@@ -162,9 +164,13 @@ def cut(buf: str, first: bool) -> tuple[str | None, str]:
 # result below — so any first-person claim of having done something in its own
 # text is false by construction, and is dropped rather than spoken.
 _CLAIM = re.compile(
-    r"\b(gönderdim|ilettim|başlattım|çalıştırdım|durdurdum|onayladım|izin verdim|reddettim|"
-    r"hallettim|düzelttim|ekledim|yolladım|söyledim|"
-    r"i(?:'ve| have)? (?:sent|started|stopped|approved|denied|told|asked|fixed|run|ran|forwarded))\b",
+    # Turkish: an action verb in the first person, done, doing or about to do.
+    r"\b(?:gönder|ilet|başlat|çalıştır|bitirt|bitir|durdur|onayla|halled|hallet|düzelt|ekle|yolla|"
+    r"kontrol ed|kontrol et|incele|bak|söyle|izin ver|reddet)\w*?(?:d[ıiuü]m|t[ıiuü]m|[ıiuü]?yorum|ece[ğk]im|aca[ğk][ıi]m|y?eyim|y?ayım)\b"
+    # English: the same, in the forms a model uses for it.
+    r"|\bi(?:'ve| have|'ll| will|'m| am)? (?:sent|started|stopped|approved|denied|told|asked|fixed|ran|"
+    r"forwarded|send|start|stop|forward|tell|ask|check|look|sending|starting|stopping|forwarding|"
+    r"checking|looking|running)\b",
     re.I)
 
 
@@ -417,14 +423,19 @@ class FastLayer(Concierge):
         self._drain = asyncio.create_task(drain())
 
     async def reply(self, text: str, lang: str, intend: Callable[[str, dict], None]) -> AsyncIterator[str]:
+        t0 = time.monotonic()
+        self.timing = timing = {}
         if self._drain is not None:
             await self._drain
             self._drain = None
+        timing["drain_ms"] = int((time.monotonic() - t0) * 1000)
         want = {"tr": "Answer in Turkish.", "en": "Answer in English."}.get(lang, "")
         async with self._lock:
+            timing["lock_ms"] = int((time.monotonic() - t0) * 1000)
             for _ in range(3):              # the account, and at most two that replace it
                 try:
                     client = await self._ensure()
+                    timing["ready_ms"] = int((time.monotonic() - t0) * 1000)
                 except NoRoom as exc:
                     yield no_room(exc.until, lang)
                     return
@@ -439,8 +450,13 @@ class FastLayer(Concierge):
                             ev = msg.event
                             d = ev.get("delta") or {}
                             if ev.get("type") == "content_block_delta" and d.get("type") == "text_delta":
+                                if not said:
+                                    timing["first_token_ms"] = int((time.monotonic() - t0) * 1000)
                                 said = True
                                 yield d.get("text", "")
+                            elif (ev.get("type") == "content_block_start" and said
+                                  and (ev.get("content_block") or {}).get("type") == "text"):
+                                yield " "           # two text blocks are two sentences
                         elif isinstance(msg, RateLimitEvent):
                             self._heard(msg.rate_limit_info)
                             refused = refused or msg.rate_limit_info.status == "rejected"
@@ -540,6 +556,13 @@ class VoiceSession:
         self.metrics: list[dict] = []
         self.tasks: set[asyncio.Task] = set()
         self.closed = False
+        # medkit's `client_ready`: a line produced before the phone's player is
+        # running is heard late or squeezed. Announcements wait for `voice.ready`.
+        self.ready_at = time.time() + READY_CAP_S
+
+    def ready(self) -> None:
+        self.ready_at = min(self.ready_at, time.time())
+        self.flush_notes()
 
     # ── wire ─────────────────────────────────────────────────────────────────
     def emit(self, event: str, data: dict, turn_id: int | None = None) -> None:
@@ -695,7 +718,10 @@ class VoiceSession:
             turn.marks["speech_end_wall"] = self.speech_wall
             turn.marks["soft_end_wall"] = time.time()
             turn.reply = self._spawn(self._reply(turn))
-        if quiet >= FINAL_STT_MS:
+        # The commit's transcription waits until the reply has its first words
+        # out: whisper's decoding loop is Python, and run next to the reply it
+        # slowed the event loop that reads the model's stream by about a second.
+        if quiet >= FINAL_STT_MS and (turn.reply is None or turn.reply.done() or turn.pieces):
             self._final(self.last_speech)
         if quiet >= max(turn.wait_ms, COMMIT_MS) or self.ms(t - self.utt) > MAX_TURN_MS:
             self._commit(turn)
@@ -732,12 +758,14 @@ class VoiceSession:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                log.warning("voice %s: recognition failed (%s, try %d)", self.id, exc, attempt + 1)
+                log.warning("voice %s: recognition failed (%r, try %d)", self.id, exc, attempt + 1)
         self.emit("voice.error", {"code": E_STT, "message": "speech recognition failed"})
         return None
 
     def _partial(self, end: int) -> None:
-        if end in self.partials or any(not t.done() for t in self.partials.values()):
+        # Queued even behind one still running (the recogniser takes them in
+        # turn): at the soft end this one is then already started.
+        if end in self.partials or sum(not t.done() for t in self.partials.values()) >= 2:
             return
         self.partials = {k: v for k, v in self.partials.items() if k >= self.utt}
         self.partials[end] = self._spawn(self._recognize(self.clip(self.utt, end, False)))
@@ -824,7 +852,7 @@ class VoiceSession:
                                 return
                     break
                 except Exception as exc:
-                    log.warning("voice %s: reply failed (%s, try %d)", self.id, exc, attempt + 1)
+                    log.warning("voice %s: reply failed (%r, try %d)", self.id, exc, attempt + 1)
                     await stream.aclose()
                     await self.brain.cancel()
                     if attempt >= RETRIES or turn.pieces or turn.withdrawn:
@@ -843,6 +871,7 @@ class VoiceSession:
                 self.close_turn(turn)
         finally:
             turn.marks["reply_done_wall"] = time.time()
+            turn.marks["brain"] = dict(getattr(self.brain, "timing", None) or {})
 
     def _speak_piece(self, turn: Turn, piece: str) -> bool:
         from .session import plain
@@ -989,7 +1018,7 @@ class VoiceSession:
         rel = lambda k: None if k not in m else int((m[k] - base) * 1000)  # noqa: E731
         self.metrics.append({
             "turn_id": turn.id, "t_speech_end_ms": self.ms(end), "text": turn.final, "routed": routed,
-            "cancelled": m.get("cancelled"), "empty": bool(m.get("empty")),
+            "cancelled": m.get("cancelled"), "empty": bool(m.get("empty")), "brain": m.get("brain"),
             "after_speech_end_ms": {k[:-5]: rel(k) for k in ("soft_end_wall", "fast_stt_wall",
                                     "first_token_wall", "first_say_wall", "commit_wall",
                                     "final_stt_wall", "executed_wall")}})
@@ -1038,6 +1067,10 @@ class VoiceSession:
         """Say what is waiting, unless the caller is talking or a turn of
         theirs is still being answered."""
         if not self.notes or self.utt is not None or not self.turn_quiet() or self.ws is None:
+            return
+        wait = self.ready_at - time.time()
+        if wait > 0:
+            asyncio.get_running_loop().call_later(wait + 0.01, self.flush_notes)
             return
         notes, self.notes = self.notes, []
         turn = self.new_turn(self.total, kind="note")

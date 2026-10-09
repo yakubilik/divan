@@ -1,0 +1,1058 @@
+{
+ "generated": "2026-10-09 11:27",
+ "summary": {
+  "turns": 22,
+  "first_say_after_speech_end_ms": {
+   "median": 3452.0,
+   "p95": 7695,
+   "n": 22
+  },
+  "client_stage_medians_ms": {
+   "fast_transcript": 1112.0,
+   "first_say": 3452.0,
+   "commit": 5101.0
+  },
+  "daemon_stage_medians_ms": {
+   "soft_end": 701,
+   "fast_stt": 1179,
+   "first_token": 3127,
+   "first_say": 3587,
+   "commit": 2500,
+   "final_stt": 4767
+  },
+  "pooled_wer_committed": 0.026785714285714284,
+  "pooled_wer_fast": 0.049107142857142856,
+  "segmentation_ok": 22,
+  "silence_turns": 0,
+  "silence_events": 0,
+  "errors": 0,
+  "baseline_proof": {
+   "first_clause_text_median_ms": 2225.0,
+   "first_audio_median_ms": 3566.0,
+   "first_audio_p95_ms": 4367
+  },
+  "models": {
+   "fast_stt": "mlx-community/whisper-small-mlx",
+   "final_stt": "mlx-community/whisper-large-v3-turbo",
+   "fast_layer": "claude-haiku-4-5-20251001"
+  },
+  "where": "first_say is the arrival of the first voice.say on a loopback socket; no phone, no EMA"
+ },
+ "rows": [
+  {
+   "id": "short-greeting",
+   "round": 0,
+   "reference": "selam nasılsın",
+   "turns": 1,
+   "committed": "Selam, nasılsın?",
+   "routed": "conversation",
+   "fast_transcript": "Selam nasılsın?",
+   "cancels": [],
+   "said": "Naber, iyi. Login screen testleri hâlâ çalışıyor, settings copy'de bir onay bekliyor, payment page'in fix'i merge olmuş. Release notes'te 2 saattir hiç hareket yok.",
+   "first_piece": "Naber, iyi.",
+   "after_speech_end_ms": {
+    "fast_transcript": 1562,
+    "first_say": 5060,
+    "commit": 5533
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "short-status",
+   "round": 0,
+   "reference": "testler bitti mi",
+   "turns": 1,
+   "committed": "Testler bitti mi?",
+   "routed": "conversation",
+   "fast_transcript": "Testler bitti mi?",
+   "cancels": [],
+   "said": "Bilmiyorum, hâlâ çalışıyor olarak görünüyor.",
+   "first_piece": "Bilmiyorum, hâlâ çalışıyor olarak görünüyor.",
+   "after_speech_end_ms": {
+    "fast_transcript": 1239,
+    "first_say": 4825,
+    "commit": 4825
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "long-request",
+   "round": 0,
+   "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+   "turns": 1,
+   "committed": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+   "routed": "conversation",
+   "fast_transcript": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+   "cancels": [],
+   "said": "Tamam, login ekranı bitene kadar bekleyip, sonra settings copy'ye onay verecek miyim?",
+   "first_piece": "Tamam, login ekranı bitene kadar bekleyip,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1738,
+    "first_say": 3362,
+    "commit": 5355
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "pause-500",
+   "round": 0,
+   "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+   "turns": 1,
+   "committed": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+   "routed": "conversation",
+   "fast_transcript": "Şimdi şeyi, giriş ekranındaki hatayı bir kontrol eder misin?",
+   "cancels": [],
+   "said": "session bulunamadı.",
+   "first_piece": "session bulunamadı.",
+   "after_speech_end_ms": {
+    "fast_transcript": 1280,
+    "first_say": 14514,
+    "commit": 14546
+   },
+   "errors": [],
+   "wer_committed": 0.1111111111111111,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "pause-1000",
+   "round": 0,
+   "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+   "turns": 1,
+   "committed": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+   "routed": "conversation",
+   "fast_transcript": "Bana bir özet çıkar, yani. Bugün neler yapıldı olduğunu merak ediyorum.",
+   "cancels": [],
+   "said": "Login screen testleri hâlâ çalışıyor, payment fix merge edilmiş, settings copy onay bekliyor, release notes 2 saattir hiç kıpırdamıyor.",
+   "first_piece": "Login screen testleri hâlâ çalışıyor,",
+   "after_speech_end_ms": {
+    "fast_transcript": 857,
+    "first_say": 2222,
+    "commit": 4641
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.09090909090909091
+  },
+  {
+   "id": "pause-1500",
+   "round": 0,
+   "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+   "turns": 1,
+   "committed": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+   "routed": "conversation",
+   "fast_transcript": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+   "cancels": [],
+   "said": "Payment page'de ne var, check edeyim. Session yok, sessiz kalmış demek — fix merge edildi ama deploy mu edildi bilmiyorum.",
+   "first_piece": "Payment page'de ne var,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1043,
+    "first_say": 7584,
+    "commit": 10994
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "pause-2000",
+   "round": 0,
+   "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+   "turns": 1,
+   "committed": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+   "routed": "conversation",
+   "fast_transcript": "Peki şu yeni özellik için? Hangi dosyaları değiştirmemiz gerekiyor?",
+   "cancels": [
+    "resumed"
+   ],
+   "said": "Hangi yeni özellikten bahsediyorsun, bilmiyorum.",
+   "first_piece": "Hangi yeni özellikten bahsediyorsun,",
+   "after_speech_end_ms": {
+    "fast_transcript": 933,
+    "first_say": 7695,
+    "commit": 7866
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "two-pauses",
+   "round": 0,
+   "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+   "turns": 1,
+   "committed": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+   "routed": "conversation",
+   "fast_transcript": "Bir de. Geçen hafta açtığımız iş vardı ya. O ne durumda?",
+   "cancels": [],
+   "said": "Geçen hafta hangi işten bahsediyorsun, bilmem — hatırlatır mısın?",
+   "first_piece": "Geçen hafta hangi işten bahsediyorsun,",
+   "after_speech_end_ms": {
+    "fast_transcript": 816,
+    "first_say": 3203,
+    "commit": 4234
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "correction",
+   "round": 0,
+   "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+   "turns": 1,
+   "committed": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+   "routed": "conversation",
+   "fast_transcript": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+   "cancels": [],
+   "said": "Web panel'de login screen testleri çalışıyor, release notes 2 saattir idle.",
+   "first_piece": "Web panel'de login screen testleri çalışıyor,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1457,
+    "first_say": 4571,
+    "commit": 4909
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "correction-pause",
+   "round": 0,
+   "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+   "turns": 1,
+   "committed": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+   "routed": "conversation",
+   "fast_transcript": "Testleri çalıştır. Hayır dur, önce değerlemeyi bitir.",
+   "cancels": [],
+   "said": "Testleri durdur muyum, yoksa değerleme bitene kadar bekle mi?",
+   "first_piece": "Testleri durdur muyum,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1161,
+    "first_say": 3204,
+    "commit": 5413
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.14285714285714285
+  },
+  {
+   "id": "tech-agents",
+   "round": 0,
+   "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+   "turns": 1,
+   "committed": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mitha attılar mı?",
+   "routed": "conversation",
+   "fast_transcript": "Claude ile Codex hangi ticket üzerinde çalışıyor? John M. Tatlılar mı?",
+   "cancels": [],
+   "said": "Bilmiyorum kimin hangi ticket'te çalıştığını — state'te sadece proje ve iş adları var.",
+   "first_piece": "Bilmiyorum kimin hangi ticket'te çalıştığını —",
+   "after_speech_end_ms": {
+    "fast_transcript": 1372,
+    "first_say": 3040,
+    "commit": 4492
+   },
+   "errors": [],
+   "wer_committed": 0.2,
+   "wer_fast": 0.3
+  },
+  {
+   "id": "silence",
+   "round": 0,
+   "reference": "",
+   "turns": 0,
+   "committed": "",
+   "routed": null,
+   "fast_transcript": "",
+   "cancels": [],
+   "said": "",
+   "first_piece": null,
+   "after_speech_end_ms": {
+    "fast_transcript": null,
+    "first_say": null,
+    "commit": null
+   },
+   "errors": [],
+   "wer_committed": null,
+   "wer_fast": null
+  },
+  {
+   "id": "short-greeting",
+   "round": 1,
+   "reference": "selam nasılsın",
+   "turns": 1,
+   "committed": "Selam, nasılsın?",
+   "routed": "conversation",
+   "fast_transcript": "Selam nasılsın?",
+   "cancels": [],
+   "said": "Naber, iyi. Login screen testleri hâlâ çalışıyor, payment fix merge edilmiş, settings copy onay bekliyor, release notes 2 saattir hiç hareket yok.",
+   "first_piece": "Naber, iyi.",
+   "after_speech_end_ms": {
+    "fast_transcript": 687,
+    "first_say": 5116,
+    "commit": 6009
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "short-status",
+   "round": 1,
+   "reference": "testler bitti mi",
+   "turns": 1,
+   "committed": "Testler bitti mi?",
+   "routed": "conversation",
+   "fast_transcript": "Testler bitti mi?",
+   "cancels": [],
+   "said": "Bilmiyorum, hâlâ çalışıyor olarak görünüyor.",
+   "first_piece": "Bilmiyorum, hâlâ çalışıyor olarak görünüyor.",
+   "after_speech_end_ms": {
+    "fast_transcript": 675,
+    "first_say": 4929,
+    "commit": 4929
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "long-request",
+   "round": 1,
+   "reference": "bugün akşama kadar yeni ekranı bitirmemiz lazım o yüzden önce giriş sayfasındaki hatayı düzelt sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder",
+   "turns": 1,
+   "committed": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+   "routed": "conversation",
+   "fast_transcript": "Bugün akşama kadar yeni ekranı bitirmemiz lazım, o yüzden önce giriş sayfasındaki hatayı düzelt, sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+   "cancels": [],
+   "said": "Tamam, login ekranı bitene kadar bekleyip, sonra settings copy'ye onay verecek miyim?",
+   "first_piece": "Tamam, login ekranı bitene kadar bekleyip,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1557,
+    "first_say": 3120,
+    "commit": 5034
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "pause-500",
+   "round": 1,
+   "reference": "şimdi şeyi giriş ekranındaki hatayı bir kontrol eder misin",
+   "turns": 1,
+   "committed": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+   "routed": "conversation",
+   "fast_transcript": "Şimdi şeyi, giriş ekranındaki hatayı bir kontrol eder misin?",
+   "cancels": [],
+   "said": "session bulunamadı.",
+   "first_piece": "session bulunamadı.",
+   "after_speech_end_ms": {
+    "fast_transcript": 943,
+    "first_say": 5273,
+    "commit": 5273
+   },
+   "errors": [],
+   "wer_committed": 0.1111111111111111,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "pause-1000",
+   "round": 1,
+   "reference": "bana bir özet çıkar yani bugün neler yapıldı onu merak ediyorum",
+   "turns": 1,
+   "committed": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+   "routed": "conversation",
+   "fast_transcript": "Bana bir özet çıkar, yani. Bugün neler yapıldı olduğunu merak ediyorum.",
+   "cancels": [],
+   "said": "Login screen testleri hâlâ çalışıyor, payment fix merge edilmiş, settings copy onay bekliyor, release notes 2 saattir hiç kıpırdamıyor.",
+   "first_piece": "Login screen testleri hâlâ çalışıyor,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1114,
+    "first_say": 3109,
+    "commit": 4782
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.09090909090909091
+  },
+  {
+   "id": "pause-1500",
+   "round": 1,
+   "reference": "ödeme sayfasında bir sorun vardı ama sanırım dün akşam düzeldi bir bakar mısın",
+   "turns": 1,
+   "committed": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+   "routed": "conversation",
+   "fast_transcript": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+   "cancels": [],
+   "said": "Payment page'de ne var, check edeyim. Session yok, sessiz kalmış demek — fix merge edildi ama deploy mu edildi bilmiyorum.",
+   "first_piece": "Payment page'de ne var,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1395,
+    "first_say": 3146,
+    "commit": 6327
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "pause-2000",
+   "round": 1,
+   "reference": "peki şu yeni özellik için hangi dosyaları değiştirmemiz gerekiyor",
+   "turns": 1,
+   "committed": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+   "routed": "conversation",
+   "fast_transcript": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+   "cancels": [
+    "resumed"
+   ],
+   "said": "Hangi yeni özellikten bahsediyorsun, bilmiyorum.",
+   "first_piece": "Hangi yeni özellikten bahsediyorsun,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1050,
+    "first_say": 3088,
+    "commit": 5002
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "two-pauses",
+   "round": 1,
+   "reference": "bir de geçen hafta açtığımız iş vardı ya o ne durumda",
+   "turns": 1,
+   "committed": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+   "routed": "conversation",
+   "fast_transcript": "Bir de. Geçen hafta açtığımız iş vardı ya. O ne durumda?",
+   "cancels": [],
+   "said": "Geçen hafta hangi işten bahsediyorsun, bilmem — hatırlatır mısın?",
+   "first_piece": "Geçen hafta hangi işten bahsediyorsun,",
+   "after_speech_end_ms": {
+    "fast_transcript": 868,
+    "first_say": 2347,
+    "commit": 4684
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.0
+  },
+  {
+   "id": "correction",
+   "round": 1,
+   "reference": "mobil uygulamada yok pardon web panelinde son değişiklik ne",
+   "turns": 1,
+   "committed": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+   "routed": "conversation",
+   "fast_transcript": "Mobil uygulamada, yok pardon, ve panelinde son değişiklik ne?",
+   "cancels": [],
+   "said": "Web panel'de login screen testleri çalışıyor, release notes 2 saattir idle.",
+   "first_piece": "Web panel'de login screen testleri çalışıyor,",
+   "after_speech_end_ms": {
+    "fast_transcript": 1325,
+    "first_say": 4506,
+    "commit": 5168
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.1111111111111111
+  },
+  {
+   "id": "correction-pause",
+   "round": 1,
+   "reference": "testleri çalıştır hayır dur önce derlemeyi bitir",
+   "turns": 1,
+   "committed": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+   "routed": "conversation",
+   "fast_transcript": "Testleri çalıştır. Hayır dur, önce değerlemeyi bitir.",
+   "cancels": [],
+   "said": "Testleri durdur muyum, yoksa değerleme bitene kadar bekle mi?",
+   "first_piece": "Testleri durdur muyum,",
+   "after_speech_end_ms": {
+    "fast_transcript": 917,
+    "first_say": 3542,
+    "commit": 5188
+   },
+   "errors": [],
+   "wer_committed": 0.0,
+   "wer_fast": 0.14285714285714285
+  },
+  {
+   "id": "tech-agents",
+   "round": 1,
+   "reference": "claude ile codex hangi ticket üzerinde çalışıyor commit attılar mı",
+   "turns": 1,
+   "committed": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mita attılar mı?",
+   "routed": "conversation",
+   "fast_transcript": "Claude ile Codex hangi ticket üzerinde çalışıyor, John M. Tatlılar mı?",
+   "cancels": [],
+   "said": "Bilmiyorum kimin hangi ticket'te çalıştığını — state'te sadece proje ve iş adları var.",
+   "first_piece": "Bilmiyorum kimin hangi ticket'te çalıştığını —",
+   "after_speech_end_ms": {
+    "fast_transcript": 1110,
+    "first_say": 3140,
+    "commit": 4820
+   },
+   "errors": [],
+   "wer_committed": 0.2,
+   "wer_fast": 0.3
+  },
+  {
+   "id": "silence",
+   "round": 1,
+   "reference": "",
+   "turns": 0,
+   "committed": "",
+   "routed": null,
+   "fast_transcript": "",
+   "cancels": [],
+   "said": "",
+   "first_piece": null,
+   "after_speech_end_ms": {
+    "fast_transcript": null,
+    "first_say": null,
+    "commit": null
+   },
+   "errors": [],
+   "wer_committed": null,
+   "wer_fast": null
+  }
+ ],
+ "daemon_turns": [
+  {
+   "turn_id": 1,
+   "t_speech_end_ms": 7740,
+   "text": "Selam, nasılsın?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 3193
+   },
+   "after_speech_end_ms": {
+    "soft_end": 582,
+    "fast_stt": 1108,
+    "first_token": 4303,
+    "first_say": 4308,
+    "commit": 2379,
+    "final_stt": 4668,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 2,
+   "t_speech_end_ms": 16480,
+   "text": "Selam, nasılsın?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 3424
+   },
+   "after_speech_end_ms": {
+    "soft_end": 698,
+    "fast_stt": 1594,
+    "first_token": 5019,
+    "first_say": 5094,
+    "commit": 2510,
+    "final_stt": 4679,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 3,
+   "t_speech_end_ms": 21920,
+   "text": "Testler bitti mi?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 2272
+   },
+   "after_speech_end_ms": {
+    "soft_end": 702,
+    "fast_stt": 1274,
+    "first_token": 3547,
+    "first_say": 4861,
+    "commit": 2499,
+    "final_stt": 4739,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 4,
+   "t_speech_end_ms": 39240,
+   "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1438
+   },
+   "after_speech_end_ms": {
+    "soft_end": 700,
+    "fast_stt": 1742,
+    "first_token": 3181,
+    "first_say": 3367,
+    "commit": 2504,
+    "final_stt": 5357,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 5,
+   "t_speech_end_ms": 48160,
+   "text": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 7,
+    "ready_ms": 8,
+    "first_token_ms": 2693
+   },
+   "after_speech_end_ms": {
+    "soft_end": 698,
+    "fast_stt": 1287,
+    "first_token": 3987,
+    "first_say": 14543,
+    "commit": 2496,
+    "final_stt": 5015,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 7,
+   "t_speech_end_ms": 58060,
+   "text": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1180
+   },
+   "after_speech_end_ms": {
+    "soft_end": 701,
+    "fast_stt": 940,
+    "first_token": 2121,
+    "first_say": 2309,
+    "commit": 2500,
+    "final_stt": 4724,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 9,
+   "t_speech_end_ms": 69580,
+   "text": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 6473
+   },
+   "after_speech_end_ms": {
+    "soft_end": 701,
+    "fast_stt": 1059,
+    "first_token": 7532,
+    "first_say": 7601,
+    "commit": 2500,
+    "final_stt": 4404,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 11,
+   "t_speech_end_ms": 80400,
+   "text": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 5993
+   },
+   "after_speech_end_ms": {
+    "soft_end": 702,
+    "fast_stt": 949,
+    "first_token": 6942,
+    "first_say": 7710,
+    "commit": 2499,
+    "final_stt": 4332,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 14,
+   "t_speech_end_ms": 90380,
+   "text": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 2179
+   },
+   "after_speech_end_ms": {
+    "soft_end": 702,
+    "fast_stt": 912,
+    "first_token": 3091,
+    "first_say": 3299,
+    "commit": 2499,
+    "final_stt": 4324,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 15,
+   "t_speech_end_ms": 99220,
+   "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 2661
+   },
+   "after_speech_end_ms": {
+    "soft_end": 699,
+    "fast_stt": 1480,
+    "first_token": 4142,
+    "first_say": 4577,
+    "commit": 2509,
+    "final_stt": 4882,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 17,
+   "t_speech_end_ms": 108180,
+   "text": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1947
+   },
+   "after_speech_end_ms": {
+    "soft_end": 676,
+    "fast_stt": 1179,
+    "first_token": 3127,
+    "first_say": 3219,
+    "commit": 2495,
+    "final_stt": 5035,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 18,
+   "t_speech_end_ms": 117160,
+   "text": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mitha attılar mı?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1434
+   },
+   "after_speech_end_ms": {
+    "soft_end": 699,
+    "fast_stt": 1453,
+    "first_token": 2888,
+    "first_say": 3125,
+    "commit": 2500,
+    "final_stt": 4578,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 19,
+   "t_speech_end_ms": 132200,
+   "text": "Selam, nasılsın?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 4303
+   },
+   "after_speech_end_ms": {
+    "soft_end": 702,
+    "fast_stt": 723,
+    "first_token": 5026,
+    "first_say": 5152,
+    "commit": 2499,
+    "final_stt": 4151,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 20,
+   "t_speech_end_ms": 137640,
+   "text": "Testler bitti mi?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 3808
+   },
+   "after_speech_end_ms": {
+    "soft_end": 699,
+    "fast_stt": 711,
+    "first_token": 4520,
+    "first_say": 4964,
+    "commit": 2498,
+    "final_stt": 4149,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 21,
+   "t_speech_end_ms": 154960,
+   "text": "Bugün akşama kadar yeni ekranı bitirmemiz lazım. O yüzden önce giriş sayfasındaki hatayı düzelt. Sonra ayarlar ekranındaki yazıları kontrol et ve en son bana kısa bir özet gönder.",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1355
+   },
+   "after_speech_end_ms": {
+    "soft_end": 704,
+    "fast_stt": 1561,
+    "first_token": 2917,
+    "first_say": 3125,
+    "commit": 2504,
+    "final_stt": 5039,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 22,
+   "t_speech_end_ms": 163900,
+   "text": "Şimdi şey, giriş ekranındaki hatayı bir kontrol eder misin?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1480
+   },
+   "after_speech_end_ms": {
+    "soft_end": 701,
+    "fast_stt": 979,
+    "first_token": 2460,
+    "first_say": 5310,
+    "commit": 2500,
+    "final_stt": 4729,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 24,
+   "t_speech_end_ms": 173780,
+   "text": "Bana bir özet çıkar, yani. Bugün neler yapıldı onu merak ediyorum.",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1859
+   },
+   "after_speech_end_ms": {
+    "soft_end": 710,
+    "fast_stt": 1198,
+    "first_token": 3057,
+    "first_say": 3193,
+    "commit": 2499,
+    "final_stt": 4868,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 26,
+   "t_speech_end_ms": 185300,
+   "text": "Ödeme sayfasında bir sorun vardı ama. Sanırım dün akşam düzeldi, bir bakar mısın?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1654
+   },
+   "after_speech_end_ms": {
+    "soft_end": 702,
+    "fast_stt": 1410,
+    "first_token": 3065,
+    "first_say": 3161,
+    "commit": 2502,
+    "final_stt": 5008,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 28,
+   "t_speech_end_ms": 196120,
+   "text": "Peki şu yeni özellik için. Hangi dosyaları değiştirmemiz gerekiyor?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1867
+   },
+   "after_speech_end_ms": {
+    "soft_end": 708,
+    "fast_stt": 1065,
+    "first_token": 2933,
+    "first_say": 3104,
+    "commit": 2507,
+    "final_stt": 5015,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 31,
+   "t_speech_end_ms": 206120,
+   "text": "Bir de, geçen hafta açtığımız iş vardı ya, o ne durumda?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1317
+   },
+   "after_speech_end_ms": {
+    "soft_end": 701,
+    "fast_stt": 963,
+    "first_token": 2281,
+    "first_say": 2444,
+    "commit": 2499,
+    "final_stt": 4776,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 32,
+   "t_speech_end_ms": 214960,
+   "text": "Mobil uygulamada, yok pardon, web panelinde son değişiklik ne?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 2952
+   },
+   "after_speech_end_ms": {
+    "soft_end": 708,
+    "fast_stt": 1349,
+    "first_token": 4302,
+    "first_say": 4532,
+    "commit": 2500,
+    "final_stt": 5087,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 34,
+   "t_speech_end_ms": 223920,
+   "text": "Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 2030
+   },
+   "after_speech_end_ms": {
+    "soft_end": 706,
+    "fast_stt": 957,
+    "first_token": 2988,
+    "first_say": 3587,
+    "commit": 2498,
+    "final_stt": 4767,
+    "executed": null
+   }
+  },
+  {
+   "turn_id": 35,
+   "t_speech_end_ms": 232900,
+   "text": "Claude ile Codex hangi ticket üzerinde çalışıyor? John Mita attılar mı?",
+   "routed": "conversation",
+   "cancelled": null,
+   "empty": false,
+   "brain": {
+    "drain_ms": 0,
+    "lock_ms": 0,
+    "ready_ms": 0,
+    "first_token_ms": 1806
+   },
+   "after_speech_end_ms": {
+    "soft_end": 701,
+    "fast_stt": 1195,
+    "first_token": 3002,
+    "first_say": 3214,
+    "commit": 2500,
+    "final_stt": 4903,
+    "executed": null
+   }
+  }
+ ]
+}

@@ -84,15 +84,28 @@ def _decode(src: Path):
     return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
 
 
+# mlx-whisper keeps exactly one model loaded and reloads it whenever another is
+# asked for, which is seconds each time. The voice session alternates between
+# two (voice.py), so every model used is kept here and handed back to it.
+_mlx_models: dict[str, object] = {}
+
+
 def _mlx(audio, prompt: str | None, language: str | None = None,
          model: str | None = None) -> dict | None:
     import mlx_whisper
+    from mlx_whisper.transcribe import ModelHolder
+    path = model or MODEL
+    if ModelHolder.model is not None and ModelHolder.model_path not in _mlx_models:
+        _mlx_models[ModelHolder.model_path] = ModelHolder.model
+    if path in _mlx_models:
+        ModelHolder.model, ModelHolder.model_path = _mlx_models[path], path
     # A voice note passes no `language`: whisper detects it, and forcing one
     # makes it *translate* a note spoken in another language instead of
     # transcribing it. Dictation does pass one — see `pcm`.
-    out = mlx_whisper.transcribe(audio, path_or_hf_repo=model or MODEL,
+    out = mlx_whisper.transcribe(audio, path_or_hf_repo=path,
                                  **({"initial_prompt": prompt} if prompt else {}),
                                  **({"language": language} if language else {}))
+    _mlx_models[path] = ModelHolder.model
     text = (out.get("text") or "").strip()
     return {"text": text, "language": out.get("language")} if text else None
 
@@ -202,7 +215,7 @@ def pcm(data: bytes, prompt: str | None = None, language: str | None = None,
     audio = np.frombuffer(data[:len(data) // 2 * 2], dtype=np.int16).astype(np.float32) / 32768.0
     backend = _backend()
     if backend == "mlx":
-        run = lambda a, p, lang: _mlx(a, p, lang, model)  # noqa: E731
+        run = (lambda a, p, lang: _mlx(a, p, lang, model)) if model else _mlx  # noqa: E731
     elif backend == "faster":
         run = _transcribe_faster_array
     else:

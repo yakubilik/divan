@@ -508,6 +508,7 @@ async def chat_bridge(phone: Phone, fx: dict, projects: Path) -> None:
     before = {c["id"] for c in (await phone.call("chat.list", {}))["chats"]}
     c = Caller(phone, "chat")
     await c.start(chat_id=cid, client={"build": "test", "device": "chat", "mode": "act"})
+    await phone.tell("voice.ready", {"session_id": c.sid, "t_client_ms": int(time.time() * 1000)})
     await c.say(fx["correction-pause"])
     turn = await phone.until(lambda e: e["event"] == "voice.turn" and e["data"]["session_id"] == c.sid, 15,
                              "the committed request")
@@ -551,6 +552,8 @@ async def chat_bridge(phone: Phone, fx: dict, projects: Path) -> None:
           str({k: (chat[k], after[k]) for k in ("provider", "account_id", "perm_mode")}))
     now = {c2["id"] for c2 in (await phone.call("chat.list", {}))["chats"]}
     check(now == before, "and no other chat was made", str(now - before))
+    states = [e["data"]["state"] for e in ev if e["event"] == "voice.state" and e["_at"] < done["_at"]]
+    check("working" in states, "while the chat works the session says it is working", str(states))
     check(no_stale_audio(ev) is None, "no piece of an old or cancelled turn", no_stale_audio(ev) or "")
     await phone.call("voice.stop", {"session_id": c.sid})
 
@@ -650,17 +653,30 @@ async def measured(phone: Phone, fx: dict, rounds: int, out: Path) -> None:
         for sid in MEASURED:
             n0 = len(phone.events)
             info = await c.say(fx[sid])
-            await c.quiet(3.0)
+            lo, hi = info["offset_ms"], info["offset_ms"] + fx[sid]["duration_ms"]
+            mine = lambda e: (e["event"] == "voice.turn" and e["data"]["session_id"] == c.sid  # noqa: E731
+                              and lo <= e["data"]["t_speech_end_ms"] <= hi)
+            if fx[sid]["reference"]:
+                try:
+                    await phone.until(mine, 15, f"the turn of {sid}")
+                except TimeoutError:
+                    pass
+            await c.quiet(1.0)
             ev = [e for e in phone.events[n0:] if e["event"].startswith("voice.")]
             end = info["speech_end_wall"]
             rel = lambda e: None if (e is None or end is None) else int((e["_at"] - end) * 1000)  # noqa: E731
-            turns = [e for e in ev if e["event"] == "voice.turn"]
+            # Attributed by where the turn's speech ended on the session's
+            # timeline, not by when it arrived: a slow turn lands after the next
+            # fixture has started.
+            turns = [e for e in phone.events if mine(e)]
             tid = turns[-1]["data"]["turn_id"] if turns else None
-            says = [e for e in ev if e["event"] == "voice.say" and e["data"]["turn_id"] == tid and e["data"]["text"]]
-            partial = [e for e in ev if e["event"] == "voice.transcript" and not e["data"]["final"]
-                       and e["data"]["turn_id"] == tid]
+            says = [e for e in phone.events if e["event"] == "voice.say" and e["data"]["session_id"] == c.sid
+                    and e["data"]["turn_id"] == tid and e["data"]["text"]]
+            partial = [e for e in phone.events if e["event"] == "voice.transcript" and not e["data"]["final"]
+                       and e["data"]["session_id"] == c.sid and e["data"]["turn_id"] == tid]
             row = {"id": sid, "round": r, "reference": fx[sid]["reference"],
                    "turns": len(turns), "committed": turns[-1]["data"]["committed_text"] if turns else "",
+                   "routed": turns[-1]["data"]["routed"] if turns else None,
                    "fast_transcript": partial[-1]["data"]["text"] if partial else "",
                    "cancels": [e["data"]["reason"] for e in ev if e["event"] == "voice.cancel"],
                    "said": " ".join(e["data"]["text"] for e in says),
@@ -673,7 +689,7 @@ async def measured(phone: Phone, fx: dict, rounds: int, out: Path) -> None:
             row["wer_fast"] = bench.wer(row["reference"], row["fast_transcript"]) if row["reference"] else None
             rows.append(row)
             s = row["after_speech_end_ms"]
-            print(f"  {sid:<17} first say {s['first_say']} ms  fast stt {s['fast_transcript']}  commit {s['commit']}"
+            print(f"  {sid:<17} first say {s['first_say']} ms  fast stt {s['fast_transcript']}  turn {s['commit']}"
                   f"  turns {row['turns']} cancels {row['cancels']}  said: {row['said'][:50]}")
     stop = await phone.call("voice.stop", {"session_id": c.sid})
     speech = [x for x in rows if x["reference"]]
@@ -695,6 +711,7 @@ async def measured(phone: Phone, fx: dict, rounds: int, out: Path) -> None:
         "pooled_wer_fast": bench.pooled_wer([(x["reference"], x["fast_transcript"]) for x in speech]),
         "segmentation_ok": sum(1 for x in speech if x["turns"] == 1),
         "silence_turns": sum(x["turns"] for x in rows if x["id"] == "silence"),
+        "silence_events": sum(1 for x in rows if x["id"] == "silence" and (x["said"] or x["fast_transcript"])),
         "errors": sum(len(x["errors"]) for x in rows),
         "baseline_proof": {"first_clause_text_median_ms": proof["stage_medians_after_speech_end_ms"]["llm_first_clause"],
                            "first_audio_median_ms": proof["first_audio_after_speech_end_ms"]["median"],
