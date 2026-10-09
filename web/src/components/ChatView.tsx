@@ -16,7 +16,7 @@ import type { ChatLog } from '../lib/timeline';
 import { useFleet } from '../lib/fleet';
 
 function Header({ chat, groupName, count, accountLabel, accountLimits, context, now,
-                 onEdit, onMenu, onDetails, detailsOpen }: {
+                 onEdit, onMenu, onDetails, detailsOpen, onCloseView }: {
   chat: Chat; groupName: string | null; count: number; accountLabel: string | null;
   /** Every window this chat's sign-in last reported, for the ring. */
   accountLimits: LimitWindow[] | undefined;
@@ -27,6 +27,9 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
   onMenu: () => void;
   onDetails: () => void;
   detailsOpen: boolean;
+  /** Where the chat is read inside another page: put it away and show that
+   *  page again. Only navigation — the chat, its history and its agent stay. */
+  onCloseView?: () => void;
 }) {
   const sub = [groupName, chat.cwd.split(/[/\\]/).pop(), `${count} messages`].filter(Boolean).join(' · ');
   const running = chat.status === 'running';
@@ -113,6 +116,15 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
             <circle cx="5.5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="18.5" cy="12" r="1.8" />
           </svg>
         </button>
+        {!!onCloseView && (
+          <button
+            type="button" onClick={onCloseView} title="Close chat" aria-label="Close chat"
+            data-close-chat=""
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, lineHeight: 0 }}
+          >
+            <Icon path={P.x} size={18} color={C.mute} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -170,13 +182,16 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
 /** What is attached but not sent yet. A picture is shown as the picture, at the
  *  size a thumbnail wants to be — a file name is not a preview, and the whole
  *  point of attaching a screenshot is to see that it is the right one. */
-export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending, filedUnder, tickets }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending, filedUnder, tickets, onCloseView }: {
   chat: Chat | null;
   /** The product Hermes filed this conversation under, as the thin rule over it
    *  (HANDOVER §4.8). Null where nothing claims it. */
   filedUnder?: string | null;
   /** Where a card this conversation filed opens. */
   tickets?: TicketLink | null;
+  /** Put the chat away where it is read inside a product's page: an X beside
+   *  the menu in its head. Absent where the chat is the page itself. */
+  onCloseView?: () => void;
   hostKey: string | null;
   log: ChatLog;
   groupName: string | null;
@@ -249,6 +264,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
           context={contextUse(log.items.filter((i) => i.kind === 'turn') as any[], liveContext)}
           onEdit={onEdit} onMenu={() => { setDetails(false); setMenu(true); }}
           onDetails={() => setDetails((v) => !v)} detailsOpen={details}
+          onCloseView={onCloseView}
         />
         {menu && (
           <ChatMenu
