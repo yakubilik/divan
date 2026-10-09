@@ -25,7 +25,8 @@ const LIVE_PHASE: Record<Snapshot['state'], Phase> = {
   idle: 'idle', starting: 'dialling', listening: 'listening', hearing: 'hearing', thinking: 'thinking',
   speaking: 'speaking', working: 'working', reconnecting: 'reconnecting', ended: 'idle',
 };
-type Line = { id: number; who: 'you' | 'them'; text: string };
+/** `dim` is words the daemon has not committed yet. */
+type Line = { id: number; who: 'you' | 'them'; text: string; dim?: boolean };
 
 /** How long a gap in the talking means "your turn". iOS's own end-of-speech is
  *  about three seconds, which in a conversation reads as the line going dead;
@@ -148,9 +149,11 @@ export default function Call() {
   const { chat: chatId } = useLocalSearchParams<{ chat?: string }>();
   const chatTitle = useStore((s) => (chatId ? s.chats?.[chatId]?.title : null));
 
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [heard, setHeard] = useState('');
-  const [lines, setLines] = useState<Line[]>([]);
+  // A call that is already up (this screen was closed and opened again) is joined, never placed twice.
+  const attached = useMemo(() => liveApi.active(), []);
+  const [phase, setPhase] = useState<Phase>(attached ? LIVE_PHASE[attached.state] : 'idle');
+  const [heard, setHeard] = useState(attached ? liveView(attached, lang).partial : '');
+  const [lines, setLines] = useState<Line[]>(attached ? liveView(attached, lang).lines : []);
   const [note, setNote] = useState<string | null>(null);
   const [voice, setVoice] = useState<string | null>(null);
   const [voices, setVoices] = useState<Speech.Voice[] | null>(null);
@@ -161,8 +164,8 @@ export default function Call() {
   // before a queued state update lands, and reading a stale transcript there
   // sent the daemon the *previous* question.
   const transcript = useRef('');
-  const phaseRef = useRef<Phase>('idle');
-  const live = useRef(false);            // the call is up (not the mic)
+  const phaseRef = useRef<Phase>(phase);
+  const live = useRef(!!attached);       // the call is up (not the mic)
   const scroller = useRef<ScrollView | null>(null);
   const nextId = useRef(1);
   const silence = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -197,9 +200,8 @@ export default function Call() {
   // The streaming call (src/voice-session.ts), when this build and the computer both have it. Everything
   // below that is about recognisers, silence timers and echo is the older half-duplex call, kept for a
   // build without the native engine or a computer without `voice.start`.
-  const liveCall = useRef<VoiceSession | null>(null);
-  const heardByTurn = useRef(new Map<number, { text: string; final: boolean }>());
-  const [latency, setLatency] = useState<number | null>(null);
+  const liveCall = useRef<VoiceSession | null>(attached);
+  const [latency, setLatency] = useState<number | null>(attached ? lastLatency(attached) : null);
 
   // The stored choice has to reach the voice module before anything is spoken.
   useEffect(() => { setVoicePrefs(prefs.voiceIds ?? {}); }, [prefs.voiceIds]);
@@ -598,24 +600,11 @@ export default function Call() {
    *  replaced (the caller went on talking) keeps neither its half-heard words nor its dropped answer. */
   const onLive = useCallback((sn: Snapshot, s: VoiceSession) => {
     setPhaseBoth(LIVE_PHASE[sn.state]);
-    if (sn.heard) heardByTurn.current.set(sn.heard.turn, { text: sn.heard.text, final: sn.heard.final });
-    const turns = new Set<number>([...heardByTurn.current.keys(), ...sn.said.map((p) => p.turn)]);
-    const out: Line[] = [];
-    let partial = '';
-    for (const turn of [...turns].sort((a, b) => a - b)) {
-      const h = heardByTurn.current.get(turn);
-      if (h?.final) out.push({ id: turn * 2, who: 'you', text: h.text });
-      else if (h && turn === sn.turn) partial = h.text;
-      const said = sn.said.filter((p) => p.turn === turn && (turn === 0 || !s.isDead(turn) || s.heardOf(turn) > 0));
-      if (said.length) {
-        const text = turn === 0 ? callLines(lang).greeting : said.map((p) => p.text).join(' ');
-        out.push({ id: turn * 2 + 1, who: 'them', text });
-      }
-    }
-    setLines(out);
-    setHeard(partial);
-    const last = [...s.timings.values()].filter((t) => t.endToAudible != null).pop();
-    if (last) setLatency(last.endToAudible);
+    const view = liveView(s, lang);
+    setLines(view.lines);
+    setHeard(view.partial);
+    const ms = lastLatency(s);
+    if (ms != null) setLatency(ms);
     if (sn.error) setNote(errText(sn.error.code, sn.error.message));
     if (sn.ended && sn.ended !== 'hangup' && sn.ended !== 'unsupported') {
       setNote(T(sn.ended === 'denied' ? 'callNoMic' : sn.ended === 'dropped' ? 'callDropped' : 'callMicError'));
@@ -629,7 +618,6 @@ export default function Call() {
     if (!(await ensureMic())) { setNote(T('callNoMic')); return true; }
     setNote(null);
     setLatency(null);
-    heardByTurn.current.clear();
     live.current = true;
     setPhaseBoth('dialling');
     // One voice for the whole call, chosen before the first word.
@@ -741,6 +729,12 @@ export default function Call() {
   // In the background the call keeps its microphone (the app has the audio background mode, as a phone
   // call does); if iOS stopped the engine anyway, it is started again when the app is back in front.
   useEffect(() => {
+    const s = attached;
+    if (!s) return;
+    return s.subscribe((sn) => { if (liveCall.current === s || sn.state === 'ended') onLive(sn, s); });
+  }, [attached, onLive]);
+
+  useEffect(() => {
     const sub = AppState.addEventListener('change', (st) => {
       if (st === 'active') void liveCall.current?.foreground();
     });
@@ -809,7 +803,7 @@ export default function Call() {
           </Text>
         )}
         {lines.map((l) => (
-          <View key={l.id} style={[styles.bubble, l.who === 'you' ? styles.you : styles.them]}>
+          <View key={l.id} style={[styles.bubble, l.who === 'you' ? styles.you : styles.them, l.dim && { opacity: 0.5 }]}>
             <Text style={[{ fontSize: 17, lineHeight: 24 }, { color: l.who === 'you' ? c.ink : c.ink }]}>{l.text}</Text>
           </View>
         ))}
@@ -881,6 +875,24 @@ export default function Call() {
       </View>
     </View>
   );
+}
+
+/** The streaming call's conversation as bubbles, and the newest words still being heard. */
+function liveView(s: VoiceSession, lang: string): { lines: Line[]; partial: string } {
+  const lines: Line[] = [];
+  let partial = '';
+  for (const l of s.conversation()) {
+    // Provisional words stay in their place, before the early answer to them, until the commit.
+    if (l.who === 'you' && !l.final) { lines.push({ id: l.turn * 2, who: 'you', text: l.text, dim: true }); continue; }
+    const text = l.turn === 0 && l.who === 'them' ? callLines(lang).greeting : l.text;
+    lines.push({ id: l.turn * 2 + (l.who === 'them' ? 1 : 0), who: l.who, text });
+  }
+  return { lines, partial };
+}
+
+function lastLatency(s: VoiceSession): number | null {
+  const last = [...s.timings.values()].filter((t) => t.endToAudible != null).pop();
+  return last?.endToAudible ?? null;
 }
 
 /** What the EMA row says under its name: loading, why it is not there, or the

@@ -107,11 +107,23 @@ export async function callVoice(lang: string, emaOn: boolean): Promise<{ voice: 
   return { voice: systemVoice(lang, sys?.identifier ?? null, sys?.name ?? 'system'), ema: false };
 }
 
+let current: VoiceSession | null = null;
+
+/** Remember the call that is up, so a screen that mounts again joins it instead of placing a second one. */
+function track(s: VoiceSession): VoiceSession {
+  current = s;
+  s.subscribe((sn) => { if (sn.state === 'ended' && current === s) current = null; });
+  return s;
+}
+
 export const live = {
   /** This build has the engine. */
   available: (): boolean => voiceEngine != null,
   create: (voice: Voice): VoiceSession =>
-    new VoiceSession({ wire: wire(), engine: engine(), voice, log: (l) => console.log(l) }),
+    track(new VoiceSession({ wire: wire(), engine: engine(), voice, log: (l) => console.log(l) })),
+  /** The call that is up, if any. */
+  active: (): VoiceSession | null => current,
+  track,
   voice: callVoice,
   client: () => ({ build: String(Constants.expoConfig?.ios?.buildNumber ?? Constants.expoConfig?.version ?? 'dev'),
                    device: `${Platform.OS}` }),

@@ -119,6 +119,9 @@ export type TurnTiming = {
   firstAudibleServer: number | null;
 };
 
+/** One line of the call as the screen writes it. */
+export type ConversationLine = { turn: number; who: 'you' | 'them'; text: string; final: boolean; kind?: string };
+
 export type BargeRecord = { turn: number; detected: number; stopped: number; playedMs: number };
 
 export type Listener = (s: Snapshot) => void;
@@ -268,6 +271,8 @@ export class VoiceSession {
   private items = new Map<string, { p: Piece; ms: number }>();
   /** Audio of each turn played to the end of its item, in ms. */
   private played = new Map<number, number>();
+  /** The latest words heard in each turn. */
+  private heardBy = new Map<number, { text: string; final: boolean }>();
   private synthQueue: Piece[] = [];
   private synthing = false;
   private barge = new BargeDetector();
@@ -486,6 +491,7 @@ export class VoiceSession {
         if (this.snap.state !== 'reconnecting' || d.state !== 'reconnecting') this.set({ state: d.state });
         break;
       case 'voice.transcript':
+        this.heardBy.set(turn, { text: d.text || '', final: !!d.final });
         this.set({ heard: { turn, text: d.text || '', final: !!d.final } });
         break;
       case 'voice.say':
@@ -501,7 +507,10 @@ export class VoiceSession {
         const tm = this.timing(turn);
         tm.speechEnd = this.captureTime(Number(d.t_speech_end_ms));
         this.finishTiming(tm);
-        if (d.committed_text) this.set({ heard: { turn, text: d.committed_text, final: true } });
+        if (d.committed_text) {
+          this.heardBy.set(turn, { text: d.committed_text, final: true });
+          this.set({ heard: { turn, text: d.committed_text, final: true } });
+        }
         break;
       }
       case 'voice.error':
@@ -644,6 +653,23 @@ export class VoiceSession {
 
   /** How much of a turn's answer the caller has heard so far, in ms. */
   heardOf(turn: number): number { return this.playedOf(turn, this.clock.now()); }
+
+  /** The call so far, turn by turn: what the caller said (final once committed; only the newest turn's
+   *  words while they are still provisional) and what was said back. A turn the daemon replaced because
+   *  the caller went on talking leaves nothing behind unless some of its answer was actually heard. */
+  conversation(): ConversationLine[] {
+    const turns = new Set<number>([...this.heardBy.keys(), ...this.snap.said.map((p) => p.turn)]);
+    const out: ConversationLine[] = [];
+    for (const turn of [...turns].sort((a, b) => a - b)) {
+      const h = this.heardBy.get(turn);
+      if (h && h.text && (h.final || turn === this.newest)) out.push({ turn, who: 'you', text: h.text, final: h.final });
+      const said = this.snap.said.filter((p) => p.turn === turn);
+      if (said.length && (turn === 0 || !this.dead.has(turn) || this.heardOf(turn) > 0)) {
+        out.push({ turn, who: 'them', text: said.map((p) => p.text).join(' '), final: true, kind: said[0].kind });
+      }
+    }
+    return out;
+  }
 
   /** The daemon cancelled this turn, or the caller cut into it. */
   isDead(turn: number): boolean { return this.dead.has(turn); }

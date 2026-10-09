@@ -435,7 +435,8 @@ function units() {
     && Buffer.compare(Buffer.from(VS.fromBase64(Buffer.from(bytes).toString('base64'))), Buffer.from(bytes)) === 0);
 }
 
-const ready = (async () => {
+/** The whole run; `test-ustabasi.cjs` and `test-call-live.cjs` share the harness above without it. */
+const run = () => (async () => {
   units();
   const py = python();
   let peer;
@@ -462,10 +463,10 @@ const ready = (async () => {
   if (at > 0) fs.writeFileSync(process.argv[at + 1], JSON.stringify({ ...report, simulated_audio: true }, null, 1));
 })();
 
-module.exports = { checks, ready };
+module.exports = { checks, run, FakeEngine, fakeVoice, startPeer, fixtures, wait, norm };
 
 if (require.main === module) {
-  void ready.then(() => {
+  void run().then(() => {
     let bad = 0;
     for (const [name, ok] of checks) {
       console.log((ok ? '  ok    ' : '  FAIL  ') + name);
