@@ -194,6 +194,13 @@ const en = {
   callVoiceEmaStats: 'load {load} · first sound {first} · RTF {rtf}', callDialling: 'Calling…', callHintDialling: 'Ringing your computer.',
   callTitle: 'Concierge', callStart: 'Call', callListening: 'Listening', callThinking: 'Asking…',
   callSpeaking: 'Speaking', callHangUp: 'End call', close: 'Close',
+  callHearing: 'Hearing you', callWorking: 'Working on it', callReconnecting: 'Reconnecting…',
+  callHintLive: 'Just talk. You can talk over the answer.', callLatency: 'answered {s} s after you stopped',
+  callDropped: 'The call dropped. The chat goes on as text.',
+  callSystemVoiceWhole: 'EMA could not load, so this call uses the system voice.',
+  errVoiceStt: 'Speech recognition failed on the computer.', errVoiceReply: 'The answer could not be made.',
+  errVoiceNoSession: 'The call ended on the computer.', errVoiceBadAudio: 'The computer could not read the audio.',
+  errVoiceNoStt: 'The computer has no speech recogniser.',
   callHintIdle: 'Ask what your computer is doing. Tap to start.',
   callHintIdleChat: 'Talk to this chat. Tap to start.',
   callHintListening: 'Just stop talking — it sends itself.',
@@ -711,6 +718,8 @@ const ERR_KEYS: Record<string, Key> = {
   empty_message: 'errEmptyMessage', no_pending_approval: 'errNoPendingApproval',
   restarting: 'errRestarting', no_supervisor: 'errNoSupervisor', not_restarting: 'errNotRestarting',
   bad_ticket: 'errBadTicket',
+  voice_stt_failed: 'errVoiceStt', voice_reply_failed: 'errVoiceReply', voice_no_session: 'errVoiceNoSession',
+  voice_bad_audio: 'errVoiceBadAudio', voice_no_transcriber: 'errVoiceNoStt',
   // `ustabasi_refused` is deliberately absent: the queue's CLI answers in its
   // own words ("ustabasi is not installed on this machine", "note too long"),
   // and a sentence of ours in its place would say less than it does.

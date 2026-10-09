@@ -266,6 +266,8 @@ export class VoiceSession {
   private dead = new Set<number>();
   private pieces: Piece[] = [];
   private items = new Map<string, { p: Piece; ms: number }>();
+  /** Audio of each turn played to the end of its item, in ms. */
+  private played = new Map<number, number>();
   private synthQueue: Piece[] = [];
   private synthing = false;
   private barge = new BargeDetector();
@@ -600,6 +602,7 @@ export class VoiceSession {
       this.items.delete(id);
       p.doneItems += 1;
       p.playedMs += it.ms;
+      this.played.set(p.turn, (this.played.get(p.turn) ?? 0) + it.ms);
       if (p.current?.id === id) p.current = null;
       this.settle();
     }
@@ -632,13 +635,18 @@ export class VoiceSession {
   }
 
   private playedOf(turn: number, now: number): number {
-    let ms = 0;
+    let ms = this.played.get(turn) ?? 0;
     for (const p of this.pieces) {
-      if (p.turn !== turn) continue;
-      ms += p.playedMs + (p.current ? Math.min(p.current.ms, Math.max(0, now - p.current.at)) : 0);
+      if (p.turn === turn && p.current) ms += Math.min(p.current.ms, Math.max(0, now - p.current.at));
     }
     return Math.round(ms);
   }
+
+  /** How much of a turn's answer the caller has heard so far, in ms. */
+  heardOf(turn: number): number { return this.playedOf(turn, this.clock.now()); }
+
+  /** The daemon cancelled this turn, or the caller cut into it. */
+  isDead(turn: number): boolean { return this.dead.has(turn); }
 
   /** Stop the player and drop the pieces of `turn` (all of them for null); the ones that had started are
    *  reported stopped with what was heard of them. */
@@ -654,7 +662,11 @@ export class VoiceSession {
     const now = this.clock.now();
     for (const p of hit) {
       if (p.started != null && !p.done) {
-        if (p.current) p.playedMs += Math.min(p.current.ms, Math.max(0, now - p.current.at));
+        if (p.current) {
+          const part = Math.min(p.current.ms, Math.max(0, now - p.current.at));
+          p.playedMs += part;
+          this.played.set(p.turn, (this.played.get(p.turn) ?? 0) + part);
+        }
         this.report(p, 'stopped', now);
       }
       p.done = true;

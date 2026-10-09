@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, AppState, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useSpeechRecognitionEvent } from '@jamsch/expo-speech-recognition';
 import { useStore, useT } from '../src/store';
+import { errText } from '../src/i18n';
+import { live as liveApi } from '../src/live-call';
+import type { Snapshot, VoiceSession } from '../src/voice-session';
 import { client } from '../src/ws';
 import { useColors, type Palette } from '../src/theme';
 import { Text } from '../src/components/ui';
@@ -14,7 +17,14 @@ import { callLines, chatCallLines, yesNo } from '../src/call-lines';
 import { Switch } from '../src/components/divan';
 import type * as Speech from 'expo-speech';
 
-type Phase = 'idle' | 'dialling' | 'listening' | 'thinking' | 'speaking';
+type Phase = 'idle' | 'dialling' | 'listening' | 'hearing' | 'thinking' | 'speaking' | 'working' | 'reconnecting';
+
+/** The streaming call's state as the screen shows it. Every one but `starting` and `ended` is the daemon's
+ *  own `voice.state` (or the socket being down), so what the screen says is what the session is doing. */
+const LIVE_PHASE: Record<Snapshot['state'], Phase> = {
+  idle: 'idle', starting: 'dialling', listening: 'listening', hearing: 'hearing', thinking: 'thinking',
+  speaking: 'speaking', working: 'working', reconnecting: 'reconnecting', ended: 'idle',
+};
 type Line = { id: number; who: 'you' | 'them'; text: string };
 
 /** How long a gap in the talking means "your turn". iOS's own end-of-speech is
@@ -184,6 +194,12 @@ export default function Call() {
   const approval = useRef<{ id: string; asked: boolean } | null>(null);
   const voiceQueue = useRef<Promise<void>>(Promise.resolve());
   const pulse = useRef(new Animated.Value(0)).current;
+  // The streaming call (src/voice-session.ts), when this build and the computer both have it. Everything
+  // below that is about recognisers, silence timers and echo is the older half-duplex call, kept for a
+  // build without the native engine or a computer without `voice.start`.
+  const liveCall = useRef<VoiceSession | null>(null);
+  const heardByTurn = useRef(new Map<number, { text: string; final: boolean }>());
+  const [latency, setLatency] = useState<number | null>(null);
 
   // The stored choice has to reach the voice module before anything is spoken.
   useEffect(() => { setVoicePrefs(prefs.voiceIds ?? {}); }, [prefs.voiceIds]);
@@ -578,6 +594,64 @@ export default function Call() {
   sendRef.current = send;
 
   // ── call control ─────────────────────────────────────────────────────────
+  /** The screen from the session: its state, what it heard per turn and what it said. A turn the daemon
+   *  replaced (the caller went on talking) keeps neither its half-heard words nor its dropped answer. */
+  const onLive = useCallback((sn: Snapshot, s: VoiceSession) => {
+    setPhaseBoth(LIVE_PHASE[sn.state]);
+    if (sn.heard) heardByTurn.current.set(sn.heard.turn, { text: sn.heard.text, final: sn.heard.final });
+    const turns = new Set<number>([...heardByTurn.current.keys(), ...sn.said.map((p) => p.turn)]);
+    const out: Line[] = [];
+    let partial = '';
+    for (const turn of [...turns].sort((a, b) => a - b)) {
+      const h = heardByTurn.current.get(turn);
+      if (h?.final) out.push({ id: turn * 2, who: 'you', text: h.text });
+      else if (h && turn === sn.turn) partial = h.text;
+      const said = sn.said.filter((p) => p.turn === turn && (turn === 0 || !s.isDead(turn) || s.heardOf(turn) > 0));
+      if (said.length) {
+        const text = turn === 0 ? callLines(lang).greeting : said.map((p) => p.text).join(' ');
+        out.push({ id: turn * 2 + 1, who: 'them', text });
+      }
+    }
+    setLines(out);
+    setHeard(partial);
+    const last = [...s.timings.values()].filter((t) => t.endToAudible != null).pop();
+    if (last) setLatency(last.endToAudible);
+    if (sn.error) setNote(errText(sn.error.code, sn.error.message));
+    if (sn.ended && sn.ended !== 'hangup' && sn.ended !== 'unsupported') {
+      setNote(T(sn.ended === 'denied' ? 'callNoMic' : sn.ended === 'dropped' ? 'callDropped' : 'callMicError'));
+    }
+    if (sn.state === 'ended') { live.current = false; liveCall.current = null; }
+  }, [lang, setPhaseBoth, T]);
+
+  /** Placing the streaming call: the same ring and pickup, then a session that listens all the time.
+   *  False when the computer does not know `voice.start` — the older call takes over. */
+  const startLive = useCallback(async (): Promise<boolean> => {
+    if (!(await ensureMic())) { setNote(T('callNoMic')); return true; }
+    setNote(null);
+    setLatency(null);
+    heardByTurn.current.clear();
+    live.current = true;
+    setPhaseBoth('dialling');
+    // One voice for the whole call, chosen before the first word.
+    const { voice: v, ema: onEma } = await liveApi.voice(lang, !prefs.emaOff);
+    setVoice(onEma ? voiceName(lang) : v.name);
+    if (isTurkish(lang) && !onEma && !prefs.emaOff && emaAvailable()) setNote(T('callSystemVoiceWhole'));
+    await ring();
+    if (!live.current) return true;
+    await pickup();
+    if (!live.current) return true;
+    const s = liveApi.create(v);
+    liveCall.current = s;
+    s.subscribe((sn) => { if (liveCall.current === s || sn.state === 'ended') onLive(sn, s); });
+    await s.start({ chatId: chatId || null, lang, client: liveApi.client(), greeting: callLines(lang).greetingSpoken });
+    if (s.snapshot().ended === 'unsupported') {
+      liveCall.current = null;
+      live.current = false;
+      return false;
+    }
+    return true;
+  }, [chatId, lang, prefs.emaOff, onLive, setPhaseBoth, T]);
+
   /** Placing the call.
    *
    *  Ringback, then the click of somebody picking up, then a voice. Those two
@@ -591,6 +665,7 @@ export default function Call() {
    *  so the first question lands in about a second like every other one. The
    *  greeting itself is spoken by the phone and never waits on the network. */
   const start = useCallback(async () => {
+    if (liveApi.available() && (await startLive())) return;
     if (!(await ensureMic())) { setNote(T('callNoMic')); return; }
     setNote(null);
     live.current = true;
@@ -630,11 +705,14 @@ export default function Call() {
     sayAloud(greetingSpoken, () => {
       if (live.current && phaseRef.current === 'speaking') listen();
     });
-  }, [chatId, lang, listen, say, setPhaseBoth, T]);
+  }, [chatId, lang, listen, say, setPhaseBoth, startLive, T]);
 
   /** Hanging up stops listening and speaking, and nothing else: a turn still
    *  running goes on in the chat, exactly as a typed one would. */
   const hangUp = useCallback(() => {
+    const s = liveCall.current;
+    liveCall.current = null;
+    if (s) void s.stop();
     live.current = false;
     turnEnd.current?.('gone');
     approval.current = null;
@@ -654,13 +732,25 @@ export default function Call() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (phase === 'idle') { void start(); return; }
     if (phase === 'dialling') return;                                // it is ringing; let it
+    if (liveCall.current) return;                                    // a live call needs no button: just talk
     if (phase === 'speaking') { stopSpeaking(); listen(); return; }   // cut in
     if (phase === 'listening') { send(); return; }                    // send it now
   }, [phase, start, listen, send]);
 
   // Leaving the screen must not leave a microphone open behind it.
+  // In the background the call keeps its microphone (the app has the audio background mode, as a phone
+  // call does); if iOS stopped the engine anyway, it is started again when the app is back in front.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void liveCall.current?.foreground();
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => () => {
     live.current = false;
+    void liveCall.current?.stop();
+    liveCall.current = null;
     turnEnd.current?.('gone');
     if (silence.current) clearTimeout(silence.current);
     abortListening();
@@ -668,7 +758,7 @@ export default function Call() {
   }, []);
 
   useEffect(() => {
-    if (phase === 'listening' || phase === 'thinking' || phase === 'dialling') {
+    if (phase === 'listening' || phase === 'thinking' || phase === 'dialling' || phase === 'working' || phase === 'reconnecting') {
       const loop = Animated.loop(Animated.sequence([
         Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
         Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
@@ -682,16 +772,21 @@ export default function Call() {
   const label = phase === 'idle' ? T('callStart')
     : phase === 'dialling' ? T('callDialling')
     : phase === 'listening' ? T('callListening')
+    : phase === 'hearing' ? T('callHearing')
     : phase === 'thinking' ? T('callThinking')
+    : phase === 'working' ? T('callWorking')
+    : phase === 'reconnecting' ? T('callReconnecting')
     : T('callSpeaking');
 
-  const hint = phase === 'dialling' ? T('callHintDialling')
+  const hint = liveCall.current && phase !== 'idle' && phase !== 'dialling'
+    ? (latency != null ? T('callLatency', { s: (latency / 1000).toFixed(1) }) : T('callHintLive'))
+    : phase === 'dialling' ? T('callHintDialling')
     : phase === 'listening' ? T('callHintListening')
     : phase === 'speaking' ? T(BARGE_IN ? 'callHintSpeaking' : 'callHintTapCut')
     : phase === 'idle' ? T(chatId ? 'callHintIdleChat' : 'callHintIdle') : '';
 
   const ringColor = phase === 'speaking' ? c.ok
-    : phase === 'thinking' || phase === 'dialling' ? c.warn : c.accent;
+    : phase === 'thinking' || phase === 'dialling' || phase === 'working' || phase === 'reconnecting' ? c.warn : c.accent;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top + 8 }}>

@@ -17,7 +17,14 @@ export type CallEvent =
   /** The system handed over the audio session; nothing may be spoken or heard
    *  before this arrives. */
   | { event: 'onAudioReady' }
-  | { event: 'onAudioGone' };
+  | { event: 'onAudioGone' }
+  // The streaming call's engine (VoiceEngine.swift).
+  /** 50 ms of echo-cancelled microphone, 16 kHz mono PCM16, base64; `t_ms` is when it was heard. */
+  | { event: 'onMicFrame'; pcm: string; t_ms: number }
+  | { event: 'onPlayback'; id: string; state: 'started' | 'done'; t_ms: number }
+  | { event: 'onAudioRoute'; reason: string; output: string }
+  | { event: 'onAudioInterruption'; began: boolean }
+  | { event: 'onAudioFailed'; reason: string };
 
 type Name = CallEvent['event'];
 type Payload<N extends Name> = Extract<CallEvent, { event: N }>;
@@ -28,6 +35,12 @@ interface CallModule {
   endVoiceSession(): Promise<void>;
   endCall(): Promise<void>;
   reportConnected(): Promise<void>;
+  voiceStart(callKit: boolean): Promise<void>;
+  voiceStop(): Promise<void>;
+  voiceRunning(): boolean;
+  voicePlay(id: string, pcm: string, rate: number): void;
+  voiceFlush(): void;
+  voiceSynthesize(text: string, language: string, voice: string | null, rate: number): Promise<{ pcm: string; rate: number }>;
   addListener<N extends Name>(event: N, listener: (payload: Omit<Payload<N>, 'event'>) => void): { remove(): void };
 }
 
@@ -61,3 +74,15 @@ export const call = {
   end: () => native?.endCall() ?? Promise.resolve(),
   connected: () => native?.reportConnected() ?? Promise.resolve(),
 };
+
+/** The streaming call's audio engine, or null in a build without it (Expo Go, an older build, web): the
+ *  call screen then keeps the older half-duplex call. */
+export const voiceEngine = native && typeof (native as any).voiceStart === 'function' ? {
+  start: (callKit = false) => native.voiceStart(callKit),
+  stop: () => native.voiceStop(),
+  running: () => native.voiceRunning(),
+  play: (id: string, pcm: string, rate: number) => native.voicePlay(id, pcm, rate),
+  flush: () => native.voiceFlush(),
+  synthesize: (text: string, language: string, voice: string | null, rate: number) =>
+    native.voiceSynthesize(text, language, voice, rate),
+} : null;
