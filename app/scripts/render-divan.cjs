@@ -111,7 +111,7 @@ function host(tag, kind) {
     // claim about this handler, and a scan is how a check asks it.
     if (typeof rest.onBarcodeScanned === 'function') SCANS.push(rest.onBarcodeScanned);
     if (typeof rest.onLongPress === 'function') {
-      HOLDS.push({ text: textOf(children), hold: rest.onLongPress, out: rest.onPressOut,
+      HOLDS.push({ text: textOf(children), label: rest.accessibilityLabel ?? null, hold: rest.onLongPress, out: rest.onPressOut,
                    delay: rest.delayLongPress ?? null });
     }
     return React.createElement(tag, attrs, children);
