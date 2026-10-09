@@ -6,8 +6,9 @@
  *  answers it offers; then Live, the latest steps of the run as a mono time and
  *  a sentence, with the one line you can say into it; then the Agent face, shut
  *  (`<details>`): Goal, Done when, Test, Files. The side column is Column,
- *  Executor, Machine, Branch, Runs alone and Opened, and under it what can be
- *  done to the queue's ticket — the buttons the wall's ticket window has.
+ *  Executor, Machine, Branch, Runs alone and Opened; under it what the ticket's
+ *  runs took and used (`lib/usage.ts`), and what can be done to the queue's
+ *  ticket — the buttons the wall's ticket window has.
  *
  *  **No agent text on the human face.** The title and the sentences are
  *  `human()`, which reads those two fields and nothing else; the brief is
@@ -35,6 +36,7 @@ import {
   QUEUE_WORD, STEPS_SHOWN, brief, human, question, queueActs, side, steps,
   type QueueAct, type Said,
 } from '../lib/ticket';
+import { UNAVAILABLE, usageFace, type TicketUsage } from '../lib/usage';
 import { useRun } from '../lib/run';
 import { RunLog } from '../components/RunLog';
 import { Report } from '../components/Report';
@@ -50,9 +52,14 @@ export interface Opened {
   full: DivanCardFull | null;
   ticket: QueueTicket | null;
   error: string | null;
+  usage?: TicketUsage | null;
 }
 
 const NOTHING: Opened = { full: null, ticket: null, error: null };
+
+/** How often a ticket that is running is asked about again: its runs end and
+ *  begin without the card moving, and each one that ends brings its figures. */
+const RUNNING_POLL_MS = 15000;
 
 /** How much of the sentences under the title a page opens on. */
 const SUMMARY_LINES = 7;
@@ -81,7 +88,8 @@ export function Ticket(props: TicketProps) {
     cardGet(card.host, card.id)
       .then((answer) => {
         if (!mine) return;
-        setGot({ full: answer?.card ?? null, ticket: answer?.ticket ?? null, error: null });
+        setGot({ full: answer?.card ?? null, ticket: answer?.ticket ?? null, error: null,
+                 usage: answer?.usage ?? null });
       })
       .catch((e) => {
         if (!mine) return;
@@ -89,6 +97,13 @@ export function Ticket(props: TicketProps) {
       });
     return () => { mine = false; };
   }, [card.host, card.id, card.updated_at, tick]);
+
+  const running = got.ticket?.status === 'running';
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setTick((n) => n + 1), RUNNING_POLL_MS);
+    return () => clearInterval(timer);
+  }, [running]);
 
   return <TicketPage {...props} opened={got} onChanged={() => setTick((n) => n + 1)} />;
 }
@@ -292,6 +307,9 @@ export function TicketPage({
 
       <aside>
         <Side card={card} rows={rows} onHand={(x) => void hand(x)} />
+        {card.ustabasi_id != null && (
+          <Usage usage={got.usage} now={now} loading={!got.full && !got.error} />
+        )}
         {(card.column === 'in_progress' || card.column === 'review') && (
           <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={() => void requeue()}>Move back to Queued</button>
         )}
@@ -463,6 +481,68 @@ function Side({ card, rows, onHand }: {
         );
       })}
     </div>
+  );
+}
+
+/** The daemon's clock, carried forward a second at a time between the moments
+ *  the board hands a new one over — only while something is being timed. */
+function useClock(now: number, going: boolean): number {
+  const [at, setAt] = useState(now);
+  useEffect(() => {
+    setAt(now);
+    if (!going) return;
+    const from = Date.now();
+    const timer = setInterval(() => setAt(now + (Date.now() - from) / 1000), 1000);
+    return () => clearInterval(timer);
+  }, [now, going]);
+  return at;
+}
+
+/** What the ticket's runs took and used. Every figure says whose it is — one
+ *  run's or the whole ticket's — and one nobody reported says `unavailable`. */
+function Usage({ usage, now, loading }: {
+  usage: TicketUsage | null | undefined; now: number; loading: boolean;
+}) {
+  const going = !!usage?.runs?.some((r) => r.live);
+  const face = usageFace(usage, useClock(now, going));
+  return (
+    <section aria-labelledby="t-usage" data-usage="" data-live={face?.live ? 'true' : undefined}>
+      <div className="dv-sec"><h3 id="t-usage">Time and usage</h3></div>
+      {!face ? (
+        <p className="dv-meta" data-usage-none="" style={{ margin: '0 4px' }}>
+          {loading ? 'Reading the runs…' : `Run time, tokens and cost are ${UNAVAILABLE} for this ticket.`}
+        </p>
+      ) : (
+        <div className="dv-glass dv-side dv-usage">
+          {face.rows.map((r) => (
+            <div key={r.key} className="dv-usage-row" data-row={r.key} data-missing={r.missing ? 'true' : undefined}>
+              <div className="dv-usage-top">
+                <span className="l">{r.label}<span className="dv-meta s">{r.scope}</span></span>
+                <span className="dv-meta v">{r.value}</span>
+                {!!r.tag && <span className="dv-meta n" data-tag="">{r.tag}</span>}
+              </div>
+              {!!r.fine && <p className="dv-meta f">{r.fine}</p>}
+            </div>
+          ))}
+          {!!face.caveat && <p className="dv-meta f dv-usage-caveat" data-usage-caveat="">{face.caveat}</p>}
+          {face.lines.length > 1 && (
+            <details className="dv-usage-runs">
+              <summary className="dv-meta dv-hit">Run by run</summary>
+              <table>
+                <tbody>
+                  {face.lines.map((l) => (
+                    <tr key={l.id} data-run={l.id}>
+                      <th scope="row">{l.what}{l.live ? ' · now' : ''}</th>
+                      <td>{l.time}</td><td>{l.tokens}</td><td>{l.cost}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

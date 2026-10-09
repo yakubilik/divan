@@ -105,6 +105,7 @@ const load = (p) => import(pathToFileURL(join(out, p)).href);
 const K = await load('web/src/lib/theme.js');
 const D = await load('web/src/lib/divan.js');
 const OV = await load('web/src/lib/overview.js');
+const PG = await load('web/src/lib/progress.js');
 const PR = await load('web/src/lib/project.js');
 const TD = await load('web/src/lib/today.js');
 const TK = await load('web/src/lib/ticket.js');
@@ -212,18 +213,13 @@ group('the panel and the phone say the same thing about the same board');
     return [r.agent.title, detail || when].filter(Boolean).join(' · ');
   };
 
-  // The Dashboard of HANDOVER §4.1 draws neither of the two lines above any
-  // more: a tile carries the worst card's own line, and Working now writes an
-  // agent as its title over `project · executor · machine · time` — on the
-  // panel both are a badge's tooltip. Both
-  // screens are held to composing that row the same way.
+  // The phone still draws a Working now row and a tile's line; the panel's
+  // Dashboard folded both into its project cards (`lib/progress.ts`), so only
+  // the phone's own composition is held here.
   const phoneScreen = appSrc('app/app/dashboard.tsx');
-  const panelScreen = readFileSync(join(web, 'src', 'screens', 'Dashboard.tsx'), 'utf8');
-  ok('the panel and the phone compose a Working now row and a tile’s line the same way',
+  ok('the phone composes a Working now row and a tile’s line off the shared rules',
     phoneScreen.includes("[name, T(r.who), r.agent.machine || r.agent.hostName, when]")
-    && panelScreen.includes("[name, r.who, r.agent.machine || r.agent.hostName, when]")
-    && phoneScreen.includes("latest(p.cards) || p.summary")
-    && panelScreen.includes("latest(p.cards) || p.summary"));
+    && phoneScreen.includes("latest(p.cards) || p.summary"));
 
   const said = (x) => (x ? t(x.key, x.params) : null);
   /** One of the phone's two lines as its screen composes it: every clause, with
@@ -354,6 +350,30 @@ group('the panel and the phone say the same thing about the same board');
     withHidden.projects.length === 0);
 }
 
+group('a project card reads each ticket’s stage off the card, and invents none');
+{
+  const c = (over) => ({ column: 'in_progress', executor: 'coding_agent', agent_status: 'running', ...over });
+  ok('the queue’s marks map to one stage each, and ideas and history are not open work',
+    eq([
+      c({}), c({ column: 'review' }), c({ column: 'queued', agent_status: 'queued' }),
+      c({ agent_status: 'asking' }), c({ agent_status: 'blocked' }), c({ agent_status: 'failed' }),
+      c({ executor: 'human', agent_status: null }), c({ agent_status: null }),
+      c({ column: 'ice_box', agent_status: null }), c({ column: 'done', agent_status: 'verified' }),
+    ].map((x) => PG.ticketStage(x)),
+    ['running', 'review', 'queued', 'asking', 'stuck', 'stuck', 'yours', 'started', null, null]));
+  const busy = view('busy');
+  const quire = PG.progress(busy.projects.find((p) => p.key === 'quire'), NOW);
+  ok('a busy product says what is working and what needs you, with its blockers worst first',
+    quire.stage === 'Live' && quire.summary === 'client portals for studios'
+    && quire.tickets.map((t) => t.number).join(' ') === '#44 #42 #41'
+    && quire.status === '2 need you · 1 working'
+    && eq(quire.blockers.map((o) => o.id), ['o1', 'o2']), JSON.stringify([quire.status, quire.tickets.map((t) => t.number)]));
+  const pebble = PG.progress(view('slow').projects.find((p) => p.key === 'pebble'), NOW);
+  ok('a product nobody described and nothing measured says exactly that',
+    pebble.stage === null && pebble.summary === null && pebble.tickets.length === 0
+    && pebble.status === 'No active work', pebble.status);
+}
+
 // ── 2 · the page is the frames' page ───────────────────────────────────────
 
 group('the Dashboard: greeting, Composer, Needs you, Projects, Working now');
@@ -369,9 +389,15 @@ group('the Dashboard: greeting, Composer, Needs you, Projects, Working now');
       === view('busy').cards.filter((c) => S.kindOf(c)).length);
   ok('every product is a badge that is a link to its own page',
     view('busy').projects.every((p) => busy.includes(`href="/p/${encodeURIComponent(p.key)}"`)));
-  ok('what is running is a badge per agent, each a link to its own ticket',
-    OV.agentRows(view('busy')).length > 0 && OV.agentRows(view('busy')).every((r) =>
-      busy.includes(`data-running="${r.agent.host}:${r.agent.card_id}" href="/p/`)));
+  ok('there is no Running row: every agent at work is a ticket line on its own product’s card',
+    !busy.includes('running-now') && OV.agentRows(view('busy')).length > 0
+    && OV.agentRows(view('busy')).every((r) => {
+      const at = busy.indexOf(`data-project-card="${r.agent.projectKey}"`);
+      const next = busy.indexOf('data-project-card=', at + 1);
+      const own = busy.slice(at, next < 0 ? undefined : next);
+      return at >= 0 && own.includes(`data-ticket-link="${r.agent.card_id}" href="/p/${encodeURIComponent(r.agent.projectKey)}/c/`)
+        || own.includes(`href="/p/${encodeURIComponent(r.agent.projectKey)}/c/${encodeURIComponent(r.agent.card_id)}" data-ticket-link="${r.agent.card_id}"`);
+    }));
   K.setThemeChoice('dark');
   const dark = page('busy');
   K.setThemeChoice('light');
@@ -1111,7 +1137,7 @@ group('every state of the fleet, drawn');
     page('alone').includes('No computer paired yet')
     && page('fresh').includes('No products yet'));
   ok('a product nobody has touched in a month says so, and one with nothing to read does not',
-    page('slow').includes('Quiet for 4 weeks. Nothing queued.')
+    page('slow').includes('No active work · last commit 4w ago')
     && OV.figure(view('slow').projects.find((p) => p.key === 'pebble'), NOW, ago) === null,
     page('slow').slice(page('slow').indexOf('quiet for') - 40, page('slow').indexOf('quiet for') + 30));
 }

@@ -755,8 +755,7 @@ export function App() {
                   }}
                 />
               ),
-              open: chat ? <ChatView {...chatProps} /> : null,
-              onClose: () => setTab('overview'),
+              open: chat ? <ChatView {...chatProps} onCloseView={() => setTab('overview')} /> : null,
             } : null}
           />
         )}

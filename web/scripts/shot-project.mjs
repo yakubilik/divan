@@ -3,7 +3,8 @@
  *
  *     node scripts/shot-project.mjs [out-dir]
  *
- *  Not a check: what it leaves is the thing to hold up beside the frame
+ *  Not a check but for one measurement — the stage card fits the window at both
+ *  widths: what it leaves is the thing to hold up beside the frame
  *  (`Project`, `Board`, `ProjectPhone` .dc.html). Needs a browser, like `test-divan-ui.mjs`. */
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -52,6 +53,7 @@ const cdp = (method, params = {}, sessionId) => new Promise((done) => {
 const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
 const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
 const page = (m, p) => cdp(m, p, sessionId);
+let failed = false;
 try {
   for (const [name, view, width, height, mobile] of [
     ['project', 'overview', 1440, 1800, false], ['board', 'board', 1440, 1100, false],
@@ -60,7 +62,28 @@ try {
     for (const scheme of ['dark', 'light']) {
       await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
       await page('Page.navigate', { url: `file://${join(build, 'harness.html')}?theme=${scheme}&view=${view}` });
+      // A busy machine can take longer than the pause below to draw the page at all.
+      for (let i = 0; i < 60; i++) {
+        const { result } = await page('Runtime.evaluate', { returnByValue: true,
+          expression: `!!document.querySelector('#root [data-project-head]')` });
+        if (result?.value) break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
       await new Promise((r) => setTimeout(r, 1500));
+      if (view === 'overview') {
+        // The one thing measured: the stage card and every word on its rail are
+        // inside the window, at both widths.
+        const { result } = await page('Runtime.evaluate', { returnByValue: true, expression: `(() => {
+          const card = document.querySelector('[data-stage-card]');
+          if (!card) return 'no stage card';
+          const fits = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= innerWidth + 0.5; };
+          const words = [...card.querySelectorAll('[data-step] span')];
+          const cut = words.filter((e) => e.scrollWidth > e.clientWidth + 0.5 || !fits(e)).map((e) => e.textContent);
+          return fits(card) && words.length === 5 && !cut.length ? '' : 'stage card does not fit: ' + JSON.stringify(cut);
+        })()` });
+        if (result.value) { console.error(`${name} ${scheme}: ${result.value}`); failed = true; }
+        else console.log(`${name} ${scheme}: the stage card and its five step names fit in ${width}px`);
+      }
       const shot = await page('Page.captureScreenshot', { format: 'png' });
       const file = join(out, `${name}${scheme === 'dark' ? '' : '-light'}.png`);
       writeFileSync(file, Buffer.from(shot.data, 'base64'));
@@ -68,4 +91,4 @@ try {
     }
   }
 } finally { ws.close(); browser.kill(); }
-process.exit(0);
+process.exit(failed ? 1 : 0);

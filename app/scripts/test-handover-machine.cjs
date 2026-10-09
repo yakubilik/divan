@@ -176,9 +176,10 @@ const ready = (async () => {
       one((p) => p.label === 'In Progress: Webhook retry policy').press();
       R.render('dark', h(Conversation, { id: 'c1' }));
       one((p) => p.label === 'Queued: Refund policy page').press();
-      const went = R.nav.pushed();
-      checks.push(['phone: a chat filed under a project shows the thin rule, and a card it filed is a small link that opens the ticket',
-        rule && eq(went, ['/card/k1?host=h1&from=chat', '/ticket/99?from=chat'])]);
+      // A tap opens the card inside the chat (#159); its Go details button,
+      // pressed in test-notice.cjs, is what leaves for the ticket.
+      checks.push(['phone: a chat filed under a project shows the thin rule, and tapping a card it filed stays in the chat',
+        rule && page.includes('Queued: Refund policy page') && R.nav.pushed().length === 0]);
     }
 
     // 3 · the Chat place is the list; a chat's back comes back to it
