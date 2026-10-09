@@ -21,10 +21,8 @@ import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '..
 import { Shell } from '../../src/components/shell';
 import { HOME } from '../../src/shell';
 import type { Chat } from '../../src/protocol';
+import { chatSections, FLAT, type Section } from '../../src/chat-sections';
 
-/** The one section the flat view draws. It is never shown as a heading, so it
- *  needs an id no group or folder could ever collide with. */
-const FLAT = '__flat__';
 
 function timeLabel(ts: number, T: ReturnType<typeof useT>, locale: string) {
   const d = new Date(ts * 1000); const now = new Date();
@@ -35,8 +33,6 @@ function timeLabel(ts: number, T: ReturnType<typeof useT>, locale: string) {
   if (diff < 86400 * 7) return d.toLocaleDateString(locale, { weekday: 'short' });
   return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
-
-type Section = { id: string; title: string; mono: boolean; data: Chat[]; count: number };
 
 export default function ChatPlace() {
   const router = useRouter();
@@ -57,6 +53,10 @@ export default function ChatPlace() {
   const projects = useStore((s) => s.projects);
   const showArchived = useStore((s) => s.showArchived);
   const chatView = useStore((s) => s.prefs.chatView);
+  // A chat carries its product's name beside its id; where an older answer
+  // left only the id, this computer's Divan board still knows what it is called.
+  const products = useStore((s) => (s.activeHostId ? s.divan[s.activeHostId]?.snapshot?.projects : undefined));
+  const productNames = useMemo(() => Object.fromEntries((products ?? []).map((p) => [p.id, p.name])) as Record<string, string>, [products]);
   const { refresh, loadProjects, createChat, updateChat, deleteChat, renameGroup, deleteGroup, createGroup, setShowArchived, setPrefs } =
     useStore(useShallow((s) => ({
       refresh: s.refresh, loadProjects: s.loadProjects, createChat: s.createChat, updateChat: s.updateChat,
@@ -119,51 +119,10 @@ export default function ChatPlace() {
     }
   }, [defaults, projects, createChat, router, go, T]);
 
-  const sections = useMemo<Section[]>(() => {
-    // `chats` is keyed by id, so its natural order is whenever each chat was first
-    // seen — sort explicitly: pinned first, then most recently active.
-    const all = Object.values(chats)
-      .filter((ch) => (showArchived || !ch.archived) && (!q || ch.title.toLowerCase().includes(q.toLowerCase()) || ch.last_preview.toLowerCase().includes(q.toLowerCase())))
-      .sort((a, b) => (b.pinned - a.pinned) || (b.updated_at - a.updated_at));
-    // Grouping is a way of reading the list, not a property of it. Asked for the
-    // flat view, hand back one unnamed section: same chats, newest first, no
-    // walls. Nothing is regrouped or forgotten — the groups are still there the
-    // moment the view is switched back.
-    if (chatView === 'flat') return [{ id: FLAT, title: '', mono: false, data: all, count: all.length }];
-
-    const byGroup: Record<string, Chat[]> = {};
-    for (const ch of all) (byGroup[ch.group_id || ''] ||= []).push(ch);
-    const out: Section[] = groups.map((g) => ({ id: g.id, title: g.name, mono: false, data: collapsed[g.id] ? [] : (byGroup[g.id] ?? []), count: byGroup[g.id]?.length ?? 0 }));
-
-    // Chats nobody has filed fall into sections by the folder they work in.
-    // One project is one section without anybody naming it, and a single
-    // folder is not a grouping at all, so it stays as one plain list.
-    // A chat somebody moved to Daily stays there, whatever folder it is in;
-    // so does one with no folder at all.
-    const loose = byGroup[''] ?? [];
-    const byCwd: Record<string, Chat[]> = {};
-    const daily: Chat[] = [];
-    for (const ch of loose) {
-      if ((ch.project_set && !ch.project_id) || !ch.cwd) daily.push(ch);
-      else (byCwd[ch.cwd] ||= []).push(ch);
-    }
-    const folders = Object.keys(byCwd);
-    if (folders.length > 1) {
-      folders
-        .sort((a, b) => (byCwd[b][0]?.updated_at ?? 0) - (byCwd[a][0]?.updated_at ?? 0))
-        .forEach((path) => {
-          const id = `cwd:${path}`;
-          out.push({ id, title: path.replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/'), mono: true,
-                     data: collapsed[id] ? [] : byCwd[path], count: byCwd[path].length });
-        });
-    } else daily.push(...(byCwd[folders[0]] ?? []));
-    if (daily.length || (groups.length === 0 && out.length === 0)) {
-      daily.sort((a, b) => (b.pinned - a.pinned) || (b.updated_at - a.updated_at));
-      out.push({ id: '', title: out.length ? T('ungrouped') : T('chats'), mono: false,
-                 data: collapsed[''] ? [] : daily, count: daily.length });
-    }
-    return out;
-  }, [chats, groups, q, collapsed, showArchived, chatView, T]);
+  const sections = useMemo<Section[]>(() => chatSections({
+    chats, groups, productNames, q, collapsed, showArchived, flat: chatView === 'flat',
+    daily: T('ungrouped'), only: T('chats'),
+  }), [chats, groups, productNames, q, collapsed, showArchived, chatView, T]);
 
   // In the flat view a row is the only place its group can still be named.
   const groupNames = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g.name])), [groups]);
@@ -272,7 +231,7 @@ export default function ChatPlace() {
     }));
   }, [T, locale]);
   const onGroupLongPress = useCallback((id: string, name: string, count: number, ref: React.RefObject<View | null>) => {
-    if (!id || id.startsWith('cwd:')) return;
+    if (!id || id.startsWith('cwd:') || id.startsWith('project:')) return;
     void measure(ref).then((r) => openMenu({
       anchor: r, previewRect: { ...r, x: 12, width: r.width - 24 }, width: 230,
       preview: <GroupPreview title={name} count={count} />,
