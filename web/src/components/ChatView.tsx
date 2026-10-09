@@ -108,23 +108,27 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
           <Icon path={P.info} size={12} color={detailsOpen ? C.text : C.mute} />
           Details
         </button>
-        <button
-          type="button" onClick={onMenu} title="Chat menu" aria-label="Chat menu"
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, lineHeight: 0 }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill={C.mute}>
-            <circle cx="5.5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="18.5" cy="12" r="1.8" />
-          </svg>
-        </button>
-        {!!onCloseView && (
+        {/* The menu and the X are one pair: where the chips wrap on a narrow
+            window they wrap together, so the X never lands apart from it. */}
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <button
-            type="button" onClick={onCloseView} title="Close chat" aria-label="Close chat"
-            data-close-chat=""
+            type="button" onClick={onMenu} title="Chat menu" aria-label="Chat menu"
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, lineHeight: 0 }}
           >
-            <Icon path={P.x} size={18} color={C.mute} />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill={C.mute}>
+              <circle cx="5.5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="18.5" cy="12" r="1.8" />
+            </svg>
           </button>
-        )}
+          {!!onCloseView && (
+            <button
+              type="button" onClick={onCloseView} title="Close chat" aria-label="Close chat"
+              data-close-chat=""
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, lineHeight: 0 }}
+            >
+              <Icon path={P.x} size={18} color={C.mute} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
