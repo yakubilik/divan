@@ -510,7 +510,7 @@ function Usage({ usage, now, loading }: {
       <div className="dv-sec"><h3 id="t-usage">Time and usage</h3></div>
       {!face ? (
         <p className="dv-meta" data-usage-none="" style={{ margin: '0 4px' }}>
-          {loading ? 'Reading the runs…' : `Run time, tokens and cost are ${UNAVAILABLE}: no run of this ticket is on record.`}
+          {loading ? 'Reading the runs…' : `Run time, tokens and cost are ${UNAVAILABLE} for this ticket.`}
         </p>
       ) : (
         <div className="dv-glass dv-side dv-usage">
