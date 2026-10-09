@@ -6,9 +6,9 @@
  *     node scripts/check-tab-switch.mjs
  *
  *  Opens Chrome with two blank tabs and the panel's chat page as the third,
- *  and sends ⌘1 through `cua-driver` (which needs Accessibility; start it with
- *  `open -n -g -a CuaDriver --args serve`), once with the chat's box focused
- *  once with nothing focused. A key sent over DevTools never reaches the
+ *  and sends ⌘1 through `cua-driver`, which briefly fronts the window and needs
+ *  Accessibility (start it with `open -n -g -a CuaDriver --args serve`): once
+ *  with the chat's box focused, once with nothing focused. A key sent over DevTools never reaches the
  *  browser's own shortcuts, headless or not, so this is the only way to see
  *  the tab actually change. Prints each run's tab visibility, the panel's
  *  address and the keydown the page saw; exits non-zero unless the first tab
