@@ -19,7 +19,7 @@ import { em, useColors } from '../../src/theme';
 import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../../src/components/ui';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Shell } from '../../src/components/shell';
-import { HOME } from '../../src/shell';
+import { freshAccount, freshAgent, freshChat, freshCwd } from '../../src/fresh-chat';
 import type { Chat } from '../../src/protocol';
 import { chatSections, FLAT, type Section } from '../../src/chat-sections';
 
@@ -74,17 +74,35 @@ export default function ChatPlace() {
   useEffect(() => { if (conn === 'online') { void refresh().catch(() => {}); void loadProjects().catch(() => {}); } }, [conn, refresh, loadProjects]);
 
   const send = useStore((s) => s.send);
+  const catalog = useStore((s) => s.catalog);
+  const accounts = useStore((s) => s.accounts);
+  const listAgents = useStore((s) => s.listAgents);
   const [first, setFirst] = useState('');
+  const creating = useRef(false);
+  const [starting, setStarting] = useState(false);
+
+  /** A fresh chat on what New chat would start with (`src/fresh-chat.ts`). The
+   *  agent list is one more round trip, asked only when the remembered choice
+   *  is an agent; if it cannot be read the chat opens without one rather than
+   *  not at all. Null where there is no folder to open it in. */
+  const openFresh = useCallback(async () => {
+    const cwd = freshCwd(defaults, projects);
+    if (!cwd) return null;
+    const account = freshAccount(defaults, accounts);
+    const agents = defaults.lastAgent === null ? []
+      : await listAgents(account || null, cwd, defaults.provider).catch(() => []);
+    return createChat(freshChat({ defaults, catalog, cwd, account, agent: freshAgent(defaults, agents) }) as any);
+  }, [defaults, projects, accounts, catalog, listAgents, createChat]);
+
   /** No conversation yet: what is said here opens one on this computer's
    *  defaults and goes straight into it. */
   const sayFirst = useCallback(async () => {
     const words = first.trim();
-    const cwd = defaults.cwd || projects[0]?.path;
     if (!words || creating.current) return;
-    if (!cwd) { go(() => router.push('/new-chat')); return; }
+    if (!freshCwd(defaults, projects)) { go(() => router.push('/new-chat')); return; }
     creating.current = true;
     try {
-      const chat = await createChat({ provider: defaults.provider, model: defaults.model, effort: defaults.effort, perm_mode: defaults.perm_mode, cwd, account_id: defaults.byProvider?.[defaults.provider]?.account_id ?? undefined } as any);
+      const chat = (await openFresh())!;
       await send(chat.id, words);
       setFirst('');
       router.replace(`/chat/${chat.id}`);
@@ -93,31 +111,35 @@ export default function ChatPlace() {
     } finally {
       creating.current = false;
     }
-  }, [first, defaults, projects, createChat, send, router, go, T]);
+  }, [first, defaults, projects, openFresh, send, router, go, T]);
 
-  // Long-press: open a chat immediately with the defaults. Tap: the picker sheet.
-  const creating = useRef(false);
+  // Tap: a fresh chat, opened at once — no Dashboard, no sheet. Long-press: the
+  // New chat sheet, for a different folder, tool or model.
   const quickNew = useCallback(async () => {
-    const cwd = defaults.cwd || projects[0]?.path;
-    if (!cwd) { go(() => router.push('/new-chat')); return; }
+    if (!freshCwd(defaults, projects)) { go(() => router.push('/new-chat')); return; }
     // Creating a chat is a round trip to the computer; without this a second
     // tap while it is in flight makes a second chat nobody asked for.
     if (creating.current) return;
     creating.current = true;
+    setStarting(true);
     try {
-      const chat = await createChat({ provider: defaults.provider, model: defaults.model, effort: defaults.effort, perm_mode: defaults.perm_mode, cwd, account_id: defaults.byProvider?.[defaults.provider]?.account_id ?? undefined } as any);
+      const chat = (await openFresh())!;
       router.push(`/chat/${chat.id}`);
     } catch (e: any) {
-      // Being offline is already on the screen, and the picker is where this tap
-      // was heading anyway — an alert about it would only be in the way. Say
-      // something only when the computer answered and said no.
-      router.push('/new-chat');
-      // After the sheet is up, so the dialog lands on top of it.
-      if (e?.code !== 'offline') setTimeout(() => alert(T('couldNotOpen'), e.message), 450);
+      // The list stays where it was; the dialog says why and offers the two
+      // ways on: the same press again, or the sheet with every choice in it.
+      alert(T('couldNotStart'), e?.message ?? String(e), [
+        { text: T('cancel'), style: 'cancel' },
+        { text: T('ncChooseSettings'), onPress: () => go(() => router.push('/new-chat')) },
+        { text: T('tryAgain'), onPress: () => void quickNewRef.current() },
+      ]);
     } finally {
       creating.current = false;
+      setStarting(false);
     }
-  }, [defaults, projects, createChat, router, go, T]);
+  }, [defaults, projects, openFresh, router, go, T]);
+  const quickNewRef = useRef(quickNew);
+  quickNewRef.current = quickNew;
 
   const sections = useMemo<Section[]>(() => chatSections({
     chats, groups, productNames, q, collapsed, showArchived, flat: chatView === 'flat',
@@ -259,13 +281,13 @@ export default function ChatPlace() {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 18, paddingHorizontal: 16, paddingBottom: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
           <Text style={{ fontSize: 30, fontWeight: '600', letterSpacing: em(30, -0.025) }}>{T('chats')}</Text>
-          {/* Tap: the Dashboard's Composer, where a new chat is written with no
-              step in between. Long-press: a chat on the defaults, at once. */}
+          {/* Tap: a fresh chat on the defaults, opened at once. Long-press: the
+              New chat sheet, where every choice can be changed first. */}
           {withControls && (
-            <Pressable accessibilityLabel={T('newChat')} hitSlop={6}
-              onPress={() => go(() => router.replace(HOME))} onLongPress={() => void quickNew()}
+            <Pressable accessibilityLabel={T('newChat')} hitSlop={6} disabled={starting}
+              onPress={() => void quickNew()} onLongPress={() => go(() => router.push('/new-chat'))}
               style={({ pressed }) => [{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
-              <Icon name="edit_square" size={22} />
+              {starting ? <Spinner size={18} /> : <Icon name="edit_square" size={22} />}
             </Pressable>
           )}
           {/* The general call: this computer's Hermes, not any one chat. */}
