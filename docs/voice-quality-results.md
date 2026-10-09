@@ -202,7 +202,9 @@ out) stay in `/tmp/divan-voice-e2e/` and are not committed.
   owner.
 - **Latency (unmet):** the fast layer's first token through the CLI (§3). Bounded follow-up: put
   `FastLayer` on the Messages API behind `Brain`, the same prompt, guard and commit gate, then rerun this
-  bench. It needs an Anthropic API key for Divan, which is an owner decision.
+  bench. It needs an Anthropic API key for Divan, which is an owner decision. **#160 prepared it**
+  (opt-in, off by default, tested offline): [voice-api-proposal.md](voice-api-proposal.md). The real
+  benchmark still waits on that key and a spend authorization; the target stays unmet until it is measured.
 - **Cold first turn:** a call's first answer waits for the CLI to start (6.9 s measured). Bounded
   follow-up: keep one warm fast layer per account in the `Hub` between calls.
 - **Spoken language:** the fast layer's English words and its listing of projects from the profile
