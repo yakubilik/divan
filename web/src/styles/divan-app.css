@@ -17,6 +17,8 @@
 .dv-topline .dv-back:hover{color:var(--ink);background:var(--hairline)}
 .dv-topline .dv-back svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .dv-topline a.dv-word,.dv-topline button.dv-word{appearance:none;border:0;background:transparent;color:var(--ink);text-decoration:none;cursor:pointer;padding:0;font-family:inherit}
+.dv-topline a.dv-word{display:inline-flex;align-items:center;gap:8px}
+.dv-topline a.dv-word img{display:block;flex:none;width:34px;height:34px}
 .dv-topline .sys .dv-btn--ghost[aria-current="page"]{color:var(--ink)}
 
 /* §5: the chips under the Composer, on one row with the microphone and send;
