@@ -27,7 +27,7 @@ if (!chrome) { console.error('no browser found — set CHROME to one'); process.
 execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
   'scripts/dashboard-harness.tsx', '--bundle', '--format=iife', '--jsx=automatic', '--target=es2022',
   `--outfile=${join(build, 'harness.js')}`, '--define:process.env.NODE_ENV="production"',
-  '--define:import.meta.env.DEV=false', '--log-level=warning',
+  '--define:import.meta.env.DEV=false', '--loader:.png=dataurl', '--log-level=warning',
 ], { cwd: web, stdio: 'inherit' });
 writeFileSync(join(build, 'harness.html'),
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="./harness.css">'

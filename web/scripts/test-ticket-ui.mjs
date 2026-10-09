@@ -44,7 +44,7 @@ execFileSync(join(web, 'node_modules', '.bin', 'esbuild'), [
   '--bundle', '--format=iife', '--jsx=automatic', '--target=es2022',
   `--outfile=${join(out, 'harness.js')}`,
   '--define:process.env.NODE_ENV="development"',
-  '--log-level=warning',
+  '--loader:.png=dataurl', '--log-level=warning',
 ], { cwd: web, stdio: 'inherit' });
 
 writeFileSync(join(out, 'harness.html'),
