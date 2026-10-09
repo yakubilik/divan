@@ -96,6 +96,7 @@ STT_TIMEOUT_S = 15.0
 FIRST_TOKEN_TIMEOUT_S = 12.0
 REPLY_TIMEOUT_S = 30.0
 RETRIES = 1             # one more try for a recogniser or a reply that failed
+KEEP_WARM_S = 300.0     # a hung-up call's fast layer is kept this long for the next call
 SPOKEN_WORDS = callmod.SPOKEN_WORDS
 
 # Small for the reply, the default model for what an agent receives (§5.4 of
@@ -345,8 +346,7 @@ CHAT_TURN_RULE = ("If this asks the chat to do anything, call forward_to_chat an
 
 
 def voice_system(home: str | None, chat_call: bool) -> tuple[str, bool]:
-    """The fast layer's system prompt, whichever transport carries it (the CLI
-    here, the Messages API in voice_api.py), and whether Hermes speaks."""
+    """The fast layer's system prompt, and whether Hermes speaks."""
     hermes = callmod.hermes_installed(home)
     extra = "\n\n" + CHAT_SYSTEM_EXTRA if chat_call else ""
     system = f"{VOICE_SYSTEM}{extra}\n\n{callmod.manner(hermes)}"
@@ -356,15 +356,13 @@ def voice_system(home: str | None, chat_call: bool) -> tuple[str, bool]:
     return system, hermes
 
 
-def turn_prompt(snap: str | None, text: str, lang: str, chat_call: bool) -> str:
+def turn_prompt(snap: str, text: str, lang: str, chat_call: bool) -> str:
     """One question as the fast layer receives it: the live state, the words,
-    and the reminder of language (and, on a chat call, of routing). Without a
-    snapshot it is the question as kept in an API layer's history."""
+    and the reminder of language (and, on a chat call, of routing)."""
     want = {"tr": "Answer in Turkish.", "en": "Answer in English."}.get(lang, "")
     if chat_call:
         want = f"{CHAT_TURN_RULE} {want}"
-    state = "" if snap is None else f"<state>\n{snap}\n</state>\n\n"
-    return f"{state}{text}\n\n({want})"
+    return f"<state>\n{snap}\n</state>\n\n{text}\n\n({want})"
 
 
 def _ok(text: str) -> dict:
@@ -581,7 +579,7 @@ class VoiceSession:
             self.lang = "en"
         self.client = data.get("client") or {}
         self.recognize: Recognizer = hub.recognizer_factory(self, data)
-        self.brain: Brain = hub.brain_factory(self, data)
+        self.brain: Brain = hub.brain_for(self, data)
         # The audio timeline: every sample since voice.start, in order.
         self.audio = bytearray()
         self.base = 0                    # sample index of audio[0]
@@ -1184,10 +1182,7 @@ class VoiceSession:
         self.closed = True
         for t in list(self.tasks):
             t.cancel()
-        try:
-            await self.brain.close()
-        except Exception:
-            pass
+        await self.hub.park(self)
 
 
 class Hub:
@@ -1199,18 +1194,58 @@ class Hub:
         self._whisper = recognizer_factory is None
         self.recognizer_factory = recognizer_factory or (lambda s, d: Whisper(s.lang))
         self.brain_factory = brain_factory or self._fast_layer
+        # The first answer of a call waits for the CLI to start (6.9 s in #151's
+        # run). So a call's fast layer is not closed at hang-up: it is kept
+        # warm, one per kind of call (the general one, or one per chat), and
+        # the next call of that kind picks it up. Nothing is asked to keep it
+        # warm, so no usage is spent on it; the CLI session recycles itself
+        # after its own idle limit and turn count (call.Concierge._ensure).
+        self.keep_warm = brain_factory is None
+        self.parked: dict[str, tuple[Brain, float]] = {}
+
+    def brain_for(self, s: "VoiceSession", d: dict) -> Brain:
+        self._expire()
+        parked = self.parked.pop(s.chat_id or "", None) if self.keep_warm else None
+        if parked is not None:
+            log.info("voice %s: reusing a warm fast layer", s.id)
+            return parked[0]
+        return self.brain_factory(s, d)
+
+    async def park(self, s: "VoiceSession") -> None:
+        """A session is over: keep its fast layer for the next call of its
+        kind, or close it when one is already kept or keeping is off."""
+        key = s.chat_id or ""
+        if self.keep_warm and key not in self.parked:
+            # A reply cut off by the hang-up still has its tail on the CLI's
+            # stream; it is drained before the next call's first question
+            # (FastLayer.cancel), never read as that question's answer.
+            try:
+                await s.brain.cancel()
+            except Exception:
+                await self._close_brain(s.brain)
+                return
+            self.parked[key] = (s.brain, time.monotonic())
+            asyncio.get_running_loop().call_later(KEEP_WARM_S + 1, self._expire)
+            return
+        await self._close_brain(s.brain)
+
+    def _expire(self) -> None:
+        now = time.monotonic()
+        for key, (brain, at) in list(self.parked.items()):
+            if now - at > KEEP_WARM_S:
+                del self.parked[key]
+                asyncio.get_running_loop().create_task(self._close_brain(brain))
+
+    @staticmethod
+    async def _close_brain(brain: Brain) -> None:
+        try:
+            await brain.close()
+        except Exception:
+            pass
 
     def _fast_layer(self, s: VoiceSession, d: dict) -> Brain:
-        from . import voice_api
         srv = self.server
         snap = (lambda: chat_state(srv.db, srv.sessions, s.chat_id)) if s.chat_id else srv.call_snapshot
-        chosen = voice_api.settings(srv.cfg)
-        if chosen.provider == voice_api.API:
-            # Opted in: the Messages API on its own key. A missing key is an
-            # error the caller sees (voice_api.E_KEY), never a quiet fallback.
-            return voice_api.ApiFastLayer(snap, voice_api.require_key(), chosen.model, chat_id=s.chat_id,
-                                          home=voice_api.profile_home(srv._concierge_account),
-                                          budget=voice_api.Budget(chosen.daily_usd))
         return FastLayer(snap, srv._concierge_account, chat_id=s.chat_id,
                          on_limits=srv._concierge_limits, on_limited=srv._concierge_limited)
 

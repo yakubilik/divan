@@ -166,16 +166,6 @@ class Config:
     # beside the daemon's own and the CLIs' transcripts: wherever this machine
     # keeps session notes. Absolute, or starting with `~`. Empty by default.
     scrub_extra_paths: list[str] = field(default_factory=list)
-    # The live call's fast conversational layer (voice.py, voice_api.py).
-    # "cli" is Haiku through the Claude Code CLI on a signed-in subscription;
-    # "anthropic-api" is the Messages API directly, billed per token to a key
-    # stored for it on purpose (`python -m remote_ai_chat.voice_api set-key`).
-    # Nothing paid happens until both are true. Re-read on every call, so
-    # switching back is an edit, not a restart. The cap is in US dollars per
-    # local day, counted from the API's own usage figures.
-    voice_fast_layer: str = "cli"
-    voice_api_model: str = "claude-haiku-4-5"
-    voice_api_daily_usd: float = 1.0
 
     # ── persistence ────────────────────────────────────────────────────────
     @classmethod
@@ -250,9 +240,6 @@ class Config:
             "pool": self.pool,
             "demo": self.demo,
             "scrub_extra_paths": self.scrub_extra_paths,
-            "voice_fast_layer": self.voice_fast_layer,
-            "voice_api_model": self.voice_api_model,
-            "voice_api_daily_usd": self.voice_api_daily_usd,
         }
         tmp = CONFIG_PATH.with_suffix(".tmp")
         tmp.write_text(tomli_w.dumps(data))
