@@ -61,6 +61,7 @@ class Fanout:
     _enqueue = Server._enqueue
     send_to = Server.send_to
     _drop = Server._drop
+    _mark_dropped = Server._mark_dropped
     _writer = Server._writer
     broadcast = Server.broadcast
 
@@ -68,6 +69,7 @@ class Fanout:
         self.clients: dict = {}
         self.outbox: dict = {}
         self.writers: dict = {}
+        self.conns: dict = {}
         self.voice = Hub(self)              # no calls on it; broadcast and _drop tell it
 
     def attach(self, ws: Sock) -> None:

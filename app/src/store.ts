@@ -401,7 +401,9 @@ export const useStore = create<State>((set, get) => {
 
   async function afterConnect(attempt = 0): Promise<void> {
     try {
-      const hello = await client.call('hello', { device_name: 'iPhone', push_token: get().pushToken ?? undefined });
+      // Why the last socket went, so the daemon's log can say (see ws.ts).
+      const reconnect = client.takeReconnect() ?? undefined;
+      const hello = await client.call('hello', { device_name: 'iPhone', push_token: get().pushToken ?? undefined, reconnect });
       set({ hostInfo: hello.host, catalog: hello.catalog, device: hello.device ?? null });
       // What the computer already knows about the plan, so the ring is filled
       // in before the first turn rather than after it.
@@ -461,7 +463,7 @@ export const useStore = create<State>((set, get) => {
       case 'daemon.restarting': {
         const st = ev.data?.state;
         set({ restarting: st === 'cancelled' ? null : ev.data });
-        if (st === 'stopping') setTimeout(() => client.poke(), 1500);
+        if (st === 'stopping') setTimeout(() => client.poke('restart'), 1500);
         return;
       }
       // What is left of the plan, straight from the tool. Kept per account so a

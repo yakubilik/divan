@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import ipaddress
 import json
 import logging
 import platform
@@ -35,6 +36,7 @@ from .call import (Concierge, NoRoom, hermes_installed, headline as call_headlin
 from .push import send_push
 from . import voice as voicemod
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
+from .transcribe import known as transcribe_known
 from .attachments import KINDS, normalize_image, peaks, sniff
 from .security import ACCESS_EMAIL, PathPolicy, TunnelAccess, TunnelGate, TunnelLock
 from . import screen as screenmod
@@ -94,6 +96,47 @@ OUTBOX_MAX = 1024
 # Requests that are answered only when they fail, if sent without an id.
 QUIET_TYPES = {"voice.audio", "voice.playback", "voice.barge", "voice.ready"}
 SEND_TIMEOUT_S = 20.0
+
+# Where a socket came from, for the line written when it goes. The tailnet is
+# Tailscale's CGNAT range and its IPv6 prefix; anything else that is not
+# loopback is somebody on the same network.
+_TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
+
+
+def _network(addr: str) -> str:
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return "unknown"
+    if ip.is_loopback:
+        return "loopback"
+    return "tailnet" if any(ip in n for n in _TAILNET) else "lan"
+
+
+class Conn:
+    """What is known about one socket, for the line written when it closes.
+
+    A phone that reconnects ten times an hour can be told apart only by these:
+    who closed it and with what code, how long it lived, which way it came in,
+    and how long since its last `ping` was answered — a socket the phone gave up
+    on mid-heartbeat looks nothing like one iOS took away in the background.
+    """
+    __slots__ = ("opened", "transport", "peer", "last_ping", "dropped")
+
+    def __init__(self, via: str | None, peer: str) -> None:
+        self.opened = time.monotonic()
+        self.transport = "tunnel" if via else "direct"
+        self.peer = via if via else f"{peer} ({_network(peer)})"
+        self.last_ping: float | None = None
+        # Why the daemon closed it, when it was the daemon.
+        self.dropped: str | None = None
+
+    def describe(self, code, reason: str) -> str:
+        since = (f"{time.monotonic() - self.last_ping:.1f}s" if self.last_ping is not None
+                 else "never")
+        return (f"code={code} reason={reason!r} lifetime={time.monotonic() - self.opened:.1f}s "
+                f"transport={self.transport} peer={self.peer} since_ping={since}"
+                + (f" dropped_by_daemon={self.dropped}" if self.dropped else ""))
 
 # ── git status (for the panel) ───────────────────────────────────────────────
 # The panel's project grid shows a branch, a dirty count and a last commit for
@@ -164,6 +207,7 @@ class Server:
         # One queue per connected client, drained by that client's own writer.
         self.outbox: dict[WebSocket, asyncio.Queue[str]] = {}
         self.writers: dict[WebSocket, asyncio.Task] = {}
+        self.conns: dict[WebSocket, Conn] = {}
         self.accounts: dict[str, acct.Account] = {}
         self.logins: dict[str, acct.LoginSession] = {}
         self._installing: str | None = None
@@ -234,6 +278,9 @@ class Server:
         # with a card in the wrong column.
         self._mirror_lock = asyncio.Lock()
         self._versions: dict | None = None
+        # Whether transcription is installed, worked out on a thread: see
+        # transcribe.available and learn_transcription.
+        self._learning: asyncio.Future | None = None
         # Live model lists per provider, the fetch in flight for each, and when
         # each list last arrived. Both fetches are local — Codex answers over its
         # app-server, Claude's comes out of the CLI binary — so they are cheap
@@ -1001,6 +1048,7 @@ class Server:
             # Hopelessly behind. Closing it is kinder than growing the queue:
             # the client reconnects and replays from its last seq.
             log.warning("client is %s events behind; dropping it", q.qsize())
+            self._mark_dropped(ws, "behind")
             self._drop(ws)
             return
         q.put_nowait(msg)
@@ -1013,6 +1061,11 @@ class Server:
         would be folded in twice by the client.
         """
         self._enqueue(ws, json.dumps(payload, ensure_ascii=False, default=str))
+
+    def _mark_dropped(self, ws: WebSocket, why: str) -> None:
+        c = self.conns.get(ws)
+        if c is not None and c.dropped is None:
+            c.dropped = why
 
     def _drop(self, ws: WebSocket) -> None:
         """Let go of a client. Its writer closes the socket on its way out.
@@ -1039,8 +1092,10 @@ class Server:
                 except asyncio.TimeoutError:
                     log.warning("a client took over %ss to accept a message; dropping it",
                                 SEND_TIMEOUT_S)
+                    self._mark_dropped(ws, "slow_send")
                     break
-                except Exception:
+                except Exception as exc:
+                    self._mark_dropped(ws, f"send_failed:{type(exc).__name__}")
                     break
         except asyncio.CancelledError:
             pass
@@ -1172,7 +1227,7 @@ class Server:
                       context: str = Query(default=""),
                       cf_connecting_ip: str | None = Header(default=None)) -> dict:
         self._device(authorization, cf_connecting_ip)
-        if not transcribe_available():
+        if not await self.learn_transcription():
             raise HTTPException(status_code=503, detail="no transcriber on this computer")
         data = await request.body()
         if len(data) > self.MAX_DICTATION_BYTES:
@@ -1218,7 +1273,7 @@ class Server:
         """Load the model while the microphone is opening, not while somebody
         waits for words. Answers immediately either way."""
         self._device(authorization, cf_connecting_ip)
-        if not transcribe_available():
+        if not await self.learn_transcription():
             raise HTTPException(status_code=503, detail="no transcriber on this computer")
         transcribe_warm()
         return {"warming": True}
@@ -1444,6 +1499,8 @@ class Server:
             await ws.close(code=4401, reason=why)
             return
         self.clients[ws] = dev
+        conn = self.conns[ws] = Conn(TunnelGate.address(ws.headers.get("cf-connecting-ip")),
+                                     ws.client.host if ws.client else "?")
         self.outbox[ws] = asyncio.Queue()
         self.writers[ws] = asyncio.create_task(self._writer(ws, self.outbox[ws]))
         # Written to disk here and when the socket closes, which is what lets
@@ -1452,10 +1509,11 @@ class Server:
         dev.last_seen = time.time()
         self.cfg.record()
         email = ACCESS_EMAIL.get()
-        log.info("device connected: %s (%s)%s", dev.name, dev.id,
-                 f", signed in as {email}" if email else "")
+        log.info("device connected: %s (%s) transport=%s peer=%s%s", dev.name, dev.id,
+                 conn.transport, conn.peer, f", signed in as {email}" if email else "")
         await self.send_to(ws, {"type": "event", "event": "host.status", "chat_id": None,
                                 "seq": None, "data": self.host_info(), "ts": time.time()})
+        code, reason = None, ""
         try:
             while True:
                 raw = await ws.receive_text()
@@ -1464,15 +1522,17 @@ class Server:
                 except json.JSONDecodeError:
                     continue
                 asyncio.create_task(self._dispatch(ws, dev, req))
-        except WebSocketDisconnect:
-            pass
+        except WebSocketDisconnect as exc:
+            code, reason = exc.code, exc.reason or ""
         except Exception as exc:
             log.warning("ws loop error: %s", exc)
+            code, reason = "error", str(exc)
         finally:
             self._drop(ws)
+            self.conns.pop(ws, None)
             dev.last_seen = time.time()
             self.cfg.record()
-            log.info("device disconnected: %s", dev.name)
+            log.info("device disconnected: %s (%s) %s", dev.name, dev.id, conn.describe(code, reason))
 
     async def _dispatch(self, ws: WebSocket, dev: Device, req: dict) -> None:
         rid = req.get("id")
@@ -1496,15 +1556,36 @@ class Server:
         await self.send_to(ws, out)
 
     # ── handlers ───────────────────────────────────────────────────────────
-    async def h_ping(self, dev: Device, d: dict) -> dict:
+    async def h_ping(self, dev: Device, d: dict, ws: WebSocket) -> dict:
         """The phone's heartbeat. A protocol-level ping only proves the socket is
         open somewhere in the OS; this proves the app is on the other end and the
         event loop is still serving it, which is what the phone needs to know
         before it decides a quiet connection is a dead one."""
         dev.last_seen = time.time()
+        c = self.conns.get(ws)
+        if c is not None:
+            c.last_ping = time.monotonic()
         return {"ts": time.time()}
 
+    async def learn_transcription(self) -> bool:
+        """Find out, off the loop, whether transcription is installed. Started
+        at startup; `hello` and `host.info` wait on it, which costs a thread and
+        not the loop, so what they report is the real answer."""
+        known = transcribe_known()
+        if known is not None:
+            return known
+        if self._learning is None or self._learning.get_loop() is not asyncio.get_running_loop():
+            self._learning = asyncio.ensure_future(asyncio.to_thread(transcribe_available))
+        return await self._learning
+
     async def h_hello(self, dev: Device, d: dict) -> dict:
+        # Why the phone dialled again, in its own words: the other half of the
+        # line written when the last socket closed (see Conn).
+        again = d.get("reconnect")
+        if isinstance(again, dict) and again.get("reason"):
+            log.info("device reconnected: %s (%s) reason=%s code=%s offline=%ss",
+                     dev.name, dev.id, str(again["reason"])[:40], again.get("code"),
+                     again.get("offline_s"))
         if d.get("push_token"):
             dev.push_token = d["push_token"]
         # Sent as an empty string when iOS invalidates it, which must clear the
@@ -1516,12 +1597,14 @@ class Server:
         if d.get("lang") in ("en", "tr"):
             dev.lang = d["lang"]
         self.cfg.save()
+        await self.learn_transcription()
         return {"host": self.host_info(), "catalog": await self.catalog_async(),
                 "device": {"id": dev.id, "name": dev.name, "push_approval": dev.push_approval,
                            "push_done": dev.push_done, "has_push_token": bool(dev.push_token),
                            "can_be_called": bool(dev.voip_token)}}
 
     async def h_host_info(self, dev: Device, d: dict) -> dict:
+        await self.learn_transcription()
         return self.host_info()
 
     async def h_device_prefs(self, dev: Device, d: dict) -> dict:
@@ -2811,7 +2894,9 @@ class Server:
             "active_sessions": self.sessions.active_count(),
             "connected_devices": len(self.clients),
             "versions": self._versions, "roots": self.cfg.allowed_roots,
-            "transcription": transcribe_available(),
+            # Never the import itself: host_info runs on the loop on every
+            # connect. False until learn_transcription has the answer.
+            "transcription": bool(transcribe_known()),
             "npm": tools.npm_available(),
             # Every device is told, every time it asks and every time it
             # changes. A computer that can be driven from a pocket does not get
