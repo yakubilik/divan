@@ -20,21 +20,36 @@ import { parseRefusal, refuse, refusedFor, refusalText, type Refusal } from './r
  *  the tunnel's shape, not something a scheme can fix.
  *
  *  The phone has no `location` at all, so nothing there changes. */
-function overTunnel(host: string): boolean {
+export function overTunnel(host: string): boolean {
   return typeof location !== 'undefined'
     && location.protocol === 'https:'
     && host === location.hostname;
 }
 
-/** The socket's address, secure when it has to be. */
-export function wsUrl(host: string, port: number, token: string): string {
+/** Whether this page may open a socket to that address at all: anything from
+ *  a page that is not HTTPS, and from one that is, only its own origin. A
+ *  computer this says no to is reached through the gateway (`via`) instead. */
+export function dialable(host: string): boolean {
+  return typeof location === 'undefined' || location.protocol !== 'https:' || overTunnel(host);
+}
+
+/** Where a peer reached through the gateway lives on the gateway's origin. */
+function peerPath(via?: string): string {
+  return via ? `/peer/${encodeURIComponent(via)}` : '';
+}
+
+/** The socket's address, secure when it has to be. With `via`, the socket of
+ *  a peer in that computer's machine directory, relayed by it — the second
+ *  computer the paragraph above could not reach, reached on the page's own
+ *  origin instead. */
+export function wsUrl(host: string, port: number, token: string, via?: string): string {
   const scheme = overTunnel(host) ? 'wss' : 'ws';
-  return `${scheme}://${host}:${port}/ws?token=${encodeURIComponent(token)}`;
+  return `${scheme}://${host}:${port}${peerPath(via)}/ws?token=${encodeURIComponent(token)}`;
 }
 
 /** Where `/upload`, `/files` and `/screen.jpg` live, by the same rule. */
-export function httpBase(host: string, port: number): string {
-  return `${overTunnel(host) ? 'https' : 'http'}://${host}:${port}`;
+export function httpBase(host: string, port: number, via?: string): string {
+  return `${overTunnel(host) ? 'https' : 'http'}://${host}:${port}${peerPath(via)}`;
 }
 
 
@@ -93,8 +108,8 @@ export class RacClient {
   /** Why the computer said no, once it has. See lib/refusal.ts. */
   refusal: Refusal | null = null;
 
-  connect(host: string, port: number, token: string) {
-    const url = wsUrl(host, port, token);
+  connect(host: string, port: number, token: string, via?: string) {
+    const url = wsUrl(host, port, token, via);
     // Same target and a live socket → nothing to do (init() can run twice under Fast Refresh).
     if (this.wanted && this.url === url && this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     this.url = url;

@@ -210,6 +210,19 @@ export interface RacEvent<T = any> {
 
 export interface HostConfig {
   host: string; port: number; token: string; name: string; device_id?: string;
+  /** A computer reached through the gateway of the one at host:port, which
+   *  keeps it in its shared machine directory under this id. host, port and
+   *  token are then that computer's — the page's own origin and this browser's
+   *  token there — and the peer's own credential never reaches the browser. */
+  via?: string;
+  /** Where such a peer itself answers (`100.76.67.2:8790`): its identity, so
+   *  that it is one row however it is reached. */
+  addr?: string;
+}
+
+/** One row of a computer's shared machine directory (`fleet.list`). */
+export interface DirectoryPeer {
+  id: string; name: string; host: string; port: number; addr: string; owner?: string | null;
 }
 
 export interface ProviderDefaults { model: string; effort: string | null; perm_mode: string; account_id?: string | null }

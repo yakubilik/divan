@@ -31,6 +31,7 @@ from . import pool as poolmod
 from . import usage as usagemod
 from .errors import Err
 from . import agents, secrets, tools
+from . import fleet as fleetmod
 from .call import (Concierge, NoRoom, hermes_installed, headline as call_headline, last_reply,
                    snapshot as call_snapshot, spoken_reply)
 from .push import send_push
@@ -250,6 +251,9 @@ class Server:
             last_update=self.db.meta_get("last_update"),
         )
         self._load_accounts()
+        # The other computers this one speaks for, and their credentials:
+        # see fleet.py. Read from disk, never sent to a client.
+        self.peers = fleetmod.Directory(CONFIG_DIR / "peers.json")
         self.failed_auth: dict[str, list[float]] = {}
         self.tunnel_lock = TunnelLock()
         self.tunnel_access = TunnelAccess()
@@ -272,6 +276,11 @@ class Server:
         # <Image> and a browser with <img>, and neither wants base64 in a
         # websocket frame five times a second.
         self.app.get("/screen.jpg")(self.screen_jpg)
+        # Every other registered computer, on this page's own origin: a socket
+        # and the HTTP routes above, relayed with this daemon's credential on
+        # that computer (fleet.py). Before the panel, which would take any path.
+        self.app.websocket("/peer/{peer_id}/ws")(self.peer_ws)
+        self.app.api_route("/peer/{peer_id}/{rest:path}", methods=["GET", "POST"])(self.peer_http)
         self._mount_panel()
         # The board mirror runs one at a time (`_mirrored_queue`): two of them
         # over one database connection is what left the board a poll behind
@@ -1488,6 +1497,182 @@ class Server:
             if until is not None:
                 out.append({"addr": key, "until": until})
         return {"locks": out}
+
+    # ── the machine directory and its gateway (fleet.py) ───────────────────
+    #: The HTTP routes a peer is reached on through `/peer/<id>/…`. Only these:
+    #: the gateway is a door to a Divan daemon, not a proxy to anything on it.
+    PEER_HTTP = {"upload", "files", "screen.jpg", "dictate", "dictate/warm"}
+
+    def _peer_for(self, dev: Device, peer_id: str) -> fleetmod.Peer | None:
+        """The registered peer, if this device's person may use it.
+
+        A credential belongs to the person whose device registered it. On a
+        computer with nobody listed in `people`, everybody is that person.
+        """
+        peer = self.peers.get(peer_id)
+        if peer is None:
+            return None
+        self.cfg.refresh_tunnel()
+        if peer.owner and self.cfg.person_names() and self.cfg.person_of(dev.id) != peer.owner:
+            return None
+        return peer
+
+    async def h_fleet_list(self, dev: Device, d: dict) -> dict:
+        """Every computer this one speaks for, that this device's person may
+        see. Names and addresses only: a credential is never in an answer."""
+        return {"peers": [p.public() for p in self.peers.all() if self._peer_for(dev, p.id)],
+                "self": {"name": self.cfg.host_name}}
+
+    async def h_fleet_add(self, dev: Device, d: dict) -> dict:
+        """Register a computer from the pairing link its `divan pair` printed.
+
+        The link is tried before anything is written: a computer that does not
+        answer, or does not take the token, is not registered. Pairing the same
+        address again replaces its credential and keeps its one row.
+        """
+        try:
+            fields = fleetmod.parse_link(str(d.get("link") or ""))
+            info = await fleetmod.probe(fields["host"], fields["port"], fields["token"])
+        except fleetmod.PeerError as exc:
+            raise Err(exc.code, str(exc))
+        if info.get("started_at") == self.started and info.get("name") == self.cfg.host_name:
+            # This very daemon, reached by another address. Its own panel
+            # already talks to it; a gateway to itself would be a second row.
+            raise Err("peer_is_self", "that link is for this computer")
+        self.cfg.refresh_tunnel()
+        owner = self.cfg.person_of(dev.id) if self.cfg.person_names() else None
+        existing = self.peers.find(fields["host"], fields["port"])
+        if existing is not None and not self._peer_for(dev, existing.id):
+            raise Err("forbidden", "that computer is registered by somebody else")
+        peer, replaced = self.peers.put(fields, str(info.get("name") or fields["name"])[:80], owner)
+        log.warning("peer %s (%s) registered at %s by device %s (%s)",
+                    peer.name, peer.id, peer.addr, dev.name, dev.id)
+        if replaced is not None:
+            self._background(fleetmod.revoke(replaced))
+        await self._fleet_changed()
+        return peer.public()
+
+    async def h_fleet_remove(self, dev: Device, d: dict) -> dict:
+        """Forget a computer, and tell it to forget this daemon's credential."""
+        peer = self._peer_for(dev, str(d.get("id") or ""))
+        if peer is None:
+            raise Err("no_peer", "no such computer")
+        self.peers.remove(peer.id)
+        log.warning("peer %s (%s) removed by device %s (%s)", peer.name, peer.id, dev.name, dev.id)
+        self._background(fleetmod.revoke(peer))
+        await self._fleet_changed()
+        return {"id": peer.id}
+
+    def _background(self, coro) -> None:
+        task = asyncio.ensure_future(coro)
+        self._alerts.add(task)
+        task.add_done_callback(self._alerts.discard)
+
+    async def _fleet_changed(self) -> None:
+        # Nothing about the peers rides along: each device asks `fleet.list`
+        # and is answered with what its own person may see.
+        await self.broadcast({"seq": None, "chat_id": None, "event": "fleet.changed",
+                              "data": {}, "ts": time.time()})
+
+    async def peer_ws(self, ws: WebSocket, peer_id: str) -> None:
+        """A browser's socket to a registered peer, relayed.
+
+        The browser's own token is checked as `/ws` checks it — the same doors,
+        lock and sign-in. A refused token is a 4401, because it is the
+        browser's to fix. A peer that is unknown, not this person's, asleep or
+        refusing the credential is none of those: the handshake is declined
+        before it is accepted, so the browser sees a computer that is not
+        there and keeps trying, and its token for this computer is untouched.
+        """
+        dev, why = self._auth(ws)
+        if dev is None:
+            await ws.accept()
+            await ws.close(code=4401, reason=why)
+            return
+        peer = self._peer_for(dev, peer_id)
+        if peer is None:
+            await ws.close(code=1008)
+            return
+        try:
+            up, first = await fleetmod.dial(peer.host, peer.port, peer.token)
+        except fleetmod.PeerError as exc:
+            log.info("peer %s (%s) not reached for device %s: %s", peer.name, peer.id, dev.name, exc.code)
+            await ws.close(code=1013)
+            return
+        await ws.accept()
+        dev.last_seen = time.time()
+        log.info("device %s (%s) connected to peer %s (%s)", dev.name, dev.id, peer.name, peer.id)
+        lock = asyncio.Lock()
+
+        async def say(text: str) -> None:
+            async with lock:
+                await ws.send_text(text)
+
+        async def down() -> None:
+            await say(first if isinstance(first, str) else first.decode())
+            async for msg in up:
+                await say(msg if isinstance(msg, str) else msg.decode())
+
+        async def upward() -> None:
+            while True:
+                raw = await ws.receive_text()
+                fwd, answer = fleetmod.filter_request(raw)
+                if answer is not None:
+                    await say(json.dumps(answer))
+                if fwd is not None:
+                    await up.send(fwd)
+
+        tasks = [asyncio.create_task(down()), asyncio.create_task(upward())]
+        try:
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
+            # Gathered whole, so the side that ended — a browser that closed,
+            # a peer that went — is retrieved rather than logged as unhandled.
+            await asyncio.gather(*tasks, return_exceptions=True)
+        finally:
+            await fleetmod._close(up)
+            try:
+                # The peer went away, never this browser's token: not 4401.
+                await ws.close(code=4502, reason="peer_gone")
+            except Exception:
+                pass
+            dev.last_seen = time.time()
+            log.info("device %s (%s) left peer %s (%s)", dev.name, dev.id, peer.name, peer.id)
+
+    async def peer_http(self, request: Request, peer_id: str, rest: str) -> Response:
+        """`/upload`, `/files`, `/screen.jpg` and dictation on a peer, relayed.
+
+        The browser's token is checked here; the peer gets this daemon's
+        credential in a header instead, and never sees the browser's. The
+        peer refusing it is answered 502, not 401: a 401 tells the panel its
+        own token is no good, and that token is fine.
+        """
+        if rest not in self.PEER_HTTP:
+            raise HTTPException(status_code=404, detail="not found")
+        dev = self._device(request.headers.get("authorization", ""),
+                           request.headers.get("cf-connecting-ip"),
+                           request.query_params.get("token", ""))
+        peer = self._peer_for(dev, peer_id)
+        if peer is None:
+            raise HTTPException(status_code=404, detail="no such computer")
+        import httpx
+        params = [(k, v) for k, v in request.query_params.multi_items() if k != "token"]
+        headers = fleetmod.auth_headers(peer.token)
+        if request.headers.get("content-type"):
+            headers["Content-Type"] = request.headers["content-type"]
+        body = await request.body()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=fleetmod.CONNECT_TIMEOUT_S)) as c:
+                r = await c.request(request.method, f"{fleetmod.http_base(peer)}/{rest}",
+                                    params=params, content=body, headers=headers)
+        except httpx.HTTPError:
+            raise HTTPException(status_code=504, detail="that computer did not answer")
+        status = 502 if r.status_code in (401, 403) else r.status_code
+        keep = {k: v for k, v in r.headers.items()
+                if k.lower() in ("content-type", "content-disposition", "cache-control")
+                or k.lower().startswith("x-screen-")}
+        return Response(content=r.content, status_code=status, headers=keep)
 
     # ── websocket ──────────────────────────────────────────────────────────
     async def ws_endpoint(self, ws: WebSocket) -> None:

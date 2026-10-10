@@ -27,7 +27,7 @@ import {
   Table, Tag, Well, type Column,
 } from '../ui/divan';
 import { ago, clock, cost, tilde, toolSummary, until, uptime, windowName } from '../lib/format';
-import { onAnyEvent, selectRunning, useFleet, type HostSlot, type Running } from '../lib/fleet';
+import { hostAddr, onAnyEvent, selectRunning, useFleet, type HostSlot, type Running } from '../lib/fleet';
 import { interrupt } from '../lib/actions';
 import type { LimitWindow } from '../lib/protocol';
 import { refusalText } from '../lib/refusal';
@@ -300,7 +300,7 @@ export function Fleet({ onOpenChat, onNewChat }: FleetProps) {
                 mark title={info?.name || slot.cfg.name}
                 note={info
                   ? `${info.os}${info.os_version ? ` ${info.os_version}` : ''} · daemon ${info.daemon_version}`
-                    + (isLocal(slot.cfg.host) ? ' · this computer' : '')
+                    + (!slot.cfg.via && isLocal(slot.cfg.host) ? ' · this computer' : '')
                   : 'no daemon information'}
               />,
               <>
@@ -324,7 +324,7 @@ export function Fleet({ onOpenChat, onNewChat }: FleetProps) {
                   : 'not reported'}
                 tone={info?.versions ? undefined : 'ink3'}
               />,
-              <Cell text={maskHost(slot.cfg.host)} tone="ink3" />,
+              <Cell text={maskHost(hostAddr(slot.cfg).host)} tone="ink3" />,
             ],
           };
         })}

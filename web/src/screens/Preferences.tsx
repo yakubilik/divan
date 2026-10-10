@@ -30,9 +30,9 @@ import {
 } from '../ui/divan';
 import { Modal, ModalHead } from '../components/Modal';
 import { ProviderMark } from '../components/Sidebar';
-import { onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
+import { hostAddr, onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
 import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
-import { parsePairing, toolStatus } from '../lib/actions';
+import { pairComputer, parsePairing, toolStatus } from '../lib/actions';
 import {
   availability, dictateEngine, dictateLang, install, langChoices, langName,
   setDictateEngine, setDictateLang, support, type Availability, type EnginePref,
@@ -41,7 +41,7 @@ import { errText, t } from '../lib/i18n';
 import { ago, tilde, until, uptime, windowName } from '../lib/format';
 import { copyText } from '../lib/clipboard';
 import type {
-  CliAccount, LimitWindow, LoginMethod, LoginPrompt, Provider, ToolStatus,
+  CliAccount, HostConfig, LimitWindow, LoginMethod, LoginPrompt, Provider, ToolStatus,
 } from '../lib/protocol';
 import { refusalText } from '../lib/refusal';
 
@@ -484,10 +484,16 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
   );
 }
 
+/** A computer's own address; one reached through another's gateway says so. */
+function addrText(cfg: HostConfig): string {
+  const a = hostAddr(cfg);
+  return `${a.host}:${a.port}` + (cfg.via ? ` · through ${cfg.host}` : '');
+}
+
 /* ── sections ─────────────────────────────────────────────────────────── */
 
 function HostsSection() {
-  const { hosts, order, addHost, removeHost } = useFleet();
+  const { hosts, order, removeHost } = useFleet();
   const [text, setText] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [doomed, setDoomed] = useState<string | null>(null);
@@ -496,8 +502,7 @@ function HostsSection() {
     const cfg = parsePairing(text);
     if (!cfg) { setProblem('That does not look like a pairing link.'); return; }
     setProblem(null);
-    setText('');
-    addHost(cfg);
+    pairComputer(text).then(() => setText(''), (e: any) => setProblem(e?.message || 'That computer could not be paired.'));
   };
 
   return (
@@ -525,7 +530,7 @@ function HostsSection() {
                 </span>
               }
             />
-            <KV k="address" v={`${slot.cfg.host}:${slot.cfg.port}`} code />
+            <KV k="address" v={addrText(slot.cfg)} code />
             <KV k="token" v="•••••••••• · kept in the panel, never shown" code />
             <KV k="daemon" v={info?.daemon_version ?? 'not reported'} code />
             <KV k="system" v={info ? `${info.os} ${info.os_version}` : 'not reported'} code />
@@ -1021,7 +1026,7 @@ function AboutSection({ slot }: { slot: HostSlot }) {
         <KV k="uptime" v={info ? uptime(info.uptime_s) : 'not reported'} code />
         <KV k="devices" v={info ? String(info.connected_devices) : 'not reported'} code />
         <KV k="open sessions" v={info ? String(info.active_sessions) : 'not reported'} code />
-        <KV k="address" v={`${slot.cfg.host}:${slot.cfg.port}`} code />
+        <KV k="address" v={addrText(slot.cfg)} code />
         <KV k="claude" v={info?.versions?.claude ?? 'not installed'} code />
         <KV k="codex" v={info?.versions?.codex ?? 'not installed'} code />
         {info?.transcription != null && (
