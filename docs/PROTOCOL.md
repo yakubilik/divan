@@ -328,6 +328,35 @@ sleeping laptop from taking the view down with it:
   socket to decides where a terminal opens and whose screen is mirrored, and
   nothing else. Switching it does not change what a board or a dashboard shows.
 
+### The machine directory and its gateway
+
+A panel served over HTTPS may only open secure sockets to its own origin, so it
+cannot dial the plain `ws://` of another computer on the tailnet. The computer
+that serves the panel therefore keeps a shared directory of the other Divan
+computers and relays to them (`daemon/divan/fleet.py`).
+
+* **registration is explicit.** `fleet.add {link}` takes the link a peer's own
+  `divan pair` printed (or its QR JSON), connects with it before anything is
+  written, and keeps the credential in `~/.divan/peers.json` (mode 600). Pairing
+  the same address again replaces the credential and keeps the row's id. `divan
+  peer add <link>`, `divan peer list` and `divan peer remove <id>` do the same
+  from a shell. Being on the tailnet makes nothing a peer.
+* **`fleet.list`** answers `{peers: [{id, name, host, port, addr, owner}], self}`
+  — never a credential. `fleet.remove {id}` forgets a peer and asks it to revoke
+  this computer's credential. Both changes are announced as `fleet.changed`
+  with no payload; each client asks `fleet.list` again.
+* **ownership.** A peer belongs to the person (`people` in config.toml) whose
+  device registered it; other people's devices neither see nor reach it.
+* **the gateway.** `/peer/<id>/ws` and `/peer/<id>/{upload,files,screen.jpg,
+  dictate,dictate/warm}` on the panel's own origin. The browser's token is
+  checked exactly as on `/ws` — same doors, tunnel lock and Access sign-in; a bad
+  one is a 4401. The peer is then reached with the gateway's credential, which
+  the browser never sees. A peer that is unknown, someone else's, asleep or
+  refusing the credential is declined before the handshake completes (HTTP: 404
+  or 502), never with 4401, so the browser's token is not marked refused and the
+  client simply retries. `device.revoke_self` is refused on the relayed socket
+  and `hello` loses its `device_name`, because the credential is shared.
+
 ## Push notifications
 
 Content-free: no message text leaves the computer. The `data` of a notification
