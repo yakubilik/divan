@@ -17,7 +17,7 @@ import {
   type MachineAction,
 } from '../lib/machine';
 import { useFleet } from '../lib/fleet';
-import { parsePairing } from '../lib/actions';
+import { pairComputer, parsePairing } from '../lib/actions';
 import { useDivanStore } from '../lib/divan';
 import { T } from '../lib/theme';
 import type { View } from '../lib/shell';
@@ -38,7 +38,6 @@ export function Machines({ view, onView, onFocus }: {
 }) {
   const { thresholds } = useThresholds();
   const removeHost = useFleet((s) => s.removeHost);
-  const addHost = useFleet((s) => s.addHost);
   const load = useDivanStore((s) => s.load);
   // Letting a computer go is the one thing on this page that cannot be undone,
   // so the button asks first — in place, on the row it is about, rather than in
@@ -47,12 +46,21 @@ export function Machines({ view, onView, onFocus }: {
   const [link, setLink] = useState('');
   const [pairError, setPairError] = useState<string | null>(null);
 
-  const pair = () => {
-    const cfg = parsePairing(link);
-    if (!cfg) { setPairError('That is not a pairing link. It starts divan://pair?'); return; }
-    setLink('');
+  const [pairing, setPairing] = useState(false);
+
+  const pair = async () => {
+    if (pairing) return;
+    if (!parsePairing(link)) { setPairError('That is not a pairing link. It starts divan://pair?'); return; }
     setPairError(null);
-    addHost(cfg);
+    setPairing(true);
+    try {
+      await pairComputer(link);
+      setLink('');
+    } catch (e: any) {
+      setPairError(e?.message || 'That computer could not be paired.');
+    } finally {
+      setPairing(false);
+    }
   };
 
   const lines = machineLines(view, since, thresholds);
@@ -144,12 +152,12 @@ export function Machines({ view, onView, onFocus }: {
               <Quoted style={{ flex: 1, minWidth: 0 }}>
                 <Write
                   value={link} onChange={(v) => { setLink(v); setPairError(null); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') pair(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void pair(); }}
                   label="The pairing link that command printed"
                   placeholder="divan://pair?host=…"
                 />
               </Quoted>
-              <Button small label="Pair" onClick={pair} />
+              <Button small label={pairing ? 'Pairing…' : 'Pair'} onClick={() => void pair()} disabled={pairing} />
             </div>
             {!!pairError && (
               <div style={{ fontSize: 12.5, color: T.amber }}>{pairError}</div>

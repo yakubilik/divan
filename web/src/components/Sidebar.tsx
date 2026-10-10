@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { C, R, SHADOW } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
 import { ago, bareTitle, uptime } from '../lib/format';
-import { useFleet, type HostSlot } from '../lib/fleet';
+import { hostAddr, useFleet, type HostSlot } from '../lib/fleet';
 import { createGroup, deleteChat, deleteGroup, renameGroup, updateChat } from '../lib/actions';
 import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag, setSectionDrag } from '../lib/dnd';
 import { DeleteChatDialog } from './ChatMenu';
@@ -59,7 +59,7 @@ export function ProviderMark({ provider, dim, size = 30 }: { provider: string; d
 }
 
 function hostDetail(slot: HostSlot): string {
-  if (slot.status === 'online') return `online · :${slot.cfg.port}`;
+  if (slot.status === 'online') return `online · :${hostAddr(slot.cfg).port}`;
   if (slot.status === 'connecting') return 'connecting…';
   if (slot.status === 'unauthorized') return refusalText(slot.refusal).short;
   return slot.lastOnline ? `offline · ${ago(slot.lastOnline / 1000)}` : 'offline';

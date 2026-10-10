@@ -1,4 +1,4 @@
-import { hostKey, useFleet } from './fleet';
+import { directoryKey, hostKey, useFleet } from './fleet';
 import { httpBase } from './ws';
 import { noteRefusal, refusedFor, refusalText } from './refusal';
 import type {
@@ -216,7 +216,7 @@ export const removeAgent = (key: string, name: string, account_id?: string | nul
 export const toolStatus = (key: string) => call(key, 'tool.status', {});
 
 function base(cfg: HostConfig): string {
-  return httpBase(cfg.host, cfg.port);
+  return httpBase(cfg.host, cfg.port, cfg.via);
 }
 
 /** Refuse locally what the computer has already refused: a token it said no to
@@ -348,6 +348,30 @@ export function parsePairing(input: string): HostConfig | null {
       name: q.get('name') || host, device_id: q.get('device_id') || undefined,
     };
   } catch { return null; }
+}
+
+/** Pair a computer from the link its `divan pair` printed.
+ *
+ *  Where a computer here keeps a shared machine directory, the link goes
+ *  there: that computer proves it, keeps the credential, and every browser
+ *  that opens this panel sees the new row — this one included, through the
+ *  gateway. Only with no such computer (or a link for that very computer, or
+ *  a daemon from before directories) does this browser pair on its own. */
+export async function pairComputer(link: string): Promise<string> {
+  const cfg = parsePairing(link);
+  if (!cfg) throw new Error('That is not a pairing link. It starts divan://pair?');
+  const fleet = useFleet.getState();
+  const home = directoryKey(fleet);
+  if (home && fleet.hosts[home]?.status === 'online') {
+    try {
+      return await fleet.registerPeer(link.trim());
+    } catch (e: any) {
+      const local = e?.code === 'peer_is_self' || /unknown type: fleet\.add/.test(String(e?.message));
+      if (!local) throw e;
+    }
+  }
+  fleet.addHost(cfg);
+  return hostKey(cfg);
 }
 
 export { hostKey };
