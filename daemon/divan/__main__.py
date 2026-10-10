@@ -1,4 +1,4 @@
-"""CLI: serve | pair | web | project | demo-seed | devices | revoke | unlock | status"""
+"""CLI: serve | pair | web | peer | project | demo-seed | devices | revoke | unlock | status"""
 from __future__ import annotations
 
 import argparse
@@ -204,6 +204,47 @@ def _device_line(d) -> str:
     if d.tunnel and d.last_addr:
         line += f"  from={d.last_addr}"
     return line.rstrip()
+
+
+def cmd_peer(args: argparse.Namespace) -> None:
+    """The other computers this one speaks for in the panel (fleet.py).
+
+    `add` takes the link `divan pair` printed on that computer, proves it by
+    connecting with it, and keeps it in peers.json. The token is never printed
+    back: `list` shows names and addresses only.
+    """
+    from . import fleet
+    cfg = Config.load()
+    peers = fleet.Directory(CONFIG_DIR / "peers.json")
+    if args.what == "list":
+        for p in peers.all():
+            print(f"{p.id}  {p.name:20s}  {p.addr}" + (f"  owner={p.owner}" if p.owner else ""))
+        if not peers.all():
+            print("(no peers)")
+        return
+    if args.what == "remove":
+        gone = peers.remove(args.target)
+        if gone is None:
+            print("no such peer")
+            sys.exit(1)
+        asyncio.run(fleet.revoke(gone))
+        print(f"removed {gone.name} ({gone.id})")
+        return
+    try:
+        fields = fleet.parse_link(args.target)
+        info = asyncio.run(fleet.probe(fields["host"], fields["port"], fields["token"]))
+    except fleet.PeerError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        sys.exit(2)
+    names = cfg.person_names()
+    owner = args.owner or (names[0] if names else None)
+    if owner and names and owner not in names:
+        print(f"no such person: {owner}", file=sys.stderr)
+        sys.exit(2)
+    peer, replaced = peers.put(fields, str(info.get("name") or fields["name"])[:80], owner)
+    if replaced is not None:
+        asyncio.run(fleet.revoke(replaced))
+    print(f"{'re-paired' if replaced else 'registered'} {peer.name} ({peer.id}) at {peer.addr}")
 
 
 def cmd_devices(args: argparse.Namespace) -> None:
@@ -720,6 +761,11 @@ def main() -> None:
     _project_parser(sub)
     s = sub.add_parser("demo-seed", help="put a sample product, cards and chat on a demo machine")
     s.set_defaults(fn=cmd_demo_seed)
+    s = sub.add_parser("peer", help="the other computers this one shows in the panel")
+    s.add_argument("what", choices=["add", "list", "remove"])
+    s.add_argument("target", nargs="?", default="", help="add: the pairing link; remove: the peer id")
+    s.add_argument("--owner", help="whose credential it is (a name in `people`); default the first")
+    s.set_defaults(fn=cmd_peer)
     s = sub.add_parser("devices"); s.set_defaults(fn=cmd_devices)
     s = sub.add_parser("revoke"); s.add_argument("device_id"); s.set_defaults(fn=cmd_revoke)
     s = sub.add_parser("unlock", help="lift a tunnel lock on an address, without a restart")
