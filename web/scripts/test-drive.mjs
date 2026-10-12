@@ -332,8 +332,14 @@ const place = () => {
   if (!header) return null;
   const cur = (header.querySelector('[aria-current="page"]')?.textContent ?? '').trim();
   if (!cur || cur === 'divan') return 'Dashboard';
-  return cur.startsWith('Chats') ? 'Chat' : cur.startsWith('Machine') ? 'Machine' : cur;
+  // The Machine place has no button of its own: the machines count is current
+  // on its pages, and Settings on the one page of it the line names.
+  return cur.startsWith('Chats') ? 'Chat'
+    : /machines/.test(cur) || cur.startsWith('Settings') ? 'Machine' : cur;
 };
+/** The machines count at the left of the system line, which is the way into
+ *  the Machine place. */
+const machinesBtn = () => doc.querySelector('header button[data-sys="machines"]');
 /** On the Dashboard itself, unscoped: the page with the greeting on it. */
 const home = () => !!doc.querySelector('h1.dv-greet');
 /** A product's tile on the Dashboard. */
@@ -394,7 +400,7 @@ const goHome = async () => {
 const goMachine = async (label) => {
   const view = MACHINE_ROWS.find((r) => r.label === label).view;
   const tab = MACHINE_TABS.find((t) => t.pages.includes(view));
-  if (place() !== 'Machine') await click(nav('Machine'));
+  if (place() !== 'Machine') await click(machinesBtn());
   await click(machineTab(tab.label));
   if (tab.pages[0] !== view) await click(doc.querySelector(`nav a[href="/machine/${view}"]`));
 };
@@ -473,12 +479,64 @@ group('the bar');
     landed && !!doc.querySelector('input[name="chat-search"]')
     && text().includes('Webhook retry policy'), `${landed} · ${place()}`);
 
-  await click(nav('Machine'));
+  await click(machinesBtn());
   ok('…and the Machine place opens on the first row of its list',
     place() === 'Machine' && page() === MACHINE_ROWS[0].label, `${place()} › ${page()}`);
 
   await click(find('Dashboard', doc.querySelector('header')));
   ok('…and the Dashboard comes back', place() === 'Dashboard' && home());
+}
+
+group('the line: Settings, and the machines count');
+{
+  const header = doc.querySelector('header');
+  const gear = nav('Settings');
+  ok('the line has a Settings button with a gear on it, and no Machine button',
+    !!gear && !!gear.querySelector('svg path') && gear.getAttribute('aria-label') === 'Settings'
+      && !nav('Machine') && ![...header.querySelectorAll('button')].some((b) => b.getAttribute('aria-label') === 'Machine'),
+    [...header.querySelectorAll('button')].map((b) => b.textContent?.trim()).join(' | '));
+
+  await click(nav('Chats'));
+  const before = w.location.pathname;
+  await click(nav('Settings'));
+  const shown = [...doc.querySelectorAll('header ~ * *')].some((e) => e.textContent?.trim() === 'Settings' && e.tagName !== 'BUTTON' && e.tagName !== 'SPAN');
+  ok('pressing it opens the Settings page, at its own path, and marks the button as the page you are on',
+    w.location.pathname === '/machine/settings' && page() === 'Settings' && shown
+      && nav('Settings')?.getAttribute('aria-current') === 'page'
+      && machinesBtn()?.getAttribute('aria-current') == null,
+    `${w.location.pathname} · ${page()} · ${shown} · ${nav('Settings')?.getAttribute('aria-current')}`);
+
+  await act(async () => {
+    const landed = new Promise((r) => { const d = () => { w.removeEventListener('popstate', d); r(null); }; w.addEventListener('popstate', d); setTimeout(d, 500); });
+    w.history.back();
+    await landed;
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  ok('…and Back from it returns to the page you were on before',
+    before.startsWith('/chats') && w.location.pathname === before && place() === 'Chat',
+    `${before} → ${w.location.pathname} · ${place()}`);
+
+  await act(async () => { root.unmount(); });
+  w.history.replaceState(null, '', '/machine/settings');
+  root = createRoot(w.document.getElementById('root'));
+  await act(async () => { root.render(React.createElement(App)); });
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  ok('…and a reload on it lands on Settings',
+    page() === 'Settings' && nav('Settings')?.getAttribute('aria-current') === 'page',
+    `${w.location.pathname} · ${page()}`);
+
+  const count = machinesBtn();
+  ok('the machines count is a button', !!count && /\d+\/\d+\s*machines/.test(count.textContent ?? ''),
+    count?.textContent ?? 'none');
+  await click(count);
+  ok('…and pressing it opens the machines list, with a card for each machine',
+    w.location.pathname === '/machine/machines' && page() === 'Machines'
+      && doc.querySelectorAll('article.dv-machine').length > 0
+      && machinesBtn()?.getAttribute('aria-current') === 'page' && nav('Settings')?.getAttribute('aria-current') == null,
+    `${w.location.pathname} · ${page()} · ${doc.querySelectorAll('article.dv-machine').length} cards`);
+
+  await click(find('Dashboard', doc.querySelector('header')) ?? doc.querySelector('header a.dv-word'));
+  await goHome();
 }
 
 group('a project tile opens the project');
@@ -1040,7 +1098,7 @@ group('the sign-in that is expiring is counted before that page is opened');
     seed(useFleet, { hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } } });
   });
   asked.length = 0;
-  await click(find('Machine', header));
+  await click(machinesBtn());
   await act(async () => {});
   ok('entering the Machine place asks the computer which sign-ins it has',
     asked.some((a) => a.key === 'studio' && a.type === 'account.list'),
@@ -1063,7 +1121,7 @@ group('the sign-in that is expiring is counted before that page is opened');
     seed(useFleet, { hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } } });
   });
   asked.length = 0;
-  await click(find('Machine', header));
+  await click(machinesBtn());
   for (let i = 0; i < 4; i++) await act(async () => {});
   ok('a computer that refuses the question is asked once and not again',
     asked.filter((a) => a.type === 'account.list').length === 1,
@@ -1211,7 +1269,7 @@ group('chats are filed into groups from the panel');
   await drag(doc.querySelector('[data-section="g1"]'), 'dragover', held);
   await drag(doc.querySelector('[data-section="g1"]'), 'drop', held);
   const now = order();
-  await click(nav('Machine'));
+  await click(machinesBtn());
   await click(nav('Chats'));
   ok('a heading dragged above another stays there, and the archive stays last',
     was[0] === 'g1' && now[0] === 'project:Hush' && now[1] === 'g1'
@@ -1794,12 +1852,12 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
   await press('k');
   const offered = [...doc.querySelectorAll('[data-i]')].map((e) => e.textContent ?? '').join(' | ');
   await press('k');
-  const wanted = ['New chat', 'Dashboard', 'Chat', 'Machine',
+  const wanted = ['New chat', 'Dashboard', 'Chat', 'Machine', 'Settings',
     ...MACHINE_ROWS.map((r) => `Machine › ${r.label}`), 'Machine › Folders', 'Machine › Agents on this computer',
     'Machine › Update', 'Machine › This computer', 'Machine › Sessions and plan limits', 'Light theme'];
   ok('Back from a project is the Dashboard, a reload redraws the page it was on, and every old destination is offered',
     backHome && reloads.every(Boolean) && wanted.every((x) => offered.includes(x))
-      && !!nav('Chats') && !!nav('Machine'),
+      && !!nav('Chats') && !!nav('Settings') && !nav('Machine') && !!machinesBtn(),
     `${backHome} ${JSON.stringify(reloads)} ${wanted.filter((x) => !offered.includes(x))}`);
 
   // 8 · low quota on the account in use, and still nothing asked

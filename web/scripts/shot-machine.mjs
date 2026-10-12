@@ -56,7 +56,7 @@ const page = (m, p) => cdp(m, p, sessionId);
 try {
   for (const [name, view, width, height, mobile] of [
     ['chat', 'chat', 1440, 1000, false], ['machine', 'machine', 1440, 1300, false],
-    ['machine-narrow', 'machine', 390, 2200, true],
+    ['machine-narrow', 'machine', 390, 2200, true], ['settings', 'settings', 1440, 1000, false],
   ]) {
     for (const scheme of ['dark', 'light']) {
       await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
