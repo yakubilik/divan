@@ -108,7 +108,10 @@ export function QuotaCard({ title, says, left, tone, foot, style }: {
  *  in amber, so "this one has stopped" survives being read in grey and being
  *  glanced at sideways. Removing it is the frame's own long-press. */
 export function MachineCard({ name, detail, state, says, tone, ring, figures, actions,
-                             onLongPress, line, seen, style }: {
+                             onLongPress, line, seen, current, style }: {
+  /** The word on the computer this phone is holding (`current`). Absent on
+   *  every other card. */
+  current?: string;
   /** What it runs, by name — and on a quiet machine, that this may be stale. */
   line?: string[];
   /** `seen just now`, `last seen 3h ago`. */
@@ -137,7 +140,10 @@ export function MachineCard({ name, detail, state, says, tone, ring, figures, ac
           <Icon name="monitor" size={SIZE.rowIcon} color={t.ink2} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text mono numberOfLines={1} style={{ fontSize: 15, fontWeight: '600' }}>{name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text mono numberOfLines={1} style={{ fontSize: 15, fontWeight: '600', flexShrink: 1 }}>{name}</Text>
+            {!!current && <Chip text={current} tone="run" />}
+          </View>
           {!!detail && <Text numberOfLines={1} style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}>{detail}</Text>}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

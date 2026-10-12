@@ -48,8 +48,34 @@ export const WARN_AT = 0.2;
  *  that did not. There is no terminal on this phone — that page is the desktop
  *  panel's — so what is left is the one page about one computer that the app
  *  does have, and asking the silent one again. Removing is the frame's own
- *  long-press, and pairing is the head's `+ Pair`. */
-export type MachineAction = 'screen' | 'retry';
+ *  long-press, and pairing is the head's `+ Pair`.
+ *
+ *  `use` moves the phone onto that computer and stays on the page, so a
+ *  computer that is not the one this phone holds can be picked right here
+ *  rather than through the picker at the foot. `pair` is what a computer
+ *  this phone has no pairing for offers instead: switching to it would do
+ *  nothing, and a tap that does nothing is not an answer. */
+export type MachineAction = 'screen' | 'retry' | 'use' | 'pair';
+
+/** Which computer this phone is holding, and which ones it is paired with —
+ *  what decides whether a card can be switched to at all. */
+export interface Holding {
+  active: string | null;
+  paired: readonly string[];
+}
+
+/** What one card offers, decided by whether it is the one held, whether the
+ *  phone can hold it, and whether it answers.
+ *
+ *    * not paired with this phone → `pair`, and nothing else: the phone has
+ *      no address or token for it, so there is nothing to switch to yet;
+ *    * the one held → no switch, only its screen or asking again;
+ *    * any other → `use` first, beside its screen or asking again. */
+export function machineActions(h: { id: string; reachable: boolean }, held: Holding): MachineAction[] {
+  if (!held.paired.includes(h.id)) return ['pair'];
+  if (h.id === held.active) return h.reachable ? ['screen'] : ['retry'];
+  return h.reachable ? ['use', 'screen'] : ['use', 'retry'];
+}
 
 /** One mono figure under a machine's head: `12s ago` over `last contact`. */
 export interface Figure {
@@ -76,6 +102,11 @@ export interface MachineLine {
   ring: 'amber' | 'line';
   figures: Figure[];
   actions: MachineAction[];
+  /** The computer this phone is holding right now: marked, and not offered
+   *  as something to switch to. */
+  current: boolean;
+  /** In the list but not paired with this phone. */
+  unpaired: boolean;
   /** HANDOVER §4.9: what it is running by name, and on a machine that has gone
    *  quiet what it was running and that this may no longer be true. */
   line: Words[];
@@ -83,7 +114,10 @@ export interface MachineLine {
   seen: Words;
 }
 
-export function machineLines(view: DivanView, ago: Ago): MachineLine[] {
+export function machineLines(view: DivanView, ago: Ago, held?: Holding): MachineLine[] {
+  // Without being told, every computer in the view is a paired one: that is
+  // what the phone's merged view is made of (`divan.ts entries`).
+  const holding = held ?? { active: null, paired: view.hosts.map((h) => h.id) };
   return view.hosts.map((h) => ({
     id: h.id,
     machine: h.machine,
@@ -94,7 +128,9 @@ export function machineLines(view: DivanView, ago: Ago): MachineLine[] {
     tone: h.reachable ? 'run' : h.missing ? 'ink3' : 'red',
     ring: 'line',
     figures: figures(h, ago),
-    actions: h.reachable ? ['screen'] : ['retry'],
+    actions: machineActions(h, holding),
+    current: h.id === holding.active,
+    unpaired: !holding.paired.includes(h.id),
     line: runningLine(view, h),
     seen: seenWords(h, ago),
   }));

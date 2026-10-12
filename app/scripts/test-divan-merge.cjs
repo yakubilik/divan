@@ -545,7 +545,15 @@ const readers = [...walk('app'), ...walk('src')]
   // The store is the one exemption and it is a narrow one: it reads the active
   // host to decide which socket carries a request. That is a transport, not a
   // scope, and it keeps one snapshot per paired machine either way.
-  .filter((f) => f !== path.join('src', 'store.ts'));
+  .filter((f) => f !== path.join('src', 'store.ts'))
+  // …and the Machine page, which is where the transport is changed (#206): it
+  // reads the active host to mark that card `current` and to leave the switch
+  // off it, and for nothing else — every machine is drawn either way.
+  .filter((f) => f !== path.join('app', 'machine.tsx'));
+const machinePage = src(path.join('app', 'machine.tsx'));
+checks.push(['the Machine page reads the active computer only to say which card is held',
+  (machinePage.match(/activeHostId/g) || []).length === 3
+  && /machineLines\(view, ago, \{ active: activeHostId, paired: /.test(machinePage)]);
 checks.push(
   ['something in the app draws from the merged view', readers.length > 0],
   [`no screen that draws it reads the active computer (${readers.join(', ')})`,

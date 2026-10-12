@@ -579,6 +579,8 @@ const en = {
   maOneTaskUnknown: '1 task · unknown', maUnknownTasks: '{n} tasks · unknown',
   maRunning: 'running',
   maScreen: 'Screen', maRetry: 'Try again',
+  maUse: 'Use this machine', maCurrent: 'current', maPairThis: 'Pair to use',
+  maNotPaired: 'Not paired with this phone yet: pair it to switch to it.',
   maPicker: 'Computer picker', maPickerNote: 'which one this phone is holding, and where it answers',
   maNone: 'No computer is paired', maNoneBody: 'Nothing has been paired with this phone yet, so there is no machine to show.',
   // Machine › Executors (Mobile11 S14): everyone who can do work, grouped by
@@ -695,6 +697,14 @@ const en = {
   devSection: 'Development', divanParts: 'Divan parts', divanPartsNote: 'design system',
 };
 export type Key = keyof typeof en;
+
+/** Turkish, for the strings that have one so far. `t` still reads English —
+ *  the app ships in English (`LOCALE`) — and this is where a Turkish build
+ *  finds its words; a key missing here falls back to `en`. */
+export const tr: Partial<Record<Key, string>> = {
+  maUse: 'Bu makineye geç', maCurrent: 'şu anki', maPairThis: 'Geçmek için eşleştir',
+  maNotPaired: 'Bu telefonla henüz eşleşmedi: geçmek için önce eşleştir.',
+};
 
 export function t(key: Key, params?: Record<string, string | number>): string {
   let s = en[key] ?? key;
