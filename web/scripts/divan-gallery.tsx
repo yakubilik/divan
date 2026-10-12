@@ -266,7 +266,7 @@ export const SPECIMENS: Specimen[] = [
       <TopBar>
         <NavItem label="Dashboard" icon={P.grid} on />
         <NavItem label="Chat" icon={P.chat} />
-        <NavItem label="Machine" icon={P.server} />
+        <NavItem label="Settings" icon={P.gear} />
         <BarDivider />
         <Pill label="All" dot="asking" face="ink" />
         <Pill label="Quire" dot="stuck" />
