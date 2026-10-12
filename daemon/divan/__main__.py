@@ -123,6 +123,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
             learner.cancel()
             stop.cancel()
             await srv.sessions.close_all()
+            await srv.terms.close_all()
             await srv.concierge.close()
 
     asyncio.run(main())

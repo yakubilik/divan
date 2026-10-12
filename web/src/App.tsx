@@ -1,5 +1,5 @@
 import type { ApprovalResponse } from './lib/approval-input';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { RADIUS, SHADOW, T, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { KEYFRAMES, P, mono } from './ui/kit';
 import { Button } from './ui/divan';
@@ -65,6 +65,9 @@ export function App() {
   // leaves it.
   const [card, setCard] = useState<string | null>(opened.current.card);
   const [sel, setSel] = useState<Selection | null>(null);
+  /** The Chat place with no chat selected on purpose: New chat was pressed
+   *  there, so its middle is the empty composer rather than the newest chat. */
+  const [fresh, setFresh] = useState(false);
   const [newChat, setNewChat] = useState<{
     cwd?: string; groupId?: string; agent?: { agent: Agent; accountId: string | null };
     /** Started from a product's own page: on the computer that product is on,
@@ -93,6 +96,8 @@ export function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   /** …and the one at the foot of a product's page, where its New chat leads. */
   const projectComposerRef = useRef<HTMLTextAreaElement>(null);
+  /** …and the Chat place's own empty composer, where New chat leads there. */
+  const firstWordRef = useRef<HTMLInputElement>(null);
 
   // Whether the sidebar is a list or a rail. Remembered because it is a way of
   // working — terminal mode wants the width, the chat screen wants the list —
@@ -231,6 +236,10 @@ export function App() {
   /** Which of the three the panel is in, worked out from the screen rather than
    *  held beside it: a place and the page it is on cannot then disagree. */
   const place = placeOf(view);
+  /** The same, for handlers mounted once (the keyboard) that must still know
+   *  which place a press came from. */
+  const placeRef = useRef(place);
+  placeRef.current = place;
 
   /** The two lights the old sidebar carried on its rows, now on the place each
    *  belongs to: a chat that cannot go on until somebody allows something, and
@@ -276,6 +285,7 @@ export function App() {
 
   const select = useCallback((hostKey: string, chatId: string) => {
     setSel({ hostKey, chatId });
+    setFresh(false);
     if (useFleet.getState().focus !== hostKey) fleet.setFocus(hostKey);
     logs.open(hostKey, chatId);
   }, []);
@@ -296,7 +306,9 @@ export function App() {
       setPeek(false);
       const host = to.host ?? hostOfChat(to.chat);
       if (host && to.chat) select(host, to.chat);
-      else setSel(null);
+      // The Chat place with no chat in its entry is the empty composer New
+      // chat left there, not a place to land on the newest chat again.
+      else { setSel(null); setFresh(to.view === 'chats'); }
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -307,13 +319,17 @@ export function App() {
   // The Chat place opens writable, on the newest conversation, without anybody
   // choosing one. An address that names a chat is honoured instead (above).
   useEffect(() => {
-    if (view !== 'chats' || sel || !fleet.ready) return;
+    if (view !== 'chats' || sel || fresh || !fleet.ready) return;
     if (opened.current.chat && opened.current.view === 'chats') return;
     const newest = fleet.order
       .flatMap((k) => (fleet.hosts[k]?.chats ?? []).filter((c) => !c.archived).map((c) => ({ k, c })))
       .sort((a, b) => b.c.updated_at - a.c.updated_at)[0];
     if (newest) { landing.current = true; select(newest.k, newest.c.id); }
-  }, [view, sel, fleet.ready, fleet.hosts, fleet.order]);
+  }, [view, sel, fresh, fleet.ready, fleet.hosts, fleet.order]);
+
+  // An empty composer asked for in the Chat place is for that visit: coming
+  // back to the place later opens on the newest chat again.
+  useEffect(() => { if (view !== 'chats') setFresh(false); }, [view]);
 
   // A ticket handed to the Terminal tab is for that one visit.
   useEffect(() => { if (view !== 'terminal') setTicket(null); }, [view]);
@@ -345,8 +361,17 @@ export function App() {
     setTab('chat');
   }, [select]);
 
-  /** A new chat is written in the Composer: home, and the field focused. */
+  /** A new chat is written in the Composer: home, and the field focused.
+   *  In the Chat place it is written right there instead — the list stays on
+   *  the left, nothing is selected, and the middle is the empty composer. */
   const compose = useCallback(() => {
+    if (placeRef.current === 'chat') {
+      setSel(null);
+      setFresh(true);
+      setPeek(false);
+      setTimeout(() => firstWordRef.current?.focus(), 0);
+      return;
+    }
     setView('overview');
     setProject(null);
     setCard(null);
@@ -775,9 +800,12 @@ export function App() {
             />
             <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               {chat ? <ChatView {...chatProps} /> : (
-                <FirstWord onSay={async (text) => {
+                <FirstWord inputRef={firstWordRef} autoFocus={fresh} onSay={async (text) => {
                   const told = await tell(text, null);
                   useTold.getState().close(idOfTold(told));
+                  // The chat takes over the empty composer's entry: Back from
+                  // it is the chat that was open before New chat.
+                  landing.current = true;
                   select(told.host, told.chatId);
                 }} />
               )}
@@ -915,7 +943,11 @@ const COLUMN_WORD: Record<string, string> = {
 /** The Chat place with no conversation in it yet: a box that is already
  *  writable. What is said in it opens a chat with every default this computer
  *  has (`tell`) — nothing is chosen first. */
-function FirstWord({ onSay }: { onSay: (text: string) => Promise<void> }) {
+function FirstWord({ onSay, inputRef, autoFocus }: {
+  onSay: (text: string) => Promise<void>;
+  inputRef?: Ref<HTMLInputElement>;
+  autoFocus?: boolean;
+}) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -935,7 +967,7 @@ function FirstWord({ onSay }: { onSay: (text: string) => Promise<void> }) {
           style={{ padding: '12px 12px 12px 18px', display: 'flex', alignItems: 'center', gap: 8 }}
           onSubmit={(e) => { e.preventDefault(); void say(); }}>
           <label htmlFor="first-word" className="dv-hidden">Message to Hermes</label>
-          <input id="first-word" value={text} onChange={(e) => setText(e.target.value)} placeholder="Talk to Hermes"
+          <input id="first-word" ref={inputRef} autoFocus={autoFocus} value={text} onChange={(e) => setText(e.target.value)} placeholder="Talk to Hermes"
             style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'inherit', font: '400 15px/22px var(--font-sans)' }} />
           <button type="submit" className="dv-send" aria-label="Send" disabled={busy || !text.trim()}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
