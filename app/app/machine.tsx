@@ -24,13 +24,17 @@ import { Shell } from '../src/components/shell';
  *
  *  Pairing is the head's `+ Pair`, removing a computer is a card's long-press
  *  (an app-styled confirmation, never the system's), the computer picker and the
- *  remote screen are rows at the foot. */
+ *  remote screen are rows at the foot. Every card but the held one offers
+ *  `Use this machine`, which switches without leaving the page; the held one
+ *  is marked `current`. */
 export default function Machine() {
   const router = useRouter();
   const go = useNavGuard();
   const T = useT();
   const t = useTokens();
   const view = useDivanView();
+  const hosts = useStore((s) => s.hosts);
+  const activeHostId = useStore((s) => s.activeHostId);
   const switchHost = useStore((s) => s.switchHost);
   const removeHost = useStore((s) => s.removeHost);
   const ago: Ago = (seconds) => since(seconds, T);
@@ -43,8 +47,16 @@ export default function Machine() {
    *  socket is moved first, and then the window opens on the right machine. */
   const press = (action: MachineAction, id: string) => {
     if (action === 'retry') { view.reload(); return; }
+    // A machine this phone has no pairing for cannot be switched to —
+    // `switchHost` would quietly do nothing — so it is offered pairing.
+    if (action === 'pair' || !hosts.some((h) => h.id === id)) { pair(); return; }
+    // Switching stays on this page: the card that was pressed becomes the
+    // marked one, and the rest of the page is every machine either way.
+    if (action === 'use') { void switchHost(id); return; }
     go(() => { void switchHost(id); router.push('/screen'); });
   };
+  const label = (a: MachineAction) =>
+    T(a === 'retry' ? 'maRetry' : a === 'use' ? 'maUse' : a === 'pair' ? 'maPairThis' : 'maScreen');
 
   const confirmRemove = (id: string, name: string) => {
     alert(T('removeHost'), T('removeHostBody', { name }), [
@@ -56,7 +68,7 @@ export default function Machine() {
     ]);
   };
 
-  const lines = machineLines(view, ago);
+  const lines = machineLines(view, ago, { active: activeHostId, paired: hosts.map((h) => h.id) });
   const quota = quotaBlock(view, ago);
   const pct = quota ? Math.round(quota.left * 100) : null;
   const low = !!quota && quota.left <= WARN_AT;
@@ -82,11 +94,13 @@ export default function Machine() {
               {lines.map((m) => (
                 <MachineCard key={m.id} name={m.machine} detail={m.detail} state={m.state}
                   says={T(m.says)} tone={m.tone} ring={m.ring} figures={[]}
-                  line={m.line.map(say)} seen={say(m.seen)}
+                  line={m.unpaired ? [...m.line.map(say), T('maNotPaired')] : m.line.map(say)}
+                  seen={say(m.seen)} current={m.current ? T('maCurrent') : undefined}
                   actions={m.actions.map((a) => ({
                     key: a,
-                    label: T(a === 'retry' ? 'maRetry' : 'maScreen'),
-                    face: a === 'retry' ? 'ink' : 'outline',
+                    label: label(a),
+                    // One filled button per card: what this card is for.
+                    face: a === 'screen' || (a === 'retry' && m.actions.includes('use')) ? 'outline' : 'ink',
                     onPress: () => press(a, m.id),
                   }))}
                   onLongPress={() => confirmRemove(m.id, m.machine)} />

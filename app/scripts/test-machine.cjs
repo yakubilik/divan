@@ -68,7 +68,8 @@ const CLOUD = paired('h3', 'cloud', { reachable: false });  // never answered
 const FLEET = [STUDIO, MINI, CLOUD];
 const view = D.merge(FLEET, NOW);
 const ago = (s) => (s == null ? '' : `${Math.floor(s / 60)}m`);
-const lines = A.machineLines(view, ago);
+const HELD = { active: 'h1', paired: ['h1', 'h2', 'h3'] };
+const lines = A.machineLines(view, ago, HELD);
 const at = (name) => lines.find((m) => m.machine === name);
 const groups = A.executorGroups(view);
 const rows = groups.flatMap((g) => g.rows);
@@ -164,7 +165,7 @@ checks.push(
     at('cloud').says === 'maNever' && at('cloud').figures.length === 0
     && at('studio').says === 'maOnline' && at('studio').line[0].said.key === 'maRunningList'],
   ['…and both of them offer the one thing that helps, which is asking again',
-    eq(at('cloud').actions, ['retry']) && eq(at('mini').actions, ['retry'])
+    eq(at('cloud').actions, ['use', 'retry']) && eq(at('mini').actions, ['use', 'retry'])
     && eq(at('studio').actions, ['screen'])],
 );
 
