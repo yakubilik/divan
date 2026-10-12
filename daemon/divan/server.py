@@ -1348,8 +1348,14 @@ class Server:
     async def h_screen_input(self, dev: Device, d: dict) -> dict:
         """Move, click, scroll or type. Coordinates are 0..1 across the whole
         desktop, so no client ever has to learn the resolution."""
-        if not self.cfg.remote_control:
-            raise Err("control_disabled", "remote control is turned off on this computer")
+        self._control_gate()
+        # Asked on every call rather than trusted from when control was turned
+        # on: a Mac whose Accessibility grant has gone — a Python upgrade is a
+        # new binary as far as macOS is concerned — still takes every posted
+        # click and quietly drops it. Saying why beats a pointer that never moves.
+        can, why = screenmod.control_state()
+        if not can:
+            raise Err("control_unavailable", why or "this computer cannot be controlled")
         try:
             display = d.get("display") or None
             for action in (d.get("actions") or [d]):
@@ -1357,6 +1363,38 @@ class Server:
         except screenmod.ScreenError as exc:
             raise Err("screen_failed", str(exc))
         return {"ok": True}
+
+    def _control_gate(self) -> None:
+        """The one switch in front of everything that touches this computer:
+        the pointer, the keyboard and the clipboard alike."""
+        if not self.cfg.remote_control:
+            raise Err("control_disabled", "remote control is turned off on this computer")
+
+    async def h_screen_clipboard_get(self, dev: Device, d: dict) -> dict:
+        """This computer's clipboard, as text, for the device driving it —
+        after a copy shortcut, so what was just selected reaches the phone or
+        the browser. Behind the control switch: a clipboard is where
+        passwords go."""
+        self._control_gate()
+        try:
+            return await screenmod.clipboard_get()
+        except screenmod.ScreenError as exc:
+            raise Err("screen_failed", str(exc))
+
+    async def h_screen_clipboard_set(self, dev: Device, d: dict) -> dict:
+        """Put text on this computer's clipboard, ahead of a paste shortcut."""
+        self._control_gate()
+        text = d.get("text")
+        if not isinstance(text, str):
+            raise Err("bad_request", "text is required")
+        if len(text) > screenmod.CLIPBOARD_MAX:
+            raise Err("too_large", f"more than {screenmod.CLIPBOARD_MAX} characters")
+        try:
+            out = await screenmod.clipboard_set(text)
+        except screenmod.ScreenError as exc:
+            raise Err("screen_failed", str(exc))
+        log.info("clipboard set by device %s (%s): %d characters", dev.name, dev.id, len(text))
+        return out
 
     async def files(self, path: str = Query(...), authorization: str = Header(default=""), token: str = Query(default=""),
                     download: int = Query(default=0),
