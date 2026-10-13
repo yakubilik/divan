@@ -14,21 +14,17 @@ import {
 } from '../ui/divan';
 import type { Chat } from '../lib/protocol';
 import { Ustabasi } from './Ustabasi';
+import { Shells } from '../components/Shells';
 
-/** Terminal mode: every chat at once, each one drawn as the window it would be
- *  if it were a terminal on a desk. The chat list answers "what have I got";
- *  this answers "what is happening", which is a different question and needs
- *  the last few lines of each conversation, not a one-line preview of the most
- *  recent one. Nothing here is a new source of truth — the tiles read the same
- *  fleet store and the same folded event logs the chat screen reads.
- *
- *  TODO(daemon): Web15 W14, the frame behind this row of the Machine drawer,
- *  draws a different product — tabs of a real shell on a reachable machine, a
- *  pty with `git status` and `divan ps` typed into it, and an agent's own
- *  session attached to. Nothing carries one: there is no request that opens a
- *  shell, and none that writes to one. So what this page is is what it has
- *  always been — every chat on every computer at once, with the ticket queue
- *  beside it — under the head that frame puts over it. */
+/** Terminal mode. What opens first is a real shell on the computer being looked
+ *  at (components/Shells.tsx, over the daemon's `term.*`): tabs of them, one
+ *  computer at a time. Beside it, under the same head, the two walls this page
+ *  has always had: every chat at once, each one drawn as the window it would be
+ *  if it were a terminal on a desk, and the ticket queue. The chat list answers
+ *  "what have I got"; the wall answers "what is happening", which needs the
+ *  last few lines of each conversation, not a one-line preview of the most
+ *  recent one. Nothing on the walls is a new source of truth — the tiles read
+ *  the same fleet store and the same folded event logs the chat screen reads. */
 
 // ── what a tile is doing ─────────────────────────────────────────────────────
 // The daemon's `chat.status` has three values, and a tile needs to tell apart
@@ -481,35 +477,36 @@ export interface TerminalProps {
   onNewChat: () => void;
   /** A ticket to open on the queue's wall as the page comes up. */
   ticket?: number | null;
+  /** Which view to open on, where it is not the shell. */
+  view?: TerminalView;
 }
 
-/** Which wall this screen is showing. Remembered, because it is a way of
- *  working and not a filter you re-pick every morning: someone who watches the
- *  queue watches it all day. */
-const SOURCE_KEY = 'rac.terminal.source';
-type Source = 'chats' | 'ustabasi';
+/** Which view this screen is showing: a shell, or one of the two walls. The
+ *  page always opens on a shell — that is what the tab is called — unless a
+ *  ticket was handed to it, which is read on the queue's wall. */
+export type TerminalView = 'shell' | 'chats' | 'ustabasi';
+type Source = TerminalView;
 
-function loadSource(): Source {
-  try { return localStorage.getItem(SOURCE_KEY) === 'ustabasi' ? 'ustabasi' : 'chats'; } catch { return 'chats'; }
-}
-
-/** The switch between the two walls. Lives in the header of both, so it reads
- *  as one screen with two subjects rather than two screens. */
+/** The switch between the shell and the two walls. Lives in the header of
+ *  each, so it reads as one screen with three subjects rather than three
+ *  screens. */
 function SourceToggle({ value, onChange }: { value: Source; onChange: (s: Source) => void }) {
   return (
     <Choice
-      label="What the wall shows" value={value} onChange={onChange}
-      options={[{ key: 'chats' as Source, label: 'Chats' },
+      label="What the page shows" value={value} onChange={onChange}
+      options={[{ key: 'shell' as Source, label: 'Shell' },
+                { key: 'chats' as Source, label: 'Chats' },
                 { key: 'ustabasi' as Source, label: 'Ustabasi' }]}
     />
   );
 }
 
-export function Terminal({ onPeek, onNewChat, ticket = null }: TerminalProps) {
+export function Terminal({ onPeek, onNewChat, ticket = null, view }: TerminalProps) {
   const { hosts, order } = useFleet();
   const logs = useLogs((s) => s.logs);
-  // A ticket handed in (a card link in a chat) is read on the queue's own wall.
-  const [source, setSourceState] = useState<Source>(() => (ticket != null ? 'ustabasi' : loadSource()));
+  // A ticket handed in (a card link in a chat) is read on the queue's own wall;
+  // otherwise the page opens on a shell.
+  const [source, setSource] = useState<Source>(view ?? (ticket != null ? 'ustabasi' : 'shell'));
   const [filter, setFilter] = useState<Phase | 'all'>('all');
   const [query, setQuery] = useState('');
   const [wall, setWall] = useState<string[]>(() => loadKeys(WALL_KEY));
@@ -646,14 +643,11 @@ export function Terminal({ onPeek, onNewChat, ticket = null }: TerminalProps) {
 
   const onlineCount = order.filter((k) => hosts[k]?.status === 'online').length;
 
-  const setSource = (s: Source) => {
-    try { localStorage.setItem(SOURCE_KEY, s); } catch { /* private mode */ }
-    setSourceState(s);
-  };
   const toggle = <SourceToggle value={source} onChange={setSource} />;
 
-  // The other wall. Placed after every hook above, so switching walls is not a
-  // change in how many hooks this component runs.
+  // The shell and the other wall. Placed after every hook above, so switching
+  // is not a change in how many hooks this component runs.
+  if (source === 'shell') return <Shells header={toggle} />;
   if (source === 'ustabasi') return <Ustabasi header={toggle} open={ticket} />;
 
   return (
