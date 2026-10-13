@@ -137,6 +137,15 @@ _LONG = 512
 _BLOB = re.compile(r"[A-Za-z0-9+/=_\-]+")     # base64 with no data: in front: a screenshot, a file
 # Values that are long and random by nature and never a key in plain text.
 _OPAQUE_KEYS = {"encrypted_content", "signature"}
+# The ids that hold a transcript together. A tool_use id is random enough to
+# look like a key (`toolu_01CWK4PWD…` reads as "PWD" and a value), and one
+# rewritten fails the API's `^[a-zA-Z0-9_-]+$` and bricks the chat, so these
+# are never touched — except inside a tool's own arguments, where an `id` is
+# whatever the tool was given and is read like any other value.
+_ID_KEYS = {"id", "tool_use_id", "uuid", "parentUuid", "leafUuid", "logicalParentUuid",
+            "session_id", "sessionId", "requestId", "request_id", "call_id", "message_id",
+            "messageId", "chat_id", "turn_id", "agentId"}
+_ARG_KEYS = {"input", "arguments", "tool_input"}
 
 
 def _maybe(s: str) -> bool:
@@ -239,7 +248,7 @@ class _Cursor:
         out.append(s[pos:])
         return "".join(out)
 
-    def json(self, v, key: str | None = None):
+    def json(self, v, key: str | None = None, args: bool = False):
         if isinstance(v, str):
             if (v.startswith("data:") and secrets._DATA_URL.fullmatch(v)) or (
                     len(v) > 1024 and _BLOB.fullmatch(v)):
@@ -251,14 +260,40 @@ class _Cursor:
             prefix = f"{key}: "
             return self.text(prefix + v, len(prefix))
         if isinstance(v, list):
-            return [self.json(x) for x in v]
+            return [self.json(x, args=args) for x in v]
         if isinstance(v, dict):
             # An inline image or document is long and random, and not a key;
-            # neither is a reasoning block the provider encrypted.
+            # neither is a reasoning block the provider encrypted, nor an id.
             raw = v.get("type") == "base64"
-            return {k: x if (raw and k == "data") or k in _OPAQUE_KEYS else self.json(x, k)
+            return {k: x if (raw and k == "data") or k in _OPAQUE_KEYS or (k in _ID_KEYS and not args)
+                    else self.json(x, k, args or k in _ARG_KEYS)
                     for k, x in v.items()}
         return v
+
+
+def _ids(v, args: bool = False):
+    """The ids the API checks, in order: tool_use.id, tool_result.tool_use_id,
+    message.id, a Codex call_id, and the uuids that chain the lines."""
+    if isinstance(v, list):
+        for x in v:
+            yield from _ids(x, args)
+    elif isinstance(v, dict):
+        if not args:
+            if v.get("type") in ("tool_use", "server_tool_use"):
+                yield v.get("id")
+            if isinstance(v.get("message"), dict):
+                yield v["message"].get("id")
+            for k in ("tool_use_id", "call_id", "uuid", "parentUuid", "sessionId", "session_id", "requestId"):
+                if k in v:
+                    yield v[k]
+        for k, x in v.items():
+            yield from _ids(x, args or k in _ARG_KEYS)
+
+
+def _ids_kept(before, after) -> bool:
+    """False when masking changed an id, which could leave one the API refuses
+    (`^[A-Za-z0-9_-]+$`): the line is then kept as it was rather than written broken."""
+    return list(_ids(before)) == list(_ids(after))
 
 
 def _when(obj, fallback: float) -> float:
@@ -291,6 +326,9 @@ def _scrub_jsonl(run: Run, where: str, text: str, mtime: float) -> tuple[str, bo
         else:
             c = _Cursor(run, where, _when(obj, mtime))
             masked = c.json(obj)
+            if c.changed and not _ids_kept(obj, masked):
+                run.errors.append(f"{where}:{i + 1}: masking would break an id; line left as it was")
+                continue
             new = _dumps(masked, separators=(",", ":")) if c.changed else line
         if c.changed:
             lines[i] = new
@@ -390,6 +428,9 @@ def scrub_db(run: Run, path: Path, after_seq: int = 0, wal_pending: bool = False
                 new = c.text(payload)
             else:
                 masked = c.json(obj)
+                if c.changed and not _ids_kept(obj, masked):
+                    run.errors.append(f"{where}: event {seq}: masking would break an id; left as it was")
+                    continue
                 new = _dumps(masked) if c.changed else payload
             if c.changed:
                 updates.append(("events", "payload", payload, new, seq))
