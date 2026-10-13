@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from divan.server import OUTBOX_MAX, Server
+from divan.term import Terms
 from divan.voice import Hub
 
 failures = 0
@@ -71,6 +72,7 @@ class Fanout:
         self.writers: dict = {}
         self.conns: dict = {}
         self.voice = Hub(self)              # no calls on it; broadcast and _drop tell it
+        self.terms = Terms(self.send_to)    # _drop detaches a socket from its shells
 
     def attach(self, ws: Sock) -> None:
         self.clients[ws] = object()

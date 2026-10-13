@@ -1,5 +1,5 @@
 /** The chat and Machine on their own, the way the panel draws them
- *  (`?view=chat|machine`; anything else is Quire's own page). Built and
+ *  (`?view=chat|machine|settings`; anything else is Quire's own page). Built and
  *  photographed by `scripts/shot-machine.mjs`. */
 import { createRoot } from 'react-dom/client';
 import '../src/styles/divan-tokens.css';
@@ -72,6 +72,11 @@ const page = which === 'chat' ? (
         onPopOut={() => {}} onSend={() => {}} onInterrupt={() => {}} onRespond={() => {}} onEdit={() => {}}
         onUpdate={() => {}} onNewGroup={async () => {}} onDelete={() => {}} onUpload={async () => null} />
     </div>
+  </Shell>
+) : which === 'settings' ? (
+  <Shell view="settings" onView={() => {}} fleet={view} back={{ label: 'Dashboard', onBack: () => {} }}>
+    <Machine view="settings" onView={() => {}} fleet={view} onOpenChat={() => {}} onNewChat={() => {}}
+      onNewChatIn={() => {}} onStartChat={() => {}} onPeek={() => {}} />
   </Shell>
 ) : which === 'machine' ? (
   <Shell view="machines" onView={() => {}} fleet={view} back={{ label: 'Dashboard', onBack: () => {} }}>

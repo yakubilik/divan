@@ -64,6 +64,12 @@ other device watching it.
 | `daemon.status` | – | `{started_at, uptime_s, restarts, pending, draining, last_restart, supervisor}` — what a restart would cost right now. `pending` is one row per chat holding work a stop would destroy: `{chat_id, busy, queued}` |
 | `daemon.restart` | `{reason?, force?, timeout_s?}` | `{ok, draining, pending, deadline, reason, supervisor}` — stop, so the supervisor starts us again on whatever is on disk. **Drains first:** new `chat.send`s are refused with `restarting`, turns in flight are allowed to finish, and only then does the process exit. Each chat's CLI is a child of this process, so killing it kills every turn mid-sentence — that is what the draining is for. When the deadline passes the restart is **abandoned**, not forced: `daemon.restarting {state: "cancelled"}` and the daemon carries on. `force` waives the waiting and only that. Refused with `no_supervisor` where nothing would bring the process back, unless `force` — doubt is not refusal, a platform this daemon cannot read goes ahead |
 | `daemon.restart.cancel` | – | `{ok}` — changed your mind while it was still waiting |
+| `term.open` | `{cols?, rows?, cwd?}` | `{term_id, pid, cwd, shell, cols, rows, created_at, attached}` — a real shell on this computer: the user's login shell (`$SHELL -l`) on a fresh pty, in `$HOME` unless `cwd` names a folder inside the allowed roots (`cwd_outside`, `no_such_folder`). Size defaults to 80×24, each side 1–1000 (`bad_size`). At most eight are open at once, every device together (`too_many_terms`). The opening socket is attached to it. See *Terminal* |
+| `term.write` | `{term_id, data}` | `{written}` — `data` is text, typed as is: `"echo hi\n"`, `"\u0003"` for ^C. `no_term` for one that has ended or is not yours |
+| `term.resize` | `{term_id, cols, rows}` | `{cols, rows}` — the pty's window size; the shell's foreground job gets `SIGWINCH` |
+| `term.attach` | `{term_id}` | as `term.open` — this socket receives its output from now on. For a client that reconnected: a dropped socket's shells keep running for five minutes |
+| `term.close` | `{term_id}` | `{term_id, ended}` — this socket lets go of it; the last one to let go ends it (`ended: true`): the shell and its foreground job are hung up, anything left in its process group is killed after a second, and the shell is reaped |
+| `term.list` | – | `{terms: [{…as term.open, mine}], max}` — the open shells of the person asking; `mine` is whether this socket is attached |
 | `ustabasi.list` | – | `{available, tickets, queue}` — the ticket queue on that computer, read-only, for the panel's second wall. `available: false` on a machine that does not run one, which is most of them. A ticket carries the queue's own row (`id, title, status, stage, round, repo, branch, created_at, updated_at, started_at, finished_at, goal, done_criteria, escalation, verdict, notes, note_count, last_event`) and three readings the queue does not store: `project` — the project the repository belongs to, by the same rule as a chat title's prefix; `round_started_at` — when the current round began, which is not `updated_at` and not `started_at`; and `git: {commits, subject} | null` — what the worker has committed on the branch, read from its worktree. All three are `null` where there is nothing to say, and the wall then shows nothing rather than a placeholder. `steps` is the fourth: the stage history read out of the events table, oldest first, each `{stage, round, at, ended_at?, outcome?, pid?, model?, account?, note?}` — `outcome` is `ok`, `rejected`, `blocked`, `failed`, `cancelled` or `stopped`, and the one step with no `ended_at` is the one running now. Absent keys are absent rather than null: a wall of twenty tickets carries a hundred of these |
 | `ustabasi.note` | `{id, text}` | `{ok, message}` — answer a ticket that stopped to ask a question. The one write, and it runs the queue's own CLI rather than touching its database: a note clears the escalation and puts the ticket back in the queue, and that sequence is the other program's to define. `ustabasi_refused` carries the CLI's own words |
 | `ustabasi.run` | `{id, cursor?}` | `{available, reason, run, events, cursor, reset, live, caught_up, size}` — what the agent on that ticket has printed, a page at a time. Every run writes the model's stream-json to a file that is hundreds of kilobytes long by the time a worker is done, so a first open (no cursor, or one naming another run) answers with the **end** of it and `reset: true`; every later call with the cursor it gave back answers with what has been appended since, and a poll that finds nothing is a couple of hundred bytes and an empty `events`. A page is capped in records **and** in bytes, and a reader that has fallen further behind than one page is moved up to the end with `reset: true` rather than made to read its way there. `cursor` is `<run directory name>:<byte offset>` and carries no path. `live` is a run that is still being written — the ticket is running and the queue has not written its exit code. `reason` is the silence, where there is one: `no_queue`, `no_ticket`, `never_run` (nobody has been handed this ticket yet), `no_log`; each answers the same shape, with no events, no cursor and `caught_up: true`. Read-only |
@@ -357,6 +363,27 @@ computers and relays to them (`daemon/divan/fleet.py`).
   client simply retries. `device.revoke_self` is refused on the relayed socket
   and `hello` loses its `device_name`, because the credential is shared.
 
+## Terminal
+
+`term.*` is a shell on the computer, driven from the phone or the panel
+(`daemon/divan/term.py`). It is exactly as reachable as `chat.*` and no more: a
+socket `/ws` admitted, by the same doors, lock and sign-in — an unpaired,
+revoked or wrong token is closed with 4401 before it can ask. A terminal belongs
+to the person (`people`) whose device opened it; another person's devices
+neither list nor drive it (`no_term`). Output goes to the attached sockets, not
+to every client, and is never written to the database.
+
+Nothing is left running: the last `term.close` ends the shell; a shell no socket
+has been attached to for five minutes, or that has neither read nor printed
+anything for thirty, is ended by a reaper; and a daemon that stops ends them all.
+Each `term.exit` follows the shell being reaped, so there is no zombie behind
+it. POSIX only for now: on Windows `term.open` answers `term_unsupported`.
+
+Through the gateway (`/peer/<id>/ws`, below) `term.*` is relayed untouched, so a
+panel opens a shell on whichever computer the socket is for. The peer sees the
+gateway's credential, so on the peer that shell belongs to the person the
+gateway's device is listed under.
+
 ## Push notifications
 
 Content-free: no message text leaves the computer. The `data` of a notification
@@ -406,6 +433,8 @@ than on the list.
 | `update.available` | – | the whole of `update.status` — the daemon holds the fetch loop and says so when it finds this computer behind, or its panel stale |
 | `daemon.restarting` | – | `{state, reason, pending, deadline, forced}` — `state` is `draining` (waiting, and `pending` says for what; re-sent whenever that count moves), `stopping` (the sockets are about to close; reconnect rather than treating it as a dropped connection) or `cancelled` (it is not happening; sends are accepted again) |
 | `update.applied` | – | `{revision, web, release, last_update, error}` — an update landed, this one's or somebody else's. `error` is set when the daemon updated but the panel did not rebuild |
+| `term.output` | – | `{term_id, data}` — what the shell printed, as text (UTF-8, bytes that are not are replaced), to the sockets attached to it only. Coalesced every 10 ms, at most 64 KB an event |
+| `term.exit` | – | `{term_id, code}` — the shell ended: `exit`, `term.close`, or the reaper. `code` is its exit status, negative for a signal |
 
 Chat `status`: `idle | running | awaiting_approval`.
 

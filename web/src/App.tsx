@@ -656,6 +656,8 @@ export function App() {
       { id: 'dashboard', label: PLACE_LABEL.dashboard, hint: 'every product', run: () => setView(PLACE_VIEW.dashboard) },
       { id: 'chat', label: PLACE_LABEL.chat, hint: slot?.info?.name, run: () => setView(PLACE_VIEW.chat) },
       { id: 'machine', label: PLACE_LABEL.machine, hint: 'the computers', run: () => setView(PLACE_VIEW.machine) },
+      // The line's own button: Settings, which is a tab of the Machine place.
+      { id: 'settings-line', label: 'Settings', shortcut: '⌘,', hint: 'the button on the line', run: () => setView('settings') },
       ...MACHINE_ROWS.map((row) => ({
         id: row.view,
         label: `${PLACE_LABEL.machine} › ${row.label}`,

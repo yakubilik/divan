@@ -41,6 +41,7 @@ from .transcribe import known as transcribe_known
 from .attachments import KINDS, normalize_image, peaks, sniff
 from .security import ACCESS_EMAIL, PathPolicy, TunnelAccess, TunnelGate, TunnelLock
 from . import screen as screenmod
+from . import term as termmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
 from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager, with_project
@@ -311,6 +312,9 @@ class Server:
         # The streaming voice session (voice.py): one per call, each with its
         # own warm fast layer, all following the chats they handed work to.
         self.voice = voicemod.Hub(self)
+        # Shells on a pty (term.py), whose output goes only to the sockets
+        # attached to each one rather than to every client.
+        self.terms = termmod.Terms(self.send_to)
 
     def _allow_cross_origin(self) -> None:
         """Let a browser talk to a daemon that did not serve the page.
@@ -1087,6 +1091,7 @@ class Server:
         self.clients.pop(ws, None)
         self.outbox.pop(ws, None)
         self.voice.detach(ws)
+        self.terms.detach(ws)
         t = self.writers.pop(ws, None)
         if t is not None:
             t.cancel()
@@ -1344,6 +1349,47 @@ class Server:
                                             d.get("display") or None)
         except screenmod.ScreenError as exc:
             raise Err("screen_failed", str(exc))
+
+    # A shell on this computer (term.py). Reached only through a socket `_admit`
+    # let in, like every handler here; a term belongs to the person whose
+    # device opened it and is invisible to everybody else's.
+    def _term_owner(self, dev: Device) -> str | None:
+        self.cfg.refresh_tunnel()
+        return self.cfg.person_of(dev.id)
+
+    async def h_term_open(self, dev: Device, d: dict, ws: WebSocket) -> dict:
+        cwd = d.get("cwd")
+        if cwd:
+            if err := self.policy.cwd_error(str(cwd)):
+                raise Err(err, "that folder cannot be opened")
+            cwd = str(Path(str(cwd)).expanduser().resolve())
+        else:
+            cwd = str(Path.home())
+        t = self.terms.open(ws, self._term_owner(dev), dev.id, d, cwd)
+        log.warning("device %s (%s) opened a terminal (%s, pid %s) in %s",
+                    dev.name, dev.id, t.id, t.pid, cwd)
+        return t.public()
+
+    async def h_term_write(self, dev: Device, d: dict) -> dict:
+        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        return {"written": await self.terms.write(t, d.get("data"))}
+
+    async def h_term_resize(self, dev: Device, d: dict) -> dict:
+        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        self.terms.resize(t, d)
+        return {"cols": t.cols, "rows": t.rows}
+
+    async def h_term_attach(self, dev: Device, d: dict, ws: WebSocket) -> dict:
+        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        self.terms.attach(t, ws)
+        return t.public()
+
+    async def h_term_close(self, dev: Device, d: dict, ws: WebSocket) -> dict:
+        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        return {"term_id": t.id, "ended": await self.terms.close(t, ws)}
+
+    async def h_term_list(self, dev: Device, d: dict, ws: WebSocket) -> dict:
+        return {"terms": self.terms.list(self._term_owner(dev), ws), "max": termmod.MAX_TERMS}
 
     async def h_screen_input(self, dev: Device, d: dict) -> dict:
         """Move, click, scroll or type. Coordinates are 0..1 across the whole
