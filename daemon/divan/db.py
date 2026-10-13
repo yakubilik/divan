@@ -342,6 +342,41 @@ class DB:
             self._c.commit()
         return self.get_chat(cid)
 
+    # A chat in either of these is in the middle of something, and is never
+    # archived however long it has been at it.
+    BUSY_STATUSES = ("running", "awaiting_approval")
+
+    def archive_stale(self, before: float, skip: set[str] | frozenset = frozenset()) -> list[dict]:
+        """Archive every chat that has not moved since `before`, and return them.
+
+        Pinned chats and busy ones (`BUSY_STATUSES`, or an id in `skip`) are
+        left alone. Written without touching `updated_at`, for the reason
+        `file_chat` gives: going quiet is not moving, and the archive should
+        still say when the chat last did.
+        """
+        busy = ",".join("?" for _ in self.BUSY_STATUSES)
+        with self._lock:
+            ids = [r["id"] for r in self._c.execute(
+                f"SELECT id FROM chats WHERE archived=0 AND pinned=0 AND status NOT IN ({busy}) "
+                "AND updated_at IS NOT NULL AND updated_at < ?",
+                (*self.BUSY_STATUSES, before)).fetchall() if r["id"] not in skip]
+            for cid in ids:
+                self._c.execute("UPDATE chats SET archived=1 WHERE id=?", (cid,))
+            self._c.commit()
+        return [c for c in (self.get_chat(cid) for cid in ids) if c]
+
+    def unarchive(self, cid: str) -> dict | None:
+        """Bring an archived chat back, because something happened in it.
+
+        Returns the chat when it was archived, None when there was nothing to do
+        — the common case, and one that costs a single UPDATE that matches no row.
+        """
+        with self._lock:
+            cur = self._c.execute("UPDATE chats SET archived=0, updated_at=? WHERE id=? AND archived!=0",
+                                  (time.time(), cid))
+            self._c.commit()
+        return self.get_chat(cid) if cur.rowcount else None
+
     def touch_chat(self, cid: str, preview: str | None = None) -> None:
         if preview is not None:
             self.update_chat(cid, last_preview=preview[:200])
