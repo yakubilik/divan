@@ -320,6 +320,12 @@ export const MEDIA = {
   /** Its label, and the dimmer one beside it. */
   ink: ON_COLOUR,
   inkDim: 'rgba(255,255,255,0.6)',
+  /** A shell (components/Shells.tsx): a terminal is dark in either theme,
+   *  because the programs run in it choose their colours assuming so. Its
+   *  cursor, and what is selected in it. */
+  term: '#0b0c0e',
+  termCursor: '#f5b544',
+  termSelection: 'rgba(245,181,68,0.33)',
 } as const;
 
 // ── what a state looks like ─────────────────────────────────────────────────

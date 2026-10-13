@@ -623,7 +623,8 @@ group('the screens the panel already had');
     Fleet: ['src/screens/Fleet.js', 'Fleet', { onOpenChat() {}, onNewChat() {} }],
     Projects: ['src/screens/Projects.js', 'Projects', { onNewChatIn() {}, onOpenChat() {} }],
     Agents: ['src/screens/Agents.js', 'Agents', { onStartChat() {} }],
-    Terminal: ['src/screens/Terminal.js', 'Terminal', { onPeek() {}, onNewChat() {} }],
+    Terminal: ['src/screens/Terminal.js', 'Terminal', { onPeek() {}, onNewChat() {}, view: 'chats' }],
+    Shell: ['src/screens/Terminal.js', 'Terminal', { onPeek() {}, onNewChat() {} }],
     Screen: ['src/screens/Screen.js', 'Screen', {}],
     Update: ['src/screens/Update.js', 'Update', {}],
     ...Object.fromEntries(SECTIONS.map((x) => (
