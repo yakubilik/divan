@@ -50,6 +50,8 @@ const PLACES_SRC = Object.values(SCREEN);
 const layout = src('app/_layout.tsx');
 const dash = src('app/dashboard.tsx');
 const chatPlace = src('app/chat/index.tsx');
+const chatNew = src('app/chat/new.tsx');
+const firstWord = src('src/components/first-word.tsx');
 const machine = src('app/machine.tsx');
 const conversation = src('app/chat/[id].tsx');
 const agents = src('app/agents.tsx');
@@ -337,7 +339,7 @@ checks.push(
     !/host-sheet|HomeTop/.test(chatPlace) && !/host-sheet|HomeTop/.test(conversation)
     && !/'\/agents'/.test(chatPlace)],
   ['a second conversation is started from the list itself',
-    /quickNew/.test(chatPlace) && /createChat\(/.test(chatPlace)
+    /router\.push\('\/chat\/new'\)/.test(chatPlace) && /createChat\(/.test(firstWord)
     && /router\.push\('\/new-chat'\)/.test(chatPlace)],
   ['a conversation that was put away can be found again',
     /setShowArchived\(/.test(chatPlace) && /T\('unarchive'\)/.test(chatPlace)],
@@ -508,8 +510,8 @@ checks.push(
   // you have to come back to the Dashboard for.
   ['a second conversation can be started without deleting the one you are in',
     fromChat.has('/new-chat')],
-  ['…and the pen on the list makes one outright, so it is not only a form',
-    /quickNew/.test(chatPlace) && /createChat\(/.test(chatPlace)],
+  ['…and the pen on the list opens an empty composer that makes one, so it is not only a form (#222)',
+    /router\.push\('\/chat\/new'\)/.test(chatPlace) && /useFreshChat\(\)/.test(chatNew) && /createChat\(/.test(firstWord)],
   ['a conversation that was put away can be found again',
     /setShowArchived\(/.test(chatPlace) && /unarchive/.test(chatPlace)
     && fromChat.has('/chat/[id]')],
