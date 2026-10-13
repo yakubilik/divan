@@ -315,7 +315,7 @@ export function App() {
           ? { label: scopedName ?? 'Project', onBack: () => setTab('overview') }
           : project
           ? { label: 'Dashboard', onBack: () => chooseProject(null) }
-          : tab === 'waiting'
+          : tab === 'waiting' || tab === 'work'
             ? { label: 'Dashboard', onBack: () => setTab('overview') }
             : null;
 
@@ -686,6 +686,20 @@ export function App() {
     },
   };
 
+  /** A ticket pressed on the Work page: the same page the wall and a product's
+   *  page open — its card on a board where it has one, the queue's wall on the
+   *  computer it is on where it has none. */
+  const openTicket = useCallback((host: string, id: number) => {
+    const found = divan.cards.find((c) => c.host === host && c.ustabasi_id === id);
+    if (found) {
+      go({ ...HOME, project: found.projectKey, tab: 'board', card: `${found.host}:${found.id}` });
+      return;
+    }
+    if (useFleet.getState().focus !== host) useFleet.getState().setFocus(host);
+    go({ ...HOME, view: 'terminal', sub: 'ustabasi', ticket: id });
+    setTicketFrom(where);
+  }, [divan.cards, go, where]);
+
   const chatProps = {
     chat, hostKey: sel?.hostKey ?? null, log, sending, filedUnder, tickets,
     project: filedProject, onDashboard: toDashboard,
@@ -824,6 +838,10 @@ export function App() {
         view={view} onView={goView} fleet={divan} dots={dots}
         onHome={() => go(HOME)}
         back={back}
+        work={{
+          on: view === 'overview' && !project && tab === 'work',
+          onOpen: () => go({ ...HOME, tab: 'work' }),
+        }}
         inbox={<InboxBell onOpen={openNotice} />}
         // Hiding the chat list is on this line, over the list; the rail it
         // leaves behind has the way back.
@@ -839,6 +857,7 @@ export function App() {
             )}
             onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setCard(idOf(c)); }}
             onOpenChat={open}
+            onOpenTicket={openTicket}
             // The Composer at the foot of a product: everything it sends is
             // about that product, and the chat it starts is read right here,
             // in the middle of the product's page, with the list beside it.
@@ -1076,7 +1095,7 @@ function FirstWord({ onSay, inputRef, autoFocus }: {
  *  `Quire · Board`, `Dashboard`. */
 function placeName(p: Place, view: ReturnType<typeof useDivanView>): string {
   if (p.view !== 'overview') return p.view === 'chats' ? 'Chats' : 'Machine';
-  if (!p.project) return p.tab === 'waiting' ? 'Waiting on you' : 'Dashboard';
+  if (!p.project) return p.tab === 'waiting' ? 'Waiting on you' : p.tab === 'work' ? 'Work' : 'Dashboard';
   const name = projectIn(view, p.project)?.name ?? p.project;
   if (p.card) return name;
   if (p.tab === 'board') return `${name} · Board`;
