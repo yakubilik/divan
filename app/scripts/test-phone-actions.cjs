@@ -245,8 +245,8 @@ const ready = (async () => {
 
     // Search and the flat view answer with the same conversations.
     const ids = (s) => s.flatMap((x) => x.data.map((c) => c.id)).sort().join();
-    const read = (q, flat) => chatSections({ chats: fixture(), groups: [quire], productNames: { [FREYA]: 'Freya Hackathon' }, q, collapsed: {},
-      showArchived: false, flat, daily: 'Daily', only: 'Chats' });
+    const read = (q, flat) => chatSections({ chats: fixture(), groups: [quire], people: { names: [], me: null }, chosen: undefined, saved: [],
+      productNames: { [FREYA]: 'Freya Hackathon' }, q, collapsed: {}, showArchived: false, flat, now: Date.now() / 1000 }).sections;
     const same = ['', 'notes', 'pitch', 'ok'].every((q) => ids(read(q, true)) === ids(read(q, false)))
       && ids(read('pitch', false)) === 'decoy,pitch';
     stage(fixture(), [quire], 'flat');

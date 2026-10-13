@@ -22,6 +22,10 @@ import { Shell } from '../../src/components/shell';
 import { freshAccount, freshAgent, freshChat, freshCwd } from '../../src/fresh-chat';
 import type { Chat } from '../../src/protocol';
 import { chatSections, FLAT, type Section } from '../../src/chat-sections';
+import { EVERYONE } from '../../src/chat-list';
+
+const NO_ORDER: string[] = [];
+const NOBODY = { names: [] as string[], me: null };
 
 
 function timeLabel(ts: number, T: ReturnType<typeof useT>, locale: string) {
@@ -53,6 +57,12 @@ export default function ChatPlace() {
   const projects = useStore((s) => s.projects);
   const showArchived = useStore((s) => s.showArchived);
   const chatView = useStore((s) => s.prefs.chatView);
+  const people = useStore((s) => s.people) ?? NOBODY;
+  const activeHostId = useStore((s) => s.activeHostId);
+  // Whose chats, and the order the headings were arranged in: both this
+  // phone's own, per computer, the way the web keeps them per browser.
+  const chosen = useStore((s) => (s.activeHostId ? s.prefs.chatPerson?.[s.activeHostId] : undefined));
+  const saved = useStore((s) => (s.activeHostId && s.prefs.chatSections?.[s.activeHostId]) || NO_ORDER);
   // A chat carries its product's name beside its id; where an older answer
   // left only the id, this computer's Divan board still knows what it is called.
   const products = useStore((s) => (s.activeHostId ? s.divan[s.activeHostId]?.snapshot?.projects : undefined));
@@ -70,6 +80,15 @@ export default function ChatPlace() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [viewMenu, setViewMenu] = useState(false);
   const viewPill = useRef<View>(null);
+  const personCard = useRef<View>(null);
+
+  // Which chats are a day old is a question about the clock, and a list left
+  // open overnight has to notice the answer changing.
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now() / 1000), 60_000);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => { if (conn === 'online') { void refresh().catch(() => {}); void loadProjects().catch(() => {}); } }, [conn, refresh, loadProjects]);
 
@@ -141,10 +160,28 @@ export default function ChatPlace() {
   const quickNewRef = useRef(quickNew);
   quickNewRef.current = quickNew;
 
-  const sections = useMemo<Section[]>(() => chatSections({
-    chats, groups, productNames, q, collapsed, showArchived, flat: chatView === 'flat',
-    daily: T('ungrouped'), only: T('chats'),
-  }), [chats, groups, productNames, q, collapsed, showArchived, chatView, T]);
+  const { sections, who, counts, shared } = useMemo(() => chatSections({
+    chats, groups, people, chosen, saved, productNames, projects, q, collapsed, showArchived,
+    flat: chatView === 'flat', now,
+  }), [chats, groups, people, chosen, saved, productNames, projects, q, collapsed, showArchived, chatView, now]);
+
+  /** Whose chats the list shows, picked the way the web's card picks it. */
+  async function pickPerson() {
+    const anchor = await measure(personCard);
+    const total = people.names.reduce((n, p) => n + (counts[p] ?? 0), 0);
+    const pick = (p: string) => {
+      if (!activeHostId) return;
+      void setPrefs({ chatPerson: { ...useStore.getState().prefs.chatPerson, [activeHostId]: p } });
+    };
+    openMenu({
+      anchor, width: 240,
+      items: [
+        { label: `${EVERYONE} · ${total}`, checked: who === null, onPress: () => pick('') },
+        ...people.names.map((p) => ({ label: `${p} · ${counts[p] ?? 0}`, checked: who === p, onPress: () => pick(p) })),
+        { kind: 'cancel' as const, label: T('cancel') },
+      ],
+    });
+  }
 
   // In the flat view a row is the only place its group can still be named.
   const groupNames = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g.name])), [groups]);
@@ -242,6 +279,7 @@ export default function ChatPlace() {
   // state, so reach them through a ref rather than rebuilding.
   const actionsRef = useRef({ chatItems, groupItems, archiveChat, confirmDelete });
   actionsRef.current = { chatItems, groupItems, archiveChat, confirmDelete };
+  const onPlus = useCallback(() => go(() => router.push('/new-chat')), [go, router]);
   const onRowPress = useCallback((chat: Chat) => go(() => router.push(`/chat/${chat.id}`)), [go, router]);
   const onRowArchive = useCallback((chat: Chat) => actionsRef.current.archiveChat(chat), []);
   const onRowDelete = useCallback((chat: Chat) => actionsRef.current.confirmDelete(chat), []);
@@ -253,13 +291,13 @@ export default function ChatPlace() {
     }));
   }, [T, locale]);
   const onGroupLongPress = useCallback((id: string, name: string, count: number, ref: React.RefObject<View | null>) => {
-    if (!id || id.startsWith('cwd:') || id.startsWith('project:')) return;
+    if (!groups.some((g) => g.id === id)) return;
     void measure(ref).then((r) => openMenu({
       anchor: r, previewRect: { ...r, x: 12, width: r.width - 24 }, width: 230,
       preview: <GroupPreview title={name} count={count} />,
       items: actionsRef.current.groupItems(id, name),
     }));
-  }, []);
+  }, [groups]);
 
   const online = conn === 'online';
   const switching = useStore((st) => st.switching);
@@ -316,6 +354,22 @@ export default function ChatPlace() {
             placeholderTextColor={c.faint} returnKeyType="search" style={{ flex: 1, fontSize: 14 }} />
           {!!q && <Pressable onPress={() => setQ('')} hitSlop={8}><Icon name="cancel" size={18} color={c.faint} /></Pressable>}
         </View>
+      )}
+      {/* Whose chats, on a computer more than one person uses: this phone's
+          own person's by default, everyone's one tap away. */}
+      {withControls && shared && (
+        <Pressable ref={personCard} accessibilityRole="button" accessibilityLabel="Whose chats"
+          onPress={() => void pickPerson()}
+          style={({ pressed }) => [{ marginHorizontal: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8,
+            paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.card },
+            pressed && { opacity: 0.6 }]}>
+          <Icon name="group" size={17} color={who ? c.muted : c.accentText} />
+          <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: '600' }}>{who ?? EVERYONE}</Text>
+          <Text mono style={{ fontSize: 12, color: c.muted }}>
+            {who ? (counts[who] ?? 0) : people.names.reduce((n, p) => n + (counts[p] ?? 0), 0)}
+          </Text>
+          <Icon name="expand_more" size={16} color={c.muted} />
+        </Pressable>
       )}
     </>
   );
@@ -381,9 +435,9 @@ export default function ChatPlace() {
         ListHeaderComponent={listHeader(true)}
         contentContainerStyle={{ paddingBottom: 24 }}
         renderSectionHeader={({ section }) => section.id === FLAT ? null : (
-          <GroupHeader section={section as Section} first={sections[0]?.id === section.id} collapsed={!!collapsed[section.id]} dimmed={viewMenu}
-            onPress={() => setCollapsed((cl) => ({ ...cl, [section.id]: !cl[section.id] }))}
-            onLongPress={onGroupLongPress} />
+          <GroupHeader section={section as Section} first={sections[0]?.id === section.id} dimmed={viewMenu}
+            onPress={() => setCollapsed((cl) => ({ ...cl, [section.id]: !(section as Section).shut }))}
+            onLongPress={onGroupLongPress} onPlus={onPlus} />
         )}
         renderItem={({ item, index, section }) => (
           <ChatRow chat={item} T={T} locale={locale} first={index === 0} last={index === section.data.length - 1} dimmed={viewMenu}
@@ -408,22 +462,43 @@ function statusLine(chat: Chat, T: ReturnType<typeof useT>): string {
   return chat.last_preview || T('emptyChat');
 }
 
-function GroupHeader({ section, first, collapsed, onPress, onLongPress, dimmed }: {
-  section: Section; first: boolean; collapsed: boolean; onPress: () => void; dimmed?: boolean;
+/** A heading: its name and how many chats are under it, then — like the web's
+ *  — a + that starts a chat in it, and a group's own ... menu. */
+function GroupHeader({ section, first, onPress, onLongPress, onPlus, dimmed }: {
+  section: Section; first: boolean; onPress: () => void; onPlus: () => void; dimmed?: boolean;
   onLongPress: (id: string, name: string, count: number, ref: React.RefObject<View | null>) => void;
 }) {
   const c = useColors();
   const ref = useRef<View>(null);
+  const group = section.kind === 'group';
   return (
-    <Pressable ref={ref} onPress={onPress} onLongPress={() => onLongPress(section.id, section.title, section.count, ref)}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: first ? 14 : 16, paddingHorizontal: 16, paddingBottom: 6, opacity: dimmed ? 0.4 : 1 }}>
-      <View style={{ height: 20, justifyContent: 'center' }}><Icon name={collapsed ? 'chevron_right' : 'expand_more'} size={16} color={c.muted} /></View>
-      {section.mono
-        ? <Text mono numberOfLines={1} style={{ fontSize: 12, fontWeight: '500', color: c.muted, flexShrink: 1 }}>{section.title}</Text>
-        : <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: c.muted, flexShrink: 1 }}>{section.title}</Text>}
-      <View style={{ flex: 1 }} />
-      <Text mono style={{ fontSize: 12, fontWeight: '500', color: c.muted }}>{section.count}</Text>
-    </Pressable>
+    <View ref={ref} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: first ? 14 : 16, paddingLeft: 16, paddingRight: 10, paddingBottom: 6, opacity: dimmed ? 0.4 : 1 }}>
+      <Pressable accessibilityRole="button" onPress={onPress} onLongPress={() => onLongPress(section.id, section.title, section.count, ref)}
+        style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ height: 20, justifyContent: 'center' }}><Icon name={section.shut ? 'chevron_right' : 'expand_more'} size={16} color={c.muted} /></View>
+        {section.mono
+          ? <Text mono numberOfLines={1} style={{ fontSize: 12, fontWeight: '500', color: c.muted, flexShrink: 1 }}>{section.title}</Text>
+          : <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: c.muted, flexShrink: 1 }}>{section.title}</Text>}
+        <View style={{ flex: 1 }} />
+        <Text mono style={{ fontSize: 12, fontWeight: '500', color: c.muted }}>{section.count}</Text>
+      </Pressable>
+      {/* The ... opens the menu a long press on the heading opens. The + opens
+          the New chat sheet; starting it already in this section comes with
+          the next step of this list. */}
+      {group && (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Group menu: ${section.title}`} hitSlop={6}
+          onPress={() => onLongPress(section.id, section.title, section.count, ref)}
+          style={{ width: 26, height: 22, alignItems: 'center', justifyContent: 'center', marginLeft: 4 }}>
+          <Icon name="more_horiz" size={16} color={c.muted} />
+        </Pressable>
+      )}
+      {section.plus && (
+        <Pressable accessibilityRole="button" accessibilityLabel={`New chat in ${section.title}`} hitSlop={6} onPress={onPlus}
+          style={{ width: 26, height: 22, alignItems: 'center', justifyContent: 'center', marginLeft: group ? 0 : 4 }}>
+          <Icon name="add" size={17} color={c.muted} />
+        </Pressable>
+      )}
+    </View>
   );
 }
 
