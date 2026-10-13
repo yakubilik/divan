@@ -24,6 +24,12 @@ export function hostAddr(cfg: HostConfig): { host: string; port: number } {
   return { host: cfg.host, port: cfg.port };
 }
 
+/** What a computer is called on screen: the name it gives itself, without the
+ *  `.local` a Mac's hostname ends in, else the name it was paired under. */
+export function hostName(slot: { cfg: HostConfig; info?: HostInfo | null }): string {
+  return slot.info?.name?.replace(/\.local$/, '') || slot.cfg.name;
+}
+
 /** Whether this is the computer that served the page. */
 function isHome(cfg: HostConfig): boolean {
   if (cfg.via || typeof location === 'undefined') return false;
