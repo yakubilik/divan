@@ -57,7 +57,7 @@ try {
     for (const scheme of ['dark', 'light']) {
       await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
       await page('Page.navigate', { url: `file://${join(build, 'harness.html')}?theme=${scheme}` });
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 5000));
       const shot = await page('Page.captureScreenshot', { format: 'png' });
       const file = join(out, `${name}${scheme === 'dark' ? '' : '-light'}.png`);
       writeFileSync(file, Buffer.from(shot.data, 'base64'));
