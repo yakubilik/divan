@@ -118,7 +118,7 @@ function PlaceButton({ label, icon, on, dot, onClick }: {
 
 /** A page: the line, and the page's own content under it. `back` is where the
  *  left end leads; absent, it is the word, on the Dashboard. */
-export function Shell({ view, onView, fleet, dots, back, onHome, inbox, children }: {
+export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, children }: {
   view: View;
   onView: (view: View) => void;
   /** The merged view the system line counts off. */
@@ -133,6 +133,9 @@ export function Shell({ view, onView, fleet, dots, back, onHome, inbox, children
   onHome?: () => void;
   /** The bell: what the queue sent, and the ticket a press on one opens. */
   inbox?: React.ReactNode;
+  /** A control for the column under the left end — the chat list's hide —
+   *  drawn at the right end of that column, `width` being the column's own. */
+  lead?: { node: React.ReactNode; width: number } | null;
   children?: React.ReactNode;
 }) {
   const here = placeOf(view);
@@ -141,7 +144,19 @@ export function Shell({ view, onView, fleet, dots, back, onHome, inbox, children
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <header style={{ flex: 'none', padding: '4px 20px' }}>
         <div className="dv-topline" style={home ? { maxWidth: 1016, margin: '0 auto' } : undefined}>
-          {back ? (
+          {lead ? (
+            // The header's 20px in, the list's 8px in: the control's right edge
+            // is the right edge of the card under it.
+            <div className="dv-topline-lead" style={{ width: lead.width - 28 }}>
+              {back && (
+                <button type="button" className="dv-back dv-hit" onClick={back.onBack}
+                  aria-label={`Back to ${back.label}`}>
+                  {SVG(BACK)}{back.label}
+                </button>
+              )}
+              {lead.node}
+            </div>
+          ) : back ? (
             <button type="button" className="dv-back dv-hit" onClick={back.onBack}
               aria-label={`Back to ${back.label}`}>
               {SVG(BACK)}{back.label}
