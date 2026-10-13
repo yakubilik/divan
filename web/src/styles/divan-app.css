@@ -20,6 +20,8 @@
 .dv-topline a.dv-word{display:inline-flex;align-items:center;gap:8px}
 .dv-topline a.dv-word img{display:block;flex:none;width:34px;height:34px}
 .dv-topline .sys .dv-btn--ghost[aria-current="page"]{color:var(--ink)}
+.dv-topline-lead{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.dv-topline-lead .dv-back{margin-right:auto}
 
 /* §5: the chips under the Composer, on one row with the microphone and send;
    wrapped on a narrow screen. */
@@ -251,6 +253,8 @@
   .dv-chatpane>.dv-chatlist{width:100%!important;height:auto!important;max-height:40vh;border-right:none!important;border-bottom:1px solid var(--hairline)}
   .dv-greet{font-size:38px;line-height:40px}
   .dv-topline{gap:8px}
+  /* The list is above its chat here, not beside it: nothing to line up with. */
+  .dv-topline-lead{width:auto!important}
   .dv-topline .sys{gap:4px}
   .dv-topline .sys .sys-word{display:none}
   /* Five things and the bell on 350px: no rules between them, tighter buttons,

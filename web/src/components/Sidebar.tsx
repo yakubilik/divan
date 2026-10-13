@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { C, R, SHADOW } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
 import { ago, bareTitle, uptime } from '../lib/format';
-import { hostAddr, useFleet, type HostSlot } from '../lib/fleet';
+import { hostAddr, hostName, useFleet, type HostSlot } from '../lib/fleet';
 import { createGroup, deleteChat, deleteGroup, renameGroup, updateChat } from '../lib/actions';
 import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag, setSectionDrag } from '../lib/dnd';
 import { DeleteChatDialog } from './ChatMenu';
@@ -62,7 +62,7 @@ export function ProviderMark({ provider, dim, size = 30 }: { provider: string; d
 }
 
 function hostDetail(slot: HostSlot): string {
-  if (slot.status === 'online') return `online · :${hostAddr(slot.cfg).port}`;
+  if (slot.status === 'online') return 'online';
   if (slot.status === 'connecting') return 'connecting…';
   if (slot.status === 'unauthorized') return refusalText(slot.refusal).short;
   return slot.lastOnline ? `offline · ${ago(slot.lastOnline / 1000)}` : 'offline';
@@ -89,10 +89,12 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
     );
   }
 
+  const port = !allHosts && online ? hostAddr(slot.cfg).port : null;
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: R.card, background: C.bg, overflow: 'hidden' }}>
       <button
         type="button" onClick={() => many && setOpen((o) => !o)}
+        data-host-card aria-expanded={many ? open : undefined}
         style={{
           display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px',
           background: 'transparent', border: 'none',
@@ -104,7 +106,7 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
           <div style={{
             fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
             overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{allHosts ? ALL_LABEL : (slot.info?.name || slot.cfg.name)}</div>
+          }} data-host-name>{allHosts ? ALL_LABEL : hostName(slot)}</div>
           <div style={{
             fontSize: 11, color: C.mute, display: 'flex', alignItems: 'center', gap: 5, marginTop: 2,
           }}>
@@ -120,9 +122,16 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
             >
               {allHosts ? `${order.length} computers · ${onlineCount} online` : hostDetail(slot)}
             </span>
+            {port != null && <span style={{ ...mono, fontSize: 10, color: C.faint, flexShrink: 0 }}>:{port}</span>}
           </div>
         </div>
-        {many && <Icon path={open ? P.chevronDown : P.chevronRight} size={13} color={C.faint} />}
+        {/* Its one affordance: a caret, because what it opens is a list under
+            it. With one computer there is nothing to open and nothing drawn. */}
+        {many && (
+          <span style={{ display: 'flex', transform: open ? 'rotate(180deg)' : undefined }}>
+            <Icon path={P.chevronDown} size={13} color={C.faint} />
+          </span>
+        )}
       </button>
       {/* Only worth offering with more than one computer paired: with one, the
           merged list and that computer's list are the same list. */}
@@ -157,12 +166,24 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
             <span style={{
               flex: 1, fontSize: 12, color: C.text2, whiteSpace: 'nowrap',
               overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>{s.info?.name || s.cfg.name}</span>
+            }}>{hostName(s)}</span>
             <span style={{ fontSize: 11, color: C.faint }}>{hostDetail(s).split(' · ')[0]}</span>
           </button>
         );
       })}
     </div>
+  );
+}
+
+/** Hide or show the chat list: a panel icon, drawn like the top line's other
+ *  icons. Hiding is on the top line over the list; showing is on the rail. */
+export function ListToggle({ shown, onClick }: { shown: boolean; onClick: () => void }) {
+  const label = shown ? 'Hide the chat list' : 'Show the chat list';
+  return (
+    <button type="button" className="dv-icon-btn dv-hit" onClick={onClick}
+      title={`${label} (⌘B)`} aria-label={label} data-list-toggle={shown ? 'hide' : 'show'}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d={shown ? P.panelLeft : P.panelLeftOpen} /></svg>
+    </button>
   );
 }
 
@@ -434,16 +455,8 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         padding: '8px 0', height: '100%',
       }}>
-        <button
-          type="button" onClick={() => onCollapse?.(false)} title="Show the chat list" aria-label="Show the chat list"
-          style={{
-            width: 32, height: 32, borderRadius: R.btn, cursor: 'pointer',
-            background: 'transparent', border: `1px solid ${C.border}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <Icon path={P.chevronRight} size={14} color={C.mute} />
-        </button>
+        {/* The same quiet icon as the top line's hide control, opened. */}
+        <ListToggle shown={false} onClick={() => onCollapse?.(false)} />
         <div style={{ flex: 1 }} />
         <button
           type="button" onClick={onNewChat} title="New chat" aria-label="New chat"
@@ -468,26 +481,14 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
       display: 'flex', flexDirection: 'column', height: '100%',
     }}>
       {project ? <div style={{ height: 8, flexShrink: 0 }} /> : (
-      <div style={{ padding: '8px 8px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <HostCard
-            hosts={hosts} order={order} focus={focus} allHosts={fleetWide}
-            onFocus={(k) => { setAllHosts(false); setFocus(k); }}
-            onAll={() => setAllHosts(true)}
-          />
-        </div>
-        {onCollapse && (
-          <button
-            type="button" onClick={() => onCollapse(true)} title="Hide the chat list" aria-label="Hide the chat list"
-            style={{
-              width: 30, height: 30, flexShrink: 0, borderRadius: R.btn, cursor: 'pointer',
-              background: 'transparent', border: `1px solid ${C.border}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Icon path={P.chevronLeft} size={14} color={C.mute} />
-          </button>
-        )}
+      // The card alone, the whole width: hiding the list is on the top line
+      // above it (`ListToggle`), not a second button beside the card.
+      <div style={{ padding: '8px 8px 0' }} data-sidebar-head>
+        <HostCard
+          hosts={hosts} order={order} focus={focus} allHosts={fleetWide}
+          onFocus={(k) => { setAllHosts(false); setFocus(k); }}
+          onAll={() => setAllHosts(true)}
+        />
       </div>
       )}
 
