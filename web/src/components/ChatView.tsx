@@ -1,6 +1,6 @@
 import type { ApprovalResponse } from '../lib/approval-input';
 import { useEffect, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, R, SHADOW, T } from '../lib/theme';
 import { Chip, Dot, Icon, P, Pulse, Spinner, mono, Empty } from '../ui/kit';
 import { Timeline, type TicketLink } from './Timeline';
 import { ChatComposer } from './ChatComposer';
@@ -90,9 +90,64 @@ function TitleField({ chat, onRename }: {
   );
 }
 
-function Header({ chat, groupName, count, accountLabel, accountLimits, context, now,
+/** A product as the chat's head needs it: the name it is written by and the
+ *  key its page is addressed by. */
+export interface ChatProject { name: string; key: string }
+
+/** The product the chat is filed under, written large in the middle of the
+ *  bar, and the box a press on it opens — drawn the way the Inbox's is. One
+ *  row for now: the product's own page. Outside click and Escape close it. */
+function ProjectTitle({ name, onDashboard }: { name: string; onDashboard: () => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('mousedown', away);
+    window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('mousedown', away); window.removeEventListener('keydown', esc); };
+  }, [open]);
+  return (
+    <div ref={box} className="dv-chatproject" data-chat-project={name} style={{ position: 'relative' }}>
+      <button
+        type="button" data-chat-project-name title={name} aria-haspopup="menu" aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: 'block', maxWidth: '100%', padding: '2px 10px', margin: 0, cursor: 'pointer',
+          background: open ? C.surface2 : 'transparent', border: 'none', borderRadius: R.btn,
+          fontSize: 20, fontWeight: 700, lineHeight: '28px', letterSpacing: '-0.01em', color: C.text,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >{name}</button>
+      {open && (
+        <div role="menu" aria-label={name} style={{
+          position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 'calc(100% + 8px)',
+          zIndex: 40, minWidth: 200, borderRadius: 14, background: T.s1, boxShadow: SHADOW.drawer, padding: 6,
+        }}>
+          <button
+            type="button" role="menuitem" data-chat-project-dashboard
+            onClick={() => { setOpen(false); onDashboard(); }}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', background: 'transparent',
+              border: 'none', borderRadius: 8, padding: '10px 14px', color: T.ink, font: 'inherit',
+              fontSize: 14, fontWeight: 600,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = T.s2; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >Dashboard</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Header({ chat, groupName, project, onDashboard, count, accountLabel, accountLimits, context, now,
                  onEdit, onRename, onMenu, onDetails, detailsOpen, onCloseView }: {
   chat: Chat; groupName: string | null; count: number; accountLabel: string | null;
+  /** The product the chat is filed under, and the way to its page. */
+  project?: ChatProject | null;
+  onDashboard?: (key: string) => void;
   /** Every window this chat's sign-in last reported, for the ring. */
   accountLimits: LimitWindow[] | undefined;
   /** …and how full the conversation itself is. */
@@ -110,8 +165,11 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
   const sub = [groupName, chat.cwd.split(/[/\\]/).pop(), `${count} messages`].filter(Boolean).join(' · ');
   const running = chat.status === 'running';
   const awaiting = chat.status === 'awaiting_approval';
+  // With a product in the middle the two sides are given the same width, which
+  // is what keeps it in the middle whatever either of them holds.
+  const centred = !!project && !!onDashboard;
   return (
-    <div className="dv-chathead" style={{
+    <div className={centred ? 'dv-chathead dv-chathead--project' : 'dv-chathead'} style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
       borderBottom: `1px solid ${C.border}`, flexShrink: 0, position: 'relative',
     }}>
@@ -132,6 +190,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
           </>}
         </div>
       </div>
+      {centred && <ProjectTitle name={project.name} onDashboard={() => onDashboard(project.key)} />}
       <div className="dv-chatchips" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         {/* Which sign-in is being spent, and the way to another one: this is
             where a person looks when a plan's limit has run out mid-chat. */}
@@ -259,11 +318,15 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
 /** What is attached but not sent yet. A picture is shown as the picture, at the
  *  size a thumbnail wants to be — a file name is not a preview, and the whole
  *  point of attaching a screenshot is to see that it is the right one. */
-export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending, filedUnder, tickets, onCloseView }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending, filedUnder, project, onDashboard, tickets, onCloseView }: {
   chat: Chat | null;
   /** The product Hermes filed this conversation under, as the thin rule over it
    *  (HANDOVER §4.8). Null where nothing claims it. */
   filedUnder?: string | null;
+  /** The product the chat is filed under, for the middle of the head, and
+   *  what its Dashboard row does. */
+  project?: ChatProject | null;
+  onDashboard?: (key: string) => void;
   /** Where a card this conversation filed opens. */
   tickets?: TicketLink | null;
   /** Put the chat away where it is read inside a product's page: an X beside
@@ -337,7 +400,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Header
-          chat={chat} groupName={groupName} count={msgCount} accountLabel={accountLabel}
+          chat={chat} groupName={groupName} project={project} onDashboard={onDashboard} count={msgCount} accountLabel={accountLabel}
           accountLimits={accountLimits} now={now} onRename={(title) => onUpdate({ title })}
           context={contextUse(log.items.filter((i) => i.kind === 'turn') as any[], liveContext)}
           onEdit={onEdit} onMenu={() => { setDetails(false); setMenu(true); }}
