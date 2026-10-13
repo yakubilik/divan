@@ -135,26 +135,28 @@ export function ShellPane({ name, visible, via = client }: {
       </View>
       <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false}
         style={{ flexGrow: 0 }}
-        contentContainerStyle={{ gap: 6, paddingHorizontal: 8, paddingVertical: 6 }}>
-        {KEY_BAR.map((k) => {
-          const on = k.key === 'ctrl' && !!bridge?.ctrl;
-          return (
-            <Pressable key={k.key} accessibilityRole="button" accessibilityLabel={k.name}
-              accessibilityState={k.key === 'ctrl' ? { selected: on } : undefined}
-              onPress={() => { Haptics.selectionAsync().catch(() => {}); bridge?.key(k.key); }}
-              style={({ pressed }) => ({ minWidth: 40, height: 34, paddingHorizontal: 10, borderRadius: 8,
-                alignItems: 'center', justifyContent: 'center',
-                backgroundColor: on ? TERM_THEME.cursor : pressed ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)' })}>
-              <Text mono style={{ fontSize: 14, color: on ? TERM_THEME.background : TERM_THEME.foreground }}>{k.label}</Text>
-            </Pressable>
-          );
-        })}
-        <Pressable accessibilityRole="button" accessibilityLabel={T('tmHideKeyboard')}
-          onPress={() => { bridge?.blur(); Keyboard.dismiss(); }}
-          style={{ minWidth: 40, height: 34, paddingHorizontal: 10, borderRadius: 8, alignItems: 'center',
-                   justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' }}>
-          <Text style={{ fontSize: 14, color: TERM_THEME.foreground }}>⌨︎↓</Text>
-        </Pressable>
+        contentContainerStyle={{ paddingHorizontal: 8, paddingVertical: 6 }}>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {KEY_BAR.map((k) => {
+            const on = k.key === 'ctrl' && !!bridge?.ctrl;
+            return (
+              <Pressable key={k.key} accessibilityRole="button" accessibilityLabel={k.name}
+                accessibilityState={k.key === 'ctrl' ? { selected: on } : undefined}
+                onPress={() => { Haptics.selectionAsync().catch(() => {}); bridge?.key(k.key); }}
+                style={({ pressed }) => ({ minWidth: 40, height: 34, paddingHorizontal: 10, borderRadius: 8,
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: on ? TERM_THEME.cursor : pressed ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)' })}>
+                <Text mono style={{ fontSize: 14, color: on ? TERM_THEME.background : TERM_THEME.foreground }}>{k.label}</Text>
+              </Pressable>
+            );
+          })}
+          <Pressable accessibilityRole="button" accessibilityLabel={T('tmHideKeyboard')}
+            onPress={() => { bridge?.blur(); Keyboard.dismiss(); }}
+            style={{ minWidth: 40, height: 34, paddingHorizontal: 10, borderRadius: 8, alignItems: 'center',
+                     justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' }}>
+            <Text style={{ fontSize: 14, color: TERM_THEME.foreground }}>⌨︎↓</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );

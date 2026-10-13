@@ -210,7 +210,11 @@ function daemon() {
     await setSize(390, 620);
     bridge.fit();
     await sleep(400);
-    await typeLine('clear; echo hi; ls -d /usr/bin');
+    await typeLine('clear');
+    await sleep(400);
+    await typeLine('echo hi');
+    await sleep(400);
+    await typeLine('ls -d /usr/bin');
     await sleep(800);
     if (shot) {
       const png = await page('Page.captureScreenshot', { format: 'png' });
