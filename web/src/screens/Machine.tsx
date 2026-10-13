@@ -22,17 +22,22 @@ import { Quota } from './Quota';
 import { Admin } from './Admin';
 import { Settings } from './Settings';
 import { Fleet } from './Fleet';
-import { Terminal } from './Terminal';
+import { Terminal, type TerminalView } from './Terminal';
 import { Projects } from './Projects';
 import { Agents } from './Agents';
 import { Screen } from './Screen';
 import { Update } from './Update';
-import { Preferences } from './Preferences';
+import { Preferences, type SectionId } from './Preferences';
 import type { Agent } from '../lib/protocol';
 
 export interface MachineProps {
   view: View;
-  onView: (view: View) => void;
+  /** A page of this place, and which part of it where it has parts. */
+  onView: (view: View, part?: string | null) => void;
+  /** Which part of the page is open (`Place.sub`): the Terminal's wall, a
+   *  section of one computer's settings. Held above, in the address. */
+  sub?: string | null;
+  onSub?: (part: string | null) => void;
   /** The merged fleet, for the one thing this place says out loud: whether every
    *  machine is answering. */
   fleet: DivanView;
@@ -41,8 +46,9 @@ export interface MachineProps {
   onNewChatIn: (cwd: string) => void;
   onStartChat: (agent: Agent, accountId: string | null) => void;
   onPeek: (hostKey: string, chatId: string) => void;
-  /** A ticket a chat's card link asked for, opened on the Terminal tab. */
+  /** The ticket open on the queue's wall: a chat's card link, or a tile. */
   ticket?: number | null;
+  onTicket?: (id: number | null) => void;
 }
 
 /** The note under the title of the column: Web15 W12's `One machine is
@@ -183,19 +189,31 @@ function Page(props: MachineProps) {
   const { view, onView, fleet, onOpenChat, onNewChat, onNewChatIn, onStartChat, onPeek } = props;
   const setFocus = useFleet.getState().setFocus;
   if (view === 'executors') return <Executors view={fleet} onView={onView} />;
-  if (view === 'terminal') return <Terminal key={props.ticket ?? 'wall'} onPeek={onPeek} onNewChat={onNewChat} ticket={props.ticket} />;
+  if (view === 'terminal') {
+    return (
+      <Terminal onPeek={onPeek} onNewChat={onNewChat} ticket={props.ticket}
+        source={props.onSub ? (props.sub ?? 'shell') as TerminalView : undefined}
+        onSource={props.onSub && ((s) => props.onSub!(s === 'shell' ? null : s))}
+        onTicket={props.onTicket} />
+    );
+  }
   if (view === 'screen') return <Screen />;
   if (view === 'accounts') {
     return <Accounts now={fleet.now} onView={onView} onFocus={setFocus} />;
   }
   if (view === 'quota') return <Quota view={fleet} />;
   if (view === 'admin') return <Admin now={fleet.now} onView={onView} />;
-  if (view === 'settings') return <Settings onView={onView} />;
+  if (view === 'settings') return <Settings onView={onView} onSection={(s) => onView('preferences', s)} />;
   if (view === 'fleet') return <Fleet onOpenChat={onOpenChat} onNewChat={onNewChat} />;
   if (view === 'projects') return <Projects onNewChatIn={onNewChatIn} onOpenChat={onOpenChat} />;
   if (view === 'agents') return <Agents onStartChat={onStartChat} />;
   if (view === 'update') return <Update />;
-  if (view === 'preferences') return <Preferences />;
+  if (view === 'preferences') {
+    return props.onSub
+      ? <Preferences section={(props.sub ?? 'accounts') as SectionId}
+          onSection={(s) => props.onSub!(s === 'accounts' ? null : s)} />
+      : <Preferences />;
+  }
   // Every other view in this place is the machines themselves: it is the first
   // row and the page this place opens on, so it is also the answer to a view
   // that has drifted.

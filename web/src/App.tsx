@@ -21,7 +21,10 @@ import {
   MACHINE_ASIDE, MACHINE_ROWS, PLACE_LABEL, PLACE_VIEW, chatNeedsYou, placeOf,
   updateWaiting, type View,
 } from './lib/shell';
-import { HOME, pathOf, placeOfState, readPlace, samePlace, searchOf, type Place } from './lib/nav';
+import {
+  ABOUT_ONE, HOME, canonical, pathOf, placeOfState, readPlace, sameButMachine, samePlace, searchOf,
+  type Place,
+} from './lib/nav';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
 import { InboxBell } from './components/Inbox';
 import { Report } from './components/Report';
@@ -67,7 +70,10 @@ export function App() {
   const [sel, setSel] = useState<Selection | null>(null);
   /** The Chat place with no chat selected on purpose: New chat was pressed
    *  there, so its middle is the empty composer rather than the newest chat. */
-  const [fresh, setFresh] = useState(false);
+  const [fresh, setFresh] = useState(opened.current.view === 'chats' && opened.current.sub === 'new');
+  /** Which part of a Machine page is open: the Terminal's wall, a section of
+   *  one computer's settings. In the address with the page (`Place.sub`). */
+  const [sub, setSub] = useState<string | null>(opened.current.view === 'chats' ? null : opened.current.sub);
   const [newChat, setNewChat] = useState<{
     cwd?: string; groupId?: string; agent?: { agent: Agent; accountId: string | null };
     /** Started from a product's own page: on the computer that product is on,
@@ -88,7 +94,7 @@ export function App() {
   const [peek, setPeek] = useState(false);
   /** A ticket a card link in a chat asked for, with no card on any board: it is
    *  read on the queue's wall under Machine › Terminal. */
-  const [ticket, setTicket] = useState<number | null>(null);
+  const [ticket, setTicket] = useState<number | null>(opened.current.ticket);
   /** …and the chat that ticket was asked for from, so the way back is to it. */
   const [ticketFrom, setTicketFrom] = useState<Place | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -170,9 +176,35 @@ export function App() {
     if (key) { cardHonoured.current = true; setCard(key); }
   }, [card, divan.cards, cardKey]);
 
+  /** A computer's name, as a page about it says it in its address. */
+  const nameOf = (key: string | null) => {
+    const s = key ? fleet.hosts[key] : null;
+    return s ? (s.info?.name || s.cfg.name || key) : null;
+  };
+  /** …and back: the computer an address names, if one paired here has it. */
+  const keyOfName = useCallback((name: string | null) => {
+    if (!name) return null;
+    const { order, hosts } = useFleet.getState();
+    return order.find((k) => (hosts[k]?.info?.name || hosts[k]?.cfg.name || k) === name) ?? null;
+  }, []);
+  /** The computer the opened address named, until the fleet can say which
+   *  one that is: until then it is still the address's, not whichever one
+   *  happens to be in focus. */
+  const [wantMachine, setWantMachine] = useState<string | null>(opened.current.machine);
+  useEffect(() => {
+    if (!wantMachine || !fleet.ready) return;
+    const key = keyOfName(wantMachine);
+    if (key && useFleet.getState().focus !== key) fleet.setFocus(key);
+    setWantMachine(null);
+  }, [wantMachine, fleet.ready, fleet.order, keyOfName]);
+  /** Which computer the page is about, where that is worth saying. */
+  const machine = ABOUT_ONE.includes(view) && fleet.order.length > 1
+    ? (wantMachine ?? nameOf(fleet.focus)) : null;
+
   /** Where the panel is, as one value: what goes in the address, and what the
-   *  back button puts back. */
-  const where: Place = useMemo(() => ({
+   *  back button puts back. In the one shape its address reads back as
+   *  (`canonical`), so a reload of it is the same value. */
+  const where: Place = useMemo(() => canonical({
     view, project,
     // A product's page with no chat open on it is the product's page, whatever
     // was open a moment ago: one place, so one entry.
@@ -188,7 +220,11 @@ export function App() {
     // popped-out window is told which machine, because it may be opened before
     // that machine has answered.
     host: opened.current.host && opened.current.chat === sel?.chatId ? opened.current.host : null,
-  }), [view, project, tab, card, sel?.chatId]);
+    sub: view === 'chats' ? (fresh && !sel ? 'new' : null) : sub,
+    ticket, machine,
+  }), [view, project, tab, card, sel?.chatId, fresh, sub, ticket, machine]);
+  const whereRef = useRef(where);
+  whereRef.current = where;
 
   /** The entry the browser is on. Compared rather than trusted: a render for a
    *  board poll must not push a second copy of the page you are already on. */
@@ -200,6 +236,9 @@ export function App() {
   const [cameFrom, setCameFrom] = useState<Place | null>(null);
   /** The opened address has been written back in this build's shape. */
   const settled = useRef(false);
+  /** Set by a change that takes the entry it is on over rather than adding
+   *  one: a chat deleted from under you is not a page Back should return to. */
+  const replacing = useRef(false);
 
   useEffect(() => {
     if (typeof history === 'undefined') return;
@@ -211,7 +250,8 @@ export function App() {
     if (!settled.current) {
       settled.current = true;
       shown.current = where;
-      if (location.pathname + location.search !== url) history.replaceState(where, '', url);
+      // …carrying its place, as every entry after it does.
+      history.replaceState(where, '', url);
       return;
     }
     if (samePlace(shown.current, where)) return;
@@ -219,9 +259,13 @@ export function App() {
     // from, so its Back is the browser's own Back and lands there. A card the
     // panel was opened on has no such page, and its Back is its product's board.
     if (where.card && where.card !== shown.current.card) setCameFrom(shown.current);
-    if (landing.current && where.chat && !shown.current.chat) history.replaceState(where, '', url);
+    // Another computer picked on a page about one is that page still.
+    const over = replacing.current || sameButMachine(shown.current, where)
+      || (landing.current && !!where.chat && !shown.current.chat);
+    if (over) history.replaceState(where, '', url);
     else history.pushState(where, '', url);
     landing.current = false;
+    replacing.current = false;
     shown.current = where;
   }, [where]);
 
@@ -262,7 +306,7 @@ export function App() {
   const back = view === 'terminal' && ticket != null && ticketFrom
     ? { label: placeName(ticketFrom, divan), onBack: () => history.back() }
     : view !== 'overview'
-    ? { label: 'Dashboard', onBack: () => setView('overview') }
+    ? { label: 'Dashboard', onBack: () => go(HOME) }
     : project && card
       ? (from
         ? { label: placeName(from, divan), onBack: () => history.back() }
@@ -292,27 +336,56 @@ export function App() {
 
   // …and the other direction: the browser hands an entry back, and the panel
   // is drawn where that entry says. Never a push, or Back would be a loop.
+  const cardKeyRef = useRef(cardKey);
+  cardKeyRef.current = cardKey;
+
+  /** The panel, drawn where a place says — every field of it, so that what is
+   *  on screen and what the address says cannot drift apart. A move made with
+   *  this pushes one entry (the effect above); Back is this with the entry the
+   *  browser handed back. */
+  const go = useCallback((to: Place) => {
+    setView(to.view);
+    setProject(to.project);
+    setTab(to.tab as ProjectTab);
+    setCard(cardKeyRef.current(to.card) ?? (to.card || null));
+    setSub(to.view === 'chats' ? null : to.sub);
+    setTicket(to.ticket);
+    setPeek(false);
+    const key = keyOfName(to.machine);
+    if (key && useFleet.getState().focus !== key) useFleet.getState().setFocus(key);
+    const host = to.host ?? hostOfChat(to.chat);
+    if (host && to.chat) select(host, to.chat);
+    // The Chat place with `new` in its entry is the empty composer New chat
+    // left there, not a place to land on the newest chat again.
+    else if (to.view === 'chats' || to.chat) { setSel(null); setFresh(to.sub === 'new'); }
+  }, [select, keyOfName, hostOfChat]);
+
+  /** A page of the Machine place or a place of the line, as a press on its
+   *  button means it: that page, at its own first part. The Chat place keeps
+   *  the chat it had open. */
+  const goView = useCallback((v: View, part: string | null = null) => {
+    if (v === 'chats') { setView('chats'); setPeek(false); return; }
+    go({ ...HOME, view: v, sub: part });
+  }, [go]);
+
+  // …and the other direction: the browser hands an entry back, and the panel
+  // is drawn where that entry says. Never a push, or Back would be a loop.
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
-      const to: Place = (e.state && typeof e.state === 'object' && 'view' in e.state)
+      const to: Place = canonical((e.state && typeof e.state === 'object' && 'view' in e.state)
         ? placeOfState(e.state as Partial<Place>)
-        : readPlace(location.pathname, location.search);
+        : readPlace(location.pathname, location.search));
+      // An entry that draws what is already drawn changes nothing, and there
+      // would be no write for the flag to be spent on.
+      if (samePlace(to, whereRef.current)) { shown.current = to; return; }
       going.current = true;
       shown.current = to;
-      setView(to.view);
-      setProject(to.project);
-      setTab(to.tab as ProjectTab);
-      setCard(cardKey(to.card));
-      setPeek(false);
-      const host = to.host ?? hostOfChat(to.chat);
-      if (host && to.chat) select(host, to.chat);
-      // The Chat place with no chat in its entry is the empty composer New
-      // chat left there, not a place to land on the newest chat again.
-      else { setSel(null); setFresh(to.view === 'chats'); }
+      setTicketFrom(null);
+      go(to);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [select]);
+  }, [go]);
 
   const scopedTo = projectIn(divan, project);
 
@@ -332,7 +405,7 @@ export function App() {
   useEffect(() => { if (view !== 'chats') setFresh(false); }, [view]);
 
   // A ticket handed to the Terminal tab is for that one visit.
-  useEffect(() => { if (view !== 'terminal') setTicket(null); }, [view]);
+  useEffect(() => { if (view !== 'terminal') { setTicket(null); setTicketFrom(null); } }, [view]);
 
   const open = useCallback((hostKey: string, chatId: string) => {
     select(hostKey, chatId);
@@ -372,11 +445,9 @@ export function App() {
       setTimeout(() => firstWordRef.current?.focus(), 0);
       return;
     }
-    setView('overview');
-    setProject(null);
-    setCard(null);
+    go(HOME);
     setTimeout(() => composerRef.current?.focus(), 0);
-  }, []);
+  }, [go]);
 
   /** Ask: a chat with these words in it, read on its product's page — the
    *  product's other chats beside it. The product is the one the Project chip
@@ -402,11 +473,8 @@ export function App() {
     const found = n.ticket == null ? null
       : divan.cards.find((c) => c.host === n.host && c.ustabasi_id === n.ticket);
     if (!found) { setReportOf(n); return; }
-    setView('overview');
-    setProject(found.projectKey);
-    setTab('overview');
-    setCard(`${found.host}:${found.id}`);
-  }, [divan.cards]);
+    go({ ...HOME, project: found.projectKey, tab: 'board', card: `${found.host}:${found.id}` });
+  }, [divan.cards, go]);
   const openNoticeRef = useRef(openNotice);
   openNoticeRef.current = openNotice;
 
@@ -573,9 +641,11 @@ export function App() {
   // The chat surface is drawn in two places — as the chat screen, and held over
   // terminal mode — and both are looking at the same selection. One set of
   // handlers, so what the overlay does cannot drift from what the screen does.
-  const popOut = () => sel && window.open(
-    `${location.pathname}?host=${encodeURIComponent(sel.hostKey)}&chat=${encodeURIComponent(sel.chatId)}`,
-    '_blank', 'width=1100,height=860');
+  const popOut = () => {
+    if (!sel) return;
+    const to: Place = { ...HOME, view: 'chats', chat: sel.chatId, host: sel.hostKey };
+    window.open(pathOf(to) + searchOf(to), '_blank', 'width=1100,height=860');
+  };
 
   /** The product this conversation is filed under, by the name the board
    *  gives it. */
@@ -589,13 +659,11 @@ export function App() {
       const found = divan.cards.find((c) => c.ustabasi_id === id);
       setPeek(false);
       if (found) {
-        setView('overview'); setProject(found.projectKey); setTab('board');
-        setCard(`${found.host}:${found.id}`);
+        go({ ...HOME, project: found.projectKey, tab: 'board', card: `${found.host}:${found.id}` });
         return;
       }
-      setTicket(id);
+      go({ ...HOME, view: 'terminal', sub: 'ustabasi', ticket: id });
       setTicketFrom(where);
-      setView('terminal');
     },
     describe: (id: number) => {
       const found = divan.cards.find((c) => c.ustabasi_id === id);
@@ -640,6 +708,8 @@ export function App() {
     onDelete: () => {
       if (!sel) return;
       const { hostKey, chatId } = sel;
+      // The chat is gone, and so is its page: Back is not to a chat that is not there.
+      replacing.current = true;
       setSel(null);
       setPeek(false);
       deleteChat(hostKey, chatId).catch(() => {});
@@ -653,16 +723,16 @@ export function App() {
       // The three places first, then every page of the third one: the palette is
       // the one list of everywhere you can go, so it says the same thing the
       // shell does and in the same order.
-      { id: 'dashboard', label: PLACE_LABEL.dashboard, hint: 'every product', run: () => setView(PLACE_VIEW.dashboard) },
-      { id: 'chat', label: PLACE_LABEL.chat, hint: slot?.info?.name, run: () => setView(PLACE_VIEW.chat) },
-      { id: 'machine', label: PLACE_LABEL.machine, hint: 'the computers', run: () => setView(PLACE_VIEW.machine) },
+      { id: 'dashboard', label: PLACE_LABEL.dashboard, hint: 'every product', run: () => goView(PLACE_VIEW.dashboard) },
+      { id: 'chat', label: PLACE_LABEL.chat, hint: slot?.info?.name, run: () => goView(PLACE_VIEW.chat) },
+      { id: 'machine', label: PLACE_LABEL.machine, hint: 'the computers', run: () => goView(PLACE_VIEW.machine) },
       // The line's own button: Settings, which is a tab of the Machine place.
-      { id: 'settings-line', label: 'Settings', shortcut: '⌘,', hint: 'the button on the line', run: () => setView('settings') },
+      { id: 'settings-line', label: 'Settings', shortcut: '⌘,', hint: 'the button on the line', run: () => goView('settings') },
       ...MACHINE_ROWS.map((row) => ({
         id: row.view,
         label: `${PLACE_LABEL.machine} › ${row.label}`,
         shortcut: row.shortcut,
-        run: () => setView(row.view),
+        run: () => goView(row.view),
       })),
       // …and the pages that have no row of their own, by name: they are opened
       // from the page above them, and a page you can only reach by remembering
@@ -670,7 +740,7 @@ export function App() {
       ...MACHINE_ASIDE.map((aside) => ({
         id: aside.view,
         label: `${PLACE_LABEL.machine} › ${aside.label}`,
-        run: () => setView(aside.view),
+        run: () => goView(aside.view),
       })),
       {
         id: 'theme',
@@ -685,7 +755,7 @@ export function App() {
         id: 'all-hosts',
         label: fleet.allHosts ? 'Show one computer' : 'Show every computer',
         hint: fleet.allHosts ? (slot?.info?.name ?? undefined) : `${fleet.order.length} paired`,
-        run: () => { fleet.setAllHosts(!fleet.allHosts); setView(PLACE_VIEW.chat); },
+        run: () => { fleet.setAllHosts(!fleet.allHosts); goView(PLACE_VIEW.chat); },
       });
     }
     const running = fleet.order.flatMap((k) =>
@@ -700,7 +770,7 @@ export function App() {
       });
     }
     return list;
-  }, [fleet.hosts, fleet.order, fleet.allHosts, slot?.info?.name, theme.scheme, theme.choice, compose]);
+  }, [fleet.hosts, fleet.order, fleet.allHosts, slot?.info?.name, theme.scheme, theme.choice, compose, goView]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -709,8 +779,8 @@ export function App() {
       if (e.key === 'k') { e.preventDefault(); setPalette((p) => !p); }
       else if (e.key === 'b') { e.preventDefault(); setRailTo('toggle'); }
       else if (e.key === 'n') { e.preventDefault(); compose(); }
-      else if (e.key === 'f') { e.preventDefault(); setView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
-      else if (e.key === ',') { e.preventDefault(); setView('settings'); }
+      else if (e.key === 'f') { e.preventDefault(); goView('chats'); setTimeout(() => searchRef.current?.focus(), 0); }
+      else if (e.key === ',') { e.preventDefault(); goView('settings'); }
       // No digit is taken. ⌘/Ctrl with 1–9 picks a tab and with 0 resets the
       // zoom, and those are the browser's: the pages they used to open here are
       // in the palette and on the Machine place's own tabs.
@@ -724,7 +794,7 @@ export function App() {
       <>
         <style>{themeCss()}</style>
         <style>{KEYFRAMES}</style>
-        <Onboarding onPaired={() => setView(PLACE_VIEW.dashboard)} />
+        <Onboarding onPaired={() => go(HOME)} />
       </>
     );
   }
@@ -734,8 +804,8 @@ export function App() {
       <style>{themeCss()}</style>
       <style>{KEYFRAMES}</style>
       <Shell
-        view={view} onView={setView} fleet={divan} dots={dots}
-        onHome={() => { setView('overview'); chooseProject(null); }}
+        view={view} onView={goView} fleet={divan} dots={dots}
+        onHome={() => go(HOME)}
         back={back}
         inbox={<InboxBell onOpen={openNotice} />}
       >
@@ -815,7 +885,9 @@ export function App() {
 
         {place === 'machine' && (
           <Machine
-            view={view} onView={setView} fleet={divan}
+            view={view} onView={goView} fleet={divan}
+            sub={sub} onSub={(part) => setSub(part)}
+            onTicket={(id) => { setTicketFrom(null); setTicket(id); }}
             onOpenChat={open}
             onNewChat={compose}
             onNewChatIn={(cwd) => setNewChat({ cwd })}

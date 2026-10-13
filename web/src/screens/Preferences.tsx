@@ -52,7 +52,7 @@ function accountName(a: { is_default: boolean; label: string }): string {
   return a.is_default ? t('useDefaultAccount') : a.label;
 }
 
-type SectionId = 'hosts' | 'accounts' | 'defaults' | 'tools' | 'appearance' | 'security' | 'about';
+export type SectionId = 'hosts' | 'accounts' | 'defaults' | 'tools' | 'appearance' | 'security' | 'about';
 
 const SECTIONS: { id: SectionId; label: string; icon: string }[] = [
   { id: 'hosts', label: 'Computers', icon: P.cpu },
@@ -1155,9 +1155,16 @@ export function AppearanceSection() {
  *  reachable by pressing something, and a static render cannot press. Nothing
  *  passes it in the panel — the drawer opens this page on Accounts, which is
  *  the one that is usually the reason for coming. */
-export function Preferences({ section: opening = 'accounts' }: { section?: SectionId }) {
+export function Preferences({ section: opening = 'accounts', onSection }: {
+  section?: SectionId;
+  /** Given, the section is the panel's — in the address, so Back and a reload
+   *  come back to it — and `section` is the one on screen. */
+  onSection?: (section: SectionId) => void;
+}) {
   const { hosts, order, focus } = useFleet();
-  const [section, setSection] = useState<SectionId>(opening);
+  const [own, setOwn] = useState<SectionId>(opening);
+  const section = onSection ? opening : own;
+  const setSection = onSection ?? setOwn;
   const slot = focus ? hosts[focus] : null;
   const online = slot?.status === 'online';
 

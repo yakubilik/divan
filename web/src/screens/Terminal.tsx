@@ -479,6 +479,12 @@ export interface TerminalProps {
   ticket?: number | null;
   /** Which view to open on, where it is not the shell. */
   view?: TerminalView;
+  /** Given, which view is on screen is the panel's — in the address — and
+   *  `source` is the one shown. */
+  source?: TerminalView;
+  onSource?: (source: TerminalView) => void;
+  /** …and the same for the ticket open on the queue's wall. */
+  onTicket?: (id: number | null) => void;
 }
 
 /** Which view this screen is showing: a shell, or one of the two walls. The
@@ -501,12 +507,14 @@ function SourceToggle({ value, onChange }: { value: Source; onChange: (s: Source
   );
 }
 
-export function Terminal({ onPeek, onNewChat, ticket = null, view }: TerminalProps) {
+export function Terminal({ onPeek, onNewChat, ticket = null, view, source: held, onSource, onTicket }: TerminalProps) {
   const { hosts, order } = useFleet();
   const logs = useLogs((s) => s.logs);
   // A ticket handed in (a card link in a chat) is read on the queue's own wall;
   // otherwise the page opens on a shell.
-  const [source, setSource] = useState<Source>(view ?? (ticket != null ? 'ustabasi' : 'shell'));
+  const [own, setOwn] = useState<Source>(view ?? (ticket != null ? 'ustabasi' : 'shell'));
+  const source = onSource && held ? held : own;
+  const setSource = onSource ?? setOwn;
   const [filter, setFilter] = useState<Phase | 'all'>('all');
   const [query, setQuery] = useState('');
   const [wall, setWall] = useState<string[]>(() => loadKeys(WALL_KEY));
@@ -648,7 +656,7 @@ export function Terminal({ onPeek, onNewChat, ticket = null, view }: TerminalPro
   // The shell and the other wall. Placed after every hook above, so switching
   // is not a change in how many hooks this component runs.
   if (source === 'shell') return <Shells header={toggle} />;
-  if (source === 'ustabasi') return <Ustabasi header={toggle} open={ticket} />;
+  if (source === 'ustabasi') return <Ustabasi header={toggle} open={ticket} onOpen={onTicket} />;
 
   return (
     <div style={{
