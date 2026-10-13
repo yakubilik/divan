@@ -207,7 +207,11 @@ const go = {
   word: () => click(wordBtn() ?? header()?.querySelector('button.dv-back[aria-label="Back to Dashboard"]')),
   chats: () => click(btn('Chats', header())),
   settings: () => click(btn('Settings', header())),
-  machines: () => click(header()?.querySelector('button[data-sys="machines"]')),
+  // The count opens the machines box; its foot, All machines, is the page.
+  machines: async () => {
+    await click(header()?.querySelector('button[data-sys="machines"]'));
+    await click(doc.querySelector('[role="dialog"][aria-label="Machines"] button[data-all-machines]'));
+  },
 };
 
 /** What is drawn, in the words that tell one page from another: the place,
@@ -375,6 +379,10 @@ group('dialogs, popovers and the palette push nothing');
     await click(header().querySelector('[data-inbox]'));
     if (!doc.querySelector('[role="dialog"][aria-label="Inbox"]')) throw new Error('no Inbox');
   }, () => click(header().querySelector('[data-inbox]')));
+  await still('the machines box on the line', async () => {
+    await click(header().querySelector('button[data-sys="machines"]'));
+    if (!doc.querySelector('[role="dialog"][aria-label="Machines"]')) throw new Error('no machines box');
+  }, () => click(header().querySelector('button[data-sys="machines"]')));
   await still('New chat with every option (the palette)', async () => {
     await paletteRun('New chat with every option');
     if (!modal()) throw new Error('no dialog');
@@ -421,7 +429,9 @@ await way('Dashboard (the line\'s left end, from the Chat place)', '/chats/c2', 
 }
 await way('Chats', '/p/quire', '/chats/c1', go.chats);
 await way('Settings', '/chats/c1', '/machine/settings', go.settings);
-await way('the machines count', '/', '/machine/machines', go.machines);
+await way('the machines count › All machines', '/', '/machine/machines', go.machines);
+await way('the Dashboard\'s See all (waiting on you)', '/', '/waiting', () => click(link('See all')));
+await way('Back from waiting on you', '/waiting', '/', () => click(header().querySelector('button.dv-back')));
 await way('an Inbox item', '/chats/c1', '/p/quire/c/k2', async () => {
   await act(async () => { await useInbox.getState().poll(); });
   await click(header().querySelector('[data-inbox]'));
