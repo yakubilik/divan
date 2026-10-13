@@ -131,6 +131,9 @@ const EXTRA = {
     useSpeechRecognitionEvent: () => {},
   },
   'react-native-webview': { WebView: RN.View },
+  // Machine › Terminal lets the phone turn while its shell is shown.
+  'expo-screen-orientation': { lockAsync: () => Promise.resolve(),
+                               OrientationLock: { DEFAULT: 0, LANDSCAPE: 1, PORTRAIT_UP: 2 } },
   'react-native-markdown-display': MARKDOWN,
   'react-native-markdown-display/src/lib/util/cleanupTokens': { cleanupTokens: (t) => t },
   'react-native-markdown-display/src/lib/util/groupTextTokens': { __esModule: true, default: (t) => t },
