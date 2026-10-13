@@ -337,9 +337,13 @@ const place = () => {
   return cur.startsWith('Chats') ? 'Chat'
     : /machines/.test(cur) || cur.startsWith('Settings') ? 'Machine' : cur;
 };
-/** The machines count at the left of the system line, which is the way into
- *  the Machine place. */
+/** The machines count at the left of the system line. A press opens a box of
+ *  the machines; the way into the Machine place is the box's foot. */
 const machinesBtn = () => doc.querySelector('header button[data-sys="machines"]');
+const toMachines = async () => {
+  await click(machinesBtn());
+  await click(doc.querySelector('header [role="dialog"] button[data-all-machines]'));
+};
 /** On the Dashboard itself, unscoped: the page with the greeting on it. */
 const home = () => !!doc.querySelector('h1.dv-greet');
 /** A product's tile on the Dashboard. */
@@ -400,7 +404,7 @@ const goHome = async () => {
 const goMachine = async (label) => {
   const view = MACHINE_ROWS.find((r) => r.label === label).view;
   const tab = MACHINE_TABS.find((t) => t.pages.includes(view));
-  if (place() !== 'Machine') await click(machinesBtn());
+  if (place() !== 'Machine') await toMachines();
   await click(machineTab(tab.label));
   if (tab.pages[0] !== view) await click(doc.querySelector(`nav a[href="/machine/${view}"]`));
 };
@@ -479,7 +483,7 @@ group('the bar');
     landed && !!doc.querySelector('input[name="chat-search"]')
     && text().includes('Webhook retry policy'), `${landed} · ${place()}`);
 
-  await click(machinesBtn());
+  await toMachines();
   ok('…and the Machine place opens on the first row of its list',
     place() === 'Machine' && page() === MACHINE_ROWS[0].label, `${place()} › ${page()}`);
 
@@ -528,8 +532,15 @@ group('the line: Settings, and the machines count');
   const count = machinesBtn();
   ok('the machines count is a button', !!count && /\d+\/\d+\s*machines/.test(count.textContent ?? ''),
     count?.textContent ?? 'none');
+  const at = w.location.pathname;
   await click(count);
-  ok('…and pressing it opens the machines list, with a card for each machine',
+  const box = doc.querySelector('header [role="dialog"][aria-label="Machines"]');
+  ok('…and pressing it opens a box of the machines, and stays on the page',
+    !!box && w.location.pathname === at && page() === 'Settings'
+      && box.querySelectorAll('[data-machine]').length === 1,
+    `${!!box} · ${at} → ${w.location.pathname} · ${page()}`);
+  await click(box.querySelector('button[data-all-machines]'));
+  ok('…and its foot opens the machines list, with a card for each machine',
     w.location.pathname === '/machine/machines' && page() === 'Machines'
       && doc.querySelectorAll('article.dv-machine').length > 0
       && machinesBtn()?.getAttribute('aria-current') === 'page' && nav('Settings')?.getAttribute('aria-current') == null,
@@ -1098,7 +1109,7 @@ group('the sign-in that is expiring is counted before that page is opened');
     seed(useFleet, { hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } } });
   });
   asked.length = 0;
-  await click(machinesBtn());
+  await toMachines();
   await act(async () => {});
   ok('entering the Machine place asks the computer which sign-ins it has',
     asked.some((a) => a.key === 'studio' && a.type === 'account.list'),
@@ -1121,7 +1132,7 @@ group('the sign-in that is expiring is counted before that page is opened');
     seed(useFleet, { hosts: { studio: { ...fakeHost(), accounts: [], loading: {} } } });
   });
   asked.length = 0;
-  await click(machinesBtn());
+  await toMachines();
   for (let i = 0; i < 4; i++) await act(async () => {});
   ok('a computer that refuses the question is asked once and not again',
     asked.filter((a) => a.type === 'account.list').length === 1,
@@ -1269,7 +1280,7 @@ group('chats are filed into groups from the panel');
   await drag(doc.querySelector('[data-section="g1"]'), 'dragover', held);
   await drag(doc.querySelector('[data-section="g1"]'), 'drop', held);
   const now = order();
-  await click(machinesBtn());
+  await toMachines();
   await click(nav('Chats'));
   ok('a heading dragged above another stays there, and the archive stays last',
     was[0] === 'g1' && now[0] === 'project:Hush' && now[1] === 'g1'
