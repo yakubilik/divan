@@ -147,6 +147,10 @@ class Config:
     ])
     idle_disconnect_s: int = 1800
     approval_timeout_s: int = 900
+    # A chat nobody has touched for this many hours is archived by itself
+    # (see Server.archive_quiet): never deleted, never while it is running or
+    # waiting on an answer, and any new message brings it back. 0 is off.
+    auto_archive_h: float = 24
     # Whether a bypass chat still puts the destructive list to the phone. Off
     # is bypass meaning bypass: nothing at all asks.
     bypass_asks: bool = True
@@ -231,6 +235,7 @@ class Config:
             "denied_paths": self.denied_paths,
             "idle_disconnect_s": self.idle_disconnect_s,
             "approval_timeout_s": self.approval_timeout_s,
+            "auto_archive_h": self.auto_archive_h,
             # Written back, not just read: every pairing calls save(), so a
             # setting left out here is one somebody turns off by hand and finds
             # back on the next time they add a device.

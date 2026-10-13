@@ -189,6 +189,13 @@ class ChatSession:
             if found:
                 payload = {**payload, "attachments": attachments.with_peaks(attachments.keep_views(found))}
         if persist:
+            # Something happened here, so an archived chat — archived by hand
+            # or for going quiet — is back in the list, and told so before the
+            # event itself so the list has the chat the event belongs to.
+            chat = self.db.unarchive(self.chat_id)
+            if chat is not None:
+                await self.broadcast({"seq": None, "chat_id": self.chat_id, "event": "chat.updated",
+                                      "data": chat, "ts": time.time()})
             ev = self.db.append_event(self.chat_id, type_, payload)
         else:
             ev = {"seq": None, "chat_id": self.chat_id, "event": type_,
