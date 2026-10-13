@@ -5,10 +5,14 @@ agent can do for you: a dialog that wants a real click, a browser sign-in, an
 installer that asks a question no tool has an answer for. Until now the only way
 through was to walk to the machine. This is the other way.
 
-It is not AnyDesk and is not trying to be. There is no audio, no clipboard sync
-and no file transfer. It is a few frames a second and a pointer — enough to
-press Allow and get out, and deliberately not enough to tempt anyone into
-working this way.
+It is not AnyDesk and is not trying to be. There is no audio and no file
+transfer. It is a few frames a second and a pointer — enough to press Allow and
+get out, and deliberately not enough to tempt anyone into working this way.
+
+The clipboard is the one exception, and only as text: a password manager's
+password or a one-time code has to get onto the machine somehow, and typing it
+character by character from a phone is how typos end up in sign-in forms. It
+sits behind the same switch as the pointer.
 
 More than one monitor is the exception to that, because a machine with two
 screens keeps the dialog you came for on the other one. Displays are listed,
@@ -229,6 +233,77 @@ async def grab_b64(max_w: int = MAX_W, quality: int = QUALITY,
     return {**meta, "jpeg_b64": base64.b64encode(data).decode("ascii"), "bytes": len(data)}
 
 
+
+# ── key tables ───────────────────────────────────────────────────────────────
+# Both platforms' tables live up here rather than inside their own branch so a
+# test on one machine can read the other's. The names are shared, so a client
+# never has to know which machine it is driving: a letter, a digit or a
+# punctuation character is its own name, and ' ' is the space bar — which is
+# what a browser reports for it and what a shortcut like ⌃Space arrives as.
+
+_LETTERS = "abcdefghijklmnopqrstuvwxyz"
+_DIGITS = "0123456789"
+#: Punctuation on a US layout, by the character on the unshifted key.
+PUNCTUATION = "-=[]\\;',./`"
+
+# Windows virtual-key codes. Letters and digits are their own ASCII capitals;
+# punctuation is the VK_OEM_* set.
+VK_WIN: dict[str, int] = {
+    "enter": 0x0D, "return": 0x0D, "tab": 0x09, "escape": 0x1B, "esc": 0x1B,
+    "backspace": 0x08, "delete": 0x2E, "space": 0x20, " ": 0x20,
+    "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+    "home": 0x24, "end": 0x23, "pageup": 0x21, "pagedown": 0x22,
+    "ctrl": 0x11, "control": 0x11, "alt": 0x12, "option": 0x12, "shift": 0x10,
+    # Command has no key on Windows; the Windows key is the one in its place,
+    # which is also what the Mac table makes of "win".
+    "win": 0x5B, "cmd": 0x5B, "command": 0x5B, "meta": 0x5B,
+    "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75,
+    "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
+    **{ch: ord(ch.upper()) for ch in _LETTERS},
+    **{ch: ord(ch) for ch in _DIGITS},
+    ";": 0xBA, "=": 0xBB, ",": 0xBC, "-": 0xBD, ".": 0xBE, "/": 0xBF, "`": 0xC0,
+    "[": 0xDB, "\\": 0xDC, "]": 0xDD, "'": 0xDE,
+}
+
+# macOS virtual keycodes (kVK_ANSI_*), which follow the physical layout of the
+# first Apple keyboards and not the alphabet — hence the table.
+VK_MAC: dict[str, int] = {
+    "enter": 0x24, "return": 0x24, "tab": 0x30, "escape": 0x35, "esc": 0x35,
+    "backspace": 0x33, "delete": 0x75, "space": 0x31, " ": 0x31,
+    "up": 0x7E, "down": 0x7D, "left": 0x7B, "right": 0x7C,
+    "home": 0x73, "end": 0x77, "pageup": 0x74, "pagedown": 0x79,
+    "f1": 0x7A, "f2": 0x78, "f3": 0x63, "f4": 0x76, "f5": 0x60, "f6": 0x61,
+    "f7": 0x62, "f8": 0x64, "f9": 0x65, "f10": 0x6D, "f11": 0x67, "f12": 0x6F,
+    "a": 0x00, "s": 0x01, "d": 0x02, "f": 0x03, "h": 0x04, "g": 0x05, "z": 0x06,
+    "x": 0x07, "c": 0x08, "v": 0x09, "b": 0x0B, "q": 0x0C, "w": 0x0D, "e": 0x0E,
+    "r": 0x0F, "y": 0x10, "t": 0x11, "o": 0x1F, "u": 0x20, "i": 0x22, "p": 0x23,
+    "l": 0x25, "j": 0x26, "k": 0x28, "n": 0x2D, "m": 0x2E,
+    "1": 0x12, "2": 0x13, "3": 0x14, "4": 0x15, "6": 0x16, "5": 0x17, "9": 0x19,
+    "7": 0x1A, "8": 0x1C, "0": 0x1D,
+    "=": 0x18, "-": 0x1B, "]": 0x1E, "[": 0x21, "'": 0x27, ";": 0x29, "\\": 0x2A,
+    ",": 0x2B, "/": 0x2C, ".": 0x2F, "`": 0x32,
+}
+
+#: Spelled-out names for the punctuation keys, for a client that would rather
+#: not put a backslash in JSON.
+_PUNCT_NAMES = {"minus": "-", "equal": "=", "bracketleft": "[", "bracketright": "]",
+                "backslash": "\\", "semicolon": ";", "quote": "'", "comma": ",",
+                "period": ".", "slash": "/", "backquote": "`", "grave": "`"}
+
+
+def key_name(raw: object) -> str:
+    """A key as a client sent it, in the tables' own vocabulary.
+
+    Lower case, except that a lone space stays a space — `str.strip` would
+    turn the space bar into nothing at all, which is the bug that made ⌃Space
+    an "unknown key".
+    """
+    name = str(raw if raw is not None else "")
+    if name != " ":
+        name = name.strip().lower()
+    return _PUNCT_NAMES.get(name, name)
+
+
 # ── input ────────────────────────────────────────────────────────────────────
 # Windows and macOS. The rest of the file works anywhere Pillow can grab a
 # screen, so looking is cross-platform even where touching is not — which is
@@ -387,18 +462,10 @@ if sys.platform == "win32":
         y = max(0, min(65535, round((py - vy) * 65535 / max(1, vh - 1))))
         return _mouse(MOUSEEVENTF["move"] | MOUSEEVENTF["absolute"] | MOUSEEVENTF["virtualdesk"], x, y)
 
-    # The keys worth naming. Anything not here is sent as text, which is what
-    # a phone keyboard produces anyway.
-    VK = {
-        "enter": 0x0D, "return": 0x0D, "tab": 0x09, "escape": 0x1B, "esc": 0x1B,
-        "backspace": 0x08, "delete": 0x2E, "space": 0x20,
-        "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
-        "home": 0x24, "end": 0x23, "pageup": 0x21, "pagedown": 0x22,
-        "ctrl": 0x11, "alt": 0x12, "shift": 0x10, "win": 0x5B,
-        "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75,
-        "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
-        "a": 0x41, "c": 0x43, "v": 0x56, "x": 0x58, "z": 0x5A, "s": 0x53, "w": 0x57,
-    }
+    # The keys worth naming (the table is at the top of the input section).
+    # Anything not there is sent as text, which is what a phone keyboard
+    # produces anyway.
+    VK = VK_WIN
 
     BUTTONS = {"left": ("ldown", "lup"), "right": ("rdown", "rup"), "middle": ("mdown", "mup")}
 
@@ -433,11 +500,11 @@ if sys.platform == "win32":
                 _send(*events)
 
         elif kind == "key":
-            name = str(action.get("key", "")).lower()
+            name = key_name(action.get("key"))
             vk = VK.get(name)
             if vk is None:
-                raise ScreenError(f"unknown key: {name}")
-            mods = [VK[m] for m in (action.get("mods") or []) if m in VK]
+                raise ScreenError(f"unknown key: {name!r}")
+            mods = [VK[key_name(m)] for m in (action.get("mods") or []) if key_name(m) in VK]
             events = [_key(m) for m in mods] + [_key(vk), _key(vk, up=True)]
             events += [_key(m, up=True) for m in reversed(mods)]
             _send(*events)
@@ -532,17 +599,8 @@ elif sys.platform == "darwin":
         "cmd": 0x00100000, "command": 0x00100000, "win": 0x00100000,
     }
 
-    # Virtual keycodes (kVK_*). Same names as the Windows table above, so a
-    # client never has to know which machine it is driving.
-    VK = {
-        "enter": 0x24, "return": 0x24, "tab": 0x30, "escape": 0x35, "esc": 0x35,
-        "backspace": 0x33, "delete": 0x75, "space": 0x31,
-        "up": 0x7E, "down": 0x7D, "left": 0x7B, "right": 0x7C,
-        "home": 0x73, "end": 0x77, "pageup": 0x74, "pagedown": 0x79,
-        "f1": 0x7A, "f2": 0x78, "f3": 0x63, "f4": 0x76, "f5": 0x60, "f6": 0x61,
-        "f7": 0x62, "f8": 0x64, "f9": 0x65, "f10": 0x6D, "f11": 0x67, "f12": 0x6F,
-        "a": 0x00, "c": 0x08, "v": 0x09, "x": 0x07, "z": 0x06, "s": 0x01, "w": 0x0D,
-    }
+    # Virtual keycodes (kVK_*), from the table at the top of the input section.
+    VK = VK_MAC
 
     # Which buttons a client is currently holding down, so a move in between
     # becomes a drag. One screen, one pointer, so one set for the process.
@@ -638,6 +696,15 @@ elif sys.platform == "darwin":
             _AS.CGEventSetIntegerValueField(ev, _F_CLICK_STATE, clicks)
         return ev
 
+    def _clicks(action: dict) -> int:
+        """Which click of a run this is. A browser counts them (`detail`) and
+        sends the second press of a double-click as clicks=2; posted as a
+        first click every time, a Mac would never see a double-click at all."""
+        try:
+            return max(1, min(3, int(action.get("clicks") or 1)))
+        except (TypeError, ValueError):
+            return 1
+
     def _type_text(text: str) -> None:
         """Type a string as text rather than as keys.
 
@@ -674,11 +741,11 @@ elif sys.platform == "darwin":
 
         elif kind == "down":
             _pressed.add(name)
-            _post(_mouse(down_ev, _at(action, d), button, clicks=1))
+            _post(_mouse(down_ev, _at(action, d), button, clicks=_clicks(action)))
 
         elif kind == "up":
             _pressed.discard(name)
-            _post(_mouse(up_ev, _at(action, d), button, clicks=1))
+            _post(_mouse(up_ev, _at(action, d), button, clicks=_clicks(action)))
 
         elif kind in ("click", "double"):
             at = _at(action, d)
@@ -714,10 +781,10 @@ elif sys.platform == "darwin":
             _post(ev)
 
         elif kind == "key":
-            key = str(action.get("key", "")).lower()
+            key = key_name(action.get("key"))
             code = VK.get(key)
             if code is None:
-                raise ScreenError(f"unknown key: {key}")
+                raise ScreenError(f"unknown key: {key!r}")
             flags = 0
             for mod in (action.get("mods") or []):
                 flags |= FLAGS.get(str(mod).lower(), 0)
@@ -750,6 +817,11 @@ else:                                                            # pragma: no co
         raise ScreenError("clicking is only implemented on Windows and macOS so far")
 
 
+def control_state() -> tuple[bool, str | None]:
+    """Whether this machine will take a click right now, and why not."""
+    return _control_state()
+
+
 async def act(action: dict, display: str | None = None) -> None:
     """Perform one pointer or keyboard action. Blocking, so it goes to a thread.
 
@@ -759,3 +831,133 @@ async def act(action: dict, display: str | None = None) -> None:
     than no click at all.
     """
     await asyncio.to_thread(_do, action, _pick(display))
+
+
+# ── clipboard ────────────────────────────────────────────────────────────────
+# Text only, and only so much of it. A password, a code, a paragraph — not a
+# file, not a picture, and not a log someone forgot was on the clipboard. The
+# switch is the pointer's: the server refuses both calls while control is off.
+
+#: Characters, in either direction. A clipboard bigger than this is something
+#: nobody meant to send across.
+CLIPBOARD_MAX = 256 * 1024
+
+
+def _utf8_env() -> dict:
+    # pbcopy and pbpaste pick their encoding off the locale, and launchd starts
+    # the daemon with none — which turns every "ş" into a question mark.
+    return {**os.environ, "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8"}
+
+
+def _mac_tool(name: str) -> str:
+    path = f"/usr/bin/{name}"
+    return path if os.path.exists(path) else name
+
+
+if sys.platform == "win32":                                      # pragma: no cover
+    _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _CF_UNICODETEXT = 13
+    _GMEM_MOVEABLE = 0x0002
+    _user32.OpenClipboard.argtypes = [wintypes.HWND]
+    _user32.OpenClipboard.restype = wintypes.BOOL
+    _user32.CloseClipboard.restype = wintypes.BOOL
+    _user32.EmptyClipboard.restype = wintypes.BOOL
+    _user32.GetClipboardData.argtypes = [wintypes.UINT]
+    _user32.GetClipboardData.restype = wintypes.HANDLE
+    _user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+    _user32.SetClipboardData.restype = wintypes.HANDLE
+    _k32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    _k32.GlobalAlloc.restype = wintypes.HGLOBAL
+    _k32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    _k32.GlobalLock.restype = ctypes.c_void_p
+    _k32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    _k32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+
+    def _open_clipboard() -> None:
+        # Whoever copied last may still be holding it for a moment; asking a
+        # few times is what every Windows clipboard tool ends up doing.
+        for _ in range(20):
+            if _user32.OpenClipboard(None):
+                return
+            time.sleep(0.02)
+        raise ScreenError(f"the clipboard is busy (error {ctypes.get_last_error()})")
+
+    def _clip_get_sync() -> str:
+        _open_clipboard()
+        try:
+            h = _user32.GetClipboardData(_CF_UNICODETEXT)
+            if not h:
+                return ""
+            p = _k32.GlobalLock(h)
+            if not p:
+                return ""
+            try:
+                return ctypes.wstring_at(p)
+            finally:
+                _k32.GlobalUnlock(h)
+        finally:
+            _user32.CloseClipboard()
+
+    def _clip_set_sync(text: str) -> None:
+        # A browser sends "\n"; Notepad and every edit box want "\r\n".
+        text = text.replace("\r\n", "\n").replace("\n", "\r\n")
+        data = text.encode("utf-16-le") + b"\0\0"
+        h = _k32.GlobalAlloc(_GMEM_MOVEABLE, len(data))
+        if not h:
+            raise ScreenError("no memory for the clipboard")
+        p = _k32.GlobalLock(h)
+        ctypes.memmove(p, data, len(data))
+        _k32.GlobalUnlock(h)
+        _open_clipboard()
+        try:
+            _user32.EmptyClipboard()
+            if not _user32.SetClipboardData(_CF_UNICODETEXT, h):
+                _k32.GlobalFree(h)
+                raise ScreenError(f"the clipboard refused the text (error {ctypes.get_last_error()})")
+        finally:
+            _user32.CloseClipboard()
+
+elif sys.platform == "darwin":
+    def _clip_get_sync() -> str:
+        try:
+            out = subprocess.run([_mac_tool("pbpaste"), "-Prefer", "txt"], capture_output=True,
+                                 env=_utf8_env(), timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ScreenError(f"the clipboard could not be read: {exc}") from exc
+        if out.returncode != 0:
+            raise ScreenError(f"pbpaste failed (exit {out.returncode})")
+        return out.stdout.decode("utf-8", "replace")
+
+    def _clip_set_sync(text: str) -> None:
+        try:
+            out = subprocess.run([_mac_tool("pbcopy")], input=text.encode("utf-8"),
+                                 capture_output=True, env=_utf8_env(), timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ScreenError(f"the clipboard could not be written: {exc}") from exc
+        if out.returncode != 0:
+            raise ScreenError(f"pbcopy failed (exit {out.returncode})")
+
+else:                                                            # pragma: no cover
+    def _clip_get_sync() -> str:
+        raise ScreenError("the clipboard is only implemented on Windows and macOS so far")
+
+    def _clip_set_sync(text: str) -> None:
+        raise ScreenError("the clipboard is only implemented on Windows and macOS so far")
+
+
+async def clipboard_get() -> dict:
+    """The machine's clipboard, as text. Cut at CLIPBOARD_MAX, and says so."""
+    text = await asyncio.to_thread(_clip_get_sync)
+    truncated = len(text) > CLIPBOARD_MAX
+    return {"text": text[:CLIPBOARD_MAX], "truncated": truncated}
+
+
+async def clipboard_set(text: str) -> dict:
+    """Put text on the machine's clipboard. Too much is refused, not cut: half
+    a pasted password is worse than an error."""
+    if not isinstance(text, str):
+        raise ScreenError("the clipboard takes text only")
+    if len(text) > CLIPBOARD_MAX:
+        raise ScreenError(f"that is more than {CLIPBOARD_MAX} characters, too much for the clipboard")
+    await asyncio.to_thread(_clip_set_sync, text)
+    return {"chars": len(text)}

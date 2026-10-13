@@ -7,11 +7,15 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import * as Clipboard from 'expo-clipboard';
 import { useStore, useT } from '../src/store';
 import { client } from '../src/ws';
 import { useColors } from '../src/theme';
 import { Icon, Spinner, Text, TextInput } from '../src/components/ui';
 import { alert } from '../src/components/overlay';
+import {
+  CLIPBOARD_MAX, COPY_SETTLE_MS, clipboardMods, controlBlocker, type ScreenCaps,
+} from '../src/screen';
 
 /** The computer's screen, in your hand.
  *
@@ -23,6 +27,11 @@ import { alert } from '../src/components/overlay';
  *
  *  The canvas stays black in both themes. It is a picture of a screen with the
  *  letterbox showing, and there is no light-mode version of that.
+ *
+ *  The clipboard rides along as text, behind the same switch as the pointer:
+ *  Paste puts the phone's text on the computer's clipboard and presses its
+ *  paste shortcut; Copy from remote presses its copy shortcut and brings the
+ *  result back to the phone.
  */
 
 /** How long a touch can rest before it stops being a tap and starts being a
@@ -90,12 +99,14 @@ export default function Screen() {
   const conn = useStore((s) => s.conn);
   const hostInfo = useStore((s) => s.hostInfo);
 
-  const [caps, setCaps] = useState<{
-    view: boolean; control: boolean; enabled: boolean;
-    os?: string; reason?: string | null;
-    displays?: { id: string; label: string; w: number; h: number; primary: boolean }[];
-  } | null>(null);
+  // Seeded from the last host.status, which carries the screen's state, so the
+  // first paint already knows whether a tap will land.
+  const pushed = (hostInfo as { screen?: ScreenCaps } | null)?.screen ?? null;
+  const [caps, setCaps] = useState<ScreenCaps | null>(pushed);
   const [error, setError] = useState<string | null>(null);
+  // What just happened that is not an error: a copy that came back, a tap that
+  // was not sent and why.
+  const [note, setNote] = useState<string | null>(null);
   const [box, setBox] = useState<LayoutRectangle | null>(null);
   const [aspect, setAspect] = useState(16 / 9);
   const [typing, setTyping] = useState(false);
@@ -199,11 +210,69 @@ export default function Screen() {
     return () => { gone = true; };
   }, [conn]);
 
+  // Every host.status says whether control is on and whether this computer
+  // can take it. Asked once on open and never again, a switch flipped from the
+  // panel left this screen ignoring every tap without a word.
+  useEffect(() => {
+    if (!pushed) return;
+    setCaps((prev) => ({ ...(prev ?? {}), ...pushed }));
+  }, [pushed?.enabled, pushed?.control, pushed?.reason, pushed?.view]);
+
+  /** A refusal is usually news (control turned off elsewhere, an Accessibility
+   *  grant gone), so the screen asks again what is allowed. */
+  const refused = useCallback((e: any, fallback: string) => {
+    setError(e?.message ?? fallback);
+    if (e?.code === 'control_disabled' || e?.code === 'control_unavailable') {
+      client.call<any>('screen.info', {}).then((r) => alive.current && setCaps(r)).catch(() => {});
+    }
+  }, []);
+
   const send = useCallback((...actions: any[]) => {
     client.call('screen.input', { actions, display: displayRef.current }).catch((e: any) => {
-      setError(e?.message ?? 'That did not go through');
+      refused(e, 'That did not go through');
     });
-  }, []);
+  }, [refused]);
+
+  const remoteMods = clipboardMods(caps?.os);
+
+  /** The phone's text onto the computer's clipboard, then its own paste. */
+  const paste = useCallback(async () => {
+    let text = '';
+    try { text = (await Clipboard.getStringAsync()) ?? ''; } catch { /* nothing to hand over */ }
+    if (text.length > CLIPBOARD_MAX) {
+      setError(`That is ${text.length} characters; the clipboard takes ${CLIPBOARD_MAX} at most.`);
+      return;
+    }
+    if (text) {
+      try {
+        await client.call('screen.clipboard.set', { text });
+      } catch (e: any) {
+        refused(e, 'The clipboard could not be set');
+        return;
+      }
+    }
+    Haptics.selectionAsync().catch(() => {});
+    send({ kind: 'key', key: 'v', mods: remoteMods });
+    setNote(text ? `Pasted ${text.length} characters` : 'Your clipboard is empty — pasted what the computer had');
+  }, [send, refused, remoteMods]);
+
+  /** The computer's copy, then its clipboard onto the phone. */
+  const copyFromRemote = useCallback(async () => {
+    try {
+      await client.call('screen.input', {
+        actions: [{ kind: 'key', key: 'c', mods: remoteMods }], display: displayRef.current,
+      });
+      await new Promise((r) => setTimeout(r, COPY_SETTLE_MS));
+      const r = await client.call<{ text?: string; truncated?: boolean }>('screen.clipboard.get', {});
+      const text = r?.text ?? '';
+      if (!text) { setNote('The computer\'s clipboard is empty'); return; }
+      await Clipboard.setStringAsync(text);
+      Haptics.selectionAsync().catch(() => {});
+      setNote(`Copied ${text.length} characters to this phone${r.truncated ? ' (cut short)' : ''}`);
+    } catch (e: any) {
+      refused(e, 'The copy did not come back');
+    }
+  }, [refused, remoteMods]);
 
   const enable = useCallback(async () => {
     setBusy(true);
@@ -266,6 +335,10 @@ export default function Screen() {
   }, []);
 
   const controllable = !!caps?.control && !!caps?.enabled;
+  const blocker = controlBlocker(caps);
+  // The pan responder below cannot read `blocker` off a later render either.
+  const blockerRef = useRef<string | null>(null);
+  blockerRef.current = blocker;
   // The pan responder below is built once and never rebuilt, so it cannot read
   // this off the render that made it: caps arrive after the first paint, and a
   // handler that closed over `false` would refuse every touch for the life of
@@ -403,7 +476,11 @@ export default function Screen() {
     onPanResponderRelease: (e) => {
       if (gesture.longTimer) { clearTimeout(gesture.longTimer); gesture.longTimer = null; }
       if (gesture.two) { gesture.two = false; gesture.mode = null; return; }
-      if (!controllableRef.current) return;
+      if (!controllableRef.current) {
+        // A tap that cannot be sent says why instead of vanishing.
+        if (!gesture.moved && blockerRef.current) setNote(blockerRef.current);
+        return;
+      }
       const up = local(e.nativeEvent);
       const p = norm(up.x, up.y) ?? norm(gesture.startX, gesture.startY);
       if (!p) return;
@@ -523,6 +600,20 @@ export default function Screen() {
           </Pressable>
         )}
         {controllable && (
+          <Pressable onPress={() => { void paste(); }} hitSlop={10} accessibilityLabel="Paste"
+            style={{ paddingHorizontal: 12, height: 30, borderRadius: 15, alignItems: 'center',
+                     justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#fff' }}>Paste</Text>
+          </Pressable>
+        )}
+        {controllable && (
+          <Pressable onPress={() => { void copyFromRemote(); }} hitSlop={10} accessibilityLabel="Copy from remote"
+            style={{ paddingHorizontal: 12, height: 30, borderRadius: 15, alignItems: 'center',
+                     justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#fff' }}>Copy from remote</Text>
+          </Pressable>
+        )}
+        {controllable && (
           <Pressable onPress={() => setTyping((t) => !t)} hitSlop={10}
             style={{ paddingHorizontal: 12, height: 30, borderRadius: 15, alignItems: 'center',
                      justifyContent: 'center', backgroundColor: typing ? c.accent : 'rgba(0,0,0,0.45)' }}>
@@ -532,13 +623,15 @@ export default function Screen() {
       </View>
 
       {/* Only when there is something to say. With control on, the screen says
-          it by doing what it is told. */}
-      {!controllable && (
+          it by doing what it is told. Three lines, because the Accessibility
+          sentence is the whole answer to "why does nothing happen" and cut to
+          one line it said nothing. */}
+      {!controllable && !!blocker && (
         <View style={{ position: 'absolute', top: insets.top + 12, alignSelf: 'center',
                        paddingHorizontal: 12, paddingVertical: 5, borderRadius: 13,
-                       backgroundColor: 'rgba(0,0,0,0.45)', maxWidth: '55%' }}>
-          <Text numberOfLines={1} style={{ fontSize: 12, color: '#fff' }}>
-            {blocked ? (caps?.reason ?? 'no screen here') : (caps?.reason ?? 'view only')}
+                       backgroundColor: 'rgba(0,0,0,0.6)', maxWidth: '60%' }}>
+          <Text numberOfLines={3} accessibilityLabel="Why control is unavailable" style={{ fontSize: 12, color: '#fff' }}>
+            {blocked ? (caps?.reason ?? 'no screen here') : blocker}
           </Text>
         </View>
       )}
@@ -555,6 +648,12 @@ export default function Screen() {
                                       (pressed || busy) && { opacity: 0.6 }]}>
             {busy ? <Spinner color="#fff" /> : <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>Turn on</Text>}
           </Pressable>
+        </View>
+      )}
+
+      {!!note && note !== blocker && (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: c.card }}>
+          <Text accessibilityLabel="Screen note" style={{ fontSize: 12, color: c.ink }}>{note}</Text>
         </View>
       )}
 
