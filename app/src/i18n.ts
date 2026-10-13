@@ -687,7 +687,9 @@ const en = {
   acSignedIn: '{n}/{of} signed in', acSignedInOne: 'signed in', acLoading: 'asking the computer…',
   sgComputers: 'computers', sgSoftware: 'software', sgAccounts: 'accounts and sign-ins',
   sgDefaults: 'what a new chat starts as', sgSecurity: 'security', sgNotifications: 'reaching you',
-  sgDev: 'development', sgHost: 'the computer itself',
+  sgDev: 'development', sgHost: 'the computer itself', sgChats: 'chats',
+  autoArchive: 'Archive quiet chats', autoArchiveNote: 'after this long without a message; anything new brings one back',
+  autoArchiveOff: 'Off', autoArchiveH: '{n} hours', autoArchiveD: '{n} days', autoArchive1D: '1 day',
   sgDefaultsNote: 'used by the pen button, and by nothing already running',
   sgBypassNote: 'asked for before a chat is allowed to skip approvals',
   sgRevokeNote: "This phone's token is dropped on the computer. Pairing again is the only way back.",
@@ -704,6 +706,9 @@ export type Key = keyof typeof en;
 export const tr: Partial<Record<Key, string>> = {
   maUse: 'Bu makineye geç', maCurrent: 'şu anki', maPairThis: 'Geçmek için eşleştir',
   maNotPaired: 'Bu telefonla henüz eşleşmedi: geçmek için önce eşleştir.',
+  sgChats: 'sohbetler', autoArchive: 'Sessiz sohbetleri arşivle',
+  autoArchiveNote: 'bu kadar süre mesaj gelmezse; yeni bir şey gelince geri döner',
+  autoArchiveOff: 'Kapalı', autoArchiveH: '{n} saat', autoArchiveD: '{n} gün', autoArchive1D: '1 gün',
 };
 
 export function t(key: Key, params?: Record<string, string | number>): string {

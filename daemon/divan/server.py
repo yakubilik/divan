@@ -3170,6 +3170,8 @@ class Server:
                        ("behind", "ahead", "auto", "repo", "error", "checked_at",
                         "web", "latest")},
             "screen": {**screenmod.available(), "enabled": self.cfg.remote_control},
+            # Hours a chat may be quiet before it is archived; 0 is off.
+            "auto_archive_h": self.cfg.auto_archive_h,
             "active_sessions": self.sessions.active_count(),
             "connected_devices": len(self.clients),
             "versions": self._versions, "roots": self.cfg.allowed_roots,
@@ -3233,6 +3235,8 @@ class Server:
                 self.cfg.auto_archive_h = int(hours) if hours.is_integer() else hours
                 self.cfg.save()
                 log.info("auto-archive set to %gh by device %s", hours, dev.name)
+                await self.broadcast({"seq": None, "chat_id": None, "event": "host.status",
+                                      "data": self.host_info(), "ts": time.time()})
             await self.archive_quiet()
         return {"hours": self.cfg.auto_archive_h}
 

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
+import { client } from '../src/ws';
+import { ARCHIVE_CHOICES, archiveLabel } from '../src/archive';
 import { useTokens } from '../src/theme';
 import type { Key } from '../src/i18n';
 import type { UpdateStatus } from '../src/protocol';
@@ -89,6 +91,21 @@ export default function Settings() {
     openMenu({ anchor, align: 'right', items: items.map((o) => ({ label: o.label, checked: o.value === now, onPress: () => onPick(o.value) })) });
   };
   const err = (e: any) => alert(T('error'), e.message);
+  // How long a chat may be quiet before the computer archives it. Kept on
+  // the computer (config.toml), so the phone and the web panel agree; read
+  // when the screen opens and written the moment a choice is made.
+  const [archiveH, setArchiveH] = useState<number | null>(hostInfo?.auto_archive_h ?? null);
+  useEffect(() => { if (hostInfo?.auto_archive_h != null) setArchiveH(hostInfo.auto_archive_h); }, [hostInfo?.auto_archive_h]);
+  const archiveRef = React.useRef<View>(null);
+  useEffect(() => {
+    if (!online) return;
+    client.call<{ hours: number }>('chat.autoarchive', {}).then((r) => setArchiveH(r.hours)).catch(() => {});
+  }, [online, activeHostId]);
+  const setArchive = (hours: number) => {
+    client.call<{ hours: number }>('chat.autoarchive', { hours }).then((r) => setArchiveH(r.hours)).catch(err);
+  };
+  const archiveChoices = [...new Set([...ARCHIVE_CHOICES, ...(archiveH == null ? [] : [archiveH])])]
+    .sort((a, b) => a - b).map((h) => ({ value: String(h), label: archiveLabel(h, T) }));
 
   return (
     <Shell place="machine">
@@ -161,6 +178,15 @@ export default function Settings() {
             meta={[modelLabel, defaults.effort].filter(Boolean).join(' · ')} onPress={openDefaults} />
           <ListRow boxed title={T('permRow')}
             meta={permissionFor(defaults.provider, catalog?.[defaults.provider], defaults)} onPress={openDefaults} />
+        </Group>
+
+        <Group label={T('sgChats')}>
+          <View ref={archiveRef} collapsable={false}>
+            <ListRow first boxed title={T('autoArchive')} note={T('autoArchiveNote')} noteLines={2}
+              meta={archiveH == null ? '–' : archiveLabel(archiveH, T)} monoMeta={false}
+              onPress={online ? () => void pickFrom(archiveRef, archiveChoices, archiveH == null ? null : String(archiveH),
+                (v) => setArchive(Number(v))) : undefined} />
+          </View>
         </Group>
 
         <Group label={T('sgSecurity')}>

@@ -12,7 +12,7 @@ A real `Server` over a temporary `DIVAN_HOME`; no network and no model turns
      is announced as `chat.updated` with `archived` set, and none is deleted.
   2. `auto_archive_h = 0` is off: nothing is archived however old.
   3. `chat.autoarchive` reads the threshold, writes a new one to config.toml,
-     and refuses nonsense.
+     tells every client (`host.status`, which carries it), and refuses nonsense.
   4. A message sent into an archived chat, and the daemon's own ustabasi 🔔
      note posted into one by the ticket follower, unarchive it — announced
      before the message itself.
@@ -136,8 +136,9 @@ async def sweep(srv: Server, heard: list[dict]) -> None:
           repr([c["title"] for c in again]))
 
 
-async def threshold(srv: Server, dev) -> None:
+async def threshold(srv: Server, dev, heard: list[dict]) -> None:
     print("\nthe threshold")
+    heard.clear()
     off = aged(srv, "ancient", 24 * 400)
     got = await srv.h_chat_autoarchive(dev, {"hours": 0})
     check(got == {"hours": 0}, "chat.autoarchive sets 0", repr(got))
@@ -147,8 +148,12 @@ async def threshold(srv: Server, dev) -> None:
           "with the threshold at 0 the sweep archives nothing, however old the chat")
     check(Config.load().auto_archive_h == 0, "a daemon started on that config has the sweep off")
 
+    check([e["data"]["auto_archive_h"] for e in heard if e["event"] == "host.status"] == [0],
+          "every client is told the new threshold with host.status")
+    heard.clear()
     got = await srv.h_chat_autoarchive(dev, {})
-    check(got == {"hours": 0}, "chat.autoarchive with no hours only reads", repr(got))
+    check(got == {"hours": 0} and not [e for e in heard if e["event"] == "host.status"],
+          "chat.autoarchive with no hours only reads", repr(got))
     for bad in (-1, "soon", 24 * 366):
         try:
             await srv.h_chat_autoarchive(dev, {"hours": bad})
@@ -158,6 +163,7 @@ async def threshold(srv: Server, dev) -> None:
     got = await srv.h_chat_autoarchive(dev, {"hours": 48})
     check(got == {"hours": 48} and tomllib.loads(configmod.CONFIG_PATH.read_text())["auto_archive_h"] == 48,
           "48 is answered and written down", repr(got))
+    check(srv.host_info()["auto_archive_h"] == 48, "host info carries the threshold, for the phone's Settings")
     check(archived(srv, off) == 1, "turning it back on sweeps at once")
     young = aged(srv, "quiet for 30h", 30)
     await srv.archive_quiet()
@@ -250,7 +256,7 @@ async def main() -> None:
     srv.broadcast = broadcast
     srv.sessions.broadcast = broadcast
     await sweep(srv, heard)
-    await threshold(srv, dev)
+    await threshold(srv, dev, heard)
     await unarchive(srv, dev, heard)
     await srv.sessions.close_all()
 
