@@ -15,8 +15,83 @@ import type { Chat, Group, LimitWindow } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
 import { useFleet } from '../lib/fleet';
 
+/** The chat's name, which is also where it is renamed: pressed, it becomes a
+ *  field in the same place. Save and Discard appear only once the text says
+ *  something else; Enter saves, Escape puts the old name back, and leaving the
+ *  field with nothing changed just leaves it. */
+function TitleField({ chat, onRename }: {
+  chat: Chat;
+  /** Sends the rename; settles once the computer has answered. */
+  onRename?: (title: string) => Promise<unknown> | void;
+}) {
+  const shown = bareTitle(chat.title, chat.cwd, chat.project);
+  /** The text being typed; null while the name is only shown. */
+  const [draft, setDraft] = useState<string | null>(null);
+  /** The name just sent, shown until the answer is in the list. */
+  const [sent, setSent] = useState<string | null>(null);
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => { setDraft(null); setSent(null); }, [chat.id]);
+  useEffect(() => { if (draft !== null) field.current?.select(); }, [draft === null]);
+
+  const name = (draft ?? '').trim();
+  const changed = draft !== null && !!name && name !== shown;
+  const save = () => {
+    if (!changed || !onRename) return;
+    setDraft(null);
+    setSent(name);
+    Promise.resolve(onRename(name)).finally(() => setSent(null));
+  };
+  const discard = () => setDraft(null);
+  const text = { fontSize: 17, fontWeight: 600, lineHeight: '24px', color: C.text } as const;
+  // Pressing either button must not blur the field first: a blur with changed
+  // text keeps the field open, so the press still lands where it was aimed.
+  const keep = (e: React.MouseEvent) => e.preventDefault();
+  const small = (primary: boolean): React.CSSProperties => ({
+    height: 26, padding: '0 10px', borderRadius: R.btn, cursor: 'pointer', flexShrink: 0,
+    fontSize: 12, fontWeight: 600,
+    background: primary ? C.accent : C.surface2,
+    border: `1px solid ${primary ? C.accent : C.border}`,
+    color: primary ? C.onAccent : C.text2,
+  });
+
+  if (draft === null) {
+    return (
+      <button
+        type="button" data-chat-title onClick={() => onRename && setDraft(sent ?? shown)}
+        title={onRename ? `${chat.title} — click to rename` : chat.title}
+        style={{
+          ...text, display: 'block', maxWidth: '100%', padding: 0, margin: 0, textAlign: 'left',
+          background: 'transparent', border: 'none', cursor: onRename ? 'text' : 'default',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >{sent ?? shown}</button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <input
+        ref={field} data-chat-title-input aria-label="Chat name" autoFocus
+        value={draft} onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); if (changed) save(); else discard(); }
+          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); discard(); }
+        }}
+        onBlur={() => { if (!changed) discard(); }}
+        style={{
+          ...text, flex: 1, minWidth: 0, height: 26, padding: '0 6px', margin: '0 -7px',
+          background: C.surface2, border: `1px solid ${C.accentRing}`, borderRadius: R.btn, outline: 'none',
+        }}
+      />
+      {changed && <>
+        <button type="button" onMouseDown={keep} onClick={save} style={{ ...small(true), marginLeft: 8 }}>Save</button>
+        <button type="button" onMouseDown={keep} onClick={discard} style={small(false)}>Discard</button>
+      </>}
+    </div>
+  );
+}
+
 function Header({ chat, groupName, count, accountLabel, accountLimits, context, now,
-                 onEdit, onMenu, onDetails, detailsOpen, onCloseView }: {
+                 onEdit, onRename, onMenu, onDetails, detailsOpen, onCloseView }: {
   chat: Chat; groupName: string | null; count: number; accountLabel: string | null;
   /** Every window this chat's sign-in last reported, for the ring. */
   accountLimits: LimitWindow[] | undefined;
@@ -24,6 +99,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
   context: ContextUse | null;
   now: number;
   onEdit: (f: Field) => void;
+  onRename?: (title: string) => Promise<unknown> | void;
   onMenu: () => void;
   onDetails: () => void;
   detailsOpen: boolean;
@@ -41,11 +117,8 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
     }}>
       {/* Basis 0 so a long title claims only the room the chips leave over,
           and a floor of 120 so it never collapses away entirely. */}
-      <div style={{ flex: '1 1 0', minWidth: 120 }}>
-        <div style={{
-          fontSize: 17, fontWeight: 600, whiteSpace: 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis',
-        }} title={chat.title}>{bareTitle(chat.title, chat.cwd, chat.project)}</div>
+      <div className="dv-chatname" style={{ flex: '1 1 0', minWidth: 120 }}>
+        <TitleField chat={chat} onRename={onRename} />
         <div style={{
           fontSize: 12, color: C.mute, display: 'flex', alignItems: 'center', gap: 6, marginTop: 2,
         }}>
@@ -215,7 +288,8 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   onInterrupt: () => void;
   onRespond: (requestId: string, d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => unknown;
   onEdit: (f: Field) => void;
-  onUpdate: (patch: Record<string, any>) => void;
+  /** Settles once the computer has answered, where the caller waits for it. */
+  onUpdate: (patch: Record<string, any>) => Promise<unknown> | void;
   onNewGroup: (name: string) => Promise<unknown>;
   onDelete: () => void;
   onUpload: (file: File) => Promise<any>;
@@ -264,7 +338,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Header
           chat={chat} groupName={groupName} count={msgCount} accountLabel={accountLabel}
-          accountLimits={accountLimits} now={now}
+          accountLimits={accountLimits} now={now} onRename={(title) => onUpdate({ title })}
           context={contextUse(log.items.filter((i) => i.kind === 'turn') as any[], liveContext)}
           onEdit={onEdit} onMenu={() => { setDetails(false); setMenu(true); }}
           onDetails={() => setDetails((v) => !v)} detailsOpen={details}

@@ -1258,10 +1258,17 @@ group('every carried screen asks its computer for exactly what it did');
     // the X in the chat's own head (ustabasi #183): same close, other file.
     'src/screens/Overview.tsx': ['Change', 'Click'],
   };
+  /** …and the gains that are on purpose. The chat's name in its head became
+   *  the field it is renamed in (ustabasi #229): typed into, left, Enter and
+   *  Escape, and two buttons that must not take the focus from it. */
+  const GAINED = {
+    'src/components/ChatView.tsx': ['Blur', 'Change', 'KeyDown', 'MouseDown'],
+  };
   const allow = (f, before) => {
     const [reqs, drives] = JSON.parse(before);
     const dropped = ON_PURPOSE[f] ?? [];
-    return JSON.stringify([reqs, drives.filter((d) => !dropped.includes(d))]);
+    const gained = (GAINED[f] ?? []).filter((d) => !drives.includes(d));
+    return JSON.stringify([reqs, [...drives.filter((d) => !dropped.includes(d)), ...gained].sort()]);
   };
   const CARRIED = carried();
   let was = null;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { C, R, SHADOW } from '../lib/theme';
 import { Dot, Icon, P, Pulse, mono } from '../ui/kit';
-import { ago, bareTitle, uptime } from '../lib/format';
+import { ago, titleParts, uptime } from '../lib/format';
 import { hostAddr, hostName, useFleet, type HostSlot } from '../lib/fleet';
 import { createGroup, deleteChat, deleteGroup, renameGroup, updateChat } from '../lib/actions';
 import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag, setSectionDrag } from '../lib/dnd';
@@ -255,11 +255,15 @@ function savedOrders(): Record<string, string[]> {
 const NO_HOVER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches;
 const BIN = 28;
 
-function ChatRow({ chat, selected, onPick, onDrag, onDelete, under }: {
+function ChatRow({ chat, selected, onPick, onDrag, onDelete, under, heading }: {
   chat: Chat; selected: boolean; onPick: () => void;
-  /** The project whose heading this row is read under, where it has one: the
-   *  title then leaves that name out and starts with what the chat is about. */
+  /** The product whose heading this row is read under, where it has one. The
+   *  title leaves the project out in every section, as the chat's own header
+   *  does; outside a product's heading the project is said quietly below it. */
   under?: string | null;
+  /** The heading the row is drawn under; a project of the same name is not
+   *  said again below it. */
+  heading?: string;
   /** Set where the row can be picked up and filed under another heading. */
   onDrag?: (dt: DataTransfer) => void;
   /** Asks before it deletes: the row only says which chat was meant. */
@@ -271,6 +275,10 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete, under }: {
   // The bin is beside the row and not inside it — a button inside a button is
   // not one — and stands where the row's clock is, which gives way to it.
   const bin = over || NO_HOVER;
+  const parts = titleParts(chat.title, chat.cwd, chat.project);
+  const { title } = parts.head || !under ? parts : titleParts(chat.title, chat.cwd, under);
+  const named = parts.head ?? chat.project ?? null;
+  const where = under || !named || named.toLocaleLowerCase('tr') === heading?.toLocaleLowerCase('tr') ? null : named;
   return (
     <div
       style={{ position: 'relative' }}
@@ -293,12 +301,21 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete, under }: {
         <div style={{
           fontSize: 14, fontWeight: 500, color: C.text, whiteSpace: 'nowrap',
           overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{under !== undefined ? bareTitle(chat.title, chat.cwd, under) : chat.title || 'New chat'}</div>
+        }} data-chat-title={chat.id} title={chat.title || undefined}>{title}</div>
         <div style={{
           fontSize: 12, color: awaiting ? C.warn : C.mute, display: 'flex',
           alignItems: 'center', gap: 4, marginTop: 2, minWidth: 0,
         }}>
           {awaiting && <Icon path={P.warn} size={11} color={C.warn} />}
+          {where && (
+            <>
+              <span data-chat-where style={{
+                color: C.faint, flexShrink: 0, maxWidth: '45%',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>{where}</span>
+              <span style={{ color: C.faint, flexShrink: 0 }}>·</span>
+            </>
+          )}
           <span style={{
             ...(awaiting ? mono : null),
             minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -325,7 +342,7 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete, under }: {
     {bin && (
       <button
         type="button" onClick={onDelete}
-        title="Delete chat" aria-label={`Delete chat: ${chat.title || 'New chat'}`}
+        title="Delete chat" aria-label={`Delete chat: ${title}`}
         style={{
           position: 'absolute', right: 8, top: '50%', marginTop: -BIN / 2,
           width: BIN, height: BIN, borderRadius: R.btn, cursor: 'pointer',
@@ -671,6 +688,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                   onDrag={canGroup ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}
                   onDelete={() => setAsking({ what: 'delete-chat', hostKey: s.hostKey, id: c.id, name: c.title })}
                   under={project ? c.project ?? null : s.kind === 'project' ? s.title : undefined}
+                  heading={s.title}
                 />
               ))}
             </div>

@@ -111,17 +111,27 @@ export function toolSummary(tool: string, input: any): string {
 
 /** A chat's title without the project in front of it.
  *
- *  The computer puts the project first in every title (`with_project`), which
- *  is what tells forty chats apart in one long list. Read under that project's
- *  own heading it is the same word on every row, in the place the eye lands
- *  first, and what the chat is about is what gets cut off.
+ *  The computer puts the project first in titles it makes (`with_project`),
+ *  and older daemons put it in front of a name somebody typed too. Read under
+ *  that project's own heading it is the same word on every row, in the place
+ *  the eye lands first, and what the chat is about is what gets cut off.
  */
 export function bareTitle(title: string | null | undefined, cwd: string, project?: string | null): string {
+  return titleParts(title, cwd, project).title;
+}
+
+/** The title split the way `bareTitle` cuts it: what the chat is about, and
+ *  the project or folder name that stood in front of it, if one did. */
+export function titleParts(title: string | null | undefined, cwd: string, project?: string | null): {
+  title: string; head: string | null;
+} {
   const text = (title || '').trim();
   const cut = text.indexOf(' · ');
-  if (cut <= 0) return text || 'New chat';
-  const head = text.slice(0, cut).toLocaleLowerCase('tr');
+  if (cut <= 0) return { title: text || 'New chat', head: null };
+  const head = text.slice(0, cut);
   const names = cwd.split(/[/\\]/).filter(Boolean).map((n) => n.toLocaleLowerCase('tr'));
   if (project) names.push(project.toLocaleLowerCase('tr'));
-  return names.includes(head) ? text.slice(cut + 3).trim() || 'New chat' : text;
+  return names.includes(head.toLocaleLowerCase('tr'))
+    ? { title: text.slice(cut + 3).trim() || 'New chat', head }
+    : { title: text, head: null };
 }

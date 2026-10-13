@@ -44,7 +44,8 @@ from . import screen as screenmod
 from . import term as termmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
-from .session import NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, SessionManager, with_project
+from .session import (NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, TITLE_MAX, TITLE_SEP, SessionManager,
+                      with_project)
 from .providers.claude_models import live_models as claude_live_models
 from .providers.codex import live_models as codex_live_models
 from .providers.demo import DemoProvider
@@ -2082,20 +2083,24 @@ class Server:
             fields["cwd"] = str(Path(fields["cwd"]).expanduser().resolve())
         if "owner" in fields and fields["owner"] not in self.cfg.person_names():
             raise Err("no_person", "nobody by that name shares this computer")
-        # A rename keeps the project in front of it, and a chat that moves to
-        # another folder takes the new project's name with it — the old prefix
-        # is dropped first, or moving a chat twice would stack them.
+        # A name a person typed is stored as they typed it: the clients show
+        # the folder beside the title, and a prefix put in front of 'FILM DIZI'
+        # is all a narrow row has room for. A chat the computer named that
+        # moves to another folder takes the new project's name with it — the
+        # old prefix is dropped first, or moving a chat twice would stack them.
         moving = fields.get("cwd", prev["cwd"])
-        if "title" in fields or "cwd" in fields:
+        if "title" in fields:
+            fields["title"] = str(fields["title"] or "").strip()[:TITLE_MAX] or NEW_CHAT_TITLE
+            fields["title_by"] = "user"          # a person's name for it; `naming` leaves it be
+        elif "cwd" in fields:
             was = self.policy.project_for(prev["cwd"])
-            title = str(fields.get("title", prev["title"]) or "")
-            if was and "cwd" in fields:
-                head = f"{was} · "
+            title = str(prev["title"] or "")
+            if was:
+                head = f"{was}{TITLE_SEP}"
                 if title.casefold().startswith(head.casefold()):
                     title = title[len(head):]
-            fields["title"] = with_project(title, self.policy.project_for(moving))
-            if "title" in d:
-                fields["title_by"] = "user"      # a person's name for it; `naming` leaves it be
+            fields["title"] = ((title.strip() or NEW_CHAT_TITLE) if prev.get("title_by") == "user"
+                               else with_project(title, self.policy.project_for(moving)))
         previous_account = prev.get("account_id") or acct.DEFAULT_ID + "-" + prev["provider"]
         switching_account = ("account_id" in fields
                              and fields["account_id"] != previous_account)

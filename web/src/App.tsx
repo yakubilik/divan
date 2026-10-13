@@ -14,7 +14,7 @@ import { Machine } from './screens/Machine';
 import { Overview, type ProjectTab } from './screens/Overview';
 import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
-import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
+import { useFleet, onAnyEvent, pokeAll, putChat } from './lib/fleet';
 import { project as projectIn, useDivanView } from './lib/divan';
 import { idOf } from './lib/sessions';
 import {
@@ -628,7 +628,11 @@ export function App() {
     },
     onEdit: setField,
     onUpdate: (patch: Record<string, any>) => {
-      if (sel) updateChat(sel.hostKey, sel.chatId, patch).catch(() => {});
+      if (!sel) return;
+      const { hostKey } = sel;
+      return updateChat(hostKey, sel.chatId, patch)
+        .then((chat) => { if (chat?.id) putChat(hostKey, chat); })
+        .catch(() => {});
     },
     // A group made from a chat's own menu is made for that chat, so the two
     // go out together: the name, and then the chat into what it named.
