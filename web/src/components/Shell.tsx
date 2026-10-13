@@ -3,8 +3,9 @@
  *
  *  It is the only navigation the panel has. On the left, the way back — or the
  *  word `divan` on the Dashboard, which is where back leads. On the right, the
- *  system line: how many machines answered, how much of the plan is left, the
- *  Chats and the Machine place, and the switch between the two themes. The
+ *  system line: how many machines answered (a press on it opens the Machine
+ *  place), how much of the plan is left, Chats, Settings, and the switch
+ *  between the two themes. The
  *  three-place bar and its project chips are gone: a product is a tile on the
  *  Dashboard, and a chat is started from the Composer.
  *
@@ -29,7 +30,7 @@ export function stamp(now: number): string {
 const SVG = (d: string) => (
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg>
 );
-const MACHINE = 'M5 4h14a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM5 13h14a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2zM7 7.5h.01M7 16.5h.01';
+const GEAR = 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z';
 const CHAT = 'M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z';
 const MOON = 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z';
 const SUN = 'M12 4V2M12 22v-2M4.9 4.9 3.5 3.5M20.5 20.5l-1.4-1.4M4 12H2M22 12h-2M4.9 19.1l-1.4 1.4M20.5 3.5l-1.4 1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z';
@@ -48,9 +49,10 @@ export function ThemeSwitch() {
   );
 }
 
-/** The right-hand half: `● 2/2 machines · ◔ quota 64% · Chats · Machine`. */
-function Sys({ fleet, here, dots, onView, inbox }: {
+/** The right-hand half: `● 2/2 machines · ◔ quota 64% · Chats · Settings`. */
+function Sys({ fleet, view, here, dots, onView, inbox }: {
   fleet?: DivanView | null;
+  view: View;
   here: Place;
   dots?: Partial<Record<Place, State>>;
   onView: (view: View) => void;
@@ -67,13 +69,22 @@ function Sys({ fleet, here, dots, onView, inbox }: {
   // and a figure that old says how old it is.
   const old = week?.at != null && !!fleet && fleet.now - week.at > 3600 ? ago(week.at) : null;
   const all = !!t && t.machines > 0 && t.reachable === t.machines;
+  // The count is the way into the Machine place, which has no button of its
+  // own on the line: Settings, which is one of its tabs, is the one it shows.
+  const settings = view === 'settings';
+  const inMachine = here === 'machine' && !settings;
   return (
     <div className="sys">
       {!!t && t.machines > 0 && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-sys="machines">
+        <button type="button" className="dv-btn dv-btn--ghost dv-hit" data-sys="machines"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          aria-current={inMachine ? 'page' : undefined}
+          title={view === 'machines' ? undefined : 'Go to Machines'}
+          onClick={() => { if (view !== 'machines') onView('machines'); }}>
           <i className={`dv-dot ${all ? 'dv-dot--run' : t.reachable ? 'dv-dot--ask' : 'dv-dot--stuck'}`} aria-hidden="true" />
           <b>{t.reachable}/{t.machines}</b><span className="sys-word"> machines</span>
-        </span>
+          {!!dots?.machine && <><i className="dv-dot dv-dot--ask" aria-hidden="true" /><span className="dv-hidden">needs you</span></>}
+        </button>
       )}
       {used != null && (
         <>
@@ -89,8 +100,8 @@ function Sys({ fleet, here, dots, onView, inbox }: {
       <span className="sep" />
       <PlaceButton label="Chats" icon={CHAT} on={here === 'chat'} dot={dots?.chat}
         onClick={() => onView('chats')} />
-      <PlaceButton label="Machine" icon={MACHINE} on={here === 'machine'} dot={dots?.machine}
-        onClick={() => onView('machines')} />
+      <PlaceButton label="Settings" icon={GEAR} on={settings}
+        onClick={() => onView('settings')} />
       {inbox}
       <ThemeSwitch />
     </div>
@@ -148,7 +159,7 @@ export function Shell({ view, onView, fleet, dots, back, onHome, inbox, children
               <img src="/divan-seal.png" width={34} height={34} alt="" aria-hidden="true" />divan
             </a>
           )}
-          <Sys fleet={fleet} here={here} dots={dots} onView={onView} inbox={inbox} />
+          <Sys fleet={fleet} view={view} here={here} dots={dots} onView={onView} inbox={inbox} />
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>

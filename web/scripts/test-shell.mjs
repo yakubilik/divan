@@ -351,12 +351,15 @@ group('nothing was dropped in the move');
     && !shell.updateWaiting({ behind: 0, web: { npm: true, stale: false } })
     && !shell.updateWaiting(null));
   const lit = renderToStaticMarkup(h(ShellUI.Shell, {
-    view: 'overview', onView() {}, now: NOW, chips: null,
+    view: 'overview', onView() {}, now: NOW, chips: null, fleet: view('fresh'),
     dots: { chat: 'asking', machine: 'asking' }, onProject() {},
   }));
+  // The Machine place's light is on the machines count, which is the way into
+  // it now that the line has no Machine button.
   ok('…and the line draws each on the place it belongs to',
-    (lit.match(/dv-dot dv-dot--ask/g) ?? []).length === 2
-    && /Chats<\/span><i class="dv-dot dv-dot--ask"/.test(lit) && /Machine<\/span><i class="dv-dot dv-dot--ask"/.test(lit));
+    /Chats<\/span><i class="dv-dot dv-dot--ask"/.test(lit)
+    && /machines<\/span><i class="dv-dot dv-dot--ask"/.test(lit)
+    && !/Settings<\/span><i class="dv-dot/.test(lit));
   seed({ hosts: { studio: withUpdate() }, order: ['studio'], focus: 'studio', ready: true });
   // The column, and not the screen beside it: the fleet panel on the right
   // draws dots of its own and counting those would say nothing.
@@ -631,8 +634,11 @@ group('the line over every page');
     && deep.includes('aria-label="Back to Dashboard"') && !/>divan<\/a>/.test(deep));
   ok('the right end counts the machines that answered out of the ones paired',
     new RegExp(`<b>${fresh.totals.reachable}/${fresh.totals.machines}</b><span class="sys-word"> machines`).test(home));
-  ok('…and the place buttons are Chats and Machine, with no project chips beside them',
-    home.includes('Chats') && home.includes('Machine') && !home.includes('Quire'));
+  ok('…and the buttons are Chats and Settings, with no Machine button and no project chips beside them',
+    home.includes('aria-label="Chats"') && home.includes('aria-label="Settings"')
+    && !home.includes('aria-label="Machine"') && !home.includes('Quire'));
+  ok('…and the machines count is the button into the Machine place',
+    /<button[^>]*data-sys="machines"/.test(home));
   const week = (used) => renderToStaticMarkup(h(ShellUI.Shell, {
     view: 'overview', onView() {},
     fleet: { ...fresh, quota: { ...fresh.quota, left: 0.89, weekly: used == null ? null
@@ -764,7 +770,7 @@ group('every screen renders with nothing, with something stale and with a machin
   if (app) {
     ok('the panel stands up with the shell around it', app.length > 500);
     ok('…and opens on the Dashboard, with the line over it',
-      />divan<\/a>/.test(app) && app.includes('Chats') && app.includes('Machine')
+      />divan<\/a>/.test(app) && app.includes('Chats') && app.includes('aria-label="Settings"')
       && app.includes('class="dv-greet"'));
     ok('…and paints nothing of its own', [...paint(app).literal].every((c) => OWN.has(c)),
       [...paint(app).literal].join(', '));
