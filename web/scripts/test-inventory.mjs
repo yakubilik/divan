@@ -21,6 +21,7 @@ const SOURCES = {
   machine: read('web/scripts/test-machine.mjs'),
   refusal: read('web/scripts/test-refusal.mjs'),
   overview: read('web/scripts/test-overview.mjs'),
+  screen: read('web/scripts/test-screen.mjs'),
   phone: app,
 };
 

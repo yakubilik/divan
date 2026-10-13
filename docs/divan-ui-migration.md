@@ -98,6 +98,7 @@ The quoted words are the check's own name.
 | Unpair a computer | Settings / Machines | Machine card Remove; Settings | `device.revoke_self` | drive: "…and removing it revokes this browser’s pairing on that computer" |
 | Remote screen | Screen page | Machine › Machines › Remote screen | `screen.info`, `screen.enable` | actions: "the remote screen asks screen.info and Take control sends screen.enable" |
 | Drive the remote screen | Screen page | Same | `screen.input` | actions: "connected and in control, a key pressed on the page goes to the computer as screen.input" |
+| Copy and paste with the remote screen (#213) | Screen page | Same (⌘/Ctrl+V, ⌘/Ctrl+C) | `screen.clipboard.set`, `screen.clipboard.get` | screen: "a paste sets the remote clipboard to the local text, then sends the Mac" |
 | Folders | Projects page | Machine › Machines › Folders | `host.git` | actions: "Folders asks the computer for host.git on its repositories" |
 | Stop a turn from the sessions list | Fleet page | Machine › Machines › Sessions and plan limits | `chat.interrupt` | actions: "Sessions and plan limits stops a running turn (chat.interrupt)" |
 | Update the computer | Update page | Machine › Machines › Update | `update.status`, `update.apply`, `daemon.restart` | actions: "the update page asks update.status, Update sends update.apply and Restart sends daemon.restart" |
@@ -146,6 +147,7 @@ The quoted words are the check's own name.
 | Switch computer | Computer picker | Machine › Machines › Computer picker | `hello` | phone: "the computer picker switches computer (switchHost)" |
 | Remove / revoke a computer | Machines long-press, Settings | Same | `device.revoke_self` | phone: "Revoke removes the computer" |
 | Remote screen, Agents, Accounts, pool, queue, Call | Machine list | Under the four Machine tabs | `screen.*`, `agent.*`, `account.*`, `pool.*`, `ustabasi.*`, `call.*` | phone: "Machine has four tabs at their own routes" |
+| Paste onto / copy from the remote screen (#213) | — | Screen toolbar: Paste, Copy from remote | `screen.clipboard.set`, `screen.clipboard.get` | phone: "Paste is in the toolbar, sets the computer" |
 | Accounts: add, rename, sign out, delete | Accounts | Machine › Executors › Accounts | `account.create`, `account.rename`, `account.logout`, `account.delete` | phone: "Accounts adds (createAccount), renames, signs out and deletes an account from its menu" |
 | Sign in | Account login | Same | `account.login` | phone: "signing in still sends account.login" |
 | Enter the sign-in code, cancel a sign-in | Account login | Same | `account.login.submit`, `account.login.cancel` | phone: "signing in still sends account.login" — proven up to the code field: the harness draws a screen once and cannot hold typed text, so the press that sends the code is not driven on the phone (the screen and its store call are unchanged from `main`; the same request is driven on the web) |

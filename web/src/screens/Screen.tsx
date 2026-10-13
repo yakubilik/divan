@@ -5,6 +5,11 @@ import { Button, Cell, EmptyState, Pill, SectionHeader } from '../ui/divan';
 import { useFleet } from '../lib/fleet';
 import { screenUrl } from '../lib/actions';
 import { refusedFor, refusalText } from '../lib/refusal';
+import { copyText } from '../lib/clipboard';
+import {
+  CLIPBOARD_MAX, clipboardChord, clipboardMods, controlBlocker, localIsMac, shortcutKey,
+  type ScreenCaps,
+} from '../lib/screen';
 
 /* The computer's own screen, in the panel.
  *
@@ -13,13 +18,14 @@ import { refusedFor, refusalText } from '../lib/refusal';
  * to be the easier client of the two. There are real mouse and keyboard events
  * here, so nothing has to be guessed from a finger, and `getBoundingClientRect`
  * already accounts for the zoom transform: a click is where the browser says it
- * is, whatever CSS did to the picture on the way. */
+ * is, whatever CSS did to the picture on the way.
+ *
+ * The clipboard rides along as text. A paste here puts this computer's text
+ * on the other one's clipboard and then presses its own paste shortcut; a copy
+ * presses its copy shortcut and brings the result back. Both sit behind the
+ * same switch as the pointer, on the daemon's side. */
 
-interface Display { id: string; label: string; w: number; h: number; primary: boolean }
-interface Caps {
-  view: boolean; control: boolean; enabled: boolean;
-  os?: string; reason?: string | null; displays?: Display[];
-}
+type Caps = ScreenCaps;
 
 /** The keys worth naming, in the daemon's own vocabulary. Anything else
  *  printable is sent as text, which is what a keyboard produces anyway. */
@@ -35,6 +41,12 @@ const MAX_ZOOM = 5;
 /** A pointer that reported every pixel would send a hundred messages a second
  *  to move an arrow the computer redraws seven times a second. */
 const MOVE_MS = 45;
+/** How long a copy shortcut is given to land on the other clipboard before it
+ *  is read back. Most apps take a frame; a terminal can take a few. */
+const COPY_SETTLE_MS = 150;
+/** A paste shortcut whose paste event never arrives (the browser had nothing
+ *  it would hand over) still pastes whatever the other computer already holds. */
+const PASTE_FALLBACK_MS = 400;
 
 export function Screen() {
   const { hosts, order, focus, setFocus, call } = useFleet();
@@ -70,6 +82,10 @@ export function Screen() {
   const lastAt = useRef(0);
   const lastMove = useRef(0);
   const held = useRef<string | null>(null);
+  const pasteArmed = useRef<number | null>(null);
+  // A line under the picture for what just happened that is not an error: a
+  // copy that came back, a click that was not sent and why.
+  const [note, setNote] = useState<string | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   // What W15's status line says about the picture: the size the computer is
   // actually sending, and how long the last frame took to arrive. Both are
@@ -82,6 +98,20 @@ export function Screen() {
   const machineName = slot?.info?.name?.replace('.local', '') || slot?.cfg.name || '';
   const base = slot ? `http://${slot.cfg.host}:${slot.cfg.port}` : null;
   const controllable = !!caps?.control && !!caps?.enabled;
+  const blocker = controlBlocker(caps);
+  const remoteMods = clipboardMods(caps?.os);
+  const mac = useMemo(() => localIsMac(), []);
+
+  // Every host.status carries the screen's state, so a switch flipped from the
+  // phone — or an Accessibility grant that has just gone — reaches this view
+  // without anyone reopening it. Asked once and never again, a stale `enabled`
+  // is a picture that silently ignores every click.
+  const pushed = (slot?.info as { screen?: Partial<Caps> } | null | undefined)?.screen;
+  useEffect(() => {
+    if (!pushed) return;
+    setCaps((c) => (c ? { ...c, ...pushed } : c));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pushed?.enabled, pushed?.control, pushed?.reason, pushed?.view]);
 
   useEffect(() => {
     alive.current = true;
@@ -205,11 +235,67 @@ export function Screen() {
   }, []);
 
   // ── input ─────────────────────────────────────────────────────────────
+  /** Ask again what the computer allows — after it has refused something,
+   *  because the refusal is usually news (control turned off elsewhere, an
+   *  Accessibility grant gone). */
+  const refreshCaps = useCallback(() => {
+    if (!key) return;
+    call<Caps>(key, 'screen.info', {}).then((r) => alive.current && setCaps(r)).catch(() => {});
+  }, [key, call]);
+
+  const refused = useCallback((e: any, fallback: string) => {
+    setError(e?.message ?? fallback);
+    if (e?.code === 'control_disabled' || e?.code === 'control_unavailable') refreshCaps();
+  }, [refreshCaps]);
+
   const send = useCallback((...actions: any[]) => {
     if (!key) return;
     call(key, 'screen.input', { actions, display: displayRef.current }).catch(
-      (e: any) => setError(e?.message ?? 'That did not go through'));
-  }, [key, call]);
+      (e: any) => refused(e, 'That did not go through'));
+  }, [key, call, refused]);
+
+  /** Local text onto the other clipboard, then the other computer's paste. */
+  const pasteToRemote = useCallback(async (text: string) => {
+    if (!key) return;
+    if (text.length > CLIPBOARD_MAX) {
+      setError(`That is ${text.length.toLocaleString()} characters; the clipboard takes ${CLIPBOARD_MAX.toLocaleString()} at most.`);
+      return;
+    }
+    if (text) {
+      try {
+        await call(key, 'screen.clipboard.set', { text });
+      } catch (e: any) {
+        refused(e, 'The clipboard could not be set');
+        return;
+      }
+    }
+    send({ kind: 'key', key: 'v', mods: remoteMods });
+  }, [key, call, send, refused, remoteMods]);
+
+  /** The other computer's copy, then its clipboard onto this one. */
+  const copyFromRemote = useCallback(async () => {
+    if (!key) return;
+    try {
+      await call(key, 'screen.input', {
+        actions: [{ kind: 'key', key: 'c', mods: remoteMods }], display: displayRef.current,
+      });
+      await new Promise((r) => window.setTimeout(r, COPY_SETTLE_MS));
+      const r = await call<{ text?: string; truncated?: boolean }>(key, 'screen.clipboard.get', {});
+      const text = r?.text ?? '';
+      if (!text) { setNote(`The clipboard on ${machineName || 'that computer'} is empty.`); return; }
+      const ok = await copyText(text);
+      setNote(ok
+        ? `Copied ${text.length.toLocaleString()} characters from ${machineName || 'that computer'}${r.truncated ? ' (cut short)' : ''}.`
+        : 'The text came back, but this browser would not let it onto the clipboard.');
+    } catch (e: any) {
+      refused(e, 'The copy did not come back');
+    }
+  }, [key, call, refused, remoteMods, machineName]);
+
+  /** A click that cannot be sent is said out loud rather than swallowed. */
+  const explain = useCallback(() => {
+    if (blocker) setNote(blocker);
+  }, [blocker]);
 
   /** Where a browser event landed on the picture, 0..1. The rect already has
    *  the zoom transform in it, so nothing has to be undone by hand. */
@@ -247,22 +333,50 @@ export function Screen() {
   // focused element never sees.
   useEffect(() => {
     if (!controllable || !live) return;
-    const onKey = (e: KeyboardEvent) => {
+    const typingHere = () => {
       const el = document.activeElement as HTMLElement | null;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (typingHere()) return;
+      const chord = clipboardChord(e, mac);
+      if (chord === 'paste') {
+        // Not prevented: the browser's paste event is the only way to read
+        // this computer's clipboard on a panel served over plain http, and it
+        // carries the text. If it never comes, paste what is already there.
+        if (pasteArmed.current) window.clearTimeout(pasteArmed.current);
+        pasteArmed.current = window.setTimeout(() => {
+          pasteArmed.current = null;
+          send({ kind: 'key', key: 'v', mods: remoteMods });
+        }, PASTE_FALLBACK_MS);
+        return;
+      }
+      if (chord === 'copy') { e.preventDefault(); void copyFromRemote(); return; }
       const named = KEYS[e.key];
       if (named) { e.preventDefault(); send({ kind: 'key', key: named, mods: mods(e) }); return; }
       if (e.metaKey || e.ctrlKey || e.altKey) {
-        // A shortcut: send the letter with its modifiers rather than the
+        // A shortcut: send the key with its modifiers rather than the
         // character the browser would have produced.
-        if (e.key.length === 1) { e.preventDefault(); send({ kind: 'key', key: e.key.toLowerCase(), mods: mods(e) }); }
+        const k = shortcutKey(e);
+        if (k) { e.preventDefault(); send({ kind: 'key', key: k, mods: mods(e) }); }
         return;
       }
       if (e.key.length === 1) { e.preventDefault(); send({ kind: 'text', text: e.key }); }
     };
+    const onPaste = (e: ClipboardEvent) => {
+      if (typingHere()) return;
+      e.preventDefault();
+      if (pasteArmed.current) { window.clearTimeout(pasteArmed.current); pasteArmed.current = null; }
+      void pasteToRemote(e.clipboardData?.getData('text/plain') ?? '');
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [controllable, live, send]);
+    document.addEventListener('paste', onPaste);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('paste', onPaste);
+      if (pasteArmed.current) { window.clearTimeout(pasteArmed.current); pasteArmed.current = null; }
+    };
+  }, [controllable, live, send, mac, remoteMods, copyFromRemote, pasteToRemote]);
 
   const onMove = (e: React.MouseEvent) => {
     if (!controllable) return;
@@ -273,32 +387,31 @@ export function Screen() {
     if (p) send({ kind: 'move', x: p.x, y: p.y });
   };
 
+  // `detail` is the browser's own count of a run of clicks, and it travels
+  // with the press: the second press of a double-click goes as clicks=2, which
+  // is how a Mac knows it was one. A separate `double` on top of the two
+  // presses the browser already sent was four clicks, and opened nothing.
   const onDown = (e: React.MouseEvent) => {
-    if (!controllable || e.button === 2) return;
+    if (e.button === 2) return;
+    if (!controllable) { explain(); return; }
     const p = norm(e);
     if (!p) return;
     held.current = e.button === 1 ? 'middle' : 'left';
-    send({ kind: 'down', button: held.current, x: p.x, y: p.y });
+    send({ kind: 'down', button: held.current, x: p.x, y: p.y, clicks: Math.max(1, e.detail || 1) });
   };
 
   const onUp = (e: React.MouseEvent) => {
     if (!controllable || !held.current) return;
     const p = norm(e);
-    send({ kind: 'up', button: held.current, ...(p ?? {}) });
+    send({ kind: 'up', button: held.current, ...(p ?? {}), clicks: Math.max(1, e.detail || 1) });
     held.current = null;
   };
 
   const onContext = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!controllable) return;
+    if (!controllable) { explain(); return; }
     const p = norm(e);
     if (p) send({ kind: 'click', button: 'right', x: p.x, y: p.y });
-  };
-
-  const onDouble = (e: React.MouseEvent) => {
-    if (!controllable) return;
-    const p = norm(e);
-    if (p) send({ kind: 'double', button: 'left', x: p.x, y: p.y });
   };
 
   const onWheel = (e: React.WheelEvent) => {
@@ -400,7 +513,7 @@ export function Screen() {
             : !live ? 'not connected'
             : controllable ? 'control is on'
             : caps?.control === false ? (caps.reason ?? 'view only')
-            : caps ? 'watching' : 'asking…'}
+            : caps ? 'watching · control is off' : 'asking…'}
         </span>
       </div>
 
@@ -414,7 +527,6 @@ export function Screen() {
             onMouseUp={onUp}
             onMouseLeave={onUp}
             onContextMenu={onContext}
-            onDoubleClick={onDouble}
             onWheel={onWheel}
             style={{ width: fit.w, height: fit.h, position: 'relative', transform: `scale(${zoom})`,
                      cursor: controllable ? 'crosshair' : 'default' }}
@@ -481,6 +593,19 @@ export function Screen() {
           <Cell text="no audio" />
         </div>
       )}
+      {/* Why a click will not land, said where the clicking happens. Not only
+          after a click: the Accessibility message on a Mac is the whole answer
+          to "why does nothing happen", and it should be on screen first. */}
+      {live && !controllable && !!blocker && caps?.view && (
+        <div data-screen-blocker="" role="status" style={{
+          padding: '8px 14px', fontSize: 12.5, color: T.amber, borderTop: `1px solid ${T.line}`,
+        }}>{blocker}</div>
+      )}
+      {!!note && note !== blocker && (
+        <div data-screen-note="" role="status" style={{
+          padding: '8px 14px', fontSize: 12.5, color: T.ink2, borderTop: `1px solid ${T.line}`,
+        }}>{note}</div>
+      )}
       {!!error && (
         <div style={{
           padding: '8px 14px', fontSize: 12.5, color: T.red, borderTop: `1px solid ${T.line}`,
@@ -491,7 +616,8 @@ export function Screen() {
           padding: '7px 14px', fontSize: 12.5, color: T.ink3, borderTop: `1px solid ${T.line}`,
         }}>
           Click, drag and type as if you were sitting at it. Right-click works; ⌃/⌘ shortcuts are passed
-          through; hold ⌃ and scroll to zoom this view rather than the computer.
+          through; {mac ? '⌘' : 'Ctrl+'}V pastes this computer's text there and {mac ? '⌘' : 'Ctrl+'}C brings
+          its selection back; hold ⌃ and scroll to zoom this view rather than the computer.
         </div>
       )}
     </div>
