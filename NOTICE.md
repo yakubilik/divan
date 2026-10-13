@@ -37,6 +37,15 @@ the user asks for them.
   2.0. The app does not ship the font: `app/scripts/gen-icons.py` cuts the
   glyphs it uses out of it and `app/src/icons.gen.ts` holds them as SVG paths.
 
+## Code the app ships from other projects
+
+- **xterm.js** and its fit addon (`@xterm/xterm`, `@xterm/addon-fit`) are
+  licensed under the MIT License, Copyright (c) 2017-2019 The xterm.js authors,
+  2014-2016 SourceLair Private Company, 2012-2013 Christopher Jeffrey.
+  `app/src/xterm.gen.ts` holds their UMD builds and stylesheet as text, made by
+  `app/scripts/gen-xterm.cjs`, so the phone's Terminal draws without fetching
+  anything. The web panel installs the same packages from npm.
+
 ## Code ported from other projects
 
 - **normalizer-tr** by Erdem Tuna (<https://github.com/erdemtuna/normalizer-tr>,

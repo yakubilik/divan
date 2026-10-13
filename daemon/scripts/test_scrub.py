@@ -145,6 +145,110 @@ def quiet(fn, *a, **kw):
         return fn(*a, **kw)
 
 
+# Ids shaped like the one that bricked a chat: `PWD` after a digit reads as a
+# password with the rest of the id as its value.
+TOOL_ID = "toolu_01CWK4PWD7xQ2mN9vB3kL8sR5tY1"
+MSG_ID = "msg_01Hq8PWD3zR7vK2mN9xB4cL6"
+UUID = "4f1c9e2a-7b3d-4PWD-9e1f-0a2b3c4d5e6f"
+PARENT = "9a8b7c6d-5e4f-4PWD-8a1b-2c3d4e5f6a7b"
+SESSION = "30c84f23-7b63-4PWD-a1b2-c3d4e5f6a7b8"
+CALL_ID = "call_PWD9xQ2mN7vB3kL8sR5tY1"
+
+
+def ids() -> None:
+    print("\nids in a transcript")
+    looks = [i for i in (TOOL_ID, MSG_ID, UUID, PARENT, SESSION, CALL_ID) if not secrets.find(f"id: {i}")]
+    check(not looks, "each test id is one the finder takes for a password", f"{looks}")
+    gh, pw, inner = "ghp_" + A[:36], "password: hunter2" + A[:10], "sk-proj-" + A[1:33]
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        path = home / "s.jsonl"
+        rows = [
+            {"type": "assistant", "uuid": UUID, "parentUuid": PARENT, "sessionId": SESSION,
+             "requestId": "req_011PWD7xQ2mN9vB3kL8", "timestamp": "2026-10-01T10:00:00.000Z",
+             "message": {"id": MSG_ID, "role": "assistant", "content": [
+                 {"type": "text", "text": f"export GH={gh}"},
+                 {"type": "tool_use", "id": TOOL_ID, "name": "Bash",
+                  "input": {"command": f"echo {pw}", "id": inner}}]}},
+            {"type": "user", "uuid": PARENT, "parentUuid": UUID, "sessionId": SESSION,
+             "message": {"role": "user", "content": [
+                 {"type": "tool_result", "tool_use_id": TOOL_ID, "content": f"ok {gh}"}]}},
+        ]
+        jsonl(path, rows)
+        codex = home / "rollout.jsonl"
+        jsonl(codex, [{"type": "response_item", "payload": {
+            "type": "function_call", "name": "shell", "call_id": CALL_ID,
+            "arguments": json.dumps({"command": ["bash", "-lc", f"DB_PASSWORD=hunter2{A[:12]} ./run"]})}}])
+        os.utime(path, (OLD, OLD))
+        os.utime(codex, (OLD, OLD))
+        r = scrub.Run(True, FakeKeychain())
+        scrub.scrub_file(r, path, time.time())
+        scrub.scrub_file(r, codex, time.time())
+        out = [json.loads(line) for line in path.read_text().splitlines()]
+        a, u = out[0], out[1]
+        block = a["message"]["content"][1]
+        check(block["id"] == TOOL_ID and u["message"]["content"][0]["tool_use_id"] == TOOL_ID
+              and f'"id":"{TOOL_ID}"'.encode() in path.read_bytes()
+              and f'"tool_use_id":"{TOOL_ID}"'.encode() in path.read_bytes(),
+              "tool_use.id and tool_result.tool_use_id come out byte-identical")
+        check(a["message"]["id"] == MSG_ID and a["uuid"] == UUID and a["parentUuid"] == PARENT
+              and a["sessionId"] == SESSION and u["uuid"] == PARENT and u["parentUuid"] == UUID
+              and u["sessionId"] == SESSION and a["requestId"] == "req_011PWD7xQ2mN9vB3kL8",
+              "message.id, uuid, parentUuid, sessionId and requestId are never rewritten")
+        text = path.read_text()
+        check(gh not in text and "hunter2" not in text and inner not in text
+              and secrets.service_for("github", gh) in a["message"]["content"][0]["text"]
+              and secrets.service_for("github", gh) in u["message"]["content"][0]["content"]
+              and secrets.SERVICE_PREFIX in block["input"]["command"]
+              and secrets.service_for("openai", inner) in block["input"]["id"],
+              "a key in the text, tool input (an `id` there too) and tool output is still masked")
+        call = json.loads(codex.read_text())["payload"]
+        check(call["call_id"] == CALL_ID and "hunter2" not in call["arguments"],
+              "a Codex call_id is kept and the key in its arguments masked")
+
+        print("\nthe safety net")
+        line = {"type": "assistant", "message": {"id": "msg_x", "content": [
+            {"type": "text", "text": f"export GH={gh}"},
+            {"type": "tool_use", "id": TOOL_ID, "name": "Bash", "input": {}}]}}
+        net = home / "net.jsonl"
+        jsonl(net, [line, {"type": "user", "message": {"content": f"only text {gh}"}}])
+        os.utime(net, (OLD, OLD))
+        keys, scrub._ID_KEYS = scrub._ID_KEYS, set()      # as if the id were not known to be one
+        try:
+            r = scrub.Run(True, FakeKeychain())
+            scrub.scrub_file(r, net, time.time())
+        finally:
+            scrub._ID_KEYS = keys
+        first, second = net.read_text().splitlines()
+        check(first == json.dumps(line, separators=(",", ":")),
+              "a line whose id masking would break is left exactly as it was")
+        check(gh not in second and any("would break an id" in e for e in r.errors),
+              "the other lines are still masked, and the skip is reported")
+
+        db = DB(home / ".divan" / "db.sqlite")
+        chat = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
+                              perm_mode="ask", cwd="/tmp")
+        payload = {"blocks": [{"type": "tool_result", "tool_use_id": TOOL_ID, "content": f"ok {gh}"}]}
+        db.append_event(chat["id"], "tool.result", payload)
+        db.append_event(chat["id"], "tool.result", {"tool_use_id": TOOL_ID, "output": f"ok {gh}"})
+        db._c.close()
+        keys, scrub._ID_KEYS = scrub._ID_KEYS, set()
+        try:
+            scrub.scrub_db(scrub.Run(True, FakeKeychain()), home / ".divan" / "db.sqlite")
+        finally:
+            scrub._ID_KEYS = keys
+        con = sqlite3.connect(home / ".divan" / "db.sqlite")
+        rows = [json.loads(p) for (p,) in con.execute("SELECT payload FROM events ORDER BY seq")]
+        con.close()
+        check(rows[0] == payload and rows[1]["tool_use_id"] == TOOL_ID, "a database event whose id masking would break is left as it was")
+        scrub.scrub_db(scrub.Run(True, FakeKeychain()), home / ".divan" / "db.sqlite")
+        con = sqlite3.connect(home / ".divan" / "db.sqlite")
+        rows = [json.loads(p) for (p,) in con.execute("SELECT payload FROM events ORDER BY seq")]
+        con.close()
+        check(rows[0]["blocks"][0]["tool_use_id"] == TOOL_ID and rows[1]["tool_use_id"] == TOOL_ID
+              and gh not in json.dumps(rows), "in the database the ids are kept and the keys masked")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)
@@ -258,6 +362,8 @@ def main() -> int:
         stray = [str(p) for p in scrub.targets(home) if not any(p.is_relative_to(r) for r in roots)]
         check(not stray, "only the daemon's and the CLIs' own folders are walked", f"{stray}")
         db._c.close()
+
+    ids()
 
     print(f"\n{'FAILED: ' + ', '.join(failures) if failures else 'all checks passed'}")
     return 1 if failures else 0

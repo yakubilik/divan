@@ -193,8 +193,11 @@ try {
     /Nothing needs you|nothing is stuck/i.test(dash) && !/Needs you\n/.test(dash) && !/\b\d+\s+working\b/.test(dash), dash.slice(0, 400));
   const wait = await empty('/waiting');
   ok('…Waiting on you says so in one sentence', /Nothing is waiting on you|Nothing waits/i.test(wait), wait.slice(0, 300));
-  const term = await empty('/machine/terminal');
-  ok('…the Terminal says no chat has been started', /No chat has been started anywhere/.test(term), term.slice(0, 300));
+  // The Terminal opens on a shell; its wall of chats is one press away.
+  await b.cold('/machine/terminal', { fixture: 'empty' });
+  const term = await b.evaluate(`[...document.querySelectorAll('[role="radio"]')].find((r) => r.textContent === 'Chats')?.click();
+    await new Promise((r) => setTimeout(r, 300)); return document.body.innerText;`);
+  ok('…the Terminal’s wall of chats says no chat has been started', /No chat has been started anywhere/.test(term), term.slice(0, 300));
   const chats = await empty('/chats');
   ok('…and the Chat place opens a box to write in, with no conversation invented', /No conversation yet/.test(chats) && /Message to Hermes/.test(chats) && !/Webhook retry policy/.test(chats), chats.slice(0, 300));
   const emptyBad = b.drain();
