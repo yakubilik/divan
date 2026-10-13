@@ -11,7 +11,7 @@
  *  agent" stays one. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore, useT } from '../src/store';
 import { useColors } from '../src/theme';
@@ -64,8 +64,11 @@ function Body() {
   const [agentTouched, setAgentTouched] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
-  const [cwd, setCwd] = useState<string | null>(defaults.cwd);
-  const [groupId, setGroupId] = useState<string | null>(null);
+  // A heading's + on the chat list opens this already where that heading is —
+  // its folder, and under a group that group — as the web's onNewChatIn does.
+  const at = useLocalSearchParams<{ cwd?: string; group?: string }>();
+  const [cwd, setCwd] = useState<string | null>(at.cwd || defaults.cwd);
+  const [groupId, setGroupId] = useState<string | null>(at.group || null);
   const [query, setQuery] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [maxTurns, setMaxTurns] = useState('');

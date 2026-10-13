@@ -19,10 +19,11 @@ import { em, useColors } from '../../src/theme';
 import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../../src/components/ui';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Shell } from '../../src/components/shell';
-import { freshAccount, freshAgent, freshChat, freshCwd } from '../../src/fresh-chat';
+import { freshCwd } from '../../src/fresh-chat';
+import { FirstWord, useFreshChat } from '../../src/components/first-word';
 import type { Chat } from '../../src/protocol';
 import { chatSections, FLAT, type Section } from '../../src/chat-sections';
-import { EVERYONE } from '../../src/chat-list';
+import { EVERYONE, ownerOf } from '../../src/chat-list';
 
 const NO_ORDER: string[] = [];
 const NOBODY = { names: [] as string[], me: null };
@@ -93,25 +94,9 @@ export default function ChatPlace() {
   useEffect(() => { if (conn === 'online') { void refresh().catch(() => {}); void loadProjects().catch(() => {}); } }, [conn, refresh, loadProjects]);
 
   const send = useStore((s) => s.send);
-  const catalog = useStore((s) => s.catalog);
-  const accounts = useStore((s) => s.accounts);
-  const listAgents = useStore((s) => s.listAgents);
+  const openFresh = useFreshChat();
   const [first, setFirst] = useState('');
   const creating = useRef(false);
-  const [starting, setStarting] = useState(false);
-
-  /** A fresh chat on what New chat would start with (`src/fresh-chat.ts`). The
-   *  agent list is one more round trip, asked only when the remembered choice
-   *  is an agent; if it cannot be read the chat opens without one rather than
-   *  not at all. Null where there is no folder to open it in. */
-  const openFresh = useCallback(async () => {
-    const cwd = freshCwd(defaults, projects);
-    if (!cwd) return null;
-    const account = freshAccount(defaults, accounts);
-    const agents = defaults.lastAgent === null ? []
-      : await listAgents(account || null, cwd, defaults.provider).catch(() => []);
-    return createChat(freshChat({ defaults, catalog, cwd, account, agent: freshAgent(defaults, agents) }) as any);
-  }, [defaults, projects, accounts, catalog, listAgents, createChat]);
 
   /** No conversation yet: what is said here opens one on this computer's
    *  defaults and goes straight into it. */
@@ -131,34 +116,6 @@ export default function ChatPlace() {
       creating.current = false;
     }
   }, [first, defaults, projects, openFresh, send, router, go, T]);
-
-  // Tap: a fresh chat, opened at once — no Dashboard, no sheet. Long-press: the
-  // New chat sheet, for a different folder, tool or model.
-  const quickNew = useCallback(async () => {
-    if (!freshCwd(defaults, projects)) { go(() => router.push('/new-chat')); return; }
-    // Creating a chat is a round trip to the computer; without this a second
-    // tap while it is in flight makes a second chat nobody asked for.
-    if (creating.current) return;
-    creating.current = true;
-    setStarting(true);
-    try {
-      const chat = (await openFresh())!;
-      router.push(`/chat/${chat.id}`);
-    } catch (e: any) {
-      // The list stays where it was; the dialog says why and offers the two
-      // ways on: the same press again, or the sheet with every choice in it.
-      alert(T('couldNotStart'), e?.message ?? String(e), [
-        { text: T('cancel'), style: 'cancel' },
-        { text: T('ncChooseSettings'), onPress: () => go(() => router.push('/new-chat')) },
-        { text: T('tryAgain'), onPress: () => void quickNewRef.current() },
-      ]);
-    } finally {
-      creating.current = false;
-      setStarting(false);
-    }
-  }, [defaults, projects, openFresh, router, go, T]);
-  const quickNewRef = useRef(quickNew);
-  quickNewRef.current = quickNew;
 
   const { sections, who, counts, shared } = useMemo(() => chatSections({
     chats, groups, people, chosen, saved, productNames, projects, q, collapsed, showArchived,
@@ -220,30 +177,37 @@ export default function ChatPlace() {
     });
   }
 
+  /** Where a chat can go, in the web's order (`ChatMenu.tsx`): Daily, every
+   *  group, a new one. */
   function moveItems(chat: Chat, back?: () => void): MenuItem[] {
     return [
       ...(back ? [{ kind: 'back' as const, label: T('moveToGroup'), onPress: back }] : []),
-      ...groups.map((g) => ({ label: g.name, checked: g.id === chat.group_id, onPress: () => void updateChat(chat.id, { group_id: g.id } as any).catch(err) })),
-      { kind: 'divider' as const },
       // Daily is out of every group and every product, for good: a chat the
       // computer filed under a product would otherwise stay there.
       { label: T('noGroup'), checked: !chat.group_id && !chat.project_id, onPress: () => void updateChat(chat.id, { group_id: null, project_id: '' }).catch(err) },
+      ...groups.map((g) => ({ label: g.name, checked: g.id === chat.group_id, onPress: () => void updateChat(chat.id, { group_id: g.id } as any).catch(err) })),
       { label: T('newGroupAction'), icon: 'add', onPress: () => newGroup((id) => updateChat(chat.id, { group_id: id } as any)) },
     ];
   }
 
+  /** A chat's own menu: the web's `ChatMenu`, entry for entry and in its order,
+   *  each sending what the web's sends. */
   function chatItems(chat: Chat): MenuItem[] {
+    const names = people.names;
+    const owner = names.length > 1 ? ownerOf(chat, names) : null;
     return [
-      { label: chat.pinned ? T('unpin') : T('pin'), icon: chat.pinned ? 'keep_off' : 'keep', onPress: () => void updateChat(chat.id, { pinned: chat.pinned ? 0 : 1 } as any).catch(err) },
       { label: T('rename'), icon: 'edit', onPress: () => prompt({
           title: T('renameChat'), value: chat.title, placeholder: T('chatName'), confirm: T('save'), cancel: T('cancel'),
-          submit: async (t) => { if (t.trim()) await updateChat(chat.id, { title: t.trim().slice(0, 60) } as any); },
+          submit: async (t) => { await updateChat(chat.id, { title: t.trim() || chat.title } as any); },
         }) },
-      { label: T('moveToGroup'), icon: 'folder_open', submenu: true, onPress: () => replaceMenu(moveItems(chat, () => replaceMenu(chatItems(chat)))) },
+      { label: chat.pinned ? T('unpin') : T('pin'), icon: chat.pinned ? 'keep_off' : 'keep', onPress: () => void updateChat(chat.id, { pinned: chat.pinned ? 0 : 1 } as any).catch(err) },
       { label: chat.archived ? T('unarchive') : T('archiveAction'), icon: chat.archived ? 'unarchive' : 'inventory_2', onPress: () => void updateChat(chat.id, { archived: chat.archived ? 0 : 1 } as any).catch(err) },
+      { label: T('deleteChat'), icon: 'delete', danger: true, onPress: () => confirmDelete(chat) },
       { kind: 'divider' },
-      { label: T('delete'), icon: 'delete', danger: true, onPress: () => alert(T('deleteChat'), T('deleteChatBody'), [
-          { text: T('cancel'), style: 'cancel' }, { text: T('delete'), style: 'destructive', onPress: () => void deleteChat(chat.id).catch(err) }]) },
+      { label: T('moveToGroupMore'), icon: 'folder_open', submenu: true, onPress: () => replaceMenu(moveItems(chat, () => replaceMenu(chatItems(chat)))) },
+      // On a computer two people use, a chat can be handed to the other one.
+      ...(owner ? names.filter((p) => p !== owner).map((p) => ({
+        label: T('giveTo', { name: p }), icon: 'group', onPress: () => void updateChat(chat.id, { owner: p } as any).catch(err) })) : []),
     ];
   }
 
@@ -279,7 +243,10 @@ export default function ChatPlace() {
   // state, so reach them through a ref rather than rebuilding.
   const actionsRef = useRef({ chatItems, groupItems, archiveChat, confirmDelete });
   actionsRef.current = { chatItems, groupItems, archiveChat, confirmDelete };
-  const onPlus = useCallback(() => go(() => router.push('/new-chat')), [go, router]);
+  // A heading's + is the web's onNewChatIn: the New chat sheet, already on the
+  // heading's folder and, under a group, filed in that group.
+  const onPlus = useCallback((s: Section) => go(() => router.push({ pathname: '/new-chat',
+    params: { ...(s.cwd ? { cwd: s.cwd } : {}), ...(s.kind === 'group' ? { group: s.id } : {}) } })), [go, router]);
   const onRowPress = useCallback((chat: Chat) => go(() => router.push(`/chat/${chat.id}`)), [go, router]);
   const onRowArchive = useCallback((chat: Chat) => actionsRef.current.archiveChat(chat), []);
   const onRowDelete = useCallback((chat: Chat) => actionsRef.current.confirmDelete(chat), []);
@@ -319,13 +286,14 @@ export default function ChatPlace() {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 18, paddingHorizontal: 16, paddingBottom: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
           <Text style={{ fontSize: 30, fontWeight: '600', letterSpacing: em(30, -0.025) }}>{T('chats')}</Text>
-          {/* Tap: a fresh chat on the defaults, opened at once. Long-press: the
-              New chat sheet, where every choice can be changed first. */}
+          {/* Tap: the empty composer, as the web's New chat in the Chat place —
+              nothing is made until something is said. Long-press: the New
+              chat sheet, where every choice can be changed first. */}
           {withControls && (
-            <Pressable accessibilityLabel={T('newChat')} hitSlop={6} disabled={starting}
-              onPress={() => void quickNew()} onLongPress={() => go(() => router.push('/new-chat'))}
+            <Pressable accessibilityLabel={T('newChat')} hitSlop={6}
+              onPress={() => go(() => router.push('/chat/new'))} onLongPress={() => go(() => router.push('/new-chat'))}
               style={({ pressed }) => [{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
-              {starting ? <Spinner size={18} /> : <Icon name="edit_square" size={22} />}
+              <Icon name="edit_square" size={22} />
             </Pressable>
           )}
           {/* The general call: this computer's Hermes, not any one chat. */}
@@ -405,18 +373,7 @@ export default function ChatPlace() {
     body = online ? (
       <View style={{ flex: 1, justifyContent: 'flex-end', padding: 16, gap: 10 }}>
         <Text style={{ fontSize: 13, color: c.muted, textAlign: 'center' }}>{T('chNoneYet')}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 28, borderWidth: 1, borderColor: c.line,
-                       backgroundColor: c.card, paddingLeft: 18, paddingRight: 6, minHeight: 56 }}>
-          <TextInput value={first} onChangeText={setFirst} placeholder={T('chTalk')} accessibilityLabel={T('chTalk')}
-            placeholderTextColor={c.faint} returnKeyType="send" onSubmitEditing={() => void sayFirst()}
-            style={{ flex: 1, fontSize: 15 }} />
-          <Pressable accessibilityRole="button" accessibilityLabel={T('send')} onPress={() => void sayFirst()}
-            disabled={!first.trim()}
-            style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-                     backgroundColor: first.trim() ? c.ink : c.fill }}>
-            <Icon name="arrow_upward" size={20} color={first.trim() ? c.onInk : c.faint} />
-          </Pressable>
-        </View>
+        <FirstWord value={first} onChangeText={setFirst} onSend={() => void sayFirst()} />
       </View>
     ) : conn === 'unauthorized' ? (
       <EmptyState icon="key_off" title={T('noAccess')} body={T('noAccessHint', { host: hostName })}
@@ -465,7 +422,7 @@ function statusLine(chat: Chat, T: ReturnType<typeof useT>): string {
 /** A heading: its name and how many chats are under it, then — like the web's
  *  — a + that starts a chat in it, and a group's own ... menu. */
 function GroupHeader({ section, first, onPress, onLongPress, onPlus, dimmed }: {
-  section: Section; first: boolean; onPress: () => void; onPlus: () => void; dimmed?: boolean;
+  section: Section; first: boolean; onPress: () => void; onPlus: (s: Section) => void; dimmed?: boolean;
   onLongPress: (id: string, name: string, count: number, ref: React.RefObject<View | null>) => void;
 }) {
   const c = useColors();
@@ -483,8 +440,7 @@ function GroupHeader({ section, first, onPress, onLongPress, onPlus, dimmed }: {
         <Text mono style={{ fontSize: 12, fontWeight: '500', color: c.muted }}>{section.count}</Text>
       </Pressable>
       {/* The ... opens the menu a long press on the heading opens. The + opens
-          the New chat sheet; starting it already in this section comes with
-          the next step of this list. */}
+          the New chat sheet already in this section. */}
       {group && (
         <Pressable accessibilityRole="button" accessibilityLabel={`Group menu: ${section.title}`} hitSlop={6}
           onPress={() => onLongPress(section.id, section.title, section.count, ref)}
@@ -493,7 +449,7 @@ function GroupHeader({ section, first, onPress, onLongPress, onPlus, dimmed }: {
         </Pressable>
       )}
       {section.plus && (
-        <Pressable accessibilityRole="button" accessibilityLabel={`New chat in ${section.title}`} hitSlop={6} onPress={onPlus}
+        <Pressable accessibilityRole="button" accessibilityLabel={`New chat in ${section.title}`} hitSlop={6} onPress={() => onPlus(section)}
           style={{ width: 26, height: 22, alignItems: 'center', justifyContent: 'center', marginLeft: group ? 0 : 4 }}>
           <Icon name="add" size={17} color={c.muted} />
         </Pressable>
