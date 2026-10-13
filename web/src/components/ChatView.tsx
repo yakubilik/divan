@@ -126,15 +126,13 @@ function ProjectTitle({ name, onDashboard }: { name: string; onDashboard: () => 
           zIndex: 40, minWidth: 200, borderRadius: 14, background: T.s1, boxShadow: SHADOW.drawer, padding: 6,
         }}>
           <button
-            type="button" role="menuitem" data-chat-project-dashboard
+            type="button" role="menuitem" data-chat-project-dashboard className="dv-chatproject-item"
             onClick={() => { setOpen(false); onDashboard(); }}
             style={{
-              display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', background: 'transparent',
+              display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
               border: 'none', borderRadius: 8, padding: '10px 14px', color: T.ink, font: 'inherit',
               fontSize: 14, fontWeight: 600,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = T.s2; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >Dashboard</button>
         </div>
       )}

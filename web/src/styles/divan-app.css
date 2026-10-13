@@ -251,6 +251,9 @@
    under the name. A head too narrow for three things stays the two it was. */
 .dv-chathead{container-type:inline-size}
 .dv-chatproject{display:none}
+/* A row of its menu, lit under the pointer the way an Inbox row is. */
+.dv-chatproject-item{background:transparent}
+.dv-chatproject-item:hover,.dv-chatproject-item:focus-visible{background:var(--glass-2)}
 @container (min-width:861px){
   .dv-chatproject{display:block;flex:0 1 auto;min-width:0;max-width:min(260px,26%)}
   .dv-chathead--project>.dv-chatname{flex:1 1 0!important}
