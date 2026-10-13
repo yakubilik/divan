@@ -7,7 +7,10 @@ import { createGroup, deleteChat, deleteGroup, renameGroup, updateChat } from '.
 import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag, setSectionDrag } from '../lib/dnd';
 import { DeleteChatDialog } from './ChatMenu';
 import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
-import type { Chat, Group } from '../lib/protocol';
+import type { Chat } from '../lib/protocol';
+import {
+  EVERYONE, fleetSections, hostSections, needle, newChatIn, personCounts, projectSections, reorder, whoseChats, type Section,
+} from '../lib/chat-list';
 import { refusalText } from '../lib/refusal';
 import claudeIcon from '../assets/provider-claude.png';
 import codexIcon from '../assets/provider-codex.png';
@@ -163,7 +166,6 @@ function HostCard({ hosts, order, focus, allHosts, onFocus, onAll }: {
   );
 }
 
-const EVERYONE = 'Everyone';
 const PERSON_KEY = 'rac.person';
 
 function savedPeople(): Record<string, string> {
@@ -218,129 +220,6 @@ function PersonCard({ names, who, counts, onPick }: {
   );
 }
 
-/** `group` is the only kind somebody made, and so the only one with a name to
- *  change or a heading to take away. `project` is a product the chats were
- *  filed under, and carries that product's id on this computer so a chat can
- *  be dropped into it; `archive` is where everything that has gone quiet ends up. */
-interface Section {
-  key: string; title: string; hostKey: string; chats: Chat[];
-  kind: 'group' | 'project' | 'folder' | 'loose' | 'archive' | 'host';
-  projectId?: string;
-}
-
-/** How long a chat stays in the list after it last moved. */
-const CURRENT_S = 24 * 3600;
-
-/** Whether a chat is still part of today. One that is pinned was put there to
- *  stay, and one that is working or waiting on an answer is the opposite of
- *  gone quiet, however long ago its last line was. */
-const isCurrent = (c: Chat, now: number) =>
-  !c.archived && (!!c.pinned || c.status !== 'idle' || c.updated_at > now - CURRENT_S);
-
-const rank = (c: Chat) => (c.pinned ? 0 : 1);
-const byRecency = (a: Chat[]) => a.sort((x, y) => rank(x) - rank(y) || y.updated_at - x.updated_at);
-
-function matches(c: Chat, q: string): boolean {
-  if (!q) return true;
-  return (c.title || '').toLocaleLowerCase('tr').includes(q)
-    || (c.last_preview || '').toLocaleLowerCase('tr').includes(q)
-    || (c.cwd || '').toLocaleLowerCase('tr').includes(q);
-}
-
-/** All computers at once: the sections become the computers themselves. The
- *  groups are a per-computer idea and would nest two deep here, so inside a
- *  computer the chats are simply the most recent first. */
-function fleetSections(hosts: Record<string, HostSlot>, order: string[], q: string): Section[] {
-  const out: Section[] = [];
-  for (const k of order) {
-    const slot = hosts[k];
-    if (!slot) continue;
-    const chats = byRecency(slot.chats.filter((c) => !c.archived && matches(c, q)));
-    if (!chats.length) continue;
-    out.push({ key: k, title: slot.info?.name || slot.cfg.name, hostKey: k, chats, kind: 'host' });
-  }
-  return out;
-}
-
-/** A product's own chats: the ones each computer filed under it and nothing
- *  else, today's first and the rest under an archive. A computer at a time,
- *  because a chat is opened on the computer that holds it — and with one
- *  computer, which is nearly always, that is one list and one archive. */
-function projectSections(
-  hosts: Record<string, HostSlot>, ids: Record<string, string>, q: string, now: number,
-): Section[] {
-  const keys = Object.keys(ids).filter((k) => hosts[k] && ids[k]);
-  const today: Section[] = [];
-  const quiet: Section[] = [];
-  for (const k of keys) {
-    const name = hosts[k].info?.name || hosts[k].cfg.name;
-    const mine = byRecency(hosts[k].chats.filter((c) => c.project_id === ids[k] && matches(c, q)));
-    const cur = mine.filter((c) => isCurrent(c, now));
-    const old = mine.filter((c) => !isCurrent(c, now));
-    if (cur.length) today.push({ key: `chats:${k}`, title: keys.length > 1 ? name : 'Chats', hostKey: k, chats: cur, kind: 'loose' });
-    if (old.length) quiet.push({ key: `__archive:${k}`, title: keys.length > 1 ? `Archive · ${name}` : 'Archive', hostKey: k, chats: old, kind: 'archive' });
-  }
-  return [...today, ...quiet];
-}
-
-const home = (path: string) => path
-  .replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/');
-
-/** One computer's list, which is the chats of the last day and nothing else:
- *  what has gone quiet falls out of its section into one `Archive` at the
- *  bottom, and comes back by itself the moment it moves again.
- *
- *  A current chat is under the group somebody put it in; failing that, under
- *  the product the computer filed it as — and where a group already carries
- *  that product's name, the two are one section rather than two with the same
- *  heading. What neither claims falls into sections by folder, the way the
- *  phone lists them; a single folder is not a grouping, so it stays one list:
- *  Daily. A chat somebody moved to Daily is there whatever folder it is in.
- *
- *  A group is drawn even with nothing in it — it is where the next chats go,
- *  and one that vanished the moment it was made would read as the button
- *  having done nothing. A search is the exception: it is asking where a chat
- *  is, and an empty heading is not an answer. */
-function sections(chats: Chat[], groups: Group[], hostKey: string, searching: boolean, now: number): Section[] {
-  const named = new Map(groups.map((g) => [g.name.toLocaleLowerCase(), g.id]));
-  const made = new Set(groups.map((g) => g.id));
-  const byGroup = new Map<string, Chat[]>();
-  const byProject = new Map<string, Chat[]>();
-  const byCwd = new Map<string, Chat[]>();
-  const daily: Chat[] = [];
-  const quiet: Chat[] = [];
-  const put = (m: Map<string, Chat[]>, k: string, c: Chat) => { m.set(k, [...(m.get(k) ?? []), c]); };
-  for (const c of byRecency([...chats])) {
-    const group = c.group_id && made.has(c.group_id) ? c.group_id
-      : c.project ? named.get(c.project.toLocaleLowerCase()) : undefined;
-    if (!isCurrent(c, now)) quiet.push(c);
-    else if (group) put(byGroup, group, c);
-    else if (c.project) put(byProject, c.project, c);
-    else if (c.project_set && !c.project_id) daily.push(c);
-    else put(byCwd, c.cwd || '', c);
-  }
-  const out: Section[] = [];
-  for (const g of [...groups].sort((a, b) => a.sort - b.sort)) {
-    const arr = byGroup.get(g.id) ?? [];
-    if (arr.length || !searching) out.push({ key: g.id, title: g.name, hostKey, chats: arr, kind: 'group' });
-  }
-  for (const [name, arr] of byProject) {
-    out.push({ key: `project:${name}`, title: name, hostKey, chats: arr, kind: 'project',
-               projectId: arr[0].project_id ?? undefined });
-  }
-  for (const [path, arr] of byCwd) {
-    if (byCwd.size > 1 && path) out.push({ key: `cwd:${path}`, title: home(path), hostKey, chats: arr, kind: 'folder' });
-    else daily.push(...arr);
-  }
-  // Drawn empty beside other sections, like a group: it is where a chat is
-  // dropped to take it out of its group and its product.
-  if (daily.length || (out.length && !searching)) {
-    out.push({ key: '__loose', title: out.length ? 'Daily' : 'Chats', hostKey, chats: byRecency(daily), kind: 'loose' });
-  }
-  if (quiet.length) out.push({ key: '__archive', title: 'Archive', hostKey, chats: quiet, kind: 'archive' });
-  return out;
-}
-
 /** The order somebody dragged the sections into, per computer. Kept in this
  *  browser: the sections are this list's way of reading the chats — half of
  *  them are products nobody made a group for — so there is no row on the
@@ -349,19 +228,6 @@ const ORDER_KEY = 'rac.chatSections';
 
 function savedOrders(): Record<string, string[]> {
   try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '{}') ?? {}; } catch { return {}; }
-}
-
-/** The sections as they were arranged. One nobody has placed keeps the place
- *  it would have had, after the ones somebody did; the archive is last
- *  whatever anybody dragged. */
-function arrange(list: Section[], saved: string[]): Section[] {
-  const at = (s: Section) => {
-    if (s.kind === 'archive') return saved.length + 1;
-    const i = saved.indexOf(s.key);
-    return i < 0 ? saved.length : i;
-  };
-  return list.map((s, i) => [s, i] as const)
-    .sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([s]) => s);
 }
 
 /** A screen with nothing to hover with shows the row's bin all the time. */
@@ -503,32 +369,25 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   const names = slot?.people?.names ?? NOBODY;
   const shared = names.length > 1 && !project;
   const chosen = focus ? picked[focus] : undefined;
-  const who = !shared ? null
-    : chosen === '' ? null
-    : chosen && names.includes(chosen) ? chosen
-    : (slot?.people?.me ?? null);
+  const who = !shared ? null : whoseChats(names, slot?.people?.me, chosen);
   const pickPerson = (p: string | null) => {
     if (!focus) return;
     const next = { ...picked, [focus]: p ?? '' };
     setPicked(next);
     try { localStorage.setItem(PERSON_KEY, JSON.stringify(next)); } catch { /* private mode */ }
   };
-  const ownerOf = (c: Chat) => (c.owner && names.includes(c.owner) ? c.owner : names[0]);
-  const counts = useMemo(() => {
-    const out: Record<string, number> = {};
-    if (shared) for (const c of slot?.chats ?? []) out[ownerOf(c)] = (out[ownerOf(c)] ?? 0) + 1;
-    return out;
-  }, [shared, slot?.chats, names]);
+  const counts = useMemo(
+    () => (shared ? personCounts(slot?.chats ?? [], names) : {}),
+    [shared, slot?.chats, names]);
   // One computer paired means there is nothing to merge: the fleet list and
   // that computer's list would be the same list, minus its groups.
   const fleetWide = !project && allHosts && order.length > 1;
   const list = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase('tr');
+    const q = needle(query);
     if (project) return projectSections(hosts, project.ids, q, now);
     if (fleetWide) return fleetSections(hosts, order, q);
     if (!slot) return [] as Section[];
-    const mine = who ? slot.chats.filter((c) => ownerOf(c) === who) : slot.chats;
-    return arrange(sections(mine.filter((c) => matches(c, q)), slot.groups, focus!, !!q, now), saved);
+    return hostSections({ chats: slot.chats, groups: slot.groups, hostKey: focus!, query, who, names, saved, now });
   }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now, saved.join('\n'), project?.ids,
       who, names]);
   // Groups belong to one computer, so there is one to make only while the list
@@ -559,10 +418,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   const move = (key: string | null, to: string, after: boolean) => {
     setLine(null);
     if (!focus || !key || key === to) return;
-    const keys = list.filter((s) => s.kind !== 'archive' && s.key !== key).map((s) => s.key);
-    keys.splice(keys.indexOf(to) + (after ? 1 : 0), 0, key);
-    // What is not on screen today keeps its place behind what is.
-    const next = { ...orders, [focus]: [...keys, ...saved.filter((k) => !keys.includes(k))] };
+    const next = { ...orders, [focus]: reorder(list, saved, key, to, after) };
     setOrders(next);
     try { localStorage.setItem(ORDER_KEY, JSON.stringify(next)); } catch { /* private mode: until reload */ }
   };
@@ -783,12 +639,8 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                 </button>
               )}
               {onNewChatIn && !project && s.kind !== 'archive' && (() => {
-                const cwd = s.kind === 'folder' ? s.key.slice(4)
-                  : s.chats.find((c) => c.cwd)?.cwd
-                    ?? hosts[s.hostKey]?.projects.find((p) => p.name === s.title)?.path;
-                // A group with nothing in it yet has no folder to offer, and
-                // still takes a chat.
-                return cwd || s.kind === 'group' ? (
+                const { offered, cwd } = newChatIn(s, hosts[s.hostKey]?.projects);
+                return offered ? (
                   <button
                     type="button" title={`New chat in ${s.title}`} aria-label={`New chat in ${s.title}`}
                     onClick={() => onNewChatIn(s.hostKey, cwd, s.kind === 'group' ? s.key : undefined)}

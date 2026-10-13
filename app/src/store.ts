@@ -32,6 +32,11 @@ export interface Prefs {
   /** Turkish is read by the system voice even where EMA, the voice made on the
    *  phone, could read it. Off (EMA) by default. */
   emaOff?: boolean;
+  /** Whose chats the list shows, per computer id: a person's name, or `''`
+   *  for everyone. Absent means this phone's own person. */
+  chatPerson?: Record<string, string>;
+  /** The order the chat list's sections were arranged into, per computer id. */
+  chatSections?: Record<string, string[]>;
 }
 export interface DeviceInfo { id: string; name: string; push_approval: boolean; push_done: boolean; has_push_token: boolean }
 /** `path` is the file the message names — what a link opens, and what the text
@@ -199,6 +204,9 @@ interface State {
   pushToken: string | null;
   chats: Record<string, Chat>;
   groups: Group[];
+  /** Who shares this computer, and which of them this phone is. One name or
+   *  none is a computer with nobody to tell apart. */
+  people: { names: string[]; me: string | null };
   showArchived: boolean;
   events: Record<string, RacEvent[]>;
   live: Record<string, LiveText | null>;
@@ -299,6 +307,7 @@ function onThisHost(cwd: string | null | undefined, known: string[]): boolean {
 export function agentAccountOf(d: Defaults): string | null {
   return d.agentAccountId !== undefined ? d.agentAccountId : (d.byProvider?.claude?.account_id ?? null);
 }
+const NOBODY: { names: string[]; me: string | null } = { names: [], me: null };
 const PREFS: Prefs = { faceIdLaunch: false, faceIdBypass: true, chatView: 'grouped', voiceIds: {} };
 
 async function loadJSON<T>(key: string, fallback: T): Promise<T> {
@@ -396,7 +405,7 @@ export const useStore = create<State>((set, get) => {
     if (conn === 'online') { set({ restarting: null }); void afterConnect(); return; }
     // The new computer answered with a refusal or is unreachable: keeping the
     // previous one's chats on screen would be a lie, so end the switch empty.
-    if (get().switching && (conn === 'offline' || conn === 'unauthorized')) settleSwitch({ chats: {}, groups: [] });
+    if (get().switching && (conn === 'offline' || conn === 'unauthorized')) settleSwitch({ chats: {}, groups: [], people: NOBODY });
   }));
 
   async function afterConnect(attempt = 0): Promise<void> {
@@ -442,7 +451,7 @@ export const useStore = create<State>((set, get) => {
       if (attempt < 2 && get().conn === 'online') { setTimeout(() => void afterConnect(attempt + 1), 3000); return; }
       // Out of retries. A switch still holding the previous computer's chats has
       // to let go of them, or the list stays dimmed and inert for good.
-      if (get().switching) settleSwitch({ chats: {}, groups: [] });
+      if (get().switching) settleSwitch({ chats: {}, groups: [], people: NOBODY });
     }
   }
 
@@ -572,7 +581,7 @@ export const useStore = create<State>((set, get) => {
   const perHost = () => {
     pendingDeltas.clear();
     return {
-      chats: {}, groups: [], events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
+      chats: {}, groups: [], people: NOBODY, events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
       chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, accounts: [],
       agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
       ustabasi: null, ustabasiError: null, ustabasiOld: false,
@@ -640,7 +649,7 @@ export const useStore = create<State>((set, get) => {
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
     compose: NO_DRAFT, drafts: {},
-    chats: {}, groups: [], showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
+    chats: {}, groups: [], people: NOBODY, showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
     ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {}, openCard: null,
     chatsLoaded: false, accountsLoaded: false, projectsLoaded: false,
@@ -783,8 +792,9 @@ export const useStore = create<State>((set, get) => {
       for (const c of r.chats as Chat[]) chats[c.id] = c;
       // Swapping the list and dropping the old computer's per-chat state in one
       // set() is what makes the switch a single frame instead of a flicker.
-      if (get().switching) settleSwitch({ chats, groups: r.groups, chatsLoaded: true });
-      else set({ chats, groups: r.groups, chatsLoaded: true });
+      const people = r.people ?? NOBODY;
+      if (get().switching) settleSwitch({ chats, groups: r.groups, people, chatsLoaded: true });
+      else set({ chats, groups: r.groups, people, chatsLoaded: true });
     },
 
     setShowArchived: (v) => { set({ showArchived: v }); },
