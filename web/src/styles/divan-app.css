@@ -239,6 +239,8 @@
 
 .dv-split{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;align-items:start}
 .dv-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+/* A chat's name being renamed takes the room it needs from the chips beside it. */
+.dv-chatname:has([data-chat-title-input]){min-width:min(380px,100%)!important}
 
 @media (max-width:720px){
   .dv-page{padding:16px 16px 64px}

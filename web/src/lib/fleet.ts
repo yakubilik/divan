@@ -493,6 +493,13 @@ function reduce(slot: HostSlot, ev: RacEvent): HostSlot {
   }
 }
 
+/** A chat as a computer just answered with it, put in that computer's list
+ *  the way its `chat.updated` broadcast would put it: the list says what was
+ *  done without waiting on the event behind the answer. */
+export function putChat(key: string, chat: Chat): void {
+  patch(useFleet.setState, key, (slot) => reduce(slot, { event: 'chat.updated', data: chat } as RacEvent));
+}
+
 export function clientFor(key: string): RacClient | undefined {
   return clients.get(key);
 }

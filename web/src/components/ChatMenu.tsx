@@ -4,6 +4,7 @@ import { Icon, P } from '../ui/kit';
 import { Modal } from './Modal';
 import { GroupNameDialog } from './GroupDialogs';
 import { Btn } from '../ui/kit';
+import { bareTitle } from '../lib/format';
 import type { Chat, Group } from '../lib/protocol';
 
 interface Entry {
@@ -132,7 +133,8 @@ export function ChatMenu({ chat, groups, people = [], onUpdate, onNewGroup, onDe
   onClose: () => void;
 }) {
   const [renaming, setRenaming] = useState(false);
-  const [title, setTitle] = useState(chat.title);
+  // The name as the header and the list show it, not with the project in front.
+  const [title, setTitle] = useState(() => bareTitle(chat.title, chat.cwd, chat.project));
   const [confirming, setConfirming] = useState(false);
   const [grouping, setGrouping] = useState(false);
 
