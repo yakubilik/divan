@@ -95,7 +95,7 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *  /chats/new                 …with the empty composer New chat leaves there
  *  /machine/accounts          a page of the Machine place
  *  /machine/terminal/ustabasi/42   …a part of one, and a ticket open on it
- *  /machine/preferences/tools/on/studio   …about one computer, of several
+ *  /machine/on/cinema/preferences/tools   …about one computer, of several
  *  /p/quire                   one product
  *  /p/quire/board             …its board
  *  /p/quire/chat/9f2c…        …one of its chats, open in the middle of it
@@ -112,10 +112,13 @@ export function pathOf(place: Place): string {
     return place.sub === 'new' ? '/chats/new' : '/chats';
   }
   if (place.view !== 'overview') {
-    let path = `/machine/${place.view}`;
+    // The computer comes before the page rather than at the end: a name is
+    // often a host name (`studio.local`), and the daemon reads a last segment
+    // with a dot in it as a file, not as a page of the panel.
+    let path = place.machine && ABOUT_ONE.includes(place.view)
+      ? `/machine/on/${enc(place.machine)}/${place.view}` : `/machine/${place.view}`;
     if (place.sub && SUBS[place.view]?.includes(place.sub)) path += `/${place.sub}`;
     if (place.view === 'terminal' && place.sub === 'ustabasi' && place.ticket != null) path += `/${place.ticket}`;
-    if (place.machine && ABOUT_ONE.includes(place.view)) path += `/on/${enc(place.machine)}`;
     return path;
   }
   if (!place.project) return place.tab === 'waiting' ? '/waiting' : '/';
@@ -167,10 +170,11 @@ export function readPlace(pathname: string, search = ''): Place {
   }
   if (parts[0] === 'waiting') return { ...place, tab: 'waiting' };
   if (parts[0] === 'machine') {
-    const view = MACHINE.includes(parts[1] as View) ? parts[1] as View : 'machines';
-    const rest = parts.slice(2);
-    // `…/on/<name>` at the end is the computer, on a page about one.
-    const on = rest.length >= 2 && rest[rest.length - 2] === 'on' ? rest.splice(rest.length - 2)[1] : null;
+    // `/machine/on/<name>/…` is the computer, on a page about one.
+    const on = parts[1] === 'on' && parts[2] ? parts[2] : null;
+    const at = on ? 3 : 1;
+    const view = MACHINE.includes(parts[at] as View) ? parts[at] as View : 'machines';
+    const rest = parts.slice(at + 1);
     const sub = rest[0] && SUBS[view]?.includes(rest[0]) ? rest[0] : null;
     const n = view === 'terminal' && sub === 'ustabasi' && /^\d+$/.test(rest[1] ?? '') ? Number(rest[1]) : null;
     return {

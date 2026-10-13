@@ -502,17 +502,17 @@ group('the computer a page is about, where there are two');
     useFleet.setState({ hosts: { studio: fakeHost(), '10.0.0.9:8790': cinema }, order: ['studio', '10.0.0.9:8790'], focus: 'studio' });
   });
   await reload('/machine/screen');
-  ok('a page about one computer names it by name, with no host:port', where() === '/machine/screen/on/studio', where());
+  ok('a page about one computer names it by name, with no host:port', where() === '/machine/on/studio/screen', where());
   const n = w.history.length;
   await act(async () => { useFleet.getState().setFocus('10.0.0.9:8790'); });
   await settle();
   ok('picking the other one is the same page: the entry is taken over, not added to',
-    where() === '/machine/screen/on/cinema' && w.history.length === n, `${where()} · ${n} → ${w.history.length}`);
+    where() === '/machine/on/cinema/screen' && w.history.length === n, `${where()} · ${n} → ${w.history.length}`);
   await act(async () => { useFleet.getState().setFocus('studio'); });
   await settle();
-  await reload('/machine/preferences/tools/on/cinema');
+  await reload('/machine/on/cinema/preferences/tools');
   ok('an address naming one opens on that one, at that section',
-    useFleet.getState().focus === '10.0.0.9:8790' && where() === '/machine/preferences/tools/on/cinema'
+    useFleet.getState().focus === '10.0.0.9:8790' && where() === '/machine/on/cinema/preferences/tools'
     && JSON.parse(screen()).section === 'Tools', `${useFleet.getState().focus} · ${where()} · ${screen()}`);
   await reload('/chats/c1');
   ok('a page not about one computer does not name one', where() === '/chats/c1', where());
@@ -545,6 +545,7 @@ group('every place reads back from its own address; old links are rewritten');
     { ...nav.HOME, view: 'terminal', sub: 'ustabasi', ticket: 42, machine: 'cinema' },
     { ...nav.HOME, view: 'preferences', sub: 'tools', machine: 'Yakup’s Mac' },
     { ...nav.HOME, view: 'screen', machine: 'studio' },
+    { ...nav.HOME, view: 'projects', machine: 'Yakups-MacBook.local' },
     { ...nav.HOME, project: 'quire' }, { ...nav.HOME, project: 'quire', tab: 'board' },
     { ...nav.HOME, project: 'quire', tab: 'board', card: 'k1' },
     { ...nav.HOME, project: 'quire', tab: 'chat', chat: 'c1' },
@@ -556,6 +557,11 @@ group('every place reads back from its own address; old links are rewritten');
   ok('canonical places read back as themselves', !bad.length, JSON.stringify(bad));
   ok('only a popped-out window carries a computer, and only in ?host=',
     places.every((p) => clean(nav.pathOf(p))));
+  // The daemon serves a path whose last segment has no dot in it as the panel
+  // (server.py, `Deep`); a dotted host name must not end an address.
+  ok('no address ends on a segment with a dot in it',
+    places.every((p) => !nav.pathOf(p).split('/').pop().includes('.')),
+    places.map((p) => nav.pathOf(p)).filter((u) => u.split('/').pop().includes('.')).join(' '));
   // A card opened from the product's own page is the card's page all the same.
   ok('a card over any tab is one address, read back as the board\'s card',
     nav.samePlace(nav.readPlace(nav.pathOf({ ...nav.HOME, project: 'quire', card: 'k1' })),
