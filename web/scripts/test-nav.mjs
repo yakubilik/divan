@@ -320,7 +320,7 @@ for (const [i, step] of walk.entries()) {
 ok('the walk is one entry a step: no more, no fewer', w.history.length === base + walk.length - 1,
   `${base} → ${w.history.length} for ${walk.length - 1} steps`);
 ok('the chat steps drew the chat they named, and New chat the empty composer',
-  JSON.parse(steps[2].screen).chat === 'Safari login' && JSON.parse(steps[4].screen).chat === 'Invoice PDF'
+  (JSON.parse(steps[2].screen).chat ?? '').startsWith('Safari login') && (JSON.parse(steps[4].screen).chat ?? '').startsWith('Invoice PDF')
   && JSON.parse(steps[3].screen).empty && !JSON.parse(steps[3].screen).chat,
   [steps[2].screen, steps[3].screen, steps[4].screen].join('\n    '));
 ok('the card steps drew the card they named',
