@@ -1,6 +1,6 @@
 import type { ApprovalResponse } from '../lib/approval-input';
 import { useEffect, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, R, SHADOW, T } from '../lib/theme';
 import { Chip, Dot, Icon, P, Pulse, Spinner, mono, Empty } from '../ui/kit';
 import { Timeline, type TicketLink } from './Timeline';
 import { ChatComposer } from './ChatComposer';
@@ -15,15 +15,144 @@ import type { Chat, Group, LimitWindow } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
 import { useFleet } from '../lib/fleet';
 
-function Header({ chat, groupName, count, accountLabel, accountLimits, context, now,
-                 onEdit, onMenu, onDetails, detailsOpen, onCloseView }: {
+/** The chat's name, which is also where it is renamed: pressed, it becomes a
+ *  field in the same place. Save and Discard appear only once the text says
+ *  something else; Enter saves, Escape puts the old name back, and leaving the
+ *  field with nothing changed just leaves it. */
+function TitleField({ chat, onRename }: {
+  chat: Chat;
+  /** Sends the rename; settles once the computer has answered. */
+  onRename?: (title: string) => Promise<unknown> | void;
+}) {
+  const shown = bareTitle(chat.title, chat.cwd, chat.project);
+  /** The text being typed; null while the name is only shown. */
+  const [draft, setDraft] = useState<string | null>(null);
+  /** The name just sent, shown until the answer is in the list. */
+  const [sent, setSent] = useState<string | null>(null);
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => { setDraft(null); setSent(null); }, [chat.id]);
+  useEffect(() => { if (draft !== null) field.current?.select(); }, [draft === null]);
+
+  const name = (draft ?? '').trim();
+  const changed = draft !== null && !!name && name !== shown;
+  const save = () => {
+    if (!changed || !onRename) return;
+    setDraft(null);
+    setSent(name);
+    Promise.resolve(onRename(name)).finally(() => setSent(null));
+  };
+  const discard = () => setDraft(null);
+  const text = { fontSize: 17, fontWeight: 600, lineHeight: '24px', color: C.text } as const;
+  // Pressing either button must not blur the field first: a blur with changed
+  // text keeps the field open, so the press still lands where it was aimed.
+  const keep = (e: React.MouseEvent) => e.preventDefault();
+  const small = (primary: boolean): React.CSSProperties => ({
+    height: 26, padding: '0 10px', borderRadius: R.btn, cursor: 'pointer', flexShrink: 0,
+    fontSize: 12, fontWeight: 600,
+    background: primary ? C.accent : C.surface2,
+    border: `1px solid ${primary ? C.accent : C.border}`,
+    color: primary ? C.onAccent : C.text2,
+  });
+
+  if (draft === null) {
+    return (
+      <button
+        type="button" data-chat-title onClick={() => onRename && setDraft(sent ?? shown)}
+        title={onRename ? `${chat.title} — click to rename` : chat.title}
+        style={{
+          ...text, display: 'block', maxWidth: '100%', padding: 0, margin: 0, textAlign: 'left',
+          background: 'transparent', border: 'none', cursor: onRename ? 'text' : 'default',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >{sent ?? shown}</button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <input
+        ref={field} data-chat-title-input aria-label="Chat name" autoFocus
+        value={draft} onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); if (changed) save(); else discard(); }
+          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); discard(); }
+        }}
+        onBlur={() => { if (!changed) discard(); }}
+        style={{
+          ...text, flex: 1, minWidth: 0, height: 26, padding: '0 6px', margin: '0 -7px',
+          background: C.surface2, border: `1px solid ${C.accentRing}`, borderRadius: R.btn, outline: 'none',
+        }}
+      />
+      {changed && <>
+        <button type="button" onMouseDown={keep} onClick={save} style={{ ...small(true), marginLeft: 8 }}>Save</button>
+        <button type="button" onMouseDown={keep} onClick={discard} style={small(false)}>Discard</button>
+      </>}
+    </div>
+  );
+}
+
+/** A product as the chat's head needs it: the name it is written by and the
+ *  key its page is addressed by. */
+export interface ChatProject { name: string; key: string }
+
+/** The product the chat is filed under, written large in the middle of the
+ *  bar, and the box a press on it opens — drawn the way the Inbox's is. One
+ *  row for now: the product's own page. Outside click and Escape close it. */
+function ProjectTitle({ name, onDashboard }: { name: string; onDashboard: () => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('mousedown', away);
+    window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('mousedown', away); window.removeEventListener('keydown', esc); };
+  }, [open]);
+  return (
+    <div ref={box} className="dv-chatproject" data-chat-project={name} style={{ position: 'relative' }}>
+      <button
+        type="button" data-chat-project-name title={name} aria-haspopup="menu" aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: 'block', maxWidth: '100%', padding: '2px 10px', margin: 0, cursor: 'pointer',
+          background: open ? C.surface2 : 'transparent', border: 'none', borderRadius: R.btn,
+          fontSize: 20, fontWeight: 700, lineHeight: '28px', letterSpacing: '-0.01em', color: C.text,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >{name}</button>
+      {open && (
+        <div role="menu" aria-label={name} style={{
+          position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 'calc(100% + 8px)',
+          zIndex: 40, minWidth: 200, borderRadius: 14, background: T.s1, boxShadow: SHADOW.drawer, padding: 6,
+        }}>
+          <button
+            type="button" role="menuitem" data-chat-project-dashboard className="dv-chatproject-item"
+            onClick={() => { setOpen(false); onDashboard(); }}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+              border: 'none', borderRadius: 8, padding: '10px 14px', color: T.ink, font: 'inherit',
+              fontSize: 14, fontWeight: 600,
+            }}
+          >Dashboard</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Header({ chat, groupName, project, onDashboard, count, accountLabel, accountLimits, context, now,
+                 onEdit, onRename, onMenu, onDetails, detailsOpen, onCloseView }: {
   chat: Chat; groupName: string | null; count: number; accountLabel: string | null;
+  /** The product the chat is filed under, and the way to its page. */
+  project?: ChatProject | null;
+  onDashboard?: (key: string) => void;
   /** Every window this chat's sign-in last reported, for the ring. */
   accountLimits: LimitWindow[] | undefined;
   /** …and how full the conversation itself is. */
   context: ContextUse | null;
   now: number;
   onEdit: (f: Field) => void;
+  onRename?: (title: string) => Promise<unknown> | void;
   onMenu: () => void;
   onDetails: () => void;
   detailsOpen: boolean;
@@ -34,18 +163,18 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
   const sub = [groupName, chat.cwd.split(/[/\\]/).pop(), `${count} messages`].filter(Boolean).join(' · ');
   const running = chat.status === 'running';
   const awaiting = chat.status === 'awaiting_approval';
+  // With a product in the middle the two sides are given the same width, which
+  // is what keeps it in the middle whatever either of them holds.
+  const centred = !!project && !!onDashboard;
   return (
-    <div className="dv-chathead" style={{
+    <div className={centred ? 'dv-chathead dv-chathead--project' : 'dv-chathead'} style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
       borderBottom: `1px solid ${C.border}`, flexShrink: 0, position: 'relative',
     }}>
       {/* Basis 0 so a long title claims only the room the chips leave over,
           and a floor of 120 so it never collapses away entirely. */}
-      <div style={{ flex: '1 1 0', minWidth: 120 }}>
-        <div style={{
-          fontSize: 17, fontWeight: 600, whiteSpace: 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis',
-        }} title={chat.title}>{bareTitle(chat.title, chat.cwd, chat.project)}</div>
+      <div className="dv-chatname" style={{ flex: '1 1 0', minWidth: 120 }}>
+        <TitleField chat={chat} onRename={onRename} />
         <div style={{
           fontSize: 12, color: C.mute, display: 'flex', alignItems: 'center', gap: 6, marginTop: 2,
         }}>
@@ -59,6 +188,7 @@ function Header({ chat, groupName, count, accountLabel, accountLimits, context, 
           </>}
         </div>
       </div>
+      {centred && <ProjectTitle name={project.name} onDashboard={() => onDashboard(project.key)} />}
       <div className="dv-chatchips" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         {/* Which sign-in is being spent, and the way to another one: this is
             where a person looks when a plan's limit has run out mid-chat. */}
@@ -186,11 +316,15 @@ function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => v
 /** What is attached but not sent yet. A picture is shown as the picture, at the
  *  size a thumbnail wants to be — a file name is not a preview, and the whole
  *  point of attaching a screenshot is to see that it is the right one. */
-export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending, filedUnder, tickets, onCloseView }: {
+export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, accountUsage, accountLimits, now, liveTokens, liveContext, onSend, onInterrupt, onRespond, onEdit, onUpdate, onNewGroup, onDelete, onUpload, onPopOut, sending, filedUnder, project, onDashboard, tickets, onCloseView }: {
   chat: Chat | null;
   /** The product Hermes filed this conversation under, as the thin rule over it
    *  (HANDOVER §4.8). Null where nothing claims it. */
   filedUnder?: string | null;
+  /** The product the chat is filed under, for the middle of the head, and
+   *  what its Dashboard row does. */
+  project?: ChatProject | null;
+  onDashboard?: (key: string) => void;
   /** Where a card this conversation filed opens. */
   tickets?: TicketLink | null;
   /** Put the chat away where it is read inside a product's page: an X beside
@@ -215,7 +349,8 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   onInterrupt: () => void;
   onRespond: (requestId: string, d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => unknown;
   onEdit: (f: Field) => void;
-  onUpdate: (patch: Record<string, any>) => void;
+  /** Settles once the computer has answered, where the caller waits for it. */
+  onUpdate: (patch: Record<string, any>) => Promise<unknown> | void;
   onNewGroup: (name: string) => Promise<unknown>;
   onDelete: () => void;
   onUpload: (file: File) => Promise<any>;
@@ -263,8 +398,8 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Header
-          chat={chat} groupName={groupName} count={msgCount} accountLabel={accountLabel}
-          accountLimits={accountLimits} now={now}
+          chat={chat} groupName={groupName} project={project} onDashboard={onDashboard} count={msgCount} accountLabel={accountLabel}
+          accountLimits={accountLimits} now={now} onRename={(title) => onUpdate({ title })}
           context={contextUse(log.items.filter((i) => i.kind === 'turn') as any[], liveContext)}
           onEdit={onEdit} onMenu={() => { setDetails(false); setMenu(true); }}
           onDetails={() => setDetails((v) => !v)} detailsOpen={details}

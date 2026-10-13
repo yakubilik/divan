@@ -14,7 +14,7 @@ import { Machine } from './screens/Machine';
 import { Overview, type ProjectTab } from './screens/Overview';
 import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
-import { useFleet, onAnyEvent, pokeAll } from './lib/fleet';
+import { useFleet, onAnyEvent, pokeAll, putChat } from './lib/fleet';
 import { project as projectIn, useDivanView } from './lib/divan';
 import { idOf } from './lib/sessions';
 import {
@@ -649,9 +649,21 @@ export function App() {
 
   /** The product this conversation is filed under, by the name the board
    *  gives it. */
-  const filedUnder = chat?.project_id && sel
-    ? divan.projects.find((p) => p.ids[sel.hostKey] === chat.project_id)?.name ?? null
+  const filedIn = chat?.project_id && sel
+    ? divan.projects.find((p) => p.ids[sel.hostKey] === chat.project_id) ?? null
     : null;
+  const filedUnder = filedIn?.name ?? null;
+  /** The same product, for the middle of the chat's head: its name, and the
+   *  key its own page is addressed by. */
+  const filedProject = useMemo(
+    () => (filedIn ? { name: filedIn.name, key: filedIn.key } : null), [filedIn?.name, filedIn?.key]);
+  /** Dashboard, from the chat's head: that product's own page. One move, so
+   *  one entry, and Back is the chat again. */
+  const toDashboard = useCallback((key: string) => {
+    setPeek(false);
+    setView('overview');
+    chooseProject(key);
+  }, [chooseProject]);
   /** A card the conversation filed: its card on a board where there is one,
    *  and the queue's own wall where there is not. */
   const tickets = {
@@ -676,6 +688,7 @@ export function App() {
 
   const chatProps = {
     chat, hostKey: sel?.hostKey ?? null, log, sending, filedUnder, tickets,
+    project: filedProject, onDashboard: toDashboard,
     groupName: chat?.group_id
       ? (slot?.groups.find((g) => g.id === chat.group_id)?.name ?? null)
       : null,
@@ -696,7 +709,11 @@ export function App() {
     },
     onEdit: setField,
     onUpdate: (patch: Record<string, any>) => {
-      if (sel) updateChat(sel.hostKey, sel.chatId, patch).catch(() => {});
+      if (!sel) return;
+      const { hostKey } = sel;
+      return updateChat(hostKey, sel.chatId, patch)
+        .then((chat) => { if (chat?.id) putChat(hostKey, chat); })
+        .catch(() => {});
     },
     // A group made from a chat's own menu is made for that chat, so the two
     // go out together: the name, and then the chat into what it named.
