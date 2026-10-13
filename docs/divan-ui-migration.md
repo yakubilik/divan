@@ -157,6 +157,7 @@ The quoted words are the check's own name.
 | Sign-in pool | Pool | Machine › Executors › pool | `pool.set` | phone: "the pool switch writes setPool" |
 | Software update | Settings | Machine › Settings | `update.apply` | phone: "Update now sends applyUpdate" |
 | Notifications, default model | Settings | Machine › Settings | `device.prefs` | phone: "Settings writes setDevicePrefs, the default model through setDefaults" |
+| Auto-archive threshold (main #220) | — | Machine › Settings | `chat.autoarchive` | phone: "sends chat.autoarchive {hours: 48} and the row says so" |
 | Face ID | Settings | Machine › Settings | — | phone: "Face ID on launch is written with setPrefs, and turning it off asks Face ID first" |
 | Default account and model | — | Machine › Settings | — | phone: "the default account and model set in Machine › Settings are what the Composer’s chips show" |
 | Call the computer | Settings › Call | Machine › Settings › Call | `call.ask` | phone: "answering a call still opens the call screen" |

@@ -3170,6 +3170,8 @@ class Server:
                        ("behind", "ahead", "auto", "repo", "error", "checked_at",
                         "web", "latest")},
             "screen": {**screenmod.available(), "enabled": self.cfg.remote_control},
+            # Hours a chat may be quiet before it is archived; 0 is off.
+            "auto_archive_h": self.cfg.auto_archive_h,
             "active_sessions": self.sessions.active_count(),
             "connected_devices": len(self.clients),
             "versions": self._versions, "roots": self.cfg.allowed_roots,
@@ -3189,6 +3191,54 @@ class Server:
                 await self.sessions.reap_idle()
             except Exception as exc:
                 log.warning("reaper: %s", exc)
+            try:
+                await self.archive_quiet()
+            except Exception as exc:
+                log.warning("auto-archive: %s", exc)
+
+    async def archive_quiet(self, now: float | None = None) -> list[dict]:
+        """Archive the chats that have been quiet longer than `auto_archive_h`.
+
+        Done here and not on the phone so that every client agrees: each one
+        hears `chat.updated` with `archived` set and drops the chat from its
+        list. A chat whose session is still busy is skipped even if the row
+        says idle — the row is written a moment after the turn starts.
+        """
+        hours = float(self.cfg.auto_archive_h or 0)
+        if hours <= 0:
+            return []
+        busy = {cid for cid, s in self.sessions.sessions.items() if s.is_busy()}
+        before = (time.time() if now is None else now) - hours * 3600
+        chats = self.db.archive_stale(before, busy)
+        for chat in chats:
+            await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.updated",
+                                  "data": chat, "ts": time.time()})
+        if chats:
+            log.info("auto-archived %d chat(s) quiet for over %gh", len(chats), hours)
+        return chats
+
+    # The longest a person can ask for: a year. Anything past it is a typo.
+    AUTO_ARCHIVE_MAX_H = 24 * 365
+
+    async def h_chat_autoarchive(self, dev: Device, d: dict) -> dict:
+        """Read, or with `hours`, set how long a chat may be quiet before it is
+        archived. 0 turns it off. Written to config.toml, and the sweep runs at
+        once so a shorter threshold shows on the phones without waiting."""
+        if "hours" in d:
+            try:
+                hours = float(d["hours"])
+            except (TypeError, ValueError):
+                raise Err("bad_hours", "hours must be a number") from None
+            if not 0 <= hours <= self.AUTO_ARCHIVE_MAX_H:
+                raise Err("bad_hours", f"hours must be between 0 and {self.AUTO_ARCHIVE_MAX_H}")
+            if hours != self.cfg.auto_archive_h:
+                self.cfg.auto_archive_h = int(hours) if hours.is_integer() else hours
+                self.cfg.save()
+                log.info("auto-archive set to %gh by device %s", hours, dev.name)
+                await self.broadcast({"seq": None, "chat_id": None, "event": "host.status",
+                                      "data": self.host_info(), "ts": time.time()})
+            await self.archive_quiet()
+        return {"hours": self.cfg.auto_archive_h}
 
 
 def _os_version() -> str:

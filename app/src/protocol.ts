@@ -49,6 +49,9 @@ export interface HostInfo {
   versions: { claude: string | null; codex: string | null };
   roots: string[];
   transcription?: boolean;
+  /** Hours a chat may be quiet before the computer archives it; 0 is off.
+   *  Missing on a computer from before auto-archive. */
+  auto_archive_h?: number;
   /** The commit this computer is actually running. `daemon_version` is a
    *  constant and cannot tell two computers apart; this can. */
   revision?: Revision | null;

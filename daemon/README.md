@@ -147,6 +147,7 @@ python scripts/smoke.py --token TOKEN [--cwd ~/projects] [--audio sample.m4a]
 python scripts/e2e.py   --token TOKEN --image <an uploaded file>
 python scripts/test_preamble.py [--live]
 python scripts/test_session.py
+python scripts/test_autoarchive.py  # quiet chats archive themselves, and come back
 python scripts/test_stream.py
 python scripts/test_demo.py      # a demo daemon with no CLI on PATH, end to end
 python scripts/test_secrets.py
