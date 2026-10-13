@@ -70,15 +70,32 @@ python scripts/smoke.py --token TOKEN          # 18 protocol checks, no model tu
 python scripts/test_voice_bench.py             # the live-voice bench's WER and turn-end judgements
 
 cd app && npx tsc --noEmit
-node scripts/test-login-web.cjs                # the sign-in WebView's two judgements
-node scripts/test-ustabasi.cjs                 # the wall's judgements, the Divan design system,
-                                               # the merged view across machines, and the i18n table
+npm test                                       # every app/scripts/test-*.cjs: the wall's judgements,
+                                               # the Divan design system, the merged view across
+                                               # machines, the i18n table, the sign-in WebView
 cd web && npm run build                        # typechecks, then builds into the daemon
 cd web && npm test                             # the wall's figures, and a ticket as a conversation
 
 cd <the repo root>
 python3 scripts/check-links.py                 # no dead path in the docs
 ```
+
+**Add a test by adding a file, never by editing `package.json`.** `npm test`
+(and `npm run test:ui` in `web/`) is `scripts/run-tests.mjs` at the repo root,
+which runs every file whose name its suite matches, one after another, and stops
+at the first failure:
+
+| Package | Command | Runs |
+|---|---|---|
+| `web/` | `npm test` | every `scripts/test-*.mjs` that is not `*-ui.mjs` |
+| `web/` | `npm run test:ui` | every `scripts/test-*-ui.mjs` |
+| `app/` | `npm test` | every `scripts/test-*.cjs`, less the modules `test-ustabasi.cjs` folds in |
+
+So a new check is `web/scripts/test-<name>.mjs` (or `app/scripts/test-<name>.cjs`)
+that exits non-zero when it fails, and nothing else. The package.json lines name
+no test file on purpose: when they did, every two tickets that added a test
+conflicted on that one line. A file that must not run on its own goes on the
+commented `skip` list in `scripts/run-tests.mjs`, with the reason.
 
 If you moved or renamed anything under `docs/`, that last one is the check that
 notices. `scripts/test_check_links.py` is the checker's own test, and it is the

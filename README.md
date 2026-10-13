@@ -306,6 +306,15 @@ delete. This one spends a few real turns.
 .venv312/bin/python scripts/test_panel_paths.py
 ```
 
+```bash
+cd web && npm test        # every web/scripts/test-*.mjs (npm run test:ui: the -ui ones)
+cd app && npm test        # every app/scripts/test-*.cjs
+```
+
+Both run `scripts/run-tests.mjs`, which finds the tests by name. Add a test by
+adding a file, never by editing `package.json` — see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## Language
