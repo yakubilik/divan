@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'rea
 import { RADIUS, SHADOW, T, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { KEYFRAMES, P, mono } from './ui/kit';
 import { Button } from './ui/divan';
-import { Sidebar } from './components/Sidebar';
+import { ListToggle, SIDEBAR_W, Sidebar } from './components/Sidebar';
 import { Shell } from './components/Shell';
 import { ChatView } from './components/ChatView';
 import { NewChat } from './components/NewChat';
@@ -808,6 +808,10 @@ export function App() {
         onHome={() => go(HOME)}
         back={back}
         inbox={<InboxBell onOpen={openNotice} />}
+        // Hiding the chat list is on this line, over the list; the rail it
+        // leaves behind has the way back.
+        lead={place === 'chat' && !rail
+          ? { node: <ListToggle shown onClick={() => setRailTo(true)} />, width: SIDEBAR_W } : null}
       >
         {place === 'dashboard' && (
           <Overview
