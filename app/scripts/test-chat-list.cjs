@@ -235,7 +235,7 @@ const ready = (async () => {
     !R.presses().some((p) => p.label === 'Whose chats') && plain === 'Chats 2 | Archive 1']);
 })();
 
-module.exports = { ready, checks };
+module.exports = { ready, checks, STUDIO };
 
 if (require.main === module) {
   ready.then(() => {
