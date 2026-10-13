@@ -3,8 +3,8 @@
  *
  *  It is the only navigation the panel has. On the left, the way back — or the
  *  word `divan` on the Dashboard, which is where back leads. On the right, the
- *  system line: how many machines answered (a press on it opens the Machine
- *  place), how much of the plan is left, Chats, Settings, and the switch
+ *  system line: how many machines answered (a press on it opens a box of
+ *  them, as the bell does), how much of the plan is left, Chats, Settings, and the switch
  *  between the two themes. The
  *  three-place bar and its project chips are gone: a product is a tile on the
  *  Dashboard, and a chat is started from the Composer.
@@ -18,6 +18,7 @@ import type { DivanView } from '../lib/divan';
 import { ago } from '../lib/format';
 import { useThresholds } from '../lib/machine';
 import type { State } from '../lib/theme';
+import { MachinesMenu } from './MachinesMenu';
 
 /** The line's clock, which the old bar carried and the frames dropped. Kept
  *  for the screens that still print one. */
@@ -68,23 +69,15 @@ function Sys({ fleet, view, here, dots, onView, inbox }: {
   // A sign-in the service would not answer for keeps what its last turn said,
   // and a figure that old says how old it is.
   const old = week?.at != null && !!fleet && fleet.now - week.at > 3600 ? ago(week.at) : null;
-  const all = !!t && t.machines > 0 && t.reachable === t.machines;
-  // The count is the way into the Machine place, which has no button of its
-  // own on the line: Settings, which is one of its tabs, is the one it shows.
+  // The count opens a box of the machines, as the bell opens the Inbox; the
+  // Machine place is behind its foot, and Settings is the line's own button.
   const settings = view === 'settings';
   const inMachine = here === 'machine' && !settings;
   return (
     <div className="sys">
-      {!!t && t.machines > 0 && (
-        <button type="button" className="dv-btn dv-btn--ghost dv-hit" data-sys="machines"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          aria-current={inMachine ? 'page' : undefined}
-          title={view === 'machines' ? undefined : 'Go to Machines'}
-          onClick={() => { if (view !== 'machines') onView('machines'); }}>
-          <i className={`dv-dot ${all ? 'dv-dot--run' : t.reachable ? 'dv-dot--ask' : 'dv-dot--stuck'}`} aria-hidden="true" />
-          <b>{t.reachable}/{t.machines}</b><span className="sys-word"> machines</span>
-          {!!dots?.machine && <><i className="dv-dot dv-dot--ask" aria-hidden="true" /><span className="dv-hidden">needs you</span></>}
-        </button>
+      {!!fleet && !!t && t.machines > 0 && (
+        <MachinesMenu fleet={fleet} here={inMachine} needsYou={!!dots?.machine}
+          onAll={() => { if (view !== 'machines') onView('machines'); }} />
       )}
       {used != null && (
         <>
