@@ -243,6 +243,24 @@
 .dv-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 /* A chat's name being renamed takes the room it needs from the chips beside it. */
 .dv-chatname:has([data-chat-title-input]){min-width:min(380px,100%)!important}
+/* A chat filed under a product has that product's name in the exact middle of
+   its head: the name and the chips are given equal shares of what the name in
+   the middle leaves, so neither can push it off centre. The chips that can
+   give up width (the account, the folder) give it up first; only when the
+   rest still do not fit their share do they go to a second line rather than
+   under the name. A head too narrow for three things stays the two it was. */
+.dv-chathead{container-type:inline-size}
+.dv-chatproject{display:none}
+/* A row of its menu, lit under the pointer the way an Inbox row is. */
+.dv-chatproject-item{background:transparent}
+.dv-chatproject-item:hover,.dv-chatproject-item:focus-visible{background:var(--glass-2)}
+@container (min-width:861px){
+  .dv-chatproject{display:block;flex:0 1 auto;min-width:0;max-width:min(260px,26%)}
+  .dv-chathead--project>.dv-chatname{flex:1 1 0!important}
+  .dv-chathead--project>.dv-chatchips{flex:1 1 0;flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
+  .dv-chathead--project>.dv-chatchips>.dv-chip-shrink{flex:1 1 130px;max-width:max-content!important}
+  .dv-chathead--project>.dv-chatname:has([data-chat-title-input]){min-width:120px!important}
+}
 
 @media (max-width:720px){
   .dv-page{padding:16px 16px 64px}

@@ -32,6 +32,7 @@ export function Chip({ children, onClick, tone = 'plain', title, shrink }: {
   return (
     <button
       type="button" onClick={onClick} title={title} disabled={!onClick}
+      className={shrink ? 'dv-chip-shrink' : undefined}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px',
         borderRadius: R.chip, background: bg, border: `1px solid ${bd}`,
