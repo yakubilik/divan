@@ -96,13 +96,12 @@ export function ShellPane({ name, visible, via = client }: {
     return () => { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}); };
   }, [visible]);
 
-  if (!bridge) return <View style={{ flex: 1, backgroundColor: TERM_THEME.background }} />;
-  const st = bridge.state;
+  const st = bridge?.state ?? 'idle';
   return (
     <View style={{ flex: 1, minHeight: 0, backgroundColor: TERM_THEME.background,
                    paddingBottom: kb > 0 ? kb : insets.bottom }}>
-      <View style={{ flex: 1, minHeight: 0 }} onLayout={() => bridge.fit()}>
-        <WebView
+      <View style={{ flex: 1, minHeight: 0 }} onLayout={() => bridge?.fit()}>
+        {bridge && <WebView
           key={bridge.serial}
           ref={web}
           accessibilityLabel="Shell"
@@ -120,16 +119,16 @@ export function ShellPane({ name, visible, via = client }: {
           contentInsetAdjustmentBehavior="never"
           setSupportMultipleWindows={false}
           style={{ flex: 1, backgroundColor: TERM_THEME.background }}
-        />
+        />}
         {st !== 'live' && st !== 'closed' && (
           <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12, padding: 12, borderRadius: 12,
                          backgroundColor: t.s1, gap: 8 }}>
             <Text accessibilityLabel="Shell state" style={{ fontSize: 13.5, color: t.ink2 }}>
-              {st === 'ended' ? T('tmEnded') : st === 'failed' ? `${T('tmFailed')} ${bridge.error ?? ''}`.trim()
+              {st === 'ended' ? T('tmEnded') : st === 'failed' ? `${T('tmFailed')} ${bridge?.error ?? ''}`.trim()
                 : T('tmOpening', { name })}
             </Text>
             {(st === 'ended' || st === 'failed') && (
-              <Button label={T(st === 'ended' ? 'tmNewShell' : 'tmRetry')} onPress={() => bridge.restart()} />
+              <Button label={T(st === 'ended' ? 'tmNewShell' : 'tmRetry')} onPress={() => bridge?.restart()} />
             )}
           </View>
         )}
@@ -138,11 +137,11 @@ export function ShellPane({ name, visible, via = client }: {
         style={{ flexGrow: 0 }}
         contentContainerStyle={{ gap: 6, paddingHorizontal: 8, paddingVertical: 6 }}>
         {KEY_BAR.map((k) => {
-          const on = k.key === 'ctrl' && bridge.ctrl;
+          const on = k.key === 'ctrl' && !!bridge?.ctrl;
           return (
             <Pressable key={k.key} accessibilityRole="button" accessibilityLabel={k.name}
               accessibilityState={k.key === 'ctrl' ? { selected: on } : undefined}
-              onPress={() => { Haptics.selectionAsync().catch(() => {}); bridge.key(k.key); }}
+              onPress={() => { Haptics.selectionAsync().catch(() => {}); bridge?.key(k.key); }}
               style={({ pressed }) => ({ minWidth: 40, height: 34, paddingHorizontal: 10, borderRadius: 8,
                 alignItems: 'center', justifyContent: 'center',
                 backgroundColor: on ? TERM_THEME.cursor : pressed ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)' })}>
@@ -151,7 +150,7 @@ export function ShellPane({ name, visible, via = client }: {
           );
         })}
         <Pressable accessibilityRole="button" accessibilityLabel={T('tmHideKeyboard')}
-          onPress={() => { bridge.blur(); Keyboard.dismiss(); }}
+          onPress={() => { bridge?.blur(); Keyboard.dismiss(); }}
           style={{ minWidth: 40, height: 34, paddingHorizontal: 10, borderRadius: 8, alignItems: 'center',
                    justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' }}>
           <Text style={{ fontSize: 14, color: TERM_THEME.foreground }}>⌨︎↓</Text>
