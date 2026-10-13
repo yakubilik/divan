@@ -37,17 +37,18 @@ useFleet.setState({
 } as any);
 
 createRoot(root).render(createElement(App));
-// Once the chat is open, its name is pressed and a new one typed.
+// Once the chat is open, its name is pressed and a new one typed — again
+// until it holds, since the chat opening late puts the plain name back.
 const rename = () => {
-  const name = document.querySelector('.dv-chathead [data-chat-title]') as HTMLButtonElement | null;
-  if (!name) { setTimeout(rename, 100); return; }
-  name.click();
-  const type = () => {
-    const field = document.querySelector('.dv-chathead input[data-chat-title-input]') as HTMLInputElement | null;
-    if (!field) { setTimeout(type, 50); return; }
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, 'Films and series');
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-  };
-  type();
+  const field = document.querySelector('.dv-chathead input[data-chat-title-input]') as HTMLInputElement | null;
+  if (field) {
+    if (field.value !== 'Films and series') {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, 'Films and series');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  } else {
+    (document.querySelector('.dv-chathead [data-chat-title]') as HTMLButtonElement | null)?.click();
+  }
+  setTimeout(rename, 100);
 };
 setTimeout(rename, 300);
