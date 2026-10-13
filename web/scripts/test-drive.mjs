@@ -2600,7 +2600,7 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
   for (let i = 0; i < 10 && !labelledBtn('Back to the wall'); i++) {
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
   }
-  const toQueue = w.location.pathname === '/machine/terminal' && !!labelledBtn('Back to the wall')
+  const toQueue = w.location.pathname === '/machine/terminal/ustabasi/177' && !!labelledBtn('Back to the wall')
     && (labelledBtn('Back to the wall').closest('div[style]')?.parentElement?.textContent ?? doc.body.textContent ?? '')
       .includes('Show pending agent questions as a floating chat on the dashboard');
   const backWord = doc.querySelector('header .dv-back')?.textContent ?? '';

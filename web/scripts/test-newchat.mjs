@@ -175,7 +175,7 @@ const emptyHere = () => ({
   place: place(), path: w.location.pathname, sidebar: sidebar(), selected: !!selectedRow(),
   chat: chatOpen(), composer: !!firstWord(), focused: doc.activeElement === firstWord() && !!firstWord(),
 });
-const isEmptyHere = (s) => s.place === 'Chat' && s.path === '/chats' && s.sidebar && !s.selected
+const isEmptyHere = (s) => s.place === 'Chat' && s.path === '/chats/new' && s.sidebar && !s.selected
   && !s.chat && s.composer && s.focused;
 
 // ── into the Chat place, a chat open ────────────────────────────────────────
@@ -195,7 +195,7 @@ group('New chat, the sidebar button');
 await click(newChatButton());
 await settle();
 let s = emptyHere();
-ok('stays in the Chat place: address /chats, sidebar there, nothing selected, empty composer focused',
+ok('stays in the Chat place: address /chats/new, sidebar there, nothing selected, empty composer focused',
   isEmptyHere(s), JSON.stringify(s));
 ok('the Dashboard Composer is not what came up', !doc.querySelector('h1.dv-greet'));
 ok('pressing it is a step Back can undo (one entry pushed)', w.history.length === historyAt + 1,

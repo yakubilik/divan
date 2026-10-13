@@ -19,6 +19,7 @@
 import { setThemeChoice, useTheme, T, type ThemeChoice } from '../lib/theme';
 import { useFleet } from '../lib/fleet';
 import type { View } from '../lib/shell';
+import type { SectionId } from './Preferences';
 import { Button, Card, Choice, EmptyState, Row, SectionHeader } from '../ui/divan';
 import { glyph } from '../ui/kit';
 import { usePrefs } from '../lib/prefs';
@@ -40,8 +41,8 @@ const CHATS: { key: 'one' | 'all'; label: string }[] = [
 /** The rows of the second group: what a computer keeps, and the page that holds
  *  it. All four are sections of the screen one level down, which is where they
  *  have always been. */
-const COMPUTER: { key: string; icon: string; title: string; note: string }[] = [
-  { key: 'chats', icon: 'plus', title: 'What a new chat opens with',
+const COMPUTER: { key: SectionId; icon: string; title: string; note: string }[] = [
+  { key: 'defaults', icon: 'plus', title: 'What a new chat opens with',
     note: 'the tool, the model, how hard it thinks, what it may do without asking, and where' },
   { key: 'tools', icon: 'bolt', title: 'Tools',
     note: 'which CLIs are installed on that computer, and which versions' },
@@ -51,7 +52,11 @@ const COMPUTER: { key: string; icon: string; title: string; note: string }[] = [
     note: 'the daemon it is running, how long it has been up and how often it has restarted' },
 ];
 
-export function Settings({ onView }: { onView: (view: View) => void }) {
+export function Settings({ onView, onSection }: {
+  onView: (view: View) => void;
+  /** A row's Change: that section of the computer's own settings. */
+  onSection?: (section: SectionId) => void;
+}) {
   const { choice, scheme } = useTheme();
   const order = useFleet((s) => s.order);
   const hosts = useFleet((s) => s.hosts);
@@ -101,7 +106,7 @@ export function Settings({ onView }: { onView: (view: View) => void }) {
               key={r.key} icon={glyph(r.icon)} title={r.title} note={r.note}
               style={{ padding: '14px 20px' }}
               right={<Button small face="outline" label="Change"
-                onClick={() => onView('preferences')} />}
+                onClick={() => (onSection ? onSection(r.key) : onView('preferences'))} />}
             />
           ))}
         </Card>
