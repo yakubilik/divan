@@ -1,11 +1,12 @@
-/** The pen on the chat list (#176): one press opens a fresh chat, with no
- *  Dashboard and no sheet in between.
+/** The pen on the chat list (#176, #222): one press opens the empty composer
+ *  in the Chat place — the web's New chat there (#208) — with no Dashboard and
+ *  no sheet in between, and nothing made until something is said.
  *
  *  The list is stood up over the same fleet `test-handover-machine.cjs` uses,
- *  the pen is pressed, and the store calls it makes — which are the daemon
- *  requests — are read back with the route it pushes. The fresh chat is then
- *  opened, its first message typed and sent. A refused `chat.create` is pressed
- *  too: the list stays, the dialog says why, and both of its ways on work.
+ *  the pen is pressed, the composer it opens is typed into and sent, and the
+ *  store calls that makes — which are the daemon requests — are read back with
+ *  the route it lands on. A refused `chat.create` is sent too: the composer
+ *  stays, the dialog says why, and both of its ways on work.
  *
  *  Run: node scripts/test-fresh-chat.cjs  (also folded into test-ustabasi.cjs.)
  */
@@ -52,6 +53,25 @@ function stand({ refuse = false, defaults = DEFAULTS } = {}) {
 }
 const list = () => R.render('dark', h(require(path.join(root, 'app/chat/index.tsx')).default, {}));
 const pen = () => R.presses().filter((p) => p.label === 'New chat');
+/** The empty composer the pen opens, with these words typed into it. The
+ *  harness keeps no state between draws, so what typing would have left in the
+ *  box is handed to its first `useState('')` — the composer's text — for one
+ *  draw. */
+const composer = (typed) => {
+  const realUseState = R.React.useState;
+  let given = false;
+  R.React.useState = (init) => {
+    if (typed != null && !given && init === '') { given = true; return [typed, () => {}]; }
+    return realUseState(init);
+  };
+  try { return R.render('dark', h(require(path.join(root, 'app/chat/new.tsx')).default, {})); }
+  finally { R.React.useState = realUseState; }
+};
+const sendIt = async (words) => {
+  composer(words);
+  R.presses().find((p) => p.label === 'Send')?.press();
+  await flush();
+};
 const made = () => calls.filter(([m]) => m === 'chat.create').map(([, d]) => d);
 
 const checks = [];
@@ -61,20 +81,33 @@ const ready = (async () => {
   const realAlert = overlay.alert;
   overlay.alert = (title, message, buttons) => dialogs.push({ title, message, buttons: buttons ?? [] });
   try {
-    // 1 · one press: chat.create on the sheet's defaults, then that chat — and nothing else
+    // 1 · one press: the empty composer, and nothing made yet
     stand();
     list();
     const pens = pen();
     pens[0]?.press();
     await flush();
-    const sent = made();
-    checks.push([`new chat: the pen on the chat list sends one chat.create with the remembered folder, tool, model, effort, permission mode, sign-in and agent, and opens that chat without the Dashboard or a sheet — ${JSON.stringify({ sent, pushed: R.nav.pushed(), replaced: R.nav.replaced() })}`,
-      pens.length === 1 && eq(sent, [{ provider: 'claude', model: 'sonnet', effort: 'low', perm_mode: 'default', cwd: '/r/quire',
-        account_id: 'a2', agent_id: 'hermes', title: 'Hermes' }])
-      && eq(calls.find(([m]) => m === 'agent.list')?.[1], ['a2', '/r/quire', 'claude'])
-      && eq(R.nav.pushed(), ['/chat/n1']) && eq(R.nav.replaced(), []) && dialogs.length === 0]);
+    const opened = R.nav.pushed();
+    const box = composer();
+    const emptyBox = /data-placeholder="Talk to Hermes"/.test(box) && box.includes('No conversation yet.')
+      && !box.includes('Students keep asking about refunds.');
+    checks.push([`new chat: the pen on the chat list opens the empty composer in the Chat place (${JSON.stringify(opened)}) and makes no chat until something is said`,
+      pens.length === 1 && eq(opened, ['/chat/new']) && emptyBox && made().length === 0 && dialogs.length === 0]);
 
-    // 2 · the fresh chat is empty, and the first message sent from it is its own
+    // 1b · sent: chat.create on the sheet's defaults, chat.send with the words, then that chat
+    await sendIt('first words');
+    const sent = made();
+    const said = calls.filter(([m]) => m === 'chat.send').map(([, d]) => d);
+    checks.push([`new chat: sending from it is one chat.create with the remembered folder, tool, model, effort, permission mode, sign-in and agent, then chat.send with the words, and the chat opens in the composer's place — ${JSON.stringify({ sent, said, replaced: R.nav.replaced() })}`,
+      eq(sent, [{ provider: 'claude', model: 'sonnet', effort: 'low', perm_mode: 'default', cwd: '/r/quire',
+        account_id: 'a2', agent_id: 'hermes', title: 'Hermes' }])
+      && eq(said, [{ id: 'n1', text: 'first words' }])
+      && eq(calls.filter(([m]) => m === 'chat.create' || m === 'chat.send').map(([m]) => m), ['chat.create', 'chat.send'])
+      && eq(calls.find(([m]) => m === 'agent.list')?.[1], ['a2', '/r/quire', 'claude'])
+      && eq(R.nav.pushed(), ['/chat/new']) && eq(R.nav.replaced(), ['/chat/n1']) && dialogs.length === 0]);
+
+    // 2 · the chat it opens is its own, and what is typed there next goes to it
+    calls.length = 0;
     const Conversation = require(path.join(root, 'app/chat/[id].tsx')).Conversation;
     const fresh = R.render('dark', h(Conversation, { id: 'n1' }));
     const empty = !fresh.includes('Students keep asking about refunds.') && !fresh.includes('Agreed. I put it in Ice Box.');
@@ -93,14 +126,13 @@ const ready = (async () => {
     R.presses().find((p) => p.label === 'Send')?.press();
     await flush();
     const sends = calls.filter(([m]) => m === 'chat.send').map(([, d]) => d);
-    checks.push([`new chat: the chat it opens shows none of the old conversation, and the first message typed there is sent to the new chat id — ${JSON.stringify(sends)}`,
+    checks.push([`new chat: the chat it opens shows none of the old conversation, and the next message typed there is sent to the new chat id — ${JSON.stringify(sends)}`,
       empty && eq(sends, [{ id: 'n1', text: 'first words' }])]);
 
-    // 3 · refused: the list stays, the dialog says why, Try again and Choose settings both work
+    // 3 · refused: the composer stays, the dialog says why, Try again and Choose settings both work
     const s = stand({ refuse: true });
     const before = list();
-    pen()[0]?.press();
-    await flush();
+    await sendIt('first words');
     const d = dialogs[0];
     const stayed = R.nav.pushed().length === 0 && R.nav.replaced().length === 0;
     const words = d && d.title === "Couldn't start" && d.message === 'No such folder: /r/quire'
@@ -112,8 +144,8 @@ const ready = (async () => {
     s.refuse = false;
     d?.buttons.find((b) => b.text === 'Try again')?.onPress?.();
     await flush();
-    const retried = made().length === 2 && eq(R.nav.pushed(), ['/chat/n1']);
-    checks.push([`new chat: a refused chat.create leaves the list where it was and says why, with Try again (which creates and opens it) and Choose settings (the New chat sheet) — ${JSON.stringify({ stayed, dialog: d && { title: d.title, message: d.message, buttons: d.buttons.map((b) => b.text) }, sheet, retried })}`,
+    const retried = made().length === 2 && eq(R.nav.replaced(), ['/chat/n1']);
+    checks.push([`new chat: a refused chat.create leaves the composer where it was and says why, with Try again (which creates and opens it) and Choose settings (the New chat sheet) — ${JSON.stringify({ stayed, dialog: d && { title: d.title, message: d.message, buttons: d.buttons.map((b) => b.text) }, sheet, retried })}`,
       stayed && !!words && sheet && retried && before.includes('Refunds')]);
 
     // 4 · after that, a row still opens its own chat and a long press still opens the sheet
@@ -137,8 +169,7 @@ const ready = (async () => {
     const accounts = current().accounts;
     stand({ defaults: none });
     list();
-    pen()[0]?.press();
-    await flush();
+    await sendIt('hello');
     checks.push(['new chat: after an explicit "No agent" the pen opens a chat with no agent and does not ask for the list; a remembered sign-in that is gone falls back to the computer\'s own; a remembered agent wins over Hermes',
       !calls.some(([m]) => m === 'agent.list') && made().length === 1 && !('agent_id' in made()[0])
       && F.freshAccount(gone, accounts) === '' && F.freshAccount(DEFAULTS, accounts) === 'a2'

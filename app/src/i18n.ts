@@ -27,7 +27,7 @@ const en = {
   hintNew: 'Tap the pen for a new chat. Long-press it to choose the folder and model.',
   hintOffline: 'Make sure the computer is awake and connected to your tailnet.',
   running: 'Running…', emptyChat: 'Empty chat', awaiting: 'Needs approval', now: 'now', yesterday: 'yesterday',
-  pin: 'Pin', unpin: 'Unpin', rename: 'Rename', chatName: 'Chat name', moveToGroup: 'Move to group',
+  pin: 'Pin', unpin: 'Unpin', rename: 'Rename', chatName: 'Chat name', moveToGroup: 'Move to group', moveToGroupMore: 'Move to group…', giveTo: 'Give to {name}',
   archiveAction: 'Archive', unarchive: 'Unarchive', deleteChat: 'Delete chat', deleteChatBody: 'History is deleted from the computer too.',
   noGroup: 'Daily', newGroupTitle: 'New group', groupName: 'Group name',
   viewGrouped: 'Grouped', viewFlat: 'Flat',

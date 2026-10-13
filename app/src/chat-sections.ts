@@ -15,6 +15,8 @@ export type Section = {
   data: Chat[]; count: number; shut: boolean;
   /** Whether the heading offers its own + , as the web's does. */
   plus: boolean;
+  /** The folder that + opens its chat in, where the web's would name one. */
+  cwd?: string;
 };
 
 /** The one section the flat view draws. It is never shown as a heading, so it
@@ -62,8 +64,9 @@ export function chatSections({ chats, groups, people, chosen, saved, productName
     // The archive is everything that is not today, so it starts shut — except
     // under a search, which is looking through it, or with the switch on.
     const shut = collapsed[s.key] ?? (s.kind === 'archive' && !q.trim() && !showArchived);
+    const at = newChatIn(s, projects);
     return { id: s.key, title: s.title, kind: s.kind, mono: s.kind === 'folder', data: shut ? [] : s.chats,
-             count: s.chats.length, shut, plus: newChatIn(s, projects).offered };
+             count: s.chats.length, shut, plus: at.offered, cwd: at.cwd };
   });
   return { sections, who, counts, shared };
 }
