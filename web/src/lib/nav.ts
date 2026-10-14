@@ -91,6 +91,7 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *  ```
  *  /                          the Dashboard
  *  /waiting                   everything waiting on you
+ *  /work                      every ticket in flight, on every computer
  *  /chats                     the Chat place · /chats/<id> one chat
  *  /chats/new                 …with the empty composer New chat leaves there
  *  /machine/accounts          a page of the Machine place
@@ -121,7 +122,7 @@ export function pathOf(place: Place): string {
     if (place.view === 'terminal' && place.sub === 'ustabasi' && place.ticket != null) path += `/${place.ticket}`;
     return path;
   }
-  if (!place.project) return place.tab === 'waiting' ? '/waiting' : '/';
+  if (!place.project) return place.tab === 'waiting' ? '/waiting' : place.tab === 'work' ? '/work' : '/';
   const head = `/p/${enc(place.project)}`;
   if (place.card) return `${head}/c/${enc(place.card)}`;
   if (place.tab === 'board') return `${head}/board`;
@@ -169,6 +170,7 @@ export function readPlace(pathname: string, search = ''): Place {
     return { ...place, view: 'chats', chat: parts[1] ?? null };
   }
   if (parts[0] === 'waiting') return { ...place, tab: 'waiting' };
+  if (parts[0] === 'work') return { ...place, tab: 'work' };
   if (parts[0] === 'machine') {
     // `/machine/on/<name>/…` is the computer, on a page about one.
     const on = parts[1] === 'on' && parts[2] ? parts[2] : null;
@@ -226,7 +228,7 @@ export function canonical(p: Place): Place {
       machine: ABOUT_ONE.includes(p.view) ? p.machine : null,
     };
   }
-  if (!p.project) return { ...HOME, tab: p.tab === 'waiting' ? 'waiting' : 'overview' };
+  if (!p.project) return { ...HOME, tab: p.tab === 'waiting' || p.tab === 'work' ? p.tab : 'overview' };
   const scoped: Place = { ...HOME, project: p.project };
   // A card is the page; which tab it was opened over is not in its address.
   if (p.card) return { ...scoped, card: p.card, tab: 'board' };

@@ -52,11 +52,12 @@ import { Board } from './Board';
 import { Project, ProjectHead } from './Project';
 import { Ticket } from './Ticket';
 import { Waiting } from './Waiting';
+import { Work } from './Work';
 import { Dashboard } from './Dashboard';
 
 /** Where inside a product the page is: its own page, one of its chats open on
  *  it, or its board. Each is a path of its own (`lib/nav.ts`). */
-export type ProjectTab = 'overview' | 'board' | 'chat' | 'waiting';
+export type ProjectTab = 'overview' | 'board' | 'chat' | 'waiting' | 'work';
 
 export interface OverviewProps {
   view: DivanView;
@@ -89,11 +90,13 @@ export interface OverviewProps {
   projectComposer?: React.ReactNode;
   /** A running chat's badge on the Dashboard: open that chat. */
   onOpenChat?: (host: string, chatId: string) => void;
+  /** A ticket pressed on the Work page: its own page. */
+  onOpenTicket?: (host: string, id: number) => void;
 }
 
 export function Overview({
   view, project, onProject, tab, onTab, card, onCard, chats,
-  composer, onOpenCard, projectComposer, onOpenChat,
+  composer, onOpenCard, projectComposer, onOpenChat, onOpenTicket,
 }: OverviewProps) {
   const here: ProjectTab = tab ?? 'overview';
   // What this product's chats did today, off every computer that has it.
@@ -119,6 +122,7 @@ export function Overview({
   if (!project) {
     const openCard = (c: MergedCard) => (onOpenCard ? onOpenCard(c) : onProject(c.projectKey));
     if (here === 'waiting') return <Waiting view={view} onCard={openCard} />;
+    if (here === 'work') return <Work onOpen={onOpenTicket} />;
     return (
       <Dashboard view={view} onProject={onProject} composer={composer}
         onCard={openCard} onChat={onOpenChat} onWaiting={() => onTab?.('waiting')}
