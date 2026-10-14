@@ -38,7 +38,7 @@ from .push import send_push
 from . import voice as voicemod
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .transcribe import known as transcribe_known
-from .attachments import KINDS, normalize_image, peaks, sniff
+from .attachments import KINDS, media_type_of, normalize_image, peaks, sniff
 from .security import ACCESS_EMAIL, PathPolicy, TunnelAccess, TunnelGate, TunnelLock
 from . import screen as screenmod
 from . import term as termmod
@@ -1460,7 +1460,7 @@ class Server:
         uploaded = UPLOAD_DIR.resolve() in p.parents and p.is_file()
         if not uploaded and not self.policy.is_servable(p):
             raise HTTPException(status_code=404, detail="not found")
-        return FileResponse(str(p), filename=p.name if download else None)
+        return FileResponse(str(p), media_type=media_type_of(p), filename=p.name if download else None)
 
     # ── auth ───────────────────────────────────────────────────────────────
     def _rate_limited(self, ip: str) -> bool:

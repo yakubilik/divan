@@ -45,6 +45,23 @@ KINDS = {
     ".m4a": "audio", ".mp3": "audio", ".wav": "audio", ".ogg": "audio", ".caf": "audio", ".aac": "audio",
 }
 
+# The Content-Type `/files` sends for media, so that it does not come from the
+# host's mime.types. macOS ships one that lists `.m4a` twice and the second,
+# `audio/mp4a-latm` (a bare AAC stream, not an MP4 file), wins in Python; told
+# that, AVPlayer refuses the file outright ("Cannot Open", -11828) and the
+# bubble's play button does nothing. These are the types AVPlayer accepts for
+# what each extension really holds.
+MEDIA_TYPES = {
+    ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".aac": "audio/aac",
+    ".ogg": "audio/ogg", ".caf": "audio/x-caf", ".flac": "audio/flac",
+    ".mp4": "video/mp4", ".mov": "video/quicktime", ".m4v": "video/x-m4v",
+}
+
+
+def media_type_of(path: str | Path) -> str | None:
+    """The Content-Type to serve a media file with; None leaves it to guessing."""
+    return MEDIA_TYPES.get(Path(path).suffix.lower())
+
 # `![alt](target)` or `[label](target)` where target is a local path: absolute
 # (`/…`, `~/…`, `C:\…`), optionally `file://`, optionally wrapped in `<…>`
 # (the Markdown spelling for a path with spaces). URLs are not matched.
