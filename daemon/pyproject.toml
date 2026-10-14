@@ -34,6 +34,14 @@ dependencies = [
   "pywinpty>=2.0; platform_system == 'Windows'",         # ConPTY for driving `claude auth login` from the phone
 ]
 
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+# The scripts/test_*.py files are standalone programs (`python scripts/test_x.py`),
+# each with its own temporary DIVAN_HOME set at import; pytest runs tests/ only.
+testpaths = ["tests"]
+
 [project.urls]
 Homepage = "https://github.com/yakubilik/divan"
 Source = "https://github.com/yakubilik/divan"
