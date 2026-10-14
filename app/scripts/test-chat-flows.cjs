@@ -6,13 +6,13 @@
  *     test renderer, wired the way `App.tsx` and `Sidebar.tsx` wire them to the
  *     real `web/src/lib/actions.ts` — whose socket is the one thing stood in
  *     for, so what it would send the computer is written down;
- *   · the phone: the chat list (`app/chat/index.tsx`), the empty composer
- *     (`app/chat/new.tsx`) and the New chat sheet (`app/new-chat.tsx`), pressed
+ *   · the phone: the chat list (`app/chat/index.tsx`) and the New chat sheet
+ *     (`app/new-chat.tsx`), pressed
  *     in the screen harness, over the real store (`src/store.ts`) whose socket
  *     client (`src/ws.ts`) writes down what it would send the same way.
  *
- *  Then, flow by flow: New chat (an empty composer; sending is chat.create +
- *  chat.send, the chat opens and is listed where the web lists it), a heading's
+ *  Then, flow by flow: New chat (the pen is chat.create, the chat opens
+ *  and is listed where the web lists it), a heading's
  *  + (the web's onNewChatIn: that folder, and that group), a chat's long-press
  *  menu (the web ChatMenu's entries in its order; rename, pin, archive, move to
  *  a group, to Daily and to a new group, delete with a confirm — each the same
@@ -212,44 +212,23 @@ const ready = (async () => {
   await machine.ready;
   R.words.real();
   try {
-    // ── 1 · New chat: an empty composer, then chat.create + chat.send ────────
+    // ── 1 · New chat: the pen makes a fresh chat and opens it ───────────────
     await reset();
     list();
     R.nav.reset();
     R.presses().find((p) => p.label === 'New chat')?.press();
     await flush();
-    const went = R.nav.pushed();
-    stand();
-    const realUseState = R.React.useState;
-    const compose = (text) => {
-      let given = false;
-      R.React.useState = (init) => {
-        if (text != null && !given && init === '') { given = true; return [text, () => {}]; }
-        return realUseState(init);
-      };
-      try { return R.render('light', h(require(path.join(root, 'app/chat/new.tsx')).default, {})); }
-      finally { R.React.useState = realUseState; }
-    };
-    const box = compose();
-    const empty = /data-placeholder="Talk to Hermes"/.test(box) && PHONE_RPC.length === 0
-      && !CHATS().some((c) => box.includes(c.title));
-    compose('Draft the refund email');
-    R.presses().find((p) => p.label === 'Send')?.press();
-    await flush();
     const sent = PHONE_RPC.map(([t]) => t);
     const made = real.getState().chats.n1;
-    const opened = R.nav.replaced();
+    const went = R.nav.pushed();
     const all = Object.values(real.getState().chats);
     const webKey = sectionOf(web.hostSections({ chats: all.filter((c) => !c.archived), groups: GROUPS, hostKey: 'h1', query: '',
       who: 'Yakup', names: PEOPLE.names, saved: [], now: NOW }), 'n1');
     const webTitle = webSections(all, GROUPS).find((s) => s.key === webKey)?.title;
     list();
     const under = drawn(all.map((c) => c.title)).find((s) => s.rows.includes('New chat'))?.title;
-    checks.push([`new chat: the pen opens an empty composer in the Chat place (${went.join()}) and nothing is asked of the computer until something is said`,
-      eq(went, ['/chat/new']) && empty]);
-    checks.push([`new chat: sending is chat.create then chat.send with the words, and that chat opens (${opened.join()}) — ${JSON.stringify(PHONE_RPC.filter(([t]) => t === 'chat.send'))}`,
-      eq(sent, ['chat.create', 'chat.send']) && PHONE_RPC[1][1].chat_id === 'n1' && PHONE_RPC[1][1].text === 'Draft the refund email'
-      && !!made && eq(opened, ['/chat/n1'])]);
+    checks.push([`new chat: the pen is one chat.create and that chat opens at once (${went.join()}) — ${JSON.stringify(sent)}`,
+      eq(sent, ['chat.create']) && !!made && eq(went, ['/chat/n1']) && eq(R.nav.replaced(), [])]);
     checks.push([`new chat: the phone lists it under the heading the web puts it under (phone "${under}", web "${webTitle}")`,
       !!under && under === webTitle]);
 
