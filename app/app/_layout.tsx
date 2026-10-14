@@ -113,7 +113,6 @@ export default function RootLayout() {
         <Stack.Screen name="dashboard" />
         <Stack.Screen name="chat/index" />
         <Stack.Screen name="machine" />
-        <Stack.Screen name="chat/new" />
         <Stack.Screen name="chat/[id]" />
         {/* The Needs-you counter, opened up: everything waiting on a person
             across every project and every machine. Pushed over the Dashboard

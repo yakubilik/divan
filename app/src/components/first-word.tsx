@@ -1,8 +1,8 @@
 // The first words of a chat that does not exist yet, and what sending them
 // does: `chat.create` on what New chat would start with (`src/fresh-chat.ts`),
-// then `chat.send` with the words, then that chat. It is the web's empty
-// composer in the Chat place (#208): nothing is made until something is said,
-// so a New chat pressed and left again leaves no empty chat behind.
+// then `chat.send` with the words, then that chat. The chat list draws it when
+// there is no conversation yet; `useFreshChat` is also what the list's pen
+// calls to open a fresh chat at once.
 import React, { useCallback } from 'react';
 import { Pressable, View } from 'react-native';
 import { useStore, useT } from '../store';
