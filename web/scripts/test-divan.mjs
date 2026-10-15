@@ -1263,6 +1263,12 @@ group('every carried screen asks its computer for exactly what it did');
    *  Escape, and two buttons that must not take the focus from it. */
   const GAINED = {
     'src/components/ChatView.tsx': ['Blur', 'Change', 'KeyDown', 'MouseDown'],
+    // Work's view buttons became a date picker, a search box and a project
+    // picker (`Change`), and its cards a drag with a Move to… menu walked by
+    // the arrow keys (`KeyDown`) and no long-press menu while held
+    // (`ContextMenu`) (ustabasi #282). The queue writes go through
+    // lib/actions.ts, so the requests are the same.
+    'src/screens/Work.tsx': ['Change', 'ContextMenu', 'KeyDown'],
   };
   const allow = (f, before) => {
     const [reqs, drives] = JSON.parse(before);
