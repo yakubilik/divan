@@ -164,7 +164,10 @@ ok('a peer is keyed by its own address, whoever reaches it',
 group('the directory, on a fresh load');
 useFleet.getState().boot();
 ok('the computer that served the page is the directory', directoryKey(useFleet.getState()) === HOME);
-await until(() => rows().some((r) => r.cfg.via === 'p1' && r.status === 'online'));
+// Online and named are two replies, not one: wait for both, or a busy machine
+// reads the row between them.
+await until(() => rows().some((r) => r.cfg.via === 'p1' && r.status === 'online' && r.info?.name === 'Cinema PC'
+  && r.cfg.name === 'Cinema PC'), 8000);
 let list = rows();
 ok('the serving computer and its peer are both listed', list.length === 2, JSON.stringify(list.map((r) => r.cfg)));
 ok('the serving computer is first', list[0]?.cfg.host === 'divan.example');
