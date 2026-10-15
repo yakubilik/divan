@@ -45,6 +45,7 @@ from . import term as termmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
 from .session import (NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, TITLE_MAX, TITLE_SEP, SessionManager,
+                      approval_gone,
                       with_project)
 from .providers.claude_models import live_models as claude_live_models
 from .providers.codex import live_models as codex_live_models
@@ -2308,7 +2309,7 @@ class Server:
         s = self.sessions.peek(d["chat_id"])
         ok = bool(s and s.respond(d["request_id"], d.get("decision", "deny"), d.get("response")))
         if not ok:
-            raise Err("no_pending_approval", "no pending approval")
+            raise approval_gone(self.db.approval_outcome(d["chat_id"], d["request_id"]))
         return {}
 
     # ── the call ───────────────────────────────────────────────────────────

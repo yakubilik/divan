@@ -8,7 +8,17 @@ from typing import Any, Awaitable, Callable
 # emit(event_type, payload, persist) -> None
 EmitFn = Callable[[str, dict, bool], Awaitable[None]]
 # approval(tool_name, tool_input, reason) -> "allow" | "allow_session" | "deny"
+#   | "expired" (nobody answered in time: not approved, and not a "no" either)
 ApprovalFn = Callable[[str, dict, str | None], Awaitable[str | dict]]
+
+# An approval nobody answered. The decision the timeline records, the line it
+# shows under the request, and what the agent is told instead of "denied".
+EXPIRED = "expired"
+EXPIRED_NOTE = "Permission timed out, so it was not run."
+DROPPED_NOTE = "The daemon restarted while this was waiting, so the request was dropped and it was not run."
+EXPIRED_TO_AGENT = ("Nobody answered the permission request on the phone in time, so it was NOT "
+                    "approved and did not run. Do not run it, or anything that does the same, "
+                    "another way; tell the user it is waiting for their approval.")
 
 
 @dataclass
