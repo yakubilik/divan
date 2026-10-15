@@ -212,6 +212,8 @@ class Server:
         self.writers: dict[WebSocket, asyncio.Task] = {}
         self.conns: dict[WebSocket, Conn] = {}
         self.accounts: dict[str, acct.Account] = {}
+        self._notice_state: dict | None = None
+        self._notice_lock = asyncio.Lock()
         self.logins: dict[str, acct.LoginSession] = {}
         self._installing: str | None = None
         # account id -> window -> last reported usage of the plan's limits,
@@ -830,15 +832,28 @@ class Server:
 
     FOLLOW_EVERY_S = 30.0
     FOLLOW_STATE = CONFIG_DIR / "ustabasi-follow.json"
+    #: Which chat each queue notification went to, and which chat each ticket
+    #: (or, for what has no project, the one general chat) has: kept on disk so
+    #: a restart neither opens a second chat for a ticket nor posts the same
+    #: notification twice.
+    NOTICE_STATE = CONFIG_DIR / "ustabasi-notices.json"
+    #: How many delivered notification ids are remembered. The cursor already
+    #: keeps the follower past them; this only has to outlast a re-read.
+    NOTICE_SENT_KEEP = 2000
+    NOTICE_GENERAL = "Ustabaşı"
+    NOTICE_AGENT = "user:hermes"
 
     async def follow_tickets(self) -> None:
-        """Wake the chat that filed a ticket when the ticket ends.
+        """Put what the ticket queue sends the owner into a chat.
 
         An agent that files a ticket used to say "I will tell you when it is
         done" and then could not: nothing woke it. This reads what the queue
-        sent, and for a ticket filed from a chat (`card.origin_chat`), sends the
-        result into that chat as a message — the agent there picks it up and
-        tells the person, who gets the chat's own notification for it.
+        sent; a ticket filed from a chat (`card.origin_chat`) has the result sent
+        into that chat as a message — the agent there picks it up and tells the
+        person, who gets the chat's own notification for it. Everything else
+        that needs the owner goes to a Hermes chat opened for its ticket
+        (`_queue_chat`), so a push or a Telegram line is never the only place it
+        is said.
 
         The place in the queue's notifications is kept on disk. The first run
         starts at the end: an old result is not news.
@@ -856,21 +871,152 @@ class Server:
                 # is still there for the next one, which reads from the same place.
                 if self.draining:
                     return
-                got, last = await asyncio.to_thread(ustabasimod.followed, after)
-                for f in got:
-                    if not self.db.get_chat(f["chat"]):
-                        continue
-                    try:
-                        await self.sessions.get(f["chat"]).send(ustabasimod.follow_message(f), None)
-                        log.info("ticket #%s %s: told chat %s", f["ticket"], f["kind"], f["chat"])
-                    except Exception:
-                        log.exception("could not tell chat %s about ticket #%s", f["chat"], f["ticket"])
+                last = await self._follow_pass(after)
                 if last != after:
                     after = last
                     self.FOLLOW_STATE.write_text(json.dumps({"after": after}))
             except Exception:
                 log.exception("ticket follow pass failed")
             await asyncio.sleep(self.FOLLOW_EVERY_S)
+
+    async def _follow_pass(self, after: int) -> int:
+        """Deliver every notification newer than `after` once; the newest id read."""
+        got, last = await asyncio.to_thread(ustabasimod.followed, after)
+        for f in got:
+            if f["chat"] and self.db.get_chat(f["chat"]):
+                try:
+                    await self.sessions.get(f["chat"]).send(ustabasimod.follow_message(f), None)
+                    log.info("ticket #%s %s: told chat %s", f["ticket"], f["kind"], f["chat"])
+                except Exception:
+                    log.exception("could not tell chat %s about ticket #%s", f["chat"], f["ticket"])
+                continue
+            # The same notification read twice — a cursor that did not reach the
+            # disk before a restart — is posted once.
+            if str(f["id"]) in self._notices()["sent"]:
+                continue
+            try:
+                cid = await self._queue_chat(f["ticket"], f["title"], f["repo"])
+                lang = await asyncio.to_thread(ustabasimod.owner_language)
+                await self.h_chat_send(None, {"chat_id": cid,
+                                              "text": ustabasimod.notice_message(f, lang)})
+                self._notice_sent(f["id"], cid)
+                log.info("notification %s (#%s %s): told queue chat %s",
+                         f["id"], f["ticket"], f["kind"], cid)
+            except Exception:
+                log.exception("could not put notification %s in a chat", f["id"])
+        return last
+
+    def _notices(self) -> dict:
+        if self._notice_state is None:
+            try:
+                raw = json.loads(self.NOTICE_STATE.read_text())
+            except Exception:
+                raw = {}
+            self._notice_state = {"chats": dict(raw.get("chats") or {}),
+                                  "sent": dict(raw.get("sent") or {})}
+        return self._notice_state
+
+    def _notices_save(self) -> None:
+        state = self._notices()
+        sent = state["sent"]
+        if len(sent) > self.NOTICE_SENT_KEEP:
+            keep = sorted(sent, key=int)[-self.NOTICE_SENT_KEEP:]
+            state["sent"] = {k: sent[k] for k in keep}
+        tmp = self.NOTICE_STATE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state))
+        tmp.replace(self.NOTICE_STATE)
+
+    def _notice_sent(self, nid: int, cid: str) -> None:
+        self._notices()["sent"][str(nid)] = cid
+        self._notices_save()
+
+    def notice_chat_of(self, nid: int | None = None, ticket: int | None = None) -> str | None:
+        """The chat a notification went to, or a ticket's queue chat — if it still exists."""
+        state = self._notices()
+        cid = state["sent"].get(str(nid)) if nid is not None else None
+        if not cid and ticket:
+            cid = state["chats"].get(f"ticket:{int(ticket)}")
+        return cid if cid and self.db.get_chat(cid) else None
+
+    async def _queue_chat(self, ticket: int | None, title: str, repo: str) -> str:
+        """The chat a ticket's notifications go to, opened the first time.
+
+        A ticket whose repository is a Divan product gets a chat of its own,
+        filed under that product; one with no product, and whatever the queue
+        says about no ticket at all, share one general `Ustabaşı` chat. Opened
+        the way the night watch opens its chat (~/server/divan-nightly): through
+        `chat.create` and `chat.update` as a client would call them, Hermes as
+        the agent, on the owner's accounts in the queue's order.
+        """
+        async with self._notice_lock:
+            project = None
+            if ticket and repo:
+                try:
+                    project = await asyncio.to_thread(self.db.divan.project_for_repo, repo)
+                except Exception:
+                    project = None
+            key = f"ticket:{int(ticket)}" if project else "general"
+            state = self._notices()
+            cid = state["chats"].get(key)
+            if cid and self.db.get_chat(cid):
+                return cid
+            if project:
+                cwd = repo if not self.policy.cwd_error(repo) else self.cfg.allowed_roots[0]
+                name = f"#{ticket} {(title or '').strip()}".strip()
+            else:
+                cwd, name = self.cfg.allowed_roots[0], self.NOTICE_GENERAL
+            chat = await self._open_hermes_chat(cwd, name)
+            # Filed by hand, so the computer never refiles it by the repos its
+            # agent happens to read; the general chat is Unfiled on purpose.
+            await self.h_chat_update(None, {"chat_id": chat["id"],
+                                            "project_id": project["id"] if project else ""})
+            state["chats"][key] = chat["id"]
+            self._notices_save()
+            log.info("opened queue chat %s (%s) for %s", chat["id"], name, key)
+            return chat["id"]
+
+    async def _open_hermes_chat(self, cwd: str, title: str) -> dict:
+        """`chat.create` with Hermes, trying the owner's accounts in turn; with
+        none of them able to run Hermes, the default account without it rather
+        than no chat at all."""
+        order = await asyncio.to_thread(ustabasimod.notice_accounts)
+        spec = {"cwd": cwd, "model": "opus", "effort": "high", "perm_mode": "bypass", "title": title}
+        for account in [a for a in order if a in self.accounts]:
+            try:
+                return await self.h_chat_create(None, {**spec, "agent_id": self.NOTICE_AGENT,
+                                                       "account_id": account})
+            except Err as exc:
+                log.warning("queue chat on %s: %s", account, exc)
+        try:
+            return await self.h_chat_create(None, {**spec, "agent_id": self.NOTICE_AGENT})
+        except Err as exc:
+            log.warning("queue chat without Hermes: %s", exc)
+        return await self.h_chat_create(None, spec)
+
+    async def h_ustabasi_notice_chat(self, dev: Device, d: dict) -> dict:
+        """The chat a queue notification goes to, opened if it is not there yet.
+
+        Asked by the queue's push (`divan.push.send_push`, from the queue's
+        rac_push) before the banner leaves, so the banner opens that chat; and
+        by the panel for a notification it holds no chat for. `{ticket, kind}`
+        or `{id}` (a notification already recorded). `chat_id` is null for a
+        kind that opens no chat."""
+        nid = d.get("id")
+        if nid is not None and (cid := self.notice_chat_of(nid=int(nid))):
+            return {"chat_id": cid}
+        kind = str(d.get("kind") or "")
+        try:
+            ticket = int(d["ticket"]) if d.get("ticket") not in (None, "") else None
+        except (TypeError, ValueError):
+            raise Err("bad_ticket", "no such ticket")
+        if not ustabasimod.wants_chat(kind):
+            return {"chat_id": self.notice_chat_of(ticket=ticket) if ticket else None}
+        brief = await asyncio.to_thread(ustabasimod.ticket_brief, ticket) if ticket else None
+        if brief and brief["origin"] and self.db.get_chat(brief["origin"]):
+            return {"chat_id": brief["origin"]}
+        cid = await self._queue_chat(ticket, (brief or {}).get("title") or "",
+                                     (brief or {}).get("repo") or "")
+        return {"chat_id": cid}
 
     async def resume_interrupted(self) -> None:
         """Carry on with the turns the process before this one was running.
@@ -2629,8 +2775,19 @@ class Server:
             after = int(d.get("after") or 0)
         except (TypeError, ValueError):
             after = 0
-        return await asyncio.to_thread(ustabasimod.notifications, after,
-                                       ustabasimod.INBOX_LIMIT, self.policy.project_for)
+        got = await asyncio.to_thread(ustabasimod.notifications, after,
+                                      ustabasimod.INBOX_LIMIT, self.policy.project_for)
+        # Each one carries the chat it was put in, so pressing it opens the
+        # conversation about it rather than the wall.
+        for item in got.get("items") or []:
+            origin = item.pop("origin", None)
+            cid = self.notice_chat_of(nid=item["id"])
+            if not cid and origin and ustabasimod.wants_chat(item["kind"]) and self.db.get_chat(origin):
+                cid = origin
+            if not cid and ustabasimod.wants_chat(item["kind"]):
+                cid = self.notice_chat_of(ticket=item["ticket"])
+            item["chat"] = cid
+        return got
 
     async def h_ustabasi_report(self, dev: Device, d: dict) -> dict:
         """What a ticket came back with: summary, verdict and the documents it wrote."""

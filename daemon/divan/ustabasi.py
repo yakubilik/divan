@@ -1076,7 +1076,7 @@ def notifications(after: int = 0, limit: int = INBOX_LIMIT,
     from . import secrets
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT n.id, n.ticket_id, n.ts, n.kind, n.text, t.title, t.repo, t.status"
+            "SELECT n.id, n.ticket_id, n.ts, n.kind, n.text, t.title, t.repo, t.status, t.card"
             " FROM notifications n LEFT JOIN tickets t ON t.id = n.ticket_id"
             " WHERE n.id > ? ORDER BY n.id DESC LIMIT ?", (int(after or 0), int(limit))).fetchall()
         last = conn.execute("SELECT COALESCE(MAX(id), 0) FROM notifications").fetchone()[0]
@@ -1091,6 +1091,9 @@ def notifications(after: int = 0, limit: int = INBOX_LIMIT,
             "headline": lines[0] if lines else "", "body": "\n".join(body).strip(),
             "title": r["title"] or "", "status": r["status"] or "",
             "project": _project(r["repo"], project_for) if r["repo"] else None,
+            # The chat the ticket was filed from; the daemon turns this into
+            # `chat`, the one the notification was put in.
+            "origin": (_json(r["card"], {}) or {}).get("origin_chat") or None,
         })
     return {"available": True, "items": items, "last": last}
 
@@ -1136,40 +1139,122 @@ def report(ticket_id: int) -> dict:
 
 
 # ── following a ticket from the chat that filed it ─────────────────────────
+#
+# Every notification that needs the owner is delivered into a chat. A ticket
+# filed from a chat (`card.origin_chat`) wakes that chat, as it always did; any
+# other — filed by the CLI, the night watch, triage, another agent, or no
+# ticket at all — goes to a Hermes chat the daemon opens for it (server.py,
+# `follow_tickets`), so the person answers in a conversation instead of working
+# out what a banner wanted.
 
-#: What ends a wait: the ticket finished, stopped to ask, or fell over.
-FOLLOWED_KINDS = ("done", "blocked", "failed")
+#: What the queue sends that asks nothing of anybody and opens no chat: a pause
+#: it lifts on its own, a nag about a question already put in a chat, the
+#: digest of those, an app that was delivered. Everything else is a chat — a
+#: ticket done, asking or failed, and every escalation, including kinds added after this was
+#: written, which is why this is the list of exceptions and not the rule.
+QUIET_KINDS = ("limit", "reminder", "last_call", "digest", "delivered")
 
 _KIND_WORD = {"done": "is done", "blocked": "is asking something", "failed": "failed"}
 
+#: The owner's accounts a queue chat runs on, in the queue's own priority order
+#: (names from `claude_accounts` in the queue's config.json).
+NOTICE_ACCOUNTS = tuple(x.strip() for x in (os.environ.get("USTABASI_NOTICE_ACCOUNTS")
+                                            or "yakup,bedriyan").split(",") if x.strip())
+
+
+def wants_chat(kind: str) -> bool:
+    """Whether a notification of this kind is something the owner should be told in a chat."""
+    return bool(kind) and kind not in QUIET_KINDS
+
+
+def _queue_config() -> dict:
+    """The queue's config.json, next to its CLI; empty when there is none."""
+    try:
+        return json.loads((CLI.parent.parent / "config.json").read_text()) or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def owner_language() -> str:
+    """The language the queue talks to its owner in (`owner_language`), as a code."""
+    return str(_queue_config().get("owner_language") or "").strip()
+
+
+def notice_accounts() -> list[str]:
+    """The account folders a queue chat should try, best first.
+
+    The owner's accounts in NOTICE_ACCOUNTS order, as the queue's config names
+    them, with the ones the queue knows to be on a usage limit or signed out
+    moved to the back — they are still worth a try when nothing else is left.
+    Returns the folders' names, which are the daemon's account ids.
+    """
+    dirs = {str(a.get("name")): Path(str(a.get("dir") or "")).name
+            for a in _queue_config().get("claude_accounts") or [] if a.get("dir")}
+    meta: dict = {}
+    if available():
+        try:
+            with _connect() as conn:
+                meta = dict(conn.execute("SELECT key, value FROM meta WHERE key LIKE 'limit_until:%'"
+                                         " OR key LIKE 'auth_lost:%'").fetchall())
+        except sqlite3.Error:
+            meta = {}
+    now = time.time()
+
+    def out(name: str) -> bool:
+        try:
+            limited = float(meta.get(f"limit_until:{name}") or 0) > now
+        except ValueError:
+            limited = False
+        return limited or bool(meta.get(f"auth_lost:{name}"))
+
+    names = [n for n in NOTICE_ACCOUNTS if dirs.get(n)]
+    return [dirs[n] for n in sorted(names, key=out)]
+
+
+def ticket_brief(ticket_id: int) -> dict | None:
+    """What a queue chat needs to know about a ticket: its title, its repo and
+    the chat it was filed from, if any."""
+    if not available():
+        return None
+    with _connect() as conn:
+        row = conn.execute("SELECT id, title, repo, card FROM tickets WHERE id=?",
+                           (int(ticket_id),)).fetchone()
+    if row is None:
+        return None
+    return {"ticket": row["id"], "title": row["title"] or "", "repo": row["repo"] or "",
+            "origin": (_json(row["card"], {}) or {}).get("origin_chat") or None}
+
 
 def followed(after: int) -> tuple[list[dict], int]:
-    """The ends of tickets that were filed from a chat, newer than `after`.
+    """What the queue sent the owner, newer than `after`, that belongs in a chat.
 
-    A ticket knows its chat through `card.origin_chat`, which `ustabasi add`
-    writes from the DIVAN_CHAT_ID the daemon puts in every agent's environment.
+    `chat` is the chat the ticket was filed from — `card.origin_chat`, which
+    `ustabasi add` writes from the DIVAN_CHAT_ID the daemon puts in every
+    agent's environment — or None, when the daemon has to find the ticket a
+    chat of its own. Either way, every kind `wants_chat` takes.
     Returns what to deliver and the newest notification id looked at.
     """
     if not available():
         return [], after
     from . import secrets
     with _connect() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(tickets)")}
+        ask = "t.ask" if "ask" in cols else "NULL AS ask"
         rows = conn.execute(
-            "SELECT n.id, n.ticket_id, n.kind, n.text, t.title, t.card, t.ask"
-            " FROM notifications n JOIN tickets t ON t.id = n.ticket_id"
+            f"SELECT n.id, n.ticket_id, n.kind, n.text, t.title, t.card, t.repo, {ask}"
+            " FROM notifications n LEFT JOIN tickets t ON t.id = n.ticket_id"
             " WHERE n.id > ? ORDER BY n.id", (int(after),)).fetchall()
         last = conn.execute("SELECT COALESCE(MAX(id), 0) FROM notifications").fetchone()[0]
     out = []
     for r in rows:
-        if r["kind"] not in FOLLOWED_KINDS:
-            continue
-        chat = (_json(r["card"], {}) or {}).get("origin_chat")
-        if not chat:
+        chat = (_json(r["card"], {}) or {}).get("origin_chat") or None
+        if not wants_chat(r["kind"]):
             continue
         lines = [ln for ln in secrets.mask(r["text"] or "").splitlines() if ln.strip()]
         body = "\n".join(ln for ln in lines[1:] if not ln.strip().startswith("ustabasi "))
-        out.append({"chat": chat, "ticket": r["ticket_id"], "kind": r["kind"],
-                    "title": r["title"] or "", "body": body.strip(),
+        out.append({"id": r["id"], "chat": chat, "ticket": r["ticket_id"], "kind": r["kind"],
+                    "title": r["title"] or (lines[0] if lines else ""), "body": body.strip(),
+                    "repo": r["repo"] or "",
                     "ask": secrets.mask(r["ask"] or "") if r["kind"] == "blocked" else ""})
     return out, max(last, after)
 
@@ -1182,13 +1267,49 @@ def newest_notification() -> int:
         return conn.execute("SELECT COALESCE(MAX(id), 0) FROM notifications").fetchone()[0]
 
 
+def _head(f: dict) -> str:
+    what = f"#{f['ticket']} " if f.get("ticket") else ""
+    return f"🔔 ustabasi {what}{_KIND_WORD.get(f['kind'], f['kind'])}: {f['title']}"
+
+
+#: The first thing a queue chat's reply says. Checked by the tests word for word.
+LEAD_WITH = ("Open your reply with what Yakup has to do now, in one line — or, when "
+             "nothing is needed from him, say \"nothing, FYI\" (in his language) — "
+             "and only then what happened.")
+
+
 def follow_message(f: dict) -> str:
     """What the filing chat is told. It reads as a note from the queue, and it
     tells the agent what to do with it: the person is waiting in this chat."""
-    head = f"🔔 ustabasi #{f['ticket']} {_KIND_WORD.get(f['kind'], f['kind'])}: {f['title']}"
+    head = _head(f)
     said = f["ask"] or f["body"]
     tail = ("You filed this ticket from this chat and the person is waiting here for it. "
             "Tell them what came of it in a few plain lines, in their language"
             + ("; put its question to them simply" if f["kind"] == "blocked" else "")
-            + f". `ustabasi show {f['ticket']}` has the details.")
+            + f". {LEAD_WITH} `ustabasi show {f['ticket']}` has the details.")
+    return f"{head}\n\n{said}\n\n{tail}" if said else f"{head}\n\n{tail}"
+
+
+def notice_message(f: dict, lang: str = "") -> str:
+    """What a queue chat is told: the notification, and how to put it to Yakup.
+
+    Nobody filed the ticket from here; the queue sent this, and the chat is
+    where he reads it and answers it instead of chasing a banner. So the reply
+    leads with what he must do, and his answer is acted on through the queue's
+    own CLI."""
+    head = _head(f)
+    said = f["ask"] or f["body"]
+    tid = f.get("ticket")
+    language = {"tr": "Turkish", "en": "English"}.get(lang, lang) or "his language"
+    act = (f"When he answers, act on it through the queue: `ustabasi note {tid} \"…\"` "
+           f"answers or adds to the ticket, `ustabasi say {tid} \"…\"` talks to the worker "
+           f"on it right now, `ustabasi restart {tid}` / `ustabasi cancel {tid}` and the rest "
+           f"as he asks; `ustabasi show {tid}` has the details." if tid else
+           "When he answers, act on it through the queue's CLI (`ustabasi ls`, "
+           "`ustabasi --help`).")
+    tail = ("The ticket queue (ustabasi) sent this to Yakup; this chat is where he reads "
+            "it and answers it. " + LEAD_WITH + " Then say what happened in a few plain lines, "
+            f"in {language}"
+            + ("; put its question to him simply" if f["kind"] == "blocked" else "")
+            + ". " + act)
     return f"{head}\n\n{said}\n\n{tail}" if said else f"{head}\n\n{tail}"
