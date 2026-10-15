@@ -32,9 +32,13 @@ That is the product. What the design does is bound it.
   `allowed_roots`, minus `denied_paths` (`~/.ssh`, `~/.aws`, credential stores,
   browser profiles). The check is in the daemon, not the client, so it holds in
   `bypass` permission mode too, and `chat.update` re-checks on every move.
-- *A destructive command slipping past a tired thumb.* A pattern list —
-  `rm -rf`, `git push --force`, `dd of=/dev/…` and friends — asks for approval
-  in every permission mode, and says so in the notification.
+- *A destructive command slipping past a tired thumb.* A command asks for
+  approval in every permission mode when it spends money (paid cloud
+  resources, billed deploys, paid API calls), exposes the machine or a secret
+  (tunnels, the firewall off, keys sent out, `curl … | sh`), or can destroy the
+  machine or your data (`rm -rf` outside the chat's folder, `git push --force`,
+  disk erase, dropping a database, killing the daemon) — and says which in the
+  notification. Nothing else asks: quoted text and heredoc bodies are data.
 - *Secrets leaking into scrollback.* Output is scrubbed for key-shaped strings
   (`sk-ant-`, `ghp_`, `AKIA`, bot tokens…) before it is stored or sent.
 - *A phone that leaves your pocket.* Face ID can lock the app, and can be
