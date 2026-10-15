@@ -13,6 +13,7 @@ import { Overview } from '../src/screens/Overview';
 import { merge, project } from '../src/lib/divan';
 import { useFleet } from '../src/lib/fleet';
 import { useDock } from '../src/lib/sessions';
+import { useInbox } from '../src/lib/inbox';
 import { boards } from './overview-fixture.js';
 import { host } from './panel-fixture.js';
 import { ticket } from './ticket-fixture.js';
@@ -75,6 +76,10 @@ useFleet.setState({
   }) as any,
 });
 useDock.setState({ minimised: ['studio:k2', 'studio:h1', 'studio:dc'], closed: {}, raised: [] });
+// The question on #42 came as a queue notification and was put in a Hermes chat:
+// Waiting offers Open chat on it.
+useInbox.setState({ items: [{ id: 10, ticket: 42, ts: NOW - 720, kind: 'blocked', headline: '', body: '',
+  title: 'Stripe keys', status: 'blocked', project: 'Quire', chat: 'c1', host: busy.key }] });
 const view = merge([{ key: busy.key, name: busy.name,
   state: { snapshot: snap, at: NOW, reachable: true, error: null, old: false } as any }], NOW);
 const quire = project(view, 'quire');
@@ -87,6 +92,7 @@ createRoot(root).render(which === 'ticket' ? (
   </Shell>
 ) : (
   <Shell view="overview" onView={() => {}} fleet={view} back={{ label: 'Dashboard', onBack: () => {} }}>
-    <Overview view={view} project={null} onProject={() => {}} tab="waiting" onTab={() => {}} />
+    <Overview view={view} project={null} onProject={() => {}} tab="waiting" onTab={() => {}}
+      onOpenChat={() => {}} />
   </Shell>
 ));
