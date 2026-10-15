@@ -56,6 +56,10 @@ export interface Ticket {
   notes: Note[];
   note_count: number;
   last_event: Event | null;
+  /** How the work reached the base, where the queue's events say it did —
+   *  `merged into main (4dd999f)`. Absent from an older daemon, null where
+   *  nothing was merged. */
+  merged?: string | null;
   /** Every run of every stage this ticket has been through, oldest first: what
    *  the queue's own events add up to (`daemon/divan/ustabasi.py`).
    *  What a ticket *is* on a board is this — the steps, ticking off. */
