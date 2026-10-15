@@ -12,6 +12,7 @@ import { FieldSheet, accountName, type Field } from './components/FieldSheet';
 import { ApprovalModal, type Pending } from './components/ApprovalModal';
 import { Machine } from './screens/Machine';
 import { Overview, type ProjectTab } from './screens/Overview';
+import type { WorkLayout } from './screens/Work';
 import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
 import { useFleet, onAnyEvent, pokeAll, putChat } from './lib/fleet';
@@ -97,6 +98,11 @@ export function App() {
   const [ticket, setTicket] = useState<number | null>(opened.current.ticket);
   /** …and the chat that ticket was asked for from, so the way back is to it. */
   const [ticketFrom, setTicketFrom] = useState<Place | null>(null);
+  /** How the Work page is laid out and how far back it reaches. In the
+   *  address with the page (`Place.group`, `Place.older`). */
+  const [workLayout, setWorkLayout] = useState<WorkLayout>({
+    group: opened.current.group, older: opened.current.older,
+  });
   const searchRef = useRef<HTMLInputElement>(null);
   /** The Dashboard's Composer, which ⌘N and every "new chat" now lead to. */
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -221,8 +227,8 @@ export function App() {
     // that machine has answered.
     host: opened.current.host && opened.current.chat === sel?.chatId ? opened.current.host : null,
     sub: view === 'chats' ? (fresh && !sel ? 'new' : null) : sub,
-    ticket, machine,
-  }), [view, project, tab, card, sel?.chatId, fresh, sub, ticket, machine]);
+    ticket, machine, group: workLayout.group, older: workLayout.older,
+  }), [view, project, tab, card, sel?.chatId, fresh, sub, ticket, machine, workLayout]);
   const whereRef = useRef(where);
   whereRef.current = where;
 
@@ -350,6 +356,8 @@ export function App() {
     setCard(cardKeyRef.current(to.card) ?? (to.card || null));
     setSub(to.view === 'chats' ? null : to.sub);
     setTicket(to.ticket);
+    setWorkLayout((had) => (had.group === to.group && had.older === to.older
+      ? had : { group: to.group, older: to.older }));
     setPeek(false);
     const key = keyOfName(to.machine);
     if (key && useFleet.getState().focus !== key) useFleet.getState().setFocus(key);
@@ -861,6 +869,7 @@ export function App() {
             onOpenCard={(c) => { setProject(c.projectKey); setTab('board'); setCard(idOf(c)); }}
             onOpenChat={open}
             onOpenTicket={openTicket}
+            work={workLayout} onWork={setWorkLayout}
             // The Composer at the foot of a product: everything it sends is
             // about that product, and the chat it starts is read right here,
             // in the middle of the product's page, with the list beside it.

@@ -52,7 +52,7 @@ import { Board } from './Board';
 import { Project, ProjectHead } from './Project';
 import { Ticket } from './Ticket';
 import { Waiting } from './Waiting';
-import { Work } from './Work';
+import { Work, type WorkLayout } from './Work';
 import { Dashboard } from './Dashboard';
 
 /** Where inside a product the page is: its own page, one of its chats open on
@@ -92,11 +92,15 @@ export interface OverviewProps {
   onOpenChat?: (host: string, chatId: string) => void;
   /** A ticket pressed on the Work page: its own page. */
   onOpenTicket?: (host: string, id: number) => void;
+  /** How the Work page is laid out and how far back it reaches, which live in
+   *  the address; a change is a step Back can undo. */
+  work?: WorkLayout;
+  onWork?: (to: WorkLayout) => void;
 }
 
 export function Overview({
   view, project, onProject, tab, onTab, card, onCard, chats,
-  composer, onOpenCard, projectComposer, onOpenChat, onOpenTicket,
+  composer, onOpenCard, projectComposer, onOpenChat, onOpenTicket, work, onWork,
 }: OverviewProps) {
   const here: ProjectTab = tab ?? 'overview';
   // What this product's chats did today, off every computer that has it.
@@ -122,7 +126,7 @@ export function Overview({
   if (!project) {
     const openCard = (c: MergedCard) => (onOpenCard ? onOpenCard(c) : onProject(c.projectKey));
     if (here === 'waiting') return <Waiting view={view} onCard={openCard} onChat={onOpenChat} />;
-    if (here === 'work') return <Work onOpen={onOpenTicket} />;
+    if (here === 'work') return <Work onOpen={onOpenTicket} layout={work} onLayout={onWork} />;
     return (
       <Dashboard view={view} onProject={onProject} composer={composer}
         onCard={openCard} onChat={onOpenChat} onWaiting={() => onTab?.('waiting')}

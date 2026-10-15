@@ -1,6 +1,7 @@
-/** Work in flight on its own, the way the panel draws it: the line over it with
- *  the Work button lit, and a queue with a ticket in every state on three
- *  projects. Built and photographed by `scripts/shot-work.mjs`. */
+/** Work on its own, the way the panel draws it: the line over it with the Work
+ *  button lit, and a queue with a ticket in every state on three projects and
+ *  some finished this week. `?layout=board` or `?layout=date` draws that
+ *  layout. Built and photographed by `scripts/shot-work.mjs`. */
 import { createRoot } from 'react-dom/client';
 import '../src/styles/divan-tokens.css';
 import '../src/styles/divan-components.css';
@@ -14,6 +15,7 @@ import { ticket } from './ticket-fixture.js';
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('theme') === 'light' ? 'light' : 'dark';
+const layout = q.get('layout') === 'board' ? 'board' : q.get('layout') === 'date' ? 'date' : null;
 document.documentElement.dataset.theme = scheme;
 const root = document.getElementById('root')!;
 root.className = 'dv-root dv-ambient';
@@ -43,7 +45,15 @@ const tickets = [
   t(32, 'isghocam-seo', 'queued', 'Blog index pagination', {
     depends_on: 31, started_at: null, round_started_at: null,
     last_event: { ts: NOW - 4000, kind: 'depends', msg: 'waits for #31' } }),
-  t(30, 'isghocam-seo', 'done', 'Robots.txt'),
+  t(30, 'isghocam-seo', 'done', 'Robots.txt', { finished_at: NOW - 2 * 86400, merged: 'merged into main (4dd999f)' }),
+  t(257, 'divan', 'done', 'Web /waiting: one page of everything waiting on you', {
+    finished_at: NOW - 40 * 60, merged: 'merged into main (0c4a6de)',
+    last_event: { ts: NOW - 39 * 60, kind: 'clean', msg: 'worktree removed (auto)' } }),
+  t(255, 'divan', 'cancelled', 'Phone: a second way to file a ticket', { finished_at: NOW - 26 * 3600 }),
+  t(70, 'nl-artsen', 'failed', 'Import the practice list from the registry', {
+    finished_at: NOW - 5 * 3600,
+    last_event: { ts: NOW - 5 * 3600, kind: 'failed', msg: 'verifier crashed repeatedly; needs a human look' } }),
+  t(69, 'nl-artsen', 'done', 'Practice pages: opening hours', { finished_at: NOW - 12 * 86400 }),
 ];
 useFleet.setState({
   hosts: { studio: { ...(host() as any), status: 'online' } }, order: ['studio'], focus: 'studio', ready: true,
@@ -54,6 +64,6 @@ useFleet.setState({
 createRoot(root).render(
   <Shell view="overview" onView={() => {}} back={{ label: 'Dashboard', onBack: () => {} }}
     work={{ on: true, onOpen: () => {} }}>
-    <Work />
+    <Work layout={{ group: layout, older: 0 }} />
   </Shell>,
 );

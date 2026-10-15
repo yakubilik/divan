@@ -56,11 +56,18 @@ export interface Place {
    *  where it is not obvious, which is where more than one is paired. Never
    *  `host:port`: that is how this browser reaches it. */
   machine: string | null;
+  /** How the Work page is laid out, where it is not the default list by
+   *  project: a board of status columns (`?view=board`) or a list by day
+   *  (`?group=date`). Only on `/work`. */
+  group: 'board' | 'date' | null;
+  /** How many weeks of finished tickets the Work page adds beyond the last
+   *  seven days (`?older=1`). Only on `/work`. */
+  older: number;
 }
 
 export const HOME: Place = {
   view: 'overview', project: null, tab: 'overview', card: null,
-  chat: null, host: null, sub: null, ticket: null, machine: null,
+  chat: null, host: null, sub: null, ticket: null, machine: null, group: null, older: 0,
 };
 
 /** The Machine pages that are about one computer — the one in focus — and so
@@ -132,11 +139,16 @@ export function pathOf(place: Place): string {
   return head;
 }
 
-/** …and what is left over, which is one thing: the computer a popped-out
- *  window was told to use. Everything else about where the panel is, is in the
- *  path. */
+/** …and what is left over: the computer a popped-out window was told to use,
+ *  and how the Work page is laid out. Everything else about where the panel
+ *  is, is in the path. */
 export function searchOf(place: Place): string {
-  return place.host ? `?host=${enc(place.host)}` : '';
+  const q: string[] = [];
+  if (place.host) q.push(`host=${enc(place.host)}`);
+  if (place.group === 'board') q.push('view=board');
+  if (place.group === 'date') q.push('group=date');
+  if (place.older > 0) q.push(`older=${place.older}`);
+  return q.length ? `?${q.join('&')}` : '';
 }
 
 /** A place, read back out of an address. Anything unrecognised is the
@@ -160,7 +172,7 @@ export function readPlace(pathname: string, search = ''): Place {
       // …including a card named the old way, `host:id`, whose tail is the id.
       card: ((q.get('card') || '').trim().split(':').pop() || null),
       chat: (q.get('chat') || '').trim() || null,
-      host, sub: null, ticket: null, machine: null,
+      host, sub: null, ticket: null, machine: null, group: null, older: 0,
     };
   }
 
@@ -170,7 +182,14 @@ export function readPlace(pathname: string, search = ''): Place {
     return { ...place, view: 'chats', chat: parts[1] ?? null };
   }
   if (parts[0] === 'waiting') return { ...place, tab: 'waiting' };
-  if (parts[0] === 'work') return { ...place, tab: 'work' };
+  if (parts[0] === 'work') {
+    const older = Number(q.get('older'));
+    return {
+      ...place, tab: 'work',
+      group: q.get('view') === 'board' ? 'board' : q.get('group') === 'date' ? 'date' : null,
+      older: Number.isInteger(older) && older > 0 ? Math.min(older, 52) : 0,
+    };
+  }
   if (parts[0] === 'machine') {
     // `/machine/on/<name>/…` is the computer, on a page about one.
     const on = parts[1] === 'on' && parts[2] ? parts[2] : null;
@@ -203,7 +222,9 @@ export function samePlace(a: Place, b: Place): boolean {
   return PLACE_KEYS.every((k) => a[k] === b[k]);
 }
 
-const PLACE_KEYS: (keyof Place)[] = ['view', 'project', 'tab', 'card', 'chat', 'host', 'sub', 'ticket', 'machine'];
+const PLACE_KEYS: (keyof Place)[] = [
+  'view', 'project', 'tab', 'card', 'chat', 'host', 'sub', 'ticket', 'machine', 'group', 'older',
+];
 
 /** …and two that differ only in which computer a page is about: the same page
  *  with another of its computers picked, which is a choice made on that page and
@@ -228,7 +249,10 @@ export function canonical(p: Place): Place {
       machine: ABOUT_ONE.includes(p.view) ? p.machine : null,
     };
   }
-  if (!p.project) return { ...HOME, tab: p.tab === 'waiting' || p.tab === 'work' ? p.tab : 'overview' };
+  if (!p.project && p.tab === 'work') {
+    return { ...HOME, tab: 'work', group: p.group ?? null, older: Math.max(0, p.older || 0) };
+  }
+  if (!p.project) return { ...HOME, tab: p.tab === 'waiting' ? p.tab : 'overview' };
   const scoped: Place = { ...HOME, project: p.project };
   // A card is the page; which tab it was opened over is not in its address.
   if (p.card) return { ...scoped, card: p.card, tab: 'board' };
