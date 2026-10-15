@@ -258,6 +258,19 @@ ticket(12, str(root / "ledger"), worktree=str(work), round_no=2, status="running
 event(12, NOW - 9000, "start", "worker round 1 pid 17 model m account a")
 event(12, NOW - 8000, "requeue", "-> worker round 2")
 event(12, NOW - 7000, "start", "worker round 2 pid 18 model m account b")
+# Finished and merged, with the worktree cleaned after it: the merge is not the
+# last event, and the snapshot still says the work reached the base.
+ticket(13, str(root / "ledger"), status="done")
+event(13, NOW - 600, "done", "verifier passed")
+event(13, NOW - 590, "merge", "checkout busy; retrying every tick until 17:05")
+event(13, NOW - 500, "merge", "merged into main (4dd999f); pushed")
+event(13, NOW - 499, "clean", "worktree removed (auto)")
+# Finished, and the merge did not happen.
+ticket(14, str(root / "ledger"), status="done")
+event(14, NOW - 600, "merge", "merge failed (aborted, main untouched): conflicts in a.txt")
+# Merged by hand, found by the queue later.
+ticket(15, str(root / "ledger"), status="done")
+event(15, NOW - 600, "merge", "merged by hand (abc1234)")
 conn.commit()
 conn.close()
 
@@ -292,6 +305,12 @@ check("a step carries no key it has nothing to say with",
       sorted(now_step), ["account", "at", "model", "pid", "round", "stage"])
 check("the step before it was closed by the hand-over that replaced it",
       after[12]["steps"][0]["outcome"], "rejected")
+
+check("a merge followed by a clean-up still says it was merged",
+      (after[13]["merged"], after[13]["last_event"]["kind"]), ("merged into main (4dd999f); pushed", "clean"))
+check("a merge that failed says nothing was merged", after[14]["merged"], None)
+check("a merge by hand is a merge", after[15]["merged"], "merged by hand (abc1234)")
+check("a ticket with no merge event has none", after[12]["merged"], None)
 
 # ── it is still the same snapshot it was ─────────────────────────────────────
 

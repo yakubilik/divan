@@ -157,7 +157,8 @@ def _json(raw, default):
 
 def _ticket(row: sqlite3.Row, last_event: dict | None,
             starts: list[tuple[float, int]], project: str | None,
-            steps: list[dict], git: bool = True) -> dict:
+            steps: list[dict], git: bool = True,
+            merged: str | None = None) -> dict:
     card = _json(row["card"], {})
     verdict = _json(row["verdict"], None)
     notes = _json(row["notes"], [])
@@ -205,6 +206,11 @@ def _ticket(row: sqlite3.Row, last_event: dict | None,
         "notes": notes[-6:],
         "note_count": len(notes),
         "last_event": last_event,
+        # How the work reached the base, when the queue's events say it did:
+        # "merged into main (4dd999f)", "merged by hand (4dd999f)". Read apart
+        # from the last event because a merge is rarely the last thing written —
+        # the worktree being cleaned or a delivery being queued comes after it.
+        "merged": merged,
         # Which steps the ticket has been through and which one it is on, read
         # out of the events. Nothing else answers "what is it doing now" —
         # `stage` and `round` say where it is, not how it got there.
@@ -247,7 +253,19 @@ def snapshot(project_for: Callable[[str], str | None] | None = None,
             "WHERE kind IN ('start', 'check', 'report', 'done', 'failed', 'blocked',"
             " 'cancelled', 'requeue', 'stuck', 'crash', 'limit') ORDER BY id"
         ).fetchall()
+        # And the newest merge event of every ticket, for whether its work is
+        # in the base: a finished ticket says so on the Work page.
+        merges = conn.execute(
+            "SELECT e.ticket_id, e.msg FROM events e "
+            "JOIN (SELECT ticket_id, MAX(id) AS id FROM events WHERE kind = 'merge'"
+            " GROUP BY ticket_id) m ON e.id = m.id"
+        ).fetchall()
         meta = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM meta").fetchall()}
+    merged = {}
+    for e in merges:
+        line = (e["msg"] or "").split("\n", 1)[0].strip()
+        if line.startswith("merged "):
+            merged[e["ticket_id"]] = line[:MAX_STEP_NOTE]
     last = {e["ticket_id"]: {"ts": e["ts"], "kind": e["kind"], "msg": e["msg"]} for e in events}
     starts: dict[int, list[tuple[float, int]]] = {}
     by_ticket: dict[int, list[sqlite3.Row]] = {}
@@ -270,7 +288,8 @@ def snapshot(project_for: Callable[[str], str | None] | None = None,
         "tickets": [
             _ticket(r, last.get(r["id"]), starts.get(r["id"], []),
                     _project(r["repo"], project_for),
-                    _steps(by_ticket.get(r["id"], []), r["status"]), git)
+                    _steps(by_ticket.get(r["id"], []), r["status"]), git,
+                    merged.get(r["id"]))
             for r in rows
         ],
         "queue": {
