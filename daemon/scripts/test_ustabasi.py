@@ -271,6 +271,13 @@ event(14, NOW - 600, "merge", "merge failed (aborted, main untouched): conflicts
 # Merged by hand, found by the queue later.
 ticket(15, str(root / "ledger"), status="done")
 event(15, NOW - 600, "merge", "merged by hand (abc1234)")
+# The queue's order: a priority column, as the queue keeps it.
+conn.execute("ALTER TABLE tickets ADD COLUMN priority INTEGER NOT NULL DEFAULT 5")
+conn.execute("UPDATE tickets SET priority = 1 WHERE id = 7")
+for col in ("depends_on INTEGER", "wake_at REAL", "lane TEXT"):
+    conn.execute(f"ALTER TABLE tickets ADD COLUMN {col}")
+conn.execute("UPDATE tickets SET depends_on = 3, lane = 'web', wake_at = ? WHERE id = 8", (NOW + 600,))
+conn.execute("INSERT INTO meta (key, value) VALUES ('disk_low_since', ?)", (str(NOW - 60),))
 conn.commit()
 conn.close()
 
@@ -311,6 +318,22 @@ check("a merge followed by a clean-up still says it was merged",
 check("a merge that failed says nothing was merged", after[14]["merged"], None)
 check("a merge by hand is a merge", after[15]["merged"], "merged by hand (abc1234)")
 check("a ticket with no merge event has none", after[12]["merged"], None)
+check("each ticket says its place in the queue's order",
+      (after[7]["priority"], after[8]["priority"]), (1, 5))
+check("…and what the queue would pass it over for",
+      (after[8]["depends_on"], after[8]["lane"], round(after[8]["wake_at"])), (3, "web", round(NOW + 600)))
+check("…none where it has none", (after[7]["depends_on"], after[7]["lane"], after[7]["wake_at"]), (None, None, None))
+low_snap = u.snapshot(policy.project_for)["queue"]
+check("the queue says since when its disk gate has held starts",
+      round(low_snap["disk_low_since"]), round(NOW - 60))
+was_cfg = u._queue_config
+try:
+    u._queue_config = lambda: {"slots": 6}
+    check("…and how many tickets it runs at once", u.snapshot(policy.project_for)["queue"]["slots"], 6)
+    u._queue_config = lambda: {}
+    check("…or nothing, where its config does not say", u.snapshot(policy.project_for)["queue"]["slots"], None)
+finally:
+    u._queue_config = was_cfg
 
 # ── it is still the same snapshot it was ─────────────────────────────────────
 
@@ -357,6 +380,8 @@ try:
     older = u.snapshot(policy.project_for)
     check("a queue without those columns is a wall, not an error",
           older["tickets"][0]["git"], None)
+    check("…and with no priority column says none rather than guessing",
+          older["tickets"][0]["priority"], None)
 finally:
     u.DB_PATH = was
 

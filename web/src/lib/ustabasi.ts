@@ -60,6 +60,10 @@ export interface Ticket {
    *  `merged into main (4dd999f)`. Absent from an older daemon, null where
    *  nothing was merged. */
   merged?: string | null;
+  /** Its place in the queue's order: picked `ORDER BY priority, id`, lowest
+   *  first, 5 unless somebody said otherwise. Absent or null from an older
+   *  daemon. */
+  priority?: number | null;
   /** Every run of every stage this ticket has been through, oldest first: what
    *  the queue's own events add up to (`daemon/divan/ustabasi.py`).
    *  What a ticket *is* on a board is this — the steps, ticking off. */
