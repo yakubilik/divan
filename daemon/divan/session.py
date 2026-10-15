@@ -15,7 +15,7 @@ from .errors import Err
 from . import attachments, naming, preamble, recap, secrets, structured_approval
 from .pool import Wait
 from .security import PathPolicy
-from .providers.base import Provider, ProviderConfig
+from .providers.base import EXPIRED, EXPIRED_NOTE, Provider, ProviderConfig
 from .providers.claude import ClaudeProvider
 from .providers.codex import CodexProvider
 from .providers.demo import DemoProvider
@@ -221,20 +221,32 @@ class ChatSession:
         await self._set_status("awaiting_approval", last_preview=preview)
         chat = self.db.get_chat(self.chat_id) or {}
         await self.notify("approval", {**chat, "preview": preview})
+        expired = False
         try:
             decision = await asyncio.wait_for(fut, timeout=self.cfg.approval_timeout_s)
         except asyncio.TimeoutError:
-            decision = "deny"
+            # Nobody answered. That is not a "no" anyone said: it is told as
+            # what it is, in the chat and to the agent, so neither the chat
+            # nor whatever the agent does next reads as if he had denied it —
+            # or as if the agent went ahead on its own (15 Oct 2026).
+            expired = True
+            structured = tool_input.get("kind") in ("mcp_elicitation", "user_input")
+            decision = "deny" if structured else EXPIRED
         finally:
             self.pending.pop(req_id, None)
             self._approval_inputs.pop(req_id, None)
         # Answers may contain secrets. Only the decision belongs in history.
-        outcome = decision.get("decision", "deny") if isinstance(decision, dict) else decision
-        await self.emit("approval.resolved", {"request_id": req_id, "decision": outcome}, True)
+        if expired:
+            await self.emit("approval.resolved", {"request_id": req_id, "decision": EXPIRED,
+                                                  "why": "timeout", "note": EXPIRED_NOTE}, True)
+        else:
+            outcome = decision.get("decision", "deny") if isinstance(decision, dict) else decision
+            await self.emit("approval.resolved", {"request_id": req_id, "decision": outcome}, True)
         await self._set_status("running")
         return decision
 
     def respond(self, request_id: str, decision: str, response: object = None) -> bool:
+        """Answer a waiting request. False when it is no longer waiting: see `approval_gone`."""
         fut = self.pending.get(request_id)
         if fut is None or fut.done():
             return False
@@ -929,6 +941,26 @@ class ChatSession:
         if self.provider:
             await self.provider.close()
             self.provider = None
+
+
+def approval_gone(outcome: dict | None) -> Err:
+    """What to tell someone who answered a request that is no longer waiting.
+
+    "Could not send. Please try again." was the answer to all of these, and
+    trying again could never work (15 Oct 2026): the request had timed out, or
+    died with a daemon restart. Each case says what happened, and that the
+    command did not run unless it was answered before.
+    """
+    if outcome is None:
+        return Err("no_pending_approval", "This request is no longer waiting, so nothing was run. "
+                                          "The daemon may have restarted; ask the agent to try again.")
+    if outcome.get("decision") == EXPIRED:
+        if outcome.get("why") == "restart":
+            return Err("approval_dropped", "This request was dropped when the daemon restarted, "
+                                           "so it was not run. Ask the agent to try again.")
+        return Err("approval_expired", "This request timed out before your answer arrived, "
+                                       "so it was not run. Ask the agent to try again.")
+    return Err("approval_answered", "This request was already answered.")
 
 
 class SessionManager:

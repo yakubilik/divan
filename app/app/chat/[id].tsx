@@ -24,6 +24,7 @@ import { ApprovalCard, AssistantText, CardLink, ConnectionBanner, FiledRule, Swi
 import { useDivanView } from '../../src/queue';
 import { filedBy, filedUnder, ticketRoute } from '../../src/filed';
 import { COLUMN_LABEL } from '../../src/board';
+import { errText } from '../../src/i18n';
 
 /** What the tools call a tier, written the way the billing page writes it.
  *  Anything unrecognised is title-cased rather than dropped: a plan we have
@@ -495,10 +496,10 @@ export function Conversation({ id }: { id: string }) {
         </View>
       );
       case 'approval': return (
-        <ApprovalCard tool={item.data.tool} input={item.data.input} preview={item.data.preview} danger={item.data.danger} decision={item.decision ?? null} cwd={chat?.cwd}
+        <ApprovalCard tool={item.data.tool} input={item.data.input} preview={item.data.preview} danger={item.data.danger} decision={item.decision ?? null} why={item.why ?? null} cwd={chat?.cwd}
           onDecide={(d, response) => respond(id!, item.data.request_id, d, response).catch((e) => {
             if (item.data.input?.kind === 'mcp_elicitation' || item.data.input?.kind === 'user_input') throw e;
-            alert(T('error'), e.message);
+            alert(T('error'), errText(e?.code, e?.message));
           })} />
       );
       case 'done': return <TurnFooter cost={item.data.cost_usd} duration={item.data.duration_ms} usage={item.data.usage} stopReason={item.data.stop_reason} />;

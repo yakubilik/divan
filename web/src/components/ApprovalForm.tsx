@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { approvalFields, approvalResponse, approvalUrl, type ApprovalResponse } from '../lib/approval-input';
 import { C, R } from '../lib/theme';
+import { sendError } from '../lib/i18n';
 
 const controlStyle = { padding: '8px 10px', borderRadius: R.btn, border: `1px solid ${C.border}`, background: C.bg, color: C.text, font: 'inherit' };
 
@@ -23,8 +24,8 @@ export function ApprovalForm({ input, onDecide }: {
     try {
       await onDecide(decision, decision === 'allow' ? response! : undefined);
       setValues({});
-    } catch {
-      setError('Could not send. Please try again.');
+    } catch (e: any) {
+      setError(sendError(e));
     } finally { setBusy(false); }
   }
   return <form autoComplete="off" onSubmit={(e) => { e.preventDefault(); void submit('allow'); }} style={{ display: 'grid', gap: 10, marginTop: 10 }}>

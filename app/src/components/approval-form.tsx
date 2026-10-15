@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Linking, Pressable, View } from 'react-native';
 import { useColors } from '../theme';
 import { useT } from '../store';
+import { sendError } from '../i18n';
 import { Text, TextInput } from './ui';
 import { approvalFields, approvalResponse, approvalUrl, type ApprovalResponse } from '../approval-input';
 
@@ -21,7 +22,7 @@ export function ApprovalForm({ input, onDecide }: { input: any; onDecide: (decis
     setBusy(true);
     setError('');
     try { await onDecide(decision, decision === 'allow' ? response! : undefined); }
-    catch { setError('Could not send. Please try again.'); }
+    catch (e: any) { setError(sendError(e)); }
     finally { setBusy(false); }
   }
   return <View style={{ gap: 10 }}>

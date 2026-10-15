@@ -11,6 +11,7 @@ import { fileUrl } from '../lib/actions';
 import { filedBy, type Filed } from '../lib/filed';
 import { NOTICE_WORD, ticketNotice, type TicketNotice } from '../lib/notice';
 import { blocks, counted, langOf, tell, type Lang, type Step } from '../lib/steps';
+import { sendError } from '../lib/i18n';
 
 const OK_BG = C.okBg;
 const BAD_BG = C.dangerBg;
@@ -407,13 +408,16 @@ function Approval({ item, onRespond }: {
 }) {
   const [error, setError] = useState('');
   async function decide(d: 'allow' | 'allow_session' | 'deny') {
-    try { await onRespond(d); setError(''); } catch { setError('Could not send. Please try again.'); }
+    try { await onRespond(d); setError(''); } catch (e: any) { setError(sendError(e)); }
   }
   const settled = item.decision != null;
   const word = item.decision === 'allow' ? 'allowed'
     : item.decision === 'allow_session' ? 'always allowed this session'
     : item.decision === 'deny' ? 'denied'
-    : item.decision === 'expired' ? 'timed out' : '';
+    // Nobody said no: it ran out of time, or a restart dropped it — and it did not run.
+    : item.decision === 'expired'
+      ? item.why === 'restart' ? 'dropped when the daemon restarted, not run' : 'timed out, not run'
+    : '';
   return (
     <div style={{
       marginRight: 32, borderRadius: R.card, background: C.surface,

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import divan as divanmod
+from .providers.base import DROPPED_NOTE, EXPIRED
 from . import filing
 
 SCHEMA = """
@@ -182,7 +183,12 @@ class DB:
 
     def _expire_orphan_approvals(self) -> None:
         """Approval requests whose waiting coroutine died with the old process can never
-        be answered; mark them expired so the phone stops showing Allow/Deny."""
+        be answered; mark them expired so the phone stops showing Allow/Deny.
+
+        Each one says so under the request, in words: a request that only
+        greys out reads like one nobody cared about, and an Allow pressed on
+        it later has to be able to say why it went nowhere (15 Oct 2026).
+        """
         rows = self._c.execute(
             "SELECT chat_id, payload FROM events WHERE type='approval.request' ORDER BY seq").fetchall()
         resolved = {json.loads(r["payload"]).get("request_id") for r in self._c.execute(
@@ -190,7 +196,18 @@ class DB:
         for r in rows:
             rid = json.loads(r["payload"]).get("request_id")
             if rid and rid not in resolved:
-                self.append_event(r["chat_id"], "approval.resolved", {"request_id": rid, "decision": "expired"})
+                self.append_event(r["chat_id"], "approval.resolved", {
+                    "request_id": rid, "decision": EXPIRED, "why": "restart", "note": DROPPED_NOTE})
+
+    def approval_outcome(self, chat_id: str, request_id: str) -> dict | None:
+        """How an approval request ended, or None if it never did (or never was)."""
+        for r in self._c.execute(
+                "SELECT payload FROM events WHERE chat_id=? AND type='approval.resolved' ORDER BY seq DESC",
+                (chat_id,)).fetchall():
+            data = json.loads(r["payload"])
+            if data.get("request_id") == request_id:
+                return data
+        return None
 
     def _migrate(self) -> None:
         """Additive column migrations for databases created by older versions."""

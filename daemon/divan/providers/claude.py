@@ -30,7 +30,7 @@ from ..config import UPLOAD_DIR
 from ..security import destructive_reason, redact
 from .. import legacy
 from . import claude_models
-from .base import Provider, ProviderConfig, TurnResult
+from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult
 
 log = logging.getLogger("rac.claude")
 
@@ -155,7 +155,7 @@ class ClaudeProvider(Provider):
             }}
         return {"hookSpecificOutput": {
             "hookEventName": "PreToolUse", "permissionDecision": "deny",
-            "permissionDecisionReason": "Denied from the phone.",
+            "permissionDecisionReason": EXPIRED_TO_AGENT if decision == EXPIRED else "Denied from the phone.",
         }}
 
     @staticmethod
@@ -186,7 +186,8 @@ class ClaudeProvider(Provider):
             return PermissionResultAllow()
         if decision == "allow":
             return PermissionResultAllow()
-        return PermissionResultDeny(message="Denied by the user.", interrupt=False)
+        message = EXPIRED_TO_AGENT if decision == EXPIRED else "Denied by the user."
+        return PermissionResultDeny(message=message, interrupt=False)
 
     # ── plan limits ────────────────────────────────────────────────────────
     @staticmethod

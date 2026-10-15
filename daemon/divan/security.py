@@ -11,6 +11,7 @@ import tempfile
 import time
 from contextvars import ContextVar
 from pathlib import Path
+from typing import NamedTuple
 
 import httpx
 import jwt
@@ -24,36 +25,81 @@ _HOME_NAMES = r"(?:\.divan|" + re.escape(legacy.HOME_NAME) + ")"
 
 log = logging.getLogger("rac.security")
 
+# Why a command is put to the phone. These three and nothing else (Yakup, 15
+# Oct 2026): a question about a harmless command is one he cannot answer in
+# time, and a question nobody answers is a denial the agent then works around.
+# Everything that is not one of these runs without asking.
+MONEY = "spends money"
+EXPOSURE = "exposes the machine or a secret"
+DESTRUCTION = "can destroy the machine or your data"
+CATEGORIES = (MONEY, EXPOSURE, DESTRUCTION)
+
+
+class Rule(NamedTuple):
+    category: str
+    pattern: re.Pattern
+    why: str
+
+    def reason(self) -> str:
+        return f"{self.category}: {self.why}"
+
+
+def _rule(category: str, pattern: str, why: str, flags: int = 0) -> Rule:
+    return Rule(category, re.compile(pattern, flags), why)
+
+
 # What a regex can still say: these have one spelling, and no path to resolve.
-# `rm`, `git push`, `find`, `chmod`, the shutdown family and a download piped
-# into a shell are parsed instead, further down.
-DESTRUCTIVE_PATTERNS = [
-    re.compile(r"\bdd\s+[^|]*\bof=/dev/"),
-    re.compile(r"\bmkfs\."),
-    re.compile(r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:"),
-    re.compile(r"\bgit\s+reset\s+--hard\b"),
-    re.compile(r"security\s+delete-(keychain|generic-password|internet-password)"),
-    re.compile(r">\s*/dev/(sd[a-z]|disk\d)"),
-    re.compile(r"\blaunchctl\s+(unload|bootout|disable|remove)\b"),
-    re.compile(r"\bkillall\s+-9\b"),
-    re.compile(r"\bpkill\s+-9?\s*-f\s+(?:divan|" + legacy.PROCESS_PATTERN + ")"),
-    # Options after the pattern are not options on macOS: they become more
-    # patterns, and `pkill -f x -u me -P 1` kills everything with "me" or "1" in it.
-    re.compile(r"\bpkill(?:\s+(?:-[uUPgGtsF]\s+\S+|-[fvilnxaoqILN0-9]+|-[A-Z]{2,}))*"
-               r"\s+(?:\"[^\"]*\"|'[^']*'|[^-\s]\S*)\s+-[A-Za-z]"),
-    # The sign-ins and the push key: even reading these puts a token in a chat.
-    re.compile(r"\.credentials\.json|" + _HOME_NAMES + r"/apns/"),
-    # Python deleting a tree is `rm -r` with the path hidden inside a string.
-    re.compile(r"\brmtree\s*\("),
-    # `sh -c "$(curl …)"` and `bash <(curl …)`: the pipe spelled another way.
-    re.compile(r"\b(?:sh|bash|zsh|dash|ksh)\b[^|;&\n]*[$<]\(\s*(?:curl|wget)\b"),
+# They are matched against the command's *code* — quoted strings and heredoc
+# bodies blanked out (`_code`) — so a commit message or a JSON file that
+# mentions one is not one. `rm`, `git push`, `find`, `chmod`, `kill*`, the
+# shutdown family, a download piped into a shell and the money and exposure
+# commands are parsed instead, further down.
+RULES = [
+    _rule(DESTRUCTION, r"\bdd\s+[^|;&\n]*\bof=/dev/", "dd onto a disk"),
+    _rule(DESTRUCTION, r"\bmkfs\.", "formats a disk"),
+    _rule(DESTRUCTION, r"\bdiskutil\s+(?:\S+\s+)?(?:erase\w*|zeroDisk|randomDisk|secureErase|"
+                       r"partitionDisk|reformat|deleteContainer|deleteVolume)\b", "erases a disk"),
+    _rule(DESTRUCTION, r">\s*/dev/r?(?:sd[a-z]|disk\d)", "writes straight onto a disk"),
+    _rule(DESTRUCTION, r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", "a fork bomb"),
+    _rule(DESTRUCTION, r"\bgit\s+reset\s+--hard\b", "git reset --hard throws away uncommitted work"),
+    _rule(DESTRUCTION, r"\bgit\s+(?:filter-branch|filter-repo)\b", "rewrites git history"),
+    _rule(DESTRUCTION, r"security\s+delete-(?:keychain|generic-password|internet-password)",
+          "deletes from the keychain"),
+    _rule(DESTRUCTION, r"\blaunchctl\s+(?:unload|bootout|disable|remove)\b",
+          "stops a background service (the daemon is one)"),
+    _rule(DESTRUCTION, r"\bdropdb\b", "drops a database"),
+    _rule(DESTRUCTION, r"\bfirebase\s+(?:firestore:delete\b[^|;&\n]*(?:--all-collections|-r\b|--recursive)"
+                       r"|database:remove\b)", "deletes a Firebase database"),
+    _rule(EXPOSURE, r"\b(?:sh|bash|zsh|dash|ksh|eval|source)\b[^|;&\n]*[$<]\(\s*(?:curl|wget)\b",
+          "runs a script straight from the internet"),
+    _rule(EXPOSURE, r"socketfilterfw\b[^|;&\n]*--setglobalstate\s+off|\bpfctl\s+-d\b"
+                    r"|\bspctl\s+--(?:master|global)-disable\b|\bcsrutil\s+disable\b"
+                    r"|\bsystemsetup\s+-setremotelogin\s+on\b|\bufw\s+disable\b",
+          "turns off the firewall or a system protection"),
+    _rule(EXPOSURE, r"\bngrok\s+(?:http|tcp|tls|start)\b|\bcloudflared\s+(?:tunnel\b[^|;&\n]*"
+                    r"(?:\brun\b|--url)|access\s+tcp)|\btailscale\s+funnel\s+(?!(?:status|reset|off)\b)\S"
+                    r"|\b(?:lt|localtunnel)\s+[^|;&\n]*--port\b|\bssh\s+[^|;&\n]*-R\s*\S"
+                    r"|\bserveo\.net\b|\blocalhost\.run\b",
+          "opens this machine to the internet"),
 ]
 
+# Inside a python/node/perl script, which a regex over the shell cannot see.
+SCRIPT_RULES = [
+    # Python deleting a tree is `rm -r` with the path hidden inside a string.
+    _rule(DESTRUCTION, r"\brmtree\s*\(", "deletes a folder tree from a script"),
+]
+
+# The sign-ins and the push key: even reading these puts a token in a chat.
+_CREDENTIALS = _rule(EXPOSURE, r"\.credentials\.json|" + _HOME_NAMES + r"/apns/",
+                     "reads a sign-in token or the push key")
+
 _SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish"}
+_INTERPRETERS = re.compile(r"^(?:python[0-9.]*|node|nodejs|deno|bun|perl|ruby|osascript)$")
+_SQL_CLIENTS = {"sqlite3", "psql", "mysql", "mariadb", "mongosh", "mongo", "redis-cli"}
 _POWER = {"shutdown", "reboot", "halt", "poweroff"}
 # Words that run the command after them, so the command is the next word.
 _WRAPPERS = {"command", "builtin", "exec", "nohup", "time", "nice", "env", "noglob",
-             "xargs", "caffeinate"}
+             "xargs", "caffeinate", "npx", "bunx", "pnpx"}
 _SUDO_TAKES_VALUE = {"-u", "-g", "-h", "-p", "-C", "-D", "-U", "-T", "-R"}
 _GIT_TAKES_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 _OPERATORS = frozenset(";<>|&\n")
@@ -64,16 +110,140 @@ _EVERYTHING = {"*", ".*", "{*,.*}", "{.*,*}", "{,.}*", ".[!.]*"}
 _OPEN_MODE = re.compile(r"^(0?777|[ugoa]*a[ugoa]*[+=]rwx|ugo[+=]rwx)$")
 # The daemon's own folder: its config, its database. Uploads, the log and the
 # accounts' memory and skills are what a chat works in all day.
-_DAEMON_HOME = re.compile(_HOME_NAMES + r"(?:/(?!(?:uploads|logs|accounts)/)|$)")
-_READS = {"cat", "head", "tail", "less", "grep", "egrep", "fgrep", "rg", "ls", "wc", "stat",
-          "file", "cut", "sort", "uniq", "diff", "du", "jq", "awk", "nl", "tr", "tree",
-          "echo", "printf", "test", "[", "readlink", "realpath", "basename", "dirname",
-          "shasum", "md5", "xxd", "strings", "cd", "pwd"}
-_SINKS = {"/dev/null", "/dev/stdout", "/dev/stderr"}
+_DAEMON_HOME = re.compile(r"(?<![\w.-])" + _HOME_NAMES + r"(?:/(?!(?:uploads|logs|accounts)(?:/|$))|$)")
 _SQL_WRITES = re.compile(
     r"\b(insert|update|delete|replace|drop|alter|create|vacuum|attach|reindex|upsert)\b"
     r"|\bpragma\b[^;]*=|^\s*\.(import|restore|save|output|once|shell|system)\b|;\s*\.",
     re.I | re.M)
+_DROP_DATABASE = re.compile(r"\bdrop\s+(?:database|schema)\b|\bdropDatabase\s*\(|\bflush(?:all|db)\b", re.I)
+# Commands that change every path they are given, and those that change only
+# the last one (the destination).
+_WRITES_ALL = {"rm", "unlink", "rmdir", "shred", "srm", "trash", "truncate", "touch", "tee",
+               "chmod", "chown", "chgrp", "mv"}
+_WRITES_LAST = {"cp", "ln", "rsync", "install", "ditto"}
+# Processes whose death takes the daemon, its agents or the machine with them.
+_VITAL = re.compile(r"^(?:divan|" + legacy.PROCESS_PATTERN + r"|python[0-9.]*|Python|claude|codex"
+                    r"|launchd|WindowServer|loginwindow|kernel_task|sshd|tailscaled|Tailscale"
+                    r"|IPNExtension|cloudflared)$")
+_PKILL_TAKES_VALUE = {"-u", "-U", "-P", "-g", "-G", "-t", "-s", "-F"}
+
+# Files whose contents are a key, and the commands that send things off the machine.
+_SECRET_FILE = re.compile(r"(?:^|[/@=])(?:\.ssh/|\.aws/credentials|\.netrc$|\.env(?!\.(?:example|sample|template)$)(?:\.[\w-]+)?$"
+                          r"|id_(?:rsa|dsa|ecdsa|ed25519)\b|\.credentials\.json$|\.npmrc$|\.pypirc$"
+                          r"|[^/]*\.(?:pem|p12|pfx)$|\.gnupg/)")
+_SENDERS = {"curl", "wget", "http", "https", "xh", "nc", "ncat", "netcat", "scp", "sftp", "ftp",
+            "rsync", "telnet", "socat"}
+# Paid APIs (models, speech, SMS), called with a body: that call is billed.
+_PAID_API = re.compile(
+    r"\b(?:api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com"
+    r"|aiplatform\.googleapis\.com|texttospeech\.googleapis\.com|api\.elevenlabs\.io"
+    r"|api\.replicate\.com|api\.stability\.ai|api\.together\.xyz|api\.mistral\.ai"
+    r"|api\.deepgram\.com|api\.cohere\.(?:ai|com)|api\.groq\.com|openrouter\.ai"
+    r"|fal\.run|api\.perplexity\.ai|api\.twilio\.com|api\.x\.ai)\b")
+_BODY_FLAGS = re.compile(r"^(?:-d|--data(?:-\w+)?|-F|--form|--json|-T|--upload-file|-XPOST|-X)$|^-d.")
+
+
+def _code(cmd: str) -> str:
+    """The command with what is inside its quotes blanked out.
+
+    A quoted string is an argument, not a command, so a regex over the
+    command's code must not see it. What still runs inside double quotes —
+    `$(…)` and backticks — is kept.
+    """
+    out: list[str] = []
+    i, n = 0, len(cmd)
+    while i < n:
+        ch = cmd[i]
+        if ch == "\\":
+            out.append(cmd[i:i + 2])
+            i += 2
+        elif ch == "'":
+            j = cmd.find("'", i + 1)
+            out.append("''")
+            i = n if j < 0 else j + 1
+        elif ch == '"':
+            j, kept = i + 1, []
+            while j < n and cmd[j] != '"':
+                if cmd[j] == "\\":
+                    j += 2
+                elif cmd.startswith("$(", j):
+                    depth, k = 0, j + 1
+                    while k < n:
+                        depth += {"(": 1, ")": -1}.get(cmd[k], 0)
+                        if depth == 0:
+                            break
+                        k += 1
+                    kept.append(cmd[j:k + 1])
+                    j = k + 1
+                elif cmd[j] == "`":
+                    k = cmd.find("`", j + 1)
+                    k = n - 1 if k < 0 else k
+                    kept.append(cmd[j:k + 1])
+                    j = k + 1
+                else:
+                    j += 1
+            out.append('"' + " ".join(kept) + '"')
+            i = j + 1
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+_HEREDOC = re.compile(r"(?<![<\w])<<(?!<)(-?)[ \t]*(['\"]?)([A-Za-z_][\w.-]*)\2")
+
+
+def _unquoted_at(line: str, pos: int) -> bool:
+    before = line[:pos]
+    return before.count("'") % 2 == 0 and before.count('"') % 2 == 0
+
+
+def _inline_heredocs(cmd: str) -> str:
+    """The command with every heredoc body taken out of the command stream.
+
+    A body is data to the command it is fed to — `cat > a.json <<'EOF'` writes
+    a file, and nothing in the file runs (15 Oct 2026: a JSON file mentioning
+    the daemon's database was read as commands). Only where the receiver runs
+    what it reads does the body come back, as the script it is: `bash <<EOF`
+    becomes `bash -c '<body>'`, `python3 - <<EOF` becomes `python3 -c
+    '<body>'`, and SQL fed to a database client becomes its query argument.
+    """
+    if "<<" not in cmd:
+        return cmd
+    lines = cmd.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        found = [m for m in _HEREDOC.finditer(line) if _unquoted_at(line, m.start())]
+        extra: list[str] = []
+        for m in found:
+            dash, delim = m.group(1), m.group(3)
+            body: list[str] = []
+            while i < len(lines):
+                end = lines[i].lstrip("\t") if dash else lines[i]
+                i += 1
+                if end.strip() == delim:
+                    break
+                body.append(lines[i - 1])
+            text = "\n".join(body)
+            # Who reads it: the command the `<<` belongs to, or a shell or
+            # interpreter it is piped into on the same line.
+            piece = re.split(r"[;&|]", line[:m.start()])[-1]
+            name, _, _ = _command(next((w for w, _ in _segments(_tokens(piece))), []))
+            after = re.search(r"\|\s*(?:sudo\s+)?(\S+)", line[m.end():])
+            sink = os.path.basename(after.group(1)) if after else ""
+            for reader in (sink, name):
+                if reader in _SHELLS or _INTERPRETERS.match(reader or "-"):
+                    extra.append(f"{reader} -c {shlex.quote(text)}")
+                    break
+            else:
+                if name in _SQL_CLIENTS:
+                    line = line.replace(m.group(0), shlex.quote(text), 1)
+        out.append(line)
+        out.extend(extra)
+    return "\n".join(out)
 
 
 def _tokens(cmd: str) -> list[str]:
@@ -85,25 +255,28 @@ def _tokens(cmd: str) -> list[str]:
     try:
         return list(lex)
     except ValueError:
-        # An unclosed quote, usually a heredoc with an apostrophe in it. Read it
-        # the blunt way rather than not at all.
+        # An unclosed quote: read it the blunt way rather than not at all.
         return [t.strip("\"'") for t in re.findall(r"[;<>|&\n]+|[^\s;<>|&]+", cmd)]
 
 
-def _segments(tokens: list[str]) -> list[tuple[list[str], bool]]:
-    """Each command of a pipeline or chain, and whether it is piped into."""
-    out: list[tuple[list[str], bool]] = []
+def _segments(tokens: list[str]) -> list[tuple[list[str], str]]:
+    """Each command of a pipeline or chain, and the operator in front of it.
+
+    The far side of a redirect arrives as a segment of its own, behind `>`,
+    `>>` or `<`: it is a file, not a command.
+    """
+    out: list[tuple[list[str], str]] = []
     cur: list[str] = []
-    piped = False
+    op = ""
     for t in tokens:
         if t and set(t) <= _OPERATORS:
             if cur:
-                out.append((cur, piped))
-            cur, piped = [], t in ("|", "|&")
+                out.append((cur, op))
+            cur, op = [], t
         else:
             cur.append(t)
     if cur:
-        out.append((cur, piped))
+        out.append((cur, op))
     return out
 
 
@@ -183,6 +356,11 @@ def _scratch(p: Path) -> bool:
 
 
 def _rm_reason(args: list[str], root: Path, here: Path | None) -> str | None:
+    """Destruction: `rm -r` of anything outside the chat's folder and /tmp.
+
+    Home, ~/projects, another project, `/`: each is outside, and each is the
+    kind of loss that cannot be taken back.
+    """
     short, long, targets = _flags(args)
     if not ({"r", "R"} & short or "--recursive" in long):
         return None
@@ -197,15 +375,16 @@ def _rm_reason(args: list[str], root: Path, here: Path | None) -> str | None:
             t = head + sep or "."
         p = _resolve(t, here)
         if p is None:
-            return f"rm -r of a path that cannot be resolved: {t}"
+            return f"{DESTRUCTION}: rm -r of a path that cannot be resolved: {t}"
         if not (_inside(p, root) or (p == root and not whole) or _scratch(p)):
             if p == root:
-                return "rm -r of the chat's whole folder"
-            return f"rm -r outside the chat's folder: {p}"
+                return f"{DESTRUCTION}: rm -r of the chat's whole folder"
+            return f"{DESTRUCTION}: rm -r outside the chat's folder: {p}"
     return None
 
 
-def _git_push_reason(args: list[str]) -> str | None:
+def _git_reason(args: list[str]) -> str | None:
+    """Destruction: a force-push, which rewrites history others already have."""
     i = 0
     while i < len(args) and args[i].startswith("-"):
         i += 2 if args[i] in _GIT_TAKES_VALUE else 1
@@ -213,14 +392,15 @@ def _git_push_reason(args: list[str]) -> str | None:
         return None
     short, long, rest = _flags(args[i + 1:])
     if "f" in short or long & {"--force", "--force-with-lease", "--force-if-includes", "--mirror"}:
-        return "git push --force"
+        return f"{DESTRUCTION}: git push --force"
     # rest[0] is the remote; a refspec with a leading + is a forced one.
     if any(r.startswith("+") for r in rest[1:]):
-        return "git push with a forced (+) refspec"
+        return f"{DESTRUCTION}: git push with a forced (+) refspec"
     return None
 
 
 def _find_reason(args: list[str], root: Path, here: Path | None) -> str | None:
+    """Destruction: `find … -delete` (or `-exec rm`) outside the chat's folder."""
     deletes = "-delete" in args or any(
         a in ("-exec", "-execdir", "-ok") and os.path.basename(args[n + 1]) == "rm"
         for n, a in enumerate(args[:-1]))
@@ -236,65 +416,231 @@ def _find_reason(args: list[str], root: Path, here: Path | None) -> str | None:
     for t in paths or ["."]:
         p = _resolve(t, here)
         if p is None or not (p == root or _inside(p, root) or _scratch(p)):
-            return f"find … -delete outside the chat's folder: {t}"
+            return f"{DESTRUCTION}: find … -delete outside the chat's folder: {t}"
     return None
 
 
 def _chmod_reason(args: list[str]) -> str | None:
+    """Exposure: `chmod -R 777` opens a whole tree to every user and process."""
     short, long, rest = _flags(args)
     if ("R" in short or "--recursive" in long) and any(_OPEN_MODE.match(a) for a in rest):
-        return "chmod -R 777"
+        return f"{EXPOSURE}: chmod -R 777"
     return None
 
 
-def _reads_only(name: str, args: list[str]) -> bool:
-    if name in _READS:
+def _kill_reason(name: str, args: list[str]) -> str | None:
+    """Destruction: killing the daemon, its agents or the system.
+
+    `killall -9 node` once asked like `killall -9 launchd` did; only the
+    second takes anything down that the chat does not own (15 Oct 2026).
+    """
+    if name == "kill":
+        # `kill -9 -1` is every process this user owns.
+        if len(args) > 1 and args[-1] == "-1":
+            return f"{DESTRUCTION}: kills every process"
+        return None
+    if name == "killall":
+        targets, i = [], 0
+        while i < len(args):
+            a = args[i]
+            if a == "-u":
+                return f"{DESTRUCTION}: kills a user's every process"
+            if a in ("-t", "-c"):
+                if a == "-c" and i + 1 < len(args):
+                    targets.append(args[i + 1])
+                i += 2
+                continue
+            if not a.startswith("-"):
+                targets.append(a)
+            i += 1
+        hit = next((t for t in targets if _VITAL.match(t)), None)
+        if hit:
+            return f"{DESTRUCTION}: kills {hit}"
+        if "-9" in args or "-KILL" in args:
+            log.info("killall -9 %s: not one the daemon or the system needs; not asking", targets)
+        return None
+    # pkill: options after the pattern are not options on macOS, they become
+    # more patterns, and `pkill -f x -u me -P 1` kills everything with "me"
+    # or "1" in it.
+    i, pattern = 0, None
+    while i < len(args):
+        a = args[i]
+        if pattern is None and a in _PKILL_TAKES_VALUE:
+            i += 2
+            continue
+        if pattern is None and not a.startswith("-"):
+            pattern = a
+        elif pattern is not None and a.startswith("-"):
+            return f"{DESTRUCTION}: pkill with options after the pattern matches far more than meant"
+        i += 1
+    if pattern is None:
+        return None
+    full = any(a.startswith("-") and not a.startswith("--") and "f" in a for a in args)
+    if re.search(r"divan|" + legacy.PROCESS_PATTERN, pattern) and full:
+        return f"{DESTRUCTION}: kills the daemon"
+    if _VITAL.match(pattern):
+        return f"{DESTRUCTION}: kills {pattern}"
+    return None
+
+
+def _money_reason(name: str, args: list[str]) -> str | None:
+    """Money: creating paid cloud resources, a billed deploy, a purchase, a paid API call."""
+    words = [a for a in args if not a.startswith("-")]
+    first = words[0] if words else ""
+    if name == "gcloud" and first not in ("auth", "config", "iam", "projects", "secrets") and \
+            {"create", "deploy", "submit", "register"} & set(words):
+        return f"{MONEY}: gcloud {' '.join(words[:3])}"
+    if name == "aws" and first not in ("iam", "sts", "configure") and any(
+            re.match(r"(?:run-instances|create-|purchase-|register-domain|request-spot|start-instances)", w)
+            for w in words[1:]):
+        return f"{MONEY}: aws {' '.join(words[:2])}"
+    if name == "az" and first not in ("ad", "login", "account", "role") and "create" in words:
+        return f"{MONEY}: az {' '.join(words[:3])}"
+    if name in ("doctl", "hcloud", "linode-cli", "vultr-cli") and "create" in words:
+        return f"{MONEY}: {name} {' '.join(words[:3])}"
+    if name in ("fly", "flyctl") and (first in ("deploy", "launch", "scale")
+                                      or {"run", "create", "clone"} & set(words[1:2])):
+        return f"{MONEY}: fly {' '.join(words[:2])}"
+    if name == "heroku" and first in ("create", "addons:create", "ps:scale", "ps:resize", "ps:type"):
+        return f"{MONEY}: heroku {first}"
+    if name in ("firebase", "firebase-tools") and first == "deploy":
+        # Functions are what bill; rules, indexes and hosting alone do not.
+        only = next((args[n + 1] for n, a in enumerate(args[:-1]) if a == "--only"),
+                    next((a.split("=", 1)[1] for a in args if a.startswith("--only=")), None))
+        if only is None or "functions" in only:
+            return f"{MONEY}: firebase deploy of Cloud Functions"
+    if name == "eas" and first == "build" and "--local" not in args:
+        return f"{MONEY}: eas build in the cloud"
+    if name == "mas" and first == "purchase":
+        return f"{MONEY}: an App Store purchase"
+    if "domains" in words[:2] and {"buy", "register", "purchase"} & set(words[:3]):
+        return f"{MONEY}: buys a domain"
+    if name in ("curl", "wget", "http", "https", "xh") and any(_PAID_API.search(a) for a in args) \
+            and (any(_BODY_FLAGS.match(a) for a in args) or name in ("http", "https", "xh")):
+        host = next(_PAID_API.search(a).group(0) for a in args if _PAID_API.search(a))
+        return f"{MONEY}: a paid API call to {host}"
+    return None
+
+
+def _send_secret_reason(name: str, args: list[str], fed_secret: bool) -> str | None:
+    """Exposure: a key, a token or the environment sent off the machine."""
+    if name not in _SENDERS and not (name == "gh" and args[:2] == ["gist", "create"]):
+        return None
+    if fed_secret:
+        return f"{EXPOSURE}: sends secrets off the machine"
+    hit = next((a for a in args if _SECRET_FILE.search(a.lstrip("@<"))), None)
+    if hit:
+        return f"{EXPOSURE}: sends {hit} off the machine"
+    return None
+
+
+def _reads_secret(name: str, args: list[str], words: list[str]) -> bool:
+    if [os.path.basename(w) for w in words] in (["env"], ["printenv"], ["set"], ["export"]):
         return True
-    if name == "sed":
-        short, long, _ = _flags(args)
-        return "i" not in short and "--in-place" not in long
-    if name == "find":
-        return not any(a == "-delete" or a.startswith(("-exec", "-ok", "-fprint")) for a in args)
-    if name == "sqlite3":
-        if "-readonly" in args or any("mode=ro" in a for a in args):
-            return True
-        # A query in the arguments that writes nothing. Without one the SQL
-        # comes from stdin, which nobody here can read in advance.
-        words = [a for a in args if not a.startswith("-")]
-        return len(words) > 1 and not any(_SQL_WRITES.search(a) for a in words)
+    if name == "security" and args[:1] in (["find-generic-password"], ["find-internet-password"]):
+        return "-w" in args or "-g" in args
+    return name in ("cat", "base64", "gpg", "openssl", "head", "tail") and \
+        any(_SECRET_FILE.search(a) for a in args)
+
+
+def _script_reason(script: str) -> str | None:
+    """A python/node/perl script given inline: what it deletes or reads.
+
+    Destruction and exposure (the rules say which), on the script's text.
+    """
+    for rule in SCRIPT_RULES + [_CREDENTIALS]:
+        if rule.pattern.search(script):
+            return rule.reason()
+    return None
+
+
+def _daemon_homes() -> list[str]:
+    extra = os.environ.get("DIVAN_HOME")
+    return [os.path.realpath(os.path.expanduser(extra))] if extra else []
+
+
+def _daemon_write(target: str, here: Path | None) -> bool:
+    p = _resolve(target, here)
+    s = str(p) if p is not None else target
+    if _DAEMON_HOME.search(s):
+        return True
+    for home in _daemon_homes():
+        if s == home or s.startswith(home + os.sep):
+            rest = s[len(home):].lstrip(os.sep)
+            if rest.split(os.sep, 1)[0] not in ("uploads", "logs", "accounts"):
+                return True
     return False
 
 
-def _daemon_home_reason(name: str, words: list[str], args: list[str], here: Path | None) -> str | None:
-    """A command that can change the daemon's own files.
+def _reads_only_sql(args: list[str]) -> bool:
+    """Does this sqlite3 call only read?"""
+    if "-readonly" in args or any("mode=ro" in a for a in args):
+        return True
+    # A query in the arguments that writes nothing. Without one the SQL
+    # comes from stdin, which nobody here can read in advance.
+    words = [a for a in args if not a.startswith("-")]
+    return len(words) > 1 and not any(_SQL_WRITES.search(a) for a in words)
 
-    Reading them is how the daemon gets debugged, and it asked for that twenty
-    times an evening (7 Oct 2026). The target of a `>` arrives here as a
-    command of its own, named after the file, so a redirect is caught too.
+
+def _daemon_write_reason(name: str, args: list[str], here: Path | None) -> str | None:
+    """Destruction: writing the daemon's own config or database.
+
+    Reading them, or only naming them, is how the daemon gets debugged and how
+    notes about it get written: a JSON file in /tmp that mentions
+    ~/.divan/db.sqlite once asked like an `rm` of it (15 Oct 2026). So only a
+    real write asks — a redirect into it (caught where the redirect is), or a
+    command that changes the path it is given.
     """
-    if not name or _reads_only(name, args):
-        return None
-    if len(words) == 1 and (words[0].isdigit() or words[0] in _SINKS):
-        return None     # the far side of `2>&1` or `> /dev/null`, not a file here
-    hit = next((w for w in words if _DAEMON_HOME.search(w)), None)
-    if hit is None and here is not None and _DAEMON_HOME.search(str(here)):
-        hit = str(here)
-    return f"changes the daemon's own files: {hit}" if hit else None
+    targets: list[str] = []
+    _, _, rest = _flags(args)
+    if name in _WRITES_ALL:
+        targets = rest
+    elif name in _WRITES_LAST:
+        targets = rest[-1:]
+    elif name in ("sed", "perl"):
+        short, long, _ = _flags(args)
+        if "i" in short or "--in-place" in long or any(a.startswith("-i") for a in args):
+            targets = rest
+    elif name == "dd":
+        targets = [a[3:] for a in args if a.startswith("of=")]
+    elif name == "sqlite3":
+        if not _reads_only_sql(args):
+            targets = rest[:1]
+    hit = next((t for t in targets if _daemon_write(t, here)), None)
+    return f"{DESTRUCTION}: changes the daemon's own files: {hit}" if hit else None
 
 
 def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> str | None:
     if depth > 4:
         return None
-    for inner in _SUBSTITUTION.findall(cmd):
+    cmd = _inline_heredocs(cmd)
+    code = _code(cmd)
+    for rule in RULES:
+        if rule.pattern.search(code):
+            return rule.reason()
+    for inner in _SUBSTITUTION.findall(code):
         reason = _parsed_reason(inner[0] or inner[1], root, here, depth + 1)
         if reason:
             return reason
-    downloading = False
-    for words, piped in _segments(_tokens(cmd)):
+    downloading = fed_secret = False
+    for words, op in _segments(_tokens(cmd)):
+        redirect = op.rstrip("|&")[-1:]
+        if redirect in ("<", ">"):
+            # The far side of a redirect: a file, not a command.
+            target = words[0]
+            if "<" in op:
+                if _CREDENTIALS.pattern.search(target):
+                    return _CREDENTIALS.reason()
+            elif not (target.isdigit() or target == "-" or target.startswith("/dev/")) \
+                    and _daemon_write(target, here):
+                return f"{DESTRUCTION}: writes the daemon's own files: {target}"
+            continue
+        piped = op in ("|", "|&")
         name, args, sudo = _command(words)
         if piped and downloading and name in _SHELLS:
-            return "a download piped into a shell"
-        downloading = name in ("curl", "wget")
+            return f"{EXPOSURE}: a download piped into a shell"
+        if not piped:
+            fed_secret = False
         reason = None
         if name == "cd":
             # Where the commands after this one run. A `cd` that cannot be
@@ -302,15 +648,20 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
             dest = next((a for a in args if a != "--"), "~")
             here = _resolve(dest, here)
         elif name == "rm":
-            reason = "sudo rm" if sudo else _rm_reason(args, root, here)
+            # Root can delete what the system needs, recursive or not.
+            reason = f"{DESTRUCTION}: sudo rm" if sudo else _rm_reason(args, root, here)
         elif name == "git":
-            reason = _git_push_reason(args)
+            reason = _git_reason(args)
         elif name == "find":
             reason = _find_reason(args, root, here)
         elif name == "chmod":
             reason = _chmod_reason(args)
+        elif name in ("kill", "killall", "pkill"):
+            reason = _kill_reason(name, args)
         elif name in _POWER:
-            reason = name
+            reason = f"{DESTRUCTION}: {name} takes the machine down"
+        elif name in _SQL_CLIENTS and any(_DROP_DATABASE.search(a) for a in args):
+            reason = f"{DESTRUCTION}: drops a database"
         elif name in _SHELLS or name == "eval":
             # `bash -lc '…'` is how Codex hands over every command.
             script = None
@@ -323,15 +674,29 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
                         break
             if script:
                 reason = _parsed_reason(script, root, here, depth + 1)
-                name = ""       # what it touches was just read from the script
-        reason = reason or _daemon_home_reason(name, words, args, here)
+        elif _INTERPRETERS.match(name):
+            script = next((args[n + 1] for n, a in enumerate(args[:-1])
+                           if a in ("-c", "-e", "--eval", "-p", "--print")), None)
+            if script:
+                reason = _script_reason(script)
+        reason = (reason or _money_reason(name, args)
+                  or _send_secret_reason(name, args, fed_secret and piped)
+                  or _daemon_write_reason(name, args, here))
+        if not reason and any(" " not in a and _CREDENTIALS.pattern.search(a) for a in args):
+            reason = _CREDENTIALS.reason()
         if reason:
             return reason
+        downloading = name in ("curl", "wget")
+        fed_secret = fed_secret or _reads_secret(name, args, words)
     return None
 
 
 def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None) -> str | None:
     """Why this shell command must be put to the phone, or None if it need not be.
+
+    It must when it spends money, exposes the machine or a secret, or can
+    destroy the machine or his data — the reason starts with which — and in no
+    other case.
 
     `cwd` is the chat's folder: deleting inside it is everyday work, deleting
     outside it is not. `at` is where the shell stands when it differs — a
@@ -339,13 +704,11 @@ def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None) 
 
     The command is parsed, one command of a pipeline or chain at a time, so a
     word in a commit message is not a command and `rm -r -f /` is the same
-    thing as `rm -rf /`.
+    thing as `rm -rf /`. Quoted strings and heredoc bodies are data, unless
+    they are handed to something that runs them.
     """
     if not cmd:
         return None
-    for pat in DESTRUCTIVE_PATTERNS:
-        if pat.search(cmd):
-            return pat.pattern
     root = Path(os.path.realpath(os.path.expanduser(cwd or os.getcwd())))
     here = Path(os.path.realpath(os.path.expanduser(at))) if at else root
     try:
@@ -353,7 +716,7 @@ def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None) 
     except Exception:
         # A classifier that falls over must not be the reason nobody was asked.
         log.exception("could not parse a command; asking")
-        return "a command that could not be read"
+        return f"{DESTRUCTION}: a command that could not be read"
 
 
 # The families live in secrets.py, which also keeps what a user pastes; here

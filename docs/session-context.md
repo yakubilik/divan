@@ -85,9 +85,10 @@ behind or ahead of the other one while work is in flight.
 `~/.divan` itself. A new chat opens in `bypass` unless whoever opened
 it picked another mode: the daemon declares that default for every tool, and
 both clients offer it first. In every permission mode, `bypass` included, a
-`PreToolUse` hook checks Bash commands and anything destructive — a recursive
-`rm` outside the chat's folder, a forced `git push` and the like — goes to the
-phone for approval. In `bypass` that is the only thing that asks.
+`PreToolUse` hook checks Bash commands and anything that spends money, exposes
+the machine or a secret, or can destroy the machine or its data — a recursive
+`rm` outside the chat's folder, a forced `git push`, a tunnel, a billed deploy
+and the like — goes to the phone for approval (`security.destructive_reason`). In `bypass` that is the only thing that asks.
 With `bypass_asks = false` in `config.toml`, `bypass` asks nothing at all.
 
 ## Where the session's own instructions come from
