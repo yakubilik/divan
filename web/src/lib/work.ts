@@ -42,7 +42,13 @@ const DAY = 86400;
 export interface QueueSnap {
   available: boolean;
   tickets: Ticket[];
-  queue?: { last_tick?: number | null; paused_until?: number | null };
+  queue?: {
+    last_tick?: number | null; paused_until?: number | null;
+    /** Since when the disk gate has held every start; null while it is open. */
+    disk_low_since?: number | null;
+    /** How many tickets the queue runs at once; null where it does not say. */
+    slots?: number | null;
+  };
 }
 
 /** A ticket as this page holds it: with the computer it is on, because a
@@ -70,6 +76,11 @@ export interface Flight {
   meta: string;
   /** The last thing that happened to it, on one line. */
   line: string;
+  /** Why it would not start if it were put first in line now — `waits for
+   *  #302`, `usage limit until 17:05`, `all 6 slots are busy; it starts
+   *  next` — or null when the next pass of the supervisor would start it.
+   *  Only for a queued ticket. */
+  startBlock: string | null;
 }
 
 /** A heading and its rows: a column of the board. */
@@ -78,7 +89,7 @@ export interface FlightGroup { key: string; title: string; rows: Flight[] }
 /** The columns this page reads that the queue keeps and an older daemon may
  *  not send. Read when they are there; the last event says the same thing
  *  when they are not. */
-type Extra = { depends_on?: number | null; wake_at?: number | null };
+type Extra = { depends_on?: number | null; wake_at?: number | null; lane?: string | null };
 
 /** Why a queued ticket is not starting, in a word or two — or null when it is
  *  only waiting for a free slot.
@@ -101,6 +112,47 @@ export function parked(t: Ticket, snap: QueueSnap, now: number): string | null {
     const n = /#(\d+)/.exec(t.last_event?.msg || '')?.[1];
     return n ? `waits for #${n}` : 'waits for another ticket';
   }
+  return null;
+}
+
+/** How many tickets a queue runs at once where its snapshot does not say. */
+export const SLOTS = 6;
+
+/** Why a queued ticket put first in line would still not start on the
+ *  supervisor's next pass, in the queue's own order of reasons
+ *  (`hold_reason`, the usage pause, the disk gate, the slots) — or null when
+ *  it would. */
+export function startBlock(t: Ticket, snap: QueueSnap, now: number): string | null {
+  if (t.status !== 'queued') return null;
+  const x = t as Ticket & Extra;
+  const ev = t.last_event;
+  const until = (msg: string | undefined) => /until (\d{1,2}:\d{2})/.exec(msg || '')?.[1];
+  if (x.wake_at && x.wake_at > now) return `the worker asked to wait until ${hm(x.wake_at)}`;
+  if (ev?.kind === 'waiting') {
+    const u = until(ev.msg);
+    return u ? `the worker asked to wait until ${u}` : 'the worker asked to wait';
+  }
+  if (x.depends_on) {
+    const dep = snap.tickets.find((o) => o.id === x.depends_on);
+    if (!dep || dep.status !== 'done') return `waits for #${x.depends_on}`;
+  } else if (ev?.kind === 'depends') {
+    const n = /#(\d+)/.exec(ev.msg || '')?.[1];
+    return n ? `waits for #${n}` : 'waits for another ticket';
+  }
+  if (x.lane) {
+    const holder = snap.tickets.find((o) => o.id !== t.id && o.status === 'running' && (o as Ticket & Extra).lane === x.lane);
+    if (holder) return `waits for #${holder.id} (lane ${x.lane})`;
+  }
+  const paused = snap.queue?.paused_until;
+  if (paused && paused > now) return `usage limit until ${hm(paused)}`;
+  if (ev?.kind === 'limit') {
+    const u = until(ev.msg);
+    return u ? `usage limit until ${u}` : 'usage limit';
+  }
+  if (snap.queue?.disk_low_since) return 'the disk is nearly full, so the queue starts nothing';
+  const slots = snap.queue?.slots || SLOTS;
+  const running = snap.tickets.filter((o) => o.status === 'running').length;
+  if (running >= slots) return `all ${slots} slots are busy; it starts next`;
   return null;
 }
 
@@ -166,6 +218,7 @@ export function flights(host: string, snap: QueueSnap | null | undefined, now: n
       at: lastMoved(t), when: '', merged: false,
       meta: [project, stageLine(t), round, totalAge(t, now)].filter(Boolean).join(' · '),
       line: cardLine(t) || 'nothing has happened yet',
+      startBlock: startBlock(t, snap, now),
     };
   });
 }
@@ -187,6 +240,7 @@ export function finished(host: string, snap: QueueSnap | null | undefined, now: 
       at, when, merged,
       meta: [project, `${ended} ${when}`, merged ? 'merged' : '', stageLine(t)].filter(Boolean).join(' · '),
       line: cardLine(t) || 'nothing happened',
+      startBlock: null,
     };
   });
 }
@@ -368,13 +422,13 @@ export function projectCounts(all: Flight[], shown: Flight[]): { name: string; c
 export type Move =
   | { kind: 'cancel'; confirm: boolean }
   | { kind: 'restart' }
+  | { kind: 'start' }
   | { kind: 'priority' }
   | { kind: 'refuse'; reason: string }
   | { kind: 'stay' };
 
 /** Why a column takes nothing from a person: the queue puts tickets there. */
 const REFUSED: Partial<Record<ColumnKey, string>> = {
-  running: 'The queue starts tickets itself when a slot is free — drag it to the top of Queued to make it next.',
   done: 'Only the queue marks a ticket done, once its work has passed and been merged.',
   blocked: 'Only a worker puts a ticket on you, by asking you something.',
   waiting: 'Waiting is the queue holding a ticket back; nothing can be put there.',
@@ -385,6 +439,15 @@ export function moveOf(f: Flight, to: ColumnKey): Move {
   const at = columnOf(f);
   if (to === 'queued' && at === 'queued') return { kind: 'priority' };
   if (to === at) return { kind: 'stay' };
+  // Started is first in line (`ustabasi priority N 0`): the supervisor's next
+  // pass, within a minute, takes it — or the card says what holds it.
+  if (to === 'running') {
+    if (f.phase === 'queued' || f.phase === 'waiting') return { kind: 'start' };
+    if (f.phase === 'red') {
+      return { kind: 'refuse', reason: `#${f.ticket.id} is waiting on you: answer it, or drag it to Queued to run it again.` };
+    }
+    return { kind: 'refuse', reason: `#${f.ticket.id} is ${f.ended}; drag it to Queued to run it again.` };
+  }
   if (to === 'cancelled') {
     if (f.ended === 'done') return { kind: 'refuse', reason: `#${f.ticket.id} is done; there is nothing left to cancel.` };
     return { kind: 'cancel', confirm: f.phase === 'running' };

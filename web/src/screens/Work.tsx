@@ -17,7 +17,8 @@
  *  on it for a moment — or moved from its own Move to… menu, and either asks
  *  the queue to do what that move means: Cancelled is `ustabasi cancel`,
  *  Queued is `ustabasi restart`, a new place in Queued is `ustabasi
- *  priority`. Nothing is moved here: the card goes back where it was, says
+ *  priority`, and In progress is first in line (`ustabasi priority N 0`) —
+ *  started by the supervisor's next pass, or told on the card what holds it. Nothing is moved here: the card goes back where it was, says
  *  what the queue answered, and lands wherever the next snapshot puts it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -44,7 +45,17 @@ export const workHold = { ms: 300 };
 export interface WorkLayout { range: string | null; search: string; project: string | null }
 
 /** What the queue said to the last thing asked of a card. */
-interface Said { tone: 'busy' | 'ok' | 'error' | 'refused'; text: string }
+interface Said { tone: 'busy' | 'ok' | 'error' | 'refused' | 'starting'; text: string }
+
+/** What a card asked to start says, read off the newest snapshot rather than
+ *  promised: started once it is running, why not while something holds it,
+ *  and starting until the supervisor's next pass takes it. */
+function startWord(f: Flight): string {
+  if (f.phase === 'running') return 'Started.';
+  if (f.ended) return `It ${f.ended} before it started.`;
+  if (f.startBlock) return `First in line, but it can't start yet: ${f.startBlock}.`;
+  return 'Starting…';
+}
 
 /** A card being dragged: what was picked up, where, and whether it has left
  *  its place yet (a press that never moved is a click). */
@@ -252,11 +263,11 @@ function Board({ groups, now, onOpen, reload }: {
 
   /** Ask the queue, say what it answered on the card, and read the queue again
    *  so the board shows where the ticket went. */
-  const ask = useCallback(async (f: Flight, busyWord: string, go: () => Promise<string>) => {
+  const ask = useCallback(async (f: Flight, busyWord: string, go: () => Promise<string>, after: Said['tone'] = 'ok') => {
     say(f.key, { tone: 'busy', text: busyWord });
     try {
       const text = await go();
-      say(f.key, { tone: 'ok', text });
+      say(f.key, { tone: after, text });
     } catch (e: any) {
       say(f.key, { tone: 'error', text: e?.message || 'The queue did not answer.' });
     } finally {
@@ -268,6 +279,10 @@ function Board({ groups, now, onOpen, reload }: {
     ((await cancelTicket(f.host, f.ticket.id))?.message || '').trim() || `#${f.ticket.id} cancelled`);
   const restart = (f: Flight) => ask(f, 'Putting it back in the queue…', async () =>
     ((await restartTicket(f.host, f.ticket.id))?.message || '').trim() || `#${f.ticket.id} back in the queue`);
+  /** First in line, which is what starting a ticket is: the queue decides
+   *  when a slot takes it, and its next pass is within a minute. */
+  const start = (f: Flight) => ask(f, 'Starting…', async () =>
+    ((await prioritiseTicket(f.host, f.ticket.id, 0))?.message || '').trim(), 'starting');
   const place = (f: Flight, index: number) => {
     const calls = reorder(queued, f, index);
     if (!calls.length) return;
@@ -294,6 +309,7 @@ function Board({ groups, now, onOpen, reload }: {
       void cancel(f);
       return;
     }
+    if (m.kind === 'start') { void start(f); return; }
     void restart(f);
   };
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -399,6 +415,7 @@ function Board({ groups, now, onOpen, reload }: {
     for (const c of COLUMNS) {
       const m = moveOf(f, c.key);
       if (m.kind === 'restart') out.push({ label: `${c.title} — run it again`, to: c.key });
+      if (m.kind === 'start') out.push({ label: `${c.title} — start it`, to: c.key });
       if (m.kind === 'cancel') out.push({ label: `${c.title} — stop it`, to: c.key });
     }
     return out;
@@ -469,7 +486,7 @@ function Board({ groups, now, onOpen, reload }: {
                   {s && (
                     <p className="dv-meta" role="status" data-work-said={s.tone}
                       style={{ margin: 0, lineHeight: '17px', color: s.tone === 'error' || s.tone === 'refused' ? 'var(--red)' : undefined }}>
-                      {s.text}
+                      {s.tone === 'starting' ? startWord(f) : s.text}
                     </p>
                   )}
                 </div>

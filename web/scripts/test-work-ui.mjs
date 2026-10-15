@@ -113,8 +113,11 @@ try {
   await mouse(31, 'queued');
   ok('Failed → Queued: ustabasi restart', (await writes()) === '["cancel 260","restart 31"]', await writes());
   await mouse(261, 'running');
-  ok('Queued → In progress: refused, no call', (await writes()) === '["cancel 260","restart 31"]'
-    && /^The queue starts tickets itself/.test((await said(261)) || ''), await said(261));
+  ok('Queued → In progress: ustabasi priority 0, and the card says it is starting',
+    (await writes()) === '["cancel 260","restart 31","priority 261 0"]' && (await said(261)) === 'Starting…', `${await writes()} · ${await said(261)}`);
+  await mouse(259, 'running');
+  ok('Needs you → In progress: refused, no call', (await writes()) === '["cancel 260","restart 31","priority 261 0"]'
+    && /^#259 is waiting on you/.test((await said(259)) || ''), await said(259));
   ok('…and the press that was a drag opened nothing', (await run('location.href')).endsWith('harness.html'));
 
   console.log('── a finger, on a phone');

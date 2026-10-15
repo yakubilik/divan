@@ -292,8 +292,8 @@ group('a card moved to another column: which queue call, or why none');
   const f = Object.fromEntries(everything().map((x) => [x.ticket.id, x]));
   const say = (m) => (m.kind === 'refuse' ? 'refuse' : m.kind === 'cancel' ? `cancel${m.confirm ? '?' : ''}` : m.kind);
   const to = (id) => Object.fromEntries(W.COLUMNS.map((c) => [c.key, say(W.moveOf(f[id], c.key))]));
-  ok('a queued one: cancel, or a new place in Queued; nowhere else',
-    same(to(44), { queued: 'priority', waiting: 'refuse', running: 'refuse', blocked: 'refuse', done: 'refuse', failed: 'refuse', cancelled: 'cancel' }),
+  ok('a queued one: start, cancel, or a new place in Queued; nowhere else',
+    same(to(44), { queued: 'priority', waiting: 'refuse', running: 'start', blocked: 'refuse', done: 'refuse', failed: 'refuse', cancelled: 'cancel' }),
     JSON.stringify(to(44)));
   ok('a running one: cancel, after asking; not back to Queued',
     same(to(41), { queued: 'refuse', waiting: 'refuse', running: 'stay', blocked: 'refuse', done: 'refuse', failed: 'refuse', cancelled: 'cancel?' }),
@@ -303,6 +303,28 @@ group('a card moved to another column: which queue call, or why none');
   ok('a waiting one is queued already: refused, with the reason it waits',
     W.moveOf(f[201], 'queued').reason === '#201 is queued already; the queue is holding it back (usage limit).');
   ok('a done one has nothing to cancel', W.moveOf(f[43], 'cancelled').kind === 'refuse');
+  ok('a waiting one can be started: it is queued, only held', W.moveOf(f[301], 'running').kind === 'start');
+  ok('…but one waiting on you, or finished, cannot',
+    W.moveOf(f[42], 'running').reason === '#42 is waiting on you: answer it, or drag it to Queued to run it again.'
+    && W.moveOf(f[202], 'running').reason === '#202 is failed; drag it to Queued to run it again.');
+}
+
+group('started: first in line, or exactly what holds it');
+{
+  const f = Object.fromEntries(everything().map((x) => [x.ticket.id, x]));
+  const block = (id, tickets = queue(), q = {}) => W.startBlock(tickets.find((x) => x.id === id), { available: true, tickets, queue: q }, NOW);
+  ok('nothing holds a plain queued ticket with slots free: the next pass starts it', block(44) === null && block(46) === null);
+  ok('a dependency', block(301) === 'waits for #302', block(301));
+  ok('a usage limit, until when the queue said', block(201) === 'usage limit until 17:05', block(201));
+  ok('…or until the pause the queue is in ends', block(44, queue(), { paused_until: NOW + 3600 })
+    === `usage limit until ${new Date((NOW + 3600) * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+  ok('a worker that asked to wait', block(204) === 'the worker asked to wait until 18:00', block(204));
+  const lanes = queue().map((x) => (x.id === 44 || x.id === 41 ? { ...x, lane: 'web' } : x));
+  ok('a lane another ticket is running in', block(44, lanes) === 'waits for #41 (lane web)', block(44, lanes));
+  ok('the disk gate', block(44, queue(), { disk_low_since: NOW - 60 }) === 'the disk is nearly full, so the queue starts nothing');
+  ok('every slot busy: it starts next', block(44, queue(), { slots: 2 }) === 'all 2 slots are busy; it starts next'
+    && block(44, queue(), {}) === null, block(44, queue(), { slots: 2 }));
+  ok('…and the card carries it', everything().find((x) => x.ticket.id === 301).startBlock === 'waits for #302');
   ok('every refusal is one line', W.COLUMNS.every((c) => {
     const m = W.moveOf(f[44], c.key);
     return m.kind !== 'refuse' || (m.reason.length > 10 && !m.reason.includes('\n'));
@@ -343,10 +365,12 @@ let tickets = queue();
 let writes = [];
 /** The queue's answer to the next write, where it refuses. */
 let refuseNext = null;
+/** The queue's own line: its pause, its disk gate, its slots. */
+let queueMeta = {};
 const write = (id, patch) => { tickets = tickets.map((x) => (x.id === id ? { ...x, ...patch, updated_at: Date.now() / 1000 } : x)); };
 const call = async (key, type, data = {}) => {
   if (type === 'divan.snapshot') throw new Error('That computer did not answer');
-  if (type === 'ustabasi.list') return { available: true, tickets, queue: { last_tick: Date.now() / 1000 } };
+  if (type === 'ustabasi.list') return { available: true, tickets, queue: { last_tick: Date.now() / 1000, ...queueMeta } };
   if (type === 'ustabasi.cancel' || type === 'ustabasi.restart' || type === 'ustabasi.priority') {
     writes.push(type === 'ustabasi.priority' ? `${key} priority ${data.id} ${data.priority}` : `${key} ${type.slice(9)} ${data.id}`);
     if (refuseNext) { const why = refuseNext; refuseNext = null; throw new Error(why); }
@@ -715,10 +739,42 @@ group('dragging a card to Cancelled, Queued, or a new place in Queued calls the 
   ok('…and it is at the bottom', columns()[0] === 'Queued: 303,46,44', columns()[0]);
 }
 
+group('dragged to In progress, a queued ticket is started: first in line');
+{
+  await fresh();
+  await drag(44, 'running');
+  ok('Queued → In progress: ustabasi priority 44 0', same(writes, ['studio priority 44 0']), JSON.stringify(writes));
+  ok('…the card says Starting… while the snapshot does not show it running',
+    saidOn(44)?.getAttribute('data-work-said') === 'starting' && saidOn(44)?.textContent === 'Starting…' && columnOf(44) === 'queued',
+    `${saidOn(44)?.textContent} · ${columnOf(44)}`);
+  write(44, { status: 'running', started_at: Date.now() / 1000 });
+  await until(() => columnOf(44) === 'running');
+  ok('…and Started. once the next snapshot has it in In progress', columnOf(44) === 'running' && saidOn(44)?.textContent === 'Started.',
+    `${columnOf(44)} · ${saidOn(44)?.textContent}`);
+
+  await fresh();
+  await drag(301, 'running');
+  ok('a ticket waiting on another: still first in line, and the card says what it waits for',
+    same(writes, ['studio priority 301 0']) && saidOn(301)?.textContent === "First in line, but it can't start yet: waits for #302."
+    && columnOf(301) === 'waiting', `${JSON.stringify(writes)} · ${saidOn(301)?.textContent}`);
+
+  await fresh();
+  queueMeta = { slots: 2 };
+  await until(() => false);
+  await drag(46, 'running');
+  ok('every slot busy: it says it starts next', same(writes, ['studio priority 46 0'])
+    && saidOn(46)?.textContent === "First in line, but it can't start yet: all 2 slots are busy; it starts next.", saidOn(46)?.textContent);
+  queueMeta = { disk_low_since: NOW - 60 };
+  await until(() => saidOn(46)?.textContent.includes('disk'));
+  ok('…and the word follows the snapshot: the disk gate shut', saidOn(46)?.textContent
+    === "First in line, but it can't start yet: the disk is nearly full, so the queue starts nothing.", saidOn(46)?.textContent);
+  queueMeta = {};
+}
+
 group('moves the queue cannot make are refused on drop, with no call');
 {
   for (const [id, to] of [
-    [44, 'running'], [44, 'done'], [44, 'blocked'], [44, 'waiting'], [44, 'failed'],
+    [42, 'running'], [44, 'done'], [44, 'blocked'], [44, 'waiting'], [44, 'failed'],
     [41, 'queued'], [201, 'queued'], [43, 'cancelled'], [202, 'done'],
   ]) {
     await fresh();
@@ -760,7 +816,7 @@ group('a finger drags too: held for a moment, then moved');
   await drag(202, 'queued', { touch: true });
   ok('touch: ustabasi restart', same(writes, ['studio restart 202']), JSON.stringify(writes));
   await fresh();
-  await drag(44, 'running', { touch: true });
+  await drag(44, 'done', { touch: true });
   ok('touch: refused the same way', writes.length === 0 && saidOn(44)?.getAttribute('data-work-said') === 'refused');
   await fresh();
   await drag(46, 'cancelled', { touch: true, wobble: true });
@@ -775,8 +831,9 @@ group('Move to…: the same moves from a menu, by keyboard');
   const menuBtn = (id) => rowOf(id)?.querySelector('[data-work-move]');
   const items = () => [...doc.querySelectorAll('[data-work-menu] [role="menuitem"]')].map((b) => b.textContent);
   await click(menuBtn(46));
-  ok('a queued card offers the top of Queued, one down, and Cancelled',
-    same(items(), ['Top of Queued', 'Down one', 'Cancelled — stop it']) && menuBtn(46)?.getAttribute('aria-expanded') === 'true',
+  ok('a queued card offers the top of Queued, one down, In progress and Cancelled',
+    same(items(), ['Top of Queued', 'Down one', 'In progress — start it', 'Cancelled — stop it'])
+    && menuBtn(46)?.getAttribute('aria-expanded') === 'true',
     JSON.stringify(items()));
   ok('…the first is focused, for the keyboard', doc.activeElement?.textContent === 'Top of Queued', doc.activeElement?.textContent);
   await act(async () => { doc.activeElement.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); });
@@ -813,9 +870,14 @@ group('Move to…: the same moves from a menu, by keyboard');
   await click(menuBtn(43));
   ok('a done card offers only Queued', same(items(), ['Queued — run it again']), JSON.stringify(items()));
   await click(menuBtn(201));
-  ok('a waiting one only Cancelled', same(items(), ['Cancelled — stop it']), JSON.stringify(items()));
+  ok('a waiting one In progress and Cancelled', same(items(), ['In progress — start it', 'Cancelled — stop it']), JSON.stringify(items()));
+  await click(btn('In progress — start it', doc.querySelector('[data-work-menu]')));
+  ok('…In progress: ustabasi priority 0, and why it cannot start yet',
+    same(writes, ['studio priority 201 0']) && saidOn(201)?.textContent === "First in line, but it can't start yet: usage limit until 17:05.",
+    `${JSON.stringify(writes)} · ${saidOn(201)?.textContent}`);
   await click(menuBtn(201));
-  ok('pressing Move to… again closes it', !doc.querySelector('[data-work-menu]') && writes.length === 0);
+  await click(menuBtn(201));
+  ok('pressing Move to… again closes it, calling nothing more', !doc.querySelector('[data-work-menu]') && writes.length === 1);
 }
 
 group('live: a new snapshot redraws the cards, no reload');
