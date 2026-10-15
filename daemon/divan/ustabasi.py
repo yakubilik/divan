@@ -178,6 +178,11 @@ def _ticket(row: sqlite3.Row, last_event: dict | None,
         "started_at": row["started_at"],
         "round_started_at": _round_start(starts, row["round"], row["started_at"]),
         "finished_at": row["finished_at"],
+        # Where it stands in the queue's order: picked `ORDER BY priority, id`,
+        # lowest first. A board that lets a person put Queued in order draws it
+        # in this order and says the new one with `prioritise`. Null from a
+        # queue too old to keep one.
+        "priority": _col(row, "priority"),
         # One `git log` per worktree, and that is a subprocess: twenty-five
         # tickets is seconds, not milliseconds. Whoever is only reading statuses
         # asks for it to be left out (see `snapshot`).
