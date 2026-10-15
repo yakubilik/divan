@@ -52,6 +52,7 @@ const en = {
   notSent: "Couldn't send", noPermission: 'No permission', photosDenied: 'Photo access was not granted.', uploadFailed: 'Upload failed',
   lookAtFile: 'Look at the attached file.', allow: 'Allow', deny: 'Deny', allowSession: 'Always allow {tool} this session',
   pending: 'PENDING', danger: 'DANGEROUS', allowed: 'Allowed', allowedSession: 'Allowed for this session', denied: 'Denied', expired: 'Expired',
+  approvalExpired: 'Permission timed out, so it was not run', approvalDropped: 'Dropped when the daemon restarted, so it was not run',
   errorPrefix: 'Error: ', empty: '(empty)', stopped: 'stopped',
   dropHere: 'Drop to attach',
   photos: 'Photos', camera: 'Camera', video: 'Video', file: 'File', voiceMessage: 'Voice message', noTranscript: 'No transcript (transcription is off on the computer)', noSpeech: 'No speech detected', micDenied: 'Microphone access was not granted.', 
@@ -181,7 +182,10 @@ const en = {
   errWrongAccount: 'That signed in as a different account than the one asked for. Start again and pick the right one.',
   errCwdOutside: 'That folder is outside the allowed roots', errNoChat: 'That chat no longer exists',
   errNoSuchFolder: 'That folder is not on this computer any more',
-  errBusy: 'Too many messages waiting in this chat', errEmptyMessage: 'Empty message', errNoPendingApproval: 'That approval is no longer waiting',
+  errBusy: 'Too many messages waiting in this chat', errEmptyMessage: 'Empty message', errNoPendingApproval: 'That request is no longer waiting, so nothing was run. Ask the agent to try again.',
+  errApprovalExpired: 'That request timed out before your answer arrived, so it was not run. Ask the agent to try again.',
+  errApprovalDropped: 'That request was dropped when the daemon restarted, so it was not run. Ask the agent to try again.',
+  errApprovalAnswered: 'That request was already answered.',
   errBadTicket: 'That ticket is not in the queue any more',
   errRestarting: 'The computer is restarting. Your message was not sent — try again in a moment.',
   errNoSupervisor: 'Nothing would start this daemon again, so it will not stop itself',
@@ -707,6 +711,11 @@ export type Key = keyof typeof en;
  *  the app ships in English (`LOCALE`) — and this is where a Turkish build
  *  finds its words; a key missing here falls back to `en`. */
 export const tr: Partial<Record<Key, string>> = {
+  approvalExpired: 'İzin süresi doldu, yapılmadı', approvalDropped: 'Daemon yeniden başladı, istek düştü; yapılmadı',
+  errApprovalExpired: 'İzin süresi doldu, yapılmadı. Ajandan tekrar denemesini iste.',
+  errApprovalDropped: 'Daemon yeniden başladı, istek düştü; yapılmadı. Ajandan tekrar denemesini iste.',
+  errNoPendingApproval: 'Bu istek artık beklemiyor, hiçbir şey çalıştırılmadı. Ajandan tekrar denemesini iste.',
+  errApprovalAnswered: 'Bu istek zaten cevaplandı.',
   maUse: 'Bu makineye geç', maCurrent: 'şu anki', maPairThis: 'Geçmek için eşleştir',
   maNotPaired: 'Bu telefonla henüz eşleşmedi: geçmek için önce eşleştir.',
   sgChats: 'sohbetler', autoArchive: 'Sessiz sohbetleri arşivle',
@@ -737,6 +746,7 @@ const ERR_KEYS: Record<string, Key> = {
   unknown_agent: 'errUnknownAgent', agent_not_removable: 'errAgentKeep', key_required: 'errKeyRequired', unknown_method: 'errUnknownMethod',
   cwd_outside: 'errCwdOutside', no_such_folder: 'errNoSuchFolder', no_chat: 'errNoChat', busy: 'errBusy',
   empty_message: 'errEmptyMessage', no_pending_approval: 'errNoPendingApproval',
+  approval_expired: 'errApprovalExpired', approval_dropped: 'errApprovalDropped', approval_answered: 'errApprovalAnswered',
   restarting: 'errRestarting', no_supervisor: 'errNoSupervisor', not_restarting: 'errNotRestarting',
   bad_ticket: 'errBadTicket',
   voice_stt_failed: 'errVoiceStt', voice_reply_failed: 'errVoiceReply', voice_no_session: 'errVoiceNoSession',
@@ -749,6 +759,13 @@ const ERR_KEYS: Record<string, Key> = {
 export function errText(code?: string | null, fallback?: string | null): string {
   const key = code ? ERR_KEYS[code] : undefined;
   return key ? t(key) : (fallback || t('error'));
+}
+
+/** What an answer that did not go through says. A request the daemon no longer
+ *  holds says why — timed out, dropped by a restart — since trying again cannot
+ *  help; only a send that never arrived is worth another press. */
+export function sendError(e: any): string {
+  return e?.code && e.code !== 'offline' ? errText(e.code, e.message) : 'Could not send. Please try again.';
 }
 
 export const LOCALE = 'en-US';

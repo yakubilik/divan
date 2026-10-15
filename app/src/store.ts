@@ -1239,6 +1239,8 @@ export interface TimelineItem {
   data: any;
   result?: any;
   decision?: string | null;
+  /** Why an `expired` approval expired: 'timeout', or 'restart' when the daemon dropped it. */
+  why?: string | null;
 }
 
 export function buildTimeline(events: RacEvent[]): TimelineItem[] {
@@ -1260,7 +1262,7 @@ export function buildTimeline(events: RacEvent[]): TimelineItem[] {
         if (pos === items.length - 2) toolIdx.set(last.data.id, items.length - 1);
         break;
       }
-      case 'approval.resolved': { const i = apprIdx.get(ev.data.request_id); if (i != null) items[i] = { ...items[i], decision: ev.data.decision }; break; }
+      case 'approval.resolved': { const i = apprIdx.get(ev.data.request_id); if (i != null) items[i] = { ...items[i], decision: ev.data.decision, why: ev.data.why ?? null }; break; }
       case 'turn.done': items.push({ key: `d${ev.seq}`, kind: 'done', data: ev.data }); break;
       case 'turn.error': items.push({ key: `e${ev.seq}`, kind: 'error', data: ev.data }); break;
       // The pool moved this chat to another sign-in, or found it had nowhere

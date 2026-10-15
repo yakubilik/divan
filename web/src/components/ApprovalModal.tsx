@@ -7,6 +7,7 @@ import { Modal } from './Modal';
 import { tilde, toolSummary } from '../lib/format';
 import type { Chat } from '../lib/protocol';
 import { copyText } from '../lib/clipboard';
+import { sendError } from '../lib/i18n';
 
 export interface Pending {
   hostKey: string;
@@ -51,7 +52,7 @@ export function ApprovalModal({ pending, chat, queued, onRespond, onOpenChat, on
 }) {
   const [error, setError] = useState('');
   async function decide(d: 'allow' | 'allow_session' | 'deny') {
-    try { await onRespond(d); setError(''); } catch { setError('Could not send. Please try again.'); }
+    try { await onRespond(d); setError(''); } catch (e: any) { setError(sendError(e)); }
   }
   const command = pending.preview || toolSummary(pending.tool, pending.input);
   return (

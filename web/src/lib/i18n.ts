@@ -152,7 +152,10 @@ const en = {
   errWrongAccount: 'That signed in as a different account than the one asked for. Start again and pick the right one.',
   errCwdOutside: 'That folder is outside the allowed roots', errNoChat: 'That chat no longer exists',
   errNoSuchFolder: 'That folder is not on this computer any more',
-  errBusy: 'Too many messages waiting in this chat', errEmptyMessage: 'Empty message', errNoPendingApproval: 'That approval is no longer waiting',
+  errBusy: 'Too many messages waiting in this chat', errEmptyMessage: 'Empty message', errNoPendingApproval: 'That request is no longer waiting, so nothing was run. Ask the agent to try again.',
+  errApprovalExpired: 'That request timed out before your answer arrived, so it was not run. Ask the agent to try again.',
+  errApprovalDropped: 'That request was dropped when the daemon restarted, so it was not run. Ask the agent to try again.',
+  errApprovalAnswered: 'That request was already answered.',
   wsNotConnected: 'not connected to the computer', wsDropped: 'connection lost', wsTimeout: 'timed out',
 };
 export type Key = keyof typeof en;
@@ -180,11 +183,19 @@ const ERR_KEYS: Record<string, Key> = {
   unknown_agent: 'errUnknownAgent', agent_not_removable: 'errAgentKeep', key_required: 'errKeyRequired', unknown_method: 'errUnknownMethod',
   cwd_outside: 'errCwdOutside', no_such_folder: 'errNoSuchFolder', no_chat: 'errNoChat', busy: 'errBusy',
   empty_message: 'errEmptyMessage', no_pending_approval: 'errNoPendingApproval',
+  approval_expired: 'errApprovalExpired', approval_dropped: 'errApprovalDropped', approval_answered: 'errApprovalAnswered',
 };
 
 export function errText(code?: string | null, fallback?: string | null): string {
   const key = code ? ERR_KEYS[code] : undefined;
   return key ? t(key) : (fallback || t('error'));
+}
+
+/** What an answer that did not go through says. A request the daemon no longer
+ *  holds says why — timed out, dropped by a restart — since trying again cannot
+ *  help; only a send that never arrived is worth another press. */
+export function sendError(e: any): string {
+  return e?.code && e.code !== 'offline' ? errText(e.code, e.message) : 'Could not send. Please try again.';
 }
 
 export const LOCALE = 'en-US';

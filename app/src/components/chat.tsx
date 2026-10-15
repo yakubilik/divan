@@ -515,8 +515,8 @@ export function ToolCard({ id, tool, input, result }: { id?: string; tool: strin
   );
 }
 
-export function ApprovalCard({ tool, input, preview, danger, decision, onDecide, cwd }: {
-  tool: string; input?: any; preview: string; danger: boolean; decision: string | null; cwd?: string;
+export function ApprovalCard({ tool, input, preview, danger, decision, why, onDecide, cwd }: {
+  tool: string; input?: any; preview: string; danger: boolean; decision: string | null; why?: string | null; cwd?: string;
   onDecide: (d: 'allow' | 'allow_session' | 'deny', response?: ApprovalResponse) => void | Promise<void>;
 }) {
   const T = useT();
@@ -532,7 +532,8 @@ export function ApprovalCard({ tool, input, preview, danger, decision, onDecide,
   if (resolved) {
     const outcome = decision === 'deny' ? { icon: 'block', text: T('denied'), color: c.danger }
       : decision === 'allow_session' ? { icon: 'verified', text: T('allowedSession'), color: c.ok }
-      : decision === 'expired' ? { icon: 'block', text: T('expired'), color: c.faint }
+      // Nobody said no: it ran out of time, or a restart dropped it — and it did not run.
+      : decision === 'expired' ? { icon: 'block', text: T(why === 'restart' ? 'approvalDropped' : 'approvalExpired'), color: c.faint }
       : { icon: 'check_circle', text: T('allowed'), color: c.ok };
     return (
       <View style={{ backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14, padding: 12, gap: 8 }}>

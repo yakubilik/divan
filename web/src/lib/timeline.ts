@@ -17,6 +17,8 @@ export type Item =
       kind: 'approval'; id: string; ts: number; requestId: string; tool: string; input: any;
       preview: string; danger: boolean; reason: string | null;
       decision: 'allow' | 'allow_session' | 'deny' | 'expired' | null;
+      /** Why an `expired` one expired: 'timeout', or 'restart' when the daemon dropped it. */
+      why?: string | null;
     }
   | {
       kind: 'turn'; id: string; ts: number; costUsd: number | null; usage: any;
@@ -135,7 +137,7 @@ export function apply(items: Item[], ev: RacEvent): Item[] {
       const i = items.findIndex((it) => it.kind === 'approval' && it.id === `a${d.request_id}`);
       if (i < 0) return items;
       const next = items.slice();
-      next[i] = { ...(next[i] as any), decision: d.decision ?? null };
+      next[i] = { ...(next[i] as any), decision: d.decision ?? null, why: d.why ?? null };
       return next;
     }
 
