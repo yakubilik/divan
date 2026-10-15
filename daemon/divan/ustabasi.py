@@ -183,6 +183,14 @@ def _ticket(row: sqlite3.Row, last_event: dict | None,
         # in this order and says the new one with `prioritise`. Null from a
         # queue too old to keep one.
         "priority": _col(row, "priority"),
+        # The three things the queue passes a queued ticket over for
+        # (`hold_reason` in its supervisor): a ticket it waits for, a time the
+        # worker asked to be woken at, and a lane another ticket holds. Read so
+        # a card asked to start can say why it does not. Null where the queue
+        # keeps none.
+        "depends_on": _col(row, "depends_on"),
+        "wake_at": _col(row, "wake_at"),
+        "lane": _col(row, "lane"),
         # One `git log` per worktree, and that is a subprocess: twenty-five
         # tickets is seconds, not milliseconds. Whoever is only reading statuses
         # asks for it to be left out (see `snapshot`).
@@ -288,6 +296,8 @@ def snapshot(project_for: Callable[[str], str | None] | None = None,
         tick = None
 
     paused = meta.get("paused_until")
+    low = meta.get("disk_low_since")
+    slots = _queue_config().get("slots")
     return {
         "available": True,
         "tickets": [
@@ -300,6 +310,11 @@ def snapshot(project_for: Callable[[str], str | None] | None = None,
         "queue": {
             "last_tick": tick,
             "paused_until": float(paused) if paused else None,
+            # Since when the disk gate has held every start (`disk_gate`), and
+            # how many tickets may run at once: the two other reasons a ticket
+            # first in line does not start. Null where there is nothing to say.
+            "disk_low_since": float(low) if low else None,
+            "slots": int(slots) if isinstance(slots, int) and slots > 0 else None,
         },
     }
 
