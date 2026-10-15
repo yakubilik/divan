@@ -47,6 +47,9 @@ export const ticketReport = (key: string, id: number) =>
 export interface QueueNotice {
   id: number; ticket: number | null; ts: number; kind: string;
   headline: string; body: string; title: string; status: string; project: string | null;
+  /** The chat this notification was put in, where it is read and answered;
+   *  null for one that opens no chat, and absent from an older daemon. */
+  chat?: string | null;
 }
 export const queueNotices = (key: string, after = 0) =>
   call<{ available: boolean; items: QueueNotice[]; last: number }>(key, 'ustabasi.notifications', { after });

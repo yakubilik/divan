@@ -153,6 +153,9 @@ export interface TicketReport {
 export interface QueueNotice {
   id: number; ticket: number | null; ts: number; kind: string;
   headline: string; body: string; title: string; status: string; project: string | null;
+  /** The chat this notification was put in, where it is read and answered;
+   *  null for one that opens no chat, and absent from an older daemon. */
+  chat?: string | null;
 }
 
 export interface Agent {

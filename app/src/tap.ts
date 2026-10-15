@@ -46,10 +46,14 @@ export function tapFromPush(data: any): Tap | null {
  *  A ticket opens the ticket, with the wall under it so that Back leads to the
  *  rest of the queue rather than out of it. A chat opens the chat, with the list
  *  under it — pushing on top of wherever the reader happened to be made Back
- *  walk into *that* chat instead of leaving. */
+ *  walk into *that* chat instead of leaving.
+ *
+ *  A queue push that names both is the queue's notification put in a chat
+ *  (the daemon's `ustabasi.notice_chat`): the chat is where it is answered, so
+ *  the chat wins and the ticket is one tap away from there. */
 export function routeForTap(tap: Tap | null | undefined): string[] {
-  if (tap?.ticket != null) return ['/ustabasi', `/ticket/${tap.ticket}`];
   if (tap?.chat) return [`/chat/${tap.chat}`];
+  if (tap?.ticket != null) return ['/ustabasi', `/ticket/${tap.ticket}`];
   return [];
 }
 
@@ -61,7 +65,7 @@ const SAME_TAP_MS = 3000;
 /** What a tap is identified by while the app decides whether it has already
  *  acted on it. */
 function key(tap: Tap): string {
-  return tap.ticket != null ? `ticket:${tap.ticket}` : `chat:${tap.chat}`;
+  return tap.chat ? `chat:${tap.chat}` : `ticket:${tap.ticket}`;
 }
 
 /** The holding pen a tap waits in until the app can act on it.

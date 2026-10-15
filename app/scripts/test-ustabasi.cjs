@@ -429,6 +429,10 @@ checks.push(
   ['a chat tap opens the chat and nothing else',
     P.routeForTap({ chat: 'abc' }).join(' ') === '/chat/abc'],
   ['a tap with neither opens nothing', P.routeForTap({}).length === 0 && P.routeForTap(null).length === 0],
+  // The queue's push once the daemon has put the notification in a chat: the
+  // chat is where it is answered, not the wall.
+  ['a queue push that carries a chat opens that chat, not the wall',
+    P.routeForTap(P.tapFromPush({ ...TICKET_PUSH, chat_id: 'q1' })).join(' ') === '/chat/q1'],
 );
 
 {

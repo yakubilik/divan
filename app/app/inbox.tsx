@@ -1,4 +1,5 @@
-/** The inbox: what the queue sent, newest first. A press opens the ticket. */
+/** The inbox: what the queue sent, newest first. A press opens the chat it was
+ *  put in, or the ticket when there is none. */
 import React, { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -40,7 +41,8 @@ export default function InboxScreen() {
             note={[n.ticket ? `#${n.ticket} · ${T((KIND_KEY[n.kind] ?? 'kindDone') as any)}` : T((KIND_KEY[n.kind] ?? 'kindDone') as any),
                    n.project, T('inboxAgo', { d: since(now - n.ts, (k) => T(k)) })].filter(Boolean).join(' · ')}
             noteLines={1}
-            onPress={n.ticket != null ? () => go(() => router.push(`/ticket/${n.ticket}`)) : undefined}
+            onPress={n.chat ? () => go(() => router.push(`/chat/${n.chat}`))
+              : n.ticket != null ? () => go(() => router.push(`/ticket/${n.ticket}`)) : undefined}
           />
         ))}
       </ScrollView>

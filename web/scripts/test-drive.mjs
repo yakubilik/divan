@@ -2429,6 +2429,61 @@ group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
     await act(async () => { useFleet.setState({ call: inner }); });
   }
 
+  // 8 · a notification the queue put in a Hermes chat (#273): the notice opens
+  // that chat — the daemon's message and Hermes's answer in it — not the
+  // ticket; and the ticket it is about, waiting on the Waiting page, has
+  // `Open chat`, which opens the same chat.
+  {
+    const { useLogs, logKey } = await load('src/lib/timeline.js');
+    const inner = useFleet.getState().call;
+    const HERMES = 'Yapman gereken: canlı anahtarı mı test anahtarını mı kullanalım, söyle.';
+    await act(async () => {
+      useFleet.setState({ call: async (key, type, data) => {
+        if (type === 'ustabasi.notifications') {
+          asked.push({ key, type, data });
+          return { available: true, last: 10, items: data.after >= 10 ? [] : [{ id: 10, ticket: 42, ts: now - 30,
+            kind: 'blocked', headline: '', body: 'Live or test keys?', title: 'Stripe keys', status: 'blocked',
+            project: 'Quire', chat: 'c1' }] };
+        }
+        return inner(key, type, data);
+      } });
+      seed(useLogs, { logs: { [logKey('studio', 'c1')]: {
+        items: [
+          { kind: 'user', id: 'n1', ts: now - 30, queued: false, attachments: [],
+            text: '🔔 ustabasi #42 is asking something: Stripe keys\n\nLive or test keys?' },
+          { kind: 'assistant', id: 'n2', ts: now - 20, segment: 0, text: HERMES, done: true },
+        ],
+        seq: 2, truncated: false, busy: false, pending: [], loading: false, error: null,
+      } } });
+    });
+    asked.length = 0;
+    await reload('/');
+    await click(doc.querySelector('header [data-inbox]'));
+    const notice = byText('button div', 'Stripe keys', doc.querySelector('[role="dialog"][aria-label="Inbox"]'))?.closest('button');
+    if (notice) await click(notice);
+    await settle();
+    const fromNotice = { path: w.location.pathname, said: (doc.body.textContent ?? '').includes(HERMES),
+      composer: !!doc.querySelector('textarea[name="composer"]'), place: place() };
+    ok('a notification put in a chat opens that chat, with Hermes’s message in it, not the ticket',
+      !!notice && fromNotice.path.endsWith('/c1') && fromNotice.said && fromNotice.composer
+      && fromNotice.place === 'Chat' && !sent('ustabasi.report', () => true),
+      JSON.stringify({ notice: !!notice, ...fromNotice }));
+
+    await reload('/waiting');
+    const ask = doc.querySelector('[data-wait="studio:k2"]')
+      ?? [...doc.querySelectorAll('[data-wait]')].find((a) => (a.textContent ?? '').includes('Stripe keys'));
+    const openChat = ask?.querySelector('[data-open-chat]');
+    const others = [...doc.querySelectorAll('[data-open-chat]')].length;
+    if (openChat) await click(openChat);
+    await settle();
+    const fromWaiting = { path: w.location.pathname, said: (doc.body.textContent ?? '').includes(HERMES),
+      label: openChat?.textContent, others };
+    ok('on Waiting, the ticket the queue notified about has Open chat, and it opens that same chat',
+      !!openChat && fromWaiting.label === 'Open chat' && fromWaiting.path.endsWith('/c1') && fromWaiting.said
+      && others === 1, JSON.stringify(fromWaiting));
+    await act(async () => { useFleet.setState({ call: inner }); });
+  }
+
   // 6 · nothing waiting
   const calm = boards(now).calm[0].snap;
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(calm, now) } }); });

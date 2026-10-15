@@ -502,8 +502,9 @@ async def the_wire() -> None:
           [f["name"] for f in rep["files"]] == ["rotation.md"] and key not in rep["files"][0]["text"]
           and "[secret openai" in rep["files"][0]["text"], json.dumps(rep)[:300])
 
-    # Following: a ticket filed from a chat wakes that chat when it ends, and
-    # only those — not a reminder, not a ticket nobody filed from a chat.
+    # Following: a ticket filed from a chat wakes that chat when it ends; one
+    # nobody filed from a chat is handed over with no chat, for the daemon to
+    # open one; a reminder is neither.
     db = sqlite3.connect(wire / "ustabasi.db")
     db.execute("ALTER TABLE tickets ADD COLUMN ask TEXT")
     db.execute("UPDATE tickets SET card=? WHERE id=2",
@@ -516,8 +517,8 @@ async def the_wire() -> None:
     db.commit()
     db.close()
     got, last = u.followed(start)
-    check("only the end of a ticket filed from a chat is delivered, to that chat",
-          [(f["chat"], f["ticket"], f["kind"]) for f in got], [("chat-7", 2, "blocked")])
+    check("the filing chat gets its ticket's end, the rest goes out chatless, reminders stay out",
+          [(f["chat"], f["ticket"], f["kind"]) for f in got], [("chat-7", 2, "blocked"), (None, 3, "done")])
     msg = u.follow_message(got[0])
     holds("the chat is told the plain question and that the person is waiting there",
           "A or B?" in msg and "#2" in msg and "waiting here" in msg, msg)

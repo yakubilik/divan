@@ -121,7 +121,7 @@ export function Overview({
     : null;
   if (!project) {
     const openCard = (c: MergedCard) => (onOpenCard ? onOpenCard(c) : onProject(c.projectKey));
-    if (here === 'waiting') return <Waiting view={view} onCard={openCard} />;
+    if (here === 'waiting') return <Waiting view={view} onCard={openCard} onChat={onOpenChat} />;
     if (here === 'work') return <Work onOpen={onOpenTicket} />;
     return (
       <Dashboard view={view} onProject={onProject} composer={composer}

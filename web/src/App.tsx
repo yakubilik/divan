@@ -465,16 +465,19 @@ export function App() {
     openHere(told.host, told.chatId);
   }, [divan, open, openHere]);
 
-  /** A notice from the queue, pressed: its ticket's page, under its product.
-   *  A ticket with no card on the board (filed before the board mirrored, or
+  /** A notice from the queue, pressed: the chat it was put in, where Hermes
+   *  has said what it wants and the answer goes. A notice with no chat (a kind
+   *  that opens none, an older daemon) is its ticket's page, under its product;
+   *  a ticket with no card on the board (filed before the board mirrored, or
    *  on a machine whose board has not answered) gets its report on its own. */
   const [reportOf, setReportOf] = useState<Notice | null>(null);
   const openNotice = useCallback((n: Notice) => {
+    if (n.chat) { open(n.host, n.chat); return; }
     const found = n.ticket == null ? null
       : divan.cards.find((c) => c.host === n.host && c.ustabasi_id === n.ticket);
     if (!found) { setReportOf(n); return; }
     go({ ...HOME, project: found.projectKey, tab: 'board', card: `${found.host}:${found.id}` });
-  }, [divan.cards, go]);
+  }, [divan.cards, go, open]);
   const openNoticeRef = useRef(openNotice);
   openNoticeRef.current = openNotice;
 
