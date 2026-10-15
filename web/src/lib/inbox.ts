@@ -75,6 +75,13 @@ export function unread(items: Notice[], seen: Record<string, number>): number {
   return items.filter((n) => n.id > (seen[n.host] ?? 0)).length;
 }
 
+/** The chat a ticket's notifications were put in, on that computer: the newest
+ *  notice that names one. Null when none of what the inbox holds does. */
+export function chatOfTicket(items: Notice[], host: string, ticket: number | null | undefined): string | null {
+  if (ticket == null) return null;
+  return items.find((n) => n.host === host && n.ticket === ticket && !!n.chat)?.chat ?? null;
+}
+
 /** What a notice says, said for a list: the ticket's title, and the kind as a
  *  word. The queue's own headline ("#111 ✅ … — done") repeats both. */
 export const KIND_WORD: Record<string, string> = {
@@ -83,7 +90,8 @@ export const KIND_WORD: Record<string, string> = {
 };
 
 /** A browser notification, when the reader allowed them. A click brings the
- *  panel forward and opens the ticket. */
+ *  panel forward and opens the chat the notice was put in (the ticket, where
+ *  there is none). */
 export function announce(n: Notice, open: (n: Notice) => void): void {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   const title = n.ticket ? `#${n.ticket} ${KIND_WORD[n.kind] ?? n.kind}` : (KIND_WORD[n.kind] ?? n.kind);

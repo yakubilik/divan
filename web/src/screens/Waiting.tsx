@@ -15,10 +15,13 @@ import { useState } from 'react';
 import { commentOpenItem, moveCard, setOpenItem, ticketNote } from '../lib/actions';
 import { short } from '../lib/compose';
 import { useDivanStore, type DivanView, type MergedCard } from '../lib/divan';
+import { chatOfTicket, useInbox } from '../lib/inbox';
 import type { Session } from '../lib/sessions';
 import { headline, waitingOn, type Plate } from '../lib/waiting';
 
-export function Waiting({ view, onCard }: { view: DivanView; onCard: (card: MergedCard) => void }) {
+export function Waiting({ view, onCard, onChat }: {
+  view: DivanView; onCard: (card: MergedCard) => void; onChat?: (host: string, chatId: string) => void;
+}) {
   /** What was answered from here: gone from the page the moment it was sent,
    *  and back only if the board stamps a new question on that card. */
   const [done, setDone] = useState<string[]>([]);
@@ -45,21 +48,23 @@ export function Waiting({ view, onCard }: { view: DivanView; onCard: (card: Merg
         {!!asking.length && (
           <Group id="w-asking" title="An agent is asking" count={String(asking.length)}>
             {asking.map((s) => (
-              <Ask key={s.id} session={s} view={view} onOpen={() => onCard(s.card)} onGone={() => gone(stamp(s))} />
+              <Ask key={s.id} session={s} view={view} onOpen={() => onCard(s.card)} onChat={onChat}
+                onGone={() => gone(stamp(s))} />
             ))}
           </Group>
         )}
         {!!decision.length && (
           <Group id="w-decision" title="A decision" count={String(decision.length)}>
             {decision.map((s) => (
-              <Ask key={s.id} session={s} view={view} onOpen={() => onCard(s.card)} onGone={() => gone(stamp(s))} />
+              <Ask key={s.id} session={s} view={view} onOpen={() => onCard(s.card)} onChat={onChat}
+                onGone={() => gone(stamp(s))} />
             ))}
           </Group>
         )}
         {!!plate.length && (
           <Group id="w-plate" title="On your plate" count="only you can do these">
             {plate.map((p) => (
-              <PlateItem key={p.id} plate={p} view={view} onOpen={onCard}
+              <PlateItem key={p.id} plate={p} view={view} onOpen={onCard} onChat={onChat}
                 onGone={() => gone(p.kind === 'card' ? stamp(p.session) : p.id)} />
             ))}
           </Group>
@@ -77,6 +82,19 @@ function Group({ id, title, count, children }: {
       <div className="dv-sec"><h3 id={id}>{title}</h3><span className="dv-meta">{count}</span></div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
     </section>
+  );
+}
+
+/** The chat a ticket's notification was put in, one press away — drawn only
+ *  where the inbox knows of one. */
+function OpenChat({ host, ticket, onChat }: {
+  host: string; ticket: number | null | undefined; onChat?: (host: string, chatId: string) => void;
+}) {
+  const chat = useInbox((st) => chatOfTicket(st.items, host, ticket));
+  if (!chat || !onChat) return null;
+  return (
+    <button type="button" className="dv-btn dv-btn--ghost dv-hit" data-open-chat={chat}
+      onClick={() => onChat(host, chat)}>Open chat</button>
   );
 }
 
@@ -118,8 +136,9 @@ function Head({ letter, where, age, status }: {
 
 /** A question or a decision: the answers it offers, first one amber, and the
  *  way into the ticket. */
-function Ask({ session: s, view, onOpen, onGone }: {
-  session: Session; view: DivanView; onOpen: () => void; onGone: () => void;
+function Ask({ session: s, view, onOpen, onChat, onGone }: {
+  session: Session; view: DivanView; onOpen: () => void;
+  onChat?: (host: string, chatId: string) => void; onGone: () => void;
 }) {
   const { busy, error, send } = useSend(s.host, onGone);
   const href = `/p/${encodeURIComponent(s.projectKey)}/c/${encodeURIComponent(s.card.id)}`;
@@ -136,6 +155,7 @@ function Ask({ session: s, view, onOpen, onGone }: {
         ))}
         <a className="dv-btn dv-btn--ghost dv-hit" href={href} style={{ textDecoration: 'none' }}
           onClick={(e) => { e.preventDefault(); onOpen(); }}>Open ticket</a>
+        <OpenChat host={s.host} ticket={s.ticket} onChat={onChat} />
       </div>
       {!!error && <span className="dv-meta" style={{ color: 'var(--red)' }}>not sent · {error}</span>}
     </article>
@@ -144,8 +164,9 @@ function Ask({ session: s, view, onOpen, onGone }: {
 
 /** Something only you can do: Mark done, and — on a Still open item — a
  *  comment in its thread. */
-function PlateItem({ plate: p, view, onOpen, onGone }: {
-  plate: Plate; view: DivanView; onOpen: (card: MergedCard) => void; onGone: () => void;
+function PlateItem({ plate: p, view, onOpen, onChat, onGone }: {
+  plate: Plate; view: DivanView; onOpen: (card: MergedCard) => void;
+  onChat?: (host: string, chatId: string) => void; onGone: () => void;
 }) {
   const host = p.kind === 'card' ? p.session.host : (p.project.hosts[0] ?? '');
   const pid = p.kind === 'open' ? p.project.ids[host] : null;
@@ -164,6 +185,7 @@ function PlateItem({ plate: p, view, onOpen, onGone }: {
           <button type="button" className="dv-btn dv-btn--primary dv-hit" disabled={busy}
             onClick={() => void send(() => moveCard(s.host, s.card.id, 'done'))}>Mark done</button>
           <button type="button" className="dv-btn dv-btn--ghost dv-hit" onClick={() => onOpen(s.card)}>Open</button>
+          <OpenChat host={s.host} ticket={s.ticket} onChat={onChat} />
         </div>
         {!!error && <span className="dv-meta" style={{ color: 'var(--red)' }}>not sent · {error}</span>}
       </article>
