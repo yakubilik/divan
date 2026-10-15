@@ -1,19 +1,24 @@
 #!/usr/bin/env node
-/** Work (`/work`): every ticket the queue is on, across every project, and
- *  what it finished lately.
+/** Work (`/work`): every ticket the queue is on, across every project, as one
+ *  board — narrowed by days, a search and a project — whose cards can be
+ *  moved, which asks the queue.
  *
  *     cd web && npm test
  *
  *  Two halves. First `lib/work.ts` on its own: a snapshot with a ticket in
  *  every state on three projects — one on a Divan board, two on none — some
- *  finished today, yesterday, this week and weeks ago, and exactly which rows
- *  come out, in which order, under which headings, with which words and counts.
+ *  finished today, yesterday, this week and weeks ago, and exactly which cards
+ *  land in which column for each preset, two dates, a search and a project;
+ *  which queue call each move between columns is, or why there is none; and
+ *  the `ustabasi priority` calls a new place in Queued takes.
  *  Then the whole panel mounted into jsdom the way `test-nav.mjs` mounts it,
- *  its computer answering through a faked `call` (the socket's one door):
- *  the top bar's Work button, Back, a reload and the path opened cold; the
- *  Board, Project and Date choices and Show older, each in the address; a new
- *  snapshot redrawing the rows with no reload; a row opening the ticket's own
- *  page and Back returning to the same layout; and the page with nothing.
+ *  its computer answering through a faked `call` (the socket's one door) that
+ *  writes down every cancel, restart and priority asked of it: /work and the
+ *  old `?view=` / `?group=` links opening as the Board; each filter driven and
+ *  kept in the address through Back, a reload and a cold link; a card opening
+ *  its ticket and Back returning to the same filters; every allowed drag —
+ *  mouse and finger — making exactly its call and every refused one making
+ *  none; the Move to… menu by keyboard; and a new snapshot redrawing the board.
  *
  *  The clock is set to noon today, so that "today", "yesterday" and the time
  *  a ticket finished are the same words whenever this runs.
@@ -97,7 +102,7 @@ Date.now = () => noon.getTime() + (realNow() - started);
 
 const load = (p) => import(pathToFileURL(join(out, p)).href);
 const W = await load('src/lib/work.js');
-const { workPoll } = await load('src/screens/Work.js');
+const { workPoll, workHold } = await load('src/screens/Work.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
 const { ticket: base } = await import(pathToFileURL(join(web, 'scripts', 'ticket-fixture.js')).href);
 const { host: fixtureHost } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
@@ -113,7 +118,7 @@ const t = (id, project, status, over = {}) => base({
   stage: 'worker', round: 1, created_at: NOW - 7200, updated_at: NOW - id, started_at: NOW - 3600,
   round_started_at: NOW - 600,
   finished_at: ['done', 'cancelled', 'failed'].includes(status) ? NOW - 60 : null,
-  escalation: '', ask: '', notes: [], note_count: 0, steps: [],
+  escalation: '', ask: '', notes: [], note_count: 0, steps: [], priority: 5,
   last_event: { ts: NOW - 30, kind: 'report', msg: `[worker] progress on ${id}` },
   ...over,
 });
@@ -129,6 +134,8 @@ const queue = () => [
   t(44, 'quire', 'queued', { started_at: null, round_started_at: null, updated_at: NOW - 26 * H,
     last_event: { ts: NOW - 26 * H, kind: 'created', msg: 'quire ticket 44' } }),
   t(305, 'quire', 'done', { finished_at: NOW - 10 * D, merged: null }),
+  t(46, 'nl-artsen', 'queued', { started_at: null, round_started_at: null, updated_at: NOW - H,
+    last_event: { ts: NOW - H, kind: 'created', msg: 'nl-artsen ticket 46' } }),
   t(201, 'nl-artsen', 'queued', { last_event: { ts: NOW - 20, kind: 'limit', msg: 'account main limited until 17:05; waiting it out' } }),
   t(202, 'nl-artsen', 'failed', { finished_at: NOW - 25 * H,
     last_event: { ts: NOW - 25 * H, kind: 'failed', msg: 'check failed three times' } }),
@@ -143,20 +150,19 @@ const queue = () => [
   t(304, 'isghocam-seo', 'done', { finished_at: NOW - 6 * D,
     last_event: { ts: NOW - 6 * D, kind: 'merge', msg: 'merged into main (def5678)' } }),
 ];
-const dayName = (at) => new Date(at * 1000).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const ids = (list) => list.map((f) => f.ticket.id);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const sorted = (list) => [...list].sort((a, b) => a - b);
 
-// ── 1 · which rows, in what order, in which words ───────────────────────────
+// ── 1 · which cards, in what order, in which words ──────────────────────────
 
 group('which tickets are in flight, across three projects');
 {
   const snap = { available: true, tickets: queue(), queue: { last_tick: NOW } };
   const rows = W.flights('studio', snap, NOW);
-  const got = ids(rows).sort((a, b) => a - b);
+  const got = sorted(ids(rows));
   ok('running, queued, waiting and needs-you are in flight; done, failed and cancelled are not',
-    same(got, [41, 42, 44, 201, 204, 301, 302, 303]), JSON.stringify(got));
-  ok('…including both projects that are on no board', got.includes(201) && got.includes(303));
+    same(got, [41, 42, 44, 46, 201, 204, 301, 302, 303]), JSON.stringify(got));
   const phase = Object.fromEntries(rows.map((f) => [f.ticket.id, `${f.phase}:${f.word}`]));
   ok('each says where it stands: red, running, parked for a reason, or next in line',
     phase[42] === 'red:needs you'
@@ -164,107 +170,162 @@ group('which tickets are in flight, across three projects');
     && phase[201] === 'waiting:usage limit' && phase[204] === 'waiting:worker waiting'
     && phase[301] === 'waiting:waits for #302'
     && phase[44] === 'queued:queued' && phase[303] === 'queued:queued', JSON.stringify(phase));
-
   const r302 = rows.find((f) => f.ticket.id === 302);
-  ok('a row carries its project, stage and round, this round\'s age and the ticket\'s',
+  ok('a card carries its project, stage and round, this round\'s age and the ticket\'s',
     r302.meta === 'isghocam-seo · check r2 · 10m in this round · open 2h 0m', r302.meta);
   ok('…and the last event in one line, without the log\'s tag',
     rows.find((f) => f.ticket.id === 41).line === 'progress on 41'
     && rows.find((f) => f.ticket.id === 303).line === 'Write the sitemap.');
-
   const paused = W.flights('studio', { ...snap, queue: { paused_until: NOW + 600 } }, NOW);
   ok('a queue paused for a limit parks every queued ticket on that computer',
     paused.find((f) => f.ticket.id === 44).word === 'usage limit');
-  const unmet = W.flights('studio', { available: true, tickets: [
-    t(1, 'a', 'done'), t(2, 'a', 'queued', { depends_on: 1 }),
-  ] }, NOW);
-  ok('a dependency that is done holds nothing', unmet.find((f) => f.ticket.id === 2).phase === 'queued');
-  ok('a computer with no queue adds no rows',
+  ok('a computer with no queue adds no cards',
     W.flights('studio', { available: false, tickets: [] }, NOW).length === 0 && W.flights('studio', null, NOW).length === 0
-    && W.finished('studio', null, NOW, 0).length === 0);
+    && W.finished('studio', null, NOW).length === 0);
 }
 
-group('what finished: the last seven days, and seven more per Show older');
+group('what finished: how, when, and whether it was merged');
 {
   const snap = { available: true, tickets: queue() };
-  const week = W.finished('studio', snap, NOW, W.since(NOW, 0));
-  ok('the last seven days: done today, failed yesterday, cancelled three days ago, done six days ago',
-    same(ids(week).sort((a, b) => a - b), [43, 202, 203, 304]), JSON.stringify(ids(week)));
-  ok('…and there is older to show', W.hasOlder(snap, W.since(NOW, 0)));
-  const two = W.finished('studio', snap, NOW, W.since(NOW, 1));
-  ok('Show older once adds the week before: the one ten days ago',
-    same(ids(two).sort((a, b) => a - b), [43, 202, 203, 304, 305]), JSON.stringify(ids(two)));
-  ok('…twice, the one twenty days ago, and then nothing is older',
-    same(ids(W.finished('studio', snap, NOW, W.since(NOW, 2))).sort((a, b) => a - b), [43, 202, 203, 304, 305, 306])
-    && !W.hasOlder(snap, W.since(NOW, 2)));
-  const by = Object.fromEntries(week.map((f) => [f.ticket.id, f]));
-  ok('each says how it ended', by[43].word === 'done' && by[202].word === 'failed' && by[203].word === 'cancelled'
-    && by[43].ended === 'done' && by[202].phase === 'finished');
-  ok('…and when', by[43].when === 'today 11:59' && by[202].when === 'yesterday 11:00'
-    && by[203].when === `${new Date((NOW - 3 * D) * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} 12:00`,
-    `${by[43].when} · ${by[202].when} · ${by[203].when}`);
+  const all = W.finished('studio', snap, NOW);
+  ok('every finished ticket, whatever its age — the date picker narrows them',
+    same(sorted(ids(all)), [43, 202, 203, 304, 305, 306]), JSON.stringify(ids(all)));
+  const by = Object.fromEntries(all.map((f) => [f.ticket.id, f]));
+  ok('each says how it ended', by[43].word === 'done' && by[202].word === 'failed' && by[203].word === 'cancelled');
+  ok('…and when', by[43].when === 'today 11:59' && by[202].when === 'yesterday 11:00', `${by[43].when} · ${by[202].when}`);
   ok('…and whether it was merged: the snapshot\'s word, or an older daemon\'s last event',
     by[43].merged && by[304].merged && !by[202].merged && !by[203].merged);
-  ok('its meta line says all three', by[43].meta === 'quire · done today 11:59 · merged · worker r1', by[43].meta);
 }
 
-group('grouped by project, by date, or as a board');
+const everything = (tickets = queue()) => {
+  const snap = { available: true, tickets };
+  return [...W.flights('studio', snap, NOW), ...W.finished('studio', snap, NOW)];
+};
+const board = (rows) => W.boardColumns(rows).map((g) => `${g.title}: ${ids(g.rows).join(',')}`);
+const narrow = (range, q = '', project = null) => {
+  const span = W.spanOf(range, NOW);
+  return everything().filter((f) => W.within(f, span) && W.matches(f, q) && (!project || f.project === project));
+};
+const BOARD7 = [
+  'Queued: 44,46,303', 'Waiting: 201,204,301', 'In progress: 41,302', 'Needs you: 42',
+  'Done: 43,304', 'Failed: 202', 'Cancelled: 203',
+];
+
+group('the board: a column per status, Queued in the queue\'s own order');
 {
-  const snap = { available: true, tickets: queue() };
-  const rows = [...W.flights('studio', snap, NOW), ...W.finished('studio', snap, NOW, W.since(NOW, 0))];
-
-  const groups = W.groupBy('project', rows, NOW);
-  const order = groups.map((g) => `${g.title}: ${ids(g.rows).join(',')}`);
-  ok('by project: in flight first in each, red first, then what finished, newest first — groups by their first row',
-    same(order, [
-      'quire: 42,41,44,43',
-      'isghocam-seo: 302,301,303,304',
-      'nl-artsen: 201,204,202,203',
-    ]), JSON.stringify(order));
-
-  const days = W.groupBy('date', rows, NOW);
-  const byDay = days.map((g) => `${g.title}: ${ids(g.rows).join(',')}`);
-  ok('by date: Today, Yesterday, then dates — last activity in flight, finished_at when finished, newest first',
-    same(byDay, [
-      'Today: 201,204,301,41,42,302,43,303',
-      'Yesterday: 202,44',
-      `${dayName(NOW - 3 * D)}: 203`,
-      `${dayName(NOW - 6 * D)}: 304`,
-    ]), JSON.stringify(byDay));
-
-  const cols = W.groupBy('board', rows, NOW);
-  const board = cols.map((g) => `${g.title}: ${ids(g.rows).join(',')}`);
-  ok('as a board: one column per status, in the order a ticket moves, every ticket in its own',
-    same(board, [
-      'Queued: 303,44',
-      'Waiting: 201,204,301',
-      'In progress: 41,302',
-      'Needs you: 42',
-      'Done: 43,304',
-      'Failed: 202',
-      'Cancelled: 203',
-    ]), JSON.stringify(board));
-  const empty = W.groupBy('board', W.flights('studio', { available: true, tickets: [t(9, 'a', 'running')] }, NOW), NOW);
+  ok('one column per status, in the order a ticket moves, every ticket in its own',
+    same(board(narrow(null)), BOARD7), JSON.stringify(board(narrow(null))));
+  const reordered = everything(queue().map((x) => (x.id === 303 ? { ...x, priority: 1 } : x.id === 44 ? { ...x, priority: 9 } : x)));
+  ok('Queued is `ORDER BY priority, id`, which is what the queue picks next',
+    board(reordered)[0] === 'Queued: 303,46,44', board(reordered)[0]);
+  ok('…a ticket from a daemon that sends no priority counts as 5',
+    board(everything(queue().map((x) => (x.id === 46 ? { ...x, priority: undefined } : x.id === 44 ? { ...x, priority: 6 } : x))))[0]
+      === 'Queued: 46,303,44');
+  const empty = W.boardColumns(W.flights('studio', { available: true, tickets: [t(9, 'a', 'running')] }, NOW));
   ok('…every column drawn even when it is empty', empty.length === 7 && empty.filter((c) => c.rows.length === 0).length === 6);
-  const card = (id) => W.cardMeta(rows.find((f) => f.ticket.id === id), NOW);
+  const card = (id) => W.cardMeta(everything().find((f) => f.ticket.id === id), NOW);
   ok('a card says project, stage and round or how it ended, and age',
     card(302) === 'isghocam-seo · check r2 · open 2h 0m' && card(43) === 'quire · done today 11:59 · merged',
     `${card(302)} · ${card(43)}`);
 }
 
-group('the head line counts in words, finished ones too');
+const today = W.dayKey(NOW);
+const daysAgo = (n) => W.dayKey(NOW - n * D);
+group('the date picker: finished by finished_at, in flight by last activity');
 {
-  const snap = { available: true, tickets: queue() };
-  const rows = (older) => [...W.flights('studio', snap, NOW), ...W.finished('studio', snap, NOW, W.since(NOW, older))];
-  ok('this week', W.headLine(rows(0), 0) === '2 running · 1 needs you · 3 waiting · 2 queued · 2 done, 1 failed and 1 cancelled this week',
-    W.headLine(rows(0), 0));
-  ok('…two weeks, with Show older pressed',
-    W.headLine(rows(1), 1) === '2 running · 1 needs you · 3 waiting · 2 queued · 3 done, 1 failed and 1 cancelled in the last 2 weeks',
-    W.headLine(rows(1), 1));
-  const two = rows(0).concat(W.flights('x', { available: true, tickets: [t(50, 'a', 'blocked')] }, NOW));
-  ok('…two needing you is said in the plural', W.headLine(two, 0).startsWith('2 running · 2 need you'));
-  ok('…only finished ones', W.headLine(W.finished('studio', { available: true, tickets: [t(1, 'a', 'done')] }, NOW, 0), 0) === '1 done this week');
-  ok('…and nothing at all is one sentence', W.nothing(0) === 'Nothing is in flight and nothing finished this week.');
+  const s7 = W.spanOf(null, NOW);
+  ok('the default is the last seven days, today the last of them',
+    s7.first === daysAgo(6) && s7.last === today, `${s7.first}..${s7.last}`);
+  ok('…and it holds exactly these cards', same(board(narrow(null)), BOARD7));
+  ok('Today: what moved or finished since midnight — #44 last moved yesterday, #202 failed yesterday',
+    same(board(narrow('today')), [
+      'Queued: 46,303', 'Waiting: 201,204,301', 'In progress: 41,302', 'Needs you: 42',
+      'Done: 43', 'Failed: ', 'Cancelled: ',
+    ]), JSON.stringify(board(narrow('today'))));
+  ok('30 days: the ones ten and twenty days old join Done',
+    board(narrow('30d'))[4] === 'Done: 43,304,305,306', board(narrow('30d'))[4]);
+  const custom = `${daysAgo(3)}..${daysAgo(1)}`;
+  ok('two dates, both whole days: three days ago to yesterday',
+    same(board(narrow(custom)), [
+      'Queued: 44', 'Waiting: ', 'In progress: ', 'Needs you: ', 'Done: ', 'Failed: 202', 'Cancelled: 203',
+    ]), JSON.stringify(board(narrow(custom))));
+  ok('…the span says its own days', W.spanOf(custom, NOW).first === daysAgo(3) && W.spanOf(custom, NOW).last === daysAgo(1));
+  ok('in words', W.rangeWords(null) === 'in the last 7 days' && W.rangeWords('today') === 'today'
+    && W.rangeWords('30d') === 'in the last 30 days' && /^between \d+ \w+ and \d+ \w+$/.test(W.rangeWords(custom)),
+    W.rangeWords(custom));
+}
+
+group('the search box: #id, title, project and last event, as you type');
+{
+  const hit = (q) => sorted(ids(narrow(null, q)));
+  ok('#302 is that ticket and no other — not #301, whose last event says "waits for #302"',
+    same(hit('#302'), [302]), JSON.stringify(hit('#302')));
+  ok('…#30 while it is being typed is every number that starts so', same(hit('#30'), [301, 302, 303, 304]), JSON.stringify(hit('#30')));
+  ok('a title', same(hit('ticket 46'), [46]), JSON.stringify(hit('ticket 46')));
+  ok('a project', same(hit('NL-ARTSEN'), [46, 201, 202, 203, 204]), JSON.stringify(hit('NL-ARTSEN')));
+  ok('the last event', same(hit('limited'), [201]) && same(hit('sitemap'), [303]), `${hit('limited')} · ${hit('sitemap')}`);
+  ok('every word has to be there', same(hit('quire progress'), [41, 42]), JSON.stringify(hit('quire progress')));
+  ok('…and an empty box is everything', hit('  ').length === 13);
+}
+
+group('the project picker: every project in the snapshot, with counts');
+{
+  const all = everything();
+  const counts = (q) => W.projectCounts(all, narrow(null, q)).map((c) => `${c.name} ${c.count}`);
+  ok('A to Z, each counted as the days and the search stand',
+    same(counts(''), ['isghocam-seo 4', 'nl-artsen 5', 'quire 4']), JSON.stringify(counts('')));
+  ok('…and one with nothing to show is still in the list', same(counts('sitemap'), ['isghocam-seo 1', 'nl-artsen 0', 'quire 0']),
+    JSON.stringify(counts('sitemap')));
+}
+
+group('the head line counts in words');
+{
+  ok('the last seven days', W.headLine(narrow(null), null)
+    === '2 running · 1 needs you · 3 waiting · 3 queued · 2 done, 1 failed and 1 cancelled in the last 7 days',
+  W.headLine(narrow(null), null));
+  ok('…thirty', W.headLine(narrow('30d'), '30d').endsWith('4 done, 1 failed and 1 cancelled in the last 30 days'));
+  ok('…and nothing at all is one sentence', W.nothing(null) === 'Nothing moved and nothing finished in the last 7 days.');
+}
+
+group('a card moved to another column: which queue call, or why none');
+{
+  const f = Object.fromEntries(everything().map((x) => [x.ticket.id, x]));
+  const say = (m) => (m.kind === 'refuse' ? 'refuse' : m.kind === 'cancel' ? `cancel${m.confirm ? '?' : ''}` : m.kind);
+  const to = (id) => Object.fromEntries(W.COLUMNS.map((c) => [c.key, say(W.moveOf(f[id], c.key))]));
+  ok('a queued one: cancel, or a new place in Queued; nowhere else',
+    same(to(44), { queued: 'priority', waiting: 'refuse', running: 'refuse', blocked: 'refuse', done: 'refuse', failed: 'refuse', cancelled: 'cancel' }),
+    JSON.stringify(to(44)));
+  ok('a running one: cancel, after asking; not back to Queued',
+    same(to(41), { queued: 'refuse', waiting: 'refuse', running: 'stay', blocked: 'refuse', done: 'refuse', failed: 'refuse', cancelled: 'cancel?' }),
+    JSON.stringify(to(41)));
+  ok('needs you, failed, cancelled and done go back to Queued: restart',
+    [42, 202, 203, 43].every((id) => W.moveOf(f[id], 'queued').kind === 'restart'));
+  ok('a waiting one is queued already: refused, with the reason it waits',
+    W.moveOf(f[201], 'queued').reason === '#201 is queued already; the queue is holding it back (usage limit).');
+  ok('a done one has nothing to cancel', W.moveOf(f[43], 'cancelled').kind === 'refuse');
+  ok('every refusal is one line', W.COLUMNS.every((c) => {
+    const m = W.moveOf(f[44], c.key);
+    return m.kind !== 'refuse' || (m.reason.length > 10 && !m.reason.includes('\n'));
+  }));
+}
+
+group('a new place in Queued: the ustabasi priority calls it takes');
+{
+  const rows = everything();
+  const col = W.boardColumns(rows)[0].rows;   // 44, 46, 303 — all priority 5
+  const card = (id) => col.find((x) => x.ticket.id === id);
+  ok('to the top: one call, one less than the first', same(W.reorder(col, card(303), 0), [{ id: 303, priority: 4 }]),
+    JSON.stringify(W.reorder(col, card(303), 0)));
+  ok('to the bottom: one call, one more than the last', same(W.reorder(col, card(44), 2), [{ id: 44, priority: 6 }]),
+    JSON.stringify(W.reorder(col, card(44), 2)));
+  ok('…where it already is: none', W.reorder(col, card(44), 0).length === 0 && W.reorder(col, card(46), 1).length === 0);
+  ok('between two of the same priority, the lower number below: it and the one under it move, in that order',
+    same(W.reorder(col, card(303), 1), [{ id: 303, priority: 5 }, { id: 46, priority: 6 }]),
+    JSON.stringify(W.reorder(col, card(303), 1)));
+  const other = { ...card(46), host: 'cinema', key: 'cinema:46' };
+  const mixed = [card(44), other, card(303)];
+  ok('a card on another computer is in another queue: it is no neighbour',
+    W.reorder(mixed, card(303), 1).length === 0 && same(W.reorder(mixed, card(303), 0), [{ id: 303, priority: 4 }]));
 }
 
 // ── 2 · the panel ───────────────────────────────────────────────────────────
@@ -274,12 +335,26 @@ const { useFleet } = await load('src/lib/fleet.js');
 const { useDivanStore, answered } = await load('src/lib/divan.js');
 const { setThemeChoice } = await load('src/lib/theme.js');
 
-/** What the computer's queue says right now. Changed by the test, read by the
- *  next poll: that is the daemon sending a new snapshot. */
+/** What the computer's queue says right now. Changed by the test and by the
+ *  three writes below, read by the next poll: that is the daemon sending a
+ *  new snapshot. */
 let tickets = queue();
-const call = async (key, type) => {
+/** Every write the page asked of the queue, in order. */
+let writes = [];
+/** The queue's answer to the next write, where it refuses. */
+let refuseNext = null;
+const write = (id, patch) => { tickets = tickets.map((x) => (x.id === id ? { ...x, ...patch, updated_at: Date.now() / 1000 } : x)); };
+const call = async (key, type, data = {}) => {
   if (type === 'divan.snapshot') throw new Error('That computer did not answer');
   if (type === 'ustabasi.list') return { available: true, tickets, queue: { last_tick: Date.now() / 1000 } };
+  if (type === 'ustabasi.cancel' || type === 'ustabasi.restart' || type === 'ustabasi.priority') {
+    writes.push(type === 'ustabasi.priority' ? `${key} priority ${data.id} ${data.priority}` : `${key} ${type.slice(9)} ${data.id}`);
+    if (refuseNext) { const why = refuseNext; refuseNext = null; throw new Error(why); }
+    if (type === 'ustabasi.cancel') { write(data.id, { status: 'cancelled', finished_at: Date.now() / 1000 }); return { ok: true, message: `#${data.id} cancelled` }; }
+    if (type === 'ustabasi.restart') { write(data.id, { status: 'queued', finished_at: null, escalation: '' }); return { ok: true, message: `#${data.id} back in the queue` }; }
+    write(data.id, { priority: data.priority });
+    return { ok: true, message: `#${data.id} priority ${data.priority}` };
+  }
   if (type === 'ustabasi.notifications') return { available: true, last: 0, items: [] };
   if (type === 'ustabasi.run') return { available: false, reason: 'no run', events: [], cursor: null };
   if (type === 'ustabasi.report') return { id: 0, title: '', status: '', summary: '', verdict: '', verdict_summary: '', files: [] };
@@ -305,6 +380,18 @@ setThemeChoice('dark');
 // The page reads every queue again on this clock; shortened so a new snapshot
 // lands within the test rather than eight seconds later.
 workPoll.ms = 60;
+workHold.ms = 120;
+
+// jsdom has no pointer events: a mouse event that says which pointer it was.
+class PointerEvent extends w.MouseEvent {
+  constructor(type, init = {}) {
+    super(type, init);
+    Object.defineProperty(this, 'pointerId', { value: init.pointerId ?? 1 });
+    Object.defineProperty(this, 'pointerType', { value: init.pointerType ?? 'mouse' });
+  }
+}
+w.PointerEvent = PointerEvent;
+globalThis.PointerEvent = PointerEvent;
 
 const doc = w.document;
 const tick = (ms = 0) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
@@ -351,208 +438,406 @@ const page = () => doc.querySelector('[data-work]');
 const rows = () => [...doc.querySelectorAll('[data-work-row]')].map((r) => r.getAttribute('data-work-row'));
 const rowIds = () => rows().map((k) => Number(k.split(':')[1]));
 const rowOf = (id) => doc.querySelector(`[data-work-row="studio:${id}"]`);
+const openOf = (id) => rowOf(id)?.querySelector('[data-work-open]');
+const saidOn = (id) => rowOf(id)?.querySelector('[data-work-said]');
 const head = () => (doc.querySelector('[data-work-head]')?.textContent ?? '').trim();
-const projects = () => [...doc.querySelectorAll('[data-work-project]')].map((s) => s.getAttribute('data-work-project'));
-const days = () => [...doc.querySelectorAll('[data-work-day]')].map((s) => s.getAttribute('data-work-day'));
 const columns = () => [...doc.querySelectorAll('[data-work-column]')].map((s) => {
   const title = s.querySelector('h3')?.textContent ?? '';
-  const n = s.querySelector('[data-work-count]')?.textContent ?? '';
   const inIt = [...s.querySelectorAll('[data-work-row]')].map((r) => r.getAttribute('data-work-row').split(':')[1]);
-  return `${title} ${n}: ${inIt.join(',')}`;
+  return `${title}: ${inIt.join(',')}`;
 });
-const grouping = () => page()?.getAttribute('data-grouping');
-const choice = (label) => btn(label, doc.querySelector('[data-work-grouping]'));
-const pressed = () => [...(doc.querySelector('[data-work-grouping]')?.querySelectorAll('button') ?? [])]
-  .filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent.trim());
-const older = () => doc.querySelector('[data-work-older]');
-const drawn = () => !!page() && rows().length > 0;
-const BY_PROJECT = [42, 41, 44, 43, 302, 301, 303, 304, 201, 204, 202, 203];
-const BY_DATE = [201, 204, 301, 41, 42, 302, 43, 303, 202, 44, 203, 304];
-const DAYS = ['Today', 'Yesterday', dayName(NOW - 3 * D), dayName(NOW - 6 * D)];
-const BOARD = ['Queued 2: 303,44', 'Waiting 3: 201,204,301', 'In progress 2: 41,302', 'Needs you 1: 42',
-  'Done 2: 43,304', 'Failed 1: 202', 'Cancelled 1: 203'];
+const columnOf = (id) => rowOf(id)?.closest('[data-work-column]')?.getAttribute('data-work-column') ?? null;
+const isBoard = () => !!doc.querySelector('[data-work-board]') && doc.querySelectorAll('[data-work-column]').length === 7
+  && page()?.getAttribute('data-grouping') === 'board';
+const noLayoutButtons = () => !doc.querySelector('[data-work-grouping]') && !btn('Project', page()) && !btn('Date', page())
+  && !btn('Board', page()) && !doc.querySelector('[data-work-older]');
+const preset = (key) => doc.querySelector(`[data-work-preset="${key}"]`);
+const pressedPreset = () => [...doc.querySelectorAll('[data-work-preset]')]
+  .filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-work-preset'));
+const searchBox = () => doc.querySelector('[data-work-search]');
+const picker = () => doc.querySelector('[data-work-project-picker]');
+const options = () => [...doc.querySelectorAll('[data-work-project-option]')]
+  .map((b) => `${b.querySelector('span')?.textContent} ${b.querySelector('.dv-meta')?.textContent}`);
+/** Type into a field the way a person does: React reads the native setter. */
+const type = async (el, value) => {
+  if (!el) throw new Error('no field');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, 'value').set.call(el, value);
+    el.dispatchEvent(new w.Event('input', { bubbles: true }));
+  });
+  await settle();
+};
+/** Wait for the next snapshots to say something. */
+const until = async (cond) => { for (let i = 0; i < 60 && !cond(); i++) await tick(25); return cond(); };
+const fresh = async () => {
+  tickets = queue();
+  writes = [];
+  await until(() => same(columns(), BOARD_SHOWN));
+};
+const BOARD_SHOWN = BOARD7;
 
-group('a page of its own: one click from the top bar, Back, reload, cold');
+group('/work opens as the Board, with no view buttons; old links still open');
 {
   await click(btn('Chats', header()));
-  const from = where();
   const n = w.history.length;
   await click(btn('Work', header()));
   ok('the top bar\'s Work button opens /work in one click, one entry',
-    address() === '/work' && w.history.length === n + 1 && drawn(), `${from} → ${address()} · ${n} → ${w.history.length}`);
-  ok('…and the button says it is the page you are on',
-    btn('Work', header())?.getAttribute('aria-current') === 'page');
-  ok('it draws in-flight and this week\'s finished tickets, grouped by project, in flight first, red first',
-    same(rowIds(), BY_PROJECT) && same(projects(), ['quire', 'isghocam-seo', 'nl-artsen'])
-    && grouping() === 'project' && same(pressed(), ['Project']),
-    `${rowIds().join(' ')} · ${projects().join(' ')}`);
-  ok('the head counts them in words, finished ones too',
-    head() === '2 running · 1 needs you · 3 waiting · 2 queued · 2 done, 1 failed and 1 cancelled this week', head());
-  const r = rowOf(302);
-  ok('a row says project, #id and title, stage and round, both ages and the last event',
-    !!r && r.textContent.includes('#302 isghocam-seo ticket 302')
-    && r.querySelector('[data-work-meta]')?.textContent === 'isghocam-seo · check r2 · 10m in this round · open 2h 0m'
-    && r.querySelector('[data-work-line]')?.textContent.trim() === 'progress on 302',
-    r?.textContent);
-  ok('…its status in words', (rowOf(42)?.querySelector('.dv-status')?.textContent ?? '') === 'needs you'
-    && (rowOf(201)?.querySelector('.dv-status')?.textContent ?? '') === 'usage limit');
-  ok('a finished row says how it ended, when, and that it was merged',
-    rowOf(43)?.querySelector('.dv-status')?.textContent === 'done'
-    && rowOf(43)?.querySelector('[data-work-meta]')?.textContent === 'quire · done today 11:59 · merged · worker r1'
-    && rowOf(202)?.querySelector('.dv-status')?.textContent === 'failed'
-    && rowOf(202)?.querySelector('[data-work-meta]')?.textContent.includes('failed yesterday 11:00')
-    && !rowOf(202)?.hasAttribute('data-merged')
-    && rowOf(203)?.querySelector('.dv-status')?.textContent === 'cancelled',
-    `${rowOf(43)?.querySelector('[data-work-meta]')?.textContent} · ${rowOf(202)?.querySelector('[data-work-meta]')?.textContent}`);
-
-  await pop(-1);
-  ok('Back returns to where you were', where() === from && !page(), where());
-  await pop(1);
-  ok('…and Forward is the page again', where() === '/work' && drawn());
-
-  await reload('/work');
-  ok('a reload stays on it and draws it', where() === '/work' && drawn() && head().includes('running'));
-  await cold('/work');
-  ok('the path opened cold draws it', where() === '/work' && same(rowIds(), BY_PROJECT), rows().join(' '));
-}
-
-group('Show older adds the week before, in the address');
-{
-  const n = w.history.length;
-  ok('before: nothing finished more than seven days ago', !rowOf(305) && !rowOf(306) && !!older());
-  await click(older());
-  ok('pressed once: the one ten days ago joins its project, and the address says so',
-    address() === '/work?older=1' && w.history.length === n + 1
-    && same(rowIds(), [42, 41, 44, 43, 305, 302, 301, 303, 304, 201, 204, 202, 203]),
-    `${address()} · ${rowIds().join(' ')}`);
-  ok('…the head counts two weeks', head().endsWith('3 done, 1 failed and 1 cancelled in the last 2 weeks'), head());
-  await click(older());
-  ok('pressed twice: the one twenty days ago too, and nothing older is left to show',
-    address() === '/work?older=2' && rowIds().includes(306) && !older(), `${address()} · ${rowIds().join(' ')}`);
-  await pop(-1);
-  await pop(-1);
-  ok('Back twice is the last seven days again', address() === '/work' && same(rowIds(), BY_PROJECT) && !!older(), address());
-}
-
-group('Board, Project and Date: each in the address, Back undoes a switch');
-{
-  await click(choice('Date'));
-  ok('Date groups by day, Today, Yesterday, then dates, newest first',
-    address() === '/work?group=date'
-    && same(days(), DAYS) && same(rowIds(), BY_DATE) && same(pressed(), ['Date']) && projects().length === 0,
-    `${address()} · ${days().join(' | ')} · ${rowIds().join(' ')}`);
-  await click(choice('Board'));
-  ok('Board draws a column per status, in order, each ticket in its own, with its count',
-    address() === '/work?view=board' && same(columns(), BOARD) && same(pressed(), ['Board']),
-    `${address()} · ${JSON.stringify(columns())}`);
+    address() === '/work' && w.history.length === n + 1, `${address()} · ${n} → ${w.history.length}`);
+  ok('…as the Board, every column in order, every card in its own', isBoard() && same(columns(), BOARD7),
+    JSON.stringify(columns()));
+  ok('…with no Board / Project / Date buttons and no Show older', noLayoutButtons());
+  ok('the head counts it in words',
+    head() === '2 running · 1 needs you · 3 waiting · 3 queued · 2 done, 1 failed and 1 cancelled in the last 7 days', head());
   const c = rowOf(302);
-  ok('…a card says #id, title, project, stage and round, and age',
-    !!c && c.textContent.includes('#302 isghocam-seo ticket 302')
-    && c.querySelector('[data-work-meta]')?.textContent === 'isghocam-seo · check r2 · open 2h 0m'
-    && rowOf(43)?.querySelector('[data-work-meta]')?.textContent === 'quire · done today 11:59 · merged',
-    c?.textContent);
-  ok('…and it is read-only: nothing on it can be dragged',
-    !doc.querySelector('[data-work-board] [draggable="true"]'));
-  await click(choice('Project'));
-  ok('Project is the default again, with nothing in the address',
-    address() === '/work' && same(rowIds(), BY_PROJECT) && same(pressed(), ['Project']), address());
+  ok('a card says #id, title, status, project, stage and round, and age',
+    !!c && c.textContent.includes('#302 isghocam-seo ticket 302') && c.querySelector('.dv-status')?.textContent === 'running'
+    && c.querySelector('[data-work-meta]')?.textContent === 'isghocam-seo · check r2 · open 2h 0m', c?.textContent);
 
-  await pop(-1);
-  ok('Back undoes the switch: the board', address() === '/work?view=board' && grouping() === 'board'
-    && same(columns(), BOARD), address());
-  await pop(-1);
-  ok('…Back again: by date', address() === '/work?group=date' && same(days(), DAYS), address());
-  await pop(-1);
-  ok('…and again: by project', address() === '/work' && same(projects(), ['quire', 'isghocam-seo', 'nl-artsen']), address());
-  await pop(1);
-  ok('Forward redoes it', address() === '/work?group=date' && grouping() === 'date');
+  await cold('/work');
+  ok('cold-opened, /work is the Board', where() === '/work' && isBoard() && same(columns(), BOARD7) && noLayoutButtons());
+  await reload('/work');
+  ok('…and a reload too', where() === '/work' && isBoard() && same(columns(), BOARD7));
 
-  await reload('/work?group=date');
-  ok('a reload keeps the date grouping', address() === '/work?group=date' && same(days(), DAYS) && same(rowIds(), BY_DATE),
-    `${address()} · ${days().join(' | ')}`);
-  await reload('/work?view=board');
-  ok('a reload keeps the board', address() === '/work?view=board' && same(columns(), BOARD), address());
+  for (const [old, now] of [
+    ['/work?view=board', '/work'], ['/work?group=date', '/work'], ['/work?group=project', '/work'],
+  ]) {
+    await cold(old);
+    ok(`an old link ${old} opens the Board, written back as ${now}`,
+      address() === now && isBoard() && same(columns(), BOARD7) && noLayoutButtons(), `${address()} · ${JSON.stringify(columns())}`);
+  }
   await cold('/work?group=date&older=1');
-  ok('a URL opened cold draws its grouping and its range',
-    address() === '/work?group=date&older=1' && grouping() === 'date' && rowIds().includes(305)
-    && days().includes(dayName(NOW - 10 * D)) && same(pressed(), ['Date']),
-    `${address()} · ${days().join(' | ')}`);
-  await cold('/work?view=board&older=1');
-  ok('…and a board opened cold, its Done column reaching the same range',
-    grouping() === 'board' && columns()[4] === 'Done 3: 43,304,305', JSON.stringify(columns()));
+  ok('…and one that reached two weeks back keeps reaching two weeks back',
+    address() === '/work?range=14d' && isBoard() && columns()[4] === 'Done: 43,304,305',
+    `${address()} · ${columns()[4]}`);
   await cold('/work');
 }
 
-group('live: a new snapshot redraws the rows, no reload');
+group('the date picker: presets and two dates, in the address');
 {
-  const before = rowOf(41)?.querySelector('[data-work-meta]')?.textContent ?? '';
-  const mountedPage = page();
-  tickets = queue().map((x) => (x.id === 41 ? { ...x, stage: 'check', updated_at: Date.now() / 1000 } : x))
-    .concat([t(45, 'quire', 'running', { title: 'a new one', stage: 'worker' })]);
-  let moved = false;
-  for (let i = 0; i < 40 && !moved; i++) {
-    await tick(25);
-    moved = !!rowOf(45) && (rowOf(41)?.querySelector('[data-work-meta]')?.textContent ?? '').includes('check r1');
-  }
-  ok('#41 moved worker → check on its row', before.includes('worker r1')
-    && (rowOf(41)?.querySelector('[data-work-meta]')?.textContent ?? '').includes('check r1'),
-    `${before} → ${rowOf(41)?.querySelector('[data-work-meta]')?.textContent}`);
-  ok('…a ticket that started appeared', !!rowOf(45) && rowOf(45).textContent.includes('#45 a new one'));
-  ok('…the head counted it', head().startsWith('3 running · 1 needs you · 3 waiting · 2 queued'), head());
-  ok('…and it was the same page, not a reload', page() === mountedPage && where() === '/work');
-  tickets = queue();
-  for (let i = 0; i < 40 && rowOf(45); i++) await tick(25);
-  ok('…and a ticket that is gone from the snapshot is gone from the page', !rowOf(45));
+  ok('the last 7 days is pressed, the two dates say them',
+    same(pressedPreset(), ['7d']) && doc.querySelector('[data-work-from]')?.value === daysAgo(6)
+    && doc.querySelector('[data-work-to]')?.value === today,
+    `${pressedPreset()} · ${doc.querySelector('[data-work-from]')?.value}..${doc.querySelector('[data-work-to]')?.value}`);
+  const n = w.history.length;
+  await click(preset('today'));
+  ok('Today: exactly what moved or finished since midnight',
+    address() === '/work?range=today' && w.history.length === n + 1 && same(columns(), [
+      'Queued: 46,303', 'Waiting: 201,204,301', 'In progress: 41,302', 'Needs you: 42',
+      'Done: 43', 'Failed: ', 'Cancelled: ',
+    ]) && same(pressedPreset(), ['today']), `${address()} · ${JSON.stringify(columns())}`);
+  await click(preset('30d'));
+  ok('30 days: Done reaches the ones ten and twenty days old',
+    address() === '/work?range=30d' && columns()[4] === 'Done: 43,304,305,306' && head().endsWith('in the last 30 days'),
+    `${address()} · ${columns()[4]} · ${head()}`);
+  await type(doc.querySelector('[data-work-from]'), daysAgo(3));
+  await type(doc.querySelector('[data-work-to]'), daysAgo(1));
+  ok('two dates: three days ago to yesterday, both in the address',
+    address() === `/work?from=${daysAgo(3)}&to=${daysAgo(1)}` && same(columns(), [
+      'Queued: 44', 'Waiting: ', 'In progress: ', 'Needs you: ', 'Done: ', 'Failed: 202', 'Cancelled: 203',
+    ]) && same(pressedPreset(), []), `${address()} · ${JSON.stringify(columns())}`);
+  await reload(address());
+  ok('a reload keeps the two dates', address() === `/work?from=${daysAgo(3)}&to=${daysAgo(1)}`
+    && same(columns().map((c) => c.split(': ')[1]), ['44', '', '', '', '', '202', '203']));
+  await pop(-1);
+  await pop(-1);
+  await pop(-1);
+  ok('Back walks the days back: 30 days', address() === '/work?range=30d' && columns()[4] === 'Done: 43,304,305,306', address());
+  await pop(-1);
+  ok('…Today', address() === '/work?range=today' && columns()[0] === 'Queued: 46,303', address());
+  await pop(-1);
+  ok('…and the last seven days', address() === '/work' && same(columns(), BOARD7), address());
+  await cold('/work?range=today');
+  ok('a cold link keeps it', address() === '/work?range=today' && columns()[0] === 'Queued: 46,303' && same(pressedPreset(), ['today']));
+  await cold('/work');
 }
 
-group('a row opens the ticket\'s own page, and Back returns to the same layout');
+group('the search box filters as you type, in the address');
 {
   const n = w.history.length;
-  await click(rowOf(41));
+  await type(searchBox(), '#30');
+  ok('#30: the tickets whose number starts so', address() === '/work?q=%2330' && same(sorted(rowIds()), [301, 302, 303, 304]),
+    `${address()} · ${rowIds()}`);
+  await type(searchBox(), '#302');
+  ok('#302: that one and no other', same(rowIds(), [302]) && address() === '/work?q=%23302', `${address()} · ${rowIds()}`);
+  ok('…and the letters typed took the entry over rather than adding one each', w.history.length === n,
+    `${n} → ${w.history.length}`);
+  await type(searchBox(), 'limited');
+  ok('the last event', same(rowIds(), [201]));
+  await type(searchBox(), 'quire progress');
+  ok('every word: a project and the last event', same(sorted(rowIds()), [41, 42]), JSON.stringify(rowIds()));
+  await reload(address());
+  ok('a reload keeps what was typed', searchBox()?.value === 'quire progress' && same(sorted(rowIds()), [41, 42]));
+  await type(searchBox(), 'nothing like this');
+  ok('nothing matching says so', rowIds().length === 0 && head() === 'Nothing here matches.' && isBoard(), head());
+  await type(searchBox(), '');
+  ok('an empty box is everything again, with nothing in the address', address() === '/work' && same(columns(), BOARD7), address());
+}
+
+group('the project picker opens a list and shows only the one chosen');
+{
+  ok('All projects to begin with', picker()?.textContent.includes('All projects') && !doc.querySelector('[data-work-projects]'));
+  await click(picker());
+  ok('it opens a list of every project in the snapshot, with counts',
+    picker()?.getAttribute('aria-expanded') === 'true'
+    && same(options(), ['All projects 13', 'isghocam-seo 4', 'nl-artsen 5', 'quire 4']), JSON.stringify(options()));
+  const n = w.history.length;
+  await click(doc.querySelector('[data-work-project-option="nl-artsen"]'));
+  ok('nl-artsen: only its cards, the list closed, the address says so',
+    address() === '/work?project=nl-artsen' && w.history.length === n + 1 && !doc.querySelector('[data-work-projects]')
+    && same(columns(), [
+      'Queued: 46', 'Waiting: 201,204', 'In progress: ', 'Needs you: ', 'Done: ', 'Failed: 202', 'Cancelled: 203',
+    ]) && picker()?.textContent.includes('nl-artsen'), `${address()} · ${JSON.stringify(columns())}`);
+  await type(searchBox(), 'sitemap');
+  await click(picker());
+  ok('…the list counts what the days and the search leave, and keeps every project',
+    same(options(), ['All projects 1', 'isghocam-seo 1', 'nl-artsen 0', 'quire 0']) && rowIds().length === 0,
+    JSON.stringify(options()));
+  await click(doc.querySelector('[data-work-project-option=""]'));
+  ok('All projects is every project again', address() === '/work?q=sitemap' && same(rowIds(), [303]), address());
+  await type(searchBox(), '');
+  await click(preset('30d'));
+  await click(picker());
+  await click(doc.querySelector('[data-work-project-option="quire"]'));
+  await type(searchBox(), 'ticket');
+  ok('all three at once, in one address', address() === '/work?range=30d&project=quire&q=ticket'
+    && same(columns(), ['Queued: 44', 'Waiting: ', 'In progress: 41', 'Needs you: 42', 'Done: 43,305', 'Failed: ', 'Cancelled: ']),
+  `${address()} · ${JSON.stringify(columns())}`);
+  await cold(address());
+  ok('…and a cold link to it draws the same board',
+    same(columns(), ['Queued: 44', 'Waiting: ', 'In progress: 41', 'Needs you: 42', 'Done: 43,305', 'Failed: ', 'Cancelled: '])
+    && searchBox()?.value === 'ticket' && same(pressedPreset(), ['30d']) && picker()?.textContent.includes('quire'));
+}
+
+group('a card opens the ticket\'s page, and Back returns to the same filters');
+{
+  const here = address();
+  const n = w.history.length;
+  await click(openOf(41));
   ok('a ticket with a card on a board opens that card\'s page',
     where() === '/p/quire/c/k1' && w.history.length === n + 1 && !page(), where());
   await pop(-1);
-  ok('Back is the live page again', where() === '/work' && drawn(), where());
-
-  await click(rowOf(202));
+  ok('Back is the board with the same days, project and search', address() === here
+    && searchBox()?.value === 'ticket' && same(pressedPreset(), ['30d']) && columns()[4] === 'Done: 43,305', address());
+  await click(openOf(305));
   ok('a finished ticket on no board opens the queue\'s wall with it open',
-    where() === '/machine/terminal/ustabasi/202' && !!doc.querySelector('[aria-label="Back to the wall"]'), where());
-  const back = header().querySelector('button.dv-back');
-  ok('…whose way back says where it came from', back?.getAttribute('aria-label') === 'Back to Work',
-    back?.getAttribute('aria-label'));
+    where() === '/machine/terminal/ustabasi/305' && !!doc.querySelector('[aria-label="Back to the wall"]'), where());
+  ok('…whose way back says where it came from',
+    header().querySelector('button.dv-back')?.getAttribute('aria-label') === 'Back to Work');
   await pop(-1);
-  ok('Back is the live page again', where() === '/work' && drawn(), where());
-
-  await click(choice('Date'));
-  await click(rowOf(203));
-  ok('from the date grouping, a cancelled ticket opens too', where() === '/machine/terminal/ustabasi/203', where());
-  await pop(-1);
-  ok('…and Back returns to the date grouping', address() === '/work?group=date' && same(days(), DAYS), address());
-
-  await click(choice('Board'));
-  await click(rowOf(43));
-  ok('from the board, a done card opens its ticket', where() === '/machine/terminal/ustabasi/43', where());
-  await pop(-1);
-  ok('…and Back returns to the board', address() === '/work?view=board' && same(columns(), BOARD), address());
-  await click(rowOf(41));
-  ok('…a running card on a Divan board opens its card\'s page', where() === '/p/quire/c/k1', where());
-  await pop(-1);
-  ok('…and Back is the board again', address() === '/work?view=board' && grouping() === 'board', address());
+  ok('…and Back returns to the same filters', address() === here && columns()[0] === 'Queued: 44', address());
+  await cold('/work');
 }
 
-group('nothing in flight and nothing finished this week: one sentence');
+// ── dragging ────────────────────────────────────────────────────────────────
+
+/** Where things are drawn. jsdom lays nothing out, so the columns are put side
+ *  by side, 200px apart, and the cards down each, 100px apart. */
+const layout = () => {
+  const rect = (left, top, width, height) => () => ({
+    left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {},
+  });
+  [...doc.querySelectorAll('[data-work-column]')].forEach((col, i) => {
+    col.getBoundingClientRect = rect(i * 200, 0, 180, 2000);
+    [...col.querySelectorAll('[data-work-row]')].forEach((card, j) => {
+      card.getBoundingClientRect = rect(i * 200, 100 + j * 100, 180, 80);
+    });
+  });
+};
+const KEYS = ['queued', 'waiting', 'running', 'blocked', 'done', 'failed', 'cancelled'];
+const pe = (type, x, y, pointerType) => new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId: 7, pointerType });
+/** Pick a card up and put it down over a column (`null`: off the board), at a
+ *  height in it; then the click a browser sends after a press. */
+const drag = async (id, to, { y = 1500, touch = false, wobble = false } = {}) => {
+  layout();
+  const card = rowOf(id);
+  if (!card) throw new Error(`no card #${id}`);
+  const r = card.getBoundingClientRect();
+  const [x0, y0] = [r.left + 20, r.top + 20];
+  const x1 = to == null ? 5000 : KEYS.indexOf(to) * 200 + 60;
+  const kind = touch ? 'touch' : 'mouse';
+  await act(async () => { card.querySelector('[data-work-open] .dv-card-title').dispatchEvent(pe('pointerdown', x0, y0, kind)); });
+  if (wobble) await act(async () => { doc.body.dispatchEvent(pe('pointermove', x0 + 30, y0 + 30, kind)); });
+  if (touch) await tick(200);
+  await act(async () => { doc.body.dispatchEvent(pe('pointermove', x0 + 10, y0 + 10, kind)); });
+  await act(async () => { doc.body.dispatchEvent(pe('pointermove', x1, y, kind)); });
+  await act(async () => {
+    doc.body.dispatchEvent(pe('pointerup', x1, y, kind));
+    // A finger that scrolled sends no click; a press that was a drag does.
+    if (!wobble) card.querySelector('[data-work-open]')?.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  });
+  await settle();
+};
+
+group('dragging a card to Cancelled, Queued, or a new place in Queued calls the queue');
 {
-  await cold('/work');
+  await fresh();
+  const n = w.history.length;
+  await drag(46, 'cancelled');
+  ok('a queued card to Cancelled: ustabasi cancel, nothing else', same(writes, ['studio cancel 46']), JSON.stringify(writes));
+  ok('…and the press that ended the drag opened nothing', address() === '/work' && w.history.length === n);
+  await until(() => columnOf(46) === 'cancelled');
+  ok('…the board shows the next snapshot: it is in Cancelled, saying what the queue said',
+    columnOf(46) === 'cancelled' && saidOn(46)?.textContent === '#46 cancelled' && saidOn(46)?.getAttribute('data-work-said') === 'ok',
+    `${columnOf(46)} · ${saidOn(46)?.textContent}`);
+
+  await fresh();
+  await drag(41, 'cancelled');
+  ok('a running card to Cancelled asks first, and calls nothing yet',
+    writes.length === 0 && !!rowOf(41)?.querySelector('[data-work-confirm]') && columnOf(41) === 'running',
+    JSON.stringify(writes));
+  await click(btn('Keep it running', rowOf(41)));
+  ok('…Keep it running: still nothing, and the card is where it was', writes.length === 0 && columnOf(41) === 'running'
+    && !rowOf(41)?.querySelector('[data-work-confirm]'));
+  await drag(41, 'cancelled');
+  await click(btn('Cancel it', rowOf(41)));
+  ok('…Cancel it: ustabasi cancel', same(writes, ['studio cancel 41']), JSON.stringify(writes));
+  await until(() => columnOf(41) === 'cancelled');
+  ok('…and it lands in Cancelled', columnOf(41) === 'cancelled');
+
+  for (const [id, from] of [[202, 'failed'], [203, 'cancelled'], [43, 'done'], [42, 'blocked']]) {
+    await fresh();
+    await drag(id, 'queued');
+    ok(`from ${from} to Queued: ustabasi restart`, same(writes, [`studio restart ${id}`]), JSON.stringify(writes));
+    await until(() => columnOf(id) === 'queued');
+    ok(`…and #${id} is in Queued, saying so`, columnOf(id) === 'queued' && saidOn(id)?.textContent === `#${id} back in the queue`,
+      `${columnOf(id)} · ${saidOn(id)?.textContent}`);
+  }
+
+  await fresh();
+  await drag(303, 'queued', { y: 50 });
+  ok('to the top of Queued: ustabasi priority, one less than the first', same(writes, ['studio priority 303 4']), JSON.stringify(writes));
+  await until(() => columns()[0] === 'Queued: 303,44,46');
+  ok('…and Queued is drawn in the queue\'s new order', columns()[0] === 'Queued: 303,44,46', columns()[0]);
+  writes = [];
+  await drag(44, 'queued', { y: 1500 });
+  ok('to the bottom: one more than the last', same(writes, ['studio priority 44 6']), JSON.stringify(writes));
+  await until(() => columns()[0] === 'Queued: 303,46,44');
+  ok('…and it is at the bottom', columns()[0] === 'Queued: 303,46,44', columns()[0]);
+}
+
+group('moves the queue cannot make are refused on drop, with no call');
+{
+  for (const [id, to] of [
+    [44, 'running'], [44, 'done'], [44, 'blocked'], [44, 'waiting'], [44, 'failed'],
+    [41, 'queued'], [201, 'queued'], [43, 'cancelled'], [202, 'done'],
+  ]) {
+    await fresh();
+    const from = columnOf(id);
+    await drag(id, to);
+    const said = saidOn(id);
+    ok(`#${id} into ${to}: refused, one line, and it snaps back to ${from}`,
+      writes.length === 0 && columnOf(id) === from && said?.getAttribute('data-work-said') === 'refused'
+      && !!said.textContent && !said.textContent.includes('\n') && !rowOf(id)?.hasAttribute('data-lifted'),
+      `${JSON.stringify(writes)} · ${columnOf(id)} · ${said?.textContent}`);
+  }
+  ok('…in words that say why', saidOn(202)?.textContent === 'Only the queue marks a ticket done, once its work has passed and been merged.');
+  await fresh();
+  await drag(44, null);
+  ok('put down off the board: no call, no word, back where it was', writes.length === 0 && columnOf(44) === 'queued' && !saidOn(44));
+  await drag(202, 'failed');
+  ok('put down on its own column: nothing', writes.length === 0 && !saidOn(202));
+  await drag(44, 'queued', { y: 50 });
+  ok('…or in its own place in Queued: nothing', writes.length === 0 && !saidOn(44));
+}
+
+group('the queue saying no is said on the card');
+{
+  await fresh();
+  refuseNext = '#203 has a branch nobody merged; restart refused';
+  await drag(203, 'queued');
+  ok('the call was made, and its error is on the card', same(writes, ['studio restart 203'])
+    && saidOn(203)?.getAttribute('data-work-said') === 'error'
+    && saidOn(203)?.textContent === '#203 has a branch nobody merged; restart refused', saidOn(203)?.textContent);
+  ok('…and the card is where the snapshot says it is', columnOf(203) === 'cancelled');
+}
+
+group('a finger drags too: held for a moment, then moved');
+{
+  await fresh();
+  await drag(46, 'cancelled', { touch: true });
+  ok('touch: ustabasi cancel', same(writes, ['studio cancel 46']), JSON.stringify(writes));
+  await fresh();
+  await drag(202, 'queued', { touch: true });
+  ok('touch: ustabasi restart', same(writes, ['studio restart 202']), JSON.stringify(writes));
+  await fresh();
+  await drag(44, 'running', { touch: true });
+  ok('touch: refused the same way', writes.length === 0 && saidOn(44)?.getAttribute('data-work-said') === 'refused');
+  await fresh();
+  await drag(46, 'cancelled', { touch: true, wobble: true });
+  ok('a finger that moves before it has rested is scrolling: no drag, no call', writes.length === 0 && columnOf(46) === 'queued');
+  ok('a card left alone still lets a finger scroll the board, either way',
+    rowOf(46)?.style.touchAction === 'manipulation');
+}
+
+group('Move to…: the same moves from a menu, by keyboard');
+{
+  await fresh();
+  const menuBtn = (id) => rowOf(id)?.querySelector('[data-work-move]');
+  const items = () => [...doc.querySelectorAll('[data-work-menu] [role="menuitem"]')].map((b) => b.textContent);
+  await click(menuBtn(46));
+  ok('a queued card offers the top of Queued, one down, and Cancelled',
+    same(items(), ['Top of Queued', 'Down one', 'Cancelled — stop it']) && menuBtn(46)?.getAttribute('aria-expanded') === 'true',
+    JSON.stringify(items()));
+  ok('…the first is focused, for the keyboard', doc.activeElement?.textContent === 'Top of Queued', doc.activeElement?.textContent);
+  await act(async () => { doc.activeElement.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); });
+  ok('…the arrow keys move through it', doc.activeElement?.textContent === 'Down one', doc.activeElement?.textContent);
+  await act(async () => { doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  ok('…Escape closes it, having called nothing', !doc.querySelector('[data-work-menu]') && writes.length === 0);
+  await click(menuBtn(46));
+  await click(btn('Top of Queued', doc.querySelector('[data-work-menu]')));
+  ok('Top of Queued: ustabasi priority', same(writes, ['studio priority 46 4']), JSON.stringify(writes));
+  await fresh();
+  await click(menuBtn(46));
+  await click(btn('Down one', doc.querySelector('[data-work-menu]')));
+  ok('Down one: below #303, which takes the next number', same(writes, ['studio priority 46 6']), JSON.stringify(writes));
+  await fresh();
+  await click(menuBtn(46));
+  await click(btn('Cancelled — stop it', doc.querySelector('[data-work-menu]')));
+  ok('Cancelled: ustabasi cancel', same(writes, ['studio cancel 46']), JSON.stringify(writes));
+
+  await fresh();
+  await click(menuBtn(202));
+  ok('a failed card offers Queued and Cancelled', same(items(), ['Queued — run it again', 'Cancelled — stop it']), JSON.stringify(items()));
+  await click(btn('Queued — run it again', doc.querySelector('[data-work-menu]')));
+  ok('…Queued: ustabasi restart', same(writes, ['studio restart 202']), JSON.stringify(writes));
+
+  await fresh();
+  await click(menuBtn(41));
+  ok('a running card offers only Cancelled', same(items(), ['Cancelled — stop it']), JSON.stringify(items()));
+  await click(btn('Cancelled — stop it', doc.querySelector('[data-work-menu]')));
+  ok('…which asks first, as a drag does', writes.length === 0 && !!rowOf(41)?.querySelector('[data-work-confirm]'));
+  await click(btn('Cancel it', rowOf(41)));
+  ok('…and then cancels', same(writes, ['studio cancel 41']), JSON.stringify(writes));
+
+  await fresh();
+  await click(menuBtn(43));
+  ok('a done card offers only Queued', same(items(), ['Queued — run it again']), JSON.stringify(items()));
+  await click(menuBtn(201));
+  ok('a waiting one only Cancelled', same(items(), ['Cancelled — stop it']), JSON.stringify(items()));
+  await click(menuBtn(201));
+  ok('pressing Move to… again closes it', !doc.querySelector('[data-work-menu]') && writes.length === 0);
+}
+
+group('live: a new snapshot redraws the cards, no reload');
+{
+  await fresh();
+  const mountedPage = page();
+  tickets = queue().map((x) => (x.id === 41 ? { ...x, stage: 'check', updated_at: Date.now() / 1000 } : x))
+    .concat([t(45, 'quire', 'running', { title: 'a new one', stage: 'worker' })]);
+  await until(() => !!rowOf(45) && (rowOf(41)?.querySelector('[data-work-meta]')?.textContent ?? '').includes('check r1'));
+  ok('#41 moved worker → check on its card', (rowOf(41)?.querySelector('[data-work-meta]')?.textContent ?? '').includes('check r1'));
+  ok('…a ticket that started appeared', !!rowOf(45) && rowOf(45).textContent.includes('#45 a new one'));
+  ok('…and it was the same page, not a reload', page() === mountedPage && where() === '/work');
+}
+
+group('nothing moved and nothing finished: one sentence, every column still drawn');
+{
   tickets = queue().filter((x) => x.id === 305 || x.id === 306);
-  for (let i = 0; i < 40 && rows().length; i++) await tick(25);
-  ok('no sections, no rows', rows().length === 0 && projects().length === 0
-    && !page()?.querySelector('.dv-sec'));
-  ok('…and the page says so in one sentence', head() === W.nothing(0), head());
-  ok('…with Show older there for what is older', !!older());
-  await click(choice('Board'));
-  ok('the board still draws every column, each saying 0',
-    same(columns(), ['Queued 0: ', 'Waiting 0: ', 'In progress 0: ', 'Needs you 0: ', 'Done 0: ', 'Failed 0: ', 'Cancelled 0: ']),
-    JSON.stringify(columns()));
+  await until(() => rows().length === 0);
+  ok('no cards', rows().length === 0);
+  ok('…and the page says so in one sentence', head() === W.nothing(null), head());
+  ok('…every column still drawn, empty',
+    same(columns(), ['Queued: ', 'Waiting: ', 'In progress: ', 'Needs you: ', 'Done: ', 'Failed: ', 'Cancelled: ']));
 }
 
 await act(async () => { root.unmount(); });

@@ -159,6 +159,13 @@
 .dv-card-line{margin:0;font-size:13px;line-height:19px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dv-card-foot{display:flex;align-items:center;gap:8px;min-width:0}
 .dv-card-foot .dv-meta{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Work: the days, the search and the project over the board, on one row that
+   wraps on a phone. */
+.dv-work-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
+.dv-work-dates{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dv-work-dates input[type="date"],.dv-work-search{height:34px;padding:0 12px;border-radius:var(--radius-pill);border:1px solid var(--glass-edge);background:var(--hairline);color:var(--ink);font:inherit;font-size:13px;outline:0}
+.dv-work-search{flex:1;min-width:200px}
+.dv-work-dates input[type="date"]:focus-visible,.dv-work-search:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 
 /* §4.5 New ticket. */
 .dv-field{display:flex;flex-direction:column;gap:6px}

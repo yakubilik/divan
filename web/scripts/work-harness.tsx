@@ -1,21 +1,24 @@
 /** Work on its own, the way the panel draws it: the line over it with the Work
  *  button lit, and a queue with a ticket in every state on three projects and
- *  some finished this week. `?layout=board` or `?layout=date` draws that
- *  layout. Built and photographed by `scripts/shot-work.mjs`. */
+ *  some finished this week. `?range=`, `?q=` and `?project=` narrow it as the
+ *  address does. Every cancel, restart and priority a card asks for is
+ *  written down in `window.__writes` and answered the way the queue answers.
+ *  Built and photographed by `scripts/shot-work.mjs`, and dragged in a real
+ *  browser by `scripts/test-work-ui.mjs`. */
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../src/styles/divan-tokens.css';
 import '../src/styles/divan-components.css';
 import '../src/styles/divan-app.css';
 import { themeCss } from '../src/lib/theme';
 import { Shell } from '../src/components/Shell';
-import { Work } from '../src/screens/Work';
+import { Work, type WorkLayout } from '../src/screens/Work';
 import { useFleet } from '../src/lib/fleet';
 import { host } from './panel-fixture.js';
 import { ticket } from './ticket-fixture.js';
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('theme') === 'light' ? 'light' : 'dark';
-const layout = q.get('layout') === 'board' ? 'board' : q.get('layout') === 'date' ? 'date' : null;
 document.documentElement.dataset.theme = scheme;
 const root = document.getElementById('root')!;
 root.className = 'dv-root dv-ambient';
@@ -37,6 +40,8 @@ const tickets = [
     last_event: { ts: NOW - 300, kind: 'blocked', msg: 'which Apple team should sign the widget?' } }),
   t(260, 'divan', 'queued', 'Daemon: send the queue on change instead of on poll', {
     started_at: null, round_started_at: null, last_event: null, goal: 'Push ustabasi.list to the panel when it changes.' }),
+  t(261, 'divan', 'queued', 'Web: one search over every chat', {
+    started_at: null, round_started_at: null, last_event: { ts: NOW - 1800, kind: 'created', msg: 'filed from the phone' } }),
   t(71, 'nl-artsen', 'running', 'Doctor pages: structured data for every practice', { stage: 'check', round: 2 }),
   t(72, 'nl-artsen', 'queued', 'Sitemap split by city', {
     last_event: { ts: NOW - 900, kind: 'limit', msg: 'account main limited until 17:05; waiting it out' } }),
@@ -55,15 +60,33 @@ const tickets = [
     last_event: { ts: NOW - 5 * 3600, kind: 'failed', msg: 'verifier crashed repeatedly; needs a human look' } }),
   t(69, 'nl-artsen', 'done', 'Practice pages: opening hours', { finished_at: NOW - 12 * 86400 }),
 ];
+const writes: string[] = [];
+(window as any).__writes = writes;
+const QUEUE_WRITES: Record<string, string> = {
+  'ustabasi.cancel': 'cancelled', 'ustabasi.restart': 'back in the queue', 'ustabasi.priority': 'priority',
+};
 useFleet.setState({
   hosts: { studio: { ...(host() as any), status: 'online' } }, order: ['studio'], focus: 'studio', ready: true,
-  call: (async (_k: string, type: string) => (type === 'ustabasi.list'
-    ? { available: true, tickets, queue: { last_tick: NOW } } : {})) as any,
+  call: (async (_k: string, type: string, d: any) => {
+    if (type === 'ustabasi.list') return { available: true, tickets, queue: { last_tick: NOW } };
+    if (QUEUE_WRITES[type]) {
+      writes.push(`${type.slice(9)} ${d.id}${type === 'ustabasi.priority' ? ` ${d.priority}` : ''}`);
+      return { ok: true, message: `#${d.id} ${QUEUE_WRITES[type]}${type === 'ustabasi.priority' ? ` ${d.priority}` : ''}` };
+    }
+    return {};
+  }) as any,
 });
 
-createRoot(root).render(
-  <Shell view="overview" onView={() => {}} back={{ label: 'Dashboard', onBack: () => {} }}
-    work={{ on: true, onOpen: () => {} }}>
-    <Work layout={{ group: layout, older: 0 }} />
-  </Shell>,
-);
+function Page() {
+  const [layout, setLayout] = useState<WorkLayout>({
+    range: q.get('range'), search: q.get('q') ?? '', project: q.get('project'),
+  });
+  return (
+    <Shell view="overview" onView={() => {}} back={{ label: 'Dashboard', onBack: () => {} }}
+      work={{ on: true, onOpen: () => {} }}>
+      <Work layout={layout} onLayout={setLayout} />
+    </Shell>
+  );
+}
+
+createRoot(root).render(<Page />);

@@ -92,8 +92,8 @@ export interface OverviewProps {
   onOpenChat?: (host: string, chatId: string) => void;
   /** A ticket pressed on the Work page: its own page. */
   onOpenTicket?: (host: string, id: number) => void;
-  /** How the Work page is laid out and how far back it reaches, which live in
-   *  the address; a change is a step Back can undo. */
+  /** What the Work board is narrowed to — its days, its search and its
+   *  project — which live in the address; a change is a step Back can undo. */
   work?: WorkLayout;
   onWork?: (to: WorkLayout) => void;
 }

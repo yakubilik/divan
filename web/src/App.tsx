@@ -23,7 +23,7 @@ import {
   updateWaiting, type View,
 } from './lib/shell';
 import {
-  ABOUT_ONE, HOME, canonical, pathOf, placeOfState, readPlace, sameButMachine, samePlace, searchOf,
+  ABOUT_ONE, HOME, canonical, pathOf, placeOfState, readPlace, sameButMachine, sameButSearch, samePlace, searchOf,
   type Place,
 } from './lib/nav';
 import { useLogs, logKey, emptyLog } from './lib/timeline';
@@ -98,10 +98,11 @@ export function App() {
   const [ticket, setTicket] = useState<number | null>(opened.current.ticket);
   /** …and the chat that ticket was asked for from, so the way back is to it. */
   const [ticketFrom, setTicketFrom] = useState<Place | null>(null);
-  /** How the Work page is laid out and how far back it reaches. In the
-   *  address with the page (`Place.group`, `Place.older`). */
+  /** What the Work board is narrowed to: which days, what is typed in its
+   *  search box and which project. In the address with the page
+   *  (`Place.range`, `Place.search`, `Place.workProject`). */
   const [workLayout, setWorkLayout] = useState<WorkLayout>({
-    group: opened.current.group, older: opened.current.older,
+    range: opened.current.range, search: opened.current.search ?? '', project: opened.current.workProject,
   });
   const searchRef = useRef<HTMLInputElement>(null);
   /** The Dashboard's Composer, which ⌘N and every "new chat" now lead to. */
@@ -227,7 +228,8 @@ export function App() {
     // that machine has answered.
     host: opened.current.host && opened.current.chat === sel?.chatId ? opened.current.host : null,
     sub: view === 'chats' ? (fresh && !sel ? 'new' : null) : sub,
-    ticket, machine, group: workLayout.group, older: workLayout.older,
+    ticket, machine, range: workLayout.range, search: workLayout.search || null,
+    workProject: workLayout.project,
   }), [view, project, tab, card, sel?.chatId, fresh, sub, ticket, machine, workLayout]);
   const whereRef = useRef(where);
   whereRef.current = where;
@@ -266,7 +268,8 @@ export function App() {
     // panel was opened on has no such page, and its Back is its product's board.
     if (where.card && where.card !== shown.current.card) setCameFrom(shown.current);
     // Another computer picked on a page about one is that page still.
-    const over = replacing.current || sameButMachine(shown.current, where)
+    // …and a letter typed into the Work board's search is not a step.
+    const over = replacing.current || sameButMachine(shown.current, where) || sameButSearch(shown.current, where)
       || (landing.current && !!where.chat && !shown.current.chat);
     if (over) history.replaceState(where, '', url);
     else history.pushState(where, '', url);
@@ -356,8 +359,8 @@ export function App() {
     setCard(cardKeyRef.current(to.card) ?? (to.card || null));
     setSub(to.view === 'chats' ? null : to.sub);
     setTicket(to.ticket);
-    setWorkLayout((had) => (had.group === to.group && had.older === to.older
-      ? had : { group: to.group, older: to.older }));
+    setWorkLayout((had) => (had.range === to.range && had.search === (to.search ?? '') && had.project === to.workProject
+      ? had : { range: to.range, search: to.search ?? '', project: to.workProject }));
     setPeek(false);
     const key = keyOfName(to.machine);
     if (key && useFleet.getState().focus !== key) useFleet.getState().setFocus(key);

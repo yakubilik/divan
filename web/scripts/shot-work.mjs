@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** A picture of Work (`/work`) by project, as a board and by date, desktop and
+/** A picture of Work (`/work`): the board, narrowed to one project, and
  *  narrow, in both themes.
  *
  *     node scripts/shot-work.mjs [out-dir]
@@ -54,13 +54,13 @@ const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
 const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
 const page = (m, p) => cdp(m, p, sessionId);
 try {
-  for (const [name, width, height, mobile, layout] of [
-    ['work', 1440, 1300, false, ''], ['work-board', 1720, 900, false, 'board'], ['work-date', 1440, 1300, false, 'date'],
-    ['work-narrow', 390, 1900, true, ''],
+  for (const [name, width, height, mobile, query] of [
+    ['work', 1720, 1000, false, ''], ['work-project', 1720, 900, false, 'project=divan&range=30d'],
+    ['work-narrow', 390, 1400, true, ''],
   ]) {
     for (const scheme of ['dark', 'light']) {
       await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
-      await page('Page.navigate', { url: `file://${join(build, 'harness.html')}?theme=${scheme}&layout=${layout}` });
+      await page('Page.navigate', { url: `file://${join(build, 'harness.html')}?theme=${scheme}&${query}` });
       await new Promise((r) => setTimeout(r, 5000));
       const shot = await page('Page.captureScreenshot', { format: 'png' });
       const file = join(out, `${name}${scheme === 'dark' ? '' : '-light'}.png`);

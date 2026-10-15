@@ -56,18 +56,22 @@ export interface Place {
    *  where it is not obvious, which is where more than one is paired. Never
    *  `host:port`: that is how this browser reaches it. */
   machine: string | null;
-  /** How the Work page is laid out, where it is not the default list by
-   *  project: a board of status columns (`?view=board`) or a list by day
-   *  (`?group=date`). Only on `/work`. */
-  group: 'board' | 'date' | null;
-  /** How many weeks of finished tickets the Work page adds beyond the last
-   *  seven days (`?older=1`). Only on `/work`. */
-  older: number;
+  /** Which days the Work board shows, where it is not the last seven: a
+   *  preset (`?range=today`, `?range=30d`, any `Nd`) or two dates
+   *  (`?from=2026-10-01&to=2026-10-10`, held here as `2026-10-01..2026-10-10`).
+   *  Only on `/work`; `lib/work.ts` reads it. */
+  range: string | null;
+  /** What is typed in the Work board's search box (`?q=`). Only on `/work`. */
+  search: string | null;
+  /** The one project the Work board is narrowed to, by name (`?project=`), or
+   *  null for all. Not `project`: that is the product a page is scoped to. */
+  workProject: string | null;
 }
 
 export const HOME: Place = {
   view: 'overview', project: null, tab: 'overview', card: null,
-  chat: null, host: null, sub: null, ticket: null, machine: null, group: null, older: 0,
+  chat: null, host: null, sub: null, ticket: null, machine: null,
+  range: null, search: null, workProject: null,
 };
 
 /** The Machine pages that are about one computer — the one in focus — and so
@@ -140,15 +144,35 @@ export function pathOf(place: Place): string {
 }
 
 /** …and what is left over: the computer a popped-out window was told to use,
- *  and how the Work page is laid out. Everything else about where the panel
- *  is, is in the path. */
+ *  and what the Work board is narrowed to. Everything else about where the
+ *  panel is, is in the path. */
 export function searchOf(place: Place): string {
   const q: string[] = [];
   if (place.host) q.push(`host=${enc(place.host)}`);
-  if (place.group === 'board') q.push('view=board');
-  if (place.group === 'date') q.push('group=date');
-  if (place.older > 0) q.push(`older=${place.older}`);
+  const span = place.range ? /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/.exec(place.range) : null;
+  if (span) q.push(`from=${span[1]}`, `to=${span[2]}`);
+  else if (place.range) q.push(`range=${enc(place.range)}`);
+  if (place.workProject) q.push(`project=${enc(place.workProject)}`);
+  if (place.search) q.push(`q=${enc(place.search)}`);
   return q.length ? `?${q.join('&')}` : '';
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The Work board's days, read out of an address: a preset, two dates, or —
+ *  from a link written before the date picker — `?older=N`, which was the
+ *  last seven days and N more weeks. Null is the default, the last seven. */
+function readRange(q: URLSearchParams): string | null {
+  const from = (q.get('from') || '').trim();
+  const to = (q.get('to') || '').trim();
+  if (DATE.test(from) && DATE.test(to)) return from <= to ? `${from}..${to}` : `${to}..${from}`;
+  const r = (q.get('range') || '').trim();
+  if (r === 'today') return r;
+  const n = /^(\d{1,3})d$/.exec(r);
+  if (n && Number(n[1]) > 0) return Number(n[1]) === 7 ? null : `${Math.min(Number(n[1]), 365)}d`;
+  const older = Number(q.get('older'));
+  if (Number.isInteger(older) && older > 0) return `${7 * (Math.min(older, 52) + 1)}d`;
+  return null;
 }
 
 /** A place, read back out of an address. Anything unrecognised is the
@@ -172,7 +196,7 @@ export function readPlace(pathname: string, search = ''): Place {
       // …including a card named the old way, `host:id`, whose tail is the id.
       card: ((q.get('card') || '').trim().split(':').pop() || null),
       chat: (q.get('chat') || '').trim() || null,
-      host, sub: null, ticket: null, machine: null, group: null, older: 0,
+      host, sub: null, ticket: null, machine: null, range: null, search: null, workProject: null,
     };
   }
 
@@ -183,11 +207,13 @@ export function readPlace(pathname: string, search = ''): Place {
   }
   if (parts[0] === 'waiting') return { ...place, tab: 'waiting' };
   if (parts[0] === 'work') {
-    const older = Number(q.get('older'));
+    // `?view=board` and `?group=date|project` were the layouts the page had
+    // before it was only a board; a link kept to one opens the board, with
+    // whatever else it said.
     return {
-      ...place, tab: 'work',
-      group: q.get('view') === 'board' ? 'board' : q.get('group') === 'date' ? 'date' : null,
-      older: Number.isInteger(older) && older > 0 ? Math.min(older, 52) : 0,
+      ...place, tab: 'work', range: readRange(q),
+      search: (q.get('q') || '').trim() ? q.get('q') : null,
+      workProject: (q.get('project') || '').trim() || null,
     };
   }
   if (parts[0] === 'machine') {
@@ -223,8 +249,15 @@ export function samePlace(a: Place, b: Place): boolean {
 }
 
 const PLACE_KEYS: (keyof Place)[] = [
-  'view', 'project', 'tab', 'card', 'chat', 'host', 'sub', 'ticket', 'machine', 'group', 'older',
+  'view', 'project', 'tab', 'card', 'chat', 'host', 'sub', 'ticket', 'machine',
+  'range', 'search', 'workProject',
 ];
+
+/** …and two that differ only in what is typed in the Work board's search box:
+ *  a letter typed is not a step Back should walk through one at a time. */
+export function sameButSearch(a: Place, b: Place): boolean {
+  return a.search !== b.search && PLACE_KEYS.every((k) => k === 'search' || a[k] === b[k]);
+}
 
 /** …and two that differ only in which computer a page is about: the same page
  *  with another of its computers picked, which is a choice made on that page and
@@ -250,7 +283,7 @@ export function canonical(p: Place): Place {
     };
   }
   if (!p.project && p.tab === 'work') {
-    return { ...HOME, tab: 'work', group: p.group ?? null, older: Math.max(0, p.older || 0) };
+    return { ...HOME, tab: 'work', range: p.range ?? null, search: p.search || null, workProject: p.workProject ?? null };
   }
   if (!p.project) return { ...HOME, tab: p.tab === 'waiting' ? p.tab : 'overview' };
   const scoped: Place = { ...HOME, project: p.project };
