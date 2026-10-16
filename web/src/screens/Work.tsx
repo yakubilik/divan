@@ -422,7 +422,7 @@ function Board({ groups, now, onOpen, reload }: {
   }), []);
 
   const down = (f: Flight, e: React.PointerEvent) => {
-    if (e.button !== 0 || lift.current || moving.current.has(f.key)) return;
+    if (e.button !== 0 || lift.current) return;
     // The card's own controls are pressed, not dragged.
     if ((e.target as HTMLElement).closest('[data-work-move], [data-work-menu], [data-work-confirm]')) return;
     const touch = e.pointerType === 'touch';
