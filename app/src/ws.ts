@@ -220,20 +220,36 @@ export class RacClient {
     };
     // Native errors can contain the credential-bearing URL. Keep diagnostics
     // free of that payload; the close event records the numeric code.
-    ws.onerror = () => { if (this.ws === ws) console.warn('ws: native socket error'); };
+    ws.onerror = () => {
+      if (this.ws !== ws) return;
+      console.warn('ws: native socket error');
+      // A dial that failed is over. React Native follows the error with a
+      // close; not every WebSocket does — Node's leaves a refused handshake in
+      // CONNECTING with no close at all — and waiting for one would sit out
+      // the handshake limit on a computer that has already said no.
+      if (ws.readyState !== WebSocket.OPEN) {
+        try { ws.onclose = null; ws.close(); } catch {}
+        this.lostSocket(1006);
+      }
+    };
     ws.onclose = (e) => {
       if (this.ws !== ws) return;
-      this.clearConnectTimer();
-      this.ws = null;
-      this.stopHeartbeat();
-      for (const p of this.pending.values()) p.reject(connError('wsDropped'));
-      this.pending.clear();
-      if (e.code === 4401 || e.code === 1008) { this.setStatus('unauthorized'); this.wanted = false; return; }
-      if (this.status === 'online') this.hush();
-      this.markLost('socket', e.code ?? null);
-      this.setStatus('offline');
-      this.scheduleRetry();
+      this.lostSocket(e.code ?? null);
     };
+  }
+
+  /** The socket in hand is gone, by a close or a failed dial. */
+  private lostSocket(code: number | null) {
+    this.clearConnectTimer();
+    this.ws = null;
+    this.stopHeartbeat();
+    for (const p of this.pending.values()) p.reject(connError('wsDropped'));
+    this.pending.clear();
+    if (code === 4401 || code === 1008) { this.setStatus('unauthorized'); this.wanted = false; return; }
+    if (this.status === 'online') this.hush();
+    this.markLost('socket', code);
+    this.setStatus('offline');
+    this.scheduleRetry();
   }
 
   private scheduleRetry() {

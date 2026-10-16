@@ -337,6 +337,15 @@ function scheduleSettle(chatId: string) {
 /** chat id -> the chat.get already in the air for it. */
 const inFlightOpen = new Map<string, Promise<void>>();
 
+/** chat id -> the last sequence number it held when the socket went. A
+ *  reconnect is caught up from here, not from the newest event in hand: the
+ *  new socket starts delivering live events the moment it is up, before the
+ *  open chat has asked for what it missed, and asking forward from the newest
+ *  of those skipped everything that happened while there was no socket. The
+ *  soak (scripts/soak-ws.cjs) lost exactly the events a restarting daemon
+ *  wrote while it shut down, every time, until this. */
+const resumeFrom = new Map<string, number>();
+
 /** Take a chat out of every per-chat table at once. Forgetting it in `chats`
  *  alone left its transcript, its live text and its "loaded" flag behind, so a
  *  chat that came back under the same id started half-remembered. */
@@ -349,6 +358,7 @@ function forgetChat(get: () => State, set: (p: Partial<State>) => void, id: stri
     progress: drop(st.progress), thinking: drop(st.thinking), busy: drop(st.busy),
     loadedChats: drop(st.loadedChats),
   });
+  resumeFrom.delete(id);
 }
 
 /** Tokens arrive from the tool one or two characters at a time - sixty-odd
@@ -402,6 +412,20 @@ export const useStore = create<State>((set, get) => {
   if (anyClient.__unbind) anyClient.__unbind();
   const unsubs: (() => void)[] = [];
   anyClient.__unbind = () => { for (const u of unsubs) u(); };
+
+  // Where every chat in hand stood when the socket went (see resumeFrom).
+  let linked = false;
+  unsubs.push(client.onLink((s) => {
+    if (s === 'online') { linked = true; return; }
+    if (!linked) return;
+    linked = false;
+    const st = get();
+    for (const id of Object.keys(st.loadedChats)) {
+      const evs = st.events[id];
+      const last = evs?.length ? evs[evs.length - 1].seq : null;
+      if (last != null && !resumeFrom.has(id)) resumeFrom.set(id, last);
+    }
+  }));
 
   unsubs.push(client.onStatus((conn) => {
     set({ conn });
@@ -585,6 +609,7 @@ export const useStore = create<State>((set, get) => {
   /** Everything that belongs to one computer and must not outlive it. */
   const perHost = () => {
     pendingDeltas.clear();
+    resumeFrom.clear();
     return {
       chats: {}, groups: [], people: NOBODY, events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
       chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, accounts: [],
@@ -596,6 +621,7 @@ export const useStore = create<State>((set, get) => {
   /** Wipe what the outgoing computer left behind and clear the switching flag. */
   function settleSwitch(extra: Partial<State> = {}) {
     pendingDeltas.clear();
+    resumeFrom.clear();
     set({ events: {}, live: {}, busy: {}, loadedChats: {}, switching: false, ...extra } as any);
   }
 
@@ -844,7 +870,8 @@ export const useStore = create<State>((set, get) => {
       if (running) return running;
       const run = (async () => {
         const list = get().loadedChats[id] ? (get().events[id] || []) : [];
-        let since = list.length ? list[list.length - 1].seq! : 0;
+        const from = list.length ? resumeFrom.get(id) : undefined;
+        let since = list.length ? (from ?? list[list.length - 1].seq!) : 0;
         // A cold open is answered from the end of the chat; a reconnect asks
         // forward from where this phone left off, and keeps asking while the
         // computer says there is more. Stopping at the first page would leave
@@ -879,6 +906,8 @@ export const useStore = create<State>((set, get) => {
           busy: { ...get().busy, [id]: busy },
           loadedChats: { ...get().loadedChats, [id]: true },
         });
+        // Caught up — unless the socket went again while this was out.
+        if (resumeFrom.get(id) === from) resumeFrom.delete(id);
       })();
       inFlightOpen.set(id, run);
       try {

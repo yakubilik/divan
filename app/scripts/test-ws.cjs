@@ -350,6 +350,16 @@ const ready = (async () => {
     client.disconnect();
   }
   {
+    // Node's WebSocket answers a refused dial with an error and no close.
+    const s = sandbox(), client = new s.RacClient();
+    client.connect('100.64.0.1', 8790, 't');
+    s.sockets[0].onerror?.();
+    await s.c.advance(250);
+    check('ws: a dial that errors with no close is over at once and dialled again, not left for the handshake limit',
+      s.sockets[0].closed && s.sockets.length === 2 && client.status === 'connecting');
+    client.disconnect();
+  }
+  {
     const s = sandbox();
     const { callOnce } = s;
     void callOnce('100.64.0.1', 8790, 't', 'divan.snapshot', {}).catch(() => {});
