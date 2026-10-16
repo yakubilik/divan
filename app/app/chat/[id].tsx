@@ -457,7 +457,10 @@ export function Conversation({ id }: { id: string }) {
 
   const online = conn === 'online';
   const dot = online ? c.ok : conn === 'connecting' ? c.warn : c.lineStrong;
-  const canSend = (!!text.trim() || pending.length > 0) && online && uploading === 0;
+  // Not tied to the connection: a message typed with none goes into the outbox
+  // and leaves when the computer is back (#292). Attachments and voice notes
+  // still need it, to be uploaded first, and say so by being greyed out.
+  const canSend = (!!text.trim() || pending.length > 0) && uploading === 0;
   const modelLabel = chat ? (catalog?.[chat.provider]?.models.find((m) => m.id === chat.model)?.label ?? chat.model) : '';
   const effortLabel = chat?.effort === 'medium' ? 'med' : chat?.effort;
   const account = useMemo(
@@ -698,18 +701,18 @@ export function Conversation({ id }: { id: string }) {
             <TextInput
               ref={inputRef}
               value={text} onChangeText={setText} placeholder={online ? T('message') : T('noConnection')}
-              multiline editable={online} numberOfLines={Platform.OS === 'web' ? 1 : undefined}
+              multiline numberOfLines={Platform.OS === 'web' ? 1 : undefined}
               style={{ fontSize: 15, paddingVertical: 4, paddingHorizontal: 8, minHeight: 26, maxHeight: 160 }}
             />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, opacity: online ? 1 : 0.45 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Pressable accessibilityLabel={T('attach')} onPress={() => setAttachOpen(true)} disabled={!online || uploading > 0}
-                style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.fill, alignItems: 'center', justifyContent: 'center' }}>
+                style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.fill, alignItems: 'center', justifyContent: 'center', opacity: online ? 1 : 0.45 }}>
                 <Icon name="add" size={20} weight={400} />
               </Pressable>
               {/* The model sits where it is picked, one tap from the message
                   being written with it. */}
               <Pressable onPress={openModelSheet} disabled={!online}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10 }}>
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10, opacity: online ? 1 : 0.45 }}>
                 <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: c.text2 }}>{[modelLabel || '…', effortLabel].filter(Boolean).join(' · ')}</Text>
                 <Icon name="expand_more" size={14} color={c.text2} />
               </Pressable>
@@ -727,7 +730,7 @@ export function Conversation({ id }: { id: string }) {
                   <Icon name="arrow_upward" size={20} weight={500} color="#FFFFFF" />
                 </Pressable>
               ) : (
-                <Pressable accessibilityLabel={T('record')} onPress={() => void startRecording()} disabled={!online || uploading > 0} style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
+                <Pressable accessibilityLabel={T('record')} onPress={() => void startRecording()} disabled={!online || uploading > 0} style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', opacity: online ? 1 : 0.45 }}>
                   <Icon name="mic" size={22} color={c.muted} />
                 </Pressable>
               )}
