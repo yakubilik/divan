@@ -226,7 +226,7 @@ Then `~/.divan/config.toml`:
 ```toml
 tunnel_access_team = "your-team"                  # of your-team.cloudflareaccess.com
 tunnel_access_aud = "4714c1358e65fe4b408ad6d4…"   # the application's AUD tag
-tunnel_access_emails = ["you@example.com"]        # optional
+tunnel_access_emails = ["you@example.com"]        # optional, but see below
 ```
 
 Why the daemon needs telling: Access refusing the unsigned at the edge is a
@@ -249,8 +249,29 @@ that token
 
 Anything else is refused the way an unlisted address is — 403, and the socket
 closed with 1008 before it is accepted — without the device token being looked
-at. The address list still applies, and so does everything after it: Access
-is one more thing a request has to pass, not a replacement for the others.
+at.
+
+What Access does to the address list depends on the mail list:
+
+- **Team, aud and `tunnel_access_emails` all set: Access replaces the address
+  list for the addresses it does not name.** A request from an address that is
+  not in `tunnel_allow_ips` is served when its token verifies for a mail on the
+  list — a phone on mobile data, or a home line whose provider hands out a new
+  address every day, gets in by who it is rather than where it is. Without a
+  token, with one that does not verify, or with one for a mail off the list,
+  the unlisted address is refused as before, and the log says which:
+  `tunnel request from 178.244.204.158 refused: not in tunnel_allow_ips and
+  refused by Access: no Access token`. A listed address still needs the token
+  too; the list does not let anybody skip the sign-in.
+- **Team and aud without a mail list** is "somebody the Access policy let
+  through", which is only as narrow as the dashboard. That is not enough to
+  stand in for the address list, so the list stays the door: an unlisted
+  address is refused whatever token it carries, and Access is one more thing a
+  listed one has to pass.
+
+Either way the device token and the lock come after, unchanged: whoever Access
+lets in still needs a token made with `--at`, and five wrong ones lock the
+address they came from.
 
 - **All three empty** is no Access: nothing looks for a token, and the tunnel
   behaves exactly as described above. **Some but not all of team and aud** is
@@ -292,7 +313,10 @@ In order:
 2. **Cloudflare Access**, if you set it up: a person, by a code sent to their
    mail, and a signed token the daemon verifies for itself on every request.
 3. **`tunnel_allow_ips`.** An address you named. It is a household, not a
-   laptop — everyone behind that router shares it.
+   laptop — everyone behind that router shares it. With Access and a mail
+   list, this is no longer the gate for addresses outside it: a verified
+   token for a mail on the list lets an unlisted address through to step 4.
+   Without a mail list it still refuses every address it does not name.
 4. **The device token.** 32 random bytes, this machine only, `revoke` cuts it
    off. This is what tells one computer in that house from another, and it has
    to be one made with `--at`: no other device's token is answered here.
@@ -302,5 +326,7 @@ In order:
 
 Without Access, what is *not* standing is any notion of a person: the address
 list is the cheap version, and it is the one that needs nothing but a tunnel.
-With it, a request has to come from an address you named, from somebody who
-can read your mail, holding a token made for that browser.
+With it and a mail list, a request has to come from somebody who can read one
+of those mails, holding a token made for that browser — from an address you
+named, or from anywhere, since the mail now does the job the address did.
+With Access but no mail list, it also has to come from an address you named.
