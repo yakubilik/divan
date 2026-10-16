@@ -11,6 +11,9 @@
    connection coming and going (#291).
 5. A `ping` is answered ahead of everything already queued for that client, so
    a heartbeat is never stuck behind a replay or a stream (#291).
+6. A `chat.send` resent under a client id the daemon already accepted for that
+   chat runs nothing and gets the first answer again; one without an id sends
+   as it always did (#292).
 
 A real `Server` over a temporary `DIVAN_HOME`, driven through a test client.
 """
@@ -124,6 +127,80 @@ async def ping_jumps_the_queue(srv: Server) -> None:
     srv.conns.pop(ws, None)
 
 
+def resent_once(client, srv: Server, phone: str) -> None:
+    """The phone's outbox resends a message it never heard the answer to; the
+    daemon has to tell the copy from a new message by the id the phone gave it.
+    The demo provider plays every turn, and each one it starts is counted."""
+    from divan.providers.demo import DemoProvider
+    srv.cfg.demo = True
+    turns: list[str] = []
+    real_run = DemoProvider.run
+
+    async def counted(self, prompt, attachments=None):
+        turns.append(prompt)
+        return await real_run(self, prompt, attachments)
+    DemoProvider.run = counted
+    chat = srv.db.create_chat(title="resend")["id"]
+    other = srv.db.create_chat(title="resend elsewhere")["id"]
+    try:
+        with client.websocket_connect(f"/ws?token={phone}") as ws:
+            ws.receive_json()
+            rid = iter(range(100, 10_000))
+
+            def ask(data: dict) -> dict:
+                i = next(rid)
+                ws.send_json({"id": i, "type": "chat.send", "data": data})
+                while True:
+                    m = ws.receive_json()
+                    if m.get("id") == i:
+                        return m
+
+            first = ask({"chat_id": chat, "text": "only once, please", "client_id": "m-1"})
+            again = ask({"chat_id": chat, "text": "only once, please", "client_id": "m-1"})
+            check(first.get("type") == "ok" and first["data"].get("accepted") is True
+                  and first["data"].get("client_id") == "m-1",
+                  "the first copy is accepted, and the answer names its client id", repr(first))
+            check(again == {**first, "id": again.get("id")},
+                  "the second copy gets the same answer", f"{first!r} / {again!r}")
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and not turns:
+                time.sleep(0.02)
+            time.sleep(0.3)
+            said = [e for e in srv.db.tail_events(chat, ("message.user",), limit=50)]
+            check(len(said) == 1 and said[0]["data"].get("client_id") == "m-1",
+                  "one user message is in the timeline, carrying the client id", repr(said))
+            check(len(turns) == 1, "one turn ran", f"{len(turns)} turns: {turns!r}")
+
+            # The same id in another chat is another message.
+            ask({"chat_id": other, "text": "same id, other chat", "client_id": "m-1"})
+            check(len(srv.db.tail_events(other, ("message.user",), limit=50)) == 1,
+                  "the same id in another chat is a message of its own")
+
+            # After a restart the memory is gone, and the timeline answers.
+            srv._sent.clear()
+            third = ask({"chat_id": chat, "text": "only once, please", "client_id": "m-1"})
+            check(third.get("type") == "ok" and third["data"] == first["data"]
+                  and len(srv.db.tail_events(chat, ("message.user",), limit=50)) == 1,
+                  "a copy that arrives after a restart is found in the timeline and not run",
+                  repr(third))
+
+            # An older phone names nothing, and every message it sends is one.
+            ask({"chat_id": chat, "text": "no id one"})
+            plain = ask({"chat_id": chat, "text": "no id two"})
+            said = srv.db.tail_events(chat, ("message.user",), limit=50)
+            check(plain.get("type") == "ok" and plain["data"].get("accepted") is True
+                  and "client_id" not in plain["data"] and len(said) == 3,
+                  "a send without a client id is accepted as before, every time", repr(plain))
+            for c in (chat, other):
+                ask_i = next(rid)
+                ws.send_json({"id": ask_i, "type": "chat.interrupt", "data": {"chat_id": c}})
+                while ws.receive_json().get("id") != ask_i:
+                    pass
+    finally:
+        DemoProvider.run = real_run
+        srv.cfg.demo = False
+
+
 def main() -> None:
     cli._already_serving = lambda port: True
     cli._panel_built = lambda: True
@@ -224,6 +301,9 @@ def main() -> None:
         once = lines("one-shot socket closed: iPhone")
         check(len(once) == 3 and "code=1000" in once[-1],
               "but as a one-shot socket, with its close line", repr(once))
+
+        print("6. a message sent twice under one client id")
+        resent_once(client, srv, phone)
 
     print("5. a ping is answered ahead of the queue")
     asyncio.run(ping_jumps_the_queue(srv))
