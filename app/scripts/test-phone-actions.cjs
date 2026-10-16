@@ -35,7 +35,8 @@ const confirm = async () => {
 
 const METHODS = ['setPrefs', 'authenticate', 'installAgent', 'createAccount', 'renameAccount', 'logoutAccount', 'deleteAccount', 'installTool', 'removeAgent',
   'setPool', 'setDefaults', 'updateChat', 'deleteChat', 'createChat', 'setDevicePrefs', 'switchHost', 'removeHost',
-  'createGroup', 'renameGroup', 'deleteGroup', 'setShowArchived', 'checkUpdate', 'applyUpdate', 'refreshHost'];
+  'createGroup', 'renameGroup', 'deleteGroup', 'setShowArchived', 'checkUpdate', 'applyUpdate', 'refreshHost',
+  'setDefaultCwd'];
 let calls = [];
 function stand(params) {
   machine.stand({ params });
@@ -365,6 +366,137 @@ const ready = (async () => {
   screen('new-chat.tsx');
   await press('Start chat');
   checks.push(['phone: New chat with every option starts one through createChat', made('createChat')]);
+
+  // #299 · where a new chat opens: the computer's default folder, unless the
+  // sheet was opened on one or a folder is picked in it. The phone remembers
+  // DevTrace-main locally (the first of a sorted list) and that must not count.
+  {
+    const HOME = '/r/home';
+    const atHome = (params) => {
+      const S = require(path.join(root, 'app', 'new-chat.tsx')).default;
+      stand(params);
+      R.store.set({
+        hostInfo: { ...useStore().hostInfo, default_cwd: HOME, default_cwd_chosen: true },
+        projects: [{ path: '/r/DevTrace-main', name: 'DevTrace-main', is_git: true }, { path: '/r/quire', name: 'quire', is_git: true }],
+        defaults: { ...useStore().defaults, cwd: '/r/DevTrace-main' },
+      });
+      return () => R.render('dark', h(S, params ?? {}));
+    };
+    const cwdOf = () => calls.filter(([m]) => m === 'createChat').map(([, a]) => a[0].cwd);
+    const useStore = () => require('../src/store').useStore.getState();
+
+    let draw = atHome();
+    draw();
+    await press('Start chat');
+    const plain = cwdOf();
+    const remembered = calls.filter(([m]) => m === 'setDefaults').map(([, a]) => a[0]);
+
+    draw = atHome({ cwd: '/r/quire' });
+    draw();
+    await press('Start chat');
+    const heading = cwdOf();
+
+    // An explicit pick: the radio's press is followed to the state it sets, and
+    // the next draw is handed that state, as the phone would redraw it.
+    draw = atHome();
+    const realUseState = R.React.useState;
+    const setters = [];
+    let n = 0;
+    let inject = null;
+    R.React.useState = (init) => {
+      const i = n++;
+      if (inject && inject.i === i) return [inject.v, () => {}];
+      const [v, set] = realUseState(init);
+      return [v, (x) => { setters.push({ i, x }); set(x); }];
+    };
+    let picked = [];
+    try {
+      n = 0; draw();
+      await press((x) => x.text === '/r/quire');
+      const hit = setters.find((x) => x.x === '/r/quire');
+      inject = hit ? { i: hit.i, v: '/r/quire' } : null;
+      n = 0; const shown = draw();
+      await press('Start chat');
+      picked = [hit ? 'set' : 'unset', cwdOf()[0], /\/r\/quire/.test(shown)];
+    } finally { R.React.useState = realUseState; }
+    checks.push([`phone: the New chat sheet opens in the computer's default folder (not the first project, not a folder the phone remembered), a heading's folder and an explicit pick win, and starting one does not make its folder the default — ${JSON.stringify({ plain, heading, picked, remembered })}`,
+      plain[0] === HOME && heading[0] === '/r/quire' && picked[0] === 'set' && picked[1] === '/r/quire'
+      && remembered.length === 1 && !('cwd' in remembered[0])]);
+
+    // An agent's own tile opens its chat in the same folder.
+    stand();
+    R.store.set({ hostInfo: { ...useStore().hostInfo, default_cwd: HOME, default_cwd_chosen: true },
+      defaults: { ...useStore().defaults, cwd: '/r/DevTrace-main' } });
+    R.render('dark', h(require(path.join(root, 'app', 'agents.tsx')).default, {}));
+    await press((x) => (x.text ?? '').startsWith('Reviewer') || x.label === 'Reviewer');
+    const agentCwd = cwdOf();
+    checks.push([`phone: an agent's tile opens its chat in the computer's default folder — ${JSON.stringify(agentCwd)}`,
+      agentCwd.length === 1 && agentCwd[0] === HOME]);
+
+    // Settings → New chats → Default folder sets it on the computer, for the
+    // web panel too (host.default_cwd); the first root goes back to none.
+    stand();
+    R.store.set({ hostInfo: { ...useStore().hostInfo, roots: ['/r'], default_cwd: HOME, default_cwd_chosen: true },
+      projects: [{ path: '/r/DevTrace-main', name: 'DevTrace-main', is_git: true }, { path: '/r/quire', name: 'quire', is_git: true }] });
+    R.menus.reset();
+    const shown = R.render('dark', h(require(path.join(root, 'app', 'settings.tsx')).default, {}));
+    const row = await press((x) => (x.text ?? '').startsWith('Default folder'));
+    const listed = (R.menus.last()?.items ?? []).map((i) => i.label);
+    const chose = row && await choose('/r/quire');
+    R.render('dark', h(require(path.join(root, 'app', 'settings.tsx')).default, {}));
+    await press((x) => (x.text ?? '').startsWith('Default folder'));
+    const back = await choose('First root');
+    const sets = calls.filter(([m]) => m === 'setDefaultCwd').map(([, a]) => a[0]);
+    checks.push([`phone: Settings shows the computer's default folder and sets another on the computer (setDefaultCwd → host.default_cwd); the first root clears it — ${JSON.stringify({ listed, sets })}`,
+      /Default folder/.test(shown) && shown.includes(HOME) && chose && back
+      && listed[0] === 'First root · /r' && listed.includes('/r/quire')
+      && JSON.stringify(sets) === JSON.stringify(['/r/quire', null])]);
+
+    // …and the store's own setDefaultCwd is that request, then a fresh
+    // host.info; a host.status from the other client lands in hostInfo, which
+    // is what every new-chat path reads. A store of its own over a stand-in
+    // socket, the way test-handover-project.cjs loads one: the shared one may
+    // have been unbound by another store made on the same client.
+    const Module = require('module');
+    const asked = [];
+    const listeners = new Set();
+    const fake = { onStatus: () => () => {}, onLink: () => () => {}, on: (l) => { listeners.add(l); return () => listeners.delete(l); },
+      poke() {}, connect() {}, disconnect() {},
+      call: async (type, data) => { asked.push([type, data]); return type === 'host.info' ? { roots: ['/r'], default_cwd: '/r/quire' } : {}; } };
+    const stubs = { [path.join(root, 'src/ws.ts')]: { client: fake, callOnce: async () => ({}), httpBase: () => '' },
+                    [path.join(root, 'src/push.ts')]: { dismissChatNotifications() {} } };
+    const packaged = {
+      'expo-secure-store': { getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} },
+      'expo-local-authentication': { hasHardwareAsync: async () => false, isEnrolledAsync: async () => false,
+                                     authenticateAsync: async () => ({ success: true }) },
+    };
+    const file = path.join(root, 'src/store.ts');
+    const had = require.cache[file];
+    delete require.cache[file];
+    const under = Module._load;
+    Module._load = function load(request, parent, isMain) {
+      if (packaged[request]) return packaged[request];
+      if (request.startsWith('.') && parent) {
+        const to = path.resolve(path.dirname(parent.filename), request);
+        for (const ext of ['', '.ts', '.tsx']) if (stubs[to + ext]) return stubs[to + ext];
+      }
+      return under.call(this, request, parent, isMain);
+    };
+    let realStore;
+    try { realStore = require(file).useStore; } finally {
+      Module._load = under;
+      if (had) require.cache[file] = had; else delete require.cache[file];
+    }
+    await realStore.getState().setDefaultCwd('/r/quire');
+    const afterSet = realStore.getState().hostInfo?.default_cwd;
+    for (const l of listeners) l({ event: 'host.status', chat_id: null, seq: null,
+      data: { roots: ['/r'], default_cwd: '/r/zeta', default_cwd_chosen: true }, ts: Date.now() / 1000 });
+    const heard = realStore.getState().hostInfo?.default_cwd;
+    checks.push([`phone: the store's setDefaultCwd sends host.default_cwd and reads host.info back, and the web's change arriving as host.status is what the next new chat reads — ${JSON.stringify({ asked, afterSet, heard })}`,
+      JSON.stringify(asked) === JSON.stringify([['host.default_cwd', { cwd: '/r/quire' }], ['host.info', {}]])
+      && afterSet === '/r/quire' && heard === '/r/zeta'
+      && require(path.join(root, 'src/fresh-chat.ts')).freshCwd(realStore.getState().hostInfo) === '/r/zeta']);
+  }
 })();
 
 module.exports = { checks, ready };

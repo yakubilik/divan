@@ -24,30 +24,40 @@ Event (daemon → client, unasked):
 ```
 `seq` is set on durable events (the ones written to SQLite) and `null` on live
 ones. After a reconnect, `chat.get {since_seq}` replays the durable events that
-were missed.
+were missed. Ask from the last `seq` held when the old socket went, not from the
+newest one in hand: the new socket delivers live events as soon as it is up,
+before the client has asked, and asking forward from those skips the gap.
 
 Every connected client has a queue of its own on the daemon side, and a writer
 that drains it. A client that stops accepting — a phone in a pocket, a laptop
 that slept — is closed once it falls a thousand events behind or takes twenty
 seconds over one message, rather than waited for: a turn awaits the events it
 emits, so waiting on one dead socket used to stop the turn itself, and every
-other device watching it.
+other device watching it. The answer to a `ping` is the one exception to the
+queue's order: it carries no state, so it goes out ahead of whatever is queued,
+and a heartbeat is never stuck behind a history replay or a long stream.
+
+A socket opened with `&once=1` beside the token is a one-shot: a client asking
+one thing of a computer it is not connected to (the phone reads every paired
+computer for its Divan screens). The daemon logs it at debug as a one-shot
+socket, not as the device connecting and disconnecting.
 
 ## Requests
 
 | type | data | returns |
 |---|---|---|
-| `hello` | `{device_name?, push_token?}` | `{host, catalog, device}` |
-| `ping` | – | `{ts}` — the client's heartbeat. A socket can die without either end being told (the computer slept, a NAT dropped an idle flow) and the client goes on reporting it open while the turn it is watching silently stops arriving. Both clients ask every 15 s and give up on the socket after 10 s of silence |
+| `hello` | `{device_name?, push_token?, reconnect?}` | `{host, catalog, device}` — `reconnect: {reason, code, offline_s, silent_s?}` is why the last socket went, for the daemon's log: `offline_s` from when the client noticed, `silent_s` from the last thing the old socket delivered (they differ by however long the phone slept) |
+| `ping` | – | `{ts}` — the client's heartbeat. A socket can die without either end being told (the computer slept, a NAT dropped an idle flow) and the client goes on reporting it open while the turn it is watching silently stops arriving. Both clients ask every 15 s and give up on the socket after 10 s of silence (the phone after two such misses). The phone also pings with a 2 s limit before sending a request on a socket that has said nothing for longer than a heartbeat, and on a foreground return; a socket that has been silent that long on a foreground return is replaced without asking |
 | `host.info` | – | host information |
 | `host.models` | – | `{claude: {models, efforts, perm_modes, default_perm_mode}, codex: {...}}` — `default_perm_mode` is what a chat opens in when `chat.create` names none, and what both clients offer first; it is `bypass` for every tool |
 | `host.projects` | – | `{projects: [{path,name,is_git}], roots}` |
+| `host.default_cwd` | `{cwd?}` | `{cwd, chosen}` — the folder a new chat opens in when nothing more specific was chosen (no product page, no folder picked): the one answer both clients use, and what `chat.create` without a `cwd` opens in. With `cwd`, sets it (written to config.toml as `default_cwd`, told to every client as `host.status`); an empty or null `cwd` goes back to the first root. A folder outside the roots or not there is refused. `chosen` is whether one was set; `host.info` carries the same pair as `default_cwd` and `default_cwd_chosen`. A chosen folder that later disappears falls back to the first root |
 | `host.git` | `{paths?}` | `{repos: {<path>: {is_git, branch, dirty, staged, untracked, subject, author, committed_at}}}` — read-only git status, for the desktop panel's project grid. Without `paths`, every allowed project. Runs in a thread pool behind a 20 s cache. `host.projects` does not carry this: the phone's folder picker would have to wait on dozens of git calls every time it opened. |
 | `device.prefs` | `{push_approval?, push_done?, push_token?}` | the device's current preferences |
 | `device.revoke_self` | – | revokes this device's token |
 | `group.list` / `group.create {name}` / `group.rename {group_id,name}` / `group.delete {group_id}` | | |
 | `chat.list` | `{include_archived?}` | `{chats, groups}`. A chat carries `project_id` and `project`: the product it is work on and that product's name, filed by this computer from the folders its agent's recent tool calls were in, and again at the end of every turn — `null` when nothing claims it. It is read-only: `group_id` is where a person files a chat, and outranks it |
-| `chat.create` | `{provider, model?, effort?, perm_mode?, cwd?, group_id?, title?, max_turns?, max_budget_usd?, pool_pinned?}` | chat. Omitted fields take the first thing the tool offers — except `perm_mode` on a chat with an `agent_id`, which defaults to `bypass`: an agent is work handed over, and a delegated turn that stops on the first prompt has been stopped rather than delegated. Sending `perm_mode` still decides it; this is only what happens when nobody does |
+| `chat.create` | `{provider, model?, effort?, perm_mode?, cwd?, group_id?, title?, max_turns?, max_budget_usd?, pool_pinned?}` | chat. An omitted `cwd` is the computer's default folder (`host.default_cwd`); other omitted fields take the first thing the tool offers — except `perm_mode` on a chat with an `agent_id`, which defaults to `bypass`: an agent is work handed over, and a delegated turn that stops on the first prompt has been stopped rather than delegated. Sending `perm_mode` still decides it; this is only what happens when nobody does |
 | `chat.get` | `{chat_id, since_seq?, limit?}` | `{chat, events, pending_approvals, busy, more, truncated}` — `events` are shaped like the envelope's events (`{event, chat_id, seq, data, ts}`). At most `limit` (500) at a time, and **which end** depends on the ask: `since_seq: 0` is a cold open and is answered from the *tail*, with `truncated: true` when there is older history above it; a `since_seq` is a catch-up and is answered forward, with `more: true` while events remain. A client that stops on `more` leaves a hole in its own timeline — the live feed only ever appends — so it asks again from the last seq it got until `more` is false |
 | `chat.update` | `{chat_id, ...fields}` | chat (changing model/perm/cwd rebuilds the provider; the resume id survives) |
 | `chat.delete` | `{chat_id}` | – |

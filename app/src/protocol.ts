@@ -48,6 +48,12 @@ export interface HostInfo {
   uptime_s: number; active_sessions: number; connected_devices: number;
   versions: { claude: string | null; codex: string | null };
   roots: string[];
+  /** The folder a new chat opens in when nothing more specific was chosen —
+   *  the computer's one answer, the same the panel reads (`freshCwd`).
+   *  Missing on a computer from before it had one. */
+  default_cwd?: string;
+  /** Whether somebody set that folder in settings; false is the first root. */
+  default_cwd_chosen?: boolean;
   transcription?: boolean;
   /** Hours a chat may be quiet before the computer archives it; 0 is off.
    *  Missing on a computer from before auto-archive. */

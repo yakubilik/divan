@@ -20,6 +20,7 @@ import { alert, prompt } from '../src/components/overlay';
 import { FolderRadios, GroupChips, OptionCard, ProviderCards, accountOptions } from '../src/components/pickers';
 import { Sheet, SheetBar, useSheet } from '../src/components/sheet';
 import { permissionFor } from '../src/permissions';
+import { freshCwd } from '../src/fresh-chat';
 import type { Agent, Provider } from '../src/protocol';
 
 export default function NewChat() {
@@ -36,6 +37,7 @@ function Body() {
   const projectsLoaded = useStore((st) => st.projectsLoaded);
   const catalog = useStore((st) => st.catalog);
   const defaults = useStore((st) => st.defaults);
+  const hostInfo = useStore((st) => st.hostInfo);
   const projects = useStore((st) => st.projects);
   const groups = useStore((st) => st.groups);
   const chats = useStore((st) => st.chats);
@@ -67,7 +69,7 @@ function Body() {
   // A heading's + on the chat list opens this already where that heading is —
   // its folder, and under a group that group — as the web's onNewChatIn does.
   const at = useLocalSearchParams<{ cwd?: string; group?: string }>();
-  const [cwd, setCwd] = useState<string | null>(at.cwd || defaults.cwd);
+  const [cwd, setCwd] = useState<string | null>(at.cwd || null);
   const [groupId, setGroupId] = useState<string | null>(at.group || null);
   const [query, setQuery] = useState('');
   const [advanced, setAdvanced] = useState(false);
@@ -105,7 +107,9 @@ function Body() {
         ? (defaults.byProvider?.[provider]?.account_id as string) : ''));
   }, [accountOpts, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const effectiveCwd = cwd || projects[0]?.path || null;
+  // Nothing picked here and no heading's folder: the computer's default, the
+  // one the pen, the first word and the web panel open new chats in too.
+  const effectiveCwd = cwd || freshCwd(hostInfo);
 
   // Which agents exist depends on the account (its folder holds the installed
   // ones) and on the folder (a project can carry its own), so it is asked again
@@ -174,8 +178,10 @@ function Body() {
         max_turns: maxTurns ? Number(maxTurns) : null,
         max_budget_usd: budget ? Number(budget) : null,
       } as any);
+      // Not the folder: one picked here is for this chat, and the default one
+      // is the computer's, set in Settings.
       void setDefaults({
-        provider, model, effort: effort ?? 'high', perm_mode: perm, cwd: effectiveCwd,
+        provider, model, effort: effort ?? 'high', perm_mode: perm,
         byProvider: { ...defaults.byProvider, [provider]: { model, effort, perm_mode: perm, account_id: account || null } },
         ...(agentTouched ? { lastAgent: agent ? agent.id : null } : {}),
       });

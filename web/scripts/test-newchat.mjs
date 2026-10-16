@@ -9,6 +9,11 @@
  *  still down the left, nothing selected, and the empty composer in the middle
  *  with the caret in it. Then a send from that composer, Back, and the
  *  Dashboard's own ⌘N, which still leads to the Dashboard's Composer.
+ *
+ *  The empty composer is a chat's own box (`ChatComposer`) with no chat under
+ *  it: a file attached there is held in the browser, nothing is made on the
+ *  computer until the send, and the send opens the chat, uploads to it and
+ *  sends — once. A draft left in it is there when New chat is pressed again.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -86,17 +91,26 @@ const load = (p) => import(pathToFileURL(join(out, p)).href);
 const { App } = await load('src/App.js');
 const { useFleet } = await load('src/lib/fleet.js');
 const { useDivanStore, answered } = await load('src/lib/divan.js');
+const { useLogs, logKey } = await load('src/lib/timeline.js');
 const { setThemeChoice } = await load('src/lib/theme.js');
 const fixture = await import(pathToFileURL(join(web, 'scripts', 'divan-fixture.js')).href);
 const { host: fixtureHost, chat: fakeChat } = await import(pathToFileURL(join(web, 'scripts', 'panel-fixture.js')).href);
 
 /** The fixture's computer, its chats a minute old and the newest one first by
  *  a clear margin, so which chat the place lands on is known. */
+const HOME = '/Users/x/projects/home';
 const fakeHost = () => {
   const host = fixtureHost();
   const at = Date.now() / 1000 - 60;
-  return { ...host, chats: host.chats.map((c, i) => ({ ...c, archived: 0, updated_at: at - i * 5 })) };
+  return { ...host, chats: host.chats.map((c, i) => ({ ...c, archived: 0, updated_at: at - i * 5 })),
+    // The computer's default folder for a new chat (#299), and DevTrace-main
+    // first in its list, the way a sorted ~/projects has it.
+    info: { ...host.info, default_cwd: HOME, default_cwd_chosen: true },
+    projects: [{ path: '/Users/x/projects/DevTrace-main', name: 'DevTrace-main', is_git: true }, ...host.projects] };
 };
+// A folder this browser remembered before the computer decided: not read.
+w.localStorage.setItem('rac.defaults', JSON.stringify({ studio: { provider: 'claude',
+  cwd: '/Users/x/projects/DevTrace-main', byProvider: {} } }));
 
 const React = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -113,6 +127,16 @@ seed(useFleet, {
     if (type === 'agent.list') {
       return { agents: [{ id: 'hermes', name: 'hermes', label: 'Hermes', installed: true, scope: 'account' }] };
     }
+    if (type === 'chat.send') {
+      // What the daemon broadcasts for a message it took: the chat's log is
+      // moved by hand, as the list is below, because there is no socket.
+      const k = logKey(key, data.chat_id);
+      const was = useLogs.getState().logs[k] ?? { items: [], seq: 0, busy: false, pending: [], loading: false, error: null, truncated: false };
+      useLogs.setState({ logs: { ...useLogs.getState().logs, [k]: was } });
+      useLogs.getState().feed(key, { event: 'message.user', chat_id: data.chat_id, seq: was.seq + 1,
+                                     ts: Date.now() / 1000, data: { text: data.text, attachments: data.attachments ?? [] } });
+      return { accepted: true, queued: false };
+    }
     if (type === 'chat.create') {
       const made = fakeChat({ id: `told${++made_n}`, title: data.title ?? 'New chat', status: 'idle',
                               cwd: data.cwd ?? '/Users/x', account_id: data.account_id ?? '',
@@ -128,6 +152,20 @@ seed(useFleet, {
 });
 seed(useDivanStore, { snaps: { studio: answered(fixture.studio(), Date.now() / 1000) } });
 setThemeChoice('dark');
+
+/** `/upload`, the one thing the panel asks a computer over plain HTTP. An audio
+ *  file comes back with what was said in it, the way the daemon transcribes. */
+const uploads = [];
+globalThis.fetch = w.fetch = async (url, init) => {
+  const body = init?.body;
+  const file = body?.get?.('file');
+  uploads.push({ url: String(url), chat: body?.get?.('chat_id'), name: file?.name });
+  const audio = /^audio\//.test(file?.type ?? '');
+  return { ok: true, status: 200, json: async () => ({
+    path: `/up/${file?.name}`, name: file?.name, size: file?.size ?? 0, kind: audio ? 'audio' : 'file',
+    ...(audio ? { transcript: 'remind me to call the bank' } : {}),
+  }) };
+};
 
 const root = createRoot(w.document.getElementById('root'));
 await act(async () => { root.render(React.createElement(App)); });
@@ -150,7 +188,19 @@ const newChatButton = () => [...(pane()?.querySelectorAll('button') ?? [])]
   .find((b) => (b.textContent ?? '').replace(/\s+/g, '') === 'Newchat⌘N') ?? null;
 const sidebar = () => !!newChatButton();
 const selectedRow = () => pane()?.querySelector('button.dv-tinted') ?? null;
-const firstWord = () => doc.getElementById('first-word');
+/** The empty composer: the chat's own box, under the "No conversation yet" line. */
+const firstWord = () => doc.querySelector('[data-first-word] textarea[name="composer"]');
+const firstBox = () => doc.querySelector('[data-first-word]');
+const sendButton = () => firstBox()?.querySelector('button[aria-label="Send"]') ?? null;
+const tray = () => [...(firstBox()?.querySelectorAll('button[title="Remove"]') ?? [])]
+  .map((x) => x.parentElement?.textContent ?? '');
+/** Files chosen in the box's own picker, the way the attach button's dialog hands them over. */
+const attach = async (files) => {
+  const input = firstBox().querySelector('input[type="file"]');
+  Object.defineProperty(input, 'files', { value: files, configurable: true });
+  await act(async () => { input.dispatchEvent(new w.Event('change', { bubbles: true })); });
+  await settle();
+};
 const chatOpen = () => !!pane()?.querySelector('.dv-chathead');
 const click = async (el) => { await act(async () => { el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); }); };
 const press = async (key) => {
@@ -158,7 +208,8 @@ const press = async (key) => {
 };
 const type = async (el, value) => {
   await act(async () => {
-    Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, 'value').set.call(el, value);
+    const proto = el.tagName === 'TEXTAREA' ? w.HTMLTextAreaElement.prototype : w.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
     el.dispatchEvent(new w.Event('input', { bubbles: true }));
   });
 };
@@ -221,10 +272,14 @@ ok('⌘N in the Chat place does the same as the button', isEmptyHere(s), JSON.st
 
 group('a send from the empty composer');
 asked.length = 0;
+ok('the empty composer is the chat’s own box: attach, microphone slot, multi-line field, send, keyboard hints',
+  !!firstBox()?.querySelector('.dv-composer button[aria-label="Attach a file"]')
+    && firstWord()?.tagName === 'TEXTAREA' && !!sendButton() && /⇧⏎ newline/.test(firstBox()?.textContent ?? '')
+    && /No conversation yet/.test(firstBox()?.textContent ?? '') && !doc.getElementById('first-word')
+    && !doc.querySelector('[data-first-word] input:not([type="file"])'),
+  firstBox()?.innerHTML.slice(0, 300));
 await type(firstWord(), 'start something new');
-await act(async () => {
-  doc.querySelector('form[data-first-word]').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
-});
+await click(sendButton());
 await settle();
 const made = asked.findIndex((a) => a.type === 'chat.create');
 const said = asked.findIndex((a) => a.type === 'chat.send');
@@ -232,6 +287,8 @@ const id = asked[said]?.data?.chat_id;
 ok('chat.create then chat.send with the words',
   made >= 0 && said > made && asked[said].data.text === 'start something new',
   asked.map((a) => a.type).join(','));
+ok('…and the chat opens in the computer’s default folder, not DevTrace-main nor this browser’s old one',
+  asked[made]?.data?.cwd === HOME, asked[made]?.data?.cwd);
 ok('the new chat opens in the Chat place middle pane with the sidebar beside it',
   place() === 'Chat' && !!id && w.location.pathname === `/chats/${id}` && chatOpen() && sidebar()
     && !!selectedRow() && !firstWord(),
@@ -240,6 +297,76 @@ await back();
 ok('Back from the new chat is the chat that was open before New chat',
   place() === 'Chat' && w.location.pathname === opened && chatOpen(),
   `${place()} · ${w.location.pathname}`);
+
+// ── 6 · a draft is not a chat ───────────────────────────────────────────────
+
+group('typing and attaching in the empty composer, then leaving');
+await press('n');
+await settle();
+asked.length = 0; uploads.length = 0;
+await type(firstWord(), 'the logo, smaller');
+await attach([new File(['notes'], 'notes.txt', { type: 'text/plain' })]);
+ok('the file is held in the tray, and nothing went to the computer',
+  tray().length === 1 && /notes\.txt/.test(tray()[0]) && !uploads.length
+    && !asked.some((a) => a.type === 'chat.create' || a.type === 'chat.send'),
+  `${JSON.stringify(tray())} · ${uploads.length} · ${asked.map((a) => a.type).join(',')}`);
+await click(nav('Dashboard'));
+await settle();
+await click(nav('Chats'));
+await settle();
+await press('n');
+await settle();
+s = emptyHere();
+ok('leaving and coming back made no chat, and New chat shows the draft — words and file — still there',
+  isEmptyHere(s) && firstWord()?.value === 'the logo, smaller' && tray().length === 1
+    && !uploads.length && !asked.some((a) => a.type === 'chat.create'),
+  `${JSON.stringify(s)} · ${firstWord()?.value} · ${JSON.stringify(tray())} · ${asked.map((a) => a.type).join(',')}`);
+
+// ── 7 · a file and words, sent ──────────────────────────────────────────────
+
+group('a file and words sent from the empty composer');
+await click(sendButton());
+await settle();
+let creates = asked.filter((a) => a.type === 'chat.create');
+let sends = asked.filter((a) => a.type === 'chat.send');
+let newId = sends[0]?.data?.chat_id;
+ok('exactly one chat.create, one upload to that chat, then one chat.send with the words and the file',
+  creates.length === 1 && uploads.length === 1 && /\/upload$/.test(uploads[0].url) && !!newId
+    && uploads[0].chat === newId && uploads[0].name === 'notes.txt'
+    && sends.length === 1 && sends[0].data.text === 'the logo, smaller'
+    && sends[0].data.attachments?.length === 1 && sends[0].data.attachments[0].path === '/up/notes.txt',
+  `${creates.length} · ${JSON.stringify(uploads)} · ${JSON.stringify(sends.map((x) => x.data))}`);
+const openText = () => pane()?.textContent ?? '';
+ok('the new chat is open, and shows the message with its attachment',
+  place() === 'Chat' && w.location.pathname === `/chats/${newId}` && chatOpen() && !firstWord()
+    && openText().includes('the logo, smaller') && openText().includes('notes.txt'),
+  `${w.location.pathname} · ${openText().slice(0, 200)}`);
+await press('n');
+await settle();
+ok('…and the empty composer is empty again', isEmptyHere(emptyHere()) && firstWord()?.value === '' && !tray().length,
+  `${firstWord()?.value} · ${JSON.stringify(tray())}`);
+
+// ── 8 · a voice note and nothing typed ──────────────────────────────────────
+
+group('a voice note sent on its own from the empty composer');
+asked.length = 0; uploads.length = 0;
+await attach([new File(['RIFF'], 'voice-note.webm', { type: 'audio/webm' })]);
+ok('the voice note is held with the microphone chip, nothing uploaded',
+  tray().length === 1 && /voice-note\.webm/.test(tray()[0]) && !uploads.length
+    && !asked.some((a) => a.type === 'chat.create'), JSON.stringify(tray()));
+await click(sendButton());
+await settle();
+creates = asked.filter((a) => a.type === 'chat.create');
+sends = asked.filter((a) => a.type === 'chat.send');
+newId = sends[0]?.data?.chat_id;
+ok('one chat made, the note uploaded to it, and sent as an audio attachment captioned by its transcript',
+  creates.length === 1 && uploads.length === 1 && uploads[0].chat === newId && !!newId
+    && sends.length === 1 && sends[0].data.attachments?.[0]?.kind === 'audio'
+    && sends[0].data.text === 'remind me to call the bank',
+  `${creates.length} · ${JSON.stringify(uploads)} · ${JSON.stringify(sends.map((x) => x.data))}`);
+ok('the voice note’s chat is open',
+  place() === 'Chat' && w.location.pathname === `/chats/${newId}` && chatOpen()
+    && openText().includes('remind me to call the bank'), w.location.pathname);
 
 // ── 5 · the Dashboard keeps its own ─────────────────────────────────────────
 
@@ -254,6 +381,34 @@ ok('⌘N on the Dashboard focuses the Dashboard Composer, and stays there',
   place() === 'Dashboard' && w.location.pathname === '/' && focused?.tagName === 'TEXTAREA'
     && !!focused.closest('.dv-composer') && !pane(),
   `${place()} · ${w.location.pathname} · ${focused?.tagName}`);
+
+// ── the dialog with every option ────────────────────────────────────────────
+
+group('New chat with every option: the folder');
+const dialogStart = () => [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Start chat');
+const moreOptions = () => [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'More options');
+const lastCreate = () => asked.filter((a) => a.type === 'chat.create').at(-1)?.data;
+await click(moreOptions());
+await settle();
+asked.length = 0;
+await click(dialogStart());
+await settle();
+ok('the dialog opens on the computer’s default folder and starts the chat there', lastCreate()?.cwd === HOME,
+  JSON.stringify(lastCreate()));
+ok('…and starting it leaves no folder of its own behind in this browser',
+  JSON.parse(w.localStorage.getItem('rac.defaults') ?? '{}').studio?.cwd !== HOME);
+await click(nav('Dashboard'));
+await settle();
+await click(moreOptions());
+await settle();
+const quire = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('quire')
+  && (b.textContent ?? '').includes('/'));
+await click(quire);
+await settle();
+asked.length = 0;
+await click(dialogStart());
+await settle();
+ok('a folder picked in the dialog wins', lastCreate()?.cwd === '/Users/x/projects/quire', JSON.stringify(lastCreate()));
 
 // ── leaving the place and coming back ───────────────────────────────────────
 

@@ -22,7 +22,9 @@ const overlay = require('../src/components/overlay');
 const { useStore } = require('../src/store');
 const current = () => useStore.getState();
 
-const DEFAULTS = { provider: 'claude', model: 'sonnet', effort: 'high', perm_mode: 'default', cwd: '/r/quire',
+// `cwd` is a folder this phone remembered before the computer decided it
+// (#299) — DevTrace-main, the first of a sorted list — and must not count.
+const DEFAULTS = { provider: 'claude', model: 'sonnet', effort: 'high', perm_mode: 'default', cwd: '/r/DevTrace-main',
   byProvider: { claude: { model: 'sonnet', effort: 'low', perm_mode: 'default', account_id: 'a2' } } };
 const AGENTS = [{ id: 'hermes', name: 'hermes', label: 'Hermes', installed: true },
                 { id: 'user:reviewer', name: 'reviewer', label: 'Reviewer', installed: true }];
@@ -31,8 +33,13 @@ let calls;
 let dialogs;
 /** The list over the fleet, with the computer answering `chat.create` the way
  *  the store does — the new chat put into `chats` — or refusing it. */
-function stand({ refuse = false, defaults = DEFAULTS } = {}) {
+/** The computer's default folder for a new chat (`host.info.default_cwd`). */
+const HOME = '/r/home';
+function stand({ refuse = false, defaults = DEFAULTS, info = { default_cwd: HOME, default_cwd_chosen: true } } = {}) {
   machine.stand({ defaults });
+  // DevTrace-main first, the way a sorted ~/projects lists it.
+  R.store.set({ hostInfo: info && { ...current().hostInfo, ...info },
+    projects: [{ path: '/r/DevTrace-main', name: 'DevTrace-main', is_git: true }, ...current().projects] });
   R.nav.reset();
   calls = [];
   dialogs = [];
@@ -68,10 +75,10 @@ const ready = (async () => {
     pens[0]?.press();
     await flush();
     const sent = made();
-    checks.push([`new chat: the pen on the chat list sends one chat.create with the remembered folder, tool, model, effort, permission mode, sign-in and agent, and opens that chat without the Dashboard or a sheet — ${JSON.stringify({ sent, pushed: R.nav.pushed(), replaced: R.nav.replaced() })}`,
-      pens.length === 1 && eq(sent, [{ provider: 'claude', model: 'sonnet', effort: 'low', perm_mode: 'default', cwd: '/r/quire',
+    checks.push([`new chat: the pen on the chat list sends one chat.create in the computer's default folder (not the first project, not a folder this phone remembered), with the remembered tool, model, effort, permission mode, sign-in and agent, and opens that chat without the Dashboard or a sheet — ${JSON.stringify({ sent, pushed: R.nav.pushed(), replaced: R.nav.replaced() })}`,
+      pens.length === 1 && eq(sent, [{ provider: 'claude', model: 'sonnet', effort: 'low', perm_mode: 'default', cwd: HOME,
         account_id: 'a2', agent_id: 'hermes', title: 'Hermes' }])
-      && eq(calls.find(([m]) => m === 'agent.list')?.[1], ['a2', '/r/quire', 'claude'])
+      && eq(calls.find(([m]) => m === 'agent.list')?.[1], ['a2', HOME, 'claude'])
       && eq(R.nav.pushed(), ['/chat/n1']) && eq(R.nav.replaced(), []) && dialogs.length === 0]);
 
     // 2 · the fresh chat is empty, and the first message sent from it is its own
@@ -144,6 +151,34 @@ const ready = (async () => {
       && F.freshAccount(gone, accounts) === '' && F.freshAccount(DEFAULTS, accounts) === 'a2'
       && F.freshAgent({ ...DEFAULTS, lastAgent: 'reviewer' }, AGENTS)?.id === 'user:reviewer'
       && F.freshAgent(DEFAULTS, AGENTS)?.id === 'hermes']);
+
+    // 6 · the first word: `useFreshChat`, which the empty chat list's field
+    //     sends through, opens in the same folder the pen does
+    stand();
+    let fresh6 = null;
+    const { useFreshChat } = require(path.join(root, 'src/components/first-word.tsx'));
+    R.render('dark', h(function Probe() { fresh6 = useFreshChat(); return null; }, {}));
+    await fresh6?.();
+    checks.push([`new chat: the first word (useFreshChat) creates its chat in the computer's default folder too — ${JSON.stringify(made())}`,
+      made().length === 1 && made()[0].cwd === HOME]);
+
+    // 7 · the rule itself: the computer's answer, its first root on a daemon
+    //     too old to give one, and nothing at all before it has said anything —
+    //     never a list's first entry, never a phone-local folder
+    stand({ info: { default_cwd: undefined } });
+    list();
+    pen()[0]?.press();
+    await flush();
+    const old = made()[0]?.cwd;
+    stand({ info: null });
+    R.store.set({ hostInfo: null });
+    list();
+    pen()[0]?.press();
+    await flush();
+    checks.push([`new chat: freshCwd is the computer's default, else its first root (an older daemon), else nothing — the sheet then asks — ${JSON.stringify({ old, held: R.nav.pushed(), made: made() })}`,
+      F.freshCwd({ default_cwd: HOME, roots: ['/r'] }) === HOME && F.freshCwd({ roots: ['/r'] }) === '/r'
+      && F.freshCwd(null) === null && F.freshCwd.length === 1
+      && old === '/r' && made().length === 0 && eq(R.nav.pushed(), ['/new-chat'])]);
   } finally {
     overlay.alert = realAlert;
     R.words.keys();

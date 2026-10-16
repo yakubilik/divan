@@ -16,6 +16,7 @@ import { Icon } from '../src/components/icon';
 import { Text } from '../src/components/text';
 import { alert, measure, openMenu } from '../src/components/overlay';
 import { tilde } from '../src/components/pickers';
+import { freshCwd } from '../src/fresh-chat';
 
 /** Why this computer cannot follow main, in the reader's words. A blocker is
  *  shown instead of a dead button: the reason it cannot update is the useful
@@ -85,6 +86,19 @@ export default function Settings() {
   const chipAccount = chipPd?.account_id ?? '';
   const accountRef = React.useRef<View>(null);
   const modelRef = React.useRef<View>(null);
+  // Where new chats open: the computer's answer, so the web panel's New chat
+  // opens there too. The first root, then every folder it lists.
+  const projects = useStore((s) => s.projects);
+  const loadProjects = useStore((s) => s.loadProjects);
+  const setDefaultCwd = useStore((s) => s.setDefaultCwd);
+  useEffect(() => { if (online) void loadProjects().catch(() => {}); }, [online, activeHostId, loadProjects]);
+  const folderRef = React.useRef<View>(null);
+  const folderNow = hostInfo?.default_cwd_chosen ? freshCwd(hostInfo) : '';
+  const firstRoot = hostInfo?.roots?.[0];
+  const folderChoices = [
+    { value: '', label: firstRoot ? `${T('stFirstRoot')} · ${tilde(firstRoot)}` : T('stFirstRoot') },
+    ...(projects ?? []).map((p) => ({ value: p.path, label: tilde(p.path) })),
+  ];
   const pickFrom = async (ref: React.RefObject<View | null>, items: { value: string; label: string }[],
                           now: string | null, onPick: (v: string) => void) => {
     const anchor = await measure(ref);
@@ -126,6 +140,12 @@ export default function Settings() {
               meta={chipModels.find((m) => m.id === chipModel)?.label ?? chipModel ?? T('stNoModel')}
               onPress={() => void pickFrom(modelRef, chipModels.map((m) => ({ value: m.id, label: m.label || m.id })), chipModel,
                 (v) => void setDefaults(withDefault(defaults, chipTool, { model: v })))} />
+          </View>
+          <View ref={folderRef} collapsable={false}>
+            <ListRow boxed title={T('stDefaultFolder')} note={T('stDefaultFolderNote')}
+              meta={freshCwd(hostInfo) ? tilde(freshCwd(hostInfo)!) : '–'}
+              onPress={() => void pickFrom(folderRef, folderChoices, folderNow ?? '',
+                (v) => void setDefaultCwd(v || null).catch(err))} />
           </View>
         </Group>
 

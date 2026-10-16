@@ -189,7 +189,7 @@ async function phone(peer, device, { mode = 'talk', engine = new FakeEngine(), g
   client.call = (type, data, ms) => { calls.push({ type, data, at: Date.now() }); return realCall(type, data, ms); };
   const wire = {
     call: (t, d, ms) => client.call(t, d, ms), tell: (t, d) => client.tell(t, d),
-    on: (l) => client.on(l), onStatus: (l) => client.onStatus(l), online: () => client.status === 'online',
+    on: (l) => client.on(l), onStatus: (l) => client.onLink(l), online: () => client.status === 'online',
   };
   const s = new VS.VoiceSession({ wire, engine, voice: fakeVoice, log: () => {} });
   const states = [];
@@ -387,9 +387,13 @@ async function resources(peer, fx) {
   const p = await phone(peer, 'resources', { greeting: 'Alo, dinliyorum.' });
   try {
     await p.until(() => p.told.some((t) => t.type === 'voice.playback' && t.data.turn_id === 0 && t.data.state === 'done'), 5000);
-    check('greeting: said by the phone on the call\'s own player, reported as turn 0, and voice.ready sent once it was audible',
+    // Order, not a clock window: ready goes out in the same tick as the first started (or earlier, at its
+    // cap), so it is never later than the next message; a millisecond bound fails on a loaded machine.
+    const readyAt = p.told.findIndex((t) => t.type === 'voice.ready');
+    const startedAt = p.told.findIndex((t) => t.type === 'voice.playback' && t.data.state === 'started');
+    check(`greeting: said by the phone on the call's own player, reported as turn 0, and voice.ready sent once it was audible (ready #${readyAt}, started #${startedAt})`,
       p.engine.plays.some((pl) => pl.id.startsWith('0:')) && p.told.filter((t) => t.type === 'voice.ready').length === 1
-      && p.told.find((t) => t.type === 'voice.ready').at <= p.told.find((t) => t.type === 'voice.playback' && t.data.state === 'started').at + 5);
+      && startedAt >= 0 && readyAt >= 0 && readyAt <= startedAt + 1);
     await wait(500);
     check('greeting: its echo is not heard as a turn', !p.of('voice.turn').length && !p.of('voice.state').some((e) => e.data.state === 'hearing'));
 

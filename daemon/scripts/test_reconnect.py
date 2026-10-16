@@ -7,6 +7,10 @@
    which way it came in (tunnel or direct) and how long since its last `ping`.
 2. The reason the phone gives in its next `hello` is logged.
 3. An event loop held up past the threshold is logged, with where it was held.
+4. A one-shot socket (`callOnce`, `?once=1`) is not written down as the phone's
+   connection coming and going (#291).
+5. A `ping` is answered ahead of everything already queued for that client, so
+   a heartbeat is never stuck behind a replay or a stream (#291).
 
 A real `Server` over a temporary `DIVAN_HOME`, driven through a test client.
 """
@@ -17,6 +21,7 @@ import asyncio
 import atexit
 import contextlib
 import io
+import json
 import logging
 import os
 import re
@@ -37,7 +42,7 @@ import divan.__main__ as cli                            # noqa: E402
 import divan.config as config_mod                       # noqa: E402
 from divan.config import CONFIG_PATH, Config            # noqa: E402
 from divan.looplag import LoopWatch                     # noqa: E402
-from divan.server import Server                         # noqa: E402
+from divan.server import Outbox, Server                 # noqa: E402
 
 TUNNEL_IP = "203.0.113.4"
 failures: list[str] = []
@@ -63,6 +68,60 @@ def run_cli(fn, **args) -> str:
 
 def lines(prefix: str) -> list[str]:
     return [m for m in logged if m.startswith(prefix)]
+
+
+class SlowSock:
+    """A client on a slow link: every message takes `per` seconds to be accepted."""
+
+    def __init__(self, per: float):
+        self.per = per
+        self.got: list[tuple[float, str]] = []
+        self.client = None
+        self.query_params: dict = {}
+
+    async def send_text(self, msg: str) -> None:
+        await asyncio.sleep(self.per)
+        self.got.append((time.monotonic(), msg))
+
+    async def close(self) -> None:
+        pass
+
+
+async def ping_jumps_the_queue(srv: Server) -> None:
+    """A client's outbox full of large events — a history replay, a long tool
+    result — and then a ping: the answer is written next, not after them."""
+    from divan.server import Conn
+    dev = next(d for d in srv.cfg.devices.values() if d.name == "iPhone")
+    ws = SlowSock(per=0.05)                  # 120 events of 256 KB: six seconds of sending
+    srv.clients[ws] = dev
+    srv.conns[ws] = Conn(None, "127.0.0.1")
+    srv.outbox[ws] = Outbox()
+    srv.writers[ws] = asyncio.create_task(srv._writer(ws, srv.outbox[ws]))
+    big = "x" * 256 * 1024
+    for i in range(120):
+        await srv.broadcast({"event": "text.delta", "chat_id": "c", "seq": i, "data": {"text": big}, "ts": 0})
+    await asyncio.sleep(0.12)                # the writer is mid-queue, as it would be
+    sent = time.monotonic()
+    await srv._dispatch(ws, dev, {"id": 7, "type": "ping", "data": {}})
+    await srv._dispatch(ws, dev, {"id": 8, "type": "no.such", "data": {}})
+    deadline = sent + 60                     # order is checked here, not speed: a loaded machine sends slower
+    while time.monotonic() < deadline and not any('"id": 8' in m for _, m in ws.got):
+        await asyncio.sleep(0.02)
+    got = [json.loads(m) for _, m in ws.got]
+    at = {m.get("id"): t for (t, _), m in zip(ws.got, got) if m.get("id")}
+    events_before_pong = sum(1 for m in got[:[m.get("id") for m in got].index(7)] if m.get("type") == "event") \
+        if 7 in at else -1
+    took = at[7] - sent if 7 in at else float("inf")
+    check(took < 1.0, "the ping's answer arrives within a second, past 120 large queued events",
+          f"took {took:.2f}s")
+    check(0 <= events_before_pong < 120, "it overtakes the queue rather than waiting it out",
+          f"{events_before_pong} events went first")
+    check(8 in at and [m.get("id") for m in got].index(8) > 120,
+          "any other answer still keeps its place behind the events it follows",
+          f"position {[m.get('id') for m in got].index(8)} of {len(got)}" if 8 in at
+          else f"not sent after {time.monotonic() - sent:.1f}s, {len(got)} messages so far")
+    srv._drop(ws)
+    srv.conns.pop(ws, None)
 
 
 def main() -> None:
@@ -134,6 +193,40 @@ def main() -> None:
             while ws.receive_json().get("id") != 1:
                 pass
         check(len(lines("device reconnected:")) == 1, "a first `hello`, with no reason, logs none")
+        with client.websocket_connect(f"/ws?token={phone}") as ws:
+            ws.receive_json()
+            ws.send_json({"id": 1, "type": "hello", "data": {
+                "device_name": "iPhone", "reconnect": {"reason": "foreground", "code": None,
+                                                       "offline_s": 0.2, "silent_s": 404.5}}})
+            while ws.receive_json().get("id") != 1:
+                pass
+        back = lines("device reconnected: iPhone")
+        check(len(back) == 2 and "offline=0.2s silent=404.5s" in back[-1],
+              "how long the old socket had been silent is logged beside it", repr(back[-1:]))
+
+        print("4. a one-shot socket")
+        logging.getLogger("rac").setLevel(logging.DEBUG)
+        gone_before = len(lines("device disconnected: iPhone"))
+        came_before = len(lines("device connected: iPhone"))
+        for _ in range(3):
+            with client.websocket_connect(f"/ws?token={phone}&once=1") as ws:
+                ws.receive_json()
+                ws.send_json({"id": 1, "type": "ping", "data": {}})
+                while ws.receive_json().get("id") != 1:
+                    pass
+                ws.close(code=1000)
+        time.sleep(0.2)
+        logging.getLogger("rac").setLevel(logging.INFO)
+        check(len(lines("device disconnected: iPhone")) == gone_before
+              and len(lines("device connected: iPhone")) == came_before,
+              "is not logged as the phone connecting and disconnecting",
+              repr(lines("device disconnected: iPhone")[gone_before:]))
+        once = lines("one-shot socket closed: iPhone")
+        check(len(once) == 3 and "code=1000" in once[-1],
+              "but as a one-shot socket, with its close line", repr(once))
+
+    print("5. a ping is answered ahead of the queue")
+    asyncio.run(ping_jumps_the_queue(srv))
 
     print("3. a held-up event loop")
 

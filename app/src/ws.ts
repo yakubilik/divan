@@ -64,9 +64,15 @@ export type ConnStatus = 'idle' | 'connecting' | 'online' | 'offline' | 'unautho
  *  log can say which side gave up. `heartbeat`: pings went unanswered; `socket`:
  *  the OS closed it (a network change lands here, as a 1006); `foreground`: the
  *  app came back and found it dead or gone; `restart`: the daemon said it was
- *  restarting. */
-export type ReconnectReason = 'heartbeat' | 'socket' | 'foreground' | 'restart';
-export type Reconnect = { reason: ReconnectReason; code: number | null; offline_s: number };
+ *  restarting; `probe`: something was asked of a socket that had gone quiet,
+ *  and the ping sent first went unanswered. */
+export type ReconnectReason = 'heartbeat' | 'socket' | 'foreground' | 'restart' | 'probe';
+/** `offline_s` runs from when the app noticed the loss; `silent_s` from the last
+ *  thing the old socket delivered. They differ by however long iOS kept the app
+ *  asleep: on 2026-10-13..16 every `socket code=1006 offline<1s` the daemon
+ *  logged came after it had seen that socket go 9 s to 3 h earlier — the app
+ *  only heard of it when it woke. */
+export type Reconnect = { reason: ReconnectReason; code: number | null; offline_s: number; silent_s?: number };
 
 /** How often to prove the socket is still there, and how long to wait for the
  *  proof. Short enough that a dead connection is noticed within a turn, long
@@ -89,16 +95,35 @@ const FOREGROUND_PROBE_MS = 2000;
  *  first — and on 2026-10-09 the daemon saw the old socket's close frame 9 to
  *  130 ms before the new socket: the phone was burying sockets that worked. */
 const HEARTBEAT_GRACE_MS = 250;
-/** A reconnect the app starts itself and finishes within this is not shown:
- *  no "reconnecting" for a blink nobody would have noticed. */
-const QUIET_RECONNECT_MS = 1000;
+/** A socket that has delivered nothing for this long, in the foreground, is not
+ *  to be trusted without asking: a working one answers a ping every
+ *  HEARTBEAT_MS. Past it the app was asleep (iOS stops its timers along with
+ *  everything else) or the pings are going unanswered. */
+const STALE_MS = HEARTBEAT_MS + 2000;
+/** A lost connection that is back within this is never shown: no
+ *  "Reconnecting…" for a recovery nobody would have noticed. Every way an
+ *  online socket can go counts, the OS closing it included — that is what a
+ *  return from the background usually is. */
+const QUIET_RECONNECT_MS = 3000;
+/** How long to wait before dialling again, attempt by attempt. Short, because
+ *  the app only dials in the foreground, where a person is waiting; a dial is a
+ *  SYN, not a cost. It was 1, 2, 4, 8, 15 s on top of a ten-second handshake
+ *  limit, and on 2026-10-16 every heartbeat loss the daemon logged came back
+ *  with `offline=80.1s` (09:42:48, 09:45:49): 10+1+10+2+10+4+10+8+10+15 = 80,
+ *  five dials that never completed and the sixth waited out the fifteen-second
+ *  step — 8.7 s after the old socket's last bytes had already reached the Mac
+ *  (09:42:40), so the way back had been open all that time. */
+const RETRY_MS = [250, 500, 1000, 2000];
 
 /** How long a request is given to be answered when nobody said otherwise. Long,
  *  because it covers a computer that is busy rather than one that is gone: a
  *  turn's worth of work can sit in front of an answer. */
 const DEFAULT_TIMEOUT_MS = 30000;
-// Bound the handshake too: iOS may leave a dead dial in CONNECTING.
-const CONNECT_TIMEOUT_MS = 10000;
+// Bound the handshake too: iOS may leave a dead dial in CONNECTING. A dial on a
+// path that comes back is answered within a second or two (the SYN is resent
+// at once); one still waiting after five seconds is in TCP's long backoff, and a
+// fresh dial is quicker than waiting it out.
+const CONNECT_TIMEOUT_MS = 5000;
 
 export class RacClient {
   private ws: WebSocket | null = null;
@@ -106,6 +131,7 @@ export class RacClient {
   private pending = new Map<number, Pending>();
   private listeners = new Set<(ev: RacEvent) => void>();
   private statusListeners = new Set<(s: ConnStatus) => void>();
+  private linkListeners = new Set<(s: ConnStatus) => void>();
   private url = '';
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -116,10 +142,14 @@ export class RacClient {
   private missed = 0;
   /** When anything last arrived on the socket: proof it is alive. */
   private lastRx = 0;
+  /** When the socket opened, which is as good as something arriving. */
+  private openedAt = 0;
+  /** One probe at a time; a second caller waits on the first. */
+  private probing: Promise<boolean> | null = null;
   /** Until when 'offline'/'connecting' are kept from the listeners. */
   private hushUntil = 0;
   private hushTimer: ReturnType<typeof setTimeout> | null = null;
-  private lost: { reason: ReconnectReason; code: number | null; at: number } | null = null;
+  private lost: { reason: ReconnectReason; code: number | null; at: number; quiet: number } | null = null;
   status: ConnStatus = 'idle';
 
   connect(host: string, port: number, token: string) {
@@ -130,6 +160,8 @@ export class RacClient {
     this.wanted = true;
     this.retry = 0;
     this.lost = null;
+    // A computer chosen just now has no outage to hide yet.
+    this.hushUntil = 0;
     if (this.timer) clearTimeout(this.timer);
     this.closeSocket();
     this.open();
@@ -179,7 +211,7 @@ export class RacClient {
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.clearConnectTimer();
-      this.retry = 0; this.missed = 0; this.lastRx = 0;
+      this.retry = 0; this.missed = 0; this.lastRx = 0; this.openedAt = Date.now();
       this.setStatus('online'); this.startHeartbeat();
     };
     ws.onmessage = (m) => {
@@ -188,25 +220,50 @@ export class RacClient {
     };
     // Native errors can contain the credential-bearing URL. Keep diagnostics
     // free of that payload; the close event records the numeric code.
-    ws.onerror = () => { if (this.ws === ws) console.warn('ws: native socket error'); };
+    ws.onerror = () => {
+      if (this.ws !== ws) return;
+      console.warn('ws: native socket error');
+      // A dial that failed is over. React Native follows the error with a
+      // close; not every WebSocket does — Node's leaves a refused handshake in
+      // CONNECTING with no close at all — and waiting for one would sit out
+      // the handshake limit on a computer that has already said no.
+      if (ws.readyState !== WebSocket.OPEN) {
+        try { ws.onclose = null; ws.close(); } catch {}
+        this.lostSocket(1006);
+      }
+    };
     ws.onclose = (e) => {
       if (this.ws !== ws) return;
-      this.clearConnectTimer();
-      this.ws = null;
-      this.stopHeartbeat();
-      for (const p of this.pending.values()) p.reject(connError('wsDropped'));
-      this.pending.clear();
-      if (e.code === 4401 || e.code === 1008) { this.setStatus('unauthorized'); this.wanted = false; return; }
-      this.markLost('socket', e.code ?? null);
-      this.setStatus('offline');
-      this.scheduleRetry();
+      this.lostSocket(e.code ?? null);
     };
+  }
+
+  /** The socket in hand is gone, by a close or a failed dial. */
+  private lostSocket(code: number | null) {
+    this.clearConnectTimer();
+    this.ws = null;
+    this.stopHeartbeat();
+    for (const p of this.pending.values()) p.reject(connError('wsDropped'));
+    this.pending.clear();
+    if (code === 4401 || code === 1008) { this.setStatus('unauthorized'); this.wanted = false; return; }
+    if (this.status === 'online') this.hush();
+    this.markLost('socket', code);
+    this.setStatus('offline');
+    this.scheduleRetry();
   }
 
   private scheduleRetry() {
     if (!this.wanted) return;
-    const delay = Math.min(15000, 1000 * 2 ** Math.min(this.retry++, 4));
+    if (this.timer) clearTimeout(this.timer);
+    const delay = RETRY_MS[Math.min(this.retry++, RETRY_MS.length - 1)];
     this.timer = setTimeout(() => this.open(), delay);
+  }
+
+  /** Keep the coming 'offline'/'connecting' from the listeners for a while: an
+   *  online socket just went, and most of the time the next one is up before
+   *  anybody could have read a banner. Started once per outage. */
+  private hush() {
+    if (this.hushUntil <= Date.now()) this.hushUntil = Date.now() + QUIET_RECONNECT_MS;
   }
 
   /** A socket can die without the phone being told: the daemon restarted, the
@@ -225,18 +282,35 @@ export class RacClient {
     if (this.hb) { clearInterval(this.hb); this.hb = null; }
   }
 
-  /** One ping. The interval's beat forgives a miss; a foreground check does
-   *  not, and waits only FOREGROUND_PROBE_MS, because coming back is when a
-   *  socket is most likely dead and a person is looking at the screen. Either
-   *  way a socket that delivered anything since the ping went out is alive. */
-  private async beat(reason: ReconnectReason = 'heartbeat'): Promise<boolean> {
+  /** The interval's ping, which forgives a miss. */
+  private async beat(): Promise<boolean> {
     if (this.beating) return true;
+    this.beating = true;
+    try {
+      return await this.ask('heartbeat', HEARTBEAT_TIMEOUT_MS);
+    } finally {
+      this.beating = false;
+    }
+  }
+
+  /** A ping that does not forgive: a foreground check, or a request about to go
+   *  out on a socket that has gone quiet. It waits only FOREGROUND_PROBE_MS,
+   *  because a person is looking at the screen. Its own ping, even with the
+   *  interval's still out: that one may have ten seconds left to run. */
+  private probe(reason: ReconnectReason): Promise<boolean> {
+    if (!this.probing) {
+      this.probing = this.ask(reason, FOREGROUND_PROBE_MS).finally(() => { this.probing = null; });
+    }
+    return this.probing;
+  }
+
+  /** One ping. A socket that delivered anything since it went out is alive. */
+  private async ask(reason: ReconnectReason, ms: number): Promise<boolean> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
-    this.beating = true;
     const sent = Date.now();
     try {
-      await this.request('ping', {}, reason === 'heartbeat' ? HEARTBEAT_TIMEOUT_MS : FOREGROUND_PROBE_MS);
+      await this.request('ping', {}, ms);
       this.missed = 0;
       return true;
     } catch {
@@ -247,32 +321,38 @@ export class RacClient {
       // says — once it has failed to answer often enough.
       if (reason !== 'heartbeat' || ++this.missed >= HEARTBEAT_MISSES) this.dropDead(reason);
       return false;
-    } finally {
-      this.beating = false;
     }
   }
 
-  /** Note why the connection went, keeping when it first went. */
+  /** How long the socket has gone without delivering anything. */
+  private silentFor(): number {
+    return Date.now() - Math.max(this.lastRx, this.openedAt);
+  }
+
+  /** Note why the connection went, keeping when it first went: an outage that
+   *  takes several dials is one outage, and `offline_s` is all of it. */
   private markLost(reason: ReconnectReason, code: number | null) {
     if (this.lost && reason !== 'restart') return;
-    this.lost = { reason, code: code ?? this.lost?.code ?? null, at: this.lost?.at ?? Date.now() };
+    this.lost = { reason, code: code ?? this.lost?.code ?? null, at: this.lost?.at ?? Date.now(),
+                  quiet: this.lost?.quiet ?? (Math.max(this.lastRx, this.openedAt) || Date.now()) };
   }
 
   /** Why the last connection was lost, once: `hello` carries it to the daemon. */
   takeReconnect(): Reconnect | null {
     const l = this.lost;
     this.lost = null;
-    return l && { reason: l.reason, code: l.code, offline_s: Math.round((Date.now() - l.at) / 100) / 10 };
+    const s = (ms: number) => Math.round(ms / 100) / 10;
+    return l && { reason: l.reason, code: l.code, offline_s: s(Date.now() - l.at), silent_s: s(Date.now() - l.quiet) };
   }
 
   /** Bury a socket the OS still believes in, and start reconnecting now. */
   private dropDead(reason: ReconnectReason) {
-    console.warn(`ws: no answer to heartbeat (${reason}), reconnecting`);
+    console.warn(`ws: socket not answering (${reason}), reconnecting`);
     this.markLost(reason, null);
     this.closeSocket();
     for (const p of this.pending.values()) p.reject(connError('wsDropped'));
     this.pending.clear();
-    this.hushUntil = Date.now() + QUIET_RECONNECT_MS;
+    this.hush();
     this.setStatus('offline');
     if (this.timer) clearTimeout(this.timer);
     this.retry = 0;
@@ -285,8 +365,17 @@ export class RacClient {
   poke(reason: 'foreground' | 'restart' | null = 'foreground') {
     if (!this.wanted || this.status === 'connecting') return;
     // Coming back from the background is precisely when "online" is most likely
-    // to be a stale belief, so check it instead of trusting it.
-    if (this.status === 'online') { if (reason) void this.beat(reason); return; }
+    // to be a stale belief, so check it instead of trusting it. A socket that
+    // has been silent past a heartbeat was asleep with the app: iOS takes it
+    // away within seconds of suspending us (since_ping=404 s, 1009 s in the
+    // daemon's log), and asking it first only adds the probe's two seconds to
+    // the wait. A fresh one is a tenth of that.
+    if (this.status === 'online') {
+      if (!reason) return;
+      if (this.silentFor() > STALE_MS) this.dropDead(reason);
+      else void this.probe(reason);
+      return;
+    }
     if (reason) this.markLost(reason, null);
     if (this.timer) clearTimeout(this.timer);
     this.retry = 0;
@@ -335,6 +424,13 @@ export class RacClient {
    *  asked for; a poll that nobody is watching wants a short one, so that a
    *  computer with the lid shut costs seconds rather than half a minute. */
   async call<T = any>(type: string, data: Record<string, any> = {}, timeoutMs?: number): Promise<T> {
+    // "Online" on a socket that has said nothing for longer than a heartbeat is
+    // a belief, not a fact — the app may have slept, or the pings be going
+    // unanswered. Ask before trusting it with what the person just did: a send
+    // into a dead socket waits out its whole timeout, and that is the chat that
+    // "shows nothing". A dead one is replaced at once and the request waits
+    // for the new one.
+    if (this.status === 'online' && this.silentFor() > STALE_MS) await this.probe('probe');
     await this.ready();
     return this.request<T>(type, data, timeoutMs);
   }
@@ -370,12 +466,20 @@ export class RacClient {
   }
 
   on(l: (ev: RacEvent) => void) { this.listeners.add(l); return () => { this.listeners.delete(l); }; }
+  /** What a person is shown: a reconnect inside the quiet window never leaves
+   *  'online' here (see setStatus). For the banner and whatever reads like it. */
   onStatus(l: (s: ConnStatus) => void) { this.statusListeners.add(l); return () => { this.statusListeners.delete(l); }; }
+  /** Every change as it happens, unhushed. For code that has to act on the
+   *  socket going, however briefly: a call that must stop playing the answer
+   *  it was in the middle of, a shell that has to be attached to again. */
+  onLink(l: (s: ConnStatus) => void) { this.linkListeners.add(l); return () => { this.linkListeners.delete(l); }; }
 
   /** Listeners hear every state but the in-between ones of a reconnect still
    *  inside its quiet window; if that runs out, they hear where it got to. */
   private setStatus(s: ConnStatus) {
+    const was = this.status;
     this.status = s;
+    if (s !== was || s === 'online') for (const l of this.linkListeners) l(s);
     if (this.hushTimer) { clearTimeout(this.hushTimer); this.hushTimer = null; }
     const wait = this.hushUntil - Date.now();
     if ((s === 'offline' || s === 'connecting') && wait > 0) {
@@ -402,7 +506,9 @@ export function callOnce<T = any>(host: string, port: number, token: string,
   return new Promise<T>((resolve, reject) => {
     let ws: WebSocket;
     try {
-      ws = new WebSocket(wsUrl(host, port, token));
+      // `once` is for the daemon's log only: this socket is not the phone's
+      // connection coming and going, and is not written down as one.
+      ws = new WebSocket(`${wsUrl(host, port, token)}&once=1`);
     } catch {
       reject(connError('wsNotConnected'));
       return;

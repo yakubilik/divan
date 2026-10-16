@@ -1257,6 +1257,9 @@ group('every carried screen asks its computer for exactly what it did');
     // …and its one press, the worded Close chat over a product's chat, became
     // the X in the chat's own head (ustabasi #183): same close, other file.
     'src/screens/Overview.tsx': ['Change', 'Click'],
+    // The Chat place's one-line first word became the chat's own box, drawn
+    // by components/ChatComposer.tsx (ustabasi #293): the typing moved there.
+    'src/App.tsx': ['Change'],
   };
   /** …and the gains that are on purpose. The chat's name in its head became
    *  the field it is renamed in (ustabasi #229): typed into, left, Enter and
@@ -1270,11 +1273,20 @@ group('every carried screen asks its computer for exactly what it did');
     // lib/actions.ts, so the requests are the same.
     'src/screens/Work.tsx': ['Change', 'ContextMenu', 'KeyDown'],
   };
+  /** …and the requests gained on purpose. The folder a new chat opens in
+   *  became the computer's (ustabasi #299): Settings sets it with
+   *  `host.default_cwd`, and the fleet hands it the folder this browser used
+   *  to remember, once. */
+  const ASKS = {
+    'src/lib/actions.ts': ['host.default_cwd'],
+    'src/lib/fleet.ts': ['host.default_cwd'],
+  };
   const allow = (f, before) => {
     const [reqs, drives] = JSON.parse(before);
     const dropped = ON_PURPOSE[f] ?? [];
     const gained = (GAINED[f] ?? []).filter((d) => !drives.includes(d));
-    return JSON.stringify([reqs, [...drives.filter((d) => !dropped.includes(d)), ...gained].sort()]);
+    const asks = (ASKS[f] ?? []).filter((r) => !reqs.includes(r));
+    return JSON.stringify([[...reqs, ...asks].sort(), [...drives.filter((d) => !dropped.includes(d)), ...gained].sort()]);
   };
   const CARRIED = carried();
   let was = null;
