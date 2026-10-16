@@ -150,7 +150,10 @@ export function Accounts({ now, onView, onFocus }: {
           cells: [
             <ProviderMark provider={s.provider} size={34} dim={s.state === 'missing' || s.state === 'signedOut'} />,
             <NameCell title={s.title} note={s.note} />,
-            <Tag label={s.says} tone={s.tone} />,
+            // On a washed row the tag's own chip would be a second wash under
+            // its word, and red on two of them is under 4.5:1.
+            <Tag label={s.says} tone={s.tone}
+              style={s.state === 'expiring' || s.state === 'expired' ? { background: 'transparent', paddingLeft: 0 } : undefined} />,
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Ring share={s.used} size={22} stroke={3}
                 colour={s.spent ? T.red : undefined} />

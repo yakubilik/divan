@@ -183,7 +183,8 @@ try {
     JSON.stringify({ palette, taken }));
   await key('k', { modifiers: CTRL });
   await key(',', { modifiers: META, code: 'Comma', vk: 188 });
-  ok('⌘, still opens Settings', (await where()) === '/machine/settings', await where());
+  // With several computers paired, Settings is the one this chat is on.
+  ok('⌘, still opens Settings', /^\/machine\/(on\/studio\/)?settings$/.test(await where()), await where());
   await b.cold('/chats/c1');
   await key('f', { modifiers: META });
   ok('⌘F still puts the cursor in the chat search',

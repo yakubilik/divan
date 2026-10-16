@@ -980,7 +980,13 @@ class TunnelGate:
 
     With `tunnel_access_*` set, an address in the list is not enough: the
     request must also carry a Cloudflare Access token that verifies — see
-    `TunnelAccess`. Both are settled here, before a device token is looked at.
+    `TunnelAccess`. With all three set, the mail list included, the token is
+    also enough without the list: an address it does not know is served when
+    its token verifies for a mail on the list, because a phone on mobile data
+    changes address every day and the mail does not. Access without a mail
+    list leaves the address list as the door. All of it is settled here,
+    before a device token is looked at, and the device token and its lockout
+    still apply to whoever gets through.
 
     Pure ASGI rather than `BaseHTTPMiddleware` because the socket matters more
     than the routes do: `/ws` is where a client asks for anything, and an HTTP
@@ -1015,25 +1021,29 @@ class TunnelGate:
         # all for the tailnet, and an edited setting needs no restart — see
         # Config.refresh_tunnel.
         self.cfg.refresh_tunnel()
-        if not self.cfg.tunnel_allows(ip):
-            # Said once per address every ten minutes: "Divan is down" from
-            # somebody at home is, most days, a provider that changed their
-            # address, and without this line nothing here shows it.
-            now = time.monotonic()
-            if now - self._told.get(ip, -self.TOLD_EVERY_S) >= self.TOLD_EVERY_S:
-                if len(self._told) > 500:
-                    self._told.clear()
-                self._told[ip] = now
-                log.warning("tunnel request from %s refused: not in tunnel_allow_ips", ip)
+        listed = self.cfg.tunnel_allows(ip)
+        want = self.cfg.tunnel_access()
+        # Access with a mail list names the person, which is what the address
+        # list was standing in for: so it lets in an address the list does not
+        # know. Without a list it is only "somebody the Access policy took",
+        # and the address list stays the door.
+        signs_in = want is not None and all(want)
+        if not listed and not signs_in:
+            # "Divan is down" from somebody at home is, most days, a provider
+            # that changed their address, and without this line nothing here
+            # shows it.
+            self._tell(ip, "not in tunnel_allow_ips")
             await self._refuse(scope, send)
             return
         email = None
-        want = self.cfg.tunnel_access()
         if want is not None:
             try:
                 email = await self.access.email(self.access.token(scope), *want)
             except AccessRefused as exc:
-                log.warning("tunnel request from %s refused by Access: %s", ip, exc)
+                if listed:
+                    log.warning("tunnel request from %s refused by Access: %s", ip, exc)
+                else:
+                    self._tell(ip, f"not in tunnel_allow_ips and refused by Access: {exc}")
                 await self._refuse(scope, send)
                 return
         signed_in = ACCESS_EMAIL.set(email)
@@ -1041,6 +1051,20 @@ class TunnelGate:
             await self.app(scope, receive, send)
         finally:
             ACCESS_EMAIL.reset(signed_in)
+
+    def _tell(self, ip: str, why: str) -> None:
+        """Log a refusal of an unlisted address, once per address and reason every ten minutes.
+
+        The whole internet is unlisted, so the line is held back rather than
+        written for every request somebody sends.
+        """
+        now = time.monotonic()
+        key = f"{ip} {why}"
+        if now - self._told.get(key, -self.TOLD_EVERY_S) >= self.TOLD_EVERY_S:
+            if len(self._told) > 500:
+                self._told.clear()
+            self._told[key] = now
+            log.warning("tunnel request from %s refused: %s", ip, why)
 
     def _claimed(self, scope) -> str | None:
         """The address Cloudflare says asked, or None if this is not tunnelled."""

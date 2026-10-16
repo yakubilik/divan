@@ -2,7 +2,10 @@
  *  button lit, and a queue with a ticket in every state on three projects and
  *  some finished this week. `?range=`, `?q=` and `?project=` narrow it as the
  *  address does. Every cancel, restart and priority a card asks for is
- *  written down in `window.__writes` and answered the way the queue answers.
+ *  written down in `window.__writes`, answered the way the queue answers and
+ *  applied to the queue the next read returns. A test can hold a write until it
+ *  says how it ends (`__holdWrites`, `__answer`), hold a read of the queue
+ *  across a move (`__holdNextList`) and shorten the poll (`?poll=ms`).
  *  Built and photographed by `scripts/shot-work.mjs`, and dragged in a real
  *  browser by `scripts/test-work-ui.mjs`. */
 import { useState } from 'react';
@@ -12,7 +15,7 @@ import '../src/styles/divan-components.css';
 import '../src/styles/divan-app.css';
 import { themeCss } from '../src/lib/theme';
 import { Shell } from '../src/components/Shell';
-import { Work, type WorkLayout } from '../src/screens/Work';
+import { Work, workPoll, type WorkLayout } from '../src/screens/Work';
 import { useFleet } from '../src/lib/fleet';
 import { host } from './panel-fixture.js';
 import { ticket } from './ticket-fixture.js';
@@ -34,7 +37,8 @@ const t = (id: number, project: string, status: string, title: string, over: Rec
   round_started_at: NOW - 14 * 60, finished_at: null, escalation: '', ask: '', notes: [], note_count: 0,
   last_event: { ts: NOW - 60, kind: 'report', msg: '[worker] committed the page and its test' }, ...over,
 });
-const tickets = [
+if (q.get('poll')) workPoll.ms = Number(q.get('poll'));
+let tickets = [
   t(258, 'divan', 'running', 'Web panel: one live page of every ticket in flight'),
   t(259, 'divan', 'blocked', 'Phone: answer a ticket from the lock screen', {
     last_event: { ts: NOW - 300, kind: 'blocked', msg: 'which Apple team should sign the widget?' } }),
@@ -61,16 +65,49 @@ const tickets = [
   t(69, 'nl-artsen', 'done', 'Practice pages: opening hours', { finished_at: NOW - 12 * 86400 }),
 ];
 const writes: string[] = [];
-(window as any).__writes = writes;
+const W = window as any;
+W.__writes = writes;
+/** Set once per page load: a test reads it back to tell a redraw from a reload. */
+W.__loaded = Math.random();
+/** Every read of the queue the page made, and whether one is held right now. */
+W.__lists = 0;
+W.__listHeld = false;
+let listGate: Promise<void> | null = null;
+W.__holdNextList = () => { listGate = new Promise((r) => { W.__releaseList = r; }); };
+/** While held, a write waits for `__answer()` — or `__answer(why)`, a refusal. */
+let held = false;
+let answer: Promise<string | undefined> | null = null;
+W.__holdWrites = (on = true) => { held = on; };
+/** The mocked queue starts a ticket the moment it is put first in line. */
+W.__startNow = false;
+const apply = (type: string, d: any) => {
+  const now = Date.now() / 1000;
+  const patch: Record<string, unknown> = type === 'ustabasi.cancel' ? { status: 'cancelled', finished_at: now }
+    : type === 'ustabasi.restart' ? { status: 'queued', finished_at: null }
+    : { priority: d.priority, ...(d.priority === 0 && W.__startNow ? { status: 'running', started_at: now, last_event: null } : {}) };
+  tickets = tickets.map((x: any) => (x.id === d.id ? { ...x, ...patch, updated_at: now } : x));
+};
 const QUEUE_WRITES: Record<string, string> = {
   'ustabasi.cancel': 'cancelled', 'ustabasi.restart': 'back in the queue', 'ustabasi.priority': 'priority',
 };
 useFleet.setState({
   hosts: { studio: { ...(host() as any), status: 'online' } }, order: ['studio'], focus: 'studio', ready: true,
   call: (async (_k: string, type: string, d: any) => {
-    if (type === 'ustabasi.list') return { available: true, tickets, queue: { last_tick: NOW } };
+    if (type === 'ustabasi.list') {
+      W.__lists++;
+      // What it read is what it was asked for: one held answers with that, late.
+      const snap = { available: true, tickets: tickets.slice(), queue: { last_tick: NOW } };
+      if (listGate) { const g = listGate; listGate = null; W.__listHeld = true; await g; W.__listHeld = false; }
+      return snap;
+    }
     if (QUEUE_WRITES[type]) {
       writes.push(`${type.slice(9)} ${d.id}${type === 'ustabasi.priority' ? ` ${d.priority}` : ''}`);
+      if (held) {
+        answer = new Promise((r) => { W.__answer = r; });
+        const why = await answer;
+        if (why) throw new Error(why);
+      }
+      apply(type, d);
       return { ok: true, message: `#${d.id} ${QUEUE_WRITES[type]}${type === 'ustabasi.priority' ? ` ${d.priority}` : ''}` };
     }
     return {};

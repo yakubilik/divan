@@ -88,23 +88,29 @@ try {
     ['ticket', '/p/quire/c/k1', `document.querySelector('h1')?.textContent.trim() === 'Webhook retry policy'`, ['.dv-board-cols button', 'Webhook retry policy'], '/p/quire/board'],
     ['chat', '/chats/c1', `document.querySelector('textarea[name="composer"]')`, ['.dv-topline button', 'Chats'], '/'],
     ['waiting', '/waiting', `/answer|task|Nothing/.test(document.querySelector('h1')?.textContent ?? '')`, ['a[href="/waiting"]', 'See all'], '/'],
-    ['machine › machines', '/machine/machines', machineTab('Machines'), ['.dv-topline button', 'Machine'], '/'],
+    // The line's machine count opens a box of them; Machines is its foot.
+    ['machine › machines', '/machine/machines', machineTab('Machines'), async () => (await press('[data-sys="machines"]', ''))
+      && press('[data-all-machines]', 'All machines'), '/'],
     ['machine › executors', '/machine/executors', machineTab('Executors'), ['[aria-label="Machine"] button', 'Executors'], '/machine/machines'],
     ['machine › terminal', '/machine/terminal', machineTab('Terminal'), ['[aria-label="Machine"] button', 'Terminal'], '/machine/machines'],
     ['machine › settings', '/machine/settings', machineTab('Settings'), ['[aria-label="Machine"] button', 'Settings'], '/machine/machines'],
   ];
   const where = Object.fromEntries(PAGES.map(([, path, js]) => [path, js]));
+  // With two computers paired, a page about one of them names it:
+  // /machine/terminal is written back as /machine/on/<name>/terminal.
+  const lands = (path, got) => got === path
+    || (path.startsWith('/machine/') && new RegExp(`^/machine/on/[^/]+/${path.slice(9)}$`).test(got));
   for (const [type, path, js, via, from] of PAGES) {
     await b.cold(path);
-    const coldOk = (await at()) === path && await mark(js);
+    const coldOk = lands(path, await at()) && await mark(js);
     await b.reload();
-    const reloadOk = (await at()) === path && await mark(js);
+    const reloadOk = lands(path, await at()) && await mark(js);
     let backOk = true;
     let detail = '';
     if (via) {
       await b.cold(from);
-      const pressed = await press(...via);
-      const arrived = pressed && (await at()) === path && await mark(js);
+      const pressed = typeof via === 'function' ? await via() : await press(...via);
+      const arrived = pressed && lands(path, await at()) && await mark(js);
       await back();
       const returned = (await at()) === from && await mark(where[from]);
       backOk = arrived && returned;
