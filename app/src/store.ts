@@ -58,6 +58,11 @@ interface State {
   activeHostId: string | null;
   host: StoredHost | null;                // derived: the active host
   conn: ConnStatus;
+  // Counts the sockets that have come up. A reconnect inside ws.ts's quiet
+  // window never lets `conn` leave 'online', so a screen keyed on `conn` alone
+  // would not notice it had a new socket — and would not ask for what it
+  // missed while there was none. The open chat is keyed on this too.
+  linkGen: number;
   // A computer switch is in flight: the outgoing computer's chats are still on
   // screen (inert) so the swap reads as a crossfade instead of a blank list.
   switching: boolean;
@@ -336,6 +341,15 @@ function scheduleSettle(chatId: string) {
 /** chat id -> the chat.get already in the air for it. */
 const inFlightOpen = new Map<string, Promise<void>>();
 
+/** chat id -> the last sequence number it held when the socket went. A
+ *  reconnect is caught up from here, not from the newest event in hand: the
+ *  new socket starts delivering live events the moment it is up, before the
+ *  open chat has asked for what it missed, and asking forward from the newest
+ *  of those skipped everything that happened while there was no socket. The
+ *  soak (scripts/soak-ws.cjs) lost exactly the events a restarting daemon
+ *  wrote while it shut down, every time, until this. */
+const resumeFrom = new Map<string, number>();
+
 /** Take a chat out of every per-chat table at once. Forgetting it in `chats`
  *  alone left its transcript, its live text and its "loaded" flag behind, so a
  *  chat that came back under the same id started half-remembered. */
@@ -348,6 +362,7 @@ function forgetChat(get: () => State, set: (p: Partial<State>) => void, id: stri
     progress: drop(st.progress), thinking: drop(st.thinking), busy: drop(st.busy),
     loadedChats: drop(st.loadedChats),
   });
+  resumeFrom.delete(id);
 }
 
 /** Tokens arrive from the tool one or two characters at a time - sixty-odd
@@ -402,11 +417,25 @@ export const useStore = create<State>((set, get) => {
   const unsubs: (() => void)[] = [];
   anyClient.__unbind = () => { for (const u of unsubs) u(); };
 
+  // Where every chat in hand stood when the socket went (see resumeFrom).
+  let linked = false;
+  unsubs.push(client.onLink((s) => {
+    if (s === 'online') { linked = true; return; }
+    if (!linked) return;
+    linked = false;
+    const st = get();
+    for (const id of Object.keys(st.loadedChats)) {
+      const evs = st.events[id];
+      const last = evs?.length ? evs[evs.length - 1].seq : null;
+      if (last != null && !resumeFrom.has(id)) resumeFrom.set(id, last);
+    }
+  }));
+
   unsubs.push(client.onStatus((conn) => {
     set({ conn });
     // Answering again is the end of the restart, whatever the last event said.
     // The daemon that announced it is not the one on the other end now.
-    if (conn === 'online') { set({ restarting: null }); void afterConnect(); return; }
+    if (conn === 'online') { set({ restarting: null, linkGen: get().linkGen + 1 }); void afterConnect(); return; }
     // The new computer answered with a refusal or is unreachable: keeping the
     // previous one's chats on screen would be a lie, so end the switch empty.
     if (get().switching && (conn === 'offline' || conn === 'unauthorized')) settleSwitch({ chats: {}, groups: [], people: NOBODY });
@@ -584,6 +613,7 @@ export const useStore = create<State>((set, get) => {
   /** Everything that belongs to one computer and must not outlive it. */
   const perHost = () => {
     pendingDeltas.clear();
+    resumeFrom.clear();
     return {
       chats: {}, groups: [], people: NOBODY, events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
       chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, accounts: [],
@@ -595,6 +625,7 @@ export const useStore = create<State>((set, get) => {
   /** Wipe what the outgoing computer left behind and clear the switching flag. */
   function settleSwitch(extra: Partial<State> = {}) {
     pendingDeltas.clear();
+    resumeFrom.clear();
     set({ events: {}, live: {}, busy: {}, loadedChats: {}, switching: false, ...extra } as any);
   }
 
@@ -635,11 +666,20 @@ export const useStore = create<State>((set, get) => {
   async function onHost<T>(hostId: string, type: string, data: Record<string, any>): Promise<T> {
     const h = get().hosts.find((x) => x.id === hostId);
     if (!h) throw new Error(tt('wsNotConnected'));
-    if (hostId === get().activeHostId) {
+    if (isActive(h)) {
       if (get().conn !== 'online') throw new Error(tt('wsNotConnected'));
       return await client.call<T>(type, data, DIVAN_TIMEOUT_MS);
     }
     return await callOnce<T>(h.host, h.port, h.token, type, data, DIVAN_TIMEOUT_MS);
+  }
+
+  /** Whether a paired computer is the one the live socket is on. By pairing
+   *  as well as by id: the same pairing kept twice (one entry by name, one by
+   *  address) is still one computer, and a one-shot socket to it would be a
+   *  second session beside the live one. */
+  function isActive(h: StoredHost): boolean {
+    const on = get().host;
+    return h.id === get().activeHostId || (!!on && on.token === h.token && on.port === h.port);
   }
 
   async function persistDefaults(byHost: DefaultsByHost) {
@@ -648,7 +688,7 @@ export const useStore = create<State>((set, get) => {
   }
 
   return {
-    ready: false, hosts: [], activeHostId: null, host: null, conn: 'idle', switching: false, hostInfo: null, catalog: null, device: null,
+    ready: false, hosts: [], activeHostId: null, host: null, conn: 'idle', linkGen: 0, switching: false, hostInfo: null, catalog: null, device: null,
     projects: [], accounts: [], tools: [], npmAvailable: true, loginPrompt: null, loginDone: null,
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
@@ -841,7 +881,8 @@ export const useStore = create<State>((set, get) => {
       if (running) return running;
       const run = (async () => {
         const list = get().loadedChats[id] ? (get().events[id] || []) : [];
-        let since = list.length ? list[list.length - 1].seq! : 0;
+        const from = list.length ? resumeFrom.get(id) : undefined;
+        let since = list.length ? (from ?? list[list.length - 1].seq!) : 0;
         // A cold open is answered from the end of the chat; a reconnect asks
         // forward from where this phone left off, and keeps asking while the
         // computer says there is more. Stopping at the first page would leave
@@ -876,6 +917,8 @@ export const useStore = create<State>((set, get) => {
           busy: { ...get().busy, [id]: busy },
           loadedChats: { ...get().loadedChats, [id]: true },
         });
+        // Caught up — unless the socket went again while this was out.
+        if (resumeFrom.get(id) === from) resumeFrom.delete(id);
       })();
       inFlightOpen.set(id, run);
       try {
@@ -990,7 +1033,7 @@ export const useStore = create<State>((set, get) => {
           set((st) => ({ divan: { ...st.divan, [h.id]: d } }));
         };
         try {
-          const active = h.id === get().activeHostId;
+          const active = isActive(h);
           // The live socket for the computer the phone is on, and a socket of
           // its own for each of the others — the same way a sign-in is read off
           // a second machine (`callOnce`). A second socket to the computer that

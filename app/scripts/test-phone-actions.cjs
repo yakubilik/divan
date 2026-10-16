@@ -460,7 +460,7 @@ const ready = (async () => {
     const Module = require('module');
     const asked = [];
     const listeners = new Set();
-    const fake = { onStatus: () => () => {}, on: (l) => { listeners.add(l); return () => listeners.delete(l); },
+    const fake = { onStatus: () => () => {}, onLink: () => () => {}, on: (l) => { listeners.add(l); return () => listeners.delete(l); },
       poke() {}, connect() {}, disconnect() {},
       call: async (type, data) => { asked.push([type, data]); return type === 'host.info' ? { roots: ['/r'], default_cwd: '/r/quire' } : {}; } };
     const stubs = { [path.join(root, 'src/ws.ts')]: { client: fake, callOnce: async () => ({}), httpBase: () => '' },

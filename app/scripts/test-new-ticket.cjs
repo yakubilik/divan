@@ -131,7 +131,7 @@ const fresh = new Promise((done) => { releaseFresh = () => done(REPORTED); });
 
 let store = null;
 {
-  const client = { onStatus: () => () => {}, on: () => () => {}, poke() {}, connect() {}, disconnect() {},
+  const client = { onStatus: () => () => {}, onLink: () => () => {}, on: () => () => {}, poke() {}, connect() {}, disconnect() {},
                    call: async () => ({}) };
   let polled = 0;
   const callOnce = async (host, port, token, type) => {
