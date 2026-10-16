@@ -349,3 +349,6 @@
   .dv-root{--dv-press:44px}
   :where(.dv-root) :where(a[href]){display:inline-flex;align-items:center}
 }
+/* xterm's hidden input is a textarea, which a dark page fills in the browser's
+   own grey: it is never seen, so it is filled in nothing. */
+.xterm .xterm-helper-textarea{background:transparent}

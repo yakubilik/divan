@@ -16,6 +16,11 @@ const THEME = {
   cursor: MEDIA.termCursor,
   cursorAccent: MEDIA.term,
   selectionBackground: MEDIA.termSelection,
+  // xterm makes its scrollbar out of the foreground at a fifth, which is no
+  // colour of the panel's: the floating chrome's own pair instead.
+  scrollbarSliderBackground: MEDIA.chromeLine,
+  scrollbarSliderHoverBackground: MEDIA.inkDim,
+  scrollbarSliderActiveBackground: MEDIA.inkDim,
 };
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
