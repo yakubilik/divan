@@ -18,15 +18,20 @@
  *  the queue to do what that move means: Cancelled is `ustabasi cancel`,
  *  Queued is `ustabasi restart`, a new place in Queued is `ustabasi
  *  priority`, and In progress is first in line (`ustabasi priority N 0`) —
- *  started by the supervisor's next pass, or told on the card what holds it. Nothing is moved here: the card goes back where it was, says
- *  what the queue answered, and lands wherever the next snapshot puts it.
+ *  started by the supervisor's next pass, or told on the card what holds it.
+ *  Until the queue answers, the card is drawn in the column it was put down in
+ *  as a ghost saying what is being asked (`Starting…`, `Cancelling…`); its
+ *  status stays the queue's. Answered, the queue is read again at once and the
+ *  card lands wherever that snapshot puts it, saying what the queue answered.
+ *
+ *  Every card is washed in its status's colour (`tintOf`).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleet } from '../lib/fleet';
 import { cancelTicket, prioritiseTicket, restartTicket } from '../lib/actions';
 import {
   COLUMNS, PRESETS, boardColumns, cardMeta, columnOf, finished, flights, headLine, matches, moveOf,
-  nothing, projectCounts, reorder, spanOf, within,
+  nothing, projectCounts, reorder, spanOf, tintOf, within,
   type ColumnKey, type Flight, type QueueSnap,
 } from '../lib/work';
 
@@ -45,7 +50,11 @@ export const workHold = { ms: 300 };
 export interface WorkLayout { range: string | null; search: string; project: string | null }
 
 /** What the queue said to the last thing asked of a card. */
-interface Said { tone: 'busy' | 'ok' | 'error' | 'refused' | 'starting'; text: string }
+interface Said { tone: 'ok' | 'error' | 'refused' | 'starting'; text: string }
+
+/** A card put down in another column whose move the queue has not answered
+ *  yet: drawn there as a ghost wearing `word`, its status still the queue's. */
+interface Pending { to: ColumnKey; word: string }
 
 /** What a card asked to start says, read off the newest snapshot rather than
  *  promised: started once it is running, why not while something holds it,
@@ -84,23 +93,40 @@ export function Work({ onOpen, layout, onLayout }: {
   const [snaps, setSnaps] = useState<Record<string, QueueSnap | null>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [now, setNow] = useState(Date.now() / 1000);
-  const busy = useRef(new Set<string>());
+  /** How many reads of each computer's queue are out, and the number of the
+   *  newest one drawn: a read that was asked for before another and answers
+   *  after it holds an older snapshot, and is not drawn over the newer one. */
+  const out = useRef<Record<string, number>>({});
+  const asked = useRef<Record<string, number>>({});
+  const drawn = useRef<Record<string, number>>({});
 
+  /** Read one computer's queue now, whatever else is out: what `reload` does
+   *  once a move has been answered, because a poll already in flight was asked
+   *  before the move and cannot have it. */
+  const read = useCallback((key: string): Promise<void> => {
+    const n = (asked.current[key] ?? 0) + 1;
+    asked.current[key] = n;
+    out.current[key] = (out.current[key] ?? 0) + 1;
+    const fresh = () => n > (drawn.current[key] ?? 0);
+    return call(key, 'ustabasi.list', {})
+      .then((snap) => {
+        if (!fresh()) return;
+        drawn.current[key] = n;
+        setSnaps((had) => ({ ...had, [key]: snap as QueueSnap }));
+        setErrors((had) => { const { [key]: _gone, ...rest } = had; return rest; });
+      })
+      // An older daemon has no such handler, and a computer with no queue
+      // has nothing in flight: either way it adds no cards.
+      .catch((e: any) => { if (fresh()) setErrors((had) => ({ ...had, [key]: e?.message || 'did not answer' })); })
+      .finally(() => { out.current[key] -= 1; setNow(Date.now() / 1000); });
+  }, [call]);
+
+  /** The poll: every computer whose last read has answered. */
   const load = useCallback(() => {
     for (const key of onlineKey ? onlineKey.split('|') : []) {
-      if (busy.current.has(key)) continue;
-      busy.current.add(key);
-      call(key, 'ustabasi.list', {})
-        .then((snap) => {
-          setSnaps((had) => ({ ...had, [key]: snap as QueueSnap }));
-          setErrors((had) => { const { [key]: _gone, ...rest } = had; return rest; });
-        })
-        // An older daemon has no such handler, and a computer with no queue
-        // has nothing in flight: either way it adds no cards.
-        .catch((e: any) => setErrors((had) => ({ ...had, [key]: e?.message || 'did not answer' })))
-        .finally(() => { busy.current.delete(key); setNow(Date.now() / 1000); });
+      if (!out.current[key]) void read(key);
     }
-  }, [onlineKey, call]);
+  }, [onlineKey, read]);
 
   useEffect(() => {
     load();
@@ -157,7 +183,7 @@ export function Work({ onOpen, layout, onLayout }: {
           </div>
         </section>
 
-        <Board groups={groups} now={now} onOpen={onOpen} reload={load} />
+        <Board groups={groups} now={now} onOpen={onOpen} reload={read} />
       </div>
     </div>
   );
@@ -241,10 +267,14 @@ function Board({ groups, now, onOpen, reload }: {
   groups: { key: string; title: string; rows: Flight[] }[];
   now: number;
   onOpen?: (host: string, id: number) => void;
-  reload: () => void;
+  /** Read that computer's queue again now; settles once it is drawn. */
+  reload: (host: string) => Promise<void>;
 }) {
   const board = useRef<HTMLDivElement>(null);
   const [said, setSaid] = useState<Record<string, Said>>({});
+  const [pending, setPending] = useState<Record<string, Pending>>({});
+  /** The cards with a move out: a second one is not asked until it is answered. */
+  const moving = useRef(new Set<string>());
   const [asking, setAsking] = useState<string | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
   const [lifted, setLifted] = useState<{ key: string; dx: number; dy: number; over: ColumnKey | null } | null>(null);
@@ -261,32 +291,47 @@ function Board({ groups, now, onOpen, reload }: {
     return rest;
   });
 
-  /** Ask the queue, say what it answered on the card, and read the queue again
-   *  so the board shows where the ticket went. */
-  const ask = useCallback(async (f: Flight, busyWord: string, go: () => Promise<string>, after: Said['tone'] = 'ok') => {
-    say(f.key, { tone: 'busy', text: busyWord });
+  const settle = (key: string, s: Said) => {
+    say(key, s);
+    setPending((had) => { const { [key]: _gone, ...rest } = had; return rest; });
+    moving.current.delete(key);
+  };
+
+  /** Ask the queue. Until it answers, the card is drawn in the column it was
+   *  put down in, as a ghost saying `word`; its status stays what the queue
+   *  says. Answered, the queue is read again at once — not left to a poll that
+   *  went out before the move — and the card settles wherever that snapshot
+   *  puts it, saying what the queue said. Refused, the ghost goes and the card
+   *  says why. One move a card at a time. */
+  const ask = useCallback(async (f: Flight, to: ColumnKey, word: string, go: () => Promise<string>, after: Said['tone'] = 'ok') => {
+    if (moving.current.has(f.key)) return;
+    moving.current.add(f.key);
+    unsay(f.key);
+    setPending((had) => ({ ...had, [f.key]: { to, word } }));
+    let text: string;
     try {
-      const text = await go();
-      say(f.key, { tone: after, text });
+      text = await go();
     } catch (e: any) {
-      say(f.key, { tone: 'error', text: e?.message || 'The queue did not answer.' });
-    } finally {
-      reload();
+      settle(f.key, { tone: 'error', text: e?.message || 'The queue did not answer.' });
+      void reload(f.host);
+      return;
     }
+    await reload(f.host);
+    settle(f.key, { tone: after, text });
   }, [reload]);
 
-  const cancel = (f: Flight) => ask(f, 'Cancelling…', async () =>
+  const cancel = (f: Flight) => ask(f, 'cancelled', 'Cancelling…', async () =>
     ((await cancelTicket(f.host, f.ticket.id))?.message || '').trim() || `#${f.ticket.id} cancelled`);
-  const restart = (f: Flight) => ask(f, 'Putting it back in the queue…', async () =>
+  const restart = (f: Flight) => ask(f, 'queued', 'Back to queue…', async () =>
     ((await restartTicket(f.host, f.ticket.id))?.message || '').trim() || `#${f.ticket.id} back in the queue`);
   /** First in line, which is what starting a ticket is: the queue decides
    *  when a slot takes it, and its next pass is within a minute. */
-  const start = (f: Flight) => ask(f, 'Starting…', async () =>
+  const start = (f: Flight) => ask(f, 'running', 'Starting…', async () =>
     ((await prioritiseTicket(f.host, f.ticket.id, 0))?.message || '').trim(), 'starting');
   const place = (f: Flight, index: number) => {
     const calls = reorder(queued, f, index);
     if (!calls.length) return;
-    void ask(f, 'Reordering…', async () => {
+    void ask(f, 'queued', 'Moving…', async () => {
       let mine = '';
       for (const c of calls) {
         const r = await prioritiseTicket(f.host, c.id, c.priority);
@@ -300,6 +345,8 @@ function Board({ groups, now, onOpen, reload }: {
    *  where in Queued, for a card that was already there. */
   const move = (f: Flight, to: ColumnKey, index = 0) => {
     setMenu(null);
+    // Its last move is still out: this one is not asked on top of it.
+    if (moving.current.has(f.key)) return;
     const m = moveOf(f, to);
     if (m.kind === 'stay') return;
     if (m.kind === 'refuse') { say(f.key, { tone: 'refused', text: m.reason }); return; }
@@ -401,6 +448,20 @@ function Board({ groups, now, onOpen, reload }: {
     return () => { window.removeEventListener('touchmove', hold); live.current.end(null); };
   }, []);
 
+  /** The columns as drawn: a card with a move out is in the column it was put
+   *  down in, first, and not in its own. */
+  const shown = useMemo(() => {
+    if (!Object.keys(pending).length) return groups;
+    const every = groups.flatMap((g) => g.rows);
+    return groups.map((g) => ({
+      ...g,
+      rows: [
+        ...every.filter((f) => pending[f.key]?.to === g.key && columnOf(f) !== g.key),
+        ...g.rows.filter((f) => !pending[f.key] || pending[f.key].to === g.key),
+      ],
+    }));
+  }, [groups, pending]);
+
   const options = (f: Flight): { label: string; to: ColumnKey; index?: number }[] => {
     const out: { label: string; to: ColumnKey; index?: number }[] = [];
     const col = columnOf(f);
@@ -424,7 +485,7 @@ function Board({ groups, now, onOpen, reload }: {
   return (
     <div className="dv-board" data-work-board="" ref={board}>
       <div className="dv-board-cols" style={{ gridTemplateColumns: 'repeat(7, minmax(180px, 1fr))', minWidth: 7 * 180 + 6 * 16 }}>
-        {groups.map((g) => (
+        {shown.map((g) => (
           <section key={g.key} className="dv-col" aria-label={g.title} data-work-column={g.key}
             data-dropping={lifted?.over === g.key ? 'true' : undefined}>
             <div className="dv-sec" style={{ margin: 0, padding: '0 4px' }}>
@@ -433,6 +494,7 @@ function Board({ groups, now, onOpen, reload }: {
             </div>
             {g.rows.map((f) => {
               const s = said[f.key];
+              const p = pending[f.key];
               const up = lifted?.key === f.key ? lifted : null;
               const opts = menu === f.key ? options(f) : [];
               return (
@@ -441,6 +503,7 @@ function Board({ groups, now, onOpen, reload }: {
                   onContextMenu={(e) => { if (lift.current) e.preventDefault(); }}
                   data-work-row={f.key} data-phase={f.phase} data-ended={f.ended ?? undefined}
                   data-merged={f.merged ? '' : undefined} data-lifted={up ? 'true' : undefined}
+                  data-tint={tintOf(f)} data-work-pending={p ? p.to : undefined} aria-busy={p ? true : undefined}
                   style={{
                     position: 'relative', touchAction: 'manipulation', userSelect: 'none', WebkitUserSelect: 'none',
                     WebkitTouchCallout: 'none',
@@ -455,11 +518,12 @@ function Board({ groups, now, onOpen, reload }: {
                     <span className="dv-card-title">{`#${f.ticket.id} ${f.ticket.title}`}</span>
                     <span className="dv-card-foot">
                       <span className={`dv-status dv-status--${f.tone}`}><i />{f.word}</span>
+                      {p && <span className="dv-work-badge" role="status" data-work-badge="">{p.word}</span>}
                     </span>
                     <span className="dv-meta" data-work-meta="" style={{ lineHeight: '17px' }}>{cardMeta(f, now)}</span>
                   </button>
                   <div style={{ position: 'relative', display: 'flex' }}>
-                    <button type="button" className="dv-chip dv-hit" data-work-move=""
+                    <button type="button" className="dv-chip dv-hit" data-work-move="" disabled={!!p}
                       aria-haspopup="menu" aria-expanded={menu === f.key}
                       aria-label={`Move #${f.ticket.id} to…`}
                       onClick={() => setMenu((m) => (m === f.key ? null : f.key))}>

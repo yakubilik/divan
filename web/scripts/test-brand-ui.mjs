@@ -191,10 +191,11 @@ try {
   console.log('── the brand control leads to the Dashboard');
   // Every page but the Dashboard opens the line on the way back instead, so
   // the walk is: away, back by that, then the seal itself.
-  await press('button[aria-label="Machine"]');
+  // The line's way into the machine's pages is Settings now.
+  await press('button[aria-label="Settings"]');
   const away = await evaluate(`return { seal: !!document.querySelector('.dv-topline a.dv-word'),
     back: document.querySelector('.dv-topline .dv-back')?.getAttribute('aria-label') ?? null };`);
-  ok('on Machine the line opens on the way back to the Dashboard instead', !away.seal && away.back === 'Back to Dashboard',
+  ok('on Settings the line opens on the way back to the Dashboard instead', !away.seal && away.back === 'Back to Dashboard',
     JSON.stringify(away));
   await press('.dv-topline .dv-back');
   ok('…which brings the seal back', await wait(`document.querySelector('.dv-topline a.dv-word img')`));
