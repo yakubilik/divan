@@ -11,6 +11,13 @@
  *  column the browser drew, and what the harness's queue was asked
  *  (`window.__writes`) is read back.
  *
+ *  Then a card pressed where a person presses: its chat opens at the bottom
+ *  right over a board that has not moved — the question and Evet for a card
+ *  that needs you, answered from there with `ustabasi.note` — another card
+ *  switches it, Enter opens it, and every card's project is a heading larger
+ *  and bolder than the line under it that opens the ticket's page, Back
+ *  landing on the board as it was.
+ *
  *  Then a move the queue takes its time over: the card is in its new column as
  *  a ghost within 200 ms of being put down, its status still the old one; the
  *  answer arriving while a poll is out is read again at once, and the card
@@ -167,7 +174,87 @@ try {
   await mouse(259, 'running');
   ok('Needs you → In progress: refused, no call', (await writes()) === '["cancel 260","restart 31","priority 261 0"]'
     && /^#259 is waiting on you/.test((await said(259)) || ''), await said(259));
-  ok('…and the press that was a drag opened nothing', (await run('location.href')).endsWith('harness.html'));
+  ok('…and the press that was a drag opened nothing: no page, no chat', (await run('location.href')).endsWith('harness.html')
+    && !(await run(`!!document.querySelector('[data-work-chat]')`)));
+
+  console.log('── a card pressed opens its chat over the board; its heading opens its page');
+  await open(1280, 800, false, '?range=30d');
+  /** A press where a person presses: down and up on the same point, no move. */
+  const press = async (sel) => {
+    const a = await box(sel);
+    if (!a) throw new Error(`nothing drawn for ${sel}`);
+    await page('Input.dispatchMouseEvent', { type: 'mousePressed', x: a.x, y: a.y, button: 'left', buttons: 1, clickCount: 1 });
+    await page('Input.dispatchMouseEvent', { type: 'mouseReleased', x: a.x, y: a.y, button: 'left', buttons: 0, clickCount: 1 });
+    await sleep(250);
+  };
+  /** Where the page is: its address, the board's scroll, the filters, the history. */
+  const place = () => run(`JSON.stringify({ href: location.href, side: document.querySelector('[data-work-board]')?.scrollLeft ?? null,
+    top: document.querySelector('[data-work]')?.parentElement?.scrollTop ?? null, days: document.querySelector('[data-work-preset][aria-pressed="true"]')?.getAttribute('data-work-preset') ?? null,
+    board: !!document.querySelector('[data-work-board]'), history: history.length })`);
+  const chatNow = () => run(`(() => { const el = document.querySelector('[data-work-chat]'); if (!el) return null; const r = el.getBoundingClientRect();
+    return { key: el.getAttribute('data-work-chat'), head: el.querySelector('header')?.textContent ?? '', right: innerWidth - r.right, bottom: innerHeight - r.bottom,
+      left: r.left, question: el.querySelector('[data-work-question]')?.textContent ?? null,
+      answers: [...el.querySelectorAll('[data-work-answers] button')].map((b) => b.textContent),
+      reply: el.querySelector('input')?.getAttribute('placeholder') ?? null, sent: el.querySelector('[data-work-sent]')?.textContent ?? null }; })()`);
+  // Somewhere other than the top left, so that "the same scroll" means something.
+  await run(`document.querySelector('[data-work-board]').scrollLeft = 120`);
+  await sleep(100);
+  const was = await place();
+  await press('[data-work-row="studio:259"] .dv-card-title');
+  let ch = await chatNow();
+  ok('a needs-you card pressed: the address, the scroll, the days and the history are what they were', (await place()) === was, `${was} → ${await place()}`);
+  ok('…and its chat is open at the bottom right: Coder asks you, the question, Evet, a box to reply in',
+    ch?.key === 'studio:259' && /Coder\s*asks you/.test(ch.head) && ch.right >= 0 && ch.right < 40 && ch.bottom >= 0 && ch.bottom < 40 && ch.left > 640
+    && ch.question?.includes('kişisel Apple takımını kullanayım mı?') && JSON.stringify(ch.answers) === '["Evet"]' && ch.reply === 'Reply to Coder…',
+    JSON.stringify(ch));
+  await run('window.__writes.length = 0');
+  await press('[data-work-chat] [data-work-answers] button');
+  ch = await chatNow();
+  ok('Evet pressed: ustabasi.note on #259 with Evet, and the board stays where it was',
+    (await writes()) === '["note 259 Evet"]' && (await place()) === was, `${await writes()} · ${await place()}`);
+  ok('…the window keeps the conversation, with the answer in it',
+    ch?.key === 'studio:259' && await waitFor(`[...document.querySelectorAll('[data-work-chat] [data-work-line="you"]')].some((el) => el.textContent.includes('Evet'))`, 3000),
+    JSON.stringify(await chatNow()));
+  await press('[data-work-row="studio:258"] .dv-card-title');
+  ch = await chatNow();
+  ok('a running card pressed switches the window to it: working, no question, board unmoved',
+    ch?.key === 'studio:258' && /Coder\s*working/.test(ch.head) && ch.question === null && !ch.answers.length && (await place()) === was,
+    `${JSON.stringify(ch)} · ${await place()}`);
+  await run(`document.querySelector('[data-work-board]').scrollLeft = 99999`);
+  await sleep(100);
+  const end = await place();
+  await press('[data-work-row="studio:257"] .dv-card-title');
+  ch = await chatNow();
+  ok('…a done card too', ch?.key === 'studio:257' && /Coder\s*done/.test(ch.head) && (await place()) === end, `${JSON.stringify(ch)} · ${await place()}`);
+  // The keyboard: Enter on a card opens its chat.
+  await run(`document.querySelector('[data-work-row="studio:71"] [data-work-open]').focus()`);
+  await page('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+  await page('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  await sleep(200);
+  ok('Enter on a focused card opens its chat', (await chatNow())?.key === 'studio:71', JSON.stringify(await chatNow()));
+
+  const heads = await run(`[...document.querySelectorAll('[data-work-row]')].map((el) => {
+    const h = el.firstElementChild; const m = el.querySelector('[data-work-meta]'); const hb = h?.querySelector('[data-work-heading]');
+    const hs = hb ? getComputedStyle(hb) : null; const ms = getComputedStyle(m);
+    return { key: el.getAttribute('data-work-row'), tag: h?.tagName, text: hb?.textContent ?? null, above: !!hb && hb.getBoundingClientRect().bottom <= el.querySelector('.dv-card-title').getBoundingClientRect().top,
+      size: hs ? parseFloat(hs.fontSize) : 0, weight: hs ? Number(hs.fontWeight) : 0, metaSize: parseFloat(ms.fontSize), metaWeight: Number(ms.fontWeight),
+      meta: m.textContent }; })`);
+  const bad = heads.filter((x) => x.tag !== 'H4' || !x.text || !x.above || !(x.size > x.metaSize) || !(x.weight > x.metaWeight) || x.meta.startsWith(x.text));
+  ok(`every card's first line is its project, as a heading over the title, larger and bolder than the line under it (${heads.length} cards; ${heads[0]?.size}px ${heads[0]?.weight} over ${heads[0]?.metaSize}px ${heads[0]?.metaWeight})`,
+    heads.length > 10 && !bad.length, JSON.stringify(bad.slice(0, 3)));
+  await run(`document.querySelector('[data-work-board]').scrollLeft = 120`);
+  await sleep(100);
+  const left = await place();
+  await press('[data-work-row="studio:258"] [data-work-heading]');
+  ok('a heading pressed opens the ticket\'s page, one entry in the history',
+    (await run(`!!document.querySelector('[data-ticket-page="studio:258"]')`)) && (await run('location.hash')) === '#ticket/studio/258'
+    && (await run('history.length')) === JSON.parse(left).history + 1, await run('location.href'));
+  await run('history.back()');
+  await waitFor(`document.querySelectorAll('[data-work-row]').length > 0 && document.querySelector('[data-work-board]').scrollLeft > 0`, 3000);
+  const after = JSON.parse(await place());
+  ok('Back is the Work board as it was: the same address, the same days, the same scroll',
+    after.board && after.href === JSON.parse(left).href && after.days === '30d' && after.side === JSON.parse(left).side,
+    `${left} → ${JSON.stringify(after)}`);
 
   console.log('── a move the queue takes its time over');
   await open(1720, 1000, false, '?poll=1500');

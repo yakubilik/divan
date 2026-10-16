@@ -128,7 +128,7 @@ const t = (id, project, status, over = {}) => base({
  *  isghocam-seo are on none. */
 const queue = () => [
   t(41, 'quire', 'running'),
-  t(42, 'quire', 'blocked', { escalation: '- which key?' }),
+  t(42, 'quire', 'blocked', { escalation: '- which key?', ask: 'Stripe anahtarını ben ekleyeyim mi?' }),
   t(43, 'quire', 'done', { merged: 'merged into main (abc1234)',
     last_event: { ts: NOW - 50, kind: 'clean', msg: 'worktree removed (auto)' } }),
   t(44, 'quire', 'queued', { started_at: null, round_started_at: null, updated_at: NOW - 26 * H,
@@ -224,9 +224,16 @@ group('the board: a column per status, Queued in the queue\'s own order');
   const empty = W.boardColumns(W.flights('studio', { available: true, tickets: [t(9, 'a', 'running')] }, NOW));
   ok('…every column drawn even when it is empty', empty.length === 7 && empty.filter((c) => c.rows.length === 0).length === 6);
   const card = (id) => W.cardMeta(everything().find((f) => f.ticket.id === id), NOW);
-  ok('a card says project, stage and round or how it ended, and age',
-    card(302) === 'isghocam-seo · check r2 · open 2h 0m' && card(43) === 'quire · done today 11:59 · merged',
+  ok('a card\'s line says stage and round or how it ended, and age — the project is its heading',
+    card(302) === 'check r2 · open 2h 0m' && card(43) === 'done today 11:59 · merged',
     `${card(302)} · ${card(43)}`);
+  const talk = (id) => W.talkOf(everything().find((f) => f.ticket.id === id));
+  ok('a needs-you card\'s chat: Coder asks you, the question, and Evet to answer it',
+    same(talk(42), { who: 'Coder', says: 'asks you', tone: 'amber', question: 'Stripe anahtarını ben ekleyeyim mi?', answers: ['Evet'] }),
+    JSON.stringify(talk(42)));
+  ok('…a running one is working, a done one says done, neither asks anything',
+    talk(41).says === 'working' && talk(41).tone === 'run' && !talk(41).question
+    && talk(43).says === 'done' && !talk(43).answers.length, `${JSON.stringify(talk(41))} · ${JSON.stringify(talk(43))}`);
 }
 
 const today = W.dayKey(NOW);
@@ -384,6 +391,8 @@ let listGate = null;
 let listHeld = false;
 let lists = 0;
 const holdNextList = () => { let open; const promise = new Promise((r) => { open = r; }); listGate = { promise, open }; listHeld = false; return listGate; };
+/** Every answer sent to a ticket, as `host note id text`. */
+const notes = [];
 const write = (id, patch) => { tickets = tickets.map((x) => (x.id === id ? { ...x, ...patch, updated_at: Date.now() / 1000 } : x)); };
 const call = async (key, type, data = {}) => {
   if (type === 'divan.snapshot') throw new Error('That computer did not answer');
@@ -402,6 +411,7 @@ const call = async (key, type, data = {}) => {
     write(data.id, { priority: data.priority });
     return { ok: true, message: `#${data.id} priority ${data.priority}` };
   }
+  if (type === 'ustabasi.note') { notes.push(`${key} note ${data.id} ${data.text}`); return { ok: true, message: `#${data.id} noted` }; }
   if (type === 'ustabasi.notifications') return { available: true, last: 0, items: [] };
   if (type === 'ustabasi.run') return { available: false, reason: 'no run', events: [], cursor: null };
   if (type === 'ustabasi.report') return { id: 0, title: '', status: '', summary: '', verdict: '', verdict_summary: '', files: [] };
@@ -538,7 +548,10 @@ group('/work opens as the Board, with no view buttons; old links still open');
   const c = rowOf(302);
   ok('a card says #id, title, status, project, stage and round, and age',
     !!c && c.textContent.includes('#302 isghocam-seo ticket 302') && c.querySelector('.dv-status')?.textContent === 'running'
-    && c.querySelector('[data-work-meta]')?.textContent === 'isghocam-seo · check r2 · open 2h 0m', c?.textContent);
+    && c.querySelector('[data-work-meta]')?.textContent === 'check r2 · open 2h 0m', c?.textContent);
+  const first = c?.firstElementChild;
+  ok('…its first line is the project, as a heading with a button in it',
+    first?.tagName === 'H4' && first.textContent === 'isghocam-seo' && !!first.querySelector('button[data-work-heading]'), first?.outerHTML);
 
   await cold('/work');
   ok('cold-opened, /work is the Board', where() === '/work' && isBoard() && same(columns(), BOARD7) && noLayoutButtons());
@@ -655,17 +668,43 @@ group('the project picker opens a list and shows only the one chosen');
     && searchBox()?.value === 'ticket' && same(pressedPreset(), ['30d']) && picker()?.textContent.includes('quire'));
 }
 
-group('a card opens the ticket\'s page, and Back returns to the same filters');
+group('a card opens its chat over the board; its heading opens the ticket\'s page, and Back returns to the same filters');
 {
   const here = address();
   const n = w.history.length;
+  const chat = () => doc.querySelector('[data-work-chat]');
+  const headingOf = (id) => rowOf(id)?.querySelector('[data-work-heading]');
+  await click(openOf(42));
+  ok('a needs-you card pressed: the board stays, at the same address, with no new entry',
+    address() === here && w.history.length === n && isBoard() && searchBox()?.value === 'ticket', address());
+  ok('…and its chat is open: Coder asks you, the question, Evet',
+    chat()?.getAttribute('data-work-chat') === 'studio:42' && /Coder\s*asks you/.test(chat()?.querySelector('header')?.textContent ?? '')
+    && chat()?.querySelector('[data-work-question]')?.textContent.includes('Stripe anahtarını ben ekleyeyim mi?')
+    && !!btn('Evet', chat()), chat()?.textContent);
+  ok('…with a box to reply to Coder', !!chat()?.querySelector('input[placeholder="Reply to Coder…"]'),
+    chat()?.querySelector('input')?.getAttribute('placeholder'));
+  ok('…and the card says it is the one open', rowOf(42)?.hasAttribute('data-work-chatting') && openOf(42)?.getAttribute('aria-expanded') === 'true');
+  await click(btn('Evet', chat()));
+  ok('Evet sends a note on the ticket, ustabasi.note, and the board stays',
+    same(notes, ['studio note 42 Evet']) && address() === here && w.history.length === n && isBoard(), JSON.stringify(notes));
+  ok('…the window says it was sent', (chat()?.querySelector('[data-work-sent]')?.textContent ?? '').includes('sent · Evet'));
   await click(openOf(41));
-  ok('a ticket with a card on a board opens that card\'s page',
+  ok('another card pressed switches the window to it: #41, working, no question',
+    chat()?.getAttribute('data-work-chat') === 'studio:41' && /Coder\s*working/.test(chat()?.querySelector('header')?.textContent ?? '')
+    && !chat()?.querySelector('[data-work-question]') && !btn('Evet', chat()) && address() === here && w.history.length === n,
+    chat()?.getAttribute('data-work-chat'));
+  await click(openOf(43));
+  ok('…a done card too', chat()?.getAttribute('data-work-chat') === 'studio:43' && address() === here);
+  await click(btn('Close', chat()) ?? chat()?.querySelector('[title="Close"]'));
+  ok('× closes the window and leaves the board', !chat() && address() === here && isBoard());
+
+  await click(headingOf(41));
+  ok('a heading pressed opens that card\'s page',
     where() === '/p/quire/c/k1' && w.history.length === n + 1 && !page(), where());
   await pop(-1);
   ok('Back is the board with the same days, project and search', address() === here
     && searchBox()?.value === 'ticket' && same(pressedPreset(), ['30d']) && columns()[4] === 'Done: 43,305', address());
-  await click(openOf(305));
+  await click(headingOf(305));
   ok('a finished ticket on no board opens the queue\'s wall with it open',
     where() === '/machine/terminal/ustabasi/305' && !!doc.querySelector('[aria-label="Back to the wall"]'), where());
   ok('…whose way back says where it came from',
@@ -702,8 +741,12 @@ const drag = async (id, to, { y = 1500, touch = false, wobble = false } = {}) =>
   const [x0, y0] = [r.left + 20, r.top + 20];
   const x1 = to == null ? 5000 : KEYS.indexOf(to) * 200 + 60;
   const kind = touch ? 'touch' : 'mouse';
-  await act(async () => { card.querySelector('[data-work-open] .dv-card-title').dispatchEvent(pe('pointerdown', x0, y0, kind)); });
-  if (wobble) await act(async () => { doc.body.dispatchEvent(pe('pointermove', x0 + 30, y0 + 30, kind)); });
+  // The wobble goes in with the press, in one act: on a loaded machine a
+  // second act can take longer than the hold, and the card would be up first.
+  await act(async () => {
+    card.querySelector('[data-work-open] .dv-card-title').dispatchEvent(pe('pointerdown', x0, y0, kind));
+    if (wobble) doc.body.dispatchEvent(pe('pointermove', x0 + 30, y0 + 30, kind));
+  });
   if (touch) await tick(200);
   await act(async () => { doc.body.dispatchEvent(pe('pointermove', x0 + 10, y0 + 10, kind)); });
   await act(async () => { doc.body.dispatchEvent(pe('pointermove', x1, y, kind)); });

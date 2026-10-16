@@ -1,11 +1,12 @@
 import type { ApprovalResponse } from './lib/approval-input';
-import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RADIUS, SHADOW, T, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { KEYFRAMES, P, mono } from './ui/kit';
 import { Button } from './ui/divan';
 import { ListToggle, SIDEBAR_W, Sidebar } from './components/Sidebar';
 import { Shell } from './components/Shell';
 import { ChatView } from './components/ChatView';
+import { ChatComposer } from './components/ChatComposer';
 import { NewChat } from './components/NewChat';
 import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
@@ -110,7 +111,7 @@ export function App() {
   /** …and the one at the foot of a product's page, where its New chat leads. */
   const projectComposerRef = useRef<HTMLTextAreaElement>(null);
   /** …and the Chat place's own empty composer, where New chat leads there. */
-  const firstWordRef = useRef<HTMLInputElement>(null);
+  const firstWordRef = useRef<HTMLTextAreaElement>(null);
 
   // Whether the sidebar is a list or a rail. Remembered because it is a way of
   // working — terminal mode wants the width, the chat screen wants the list —
@@ -925,14 +926,28 @@ export function App() {
             />
             <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               {chat ? <ChatView {...chatProps} /> : (
-                <FirstWord inputRef={firstWordRef} autoFocus={fresh} onSay={async (text) => {
-                  const told = await tell(text, null);
-                  useTold.getState().close(idOfTold(told));
-                  // The chat takes over the empty composer's entry: Back from
-                  // it is the chat that was open before New chat.
-                  landing.current = true;
-                  select(told.host, told.chatId);
-                }} />
+                // No conversation yet: a chat's own box, with no chat under it.
+                // What is said in it opens one with every default this
+                // computer has (`tell`) — nothing is chosen first, and nothing
+                // is made on the computer until it is sent.
+                <div data-first-word style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                  <p className="dv-meta" style={{ margin: '0 0 4px', textAlign: 'center' }}>No conversation yet.</p>
+                  <div style={{ width: '100%', maxWidth: 800, margin: '0 auto', flexShrink: 0 }}>
+                    <ChatComposer
+                      chat={null} hostKey={fleet.focus ?? ''} busy={false} sending={false}
+                      placeholder="Talk to Hermes" autoFocus={fresh} fieldRef={firstWordRef}
+                      onInterrupt={() => {}}
+                      onSend={async (text, held) => {
+                        const told = await tell(text, null, {}, held.map((a) => a.file));
+                        useTold.getState().close(idOfTold(told));
+                        // The chat takes over the empty composer's entry: Back
+                        // from it is the chat that was open before New chat.
+                        landing.current = true;
+                        select(told.host, told.chatId);
+                      }}
+                    />
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -1066,45 +1081,6 @@ export function App() {
 const COLUMN_WORD: Record<string, string> = {
   ice_box: 'Ice Box', queued: 'Queued', in_progress: 'In Progress', done: 'Done',
 };
-
-/** The Chat place with no conversation in it yet: a box that is already
- *  writable. What is said in it opens a chat with every default this computer
- *  has (`tell`) — nothing is chosen first. */
-function FirstWord({ onSay, inputRef, autoFocus }: {
-  onSay: (text: string) => Promise<void>;
-  inputRef?: Ref<HTMLInputElement>;
-  autoFocus?: boolean;
-}) {
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const say = async () => {
-    const words = text.trim();
-    if (!words || busy) return;
-    setBusy(true); setError(null);
-    try { await onSay(words); setText(''); }
-    catch (e: any) { setError(e?.message ?? 'That did not go through'); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '20px 24px 32px' }}>
-      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <p className="dv-meta" style={{ margin: 0, textAlign: 'center' }}>No conversation yet.</p>
-        <form className="dv-glass-strong dv-composer" data-first-word
-          style={{ padding: '12px 12px 12px 18px', display: 'flex', alignItems: 'center', gap: 8 }}
-          onSubmit={(e) => { e.preventDefault(); void say(); }}>
-          <label htmlFor="first-word" className="dv-hidden">Message to Hermes</label>
-          <input id="first-word" ref={inputRef} autoFocus={autoFocus} value={text} onChange={(e) => setText(e.target.value)} placeholder="Talk to Hermes"
-            style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'inherit', font: '400 15px/22px var(--font-sans)' }} />
-          <button type="submit" className="dv-send" aria-label="Send" disabled={busy || !text.trim()}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
-          </button>
-        </form>
-        {!!error && <p style={{ margin: 0, fontSize: 13, color: T.red }}>{error}</p>}
-      </div>
-    </div>
-  );
-}
 
 /** A place, as the words the way back to it says: `Waiting on you`,
  *  `Quire · Board`, `Dashboard`. */

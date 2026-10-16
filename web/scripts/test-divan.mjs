@@ -1257,6 +1257,9 @@ group('every carried screen asks its computer for exactly what it did');
     // …and its one press, the worded Close chat over a product's chat, became
     // the X in the chat's own head (ustabasi #183): same close, other file.
     'src/screens/Overview.tsx': ['Change', 'Click'],
+    // The Chat place's one-line first word became the chat's own box, drawn
+    // by components/ChatComposer.tsx (ustabasi #293): the typing moved there.
+    'src/App.tsx': ['Change'],
   };
   /** …and the gains that are on purpose. The chat's name in its head became
    *  the field it is renamed in (ustabasi #229): typed into, left, Enter and

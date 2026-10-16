@@ -1,14 +1,15 @@
 /** Work on its own, the way the panel draws it: the line over it with the Work
  *  button lit, and a queue with a ticket in every state on three projects and
  *  some finished this week. `?range=`, `?q=` and `?project=` narrow it as the
- *  address does. Every cancel, restart and priority a card asks for is
- *  written down in `window.__writes`, answered the way the queue answers and
+ *  address does. Every cancel, restart, priority and note (an answer sent from a card's
+ *  chat) a card asks for is written down in `window.__writes`, answered the way the queue answers and
  *  applied to the queue the next read returns. A test can hold a write until it
  *  says how it ends (`__holdWrites`, `__answer`), hold a read of the queue
- *  across a move (`__holdNextList`) and shorten the poll (`?poll=ms`).
+ *  across a move (`__holdNextList`) and shorten the poll (`?poll=ms`). A card's
+ *  heading opens a stand-in for the ticket's page at `#ticket/<host>/<id>`.
  *  Built and photographed by `scripts/shot-work.mjs`, and dragged in a real
  *  browser by `scripts/test-work-ui.mjs`. */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../src/styles/divan-tokens.css';
 import '../src/styles/divan-components.css';
@@ -41,6 +42,8 @@ if (q.get('poll')) workPoll.ms = Number(q.get('poll'));
 let tickets = [
   t(258, 'divan', 'running', 'Web panel: one live page of every ticket in flight'),
   t(259, 'divan', 'blocked', 'Phone: answer a ticket from the lock screen', {
+    escalation: '- which Apple team should sign the widget?',
+    ask: 'Widget için kişisel Apple takımını kullanayım mı?',
     last_event: { ts: NOW - 300, kind: 'blocked', msg: 'which Apple team should sign the widget?' } }),
   t(260, 'divan', 'queued', 'Daemon: send the queue on change instead of on poll', {
     started_at: null, round_started_at: null, last_event: null, goal: 'Push ustabasi.list to the panel when it changes.' }),
@@ -100,6 +103,15 @@ useFleet.setState({
       if (listGate) { const g = listGate; listGate = null; W.__listHeld = true; await g; W.__listHeld = false; }
       return snap;
     }
+    // An answer from a card's chat: written down, and kept on the ticket.
+    if (type === 'ustabasi.note') {
+      writes.push(`note ${d.id} ${d.text}`);
+      tickets = tickets.map((x: any) => (x.id === d.id
+        ? { ...x, notes: [...x.notes, { ts: Date.now() / 1000, from: 'user', text: d.text }],
+            // …and a stopped one goes back in the queue with it, as the queue does.
+            ...(x.status === 'blocked' || x.status === 'failed' ? { status: 'queued', finished_at: null } : {}) } : x));
+      return { ok: true, message: `#${d.id} noted` };
+    }
     if (QUEUE_WRITES[type]) {
       writes.push(`${type.slice(9)} ${d.id}${type === 'ustabasi.priority' ? ` ${d.priority}` : ''}`);
       if (held) {
@@ -114,14 +126,30 @@ useFleet.setState({
   }) as any,
 });
 
+/** A card's heading leaves the board for the ticket's page, as the panel's
+ *  address does: one entry in the history, and Back draws the board again. */
+const ticketAt = () => /^#ticket\/(\w+)\/(\d+)$/.exec(location.hash);
+
 function Page() {
   const [layout, setLayout] = useState<WorkLayout>({
     range: q.get('range'), search: q.get('q') ?? '', project: q.get('project'),
   });
+  const [, redraw] = useState(0);
+  useEffect(() => {
+    const on = () => redraw((n) => n + 1);
+    window.addEventListener('popstate', on);
+    return () => window.removeEventListener('popstate', on);
+  }, []);
+  const open = ticketAt();
   return (
     <Shell view="overview" onView={() => {}} back={{ label: 'Dashboard', onBack: () => {} }}
       work={{ on: true, onOpen: () => {} }}>
-      <Work layout={layout} onLayout={setLayout} />
+      {open ? (
+        <div data-ticket-page={`${open[1]}:${open[2]}`} style={{ padding: 40 }}>Ticket #{open[2]}</div>
+      ) : (
+        <Work layout={layout} onLayout={setLayout}
+          onOpen={(h, id) => { history.pushState(null, '', `${location.search}#ticket/${h}/${id}`); redraw((n) => n + 1); }} />
+      )}
     </Shell>
   );
 }
