@@ -189,7 +189,7 @@ async function phone(peer, device, { mode = 'talk', engine = new FakeEngine(), g
   client.call = (type, data, ms) => { calls.push({ type, data, at: Date.now() }); return realCall(type, data, ms); };
   const wire = {
     call: (t, d, ms) => client.call(t, d, ms), tell: (t, d) => client.tell(t, d),
-    on: (l) => client.on(l), onStatus: (l) => client.onStatus(l), online: () => client.status === 'online',
+    on: (l) => client.on(l), onStatus: (l) => client.onLink(l), online: () => client.status === 'online',
   };
   const s = new VS.VoiceSession({ wire, engine, voice: fakeVoice, log: () => {} });
   const states = [];

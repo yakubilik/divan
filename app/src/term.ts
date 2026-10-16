@@ -20,6 +20,9 @@ export interface TermClient {
   call<T = any>(type: string, data?: Record<string, any>): Promise<T>;
   on(listener: (ev: RacEvent) => void): () => void;
   onStatus?(listener: (status: string) => void): () => void;
+  /** Every change unhushed (ws.ts): preferred, because a reconnect quick
+   *  enough to stay 'online' for the screen is still a new socket here. */
+  onLink?(listener: (status: string) => void): () => void;
 }
 
 /** What the page sends: it has drawn and fitted, something was typed, it
@@ -119,7 +122,9 @@ export class TermBridge {
   constructor(private client: TermClient, private post: (m: ToPage) => void,
               private changed: () => void = () => {}) {
     this.off.push(client.on((ev) => this.onEvent(ev)));
-    if (client.onStatus) {
+    if (client.onLink) {
+      this.off.push(client.onLink((s) => this.onStatus(s)));
+    } else if (client.onStatus) {
       this.off.push(client.onStatus((s) => this.onStatus(s)));
     }
   }

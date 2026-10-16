@@ -57,6 +57,11 @@ interface State {
   activeHostId: string | null;
   host: StoredHost | null;                // derived: the active host
   conn: ConnStatus;
+  // Counts the sockets that have come up. A reconnect inside ws.ts's quiet
+  // window never lets `conn` leave 'online', so a screen keyed on `conn` alone
+  // would not notice it had a new socket — and would not ask for what it
+  // missed while there was none. The open chat is keyed on this too.
+  linkGen: number;
   // A computer switch is in flight: the outgoing computer's chats are still on
   // screen (inert) so the swap reads as a crossfade instead of a blank list.
   switching: boolean;
@@ -402,7 +407,7 @@ export const useStore = create<State>((set, get) => {
     set({ conn });
     // Answering again is the end of the restart, whatever the last event said.
     // The daemon that announced it is not the one on the other end now.
-    if (conn === 'online') { set({ restarting: null }); void afterConnect(); return; }
+    if (conn === 'online') { set({ restarting: null, linkGen: get().linkGen + 1 }); void afterConnect(); return; }
     // The new computer answered with a refusal or is unreachable: keeping the
     // previous one's chats on screen would be a lie, so end the switch empty.
     if (get().switching && (conn === 'offline' || conn === 'unauthorized')) settleSwitch({ chats: {}, groups: [], people: NOBODY });
@@ -631,11 +636,20 @@ export const useStore = create<State>((set, get) => {
   async function onHost<T>(hostId: string, type: string, data: Record<string, any>): Promise<T> {
     const h = get().hosts.find((x) => x.id === hostId);
     if (!h) throw new Error(tt('wsNotConnected'));
-    if (hostId === get().activeHostId) {
+    if (isActive(h)) {
       if (get().conn !== 'online') throw new Error(tt('wsNotConnected'));
       return await client.call<T>(type, data, DIVAN_TIMEOUT_MS);
     }
     return await callOnce<T>(h.host, h.port, h.token, type, data, DIVAN_TIMEOUT_MS);
+  }
+
+  /** Whether a paired computer is the one the live socket is on. By pairing
+   *  as well as by id: the same pairing kept twice (one entry by name, one by
+   *  address) is still one computer, and a one-shot socket to it would be a
+   *  second session beside the live one. */
+  function isActive(h: StoredHost): boolean {
+    const on = get().host;
+    return h.id === get().activeHostId || (!!on && on.token === h.token && on.port === h.port);
   }
 
   async function persistDefaults(byHost: DefaultsByHost) {
@@ -644,7 +658,7 @@ export const useStore = create<State>((set, get) => {
   }
 
   return {
-    ready: false, hosts: [], activeHostId: null, host: null, conn: 'idle', switching: false, hostInfo: null, catalog: null, device: null,
+    ready: false, hosts: [], activeHostId: null, host: null, conn: 'idle', linkGen: 0, switching: false, hostInfo: null, catalog: null, device: null,
     projects: [], accounts: [], tools: [], npmAvailable: true, loginPrompt: null, loginDone: null,
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
@@ -979,7 +993,7 @@ export const useStore = create<State>((set, get) => {
           set((st) => ({ divan: { ...st.divan, [h.id]: d } }));
         };
         try {
-          const active = h.id === get().activeHostId;
+          const active = isActive(h);
           // The live socket for the computer the phone is on, and a socket of
           // its own for each of the others — the same way a sign-in is read off
           // a second machine (`callOnce`). A second socket to the computer that

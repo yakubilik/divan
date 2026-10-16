@@ -16,7 +16,9 @@ function wire(): Wire {
     call: (type, data, ms) => client.call(type, data, ms),
     tell: (type, data) => { client.tell(type, data); },
     on: (l) => client.on(l),
-    onStatus: (l) => client.onStatus(l),
+    // Unhushed: an answer interrupted by a dropped socket stops at once, even
+    // when the socket is back before anybody would see a banner.
+    onStatus: (l) => client.onLink(l),
     online: () => client.status === 'online',
   };
 }

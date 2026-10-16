@@ -93,6 +93,7 @@ export function Conversation({ id }: { id: string }) {
   const progress = useStore((s) => s.progress[id!]);
   const busy = useStore((s) => s.busy[id!]);
   const conn = useStore((s) => s.conn);
+  const linkGen = useStore((s) => s.linkGen);
   const catalog = useStore((s) => s.catalog);
   const groups = useStore((s) => s.groups);
   const accounts = useStore((s) => s.accounts);
@@ -171,7 +172,7 @@ export function Conversation({ id }: { id: string }) {
         setOpenError(e?.message || T('error'));
       });
     return () => { alive = false; };
-  }, [id, conn, openChat, tryCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, conn, linkGen, openChat, tryCount]); // eslint-disable-line react-hooks/exhaustive-deps
   // Coming back to the screen is the natural moment to try again — the phone
   // has usually just woken up or reconnected. The error is read through a ref
   // so that regaining focus is the only thing that triggers a retry; keying it
