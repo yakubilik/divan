@@ -21,8 +21,9 @@
  *  last event are the wall's own (`lib/ustabasi.ts`).
  */
 import {
-  cardLine, projectName, roundAge, stageLine, totalAge, type Ticket,
+  answerable, cardLine, projectName, question, roundAge, stageLine, totalAge, type Ticket,
 } from './ustabasi';
+import { answers } from './sessions';
 
 /** Where a ticket stands, in the order the page puts them: the ones that want
  *  a person first, then what is moving, then what is parked, then what is
@@ -309,12 +310,35 @@ export function tintOf(f: Flight): Tint {
   return 'grey';
 }
 
-/** What a card on the Board says under its title: the project, where it is or
- *  how it ended, and its age. `quire · worker r2 · open 3h`,
- *  `quire · done today 16:19 · merged`. */
+/** What a card on the Board says under its title: where it is or how it
+ *  ended, and its age. `worker r2 · open 3h`, `done today 16:19 · merged`.
+ *  The project is not in it: it is the card's heading, over the title. */
 export function cardMeta(f: Flight, now: number): string {
-  if (f.ended) return [f.project, `${f.ended} ${f.when}`, f.merged ? 'merged' : ''].filter(Boolean).join(' · ');
-  return [f.project, stageLine(f.ticket), totalAge(f.ticket, now)].join(' · ');
+  if (f.ended) return [`${f.ended} ${f.when}`, f.merged ? 'merged' : ''].filter(Boolean).join(' · ');
+  return [stageLine(f.ticket), totalAge(f.ticket, now)].join(' · ');
+}
+
+/** What a card's chat window says: who is on the other end (a queue's ticket
+ *  is a coding agent's), what it is doing in the words the Dashboard's windows
+ *  use, the colour of its ring, and — for a ticket stopped on a question — the
+ *  question and the answers it offers in its own words (`answers`). */
+export interface Talk {
+  who: string;
+  says: string;
+  tone: 'amber' | 'run' | 'red' | 'ink3';
+  question: string;
+  answers: string[];
+}
+
+export function talkOf(f: Flight): Talk {
+  const t = f.ticket;
+  const asked = answerable(t.status) ? question(t) : '';
+  const says = t.status === 'blocked' ? 'asks you'
+    : t.status === 'failed' ? 'stopped'
+    : f.phase === 'running' ? 'working'
+    : f.word;
+  const tone = t.status === 'blocked' ? 'amber' : t.status === 'failed' ? 'red' : f.phase === 'running' ? 'run' : 'ink3';
+  return { who: 'Coder', says, tone, question: asked, answers: asked ? answers(asked) : [] };
 }
 
 /** The head line, in words: `3 running · 1 needs you · 2 waiting · 2 queued ·

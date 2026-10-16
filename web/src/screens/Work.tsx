@@ -10,8 +10,13 @@
  *  drawing them.
  *
  *  It is live the way the wall is: every computer's `ustabasi.list` is read
- *  again every few seconds, and whatever the newest answer says is drawn. A
- *  card opens the ticket's own page through `onOpen`.
+ *  again every few seconds, and whatever the newest answer says is drawn.
+ *
+ *  Pressing a card opens its ticket as a floating chat over the board, at the
+ *  bottom right (`components/WorkChat.tsx`): the board stays where it is — the
+ *  same scroll, the same filters, the same address — and pressing another card
+ *  switches the window to that one. The project's name is the card's heading,
+ *  and pressing it opens the ticket's own page through `onOpen`.
  *
  *  A card can be dragged to another column — with a mouse, or a finger held
  *  on it for a moment — or moved from its own Move to… menu, and either asks
@@ -28,6 +33,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFleet } from '../lib/fleet';
+import { WorkChat } from '../components/WorkChat';
 import { cancelTicket, prioritiseTicket, restartTicket } from '../lib/actions';
 import {
   COLUMNS, PRESETS, boardColumns, cardMeta, columnOf, finished, flights, headLine, matches, moveOf,
@@ -74,7 +80,7 @@ interface Lift {
 }
 
 export function Work({ onOpen, layout, onLayout }: {
-  /** A card pressed: that ticket, on the computer it is on. */
+  /** A card's heading pressed: that ticket's own page, on the computer it is on. */
   onOpen?: (host: string, id: number) => void;
   layout?: WorkLayout;
   onLayout?: (to: WorkLayout) => void;
@@ -158,6 +164,14 @@ export function Work({ onOpen, layout, onLayout }: {
   const silent = online.length > 0 && answered.length === online.length && online.every((k) => errors[k]);
   const narrowed = !!shown.search.trim() || !!shown.project;
 
+  /** The card whose chat is open, by its key. What the window says is read off
+   *  the newest snapshot; a card the filters have since narrowed away keeps
+   *  the last one it was drawn from rather than closing under the reader. */
+  const [chat, setChat] = useState<string | null>(null);
+  const seen = useRef<Flight | null>(null);
+  const talking = chat ? all.find((f) => f.key === chat) ?? (seen.current?.key === chat ? seen.current : null) : null;
+  seen.current = talking;
+
   return (
     <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
       {/* Seven columns do not fit the width a list is read at: the board takes
@@ -183,8 +197,13 @@ export function Work({ onOpen, layout, onLayout }: {
           </div>
         </section>
 
-        <Board groups={groups} now={now} onOpen={onOpen} reload={read} />
+        <Board groups={groups} now={now} onOpen={onOpen} chat={chat} onPress={(f) => setChat(f.key)} reload={read} />
       </div>
+      {!!talking && (
+        <WorkChat f={talking}
+          machine={hosts[talking.host]?.info?.name ?? hosts[talking.host]?.cfg.name ?? talking.host}
+          onClose={() => setChat(null)} onSent={(key) => { void read(key); }} />
+      )}
     </div>
   );
 }
@@ -263,10 +282,14 @@ function Projects({ chosen, counts, total, onPick }: {
 
 const TITLE = Object.fromEntries(COLUMNS.map((c) => [c.key, c.title])) as Record<ColumnKey, string>;
 
-function Board({ groups, now, onOpen, reload }: {
+function Board({ groups, now, onOpen, chat, onPress, reload }: {
   groups: { key: string; title: string; rows: Flight[] }[];
   now: number;
+  /** A card's heading pressed: the ticket's own page. */
   onOpen?: (host: string, id: number) => void;
+  /** The card whose chat is open, and a card pressed: open its chat. */
+  chat: string | null;
+  onPress: (f: Flight) => void;
   /** Read that computer's queue again now; settles once it is drawn. */
   reload: (host: string) => Promise<void>;
 }) {
@@ -504,16 +527,29 @@ function Board({ groups, now, onOpen, reload }: {
                   data-work-row={f.key} data-phase={f.phase} data-ended={f.ended ?? undefined}
                   data-merged={f.merged ? '' : undefined} data-lifted={up ? 'true' : undefined}
                   data-tint={tintOf(f)} data-work-pending={p ? p.to : undefined} aria-busy={p ? true : undefined}
+                  data-work-chatting={chat === f.key ? '' : undefined}
                   style={{
                     position: 'relative', touchAction: 'manipulation', userSelect: 'none', WebkitUserSelect: 'none',
                     WebkitTouchCallout: 'none',
                     ...(up ? { transform: `translate(${up.dx}px, ${up.dy}px)`, zIndex: 30, cursor: 'grabbing' } : {}),
                   } as React.CSSProperties}>
+                  {/* The project is the card's heading, and the way to the
+                      ticket's own page; the rest of the card opens its chat. */}
+                  <h4 className="dv-work-heading">
+                    <button type="button" data-work-heading="" title={`Open #${f.ticket.id} on its own page`}
+                      onClick={() => {
+                        if (dropped.current === f.key) { dropped.current = null; return; }
+                        onOpen?.(f.host, f.ticket.id);
+                      }}>
+                      {f.project}
+                    </button>
+                  </h4>
                   <button type="button" className="press" data-work-open="" title={f.ticket.title}
+                    aria-expanded={chat === f.key}
                     style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}
                     onClick={() => {
                       if (dropped.current === f.key) { dropped.current = null; return; }
-                      onOpen?.(f.host, f.ticket.id);
+                      onPress(f);
                     }}>
                     <span className="dv-card-title">{`#${f.ticket.id} ${f.ticket.title}`}</span>
                     <span className="dv-card-foot">
