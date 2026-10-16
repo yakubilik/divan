@@ -180,6 +180,14 @@
 .dv-card[data-tint] .dv-meta{color:var(--ink-2)}
 /* A card put down in another column, waiting for the queue to answer. */
 .dv-card[data-work-pending]{border-style:dashed;cursor:progress}
+/* A Work card's heading: its project, over the title, larger and bolder than
+   the mono line under it, and the way to the ticket's own page. */
+.dv-work-heading{margin:0;min-width:0;font-size:15px;line-height:20px;font-weight:700;letter-spacing:-0.01em}
+.dv-work-heading button{appearance:none;border:0;background:transparent;padding:0;margin:0;max-width:100%;font:inherit;color:var(--ink);cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:4px}
+.dv-work-heading button:hover{text-decoration:underline;text-underline-offset:3px}
+.dv-work-heading button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* The card whose chat is open over the board. */
+.dv-card[data-work-chatting]{box-shadow:0 0 0 2px var(--ink-3)}
 .dv-work-badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px 0 8px;border-radius:var(--radius-pill);font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap;color:var(--ink);background:var(--hairline);box-shadow:inset 0 0 0 1px var(--ink-3)}
 .dv-work-badge::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;animation:dv-breathe 1.2s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.dv-work-badge::before{animation:none}}
