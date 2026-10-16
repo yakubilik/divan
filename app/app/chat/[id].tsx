@@ -25,6 +25,7 @@ import { useDivanView } from '../../src/queue';
 import { filedBy, filedUnder, ticketRoute } from '../../src/filed';
 import { COLUMN_LABEL } from '../../src/board';
 import { errText } from '../../src/i18n';
+import { delivered } from '../../src/outbox';
 
 /** What the tools call a tier, written the way the billing page writes it.
  *  Anything unrecognised is title-cased rather than dropped: a plan we have
@@ -101,12 +102,15 @@ export function Conversation({ id }: { id: string }) {
   const hostInfo = useStore((s) => s.hostInfo);
   const host = useStore((s) => s.host);
   const limits = useStore((s) => s.limits);
+  // This chat's messages still on their way (#292), oldest first. A chat id
+  // is one computer's, so which computer they are for needs no asking here.
+  const outgoing = useStore(useShallow((s) => (s.outbox ?? []).filter((m) => m.chat_id === id)));
   // Selector-less `useStore()` would subscribe this screen to every store write,
   // so a *different* chat streaming in the background re-rendered this one on
   // every token. Take just the actions; their identities never change.
-  const { openChat, send, interrupt, respond, uploadAttachment, updateChat, deleteChat, createGroup, settleLive, loadAccounts } =
+  const { openChat, send, retrySend, discardSend, interrupt, respond, uploadAttachment, updateChat, deleteChat, createGroup, settleLive, loadAccounts } =
     useStore(useShallow((s) => ({
-      openChat: s.openChat, send: s.send, interrupt: s.interrupt, respond: s.respond,
+      openChat: s.openChat, send: s.send, retrySend: s.retrySend, discardSend: s.discardSend, interrupt: s.interrupt, respond: s.respond,
       uploadAttachment: s.uploadAttachment, updateChat: s.updateChat, deleteChat: s.deleteChat,
       createGroup: s.createGroup, settleLive: s.settleLive, loadAccounts: s.loadAccounts,
     })));
@@ -248,6 +252,14 @@ export function Conversation({ id }: { id: string }) {
     const out = live?.final
       ? items.filter((i) => !(i.kind === 'assistant' && i.data.segment === live.segment))
       : [...items];
+    // Messages the computer has not got yet go last: they are the newest thing
+    // said. One the timeline already has — sent before the answer was lost, say
+    // — is drawn once, as the timeline's (outbox.ts `delivered`).
+    const have = delivered(events);
+    const waiting: TimelineItem[] = outgoing.filter((m) => !have.has(m.client_id)).map((m) => ({
+      key: `o${m.client_id}`, kind: 'user',
+      data: { text: m.text, attachments: m.attachments, client_id: m.client_id, out: m.state === 'sent' ? undefined : m.state, error: m.error },
+    } as TimelineItem));
     if (live) out.push({ key: 'live', kind: 'assistant', data: { text: typed, live: !live.final || typed.length < live.text.length } });
     else if (busy) {
       // No text yet: say what the turn is doing instead of showing nothing.
@@ -258,8 +270,9 @@ export function Conversation({ id }: { id: string }) {
       // is waiting for.
       if (!items.some((i) => i.kind === 'approval' && !i.decision)) out.push({ key: 'working', kind: 'working', data: { phase } } as any);
     }
+    out.push(...waiting);
     return out.reverse();
-  }, [items, live, typed, busy, thinking, progress, turnStart, T]);
+  }, [items, live, typed, busy, thinking, progress, turnStart, T, outgoing, events]);
 
   // Every picture in the chat, oldest first, for the viewer to page through.
   const images = useMemo(() => {
@@ -278,11 +291,29 @@ export function Conversation({ id }: { id: string }) {
   async function sendNow(t: string, atts: Attachment[]) {
     const voice = atts.find((a) => a.kind === 'audio');
     const body = t || voice?.transcript || (voice ? T('voiceMessage') : T('lookAtFile'));
+    // Into the outbox, which delivers it whenever the computer can be reached:
+    // a connection that is coming back is not a reason to say anything. Only
+    // a phone paired with no computer at all gets here with an error.
     try { await send(id!, body, atts); }
     catch (e: any) {
-      alert(T('notSent'), e?.message && e?.code !== 'offline' ? `${T('notSentBody')}\n${e.message}` : T('notSentBody'));
+      alert(T('notSent'), e?.message ? `${T('notSentBody')}\n${e.message}` : T('notSentBody'));
       setText(t); setPending(atts);
     }
+  }
+  /** A message given up on: try it again, or take it back into the composer. */
+  function onOutboxTap(clientId: string, error?: string | null) {
+    alert(T('outFailedTitle'), error || T('notSentBody'), [
+      { text: T('cancel'), style: 'cancel' },
+      { text: T('outDiscard'), style: 'destructive', onPress: () => {
+          void discardSend(clientId).then((m) => {
+            if (!m) return;
+            // Back into the composer, unless something new is already there.
+            setText((cur) => (cur.trim() ? cur : m.text));
+            setPending((p) => (p.length ? p : m.attachments as Attachment[]));
+          });
+        } },
+      { text: T('outRetry'), onPress: () => { void retrySend(clientId); } },
+    ]);
   }
   async function onSend() {
     const t = text.trim();
@@ -426,7 +457,10 @@ export function Conversation({ id }: { id: string }) {
 
   const online = conn === 'online';
   const dot = online ? c.ok : conn === 'connecting' ? c.warn : c.lineStrong;
-  const canSend = (!!text.trim() || pending.length > 0) && online && uploading === 0;
+  // Not tied to the connection: a message typed with none goes into the outbox
+  // and leaves when the computer is back (#292). Attachments and voice notes
+  // still need it, to be uploaded first, and say so by being greyed out.
+  const canSend = (!!text.trim() || pending.length > 0) && uploading === 0;
   const modelLabel = chat ? (catalog?.[chat.provider]?.models.find((m) => m.id === chat.model)?.label ?? chat.model) : '';
   const effortLabel = chat?.effort === 'medium' ? 'med' : chat?.effort;
   const account = useMemo(
@@ -480,7 +514,8 @@ export function Conversation({ id }: { id: string }) {
       // starts a text selection, and a Pressable takes it first. Copying the
       // whole message is still one tap away — iOS offers Select All beside Copy
       // in the selection menu — and now part of a message can be taken too.
-      case 'user': return <UserBubble text={item.data.text} attachments={item.data.attachments} queued={item.data.queued} onTicket={openTicket} />;
+      case 'user': return <UserBubble text={item.data.text} attachments={item.data.attachments} queued={item.data.queued} onTicket={openTicket}
+                                      out={item.data.out} onOut={item.data.client_id ? () => onOutboxTap(item.data.client_id, item.data.error) : undefined} />;
       case 'assistant':
         if (item.data.thinking) return <ThinkingRow text={item.data.thinking.trim().slice(-240)} />;
         return <AssistantText text={item.data.text} streaming={item.data.live} attachments={item.data.attachments} />;
@@ -666,18 +701,18 @@ export function Conversation({ id }: { id: string }) {
             <TextInput
               ref={inputRef}
               value={text} onChangeText={setText} placeholder={online ? T('message') : T('noConnection')}
-              multiline editable={online} numberOfLines={Platform.OS === 'web' ? 1 : undefined}
+              multiline numberOfLines={Platform.OS === 'web' ? 1 : undefined}
               style={{ fontSize: 15, paddingVertical: 4, paddingHorizontal: 8, minHeight: 26, maxHeight: 160 }}
             />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, opacity: online ? 1 : 0.45 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Pressable accessibilityLabel={T('attach')} onPress={() => setAttachOpen(true)} disabled={!online || uploading > 0}
-                style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.fill, alignItems: 'center', justifyContent: 'center' }}>
+                style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.fill, alignItems: 'center', justifyContent: 'center', opacity: online ? 1 : 0.45 }}>
                 <Icon name="add" size={20} weight={400} />
               </Pressable>
               {/* The model sits where it is picked, one tap from the message
                   being written with it. */}
               <Pressable onPress={openModelSheet} disabled={!online}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10 }}>
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10, opacity: online ? 1 : 0.45 }}>
                 <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: c.text2 }}>{[modelLabel || '…', effortLabel].filter(Boolean).join(' · ')}</Text>
                 <Icon name="expand_more" size={14} color={c.text2} />
               </Pressable>
@@ -695,7 +730,7 @@ export function Conversation({ id }: { id: string }) {
                   <Icon name="arrow_upward" size={20} weight={500} color="#FFFFFF" />
                 </Pressable>
               ) : (
-                <Pressable accessibilityLabel={T('record')} onPress={() => void startRecording()} disabled={!online || uploading > 0} style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
+                <Pressable accessibilityLabel={T('record')} onPress={() => void startRecording()} disabled={!online || uploading > 0} style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', opacity: online ? 1 : 0.45 }}>
                   <Icon name="mic" size={22} color={c.muted} />
                 </Pressable>
               )}

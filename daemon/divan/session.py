@@ -570,13 +570,20 @@ class ChatSession:
     def is_busy(self) -> bool:
         return self.running is not None and not self.running.done()
 
-    async def send(self, text: str, attachments: list[dict] | None) -> bool:
+    async def send(self, text: str, attachments: list[dict] | None,
+                   client_id: str | None = None) -> bool:
         """Start a turn, or queue the message behind the one already running.
 
         Returns True when the message went to the back of the queue. Waiting for
         the agent to be free is the agent's job, not the phone's: nobody should
         have to stop a turn just to add a thought to it.
+
+        `client_id` is the phone's own name for the message (#292). It is
+        written into the `message.user` event, which is what lets a resent
+        message be recognised after a restart and lets the phone match its
+        waiting bubble to the one the timeline now has.
         """
+        said = {"client_id": client_id} if client_id else {}
         # A key pasted into the message is taken out before anything else sees
         # it: the timeline, the queue, the title and the prompt all get the
         # placeholder, and the value is only in the keychain.
@@ -595,15 +602,15 @@ class ChatSession:
                 if (not self.queued and self.provider is not None
                         and await self.provider.steer(text, attachments or [])):
                     await self.emit("message.user",
-                                    {"text": text, "attachments": attachments or []}, True)
+                                    {"text": text, "attachments": attachments or [], **said}, True)
                     return False
                 if len(self.queued) >= MAX_QUEUED:
                     raise Err("busy", "too many queued messages")
                 self.queued.append((text, attachments or []))
                 await self.emit("message.user",
-                                {"text": text, "attachments": attachments or [], "queued": True}, True)
+                                {"text": text, "attachments": attachments or [], "queued": True, **said}, True)
                 return True
-            await self._prepare(text, attachments, announce=True)
+            await self._prepare(text, attachments, announce=True, said=said)
             self.running = asyncio.create_task(self._run(text, attachments))
         return False
 
@@ -634,7 +641,8 @@ class ChatSession:
             await self._prepare(text, attachments, announce=False)
             self.running = asyncio.create_task(self._run(text, attachments))
 
-    async def _prepare(self, text: str, attachments: list[dict] | None, announce: bool) -> dict:
+    async def _prepare(self, text: str, attachments: list[dict] | None, announce: bool,
+                       said: dict | None = None) -> dict:
         """Everything a turn needs before it starts: fresh provider, user event,
         title, running status. Runs for queued messages too — those were already
         announced when they arrived, so they come through with announce=False."""
@@ -643,7 +651,7 @@ class ChatSession:
         if chat is None:
             raise Err("no_chat", "no such chat")
         if announce:
-            await self.emit("message.user", {"text": text, "attachments": attachments or []}, True)
+            await self.emit("message.user", {"text": text, "attachments": attachments or [], **(said or {})}, True)
         # Asked before the provider exists, because the answer decides which
         # account the provider is built for. _build_recap drops the message
         # that was just announced from the transcript, so announcing first

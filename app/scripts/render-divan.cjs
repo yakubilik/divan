@@ -244,6 +244,9 @@ const STUBS = {
   'expo-clipboard': { setStringAsync: () => Promise.resolve(true) },
   // The inbox keeps which notice was seen last; nothing here reads it back.
   'expo-secure-store': { getItemAsync: () => Promise.resolve(null), setItemAsync: () => Promise.resolve() },
+  // The outbox's file (`src/store.ts`): no document directory here, so it keeps
+  // nothing, which the store takes as a phone with nothing waiting.
+  'expo-file-system': { File: class { get exists() { return false; } }, Paths: {} },
   'expo-linking': { openURL: () => Promise.resolve(true), createURL: (p) => `divan://${p}` },
   // …and the camera, whose permission is not a stub but a state a check sets:
   // the pairing screen has three faces — the viewfinder, the form it falls back

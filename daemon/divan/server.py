@@ -248,6 +248,11 @@ class Server:
         self.outbox: dict[WebSocket, Outbox] = {}
         self.writers: dict[WebSocket, asyncio.Task] = {}
         self.conns: dict[WebSocket, Conn] = {}
+        # (chat id, client id) -> the answer `chat.send` gave, or will give, for
+        # that message: a resend of one the phone never heard the answer to is
+        # answered from here instead of being run again (#292). Oldest first,
+        # bounded; the timeline itself is asked past that (see h_chat_send).
+        self._sent: dict[tuple[str, str], asyncio.Future] = {}
         self.accounts: dict[str, acct.Account] = {}
         self._notice_state: dict | None = None
         self._notice_lock = asyncio.Lock()
@@ -2377,18 +2382,59 @@ class Server:
                               "data": {"id": cid}, "ts": time.time()})
         return {}
 
+    # How many accepted client ids are remembered in memory. A phone resends
+    # within seconds or minutes; anything older is found in the timeline.
+    SENT_KEEP = 2000
+    # …and how far back the timeline is searched for one, in user messages.
+    SENT_LOOKBACK = 200
+
     async def h_chat_send(self, dev: Device, d: dict) -> dict:
         text = str(d.get("text") or "").strip()
         if not text:
             raise Err("empty_message", "empty message")
+        chat_id = d["chat_id"]
+        # The phone names every message it sends and sends it again until it
+        # hears this answer (#292). The socket can die after the message got
+        # here and before the answer got back; the second copy is that same
+        # message, and is answered as the first was rather than run again. A
+        # client that names nothing — an older phone, the panel — sends as ever.
+        client_id = str(d.get("client_id") or "")[:100] or None
+        if client_id:
+            key = (chat_id, client_id)
+            first = self._sent.get(key)
+            if first is not None:
+                log.info("chat.send %s: %s already accepted, not run again", chat_id, client_id)
+                return dict(await asyncio.shield(first))
+            for ev in self.db.tail_events(chat_id, ("message.user",), limit=self.SENT_LOOKBACK):
+                if (ev["data"] or {}).get("client_id") == client_id:
+                    log.info("chat.send %s: %s already in the timeline, not run again", chat_id, client_id)
+                    return {"accepted": True, "queued": bool(ev["data"].get("queued")), "client_id": client_id}
         # Refused rather than queued: the queue is in memory and this process
         # is leaving. Better to say no and keep the message in the composer
         # than to accept it and lose it.
         if self.draining:
             raise Err("restarting", "this computer is restarting — try again in a moment")
-        s = self.sessions.get(d["chat_id"])
-        queued = await s.send(text, d.get("attachments"))
-        return {"accepted": True, "queued": queued}
+        s = self.sessions.get(chat_id)
+        if not client_id:
+            queued = await s.send(text, d.get("attachments"))
+            return {"accepted": True, "queued": queued}
+        answer: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._sent[key] = answer
+        while len(self._sent) > self.SENT_KEEP:
+            self._sent.pop(next(iter(self._sent)))
+        try:
+            queued = await s.send(text, d.get("attachments"), client_id=client_id)
+        except BaseException as exc:
+            # Not accepted, so not a message to remember: the next copy is a
+            # fresh attempt, and one waiting on this one hears the same refusal.
+            self._sent.pop(key, None)
+            if not answer.done():
+                answer.set_exception(exc if isinstance(exc, Exception) else Err("cancelled", "cancelled"))
+                answer.exception()                      # retrieved: no "never retrieved" warning
+            raise
+        ack = {"accepted": True, "queued": queued, "client_id": client_id}
+        answer.set_result(ack)
+        return dict(ack)
 
     async def h_chat_interrupt(self, dev: Device, d: dict) -> dict:
         s = self.sessions.peek(d["chat_id"])

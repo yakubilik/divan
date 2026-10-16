@@ -291,6 +291,8 @@ const en = {
   newGroupPill: '+ New group',
   noAgentsHere: 'No agents on this account',
   notSentBody: 'Your message and attachments are back in the composer.',
+  outSending: 'Sending…', outFailed: 'Not sent · Tap to retry',
+  outFailedTitle: 'Message not sent', outRetry: 'Try again', outDiscard: 'Delete message',
   online: 'online',
   openDevicePage: 'Open device page',
   ownShort: "Computer's own",
@@ -724,6 +726,8 @@ export const tr: Partial<Record<Key, string>> = {
   autoArchiveNote: 'bu kadar süre mesaj gelmezse; yeni bir şey gelince geri döner',
   stDefaultFolder: 'Varsayılan klasör', stDefaultFolderNote: 'yeni sohbetlerin açıldığı yer, burada ve web panelde',
   stFirstRoot: 'İlk kök',
+  outSending: 'Gönderiliyor…', outFailed: 'Gönderilemedi · Tekrar denemek için dokun',
+  outFailedTitle: 'Mesaj gönderilemedi', outRetry: 'Tekrar dene', outDiscard: 'Mesajı sil',
   autoArchiveOff: 'Kapalı', autoArchiveH: '{n} saat', autoArchiveD: '{n} gün', autoArchive1D: '1 gün',
 };
 

@@ -22,9 +22,13 @@ import { Icon, SelectableText, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
 import type { Attachment } from '../store';
 import { ticketNotice, type TicketNotice } from '../notice';
+import type { OutState } from '../outbox';
 
-export function UserBubble({ text, attachments, queued, onTicket }: {
+export function UserBubble({ text, attachments, queued, onTicket, out, onOut }: {
   text: string; attachments?: Attachment[]; queued?: boolean; onTicket?: (n: number) => void;
+  /** A message still in the outbox (#292): on its way, or given up on. Absent
+   *  for one the timeline already has, which is what "sent" looks like. */
+  out?: OutState; onOut?: () => void;
 }) {
   const c = useColors();
   const atts = attachments ?? [];
@@ -55,11 +59,24 @@ export function UserBubble({ text, attachments, queued, onTicket }: {
       {voices.map((v) => <VoiceBubble key={v.path} item={v} />)}
       {files.map((f) => <FileChip key={f.path} item={f} />)}
       {!!text && !textIsTranscript && (
-        <View style={{ backgroundColor: c.bubble, borderWidth: 1, borderColor: c.line,
+        <View style={{ backgroundColor: c.bubble, borderWidth: 1, borderColor: out === 'failed' ? c.danger : c.line,
                        borderRadius: 18, borderBottomRightRadius: 6, borderTopRightRadius: media ? 4 : 18,
-                       paddingVertical: 10, paddingHorizontal: 13 }}>
+                       paddingVertical: 10, paddingHorizontal: 13, opacity: out === 'sending' ? 0.7 : 1 }}>
           <SelectableText style={{ color: c.ink, fontSize: 17, lineHeight: 24 }}>{withSecrets(text, c)}</SelectableText>
         </View>
+      )}
+      {out === 'sending' && (
+        <View testID="out-sending" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 4 }}>
+          <Spinner size={10} color={c.faint} />
+          <Text style={{ fontSize: 12, color: c.faint }}>{T('outSending')}</Text>
+        </View>
+      )}
+      {out === 'failed' && (
+        <Pressable testID="out-failed" onPress={onOut} hitSlop={8} accessibilityRole="button"
+                   style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingRight: 4 }, pressed ? { opacity: 0.6 } : null]}>
+          <Icon name="error" size={14} color={c.danger} />
+          <Text style={{ fontSize: 12, color: c.danger }}>{T('outFailed')}</Text>
+        </Pressable>
       )}
     </View>
   );

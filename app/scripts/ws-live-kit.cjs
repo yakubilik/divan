@@ -42,15 +42,16 @@ function freePort() {
   });
 }
 
-/** The daemon. `log` is everything it wrote to stderr, line by line. */
-async function peer(py) {
+/** The daemon. `log` is everything it wrote to stderr, line by line. `extra`
+ *  is more of soak_peer.py's own flags. */
+async function peer(py, extra = []) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'divan-soak-'));
   const port = await freePort();
   const log = [];
   let proc = null;
   let info = null;
   async function start() {
-    proc = spawn(py, [path.join(repo, 'daemon/scripts/soak_peer.py'), '--home', home, '--port', String(port)],
+    proc = spawn(py, [path.join(repo, 'daemon/scripts/soak_peer.py'), '--home', home, '--port', String(port), ...extra],
       { stdio: ['pipe', 'pipe', 'pipe'] });
     let err = '';
     proc.stderr.on('data', (b) => {
@@ -90,7 +91,9 @@ async function peer(py) {
 /** A TCP proxy in front of the daemon, with faults to inject. */
 async function proxy(upstreamPort) {
   const pairs = new Set();
+  let refusing = false;
   const server = net.createServer((client) => {
+    if (refusing) { client.on('error', () => {}); try { client.resetAndDestroy(); } catch { client.destroy(); } return; }
     const up = net.connect(upstreamPort, '127.0.0.1');
     const pair = { client, up, stalled: null, dead: false };
     pairs.add(pair);
@@ -130,6 +133,11 @@ async function proxy(upstreamPort) {
         try { p.up.resetAndDestroy(); } catch { p.up.destroy(); }
       }
     },
+    /** The computer stops being reachable: every connection dies with no
+     *  close frame and every new one is reset, until `unblock()` — a daemon
+     *  stopped, or its port blocked. */
+    block() { refusing = true; this.kill(); },
+    unblock() { refusing = false; },
     /** The line goes dead the way it does under a suspended app: the daemon's
      *  side is torn down, the phone's stays open and never hears another byte. */
     blackhole() {
@@ -145,9 +153,11 @@ async function proxy(upstreamPort) {
   };
 }
 
-/** The phone: `src/ws.ts` in a child process, driven over IPC. */
-function phone() {
-  const child = fork(path.join(__dirname, 'ws-live-child.cjs'), [], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+/** The phone: `src/ws.ts` in a child process, driven over IPC — or another
+ *  child script driven the same way (`outbox-live-child.cjs`: the whole store). */
+function phone(script = 'ws-live-child.cjs', env = {}) {
+  const child = fork(path.join(__dirname, script), [], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+                                                         env: { ...process.env, ...env } });
   const heard = [];               // every message from the child, with the parent's own clock
   const waiters = new Set();
   child.on('message', (m) => {
@@ -171,6 +181,8 @@ function phone() {
       return answer;
     },
     freeze() { child.kill('SIGSTOP'); },
+    /** The app killed: no goodbye, nothing flushed that was not already. */
+    kill() { child.kill('SIGKILL'); return new Promise((r) => (child.exitCode !== null || child.signalCode ? r() : child.once('exit', r))); },
     thaw() { child.kill('SIGCONT'); },
     async close() {
       if (child.exitCode !== null || child.signalCode) return;
