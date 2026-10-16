@@ -122,7 +122,7 @@ try {
   await press('Details');
   await press('Open in a new window');
   const popped = await b.evaluate(`return window.__opened || '';`);
-  ok('a chat still opens in a window of its own from Details', /\?host=studio&chat=c1$/.test(popped), popped);
+  ok('a chat still opens in a window of its own from Details', /\/chats\/c1\?host=studio$/.test(popped), popped);
 
   console.log('── Machine › Machines and Sessions');
   await b.cold('/machine/fleet');
