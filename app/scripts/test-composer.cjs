@@ -103,7 +103,7 @@ const checks = [];
   draw();
   press(label('cmSend'));
   await flush();
-  checks.push(['Ask: one press sends chat.create (in the computer\'s default folder, with no project picked) then chat.send with the words and lands in that chat, with no sheet or picker in between',
+  checks.push(['Ask: one press sends chat.create then chat.send with the words and lands in that chat, with no sheet or picker in between — the chat in the computer\'s default folder when no project is picked',
     calls.map((c) => c[0]).join(',') === 'chat.create,chat.send' && calls[1][1].text === 'ship the beta tonight'
     && calls[0][1].cwd === '/r/home'
     && calls[1][1].id === 'new1' && JSON.stringify(R.nav.pushed()) === '["/chat/new1"]'
