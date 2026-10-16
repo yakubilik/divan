@@ -98,7 +98,12 @@ try {
     await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
     await page('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: mobile ? 5 : 0 });
     await page('Page.navigate', { url: `file://${join(build, 'harness.html')}${query}` });
-    await sleep(2500);
+    // Drawn when the cards are, not after a fixed wait: a busy machine takes longer.
+    for (let i = 0; i < 150; i++) {
+      await sleep(100);
+      if (i >= 10 && await run(`document.querySelectorAll('[data-work-row]').length > 0`)) break;
+    }
+    await sleep(300);
   };
   const writes = () => run('JSON.stringify(window.__writes)');
   const said = (n) => run(`document.querySelector('[data-work-row="studio:${n}"] [data-work-said]')?.textContent ?? null`);
