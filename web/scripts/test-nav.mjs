@@ -232,7 +232,7 @@ const screen = () => {
     chat: head,
     selected: pane()?.querySelector('button.dv-tinted [title]')?.getAttribute('title')
       ?? (pane()?.querySelector('button.dv-tinted')?.textContent ?? '').trim().slice(0, 24) ?? null,
-    empty: !!doc.getElementById('first-word'),
+    empty: !!doc.querySelector('[data-first-word] textarea[name="composer"]'),
     h1: [...doc.querySelectorAll('h1')].map((h) => (h.textContent ?? '').trim()).filter((t) => !/^Good /.test(t)),
     greet: !!doc.querySelector('h1.dv-greet'),
     board: !!doc.querySelector('section.dv-col'),

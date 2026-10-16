@@ -702,8 +702,12 @@ const drag = async (id, to, { y = 1500, touch = false, wobble = false } = {}) =>
   const [x0, y0] = [r.left + 20, r.top + 20];
   const x1 = to == null ? 5000 : KEYS.indexOf(to) * 200 + 60;
   const kind = touch ? 'touch' : 'mouse';
-  await act(async () => { card.querySelector('[data-work-open] .dv-card-title').dispatchEvent(pe('pointerdown', x0, y0, kind)); });
-  if (wobble) await act(async () => { doc.body.dispatchEvent(pe('pointermove', x0 + 30, y0 + 30, kind)); });
+  // The wobble goes in with the press, in one act: on a loaded machine a
+  // second act can take longer than the hold, and the card would be up first.
+  await act(async () => {
+    card.querySelector('[data-work-open] .dv-card-title').dispatchEvent(pe('pointerdown', x0, y0, kind));
+    if (wobble) doc.body.dispatchEvent(pe('pointermove', x0 + 30, y0 + 30, kind));
+  });
   if (touch) await tick(200);
   await act(async () => { doc.body.dispatchEvent(pe('pointermove', x0 + 10, y0 + 10, kind)); });
   await act(async () => { doc.body.dispatchEvent(pe('pointermove', x1, y, kind)); });

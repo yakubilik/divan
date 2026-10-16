@@ -248,9 +248,14 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
   // that is depends on the scope, so the Composer cannot upload them itself.
   const attached: any[] = [];
   for (const f of files) attached.push(await upload(host, chat.id, f));
+  // Nothing typed: a voice note's words are what was said, the way a chat's
+  // own box captions one (`ChatComposer`), and they exist only once it is up.
+  const said = (text || '').trim()
+    || attached.map((a) => a?.transcript).filter(Boolean).join('\n')
+    || words;
   await send(host, chat.id, at.project && !at.cwd
-    ? `${words}\n\n(This is about ${at.project}.)`
-    : words, attached);
+    ? `${said}\n\n(This is about ${at.project}.)`
+    : said, attached);
   return told;
 }
 
