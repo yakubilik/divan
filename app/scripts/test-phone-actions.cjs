@@ -452,24 +452,50 @@ const ready = (async () => {
       && listed[0] === 'First root · /r' && listed.includes('/r/quire')
       && JSON.stringify(sets) === JSON.stringify(['/r/quire', null])]);
 
-    // …and the real store's setDefaultCwd is that request, then a fresh
+    // …and the store's own setDefaultCwd is that request, then a fresh
     // host.info; a host.status from the other client lands in hostInfo, which
-    // is what every new-chat path reads.
-    const { useStore: realStore } = require(path.join(root, 'src/store.ts'));
-    const { client } = require(path.join(root, 'src/ws.ts'));
+    // is what every new-chat path reads. A store of its own over a stand-in
+    // socket, the way test-handover-project.cjs loads one: the shared one may
+    // have been unbound by another store made on the same client.
+    const Module = require('module');
     const asked = [];
-    const realCall = client.call;
-    client.call = async (type, data) => { asked.push([type, data]); return type === 'host.info' ? { roots: ['/r'], default_cwd: '/r/quire' } : {}; };
-    let heard;
-    try {
-      await realStore.getState().setDefaultCwd('/r/quire');
-      client.handle(JSON.stringify({ type: 'event', event: 'host.status', chat_id: null, seq: null,
-        data: { roots: ['/r'], default_cwd: '/r/zeta', default_cwd_chosen: true }, ts: Date.now() / 1000 }));
-      heard = realStore.getState().hostInfo?.default_cwd;
-    } finally { client.call = realCall; }
-    checks.push([`phone: the store's setDefaultCwd sends host.default_cwd and reads host.info back, and the web's change arriving as host.status is what the next new chat reads — ${JSON.stringify({ asked, heard })}`,
+    const listeners = new Set();
+    const fake = { onStatus: () => () => {}, on: (l) => { listeners.add(l); return () => listeners.delete(l); },
+      poke() {}, connect() {}, disconnect() {},
+      call: async (type, data) => { asked.push([type, data]); return type === 'host.info' ? { roots: ['/r'], default_cwd: '/r/quire' } : {}; } };
+    const stubs = { [path.join(root, 'src/ws.ts')]: { client: fake, callOnce: async () => ({}), httpBase: () => '' },
+                    [path.join(root, 'src/push.ts')]: { dismissChatNotifications() {} } };
+    const packaged = {
+      'expo-secure-store': { getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} },
+      'expo-local-authentication': { hasHardwareAsync: async () => false, isEnrolledAsync: async () => false,
+                                     authenticateAsync: async () => ({ success: true }) },
+    };
+    const file = path.join(root, 'src/store.ts');
+    const had = require.cache[file];
+    delete require.cache[file];
+    const under = Module._load;
+    Module._load = function load(request, parent, isMain) {
+      if (packaged[request]) return packaged[request];
+      if (request.startsWith('.') && parent) {
+        const to = path.resolve(path.dirname(parent.filename), request);
+        for (const ext of ['', '.ts', '.tsx']) if (stubs[to + ext]) return stubs[to + ext];
+      }
+      return under.call(this, request, parent, isMain);
+    };
+    let realStore;
+    try { realStore = require(file).useStore; } finally {
+      Module._load = under;
+      if (had) require.cache[file] = had; else delete require.cache[file];
+    }
+    await realStore.getState().setDefaultCwd('/r/quire');
+    const afterSet = realStore.getState().hostInfo?.default_cwd;
+    for (const l of listeners) l({ event: 'host.status', chat_id: null, seq: null,
+      data: { roots: ['/r'], default_cwd: '/r/zeta', default_cwd_chosen: true }, ts: Date.now() / 1000 });
+    const heard = realStore.getState().hostInfo?.default_cwd;
+    checks.push([`phone: the store's setDefaultCwd sends host.default_cwd and reads host.info back, and the web's change arriving as host.status is what the next new chat reads — ${JSON.stringify({ asked, afterSet, heard })}`,
       JSON.stringify(asked) === JSON.stringify([['host.default_cwd', { cwd: '/r/quire' }], ['host.info', {}]])
-      && heard === '/r/zeta' && require(path.join(root, 'src/fresh-chat.ts')).freshCwd(realStore.getState().hostInfo) === '/r/zeta']);
+      && afterSet === '/r/quire' && heard === '/r/zeta'
+      && require(path.join(root, 'src/fresh-chat.ts')).freshCwd(realStore.getState().hostInfo) === '/r/zeta']);
   }
 })();
 
