@@ -17,6 +17,12 @@
  *  them, and you press send yourself. `lib/dictate.ts` is the engine and the
  *  reasoning; what is here is the button, the counter and where the live words
  *  land.
+ *
+ *  It is also the box of a chat that does not exist yet: the Chat place's New
+ *  chat (`chat` null). Nothing is made on the computer by typing or attaching
+ *  there — an upload needs a chat to be filed under — so what is attached is
+ *  held in the browser (`held`) and handed to `onSend` as it is, and the
+ *  caller opens the chat, uploads the files to it and sends, in that order.
  */
 import { useEffect, useRef, useState } from 'react';
 import { draftAttached, draftKey, draftText, useDrafts } from '../lib/drafts';
@@ -27,17 +33,37 @@ import { appendSpeech, dictateLang, langName } from '../lib/dictate';
 import { MicButton, useMic } from './Mic';
 import type { Chat } from '../lib/protocol';
 
+/** A file attached to a box whose chat does not exist yet: the file itself, kept
+ *  in the browser until the send opens the chat it goes up to. `path` is only
+ *  an id here, for the tray to remove it by. */
+export interface Held { path: string; name: string; size: number; kind: string; file: File; preview?: string }
+
+let heldN = 0;
+/** What the daemon will call it, guessed from the browser's type: a picture
+ *  gets a thumbnail in the tray, a recording the microphone chip. */
+export function held(file: File): Held {
+  const type = file.type || '';
+  const kind = type.startsWith('image/') ? 'image' : type.startsWith('audio/') ? 'audio' : 'file';
+  let preview: string | undefined;
+  if (kind === 'image') {
+    try { preview = URL.createObjectURL(file); } catch { /* no preview, a chip instead */ }
+  }
+  return { path: `held:${++heldN}:${file.name}`, name: file.name, size: file.size, kind, file, preview };
+}
+
 export function Tray({ items, hostKey, busy, onRemove }: {
   items: any[]; hostKey: string; busy: boolean; onRemove: (path: string) => void;
 }) {
   const src = (a: any) => {
+    if (a.preview) return a.preview;
+    if (a.file) return '';              // held: nothing of it is on the computer yet
     try { return fileUrl(hostKey, a.view || a.path); } catch { return ''; }
   };
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 8 }}>
       {items.map((a) => (
         <div key={a.path} style={{ position: 'relative' }}>
-          {a.kind === 'image' ? (
+          {a.kind === 'image' && src(a) ? (
             <img
               src={src(a)} alt=""
               style={{
@@ -78,20 +104,31 @@ export function Tray({ items, hostKey, busy, onRemove }: {
 /** Seconds as `0:07`. A dictation is never long enough to need an hour in it. */
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
+/** The draft of the chat that has not been opened yet, per computer. */
+export const FRESH = 'new';
+
 export function ChatComposer({ chat, hostKey, busy, sending, compact,
-                               onSend, onInterrupt, onUpload }: {
-  chat: Chat; hostKey: string; busy: boolean; sending: boolean;
+                               onSend, onInterrupt, onUpload, placeholder, autoFocus, fieldRef }: {
+  /** Null for New chat: the box before there is a chat (see the top). */
+  chat: Chat | null; hostKey: string; busy: boolean; sending: boolean;
   /** Drawn for a 350 pt window: the same parts, one size down, and the line of
    *  keyboard hints dropped — there is no room for it and nobody reads it
    *  twice. */
   compact?: boolean;
-  onSend: (text: string, attachments: any[]) => void;
+  /** With a chat: the caption and the uploaded files, and the box is cleared
+   *  at once. Without one: what was typed (possibly nothing) and the `Held`
+   *  files, and the box keeps its draft until the promise settles well — a
+   *  chat that could not be opened leaves the words and files where they were. */
+  onSend: (text: string, attachments: any[]) => void | Promise<unknown>;
   onInterrupt: () => void;
-  onUpload: (file: File) => Promise<any>;
+  onUpload?: (file: File) => Promise<any>;
+  placeholder?: string;
+  autoFocus?: boolean;
+  fieldRef?: React.Ref<HTMLTextAreaElement>;
 }) {
   // What is typed and what is attached belong to the chat, not to this box:
   // the box stays mounted while the chat under it changes (`lib/drafts.ts`).
-  const key = draftKey(hostKey, chat.id);
+  const key = draftKey(hostKey, chat?.id ?? FRESH);
   const text = useDrafts((s) => draftText(s, key));
   const pending = useDrafts((s) => draftAttached(s, key));
   const setText = (next: string | ((was: string) => string)) =>
@@ -101,11 +138,17 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const [starting, setStarting] = useState(false);
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const setRef = (el: HTMLTextAreaElement | null) => {
+    ref.current = el;
+    if (typeof fieldRef === 'function') fieldRef(el);
+    else if (fieldRef) (fieldRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+  };
   const file = useRef<HTMLInputElement>(null);
 
   const mic = useMic({
-    hostKey, folder: chat.cwd.split(/[/\\]/).pop(),
+    hostKey, folder: chat?.cwd.split(/[/\\]/).pop(),
     onCommit: (chunk) => setText((prev) => appendSpeech(prev, chunk)),
   });
   const listening = mic.state === 'listening';
@@ -131,7 +174,8 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
     setError(null);
     try {
       for (const f of Array.from(files)) {
-        const a = await onUpload(f);
+        // No chat yet: kept here, and uploaded by the send that opens one.
+        const a = chat && onUpload ? await onUpload(f) : held(f);
         setPending((p) => [...p, a]);
       }
     } catch (e: any) { setError(e?.message ?? 'Upload failed'); }
@@ -183,6 +227,17 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
     if (mic.state !== 'idle') { mic.stop(); return; }
     const t = text.trim();
     if (!t && !pending.length) return;
+    if (!chat) {
+      // The caption of a voice note is its transcript, and there is none until
+      // it has gone up — so the caller words it once the chat has the files.
+      if (starting) return;
+      setStarting(true); setError(null);
+      Promise.resolve(onSend(t, pending))
+        .then(() => useDrafts.getState().clear(key))
+        .catch((e: any) => setError(e?.message ?? 'That did not go through'))
+        .finally(() => setStarting(false));
+      return;
+    }
     // A voice note carries its own words; anything else gets a line that says
     // why it is there, because a message with no text at all reads as a glitch.
     const caption = t
@@ -192,7 +247,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
     useDrafts.getState().clear(key);
   };
 
-  const folder = chat.cwd.split(/[/\\]/).pop();
+  const folder = chat?.cwd.split(/[/\\]/).pop();
   const ready = !!text.trim() || pending.length > 0;
   // The disc takes a colour only when pressing it would do something: red to
   // send, red to stop, and at rest the quiet fill. What is drawn on it follows
@@ -200,7 +255,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
   // so a resting button gets an ink instead. (It used to be white at half
   // opacity on `surface2`, which in the light theme is white on off-white: the
   // send button looked empty until you typed.)
-  const armed = busy || ready || sending || mic.state !== 'idle';
+  const armed = busy || ready || sending || starting || mic.state !== 'idle';
   const sendFace = busy && !ready ? C.danger : armed ? C.accent : C.surface2;
   const sendGlyph = armed ? C.onAccent : C.mute;
   return (
@@ -253,7 +308,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
           <Icon path={P.plus} size={compact ? 15 : 18} color={C.text} />
         </button>
         <textarea
-          ref={ref} name="composer" aria-label="Message" value={shown} rows={1}
+          ref={setRef} name="composer" aria-label="Message" value={shown} rows={1} autoFocus={autoFocus}
           onChange={(e) => setText(e.target.value)}
           onPaste={onPaste}
           onKeyDown={(e) => {
@@ -267,7 +322,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
             }
           }}
           placeholder={listening ? 'Listening…'
-            : busy ? 'You can already type the next message…' : `Message ${folder}…`}
+            : busy ? 'You can already type the next message…' : placeholder ?? `Message ${folder}…`}
           style={{
             flex: 1, minWidth: 0, alignSelf: 'center', boxSizing: 'border-box', minHeight: press, maxHeight: tallest, resize: 'none',
             background: 'transparent', border: 'none', outline: 'none',
@@ -287,7 +342,7 @@ export function ChatComposer({ chat, hostKey, busy, sending, compact,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          {sending ? <Spinner size={compact ? 12 : 14} color={sendGlyph} />
+          {sending || starting ? <Spinner size={compact ? 12 : 14} color={sendGlyph} />
             : busy && !ready ? <Icon path={P.stop} size={compact ? 12 : 14} color={sendGlyph} fill />
             : <Icon path={P.send} size={compact ? 14 : 16} color={sendGlyph} width={2.4} />}
         </button>

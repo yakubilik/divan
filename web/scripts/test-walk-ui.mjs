@@ -199,7 +199,7 @@ try {
     await new Promise((r) => setTimeout(r, 300)); return document.body.innerText;`);
   ok('…the Terminal’s wall of chats says no chat has been started', /No chat has been started anywhere/.test(term), term.slice(0, 300));
   const chats = await empty('/chats');
-  ok('…and the Chat place opens a box to write in, with no conversation invented', /No conversation yet/.test(chats) && /Message to Hermes/.test(chats) && !/Webhook retry policy/.test(chats), chats.slice(0, 300));
+  ok('…and the Chat place opens a chat’s own box to write in, with no conversation invented', /No conversation yet/.test(chats) && /⇧⏎ newline/.test(chats) && !/Webhook retry policy/.test(chats), chats.slice(0, 300));
   const emptyBad = b.drain();
   ok('…with no console errors', !emptyBad.length, emptyBad.join('\n    '));
 } finally {
