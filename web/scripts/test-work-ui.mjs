@@ -11,6 +11,13 @@
  *  column the browser drew, and what the harness's queue was asked
  *  (`window.__writes`) is read back.
  *
+ *  Then a move the queue takes its time over: the card is in its new column as
+ *  a ghost within 200 ms of being put down, its status still the old one; the
+ *  answer arriving while a poll is out is read again at once, and the card
+ *  lands where the queue put it with no reload; a refusal takes the ghost away
+ *  and says why; a second drop while one is out asks nothing. Last, every
+ *  card's tint, and its title's contrast on it, in both themes.
+ *
  *  Not in CI: it needs a browser on the machine.
  */
 import { execFileSync, spawn } from 'node:child_process';
@@ -31,6 +38,21 @@ const chrome = [
 if (!chrome) { console.error('no browser found — set CHROME to one'); process.exit(2); }
 
 let failures = 0;
+/** A computed colour as the browser writes it — `rgb()`, `rgba()` or
+ *  `color(srgb …)` — as [r, g, b] from 0 to 1. */
+function rgbOf(css) {
+  let m = /color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)/.exec(css);
+  if (m) return m.slice(1, 4).map(Number);
+  m = /rgba?\(([\d.]+),? ([\d.]+),? ([\d.]+)/.exec(css);
+  if (m) return m.slice(1, 4).map((v) => Number(v) / 255);
+  throw new Error(`unreadable colour ${css}`);
+}
+/** WCAG contrast of two opaque colours. */
+function contrast(a, b) {
+  const lum = (c) => { const [r, g, b2] = rgbOf(c).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b2; };
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
 function ok(name, cond, detail) {
   if (cond) { console.log(`  ✓ ${name}`); return; }
   failures++;
@@ -72,14 +94,36 @@ try {
   const box = (sel) => run(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return null;
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); const r = el.getBoundingClientRect();
     return { x: r.left + Math.min(40, r.width / 2), y: r.top + Math.min(24, r.height / 2), cx: r.left + r.width / 2, top: r.top }; })()`);
-  const open = async (width, height, mobile) => {
+  const open = async (width, height, mobile, query = '') => {
     await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
     await page('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: mobile ? 5 : 0 });
-    await page('Page.navigate', { url: `file://${join(build, 'harness.html')}` });
+    await page('Page.navigate', { url: `file://${join(build, 'harness.html')}${query}` });
     await sleep(2500);
   };
   const writes = () => run('JSON.stringify(window.__writes)');
   const said = (n) => run(`document.querySelector('[data-work-row="studio:${n}"] [data-work-said]')?.textContent ?? null`);
+
+  const waitFor = async (expr, ms = 3000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) { if (await run(expr)) return true; await sleep(20); }
+    return false;
+  };
+  /** How a card is drawn right now: its column, whether it is a ghost and
+   *  saying what, its status pill and what was said on it. */
+  const card = (n) => run(`(() => { const el = document.querySelector('[data-work-row="studio:${n}"]'); if (!el) return null;
+    return { col: el.closest('[data-work-column]')?.getAttribute('data-work-column'), ghost: el.getAttribute('data-work-pending'),
+      badge: el.querySelector('[data-work-badge]')?.textContent ?? null, pill: el.querySelector('.dv-status')?.textContent ?? null,
+      said: el.querySelector('[data-work-said]')?.textContent ?? null, tone: el.querySelector('[data-work-said]')?.getAttribute('data-work-said') ?? null,
+      tint: el.getAttribute('data-tint') }; })()`);
+  /** From now on, how long after the next press is let go (or the next click)
+   *  card #n is first drawn in \`column\` as a ghost with a badge. */
+  const timeGhost = (n, column) => run(`(() => { window.__ghostMs = null; window.__upAt = null;
+    const mark = () => { window.__upAt = performance.now(); };
+    window.addEventListener('pointerup', mark, { capture: true, once: true });
+    window.addEventListener('click', mark, { capture: true, once: true });
+    const seen = () => document.querySelector('[data-work-column="${column}"] [data-work-row="studio:${n}"][data-work-pending] [data-work-badge]');
+    const mo = new MutationObserver(() => { if (window.__upAt != null && seen()) { window.__ghostMs = performance.now() - window.__upAt; mo.disconnect(); } });
+    mo.observe(document.body, { subtree: true, childList: true, attributes: true }); return true; })()`);
 
   const mouse = async (card, column) => {
     const a = await box(`[data-work-row="studio:${card}"] .dv-card-title`);
@@ -119,6 +163,82 @@ try {
   ok('Needs you → In progress: refused, no call', (await writes()) === '["cancel 260","restart 31","priority 261 0"]'
     && /^#259 is waiting on you/.test((await said(259)) || ''), await said(259));
   ok('…and the press that was a drag opened nothing', (await run('location.href')).endsWith('harness.html'));
+
+  console.log('── a move the queue takes its time over');
+  await open(1720, 1000, false, '?poll=1500');
+  const loaded = await run('window.__loaded');
+  await run('window.__holdWrites(true); window.__startNow = true');
+  await timeGhost(72, 'running');
+  await mouse(72, 'running');
+  let c = await card(72);
+  const ms72 = await run('window.__ghostMs');
+  console.log(`  · ghost drawn ${ms72?.toFixed?.(0)} ms after the drop`);
+  ok('Waiting → In progress: within 200 ms it is in In progress as a ghost saying Starting…, its status still the old one',
+    ms72 != null && ms72 < 200 && c?.col === 'running' && c.ghost === 'running' && c.badge === 'Starting…' && c.pill === 'usage limit'
+    && (await writes()) === '["priority 72 0"]', `${ms72?.toFixed?.(0)} ms · ${JSON.stringify(c)} · ${await writes()}`);
+  // A poll goes out and is held across the answer: it read the queue before the move.
+  await run('window.__holdNextList()');
+  ok('…a poll is in flight', await waitFor('window.__listHeld', 4000));
+  const before = await run('window.__lists');
+  await run('window.__answer()');
+  ok('…answered: the queue is read again at once, past the poll, and the card lands in In progress, running',
+    await waitFor(`(() => { const el = document.querySelector('[data-work-column="running"] [data-work-row="studio:72"]');
+      return !!el && !el.hasAttribute('data-work-pending') && el.querySelector('.dv-status')?.textContent === 'running'; })()`, 1000)
+    && (await run('window.__lists')) > before && (await run('window.__listHeld')), JSON.stringify(await card(72)));
+  ok('…with no reload of the page', (await run('window.__loaded')) === loaded && (await run('location.href')).endsWith('?poll=1500'));
+  await run('window.__releaseList()');
+  await sleep(100);
+  ok('…and the poll that read before the move, answering last, is not drawn over it', (await card(72))?.col === 'running', JSON.stringify(await card(72)));
+
+  // The same move from the Move to… menu.
+  await run(`document.querySelector('[data-work-row="studio:260"] [data-work-move]').click()`);
+  await timeGhost(260, 'running');
+  await run(`[...document.querySelectorAll('[data-work-menu] [role="menuitem"]')].find((b) => b.textContent === 'In progress — start it').click()`);
+  await sleep(50);
+  c = await card(260);
+  const ms260 = await run('window.__ghostMs');
+  console.log(`  · ghost drawn ${ms260?.toFixed?.(0)} ms after the click`);
+  ok('Move to… In progress: within 200 ms a ghost in In progress saying Starting…, still queued',
+    ms260 != null && ms260 < 200 && c?.col === 'running' && c.ghost === 'running' && c.badge === 'Starting…' && c.pill === 'queued',
+    `${ms260?.toFixed?.(0)} ms · ${JSON.stringify(c)}`);
+  await run('window.__answer()');
+  ok('…answered: it lands in In progress', await waitFor(`(() => { const el = document.querySelector('[data-work-column="running"] [data-work-row="studio:260"]');
+    return !!el && !el.hasAttribute('data-work-pending'); })()`, 1000), JSON.stringify(await card(260)));
+
+  // Refused, and dropped twice.
+  await run('window.__writes.length = 0');
+  await mouse(261, 'cancelled');
+  c = await card(261);
+  ok('Queued → Cancelled, held: a ghost in Cancelled saying Cancelling…', c?.col === 'cancelled' && c.badge === 'Cancelling…' && c.pill === 'queued', JSON.stringify(c));
+  await mouse(261, 'running');
+  ok('…dropped again while the first is out: no second call', (await writes()) === '["cancel 261"]' && (await card(261))?.col === 'cancelled', await writes());
+  await run(`window.__answer('#261 is held by the supervisor; cancel refused')`);
+  await sleep(200);
+  c = await card(261);
+  ok('…refused: the ghost goes, the card is back in Queued with the reason on it',
+    c?.col === 'queued' && !c.ghost && !c.badge && c.tone === 'error' && c.said === '#261 is held by the supervisor; cancel refused', JSON.stringify(c));
+  await run('window.__holdWrites(false)');
+
+  console.log('── every card tinted by its status, readable in both themes');
+  const TINT = { queued: 'grey', waiting: 'grey', running: 'running', blocked: 'ask', done: 'done', failed: 'failed', cancelled: 'grey' };
+  for (const theme of ['dark', 'light']) {
+    await open(1720, 1000, false, `?theme=${theme}&range=30d`);
+    const cards = await run(`[...document.querySelectorAll('[data-work-row]')].map((el) => {
+      const cs = getComputedStyle(el); const title = el.querySelector('.dv-card-title');
+      return { key: el.getAttribute('data-work-row'), col: el.closest('[data-work-column]').getAttribute('data-work-column'), tint: el.getAttribute('data-tint'),
+        bg: cs.backgroundColor, edge: cs.borderTopColor, ink: getComputedStyle(title).color };
+    })`);
+    const wrong = cards.filter((x) => x.tint !== TINT[x.col]);
+    ok(`${theme}: every card's tint is its column's status (${cards.length} cards)`, cards.length > 10 && !wrong.length, JSON.stringify(wrong));
+    const byTint = Object.fromEntries(cards.map((x) => [x.tint, x]));
+    const bgs = new Set(Object.values(byTint).map((x) => x.bg));
+    const edges = new Set(Object.values(byTint).map((x) => x.edge));
+    ok(`${theme}: the five tints are five different surfaces and five different edges`, bgs.size === 5 && edges.size === 5,
+      JSON.stringify(Object.fromEntries(Object.entries(byTint).map(([k, v]) => [k, `${v.bg} / ${v.edge}`]))));
+    const worst = Math.min(...cards.map((x) => contrast(x.ink, x.bg)));
+    ok(`${theme}: the title is at least 4.5:1 on every tint (lowest ${worst.toFixed(2)}:1)`, worst >= 4.5,
+      JSON.stringify(Object.fromEntries(Object.entries(byTint).map(([k, v]) => [k, contrast(v.ink, v.bg).toFixed(2)]))));
+  }
 
   console.log('── a finger, on a phone');
   await open(390, 844, true);
