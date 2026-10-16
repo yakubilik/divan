@@ -182,15 +182,21 @@ function daysBefore(at: number, now: number): number {
   return Math.round((midnight(now) - midnight(at)) / DAY);
 }
 
-const hm = (at: number) => new Date(at * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+// Made once: `toLocaleTimeString` builds a formatter on every call, and the
+// board asks for one per finished ticket every second — on a queue of a few
+// hundred that was a third of a second a tick, and a card put down waited
+// behind it.
+const HM = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
+const DAY_MONTH = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+
+const hm = (at: number) => HM.format(new Date(at * 1000));
 
 /** `today 16:19`, `yesterday 09:02`, `12 Oct 16:19`. */
 export function whenLine(at: number, now: number): string {
   const n = daysBefore(at, now);
   if (n <= 0) return `today ${hm(at)}`;
   if (n === 1) return `yesterday ${hm(at)}`;
-  const date = new Date(at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return `${date} ${hm(at)}`;
+  return `${DAY_MONTH.format(new Date(at * 1000))} ${hm(at)}`;
 }
 
 function lastMoved(t: Ticket): number {

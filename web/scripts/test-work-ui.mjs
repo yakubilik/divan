@@ -226,7 +226,8 @@ try {
     const cards = await run(`[...document.querySelectorAll('[data-work-row]')].map((el) => {
       const cs = getComputedStyle(el); const title = el.querySelector('.dv-card-title');
       return { key: el.getAttribute('data-work-row'), col: el.closest('[data-work-column]').getAttribute('data-work-column'), tint: el.getAttribute('data-tint'),
-        bg: cs.backgroundColor, edge: cs.borderTopColor, ink: getComputedStyle(title).color };
+        bg: cs.backgroundColor, edge: cs.borderTopColor, ink: getComputedStyle(title).color,
+        meta: getComputedStyle(el.querySelector('[data-work-meta]')).color };
     })`);
     const wrong = cards.filter((x) => x.tint !== TINT[x.col]);
     ok(`${theme}: every card's tint is its column's status (${cards.length} cards)`, cards.length > 10 && !wrong.length, JSON.stringify(wrong));
@@ -238,6 +239,9 @@ try {
     const worst = Math.min(...cards.map((x) => contrast(x.ink, x.bg)));
     ok(`${theme}: the title is at least 4.5:1 on every tint (lowest ${worst.toFixed(2)}:1)`, worst >= 4.5,
       JSON.stringify(Object.fromEntries(Object.entries(byTint).map(([k, v]) => [k, contrast(v.ink, v.bg).toFixed(2)]))));
+    const meta = Math.min(...cards.map((x) => contrast(x.meta, x.bg)));
+    ok(`${theme}: …and so is the grey line under it (lowest ${meta.toFixed(2)}:1)`, meta >= 4.5,
+      JSON.stringify(Object.fromEntries(Object.entries(byTint).map(([k, v]) => [k, contrast(v.meta, v.bg).toFixed(2)]))));
   }
 
   console.log('── a finger, on a phone');
