@@ -102,8 +102,9 @@ export function Conversation({ id }: { id: string }) {
   const hostInfo = useStore((s) => s.hostInfo);
   const host = useStore((s) => s.host);
   const limits = useStore((s) => s.limits);
-  // This chat's messages still on their way (#292), oldest first.
-  const outgoing = useStore(useShallow((s) => (s.outbox ?? []).filter((m) => m.chat_id === id && m.host === s.activeHostId)));
+  // This chat's messages still on their way (#292), oldest first. A chat id
+  // is one computer's, so which computer they are for needs no asking here.
+  const outgoing = useStore(useShallow((s) => (s.outbox ?? []).filter((m) => m.chat_id === id)));
   // Selector-less `useStore()` would subscribe this screen to every store write,
   // so a *different* chat streaming in the background re-rendered this one on
   // every token. Take just the actions; their identities never change.
