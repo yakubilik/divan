@@ -24,21 +24,30 @@ Event (daemon → client, unasked):
 ```
 `seq` is set on durable events (the ones written to SQLite) and `null` on live
 ones. After a reconnect, `chat.get {since_seq}` replays the durable events that
-were missed.
+were missed. Ask from the last `seq` held when the old socket went, not from the
+newest one in hand: the new socket delivers live events as soon as it is up,
+before the client has asked, and asking forward from those skips the gap.
 
 Every connected client has a queue of its own on the daemon side, and a writer
 that drains it. A client that stops accepting — a phone in a pocket, a laptop
 that slept — is closed once it falls a thousand events behind or takes twenty
 seconds over one message, rather than waited for: a turn awaits the events it
 emits, so waiting on one dead socket used to stop the turn itself, and every
-other device watching it.
+other device watching it. The answer to a `ping` is the one exception to the
+queue's order: it carries no state, so it goes out ahead of whatever is queued,
+and a heartbeat is never stuck behind a history replay or a long stream.
+
+A socket opened with `&once=1` beside the token is a one-shot: a client asking
+one thing of a computer it is not connected to (the phone reads every paired
+computer for its Divan screens). The daemon logs it at debug as a one-shot
+socket, not as the device connecting and disconnecting.
 
 ## Requests
 
 | type | data | returns |
 |---|---|---|
-| `hello` | `{device_name?, push_token?}` | `{host, catalog, device}` |
-| `ping` | – | `{ts}` — the client's heartbeat. A socket can die without either end being told (the computer slept, a NAT dropped an idle flow) and the client goes on reporting it open while the turn it is watching silently stops arriving. Both clients ask every 15 s and give up on the socket after 10 s of silence |
+| `hello` | `{device_name?, push_token?, reconnect?}` | `{host, catalog, device}` — `reconnect: {reason, code, offline_s, silent_s?}` is why the last socket went, for the daemon's log: `offline_s` from when the client noticed, `silent_s` from the last thing the old socket delivered (they differ by however long the phone slept) |
+| `ping` | – | `{ts}` — the client's heartbeat. A socket can die without either end being told (the computer slept, a NAT dropped an idle flow) and the client goes on reporting it open while the turn it is watching silently stops arriving. Both clients ask every 15 s and give up on the socket after 10 s of silence (the phone after two such misses). The phone also pings with a 2 s limit before sending a request on a socket that has said nothing for longer than a heartbeat, and on a foreground return; a socket that has been silent that long on a foreground return is replaced without asking |
 | `host.info` | – | host information |
 | `host.models` | – | `{claude: {models, efforts, perm_modes, default_perm_mode}, codex: {...}}` — `default_perm_mode` is what a chat opens in when `chat.create` names none, and what both clients offer first; it is `bypass` for every tool |
 | `host.projects` | – | `{projects: [{path,name,is_git}], roots}` |
