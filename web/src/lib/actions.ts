@@ -22,6 +22,12 @@ export const send = (key: string, chatId: string, text: string, attachments: any
     chat_id: chatId, text, ...(attachments.length ? { attachments } : {}),
   });
 
+/** Set the folder new chats open in on that computer — for the phone as well,
+ *  which reads the same answer. Null goes back to the computer's first root.
+ *  Every client hears it as `host.status`, this one included. */
+export const setDefaultCwd = (key: string, cwd: string | null) =>
+  call<{ cwd: string; chosen: boolean }>(key, 'host.default_cwd', { cwd });
+
 /** What the agent on a ticket has printed, a page at a time.
  *
  *  The run's stream-json is hundreds of kilobytes by the time a worker is

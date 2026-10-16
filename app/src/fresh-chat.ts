@@ -5,12 +5,12 @@
 // computer for one outright, and this is what it asks with: the same choices
 // `app/new-chat.tsx` starts out on before anything in it is touched — the tool
 // and its remembered model, effort and sign-in, the computer's permission mode,
-// the remembered folder, and the agent the last chat was opened with (Hermes
+// the computer's default folder, and the agent the last chat was opened with (Hermes
 // where none ever was, nothing after an explicit "No agent"). No React and no
 // store, so `scripts/test-fresh-chat.cjs` holds it to that without a phone.
 import { accountValues } from './compose';
 import { permissionFor } from './permissions';
-import type { Agent, CliAccount, Defaults, Provider, ProviderCatalog } from './protocol';
+import type { Agent, CliAccount, Defaults, HostInfo, Provider, ProviderCatalog } from './protocol';
 
 /** What `chat.create` is given. */
 export interface FreshChat {
@@ -24,10 +24,14 @@ export interface FreshChat {
   title?: string;
 }
 
-/** The folder a fresh chat opens in: the remembered one, else the first the
- *  computer lists. Null where there is none, and only the sheet can ask. */
-export function freshCwd(d: Defaults, projects: { path: string }[]): string | null {
-  return d.cwd || projects[0]?.path || null;
+/** The folder a new chat opens in when nothing more specific was chosen: the
+ *  computer's answer (`host.info.default_cwd`, set from either client's
+ *  settings), the same one the web panel reads — never the first entry of a
+ *  list. A daemon too old to say gets its first root, which is what it would
+ *  use itself. Null before the computer has said anything, and only the sheet
+ *  can ask. A product page or a folder picked in the sheet still wins. */
+export function freshCwd(host: Pick<HostInfo, 'default_cwd' | 'roots'> | null | undefined): string | null {
+  return host?.default_cwd || host?.roots?.[0] || null;
 }
 
 /** The sign-in a fresh chat opens on: the one remembered for this tool, unless

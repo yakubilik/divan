@@ -80,7 +80,8 @@ function Body() {
         max_budget_usd: budget.trim() ? Number(budget.replace('$', '')) : null,
         pool_pinned: pinned ? 1 : 0,
       } as any);
-      void setDefaults({ provider, model, effort: effort ?? 'high', perm_mode: perm, cwd: cwd ?? undefined });
+      // Not the folder: where new chats open is the computer's, set in Settings.
+      void setDefaults({ provider, model, effort: effort ?? 'high', perm_mode: perm });
       close();
     } catch (e: any) { alert(T('couldNotSave'), e.message); }
     finally { setSaving(false); }

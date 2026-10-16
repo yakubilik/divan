@@ -63,13 +63,16 @@ function stand(fleet = BUSY, o = {}) {
     loadDivan() {}, ustabasi: null, ustabasiOld: false, loadUstabasi() {},
     catalog: { claude: { models: [{ id: 'opus', label: 'Opus 5', hint: '' }, { id: 'sonnet', label: 'Sonnet 5', hint: '' }],
                          efforts: ['low', 'high'], perm_modes: ['default', 'bypass'] } },
-    defaults: { provider: 'claude', model: 'opus', effort: 'high', perm_mode: 'default', cwd: '/r/home',
+    // A folder this phone remembered before the computer decided (#299): it
+    // must not count. The computer's default is `hostInfo.default_cwd`.
+    defaults: { provider: 'claude', model: 'opus', effort: 'high', perm_mode: 'default', cwd: '/r/stale',
                 byProvider: { claude: { model: 'opus', effort: 'high', perm_mode: 'default', account_id: '' } } },
     accounts: [{ id: 'default-claude', provider: 'claude', label: 'own', logged_in: true, is_default: true, detail: '' },
                { id: 'a2', provider: 'claude', label: 'yakup@', logged_in: true, is_default: false, detail: '' }],
     accountsLoaded: true, loadAccounts: async () => {},
     limits: o.limits ?? { 'default-claude': [{ window: '7d', status: 'allowed', utilization: 0.91, resets_at: null }] },
-    projects: [{ path: '/r/quire', name: 'quire', is_git: true }],
+    projects: [{ path: '/r/DevTrace-main', name: 'DevTrace-main', is_git: true }, { path: '/r/quire', name: 'quire', is_git: true }],
+    hostInfo: { name: 'studio', roots: ['/r'], default_cwd: '/r/home', default_cwd_chosen: true },
     listAgents: async () => [{ id: 'hermes', name: 'hermes', label: 'Hermes', installed: true }],
     createChat: async (d) => { calls.push(['chat.create', d]); return { id: 'new1' }; },
     send: async (id, text) => { calls.push(['chat.send', { id, text }]); },
@@ -100,8 +103,9 @@ const checks = [];
   draw();
   press(label('cmSend'));
   await flush();
-  checks.push(['Ask: one press sends chat.create then chat.send with the words and lands in that chat, with no sheet or picker in between',
+  checks.push(['Ask: one press sends chat.create (in the computer\'s default folder, with no project picked) then chat.send with the words and lands in that chat, with no sheet or picker in between',
     calls.map((c) => c[0]).join(',') === 'chat.create,chat.send' && calls[1][1].text === 'ship the beta tonight'
+    && calls[0][1].cwd === '/r/home'
     && calls[1][1].id === 'new1' && JSON.stringify(R.nav.pushed()) === '["/chat/new1"]'
     && R.menus.all().length === 0 && !R.nav.pushed().some((p) => ASKERS.includes(p))]);
 

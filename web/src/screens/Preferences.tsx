@@ -31,8 +31,8 @@ import {
 import { Modal, ModalHead } from '../components/Modal';
 import { ProviderMark } from '../components/Sidebar';
 import { hostAddr, onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
-import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
-import { pairComputer, parsePairing, toolStatus } from '../lib/actions';
+import { hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
+import { pairComputer, parsePairing, setDefaultCwd, toolStatus } from '../lib/actions';
 import {
   availability, dictateEngine, dictateLang, install, langChoices, langName,
   setDictateEngine, setDictateLang, support, type Availability, type EnginePref,
@@ -833,15 +833,25 @@ function ToolsSection({ tools, npm, loading, problem, onReload }: {
   );
 }
 
-/** Where the New chat dialog gets its opening answers. Unlike everything else
- *  on this screen these are the panel's own, not the daemon's: the phone keeps
- *  the same preference in its own storage, and neither can see the other's. */
+/** Where the New chat dialog gets its opening answers. The tool, model,
+ *  effort and sign-in are this panel's own; the folder is the computer's
+ *  (`host.default_cwd`), so the phone's new chats open in the same one. */
 function DefaultsSection({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
   const { refreshAccounts } = useFleet();
   const defaults = usePrefs((s) => hostDefaults(s.defaults, hostKey));
   const setDefaults = usePrefs((s) => s.setDefaults);
   const setProviderDefaults = usePrefs((s) => s.setProviderDefaults);
   const online = slot.status === 'online';
+  // The folder is the computer's answer: what it says now, and whether
+  // somebody chose it or it is simply the first root.
+  const folder = newChatCwd(slot.info);
+  const chosen = !!slot.info?.default_cwd_chosen;
+  const [folderErr, setFolderErr] = useState<string | null>(null);
+  const pickFolder = (cwd: string | null) => {
+    setFolderErr(null);
+    setDefaultCwd(hostKey, cwd).catch((e) => setFolderErr(err(e)));
+  };
+  const firstRoot = slot.info?.roots?.[0] ?? null;
 
   // Same reason AccountsSection asks: account.list shells out to the CLIs, so
   // it is asked for once and only re-asked when something needs it.
@@ -960,22 +970,25 @@ function DefaultsSection({ hostKey, slot }: { hostKey: string; slot: HostSlot })
             pushing everything else off the screen. */}
         <div style={{ maxHeight: 260, overflowY: 'auto' }}>
           <Pick
-            first label="Ask each time" hint="New chat opens with no folder picked"
-            on={!defaults.cwd}
-            onPick={() => setDefaults(hostKey, { cwd: null })}
+            first label="The computer's first root" hint="New chats open at the top of the allowed folders"
+            right={firstRoot ? tilde(firstRoot) : undefined}
+            on={!chosen}
+            onPick={() => pickFolder(null)}
           />
           {slot.projects.map((pr) => (
             <Pick
               key={pr.path} label={pr.name} right={tilde(pr.path)}
-              on={defaults.cwd === pr.path}
-              onPick={() => setDefaults(hostKey, { cwd: pr.path })}
+              on={chosen && folder === pr.path}
+              onPick={() => pickFolder(pr.path)}
             />
           ))}
         </div>
       </Card>
+      {folderErr && <Aside tone="warn">{folderErr}</Aside>}
 
       <Aside>
-        Remembered in this browser, for this computer — the phone app keeps its own.
+        Kept on the computer, so the phone opens its new chats in the same folder. A product
+        page, or a folder picked in New chat, still wins for that one chat.
       </Aside>
     </>
   );

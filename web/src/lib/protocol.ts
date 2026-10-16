@@ -54,6 +54,12 @@ export interface HostInfo {
   uptime_s: number; active_sessions: number; connected_devices: number;
   versions: { claude: string | null; codex: string | null };
   roots: string[];
+  /** The folder a new chat opens in when nothing more specific was chosen —
+   *  the computer's one answer, the same the phone reads (`newChatCwd`).
+   *  Missing on a computer from before it had one. */
+  default_cwd?: string;
+  /** Whether somebody set that folder in settings; false is the first root. */
+  default_cwd_chosen?: boolean;
   transcription?: boolean;
   /** The commit this computer is actually running. `daemon_version` is a
    *  constant nobody remembers to raise and cannot tell two computers apart;

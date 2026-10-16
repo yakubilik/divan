@@ -29,9 +29,41 @@ os.environ["DIVAN_HOME"] = str(TMP / "home")
 os.environ["USTABASI_STATE_DIR"] = str(TMP / "nowhere")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from divan import naming, recap                                  # noqa: E402
 from divan.config import Config                                  # noqa: E402
+from divan.providers.base import TurnResult                      # noqa: E402
+from divan.session import ChatSession                            # noqa: E402
 
 FOLDERS = ["DevTrace-main", "quire", "zeta"]
+
+
+class StandIn:
+    """A CLI that answers every turn at once, and never runs."""
+
+    async def steer(self, prompt, attachments=None):
+        return False
+
+    async def run(self, prompt, attachments=None):
+        return TurnResult(session_id="sess-1", cost_usd=None, usage=None, duration_ms=1, num_turns=1)
+
+    def has_pending(self):
+        return False
+
+    async def interrupt(self):
+        pass
+
+    async def close(self):
+        pass
+
+
+async def nothing(*a, **k):
+    return None
+
+
+ChatSession._make_provider = lambda self, chat: StandIn()
+# Titles and recaps are asked of a CLI after a turn; here nobody is asked.
+naming.ask = nothing
+recap.ask = nothing
 
 
 def free_port() -> int:
@@ -55,6 +87,10 @@ async def main() -> None:
     cfg.save()
     port = free_port()
     srv = Server(cfg)
+
+    async def no_fetch() -> None:
+        return None
+    srv.warm_models = no_fetch                 # the catalog's own lists, no CLI asked
     uc = uvicorn.Config(srv.app, host="127.0.0.1", port=port, log_level="warning",
                         ws_ping_interval=None, ws_ping_timeout=None)
     server = uvicorn.Server(uc)

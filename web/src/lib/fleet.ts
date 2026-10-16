@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { RacClient, dialable, type ConnStatus } from './ws';
+import { localCwdToAdopt, usePrefs } from './prefs';
 import type {
   Catalog, Chat, CliAccount, DirectoryPeer, Group, HostConfig, HostInfo, LimitWindow, Project, RacEvent,
 } from './protocol';
@@ -289,6 +290,7 @@ export const useFleet = create<FleetState>((set, get) => ({
       projects: projects.status === 'fulfilled' ? projects.value.projects : slot.projects,
       info: info.status === 'fulfilled' ? info.value : slot.info,
     }));
+    if (info.status === 'fulfilled') await adoptLocalCwd(key, info.value);
     // Plan usage only reaches the phone as an event during a turn, so a panel
     // that just opened would show nothing. limits.get is the cold-start read.
     try {
@@ -315,6 +317,21 @@ export const useFleet = create<FleetState>((set, get) => ({
     }
   },
 }));
+
+/** Hand the folder this browser used to remember for new chats to the
+ *  computer, once, where nobody has set one there yet (`localCwdToAdopt`), and
+ *  forget it here either way: from now on the computer's answer is the only
+ *  one. A folder it refuses — gone, or outside its roots — is simply dropped. */
+async function adoptLocalCwd(key: string, info: any): Promise<void> {
+  const prefs = usePrefs.getState();
+  const local = prefs.defaults[key]?.cwd;
+  const cwd = localCwdToAdopt(info, local);
+  if (!cwd) return;
+  const c = clients.get(key);
+  if (!c) return;
+  try { await c.call('host.default_cwd', { cwd }); } catch { /* refused: nothing to keep */ }
+  usePrefs.getState().setDefaults(key, { cwd: null });
+}
 
 type Setter = (fn: (s: FleetState) => Partial<FleetState>) => void;
 
