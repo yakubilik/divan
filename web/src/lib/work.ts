@@ -289,6 +289,20 @@ export function columnOf(f: Flight): ColumnKey {
   return COLUMNS.find((c) => c.holds(f))?.key ?? 'queued';
 }
 
+/** The colour a card is washed in, over its whole surface and its edge, by
+ *  where the ticket stands: done green, needs you amber, failed red, running
+ *  the panel's own accent, and everything that is only waiting its turn —
+ *  queued, held back, cancelled — grey. */
+export type Tint = 'done' | 'ask' | 'failed' | 'running' | 'grey';
+
+export function tintOf(f: Flight): Tint {
+  if (f.ended === 'done') return 'done';
+  if (f.ended === 'failed') return 'failed';
+  if (f.phase === 'red') return 'ask';
+  if (f.phase === 'running') return 'running';
+  return 'grey';
+}
+
 /** What a card on the Board says under its title: the project, where it is or
  *  how it ended, and its age. `quire · worker r2 · open 3h`,
  *  `quire · done today 16:19 · merged`. */
