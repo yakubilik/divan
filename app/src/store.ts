@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { File, Paths } from 'expo-file-system';
 import { useCallback } from 'react';
 import { callOnce, client, httpBase, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
@@ -11,11 +12,28 @@ import { answered, DIVAN_TIMEOUT_MS, Polls, silent, type HostDivan } from './div
 import { missed, opening, took, type Open, type Say } from './card';
 import { filed, NO_DRAFT, type ComposeDraft, type Filing } from './compose';
 import { freshCwd } from './fresh-chat';
+import { delivered, Outbox, type OutboxStorage, type OutMsg } from './outbox';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
 const DEFAULTS_KEY = 'rac.defaults';
 const PREFS_KEY = 'rac.prefs';
+
+/** Where messages not yet the computer's are kept (#292): a file rather than
+ *  the keychain, which is meant for a few short secrets and not a paragraph
+ *  with attachments. A phone without a document directory (a test harness)
+ *  simply keeps nothing, and the outbox still works for the life of the app. */
+const outboxFile = () => new File(Paths.document, 'outbox.json');
+export const OUTBOX_STORAGE: OutboxStorage = {
+  read: async () => {
+    try { const f = outboxFile(); return f.exists ? await f.text() : null; } catch { return null; }
+  },
+  write: async (text) => {
+    const f = outboxFile();
+    if (!f.exists) f.create();
+    f.write(text);
+  },
+};
 
 export interface LiveText { segment: number; text: string; final?: boolean }
 export interface TurnProgress { output_tokens: number; open_tools: number }
@@ -260,7 +278,17 @@ interface State {
   createChat: (d: Partial<Chat> & { provider: string }) => Promise<Chat>;
   updateChat: (id: string, fields: Partial<Chat>) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
+  /** Hand a message to the outbox (#292): it is on the phone's disk when this
+   *  resolves, and delivered — once — whenever the computer can be reached.
+   *  Never fails for want of a connection; the bubble says how it is going. */
   send: (id: string, text: string, attachments?: Attachment[]) => Promise<void>;
+  /** Messages not yet the computer's, every chat and every computer. */
+  outbox: OutMsg[];
+  /** Try a message that was given up on again. */
+  retrySend: (clientId: string) => Promise<void>;
+  /** Drop a message that was given up on; it is handed back so its words can
+   *  go back into the composer. */
+  discardSend: (clientId: string) => Promise<OutMsg | null>;
   interrupt: (id: string) => Promise<void>;
   respond: (id: string, requestId: string, decision: 'allow' | 'allow_session' | 'deny', response?: Record<string, unknown>) => Promise<void>;
   uploadAttachment: (chatId: string, uri: string, name: string) => Promise<Attachment>;
@@ -417,9 +445,23 @@ export const useStore = create<State>((set, get) => {
   const unsubs: (() => void)[] = [];
   anyClient.__unbind = () => { for (const u of unsubs) u(); };
 
+  const outbox = new Outbox({
+    call: (type, data) => client.call(type, data),
+    storage: OUTBOX_STORAGE,
+    host: () => get()?.activeHostId ?? null,
+    online: () => client.status === 'online',
+    onChange: (items) => set({ outbox: items }),
+    words: { offline: tt('wsNotConnected') },
+  });
+  anyClient.__outbox = outbox;
+  unsubs.push(() => outbox.stop());
+
   // Where every chat in hand stood when the socket went (see resumeFrom).
   let linked = false;
   unsubs.push(client.onLink((s) => {
+    // Every socket that comes up is a chance for what is waiting to go, and
+    // every one that goes starts the clock on giving up (outbox.ts).
+    outbox.link(s === 'online');
     if (s === 'online') { linked = true; return; }
     if (!linked) return;
     linked = false;
@@ -556,6 +598,9 @@ export const useStore = create<State>((set, get) => {
       case 'chat.deleted': { const chats = { ...s.chats }; delete chats[ev.data.id]; set({ chats }); return; }
     }
     if (!cid) return;
+    // The timeline's own copy of a message the outbox sent: its waiting
+    // bubble is done, whether or not this chat's events are kept here.
+    if (ev.event === 'message.user' && ev.data?.client_id) outbox.seen([ev.data.client_id]);
     switch (ev.event) {
       case 'turn.started':
         set({ busy: { ...s.busy, [cid]: true }, live: { ...s.live, [cid]: null },
@@ -723,6 +768,8 @@ export const useStore = create<State>((set, get) => {
       const host = hosts.find((h) => h.id === active) ?? null;
       set({ hosts, activeHostId: active, host, defaultsByHost: byHost,
             defaults: defaultsFor(byHost, active), prefs, locked: prefs.faceIdLaunch, ready: true });
+      // What the last run left unsent, before the socket that will send it.
+      await outbox.load();
       if (host) client.connect(host.host, host.port, host.token);
     },
 
@@ -917,6 +964,8 @@ export const useStore = create<State>((set, get) => {
           busy: { ...get().busy, [id]: busy },
           loadedChats: { ...get().loadedChats, [id]: true },
         });
+        // A message whose live copy went down with a socket is in this page.
+        outbox.seen(delivered(events));
         // Caught up — unless the socket went again while this was out.
         if (resumeFrom.get(id) === from) resumeFrom.delete(id);
       })();
@@ -951,8 +1000,14 @@ export const useStore = create<State>((set, get) => {
     },
 
     send: async (id, text, attachments) => {
-      await client.call('chat.send', { chat_id: id, text, attachments: attachments ?? [] });
+      const host = get().activeHostId;
+      if (!host) throw new Error(tt('wsNotConnected'));
+      await outbox.add(host, id, text, (attachments ?? []) as any);
     },
+
+    outbox: [],
+    retrySend: (clientId) => outbox.retry(clientId),
+    discardSend: (clientId) => outbox.discard(clientId),
 
     interrupt: async (id) => { await client.call('chat.interrupt', { chat_id: id }); },
 

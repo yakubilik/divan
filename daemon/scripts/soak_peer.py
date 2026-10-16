@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -38,6 +39,9 @@ ap.add_argument("--port", type=int, required=True)
 ap.add_argument("--tick-ms", type=int, default=200)
 ap.add_argument("--say-every", type=float, default=0)
 ap.add_argument("--host", default="127.0.0.1")
+ap.add_argument("--drop-ack", action="store_true",
+                help="a chat.send whose text has [drop-ack] in it is accepted, and then its socket "
+                     "is closed before the answer goes out — once per client id (#292)")
 args = ap.parse_args()
 os.environ["DIVAN_HOME"] = args.home
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -47,6 +51,8 @@ import uvicorn                                          # noqa: E402
 import divan.config as config_mod                       # noqa: E402
 from divan.config import Config                         # noqa: E402
 from divan.server import Server                         # noqa: E402
+
+log = logging.getLogger("rac.soak")
 
 
 async def main() -> None:
@@ -69,6 +75,20 @@ async def main() -> None:
     async def no_catalog() -> dict:
         return {}
     srv.catalog_async = no_catalog          # `hello` would otherwise ask both CLIs for models
+    if args.drop_ack:
+        real_send = srv.h_chat_send
+        dropped: set[str] = set()
+
+        async def send_and_drop(dev, d, ws):
+            ack = await real_send(dev, d)
+            cid = d.get("client_id")
+            if "[drop-ack]" in str(d.get("text")) and cid and cid not in dropped:
+                dropped.add(cid)
+                log.warning("soak_peer: chat.send %s accepted; closing the socket before the answer", cid)
+                with contextlib.suppress(Exception):
+                    await ws.close(code=1011)
+            return ack
+        srv.h_chat_send = send_and_drop
     if "chat_id" not in known:
         known["chat_id"] = srv.db.create_chat(title="soak")["id"]
         state.write_text(json.dumps(known))
