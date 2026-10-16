@@ -50,6 +50,12 @@ export const workPoll = { ms: 8000 };
  *  scrolled past. An object for the same reason as `workPoll`. */
 export const workHold = { ms: 300 };
 
+/** Where the board was scrolled to, by the address it was at: a heading
+ *  pressed leaves for the ticket's page, and Back lands where the reader was
+ *  rather than at the top left. */
+const kept = { at: '', top: 0, side: 0 };
+const here = () => (typeof location === 'undefined' ? '' : location.pathname + location.search);
+
 /** What the board is narrowed to: which days (null: the last seven), what is
  *  typed in the search box and which project (null: all). Held by the panel,
  *  beside the rest of where it is, because it is in the address. */
@@ -164,6 +170,27 @@ export function Work({ onOpen, layout, onLayout }: {
   const silent = online.length > 0 && answered.length === online.length && online.every((k) => errors[k]);
   const narrowed = !!shown.search.trim() || !!shown.project;
 
+  // The scroll this address was left at, put back once the cards are drawn.
+  const pane = useRef<HTMLDivElement>(null);
+  const back = useRef(kept.at === here() ? { top: kept.top, side: kept.side } : null);
+  useEffect(() => {
+    const was = back.current;
+    if (!was || !rows.length) return;
+    back.current = null;
+    const el = pane.current;
+    if (!el) return;
+    el.scrollTop = was.top;
+    const b = el.querySelector<HTMLElement>('[data-work-board]');
+    if (b) b.scrollLeft = was.side;
+  }, [rows.length]);
+  const scrolled = (e: React.UIEvent<HTMLElement>) => {
+    const el = pane.current;
+    if (!el || back.current) return;
+    const b = el.querySelector<HTMLElement>('[data-work-board]');
+    if (e.target !== el && e.target !== b) return;
+    Object.assign(kept, { at: here(), top: el.scrollTop, side: b?.scrollLeft ?? 0 });
+  };
+
   /** The card whose chat is open, by its key. What the window says is read off
    *  the newest snapshot; a card the filters have since narrowed away keeps
    *  the last one it was drawn from rather than closing under the reader. */
@@ -173,7 +200,7 @@ export function Work({ onOpen, layout, onLayout }: {
   seen.current = talking;
 
   return (
-    <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+    <div ref={pane} onScrollCapture={scrolled} style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
       {/* Seven columns do not fit the width a list is read at: the board takes
           the window. */}
       <div className="dv-page" data-work="" data-grouping="board" style={{ maxWidth: 'none' }}>
