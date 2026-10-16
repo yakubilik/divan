@@ -54,7 +54,6 @@ export default function ChatPlace() {
   const conn = useStore((s) => s.conn);
   const hostInfo = useStore((s) => s.hostInfo);
   const host = useStore((s) => s.host);
-  const defaults = useStore((s) => s.defaults);
   const projects = useStore((s) => s.projects);
   const showArchived = useStore((s) => s.showArchived);
   const chatView = useStore((s) => s.prefs.chatView);
@@ -104,7 +103,7 @@ export default function ChatPlace() {
   const sayFirst = useCallback(async () => {
     const words = first.trim();
     if (!words || creating.current) return;
-    if (!freshCwd(defaults, projects)) { go(() => router.push('/new-chat')); return; }
+    if (!freshCwd(hostInfo)) { go(() => router.push('/new-chat')); return; }
     creating.current = true;
     try {
       const chat = (await openFresh())!;
@@ -116,12 +115,12 @@ export default function ChatPlace() {
     } finally {
       creating.current = false;
     }
-  }, [first, defaults, projects, openFresh, send, router, go, T]);
+  }, [first, hostInfo, openFresh, send, router, go, T]);
 
   // Tap: a fresh chat, opened at once — no Dashboard, no sheet. Long-press: the
   // New chat sheet, for a different folder, tool or model.
   const quickNew = useCallback(async () => {
-    if (!freshCwd(defaults, projects)) { go(() => router.push('/new-chat')); return; }
+    if (!freshCwd(hostInfo)) { go(() => router.push('/new-chat')); return; }
     // Creating a chat is a round trip to the computer; without this a second
     // tap while it is in flight makes a second chat nobody asked for.
     if (creating.current) return;
@@ -142,7 +141,7 @@ export default function ChatPlace() {
       creating.current = false;
       setStarting(false);
     }
-  }, [defaults, projects, openFresh, router, go, T]);
+  }, [hostInfo, openFresh, router, go, T]);
   const quickNewRef = useRef(quickNew);
   quickNewRef.current = quickNew;
 

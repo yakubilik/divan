@@ -98,11 +98,19 @@ const { host: fixtureHost, chat: fakeChat } = await import(pathToFileURL(join(we
 
 /** The fixture's computer, its chats a minute old and the newest one first by
  *  a clear margin, so which chat the place lands on is known. */
+const HOME = '/Users/x/projects/home';
 const fakeHost = () => {
   const host = fixtureHost();
   const at = Date.now() / 1000 - 60;
-  return { ...host, chats: host.chats.map((c, i) => ({ ...c, archived: 0, updated_at: at - i * 5 })) };
+  return { ...host, chats: host.chats.map((c, i) => ({ ...c, archived: 0, updated_at: at - i * 5 })),
+    // The computer's default folder for a new chat (#299), and DevTrace-main
+    // first in its list, the way a sorted ~/projects has it.
+    info: { ...host.info, default_cwd: HOME, default_cwd_chosen: true },
+    projects: [{ path: '/Users/x/projects/DevTrace-main', name: 'DevTrace-main', is_git: true }, ...host.projects] };
 };
+// A folder this browser remembered before the computer decided: not read.
+w.localStorage.setItem('rac.defaults', JSON.stringify({ studio: { provider: 'claude',
+  cwd: '/Users/x/projects/DevTrace-main', byProvider: {} } }));
 
 const React = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -279,6 +287,8 @@ const id = asked[said]?.data?.chat_id;
 ok('chat.create then chat.send with the words',
   made >= 0 && said > made && asked[said].data.text === 'start something new',
   asked.map((a) => a.type).join(','));
+ok('…and the chat opens in the computer’s default folder, not DevTrace-main nor this browser’s old one',
+  asked[made]?.data?.cwd === HOME, asked[made]?.data?.cwd);
 ok('the new chat opens in the Chat place middle pane with the sidebar beside it',
   place() === 'Chat' && !!id && w.location.pathname === `/chats/${id}` && chatOpen() && sidebar()
     && !!selectedRow() && !firstWord(),
@@ -371,6 +381,34 @@ ok('⌘N on the Dashboard focuses the Dashboard Composer, and stays there',
   place() === 'Dashboard' && w.location.pathname === '/' && focused?.tagName === 'TEXTAREA'
     && !!focused.closest('.dv-composer') && !pane(),
   `${place()} · ${w.location.pathname} · ${focused?.tagName}`);
+
+// ── the dialog with every option ────────────────────────────────────────────
+
+group('New chat with every option: the folder');
+const dialogStart = () => [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Start chat');
+const moreOptions = () => [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'More options');
+const lastCreate = () => asked.filter((a) => a.type === 'chat.create').at(-1)?.data;
+await click(moreOptions());
+await settle();
+asked.length = 0;
+await click(dialogStart());
+await settle();
+ok('the dialog opens on the computer’s default folder and starts the chat there', lastCreate()?.cwd === HOME,
+  JSON.stringify(lastCreate()));
+ok('…and starting it leaves no folder of its own behind in this browser',
+  JSON.parse(w.localStorage.getItem('rac.defaults') ?? '{}').studio?.cwd !== HOME);
+await click(nav('Dashboard'));
+await settle();
+await click(moreOptions());
+await settle();
+const quire = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('quire')
+  && (b.textContent ?? '').includes('/'));
+await click(quire);
+await settle();
+asked.length = 0;
+await click(dialogStart());
+await settle();
+ok('a folder picked in the dialog wins', lastCreate()?.cwd === '/Users/x/projects/quire', JSON.stringify(lastCreate()));
 
 // ── leaving the place and coming back ───────────────────────────────────────
 

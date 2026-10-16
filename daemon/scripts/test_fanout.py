@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from divan.server import OUTBOX_MAX, Server
+from divan.server import OUTBOX_MAX, Outbox, Server
 from divan.term import Terms
 from divan.voice import Hub
 
@@ -76,7 +76,7 @@ class Fanout:
 
     def attach(self, ws: Sock) -> None:
         self.clients[ws] = object()
-        self.outbox[ws] = asyncio.Queue()
+        self.outbox[ws] = Outbox()
         self.writers[ws] = asyncio.create_task(self._writer(ws, self.outbox[ws]))
 
 

@@ -186,7 +186,7 @@ async function locked() {
 // 1 (wire) · what the board's move asks the computer for
 async function wire() {
   const asked = [];
-  const client = { onStatus: () => () => {}, on: () => () => {}, poke() {}, connect() {}, disconnect() {},
+  const client = { onStatus: () => () => {}, onLink: () => () => {}, on: () => () => {}, poke() {}, connect() {}, disconnect() {},
                    call: async (type, data) => { asked.push([type, data]); return type === 'divan.card.move' ? { error: null } : {}; } };
   const stand2 = { [path.join(root, 'src/ws.ts')]: { client, callOnce: async () => ({}) },
                    [path.join(root, 'src/push.ts')]: { dismissChatNotifications() {} } };

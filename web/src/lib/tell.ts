@@ -23,7 +23,7 @@ import { create } from 'zustand';
 import { createChat, listAgents, send, upload } from './actions';
 import type { Provider } from './protocol';
 import { useFleet } from './fleet';
-import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from './prefs';
+import { hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from './prefs';
 import { PANELS, TABS } from './sessions';
 import { useLogs } from './timeline';
 
@@ -84,7 +84,7 @@ export function chatTitle(text: string): string {
  *  reported its catalog yet, or one with no model in it. The bar says so
  *  instead of sending a chat nobody can answer. */
 export function toldDefaults(
-  slot: { catalog: any; accounts?: any[] } | null | undefined,
+  slot: { catalog: any; accounts?: any[]; info?: any } | null | undefined,
   defaults: Record<string, any>,
   host: string,
   /** Asked for by name rather than the computer's usual tool: the bar's chats
@@ -106,7 +106,9 @@ export function toldDefaults(
   // than resolved away to the computer's own, which would quietly move every
   // chat off the subscription that was chosen.
   const account_id = accounts.length ? r.account_id : (pd.account_id ?? '');
-  return { provider, cwd: d.cwd ?? null, ...r, account_id };
+  // The folder is the computer's answer, not this browser's: the phone opens
+  // its new chats in the same one (`newChatCwd`).
+  return { provider, cwd: newChatCwd(slot?.info), ...r, account_id };
 }
 
 // ── where a scoped page opens a chat ────────────────────────────────────────

@@ -6,7 +6,7 @@ import { ProviderMark } from './Sidebar';
 import { accountName } from './FieldSheet';
 import { tilde } from '../lib/format';
 import { useFleet } from '../lib/fleet';
-import { hostDefaults, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
+import { hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
 import { createChat, listAgents } from '../lib/actions';
 import type { Agent, Chat, Provider } from '../lib/protocol';
 
@@ -49,7 +49,10 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
   const [agentTouched, setAgentTouched] = useState(!!initialAgent);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
-  const [cwd, setCwd] = useState<string | null>(initialCwd ?? defaults.cwd ?? null);
+  // Where the dialog was opened from wins (a group's or a folder's own +);
+  // anywhere else it is the computer's default folder, the one the phone and
+  // the command bar open new chats in too (`newChatCwd`).
+  const [cwd, setCwd] = useState<string | null>(initialCwd ?? newChatCwd(slot?.info));
   const [query, setQuery] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [maxTurns, setMaxTurns] = useState('');
@@ -178,8 +181,10 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
       // what the next one opens with. Settings shows and edits the same values.
       // An agent opened from its own card is not remembered: it belongs to
       // that one chat. One picked here is, so the next chat opens on it.
+      // Not the folder: a folder picked here is for this chat, and the default
+      // one is the computer's, set in Settings → New chats.
       setDefaults(hostKey, {
-        provider, cwd,
+        provider,
         ...(agentTouched && !initialAgent ? { lastAgent: agent ? agent.id : null } : {}),
       });
       setProviderDefaults(hostKey, provider, {

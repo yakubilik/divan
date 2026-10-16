@@ -134,6 +134,10 @@ class Config:
     # Written by hand and re-read like the tunnel's settings.
     people: dict = field(default_factory=dict)
     allowed_roots: list[str] = field(default_factory=lambda: [str(Path.home() / "projects")])
+    # The folder a new chat opens in when nothing more specific was chosen: no
+    # product page, no folder picked. One answer for every client, set from
+    # either one's settings (`host.default_cwd`); empty is the first root.
+    default_cwd: str = ""
     # Subtracted from allowed_roots. Anything that holds a credential, plus this
     # daemon's own state — a chat has no business opening in its own token store.
     denied_paths: list[str] = field(default_factory=lambda: [
@@ -232,6 +236,7 @@ class Config:
             "tunnel_access_emails": self.tunnel_access_emails,
             "people": self.people,
             "allowed_roots": self.allowed_roots,
+            "default_cwd": self.default_cwd,
             "denied_paths": self.denied_paths,
             "idle_disconnect_s": self.idle_disconnect_s,
             "approval_timeout_s": self.approval_timeout_s,

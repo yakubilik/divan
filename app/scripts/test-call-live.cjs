@@ -49,7 +49,7 @@ const ready = (async () => {
   client.on((ev) => { if (ev.event?.startsWith('voice.')) events.push(ev); });
   const wire = {
     call: (t, d, ms) => { calls.push(t); return client.call(t, d, ms); }, tell: (t, d) => client.tell(t, d),
-    on: (l) => client.on(l), onStatus: (l) => client.onStatus(l), online: () => client.status === 'online',
+    on: (l) => client.on(l), onStatus: (l) => client.onLink(l), online: () => client.status === 'online',
   };
   let engine = new H.FakeEngine();
   let mic = true;
