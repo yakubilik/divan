@@ -47,6 +47,8 @@ from divan.server import Server                         # noqa: E402
 HOUSE, ELSEWHERE, GUESSER = "203.0.113.4", "203.0.113.9", "198.51.100.7"
 # A household whose browser holds a token that does not open the tunnel.
 RETRIER = "203.0.113.5"
+# Not in tunnel_allow_ips: a phone on mobile data, a new address every day.
+ROAMING, STRANGER = "178.244.204.158", "192.0.2.77"
 TEAM, AUD, ME = "divan-test", "0123abcd", "me@example.com"
 ISS = f"https://{TEAM}.cloudflareaccess.com"
 KEYS = {kid: rsa.generate_private_key(public_exponent=65537, key_size=2048) for kid in ("k1", "k2")}
@@ -318,12 +320,19 @@ def main() -> None:
 
     global published
     with client:
-        def both(**kw) -> list[int]:
-            return [ws_code(client, panel, HOUSE, **kw), http(client, "GET", "/files", panel, HOUSE, **kw, **files)]
+        def both(via: str = HOUSE, **kw) -> list[int]:
+            return [ws_code(client, panel, via, **kw), http(client, "GET", "/files", panel, via, **kw, **files)]
+
+        def told(ip: str) -> list[str]:
+            return [ln for ln in logged if ln.startswith(f"tunnel request from {ip} refused")]
 
         print("\n6. Cloudflare Access")
         check(both() == [0, 200] and fetched == [],
               "with the three settings empty no Access token is asked for", repr(fetched))
+        logged.clear()
+        check(both(STRANGER, access=signed()) == [1008, 403] and fetched == []
+              and told(STRANGER) == [f"tunnel request from {STRANGER} refused: not in tunnel_allow_ips"],
+              "with no Access an unlisted address is refused as before, a token or not", repr(told(STRANGER)))
         configure(tunnel_access_team=TEAM, tunnel_access_aud=AUD)
         srv.cfg.save()
         check(both() == [1008, 403],
@@ -340,10 +349,41 @@ def main() -> None:
                            ("for another aud", signed(aud=["somebody-else"])),
                            ("from another iss", signed(iss="https://other.cloudflareaccess.com"))):
             check(both(access=bad) == [1008, 403], f"a token {label} is refused", repr(both(access=bad)))
+        logged.clear()
+        check(both(ROAMING, access=signed()) == [1008, 403]
+              and told(ROAMING) == [f"tunnel request from {ROAMING} refused: not in tunnel_allow_ips"],
+              "team and aud without a mail list: an unlisted address with a good token is still refused",
+              repr(told(ROAMING)))
         configure(tunnel_access_emails=["Me@Example.com"])
         got = [both(access=signed(email="you@example.com")), both(access=signed())]
         check(got == [[1008, 403], [0, 200]], "with a mail list, a mail off it is refused and one on it served",
               repr(got))
+
+        logged.clear()
+        got = [both(ROAMING, access=signed()), both(ROAMING, cookie=signed())]
+        check(got == [[0, 200], [0, 200]] and told(ROAMING) == [],
+              "with all three set, an unlisted address with a good token for a listed mail is served, "
+              "socket and HTTP, header or cookie", repr((got, told(ROAMING))))
+        got = [ws_code(client, "not-a-device", ROAMING, access=signed()),
+               http(client, "GET", "/files", "not-a-device", ROAMING, access=signed(), **files),
+               http(client, "GET", "/files", local, ROAMING, access=signed(), **files)]
+        check(got == [4401, 401, 401], "and a good Access token still needs the tunnel device's own token",
+              repr(got))
+        why = "not in tunnel_allow_ips and refused by Access"
+        for label, kw, said in (
+                ("no token", {}, "no Access token"),
+                ("an expired token", {"access": signed(exp=time.time() - 3600)}, "Signature has expired"),
+                ("a token signed with another key", {"access": signed(key="k2")}, "Signature verification failed"),
+                ("a token for a mail off the list", {"access": signed(email="you@example.com")},
+                 "you@example.com is not in tunnel_access_emails")):
+            logged.clear()
+            got = both(STRANGER, **kw)
+            check(got == [1008, 403] and told(STRANGER) == [f"tunnel request from {STRANGER} refused: {why}: {said}"],
+                  f"an unlisted address with {label} is refused, and the log says why", repr((got, told(STRANGER))))
+        configure(tunnel_access_emails=[])
+        check(both(ROAMING, access=signed()) == [1008, 403],
+              "and with the mail list emptied again, the same address and token are refused")
+        configure(tunnel_access_emails=["Me@Example.com"])
         configure(tunnel_access_aud="")
         check(both(access=signed()) == [1008, 403], "a team without an aud refuses everybody")
         configure(tunnel_access_aud=AUD)
