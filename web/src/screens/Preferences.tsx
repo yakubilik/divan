@@ -875,7 +875,7 @@ function DefaultsSection({ hostKey, slot }: { hostKey: string; slot: HostSlot })
     <>
       <Head
         title="New chats"
-        hint="What the New chat dialog opens with on this computer. Nothing here is a lock — starting a chat with something else changes these to match."
+        hint="What the New chat dialog opens with on this computer. Nothing here is a lock — starting a chat with something else changes these to match, except the folder, which only changes here or in the phone's Settings."
       />
 
       <Card>
