@@ -104,7 +104,7 @@ async def ping_jumps_the_queue(srv: Server) -> None:
     sent = time.monotonic()
     await srv._dispatch(ws, dev, {"id": 7, "type": "ping", "data": {}})
     await srv._dispatch(ws, dev, {"id": 8, "type": "no.such", "data": {}})
-    deadline = sent + 10
+    deadline = sent + 60                     # order is checked here, not speed: a loaded machine sends slower
     while time.monotonic() < deadline and not any('"id": 8' in m for _, m in ws.got):
         await asyncio.sleep(0.02)
     got = [json.loads(m) for _, m in ws.got]
@@ -117,7 +117,9 @@ async def ping_jumps_the_queue(srv: Server) -> None:
     check(0 <= events_before_pong < 120, "it overtakes the queue rather than waiting it out",
           f"{events_before_pong} events went first")
     check(8 in at and [m.get("id") for m in got].index(8) > 120,
-          "any other answer still keeps its place behind the events it follows")
+          "any other answer still keeps its place behind the events it follows",
+          f"position {[m.get('id') for m in got].index(8)} of {len(got)}" if 8 in at
+          else f"not sent after {time.monotonic() - sent:.1f}s, {len(got)} messages so far")
     srv._drop(ws)
     srv.conns.pop(ws, None)
 
