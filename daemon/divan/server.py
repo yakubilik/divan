@@ -13,6 +13,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from collections import deque
 from urllib.parse import unquote
 from pathlib import Path
 
@@ -100,6 +101,41 @@ OUTBOX_MAX = 1024
 # Requests that are answered only when they fail, if sent without an id.
 QUIET_TYPES = {"voice.audio", "voice.playback", "voice.barge", "voice.ready"}
 SEND_TIMEOUT_S = 20.0
+# Answers that say "this socket is alive" and nothing else. They go out ahead of
+# whatever is queued for the client (see Outbox).
+URGENT_TYPES = {"ping"}
+
+
+class Outbox:
+    """One client's queue, with a lane in front of it.
+
+    Replies and events share one queue so they keep their order (see
+    `send_to`). A heartbeat's answer is the exception: it carries no state, so
+    it cannot be overtaken or overtake anything that matters, and the phone
+    buries a socket whose pings go unanswered for long enough. Behind a history
+    replay, a long streamed turn or a large tool result, an answer queued in
+    order waits for all of it to be written first — on a slow link that is the
+    phone giving up on a socket that was working. So pings are answered from
+    the front.
+    """
+
+    def __init__(self) -> None:
+        self._urgent: deque[str] = deque()
+        self._normal: deque[str] = deque()
+        self._ready = asyncio.Event()
+
+    def qsize(self) -> int:
+        return len(self._normal)
+
+    def put_nowait(self, msg: str, urgent: bool = False) -> None:
+        (self._urgent if urgent else self._normal).append(msg)
+        self._ready.set()
+
+    async def get(self) -> str:
+        while not (self._urgent or self._normal):
+            self._ready.clear()
+            await self._ready.wait()
+        return self._urgent.popleft() if self._urgent else self._normal.popleft()
 
 # Where a socket came from, for the line written when it goes. The tailnet is
 # Tailscale's CGNAT range and its IPv6 prefix; anything else that is not
@@ -209,7 +245,7 @@ class Server:
                                        naming_env=self._naming_env)
         self.clients: dict[WebSocket, Device] = {}
         # One queue per connected client, drained by that client's own writer.
-        self.outbox: dict[WebSocket, asyncio.Queue[str]] = {}
+        self.outbox: dict[WebSocket, Outbox] = {}
         self.writers: dict[WebSocket, asyncio.Task] = {}
         self.conns: dict[WebSocket, Conn] = {}
         self.accounts: dict[str, acct.Account] = {}
@@ -1200,10 +1236,13 @@ class Server:
             self._sweeps.add(task)
             task.add_done_callback(self._sweeps.discard)
 
-    def _enqueue(self, ws: WebSocket, msg: str) -> None:
+    def _enqueue(self, ws: WebSocket, msg: str, urgent: bool = False) -> None:
         """Hand one message to a client's writer. Never waits on the socket."""
         q = self.outbox.get(ws)
         if q is None:
+            return
+        if urgent:
+            q.put_nowait(msg, urgent=True)
             return
         if q.qsize() >= OUTBOX_MAX:
             # Hopelessly behind. Closing it is kinder than growing the queue:
@@ -1214,14 +1253,15 @@ class Server:
             return
         q.put_nowait(msg)
 
-    async def send_to(self, ws: WebSocket, payload: dict) -> None:
+    async def send_to(self, ws: WebSocket, payload: dict, urgent: bool = False) -> None:
         """One message to one client, through that client's queue.
 
         Replies go the same way as events so the two keep their order: a
         `chat.get` answer that overtook the events it was meant to precede
-        would be folded in twice by the client.
+        would be folded in twice by the client. `urgent` is for the one answer
+        that has no order to keep — a heartbeat's (see Outbox).
         """
-        self._enqueue(ws, json.dumps(payload, ensure_ascii=False, default=str))
+        self._enqueue(ws, json.dumps(payload, ensure_ascii=False, default=str), urgent)
 
     def _mark_dropped(self, ws: WebSocket, why: str) -> None:
         c = self.conns.get(ws)
@@ -1244,7 +1284,7 @@ class Server:
         if t is not None:
             t.cancel()
 
-    async def _writer(self, ws: WebSocket, q: "asyncio.Queue[str]") -> None:
+    async def _writer(self, ws: WebSocket, q: Outbox) -> None:
         """Drain one client's queue onto its socket, for as long as it lives."""
         try:
             while True:
@@ -1918,7 +1958,7 @@ class Server:
         self.clients[ws] = dev
         conn = self.conns[ws] = Conn(TunnelGate.address(ws.headers.get("cf-connecting-ip")),
                                      ws.client.host if ws.client else "?")
-        self.outbox[ws] = asyncio.Queue()
+        self.outbox[ws] = Outbox()
         self.writers[ws] = asyncio.create_task(self._writer(ws, self.outbox[ws]))
         # Written to disk here and when the socket closes, which is what lets
         # `devices` answer "when was this last used" from another process and
@@ -1926,8 +1966,16 @@ class Server:
         dev.last_seen = time.time()
         self.cfg.record()
         email = ACCESS_EMAIL.get()
-        log.info("device connected: %s (%s) transport=%s peer=%s%s", dev.name, dev.id,
-                 conn.transport, conn.peer, f", signed in as {email}" if email else "")
+        # A socket the phone opens for one request and closes when the answer
+        # lands (`callOnce` in app/src/ws.ts: reading a computer it is not
+        # connected to, every minute while a Divan screen is up). It lives a
+        # fifth of a second and is not the phone's connection, so it is not
+        # written down as one: a burst of "device disconnected" lines from these
+        # read as the phone losing the Mac when the phone was fine.
+        once = ws.query_params.get("once") == "1"
+        (log.debug if once else log.info)(
+            "%s connected: %s (%s) transport=%s peer=%s%s", "one-shot socket" if once else "device",
+            dev.name, dev.id, conn.transport, conn.peer, f", signed in as {email}" if email else "")
         await self.send_to(ws, {"type": "event", "event": "host.status", "chat_id": None,
                                 "seq": None, "data": self.host_info(), "ts": time.time()})
         code, reason = None, ""
@@ -1949,7 +1997,10 @@ class Server:
             self.conns.pop(ws, None)
             dev.last_seen = time.time()
             self.cfg.record()
-            log.info("device disconnected: %s (%s) %s", dev.name, dev.id, conn.describe(code, reason))
+            if once:
+                log.debug("one-shot socket closed: %s (%s) %s", dev.name, dev.id, conn.describe(code, reason))
+            else:
+                log.info("device disconnected: %s (%s) %s", dev.name, dev.id, conn.describe(code, reason))
 
     async def _dispatch(self, ws: WebSocket, dev: Device, req: dict) -> None:
         rid = req.get("id")
@@ -1970,7 +2021,7 @@ class Server:
             log.warning("%s failed: %s", typ, exc)
             out = {"id": rid, "type": "error",
                    "data": {"message": str(exc), "code": getattr(exc, "code", None)}}
-        await self.send_to(ws, out)
+        await self.send_to(ws, out, urgent=typ in URGENT_TYPES)
 
     # ── handlers ───────────────────────────────────────────────────────────
     async def h_ping(self, dev: Device, d: dict, ws: WebSocket) -> dict:
@@ -2000,9 +2051,13 @@ class Server:
         # line written when the last socket closed (see Conn).
         again = d.get("reconnect")
         if isinstance(again, dict) and again.get("reason"):
-            log.info("device reconnected: %s (%s) reason=%s code=%s offline=%ss",
+            # `offline` runs from when the phone noticed; `silent` from the last
+            # thing the old socket delivered. After a background they differ by
+            # however long iOS kept the app asleep (see ws.ts takeReconnect).
+            silent = again.get("silent_s")
+            log.info("device reconnected: %s (%s) reason=%s code=%s offline=%ss%s",
                      dev.name, dev.id, str(again["reason"])[:40], again.get("code"),
-                     again.get("offline_s"))
+                     again.get("offline_s"), f" silent={silent}s" if silent is not None else "")
         if d.get("push_token"):
             dev.push_token = d["push_token"]
         # Sent as an empty string when iOS invalidates it, which must clear the
