@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-/** A picture of Work (`/work`): the board, narrowed to one project, and
- *  narrow, in both themes.
+/** A picture of Work (`/work`): the board, narrowed to one project, narrow,
+ *  and with a needs-you card's chat open over it, in both themes.
  *
  *     node scripts/shot-work.mjs [out-dir]
  *
@@ -54,14 +54,20 @@ const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
 const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
 const page = (m, p) => cdp(m, p, sessionId);
 try {
-  for (const [name, width, height, mobile, query] of [
+  for (const [name, width, height, mobile, query, press] of [
     ['work', 1720, 1000, false, ''], ['work-project', 1720, 900, false, 'project=divan&range=30d'],
     ['work-narrow', 390, 1400, true, ''],
+    // A needs-you card pressed: its chat over the board, the question and Evet.
+    ['work-chat', 1600, 1000, false, '', 'studio:259'],
   ]) {
     for (const scheme of ['dark', 'light']) {
       await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
       await page('Page.navigate', { url: `file://${join(build, 'harness.html')}?theme=${scheme}&${query}` });
       await new Promise((r) => setTimeout(r, 5000));
+      if (press) {
+        await page('Runtime.evaluate', { expression: `document.querySelector('[data-work-row="${press}"] [data-work-open]').click()` });
+        await new Promise((r) => setTimeout(r, 600));
+      }
       const shot = await page('Page.captureScreenshot', { format: 'png' });
       const file = join(out, `${name}${scheme === 'dark' ? '' : '-light'}.png`);
       writeFileSync(file, Buffer.from(shot.data, 'base64'));
