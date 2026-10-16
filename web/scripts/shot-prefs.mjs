@@ -74,6 +74,12 @@ try {
     writeFileSync(file, Buffer.from(shot.data, 'base64'));
     console.log(file);
   }
-} finally { ws.close(); browser.kill(); server.close(); }
+} finally {
+  ws.close(); server.close();
+  const gone = new Promise((done) => browser.once('exit', done));
+  browser.kill();
+  await Promise.race([gone, new Promise((r) => setTimeout(r, 5000))]);
+  if (browser.exitCode === null && browser.signalCode === null) browser.kill('SIGKILL');
+}
 // An open keep-alive socket would hold the process up after the pictures are written.
 process.exit(0);
