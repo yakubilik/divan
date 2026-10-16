@@ -2044,6 +2044,42 @@ class Server:
     async def h_host_models(self, dev: Device, d: dict) -> dict:
         return await self.catalog_async()
 
+    def new_chat_cwd(self) -> str:
+        """The folder a new chat opens in when nothing more specific was
+        chosen — the one answer to that question, for every client.
+
+        The phone and the panel used to answer it each their own way (the
+        first project in a list, a folder remembered in one browser), and the
+        same "New chat" opened in two places. Now both read this from
+        `host.info` and send it back; a client that sends no folder gets it
+        here. `default_cwd` as set from settings, while it is still a folder a
+        chat may open in; else the first root, as before there was a setting.
+        """
+        chosen = self.cfg.default_cwd
+        if chosen and not self.policy.cwd_error(chosen):
+            return str(Path(chosen).expanduser().resolve())
+        return str(Path(self.cfg.allowed_roots[0]).expanduser().resolve())
+
+    async def h_host_default_cwd(self, dev: Device, d: dict) -> dict:
+        """Read, or with `cwd`, set the folder new chats open in. An empty or
+        null `cwd` goes back to the first root. Written to config.toml and told
+        to every client as `host.status`, so the other side's next new chat
+        opens there too. Existing chats are not touched."""
+        if "cwd" in d:
+            want = str(d.get("cwd") or "").strip()
+            if want:
+                if err := self.policy.cwd_error(want):
+                    raise Err(err, "that folder cannot be opened")
+                want = str(Path(want).expanduser().resolve())
+            if want != self.cfg.default_cwd:
+                self.cfg.default_cwd = want
+                self.cfg.save()
+                log.info("default folder set to %s by device %s",
+                         want or "(first root)", dev.name if dev else "?")
+                await self.broadcast({"seq": None, "chat_id": None, "event": "host.status",
+                                      "data": self.host_info(), "ts": time.time()})
+        return {"cwd": self.new_chat_cwd(), "chosen": bool(self.cfg.default_cwd)}
+
     async def h_host_projects(self, dev: Device, d: dict) -> dict:
         return {"projects": self.policy.list_projects(), "roots": self.cfg.allowed_roots}
 
@@ -2108,7 +2144,7 @@ class Server:
         provider = d.get("provider", "claude")
         if provider not in PROVIDERS:
             raise Err("unknown_provider", "unknown tool")
-        cwd = d.get("cwd") or self.cfg.allowed_roots[0]
+        cwd = d.get("cwd") or self.new_chat_cwd()
         if err := self.policy.cwd_error(cwd):
             raise Err(err, "that folder cannot be opened")
         cat = PROVIDERS[provider].catalog()
@@ -2151,7 +2187,7 @@ class Server:
         start a chat at all, so the name is taken as "a chat" and the demo
         script is what runs. No account and no agent: neither exists here.
         """
-        cwd = d.get("cwd") or self.cfg.allowed_roots[0]
+        cwd = d.get("cwd") or self.new_chat_cwd()
         if err := self.policy.cwd_error(cwd):
             raise Err(err, "that folder cannot be opened")
         cat = DemoProvider.catalog()
@@ -3338,6 +3374,11 @@ class Server:
             "active_sessions": self.sessions.active_count(),
             "connected_devices": len(self.clients),
             "versions": self._versions, "roots": self.cfg.allowed_roots,
+            # Where a new chat opens when nothing more specific was chosen —
+            # what both clients send, and what chat.create uses without one.
+            # `default_cwd_chosen` is whether somebody set it in settings.
+            "default_cwd": self.new_chat_cwd(),
+            "default_cwd_chosen": bool(self.cfg.default_cwd),
             # Never the import itself: host_info runs on the loop on every
             # connect. False until learn_transcription has the answer.
             "transcription": bool(transcribe_known()),

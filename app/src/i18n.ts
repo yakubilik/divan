@@ -567,6 +567,8 @@ const en = {
   tmRetry: 'Try again', tmHideKeyboard: 'Hide keyboard', tmNoComputer: 'No computer connected.',
   stNewChats: 'New chats', stDefaultAccount: 'Default account', stDefaultModel: 'Default model',
   stDefaultsChips: 'what the Composer opens with until its chip is changed for one chat',
+  stDefaultFolder: 'Default folder', stDefaultFolderNote: 'where new chats open, here and on the web panel',
+  stFirstRoot: 'First root',
   stOwnAccount: "This computer's account", stNoModel: 'none offered yet',
   // HANDOVER §4.8: one conversation, filed by Hermes.
   chFiled: 'filed under {project}', chTalk: 'Talk to Hermes', chNoneYet: 'No conversation yet.',
@@ -720,6 +722,8 @@ export const tr: Partial<Record<Key, string>> = {
   maNotPaired: 'Bu telefonla henüz eşleşmedi: geçmek için önce eşleştir.',
   sgChats: 'sohbetler', autoArchive: 'Sessiz sohbetleri arşivle',
   autoArchiveNote: 'bu kadar süre mesaj gelmezse; yeni bir şey gelince geri döner',
+  stDefaultFolder: 'Varsayılan klasör', stDefaultFolderNote: 'yeni sohbetlerin açıldığı yer, burada ve web panelde',
+  stFirstRoot: 'İlk kök',
   autoArchiveOff: 'Kapalı', autoArchiveH: '{n} saat', autoArchiveD: '{n} gün', autoArchive1D: '1 gün',
 };
 

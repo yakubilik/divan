@@ -10,6 +10,7 @@ import { oldHost } from './tickets';
 import { answered, DIVAN_TIMEOUT_MS, Polls, silent, type HostDivan } from './divan';
 import { missed, opening, took, type Open, type Say } from './card';
 import { filed, NO_DRAFT, type ComposeDraft, type Filing } from './compose';
+import { freshCwd } from './fresh-chat';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -220,6 +221,9 @@ interface State {
   switchHost: (id: string) => Promise<void>;
   removeHost: (id: string) => Promise<void>;
   setDefaults: (d: Partial<Defaults>) => Promise<void>;
+  /** The folder new chats open in, on the computer — for the web panel too.
+   *  Null goes back to its first root. */
+  setDefaultCwd: (cwd: string | null) => Promise<void>;
   setPrefs: (p: Partial<Prefs>) => Promise<void>;
   setDevicePrefs: (p: { push_approval?: boolean; push_done?: boolean }) => Promise<void>;
   setPushToken: (t: string | null) => void;
@@ -763,6 +767,13 @@ export const useStore = create<State>((set, get) => {
       set({ hostInfo: info });
     },
 
+    setDefaultCwd: async (cwd) => {
+      // The computer keeps it and tells every client (`host.status`), the web
+      // panel included; asking again here is for a reply that beats the event.
+      await client.call('host.default_cwd', { cwd });
+      await get().refreshHost();
+    },
+
     checkUpdate: async (refresh = false) => {
       try {
         const st = await client.call<UpdateStatus>('update.status', { refresh });
@@ -1122,12 +1133,12 @@ export const useStore = create<State>((set, get) => {
 
     installAgent: async (id, accountId) => {
       await client.call('agent.install', { id, account_id: accountId ?? null });
-      await get().loadAgents(accountId ?? null, get().defaults.cwd ?? null);
+      await get().loadAgents(accountId ?? null, freshCwd(get().hostInfo));
     },
 
     removeAgent: async (name, accountId) => {
       await client.call('agent.remove', { name, account_id: accountId ?? null });
-      await get().loadAgents(accountId ?? null, get().defaults.cwd ?? null);
+      await get().loadAgents(accountId ?? null, freshCwd(get().hostInfo));
     },
 
     loadAccounts: async () => {

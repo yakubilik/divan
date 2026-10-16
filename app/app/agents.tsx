@@ -8,6 +8,7 @@ import { useColors } from '../src/theme';
 import { BackBar, Icon, LargeTitle, Skeleton, Text } from '../src/components/ui';
 import { alert, measure, openMenu } from '../src/components/overlay';
 import { accountOptions } from '../src/components/pickers';
+import { freshCwd } from '../src/fresh-chat';
 import { AgentCard } from '../src/components/agentcard';
 import { permissionFor } from '../src/permissions';
 import type { Agent } from '../src/protocol';
@@ -18,8 +19,11 @@ export default function Agents() {
   const insets = useSafeAreaInsets();
   const T = useT();
   const c = useColors();
-  const { agents, agentsLoaded, loadAgents, defaults, projects, createChat, conn, removeAgent,
+  const { agents, agentsLoaded, loadAgents, defaults, hostInfo, createChat, conn, removeAgent,
           accounts, loadAccounts, setDefaults, catalog } = useStore();
+  // The folder an agent's chat opens in, and the one its project agents are
+  // read from: the computer's default, as for every other new chat.
+  const cwd = freshCwd(hostInfo);
   const [opening, setOpening] = useState<string | null>(null);
   const [elsewhere, setElsewhere] = useState<{ label: string; n: number } | null>(null);
   const change = useRef<View>(null);
@@ -31,9 +35,9 @@ export default function Agents() {
 
   useFocusEffect(useCallback(() => {
     if (conn !== 'online') return;
-    void loadAgents(account, defaults.cwd ?? null, provider).catch(() => {});
+    void loadAgents(account, cwd, provider).catch(() => {});
     void loadAccounts().catch(() => {});
-  }, [conn, loadAgents, loadAccounts, account, defaults.cwd, provider]));
+  }, [conn, loadAgents, loadAccounts, account, cwd, provider]));
 
   // Agents belong to an account, so an empty grid can just mean the wrong one
   // is selected. Saying which one, and letting it be changed here, is the
@@ -57,7 +61,7 @@ export default function Agents() {
     (async () => {
       for (const o of accountOpts.filter((x) => x.id !== (account ?? ''))) {
         try {
-          const r = await client.call<{ agents: Agent[] }>('agent.list', { account_id: o.id || null, cwd: defaults.cwd ?? null, provider });
+          const r = await client.call<{ agents: Agent[] }>('agent.list', { account_id: o.id || null, cwd, provider });
           const n = r.agents.filter((a) => a.installed).length;
           if (n && alive) { setElsewhere({ label: o.id === '' ? T('ownShort') : o.label, n }); return; }
         } catch {}
@@ -85,7 +89,7 @@ export default function Agents() {
         // Shared by both tools, so the general default is a fair fallback.
         perm_mode: permissionFor(provider, catalog?.[provider], defaults),
         account_id: account ?? undefined,
-        cwd: defaults.cwd ?? projects[0]?.path ?? null,
+        cwd,
       } as any);
       router.push(`/chat/${chat.id}`);
     } catch (e: any) {

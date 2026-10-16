@@ -1,4 +1,5 @@
 import { permissionFor } from '../src/permissions';
+import { freshCwd } from '../src/fresh-chat';
 import React from 'react';
 import { ScrollView, View, type GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -322,6 +323,7 @@ function DashComposer({ view, lock = null }: {
   const setCompose = (patch: Partial<typeof NO_DRAFT>) => (lock ? storeDraft(lock, patch) : storeCompose(patch));
   const catalog = useStore((s) => s.catalog);
   const defaults = useStore((s) => s.defaults);
+  const hostInfo = useStore((s) => s.hostInfo);
   const accounts = useStore((s) => s.accounts) ?? [];
   const accountsLoaded = useStore((s) => s.accountsLoaded);
   const loadAccounts = useStore((s) => s.loadAccounts);
@@ -392,7 +394,9 @@ function DashComposer({ view, lock = null }: {
         const mm = readModel(model)!;
         // The product's own repository, where this computer has it.
         const repo = p && p.ids[host.id] ? p.repos.find((r) => folders.some((f) => f.path === r)) ?? p.repos[0] ?? null : null;
-        const cwd = repo ?? defaults?.cwd ?? folders[0]?.path ?? undefined;
+        // No product picked: the computer's default folder, where every other
+        // new chat opens too (`freshCwd`).
+        const cwd = repo ?? freshCwd(hostInfo) ?? undefined;
         const agent = picks.agent !== undefined ? picks.agent
           : hermes?.id ?? (await listAgents(account || null, cwd ?? null, mm.provider).catch(() => [] as Agent[]))
               .find((a) => a.installed && (a.name === 'hermes' || a.id === 'hermes'))?.id ?? null;

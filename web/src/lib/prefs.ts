@@ -17,6 +17,9 @@ export interface ProviderDefaults {
  *  folders are all things only that daemon can name. Keyed by `hostKey`. */
 export interface Defaults {
   provider: Provider;
+  /** No longer read for new chats: the folder they open in is the computer's
+   *  (`newChatCwd`). A value left from before is handed to the computer once
+   *  (`localCwdToAdopt`) and then cleared. */
   cwd: string | null;
   byProvider: Partial<Record<Provider, ProviderDefaults>>;
   /** Which sign-in the Agents screen reads from. Its own setting, because an
@@ -113,4 +116,28 @@ export function resolveDefaults(
     // never to whichever other account happens to be there.
     account_id: accounts.some((a) => !a.is_default && a.id === pd.account_id) ? pd.account_id : '',
   };
+}
+
+/** The folder a new chat opens in on this computer when nothing more specific
+ *  was chosen — no product page, no folder picked. The computer decides it
+ *  (`host.info.default_cwd`, set from either client's settings) and the phone
+ *  reads the same field, so "New chat" opens in one place from both. A daemon
+ *  too old to say gets its first root, which is what it would use itself. */
+export function newChatCwd(
+  info: { default_cwd?: string | null; roots?: string[] } | null | undefined,
+): string | null {
+  return info?.default_cwd || info?.roots?.[0] || null;
+}
+
+/** The folder this browser used to remember for new chats, to hand to the
+ *  computer once: while the default lived here, this was where the panel's
+ *  new chats opened, and it is what that computer's default should become.
+ *  Only where the computer can take one and nobody has set one there yet; null
+ *  when there is nothing to hand over. */
+export function localCwdToAdopt(
+  info: { default_cwd?: string | null; default_cwd_chosen?: boolean } | null | undefined,
+  local: string | null | undefined,
+): string | null {
+  if (!local || !info || info.default_cwd === undefined || info.default_cwd_chosen) return null;
+  return local;
 }
