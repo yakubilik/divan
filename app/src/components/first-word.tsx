@@ -17,19 +17,19 @@ import type { Chat } from '../protocol';
  *  cannot be read the chat opens without one rather than not at all. */
 export function useFreshChat() {
   const defaults = useStore((s) => s.defaults);
-  const projects = useStore((s) => s.projects);
+  const hostInfo = useStore((s) => s.hostInfo);
   const accounts = useStore((s) => s.accounts);
   const catalog = useStore((s) => s.catalog);
   const listAgents = useStore((s) => s.listAgents);
   const createChat = useStore((s) => s.createChat);
   return useCallback(async (): Promise<Chat | null> => {
-    const cwd = freshCwd(defaults, projects ?? []);
+    const cwd = freshCwd(hostInfo);
     if (!cwd) return null;
     const account = freshAccount(defaults, accounts);
     const agents = defaults.lastAgent === null ? []
       : await listAgents(account || null, cwd, defaults.provider).catch(() => []);
     return createChat(freshChat({ defaults, catalog, cwd, account, agent: freshAgent(defaults, agents) }) as any);
-  }, [defaults, projects, accounts, catalog, listAgents, createChat]);
+  }, [defaults, hostInfo, accounts, catalog, listAgents, createChat]);
 }
 
 /** The field and its send button. Whatever is typed stays the caller's. */
