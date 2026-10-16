@@ -278,6 +278,14 @@ group('the project picker: every project in the snapshot, with counts');
     JSON.stringify(counts('sitemap')));
 }
 
+group('every card is tinted by where it stands');
+{
+  const tints = Object.fromEntries(W.boardColumns(narrow(null)).map((g) => [g.key, [...new Set(g.rows.map(W.tintOf))].join(',')]));
+  ok('done green, needs you amber, failed red, running the accent; queued, waiting and cancelled grey',
+    same(tints, { queued: 'grey', waiting: 'grey', running: 'running', blocked: 'ask', done: 'done', failed: 'failed', cancelled: 'grey' }),
+    JSON.stringify(tints));
+}
+
 group('the head line counts in words');
 {
   ok('the last seven days', W.headLine(narrow(null), null)
@@ -367,12 +375,27 @@ let writes = [];
 let refuseNext = null;
 /** The queue's own line: its pause, its disk gate, its slots. */
 let queueMeta = {};
+/** While set, a write waits for it to open: `open()` answers, `open(why)` refuses. */
+let gate = null;
+const holdWrites = () => { let open; const promise = new Promise((r) => { open = r; }); gate = { promise, open }; return gate; };
+/** While set, the next read of the queue is held, with the snapshot it read
+ *  before it was held — a poll in flight across a move. */
+let listGate = null;
+let listHeld = false;
+let lists = 0;
+const holdNextList = () => { let open; const promise = new Promise((r) => { open = r; }); listGate = { promise, open }; listHeld = false; return listGate; };
 const write = (id, patch) => { tickets = tickets.map((x) => (x.id === id ? { ...x, ...patch, updated_at: Date.now() / 1000 } : x)); };
 const call = async (key, type, data = {}) => {
   if (type === 'divan.snapshot') throw new Error('That computer did not answer');
-  if (type === 'ustabasi.list') return { available: true, tickets, queue: { last_tick: Date.now() / 1000, ...queueMeta } };
+  if (type === 'ustabasi.list') {
+    lists++;
+    const snap = { available: true, tickets, queue: { last_tick: Date.now() / 1000, ...queueMeta } };
+    if (listGate) { const g = listGate; listGate = null; listHeld = true; await g.promise; listHeld = false; }
+    return snap;
+  }
   if (type === 'ustabasi.cancel' || type === 'ustabasi.restart' || type === 'ustabasi.priority') {
     writes.push(type === 'ustabasi.priority' ? `${key} priority ${data.id} ${data.priority}` : `${key} ${type.slice(9)} ${data.id}`);
+    if (gate) { const g = gate; const why = await g.promise; gate = null; if (why) throw new Error(why); }
     if (refuseNext) { const why = refuseNext; refuseNext = null; throw new Error(why); }
     if (type === 'ustabasi.cancel') { write(data.id, { status: 'cancelled', finished_at: Date.now() / 1000 }); return { ok: true, message: `#${data.id} cancelled` }; }
     if (type === 'ustabasi.restart') { write(data.id, { status: 'queued', finished_at: null, escalation: '' }); return { ok: true, message: `#${data.id} back in the queue` }; }
@@ -809,6 +832,51 @@ group('the queue saying no is said on the card');
     && saidOn(203)?.getAttribute('data-work-said') === 'error'
     && saidOn(203)?.textContent === '#203 has a branch nobody merged; restart refused', saidOn(203)?.textContent);
   ok('…and the card is where the snapshot says it is', columnOf(203) === 'cancelled');
+}
+
+group('a card put down waits in its new column as a ghost until the queue answers');
+{
+  const pill = (id) => rowOf(id)?.querySelector('.dv-status')?.textContent ?? null;
+  const badge = (id) => rowOf(id)?.querySelector('[data-work-badge]')?.textContent ?? null;
+  const ghost = (id) => rowOf(id)?.getAttribute('data-work-pending') ?? null;
+  await fresh();
+  const g = holdWrites();
+  await drag(44, 'running');
+  ok('Queued → In progress: at once in In progress, saying Starting…, its status still queued',
+    columnOf(44) === 'running' && ghost(44) === 'running' && badge(44) === 'Starting…' && pill(44) === 'queued'
+    && same(writes, ['studio priority 44 0']), `${columnOf(44)} · ${ghost(44)} · ${badge(44)} · ${pill(44)} · ${JSON.stringify(writes)}`);
+  ok('…and no longer in Queued', !doc.querySelector('[data-work-column="queued"] [data-work-row="studio:44"]'));
+  await drag(44, 'cancelled');
+  await click(rowOf(44)?.querySelector('[data-work-move]'));
+  ok('a second drop while the first is out asks nothing, and Move to… is shut',
+    same(writes, ['studio priority 44 0']) && columnOf(44) === 'running' && rowOf(44)?.querySelector('[data-work-move]')?.disabled
+    && !doc.querySelector('[data-work-menu]'), JSON.stringify(writes));
+  // A poll goes out and is held — it read the queue before the move landed.
+  const poll = holdNextList();
+  await until(() => listHeld);
+  write(44, { status: 'running', started_at: Date.now() / 1000 });
+  const before = lists;
+  g.open();
+  await until(() => !ghost(44) && columnOf(44) === 'running');
+  ok('answered while a poll was in flight: the queue is read again at once, and it lands in In progress',
+    lists > before && listHeld && !ghost(44) && columnOf(44) === 'running' && pill(44) === 'running',
+    `${lists - before} reads · held ${listHeld} · ${ghost(44)} · ${columnOf(44)} · ${pill(44)}`);
+  poll.open();
+  await tick(0);
+  ok('…and the poll that read before the move, answering last, is not drawn over it', columnOf(44) === 'running', columnOf(44));
+
+  await fresh();
+  const r = holdWrites();
+  await drag(203, 'queued');
+  ok('Cancelled → Queued: a ghost in Queued, saying Back to queue…', columnOf(203) === 'queued' && badge(203) === 'Back to queue…'
+    && pill(203) === 'cancelled', `${columnOf(203)} · ${badge(203)}`);
+  r.open('#203 has a branch nobody merged; restart refused');
+  await settle();
+  ok('…refused: the ghost goes, the card is back in Cancelled, saying why',
+    columnOf(203) === 'cancelled' && !ghost(203) && !badge(203) && saidOn(203)?.getAttribute('data-work-said') === 'error'
+    && saidOn(203)?.textContent === '#203 has a branch nobody merged; restart refused', `${columnOf(203)} · ${saidOn(203)?.textContent}`);
+  await drag(203, 'queued');
+  ok('…and it can be moved again', same(writes, ['studio restart 203', 'studio restart 203']), JSON.stringify(writes));
 }
 
 group('a finger drags too: held for a moment, then moved');
