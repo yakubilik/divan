@@ -355,6 +355,32 @@ def _scratch(p: Path) -> bool:
     return any(_inside(p, d) for d in _SCRATCH)
 
 
+# Regenerable caches (17 Oct 2026: an agent freeing disk space was asked about
+# `rm -rf ~/Library/Caches/CocoaPods`). Deleting these loses nothing the tools
+# cannot rebuild or re-download. Each entry is (home-relative path, whether the
+# folder itself may go too); a cache root that holds other apps' caches is
+# exempt only for what is inside it, so emptying the root still asks.
+_CACHES = [
+    ("Library/Caches", False),  # every app's cache folder; macOS refills them on demand
+    (".cache", False),  # XDG cache home: pip, uv, huggingface, ... all re-download
+    ("Library/Developer/Xcode/DerivedData", True),  # Xcode build products, rebuilt on the next build
+    ("Library/Developer/CoreSimulator/Caches", True),  # simulator dyld/launch caches, regenerated at boot
+    (".npm/_cacache", True),  # npm's content-addressed download cache
+    ("Library/Caches/Yarn", True),  # Yarn's package cache, re-fetched on install
+    (".gradle/caches", True),  # Gradle dependency and build caches, re-fetched on build
+    (".cocoapods/repos", True),  # CocoaPods spec repos, re-cloned by `pod repo update`
+]
+
+
+def _cache(p: Path) -> bool:
+    home = os.path.realpath(os.path.expanduser("~"))
+    for rel, itself in _CACHES:
+        d = Path(os.path.realpath(os.path.join(home, rel)))
+        if _inside(p, d) or (itself and p == d):
+            return True
+    return False
+
+
 def _rm_reason(args: list[str], root: Path, here: Path | None) -> str | None:
     """Destruction: `rm -r` of anything outside the chat's folder and /tmp.
 
@@ -376,7 +402,7 @@ def _rm_reason(args: list[str], root: Path, here: Path | None) -> str | None:
         p = _resolve(t, here)
         if p is None:
             return f"{DESTRUCTION}: rm -r of a path that cannot be resolved: {t}"
-        if not (_inside(p, root) or (p == root and not whole) or _scratch(p)):
+        if not (_inside(p, root) or (p == root and not whole) or _scratch(p) or _cache(p)):
             if p == root:
                 return f"{DESTRUCTION}: rm -r of the chat's whole folder"
             return f"{DESTRUCTION}: rm -r outside the chat's folder: {p}"
@@ -415,7 +441,7 @@ def _find_reason(args: list[str], root: Path, here: Path | None) -> str | None:
         i += 1
     for t in paths or ["."]:
         p = _resolve(t, here)
-        if p is None or not (p == root or _inside(p, root) or _scratch(p)):
+        if p is None or not (p == root or _inside(p, root) or _scratch(p) or _cache(p)):
             return f"{DESTRUCTION}: find … -delete outside the chat's folder: {t}"
     return None
 
