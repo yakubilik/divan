@@ -16,7 +16,7 @@ import { ticketNote } from '../lib/actions';
 import {
   PHASE_WORD, pending, phase, points, useAsking, type Pending, type Phase, type Thread,
 } from '../lib/asking';
-import { useDivanStore, type DivanView } from '../lib/divan';
+import { cardAt, useDivanStore, type DivanView } from '../lib/divan';
 import { useFleet } from '../lib/fleet';
 import { clock } from '../lib/overview';
 import { executorFace } from '../lib/sessions';
@@ -116,7 +116,7 @@ export function Asking({ view }: { view: DivanView }) {
 }
 
 function face(t: Thread, view: DivanView): string {
-  const card = view.cards.find((c) => c.host === t.host && c.id === t.cardId);
+  const card = cardAt(view, t.host, t.cardId);
   return card ? executorFace(card) : 'coder';
 }
 
@@ -133,7 +133,7 @@ function TicketThread({ thread: t, place, view, live }: {
   const end = useRef<HTMLDivElement | null>(null);
   const p = phase(t, view, hosts);
   const tone = TONE[p];
-  const card = view.cards.find((c) => c.host === t.host && c.id === t.cardId);
+  const card = cardAt(view, t.host, t.cardId);
   const machine = card?.machine ?? view.hosts.find((h) => h.key === t.host)?.machine ?? t.host;
   // A pill is one answer to one question. A question that makes several points
   // has no single answer to put on a button, so it gets the box alone.

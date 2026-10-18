@@ -107,6 +107,10 @@ export function answered(snap: Partial<DivanSnapshot> | null | undefined, at: nu
       at: typeof snap?.at === 'number' ? snap.at : at,
       projects: snap?.projects ?? [],
       cards: snap?.cards ?? [],
+      // The holding place's cards travel apart from the board (`divan.py
+      // snapshot`), and a ticket out of a folder no product claims still asks
+      // its questions there: dropped here, it never reached a screen at all.
+      unfiled: snap?.unfiled ?? [],
       agents: snap?.agents ?? [],
       quota: snap?.quota ?? null,
       activity: snap?.activity ?? {},
@@ -329,6 +333,10 @@ export interface DivanView {
   hosts: HostView[];
   projects: MergedProject[];
   cards: MergedCard[];
+  /** The holding place's cards: work no product has claimed. In no product and
+   *  no count, but a ticket there that stops on a question is still a question
+   *  (`sessions`). Absent from a view built by hand. */
+  unfiled?: MergedCard[];
   agents: MergedAgent[];
   totals: Totals;
   quota: MergedQuota;
@@ -347,6 +355,13 @@ export function waiting(card: { column: string; agent_status: string | null; exe
   if (card.column === 'done') return false;
   if (card.agent_status === 'asking' || card.agent_status === 'blocked' || card.agent_status === 'failed') return true;
   return card.executor === 'human' && card.column === 'in_progress';
+}
+
+/** A card by the machine it is on and its id, wherever it sits: on a product's
+ *  board or in the holding place. */
+export function cardAt(view: Pick<DivanView, 'cards' | 'unfiled'>, host: string, id: string | undefined): MergedCard | undefined {
+  return view.cards.find((c) => c.host === host && c.id === id)
+    ?? view.unfiled?.find((c) => c.host === host && c.id === id);
 }
 
 /** A card an agent gave up on or was turned down on. Red, and a subset of what
@@ -430,6 +445,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
   }
 
   const cards: MergedCard[] = [];
+  const unfiled: MergedCard[] = [];
   const agents: MergedAgent[] = [];
   for (const e of list) {
     const h = byKey.get(e.key)!;
@@ -441,6 +457,13 @@ export function merge(list: HostEntry[], now: number): DivanView {
         machine: (c.machine || '').trim() || h.machine,
         projectKey: keyOf.get(`${h.key}:${c.project_id}`) ?? '',
         stale: h.stale,
+      });
+    }
+    for (const c of snap.unfiled ?? []) {
+      unfiled.push({
+        ...c, host: h.key, hostName: h.name,
+        machine: (c.machine || '').trim() || h.machine,
+        projectKey: '', stale: h.stale,
       });
     }
     for (const a of snap.agents) {
@@ -580,9 +603,12 @@ export function merge(list: HostEntry[], now: number): DivanView {
   // are two counters and not one. Counted off the cards and the agents, the way
   // `app/src/divan.ts` counts them — the two clients say the same number about
   // the same board or one of them is wrong.
+  // The holding place counts here too: what needs you is what `sessions()`
+  // lists under Needs you, and a ticket no product claims is on that list.
+  const all = [...cards, ...unfiled];
   const totals: Totals = {
-    needsYou: cards.filter(waiting).length,
-    stuck: cards.filter(stuck).length,
+    needsYou: all.filter(waiting).length,
+    stuck: all.filter(stuck).length,
     running: agents.filter((a) => !a.unknown && !stopped.has(a.host)).length,
     unknown: agents.filter((a) => a.unknown).length,
     queued: cards.filter((c) => c.column === 'queued').length,
@@ -598,7 +624,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
       : [...history.values()].reduce((n, a) => n + (a.today || 0), 0),
   };
 
-  return { hosts, projects, cards, agents, totals, quota: fleetQuota(hosts), now };
+  return { hosts, projects, cards, unfiled, agents, totals, quota: fleetQuota(hosts), now };
 }
 
 /** The branches of a product that is on two machines. A branch is a face of the

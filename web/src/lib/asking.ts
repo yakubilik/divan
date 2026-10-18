@@ -34,7 +34,7 @@
  */
 import { create } from 'zustand';
 import type { Chat } from './protocol';
-import type { DivanView, MergedCard } from './divan';
+import { cardAt, type DivanView, type MergedCard } from './divan';
 import { idOf, sessions, type Session } from './sessions';
 
 // ── what is asking right now ────────────────────────────────────────────────
@@ -173,7 +173,7 @@ function follow(t: Thread, p: Pending): Thread {
  *  the verifier passed it. Nothing else closes a window by itself. */
 export function complete(t: Thread, view: DivanView): boolean {
   if (t.kind !== 'ticket') return false;
-  const card = view.cards.find((c) => c.host === t.host && c.id === t.cardId);
+  const card = cardAt(view, t.host, t.cardId);
   return card?.agent_status === 'verified';
 }
 
@@ -225,7 +225,7 @@ export function phase(t: Thread, view: DivanView,
     if (chat.status === 'awaiting_approval') return 'asking';
     return chat.status === 'running' ? 'working' : 'quiet';
   }
-  const card: MergedCard | undefined = view.cards.find((c) => c.host === t.host && c.id === t.cardId);
+  const card: MergedCard | undefined = cardAt(view, t.host, t.cardId);
   const board = view.hosts.find((h) => h.key === t.host);
   if (!card) return board && !board.missing && !board.stale ? 'withdrawn' : 'working';
   if (card.agent_status === 'asking') return 'asking';
