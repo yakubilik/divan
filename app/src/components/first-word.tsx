@@ -7,14 +7,11 @@ import React, { useCallback } from 'react';
 import { Pressable, View } from 'react-native';
 import { useStore, useT } from '../store';
 import { useColors } from '../theme';
-import { freshAccount, freshAgent, freshChat, freshCwd } from '../fresh-chat';
+import { openFresh } from '../fresh-chat';
 import { Icon, TextInput } from './ui';
 import type { Chat } from '../protocol';
 
-/** Make a fresh chat. Null where there is no folder to
- *  open one in — only the New chat sheet can ask for one. The agent list is one
- *  more round trip, asked only when the remembered choice is an agent; if it
- *  cannot be read the chat opens without one rather than not at all. */
+/** Make a fresh chat (`openFresh`), on what the store holds right now. */
 export function useFreshChat() {
   const defaults = useStore((s) => s.defaults);
   const hostInfo = useStore((s) => s.hostInfo);
@@ -22,14 +19,9 @@ export function useFreshChat() {
   const catalog = useStore((s) => s.catalog);
   const listAgents = useStore((s) => s.listAgents);
   const createChat = useStore((s) => s.createChat);
-  return useCallback(async (): Promise<Chat | null> => {
-    const cwd = freshCwd(hostInfo);
-    if (!cwd) return null;
-    const account = freshAccount(defaults, accounts);
-    const agents = defaults.lastAgent === null ? []
-      : await listAgents(account || null, cwd, defaults.provider).catch(() => []);
-    return createChat(freshChat({ defaults, catalog, cwd, account, agent: freshAgent(defaults, agents) }) as any);
-  }, [defaults, hostInfo, accounts, catalog, listAgents, createChat]);
+  return useCallback(
+    (): Promise<Chat | null> => openFresh({ defaults, hostInfo, accounts, catalog, listAgents, createChat: createChat as any }),
+    [defaults, hostInfo, accounts, catalog, listAgents, createChat]);
 }
 
 /** The field and its send button. Whatever is typed stays the caller's. */

@@ -10,7 +10,7 @@
 // store, so `scripts/test-fresh-chat.cjs` holds it to that without a phone.
 import { accountValues } from './compose';
 import { permissionFor } from './permissions';
-import type { Agent, CliAccount, Defaults, HostInfo, Provider, ProviderCatalog } from './protocol';
+import type { Agent, Chat, CliAccount, Defaults, HostInfo, Provider, ProviderCatalog } from './protocol';
 
 /** What `chat.create` is given. */
 export interface FreshChat {
@@ -75,4 +75,28 @@ export function freshChat(o: {
     // An agent chat is named after the agent, as the sheet and the panel name it.
     ...(o.agent ? { agent_id: o.agent.id, title: o.agent.label || o.agent.name } : {}),
   };
+}
+
+/** What opening a fresh chat needs out of the store. */
+export interface FreshDeps {
+  defaults: Defaults;
+  hostInfo: Pick<HostInfo, 'default_cwd' | 'roots'> | null | undefined;
+  accounts: CliAccount[] | null | undefined;
+  catalog: Partial<Record<Provider, ProviderCatalog>> | null | undefined;
+  listAgents: (accountId: string | null, cwd: string, provider: Provider) => Promise<Agent[]>;
+  createChat: (d: FreshChat) => Promise<Chat>;
+}
+
+/** Make a fresh chat — the pen's press, and a link shared to Divan. Null where
+ *  there is no folder to open one in; only the New chat sheet can ask for one.
+ *  The agent list is one more round trip, asked only when the remembered choice
+ *  is an agent; if it cannot be read the chat opens without one rather than not
+ *  at all. */
+export async function openFresh(o: FreshDeps): Promise<Chat | null> {
+  const cwd = freshCwd(o.hostInfo);
+  if (!cwd) return null;
+  const account = freshAccount(o.defaults, o.accounts);
+  const agents = o.defaults.lastAgent === null ? []
+    : await o.listAgents(account || null, cwd, o.defaults.provider).catch(() => []);
+  return o.createChat(freshChat({ defaults: o.defaults, catalog: o.catalog, cwd, account, agent: freshAgent(o.defaults, agents) }));
 }
