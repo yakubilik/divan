@@ -12,6 +12,8 @@ import { Button, Icon, Text } from '../src/components/ui';
 import { DialogHost, MenuHost } from '../src/components/overlay';
 import { getOpenChat, protectChat, registerForPush } from '../src/push';
 import { follow, Taps } from '../src/tap';
+import { CONNECT_GRACE_MS, deliver, shares } from '../src/share';
+import { alert } from '../src/components/overlay';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { prepareForCalls, startIncomingCalls } from '../src/incoming-call';
 
@@ -61,6 +63,43 @@ export default function RootLayout() {
   }, [router]);
 
   useEffect(() => { void deliverTap(); }, [ready, locked, deliverTap]);
+
+  /* A link shared to Divan from another app's share sheet. `app/share.tsx`
+   * puts it in the pen; it is taken out here the first time the app is ready,
+   * unlocked and talking to a computer, and opened in a fresh chat the way the
+   * pen opens one. Until then it is held and, if that takes longer than a
+   * reconnect, the person is told so (src/share.ts). */
+  const conn = useStore((s) => s.conn);
+  const hostInfo = useStore((s) => s.hostInfo);
+  const paired = useStore((s) => !!s.host);
+  const T = useT();
+  const sharing = useRef(false);
+  const deliverShare = useCallback(async () => {
+    if (sharing.current) return;
+    sharing.current = true;
+    const st = useStore.getState();
+    try {
+      await deliver(shares, { ...st, paired: !!st.host, createChat: st.createChat as any }, {
+        opened: (chat) => { protectChat(chat.id); follow({ chat: chat.id }, router); },
+        say: (s) => {
+          if (s.kind === 'pair') alert(T('sharePair'), T('sharePairBody'));
+          else if (s.kind === 'connect') alert(T('shareWait'), T('shareWaitBody', { host: st.host?.name ?? '' }));
+          else if (s.kind === 'failed') alert(T('shareFailed'), s.message, [
+            { text: T('shareDiscard'), style: 'cancel', onPress: () => shares.discard() },
+            { text: T('tryAgain'), onPress: () => void deliverShare() },
+          ]);
+        },
+      });
+    } finally {
+      sharing.current = false;
+    }
+  }, [router, T]);
+  useEffect(() => { void deliverShare(); }, [ready, locked, conn, hostInfo, paired, deliverShare]);
+  useEffect(() => shares.subscribe(() => {
+    void deliverShare();
+    // Asked again once the grace is over, so a link still waiting is said out loud.
+    setTimeout(() => void deliverShare(), CONNECT_GRACE_MS + 100);
+  }), [deliverShare]);
   const [fontsLoaded, fontError] = useFonts(FONTS);
 
   useEffect(() => {
@@ -107,6 +146,8 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="welcome" />
         <Stack.Screen name="pair" />
+        {/* The share extension's way in: it hands a link over and is gone. */}
+        <Stack.Screen name="share" options={{ animation: 'none' }} />
         {/* Divan's three places. They replace each other at the root of the
             stack rather than stacking up, so Back leaves the app from any of
             them and everything else is pushed over whichever one is up. */}

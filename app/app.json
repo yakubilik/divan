@@ -104,7 +104,8 @@
           "speechRecognitionPermission": "To turn what you ask the concierge into text, on the phone."
         }
       ],
-      "./plugins/with-tts-models.js"
+      "./plugins/with-tts-models.js",
+      "./plugins/with-share-extension.js"
     ],
     "experiments": {
       "typedRoutes": false

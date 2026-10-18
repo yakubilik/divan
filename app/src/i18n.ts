@@ -708,6 +708,11 @@ const en = {
   sgBlocked: 'Cannot update', sgWaiting: 'Waiting to be pulled',
   // the design gallery, which only a development build can reach
   devSection: 'Development', divanParts: 'Divan parts', divanPartsNote: 'design system',
+  // a link shared to Divan from another app (src/share.ts)
+  shareNoLink: 'No link to open', shareNoLinkBody: 'What was shared has no web link in it, so no chat was opened.',
+  sharePair: 'Pair a computer first', sharePairBody: 'The link you shared is kept. Pair Divan with your computer and it opens in a new chat.',
+  shareWait: 'Link kept', shareWaitBody: "Divan isn't connected to {host} yet. The link opens in a new chat as soon as it is.",
+  shareFailed: "Couldn't open the link", shareDiscard: 'Discard link',
 };
 export type Key = keyof typeof en;
 
