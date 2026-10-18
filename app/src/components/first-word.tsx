@@ -20,7 +20,7 @@ export function useFreshChat() {
   const listAgents = useStore((s) => s.listAgents);
   const createChat = useStore((s) => s.createChat);
   return useCallback(
-    (): Promise<Chat | null> => openFresh({ defaults, hostInfo, accounts, catalog, listAgents, createChat: createChat as any }),
+    (): Promise<Chat | null> => openFresh({ defaults, hostInfo, accounts, catalog, listAgents, createChat: (d) => createChat(d as any) }),
     [defaults, hostInfo, accounts, catalog, listAgents, createChat]);
 }
 
