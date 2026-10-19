@@ -29,7 +29,7 @@ os.environ["DIVAN_HOME"] = str(TMP / "home")
 os.environ["USTABASI_STATE_DIR"] = str(TMP / "nowhere")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from divan import naming, recap                                  # noqa: E402
+from divan import naming, recap, transcribe                      # noqa: E402
 from divan.config import Config                                  # noqa: E402
 from divan.providers.base import TurnResult                      # noqa: E402
 from divan.session import ChatSession                            # noqa: E402
@@ -64,6 +64,10 @@ ChatSession._make_provider = lambda self, chat: StandIn()
 # Titles and recaps are asked of a CLI after a turn; here nobody is asked.
 naming.ask = nothing
 recap.ask = nothing
+# `hello` waits on whether transcription is installed, which is an import of
+# mlx_whisper: on a loaded Mac that took over a minute and timed the greeting
+# out. Nothing here dictates, so the answer is given rather than worked out.
+transcribe._known = False
 
 
 def free_port() -> int:

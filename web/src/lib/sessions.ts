@@ -214,7 +214,9 @@ export const idOf = (card: { host: string; id: string }): string => `${card.host
 export function sessions(view: DivanView): Session[] {
   const at = new Map(view.projects.map((p, i) => [p.key, i]));
   const out: Session[] = [];
-  for (const card of view.cards) {
+  // The holding place too: a ticket out of a folder no product claims is on no
+  // board, and it asks its questions all the same.
+  for (const card of [...view.cards, ...(view.unfiled ?? [])]) {
     const kind = kindOf(card);
     if (!kind) continue;
     const index = at.has(card.projectKey) ? at.get(card.projectKey)! : -1;
@@ -227,7 +229,8 @@ export function sessions(view: DivanView): Session[] {
       face: executorFace(card),
       who: kind === 'yours' ? 'Divan' : executorWord(card.executor),
       says: kind === 'stuck' ? 'stopped' : kind === 'yours' ? 'your call' : 'asks you',
-      project: view.projects[index]?.name ?? card.branch,
+      // A card no product claims is named by its folder, as the queue names it.
+      project: view.projects[index]?.name ?? ((card.repo || '').split('/').filter(Boolean).pop() || card.branch),
       projectKey: card.projectKey,
       index,
       machine: card.machine,

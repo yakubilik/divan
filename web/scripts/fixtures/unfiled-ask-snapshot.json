@@ -1,0 +1,174 @@
+{
+  "activity": {},
+  "agents": [
+    {
+      "branch": "engineering",
+      "card_id": "7440dd5c0fef",
+      "detail": "",
+      "executor": "coding_agent",
+      "machine": "studio",
+      "project": "Divan",
+      "project_id": "23d088198f6b",
+      "since": 1792363453.611155,
+      "status": "running",
+      "title": "Web Dashboard question window",
+      "ustabasi_id": 352
+    }
+  ],
+  "cards": [
+    {
+      "agent_column": "in_progress",
+      "agent_detail": "",
+      "agent_status": "running",
+      "agent_status_at": 1792363453.611155,
+      "branch": "engineering",
+      "branch_id": "ad9e99d9f969",
+      "column": "in_progress",
+      "created_at": 1792363453.61006,
+      "executor": "coding_agent",
+      "id": "7440dd5c0fef",
+      "machine": "studio",
+      "moved_at": 1792363453.61006,
+      "position": 0,
+      "project_id": "23d088198f6b",
+      "repo": "/Users/me/projects/divan",
+      "summary": "Fix it.",
+      "title": "Web Dashboard question window",
+      "updated_at": 1792363453.61006,
+      "ustabasi_id": 352
+    }
+  ],
+  "machine": "studio",
+  "projects": [
+    {
+      "archived": false,
+      "branches": [
+        {
+          "cards": {
+            "done": 0,
+            "ice_box": 0,
+            "in_progress": 1,
+            "queued": 0,
+            "review": 0
+          },
+          "id": "ad9e99d9f969",
+          "kind": "engineering",
+          "name": "Engineering",
+          "open": 1,
+          "summary": "",
+          "summary_at": null
+        },
+        {
+          "cards": {
+            "done": 0,
+            "ice_box": 0,
+            "in_progress": 0,
+            "queued": 0,
+            "review": 0
+          },
+          "id": "abdcc76e99e5",
+          "kind": "seo",
+          "name": "SEO",
+          "open": 0,
+          "summary": "",
+          "summary_at": null
+        },
+        {
+          "cards": {
+            "done": 0,
+            "ice_box": 0,
+            "in_progress": 0,
+            "queued": 0,
+            "review": 0
+          },
+          "id": "eb442dd511b7",
+          "kind": "analytics",
+          "name": "Analytics",
+          "open": 0,
+          "summary": "",
+          "summary_at": null
+        },
+        {
+          "cards": {
+            "done": 0,
+            "ice_box": 0,
+            "in_progress": 0,
+            "queued": 0,
+            "review": 0
+          },
+          "id": "993972a795c3",
+          "kind": "marketing",
+          "name": "Marketing",
+          "open": 0,
+          "summary": "",
+          "summary_at": null
+        },
+        {
+          "cards": {
+            "done": 0,
+            "ice_box": 0,
+            "in_progress": 0,
+            "queued": 0,
+            "review": 0
+          },
+          "id": "b519f1c8d764",
+          "kind": "customers",
+          "name": "Customers",
+          "open": 0,
+          "summary": "",
+          "summary_at": null
+        }
+      ],
+      "counts": {
+        "done": 0,
+        "ice_box": 0,
+        "in_progress": 1,
+        "queued": 0,
+        "review": 0
+      },
+      "created_at": 1792363453.602767,
+      "hidden": false,
+      "id": "23d088198f6b",
+      "kind": "",
+      "milestones": [],
+      "name": "Divan",
+      "open_items": [],
+      "repos": [
+        "/Users/me/projects/divan"
+      ],
+      "running": 1,
+      "slug": "divan",
+      "sort": 0,
+      "stage": "",
+      "started_at": null,
+      "summary": "",
+      "summary_line": "1 running",
+      "updated_at": 1792363453.602767,
+      "waiting": 0
+    }
+  ],
+  "unfiled": [
+    {
+      "agent_column": "in_progress",
+      "agent_detail": "Harfiyen'in gizlilik sayfası yakupkeskin.dev'de mi dursun, yoksa uygulamanın kendi sitesinde mi?",
+      "agent_status": "asking",
+      "agent_status_at": 1792363453.611926,
+      "branch": "engineering",
+      "branch_id": "8d51ca0b30c6",
+      "column": "in_progress",
+      "created_at": 1792363453.6081789,
+      "executor": "coding_agent",
+      "id": "a0dc366a6fef",
+      "machine": "studio",
+      "moved_at": 1792363453.6081789,
+      "position": 0,
+      "project_id": "unfiled",
+      "repo": "/Users/me/projects/passaparola",
+      "summary": "Get it ready.",
+      "title": "Harfiyen: App Store readiness",
+      "updated_at": 1792363453.6081789,
+      "ustabasi_id": 348
+    }
+  ],
+  "unfiled_project_id": "unfiled"
+}
