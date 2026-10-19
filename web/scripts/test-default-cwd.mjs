@@ -44,6 +44,7 @@ function ok(name, cond, detail) {
 }
 function group(name) { console.log(`── ${name}`); }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const CONNECT_MS = 60000;
 async function until(cond, ms = 5000) {
   for (let t = 0; t < ms; t += 20) { if (cond()) return true; await wait(20); }
   return cond();
@@ -136,14 +137,16 @@ let phone;
 try {
   // The web panel, as a browser that paired this computer.
   useFleet.getState().addHost(cfg);
-  await until(() => useFleet.getState().hosts[key]?.info?.default_cwd && useFleet.getState().hosts[key]?.catalog);
+  // The first connection gets room: on a loaded Mac a handshake is retried and
+  // a greeting can take seconds. Each wait still ends the moment it holds.
+  await until(() => useFleet.getState().hosts[key]?.info?.default_cwd && useFleet.getState().hosts[key]?.catalog, CONNECT_MS);
   const slot = () => useFleet.getState().hosts[key];
 
   // The phone: its own socket, and a folder it remembered locally before this
   // change — DevTrace-main, the first of a sorted list — that must not count.
   phone = new PhoneClient();
   phone.connect('127.0.0.1', peer.port, peer.phone);
-  await until(() => phone.status === 'online');
+  await until(() => phone.status === 'online', CONNECT_MS);
   const hello = await phone.call('hello', { device_name: 'phone' });
   let phoneInfo = hello.host;
   phone.on((ev) => { if (ev.event === 'host.status') phoneInfo = ev.data; });
