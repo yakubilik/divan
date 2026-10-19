@@ -7,6 +7,7 @@ import { ListToggle, SIDEBAR_W, Sidebar } from './components/Sidebar';
 import { Shell } from './components/Shell';
 import { ChatView } from './components/ChatView';
 import { ChatComposer } from './components/ChatComposer';
+import { Asking, useAskingRoom } from './components/Asking';
 import { NewChat } from './components/NewChat';
 import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
@@ -49,6 +50,9 @@ export function App() {
   // the page under it. `now` comes back on the view, so the bar's clock and a
   // machine's age are the same moment.
   const divan = useDivanView();
+  // The questions' floating windows are drawn on the Chat place too, and what
+  // they cover of it is kept clear: the composer's send button above all.
+  const askingRoom = useAskingRoom();
   // The panel opens on the Dashboard: it is the screen that is looked at instead
   // of a question being asked. The chat is a place you go to on purpose.
   /** Where the panel opens: whatever the address says. A link to a board, a
@@ -924,7 +928,7 @@ export function App() {
               searchRef={searchRef}
               collapsed={rail} onCollapse={setRailTo}
             />
-            <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div data-chat-column="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', paddingRight: askingRoom }}>
               {chat ? <ChatView {...chatProps} /> : (
                 // No conversation yet: a chat's own box, with no chat under it.
                 // What is said in it opens one with every default this
@@ -950,6 +954,9 @@ export function App() {
                 </div>
               )}
             </div>
+            {/* What agents are asking, as on the Dashboard: the same windows
+                from the same store, not rows in the list. */}
+            <Asking view={divan} />
           </div>
         )}
 

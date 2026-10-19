@@ -1,4 +1,6 @@
-/** The Dashboard's floating chat for whatever an agent is asking.
+/** The floating chat for whatever an agent is asking, on the Dashboard and on
+ *  the Chat place alike — one store (`useAsking`), so a window put away or
+ *  answered on one is the same window on the other.
  *
  *  One window at a time over the bottom right of the page, and a tab under it
  *  for every conversation that is open — the selected one filled, the others a
@@ -48,6 +50,19 @@ function useViewport() {
     return () => window.removeEventListener('resize', on);
   }, []);
   return size;
+}
+
+/** As wide as this, a page that has its own box at the bottom right (the Chat
+ *  place's composer) makes room for the dock beside it instead of under it. */
+const ROOMY = 1100;
+
+/** The width a page should keep clear on its right for the dock: the window
+ *  and its gap, while anything is open in it and the page is wide enough to
+ *  spare it. Narrower, the window floats over the page as on a phone. */
+export function useAskingRoom(): number {
+  const open = useAsking((s) => s.threads.length > 0);
+  const vp = useViewport();
+  return open && vp.width >= ROOMY ? 24 + SIZE.panel + 30 + 16 : 0;
 }
 
 export function Asking({ view }: { view: DivanView }) {
