@@ -35,6 +35,12 @@ STYLE_PATH = Path(__file__).with_name("house_style.md")
 # four facts above it. Kept out of the prompt itself: most turns never ask.
 DEEP_DOC = "docs/session-context.md"
 
+# The three kinds of work that go wrong the same way every time, each with the
+# method written down once. Named, not inlined, for the same reason as the doc
+# above: a chat that says "hey" should not pay for all three, and a session
+# that is about to debug something can afford one file read.
+METHOD_DIR = "daemon/divan/method"
+
 
 def _repo_root() -> Path | None:
     for parent in Path(__file__).resolve().parents:
@@ -58,6 +64,7 @@ def build(cfg, pc, tool: str = "claude") -> str:
     """
     root = _repo_root()
     doc = str(root / DEEP_DOC) if root else DEEP_DOC
+    method = str(root / METHOD_DIR) if root else METHOD_DIR
     roots = ", ".join(cfg.allowed_roots) or "(none configured)"
     account = pc.account_id or "the computer's own login"
     model = pc.model + (f" ({pc.effort} effort)" if pc.effort else "")
@@ -98,6 +105,12 @@ def build(cfg, pc, tool: str = "claude") -> str:
         "If you are asked how any of this works — ports, storage, accounts, updates,",
         f"security — read {doc}",
         "rather than guessing from this summary.",
+        "",
+        "Three kinds of work have a method written down, and it is not optional",
+        f"for them. In {method}: `debugging.md` before diagnosing a reported",
+        "fault, `plan-review.md` before agreeing to a plan or filing a card as a",
+        "ticket, `product-questions.md` when the question is whether to build the",
+        "thing at all. Read the one that applies before starting, not after.",
         "</session-context>",
     ]
     style = house_style()

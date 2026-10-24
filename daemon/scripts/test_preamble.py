@@ -69,8 +69,21 @@ def offline() -> None:
         ("when an idle chat closes", "1800s"),
         ("that it is not some other bridge", "not any other bridge or bot"),
         ("where the detail lives", "docs/session-context.md"),
+        ("where the methods live", "daemon/divan/method"),
+        ("the method for a reported fault", "debugging.md"),
+        ("the method for a plan or a ticket", "plan-review.md"),
+        ("the method for whether to build it", "product-questions.md"),
     ]:
-        check(needle in text, label, f"missing {needle!r}")
+        # Paths in the preamble are the host's own, so they are backslashed on
+        # Windows; the needle is written one way and has to match either.
+        check(needle in text.replace(chr(92), "/"), label, f"missing {needle!r}")
+
+    print("\nand each method named in the preamble is a file that exists")
+    root = Path(__file__).resolve().parents[2]
+    for name in ("debugging.md", "plan-review.md", "product-questions.md"):
+        f = root / preamble.METHOD_DIR / name
+        check(f.is_file() and f.stat().st_size > 500, f"{name} is there and has content",
+              f"missing or near-empty: {f}")
 
     print("\nthe style rides along, and a missing one costs nothing")
     check("<house-style>" in text, "the house style is included")
