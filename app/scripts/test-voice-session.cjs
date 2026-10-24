@@ -177,8 +177,8 @@ const fakeVoice = {
 async function phone(peer, device, { mode = 'talk', engine = new FakeEngine(), greeting, chatId } = {}) {
   const client = new RacClient();
   client.connect('127.0.0.1', peer.port, peer.token);
-  for (let i = 0; i < 100 && client.status !== 'online'; i++) await wait(20);
-  await client.call('hello', { device_name: device, lang: 'tr' });
+  for (let i = 0; i < 1500 && client.status !== 'online'; i++) await wait(20);   // a loaded Mac is slow to answer
+  await client.call('hello', { device_name: device, lang: 'tr' }, 60000);
   const events = [];
   const told = [];
   client.on((ev) => { if (ev.event?.startsWith('voice.')) events.push({ ...ev, at: Date.now() }); });
