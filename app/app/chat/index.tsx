@@ -6,8 +6,9 @@
 // that is one chat and eleven you cannot reach, so the list is the place again:
 // the tab opens it, a row opens the conversation, and `/chat/<id>` is still the
 // same screen a notification pushes. What the redesign did take away stays
-// away — no computer picker over the top, no Agents tab beside it. The tab bar
-// under it is the only thing the place adds.
+// away — no Agents tab beside it. The computer picker is back over the list as
+// the web sidebar's computer card (`components/host-card`), between the title
+// and the search; the tab bar under it is the only other thing the place adds.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, SectionList, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -19,6 +20,7 @@ import { em, useColors } from '../../src/theme';
 import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../../src/components/ui';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Shell } from '../../src/components/shell';
+import { HostCard } from '../../src/components/host-card';
 import { freshCwd } from '../../src/fresh-chat';
 import { FirstWord, useFreshChat } from '../../src/components/first-word';
 import type { Chat } from '../../src/protocol';
@@ -339,6 +341,9 @@ export default function ChatPlace() {
           </View>
         )}
       </View>
+      {/* Which computer this list is, and the way to another: the web
+          sidebar's card, above everything that reads the list. */}
+      <HostCard style={{ marginHorizontal: 16, marginBottom: 10 }} />
       {(
         <View style={[{ marginHorizontal: 16, marginBottom: focused || q ? 10 : 8, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 999 },
           focused || q
@@ -397,16 +402,28 @@ export default function ChatPlace() {
       </>
     );
   } else if (empty) {
+    // No list to hang it from, but a computer that is offline or refusing is
+    // exactly when the way to another one is wanted.
+    const card = <HostCard style={{ marginTop: 18, marginHorizontal: 16 }} />;
     body = online ? (
-      <View style={{ flex: 1, justifyContent: 'flex-end', padding: 16, gap: 10 }}>
-        <Text style={{ fontSize: 13, color: c.muted, textAlign: 'center' }}>{T('chNoneYet')}</Text>
-        <FirstWord value={first} onChangeText={setFirst} onSend={() => void sayFirst()} />
-      </View>
+      <>
+        {card}
+        <View style={{ flex: 1, justifyContent: 'flex-end', padding: 16, gap: 10 }}>
+          <Text style={{ fontSize: 13, color: c.muted, textAlign: 'center' }}>{T('chNoneYet')}</Text>
+          <FirstWord value={first} onChangeText={setFirst} onSend={() => void sayFirst()} />
+        </View>
+      </>
     ) : conn === 'unauthorized' ? (
-      <EmptyState icon="key_off" title={T('noAccess')} body={T('noAccessHint', { host: hostName })}
-        action={<SmallButton title={T('pairAgain')} onPress={() => go(() => router.push({ pathname: '/pair', params: { add: '1' } }))} />} />
+      <>
+        {card}
+        <EmptyState icon="key_off" title={T('noAccess')} body={T('noAccessHint', { host: hostName })}
+          action={<SmallButton title={T('pairAgain')} onPress={() => go(() => router.push({ pathname: '/pair', params: { add: '1' } }))} />} />
+      </>
     ) : (
-      <EmptyState icon="cloud_off" title={T('cantConnect', { host: hostName })} body={T('hintOffline')} />
+      <>
+        {card}
+        <EmptyState icon="cloud_off" title={T('cantConnect', { host: hostName })} body={T('hintOffline')} />
+      </>
     );
   } else {
     body = (
