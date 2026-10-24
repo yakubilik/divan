@@ -232,7 +232,9 @@ await settle();
 // ── Settings › Accounts ─────────────────────────────────────────────────────
 
 group('Settings › Accounts on the focused computer');
-await act(async () => { useFleet.setState({ focus: 'mac' }); });
+await act(async () => {
+  useFleet.setState((s) => ({ focus: 'mac', hosts: { ...s.hosts, mac: { ...s.hosts.mac, accounts: [] } } }));
+});
 await go('/machine/preferences/accounts');
 ok('a refused list says why', /took too long to answer/.test(text()), text().slice(0, 600));
 ok('…and does not read as "No accounts on this computer"', !/No accounts on this computer/.test(text()));
