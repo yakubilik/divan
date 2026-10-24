@@ -112,6 +112,9 @@ const { host: fixtureHost } = await import(pathToFileURL(join(web, 'scripts', 'p
 const NOW = Date.now() / 1000;
 const H = 3600;
 const D = 86400;
+// Yesterday at 11:00 on the wall clock. Not NOW - 25 * H: on the day the clocks go
+// back (25 Oct 2026 in Europe) that lands at yesterday 12:00.
+const YESTERDAY_11 = (() => { const d = new Date(NOW * 1000); d.setDate(d.getDate() - 1); d.setHours(11, 0, 0, 0); return d.getTime() / 1000; })();
 /** A ticket in a project, `ago` seconds since it last moved. */
 const t = (id, project, status, over = {}) => base({
   id, project, status, title: `${project} ticket ${id}`, repo: `/Users/x/projects/${project}`,
@@ -137,8 +140,8 @@ const queue = () => [
   t(46, 'nl-artsen', 'queued', { started_at: null, round_started_at: null, updated_at: NOW - H,
     last_event: { ts: NOW - H, kind: 'created', msg: 'nl-artsen ticket 46' } }),
   t(201, 'nl-artsen', 'queued', { last_event: { ts: NOW - 20, kind: 'limit', msg: 'account main limited until 17:05; waiting it out' } }),
-  t(202, 'nl-artsen', 'failed', { finished_at: NOW - 25 * H,
-    last_event: { ts: NOW - 25 * H, kind: 'failed', msg: 'check failed three times' } }),
+  t(202, 'nl-artsen', 'failed', { finished_at: YESTERDAY_11,
+    last_event: { ts: YESTERDAY_11, kind: 'failed', msg: 'check failed three times' } }),
   t(203, 'nl-artsen', 'cancelled', { finished_at: NOW - 3 * D }),
   t(204, 'nl-artsen', 'queued', { last_event: { ts: NOW - 20, kind: 'waiting', msg: 'worker is waiting 30m (until 18:00): CI' } }),
   t(306, 'nl-artsen', 'done', { finished_at: NOW - 20 * D }),
