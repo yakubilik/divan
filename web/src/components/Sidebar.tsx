@@ -11,6 +11,7 @@ import type { Chat } from '../lib/protocol';
 import {
   EVERYONE, fleetSections, hostSections, needle, newChatIn, personCounts, projectSections, reorder, whoseChats, type Section,
 } from '../lib/chat-list';
+import { fleetOrder, moveHost, saveFleetOrder, savedFleetOrder } from '../lib/fleet-order';
 import { refusalText } from '../lib/refusal';
 import claudeIcon from '../assets/provider-claude.png';
 import codexIcon from '../assets/provider-codex.png';
@@ -420,17 +421,25 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   // One computer paired means there is nothing to merge: the fleet list and
   // that computer's list would be the same list, minus its groups.
   const fleetWide = !project && allHosts && order.length > 1;
+  // The order the computers stand in on that list: what this browser saved,
+  // over pairing order. The card above it keeps pairing order (fleet-order.ts).
+  const [fleetSaved, setFleetSaved] = useState(savedFleetOrder);
+  const hostOrder = useMemo(() => fleetOrder(order, fleetSaved), [order, fleetSaved]);
   const list = useMemo(() => {
     const q = needle(query);
     if (project) return projectSections(hosts, project.ids, q, now);
-    if (fleetWide) return fleetSections(hosts, order, q);
+    if (fleetWide) return fleetSections(hosts, hostOrder, q);
     if (!slot) return [] as Section[];
     return hostSections({ chats: slot.chats, groups: slot.groups, hostKey: focus!, query, who, names, saved, now });
-  }, [fleetWide, hosts, order, slot?.chats, slot?.groups, focus, query, now, saved.join('\n'), project?.ids,
+  }, [fleetWide, hosts, hostOrder, slot?.chats, slot?.groups, focus, query, now, saved.join('\n'), project?.ids,
       who, names]);
   // Groups belong to one computer, so there is one to make only while the list
   // is one computer's.
   const canGroup = !!slot && !!focus && !fleetWide && !project;
+  /** Headings that can be dragged above or below each other: a computer's
+   *  groups, or on the All computers list the computers themselves. Only a
+   *  heading moves there — a chat stays on the computer that holds it. */
+  const canMove = canGroup || fleetWide;
   /** The heading a dragged chat is over. */
   const [over, setOver] = useState<string | null>(null);
   // A chat dropped on a group goes into it. Dropped on a product it comes out
@@ -455,7 +464,14 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   const [line, setLine] = useState<{ key: string; after: boolean } | null>(null);
   const move = (key: string | null, to: string, after: boolean) => {
     setLine(null);
-    if (!focus || !key || key === to) return;
+    if (!key || key === to) return;
+    if (fleetWide) {
+      const next = moveHost(hostOrder, key, to, after);
+      setFleetSaved(next);
+      saveFleetOrder(next);
+      return;
+    }
+    if (!focus) return;
     const next = { ...orders, [focus]: reorder(list, saved, key, to, after) };
     setOrders(next);
     try { localStorage.setItem(ORDER_KEY, JSON.stringify(next)); } catch { /* private mode: until reload */ }
@@ -580,9 +596,9 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
               // forty chats in it is a tall target and a 30px line is not. It
               // catches two things — a chat, which goes into it, and another
               // heading, which goes above or below it by the half it is over.
-              {...(canGroup && s.kind !== 'archive' ? {
+              {...(canMove && s.kind !== 'archive' ? {
                 onDragOver: (e: React.DragEvent) => {
-                  const chat = hasChatDrag(e.dataTransfer);
+                  const chat = canGroup && hasChatDrag(e.dataTransfer);
                   if (!chat && !hasSectionDrag(e.dataTransfer)) return;
                   e.preventDefault();
                   e.dataTransfer.dropEffect = 'move';
@@ -598,7 +614,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                 },
                 onDrop: (e: React.DragEvent) => {
                   e.preventDefault();
-                  if (!hasSectionDrag(e.dataTransfer)) { drop(s, e.dataTransfer); return; }
+                  if (!hasSectionDrag(e.dataTransfer)) { if (canGroup) drop(s, e.dataTransfer); return; }
                   const box = e.currentTarget.getBoundingClientRect();
                   move(readSectionDrag(e.dataTransfer), s.key, e.clientY > box.top + box.height / 2);
                 },
@@ -614,7 +630,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                 type="button"
                 onClick={() => setCollapsed((c) => ({ ...c, [s.key]: !shut }))}
                 // A heading is picked up and put down above or below another.
-                draggable={canGroup && s.kind !== 'archive'}
+                draggable={canMove && s.kind !== 'archive'}
                 onDragStart={(e) => setSectionDrag(e.dataTransfer, s.key)}
                 onDragEnd={() => setLine(null)}
                 style={{
