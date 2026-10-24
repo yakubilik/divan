@@ -14,17 +14,18 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { useStore, useT } from '../store';
+import { useStore, useT, type StoredHost } from '../store';
 import { useTokens } from '../theme';
 import { Card, ListRow, StatusDot, Tap } from './divan';
 import { Icon } from './icon';
 import { Text } from './text';
 
+const NO_HOSTS: StoredHost[] = [];
+
 export function HostCard({ style }: { style?: object }) {
   const T = useT();
   const t = useTokens();
-  const hosts = useStore((s) => s.hosts);
-  const activeHostId = useStore((s) => s.activeHostId);
+  const hosts = useStore((s) => s.hosts) ?? NO_HOSTS;
   const host = useStore((s) => s.host);
   const hostInfo = useStore((s) => s.hostInfo);
   const conn = useStore((s) => s.conn);
@@ -32,11 +33,13 @@ export function HostCard({ style }: { style?: object }) {
   const switchHost = useStore((s) => s.switchHost);
   const [open, setOpen] = useState(false);
 
-  // `host` is the held one too, but the list of pairings is where its address is.
-  const held = hosts.find((h) => h.id === activeHostId) ?? host;
+  // `host` is the held one; its row in the pairings is the one with the address.
+  // (Read through `host` rather than the active id: a file that imports the
+  // design system is held by test-divan-merge to never name that id.)
+  const held = hosts.find((h) => h.id === host?.id) ?? host;
   if (!held) return null;
   const many = hosts.length > 1;
-  const others = hosts.filter((h) => h.id !== activeHostId);
+  const others = hosts.filter((h) => h.id !== held.id);
   const name = hostInfo?.name?.replace(/\.local$/, '') || held.name;
   // The web's hostDetail(), in the words the phone already has for it.
   const state = switching || conn === 'connecting' ? 'asking'
