@@ -216,7 +216,7 @@ function Thumb({ a, style, onPress, onSize, children }: {
   // bug; named, it reads as a file name where a picture should be.
   const [gone, setGone] = useState(false);
   return (
-    <Pressable onPress={onPress} style={[{ overflow: 'hidden', backgroundColor: c.fill }, style]}>
+    <Pressable accessibilityLabel={`photo ${a.name}`} onPress={onPress} style={[{ overflow: 'hidden', backgroundColor: c.fill }, style]}>
       {uri && !gone ? (
         <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setGone(true)}
           onLoad={(e) => { const s = (e.nativeEvent as any)?.source; if (onSize && s?.width > 0 && s?.height > 0) onSize(s.width, s.height); }} />
