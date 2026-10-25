@@ -19,6 +19,7 @@ import { Icon, SmallButton, Spinner, Text, TextInput } from '../../src/component
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Sheet, useSheet } from '../../src/components/sheet';
 import { GalleryProvider } from '../../src/components/media';
+import { isPhoto } from '../../src/media-size';
 import { tailCwd, tilde } from '../../src/components/pickers';
 import { ApprovalCard, AssistantText, CardLink, ConnectionBanner, FiledRule, SwitchNote, ThinkingRow, ToolCard, ToolGroup, TranscriptSkeleton, TurnFooter, UserBubble, WorkingRow } from '../../src/components/chat';
 import { useDivanView } from '../../src/queue';
@@ -274,13 +275,15 @@ export function Conversation({ id }: { id: string }) {
     return out.reverse();
   }, [items, live, typed, busy, thinking, progress, turnStart, T, outgoing, events]);
 
-  // Every picture in the chat, oldest first, for the viewer to page through.
+  // Every photo and video in the chat, oldest first, for the viewer to page
+  // through — each message's in the order its bubble draws them: photos, then
+  // videos.
   const images = useMemo(() => {
     const out: Attachment[] = [];
     for (const it of items) {
       const atts: Attachment[] | undefined = it.data?.attachments;
       if (!atts) continue;
-      for (const a of atts) if (a.kind === 'image' || (!a.kind && /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name || a.path || ''))) out.push(a);
+      out.push(...atts.filter(isPhoto), ...atts.filter((a) => a.kind === 'video'));
     }
     return out;
   }, [items]);

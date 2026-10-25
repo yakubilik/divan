@@ -294,6 +294,9 @@ const STORE = {
   // decide something, and a stub that answered differently would be checking
   // the stub.
   DEFAULT_PERM: 'bypass',
+  // Where a bubble or the photo viewer reads a file from (`src/store.ts`
+  // builds it off the paired computer): the path, readable in the markup.
+  fileUrl: (p) => `http://mac/files?path=${encodeURIComponent(p)}`,
   agentAccountOf: (d) => (d.agentAccountId !== undefined ? d.agentAccountId
     : (d.byProvider?.claude?.account_id ?? null)),
   // A screen that takes a slice asks with a selector; one that takes half the

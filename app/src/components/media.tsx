@@ -10,16 +10,28 @@ import { useColors } from '../theme';
 import { fileUrl, useStore, useT, type Attachment } from '../store';
 import { Icon, Text } from './ui';
 import { claim, fmt, nextSpeed, phase, playedBars, release, rememberSpeed, rememberedSpeed, seekFor, speedLabel, timeLabel, waveform } from '../voicenote';
+import { bubbleSize, isVideo, viewerSources } from '../media-size';
 
 function srcOf(a: Attachment): string | null {
   const remote = a.view || a.path;
   return a.localUri || (remote ? fileUrl(remote) : null);
 }
 
+/** The pixel size of each picture and video a bubble has drawn, by address,
+ *  so a bubble scrolled away and back is the right shape at once instead of
+ *  starting from the placeholder again. */
+const sizes = new Map<string, { w: number; h: number }>();
+/** A video's first frame, made once per address. */
+const posters = new Map<string, string>();
+
+/** What a bubble learns once its picture or first frame has loaded; exported
+ *  so `scripts/test-media.cjs` can hand a bubble a size without a decoder. */
+export function rememberSize(uri: string, w: number, h: number) { sizes.set(uri, { w, h }); }
+
 // ── gallery ─────────────────────────────────────────────────────────────────
 
-/** Every picture in the chat, so the viewer can page through all of them
- *  rather than only the ones in the bubble that was tapped. */
+/** Every photo and video in the chat, so the viewer can page through all of
+ *  them rather than only the ones in the bubble that was tapped. */
 const GalleryCtx = createContext<{ open: (a: Attachment, fallback: Attachment[]) => void } | null>(null);
 
 export function GalleryProvider({ items, children }: { items: Attachment[]; children: React.ReactNode }) {
@@ -38,14 +50,29 @@ export function GalleryProvider({ items, children }: { items: Attachment[]; chil
   );
 }
 
-/** Full screen, black: one picture at a time, swipe across for the next,
- *  double-tap or pinch to zoom, drag down to put it away. */
-function Gallery({ items, start, onClose }: { items: Attachment[]; start: number; onClose: () => void }) {
+/** A bubble's way into the viewer: the chat's own when there is one, and a
+ *  viewer of just this message's media when there is not. */
+function useViewer(group: Attachment[]) {
+  const gal = useContext(GalleryCtx);
+  const [local, setLocal] = useState<number | null>(null);
+  const open = (a: Attachment) => (gal ? gal.open(a, group) : setLocal(Math.max(0, group.indexOf(a))));
+  const viewer = !gal && local != null ? <Gallery items={group} start={local} onClose={() => setLocal(null)} /> : null;
+  return { open, viewer };
+}
+
+/** Full screen, black, the way the Photos app and the messengers do it: one
+ *  photo or video at a time, the whole frame letterboxed, swipe across for the
+ *  next, double-tap or pinch a photo to zoom, drag down to put it away. A video
+ *  plays in the system player (AVPlayerViewController under expo-video), with
+ *  its own scrubber, full screen and picture-in-picture. */
+export function Gallery({ items, start, onClose }: { items: Attachment[]; start: number; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   const win = useWindowDimensions();
   const [index, setIndex] = useState(start);
   const [zoomed, setZoomed] = useState(false);
-  const [areaH, setAreaH] = useState(0);
+  // The page area under the top bar, measured once laid out; until then, the
+  // screen less the bars, so the first frame is not an empty one.
+  const [areaH, setAreaH] = useState(win.height - insets.top - insets.bottom - 48 - 40);
   const drag = useRef(new Animated.ValueXY()).current;
   const current = items[index];
 
@@ -69,9 +96,9 @@ function Gallery({ items, start, onClose }: { items: Attachment[]; start: number
     if (!current) return;
     try {
       let uri = current.localUri ?? null;
-      const remote = srcOf(current);
+      const remote = viewerSources(current, fileUrl)[0] ?? null;
       if (!uri && remote && Platform.OS !== 'web') {
-        const f = await File.downloadFileAsync(remote, new File(Paths.cache, current.name || 'image'), { idempotent: true });
+        const f = await File.downloadFileAsync(remote, new File(Paths.cache, current.name || (isVideo(current) ? 'video' : 'image')), { idempotent: true });
         uri = f.uri;
       }
       await Share.share(Platform.OS === 'ios' ? { url: uri ?? remote ?? '' } : { message: uri ?? remote ?? '' });
@@ -84,22 +111,27 @@ function Gallery({ items, start, onClose }: { items: Attachment[]; start: number
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: backdrop }]} />
       <View style={{ flex: 1, paddingTop: insets.top }}>
         <Animated.View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, paddingHorizontal: 12, opacity: chrome, zIndex: 2 }}>
-          <Pressable onPress={onClose} hitSlop={8} style={g.round}><Icon name="close" size={22} weight={400} color="#FFFFFF" /></Pressable>
+          <Pressable accessibilityLabel="close" onPress={onClose} hitSlop={8} style={g.round}><Icon name="close" size={22} weight={400} color="#FFFFFF" /></Pressable>
           <Text mono style={{ fontSize: 13, color: '#FFFFFF' }}>{items.length > 1 ? `${index + 1} / ${items.length}` : ''}</Text>
           <Pressable onPress={() => void share()} hitSlop={8} style={g.round}><Icon name="ios_share" size={22} weight={400} color="#FFFFFF" /></Pressable>
         </Animated.View>
         <Animated.View {...pan.panHandlers} onLayout={(e) => setAreaH(e.nativeEvent.layout.height)}
           style={{ flex: 1, transform: [{ translateX: drag.x }, { translateY: drag.y }, { scale }, { rotate }] }}>
-          <FlatList
-            data={items}
-            horizontal pagingEnabled scrollEnabled={!zoomed}
-            initialScrollIndex={start}
-            getItemLayout={(_d, i) => ({ length: win.width, offset: win.width * i, index: i })}
-            keyExtractor={(a) => a.path}
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / win.width))}
-            renderItem={({ item }) => <ZoomImage item={item} width={win.width} height={areaH} onZoom={setZoomed} />}
-          />
+          {areaH > 0 && (
+            <FlatList
+              data={items}
+              extraData={index}
+              horizontal pagingEnabled scrollEnabled={!zoomed}
+              initialScrollIndex={start}
+              getItemLayout={(_d, i) => ({ length: win.width, offset: win.width * i, index: i })}
+              keyExtractor={(a, i) => `${i}:${a.path}`}
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / win.width))}
+              renderItem={({ item, index: i }) => isVideo(item)
+                ? <VideoPage item={item} width={win.width} height={areaH} active={i === index} />
+                : <ZoomImage item={item} width={win.width} height={areaH} onZoom={setZoomed} />}
+            />
+          )}
         </Animated.View>
         <Animated.View style={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 10, paddingTop: 12, opacity: chrome }}>
           <Text mono numberOfLines={1} style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.7)' }}>{current?.name ?? ''}</Text>
@@ -109,13 +141,37 @@ function Gallery({ items, start, onClose }: { items: Attachment[]; start: number
   );
 }
 
-/** One picture that zooms: a scroll view does the pinch, a second tap within
- *  a moment does 2.5×. */
+/** One video, in the system player: letterboxed (`contain`), never cropped,
+ *  with the player's own controls. It plays while it is the page on screen and
+ *  pauses when swiped away. */
+function VideoPage({ item, width, height, active }: { item: Attachment; width: number; height: number; active: boolean }) {
+  const uri = viewerSources(item, fileUrl)[0] ?? null;
+  const player = useVideoPlayer(uri, (p) => { p.loop = false; });
+  useEffect(() => {
+    if (active) player.play(); else player.pause();
+  }, [active, player]);
+  return (
+    <View style={{ width, height, backgroundColor: '#000' }}>
+      <VideoView player={player} style={{ width, height }} contentFit="contain" nativeControls
+        allowsPictureInPicture fullscreenOptions={{ enable: true }} />
+    </View>
+  );
+}
+
+/** One photo that zooms. The pinch is the system's own scroll-view zoom
+ *  (UIScrollView on iOS), a second tap within a moment does 2.5×. It shows the
+ *  original the message names, not the bubble's smaller copy — that copy is
+ *  drawn underneath only until the original arrives, and is what is left if
+ *  the original has gone. */
 function ZoomImage({ item, width, height: h, onZoom }: { item: Attachment; width: number; height: number; onZoom: (z: boolean) => void }) {
   const ref = useRef<ScrollView>(null);
   const last = useRef(0);
   const [z, setZ] = useState(1);
-  const uri = srcOf(item);
+  const sources = useMemo(() => viewerSources(item, fileUrl), [item]);
+  const [at, setAt] = useState(0);
+  const [ready, setReady] = useState(false);
+  const uri = sources[at] ?? null;
+  const under = srcOf(item);
   function tap(x: number, y: number) {
     const now = Date.now();
     if (now - last.current < 280) {
@@ -134,7 +190,11 @@ function ZoomImage({ item, width, height: h, onZoom }: { item: Attachment; width
         scrollEventThrottle={32}
         contentContainerStyle={{ width, height: h || undefined, alignItems: 'center', justifyContent: 'center' }}>
         <Pressable onPress={(e) => tap(e.nativeEvent.locationX, e.nativeEvent.locationY)} style={{ width, height: h || '100%' }}>
-          {uri && <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />}
+          {under && !ready && under !== uri && <Image source={{ uri: under }} style={StyleSheet.absoluteFill} resizeMode="contain" />}
+          {uri && (
+            <Image key={uri} source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain"
+              onLoad={() => setReady(true)} onError={() => setAt((n) => n + 1)} />
+          )}
         </Pressable>
       </ScrollView>
     </View>
@@ -147,7 +207,9 @@ const g = StyleSheet.create({
 
 // ── in the transcript ──────────────────────────────────────────────────────
 
-function Thumb({ a, style, onPress, children }: { a: Attachment; style: any; onPress: () => void; children?: React.ReactNode }) {
+function Thumb({ a, style, onPress, onSize, children }: {
+  a: Attachment; style: any; onPress: () => void; onSize?: (w: number, h: number) => void; children?: React.ReactNode;
+}) {
   const c = useColors();
   const uri = srcOf(a);
   // A picture that will not load says so. Left blank it reads as a rendering
@@ -156,7 +218,8 @@ function Thumb({ a, style, onPress, children }: { a: Attachment; style: any; onP
   return (
     <Pressable onPress={onPress} style={[{ overflow: 'hidden', backgroundColor: c.fill }, style]}>
       {uri && !gone ? (
-        <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setGone(true)} />
+        <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setGone(true)}
+          onLoad={(e) => { const s = (e.nativeEvent as any)?.source; if (onSize && s?.width > 0 && s?.height > 0) onSize(s.width, s.height); }} />
       ) : (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8 }}>
           <Icon name="broken_image" size={22} color={c.faint} />
@@ -168,17 +231,38 @@ function Thumb({ a, style, onPress, children }: { a: Attachment; style: any; onP
   );
 }
 
-/** Photos as a small grid: one wide on top and two below, "+N" on the last
- *  one when there are more than fit. Tap opens the viewer. */
-export function ImageGroup({ items, align = 'right' }: { items: Attachment[]; align?: 'left' | 'right' }) {
+/** The pixel size of what `uri` points at, once something has measured it. */
+function useMeasured(uri: string | null) {
+  const [size, setSize] = useState(() => (uri ? sizes.get(uri) ?? null : null));
+  const measured = (w: number, h: number) => {
+    if (!uri) return;
+    rememberSize(uri, w, h);
+    setSize((s) => (s && s.w === w && s.h === h ? s : { w, h }));
+  };
+  return [size, measured] as const;
+}
+
+/** One photo: a bubble the photo's own shape (see `bubbleSize`). */
+function SinglePhoto({ a, align, onPress }: { a: Attachment; align: 'left' | 'right'; onPress: () => void }) {
+  const [size, measured] = useMeasured(srcOf(a));
+  const box = bubbleSize(size?.w, size?.h);
+  return (
+    <Thumb a={a} onPress={onPress} onSize={measured}
+      style={{ width: box.width, height: box.height, borderRadius: 16, borderBottomRightRadius: align === 'right' ? 4 : 16, borderBottomLeftRadius: align === 'left' ? 4 : 16 }} />
+  );
+}
+
+/** Photos: one alone in its own shape; several as a small grid, one wide on
+ *  top and two below, "+N" on the last one when there are more than fit. Tap
+ *  opens the viewer. `group` is the whole message's media (photos and videos),
+ *  what a viewer opened from here pages through when the chat has none. */
+export function ImageGroup({ items, align = 'right', group }: { items: Attachment[]; align?: 'left' | 'right'; group?: Attachment[] }) {
   const c = useColors();
-  const gal = useContext(GalleryCtx);
-  const [local, setLocal] = useState<number | null>(null);
-  const open = (a: Attachment) => (gal ? gal.open(a, items) : setLocal(items.indexOf(a)));
+  const { open, viewer } = useViewer(group ?? items);
   const n = items.length;
   let body: React.ReactNode;
   if (n === 1) {
-    body = <Thumb a={items[0]} onPress={() => open(items[0])} style={{ width: 230, height: 170, borderRadius: 16, borderBottomRightRadius: align === 'right' ? 4 : 16, borderBottomLeftRadius: align === 'left' ? 4 : 16 }} />;
+    body = <SinglePhoto a={items[0]} align={align} onPress={() => open(items[0])} />;
   } else if (n === 2) {
     body = (
       <View style={{ flexDirection: 'row', gap: 4, width: 220 }}>
@@ -207,49 +291,49 @@ export function ImageGroup({ items, align = 'right' }: { items: Attachment[]; al
   return (
     <>
       {body}
-      {!gal && local != null && <Gallery items={items} start={local} onClose={() => setLocal(null)} />}
+      {viewer}
     </>
   );
 }
 
-/** Video thumbnail with play badge; tap plays full screen. */
-export function VideoBubble({ item, stacked }: { item: Attachment; stacked?: boolean }) {
+/** A video as its first frame with a play badge, in the video's own shape: a
+ *  phone video upright, a landscape one wide (see `bubbleSize`). The first
+ *  frame comes out of the decoder already turned the way the video is watched.
+ *  Tap opens it in the viewer, in the system player. */
+export function VideoBubble({ item, stacked, group }: { item: Attachment; stacked?: boolean; group?: Attachment[] }) {
   const uri = srcOf(item);
-  const [thumb, setThumb] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [thumb, setThumb] = useState<string | null>(() => (uri ? posters.get(uri) ?? null : null));
+  const [size, measured] = useMeasured(uri);
+  const { open, viewer } = useViewer(group ?? [item]);
   useEffect(() => {
     let alive = true;
-    if (uri && Platform.OS !== 'web') VideoThumbnails.getThumbnailAsync(uri, { time: 500 }).then((r) => alive && setThumb(r.uri)).catch(() => {});
+    if (uri && !posters.has(uri) && Platform.OS !== 'web') {
+      VideoThumbnails.getThumbnailAsync(uri, { time: 500 }).then((r) => {
+        posters.set(uri, r.uri);
+        if (!alive) return;
+        setThumb(r.uri);
+        if (r.width > 0 && r.height > 0) measured(r.width, r.height);
+      }).catch(() => {});
+    }
     return () => { alive = false; };
-  }, [uri]);
+  }, [uri]); // eslint-disable-line react-hooks/exhaustive-deps
+  const box = bubbleSize(size?.w, size?.h);
   return (
     <>
-      <Pressable onPress={() => uri && setOpen(true)}
-        style={{ width: 230, height: 120, borderRadius: stacked ? 4 : 16, overflow: 'hidden', backgroundColor: '#1A1A18', alignItems: 'center', justifyContent: 'center' }}>
+      <Pressable accessibilityLabel={`video ${item.name}`} onPress={() => uri && open(item)}
+        style={{ width: box.width, height: box.height, borderRadius: stacked ? 4 : 16, overflow: 'hidden', backgroundColor: '#1A1A18', alignItems: 'center', justifyContent: 'center' }}>
         {thumb ? <Image source={{ uri: thumb }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,.9)', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="play_arrow" size={24} weight={400} color="#111110" />
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,.45)', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="play_arrow" size={24} weight={400} color="#FFFFFF" />
         </View>
-        {item.duration != null && <Text mono style={{ position: 'absolute', right: 8, bottom: 6, fontSize: 10.5, color: '#FFFFFF' }}>{fmt(item.duration)}</Text>}
+        {item.duration != null && (
+          <View style={{ position: 'absolute', left: 8, bottom: 8, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, backgroundColor: 'rgba(0,0,0,.45)' }}>
+            <Text mono style={{ fontSize: 10.5, color: '#FFFFFF' }}>{fmt(item.duration)}</Text>
+          </View>
+        )}
       </Pressable>
-      <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
-        {uri && <FullVideo uri={uri} onClose={() => setOpen(false)} />}
-      </Modal>
+      {viewer}
     </>
-  );
-}
-
-function FullVideo({ uri, onClose }: { uri: string; onClose: () => void }) {
-  const insets = useSafeAreaInsets();
-  const player = useVideoPlayer(uri, (p) => { p.loop = false; p.play(); });
-  return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <StatusBar style="light" />
-      <VideoView player={player} style={{ flex: 1 }} fullscreenOptions={{ enable: true }} nativeControls />
-      <Pressable onPress={onClose} style={[g.round, { position: 'absolute', top: insets.top + 4, left: 12 }]}>
-        <Icon name="close" size={22} weight={400} color="#FFFFFF" />
-      </Pressable>
-    </View>
   );
 }
 
