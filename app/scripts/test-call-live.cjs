@@ -43,7 +43,7 @@ const ready = (async () => {
   const client = new RacClient();
   client.connect('127.0.0.1', peer.port, peer.token);
   for (let i = 0; i < 100 && client.status !== 'online'; i++) await H.wait(20);
-  await client.call('hello', { device_name: 'screen', lang: 'tr' });
+  await client.call('hello', { device_name: 'screen', lang: 'tr' }, H.HELLO_MS);
   const calls = [];
   const events = [];
   client.on((ev) => { if (ev.event?.startsWith('voice.')) events.push(ev); });

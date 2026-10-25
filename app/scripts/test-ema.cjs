@@ -386,7 +386,9 @@ async function run() {
     const sp = speaker(log, fakeEma(log));
     let done = 0;
     sp.speak(THREE, 'tr-TR', () => done++);
-    await wait(30);
+    // Until it has finished rather than a fixed 30 ms: on a loaded Mac the
+    // three timers had not all run by then, and the check read half a log.
+    for (let i = 0; i < 200 && done === 0; i++) await wait(10);
     const at = (s) => log.indexOf(s);
     check(`three sentences: the first is handed to the player before the last is made (${log.join(', ')})`,
       at('play 0') >= 0 && at('play 0') < at('synth 2') && at('play 0') < at('made 2') && at('play 2') < at('finish') && done === 1);
