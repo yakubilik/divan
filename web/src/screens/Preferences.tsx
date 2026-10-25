@@ -628,11 +628,18 @@ function AccountsSection({ hostKey, slot, tools }: {
   const [newLabel, setNewLabel] = useState('');
   const online = slot.status === 'online';
 
+  // A failed read is kept on the slot (`accountsError`) and said below; this
+  // page's own `problem` is for the buttons on it.
   const reload = useCallback(() => {
-    refreshAccounts(hostKey).catch((e) => setProblem(err(e)));
+    refreshAccounts(hostKey).catch(() => {});
   }, [hostKey]);
 
-  useEffect(() => { if (online) reload(); }, [hostKey, online]);
+  // Asked again on every reconnect, not only when `online` flips: a socket
+  // that drops and comes back between two renders is seen as online twice,
+  // with a newer `lastOnline`.
+  useEffect(() => { if (online) reload(); }, [hostKey, online, slot.lastOnline]);
+  useEffect(() => { setProblem(null); }, [hostKey]);
+  const readError = slot.accountsError && !slot.loading.accounts ? slot.accountsError : null;
 
   const run = async (fn: () => Promise<any>) => {
     setProblem(null);
@@ -663,6 +670,9 @@ function AccountsSection({ hostKey, slot, tools }: {
       />
 
       {problem && <Aside tone="warn">{problem}</Aside>}
+      {online && readError && (
+        <Aside tone="warn">The accounts could not be read: {readError}</Aside>
+      )}
       {!online && <Aside>This computer is offline — accounts cannot be read.</Aside>}
 
       {(['claude', 'codex'] as Provider[]).map((p) => (
@@ -682,7 +692,7 @@ function AccountsSection({ hostKey, slot, tools }: {
         ) : null
       ))}
 
-      {online && !slot.accounts.length && !slot.loading.accounts && (
+      {online && !slot.accounts.length && !slot.loading.accounts && !slot.accountsError && (
         <Aside>No accounts on this computer.</Aside>
       )}
 
@@ -856,10 +866,10 @@ function DefaultsSection({ hostKey, slot }: { hostKey: string; slot: HostSlot })
   // Same reason AccountsSection asks: account.list shells out to the CLIs, so
   // it is asked for once and only re-asked when something needs it.
   useEffect(() => {
-    if (online && !slot.accounts.length && !slot.loading.accounts) {
+    if (online && (!slot.accounts.length || slot.accountsError) && !slot.loading.accounts) {
       refreshAccounts(hostKey).catch(() => {});
     }
-  }, [hostKey, online]);
+  }, [hostKey, online, slot.lastOnline]);
 
   const provider = defaults.provider;
   const pc = slot.catalog?.[provider] ?? null;

@@ -652,13 +652,29 @@ export function App() {
     return top ? (top.utilization ?? 0) : null;
   }, [accountLimits]);
 
+  // Asked of the computer the open chat is on — on the All computers list that
+  // is not always the one in focus — and asked again each time it comes back
+  // online, so a list that failed or went stale is not kept until a reload.
+  const chatHost = sel?.hostKey ?? fleet.focus;
+  const chatSlot = chatHost ? fleet.hosts[chatHost] : undefined;
+  const accountsRead = useRef(new Map<string, number | null>());
   useEffect(() => {
-    if (view !== 'chats' || !fleet.focus) return;
-    const s = fleet.hosts[fleet.focus];
-    if (s?.status === 'online' && !s.accounts.length && !s.loading.accounts) {
-      fleet.refreshAccounts(fleet.focus).catch(() => {});
-    }
-  }, [view, fleet.focus, slot?.status, slot?.accounts.length]);
+    if (view !== 'chats' || !chatHost) return;
+    const s = useFleet.getState().hosts[chatHost];
+    if (s?.status !== 'online' || s.loading.accounts) return;
+    const fresh = accountsRead.current.has(chatHost) && accountsRead.current.get(chatHost) === s.lastOnline;
+    if (fresh && s.accounts.length && !s.accountsError) return;
+    accountsRead.current.set(chatHost, s.lastOnline);
+    fleet.refreshAccounts(chatHost).catch(() => {});
+  }, [view, chatHost, chatSlot?.status, chatSlot?.lastOnline]);
+
+  // The Account sheet reads the list afresh every time it is opened: it is the
+  // one place a person goes to see which sign-ins work, and what was read
+  // before may say they are all signed out.
+  useEffect(() => {
+    if (field !== 'account_id' || !sel) return;
+    fleet.refreshAccounts(sel.hostKey).catch(() => {});
+  }, [field, sel?.hostKey]);
 
   // The chat surface is drawn in two places — as the chat screen, and held over
   // terminal mode — and both are looking at the same selection. One set of
@@ -1094,6 +1110,8 @@ export function App() {
           catalog={fleet.hosts[sel.hostKey]?.catalog ?? null}
           projects={fleet.hosts[sel.hostKey]?.projects ?? []}
           accounts={fleet.hosts[sel.hostKey]?.accounts ?? []}
+          accountsLoading={!!fleet.hosts[sel.hostKey]?.loading.accounts}
+          accountsError={fleet.hosts[sel.hostKey]?.accountsError ?? null}
           limits={fleet.hosts[sel.hostKey]?.limits ?? {}}
           busy={log.busy || chat.status !== 'idle'}
           onPick={(value) => updateChat(sel.hostKey, sel.chatId, { [field]: value })

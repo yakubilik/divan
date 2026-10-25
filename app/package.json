@@ -55,6 +55,8 @@
   },
   "private": true,
   "overrides": {
-    "react-dom": "$react-dom"
+    "react-dom": "$react-dom",
+    "markdown-it": "^14.3.3",
+    "postcss": "^8.5.31"
   }
 }

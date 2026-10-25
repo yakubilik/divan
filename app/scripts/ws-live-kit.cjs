@@ -62,7 +62,9 @@ async function peer(py, extra = []) {
     });
     info = await new Promise((resolve, reject) => {
       let out = '';
-      const timer = setTimeout(() => reject(new Error(`soak_peer did not start:\n${log.slice(-20).join('\n')}`)), 60000);
+      // Three minutes: on 25 Oct 2026, at load 28, importing the daemon alone took 56 s
+      // of wall clock for 3 s of CPU, and the peer came up after 88 s.
+      const timer = setTimeout(() => reject(new Error(`soak_peer did not start:\n${log.slice(-20).join('\n')}`)), 180000);
       proc.stdout.on('data', (b) => {
         out += b.toString();
         const nl = out.indexOf('\n');

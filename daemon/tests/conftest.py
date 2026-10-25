@@ -9,10 +9,33 @@ reads it; a module may still point DIVAN_HOME elsewhere for itself.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 import tempfile
 from pathlib import Path
+
+# `python3 -m pytest` is how the queue's check runs this, and the python3 on PATH
+# is whatever the Mac has (Homebrew or python.org), never the daemon's venv: on
+# 24 Oct 2026 the check died on `No module named 'tomli_w'`. When the daemon's
+# own dependencies are missing here, run the same pytest again in the venv the
+# daemon runs from. DIVAN_PYTEST_REEXEC guards against looping.
+if importlib.util.find_spec("tomli_w") is None and not os.environ.get("DIVAN_PYTEST_REEXEC"):
+    _daemon = Path(__file__).resolve().parents[1]
+    for _venv in (_daemon / ".venv312", _daemon / ".venv",
+                  Path.home() / "projects/divan/daemon/.venv312"):
+        _py = _venv / "bin" / "python"
+        if _py.is_file() and Path(sys.prefix).resolve() != _venv.resolve():
+            os.environ["DIVAN_PYTEST_REEXEC"] = "1"
+            # pytest already holds stdout/stderr at the fd level; give them back
+            # first, or the second run reports into pytest's capture file.
+            import gc
+            from _pytest.capture import CaptureManager
+            for _cm in [o for o in gc.get_objects() if isinstance(o, CaptureManager)]:
+                _cm.stop_global_capturing()
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.execv(str(_py), [str(_py), "-m", "pytest", *sys.argv[1:]])
 
 os.environ["DIVAN_HOME"] = tempfile.mkdtemp(prefix="divan-pytest-")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

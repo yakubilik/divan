@@ -62,6 +62,9 @@ export interface HostSlot {
   accounts: CliAccount[];
   /** account id → the windows that account last reported */
   limits: Record<string, LimitWindow[]>;
+  /** Why the last `account.list` failed, until one succeeds. An empty list
+   *  with this set is "could not read", never "there are none". */
+  accountsError?: string | null;
   /** set while a slow refresh (account.list shells out to the CLIs) is in flight */
   loading: Record<string, boolean>;
   lastOnline: number | null;
@@ -88,6 +91,8 @@ const ACTIVITY_MAX = 300;
  *  thing that produces it. */
 const clients = new Map<string, RacClient>();
 const unsubs = new Map<string, (() => void)[]>();
+/** The `account.list` each computer is answering right now, by key. */
+const accountsInFlight = new Map<string, Promise<void>>();
 
 let activitySeq = 0;
 
@@ -307,14 +312,29 @@ export const useFleet = create<FleetState>((set, get) => ({
    *  Asked through this store's own `call` rather than by reaching into the
    *  client map, like every other request the panel makes: a caller that wants
    *  to say why it failed (Settings › Accounts does) still gets the rejection. */
-  refreshAccounts: async (key) => {
-    patch(set, key, (s) => ({ ...s, loading: { ...s.loading, accounts: true } }));
-    try {
-      const r = await get().call<{ accounts?: CliAccount[] }>(key, 'account.list', {});
-      patch(set, key, (s) => ({ ...s, accounts: r.accounts ?? [] }));
-    } finally {
-      patch(set, key, (s) => ({ ...s, loading: { ...s.loading, accounts: false } }));
-    }
+  refreshAccounts: (key) => {
+    // Several screens ask on the way in (the chat's Account sheet, Settings ›
+    // Accounts and › New chats); one shell-out answers all of them.
+    const going = accountsInFlight.get(key);
+    if (going) return going;
+    const run = (async () => {
+      patch(set, key, (s) => ({ ...s, loading: { ...s.loading, accounts: true } }));
+      try {
+        const r = await get().call<{ accounts?: CliAccount[] }>(key, 'account.list', {});
+        patch(set, key, (s) => ({ ...s, accounts: r.accounts ?? [], accountsError: null }));
+      } catch (e: any) {
+        // Kept on the slot, so whoever draws the list says why it is empty
+        // rather than that the computer has no accounts.
+        const why = e?.message || String(e) || 'The accounts could not be read';
+        patch(set, key, (s) => ({ ...s, accountsError: why }));
+        throw e;
+      } finally {
+        accountsInFlight.delete(key);
+        patch(set, key, (s) => ({ ...s, loading: { ...s.loading, accounts: false } }));
+      }
+    })();
+    accountsInFlight.set(key, run);
+    return run;
   },
 }));
 
