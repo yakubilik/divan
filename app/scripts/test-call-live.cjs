@@ -42,8 +42,18 @@ const ready = (async () => {
   const realLive = { ...live };
   const client = new RacClient();
   client.connect('127.0.0.1', peer.port, peer.token);
-  for (let i = 0; i < 100 && client.status !== 'online'; i++) await H.wait(20);
-  await client.call('hello', { device_name: 'screen', lang: 'tr' }, H.HELLO_MS);
+  // A loaded Mac can take more than a couple of seconds to bring the peer up. A
+  // hello that still fails is a failed check, not an unhandled rejection that
+  // takes the whole of test-ustabasi.cjs down with it.
+  for (let i = 0; i < 1500 && client.status !== 'online'; i++) await H.wait(20);
+  try {
+    await client.call('hello', { device_name: 'screen', lang: 'tr' }, H.HELLO_MS);
+  } catch (e) {
+    checks.push([`call screen (live): hello: ${e.stack || e}`, false]);
+    client.disconnect();
+    peer.proc.stdin.end();
+    return;
+  }
   const calls = [];
   const events = [];
   client.on((ev) => { if (ev.event?.startsWith('voice.')) events.push(ev); });

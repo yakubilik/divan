@@ -21,12 +21,12 @@ dependencies = [
   "uvicorn[standard]>=0.30",
   "claude-agent-sdk>=0.2.100",
   "httpx[http2]>=0.27",                                  # HTTP/2 is not optional for APNs
-  "pyjwt[crypto]>=2.8",                                  # the ES256 token every APNs request carries
+  "pyjwt[crypto]>=2.15",                                 # the ES256 token every APNs request carries
   "tomli-w>=1.0",
   "jsonschema>=4.23",                                   # MCP approval form validation
   "qrcode>=7.4",
   "websockets>=12",
-  "pillow>=10",
+  "pillow>=13",
   "pillow-heif>=0.16; platform_system != 'Darwin'",
   "python-multipart>=0.0.9",
   "mlx-whisper>=0.4; sys_platform == 'darwin'",          # voice transcription on Apple silicon
