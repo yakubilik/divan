@@ -52,7 +52,7 @@ const lineBox = (d: Divider): React.CSSProperties => (d.dir === 'row'
   : { left: pct(d.at.x), top: `calc(${pct(d.at.y)} - ${GAP / 2 + 2}px)`, width: pct(d.at.w), height: GAP + 4, cursor: 'row-resize' });
 
 const CSS = `
-.dv-panes .dv-pane { transition: left ${EASE}, top ${EASE}, width ${EASE}, height ${EASE}, opacity ${EASE};
+.dv-panes .dv-pane { transition: left ${EASE}, top ${EASE}, width ${EASE}, height ${EASE};
   animation: dv-pane-in ${EASE}; }
 .dv-panes[data-resizing] .dv-pane { transition: none; }
 .dv-panes .dv-pane-line::after { content: ''; position: absolute; inset: 0; margin: auto; border-radius: 2px;
@@ -60,7 +60,7 @@ const CSS = `
 .dv-panes .dv-pane-line[data-dir="row"]::after { width: 2px; }
 .dv-panes .dv-pane-line[data-dir="col"]::after { height: 2px; }
 .dv-panes .dv-pane-line:hover::after, .dv-panes[data-resizing] .dv-pane-line[data-active]::after { background: ${T.ink3}; }
-@keyframes dv-pane-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes dv-pane-in { from { transform: scale(.94); } to { transform: none; } }
 `;
 
 /** Nobody drags the pane's window by its own corner here; the place it is
@@ -248,7 +248,9 @@ export function Panes() {
               position: 'absolute', left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h),
               padding: GAP / 2, boxSizing: 'border-box', zIndex: maxed ? 2 : 1,
               visibility: hidden ? 'hidden' : undefined,
-              opacity: moving === l.id ? 0.45 : 1,
+              // The pane being carried is marked where it was, not faded.
+              outline: moving === l.id ? `2px dashed ${T.ink3}` : undefined,
+              outlineOffset: -GAP / 2,
             }}
           >
             <PaneChat id={l.id} host={l.host} chat={l.chat} maxed={maxed} grab={grab} />
