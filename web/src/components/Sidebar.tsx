@@ -252,11 +252,11 @@ function savedOrders(): Record<string, string[]> {
   try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '{}') ?? {}; } catch { return {}; }
 }
 
-/** A screen with nothing to hover with shows the row's bin all the time. */
+/** A screen with nothing to hover with shows the row's buttons all the time. */
 const NO_HOVER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches;
 const BIN = 28;
 
-function ChatRow({ chat, selected, onPick, onDrag, onDelete, under, heading }: {
+function ChatRow({ chat, selected, onPick, onDrag, onArchive, onDelete, under, heading }: {
   chat: Chat; selected: boolean; onPick: () => void;
   /** The product whose heading this row is read under, where it has one. The
    *  title leaves the project out in every section, as the chat's own header
@@ -267,14 +267,17 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete, under, heading }: {
   heading?: string;
   /** Set where the row can be picked up and filed under another heading. */
   onDrag?: (dt: DataTransfer) => void;
+  /** Archives at once, or brings an archived chat back: nothing is lost. */
+  onArchive: () => void;
   /** Asks before it deletes: the row only says which chat was meant. */
   onDelete: () => void;
 }) {
   const awaiting = chat.status === 'awaiting_approval';
   const running = chat.status === 'running';
   const [over, setOver] = useState(false);
-  // The bin is beside the row and not inside it — a button inside a button is
-  // not one — and stands where the row's clock is, which gives way to it.
+  // The archive box and the bin are beside the row and not inside it — a
+  // button inside a button is not one — and stand where the row's clock is,
+  // which gives way to them.
   const bin = over || NO_HOVER;
   const parts = titleParts(chat.title, chat.cwd, chat.project);
   const { title } = parts.head || !under ? parts : titleParts(chat.title, chat.cwd, under);
@@ -291,7 +294,7 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete, under, heading }: {
       draggable={!!onDrag} onDragStart={onDrag && ((e) => onDrag(e.dataTransfer))}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56,
-        padding: NO_HOVER ? `8px ${BIN + 12}px 8px 10px` : '8px 10px',
+        padding: NO_HOVER ? `8px ${2 * BIN + 16}px 8px 10px` : '8px 10px',
         borderRadius: R.card, cursor: 'pointer', textAlign: 'left',
         background: selected ? C.accentTint : 'transparent',
         border: `1px solid ${selected ? C.accentRing : 'transparent'}`,
@@ -340,6 +343,21 @@ function ChatRow({ chat, selected, onPick, onDrag, onDelete, under, heading }: {
         )}
       </div>
     </button>
+    {bin && (
+      <button
+        type="button" onClick={onArchive}
+        title={chat.archived ? 'Unarchive chat' : 'Archive chat'}
+        aria-label={`${chat.archived ? 'Unarchive' : 'Archive'} chat: ${title}`}
+        style={{
+          position: 'absolute', right: 8 + BIN + 4, top: '50%', marginTop: -BIN / 2,
+          width: BIN, height: BIN, borderRadius: R.btn, cursor: 'pointer',
+          background: C.surface3, border: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <Icon path={P.archive} size={14} color={C.mute} />
+      </button>
+    )}
     {bin && (
       <button
         type="button" onClick={onDelete}
@@ -702,6 +720,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                   selected={selected === c.id && selectedHost === s.hostKey}
                   onPick={() => onSelect(s.hostKey, c.id)}
                   onDrag={canGroup ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}
+                  onArchive={() => { updateChat(s.hostKey, c.id, { archived: c.archived ? 0 : 1 }).catch(() => {}); }}
                   onDelete={() => setAsking({ what: 'delete-chat', hostKey: s.hostKey, id: c.id, name: c.title })}
                   under={project ? c.project ?? null : s.kind === 'project' ? s.title : undefined}
                   heading={s.title}
