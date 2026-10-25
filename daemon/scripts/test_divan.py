@@ -1315,7 +1315,8 @@ async def wire() -> None:
           "Give video its own uploader.")
     check("with its criteria", spec["done_criteria"], ["one path each"])
     check("its test", spec["verify_cmd"], "npm test")
-    check("its constraints", spec["constraints"], ["no UI work"])
+    check("its constraints, with the standing ones behind them",
+          spec["constraints"], ["no UI work", *divan.METHOD_CONSTRAINTS])
     check("and the paths it may touch", spec["allowed"], ["daemon/"])
 
     # ── 11 · a queue that will not take it ───────────────────────────────────
@@ -1815,6 +1816,43 @@ async def wire() -> None:
         except Exception as exc:
             check(f"{name} refuses {data} by name", getattr(exc, "code", None), code)
 
+
+# ── 13b · what every ticket says whether or not the card said it ─────────────
+#
+# The filing checks above go through the stub CLI, which is a shebang script and
+# therefore does not launch on Windows. The spec's own shape needs no queue at
+# all, so it is checked here, where it runs everywhere.
+
+
+def spec_constraints() -> None:
+    def card(**agent):
+        return {"title": "the receipts page prints blank", "summary": "",
+                "repo": "/r", "agent": agent or None}
+
+    bare = divan.ticket_spec(card(), {})["card"]
+    check("a card that wrote no constraint still carries the method's four",
+          bare["constraints"], list(divan.METHOD_CONSTRAINTS))
+    check("and the rest of the spec is untouched by that",
+          (bare["goal"], bare["done_criteria"], bare["verify_cmd"], bare["allowed"]),
+          ("the receipts page prints blank", ["the receipts page prints blank"],
+           None, []))
+
+    written = divan.ticket_spec(card(constraints=["no UI work"]), {})["card"]
+    check("a constraint somebody typed comes first",
+          written["constraints"], ["no UI work", *divan.METHOD_CONSTRAINTS])
+
+    dupe = divan.ticket_spec(
+        card(constraints=[divan.METHOD_CONSTRAINTS[0], "ours"]), {})["card"]
+    check("and one the card already says verbatim is not said twice",
+          dupe["constraints"],
+          [divan.METHOD_CONSTRAINTS[0], "ours", *divan.METHOD_CONSTRAINTS[1:]])
+
+    check("every one of them is a sentence the worker can act on",
+          [c for c in divan.METHOD_CONSTRAINTS
+           if len(c) < 40 or not c.endswith(".")], [])
+
+
+spec_constraints()
 
 asyncio.run(wire())
 
