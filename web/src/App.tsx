@@ -970,6 +970,7 @@ export function App() {
             <Sidebar
               selected={null} selectedHost={null}
               onSelect={(hostKey, chatId) => usePanes.getState().open(hostKey, chatId)}
+              dragOut
               onNewChat={compose}
               onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
               searchRef={searchRef}

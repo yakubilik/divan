@@ -380,7 +380,7 @@ function ChatRow({ chat, selected, onPick, onDrag, onArchive, onDelete, under, h
 // own that word, and two different things called collapsed in one component is
 // how you end up hiding the wrong one.
 export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChatIn, searchRef,
-                          collapsed: railed = false, onCollapse, project }: {
+                          collapsed: railed = false, onCollapse, project, dragOut = false }: {
   /** On a product's own page: the list is that product's chats, on whichever
    *  computers have it, and the things that are about one computer's whole
    *  list — which computer, its groups, their order — are not offered. */
@@ -396,6 +396,10 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
   searchRef?: React.RefObject<HTMLInputElement>;
   collapsed?: boolean;
   onCollapse?: (next: boolean) => void;
+  /** Every row can be picked up, on any list: the Panes screen beside the
+   *  list catches a chat wherever it comes from. Elsewhere a row is only
+   *  picked up where there are groups to file it into. */
+  dragOut?: boolean;
 }) {
   const { hosts, order, focus, allHosts, setFocus, setAllHosts } = useFleet();
   const [query, setQuery] = useState('');
@@ -719,9 +723,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                   key={`${s.hostKey}/${c.id}`} chat={c}
                   selected={selected === c.id && selectedHost === s.hostKey}
                   onPick={() => onSelect(s.hostKey, c.id)}
-                  // Always picked up: a group catches it where there are groups
-                  // to file into, and the Panes screen catches it anywhere.
-                  onDrag={(dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id })}
+                  onDrag={canGroup || dragOut ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}
                   onArchive={() => { updateChat(s.hostKey, c.id, { archived: c.archived ? 0 : 1 }).catch(() => {}); }}
                   onDelete={() => setAsking({ what: 'delete-chat', hostKey: s.hostKey, id: c.id, name: c.title })}
                   under={project ? c.project ?? null : s.kind === 'project' ? s.title : undefined}
