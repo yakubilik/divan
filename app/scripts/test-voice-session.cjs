@@ -174,11 +174,15 @@ const fakeVoice = {
 };
 
 // ── a phone ─────────────────────────────────────────────────────────────────
+/** How long `hello` may take. The isolated daemon answers its first one after
+ *  probing the machine's tools, which on a loaded Mac took 21–28 s — inside the
+ *  client's 30 s default only just, and past it often enough to fail the run. */
+const HELLO_MS = 120_000;
 async function phone(peer, device, { mode = 'talk', engine = new FakeEngine(), greeting, chatId } = {}) {
   const client = new RacClient();
   client.connect('127.0.0.1', peer.port, peer.token);
   for (let i = 0; i < 1500 && client.status !== 'online'; i++) await wait(20);   // a loaded Mac is slow to answer
-  await client.call('hello', { device_name: device, lang: 'tr' }, 60000);
+  await client.call('hello', { device_name: device, lang: 'tr' }, HELLO_MS);
   const events = [];
   const told = [];
   client.on((ev) => { if (ev.event?.startsWith('voice.')) events.push({ ...ev, at: Date.now() }); });
@@ -493,7 +497,7 @@ const run = () => (async () => {
   if (at > 0) fs.writeFileSync(process.argv[at + 1], JSON.stringify({ ...report, simulated_audio: true }, null, 1));
 })();
 
-module.exports = { checks, run, FakeEngine, fakeVoice, startPeer, fixtures, wait, norm };
+module.exports = { checks, run, FakeEngine, fakeVoice, startPeer, fixtures, wait, norm, HELLO_MS };
 
 if (require.main === module) {
   void run().then(() => {

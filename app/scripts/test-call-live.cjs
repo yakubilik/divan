@@ -47,7 +47,7 @@ const ready = (async () => {
   // takes the whole of test-ustabasi.cjs down with it.
   for (let i = 0; i < 1500 && client.status !== 'online'; i++) await H.wait(20);
   try {
-    await client.call('hello', { device_name: 'screen', lang: 'tr' }, 60000);
+    await client.call('hello', { device_name: 'screen', lang: 'tr' }, H.HELLO_MS);
   } catch (e) {
     checks.push([`call screen (live): hello: ${e.stack || e}`, false]);
     client.disconnect();

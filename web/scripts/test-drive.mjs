@@ -1382,6 +1382,151 @@ group('chats are filed into groups from the panel');
     JSON.stringify(asked.map((a) => [a.type, a.data])));
 }
 
+group('the computers on the All computers list are dragged into an order');
+{
+  // Three computers, each with a chat of its own a minute old. The list reads
+  // them in pairing order until a heading is dragged.
+  const machine = (key, name, chatId, title) => {
+    const host = fakeHost();
+    return { ...host, cfg: { ...host.cfg, name }, info: { ...host.info, name },
+             chats: [fakeChat({ id: chatId, title, updated_at: Date.now() / 1000 - 60 })] };
+  };
+  const three = () => ({
+    studio: machine('studio', 'dilara-macbook-air', 'm1', 'Mac thread'),
+    cinema: machine('cinema', 'cinema pc', 'p1', 'Cinema thread'),
+    salure: machine('salure', 'salure-5986', 's1', 'Salure thread'),
+  });
+  const reload = async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(w.document.getElementById('root'));
+    await act(async () => { root.render(React.createElement(App)); });
+    for (let i = 0; i < 3; i++) await act(async () => {});
+  };
+  w.localStorage.removeItem('rac.fleetOrder');
+  await act(async () => {
+    seed(useFleet, { hosts: three(), order: ['studio', 'cinema', 'salure'], focus: 'studio', allHosts: true });
+  });
+  await reload();
+  await click(nav('Chats'));
+  const order = () => [...doc.querySelectorAll('[data-section]')].map((e) => e.dataset.section);
+  const sectionOf = (k) => doc.querySelector(`[data-section="${k}"]`);
+  const headingOf = (k) => sectionOf(k)?.querySelector('button[draggable]');
+  const was = order();
+
+  // jsdom has no layout: a box at the top of the page, with the pointer on its
+  // upper half, is the drop above that heading.
+  const box = (el) => { el.getBoundingClientRect = () => ({ top: 0, height: 40, bottom: 40, left: 0, right: 260, width: 260 }); };
+  const over = async (el, type, held, clientY) => {
+    await act(async () => {
+      const ev = new w.Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'dataTransfer', { value: held });
+      Object.defineProperty(ev, 'clientY', { value: clientY });
+      el.dispatchEvent(ev);
+    });
+  };
+  ok('a computer’s heading can be picked up', headingOf('cinema')?.getAttribute('draggable') === 'true',
+    headingOf('cinema')?.outerHTML.slice(0, 200));
+  box(sectionOf('studio'));
+  const held = new Transfer();
+  await drag(headingOf('cinema'), 'dragstart', held);
+  await over(sectionOf('studio'), 'dragover', held, 5);
+  const line = sectionOf('studio').style.boxShadow;
+  ok('…and while it is over the top half of another, the same accent line as a group’s shows above it',
+    /inset 0(px)? 2px 0/.test(line), line);
+  await over(sectionOf('studio'), 'drop', held, 5);
+  const now = order();
+  ok('CINEMA PC dropped on the top half of the first computer’s heading is first',
+    was.join() === 'studio,cinema,salure' && now.join() === 'cinema,studio,salure',
+    `${was.join()} → ${now.join()}`);
+  ok('…and the line is gone once it has landed', !sectionOf('studio').style.boxShadow, sectionOf('studio').style.boxShadow);
+  ok('…and the order is kept in this browser',
+    w.localStorage.getItem('rac.fleetOrder') === JSON.stringify(['cinema', 'studio', 'salure']),
+    w.localStorage.getItem('rac.fleetOrder'));
+
+  // Dropped on the lower half, below.
+  box(sectionOf('cinema'));
+  const below = new Transfer();
+  await drag(headingOf('salure'), 'dragstart', below);
+  await over(sectionOf('cinema'), 'dragover', below, 35);
+  await over(sectionOf('cinema'), 'drop', below, 35);
+  ok('a heading dropped on the lower half goes below it', order().join() === 'cinema,salure,studio', order().join());
+
+  await reload();
+  await click(nav('Chats'));
+  ok('the order survives a reload', order().join() === 'cinema,salure,studio', order().join());
+
+  // A chat is not moved from one computer to another: its row is not
+  // draggable here, and a chat drag that reaches another computer anyway is
+  // not taken.
+  const rows = [...doc.querySelectorAll('[data-section] button[draggable="true"]')]
+    .filter((b) => !b.closest('[data-section]')?.querySelector('button[draggable]')?.isSameNode(b));
+  asked.length = 0;
+  const chatDrag = new Transfer();
+  chatDrag.setData('application/x-rac-chat', 'cinema/p1');
+  chatDrag.setData('text/plain', 'p1');
+  box(sectionOf('studio'));
+  await over(sectionOf('studio'), 'dragover', chatDrag, 20);
+  const lit = sectionOf('studio').style.background;
+  await over(sectionOf('studio'), 'drop', chatDrag, 20);
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  ok('a chat dropped on another computer’s section does nothing',
+    rows.length === 0 && !lit && !asked.some((a) => a.type === 'chat.update')
+      && order().join() === 'cinema,salure,studio',
+    `${rows.length} draggable rows · ${lit} · ${JSON.stringify(asked.map((a) => [a.key, a.type]))}`);
+
+  // A computer paired since is at the end; one removed is gone from the list
+  // and from the order the next drag saves.
+  await act(async () => {
+    const hosts = { ...three(), lab: machine('lab', 'lab-box', 'l1', 'Lab thread') };
+    delete hosts.salure;
+    useFleet.setState({ hosts, order: ['studio', 'lab', 'cinema'] });
+  });
+  ok('a computer paired later comes last, and a removed one is dropped',
+    order().join() === 'cinema,studio,lab', order().join());
+  box(sectionOf('cinema'));
+  const again = new Transfer();
+  await drag(headingOf('lab'), 'dragstart', again);
+  await over(sectionOf('cinema'), 'dragover', again, 35);
+  await over(sectionOf('cinema'), 'drop', again, 35);
+  ok('…and the order saved next carries only the computers still paired',
+    w.localStorage.getItem('rac.fleetOrder') === JSON.stringify(['cinema', 'lab', 'studio']),
+    w.localStorage.getItem('rac.fleetOrder'));
+
+  // Back on one computer, its group headings and chat drops are as they were.
+  await act(async () => {
+    seed(useFleet, { hosts: { studio: fakeHost() }, order: ['studio'], focus: 'studio', allHosts: false });
+  });
+  w.localStorage.removeItem('rac.fleetOrder');
+  w.localStorage.removeItem('rac.chatSections');
+  await reload();
+  await click(nav('Chats'));
+  const one = order();
+  const lift = new Transfer();
+  const last = one.filter((k) => k !== '__archive').at(-1);
+  box(sectionOf(one[0]));
+  await drag(sectionOf(last).querySelector('button[draggable="true"]'), 'dragstart', lift);
+  await over(sectionOf(one[0]), 'dragover', lift, 5);
+  await over(sectionOf(one[0]), 'drop', lift, 5);
+  ok('on one computer a group heading still reorders',
+    one.length > 1 && order()[0] === last && !!doc.querySelector('button[aria-label="New group"]'),
+    `${one.join()} → ${order().join()}`);
+  asked.length = 0;
+  const row = [...doc.querySelectorAll('button[draggable="true"]')]
+    .find((b) => (b.textContent ?? '').includes('Safari login'));
+  const into = doc.querySelector('[data-section="g1"]');
+  const chatHeld = new Transfer();
+  await drag(row, 'dragstart', chatHeld);
+  await drag(into, 'dragover', chatHeld);
+  await drag(into, 'drop', chatHeld);
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  ok('…and a chat dropped on a group is still filed in it',
+    asked.some((a) => a.type === 'chat.update' && a.data.chat_id === 'c2' && a.data.group_id === 'g1'),
+    JSON.stringify(asked.map((a) => [a.type, a.data])));
+  w.localStorage.removeItem('rac.chatSections');
+  await act(async () => { seed(useFleet, { hosts: { studio: fakeHost() } }); });
+  await reload();
+}
+
 group('a product has its own chats');
 {
   const header = doc.querySelector('header');
