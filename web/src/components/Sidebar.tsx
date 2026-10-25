@@ -719,7 +719,9 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                   key={`${s.hostKey}/${c.id}`} chat={c}
                   selected={selected === c.id && selectedHost === s.hostKey}
                   onPick={() => onSelect(s.hostKey, c.id)}
-                  onDrag={canGroup ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}
+                  // Always picked up: a group catches it where there are groups
+                  // to file into, and the Panes screen catches it anywhere.
+                  onDrag={(dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id })}
                   onArchive={() => { updateChat(s.hostKey, c.id, { archived: c.archived ? 0 : 1 }).catch(() => {}); }}
                   onDelete={() => setAsking({ what: 'delete-chat', hostKey: s.hostKey, id: c.id, name: c.title })}
                   under={project ? c.project ?? null : s.kind === 'project' ? s.title : undefined}

@@ -105,6 +105,7 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *  /work                      every ticket in flight, on every computer
  *  /chats                     the Chat place · /chats/<id> one chat
  *  /chats/new                 …with the empty composer New chat leaves there
+ *  /panes                     several chats at once, tiled (the layout is this browser's)
  *  /machine/accounts          a page of the Machine place
  *  /machine/terminal/ustabasi/42   …a part of one, and a ticket open on it
  *  /machine/on/cinema/preferences/tools   …about one computer, of several
@@ -119,6 +120,7 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *  to either is read as the product's own page (`readPlace`).
  */
 export function pathOf(place: Place): string {
+  if (place.view === 'panes') return '/panes';
   if (place.view === 'chats') {
     if (place.chat) return `/chats/${enc(place.chat)}`;
     return place.sub === 'new' ? '/chats/new' : '/chats';
@@ -205,6 +207,7 @@ export function readPlace(pathname: string, search = ''): Place {
     if (parts[1] === 'new') return { ...place, view: 'chats', sub: 'new' };
     return { ...place, view: 'chats', chat: parts[1] ?? null };
   }
+  if (parts[0] === 'panes') return { ...place, view: 'panes' };
   if (parts[0] === 'waiting') return { ...place, tab: 'waiting' };
   if (parts[0] === 'work') {
     // `?view=board` and `?group=date|project` were the layouts the page had
