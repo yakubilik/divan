@@ -10,12 +10,17 @@ import type { Catalog, Chat, CliAccount, LimitWindow, Project } from '../lib/pro
 export type { Field };
 export { accountName };
 
-export function FieldSheet({ field, chat, catalog, projects, accounts, limits, busy, onPick, onClose }: {
+export function FieldSheet({ field, chat, catalog, projects, accounts, accountsLoading, accountsError, limits, busy, onPick, onClose }: {
   field: Field;
   chat: Chat;
   catalog: Catalog | null;
   projects: Project[];
   accounts: CliAccount[];
+  /** `account.list` is being asked right now. */
+  accountsLoading?: boolean;
+  /** Why the last `account.list` failed: said here, so an empty sheet does
+   *  not read as a computer with no accounts. */
+  accountsError?: string | null;
   limits: Record<string, LimitWindow[]>;
   /** A turn is running; moving the chat now would cut it off. */
   busy: boolean;
@@ -81,7 +86,17 @@ export function FieldSheet({ field, chat, catalog, projects, accounts, limits, b
             on={r.value === current} onPick={() => pick(r.value)}
           />
         ))}
-        {!rows.length && (
+        {field === 'account_id' && accountsError && !accountsLoading && (
+          <div role="alert" data-accounts-error style={{ padding: '12px 16px', fontSize: 13, color: C.danger }}>
+            The accounts could not be read: {accountsError}
+          </div>
+        )}
+        {!rows.length && field === 'account_id' && accountsLoading && (
+          <div style={{ padding: 24, fontSize: 13, color: C.mute, textAlign: 'center' }}>
+            Reading accounts…
+          </div>
+        )}
+        {!rows.length && !(field === 'account_id' && (accountsLoading || accountsError)) && (
           <div style={{ padding: 24, fontSize: 13, color: C.mute, textAlign: 'center' }}>
             Nothing to choose — the computer may be offline
           </div>
