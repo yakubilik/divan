@@ -266,6 +266,7 @@ export const P = {
   pencil: 'M4 20h4L19 9a2 2 0 0 0-3-3L5 17zM15 7l2 2',
   undo: 'M9 14l-5-4 5-4M4 10h9a5 5 0 0 1 0 10h-3',
   trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12',
+  archive: 'M4 5h16v4H4zM5 9v10h14V9M10 13h4',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   agent: 'M12 4a4 4 0 0 1 4 4v1h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h1V8a4 4 0 0 1 4-4zM9 14v.1M15 14v.1',
   clock: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2',
