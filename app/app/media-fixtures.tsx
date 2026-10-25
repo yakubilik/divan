@@ -22,12 +22,17 @@ import type { Attachment } from '../src/store';
  *
  *  Development only, like `divan-gallery`: the route turns away in a release
  *  build. Its few words are fixture names, not anything a user reads. */
+/** The documents folder, or nothing where there is none (a headless render). */
+function docsUri(): string {
+  try { return Paths.document.uri; } catch { return ''; }
+}
+
 export default function MediaFixtures() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const c = useColors();
   const { only } = useLocalSearchParams<{ only?: string }>();
-  const dir = Paths.document.uri.replace(/\/?$/, '/') + 'fixtures/';
+  const dir = `${docsUri().replace(/\/?$/, '/')}fixtures/`;
   const items = useMemo<Attachment[]>(() => [
     { path: '/fixtures/portrait.mp4', name: 'portrait.mp4', kind: 'video', duration: 4, localUri: dir + 'portrait.mp4' },
     { path: '/fixtures/landscape.mp4', name: 'landscape.mp4', kind: 'video', duration: 4, localUri: dir + 'landscape.mp4' },
