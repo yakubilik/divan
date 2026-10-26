@@ -35,6 +35,7 @@ const SVG = (d: string) => (
 const GEAR = 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z';
 const WORK = 'M22 12h-4l-3 9L9 3l-3 9H2';
 const CHAT = 'M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z';
+const PANES = 'M4 4h16v16H4zM12 4v16M12 12h8';
 const MOON = 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z';
 const SUN = 'M12 4V2M12 22v-2M4.9 4.9 3.5 3.5M20.5 20.5l-1.4-1.4M4 12H2M22 12h-2M4.9 19.1l-1.4 1.4M20.5 3.5l-1.4 1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z';
 const BACK = 'M15 5 8 12l7 7';
@@ -95,8 +96,10 @@ function Sys({ fleet, view, here, dots, onView, inbox, work }: {
       )}
       <span className="sep" />
       {!!work && <PlaceButton label="Work" icon={WORK} on={work.on} onClick={work.onOpen} />}
-      <PlaceButton label="Chats" icon={CHAT} on={here === 'chat'} dot={dots?.chat}
+      <PlaceButton label="Chats" icon={CHAT} on={view === 'chats'} dot={dots?.chat}
         onClick={() => onView('chats')} />
+      <PlaceButton label="Panes" icon={PANES} on={view === 'panes'}
+        onClick={() => onView('panes')} />
       <PlaceButton label="Settings" icon={GEAR} on={settings}
         onClick={() => onView('settings')} />
       {inbox}

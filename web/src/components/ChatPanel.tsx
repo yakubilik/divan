@@ -34,7 +34,7 @@ function doing(status: string | null, busy: boolean): { badge: string | null; to
   return { badge: null, tone: 'ink3' };
 }
 
-export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClose }: {
+export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClose, fill, onGrab }: {
   told: Told;
   /** Where this window stands and how big it is — the dock's own slot until
    *  somebody drags it somewhere else. */
@@ -44,8 +44,14 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
    *  chat, with room to read it. */
   big?: boolean;
   onBig?: (big: boolean) => void;
-  onMinimise: () => void;
+  onMinimise?: () => void;
   onClose: () => void;
+  /** Drawn as a pane of the Panes screen: as big as the box it is in, with
+   *  no corner of its own to resize from — the dividers around it are that —
+   *  and `big` meaning it fills the Panes area. */
+  fill?: boolean;
+  /** …where the head is picked up by the screen, which moves the pane. */
+  onGrab?: (e: React.MouseEvent) => void;
 }) {
   const slot = useFleet((s) => s.hosts[told.host]);
   const chat = useMemo(
@@ -180,7 +186,7 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
   // Opened out, the window is as big as the screen sensibly allows rather than
   // the size it was dragged to: what "bigger" is for is reading, and a window
   // somebody had pulled down to 280 pt would open out to 280 pt.
-  const room = big ? {
+  const room = fill ? place : big ? {
     width: Math.min(1040, Math.max(360, view.width - 64)),
     height: Math.min(880, Math.max(320, view.height - 64)),
   } : place;
@@ -188,6 +194,7 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
   return (
     <Panel
       tone={tone} width={room.width} height={room.height}
+      style={fill ? { width: '100%', height: '100%' } : undefined}
       head={(
         <div
           style={{ flex: 'none', position: 'relative', zIndex: 3 }}
@@ -196,15 +203,16 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
             // window buttons, the chips, the list under them. And a window
             // standing in the middle of the screen is not dragged at all —
             // there is nowhere for it to go.
-            if (big) return;
             if ((e.target as HTMLElement | null)?.closest('button')) return;
+            if (onGrab) { onGrab(e); return; }
+            if (big) return;
             hold(e, 'move');
           }}
         >
           {/* The corner that is free to move, which is the one to pull on: the
               window is anchored to the bottom right, so the top left is where
               it grows from. */}
-          {!big && <span
+          {!big && !fill && <span
             role="separator" aria-label="Resize this window"
             onMouseDown={(e) => { e.stopPropagation(); hold(e, 'size'); }}
             style={{
@@ -220,7 +228,7 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
             style={{
               margin: '10px 12px 0', padding: '7px 10px', borderRadius: RADIUS.quote,
               background: T.s2, fontSize: 13, fontWeight: 600, lineHeight: 1.3,
-              cursor: big ? undefined : 'grab',
+              cursor: big && !onGrab ? undefined : 'grab',
             }}
           >
             {/* Clamped inside the padding: a clamp on the padded box itself
@@ -235,13 +243,15 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
             extra={!!onBig && (
               <HeadGlyph
                 label={big ? '⤡' : '⤢'}
-                title={big ? 'Back to the corner' : 'Open it in the middle of the screen'}
+                title={fill
+                  ? (big ? 'Restore the layout' : 'Fill the Panes screen')
+                  : (big ? 'Back to the corner' : 'Open it in the middle of the screen')}
                 onClick={() => onBig(!big)}
               />
             )}
             title={machine} badge={badge} tone={tone}
             note={stamp ? clock(stamp) : ''}
-            grab={!big}
+            grab={!big || !!onGrab}
             onMinimise={onMinimise}
             onClose={onClose}
           />

@@ -36,6 +36,8 @@ export const PLACES: Place[] = ['dashboard', 'chat', 'machine'];
 export type View =
   | 'overview'
   | 'chats'
+  // …and the Chat place's second page: several chats at once, tiled
+  | 'panes'
   // the eight rows of the Machine drawer, in the order Web15 draws them
   | 'machines' | 'executors' | 'terminal' | 'screen' | 'accounts' | 'quota' | 'admin' | 'settings'
   // …and the five pages that are one level under one of those rows
@@ -150,7 +152,7 @@ export const PLACE_VIEW: Record<Place, View> = {
  *  page of the Machine place, which is the whole of the move. */
 export function placeOf(view: View): Place {
   if (view === 'overview') return 'dashboard';
-  if (view === 'chats') return 'chat';
+  if (view === 'chats' || view === 'panes') return 'chat';
   return 'machine';
 }
 
