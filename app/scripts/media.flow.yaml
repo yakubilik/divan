@@ -38,6 +38,10 @@ name: photo and video bubbles, opened full screen
 - tapOn: "video portrait.mp4"
 - waitForAnimationToEnd
 - takeScreenshot: full-portrait-video
+# …a tap on the picture brings up the system player's own controls.
+- tapOn:
+    point: 50%, 50%
+- takeScreenshot: full-portrait-video-controls
 # …the close button puts it away, back on the same bubble.
 - tapOn: "close"
 - assertVisible: "video portrait.mp4"

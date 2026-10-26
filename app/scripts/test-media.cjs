@@ -156,7 +156,8 @@ const srcs = [...viewer.matchAll(/data-rn="Image" data-src="([^"]*)"/g)].map((m)
 checks.push(['a photo opens at the original the message names, not the bubble copy',
   srcs.includes(fileUrl(TALL_PHOTO.path)) && srcs.includes(fileUrl(WIDE_PHOTO.path))]);
 checks.push(['…drawn whole (contain)', [...viewer.matchAll(/data-rn="Image" data-src="[^"]*" data-fit="([^"]*)"/g)].every((m) => m[1] === 'contain')]);
-checks.push(['…with the system pinch zoom under it', /data-rn="ScrollView"/.test(viewer)]);
+checks.push(['…with the system pinch zoom under it, up to 4×, starting whole',
+  scrolls.some((p) => p.maximumZoomScale === 4 && p.minimumZoomScale === 1 && p.zoomScale === 1)]);
 const video = viewer.match(/data-rn="VideoView" data-fit="([^"]*)" data-controls="([^"]*)" data-pip="([^"]*)" data-fullscreen="([^"]*)" data-style="([^"]*)"/);
 checks.push(['a video plays in the system player, letterboxed and never cropped', !!video && video[1] === 'contain']);
 checks.push(['…with its native controls, full screen and picture-in-picture', !!video && video[2] === 'true' && video[3] === 'true' && video[4] === 'true']);

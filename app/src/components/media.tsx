@@ -172,7 +172,10 @@ function VideoPage({ item, width, height, active, onClose }: { item: Attachment;
 }
 
 /** One photo that zooms. The pinch is the system's own scroll-view zoom
- *  (UIScrollView on iOS), a second tap within a moment does 2.5×. It shows the
+ *  (UIScrollView on iOS), a second tap within a moment does 2.5× around the
+ *  tap. The double-tap drives the scroll view's own `zoomScale` prop and then
+ *  scrolls the tapped point to the middle: the old `scrollResponderZoomTo`
+ *  does not exist on the new architecture's scroll view, and did nothing. It shows the
  *  original the message names, not the bubble's smaller copy — that copy is
  *  drawn underneath only until the original arrives, and is what is left if
  *  the original has gone. */
@@ -180,6 +183,10 @@ function ZoomImage({ item, width, height: h, onZoom }: { item: Attachment; width
   const ref = useRef<ScrollView>(null);
   const last = useRef(0);
   const [z, setZ] = useState(1);
+  // What the double-tap last asked the scroll view for. A pinch moves the real
+  // scale without touching this, so asking for 1 again when it already says 1
+  // nudges it by a hair, or the unchanged prop would not be applied.
+  const [target, setTarget] = useState(1);
   const sources = useMemo(() => viewerSources(item, fileUrl), [item]);
   const [at, setAt] = useState(0);
   const [ready, setReady] = useState(false);
@@ -188,16 +195,24 @@ function ZoomImage({ item, width, height: h, onZoom }: { item: Attachment; width
   function tap(x: number, y: number) {
     const now = Date.now();
     if (now - last.current < 280) {
-      const next = z > 1 ? 1 : 2.5;
-      const w = width / next; const hh = h / next;
-      (ref.current as any)?.scrollResponderZoomTo?.({ x: x - w / 2, y: y - hh / 2, width: w, height: hh, animated: true });
-      setZ(next); onZoom(next > 1);
+      const zoomIn = z <= 1.01;
+      const next = zoomIn ? 2.5 : (target === 1 ? 1.0001 : 1);
+      setTarget(next);
+      if (zoomIn) {
+        // Once the scale has landed, bring the tapped point to the middle.
+        setTimeout(() => ref.current?.scrollTo({
+          x: Math.max(0, Math.min(x * next - width / 2, width * next - width)),
+          y: Math.max(0, Math.min(y * next - h / 2, h * next - h)),
+          animated: true,
+        }), 60);
+      }
+      setZ(zoomIn ? next : 1); onZoom(zoomIn);
       last.current = 0;
     } else last.current = now;
   }
   return (
     <View style={{ width, height: h }}>
-      <ScrollView ref={ref} maximumZoomScale={4} minimumZoomScale={1} centerContent bounces={z > 1} alwaysBounceVertical={false}
+      <ScrollView ref={ref} maximumZoomScale={4} minimumZoomScale={1} zoomScale={target} centerContent bounces={z > 1} alwaysBounceVertical={false}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
         onScroll={(e) => { const s = (e.nativeEvent as any).zoomScale ?? 1; if ((s > 1.01) !== (z > 1.01)) { setZ(s); onZoom(s > 1.01); } }}
         scrollEventThrottle={32}
