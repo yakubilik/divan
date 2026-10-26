@@ -40,7 +40,9 @@ name: photo and video bubbles, opened full screen
 - takeScreenshot: full-portrait-video
 # …a tap on the picture brings up the system player's own controls.
 - tapOn:
-    point: 50%, 50%
+    point: 50%, 70%
+- waitForAnimationToEnd:
+    timeout: 800
 - takeScreenshot: full-portrait-video-controls
 # …the close button puts it away, back on the same bubble.
 - tapOn: "close"

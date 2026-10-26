@@ -179,6 +179,10 @@ function VideoPage({ item, width, height, active, onClose }: { item: Attachment;
  *  original the message names, not the bubble's smaller copy — that copy is
  *  drawn underneath only until the original arrives, and is what is left if
  *  the original has gone. */
+/** How far apart two taps may land and still be one double-tap. A single tap
+ *  on a photo does nothing here, so a generous window costs nothing; a tight
+ *  one (it was 280 ms) lost slow double-taps. */
+const DOUBLE_TAP = 500;
 function ZoomImage({ item, width, height: h, onZoom }: { item: Attachment; width: number; height: number; onZoom: (z: boolean) => void }) {
   const ref = useRef<ScrollView>(null);
   const last = useRef(0);
@@ -192,9 +196,12 @@ function ZoomImage({ item, width, height: h, onZoom }: { item: Attachment; width
   const [ready, setReady] = useState(false);
   const uri = sources[at] ?? null;
   const under = srcOf(item);
-  function tap(x: number, y: number) {
-    const now = Date.now();
-    if (now - last.current < 280) {
+  // Taps are timed by when the finger touched the glass (the native event's
+  // timestamp), not by when the JS thread got round to them: a busy thread
+  // delivers two quick taps half a second apart and the second was lost.
+  function tap(x: number, y: number, at: number) {
+    const now = at || Date.now();
+    if (now - last.current < DOUBLE_TAP) {
       const zoomIn = z <= 1.01;
       const next = zoomIn ? 2.5 : (target === 1 ? 1.0001 : 1);
       setTarget(next);
@@ -217,7 +224,7 @@ function ZoomImage({ item, width, height: h, onZoom }: { item: Attachment; width
         onScroll={(e) => { const s = (e.nativeEvent as any).zoomScale ?? 1; if ((s > 1.01) !== (z > 1.01)) { setZ(s); onZoom(s > 1.01); } }}
         scrollEventThrottle={32}
         contentContainerStyle={{ width, height: h || undefined, alignItems: 'center', justifyContent: 'center' }}>
-        <Pressable onPress={(e) => tap(e.nativeEvent.locationX, e.nativeEvent.locationY)} style={{ width, height: h || '100%' }}>
+        <Pressable onPress={(e) => tap(e.nativeEvent.locationX, e.nativeEvent.locationY, e.nativeEvent.timestamp)} style={{ width, height: h || '100%' }}>
           {under && !ready && under !== uri && <Image source={{ uri: under }} style={StyleSheet.absoluteFill} resizeMode="contain" />}
           {uri && (
             <Image key={uri} source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain"
