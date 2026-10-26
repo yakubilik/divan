@@ -23,9 +23,16 @@ name: photo and video bubbles, opened full screen
 
 # 1 · a phone video: an upright bubble, then full screen, whole and letterboxed.
 - openLink: divan://media-fixtures?only=portrait.mp4
+# A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
+- runFlow:
+    when:
+      visible: "Aç|Open"
+    commands:
+      - tapOn: "Aç|Open"
 - extendedWaitUntil:
     visible: "video portrait.mp4"
-    timeout: 15000
+    # The first open of a Debug build waits for Metro to bundle the app.
+    timeout: 240000
 - waitForAnimationToEnd
 - takeScreenshot: bubble-portrait-video
 - tapOn: "video portrait.mp4"
@@ -47,6 +54,12 @@ name: photo and video bubbles, opened full screen
 
 # 2 · a landscape video: a wide bubble, and full screen with bars above and below.
 - openLink: divan://media-fixtures?only=landscape.mp4
+# A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
+- runFlow:
+    when:
+      visible: "Aç|Open"
+    commands:
+      - tapOn: "Aç|Open"
 - extendedWaitUntil:
     visible: "video landscape.mp4"
     timeout: 15000
@@ -59,6 +72,12 @@ name: photo and video bubbles, opened full screen
 
 # 3 · a portrait photo: its own shape in the bubble, whole full screen.
 - openLink: divan://media-fixtures?only=portrait.jpg
+# A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
+- runFlow:
+    when:
+      visible: "Aç|Open"
+    commands:
+      - tapOn: "Aç|Open"
 - extendedWaitUntil:
     visible: "photo portrait.jpg"
     timeout: 15000
@@ -80,6 +99,12 @@ name: photo and video bubbles, opened full screen
 # 4 · a landscape photo, and the pager: every fixture is one chat's media, so a
 #     swipe at zoom 1 moves to the next item and back.
 - openLink: divan://media-fixtures?only=landscape.jpg
+# A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
+- runFlow:
+    when:
+      visible: "Aç|Open"
+    commands:
+      - tapOn: "Aç|Open"
 - extendedWaitUntil:
     visible: "photo landscape.jpg"
     timeout: 15000

@@ -73,6 +73,13 @@ RN.Image = function Image(props) {
                     'data-style': JSON.stringify(R.flatten(props.style)) });
 };
 RN.Share = { share: () => Promise.resolve() };
+/** Scroll views keep their props: a video page's drag down is one of them. */
+let scrolls = [];
+RN.ScrollView = function ScrollView(props) {
+  scrolls.push(props);
+  return h('div', { 'data-rn': 'ScrollView', 'data-style': JSON.stringify(R.flatten(props.style)) }, props.children);
+};
+RN.LogBox = { ignoreAllLogs() {} };
 RN.Linking = { openURL: () => Promise.resolve() };
 class ValueXY { constructor() { this.x = new RN.Animated.Value(0); this.y = new RN.Animated.Value(0); } }
 RN.Animated.ValueXY = ValueXY;
@@ -139,6 +146,7 @@ checks.push(["the bubble draws the computer's kept copy", bubbleImg.includes(`da
 let closed = 0;
 pans = [];
 const group = [TALL_PHOTO, PHONE_VIDEO, WIDE_PHOTO];
+scrolls = [];
 const viewer = R.render('dark', h(media.Gallery, { items: group, start: 0, onClose: () => { closed++; } }));
 const pan = pans[0];
 checks.push(['the viewer is one pager for photos and videos together',
@@ -162,6 +170,16 @@ pan.onPanResponderRelease({}, { dx: 0, dy: 40, vy: 0.1 });
 checks.push(['…a short one springs back', closed === 0]);
 pan.onPanResponderRelease({}, { dx: 5, dy: 200, vy: 0.4 });
 checks.push(['…a long one puts the viewer away', closed === 1]);
+const videoScroll = scrolls.find((p) => p.alwaysBounceVertical && typeof p.onScrollEndDrag === 'function');
+checks.push(['a video page sits in a native vertical scroll that only bounces', !!videoScroll && !videoScroll.maximumZoomScale]);
+if (videoScroll) {
+  const before2 = closed;
+  videoScroll.onScrollEndDrag({ nativeEvent: { contentOffset: { y: -30 }, velocity: { y: 0.2 } } });
+  const small = closed === before2;
+  videoScroll.onScrollEndDrag({ nativeEvent: { contentOffset: { y: -140 }, velocity: { y: 0.5 } } });
+  checks.push(['…a short pull on the video springs back, a long one puts the viewer away', small && closed === before2 + 1]);
+  closed = before2;
+}
 checks.push(['the close button puts it away too', (() => {
   const b = R.presses().find((p) => p.label === 'close'); if (!b) return false; b.press(); return closed === 2;
 })()]);

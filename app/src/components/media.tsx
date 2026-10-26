@@ -128,7 +128,7 @@ export function Gallery({ items, start, onClose }: { items: Attachment[]; start:
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / win.width))}
               renderItem={({ item, index: i }) => isVideo(item)
-                ? <VideoPage item={item} width={win.width} height={areaH} active={i === index} />
+                ? <VideoPage item={item} width={win.width} height={areaH} active={i === index} onClose={onClose} />
                 : <ZoomImage item={item} width={win.width} height={areaH} onZoom={setZoomed} />}
             />
           )}
@@ -143,18 +143,31 @@ export function Gallery({ items, start, onClose }: { items: Attachment[]; start:
 
 /** One video, in the system player: letterboxed (`contain`), never cropped,
  *  with the player's own controls. It plays while it is the page on screen and
- *  pauses when swiped away. */
-function VideoPage({ item, width, height, active }: { item: Attachment; width: number; height: number; active: boolean }) {
+ *  pauses when swiped away.
+ *
+ *  The player's own touch handling keeps a drag on the picture from reaching
+ *  the viewer's pan responder, so the drag down that puts it away is a native
+ *  one: the page sits in a vertical scroll view that only bounces, and a pull
+ *  past `DISMISS` (or a flick) closes the viewer. */
+const DISMISS = 90;
+function VideoPage({ item, width, height, active, onClose }: { item: Attachment; width: number; height: number; active: boolean; onClose: () => void }) {
   const uri = viewerSources(item, fileUrl)[0] ?? null;
   const player = useVideoPlayer(uri, (p) => { p.loop = false; });
   useEffect(() => {
     if (active) player.play(); else player.pause();
   }, [active, player]);
   return (
-    <View style={{ width, height, backgroundColor: '#000' }}>
-      <VideoView player={player} style={{ width, height }} contentFit="contain" nativeControls
-        allowsPictureInPicture fullscreenOptions={{ enable: true }} />
-    </View>
+    <ScrollView style={{ width, height }} contentContainerStyle={{ width, height }} alwaysBounceVertical
+      showsVerticalScrollIndicator={false} scrollEventThrottle={16}
+      onScrollEndDrag={(e) => {
+        const { contentOffset, velocity } = e.nativeEvent as any;
+        if (Math.abs(contentOffset?.y ?? 0) > DISMISS || Math.abs(velocity?.y ?? 0) > 1.5) onClose();
+      }}>
+      <View style={{ width, height, backgroundColor: '#000' }}>
+        <VideoView player={player} style={{ width, height }} contentFit="contain" nativeControls
+          allowsPictureInPicture fullscreenOptions={{ enable: true }} />
+      </View>
+    </ScrollView>
   );
 }
 

@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { LogBox, Pressable, ScrollView, View } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Paths } from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +39,9 @@ export default function MediaFixtures() {
     { path: '/fixtures/portrait.jpg', name: 'portrait.jpg', kind: 'image', localUri: dir + 'portrait.jpg' },
     { path: '/fixtures/landscape.jpg', name: 'landscape.jpg', kind: 'image', localUri: dir + 'landscape.jpg' },
   ], [dir]);
+
+  // The development warnings toast would sit over the bubbles being looked at.
+  useEffect(() => { LogBox.ignoreAllLogs(true); return () => LogBox.ignoreAllLogs(false); }, []);
 
   if (!__DEV__) return <Redirect href="/" />;
 
