@@ -13,6 +13,8 @@ import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
 import { ApprovalModal, type Pending } from './components/ApprovalModal';
 import { Machine } from './screens/Machine';
+import { Panes } from './screens/Panes';
+import { usePanes } from './lib/panes';
 import { Overview, type ProjectTab } from './screens/Overview';
 import type { WorkLayout } from './screens/Work';
 import { Composer } from './components/Composer';
@@ -455,6 +457,7 @@ export function App() {
    *  the left, nothing is selected, and the middle is the empty composer. */
   const compose = useCallback(() => {
     if (placeRef.current === 'chat') {
+      setView('chats');
       setSel(null);
       setFresh(true);
       setPeek(false);
@@ -934,8 +937,24 @@ export function App() {
         )}
 
         {/* The chat list down the left, and the newest conversation open and
-            writable beside it the moment the place is entered. */}
-        {place === 'chat' && (
+            writable beside it the moment the place is entered — or, on the
+            Panes page, several chats at once: the same list down the left,
+            and every chat dragged off it (or pressed in it) a pane beside the
+            others. */}
+        {place === 'chat' && (view === 'panes' ? (
+          <div className="dv-chatpane" data-panes-screen="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
+            <Sidebar
+              selected={null} selectedHost={null}
+              onSelect={(hostKey, chatId) => usePanes.getState().open(hostKey, chatId)}
+              dragOut
+              onNewChat={compose}
+              onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
+              searchRef={searchRef}
+              collapsed={rail} onCollapse={setRailTo}
+            />
+            <Panes />
+          </div>
+        ) : (
           <div className="dv-chatpane" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
             <Sidebar
               selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
@@ -974,7 +993,7 @@ export function App() {
                 from the same store, not rows in the list. */}
             <Asking view={divan} />
           </div>
-        )}
+        ))}
 
         {place === 'machine' && (
           <Machine
@@ -1110,7 +1129,7 @@ const COLUMN_WORD: Record<string, string> = {
 /** A place, as the words the way back to it says: `Waiting on you`,
  *  `Quire · Board`, `Dashboard`. */
 function placeName(p: Place, view: ReturnType<typeof useDivanView>): string {
-  if (p.view !== 'overview') return p.view === 'chats' ? 'Chats' : 'Machine';
+  if (p.view !== 'overview') return p.view === 'chats' ? 'Chats' : p.view === 'panes' ? 'Panes' : 'Machine';
   if (!p.project) return p.tab === 'waiting' ? 'Waiting on you' : p.tab === 'work' ? 'Work' : 'Dashboard';
   const name = projectIn(view, p.project)?.name ?? p.project;
   if (p.card) return name;
