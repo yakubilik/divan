@@ -937,8 +937,24 @@ export function App() {
         )}
 
         {/* The chat list down the left, and the newest conversation open and
-            writable beside it the moment the place is entered. */}
-        {view === 'chats' && (
+            writable beside it the moment the place is entered — or, on the
+            Panes page, several chats at once: the same list down the left,
+            and every chat dragged off it (or pressed in it) a pane beside the
+            others. */}
+        {place === 'chat' && (view === 'panes' ? (
+          <div className="dv-chatpane" data-panes-screen="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
+            <Sidebar
+              selected={null} selectedHost={null}
+              onSelect={(hostKey, chatId) => usePanes.getState().open(hostKey, chatId)}
+              dragOut
+              onNewChat={compose}
+              onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
+              searchRef={searchRef}
+              collapsed={rail} onCollapse={setRailTo}
+            />
+            <Panes />
+          </div>
+        ) : (
           <div className="dv-chatpane" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
             <Sidebar
               selected={sel?.chatId ?? null} selectedHost={sel?.hostKey ?? null} onSelect={open}
@@ -977,24 +993,7 @@ export function App() {
                 from the same store, not rows in the list. */}
             <Asking view={divan} />
           </div>
-        )}
-
-        {/* Several chats at once: the same list down the left, and every
-            chat dragged off it (or pressed in it) a pane beside the others. */}
-        {view === 'panes' && (
-          <div className="dv-chatpane" data-panes-screen="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
-            <Sidebar
-              selected={null} selectedHost={null}
-              onSelect={(hostKey, chatId) => usePanes.getState().open(hostKey, chatId)}
-              dragOut
-              onNewChat={compose}
-              onNewChatIn={(host, cwd, groupId) => setNewChat({ host, cwd, groupId })}
-              searchRef={searchRef}
-              collapsed={rail} onCollapse={setRailTo}
-            />
-            <Panes />
-          </div>
-        )}
+        ))}
 
         {place === 'machine' && (
           <Machine
