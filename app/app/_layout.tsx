@@ -213,6 +213,8 @@ export default function RootLayout() {
         {/* The Divan design system, part by part. Nothing links here outside a
             development build, and the screen itself turns away in one. */}
         <Stack.Screen name="divan-gallery" />
+        {/* Photo and video bubbles over fixture media, for the simulator. */}
+        <Stack.Screen name="media-fixtures" />
       </Stack>
       {ready && locked && <LockScreen onUnlock={() => void unlock()} />}
       <MenuHost />

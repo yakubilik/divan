@@ -20,6 +20,7 @@ import { em, family, useColors, type Palette } from '../theme';
 import { useStore, useT } from '../store';
 import { Icon, SelectableText, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
+import { isPhoto } from '../media-size';
 import type { Attachment } from '../store';
 import { ticketNotice, type TicketNotice } from '../notice';
 import type { OutState } from '../outbox';
@@ -35,8 +36,9 @@ export function UserBubble({ text, attachments, queued, onTicket, out, onOut }: 
   // A ticket filed from this chat ended: one line, with the report behind it.
   // Read from the stored text, so a replayed history shows it the same way.
   const notice = React.useMemo(() => (atts.length ? null : ticketNotice(text)), [text, atts.length]);
-  const images = atts.filter((a) => a.kind === 'image' || (!a.kind && /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name || a.path || '')));
+  const images = atts.filter(isPhoto);
   const videos = atts.filter((a) => a.kind === 'video');
+  const group = [...images, ...videos];
   const voices = atts.filter((a) => a.kind === 'audio');
   const files = atts.filter((a) => !images.includes(a) && !videos.includes(a) && !voices.includes(a));
   // A voice note sent on its own carries its transcript, or a placeholder
@@ -54,8 +56,8 @@ export function UserBubble({ text, attachments, queued, onTicket, out, onOut }: 
   }
   return (
     <View style={{ alignSelf: 'flex-end', maxWidth: '80%', alignItems: 'flex-end', gap: media ? 4 : 6 }}>
-      {images.length > 0 && <ImageGroup items={images} />}
-      {videos.map((v) => <VideoBubble key={v.path} item={v} stacked={images.length > 0} />)}
+      {images.length > 0 && <ImageGroup items={images} group={group} />}
+      {videos.map((v) => <VideoBubble key={v.path} item={v} stacked={images.length > 0} group={group} />)}
       {voices.map((v) => <VoiceBubble key={v.path} item={v} />)}
       {files.map((f) => <FileChip key={f.path} item={f} />)}
       {!!text && !textIsTranscript && (
@@ -360,8 +362,8 @@ function AssistantAttachments({ items }: { items: Attachment[] }) {
   const files = items.filter((a) => !images.includes(a) && !videos.includes(a) && !voices.includes(a));
   return (
     <View style={{ alignItems: 'flex-start', gap: 6, marginBottom: 9 }}>
-      {images.length > 0 && <ImageGroup items={images} align="left" />}
-      {videos.map((v) => <VideoBubble key={v.path} item={v} />)}
+      {images.length > 0 && <ImageGroup items={images} align="left" group={[...images, ...videos]} />}
+      {videos.map((v) => <VideoBubble key={v.path} item={v} group={[...images, ...videos]} />)}
       {voices.map((v) => <VoiceBubble key={v.path} item={v} sent />)}
       {files.map((f) => <FileChip key={f.path} item={f} openable />)}
     </View>

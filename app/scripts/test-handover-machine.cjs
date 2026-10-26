@@ -156,7 +156,9 @@ const ready = (async () => {
       // The waveform's bars and the transcript; its speed chip and scrub are
       // pressed in test-voicenote.cjs, where a note is playing.
       const voice = R.styles(page).filter((s) => s.width === 2.5).length >= 10 && page.includes('about refunds');
-      const picture = R.styles(page).some((s) => s.width === 230 && s.height === 170);
+      // A single photo whose size is not known yet is drawn at the bubble's
+      // 4:3 placeholder (src/media-size.ts); its own shape comes once it loads.
+      const picture = R.styles(page).some((s) => s.width === 250 && s.height === 188);
       const sent = calls.slice();
       stand();
       const idle = R.render('dark', h(Conversation, { id: 'c1' }));

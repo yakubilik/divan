@@ -1,0 +1,137 @@
+# Photos and videos in a chat, on a simulator (#552).
+#
+# What a headless check can say about the bubbles and the viewer is said in
+# scripts/test-media.cjs: the bubble's size for every shape, which file the
+# viewer reads, which player a video is handed to. What only a device shows is
+# whether it looks right — a phone video upright and whole, the black bars
+# around it full screen, the system player's controls — and whether the
+# gestures land: double-tap zoom, a swipe to the next item, a drag down and the
+# close button putting the viewer away.
+#
+# It needs a Debug build (the fixture route turns away in a release one) and
+# the four fixture files in the app's documents folder, under fixtures/:
+# portrait.mp4 (9:16, stored landscape with a quarter turn the way an iPhone
+# records it), landscape.mp4 (16:9), portrait.jpg (2:3) and landscape.jpg
+# (16:9). Run it from the folder the screenshots should land in:
+#
+#   maestro test <repo>/app/scripts/media.flow.yaml -e APP_ID=<bundle id>
+appId: ${APP_ID}
+name: photo and video bubbles, opened full screen
+---
+- launchApp
+- waitForAnimationToEnd
+
+# 1 · a phone video: an upright bubble, then full screen, whole and letterboxed.
+- openLink: divan://media-fixtures?only=portrait.mp4
+# A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
+- runFlow:
+    when:
+      visible: "Aç|Open"
+    commands:
+      - tapOn: "Aç|Open"
+- extendedWaitUntil:
+    visible: "video portrait.mp4"
+    # The first open of a Debug build waits for Metro to bundle the app.
+    timeout: 240000
+- waitForAnimationToEnd
+- takeScreenshot: bubble-portrait-video
+- tapOn: "video portrait.mp4"
+- waitForAnimationToEnd
+- takeScreenshot: full-portrait-video
+# …a tap on the picture brings up the system player's own controls.
+- tapOn:
+    point: 50%, 70%
+- waitForAnimationToEnd:
+    timeout: 800
+- takeScreenshot: full-portrait-video-controls
+# …the close button puts it away, back on the same bubble.
+- tapOn: "close"
+- assertVisible: "video portrait.mp4"
+# …and so does a drag down.
+- tapOn: "video portrait.mp4"
+- waitForAnimationToEnd
+- swipe:
+    start: 50%, 30%
+    end: 50%, 85%
+    duration: 400
+- waitForAnimationToEnd
+- assertVisible: "video portrait.mp4"
+- assertNotVisible: "close"
+
+# 2 · a landscape video: a wide bubble, and full screen with bars above and below.
+- openLink: divan://media-fixtures?only=landscape.mp4
+# A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
+- runFlow:
+    when:
+      visible: "Aç|Open"
+    commands:
+      - tapOn: "Aç|Open"
+- extendedWaitUntil:
+    visible: "video landscape.mp4"
+    timeout: 15000
+- waitForAnimationToEnd
+- takeScreenshot: bubble-landscape-video
+- tapOn: "video landscape.mp4"
+- waitForAnimationToEnd
+- takeScreenshot: full-landscape-video
+- tapOn: "close"
+
+# 3 · a portrait photo: its own shape in the bubble, whole full screen.
+- openLink: divan://media-fixtures?only=portrait.jpg
+# A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
+- runFlow:
+    when:
+      visible: "Aç|Open"
+    commands:
+      - tapOn: "Aç|Open"
+- extendedWaitUntil:
+    visible: "photo portrait.jpg"
+    timeout: 15000
+- waitForAnimationToEnd
+- takeScreenshot: bubble-portrait-photo
+- tapOn: "photo portrait.jpg"
+- waitForAnimationToEnd
+- takeScreenshot: full-portrait-photo
+# …double-tap zooms in, double-tap again comes back to the whole picture.
+- doubleTapOn:
+    point: 50%, 50%
+- waitForAnimationToEnd
+- takeScreenshot: full-portrait-photo-zoomed
+- doubleTapOn:
+    point: 50%, 50%
+- waitForAnimationToEnd
+- tapOn: "close"
+
+# 4 · a landscape photo, and the pager: every fixture is one chat's media, so a
+#     swipe at zoom 1 moves to the next item and back.
+- openLink: divan://media-fixtures?only=landscape.jpg
+# A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
+- runFlow:
+    when:
+      visible: "Aç|Open"
+    commands:
+      - tapOn: "Aç|Open"
+- extendedWaitUntil:
+    visible: "photo landscape.jpg"
+    timeout: 15000
+- waitForAnimationToEnd
+- takeScreenshot: bubble-landscape-photo
+- tapOn: "photo landscape.jpg"
+- waitForAnimationToEnd
+- assertVisible: "4 / 4"
+- takeScreenshot: full-landscape-photo
+- swipe:
+    direction: RIGHT
+- waitForAnimationToEnd
+- assertVisible: "3 / 4"
+- swipe:
+    direction: LEFT
+- waitForAnimationToEnd
+- assertVisible: "4 / 4"
+- swipe:
+    start: 50%, 30%
+    end: 50%, 85%
+    duration: 400
+- waitForAnimationToEnd
+- assertVisible: "photo landscape.jpg"
+- assertNotVisible: "4 / 4"
