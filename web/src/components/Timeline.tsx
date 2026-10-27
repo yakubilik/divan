@@ -1,7 +1,7 @@
 import { ApprovalForm } from './ApprovalForm';
 import { structuredInput, type ApprovalResponse } from '../lib/approval-input';
 import { memo, useCallback, useId, useMemo, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, MEDIA, R } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import { cost, duration, tokens, toolSummary, clock } from '../lib/format';
 import type { Item } from '../lib/timeline';
@@ -143,10 +143,10 @@ function VideoBubble({ src, name, onOpen }: { src: string; name: string; onOpen:
       />
       <div style={{
         position: 'absolute', left: '50%', top: '50%', width: 40, height: 40, marginLeft: -20, marginTop: -20,
-        borderRadius: 20, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none',
+        borderRadius: 20, background: MEDIA.badge, pointerEvents: 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="#fff" /></svg>
+        <Icon path={P.play} size={18} color={MEDIA.ink} fill />
       </div>
     </MediaBox>
   );
