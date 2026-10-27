@@ -8,6 +8,11 @@ export interface Shot {
   /** the same file with a Content-Disposition, so the browser saves it */
   download: string;
   name: string;
+  /** A video plays here in the browser's own player; anything else is a picture. */
+  kind?: 'image' | 'video';
+  /** Where to read it from when `src` will not load — the copy the computer
+   *  kept for the bubble, which outlives the original being deleted. */
+  fallback?: string;
 }
 
 function Tool({ icon, title, onClick, href }: {
@@ -27,10 +32,29 @@ function Tool({ icon, title, onClick, href }: {
     : <button type="button" title={title} onClick={onClick} style={style}>{glyph}</button>;
 }
 
-/** A picture, looked at. It used to open in a tab, which threw away the chat
- *  behind it and handed the person a bare file on a localhost URL; here the
- *  chat is still there when they close it, and several pictures in one message
- *  can be stepped through without going back and forth. */
+/** One photo or video at a time, the whole of it: letterboxed (`contain`),
+ *  never cropped, the way the messengers' viewers show it.
+ *  A video is the browser's own player — play, scrub, volume, full screen and
+ *  picture-in-picture are whatever the browser offers — and it is keyed by its
+ *  address, so stepping away unmounts it and it stops. */
+function Media({ shot }: { shot: Shot }) {
+  const [failed, setFailed] = useState(false);
+  const src = failed && shot.fallback ? shot.fallback : shot.src;
+  const style: React.CSSProperties = {
+    display: 'block', maxWidth: '100%', maxHeight: '100%', minWidth: 0, minHeight: 0,
+    objectFit: 'contain', borderRadius: R.media, background: MEDIA.stage,
+  };
+  const onError = () => { if (!failed && shot.fallback) setFailed(true); };
+  return shot.kind === 'video'
+    ? <video src={src} controls autoPlay playsInline onError={onError} style={style} />
+    : <img src={src} alt={shot.name} onError={onError} style={style} />;
+}
+
+/** A picture or a video, looked at. A picture used to open in a tab, which
+ *  threw away the chat behind it and handed the person a bare file on a
+ *  localhost URL; here the chat is still there when they close it, and the
+ *  photos and videos of one message can be stepped through without going back
+ *  and forth. */
 export function Lightbox({ shots, start, onClose }: {
   shots: Shot[]; start: number; onClose: () => void;
 }) {
@@ -81,13 +105,15 @@ export function Lightbox({ shots, start, onClose }: {
         style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', gap: 12 }}
       >
         {many && <Tool icon={P.chevronLeft} title="Previous" onClick={() => setI((n) => (n - 1 + shots.length) % shots.length)} />}
-        <img
-          src={shot.src} alt={shot.name}
+        <div
+          onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
           style={{
-            flex: 1, minWidth: 0, maxWidth: '100%', maxHeight: '100%',
-            objectFit: 'contain', borderRadius: R.media,
+            flex: 1, minWidth: 0, height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
-        />
+        >
+          <Media key={shot.src} shot={shot} />
+        </div>
         {many && <Tool icon={P.chevronRight} title="Next" onClick={() => setI((n) => (n + 1) % shots.length)} />}
       </div>
     </div>

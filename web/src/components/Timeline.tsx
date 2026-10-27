@@ -1,13 +1,14 @@
 import { ApprovalForm } from './ApprovalForm';
 import { structuredInput, type ApprovalResponse } from '../lib/approval-input';
 import { memo, useCallback, useId, useMemo, useRef, useState } from 'react';
-import { C, R } from '../lib/theme';
+import { C, MEDIA, R } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import { cost, duration, tokens, toolSummary, clock } from '../lib/format';
 import type { Item } from '../lib/timeline';
 import { Bubble, Prose, withSecrets } from './Bubble';
 import { Lightbox, type Shot } from './Lightbox';
 import { fileUrl } from '../lib/actions';
+import { bubbleSize, isPhoto, isVideo, viewerSources } from '../lib/media-size';
 import { filedBy, type Filed } from '../lib/filed';
 import { NOTICE_WORD, ticketNotice, type TicketNotice } from '../lib/notice';
 import { blocks, counted, langOf, tell, type Lang, type Step } from '../lib/steps';
@@ -64,19 +65,108 @@ function Download({ href }: { href: string }) {
   );
 }
 
+/** The pixel size of each picture and video a bubble has drawn, by address,
+ *  so a bubble scrolled away and back is the right shape at once instead of
+ *  starting from the placeholder again. Attachments carry no size, so it is
+ *  read off what the browser loaded. */
+const sizes = new Map<string, { w: number; h: number }>();
+
+function useMeasured(src: string) {
+  const [size, setSize] = useState(() => sizes.get(src) ?? null);
+  const measured = (w: number, h: number) => {
+    if (!(w > 0) || !(h > 0)) return;
+    sizes.set(src, { w, h });
+    setSize((s) => (s && s.w === w && s.h === h ? s : { w, h }));
+  };
+  return [size, measured] as const;
+}
+
+/** A frame around one photo or video in the transcript, pressed to open it. */
+function MediaBox({ width, height, title, label, onOpen, children }: {
+  width: number | string; height: number; title: string; label: string; onOpen?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      role={onOpen ? 'button' : undefined} tabIndex={onOpen ? 0 : undefined}
+      title={title} aria-label={label} data-media={label.split(' ')[0]}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(); } }}
+      style={{
+        position: 'relative', width, height, flexShrink: 0,
+        borderRadius: R.media, overflow: 'hidden', background: C.bg,
+        border: `1px solid ${C.border}`, cursor: onOpen ? 'zoom-in' : 'default',
+      }}
+    >{children}</div>
+  );
+}
+
+/** One photo alone: a bubble in the photo's own shape (`bubbleSize`). Filling
+ *  that box crops nothing; only a shape the frame clamps (a 1:4 screenshot)
+ *  loses an edge, as it does in the messengers. */
+function SinglePhoto({ src, name, onOpen, onBroken }: {
+  src: string; name: string; onOpen: () => void; onBroken: () => void;
+}) {
+  const [size, measured] = useMeasured(src);
+  const box = bubbleSize(size?.w, size?.h);
+  return (
+    <MediaBox width={box.width} height={box.height} title={name} label={`photo ${name}`} onOpen={onOpen}>
+      <img
+        src={src} alt=""
+        onLoad={(e) => measured(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)}
+        onError={onBroken}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
+    </MediaBox>
+  );
+}
+
+/** A video as its first frame with a play badge, in the video's own shape: a
+ *  phone video upright, a landscape one wide. It is not played in the bubble —
+ *  pressing it opens the viewer, where it plays at a size worth watching. */
+function VideoBubble({ src, name, onOpen }: { src: string; name: string; onOpen: () => void }) {
+  const [size, measured] = useMeasured(src);
+  const [gone, setGone] = useState(false);
+  const box = bubbleSize(size?.w, size?.h);
+  if (gone) {
+    return <MediaBox width={box.width} height={box.height} title={name} label={`video ${name}`}><Missing name={name} /></MediaBox>;
+  }
+  return (
+    <MediaBox width={box.width} height={box.height} title={name} label={`video ${name}`} onOpen={onOpen}>
+      {/* `#t=0.1` asks for a frame a moment in, so the bubble is not a black
+          first frame — and Safari only draws any frame when asked. */}
+      <video
+        src={src ? `${src}#t=0.1` : ''} preload="metadata" muted playsInline tabIndex={-1}
+        onLoadedMetadata={(e) => measured(e.currentTarget.videoWidth, e.currentTarget.videoHeight)}
+        onError={() => setGone(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+      />
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%', width: 40, height: 40, marginLeft: -20, marginTop: -20,
+        borderRadius: 20, background: MEDIA.badge, pointerEvents: 'none',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icon path={P.play} size={18} color={MEDIA.ink} fill />
+      </div>
+    </MediaBox>
+  );
+}
+
 function Attachments({ list, hostKey }: { list: any[]; hostKey: string }) {
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const [shot, setShot] = useState<number | null>(null);
   if (!list?.length) return null;
-  const media = list.filter((a) => a?.kind === 'image' || a?.kind === 'video');
-  const rest = list.filter((a) => a?.kind !== 'image' && a?.kind !== 'video');
+  const photos = list.filter((a) => a && isPhoto(a));
+  const videos = list.filter((a) => a && !isPhoto(a) && isVideo(a));
+  const rest = list.filter((a) => !photos.includes(a) && !videos.includes(a));
   // fileUrl needs the computer's token; if that computer is gone the bubble
   // still has to render, just without a working link. A picture is drawn from
   // the copy the daemon kept (`view`) so that it survives the original being
-  // deleted; the link still opens the file the message named.
-  const src = (a: any, viewing = false) => {
-    try { return fileUrl(hostKey, (viewing && a.view) || a.path); } catch { return ''; }
+  // deleted; the viewer opens the file the message named.
+  const url = (p: string) => {
+    try { return fileUrl(hostKey, p); } catch { return ''; }
   };
+  const src = (a: any, viewing = false) => url((viewing && a.view) || a.path);
   // Saving hands over the file the message named, not the copy kept for
   // showing it — the same thing the link used to open.
   const dl = (a: any) => {
@@ -84,52 +174,51 @@ function Attachments({ list, hostKey }: { list: any[]; hostKey: string }) {
   };
   const name = (a: any) => a.name ?? a.path?.split(/[/\\]/).pop() ?? 'file';
 
-  // Every picture in this message, so one can be opened and the rest stepped
-  // through without closing anything. Videos sit in the same grid but play in
-  // place, so they are not part of it — hence the index of its own.
-  const shots: Shot[] = [];
-  const shotOf = new Map<number, number>();
-  media.forEach((a, i) => {
-    if (a.kind !== 'image') return;
-    shotOf.set(i, shots.length);
-    shots.push({ src: src(a, true), download: dl(a), name: name(a) });
+  // Every photo and video in this message, photos first as they are drawn, so
+  // one can be opened and the rest stepped through without closing anything.
+  // The viewer shows the original; the kept copy only if that has gone.
+  const media = [...photos, ...videos];
+  const shots: Shot[] = media.map((a) => {
+    const [first, second] = viewerSources(a, url);
+    return {
+      src: first ?? '', fallback: second, download: dl(a), name: name(a),
+      kind: videos.includes(a) ? 'video' : 'image',
+    };
   });
+  const open = (a: any) => setShot(Math.max(0, media.indexOf(a)));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: media.length || rest.length ? 8 : 0 }}>
-      {media.length > 0 && (
-        <div style={{
-          display: 'grid', gap: 4, width: media.length > 1 ? 232 : 200,
-          gridTemplateColumns: media.length > 1 ? 'repeat(2, minmax(0, 1fr))' : '1fr',
-        }}>
-          {media.map((a, i) => (
-            <div key={i} style={{
-              position: 'relative', height: media.length > 1 ? 114 : 150,
-              borderRadius: R.media, overflow: 'hidden', background: C.bg,
-              border: `1px solid ${C.border}`,
-            }}>
-              {a.kind === 'image' ? (
-                broken[a.path] ? <Missing name={a.name ?? ''} /> : (
-                  <button
-                    type="button" title={name(a)}
-                    onClick={() => setShot(shotOf.get(i) ?? 0)}
-                    style={{
-                      display: 'block', width: '100%', height: '100%', padding: 0,
-                      border: 'none', background: 'transparent', cursor: 'zoom-in',
-                    }}
-                  >
-                    <img
-                      src={src(a, true)} alt=""
-                      onError={() => setBroken((b) => ({ ...b, [a.path]: true }))}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    />
-                  </button>
-                )
-              ) : <video src={src(a, true)} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-            </div>
+      {photos.length === 1 && (
+        broken[photos[0].path]
+          ? <MediaBox width={200} height={150} title={name(photos[0])} label={`photo ${name(photos[0])}`}><Missing name={photos[0].name ?? ''} /></MediaBox>
+          : <SinglePhoto
+              key={photos[0].path} src={src(photos[0], true)} name={name(photos[0])}
+              onOpen={() => open(photos[0])}
+              onBroken={() => setBroken((b) => ({ ...b, [photos[0].path]: true }))}
+            />
+      )}
+      {photos.length > 1 && (
+        // Several photos are a grid of equal tiles, cropped to fill them, the
+        // way the messengers draw an album; the viewer shows each one whole.
+        <div style={{ display: 'grid', gap: 4, width: 232, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+          {photos.map((a, i) => (
+            <MediaBox key={i} width="100%" height={114} title={name(a)} label={`photo ${name(a)}`}
+              onOpen={broken[a.path] ? undefined : () => open(a)}>
+              {broken[a.path] ? <Missing name={a.name ?? ''} /> : (
+                <img
+                  src={src(a, true)} alt=""
+                  onError={() => setBroken((b) => ({ ...b, [a.path]: true }))}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              )}
+            </MediaBox>
           ))}
         </div>
       )}
+      {videos.map((a) => (
+        <VideoBubble key={a.path} src={src(a, true)} name={name(a)} onOpen={() => open(a)} />
+      ))}
       {rest.map((a, i) => (
         a.kind === 'audio' ? (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240 }}>

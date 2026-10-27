@@ -320,6 +320,8 @@ export const MEDIA = {
   /** Its label, and the dimmer one beside it. */
   ink: ON_COLOUR,
   inkDim: 'rgba(255,255,255,0.6)',
+  /** The round play badge on a video's first frame in the transcript. */
+  badge: 'rgba(0,0,0,0.45)',
   /** A shell (components/Shells.tsx): a terminal is dark in either theme,
    *  because the programs run in it choose their colours assuming so. Its
    *  cursor, and what is selected in it. */

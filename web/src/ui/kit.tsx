@@ -248,6 +248,7 @@ export const P = {
   folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10.5v5M9.5 13h5',
   more: 'M5 12v.1M12 12v.1M19 12v.1',
   stop: 'M8 8h8v8H8z',
+  play: 'M8 5v14l11-7z',
   send: 'M12 19V5M5 12l7-7 7 7',
   warn: 'M12 3l9 16H3zM12 9v5M12 17.2v.1',
   info: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 11v5M12 8.1v.1',
