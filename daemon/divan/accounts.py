@@ -32,7 +32,7 @@ from typing import Any, Awaitable, Callable
 
 from .config import CONFIG_DIR
 from .errors import Err
-from . import tools
+from . import claude_memory, tools
 
 log = logging.getLogger("rac.accounts")
 
@@ -564,6 +564,25 @@ def _link_shared(provider: str, home: Path) -> None:
                 dst.symlink_to(src, target_is_directory=src.is_dir())
             except OSError:
                 pass
+    if provider == "claude":
+        # memory is shared per project folder, never projects/ as a whole: the
+        # transcripts in there belong to the account that wrote them
+        try:
+            claude_memory.link_all_known(home)
+        except OSError as e:
+            log.warning("could not link shared memory into %s: %s", home, e)
+
+
+def share_memory(home: str | None, cwd: str) -> None:
+    """Before a Claude chat starts in cwd: point this account's memory for that
+    folder at the one every account shares. The machine's own account (no
+    home) already uses the shared place. Never stops a chat from starting."""
+    if not home or not cwd:
+        return
+    try:
+        claude_memory.link_project(home, cwd, rollback_dir=CONFIG_DIR / "rollback")
+    except OSError as e:
+        log.warning("could not share memory for %s in %s: %s", cwd, home, e)
 
 
 def new_account(provider: str, label: str) -> Account:

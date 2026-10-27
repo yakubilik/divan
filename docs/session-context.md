@@ -59,7 +59,16 @@ symlinked from the computer's own `~/.claude` into each account, so a second
 subscription sees the same instructions and skills as the first. Configuration
 is shared that way; credentials never are.
 
-**Nothing writes into `~/.claude` itself.** An agent that carries skills can only
+Claude's auto-memory is shared too, per project folder: before a chat starts,
+the account's `projects/<folder>/memory` is made a symlink to
+`~/.claude/projects/<folder>/memory`, Claude Code's own default, so every
+account and the terminal read and write one memory. A real memory folder found
+there is merged in (backed up under `~/.divan/rollback/` first) before it is
+replaced. The transcripts beside it stay with their account. Codex is not
+touched. `daemon/scripts/share_claude_memory.py` did the one-off merge of the
+memories accounts kept before this.
+
+**Nothing else writes into `~/.claude` itself.** An agent that carries skills can only
 be installed into an account added in the app, which has a folder of its own.
 This is a decision, not an oversight: the user's own setup is not this project's
 to fill. If a change here seems to want a file in `~/.claude/skills`, it wants
