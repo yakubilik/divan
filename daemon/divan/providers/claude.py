@@ -28,7 +28,7 @@ from claude_agent_sdk import (
 
 from ..config import UPLOAD_DIR
 from ..security import destructive_reason, redact
-from .. import legacy
+from .. import accounts, legacy
 from . import claude_models
 from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult
 
@@ -254,6 +254,8 @@ class ClaudeProvider(Provider):
                     if k in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")})
         if c.account_home:
             env["CLAUDE_CONFIG_DIR"] = c.account_home
+        # every account reads and writes the same memory for this folder
+        accounts.share_memory(env.get("CLAUDE_CONFIG_DIR"), c.cwd)
         if c.chat_id:
             env["DIVAN_CHAT_ID"] = c.chat_id
             env.update(legacy.chat_env(c.chat_id))

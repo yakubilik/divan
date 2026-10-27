@@ -45,3 +45,10 @@ from divan import config  # noqa: E402
 _real = {(Path.home() / config.HOME_NAME).resolve(), (Path.home() / ".remote-ai-chat").resolve()}
 if config.CONFIG_DIR.resolve() in _real:
     raise RuntimeError(f"tests would write to the live daemon home {config.CONFIG_DIR}")
+
+# Shared Claude memory lives under ~/.claude/projects; a test that starts a chat
+# on an account would otherwise create folders in the real one.
+from divan import claude_memory  # noqa: E402
+
+_claude_home = Path(tempfile.mkdtemp(prefix="divan-pytest-claude-"))
+claude_memory.default_claude_home = lambda: _claude_home

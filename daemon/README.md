@@ -44,6 +44,21 @@ so recorded session paths keep resolving, rewrites the old home inside
 `config.toml`, and writes the launchd plist under the new label. It does not
 call `launchctl`; it prints the two commands to run.
 
+### One Claude memory for every account
+
+Accounts used to keep their own Claude memory per project. To merge those into
+the shared `~/.claude/projects/<folder>/memory` once (the daemon links new
+accounts and folders itself), run
+
+```bash
+python3 scripts/share_claude_memory.py --dry-run    # what it would do
+python3 scripts/share_claude_memory.py
+```
+
+It tars every memory folder it changes into `~/.divan/rollback/` first, keeps
+both copies of a file that differs (the account's renamed with its id, and
+listed), unions `MEMORY.md`, and on a second run changes nothing.
+
 ## Commands
 
 ```
