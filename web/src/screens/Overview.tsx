@@ -54,10 +54,11 @@ import { Ticket } from './Ticket';
 import { Waiting } from './Waiting';
 import { Work, type WorkLayout } from './Work';
 import { Dashboard } from './Dashboard';
+import { Havuz } from './Havuz';
 
 /** Where inside a product the page is: its own page, one of its chats open on
  *  it, or its board. Each is a path of its own (`lib/nav.ts`). */
-export type ProjectTab = 'overview' | 'board' | 'chat' | 'waiting' | 'work';
+export type ProjectTab = 'overview' | 'board' | 'chat' | 'waiting' | 'work' | 'havuz';
 
 export interface OverviewProps {
   view: DivanView;
@@ -96,11 +97,14 @@ export interface OverviewProps {
    *  project — which live in the address; a change is a step Back can undo. */
   work?: WorkLayout;
   onWork?: (to: WorkLayout) => void;
+  /** The Havuz page's category, which lives in the address (`?g=`). */
+  group?: string | null;
+  onGroup?: (group: string | null) => void;
 }
 
 export function Overview({
   view, project, onProject, tab, onTab, card, onCard, chats,
-  composer, onOpenCard, projectComposer, onOpenChat, onOpenTicket, work, onWork,
+  composer, onOpenCard, projectComposer, onOpenChat, onOpenTicket, work, onWork, group, onGroup,
 }: OverviewProps) {
   const here: ProjectTab = tab ?? 'overview';
   // What this product's chats did today, off every computer that has it.
@@ -127,9 +131,11 @@ export function Overview({
     const openCard = (c: MergedCard) => (onOpenCard ? onOpenCard(c) : onProject(c.projectKey));
     if (here === 'waiting') return <Waiting view={view} onCard={openCard} onChat={onOpenChat} />;
     if (here === 'work') return <Work onOpen={onOpenTicket} layout={work} onLayout={onWork} />;
+    if (here === 'havuz') return <Havuz group={group ?? null} onGroup={(g) => onGroup?.(g)} />;
     return (
       <Dashboard view={view} onProject={onProject} composer={composer}
         onCard={openCard} onChat={onOpenChat} onWaiting={() => onTab?.('waiting')}
+        onHavuz={() => { onGroup?.(null); onTab?.('havuz'); }}
         empty={<Nothing view={view} />} />
     );
   }

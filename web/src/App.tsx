@@ -108,6 +108,9 @@ export function App() {
   /** What the Work board is narrowed to: which days, what is typed in its
    *  search box and which project. In the address with the page
    *  (`Place.range`, `Place.search`, `Place.workProject`). */
+  /** The Havuz page's category (`/havuz?g=video`), held here for the reason
+   *  the Work board's layout is: it is in the address. */
+  const [poolGroup, setPoolGroup] = useState<string | null>(opened.current.group);
   const [workLayout, setWorkLayout] = useState<WorkLayout>({
     range: opened.current.range, search: opened.current.search ?? '', project: opened.current.workProject,
   });
@@ -236,8 +239,8 @@ export function App() {
     host: opened.current.host && opened.current.chat === sel?.chatId ? opened.current.host : null,
     sub: view === 'chats' ? (fresh && !sel ? 'new' : null) : sub,
     ticket, machine, range: workLayout.range, search: workLayout.search || null,
-    workProject: workLayout.project,
-  }), [view, project, tab, card, sel?.chatId, fresh, sub, ticket, machine, workLayout]);
+    workProject: workLayout.project, group: poolGroup,
+  }), [view, project, tab, card, sel?.chatId, fresh, sub, ticket, machine, workLayout, poolGroup]);
   const whereRef = useRef(where);
   whereRef.current = where;
 
@@ -331,7 +334,7 @@ export function App() {
           ? { label: scopedName ?? 'Project', onBack: () => setTab('overview') }
           : project
           ? { label: 'Dashboard', onBack: () => chooseProject(null) }
-          : tab === 'waiting' || tab === 'work'
+          : tab === 'waiting' || tab === 'work' || tab === 'havuz'
             ? { label: 'Dashboard', onBack: () => setTab('overview') }
             : null;
 
@@ -368,6 +371,7 @@ export function App() {
     setTicket(to.ticket);
     setWorkLayout((had) => (had.range === to.range && had.search === (to.search ?? '') && had.project === to.workProject
       ? had : { range: to.range, search: to.search ?? '', project: to.workProject }));
+    setPoolGroup(to.group);
     setPeek(false);
     const key = keyOfName(to.machine);
     if (key && useFleet.getState().focus !== key) useFleet.getState().setFocus(key);
@@ -897,6 +901,7 @@ export function App() {
             onOpenChat={open}
             onOpenTicket={openTicket}
             work={workLayout} onWork={setWorkLayout}
+            group={poolGroup} onGroup={setPoolGroup}
             // The Composer at the foot of a product: everything it sends is
             // about that product, and the chat it starts is read right here,
             // in the middle of the product's page, with the list beside it.
@@ -1130,7 +1135,9 @@ const COLUMN_WORD: Record<string, string> = {
  *  `Quire · Board`, `Dashboard`. */
 function placeName(p: Place, view: ReturnType<typeof useDivanView>): string {
   if (p.view !== 'overview') return p.view === 'chats' ? 'Chats' : p.view === 'panes' ? 'Panes' : 'Machine';
-  if (!p.project) return p.tab === 'waiting' ? 'Waiting on you' : p.tab === 'work' ? 'Work' : 'Dashboard';
+  if (!p.project) {
+    return p.tab === 'waiting' ? 'Waiting on you' : p.tab === 'work' ? 'Work' : p.tab === 'havuz' ? 'Havuz' : 'Dashboard';
+  }
   const name = projectIn(view, p.project)?.name ?? p.project;
   if (p.card) return name;
   if (p.tab === 'board') return `${name} · Board`;

@@ -360,3 +360,54 @@
 /* xterm's hidden input is a textarea, which a dark page fills in the browser's
    own grey: it is never seen, so it is filled in nothing. */
 .xterm .xterm-helper-textarea{background:transparent}
+
+/* Havuz (/havuz): the tool pool, by category */
+.dv-hv-chips{position:sticky;top:0;z-index:5;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:28px -4px 0;padding:10px 4px;background:linear-gradient(var(--canvas) 70%,transparent)}
+.dv-hv-chips::-webkit-scrollbar{display:none}
+.dv-hv-chip{flex:none;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--glass-edge);color:var(--ink-2);font:500 13px/18px var(--font-sans);text-decoration:none;transition:background .18s ease,color .18s ease}
+.dv-hv-chip:hover{background:var(--glass-2);color:var(--ink)}
+.dv-hv-chip .n{font:500 11.5px var(--font-mono);color:var(--ink-3)}
+.dv-hv-chip[aria-current="page"]{background:var(--ink);color:var(--on-ink);border-color:transparent}
+.dv-hv-chip[aria-current="page"] .n{color:var(--on-ink);opacity:.7}
+.dv-hv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:16px}
+.dv-hv-card{display:flex;flex-direction:column;border-radius:var(--radius-lg);overflow:hidden;min-width:0}
+.dv-hv-pic{appearance:none;display:block;width:100%;aspect-ratio:1200/630;padding:0;border:0;background:var(--glass-2);cursor:zoom-in;overflow:hidden}
+.dv-hv-pic:disabled{cursor:default}
+.dv-hv-pic img{display:block;width:100%;height:100%;object-fit:cover;object-position:top;transition:transform .5s ease}
+.dv-hv-card:hover .dv-hv-pic img{transform:scale(1.02)}
+.dv-hv-ph{display:flex;flex-direction:column;justify-content:flex-end;gap:4px;width:100%;height:100%;padding:18px;text-align:left;background:linear-gradient(135deg,var(--glass-2),var(--hairline))}
+.dv-hv-ph b{font:600 20px/1.1 var(--font-sans);color:var(--ink);letter-spacing:-.01em}
+.dv-hv-ph i{font:500 11.5px var(--font-mono);font-style:normal;color:var(--ink-3)}
+.dv-hv-body{display:flex;flex-direction:column;gap:10px;padding:14px 16px 12px;flex:1}
+.dv-hv-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.dv-hv-head h4{margin:0;font:600 15px/20px var(--font-sans);color:var(--ink)}
+.dv-hv-purpose{margin:0;font-size:13px;line-height:19px;color:var(--ink)}
+.dv-hv-fit,.dv-hv-more p{margin:0;font-size:12.5px;line-height:18px;color:var(--ink-2)}
+.dv-hv-fit span,.dv-hv-more p span{display:inline-block;min-width:52px;margin-right:6px;font:500 11px var(--font-mono);color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+.dv-hv-more{display:flex;flex-direction:column;gap:8px}
+.dv-hv-more a{color:var(--ink-2)}
+.dv-hv-meta{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;font-size:12px;line-height:17px}
+.dv-hv-meta dt{font:500 11px var(--font-mono);color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;padding-top:1px}
+.dv-hv-meta dd{margin:0;color:var(--ink-2)}
+.dv-hv-meta dd[data-priority="high"]{color:var(--ink)}
+.dv-hv-foot{display:flex;gap:6px;margin-top:auto;padding-top:4px}
+.dv-hv-foot .dv-btn{height:30px;text-decoration:none}
+.dv-hv-st--verified{color:var(--ink);background:var(--glass-2)}
+.dv-hv-st--verified i{background:var(--ink)}
+.dv-hv-st--installed{color:var(--ink-2)}
+.dv-hv-st--installed i{background:var(--ink-2)}
+.dv-hv-st--catalogued{color:var(--ink-3);background:transparent}
+.dv-hv-st--catalogued i{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ink-3)}
+.dv-hv-empty{padding:20px 22px;border-radius:var(--radius-lg)}
+.dv-hv-empty p{margin:0 0 6px;font-size:14px;color:var(--ink)}
+.dv-hv-lb{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.86);cursor:zoom-out}
+.dv-hv-lb img{max-width:100%;max-height:92vh;border-radius:12px}
+.dv-hv-tile{display:flex;align-items:center;gap:16px;padding:12px 16px 12px 12px;text-decoration:none;color:var(--ink)}
+.dv-hv-tile-pics{display:flex;flex:none}
+.dv-hv-tile-pics img{width:64px;height:40px;object-fit:cover;object-position:top;border-radius:8px;border:2px solid var(--canvas);margin-left:-14px}
+.dv-hv-tile-pics img:first-child{margin-left:0}
+.dv-hv-tile-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.dv-hv-tile-text b{font:600 14px/18px var(--font-sans)}
+.dv-hv-tile-text span{font-size:12.5px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:720px){.dv-hv-tile-pics img:nth-child(n+3){display:none}}
+@media (prefers-reduced-motion:reduce){.dv-hv-pic img{transition:none}}
