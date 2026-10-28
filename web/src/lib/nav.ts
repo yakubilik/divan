@@ -66,12 +66,15 @@ export interface Place {
   /** The one project the Work board is narrowed to, by name (`?project=`), or
    *  null for all. Not `project`: that is the product a page is scoped to. */
   workProject: string | null;
+  /** The Havuz page's category (`/havuz?g=video`), or null for every group.
+   *  Only on `/havuz`. */
+  group: string | null;
 }
 
 export const HOME: Place = {
   view: 'overview', project: null, tab: 'overview', card: null,
   chat: null, host: null, sub: null, ticket: null, machine: null,
-  range: null, search: null, workProject: null,
+  range: null, search: null, workProject: null, group: null,
 };
 
 /** The Machine pages that are about one computer — the one in focus — and so
@@ -103,6 +106,7 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
  *  /                          the Dashboard
  *  /waiting                   everything waiting on you
  *  /work                      every ticket in flight, on every computer
+ *  /havuz                     the tool pool, by category (`?g=video`)
  *  /chats                     the Chat place · /chats/<id> one chat
  *  /chats/new                 …with the empty composer New chat leaves there
  *  /panes                     several chats at once, tiled (the layout is this browser's)
@@ -135,7 +139,9 @@ export function pathOf(place: Place): string {
     if (place.view === 'terminal' && place.sub === 'ustabasi' && place.ticket != null) path += `/${place.ticket}`;
     return path;
   }
-  if (!place.project) return place.tab === 'waiting' ? '/waiting' : place.tab === 'work' ? '/work' : '/';
+  if (!place.project) {
+    return place.tab === 'waiting' ? '/waiting' : place.tab === 'work' ? '/work' : place.tab === 'havuz' ? '/havuz' : '/';
+  }
   const head = `/p/${enc(place.project)}`;
   if (place.card) return `${head}/c/${enc(place.card)}`;
   if (place.tab === 'board') return `${head}/board`;
@@ -156,6 +162,7 @@ export function searchOf(place: Place): string {
   else if (place.range) q.push(`range=${enc(place.range)}`);
   if (place.workProject) q.push(`project=${enc(place.workProject)}`);
   if (place.search) q.push(`q=${enc(place.search)}`);
+  if (place.group) q.push(`g=${enc(place.group)}`);
   return q.length ? `?${q.join('&')}` : '';
 }
 
@@ -199,6 +206,7 @@ export function readPlace(pathname: string, search = ''): Place {
       card: ((q.get('card') || '').trim().split(':').pop() || null),
       chat: (q.get('chat') || '').trim() || null,
       host, sub: null, ticket: null, machine: null, range: null, search: null, workProject: null,
+      group: null,
     };
   }
 
@@ -209,6 +217,7 @@ export function readPlace(pathname: string, search = ''): Place {
   }
   if (parts[0] === 'panes') return { ...place, view: 'panes' };
   if (parts[0] === 'waiting') return { ...place, tab: 'waiting' };
+  if (parts[0] === 'havuz') return { ...place, tab: 'havuz', group: (q.get('g') || '').trim() || null };
   if (parts[0] === 'work') {
     // `?view=board` and `?group=date|project` were the layouts the page had
     // before it was only a board; a link kept to one opens the board, with
@@ -253,7 +262,7 @@ export function samePlace(a: Place, b: Place): boolean {
 
 const PLACE_KEYS: (keyof Place)[] = [
   'view', 'project', 'tab', 'card', 'chat', 'host', 'sub', 'ticket', 'machine',
-  'range', 'search', 'workProject',
+  'range', 'search', 'workProject', 'group',
 ];
 
 /** …and two that differ only in what is typed in the Work board's search box:
@@ -288,6 +297,7 @@ export function canonical(p: Place): Place {
   if (!p.project && p.tab === 'work') {
     return { ...HOME, tab: 'work', range: p.range ?? null, search: p.search || null, workProject: p.workProject ?? null };
   }
+  if (!p.project && p.tab === 'havuz') return { ...HOME, tab: 'havuz', group: p.group ?? null };
   if (!p.project) return { ...HOME, tab: p.tab === 'waiting' ? p.tab : 'overview' };
   const scoped: Place = { ...HOME, project: p.project };
   // A card is the page; which tab it was opened over is not in its address.

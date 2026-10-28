@@ -13,14 +13,17 @@ import { moveCard, ticketNote } from '../lib/actions';
 import { dormant, freshness, staleWords, staleness } from '../lib/overview';
 import { progress, SHOWN, STAGE_WORD } from '../lib/progress';
 import { useFleet } from '../lib/fleet';
+import { grouped, thumbUrl, usePool } from '../lib/havuz';
 import { sessions, type Session } from '../lib/sessions';
 import { greeting, short, summary } from '../lib/compose';
 import { uptime } from '../lib/format';
 import { pending, useAsking } from '../lib/asking';
 import { Asking } from '../components/Asking';
 
-export function Dashboard({ view, onProject, onCard, onChat, onWaiting, composer, empty }: {
+export function Dashboard({ view, onProject, onCard, onChat, onWaiting, onHavuz, composer, empty }: {
   view: DivanView;
+  /** The tool pool, on a page of its own (`/havuz`). */
+  onHavuz?: () => void;
   /** Everything waiting on you, on a page of its own (HANDOVER §4.6). */
   onWaiting?: () => void;
   onProject: (key: string) => void;
@@ -73,6 +76,7 @@ export function Dashboard({ view, onProject, onCard, onChat, onWaiting, composer
         )}
 
         <Projects view={view} onProject={onProject} onCard={onCard} onChat={onChat} empty={empty} />
+        {!!onHavuz && <PoolTile onOpen={onHavuz} />}
       </div>
       <Asking view={view} />
     </div>
@@ -289,5 +293,36 @@ function ProjectCard({ project: p, now, dim, chats, onOpen, onCard, onChat }: {
         </ul>
       )}
     </article>
+  );
+}
+
+/** The tool pool, as one tile under the products: how many tools, in how many
+ *  categories, a few of their pictures, and the way to its page. Drawn only
+ *  once a computer has a pool snapshot to read. */
+function PoolTile({ onOpen }: { onOpen: () => void }) {
+  const load = usePool();
+  if (load.state !== 'ok') return null;
+  const tools = load.pool.tools;
+  const groups = grouped(tools);
+  const pics = tools.filter((t) => t.thumb && t.status !== 'catalogued')
+    .concat(tools.filter((t) => t.thumb && t.status === 'catalogued')).slice(0, 4);
+  return (
+    <section style={{ marginTop: 40 }} aria-labelledby="havuz" data-havuz-tile="">
+      <div className="dv-sec">
+        <h3 id="havuz">Havuz</h3>
+        <span className="dv-meta">{tools.length} tools · {groups.length} categories</span>
+      </div>
+      <a href="/havuz" className="dv-glass dv-tile dv-hv-tile" data-havuz-open=""
+        onClick={(e) => { e.preventDefault(); onOpen(); }}>
+        <div className="dv-hv-tile-pics" aria-hidden="true">
+          {pics.map((t) => <img key={t.id} src={thumbUrl(load.host, t)} alt="" loading="lazy" />)}
+        </div>
+        <div className="dv-hv-tile-text">
+          <b>The tool pool</b>
+          <span>{groups.slice(0, 6).map((g) => g.word).join(' · ')}{groups.length > 6 ? ' …' : ''}</span>
+        </div>
+        <span className="dv-btn dv-btn--ghost dv-hit" style={{ height: 28 }}>Open</span>
+      </a>
+    </section>
   );
 }
