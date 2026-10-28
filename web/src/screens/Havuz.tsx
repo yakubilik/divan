@@ -4,13 +4,18 @@
  *  with a picture, what it is for, where it fits, what it costs and whether it
  *  is actually on this machine. The chips at the top narrow the page to one
  *  group; that choice is in the address (`?g=video`), so a reload or a link
- *  lands on the same group. A press on a picture opens it large.
+ *  lands on the same group.
+ *
+ *  Each card shows what the tool looks like in use — the pictures and video
+ *  frames from its README and shots of its site, not just its repository
+ *  card. The strip under the picture steps through them; a press on the
+ *  picture opens them large, where the arrows (and ←/→) go on.
  *
  *  The data is `lib/havuz.ts`'s; the page only reads.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { ago } from '../lib/format';
-import { grouped, knownGroup, thumbUrl, usePool, type PoolTool } from '../lib/havuz';
+import { grouped, knownGroup, shotsOf, usePool, type PoolTool, type Shot } from '../lib/havuz';
 
 const STATUS_WORD: Record<string, { word: string; cls: string }> = {
   verified: { word: 'verified', cls: 'dv-hv-st--verified' },
@@ -20,10 +25,15 @@ const STATUS_WORD: Record<string, { word: string; cls: string }> = {
 
 export function Havuz({ group, onGroup }: { group: string | null; onGroup: (g: string | null) => void }) {
   const load = usePool();
-  const [big, setBig] = useState<{ src: string; alt: string } | null>(null);
+  const [big, setBig] = useState<{ tool: PoolTool; shots: Shot[]; at: number } | null>(null);
+  const step = (d: number) => setBig((b) => (b ? { ...b, at: (b.at + d + b.shots.length) % b.shots.length } : b));
   useEffect(() => {
     if (!big) return;
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setBig(null); };
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBig(null);
+      if (e.key === 'ArrowRight') step(1);
+      if (e.key === 'ArrowLeft') step(-1);
+    };
     addEventListener('keydown', k);
     return () => removeEventListener('keydown', k);
   }, [big]);
@@ -85,7 +95,8 @@ export function Havuz({ group, onGroup }: { group: string | null; onGroup: (g: s
                 </div>
                 <div className="dv-hv-grid">
                   {x.tools.map((t) => (
-                    <Tool key={t.id} tool={t} host={load.host} onBig={setBig} />
+                    <Tool key={t.id} tool={t} host={load.host}
+                      onBig={(shots, at) => setBig({ tool: t, shots, at })} />
                   ))}
                 </div>
               </section>
@@ -94,8 +105,23 @@ export function Havuz({ group, onGroup }: { group: string | null; onGroup: (g: s
         )}
       </div>
       {!!big && (
-        <div className="dv-hv-lb" role="dialog" aria-label={big.alt} onClick={() => setBig(null)}>
-          <img src={big.src} alt={big.alt} />
+        <div className="dv-hv-lb" role="dialog" aria-label={`${big.tool.name} pictures`} data-havuz-lightbox=""
+          onClick={(e) => { if (e.target === e.currentTarget) setBig(null); }}>
+          <figure>
+            <img src={big.shots[big.at].src} alt={big.shots[big.at].alt} />
+            <figcaption>
+              <b>{big.tool.name}</b>
+              <span>{big.shots[big.at].from} · {big.at + 1}/{big.shots.length}</span>
+              {!!big.tool.purpose && <p>{big.tool.purpose}</p>}
+            </figcaption>
+          </figure>
+          {big.shots.length > 1 && (
+            <>
+              <button type="button" className="dv-hv-lb-nav dv-hv-lb-prev" aria-label="Previous picture" onClick={() => step(-1)}>‹</button>
+              <button type="button" className="dv-hv-lb-nav dv-hv-lb-next" aria-label="Next picture" onClick={() => step(1)}>›</button>
+            </>
+          )}
+          <button type="button" className="dv-hv-lb-close" aria-label="Close" onClick={() => setBig(null)}>×</button>
         </div>
       )}
     </div>
@@ -103,22 +129,36 @@ export function Havuz({ group, onGroup }: { group: string | null; onGroup: (g: s
 }
 
 function Tool({ tool: t, host, onBig }: {
-  tool: PoolTool; host: string; onBig: (b: { src: string; alt: string }) => void;
+  tool: PoolTool; host: string; onBig: (shots: Shot[], at: number) => void;
 }) {
   const [more, setMore] = useState(false);
-  const [broken, setBroken] = useState(false);
-  const src = broken ? '' : thumbUrl(host, t);
+  const [broken, setBroken] = useState<string[]>([]);
+  const shots = useMemo(() => shotsOf(host, t), [host, t]).filter((x) => !broken.includes(x.src));
+  const [at, setAt] = useState(0);
+  const cur = shots[Math.min(at, shots.length - 1)];
+  const src = cur?.src ?? '';
   const st = STATUS_WORD[t.status] ?? STATUS_WORD.catalogued;
   const link = t.canonical || t.shared?.[0]?.link;
   return (
     <article className="dv-glass dv-hv-card" data-havuz-tool={t.id} data-status={t.status}>
       <button type="button" className="dv-hv-pic" disabled={!src}
-        aria-label={src ? `Open the picture of ${t.name}` : undefined}
-        onClick={() => src && onBig({ src, alt: t.name })}>
+        aria-label={src ? `Open the pictures of ${t.name}` : undefined}
+        onClick={() => src && onBig(shots, Math.min(at, shots.length - 1))}>
         {src
-          ? <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
+          ? <img src={src} alt={cur.alt} loading="lazy" onError={() => setBroken((b) => [...b, src])} />
           : <span className="dv-hv-ph" data-group={t.group} aria-hidden="true"><b>{t.name}</b><i>{t.group}</i></span>}
+        {!!cur && <span className="dv-hv-from">{cur.from}{shots.length > 1 ? ` · ${at + 1}/${shots.length}` : ''}</span>}
       </button>
+      {shots.length > 1 && (
+        <div className="dv-hv-strip" role="tablist" aria-label={`Pictures of ${t.name}`} data-havuz-strip="">
+          {shots.map((x, i) => (
+            <button key={x.src} type="button" role="tab" aria-selected={i === at} aria-label={`${x.from} ${i + 1}`}
+              onClick={() => setAt(i)} onMouseEnter={() => setAt(i)}>
+              <img src={x.src} alt="" loading="lazy" onError={() => setBroken((b) => [...b, x.src])} />
+            </button>
+          ))}
+        </div>
+      )}
       <div className="dv-hv-body">
         <div className="dv-hv-head">
           <h4>{t.name}</h4>

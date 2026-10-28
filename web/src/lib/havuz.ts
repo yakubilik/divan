@@ -33,6 +33,9 @@ export interface PoolTool {
   status: PoolStatus;
   status_label?: string;
   thumb?: string;
+  /** What the tool looks like in use: README pictures and video frames, then
+   *  its site. Paths on the computer the snapshot came from. */
+  gallery?: { path: string; from: string; alt?: string }[];
   shared?: { link: string; on?: string; note?: string }[];
 }
 
@@ -128,7 +131,19 @@ export function usePool(): Load {
   return load;
 }
 
-/** A tool's picture, through the computer the snapshot came from. */
+/** A tool's picture, through the computer the snapshot came from: the first
+ *  of its gallery, which shows the thing, else its repository card. */
 export function thumbUrl(host: string, tool: PoolTool): string {
-  return tool.thumb ? fileUrl(host, tool.thumb) : '';
+  const first = tool.gallery?.[0]?.path ?? tool.thumb;
+  return first ? fileUrl(host, first) : '';
+}
+
+export interface Shot { src: string; from: string; alt: string }
+
+/** Every picture of a tool, in order, as the page shows them. The repository
+ *  card comes only where there is nothing better. */
+export function shotsOf(host: string, tool: PoolTool): Shot[] {
+  const g = (tool.gallery ?? []).map((x) => ({ src: fileUrl(host, x.path), from: x.from, alt: x.alt || tool.name }));
+  if (g.length) return g.filter((x) => !!x.src);
+  return tool.thumb ? [{ src: fileUrl(host, tool.thumb), from: 'repository', alt: tool.name }].filter((x) => !!x.src) : [];
 }
