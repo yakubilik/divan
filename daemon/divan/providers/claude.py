@@ -27,7 +27,7 @@ from claude_agent_sdk import (
 )
 
 from ..config import UPLOAD_DIR
-from ..security import destructive_reason, redact
+from ..security import asked, destructive_reason, redact
 from .. import accounts, legacy
 from . import claude_models
 from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult
@@ -141,7 +141,7 @@ class ClaudeProvider(Provider):
         if self.cfg.perm_mode == "bypass" and not self.cfg.bypass_asks:
             return {}
         cmd = (input_data.get("tool_input") or {}).get("command", "") or ""
-        reason = destructive_reason(cmd, self.cfg.cwd, input_data.get("cwd"))
+        reason = asked(destructive_reason(cmd, self.cfg.cwd, input_data.get("cwd")), self.cfg.ask_for)
         if not reason:
             if self.cfg.perm_mode != "ask" or "Bash" in self._session_allow:
                 return {}

@@ -294,6 +294,7 @@ class ChatSession:
             cwd=chat["cwd"], session_id=chat.get("provider_session_id"),
             max_turns=chat.get("max_turns"), max_budget_usd=chat.get("max_budget_usd"),
             chat_id=self.chat_id, bypass_asks=self.cfg.bypass_asks,
+            ask_for=self.cfg.ask_for,
         )
         pc.preamble = preamble.build(self.cfg, pc, chat["provider"])
         provider = cls(pc, self.emit, self._approval)

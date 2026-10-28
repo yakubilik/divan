@@ -49,6 +49,8 @@ class ProviderConfig:
     chat_id: str | None = None
     # Config.bypass_asks, carried to the provider that enforces it.
     bypass_asks: bool = True
+    # Config.ask_for: the categories of the destructive list still asked about.
+    ask_for: list[str] | None = None
 
 
 @dataclass

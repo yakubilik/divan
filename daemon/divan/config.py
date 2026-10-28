@@ -158,6 +158,9 @@ class Config:
     # Whether a bypass chat still puts the destructive list to the phone. Off
     # is bypass meaning bypass: nothing at all asks.
     bypass_asks: bool = True
+    # Which of security.CATEGORIES still go to the phone: "money", "exposure",
+    # "destruction". A category left out runs without asking, in every mode.
+    ask_for: list[str] = field(default_factory=lambda: ["money", "exposure", "destruction"])
     # Letting a paired device drive the mouse and keyboard. Off until somebody
     # turns it on, and stored here rather than in memory so that "off" survives
     # a restart — a switch this size should never come back on by accident.
@@ -249,6 +252,7 @@ class Config:
             # Left out once, and `bypass_asks = false` set by hand was gone
             # after the next pairing — the exact trap the comment above names.
             "bypass_asks": self.bypass_asks,
+            "ask_for": self.ask_for,
             "update_interval_s": self.update_interval_s,
             "apns_key_path": self.apns_key_path,
             "apns_key_id": self.apns_key_id,

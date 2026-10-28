@@ -99,6 +99,8 @@ the machine or a secret, or can destroy the machine or its data — a recursive
 `rm` outside the chat's folder, a forced `git push`, a tunnel, a billed deploy
 and the like — goes to the phone for approval (`security.destructive_reason`). In `bypass` that is the only thing that asks.
 With `bypass_asks = false` in `config.toml`, `bypass` asks nothing at all.
+`ask_for` in `config.toml` narrows the list to the categories named —
+`["money"]` on Yakup's Mac (28 Oct 2026), so there only spending asks.
 
 ## Where the session's own instructions come from
 

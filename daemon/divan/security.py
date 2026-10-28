@@ -33,6 +33,20 @@ MONEY = "spends money"
 EXPOSURE = "exposes the machine or a secret"
 DESTRUCTION = "can destroy the machine or your data"
 CATEGORIES = (MONEY, EXPOSURE, DESTRUCTION)
+# How config.toml names them in `ask_for`.
+CATEGORY_KEYS = {"money": MONEY, "exposure": EXPOSURE, "destruction": DESTRUCTION}
+
+
+def asked(reason: str | None, ask_for: list[str] | None) -> str | None:
+    """The reason, if its category is one this machine still asks about.
+
+    `ask_for` is Config.ask_for: on 28 Oct 2026 Yakup kept only "money", so
+    exposure and destruction run without a word there.
+    """
+    if not reason or ask_for is None:
+        return reason
+    wanted = tuple(CATEGORY_KEYS[k] for k in ask_for if k in CATEGORY_KEYS)
+    return reason if reason.startswith(wanted) else None
 
 
 class Rule(NamedTuple):

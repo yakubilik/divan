@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import Err
-from ..security import destructive_reason, redact
+from ..security import asked, destructive_reason, redact
 from .. import legacy, tools, structured_approval
 from .base import Provider, ProviderConfig, TurnResult
 
@@ -262,7 +262,7 @@ class CodexProvider(Provider):
                 cmd = params.get("command") or ""
                 if isinstance(cmd, (list, tuple)):
                     cmd = shlex.join(str(c) for c in cmd)
-                reason = destructive_reason(cmd, self.cfg.cwd, params.get("cwd"))
+                reason = asked(destructive_reason(cmd, self.cfg.cwd, params.get("cwd")), self.cfg.ask_for)
                 if self.cfg.perm_mode == "bypass" and not self.cfg.bypass_asks:
                     reason = None
                 # Bypass answers everything itself except the destructive list,
