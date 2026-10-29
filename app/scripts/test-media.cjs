@@ -158,12 +158,16 @@ checks.push(['a photo opens at the original the message names, not the bubble co
 checks.push(['…drawn whole (contain)', [...viewer.matchAll(/data-rn="Image" data-src="[^"]*" data-fit="([^"]*)"/g)].every((m) => m[1] === 'contain')]);
 checks.push(['…with the system pinch zoom under it, up to 4×, starting whole',
   scrolls.some((p) => p.maximumZoomScale === 4 && p.minimumZoomScale === 1 && p.zoomScale === 1)]);
-const video = viewer.match(/data-rn="VideoView" data-fit="([^"]*)" data-controls="([^"]*)" data-pip="([^"]*)" data-fullscreen="([^"]*)" data-style="([^"]*)"/);
+checks.push(['a video not on screen has no player fetching it', !/data-rn="VideoView"/.test(viewer) && players.length === 0]);
+checks.push(['…only the page on screen and its neighbours are drawn', list.initialNumToRender === 1 && list.windowSize === 3]);
+// The same viewer opened on the video.
+const onVideo = R.render('dark', h(media.Gallery, { items: group, start: 1, onClose: () => { closed++; } }));
+const video = onVideo.match(/data-rn="VideoView" data-fit="([^"]*)" data-controls="([^"]*)" data-pip="([^"]*)" data-fullscreen="([^"]*)" data-style="([^"]*)"/);
 checks.push(['a video plays in the system player, letterboxed and never cropped', !!video && video[1] === 'contain']);
 checks.push(['…with its native controls, full screen and picture-in-picture', !!video && video[2] === 'true' && video[3] === 'true' && video[4] === 'true']);
 const vs = video && JSON.parse(video[5].replace(/&quot;/g, '"'));
 checks.push(['…filling the page, the width of the screen', !!vs && vs.width === 390 && vs.height > 600]);
-checks.push(['…reading the original video', players.some((p) => p.src === fileUrl(PHONE_VIDEO.path))]);
+checks.push(['…reading the original video, with one player', players.length === 1 && players[0].src === fileUrl(PHONE_VIDEO.path)]);
 checks.push(['a sideways swipe at zoom 1 is left to the pager',
   pan.onMoveShouldSetPanResponder({}, { dx: 80, dy: 4 }) === false]);
 checks.push(['a drag down is taken by the viewer', pan.onMoveShouldSetPanResponder({}, { dx: 3, dy: 40 }) === true]);

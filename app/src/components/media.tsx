@@ -126,6 +126,11 @@ export function Gallery({ items, start, onClose }: { items: Attachment[]; start:
               getItemLayout={(_d, i) => ({ length: win.width, offset: win.width * i, index: i })}
               keyExtractor={(a, i) => `${i}:${a.path}`}
               showsHorizontalScrollIndicator={false}
+              // Only the page on screen and its neighbours are drawn: every page
+              // drawn is an original photo or a video being fetched from the
+              // computer, and a chat's worth of them at once starved the one
+              // being looked at.
+              initialNumToRender={1} maxToRenderPerBatch={1} windowSize={3}
               onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / win.width))}
               renderItem={({ item, index: i }) => isVideo(item)
                 ? <VideoPage item={item} width={win.width} height={areaH} active={i === index} onClose={onClose} />
@@ -142,8 +147,10 @@ export function Gallery({ items, start, onClose }: { items: Attachment[]; start:
 }
 
 /** One video, in the system player: letterboxed (`contain`), never cropped,
- *  with the player's own controls. It plays while it is the page on screen and
- *  pauses when swiped away.
+ *  with the player's own controls. Only the page on screen has a player; the
+ *  others show the first frame the bubble made. A player that is merely paused
+ *  keeps buffering, so a player per page had every video in the chat
+ *  downloading at once and the one on screen waited behind them.
  *
  *  The player's own touch handling keeps a drag on the picture from reaching
  *  the viewer's pan responder, so the drag down that puts it away is a native
@@ -152,10 +159,8 @@ export function Gallery({ items, start, onClose }: { items: Attachment[]; start:
 const DISMISS = 90;
 function VideoPage({ item, width, height, active, onClose }: { item: Attachment; width: number; height: number; active: boolean; onClose: () => void }) {
   const uri = viewerSources(item, fileUrl)[0] ?? null;
-  const player = useVideoPlayer(uri, (p) => { p.loop = false; });
-  useEffect(() => {
-    if (active) player.play(); else player.pause();
-  }, [active, player]);
+  const bubble = srcOf(item);
+  const poster = bubble ? posters.get(bubble) ?? null : null;
   return (
     <ScrollView style={{ width, height }} contentContainerStyle={{ width, height }} alwaysBounceVertical
       showsVerticalScrollIndicator={false} scrollEventThrottle={16}
@@ -164,10 +169,18 @@ function VideoPage({ item, width, height, active, onClose }: { item: Attachment;
         if (Math.abs(contentOffset?.y ?? 0) > DISMISS || Math.abs(velocity?.y ?? 0) > 1.5) onClose();
       }}>
       <View style={{ width, height, backgroundColor: '#000' }}>
-        <VideoView player={player} style={{ width, height }} contentFit="contain" nativeControls
-          allowsPictureInPicture fullscreenOptions={{ enable: true }} />
+        {active && uri ? <LiveVideo uri={uri} width={width} height={height} />
+          : poster ? <Image source={{ uri: poster }} style={{ width, height }} resizeMode="contain" /> : null}
       </View>
     </ScrollView>
+  );
+}
+
+function LiveVideo({ uri, width, height }: { uri: string; width: number; height: number }) {
+  const player = useVideoPlayer(uri, (p) => { p.loop = false; p.play(); });
+  return (
+    <VideoView player={player} style={{ width, height }} contentFit="contain" nativeControls
+      allowsPictureInPicture fullscreenOptions={{ enable: true }} />
   );
 }
 
