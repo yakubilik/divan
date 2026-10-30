@@ -270,7 +270,11 @@ class ClaudeProvider(Provider):
         )
         # In every mode, bypass included: the hook is what stops a destructive
         # command, and it decides for itself what each mode lets through.
-        kw["hooks"] = {"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_tool_hook])]}
+        # The CLI gives a hook 600 s unless told otherwise, and cancels it there:
+        # the 900 s a request may wait never ran, so a request left unanswered
+        # was cut off at ten minutes instead of expiring (30 Oct 2026).
+        kw["hooks"] = {"PreToolUse": [HookMatcher(matcher="Bash", hooks=[self._pre_tool_hook],
+                                                  timeout=c.approval_timeout_s + 60)]}
         # Where it is first, then who it is. An agent's own definition is the
         # more specific instruction and so goes last, but it never replaces the
         # context: an agent that does not know it is being read on a phone

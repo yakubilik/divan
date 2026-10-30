@@ -22,6 +22,12 @@ export interface Pending {
   ts: number;
 }
 
+/** What `approval_gone` answers with: this request can never run, so there is
+ *  nothing left to decide and nothing for a dialog to hold open. */
+const GONE = ['no_pending_approval', 'approval_expired', 'approval_dropped',
+  'approval_cancelled', 'approval_answered'];
+export const isGone = (e: any): boolean => GONE.includes(e?.code);
+
 function Line({ label, value, right }: { label: string; value: string; right?: string }) {
   return (
     <div style={{

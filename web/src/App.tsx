@@ -11,7 +11,7 @@ import { Asking, useAskingRoom } from './components/Asking';
 import { NewChat } from './components/NewChat';
 import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
-import { ApprovalModal, type Pending } from './components/ApprovalModal';
+import { ApprovalModal, isGone, type Pending } from './components/ApprovalModal';
 import { Machine } from './screens/Machine';
 import { Panes } from './screens/Panes';
 import { usePanes } from './lib/panes';
@@ -94,6 +94,8 @@ export function App() {
   const [liveTokens, setLiveTokens] = useState<number | null>(null);
   const [liveContext, setLiveContext] = useState<number | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
+  // Closed by hand: the chat still shows it, the dialog does not raise it again.
+  const dismissed = useRef(new Set<string>());
   // Terminal mode opens a chat over the wall rather than leaving it: the point
   // of the wall is that you can answer one thing and still be looking at the
   // other eleven. It is the same selection the chat screen uses, so everything
@@ -598,7 +600,10 @@ export function App() {
       const existing = useLogs.getState().logs[logKey(hostKey, chatId)];
       if (!existing) { useLogs.getState().open(hostKey, chatId); continue; }
       const slot = useFleet.getState().hosts[hostKey];
-      const open = existing.items.filter((it) => it.kind === 'approval' && it.decision == null);
+      // Only what the daemon says it still holds. An unanswered card in the log
+      // is not enough: one that died unresolved can never be answered.
+      const open = existing.items.filter((it: any) => it.kind === 'approval' && it.decision == null
+        && existing.pending.includes(it.requestId) && !dismissed.current.has(it.requestId));
       if (!open.length) continue;
       setPending((q) => {
         const add = open
@@ -1100,11 +1105,18 @@ export function App() {
           queued={pending.length}
           chat={fleet.hosts[blocking.hostKey]?.chats.find((c) => c.id === blocking.chatId) ?? null}
           onRespond={async (d, response) => {
-            await respond(blocking.hostKey, blocking.chatId, blocking.requestId, d, response);
+            try {
+              await respond(blocking.hostKey, blocking.chatId, blocking.requestId, d, response);
+            } catch (e) {
+              if (!isGone(e)) throw e;
+            }
             setPending((q) => q.filter((p) => p.requestId !== blocking.requestId));
           }}
           onOpenChat={() => open(blocking.hostKey, blocking.chatId)}
-          onClose={() => setPending((q) => q.filter((p) => p.requestId !== blocking.requestId))}
+          onClose={() => {
+            dismissed.current.add(blocking.requestId);
+            setPending((q) => q.filter((p) => p.requestId !== blocking.requestId));
+          }}
         />
       )}
 

@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from divan.config import Config  # noqa: E402
 from divan.db import DB  # noqa: E402
 from divan.errors import Err  # noqa: E402
-from divan.providers.base import DROPPED_NOTE, EXPIRED, EXPIRED_NOTE, EXPIRED_TO_AGENT, ProviderConfig  # noqa: E402
+from divan.providers.base import CANCELLED_NOTE, DROPPED_NOTE, EXPIRED, EXPIRED_NOTE, EXPIRED_TO_AGENT, ProviderConfig  # noqa: E402
 from divan.providers.claude import ClaudeProvider  # noqa: E402
 from divan.server import Server  # noqa: E402
 from divan.session import ChatSession, SessionManager  # noqa: E402
@@ -100,6 +100,36 @@ def test_the_agent_is_told_it_was_not_approved(tmp_path):
     p.cfg.perm_mode = "ask"
     res = asyncio.run(p._can_use_tool("Write", {"file_path": "x"}, None))
     assert res.message == EXPIRED_TO_AGENT
+
+
+def test_a_cancelled_request_is_resolved_not_left_open(tmp_path):
+    """30 Oct 2026: the CLI cancelled the hook, nothing was recorded, and Allow stayed up for good."""
+    db = DB(tmp_path / "d.sqlite")
+    session = _session(db, 60)
+
+    async def run():
+        task = asyncio.create_task(session._approval("Bash", {"command": "dropdb x"}, "danger"))
+        await asyncio.sleep(0.01)
+        request_id = next(iter(session.pending))
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return request_id
+
+    request_id = asyncio.run(run())
+    assert not session.pending
+    assert db.get_chat(session.chat_id)["status"] == "running"
+    outcome = db.approval_outcome(session.chat_id, request_id)
+    assert (outcome["decision"], outcome["why"], outcome["note"]) == (EXPIRED, "cancelled", CANCELLED_NOTE)
+    assert _respond(db, SimpleNamespace(peek=lambda _id: session), session.chat_id, request_id).code == "approval_cancelled"
+
+
+def test_the_bash_hook_outlives_the_approval_timeout():
+    """A hook cut off first means the 900 s never ran and the request died unresolved."""
+    pc = ProviderConfig(model="opus", effort=None, perm_mode="bypass", cwd=tempfile.mkdtemp(),
+                        session_id=None, approval_timeout_s=900)
+    provider = ClaudeProvider(pc, _nothing, _nothing)
+    assert provider._options().hooks["PreToolUse"][0].timeout > 900
 
 
 def test_a_restart_drops_waiting_requests_in_words(tmp_path):

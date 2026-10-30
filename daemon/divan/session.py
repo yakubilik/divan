@@ -15,7 +15,7 @@ from .errors import Err
 from . import attachments, naming, preamble, recap, secrets, structured_approval
 from .pool import Wait
 from .security import PathPolicy
-from .providers.base import EXPIRED, EXPIRED_NOTE, Provider, ProviderConfig
+from .providers.base import CANCELLED_NOTE, EXPIRED, EXPIRED_NOTE, Provider, ProviderConfig
 from .providers.claude import ClaudeProvider
 from .providers.codex import CodexProvider
 from .providers.demo import DemoProvider
@@ -232,6 +232,18 @@ class ChatSession:
             expired = True
             structured = tool_input.get("kind") in ("mcp_elicitation", "user_input")
             decision = "deny" if structured else EXPIRED
+        except asyncio.CancelledError:
+            # The agent stopped waiting: its CLI cancelled the callback, or the
+            # turn died under it. Nothing will ever answer this, and without a
+            # resolution every client keeps offering Allow on it for good and
+            # the chat reads as waiting on him (30 Oct 2026).
+            self.pending.pop(req_id, None)
+            await self.emit("approval.resolved", {"request_id": req_id, "decision": EXPIRED,
+                                                  "why": "cancelled", "note": CANCELLED_NOTE}, True)
+            chat = self.db.get_chat(self.chat_id) or {}
+            if not self.pending and chat.get("status") == "awaiting_approval":
+                await self._set_status("running")
+            raise
         finally:
             self.pending.pop(req_id, None)
             self._approval_inputs.pop(req_id, None)
@@ -294,7 +306,7 @@ class ChatSession:
             cwd=chat["cwd"], session_id=chat.get("provider_session_id"),
             max_turns=chat.get("max_turns"), max_budget_usd=chat.get("max_budget_usd"),
             chat_id=self.chat_id, bypass_asks=self.cfg.bypass_asks,
-            ask_for=self.cfg.ask_for,
+            ask_for=self.cfg.ask_for, approval_timeout_s=self.cfg.approval_timeout_s,
         )
         pc.preamble = preamble.build(self.cfg, pc, chat["provider"])
         provider = cls(pc, self.emit, self._approval)
@@ -967,6 +979,9 @@ def approval_gone(outcome: dict | None) -> Err:
         if outcome.get("why") == "restart":
             return Err("approval_dropped", "This request was dropped when the daemon restarted, "
                                            "so it was not run. Ask the agent to try again.")
+        if outcome.get("why") == "cancelled":
+            return Err("approval_cancelled", "The agent stopped waiting for this answer, "
+                                             "so it was not approved.")
         return Err("approval_expired", "This request timed out before your answer arrived, "
                                        "so it was not run. Ask the agent to try again.")
     return Err("approval_answered", "This request was already answered.")

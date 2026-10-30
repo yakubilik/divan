@@ -505,7 +505,8 @@ function Approval({ item, onRespond }: {
     : item.decision === 'deny' ? 'denied'
     // Nobody said no: it ran out of time, or a restart dropped it — and it did not run.
     : item.decision === 'expired'
-      ? item.why === 'restart' ? 'dropped when the daemon restarted, not run' : 'timed out, not run'
+      ? item.why === 'restart' ? 'dropped when the daemon restarted, not run'
+        : item.why === 'cancelled' ? 'the agent stopped waiting' : 'timed out, not run'
     : '';
   return (
     <div style={{

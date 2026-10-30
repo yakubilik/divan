@@ -15,6 +15,7 @@ ApprovalFn = Callable[[str, dict, str | None], Awaitable[str | dict]]
 # shows under the request, and what the agent is told instead of "denied".
 EXPIRED = "expired"
 EXPIRED_NOTE = "Permission timed out, so it was not run."
+CANCELLED_NOTE = "The agent stopped waiting for this answer, so it was not approved."
 DROPPED_NOTE = "The daemon restarted while this was waiting, so the request was dropped and it was not run."
 EXPIRED_TO_AGENT = ("Nobody answered the permission request on the phone in time, so it was NOT "
                     "approved and did not run. Do not run it, or anything that does the same, "
@@ -51,6 +52,8 @@ class ProviderConfig:
     bypass_asks: bool = True
     # Config.ask_for: the categories of the destructive list still asked about.
     ask_for: list[str] | None = None
+    # Config.approval_timeout_s: a hook has to outlive it (`ClaudeProvider._options`).
+    approval_timeout_s: int = 900
 
 
 @dataclass
