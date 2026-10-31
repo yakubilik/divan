@@ -126,7 +126,9 @@ _OPEN_MODE = re.compile(r"^(0?777|[ugoa]*a[ugoa]*[+=]rwx|ugo[+=]rwx)$")
 # accounts' memory and skills are what a chat works in all day.
 _DAEMON_HOME = re.compile(r"(?<![\w.-])" + _HOME_NAMES + r"(?:/(?!(?:uploads|logs|accounts)(?:/|$))|$)")
 _SQL_WRITES = re.compile(
-    r"\b(insert|update|delete|replace|drop|alter|create|vacuum|attach|reindex|upsert)\b"
+    # `replace(` is the string function, which reads; only the REPLACE statement
+    # writes. A night watch select over chat events asked like a delete (31 Oct 2026).
+    r"\b(insert|update|delete|replace(?!\s*\()|drop|alter|create|vacuum|attach|reindex|upsert)\b"
     r"|\bpragma\b[^;]*=|^\s*\.(import|restore|save|output|once|shell|system)\b|;\s*\.",
     re.I | re.M)
 _DROP_DATABASE = re.compile(r"\bdrop\s+(?:database|schema)\b|\bdropDatabase\s*\(|\bflush(?:all|db)\b", re.I)

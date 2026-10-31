@@ -86,6 +86,8 @@ FLAGGED = [
     "> ~/.divan/config.json",
     "sqlite3 ~/.divan/db.sqlite 'delete from chats'",
     "sqlite3 ~/.divan/db.sqlite <<'SQL'\ndelete from chats;\nSQL",
+    'sqlite3 ~/.divan/db.sqlite "replace into chats(id) values(1)"',
+    'sqlite3 ~/.divan/db.sqlite "select replace (title, 1, 2) from chats; replace into chats(id) values(1)"',
     # A heredoc handed to something that runs it is still code.
     "bash <<'EOF'\nrm -rf ~/projects\nEOF",
     "cat <<'EOF' | sh\nrm -rf ~/\nEOF",
@@ -187,6 +189,8 @@ ALLOWED = [
     "cd ~/.divan && python3 -c 'print(1)'",
     "cp ~/.divan/db.sqlite /tmp/db-copy.sqlite",
     "sqlite3 ~/.divan/db.sqlite <<'SQL'\nselect * from chats;\nSQL",
+    # The replace() string function reads (31 Oct 2026).
+    'sqlite3 ~/.divan/db.sqlite "SELECT substr(replace(payload,char(10),\' \'),1,260) FROM events" | head',
     # Harmless outside the three reasons.
     "killall -9 node",
     "firebase deploy --only hosting,firestore:rules",
