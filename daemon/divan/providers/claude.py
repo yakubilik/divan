@@ -27,7 +27,7 @@ from claude_agent_sdk import (
 )
 
 from ..config import UPLOAD_DIR
-from ..security import asked, destructive_reason, redact
+from ..security import MONEY, asked, destructive_reason, redact
 from .. import accounts, legacy
 from . import claude_models
 from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult
@@ -73,6 +73,9 @@ class ClaudeProvider(Provider):
         super().__init__(cfg, emit, approval)
         self._client: ClaudeSDKClient | None = None
         self._session_allow: set[str] = set()
+        # Destructive asks answered "allow for this chat": the same reason is not
+        # put to the phone again in this chat (1 Nov 2026). Money always asks.
+        self._session_reasons: set[str] = set()
         self._session_id: str | None = cfg.session_id
         self._interrupted = False
         # One reader for the life of the client, and the queue it fills.
@@ -145,9 +148,16 @@ class ClaudeProvider(Provider):
         if not reason:
             if self.cfg.perm_mode != "ask" or "Bash" in self._session_allow:
                 return {}
+        elif reason in self._session_reasons:
+            return {"hookSpecificOutput": {
+                "hookEventName": "PreToolUse", "permissionDecision": "allow",
+                "permissionDecisionReason": "Allowed from the phone for this chat.",
+            }}
         decision = await self.approval("Bash", input_data.get("tool_input") or {}, reason)
         if decision == "allow_session":
             self._session_allow.add("Bash")
+            if reason and not reason.startswith(MONEY):
+                self._session_reasons.add(reason)
         if decision in ("allow", "allow_session"):
             return {"hookSpecificOutput": {
                 "hookEventName": "PreToolUse", "permissionDecision": "allow",

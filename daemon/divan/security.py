@@ -652,6 +652,81 @@ def _daemon_write_reason(name: str, args: list[str], here: Path | None) -> str |
     return f"{DESTRUCTION}: changes the daemon's own files: {hit}" if hit else None
 
 
+# Variables a command sets itself and then deletes (1 Nov 2026: three phone
+# asks in eleven minutes for `T=$(mktemp -d /tmp/esp32.XXXXXX); …; rm -rf $T`).
+# Only a literal path, or a `mktemp` whose result is known to land in scratch,
+# is remembered; anything else leaves the variable unknown and the rm asks.
+_SET = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
+_MKTEMP = re.compile(r"^\$\(\s*mktemp\b(?P<args>[^()`$;|&]*)\)$")
+_VAR = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
+
+
+def _mktemp_place(args: str) -> str | None:
+    """Where `mktemp ARGS` creates its file or folder, as a path inside it."""
+    words = args.split()
+    place = None
+    for n, w in enumerate(words):
+        if w in ("-p", "--tmpdir") and n + 1 < len(words):
+            place = words[n + 1]
+        elif w.startswith("--tmpdir="):
+            place = w.split("=", 1)[1]
+        elif w == "-t":
+            place = tempfile.gettempdir()
+    templates = [w for w in words if not w.startswith("-") and w not in (place,)]
+    if not templates:
+        return os.path.join(place or tempfile.gettempdir(), "tmp.XXXXXXXX")
+    t = templates[-1]
+    if t.startswith(("/", "~")) or place is None:
+        return t        # absolute, or relative to where the shell stands (BSD mktemp)
+    return os.path.join(place, t)
+
+
+def _assignments(words: list[str], known: dict[str, str]) -> None:
+    """Update `known` with what a segment's leading `NAME=value` words set."""
+    i = 1 if words and words[0] in ("export", "local", "readonly", "declare", "typeset") else 0
+    text = " ".join(words[i:])
+    m = _SET.match(text)
+    if not m:
+        return
+    whole_sub = m.group(2).startswith("$(") and m.group(2).count("(") == m.group(2).count(")")
+    if len(words) > i + 1 and not whole_sub:
+        return      # `A=1 cmd` sets A for cmd only, `export A B` is more than one
+    name, value = m.group(1), m.group(2).strip().strip("'\"")
+    mk = _MKTEMP.match(value)
+    if mk:
+        place = _mktemp_place(mk.group("args"))
+        if place is None:
+            known.pop(name, None)
+        else:
+            known[name] = place
+        return
+    if "`" in value or "$(" in value:
+        known.pop(name, None)
+        return
+    sub = _expand(value, known)
+    if sub is None:
+        known.pop(name, None)
+    else:
+        known[name] = sub
+
+
+def _expand(arg: str, known: dict[str, str]) -> str | None:
+    """`arg` with the remembered variables put in; None if it names one that is
+    not remembered (HOME and PWD are left for _resolve)."""
+    missing = False
+
+    def put(m):
+        nonlocal missing
+        v = m.group(1) or m.group(2)
+        if v in known:
+            return known[v]
+        if v not in ("HOME", "PWD"):
+            missing = True
+        return m.group(0)
+    out = _VAR.sub(put, arg)
+    return None if missing else out
+
+
 def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> str | None:
     if depth > 4:
         return None
@@ -665,6 +740,7 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
         if reason:
             return reason
     downloading = fed_secret = False
+    known: dict[str, str] = {}
     for words, op in _segments(_tokens(cmd)):
         redirect = op.rstrip("|&")[-1:]
         if redirect in ("<", ">"):
@@ -679,6 +755,9 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
             continue
         piped = op in ("|", "|&")
         name, args, sudo = _command(words)
+        if words and (_ASSIGNMENT.match(words[0])
+                      or words[0] in ("export", "local", "readonly", "declare", "typeset")):
+            _assignments(words, known)
         if piped and downloading and name in _SHELLS:
             return f"{EXPOSURE}: a download piped into a shell"
         if not piped:
@@ -691,6 +770,8 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
             here = _resolve(dest, here)
         elif name == "rm":
             # Root can delete what the system needs, recursive or not.
+            if not sudo and known:
+                args = [(_expand(a, known) or a) for a in args]
             reason = f"{DESTRUCTION}: sudo rm" if sudo else _rm_reason(args, root, here)
         elif name == "git":
             reason = _git_reason(args)

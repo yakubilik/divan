@@ -41,6 +41,13 @@ def check(ok: bool, label: str, detail: str = "") -> None:
 
 
 FLAGGED = [
+    # Remembered variables still ask when they point outside (1 Nov 2026).
+    "D=~/projects; rm -rf $D",
+    "D=/tmp/x; D=$HOME; rm -rf $D",
+    "D=/tmp/a; rm -rf $D/../../Users",
+    "D=$(pwd); cd ~; rm -rf $D",
+    "X=/tmp/a rm -rf $X",
+    'rm -rf "$(cat /tmp/reel-dir)"',
     "rm -r -f /",
     "rm -rf ~/",
     'rm -rf "$HOME"',
@@ -191,6 +198,11 @@ ALLOWED = [
     "sqlite3 ~/.divan/db.sqlite <<'SQL'\nselect * from chats;\nSQL",
     # The replace() string function reads (31 Oct 2026).
     'sqlite3 ~/.divan/db.sqlite "SELECT substr(replace(payload,char(10),\' \'),1,260) FROM events" | head',
+    # A temp folder the same command made, then deletes (1 Nov 2026).
+    "T=$(mktemp -d /tmp/esp32-wifi.XXXXXX); chmod 700 $T; rm -rf $T",
+    'T=$(mktemp -d); trap \'rm -rf "$T"\' EXIT; rm -rf "$T"',
+    "S=/tmp/bs-sim-shots; rm -rf $S; mkdir -p $S",
+    'export D=/tmp/x; rm -rf "$D"',
     # Harmless outside the three reasons.
     "killall -9 node",
     "firebase deploy --only hosting,firestore:rules",
@@ -276,6 +288,36 @@ async def test_claude_bypass(cwd: str) -> None:
     out = await pending
     check(out.get("hookSpecificOutput", {}).get("permissionDecision") == "deny",
           "a denial from the phone blocks it", str(out))
+
+
+async def test_claude_allow_for_chat(cwd: str) -> None:
+    print("claude, allow for this chat")
+    asked: list = []
+    p = provider(ClaudeProvider, cwd, asked)
+    answers = ["allow_session", "allow_session"]
+
+    async def phone(tool, tool_input, reason):
+        asked.append(reason)
+        return answers.pop(0) if answers else "deny"
+
+    p.approval = phone
+
+    def call(cmd):
+        return p._pre_tool_hook({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": cwd}, "t1", None)
+
+    def allowed(out):
+        return out.get("hookSpecificOutput", {}).get("permissionDecision") == "allow"
+
+    check(allowed(await call("rm -rf ~/old-thing")) and len(asked) == 1, "first destructive ask goes to the phone")
+    check(allowed(await call("rm -rf ~/old-thing")) and len(asked) == 1,
+          "the same reason is not asked again in this chat", str(asked))
+    out = await call("rm -rf ~/other-thing")
+    check(len(asked) == 2, "a different path still asks", str(asked))
+    asked.clear()
+    answers[:] = ["allow_session"]
+    await call("eas build -p ios")
+    await call("eas build -p ios")
+    check(len(asked) == 2, "money asks every time, even after allow for this chat", str(asked))
 
 
 async def test_codex_bypass(cwd: str) -> None:
@@ -373,6 +415,7 @@ async def main() -> int:
         test_classifier(str(cwd))
         test_categories(str(cwd))
         await test_claude_bypass(str(cwd))
+        await test_claude_allow_for_chat(str(cwd))
         await test_codex_bypass(str(cwd))
         await test_bypass_without_asking(str(cwd))
         test_bypass_asks_persists(Path(tmp))
