@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import shlex
+import sys
 import tempfile
 import time
 from contextvars import ContextVar
@@ -142,6 +143,29 @@ _VITAL = re.compile(r"^(?:divan|" + legacy.PROCESS_PATTERN + r"|python[0-9.]*|Py
                     r"|launchd|WindowServer|loginwindow|kernel_task|sshd|tailscaled|Tailscale"
                     r"|IPNExtension|cloudflared)$")
 _PKILL_TAKES_VALUE = {"-u", "-U", "-P", "-g", "-G", "-t", "-s", "-F"}
+
+
+def _daemon_command_lines() -> list[str]:
+    """What `pkill -f` would see for the daemon: its own command line and the forms it is
+    started in. A pattern that matches none of these cannot reach it."""
+    lines = [" ".join([sys.executable, *sys.argv])]
+    for py in (sys.executable, "/usr/bin/python3"):
+        lines += [f"{py} {Path.home()}/projects/divan/daemon/.venv312/bin/divan serve",
+                  f"{py} -m divan serve",
+                  f"{py} {Path.home()}/projects/remote_ai_chat/daemon/.venv/bin/remote-ai-chat serve",
+                  f"{py} -m remote_ai_chat serve"]
+    return lines
+
+
+def _pkill_hits_daemon(pattern: str) -> bool:
+    """Whether `pkill -f <pattern>` would match the daemon. pkill reads the pattern as an
+    extended regex; one Python cannot read is asked about, not guessed. On 2 Nov 2026
+    `pkill -f "divan_peer.py ask salure ORTAK"` asked because it contained "divan"."""
+    try:
+        rx = re.compile(pattern)
+    except re.error:
+        return True
+    return any(rx.search(line) for line in _daemon_command_lines())
 
 # Files whose contents are a key, and the commands that send things off the machine.
 _SECRET_FILE = re.compile(r"(?:^|[/@=])(?:\.ssh/|\.aws/credentials|\.netrc$|\.env(?!\.(?:example|sample|template)$)(?:\.[\w-]+)?$"
@@ -518,7 +542,7 @@ def _kill_reason(name: str, args: list[str]) -> str | None:
     if pattern is None:
         return None
     full = any(a.startswith("-") and not a.startswith("--") and "f" in a for a in args)
-    if re.search(r"divan|" + legacy.PROCESS_PATTERN, pattern) and full:
+    if full and _pkill_hits_daemon(pattern):
         return f"{DESTRUCTION}: kills the daemon"
     if _VITAL.match(pattern):
         return f"{DESTRUCTION}: kills {pattern}"

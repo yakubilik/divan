@@ -132,6 +132,9 @@ BY_CATEGORY = {
         "psql -c 'DROP DATABASE prod'",
         "dropdb prod",
         "pkill -f divan",
+        "pkill -f 'divan serve'",
+        "pkill -f python",
+        "pkill -f '[d]ivan'",
         "killall python3",
         "launchctl bootout gui/501/com.divan.daemon",
         "sudo shutdown -h now",
@@ -164,6 +167,10 @@ ALLOWED = [
     'echo "- [A](a.md)" >> ~/.divan/accounts/claude-1/projects/x/memory/MEMORY.md',
     "bash -lc 'tail -50 ~/.divan/logs/daemon.log'",
     "rm -rf /tmp/shots; mkdir -p /tmp/shots",
+    # A pattern that cannot match the daemon's command line (2 Nov 2026).
+    'pkill -f "divan_peer.py ask salure ORTAK" ; echo done',
+    "pkill -f divan_peer",
+    "pkill -f 'http.server 8792'",
     # Regenerable caches are not destruction (17 Oct 2026).
     'pgrep -x pod >/dev/null && echo "pod running"; rm -rf ~/Library/Caches/CocoaPods ~/Library/Caches/dotslash ~/Library/Caches/com.brave.Browser; df -h / | tail -1',
     "rm -rf ~/Library/Caches/x",
