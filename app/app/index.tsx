@@ -16,12 +16,15 @@ export default function Index() {
   const ready = useStore((s) => s.ready);
   const host = useStore((s) => s.host);
   const c = useColors();
-  // Decided once, on the first render with a paired computer, and kept: a
-  // second visit to `/` in the same process is not a launch.
-  const [launching] = useState(() => !!host && !launchHandled());
+  // Decided once, on the first render where the store is loaded and a computer
+  // is paired, and kept: a second visit to `/` in the same process is not a
+  // launch. Not on the very first render — the hosts are still in the keychain
+  // then, and deciding there sent every cold start to the Dashboard.
+  const launching = useRef<boolean | null>(null);
   if (!ready) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
   if (!host) return <Redirect href="/welcome" />;
-  if (launching) return <Launch />;
+  if (launching.current === null) launching.current = !launchHandled();
+  if (launching.current) return <Launch />;
   // Divan opens on the Dashboard: every project on every machine, rather than
   // one computer's chats.
   return <Redirect href={HOME} />;
