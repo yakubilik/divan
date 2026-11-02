@@ -117,8 +117,12 @@ for (const place of S.PLACES) {
 checks.push(
   ['the place the app opens on is the Dashboard',
     S.HOME === S.PLACE_ROUTE.dashboard && S.HOME === '/dashboard'],
+  // A cold start opens an empty Hermes chat over it (2 Nov 2026, src/launch.ts);
+  // Back from that chat, and every later visit to `/`, is the Dashboard.
   ['…and the first screen redirects there rather than to a chat list',
-    /<Redirect href=\{host \? HOME : '\/welcome'\} \/>/.test(src('app/index.tsx'))],
+    /<Redirect href=\{HOME\} \/>/.test(src('app/index.tsx'))
+    && /router\.replace\(HOME\)/.test(src('app/index.tsx'))
+    && /<Redirect href="\/welcome" \/>/.test(src('app/index.tsx'))],
   ['a notification pops the stack back to that same place',
     new RegExp(`follow\\(tap: Tap, nav: Nav, home = '${S.HOME}'\\)`).test(tap)],
   ['the computer picker the old top level was built around is gone',

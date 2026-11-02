@@ -242,7 +242,8 @@ class Server:
                                        agent_prompt=self._agent_prompt,
                                        pool_pick=self._pool_pick,
                                        pool_next=self._pool_next_for,
-                                       naming_env=self._naming_env)
+                                       naming_env=self._naming_env,
+                                       live_account=self._live_account)
         self.clients: dict[WebSocket, Device] = {}
         # One queue per connected client, drained by that client's own writer.
         self.outbox: dict[WebSocket, Outbox] = {}
@@ -350,6 +351,8 @@ class Server:
         # Accounts that refused a call's turn, and until when the call leaves
         # them alone whatever the pool has on record for them.
         self._concierge_skip: dict[str, float] = {}
+        # account id -> when the CLI last said it was signed in (`_signed_in`)
+        self._live_checked: dict[str, float] = {}
         self.concierge = Concierge(self.call_snapshot, self._concierge_account,
                                    self._concierge_actions(),
                                    on_limits=self._concierge_limits,
@@ -785,6 +788,65 @@ class Server:
         back = [s.until for s in (self.pool.state(a, provider, now) for a in self.pool.order(provider))
                 if s.blocked and s.until and s.until > now]
         return poolmod.Wait(min(back), False) if back else None
+
+    # How long a "signed in" answer from the CLI is trusted before a turn asks
+    # again. Asking costs a subprocess (~0.2 s), which a turn can afford once
+    # in a while but not on every message of a busy chat.
+    LIVE_TRUST_S = 120.0
+
+    async def _signed_in(self, a: acct.Account, fresh: bool = False) -> bool:
+        now = time.time()
+        if not fresh and a.logged_in and now - self._live_checked.get(a.id, 0) < self.LIVE_TRUST_S \
+                and not acct.auth_broken(a, now):
+            return True
+        try:
+            await asyncio.to_thread(acct.refresh, a)
+        except Exception:
+            return False
+        self._live_checked[a.id] = now
+        return a.logged_in
+
+    async def _first_signed_in(self, provider: str, exclude: set[str]) -> str | None:
+        """The best sign-in of this tool that is signed in: the pool's ranking
+        of who has room first, then everything else in the accounts screen's
+        order. None when there is none at all."""
+        seen = set(exclude)
+        order = self.pool.candidates(provider, exclude) + self.pool.order(provider)
+        for aid in order:
+            if aid in seen:
+                continue
+            seen.add(aid)
+            a = self.accounts.get(aid)
+            if a is not None and a.provider == provider and await self._signed_in(a):
+                return aid
+        return None
+
+    async def _live_account(self, chat: dict, failed: bool = False) -> str | None:
+        """The sign-in a chat should run on instead of its own, or None to stay.
+
+        A chat never runs on a sign-in that cannot authenticate: one the CLI
+        says is signed out, the computer's own when nobody signed it in, or one
+        a turn was just refused on (`failed`) — that one is held as signed out
+        until its stored credentials change. Pinning a chat to an account is
+        about which plan pays, not about running on a dead one, so it does not
+        keep a chat here either.
+        """
+        if self.cfg.demo:
+            return None
+        provider = chat.get("provider") or "claude"
+        current = chat.get("account_id") or acct.DEFAULT_ID + "-" + provider
+        a = self.accounts.get(current)
+        if failed and a is not None:
+            a.auth_failed_at = time.time()
+            a.logged_in = False
+            log.warning("account=%s failed to authenticate on a fresh process; held as signed out", a.id)
+        elif a is not None and await self._signed_in(a):
+            return None
+        nxt = await self._first_signed_in(provider, {current})
+        if nxt is None:
+            log.warning("chat %s: account=%s is not signed in and no other %s account is",
+                        chat.get("id"), current, provider)
+        return nxt
 
     async def _pool_next_for(self, chat: dict) -> "str | poolmod.Wait | None":
         """Where a chat whose turn has just been stopped should carry on.
@@ -2223,6 +2285,16 @@ class Server:
             raise Err("unknown_perm_mode", "unknown permission mode")
         account_id = d.get("account_id")
         self._account(account_id, provider)          # raises if unknown/mismatched
+        # A chat opens on a sign-in that works. Whatever the phone remembered —
+        # an account since signed out, or the computer's own when nobody signed
+        # it in — the best signed-in one takes its place, before the first
+        # message can fail with "Failed to authenticate".
+        if not self.cfg.demo:
+            live = await self._live_account({"provider": provider, "account_id": account_id})
+            if live:
+                log.info("chat.create: account=%s is not signed in; opening on account=%s",
+                         account_id or "default", live)
+                account_id = live
         if agent_id and agent_id != agents.CREATOR_ID \
                 and not agents.find(agent_id, self._account(account_id, provider).home, cwd):
             raise Err("no_agent", "that agent is not on this computer")

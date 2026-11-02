@@ -195,6 +195,14 @@ class Account:
     # that does not say — which is not the same as a sign-in that never expires,
     # so the panel says nothing rather than guessing.
     expires_at: float | None = None
+    # When a turn on this sign-in was refused as "OAuth session expired" even
+    # after a fresh CLI process tried again (`ChatSession._turn`). The CLI's
+    # own `auth status` only reads whether a token is on disk, so it keeps
+    # saying "logged in" about a sign-in whose refresh token is dead — and
+    # every chat opened on it failed. Held here, in memory, until the stored
+    # sign-in changes (a new login, or a refresh that worked) or AUTH_HOLD_S
+    # passes; until then `refresh` reports the account as signed out.
+    auth_failed_at: float | None = None
 
     def env(self) -> dict[str, str]:
         """Environment for running this account's CLI."""
@@ -256,6 +264,34 @@ def sign_in_expiry(acc: Account) -> float | None:
         return None
 
 
+# How long a sign-in that failed to authenticate stays signed out when nothing
+# on disk says it was renewed. A keychain sign-in has no file to watch, so this
+# is all it gets.
+AUTH_HOLD_S = 6 * 3600
+
+
+def auth_broken(acc: Account, now: float | None = None) -> bool:
+    """Whether a failed authentication still stands against this sign-in.
+
+    Cleared, and False, once the stored credentials were written after the
+    failure — somebody signed in again, or a refresh got through — or once the
+    hold runs out."""
+    at = acc.auth_failed_at
+    if at is None:
+        return False
+    now = time.time() if now is None else now
+    try:
+        if _cred_path(acc).stat().st_mtime > at:
+            acc.auth_failed_at = None
+            return False
+    except OSError:
+        pass
+    if now - at > AUTH_HOLD_S:
+        acc.auth_failed_at = None
+        return False
+    return True
+
+
 def refresh(acc: Account) -> Account:
     """Ask the CLI whether this account is signed in. Never raises."""
     acc.logged_in, acc.detail, acc.plan = False, "", ""
@@ -295,6 +331,9 @@ def refresh(acc: Account) -> Account:
                             else "api" if acc.api_key else "")
     except Exception as exc:
         acc.detail = str(exc)[:80]
+    if acc.logged_in and auth_broken(acc):
+        acc.logged_in = False
+        acc.detail = "sign-in expired — sign in again"
     if acc.logged_in:
         acc.expires_at = sign_in_expiry(acc)
     return acc

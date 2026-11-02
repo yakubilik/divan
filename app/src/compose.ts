@@ -272,8 +272,25 @@ export function modelOptions(catalog: Partial<Record<Provider, ProviderCatalog>>
 
 /** The sign-ins one tool can open a chat on, `''` for the computer's own. */
 export function accountValues(accounts: CliAccount[], provider: Provider): { value: string; label: string | null }[] {
-  return accounts.filter((a) => a.provider === provider && (a.logged_in || a.is_default))
+  return signedIn(accounts, provider)
     .map((a) => ({ value: a.is_default ? '' : a.id, label: a.is_default ? null : a.label }));
+}
+
+/** The sign-ins of a tool that can run a turn: the signed-in ones, and nothing
+ *  else. The computer's own login used to be offered whatever its state, and a
+ *  chat opened on it — or on a sign-in whose token had died — failed its first
+ *  message with "Failed to authenticate" (Yakup, 2 Nov 2026). */
+export function signedIn(accounts: CliAccount[], provider: Provider): CliAccount[] {
+  return accounts.filter((a) => a.provider === provider && a.logged_in);
+}
+
+/** `stored` when it is still a working sign-in, else the first one that is.
+ *  `''` is the computer's own. With the list not yet known, `stored` stands. */
+export function workingAccount(accounts: CliAccount[] | null | undefined, provider: Provider, stored: string): string {
+  if (!accounts?.length) return stored;
+  const ok = accountValues(accounts, provider);
+  if (ok.some((a) => a.value === stored)) return stored;
+  return ok[0]?.value ?? stored;
 }
 
 /** Under the design's own `warn at 20%` (`machine.ts WARN_AT`), or refused

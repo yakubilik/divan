@@ -92,9 +92,9 @@ function Body() {
   // this app sends no per-model list, so fall back to the provider's rather
   // than letting the control vanish against an older computer.
   const efforts: string[] = (cat?.models?.find((m: any) => m.id === model) as any)?.efforts ?? cat?.efforts ?? [];
-  // Every sign-in of this tool is listed, but only one that is actually signed
-  // in can run a turn — and the computer's own login is always offered.
-  const accountsFor = accounts.filter((a) => a.provider === provider && (a.logged_in || a.is_default));
+  // Only a sign-in that is actually signed in can run a turn, so only those are
+  // listed — the computer's own login included, when it is signed in.
+  const accountsFor = accounts.filter((a) => a.provider === provider && a.logged_in);
 
   function onAccount(accountId: string | null) {
     if (editingDefaults) {

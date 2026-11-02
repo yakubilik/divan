@@ -65,7 +65,7 @@ export function LimitsRing({ chatId, accountId, provider, label, sub, dot, onOpe
   // The chip already names the account being spent, so this is where a reader
   // looks to change it. Only sign-ins that can actually run a turn are offered.
   const others = useMemo(
-    () => (chatId ? accounts.filter((a) => a.provider === provider && (a.logged_in || a.is_default)) : []),
+    () => (chatId ? accounts.filter((a) => a.provider === provider && a.logged_in) : []),
     [accounts, provider, chatId]);
 
   /** Moving a chat to another account starts a new thread there: a resume id

@@ -13,6 +13,7 @@ import { missed, opening, took, type Open, type Say } from './card';
 import { filed, NO_DRAFT, type ComposeDraft, type Filing } from './compose';
 import { freshCwd } from './fresh-chat';
 import { delivered, Outbox, type OutboxStorage, type OutMsg } from './outbox';
+import { launchHostId } from './launch';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -56,6 +57,9 @@ export interface Prefs {
   chatPerson?: Record<string, string>;
   /** The order the chat list's sections were arranged into, per computer id. */
   chatSections?: Record<string, string[]>;
+  /** The computer a cold start connects to and opens its empty chat on
+   *  (`src/launch.ts`). Absent: the first one paired. */
+  launchHost?: string;
 }
 export interface DeviceInfo { id: string; name: string; push_approval: boolean; push_done: boolean; has_push_token: boolean }
 /** `path` is the file the message names — what a link opens, and what the text
@@ -756,15 +760,18 @@ export const useStore = create<State>((set, get) => {
           await SecureStore.setItemAsync(HOSTS_KEY, JSON.stringify(hosts));
         }
       } catch {}
-      let active = (await SecureStore.getItemAsync(ACTIVE_KEY).catch(() => null)) || null;
-      if (!active || !hosts.some((h) => h.id === active)) active = hosts[0]?.id ?? null;
+      const prefs = await loadJSON(PREFS_KEY, PREFS);
+      const last = (await SecureStore.getItemAsync(ACTIVE_KEY).catch(() => null)) || null;
+      // A cold start always opens on the launch computer, not on whichever one
+      // was in use when the app was last killed (src/launch.ts).
+      const active = launchHostId(hosts, prefs.launchHost, last);
+      if (active && active !== last) await SecureStore.setItemAsync(ACTIVE_KEY, active).catch(() => {});
       // Builds before per-host defaults kept one flat blob: it was whatever the
       // last computer used, so it becomes that computer's entry and no other's.
       const stored = await loadJSON<any>(DEFAULTS_KEY, {});
       const byHost: DefaultsByHost = (typeof stored?.provider === 'string'
         ? (active ? { [active]: stored as Defaults } : {})
         : (stored as DefaultsByHost));
-      const prefs = await loadJSON(PREFS_KEY, PREFS);
       const host = hosts.find((h) => h.id === active) ?? null;
       set({ hosts, activeHostId: active, host, defaultsByHost: byHost,
             defaults: defaultsFor(byHost, active), prefs, locked: prefs.faceIdLaunch, ready: true });

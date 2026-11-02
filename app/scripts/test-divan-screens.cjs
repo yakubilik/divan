@@ -255,7 +255,8 @@ const wentTo = (p) => R.nav.pushed().find((x) => x && x.pathname === p);
     for (const r of routes) if (!found.has(r)) lost.push(`${name} → ${r}`);
   }
 
-  draw('dark', 'accounts', 'a computer answering');
+  // Signed-out sign-ins are folded away (2 Nov 2026); `?all=1` opens them.
+  draw('dark', 'accounts', 'a computer answering', { at: { all: '1' } });
   const signIn = press('signIn') && wentTo('/login-method');
 
   draw('dark', 'agent-store', 'a computer answering');

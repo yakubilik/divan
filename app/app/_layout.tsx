@@ -16,6 +16,7 @@ import { CONNECT_GRACE_MS, deliver, shares } from '../src/share';
 import { alert } from '../src/components/overlay';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { prepareForCalls, startIncomingCalls } from '../src/incoming-call';
+import { skipLaunch } from '../src/launch';
 
 /** Presented over the page by the app's own sheet (see components/sheet). */
 const SHEET = { presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } } as const;
@@ -96,6 +97,7 @@ export default function RootLayout() {
   }, [router, T]);
   useEffect(() => { void deliverShare(); }, [ready, locked, conn, hostInfo, paired, deliverShare]);
   useEffect(() => shares.subscribe(() => {
+    skipLaunch();       // the shared link opens its own chat
     void deliverShare();
     // Asked again once the grace is over, so a link still waiting is said out loud.
     setTimeout(() => void deliverShare(), CONNECT_GRACE_MS + 100);
@@ -124,12 +126,22 @@ export default function RootLayout() {
     });
     const queue = (r: Notifications.NotificationResponse | null) => {
       if (!taps.current.offer(r?.notification.request.content.data ?? {})) return;
+      skipLaunch();     // the tapped chat opens, not the launch's empty one
       void deliverTap();
     };
     // A tap that launched the app is delivered before any listener can be
     // attached, so it has to be asked for as well; the listener catches every
     // tap after that, and the pair of them cannot double-open a chat.
-    void Notifications.getLastNotificationResponseAsync().then(queue).catch(() => {});
+    // The response is kept by the system past the launch it came with; one
+    // from minutes ago is a tap this app already acted on in an earlier run,
+    // and acting on it again would swap the launch's empty chat for an old one.
+    void Notifications.getLastNotificationResponseAsync()
+      .then((r) => {
+        // Seconds on iOS, milliseconds on Android.
+        const d = r?.notification.date || 0;
+        if (r && Date.now() - (d < 1e12 ? d * 1000 : d) < 120_000) queue(r);
+      })
+      .catch(() => {});
     const tap = Notifications.addNotificationResponseReceivedListener(queue);
     return () => { sub.remove(); tap.remove(); };
   }, [init, setPushToken, lock, router, deliverTap]);

@@ -544,7 +544,7 @@ export function Conversation({ id }: { id: string }) {
       case 'done': return <TurnFooter cost={item.data.cost_usd} duration={item.data.duration_ms} usage={item.data.usage} stopReason={item.data.stop_reason} />;
       case 'error': return <TurnFooter error={item.data.message} />;
       case 'switch': return <SwitchNote to={item.data.to} until={item.data.until} label={accountLabel(item.data.to)}
-                              from={accountLabel(item.data.from)} window={fullest(item.data.from)} />;
+                              from={accountLabel(item.data.from)} window={fullest(item.data.from)} reason={item.data.reason} />;
       default: return null;
     }
   }, [id, respond, T, accounts, limits, turnStart, progress]); // eslint-disable-line react-hooks/exhaustive-deps

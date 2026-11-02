@@ -632,7 +632,7 @@ export function TurnFooter({ cost, duration, error, usage, stopReason }: { cost?
  *  summary of the chat rather than the chat. When there was nowhere to move
  *  to, the same line says that instead — the turn is about to run into a real
  *  limit and the reader should not have to guess why. */
-export function SwitchNote({ to, until, label, from, window: win }: { to?: string | null; until?: number | null; label?: string; from?: string; window?: string }) {
+export function SwitchNote({ to, until, label, from, window: win, reason }: { to?: string | null; until?: number | null; label?: string; from?: string; window?: string; reason?: string }) {
   const T = useT();
   const c = useColors();
   const back = until ? new Date(until * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : null;
@@ -643,7 +643,7 @@ export function SwitchNote({ to, until, label, from, window: win }: { to?: strin
         {to ? (
           <>
             {T('poolMovedTo')}<Text style={{ color: c.ink, fontWeight: '600' }}>{label || to}</Text>
-            {from ? `: ${T('poolReached', { from, window: win || T('limPlan') })}` : ''}
+            {from ? `: ${reason === 'auth' ? T('poolSignedOut', { from }) : T('poolReached', { from, window: win || T('limPlan') })}` : ''}
           </>
         ) : back ? T('poolExhaustedUntil', { time: back }) : T('poolExhausted')}
       </Text>

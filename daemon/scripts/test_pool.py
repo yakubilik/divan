@@ -890,6 +890,111 @@ async def scenario_killed(db) -> None:
         FakeProvider.run = real
 
 
+async def scenario_auth(db) -> None:
+    print("\na sign-in that cannot authenticate")
+    import divan.server as server_mod
+    import divan.session as session_mod
+    real_refresh = server_mod.acct.refresh
+    real_delay = session_mod.AUTH_RETRY_DELAY_S
+    session_mod.AUTH_RETRY_DELAY_S = 0
+    # What `claude auth status` says: "logged in" whenever a token is on disk —
+    # which a dead refresh token still is. Only the default is truly signed out.
+    cli_says = {"default-claude": False, "acct-2": True, "acct-3": True}
+
+    def fake_refresh(a):
+        a.logged_in = cli_says.get(a.id, False) and not acct.auth_broken(a)
+        return a
+
+    server_mod.acct.refresh = fake_refresh
+    real = FakeProvider.run
+    refuse: dict[str, int] = {}
+
+    async def run(self, prompt, attachments=None):
+        if refuse.get(self.account_id, 0):
+            refuse[self.account_id] -= 1
+            self.prompts.append(prompt)
+            return TurnResult("sess-x", None, None, None, None, True,
+                              "Failed to authenticate: OAuth session expired and could not be refreshed",
+                              auth_failed=True)
+        return await real(self, prompt, attachments)
+
+    FakeProvider.run = run
+    try:
+        accounts = {
+            "default-claude": Account(id="default-claude", provider="claude", label="this computer"),
+            "acct-2": Account(id="acct-2", provider="claude", label="second", home="/tmp/divan-test-a2",
+                              created_at=2),
+            "acct-3": Account(id="acct-3", provider="claude", label="third", home="/tmp/divan-test-a3",
+                              created_at=3),
+        }
+        host = stub_host(db, accounts, {}, order={"claude": ["acct-2", "acct-3", "default-claude"]})
+        host.cfg = Config()
+        host._live_checked = {}
+        host.LIVE_TRUST_S = Server.LIVE_TRUST_S
+        for name in ("_signed_in", "_first_signed_in", "_live_account"):
+            setattr(host, name, getattr(Server, name).__get__(host))
+
+        # 1 · a lost race: the next process reads the renewed token and works
+        chat = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
+                              perm_mode="ask", cwd="/tmp", account_id="acct-2")
+        s, built, events, _ = make_session(db, chat)
+        s.live_account = host._live_account
+        refuse["acct-2"] = 1
+        await s.send("hello", None)
+        await s.running
+        check([p.prompts for p in built] == [["hello"], ["hello"]],
+              "a refused turn is asked again on a fresh process", str([p.prompts for p in built]))
+        check(not [e for e, _ in events if e in ("turn.error", "account.switched")]
+              and [e for e, _ in events if e == "turn.done"],
+              "…on the same sign-in, and the chat never sees an error")
+        check(accounts["acct-2"].auth_failed_at is None, "…and the sign-in is not held against it")
+
+        # 2 · a dead sign-in: retried, then held as signed out, then moved
+        chat2 = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
+                               perm_mode="ask", cwd="/tmp", account_id="acct-2")
+        s2, built2, events2, _ = make_session(db, chat2)
+        s2.live_account = host._live_account
+        refuse["acct-2"] = 99
+        await s2.send("hi", None)
+        await s2.running
+        refuse["acct-2"] = 0
+        sw = [d for e, d in events2 if e == "account.switched"]
+        check(len(built2) == session_mod.AUTH_RETRY_MAX + 2 and built2[-1].account_id == "acct-3",
+              "after the retries the turn runs on the next sign-in that works",
+              str([(p.account_id, p.prompts) for p in built2]))
+        check(sw == [{"from": "acct-2", "to": "acct-3", "reason": "auth", "provider": "claude"}],
+              "…said on the timeline as a sign-in failure, not a limit", str(sw))
+        check(built2[-1].prompts and built2[-1].prompts[-1].endswith("hi")
+              and db.get_chat(chat2["id"])["account_id"] == "acct-3"
+              and not [e for e, _ in events2 if e == "turn.error"],
+              "…with the message, and no error", str(built2[-1].prompts))
+        fake_refresh(accounts["acct-2"])
+        check(accounts["acct-2"].auth_failed_at is not None and not accounts["acct-2"].logged_in,
+              "the dead sign-in reads as signed out though the CLI says logged in")
+
+        # 3 · a chat opened on it, or on the unsigned computer's own, opens elsewhere
+        check(await host._live_account({"provider": "claude", "account_id": "acct-2"}) == "acct-3"
+              and await host._live_account({"provider": "claude", "account_id": None}) == "acct-3"
+              and await host._live_account({"provider": "claude", "account_id": "acct-3"}) is None,
+              "a new chat never opens on a sign-in that cannot authenticate")
+
+        # 4 · signing in again clears it
+        Path("/tmp/divan-test-a2").mkdir(exist_ok=True)
+        cred = Path("/tmp/divan-test-a2/.credentials.json")
+        cred.write_text("{}")
+        import os
+        later = accounts["acct-2"].auth_failed_at + 5
+        os.utime(cred, (later, later))
+        fake_refresh(accounts["acct-2"])
+        check(accounts["acct-2"].logged_in and accounts["acct-2"].auth_failed_at is None,
+              "a sign-in written after the failure counts again")
+        cred.unlink()
+    finally:
+        FakeProvider.run = real
+        server_mod.acct.refresh = real_refresh
+        session_mod.AUTH_RETRY_DELAY_S = real_delay
+
+
 async def main() -> None:
     scenario_reading()
     scenario_never_spend()
@@ -906,6 +1011,7 @@ async def main() -> None:
         await scenario_nowhere_to_go(db)
         await scenario_wait_it_out(db)
         await scenario_killed(db)
+        await scenario_auth(db)
     print()
     if failures:
         print(f"{len(failures)} failed: " + ", ".join(failures))

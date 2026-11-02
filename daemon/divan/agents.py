@@ -90,8 +90,16 @@ def body(path: str) -> str:
 
 
 def find(agent_id: str, account_home: str | None = None, cwd: str | None = None) -> dict | None:
-    for a in listing(account_home, cwd):
+    found = listing(account_home, cwd)
+    for a in found:
         if a["id"] == agent_id or a["name"] == agent_id:
+            return a
+    # An id names the scope it was found in ("account:hermes"). A chat moved to
+    # another sign-in, which keeps the same agent in a different scope, still
+    # means that agent: matched by the file it was read from.
+    stem = agent_id.split(":", 1)[-1]
+    for a in found:
+        if a["id"].split(":", 1)[-1] == stem:
             return a
     return None
 

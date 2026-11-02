@@ -10,7 +10,8 @@ import type { UpdateStatus } from '../src/protocol';
 import { Group, ListRow, RowButton, StatusDot, Switch } from '../src/components/divan';
 import { MachineTabs, PageHead, UnderTab } from '../src/components/machine';
 import { Shell } from '../src/components/shell';
-import { composerProvider, withDefault } from '../src/compose';
+import { composerProvider, withDefault, workingAccount } from '../src/compose';
+import { launchHostId } from '../src/launch';
 import { permissionFor } from '../src/permissions';
 import { Icon } from '../src/components/icon';
 import { Text } from '../src/components/text';
@@ -81,10 +82,12 @@ export default function Settings() {
   const chipModels = catalog?.[chipTool]?.models ?? [];
   const chipPd = defaults.byProvider?.[chipTool];
   const chipModel = [chipPd?.model, defaults.model].find((m) => m && chipModels.some((x) => x.id === m)) ?? chipModels[0]?.id ?? null;
-  const chipAccounts = accounts.filter((a) => a.provider === chipTool && (a.logged_in || a.is_default))
+  const chipAccounts = accounts.filter((a) => a.provider === chipTool && a.logged_in)
     .map((a) => ({ value: a.is_default ? '' : a.id, label: a.is_default ? T('stOwnAccount') : a.label }));
-  const chipAccount = chipPd?.account_id ?? '';
+  const chipAccount = workingAccount(accounts, chipTool, chipPd?.account_id ?? '');
   const accountRef = React.useRef<View>(null);
+  const launchRef = React.useRef<View>(null);
+  const launchHost = launchHostId(hosts, prefs.launchHost, activeHostId);
   const modelRef = React.useRef<View>(null);
   // Where new chats open: the computer's answer, so the web panel's New chat
   // opens there too. The first root, then every folder it lists.
@@ -129,8 +132,16 @@ export default function Settings() {
         <PageHead title={T('settings')} style={{ marginTop: 6, marginBottom: 2 }} />
 
         <Group label={T('stNewChats')}>
+          {hosts.length > 1 && (
+            <View ref={launchRef} collapsable={false}>
+              <ListRow first boxed title={T('stLaunchHost')} note={T('stLaunchHostNote')} monoMeta={false}
+                meta={hosts.find((h) => h.id === launchHost)?.name ?? '–'}
+                onPress={() => void pickFrom(launchRef, hosts.map((h) => ({ value: h.id, label: h.name })), launchHost,
+                  (v) => void setPrefs({ launchHost: v }))} />
+            </View>
+          )}
           <View ref={accountRef} collapsable={false}>
-            <ListRow first boxed title={T('stDefaultAccount')} note={T('stDefaultsChips')} monoMeta={false}
+            <ListRow first={hosts.length <= 1} boxed title={T('stDefaultAccount')} note={T('stDefaultsChips')} monoMeta={false}
               meta={chipAccounts.find((a) => a.value === chipAccount)?.label ?? (chipAccount || T('stOwnAccount'))}
               onPress={() => void pickFrom(accountRef, chipAccounts, chipAccount,
                 (v) => void setDefaults(withDefault(defaults, chipTool, { account_id: v })))} />

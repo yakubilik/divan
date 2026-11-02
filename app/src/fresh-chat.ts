@@ -8,7 +8,7 @@
 // the computer's default folder, and the agent the last chat was opened with (Hermes
 // where none ever was, nothing after an explicit "No agent"). No React and no
 // store, so `scripts/test-fresh-chat.cjs` holds it to that without a phone.
-import { accountValues } from './compose';
+import { workingAccount } from './compose';
 import { permissionFor } from './permissions';
 import type { Agent, Chat, CliAccount, Defaults, HostInfo, Provider, ProviderCatalog } from './protocol';
 
@@ -35,12 +35,10 @@ export function freshCwd(host: Pick<HostInfo, 'default_cwd' | 'roots'> | null | 
 }
 
 /** The sign-in a fresh chat opens on: the one remembered for this tool, unless
- *  the computer's list is known and no longer has it signed in — then the
- *  computer's own, as the sheet resolves it. `''` is the computer's own. */
+ *  the computer's list is known and no longer has it signed in — then the first
+ *  one that is. Never one that is signed out. `''` is the computer's own. */
 export function freshAccount(d: Defaults, accounts: CliAccount[] | null | undefined): string {
-  const stored = d.byProvider?.[d.provider]?.account_id ?? '';
-  if (!stored || !accounts?.length) return stored;
-  return accountValues(accounts, d.provider).some((a) => a.value === stored) ? stored : '';
+  return workingAccount(accounts, d.provider, d.byProvider?.[d.provider]?.account_id ?? '');
 }
 
 /** The sheet's agent rule: the last one chosen, else Hermes; an explicit

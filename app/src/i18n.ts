@@ -271,6 +271,7 @@ const en = {
   limMeasuredNow: 'measured just now',
   limPlan: 'plan',
   poolReached: '{from} reached its {window} limit',
+  poolSignedOut: '{from} could not sign in',
   limResetsAt: 'Resets {when}',
   limTitle: 'Usage limits',
   loginBrowserTitle: 'Finish in the browser',
@@ -570,6 +571,7 @@ const en = {
   stNewChats: 'New chats', stDefaultAccount: 'Default account', stDefaultModel: 'Default model',
   stDefaultsChips: 'what the Composer opens with until its chip is changed for one chat',
   stDefaultFolder: 'Default folder', stDefaultFolderNote: 'where new chats open, here and on the web panel',
+  stLaunchHost: 'Computer on launch', stLaunchHostNote: 'an empty Hermes chat opens here when the app starts',
   stFirstRoot: 'First root',
   stOwnAccount: "This computer's account", stNoModel: 'none offered yet',
   // HANDOVER §4.8: one conversation, filed by Hermes.
@@ -696,6 +698,7 @@ const en = {
   aiUnknown: 'That agent is not in the store',
   aiUnknownBody: 'Nothing this computer can reach lists it, so there is nothing here to install. It may have been taken out of the source it came from.',
   acSignedIn: '{n}/{of} signed in', acSignedInOne: 'signed in', acLoading: 'asking the computer…',
+  acShowSignedOut: 'Signed out ({n})', acHideSignedOut: 'Hide signed out',
   sgComputers: 'computers', sgSoftware: 'software', sgAccounts: 'accounts and sign-ins',
   sgDefaults: 'what a new chat starts as', sgSecurity: 'security', sgNotifications: 'reaching you',
   sgDev: 'development', sgHost: 'the computer itself', sgChats: 'chats',

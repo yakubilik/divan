@@ -98,13 +98,14 @@ function Body() {
   const accountOpts = useMemo(
     () => accountOptions(accounts, provider, T('useDefaultAccount'), T('notSignedIn')),
     [accounts, provider, T]);
-  // A remembered sign-in that is gone, or belongs to the other tool, is the
-  // computer's own — the same resolution the panel makes.
+  // A remembered sign-in that is gone, signed out, or belongs to the other tool
+  // gives way to the remembered default if that one works, else to the first
+  // sign-in that does — never to one that would fail its first message.
   useEffect(() => {
     if (!accountOpts.length) return;
+    const remembered = defaults.byProvider?.[provider]?.account_id ?? '';
     setAccount((a) => (accountOpts.some((o) => o.id === a) ? a
-      : (defaults.byProvider?.[provider]?.account_id ?? '') && accountOpts.some((o) => o.id === defaults.byProvider?.[provider]?.account_id)
-        ? (defaults.byProvider?.[provider]?.account_id as string) : ''));
+      : accountOpts.some((o) => o.id === remembered) ? remembered : accountOpts[0].id));
   }, [accountOpts, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Nothing picked here and no heading's folder: the computer's default, the

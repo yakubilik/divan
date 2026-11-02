@@ -29,7 +29,7 @@ import {
   KIND_TONE, actions, items as waitingItems, type Doing, type Item as WaitItem,
 } from '../src/waiting';
 import {
-  MODES, MODE_COLUMN, NO_DRAFT, accountValues, cardOf, draft as draftOf, filing, greeting, limitsKey,
+  MODES, MODE_COLUMN, NO_DRAFT, accountValues, workingAccount, cardOf, draft as draftOf, filing, greeting, limitsKey,
   lowQuota, mention, modelOptions, modelValue, readModel, short, summary, writer, type Mode,
 } from '../src/compose';
 import { WARN_AT } from '../src/machine';
@@ -349,7 +349,7 @@ function DashComposer({ view, lock = null }: {
   const model = picks.model ?? (baseModel ? modelValue(provider, baseModel) : undefined);
   const signIns = accountValues(accounts, provider);
   const stored = pd?.account_id ?? '';
-  const account = picks.account ?? (signIns.some((a) => a.value === stored) || !accountsLoaded ? stored : '');
+  const account = picks.account ?? (!accountsLoaded ? stored : workingAccount(accounts, provider, stored));
   const low = lowQuota(limits[limitsKey(provider, account)], WARN_AT) === true;
   const scoped = lock ?? picks.project ?? null;
   const scope = scoped ? view.projects.find((p) => p.key === scoped) ?? null : null;

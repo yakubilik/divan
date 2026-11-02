@@ -30,7 +30,7 @@ from ..config import UPLOAD_DIR
 from ..security import MONEY, asked, destructive_reason, redact
 from .. import accounts, legacy
 from . import claude_models
-from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult
+from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult, is_auth_failure
 
 log = logging.getLogger("rac.claude")
 
@@ -601,6 +601,7 @@ class ClaudeProvider(Provider):
             }, False)
 
         result: ResultMessage | None = None
+        auth_failed = False
         try:
             async for msg in self._iter_inbox(idle_timeout):
                 # A background agent's messages ride this same stream, tagged
@@ -680,6 +681,13 @@ class ClaudeProvider(Provider):
                     continue
 
                 if isinstance(msg, AssistantMessage):
+                    if not parent and getattr(msg, "error", None) == "authentication_failed":
+                        # The CLI's own "Failed to authenticate" written as a
+                        # reply. Kept off the timeline: the session tries the
+                        # turn again on a fresh process or another sign-in, and
+                        # only says so if none of that works.
+                        auth_failed = True
+                        continue
                     if parent:
                         for block in msg.content or []:
                             if isinstance(block, TextBlock) and block.text.strip():
@@ -761,6 +769,7 @@ class ClaudeProvider(Provider):
                               result.num_turns, False, None, "interrupted")
         if result.is_error:
             err = result.result or (result.errors[0] if result.errors else "unknown error")
+            auth_failed = auth_failed or is_auth_failure(err)
         return TurnResult(
             session_id=self._session_id,
             cost_usd=result.total_cost_usd,
@@ -771,6 +780,7 @@ class ClaudeProvider(Provider):
             is_error=bool(result.is_error),
             error=err,
             stop_reason=result.stop_reason,
+            auth_failed=bool(result.is_error) and auth_failed,
         )
 
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
 import { useTokens } from '../src/theme';
 import { Group, ListRow, RowButton } from '../src/components/divan';
@@ -33,6 +33,13 @@ export default function Accounts() {
   const [installing, setInstalling] = useState<Provider | null>(null);
   const [creating, setCreating] = useState<Provider | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  // Signed-out sign-ins are folded away: nothing can run on them, and a list
+  // of ten dead ones hid the two that work (Yakup, 2 Nov 2026). One row opens
+  // them, for signing one back in or removing it.
+  // `?all=1` opens them, for a link whose point is signing one back in.
+  const { all } = useLocalSearchParams<{ all?: string }>();
+  const [showOut, setShowOut] = useState<Partial<Record<Provider, boolean>>>(
+    () => (all === '1' ? { claude: true, codex: true } : {}));
   const accountsLoaded = useStore((s) => s.accountsLoaded);
   const loginPrompt = useStore((s) => s.loginPrompt);
   const busyLogin = useStore((s) => s.loginBusy);
@@ -147,7 +154,9 @@ export default function Accounts() {
         {PROVIDERS.map((p) => {
           const tool = tools.find((x) => x.provider === p);
           const missing = tool ? !tool.version : false;
-          const list = accounts.filter((a) => a.provider === p);
+          const all = accounts.filter((a) => a.provider === p);
+          const out = all.filter((a) => !a.logged_in);
+          const list = showOut[p] ? all : all.filter((a) => a.logged_in);
           const chosen = defaults.byProvider?.[p]?.account_id ?? null;
           return (
             <Group key={p} label={NAMES[p]}>
@@ -170,12 +179,17 @@ export default function Accounts() {
                   {list.map((a, i) => (
                     <AccountRow key={a.id} a={a} first={i === 0}
                       isDefault={chosen === a.id || (!chosen && a.is_default)}
-                      onPress={() => void setDefaults({ byProvider: { ...(defaults.byProvider ?? {}),
-                        [p]: { ...(defaults.byProvider?.[p] ?? { model: '', effort: null, perm_mode: '' }), account_id: a.is_default ? null : a.id } } })}
+                      onPress={a.logged_in ? () => void setDefaults({ byProvider: { ...(defaults.byProvider ?? {}),
+                        [p]: { ...(defaults.byProvider?.[p] ?? { model: '', effort: null, perm_mode: '' }), account_id: a.is_default ? null : a.id } } }) : () => signIn(a, p)}
                       onSignIn={() => signIn(a, p)}
                       onMenu={(anchor) => { setMenuFor(a.id); openMenu({ anchor, align: 'right', width: 220, items: items(a), onClose: () => setMenuFor(null) }); }} />
                   ))}
-                  <ListRow first={list.length === 0} boxed chevron={false} icon="add"
+                  {out.length > 0 && (
+                    <ListRow first={list.length === 0} boxed chevron={false}
+                      title={showOut[p] ? T('acHideSignedOut') : T('acShowSignedOut', { n: out.length })}
+                      onPress={() => setShowOut((x) => ({ ...x, [p]: !x[p] }))} />
+                  )}
+                  <ListRow first={list.length === 0 && out.length === 0} boxed chevron={false} icon="add"
                     title={creating === p ? T('creatingAccount') : T('addAccount', { p: NAMES[p] })}
                     onPress={creating ? undefined : () => add(p)} />
                 </>

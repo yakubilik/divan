@@ -65,6 +65,14 @@ REVIVE_PROMPT = ("[Divan] The process running this session was stopped from outs
                  "with what you were doing from where it stopped; do not start over, and do not "
                  "mention this note unless it changes something for the person.")
 
+# A turn refused with "Failed to authenticate" is tried again on a fresh CLI
+# process this many times before the chat is moved to another sign-in. Nearly
+# every such refusal is two processes on one sign-in racing to renew its
+# single-use refresh token: the loser fails, and a process started after the
+# winner reads the renewed token and works.
+AUTH_RETRY_MAX = 2
+AUTH_RETRY_DELAY_S = 1.5
+
 # Rebuilding a dropped CLI session from the chat's own event log.
 # A chat outlives the CLI session behind it: switching account or tool clears the
 # resume id, and the next turn opens a session that has never seen this chat.
@@ -128,6 +136,10 @@ class ChatSession:
     # before: it costs a subprocess, and a turn that is over its plan must not
     # keep generating through it.
     pool_next = None
+    # `(chat, failed) -> account id | None`: the sign-in a chat should run on
+    # instead of its own, when its own cannot authenticate. `failed` says a
+    # turn was just refused there; without it this only checks.
+    live_account = None
 
     def __init__(self, chat: dict, db: DB, cfg: Config, broadcast: BroadcastFn, notify: NotifyFn):
         self.chat_id = chat["id"]
@@ -420,6 +432,14 @@ class ChatSession:
         made too late to be free — it only happens when a window fills while
         the model is already talking.
         """
+        if self.live_account:
+            try:
+                live = await self.live_account(chat, False)
+            except Exception:
+                log.exception("could not check the chat's sign-in")
+                live = None
+            if live and live != chat.get("account_id"):
+                chat = await self._rebind(chat, live, "auth")
         if not self.pool_pick:
             return chat
         try:
@@ -889,6 +909,7 @@ class ChatSession:
                 await self.emit("turn.error", {"message": str(exc)}, True)
                 await self._finish(last_preview=f"Error: {exc}"[:200])
                 return
+        res, owner = await self._past_auth_failure(res, owner, text, prompt, attachments)
         self.last_active = time.monotonic()
         chat = self.db.get_chat(self.chat_id) or {}
         if self._handover is not None:
@@ -925,6 +946,59 @@ class ChatSession:
         if not res.is_error:
             self._rename_if_due()
             self._recap_now()
+
+    async def _past_auth_failure(self, res, owner, text, prompt, attachments):
+        """Get a turn the tool refused to authenticate through, if it can be.
+
+        First on a fresh process on the same sign-in, AUTH_RETRY_MAX times:
+        nearly always the refusal was a lost race to renew the refresh token,
+        and a new process reads the token the winner wrote. The session id the
+        refused attempt made is not kept, so the retry resumes from where the
+        chat was before it. If the sign-in still refuses, it is held as signed
+        out (`accounts.auth_broken`) and the turn moves to the next sign-in
+        that works, with the transcript, the way a plan limit moves it. Returns
+        the last result and the provider's owner, which a move changes.
+        """
+        tries = 0
+        moved: set[str] = set()
+        while res.is_error and getattr(res, "auth_failed", False) and self._handover is None:
+            chat = self.db.get_chat(self.chat_id)
+            if chat is None:
+                break
+            if tries < AUTH_RETRY_MAX:
+                tries += 1
+                log.warning("chat %s: account=%s failed to authenticate; trying again on a new process (%d/%d)",
+                            self.chat_id, chat.get("account_id"), tries, AUTH_RETRY_MAX)
+                await asyncio.sleep(AUTH_RETRY_DELAY_S * tries)
+                again = prompt if prompt is not None else REVIVE_PROMPT
+            else:
+                nxt = None
+                if self.live_account:
+                    try:
+                        nxt = await self.live_account(chat, True)
+                    except Exception:
+                        log.exception("could not find another sign-in")
+                if not nxt or nxt == chat.get("account_id") or nxt in moved:
+                    break
+                moved.add(nxt)
+                tries = AUTH_RETRY_MAX     # a new sign-in is not retried on its own
+                log.warning("chat %s: account=%s cannot authenticate; moving to account=%s",
+                            self.chat_id, chat.get("account_id"), nxt)
+                chat = await self._rebind(chat, nxt, "auth")
+                recap = self._build_recap(text or "", handover=text is None)
+                body = text if text is not None else REVIVE_PROMPT
+                again = f"{recap}{body}" if recap else body
+            await self._rebuild()
+            self.provider = self._build_provider(chat)
+            owner = self._provider_owner
+            self._recap = None
+            try:
+                res = await self.provider.run(again, attachments)
+            except Exception as exc:
+                log.exception("turn crashed while retrying after an authentication failure")
+                from .providers.base import TurnResult
+                res = TurnResult(None, None, None, None, None, True, str(exc))
+        return res, owner
 
     async def _finish(self, **fields) -> None:
         """End of one turn. Only a turn with nothing queued behind it puts the
@@ -990,13 +1064,14 @@ def approval_gone(outcome: dict | None) -> Err:
 class SessionManager:
     def __init__(self, db: DB, cfg: Config, broadcast: BroadcastFn, notify: NotifyFn,
                  resolve_account=None, agent_prompt=None, pool_pick=None, pool_next=None,
-                 naming_env=None):
+                 naming_env=None, live_account=None):
         self.db, self.cfg, self.broadcast, self.notify = db, cfg, broadcast, notify
         self.resolve_account = resolve_account
         self.naming_env = naming_env
         self.agent_prompt = agent_prompt
         self.pool_pick = pool_pick
         self.pool_next = pool_next
+        self.live_account = live_account
         self.sessions: dict[str, ChatSession] = {}
 
     def get(self, chat_id: str) -> ChatSession:
@@ -1011,6 +1086,7 @@ class SessionManager:
             s.agent_prompt = self.agent_prompt
             s.pool_pick = self.pool_pick
             s.pool_next = self.pool_next
+            s.live_account = self.live_account
             self.sessions[chat_id] = s
         return s
 

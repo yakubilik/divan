@@ -5,13 +5,13 @@ import { useColors } from '../theme';
 import { Card, Icon, ProviderBadge, Radio, Skeleton, Text } from './ui';
 import type { CliAccount, Group, Project, Provider } from '../protocol';
 
-/** The accounts a tool can actually run under: the ones signed in, plus the
- *  computer's own login, which is always on offer and is spelled with the
+/** The accounts a tool can actually run under: the ones signed in, and only
+ *  those — the computer's own login too, when it is signed in, spelled with the
  *  app's own words rather than the computer's (`is_default`). The empty id is
  *  that one — it is "no account of ours", not an account named "". */
 export function accountOptions(accounts: CliAccount[], provider: Provider, defaultLabel: string, notSignedIn: string) {
   return accounts
-    .filter((a) => a.provider === provider && (a.logged_in || a.is_default))
+    .filter((a) => a.provider === provider && a.logged_in)
     .map((a) => ({ id: a.is_default ? '' : a.id,
                    label: a.is_default ? defaultLabel : a.label,
                    hint: a.logged_in ? a.detail : notSignedIn,

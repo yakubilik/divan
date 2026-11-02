@@ -186,6 +186,37 @@ const ready = (async () => {
     R.params.reset();
     R.nav.reset();
   }
+
+    // 7 · never a signed-out sign-in (2 Nov 2026): the computer's own is not
+    //     offered unless it is signed in, a dead remembered one gives way to
+    //     the first that works, and a cold start opens on the launch computer
+    //     with Hermes whatever the last chat was opened with.
+    {
+      const C = require(path.join(root, 'src/compose.ts'));
+      const L = require(path.join(root, 'src/launch.ts'));
+      const acc = [
+        { id: 'default-claude', provider: 'claude', label: 'own', logged_in: false, is_default: true, detail: '' },
+        { id: 'a1', provider: 'claude', label: 'one', logged_in: false, is_default: false, detail: '' },
+        { id: 'a2', provider: 'claude', label: 'two', logged_in: true, is_default: false, detail: '' },
+      ];
+      const hosts = [{ id: 'air' }, { id: 'salure' }];
+      L._resetLaunch();
+      checks.push(['accounts: only signed-in sign-ins are offered, the computer\'s own included',
+        eq(C.accountValues(acc, 'claude').map((a) => a.value), ['a2'])]);
+      checks.push(['accounts: a remembered sign-in that is signed out, or the unsigned computer\'s own, gives way to the first that works',
+        C.workingAccount(acc, 'claude', 'a1') === 'a2' && C.workingAccount(acc, 'claude', '') === 'a2'
+        && C.workingAccount(acc, 'claude', 'a2') === 'a2' && C.workingAccount(null, 'claude', 'a1') === 'a1'
+        && F.freshAccount({ ...DEFAULTS, byProvider: { claude: { ...DEFAULTS.byProvider.claude, account_id: 'a1' } } }, acc) === 'a2']);
+      checks.push(['launch: the chosen launch computer, else the first paired, never the last one used',
+        L.launchHostId(hosts, 'salure', 'air') === 'salure' && L.launchHostId(hosts, null, 'salure') === 'air'
+        && L.launchHostId(hosts, 'gone', 'salure') === 'air' && L.launchHostId([], null, 'x') === 'x']);
+      checks.push(['launch: once per process, Hermes as the agent, and a tap or a share skips it',
+        L.launchHandled() === false && L.launchHandled() === true
+        && L.launchDefaults({ ...DEFAULTS, lastAgent: null }).lastAgent === 'hermes'
+        && F.freshAgent(L.launchDefaults({ ...DEFAULTS, lastAgent: 'reviewer' }), AGENTS)?.id === 'hermes'
+        && !L.launchSkipped() && (L.skipLaunch(), L.launchSkipped())]);
+      L._resetLaunch();
+    }
 })();
 
 module.exports = { checks, ready };

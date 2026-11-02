@@ -69,6 +69,20 @@ class TurnResult:
     # The CLI was killed by a signal from outside while the turn ran. Not the
     # turn's own failure: the session is intact and can be picked up again.
     killed: bool = False
+    # The tool could not authenticate: "OAuth session expired and could not
+    # be refreshed". Usually two CLI processes on one sign-in racing to renew
+    # its single-use refresh token — a fresh process reads the renewed one —
+    # and sometimes a sign-in that is really gone. The session decides which.
+    auth_failed: bool = False
+
+
+AUTH_FAILED_MARKERS = ("failed to authenticate", "oauth session expired",
+                       "oauth token has expired", "invalid authentication credentials")
+
+
+def is_auth_failure(text: str | None) -> bool:
+    t = (text or "").lower()
+    return any(m in t for m in AUTH_FAILED_MARKERS)
 
 
 class Provider(ABC):
