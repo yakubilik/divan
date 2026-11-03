@@ -2253,9 +2253,28 @@ class Server:
                               "data": {"chats": self.db.list_chats(True)}, "ts": time.time()})
         return {}
 
+    def _agent_marks(self, chats: list[dict]) -> dict[str, dict]:
+        """Glyph and colour of every agent a listed chat runs as, so a chat row
+        can wear its agent's mark instead of the tool's icon."""
+        out: dict[str, dict] = {}
+        for ch in chats:
+            aid = ch.get("agent_id")
+            if not aid or aid in out or aid == agents.CREATOR_ID:
+                continue
+            try:
+                home = self._account(ch.get("account_id"), ch.get("provider", "claude")).home
+                a = agents.find(aid, home, ch.get("cwd"))
+            except Exception:  # noqa: BLE001 - a missing agent just keeps the tool icon
+                a = None
+            if a:
+                out[aid] = {"glyph": a["glyph"], "color": a["color"], "label": a["label"]}
+        return out
+
     async def h_chat_list(self, dev: Device, d: dict) -> dict:
         self.cfg.refresh_tunnel()
-        return {"chats": self.db.list_chats(bool(d.get("include_archived"))),
+        chats = self.db.list_chats(bool(d.get("include_archived")))
+        return {"chats": chats,
+                "agent_marks": await asyncio.to_thread(self._agent_marks, chats),
                 "groups": self.db.list_groups(),
                 # Who shares this computer, and which of them is asking. A chat
                 # with no owner written on it is the first person's.

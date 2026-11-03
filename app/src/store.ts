@@ -36,6 +36,9 @@ export const OUTBOX_STORAGE: OutboxStorage = {
   },
 };
 
+/** How a chat row draws the agent it runs as. */
+export type AgentMark = { glyph: string; color: string; label: string };
+
 export interface LiveText { segment: number; text: string; final?: boolean }
 export interface TurnProgress { output_tokens: number; open_tools: number }
 export interface StoredHost extends HostConfig { id: string }
@@ -235,6 +238,8 @@ interface State {
   /** Who shares this computer, and which of them this phone is. One name or
    *  none is a computer with nobody to tell apart. */
   people: { names: string[]; me: string | null };
+  /** Glyph and colour of the agent each listed chat runs as, by agent id. */
+  agentMarks: Record<string, AgentMark>;
   showArchived: boolean;
   events: Record<string, RacEvent[]>;
   live: Record<string, LiveText | null>;
@@ -664,7 +669,7 @@ export const useStore = create<State>((set, get) => {
     pendingDeltas.clear();
     resumeFrom.clear();
     return {
-      chats: {}, groups: [], people: NOBODY, events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
+      chats: {}, groups: [], people: NOBODY, agentMarks: {}, events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
       chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, accounts: [],
       agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
       ustabasi: null, ustabasiError: null, ustabasiOld: false,
@@ -742,7 +747,7 @@ export const useStore = create<State>((set, get) => {
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
     compose: NO_DRAFT, drafts: {},
-    chats: {}, groups: [], people: NOBODY, showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
+    chats: {}, groups: [], people: NOBODY, agentMarks: {}, showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
     ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {}, openCard: null,
     chatsLoaded: false, accountsLoaded: false, projectsLoaded: false,
@@ -898,8 +903,9 @@ export const useStore = create<State>((set, get) => {
       // Swapping the list and dropping the old computer's per-chat state in one
       // set() is what makes the switch a single frame instead of a flicker.
       const people = r.people ?? NOBODY;
-      if (get().switching) settleSwitch({ chats, groups: r.groups, people, chatsLoaded: true });
-      else set({ chats, groups: r.groups, people, chatsLoaded: true });
+      const agentMarks = r.agent_marks ?? {};
+      if (get().switching) settleSwitch({ chats, groups: r.groups, people, agentMarks, chatsLoaded: true });
+      else set({ chats, groups: r.groups, people, agentMarks, chatsLoaded: true });
     },
 
     setShowArchived: (v) => { set({ showArchived: v }); },
