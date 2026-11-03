@@ -20,7 +20,6 @@ import asyncio
 import codecs
 import logging
 import os
-import pwd
 import secrets
 import signal
 import struct
@@ -31,6 +30,7 @@ from typing import Awaitable, Callable
 
 if sys.platform != "win32":
     import fcntl
+    import pwd
     import termios
 
 from .errors import Err
