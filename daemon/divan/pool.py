@@ -82,6 +82,12 @@ OVERAGE = "overage"
 # of a five-hour window says nothing about now.
 STALE_AFTER = 7 * 24 * 3600
 
+# The most a single measured step may hold an account back. A step is meant to
+# be the jump one turn can make between two reports; anything bigger is not a
+# turn but readings far apart (usage elsewhere, an idle night), and a margin
+# that size kept a 58% account and a 66% week locked for days (3 Nov 2026).
+MAX_STEP = 0.15
+
 
 def _util(v) -> float | None:
     """Utilization as a fraction. The SDK documents 0.0–1.0, but the CLI has
@@ -299,8 +305,14 @@ class Pool:
         # How coarse this account's readings are. The next jump can be as big
         # as the biggest one seen, so anything within one of the threshold is
         # already over it as far as anyone here can prove otherwise.
+        # Per window: a five-hour jump says nothing about how fast a week moves.
+        def margin_of(r: dict) -> float:
+            if not st.strict:
+                return 0.0
+            step = _util(r.get("step"))
+            return max(min(step, MAX_STEP) if step is not None else 0.0, self.settings.reserve)
         steps = [_util(r.get("step")) for r in rows]
-        measured = [x for x in steps if x is not None]
+        measured = [min(x, MAX_STEP) for x in steps if x is not None]
         st.step = max(measured) if measured else None
         if st.strict:
             st.margin = max(st.step or 0.0, self.settings.reserve)
@@ -326,7 +338,7 @@ class Pool:
             # is held further back than the weeklies by default: it refills
             # several times a day, so stopping early there costs little, while
             # 5% of a weekly window is most of a working day.
-            limit = max(0.5, self.threshold_for(window) - st.margin)
+            limit = max(0.5, self.threshold_for(window) - margin_of(r))
             full = r.get("status") == "rejected" or (util is not None and util >= limit)
 
             if window == OVERAGE:

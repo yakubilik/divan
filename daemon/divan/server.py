@@ -58,6 +58,8 @@ log = logging.getLogger("rac.server")
 # on this machine update themselves overnight, and a daemon that runs for weeks
 # would otherwise offer the models of the week it started.
 MODELS_TTL_S = 900.0
+# Two limit readings further apart than this do not measure one report-step.
+STEP_PAIR_S = 600.0
 
 # The upload is handed to the agent as a path, so there is no allowlist: a
 # .pptx, a .zip or a .docx the agent could read perfectly well is just "file".
@@ -710,8 +712,16 @@ class Server:
             old = previous.get(str(r.get("window"))) or {}
             was, now_ = old.get("utilization"), r.get("utilization")
             step = old.get("step")
-            if isinstance(was, (int, float)) and isinstance(now_, (int, float)) and now_ > was:
-                jump = float(now_) - float(was)
+            if isinstance(step, (int, float)):
+                step = min(float(step), poolmod.MAX_STEP)
+            t0, t1 = old.get("at"), r.get("at")
+            # Only two readings close together measure a step. Hours apart, the
+            # jump is everything used meanwhile, here and elsewhere, not the
+            # size of one report.
+            close = (isinstance(t0, (int, float)) and isinstance(t1, (int, float))
+                     and 0 <= t1 - t0 <= STEP_PAIR_S)
+            if close and isinstance(was, (int, float)) and isinstance(now_, (int, float)) and now_ > was:
+                jump = min(float(now_) - float(was), poolmod.MAX_STEP)
                 step = jump if not isinstance(step, (int, float)) else max(float(step), jump)
             if isinstance(step, (int, float)):
                 r["step"] = step

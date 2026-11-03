@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from divan import accounts as acct                     # noqa: E402
 from divan.accounts import Account                    # noqa: E402
 from divan.config import Config                       # noqa: E402
+from divan import pool as poolmod                      # noqa: E402
 from divan.db import DB                               # noqa: E402
 from divan.pool import Pool, Settings                 # noqa: E402
 from divan.providers.base import TurnResult           # noqa: E402
@@ -258,11 +259,22 @@ def scenario_never_spend() -> None:
           "with overage allowed there is nothing to hold plan back against")
 
     # Once a real step has been seen, that is the margin — bigger or smaller.
-    coarse = {"acct-2": [dict(window("seven_day", 0.80), step=0.22)]}
+    coarse = {"acct-2": [dict(window("seven_day", 0.88), step=0.12)]}
     st = make_pool(coarse, use_overage="never", threshold=0.99, reserve=0.10).state("acct-2", "claude")
-    check(st.blocked and st.step == 0.22 and st.margin == 0.22,
+    check(st.blocked and st.step == 0.12 and st.margin == 0.12,
           "a measured step wider than the guess widens the margin",
           f"blocked={st.blocked} step={st.step} margin={st.margin}")
+
+    # A "step" far beyond one report is readings far apart, not a turn: it is
+    # capped, and one window's step does not hold back another (3 Nov 2026:
+    # 0.37 on five_hour locked a 58% account and a 66% week).
+    huge = {"acct-2": [dict(window("five_hour", 0.58), step=0.37),
+                       dict(window("seven_day_overage_included", 0.66), step=0.01)]}
+    st = make_pool(huge, use_overage="never", threshold=0.99, reserve=0.10,
+                   thresholds={"five_hour": 0.95}).state("acct-2", "claude")
+    check(not st.blocked and abs(st.margin - poolmod.MAX_STEP) < 1e-9,
+          "an outsized step is capped and stays in its own window",
+          f"blocked={st.blocked} window={st.window} margin={st.margin}")
 
     fine = {"acct-2": [dict(window("seven_day", 0.94), step=0.02)]}
     st = make_pool(fine, use_overage="never", threshold=0.99, reserve=0.10).state("acct-2", "claude")
@@ -604,8 +616,11 @@ def scenario_learning() -> None:
 
     slot: dict = {}
 
-    def report(util):
-        kept = [{"window": "five_hour", "utilization": util}]
+    clock = [1000.0]
+
+    def report(util, after=60.0):
+        clock[0] += after
+        kept = [{"window": "five_hour", "utilization": util, "at": clock[0]}]
         Server._learn_steps(slot, kept)
         for r in kept:
             slot["five_hour"] = r
@@ -614,12 +629,18 @@ def scenario_learning() -> None:
     check(report(0.10) is None, "one reading teaches nothing")
     check(abs(report(0.14) - 0.04) < 1e-9, "two readings give a step",
           str(slot["five_hour"].get("step")))
-    check(abs(report(0.35) - 0.21) < 1e-9, "a wider jump replaces it",
+    check(abs(report(0.25) - 0.11) < 1e-9, "a wider jump replaces it",
           str(slot["five_hour"].get("step")))
-    check(abs(report(0.36) - 0.21) < 1e-9, "a narrower one does not",
+    check(abs(report(0.26) - 0.11) < 1e-9, "a narrower one does not",
           str(slot["five_hour"].get("step")))
     # A window rolling over is a drop, not a jump.
-    check(abs(report(0.01) - 0.21) < 1e-9, "a window reset is not mistaken for a step",
+    check(abs(report(0.01) - 0.11) < 1e-9, "a window reset is not mistaken for a step",
+          str(slot["five_hour"].get("step")))
+    # Hours between two readings: the jump is everything used meanwhile.
+    check(abs(report(0.60, after=3 * 3600) - 0.11) < 1e-9,
+          "readings hours apart do not measure a step", str(slot["five_hour"].get("step")))
+    # One huge jump in quick succession is still capped.
+    check(abs(report(0.95) - poolmod.MAX_STEP) < 1e-9, "a measured step is capped",
           str(slot["five_hour"].get("step")))
 
 
