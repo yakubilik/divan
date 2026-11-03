@@ -47,6 +47,13 @@ KILLED_EXIT_CODES = (143, 137, -15, -9)
 # waiting on a ten-minute command — but an unasked one is opened on a guess,
 # and a guess that turns out wrong must not wedge the chat forever.
 _CONTINUATION_IDLE_S = 180.0
+# Silence is not idleness while the phone is being asked something or a tool
+# has not answered yet: on 2 Nov 2026 a continuation waiting on a money
+# approval was ended at exactly 180 s ("no result"), the chat looked free, and a
+# daemon restart 24 s later dropped the approval. An open tool still gets a
+# ceiling, so a guess that turned out wrong cannot wedge the chat forever; a
+# pending approval has its own timeout and needs none here.
+_CONTINUATION_TOOL_CEILING_S = 1800.0
 
 # What the CLI's own catalog says, when it can be read, is the truth about which
 # model an alias points at — see claude_models. This table is what is left when
@@ -76,6 +83,14 @@ class ClaudeProvider(Provider):
         # Destructive asks answered "allow for this chat": the same reason is not
         # put to the phone again in this chat (1 Nov 2026). Money always asks.
         self._session_reasons: set[str] = set()
+        # Folders a destructive ask was allowed for this chat, per rule: the
+        # next file in the same folder is not put to the phone again (3 Nov).
+        self._session_folders: set[tuple[str, str]] = set()
+        # How many approvals are waiting on the phone right now, and how many
+        # tool calls of the turn in flight have no result yet. Both mean the
+        # turn is working, however quiet the stream is.
+        self._asking = 0
+        self._open_tools = 0
         self._session_id: str | None = cfg.session_id
         self._interrupted = False
         # One reader for the life of the client, and the queue it fills.
@@ -148,16 +163,19 @@ class ClaudeProvider(Provider):
         if not reason:
             if self.cfg.perm_mode != "ask" or "Bash" in self._session_allow:
                 return {}
-        elif reason in self._session_reasons:
+        elif reason in self._session_reasons or self._folder_allowed(reason):
             return {"hookSpecificOutput": {
                 "hookEventName": "PreToolUse", "permissionDecision": "allow",
                 "permissionDecisionReason": "Allowed from the phone for this chat.",
             }}
-        decision = await self.approval("Bash", input_data.get("tool_input") or {}, reason)
+        decision = await self._ask("Bash", input_data.get("tool_input") or {}, reason)
         if decision == "allow_session":
             self._session_allow.add("Bash")
             if reason and not reason.startswith(MONEY):
                 self._session_reasons.add(reason)
+                folder = _reason_folder(reason)
+                if folder:
+                    self._session_folders.add(folder)
         if decision in ("allow", "allow_session"):
             return {"hookSpecificOutput": {
                 "hookEventName": "PreToolUse", "permissionDecision": "allow",
@@ -167,6 +185,24 @@ class ClaudeProvider(Provider):
             "hookEventName": "PreToolUse", "permissionDecision": "deny",
             "permissionDecisionReason": EXPIRED_TO_AGENT if decision == EXPIRED else "Denied from the phone.",
         }}
+
+    async def _ask(self, tool: str, tool_input: dict, reason: str | None):
+        self._asking += 1
+        try:
+            return await self.approval(tool, tool_input, reason)
+        finally:
+            self._asking -= 1
+
+    def _folder_allowed(self, reason: str) -> bool:
+        """Was this rule allowed for this chat on a file in the same folder?"""
+        rule_path = _reason_path(reason)
+        if not rule_path:
+            return False
+        rule, path = rule_path
+        for r, folder in self._session_folders:
+            if r == rule and (path.parent == Path(folder) or Path(folder) in path.parents):
+                return True
+        return False
 
     @staticmethod
     def _is_upload(file_path: Any) -> bool:
@@ -190,7 +226,7 @@ class ClaudeProvider(Provider):
         if tool_name == "Read":
             if self._is_upload((tool_input or {}).get("file_path")):
                 return PermissionResultAllow()
-        decision = await self.approval(tool_name, tool_input or {}, None)
+        decision = await self._ask(tool_name, tool_input or {}, None)
         if decision == "allow_session":
             self._session_allow.add(tool_name)
             return PermissionResultAllow()
@@ -423,12 +459,16 @@ class ClaudeProvider(Provider):
                 "message_start", "content_block_start", "content_block_delta")
         return False
 
+    def _working(self) -> bool:
+        return self._asking > 0 or self._open_tools > 0
+
     async def _iter_inbox(self, idle_timeout: float | None = None):
         """The messages of one turn, taken from the one reader.
 
         `idle_timeout` ends the turn when the stream falls completely silent
         for that long. Only a continuation sets it; see _CONTINUATION_IDLE_S.
         """
+        silent_since = time.monotonic()
         while True:
             if idle_timeout is None:
                 msg = await self._inbox.get()
@@ -436,9 +476,16 @@ class ClaudeProvider(Provider):
                 try:
                     msg = await asyncio.wait_for(self._inbox.get(), idle_timeout)
                 except asyncio.TimeoutError:
-                    log.warning("continuation turn idle for %ss; ending it",
-                                idle_timeout)
+                    quiet = time.monotonic() - silent_since
+                    if self._asking > 0:
+                        log.info("continuation quiet %.0fs, an approval is pending; waiting", quiet)
+                        continue
+                    if self._open_tools > 0 and quiet < _CONTINUATION_TOOL_CEILING_S:
+                        log.info("continuation quiet %.0fs, a tool is open; waiting", quiet)
+                        continue
+                    log.warning("continuation turn idle for %.0fs; ending it", quiet)
                     return
+            silent_since = time.monotonic()
             if msg is _STREAM_BROKEN:
                 raise RuntimeError(f"stream closed: {self._reader_error}"
                                    if self._reader_error else "stream closed")
@@ -520,10 +567,12 @@ class ClaudeProvider(Provider):
                      idle_timeout: float | None = None) -> TurnResult:
         self._turn_active = True
         self._idle_notified = False
+        self._open_tools = 0
         try:
             return await self._drain_turn(started, idle_timeout)
         finally:
             self._turn_active = False
+            self._open_tools = 0
 
     async def _drain_turn(self, started: float,
                           idle_timeout: float | None = None) -> TurnResult:
@@ -706,6 +755,7 @@ class ClaudeProvider(Provider):
                                 await self.emit("text.delta", {"segment": segment, "text": block.text}, False)
                         elif isinstance(block, ToolUseBlock):
                             open_tools += 1
+                            self._open_tools = open_tools
                             await progress(force=True)
                             payload = {"id": block.id, "tool": block.name, "input": _trim(block.input)}
                             if text_open:
@@ -727,6 +777,7 @@ class ClaudeProvider(Provider):
                         for block in content:
                             if isinstance(block, ToolResultBlock):
                                 open_tools = max(0, open_tools - 1)
+                                self._open_tools = open_tools
                                 await progress(force=True)
                                 # The tool has already run, so its card is due even
                                 # if the stream has not closed the text yet.
@@ -851,3 +902,44 @@ def _result_text(content: Any) -> str:
         if isinstance(c, dict) and c.get("type") == "text":
             parts.append(c.get("text", ""))
     return "\n".join(parts)
+
+
+# A destructive reason that names one path ends in it; see security.py.
+_PATH_RULES = ("rm -r outside the chat's folder: ", "find … -delete outside the chat's folder: ")
+
+
+def _reason_path(reason: str | None) -> tuple[str, Path] | None:
+    if not reason:
+        return None
+    for rule in _PATH_RULES:
+        i = reason.find(rule)
+        if i >= 0:
+            raw = reason[i + len(rule):].strip()
+            try:
+                return rule, Path(raw).expanduser()
+            except Exception:
+                return None
+    return None
+
+
+def _reason_folder(reason: str | None) -> tuple[str, str] | None:
+    """The (rule, folder) an "allow for this chat" on this reason extends to.
+
+    Only a folder deep enough to be one project's own: the home folder, a
+    direct child of it (~/projects, ~/Library) or anything shallower than that
+    outside home stays per-path, or one yes would cover half the disk.
+    """
+    rp = _reason_path(reason)
+    if not rp:
+        return None
+    rule, path = rp
+    folder = path.parent
+    home = Path.home()
+    if folder == home or folder in home.parents:
+        return None
+    if home in folder.parents:
+        if len(folder.relative_to(home).parts) < 2:
+            return None
+    elif len(folder.parts) < 4:          # "/", "a", "b", "c"
+        return None
+    return rule, str(folder)

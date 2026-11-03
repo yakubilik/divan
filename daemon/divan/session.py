@@ -1120,7 +1120,9 @@ class SessionManager:
         """
         out = []
         for cid, sess in self.sessions.items():
-            busy, queued = sess.is_busy(), len(sess.queued)
+            # An approval still waiting on the phone is work too: on 2 Nov
+            # 2026 a restart dropped one whose turn had already given up.
+            busy, queued = sess.is_busy() or bool(sess.pending), len(sess.queued)
             if busy or queued:
                 out.append({"chat_id": cid, "busy": busy, "queued": queued})
         return out

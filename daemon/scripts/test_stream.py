@@ -388,6 +388,60 @@ async def scenario_background_agent_is_not_a_turn() -> None:
         p._reader.cancel()
 
 
+async def scenario_continuation_waits_on_approval() -> None:
+    """A continuation is not idle while the phone is being asked.
+
+    2 Nov 2026: a continuation sent a paid call to the phone, the stream went
+    quiet, the 180 s idle ceiling ended the turn as "no result", the chat looked
+    free and a daemon restart 24 s later dropped the approval.
+    """
+    print("\na continuation with an approval pending")
+    import divan.providers.claude as claude_mod
+    seen: list[dict] = []
+
+    async def emit(event: str, data: dict, persist: bool) -> None:
+        if persist:
+            seen.append({"event": event, **data})
+
+    answer = asyncio.Event()
+
+    async def approval(*a, **kw):  # noqa: ANN002, ANN003
+        await answer.wait()
+        return "allow"
+
+    cfg = ProviderConfig(model="opus", effort=None, perm_mode="bypass",
+                         cwd=str(Path.home()), session_id=None)
+    p = ClaudeProvider(cfg, emit, approval)
+    cli = LiveClient()
+    p._client = cli
+    p._reader = asyncio.create_task(p._read_stream(cli))
+    old_idle, old_ceiling = claude_mod._CONTINUATION_IDLE_S, claude_mod._CONTINUATION_TOOL_CEILING_S
+    claude_mod._CONTINUATION_IDLE_S = 0.05
+    try:
+        turn = asyncio.create_task(p.run_continuation())
+        cli.say(msg_start(), assistant(ToolUseBlock(id="t1", name="Bash", input={"command": "curl paid"})))
+        asking = asyncio.create_task(p._ask("Bash", {"command": "curl paid"}, "spends money"))
+        await asyncio.sleep(0.4)                   # eight idle windows, approval still open
+        check(not turn.done(), "the turn outlives the idle ceiling while the phone is asked")
+        answer.set()
+        await asking
+        await asyncio.sleep(0.2)                   # tool still has no result: still working
+        check(not turn.done(), "and while its tool has not answered")
+        claude_mod._CONTINUATION_TOOL_CEILING_S = 0.1
+        await asyncio.sleep(0.3)
+        check(turn.done(), "but an open tool alone still meets a ceiling")
+        res = await turn
+        check(res.error == "no result", "ending as before", f"got={res.error!r}")
+
+        # nothing open at all: the old 180 s rule, unchanged
+        turn = asyncio.create_task(p.run_continuation())
+        await asyncio.sleep(0.2)
+        check(turn.done(), "a silent continuation with nothing open still ends")
+    finally:
+        claude_mod._CONTINUATION_IDLE_S, claude_mod._CONTINUATION_TOOL_CEILING_S = old_idle, old_ceiling
+        p._reader.cancel()
+
+
 async def main() -> None:
     await scenario_background_agent_is_not_a_turn()
     await scenario_housekeeping_is_not_a_turn()
@@ -397,6 +451,7 @@ async def main() -> None:
     await scenario_no_deltas()
     await scenario_result_before_stop()
     await scenario_multiple_tools()
+    await scenario_continuation_waits_on_approval()
     print("\nall checks passed" if not failures else f"\n{failures} check(s) failed")
     sys.exit(1 if failures else 0)
 

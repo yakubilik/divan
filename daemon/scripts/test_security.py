@@ -322,6 +322,21 @@ async def test_claude_allow_for_chat(cwd: str) -> None:
     check(len(asked) == 2, "a different path still asks", str(asked))
     asked.clear()
     answers[:] = ["allow_session"]
+    d = "~/projects/some-bot/dashboard"
+    await call(f"rm -rf {d}/one.png")
+    check(allowed(await call(f"rm -rf {d}/two.png")) and len(asked) == 1,
+          "allow for this chat covers the next file in the same folder", str(asked))
+    check(allowed(await call(f"rm -rf {d}/shots/three.png")) and len(asked) == 1,
+          "and below it", str(asked))
+    await call("rm -rf ~/projects/some-bot/data.db")
+    check(len(asked) == 2, "but not the folder above", str(asked))
+    asked.clear()
+    answers[:] = ["allow_session"]
+    await call("rm -rf ~/projects/a-file")
+    await call("rm -rf ~/projects/another-file")
+    check(len(asked) == 2, "a yes in ~/projects does not cover all of ~/projects", str(asked))
+    asked.clear()
+    answers[:] = ["allow_session"]
     await call("eas build -p ios")
     await call("eas build -p ios")
     check(len(asked) == 2, "money asks every time, even after allow for this chat", str(asked))
