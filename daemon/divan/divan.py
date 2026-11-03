@@ -2080,6 +2080,38 @@ def wants_bumping(card: dict) -> bool:
             and (card["agent_status"] or "queued") in ("queued", "blocked", "failed"))
 
 
+#: What every ticket carries whether or not anybody wrote it on the card.
+#:
+#: A worker on this queue runs with nobody watching it, which makes one failure
+#: mode worse here than anywhere else: a fix aimed at the symptom, reported as
+#: done. Nobody re-reads a ticket that claimed success, so the claim has to be
+#: earned at the time. These four are the part of `method/debugging.md` that has
+#: to reach the worker rather than wait for it to go and read something — the
+#: queue's prompt belongs to the other program, and the spec is the one thing
+#: this side of the CLI writes. They go last, after the card's own, because a
+#: constraint somebody typed for this ticket is the more specific instruction.
+METHOD_CONSTRAINTS = (
+    "Find the root cause before writing the fix; a change aimed at the symptom"
+    " is not a fix.",
+    "A fix you could not verify is not done. Reproduce the fault against the"
+    " fixed code and say so, with the output.",
+    "If three hypotheses have failed, stop and escalate instead of trying a"
+    " fourth. Three failures mean the problem is not where it looks.",
+    "If the change would touch more than five files, escalate before making it"
+    " — that is a plan, not a bug fix.",
+)
+
+
+def _constraints(written) -> list[str]:
+    """The card's own constraints, then the ones every ticket gets.
+
+    A card that already says one of them verbatim — a re-filed ticket, a card
+    copied from another — says it once.
+    """
+    out = [c for c in (written or [])]
+    return out + [c for c in METHOD_CONSTRAINTS if c not in out]
+
+
 def ticket_spec(card: dict, project: dict) -> dict:
     """The card, in the shape the queue's `add` takes.
 
@@ -2090,6 +2122,9 @@ def ticket_spec(card: dict, project: dict) -> dict:
     summary and then to the title, and the one done criterion the queue insists
     on falls back to the title — which is, after all, what done means on a card
     somebody wrote in a sentence.
+
+    The constraints are the card's own plus `METHOD_CONSTRAINTS`, which is the
+    only place this daemon gets to say anything to the worker itself.
     """
     face = card.get("agent") or {}
     goal = (face.get("goal") or "").strip() or (card["summary"] or "").strip() or card["title"]
@@ -2099,7 +2134,7 @@ def ticket_spec(card: dict, project: dict) -> dict:
         raise ValueError("this project has no repository to work in")
     card_spec = {"goal": goal, "done_criteria": done,
                  "verify_cmd": (face.get("verify_cmd") or "").strip() or None,
-                 "constraints": list(face.get("constraints") or []),
+                 "constraints": _constraints(face.get("constraints")),
                  "allowed": list(face.get("paths") or [])}
     notes = (face.get("notes") or "").strip()
     if notes:
