@@ -229,13 +229,21 @@ const PROVIDER_ICONS: Record<string, any> = {
 /** The mark a chat, an account or a tool is drawn with: the tool's own icon,
  *  quieter on an archived chat. An account with nobody signed in has no icon
  *  to draw, so it keeps the dashed square and the two-letter mark. */
-export function ProviderBadge({ provider, size = 26, variant, agent }: {
+export function ProviderBadge({ provider, size = 26, variant, agent, project }: {
   provider: string; size?: number; variant?: 'filled' | 'outline' | 'dashed';
   /** A chat that runs as an agent wears the agent's mark, not the tool's icon. */
   agent?: { glyph: string; color: string } | null;
+  /** A chat filed under a product with a picture wears that picture. */
+  project?: { image: string; label: string } | null;
 }) {
   const c = useColors();
   const v = variant ?? 'filled';
+  if (!agent && project && v !== 'dashed') {
+    return (
+      <Image source={{ uri: project.image }} accessibilityLabel={project.label}
+             style={{ width: size, height: size, borderRadius: size * 0.3, opacity: v === 'outline' ? 0.45 : 1 }} />
+    );
+  }
   if (agent && v !== 'dashed') {
     return (
       <View style={{ width: size, height: size, borderRadius: size * 0.3, alignItems: 'center', justifyContent: 'center',

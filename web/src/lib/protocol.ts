@@ -10,6 +10,10 @@ export type ChatStatus = 'idle' | 'running' | 'awaiting_approval';
  *  tool's icon; chat.list carries one per agent id as `agent_marks`. */
 export type AgentMark = { glyph: string; color: string; label: string };
 
+/** The picture of the product a chat is filed under, worn instead of its
+ *  tool's icon; chat.list carries one per project id as `project_marks`. */
+export type ProjectMark = { image: string; label: string };
+
 export interface Chat {
   agent_id?: string | null;
   id: string;

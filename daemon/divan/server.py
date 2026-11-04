@@ -31,7 +31,7 @@ from . import accounts as acct
 from . import pool as poolmod
 from . import usage as usagemod
 from .errors import Err
-from . import agents, secrets, tools
+from . import agents, projectmarks, secrets, tools
 from . import fleet as fleetmod
 from .call import (Concierge, NoRoom, hermes_installed, headline as call_headline, last_reply,
                    snapshot as call_snapshot, spoken_reply)
@@ -2270,11 +2270,17 @@ class Server:
                 out[aid] = {"glyph": a["glyph"], "color": a["color"], "label": a["label"]}
         return out
 
+    def _project_marks(self, chats: list[dict]) -> dict[str, dict]:
+        filed = {ch.get("project_id") for ch in chats if ch.get("project_id")}
+        return projectmarks.marks([p for p in self.db.divan.list_projects() if p["id"] in filed])
+
     async def h_chat_list(self, dev: Device, d: dict) -> dict:
         self.cfg.refresh_tunnel()
         chats = self.db.list_chats(bool(d.get("include_archived")))
         return {"chats": chats,
                 "agent_marks": await asyncio.to_thread(self._agent_marks, chats),
+                # The picture of every product a listed chat is filed under (`projectmarks`).
+                "project_marks": await asyncio.to_thread(self._project_marks, chats),
                 "groups": self.db.list_groups(),
                 # Who shares this computer, and which of them is asking. A chat
                 # with no owner written on it is the first person's.
