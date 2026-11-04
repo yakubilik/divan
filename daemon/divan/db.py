@@ -240,9 +240,15 @@ class DB:
                           # looked, and what the chat left running in the
                           # background after its turn ended
                           ("done_at", "REAL"), ("done_failed", "INTEGER DEFAULT 0"),
-                          ("seen_at", "REAL"), ("bg", "TEXT DEFAULT '[]'")):
+                          ("seen_at", "REAL"), ("bg", "TEXT DEFAULT '[]'"),
+                          # what filed the chat (`file_chat`): 'work' or 'folder'
+                          ("project_by", "TEXT")):
             if col not in have:
                 self._c.execute(f"ALTER TABLE chats ADD COLUMN {col} {decl}")
+        if "project_by" not in have:
+            # Filed before anybody wrote down what by; `_file_unfiled` sorts out which.
+            self._c.execute("UPDATE chats SET project_by='before' "
+                            "WHERE project_set=0 AND project_id IS NOT NULL AND project_id!=''")
         self._c.commit()
 
     # ── groups ─────────────────────────────────────────────────────────────
@@ -294,23 +300,28 @@ class DB:
         `''` is "looked, and nothing claims it", which is not the same as
         never having been looked at.
 
-        A chat is filed once: a product it already has is never taken away
-        by later work, and one a person put it under (`project_set`, Unfiled
-        included) is never the computer's to change.
+        A chat is filed once by its work: a product its tool calls gave it is
+        never taken away by later work, and one a person put it under
+        (`project_set`, Unfiled included) is never the computer's to change.
+        A product it got only from the folder it was opened in is a guess
+        (`project_by = 'folder'`), and the first turn that works somewhere
+        replaces it — or a chat opened in the Divan repo is a Divan chat for
+        good, whatever it turns out to be about.
         """
-        chat = self._c.execute("SELECT cwd, project_id, project_set FROM chats WHERE id=?",
-                               (cid,)).fetchone()
-        if not chat or chat["project_id"] or chat["project_set"]:
+        chat = self._c.execute("SELECT cwd, project_id, project_set, project_by FROM chats "
+                               "WHERE id=?", (cid,)).fetchone()
+        if (not chat or chat["project_set"]
+                or (chat["project_id"] and chat["project_by"] != "folder")):
             return
         repos = [(r["path"], r["project_id"])
                  for r in self._c.execute("SELECT project_id, path FROM project_repos")]
         inputs = (r["payload"] for r in self._c.execute(
             "SELECT payload FROM events WHERE chat_id=? AND type='tool.use' "
             "ORDER BY seq DESC LIMIT ?", (cid, filing.WINDOW)))
-        pid = filing.pick(inputs, chat["cwd"], filing.matcher(repos))
+        pid, by = filing.decide(inputs, chat["cwd"], filing.matcher(repos))
         with self._lock:
-            self._c.execute("UPDATE chats SET project_id=? WHERE id=? AND project_set=0",
-                            (pid, cid))
+            self._c.execute("UPDATE chats SET project_id=?, project_by=? "
+                            "WHERE id=? AND project_set=0", (pid, by, cid))
             self._c.commit()
 
     def set_project(self, cid: str, pid: str | None) -> dict | None:
@@ -325,9 +336,24 @@ class DB:
         return self.get_chat(cid)
 
     def _file_unfiled(self) -> None:
-        """File every chat nobody has looked at yet: the ones from before chats
-        were filed at all. Once each, at start."""
-        for r in self._c.execute("SELECT id FROM chats WHERE project_id IS NULL").fetchall():
+        """File every chat whose product is still a guess: the ones from before
+        chats were filed at all, and the ones only their folder filed. At start."""
+        before = self._c.execute("SELECT id, cwd, project_id FROM chats "
+                                 "WHERE project_by='before'").fetchall()
+        if before:
+            # Filed before what filed it was written down. One whose product is
+            # its folder's was most likely filed by that folder and never looked
+            # at again; any other was filed by its work.
+            repos = [(r["path"], r["project_id"])
+                     for r in self._c.execute("SELECT project_id, path FROM project_repos")]
+            found = filing.matcher(repos)
+            with self._lock:
+                for r in before:
+                    by = "folder" if r["project_id"] in found(r["cwd"] or "") else "work"
+                    self._c.execute("UPDATE chats SET project_by=? WHERE id=?", (by, r["id"]))
+                self._c.commit()
+        for r in self._c.execute("SELECT id FROM chats WHERE project_set=0 AND "
+                                 "(project_id IS NULL OR project_by='folder')").fetchall():
             self.file_chat(r["id"])
 
     def create_chat(self, **kw: Any) -> dict:

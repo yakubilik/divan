@@ -90,6 +90,32 @@ with tempfile.TemporaryDirectory() as tmp:
     work_in(loose["id"], "site")
     check("…and is filed by its first turn that works in one", db.get_chat(loose["id"])["project_id"], site["id"])
 
+    # Opened in one product's folder, about another: the folder was a guess.
+    opened = db.create_chat(title="opened", cwd=f"{tmp}/shop")
+    check("a chat that has run nothing is filed by the folder it opened in",
+          db.get_chat(opened["id"])["project_id"], shop["id"])
+    work_in(opened["id"], "site")
+    check("…until its first turn works in another product, which files it there",
+          db.get_chat(opened["id"])["project_id"], site["id"])
+    work_in(opened["id"], "shop")
+    work_in(opened["id"], "shop")
+    check("…and from then on it is filed, like any other",
+          db.get_chat(opened["id"])["project_id"], site["id"])
+
+    # A database from before `project_by`: a chat the folder filed is looked at
+    # again at start, so it does not stay where it was opened.
+    stale = db.create_chat(title="stale", cwd=f"{tmp}/shop")
+    for _ in range(3):
+        db.append_event(stale["id"], "tool.use", {"tool": "Edit", "input": {"file_path": f"{tmp}/site/y.py"}})
+    db._c.execute("UPDATE chats SET project_by=NULL WHERE project_set=0")
+    db._c.execute("ALTER TABLE chats DROP COLUMN project_by")
+    db._c.commit()
+    again = DB(Path(tmp) / "db.sqlite")
+    check("an old database's folder-filed chat is refiled by its work at start",
+          again.get_chat(stale["id"])["project_id"], site["id"])
+    check("…and a chat its work had filed keeps its product",
+          again.get_chat(chat["id"])["project_id"], shop["id"])
+
     # By hand, through the real chat.update handler.
     sent: list[dict] = []
 

@@ -62,11 +62,23 @@ def pick(inputs: Iterable[str], cwd: str, projects_in: Callable[[str], set[str]]
     product it names, and the newest call breaks a tie. A chat that has run
     nothing yet is where it was opened.
     """
+    return decide(inputs, cwd, projects_in)[0]
+
+
+def decide(inputs: Iterable[str], cwd: str,
+           projects_in: Callable[[str], set[str]]) -> tuple[str, str]:
+    """`pick`, and what said so: `'work'` when its tool calls did, `'folder'`
+    when nothing it ran named a product and the folder it was opened in stood in.
+
+    Only the work is an answer. The folder is a guess the next turn may
+    overrule: chats here open in whichever repo the phone was last in, and
+    the conversation goes wherever it goes.
+    """
     votes: Counter[str] = Counter()
     for text in inputs:
         for pid in projects_in(text):
             votes[pid] += 1
     if votes:
         # Counter keeps first-seen order among equals, and first seen is newest.
-        return votes.most_common(1)[0][0]
-    return next(iter(projects_in(_flat(cwd))), "")
+        return votes.most_common(1)[0][0], "work"
+    return next(iter(projects_in(_flat(cwd))), ""), "folder"
