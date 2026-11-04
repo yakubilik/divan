@@ -33,10 +33,12 @@ export function ProviderMark({ provider, dim, size = 30, agent, project }: {
   provider: string; dim?: boolean; size?: number;
   /** A chat that runs as an agent wears the agent's mark, not the tool's icon. */
   agent?: AgentMark | null;
-  /** A chat filed under a product with a picture wears that picture. */
+  /** A chat filed under a product with a picture wears that picture, over its
+   *  agent's mark: nearly every chat runs as Hermes, so the agent tells rows apart
+   *  less than the product does. */
   project?: ProjectMark | null;
 }) {
-  if (!agent && project) {
+  if (project) {
     return (
       <img
         src={project.image} alt={project.label} title={project.label} draggable={false} data-project-mark

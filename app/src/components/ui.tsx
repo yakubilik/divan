@@ -233,12 +233,14 @@ export function ProviderBadge({ provider, size = 26, variant, agent, project }: 
   provider: string; size?: number; variant?: 'filled' | 'outline' | 'dashed';
   /** A chat that runs as an agent wears the agent's mark, not the tool's icon. */
   agent?: { glyph: string; color: string } | null;
-  /** A chat filed under a product with a picture wears that picture. */
+  /** A chat filed under a product with a picture wears that picture, over its
+   *  agent's mark: nearly every chat runs as Hermes, so the agent tells rows apart
+   *  less than the product does. */
   project?: { image: string; label: string } | null;
 }) {
   const c = useColors();
   const v = variant ?? 'filled';
-  if (!agent && project && v !== 'dashed') {
+  if (project && v !== 'dashed') {
     return (
       <Image source={{ uri: project.image }} accessibilityLabel={project.label}
              style={{ width: size, height: size, borderRadius: size * 0.3, opacity: v === 'outline' ? 0.45 : 1 }} />
