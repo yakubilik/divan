@@ -233,6 +233,43 @@ const ready = (async () => {
   const plain = layout().map((s) => `${s.title} ${s.count}`).join(' | ');
   checks.push([`driven: one person on the computer draws no person card, and the plain list is the web's (${plain})`,
     !R.presses().some((p) => p.label === 'Whose chats') && plain === 'Chats 2 | Archive 1']);
+
+  // ── the list's lights: one file kept twice, and drawn from the chat ──────
+  const WEB_LIGHT = path.join(root, '..', 'web/src/lib/light.ts');
+  const APP_LIGHT = path.join(root, 'src/light.ts');
+  checks.push(['lights: web/src/lib/light.ts and app/src/light.ts are byte for byte the same',
+    fs.readFileSync(WEB_LIGHT, 'utf8') === fs.readFileSync(APP_LIGHT, 'utf8')]);
+  const { chatLight } = require(APP_LIGHT);
+  const L = (o) => chatLight(chat('x', 'x', o));
+  const order = [
+    L({ status: 'awaiting_approval', bg: [{ id: 't', kind: 'local_bash', label: 'b', since: NOW }], done_at: NOW }),
+    L({ status: 'running', bg: [{ id: 't', kind: 'local_bash', label: 'b', since: NOW }], done_at: NOW }),
+    L({ bg: [{ id: 't', kind: 'local_bash', label: 'b', since: NOW }], done_at: NOW }),
+    L({ done_at: NOW, done_failed: 1, seen_at: NOW - 5 }),
+    L({ done_at: NOW, seen_at: null }),
+    L({ done_at: NOW - 5, seen_at: NOW }),
+    L({}),
+  ];
+  checks.push([`lights: worst news first, and an older daemon's chat lights only what it says — ${order.join(', ')}`,
+    order.join(',') === 'awaiting,running,background,failed,unread,,']);
+  machine.stand();
+  R.store.set({
+    chats: Object.fromEntries([
+      chat('l1', 'Build in back', { bg: [{ id: 't1', kind: 'local_bash', label: 'npm run build', since: NOW }] }),
+      chat('l2', 'Helper in back', { bg: [{ id: 't2', kind: 'local_agent', label: '', since: NOW }] }),
+      chat('l3', 'Finished one', { done_at: NOW - 30, seen_at: null }),
+      chat('l4', 'Broke one', { done_at: NOW - 30, done_failed: 1, seen_at: NOW - 600 }),
+      chat('l5', 'Read one', { done_at: NOW - 900, seen_at: NOW - 30 }),
+    ].map((c) => [c.id, c])), groups: [], people: MINI.people, prefs: { chatView: 'grouped', voiceIds: {} },
+  });
+  const litMarkup = R.render('light', h(Chats, {}));
+  const has = (t) => litMarkup.includes(t);
+  const count = (t) => litMarkup.split(t).length - 1;
+  // The screens here draw a string's key, not its words.
+  const what = { build: count('bgOne'), helper: count('bgAgent'),
+    unread: count('data-label="lightUnread"'), failed: count('data-label="lightFailed"') };
+  checks.push([`driven: a row says what is still running in the background (its own words, or "a helper"), marks a finished turn nobody read green and a failed one red, and a read one plainly — ${JSON.stringify(what)}`,
+    what.build === 1 && what.helper === 1 && what.unread === 1 && what.failed === 1]);
 })();
 
 module.exports = { ready, checks, STUDIO };

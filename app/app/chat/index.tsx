@@ -17,7 +17,8 @@ import { useStore, useT } from '../../src/store';
 import { useNavGuard } from '../../src/nav';
 import { LOCALE } from '../../src/i18n';
 import { em, useColors } from '../../src/theme';
-import { Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../../src/components/ui';
+import { BreathingDot, Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../../src/components/ui';
+import { bgWhat, chatLight } from '../../src/light';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Shell } from '../../src/components/shell';
 import { HostCard } from '../../src/components/host-card';
@@ -525,7 +526,7 @@ function RowPreview({ chat, T, locale }: { chat: Chat; T: ReturnType<typeof useT
   return (
     <View style={{ marginHorizontal: 0, backgroundColor: c.card, borderRadius: 14, flexDirection: 'row', gap: 10, paddingVertical: 12, paddingHorizontal: 14,
                    boxShadow: c.shadow.menu }}>
-      <ProviderBadge provider={chat.provider} variant={chat.archived ? 'outline' : undefined} agent={chat.agent_id ? marks[chat.agent_id] : null} />
+      <ProviderBadge provider={chat.provider} variant={chat.archived ? 'outline' : undefined} agent={chat.agent_id ? marks?.[chat.agent_id] : null} />
       <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', gap: 5 }}>
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '600' }}>{chat.title}</Text>
@@ -547,9 +548,12 @@ const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, onArch
   const c = useColors();
   const marks = useStore((s) => s.agentMarks);
   const ref = useRef<View>(null);
-  const waiting = chat.status === 'awaiting_approval';
-  const running = chat.status === 'running';
+  const light = chatLight(chat);
+  const waiting = light === 'awaiting';
+  const running = light === 'running';
   const archived = !!chat.archived;
+  const lit = light === 'unread' || light === 'failed';
+  const bg = bgWhat(chat);
   const tags = [group, chat.model, chat.effort, chat.perm_mode].filter(Boolean) as string[];
   return (
     <View style={{ marginHorizontal: 12, opacity: dimmed ? 0.4 : 1 }}>
@@ -573,15 +577,28 @@ const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, onArch
           first && { borderTopWidth: 1, borderTopLeftRadius: 14, borderTopRightRadius: 14 },
           last ? { borderBottomWidth: 1, borderBottomLeftRadius: 14, borderBottomRightRadius: 14 } : { borderBottomWidth: 1 },
         ]}>
-        <ProviderBadge provider={chat.provider} variant={archived ? 'outline' : undefined} agent={chat.agent_id ? marks[chat.agent_id] : null} />
+        <ProviderBadge provider={chat.provider} variant={archived ? 'outline' : undefined} agent={chat.agent_id ? marks?.[chat.agent_id] : null} />
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             {!!chat.pinned && <Icon name="keep" size={14} color={c.faint} />}
             {archived && <Icon name="inventory_2" size={14} color={c.faint} />}
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '600', color: archived ? c.muted : c.ink }}>{chat.title}</Text>
-            <Text style={{ fontSize: 12, color: c.faint }}>{timeLabel(chat.updated_at, T, locale)}</Text>
+            <Text style={{ fontSize: 12, color: lit ? c.ink : c.faint, fontWeight: lit ? '600' : undefined }}>{timeLabel(chat.updated_at, T, locale)}</Text>
+            {lit && (
+              <View accessibilityLabel={T(light === 'failed' ? 'lightFailed' : 'lightUnread')}>
+                <Dot color={light === 'failed' ? c.danger : c.ok} />
+              </View>
+            )}
           </View>
-          {running ? (
+          {light === 'background' ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <BreathingDot color={c.ink} />
+              <Text numberOfLines={1} style={{ fontSize: 13, color: c.text2, flexShrink: 1 }}>
+                {bg.count > 1 ? T('bgMany', { n: bg.count }) : bg.label ? T('bgOne', { what: bg.label })
+                  : T(bg.agent ? 'bgAgent' : 'bgTask')}
+              </Text>
+            </View>
+          ) : running ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Spinner size={11} />
               <Text numberOfLines={1} style={{ fontSize: 13, color: c.text2, flexShrink: 1 }}>{statusLine(chat, T)}</Text>

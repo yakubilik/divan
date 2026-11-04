@@ -8,6 +8,7 @@ import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag
 import { DeleteChatDialog } from './ChatMenu';
 import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
 import type { AgentMark, Chat } from '../lib/protocol';
+import { bgWhat, chatLight, type Light } from '../lib/light';
 import {
   EVERYONE, fleetSections, hostSections, needle, newChatIn, personCounts, projectSections, reorder, whoseChats, type Section,
 } from '../lib/chat-list';
@@ -268,6 +269,29 @@ function savedOrders(): Record<string, string[]> {
 }
 
 /** A screen with nothing to hover with shows the row's buttons all the time. */
+/** The row's second line while a chat's helper or build is still going. */
+function bgText(chat: Chat): string {
+  const bg = bgWhat(chat);
+  if (bg.count > 1) return `${bg.count} tasks in the background`;
+  if (bg.label) return `In the background · ${bg.label}`;
+  return bg.agent ? 'A helper is still working' : 'A task is still running';
+}
+
+/** The dot at the end of a row: breathing while something the chat started is
+ *  still at work in the background, green for a finished turn nobody has
+ *  looked at, red for one that ended in an error. */
+function LightDot({ light }: { light: Exclude<Light, null> }) {
+  const color = light === 'failed' ? C.danger : light === 'unread' ? C.ok : C.accent;
+  const label = light === 'failed' ? 'Ended in an error — not seen yet'
+    : light === 'unread' ? 'Finished — not seen yet' : 'Still working in the background';
+  return (
+    <span title={label} aria-label={label} data-chat-light={light} style={{
+      width: 8, height: 8, borderRadius: 4, flexShrink: 0, background: color, display: 'inline-block',
+      animation: light === 'background' ? 'rac-breathe 1.6s ease-in-out infinite' : undefined,
+    }} />
+  );
+}
+
 const NO_HOVER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches;
 const BIN = 28;
 
@@ -288,8 +312,9 @@ function ChatRow({ chat, mark, selected, onPick, onDrag, onArchive, onDelete, un
   /** Asks before it deletes: the row only says which chat was meant. */
   onDelete: () => void;
 }) {
-  const awaiting = chat.status === 'awaiting_approval';
-  const running = chat.status === 'running';
+  const light = chatLight(chat);
+  const awaiting = light === 'awaiting';
+  const running = light === 'running';
   const [over, setOver] = useState(false);
   // The archive box and the bin are beside the row and not inside it — a
   // button inside a button is not one — and stand where the row's clock is,
@@ -340,7 +365,8 @@ function ChatRow({ chat, mark, selected, onPick, onDrag, onArchive, onDelete, un
             ...(awaiting ? mono : null),
             minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
-            {chat.last_preview || (running ? 'Running…' : 'Empty chat')}
+            {light === 'background' ? bgText(chat)
+              : chat.last_preview || (running ? 'Running…' : 'Empty chat')}
           </span>
         </div>
       </div>
@@ -355,7 +381,12 @@ function ChatRow({ chat, mark, selected, onPick, onDrag, onArchive, onDelete, un
             border: `1px solid ${C.warnLine}`, borderRadius: R.badge, padding: '2px 6px',
           }}>APPROVE</span>
         ) : running ? <Pulse /> : (
-          <span style={{ fontSize: 11, color: C.faint }}>{ago(chat.updated_at)}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: light === 'unread' || light === 'failed' ? C.text : C.faint }}>
+              {ago(chat.updated_at)}
+            </span>
+            {light && <LightDot light={light} />}
+          </span>
         )}
       </div>
     </button>

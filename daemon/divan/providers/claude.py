@@ -55,6 +55,11 @@ _CONTINUATION_IDLE_S = 180.0
 # pending approval has its own timeout and needs none here.
 _CONTINUATION_TOOL_CEILING_S = 1800.0
 
+# The statuses a background task's `task_updated` frame ends it with — the SDK's
+# TERMINAL_TASK_STATUSES, which spans both of the CLI's vocabularies ("stopped"
+# in a notification, "killed" in an update).
+_TASK_OVER = frozenset({"completed", "failed", "stopped", "killed"})
+
 # What the CLI's own catalog says, when it can be read, is the truth about which
 # model an alias points at — see claude_models. This table is what is left when
 # it cannot be: the mapping as it stood in Claude Code 2.1.
@@ -103,6 +108,11 @@ class ClaudeProvider(Provider):
         # How many messages sit in the inbox that are the model actually
         # speaking, rather than the housekeeping a connection also emits.
         self._spoken = 0
+        # What the CLI has running in the background, by task id, as its
+        # `task_started` frames announced it and until a terminal frame for
+        # it. Kept by the reader, because it outlives the turn: the whole point
+        # of background work is that it is still going after the turn ends.
+        self._tasks: dict[str, dict] = {}
 
     # The list as of Claude Code 2.1, for when the CLI's catalog cannot be read.
     # Each model carries its own effort list, because they differ: Haiku takes no
@@ -378,6 +388,10 @@ class ClaudeProvider(Provider):
         # this it waits on a queue nobody will fill again and the chat stays
         # "running" for good.
         self._inbox.put_nowait(_STREAM_BROKEN)
+        # What ran in the background ran inside the CLI, and the CLI is gone.
+        if self._tasks:
+            self._tasks.clear()
+            await self._tasks_changed()
 
     async def interrupt(self) -> None:
         if self._client is None:
@@ -409,6 +423,8 @@ class ClaudeProvider(Provider):
         """
         try:
             async for msg in client.receive_messages():
+                if isinstance(msg, SystemMessage):
+                    await self._track_task(msg)
                 speech = self._starts_a_turn(msg)
                 if speech:
                     self._spoken += 1
@@ -429,6 +445,46 @@ class ClaudeProvider(Provider):
             log.exception("claude stream reader stopped")
             self._reader_error = exc
             await self._inbox.put(_STREAM_BROKEN)
+
+    async def _track_task(self, msg: Any) -> None:
+        """Keep `_tasks` to what the CLI's task frames say is running.
+
+        `task_started` adds one; `task_notification`, or a `task_updated`
+        whose status is terminal, removes it. Both ends are needed: a task
+        stopped with TaskStop reports only the second (see the SDK's
+        TaskUpdatedMessage). A frame that changes nothing tells nobody.
+        """
+        data = getattr(msg, "data", None) or {}
+        sub = getattr(msg, "subtype", "") or data.get("subtype")
+        tid = data.get("task_id")
+        if not tid:
+            return
+        if sub == "task_started":
+            if tid in self._tasks:
+                return
+            self._tasks[tid] = {
+                "id": str(tid), "kind": str(data.get("task_type") or ""),
+                "label": redact(str(data.get("description") or "").strip())[:120],
+                "since": time.time(),
+            }
+        elif sub == "task_notification" or (
+                sub == "task_updated"
+                and ((data.get("patch") or {}).get("status") if isinstance(data.get("patch"), dict)
+                     else None) in _TASK_OVER):
+            if self._tasks.pop(tid, None) is None:
+                return
+        else:
+            return
+        await self._tasks_changed()
+
+    async def _tasks_changed(self) -> None:
+        cb = self.on_tasks
+        if cb is None:
+            return
+        try:
+            await cb(list(self._tasks.values()))
+        except Exception:
+            log.exception("reporting background tasks failed")
 
     @staticmethod
     def _starts_a_turn(msg: Any) -> bool:

@@ -2516,6 +2516,13 @@ class Server:
         if self.draining:
             raise Err("restarting", "this computer is restarting — try again in a moment")
         s = self.sessions.get(chat_id)
+        # A person writing into a chat has read it: whatever it had finished
+        # is seen. Not a message the daemon sends itself (no device) — a
+        # notice dropped into a chat is not somebody looking at it. The status
+        # the send is about to set carries this out to the lists.
+        if dev is not None and (prev := self.db.get_chat(chat_id)) \
+                and (prev.get("done_at") or 0) > (prev.get("seen_at") or 0):
+            self.db.mark_chat(chat_id, seen_at=time.time())
         if not client_id:
             queued = await s.send(text, d.get("attachments"))
             return {"accepted": True, "queued": queued}
@@ -2536,6 +2543,25 @@ class Server:
         ack = {"accepted": True, "queued": queued, "client_id": client_id}
         answer.set_result(ack)
         return dict(ack)
+
+    async def h_chat_seen(self, dev: Device, d: dict) -> dict:
+        """Somebody has looked at the chat, on whichever screen.
+
+        Kept on the chat rather than on the device, so a chat read on the
+        computer is no longer lit on the phone. Only a look that changes
+        something is told to the others: a chat open on a screen asks again
+        each time a turn ends in it.
+        """
+        cid = d["chat_id"]
+        chat = self.db.get_chat(cid)
+        if chat is None:
+            raise Err("no_chat", "no such chat")
+        if (chat.get("seen_at") or 0) >= (chat.get("done_at") or 0):
+            return {"chat": chat}
+        chat = self.db.mark_chat(cid, seen_at=time.time())
+        await self.broadcast({"seq": None, "chat_id": cid, "event": "chat.updated",
+                              "data": chat, "ts": time.time()})
+        return {"chat": chat}
 
     async def h_chat_interrupt(self, dev: Device, d: dict) -> dict:
         s = self.sessions.peek(d["chat_id"])

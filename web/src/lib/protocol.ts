@@ -49,6 +49,23 @@ export interface Chat {
    *  daemon older than the product's Today. */
   task?: string | null;
   done?: string | null;
+  /** When a turn last ended here, and whether it ended in an error; when
+   *  somebody last looked (`chat.seen`, from any screen); and what the chat
+   *  left running in the background after its turn ended. Absent from a
+   *  daemon older than the list's lights — see `light.ts`. */
+  done_at?: number | null;
+  done_failed?: number;
+  seen_at?: number | null;
+  bg?: BgTask[];
+}
+
+/** Something a chat is running in the background on its computer: a helper
+ *  agent (`local_agent`), a shell (`local_bash`), a workflow. */
+export interface BgTask {
+  id: string;
+  kind: string;
+  label: string;
+  since: number;
 }
 
 export interface Group { id: string; name: string; sort: number; created_at: number }

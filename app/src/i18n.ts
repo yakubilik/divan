@@ -26,7 +26,9 @@ const en = {
   noChats: 'No chats yet', cantConnect: "Can't reach {host}", noAccess: 'Access denied', noAccessHint: "This phone's token was revoked on {host}. Pair again to reconnect.",
   hintNew: 'Tap the pen for a new chat. Long-press it to choose the folder and model.',
   hintOffline: 'Make sure the computer is awake and connected to your tailnet.',
-  running: 'Running…', emptyChat: 'Empty chat', awaiting: 'Needs approval', now: 'now', yesterday: 'yesterday',
+  running: 'Running…', emptyChat: 'Empty chat', awaiting: 'Needs approval',
+  bgOne: 'In the background · {what}', bgAgent: 'A helper is still working', bgTask: 'A task is still running', bgMany: '{n} tasks in the background',
+  lightUnread: 'Finished, not seen yet', lightFailed: 'Ended in an error, not seen yet', now: 'now', yesterday: 'yesterday',
   pin: 'Pin', unpin: 'Unpin', rename: 'Rename', chatName: 'Chat name', moveToGroup: 'Move to group', moveToGroupMore: 'Move to group…', giveTo: 'Give to {name}',
   archiveAction: 'Archive', unarchive: 'Unarchive', deleteChat: 'Delete chat', deleteChatBody: 'History is deleted from the computer too.',
   noGroup: 'Daily', newGroupTitle: 'New group', groupName: 'Group name',
@@ -736,6 +738,8 @@ export const tr: Partial<Record<Key, string>> = {
   stFirstRoot: 'İlk kök',
   outSending: 'Gönderiliyor…', outFailed: 'Gönderilemedi · Tekrar denemek için dokun',
   outFailedTitle: 'Mesaj gönderilemedi', outRetry: 'Tekrar dene', outDiscard: 'Mesajı sil',
+  bgOne: 'Arka planda · {what}', bgAgent: 'Bir agent hâlâ çalışıyor', bgTask: 'Bir iş hâlâ çalışıyor', bgMany: 'Arka planda {n} iş',
+  lightUnread: 'Bitti, henüz bakılmadı', lightFailed: 'Hatayla bitti, henüz bakılmadı',
   autoArchiveOff: 'Kapalı', autoArchiveH: '{n} saat', autoArchiveD: '{n} gün', autoArchive1D: '1 gün',
 };
 

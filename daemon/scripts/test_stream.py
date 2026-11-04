@@ -442,7 +442,75 @@ async def scenario_continuation_waits_on_approval() -> None:
         p._reader.cancel()
 
 
+async def scenario_background_tasks_are_counted() -> None:
+    """What runs in the background is reported as it starts and as it ends —
+    including with no turn in flight, and when it ends only as a `task_updated`."""
+    print("\nbackground tasks are reported to the session")
+    from claude_agent_sdk.types import TaskNotificationMessage, TaskStartedMessage, TaskUpdatedMessage
+
+    def started(tid: str, kind: str, label: str) -> TaskStartedMessage:
+        data = {"type": "system", "subtype": "task_started", "task_id": tid, "task_type": kind,
+                "description": label, "uuid": "u", "session_id": "s"}
+        return TaskStartedMessage(subtype="task_started", data=data, task_id=tid,
+                                  description=label, uuid="u", session_id="s", task_type=kind)
+
+    def notified(tid: str) -> TaskNotificationMessage:
+        data = {"type": "system", "subtype": "task_notification", "task_id": tid, "status": "completed",
+                "output_file": "", "summary": "", "uuid": "u", "session_id": "s"}
+        return TaskNotificationMessage(subtype="task_notification", data=data, task_id=tid,
+                                       status="completed", output_file="", summary="",
+                                       uuid="u", session_id="s")
+
+    def updated(tid: str, status: str) -> TaskUpdatedMessage:
+        data = {"type": "system", "subtype": "task_updated", "task_id": tid, "patch": {"status": status}}
+        return TaskUpdatedMessage(subtype="task_updated", data=data, task_id=tid,
+                                  patch={"status": status}, status=status)
+
+    reports: list[list[dict]] = []
+
+    async def emit(*a, **kw):  # noqa: ANN002, ANN003
+        return None
+
+    async def on_tasks(tasks: list[dict]) -> None:
+        reports.append(tasks)
+
+    cfg = ProviderConfig(model="opus", effort=None, perm_mode="bypass", cwd=str(Path.home()), session_id=None)
+    p = ClaudeProvider(cfg, emit, emit)
+    p.on_tasks = on_tasks
+    live = LiveClient()
+    p._client = live
+    p._reader = asyncio.create_task(p._read_stream(live))
+    try:
+        live.say(started("a1", "local_agent", "Review the diff"))
+        await asyncio.sleep(0.05)
+        check(len(reports) == 1 and [t["id"] for t in reports[-1]] == ["a1"],
+              "a helper starting is reported with no turn in flight", f"got={reports}")
+        check(reports[-1][0]["kind"] == "local_agent" and reports[-1][0]["label"] == "Review the diff",
+              "with what it is and what it is doing", f"got={reports[-1]}")
+        live.say(started("b1", "local_bash", "npm run build"), started("b1", "local_bash", "npm run build"))
+        await asyncio.sleep(0.05)
+        check(len(reports) == 2 and len(reports[-1]) == 2, "a second one adds to it, once", f"got={reports}")
+        live.say(updated("b1", "running"))
+        await asyncio.sleep(0.05)
+        check(len(reports) == 2, "a non-terminal update changes nothing")
+        live.say(notified("a1"))
+        await asyncio.sleep(0.05)
+        check([t["id"] for t in reports[-1]] == ["b1"], "a notification ends one", f"got={reports[-1]}")
+        live.say(updated("b1", "killed"))
+        await asyncio.sleep(0.05)
+        check(reports[-1] == [], "a terminal update with no notification ends one too", f"got={reports[-1]}")
+        live.say(started("c1", "local_agent", "x"))
+        await asyncio.sleep(0.05)
+        n = len(reports)
+        await p.close()
+        check(len(reports) == n + 1 and reports[-1] == [], "closing the CLI ends what it ran", f"got={reports[-1]}")
+    finally:
+        if p._reader:
+            p._reader.cancel()
+
+
 async def main() -> None:
+    await scenario_background_tasks_are_counted()
     await scenario_background_agent_is_not_a_turn()
     await scenario_housekeeping_is_not_a_turn()
     await scenario_unasked_turn()

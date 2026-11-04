@@ -159,6 +159,10 @@ export const commentOpenItem = (
 export const removeOpenItem = (key: string, projectId: string, itemId: string) =>
   openItems(key, projectId, { item_id: itemId, remove: true });
 
+/** Somebody is looking at the chat: its light goes out on every screen. */
+export const markSeen = (key: string, chatId: string) =>
+  call(key, 'chat.seen', { chat_id: chatId });
+
 export const interrupt = (key: string, chatId: string) =>
   call(key, 'chat.interrupt', { chat_id: chatId });
 

@@ -275,6 +275,21 @@ export function Dot({ color, size = 8, style }: { color: string; size?: number; 
   return <View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }, style]} />;
 }
 
+/** A dot that fades in and out, slowly: work still going on somewhere the
+ *  screen is not looking — a chat's helper or build in the background. */
+export function BreathingDot({ color, size = 8 }: { color: string; size?: number }) {
+  const v = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const a = Animated.loop(Animated.sequence([
+      Animated.timing(v, { toValue: 0.3, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(v, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    ]));
+    a.start();
+    return () => a.stop();
+  }, [v]);
+  return <Animated.View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, opacity: v }} />;
+}
+
 /** A thin ring with one coloured quarter, turning. The design's spinner. */
 export function Spinner({ size = 11, width = 2, color, track }: { size?: number; width?: number; color?: string; track?: string }) {
   const c = useColors();

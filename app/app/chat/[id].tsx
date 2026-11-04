@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, Image as RNImage, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View, type TextInput as RNTextInput } from 'react-native';
+import { Animated, AppState, FlatList, Image as RNImage, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View, type TextInput as RNTextInput } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,6 +26,7 @@ import { useDivanView } from '../../src/queue';
 import { filedBy, filedUnder, ticketRoute } from '../../src/filed';
 import { COLUMN_LABEL } from '../../src/board';
 import { errText } from '../../src/i18n';
+import { unseen } from '../../src/light';
 import { delivered } from '../../src/outbox';
 
 /** What the tools call a tier, written the way the billing page writes it.
@@ -199,6 +200,20 @@ export function Conversation({ id }: { id: string }) {
     setOnScreen(true);
     return () => { setChatOnScreen(null); setOnScreen(false); };
   }, [id]));
+  // The chat on screen is seen: its light goes out here and on the computer's
+  // panel. Asked again whenever a turn ends in it while it is open, and when
+  // the app comes back to the front — a chat behind the lock screen is not
+  // anybody looking.
+  const markSeen = useStore((s) => s.markSeen);
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => setAppActive(st === 'active'));
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (!onScreen || !appActive || !chat || !unseen(chat) || conn !== 'online') return;
+    markSeen(id!).catch(() => { /* an older computer has no lights to put out */ });
+  }, [onScreen, appActive, chat?.done_at, chat?.seen_at, conn, id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Blur is not "left the chat" — a sheet blurs it too, and so does backgrounding
   // the app, which is exactly when a notification tap has to know where we are.
   useEffect(() => () => { if (getOpenChat() === id) setOpenChat(null); }, [id]);

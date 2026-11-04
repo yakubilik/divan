@@ -429,6 +429,64 @@ async def scenario_dropped_session(db):
           "the next turn on the same session gets no second recap")
 
 
+async def scenario_list_lights(db):
+    """What the lists light a chat with, stored on the chat, not on a screen.
+
+    A turn ending stamps `done_at` (and whether it failed); a look from any
+    screen stamps `seen_at`; neither moves `updated_at`, which the lists sort
+    by. What a chat left running in the background rides on the row, and an
+    idle session with a young helper in it is not reaped.
+    """
+    print("\nthe list's lights: done, seen, failed, background")
+    chat = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
+                          perm_mode="ask", cwd="/tmp")
+    cid = chat["id"]
+    s, built = make_session(db, chat)
+    await turn(s)
+    row = db.get_chat(cid)
+    check((row["done_at"] or 0) > 0 and row["done_failed"] == 0, "a finished turn is stamped done", f"{row}")
+    check(not row.get("seen_at"), "and nobody has seen it yet")
+
+    class Host:
+        pass
+
+    host = Host()
+    host.db = db
+    told: list[dict] = []
+    host.broadcast = lambda ev: (told.append(ev), asyncio.sleep(0))[1]
+    moved = row["updated_at"]
+    await Server.h_chat_seen(host, None, {"chat_id": cid})
+    row = db.get_chat(cid)
+    check((row["seen_at"] or 0) >= row["done_at"], "a look marks it seen")
+    check(row["updated_at"] == moved, "without floating it up the list")
+    check(len(told) == 1 and told[0]["event"] == "chat.updated", "and every screen is told")
+    await Server.h_chat_seen(host, None, {"chat_id": cid})
+    check(len(told) == 1, "looking again tells nobody")
+
+    built[-1].run = lambda *a, **kw: asyncio.sleep(0, TurnResult(
+        session_id=None, cost_usd=None, usage=None, duration_ms=1, num_turns=1,
+        is_error=True, error="boom"))
+    await turn(s)
+    row = db.get_chat(cid)
+    check(row["done_failed"] == 1 and row["done_at"] > row["seen_at"], "a failed turn is stamped failed", f"{row}")
+
+    check(db.get_chat(cid)["bg"] == [], "no background work is an empty list, not a string")
+    await s._on_tasks([{"id": "a1", "kind": "local_agent", "label": "review", "since": __import__("time").time()}])
+    row = db.get_chat(cid)
+    check([t["id"] for t in row["bg"]] == ["a1"], "background work rides on the row", f"{row['bg']}")
+    check(s.has_background(), "a young helper holds the session")
+    s.last_active -= 10 ** 6
+    mgr = __import__("divan.session", fromlist=["SessionManager"]).SessionManager(
+        db, Config(), lambda _e: asyncio.sleep(0), lambda *_a: asyncio.sleep(0))
+    mgr.sessions[cid] = s
+    await mgr.reap_idle()
+    check(cid in mgr.sessions, "an idle session with a helper running is not reaped")
+    s.bg[0]["since"] -= 10 ** 6
+    check(not s.has_background(), "a task older than the keepalive no longer holds it")
+    await mgr.reap_idle()
+    check(cid not in mgr.sessions, "and the session is reaped as before")
+
+
 async def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         db = DB(Path(tmp) / "test.sqlite")
@@ -439,6 +497,7 @@ async def main() -> int:
         await scenario_dropped_session(db)
         await scenario_queue(db)
         await scenario_queue_interrupt(db)
+        await scenario_list_lights(db)
         await scenario_perm_modes()
         scenario_default_mode()
         scenario_coverage()

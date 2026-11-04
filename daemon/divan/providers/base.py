@@ -96,6 +96,11 @@ class Provider(ABC):
         # session fills this in; it opens a turn for what was said. A provider
         # that cannot be spoken to unasked simply never calls it.
         self.on_idle_output: Callable[[], Awaitable[None]] | None = None
+        # Called with what the tool has running in the background — helpers,
+        # shells, workflows — each time that set changes, and with [] when the
+        # process that ran them goes. A provider that runs nothing in the
+        # background never calls it.
+        self.on_tasks: Callable[[list[dict]], Awaitable[None]] | None = None
 
     @abstractmethod
     async def run(self, prompt: str, attachments: list[dict] | None = None) -> TurnResult: ...

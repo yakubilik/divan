@@ -60,6 +60,10 @@ MAX_QUEUED = 20
 # A turn whose CLI was killed from outside is picked up again this many times
 # before it is reported as failed.
 REVIVE_MAX = 2
+# How long a task left running in the background keeps an idle chat's CLI open
+# (`has_background`). A helper or a build finishes well inside it; a dev server
+# that never ends stops holding the chat after it.
+BG_KEEPALIVE_S = 3 * 3600
 REVIVE_PROMPT = ("[Divan] The process running this session was stopped from outside in the "
                  "middle of your turn and has been started again. Nobody asked anything new. Carry on "
                  "with what you were doing from where it stopped; do not start over, and do not "
@@ -158,6 +162,8 @@ class ChatSession:
         self.pending: dict[str, asyncio.Future] = {}
         self._approval_inputs: dict[str, dict] = {}
         self.last_active = time.monotonic()
+        # What the provider says is running in the background (`_on_tasks`).
+        self.bg: list[dict] = []
         # Wall clock at which the turn now running started, or None between
         # turns. `updated_at` cannot answer this — an approval moves it too —
         # and "how long has it been at this" is the first thing anyone asks the
@@ -323,7 +329,33 @@ class ChatSession:
         pc.preamble = preamble.build(self.cfg, pc, chat["provider"])
         provider = cls(pc, self.emit, self._approval)
         provider.on_idle_output = self._on_idle_output
+        provider.on_tasks = self._on_tasks
         return provider
+
+    async def _on_tasks(self, tasks: list[dict]) -> None:
+        """What the chat has running in the background, onto the chat row.
+
+        This is what the lists read "still working" from once the turn that
+        started a helper or a background build has ended — the status alone
+        says idle there, and the work is not done.
+        """
+        self.bg = tasks
+        if tasks:
+            self.last_active = time.monotonic()
+        chat = self.db.mark_chat(self.chat_id, bg=json.dumps(tasks))
+        if chat is not None:
+            await self.broadcast({"seq": None, "chat_id": self.chat_id, "event": "chat.updated",
+                                  "data": chat, "ts": time.time()})
+
+    def has_background(self) -> bool:
+        """Background work young enough to still be the chat's job.
+
+        A dev server or a `tail -f` started in the background may never end,
+        and a chat kept alive for one would keep its CLI forever. Past
+        BG_KEEPALIVE_S a task no longer holds the session open.
+        """
+        now = time.time()
+        return any(now - float(t.get("since") or 0) < BG_KEEPALIVE_S for t in self.bg)
 
     def _build_recap(self, incoming: str, handover: bool = False) -> str | None:
         """The chat's recent transcript, addressed to a session that never saw it.
@@ -1011,6 +1043,10 @@ class ChatSession:
         if self.queued:
             await self._set_status("running", **fields)
             return
+        # When the work ended and whether it went wrong: the lists light a
+        # chat nobody has looked at since (`seen_at`) green, or red.
+        failed = str(fields.get("last_preview") or "").startswith("Error")
+        self.db.mark_chat(self.chat_id, done_at=time.time(), done_failed=int(failed))
         await self._set_status("idle", **fields)
         await self.notify("done", self.db.get_chat(self.chat_id) or {})
 
@@ -1101,7 +1137,10 @@ class SessionManager:
     async def reap_idle(self) -> None:
         now = time.monotonic()
         for cid, s in list(self.sessions.items()):
-            if not s.is_busy() and now - s.last_active > self.cfg.idle_disconnect_s:
+            # A helper still working is not idleness: closing the session
+            # kills the CLI, and the helper with it, mid-job.
+            if (not s.is_busy() and not s.has_background()
+                    and now - s.last_active > self.cfg.idle_disconnect_s):
                 log.info("reaping idle session %s", cid)
                 await self.drop(cid)
 

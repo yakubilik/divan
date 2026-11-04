@@ -63,6 +63,7 @@ socket, not as the device connecting and disconnecting.
 | `chat.delete` | `{chat_id}` | – |
 | `chat.send` | `{chat_id, text, attachments?: [{path}], client_id?}` | `{accepted, queued, client_id?}` — if a turn is running the message is queued (`queued: true`) and runs in order once the turn ends; `chat.interrupt` empties the queue. A full queue (20) returns `error: busy`. `client_id` is the sender's own name for the message (the phone's outbox resends until it hears this answer): it is written into the `message.user` event, and a second `chat.send` with an id already accepted for that chat runs nothing and gets the first answer again — remembered in memory, and found in the timeline's last 200 user messages after a restart. Without one, every send is a new message, as before |
 | `chat.interrupt` | `{chat_id}` | – |
+| `chat.seen` | `{chat_id}` | `{chat}` — somebody is looking at the chat, on any screen: `seen_at` is stamped and every screen gets a `chat.updated`, so the list's "finished, not seen" light goes out on the phone and the panel alike. Nothing is stamped or broadcast when nothing has ended since the last look. `updated_at` does not move. A `chat.send` from a device counts as a look too |
 | `approval.respond` | `{chat_id, request_id, decision: allow \| allow_session \| deny \| cancel, response?}` | – |
 | `limits.get` | – | `{accounts: {<account_id>: [window, …]}}` — the last word on every plan, as the tool reported it |
 | `pool.get` | `{provider?}` | `{settings, accounts}` — see *The account pool* |
@@ -448,6 +449,15 @@ than on the list.
 | `term.exit` | – | `{term_id, code}` — the shell ended: `exit`, `term.close`, or the reaper. `code` is its exit status, negative for a signal |
 
 Chat `status`: `idle | running | awaiting_approval`.
+
+What the chat lists light a row with, on the chat (not per device), none of it moving `updated_at`:
+`done_at` — when a turn last ended; `done_failed` — `1` if it ended in an error;
+`seen_at` — when somebody last looked (`chat.seen`); `bg` — what the chat left running
+in the background after its turn ended, `[{id, kind, label, since}]` with `kind` the
+CLI's task type (`local_agent`, `local_bash`, `local_workflow`, …). `bg` is emptied when
+the CLI closes and when the daemon starts. A row is lit, worst news first: awaiting
+approval, running, background work, then `done_at > seen_at` (green, or red when
+`done_failed`). An idle session with background work under three hours old is not reaped.
 
 ## The ordering rule (clients)
 

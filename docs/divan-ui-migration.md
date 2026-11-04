@@ -84,6 +84,7 @@ The quoted words are the check's own name.
 | A ticket's report | On the ticket page (added on `main`, 5736dcf) | Ticket page, between the question card and Live; in a window of its own for a ticket with no card | `ustabasi.report` | drive: "a ticket page asks for the report of its own ticket (ustabasi.report)" |
 | Type into a chat on the wall | Terminal peek | Machine › Terminal peek | `chat.send` | drive: "Terminal takes a command" |
 | Open a chat | Chat list | Chat list; `/chats/<id>` | `chat.get` | drive: "the Chat place lands in a writable chat without a choice" |
+| See which chats finished, failed or are still working in the background | — (new, 4 Nov 2026) | Chat list row: a breathing dot and what is running, a green or red dot by the time; the chat on screen goes out | `chat.seen` | drive: "a chat row lights from the chat" |
 | Send, stream, stop, approve | Chat | Same | `chat.send`, `chat.interrupt`, `approval.respond` | drive: "a message sends chat.send and the reply streams in" |
 | Attach a file | Chat box + | Same | `/upload` | refusal: "and the upload went out" |
 | Dictate | Mic | Same | `/dictate` | drive: "interrupt, approval, the picture and the mic are there and work" |
@@ -139,6 +140,7 @@ The quoted words are the check's own name.
 | Open a branch | Branch cards | The card's branch label; a kept branch link lands on its product (ustabasi #146) | — | phone: "a branch has no page of its own; a link kept to one lands on the project it named" |
 | Chat: send, stop, approve, picture, voice note | Conversation | Same | `chat.send`, `chat.interrupt`, `approval.respond` | phone: "Allow sends approval.respond, Stop sends chat.interrupt" |
 | The chat list | Chat tab | Chat tab (`/chat`) | `chat.list` | phone: "the Chat place is the list of chats, a chat opened cold goes back to it" |
+| See which chats finished, failed or are still working in the background | — (new, 4 Nov 2026) | Chat list row: a breathing dot and what is running, a green or red dot by the time; an open chat is marked seen | `chat.seen` | phone: "driven: a row says what is still running in the background" |
 | Archive / delete a chat | Chat list row | Chat list row | `chat.update`, `chat.delete` | phone: "a row archives (updateChat) and deletes (deleteChat, after asking)" |
 | Groups | Chat list | Chat list | `group.create`, `group.rename`, `group.delete` | phone: "a group is made (createGroup), renamed (renameGroup) and deleted (deleteGroup)" |
 | Chat settings, delete chat | Chat settings | Same | `chat.update`, `chat.delete` | phone: "chat settings save through updateChat and Delete chat asks, then deleteChat" |

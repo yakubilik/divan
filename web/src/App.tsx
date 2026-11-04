@@ -35,7 +35,8 @@ import { InboxBell } from './components/Inbox';
 import { Report } from './components/Report';
 import { Modal, ModalHead } from './components/Modal';
 import { POLL_MS, announce, useInbox, type Notice } from './lib/inbox';
-import { createGroup, deleteChat, interrupt, respond, send, updateChat, upload } from './lib/actions';
+import { createGroup, deleteChat, interrupt, markSeen, respond, send, updateChat, upload } from './lib/actions';
+import { unseen } from './lib/light';
 import { idOfTold, tell, useTold, whereFor, type Scoped, type ToldPicks } from './lib/tell';
 import type { Agent, Chat } from './lib/protocol';
 
@@ -529,6 +530,22 @@ export function App() {
     if (!sel || selStatus !== 'online') return;
     void useLogs.getState().open(sel.hostKey, sel.chatId);
   }, [sel?.hostKey, sel?.chatId, selStatus]);
+
+  // The chat being read is seen: its light goes out here and on the phone.
+  // Asked again whenever a turn ends in it while it is on screen, and when the
+  // tab comes back — a hidden tab is not anybody looking.
+  const reading = sel && (view === 'chats' || (view === 'overview' && tab === 'chat')) ? sel : null;
+  const readChat = reading ? fleet.hosts[reading.hostKey]?.chats.find((c) => c.id === reading.chatId) : undefined;
+  const [tabShown, setTabShown] = useState(() => !document.hidden);
+  useEffect(() => {
+    const look = () => setTabShown(!document.hidden);
+    document.addEventListener('visibilitychange', look);
+    return () => document.removeEventListener('visibilitychange', look);
+  }, []);
+  useEffect(() => {
+    if (!reading || !readChat || !tabShown || !unseen(readChat)) return;
+    markSeen(reading.hostKey, reading.chatId).catch(() => { /* an older computer; nothing lit there */ });
+  }, [reading?.hostKey, reading?.chatId, readChat?.done_at, readChat?.seen_at, tabShown]);
 
   // A tab in the background is where sockets go to die unnoticed.
   useEffect(() => {

@@ -71,6 +71,17 @@ def new_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+def _chat_row(r: sqlite3.Row) -> dict:
+    """A chat as the clients get it: `bg` is stored as JSON and sent as a list."""
+    d = dict(r)
+    try:
+        bg = json.loads(d.get("bg") or "[]")
+    except (TypeError, ValueError):
+        bg = []
+    d["bg"] = bg if isinstance(bg, list) else []
+    return d
+
+
 class DB:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -89,6 +100,9 @@ class DB:
         interrupted = [r["id"] for r in
                        self._c.execute("SELECT id FROM chats WHERE status!='idle'").fetchall()]
         self._c.execute("UPDATE chats SET status='idle' WHERE status!='idle'")
+        # Background work is a child of the CLI, and the CLI went with the
+        # process that is now starting again.
+        self._c.execute("UPDATE chats SET bg='[]' WHERE bg IS NOT NULL AND bg!='[]'")
         self._c.commit()
         self._lock = threading.Lock()
         # The board, on this connection and behind this lock. Built here rather
@@ -220,7 +234,13 @@ class DB:
                           ("title_by", "TEXT"), ("named_at", "INTEGER DEFAULT 0"),
                           # what the chat is working on, in a line, and what has
                           # been done in it, a line each (`recap`)
-                          ("task", "TEXT"), ("done", "TEXT")):
+                          ("task", "TEXT"), ("done", "TEXT"),
+                          # the list's lights (`mark_chat`): when a turn last
+                          # ended and whether it failed, when somebody last
+                          # looked, and what the chat left running in the
+                          # background after its turn ended
+                          ("done_at", "REAL"), ("done_failed", "INTEGER DEFAULT 0"),
+                          ("seen_at", "REAL"), ("bg", "TEXT DEFAULT '[]'")):
             if col not in have:
                 self._c.execute(f"ALTER TABLE chats ADD COLUMN {col} {decl}")
         self._c.commit()
@@ -260,11 +280,11 @@ class DB:
     def list_chats(self, include_archived: bool = False) -> list[dict]:
         q = self._CHATS + ("" if include_archived else " WHERE chats.archived=0")
         q += " ORDER BY chats.pinned DESC, chats.updated_at DESC"
-        return [dict(r) for r in self._c.execute(q).fetchall()]
+        return [_chat_row(r) for r in self._c.execute(q).fetchall()]
 
     def get_chat(self, cid: str) -> dict | None:
         r = self._c.execute(self._CHATS + " WHERE chats.id=?", (cid,)).fetchone()
-        return dict(r) if r else None
+        return _chat_row(r) if r else None
 
     def file_chat(self, cid: str) -> None:
         """Put a chat under the product it is work on (`filing`).
@@ -340,6 +360,24 @@ class DB:
         if not fields:
             return self.get_chat(cid)
         fields["updated_at"] = time.time()
+        sets = ",".join(f"{k}=:{k}" for k in fields)
+        fields["id"] = cid
+        with self._lock:
+            self._c.execute(f"UPDATE chats SET {sets} WHERE id=:id", fields)
+            self._c.commit()
+        return self.get_chat(cid)
+
+    def mark_chat(self, cid: str, **fields: Any) -> dict | None:
+        """Set the fields the list's lights are drawn from, and nothing else.
+
+        Not `update_chat`: that moves `updated_at`, which is what the lists
+        sort by and the time a row shows. Opening a chat, or a helper
+        finishing in it, is not news, and must not float it to the top.
+        """
+        allowed = {"done_at", "done_failed", "seen_at", "bg"}
+        fields = {k: v for k, v in fields.items() if k in allowed}
+        if not fields:
+            return self.get_chat(cid)
         sets = ",".join(f"{k}=:{k}" for k in fields)
         fields["id"] = cid
         with self._lock:

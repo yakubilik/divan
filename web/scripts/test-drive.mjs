@@ -2727,6 +2727,35 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
   ok('the Chat place lands in a writable chat without a choice; /p/<project>/chat/<id> draws one cold, the project’s page lists it, and the list beside it opens any other',
     landed && cold && listed && fromEarlier, JSON.stringify({ landed, cold, listed, fromEarlier }));
 
+  // 3b · the list's lights, read from the chat (not this browser): a finished
+  // turn nobody has looked at is green, one that failed is red, a helper left
+  // running breathes and says what it is, and the chat on screen is told seen.
+  const before = useFleet.getState().hosts.studio.chats;
+  const t0 = Date.now() / 1000;
+  asked.length = 0;
+  await act(async () => {
+    const slot = useFleet.getState().hosts.studio;
+    seed(useFleet, { hosts: { studio: { ...slot, chats: slot.chats.map((c) => (
+      c.id === 'c1' ? { ...c, status: 'idle', bg: [{ id: 't1', kind: 'local_bash', label: 'npm run build', since: t0 }] }
+      : c.id === 'c2' ? { ...c, status: 'idle', done_at: t0 - 10, done_failed: 1, seen_at: null }
+      : c.id === 'c3' ? { ...c, status: 'idle', done_at: t0 - 5, done_failed: 0, seen_at: t0 - 60 }
+      : c)) } } });
+  });
+  await settle();
+  const rowOf = (id) => doc.querySelector(`[data-chat-title="${id}"]`)?.closest('button');
+  const lightOf = (id) => rowOf(id)?.querySelector('[data-chat-light]')?.getAttribute('data-chat-light') ?? null;
+  const lights = { c1: lightOf('c1'), c2: lightOf('c2') };
+  const bgSays = (rowOf('c1')?.textContent ?? '').includes('In the background · npm run build');
+  const seenAsked = asked.filter((a) => a.type === 'chat.seen').map((a) => a.data.chat_id);
+  ok('a chat row lights from the chat: red for a failed turn nobody looked at, breathing with what it is for a task left in the background, and the chat on screen is told seen (chat.seen) and no other',
+    lights.c1 === 'background' && lights.c2 === 'failed' && bgSays
+      && seenAsked.length === 1 && seenAsked[0] === 'c3',
+    JSON.stringify({ lights, bgSays, seenAsked }));
+  await act(async () => {
+    const slot = useFleet.getState().hosts.studio;
+    seed(useFleet, { hosts: { studio: { ...slot, chats: before } } });
+  });
+
   // 1 · send, stream, bubble, interrupt, approval, picture, mic
   w.SpeechRecognition = class { start() { setTimeout(() => this.onstart?.(), 0); } stop() { this.onend?.(); } abort() { this.onend?.(); } };
   await reload('/chats');

@@ -299,6 +299,8 @@ interface State {
    *  go back into the composer. */
   discardSend: (clientId: string) => Promise<OutMsg | null>;
   interrupt: (id: string) => Promise<void>;
+  /** Somebody is looking at the chat: its light goes out on every screen. */
+  markSeen: (id: string) => Promise<void>;
   respond: (id: string, requestId: string, decision: 'allow' | 'allow_session' | 'deny', response?: Record<string, unknown>) => Promise<void>;
   uploadAttachment: (chatId: string, uri: string, name: string) => Promise<Attachment>;
   loadAccounts: () => Promise<void>;
@@ -1023,6 +1025,8 @@ export const useStore = create<State>((set, get) => {
     discardSend: (clientId) => outbox.discard(clientId),
 
     interrupt: async (id) => { await client.call('chat.interrupt', { chat_id: id }); },
+
+    markSeen: async (id) => { await client.call('chat.seen', { chat_id: id }); },
 
     respond: async (id, requestId, decision, response) => {
       await client.call('approval.respond', { chat_id: id, request_id: requestId, decision, ...(decision === 'allow' && response ? { response } : {}) });
