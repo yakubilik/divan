@@ -6,6 +6,10 @@ import type { TicketUsage } from './usage';
 export type Provider = 'claude' | 'codex';
 export type ChatStatus = 'idle' | 'running' | 'awaiting_approval';
 
+/** The glyph and colour a chat that runs as an agent wears instead of its
+ *  tool's icon; chat.list carries one per agent id as `agent_marks`. */
+export type AgentMark = { glyph: string; color: string; label: string };
+
 export interface Chat {
   agent_id?: string | null;
   id: string;

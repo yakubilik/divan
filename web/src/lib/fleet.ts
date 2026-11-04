@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { RacClient, dialable, type ConnStatus } from './ws';
 import { localCwdToAdopt, usePrefs } from './prefs';
 import type {
-  Catalog, Chat, CliAccount, DirectoryPeer, Group, HostConfig, HostInfo, LimitWindow, Project, RacEvent,
+  AgentMark, Catalog, Chat, CliAccount, DirectoryPeer, Group, HostConfig, HostInfo, LimitWindow, Project, RacEvent,
 } from './protocol';
 import type { Refusal } from './refusal';
 
@@ -55,6 +55,8 @@ export interface HostSlot {
   catalog: Catalog | null;
   chats: Chat[];
   groups: Group[];
+  /** Agent id → its mark, from the last chat.list. */
+  agentMarks: Record<string, AgentMark>;
   /** Who shares that computer, and which of them this browser is. One name
    *  or none is a computer with nobody to tell apart. */
   people: { names: string[]; me: string | null };
@@ -134,7 +136,7 @@ interface FleetState {
 function emptySlot(cfg: HostConfig): HostSlot {
   return {
     cfg, status: 'idle', info: null, catalog: null,
-    chats: [], groups: [], people: { names: [], me: null }, projects: [], accounts: [], limits: {},
+    chats: [], groups: [], agentMarks: {}, people: { names: [], me: null }, projects: [], accounts: [], limits: {},
     loading: {}, lastOnline: null,
   };
 }
@@ -291,6 +293,7 @@ export const useFleet = create<FleetState>((set, get) => ({
       ...slot,
       chats: list.status === 'fulfilled' ? list.value.chats : slot.chats,
       groups: list.status === 'fulfilled' ? list.value.groups : slot.groups,
+      agentMarks: list.status === 'fulfilled' ? list.value.agent_marks ?? {} : slot.agentMarks,
       people: list.status === 'fulfilled' && list.value.people ? list.value.people : slot.people,
       projects: projects.status === 'fulfilled' ? projects.value.projects : slot.projects,
       info: info.status === 'fulfilled' ? info.value : slot.info,

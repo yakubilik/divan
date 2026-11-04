@@ -7,7 +7,7 @@ import { createGroup, deleteChat, deleteGroup, renameGroup, updateChat } from '.
 import { hasChatDrag, hasSectionDrag, readChatDrag, readSectionDrag, setChatDrag, setSectionDrag } from '../lib/dnd';
 import { DeleteChatDialog } from './ChatMenu';
 import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
-import type { Chat } from '../lib/protocol';
+import type { AgentMark, Chat } from '../lib/protocol';
 import {
   EVERYONE, fleetSections, hostSections, needle, newChatIn, personCounts, projectSections, reorder, whoseChats, type Section,
 } from '../lib/chat-list';
@@ -28,7 +28,22 @@ const NOBODY: string[] = [];
  *  trademarks; used to identify them.) */
 const PROVIDER_ICONS: Record<string, string> = { claude: claudeIcon, codex: codexIcon };
 
-export function ProviderMark({ provider, dim, size = 30 }: { provider: string; dim?: boolean; size?: number }) {
+export function ProviderMark({ provider, dim, size = 30, agent }: {
+  provider: string; dim?: boolean; size?: number;
+  /** A chat that runs as an agent wears the agent's mark, not the tool's icon. */
+  agent?: AgentMark | null;
+}) {
+  if (agent) {
+    return (
+      <div title={agent.label} data-agent-mark style={{
+        width: size, height: size, borderRadius: R.btn, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: agent.color, fontSize: size * 0.58, lineHeight: 1,
+      }}>
+        {agent.glyph}
+      </div>
+    );
+  }
   const claude = provider === 'claude';
   // `dim` is "this one is not there": an account not signed in, a tool not
   // installed. The icon loses its colour and some contrast rather than fading
@@ -256,7 +271,8 @@ function savedOrders(): Record<string, string[]> {
 const NO_HOVER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches;
 const BIN = 28;
 
-function ChatRow({ chat, selected, onPick, onDrag, onArchive, onDelete, under, heading }: {
+function ChatRow({ chat, mark, selected, onPick, onDrag, onArchive, onDelete, under, heading }: {
+  mark?: AgentMark | null;
   chat: Chat; selected: boolean; onPick: () => void;
   /** The product whose heading this row is read under, where it has one. The
    *  title leaves the project out in every section, as the chat's own header
@@ -300,7 +316,7 @@ function ChatRow({ chat, selected, onPick, onDrag, onArchive, onDelete, under, h
         border: `1px solid ${selected ? C.accentRing : 'transparent'}`,
       }}
     >
-      <ProviderMark provider={chat.provider} />
+      <ProviderMark provider={chat.provider} agent={mark} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontSize: 14, fontWeight: 500, color: C.text, whiteSpace: 'nowrap',
@@ -721,6 +737,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
               {!shut && s.chats.map((c) => (
                 <ChatRow
                   key={`${s.hostKey}/${c.id}`} chat={c}
+                  mark={c.agent_id ? hosts[s.hostKey]?.agentMarks?.[c.agent_id] : null}
                   selected={selected === c.id && selectedHost === s.hostKey}
                   onPick={() => onSelect(s.hostKey, c.id)}
                   onDrag={canGroup || dragOut ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}
