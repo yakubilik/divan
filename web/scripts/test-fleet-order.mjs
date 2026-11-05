@@ -49,7 +49,7 @@ const load = (p) => import(pathToFileURL(join(out, p)).href);
 const O = await load('src/lib/fleet-order.js');
 const { fleetSections } = await load('src/lib/chat-list.js');
 
-const chat = (id) => ({ id, title: id, archived: 0, pinned: 0, status: 'idle', updated_at: 100, cwd: '' });
+const chat = (id) => ({ id, title: id, archived: 0, pinned: 0, status: 'idle', last_preview: 'ok', updated_at: 100, cwd: '' });
 const host = (name, ...ids) => ({ cfg: { name }, info: { name }, chats: ids.map(chat) });
 const hosts = {
   mac: host('DILARA-MACBOOK-AIR', 'm1'),

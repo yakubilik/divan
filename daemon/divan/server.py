@@ -3654,6 +3654,10 @@ class Server:
                 await self.archive_quiet()
             except Exception as exc:
                 log.warning("auto-archive: %s", exc)
+            try:
+                await self.drop_empty()
+            except Exception as exc:
+                log.warning("empty chats: %s", exc)
 
     async def archive_quiet(self, now: float | None = None) -> list[dict]:
         """Archive the chats that have been quiet longer than `auto_archive_h`.
@@ -3675,6 +3679,26 @@ class Server:
         if chats:
             log.info("auto-archived %d chat(s) quiet for over %gh", len(chats), hours)
         return chats
+
+    # How long a chat may sit with nothing written in it before it is deleted.
+    # The lists hide it at once (`chat-list.ts`, `isEmpty`); this is only how
+    # long the person may stay on the empty screen before sending the first line.
+    EMPTY_CHAT_S = 3600
+
+    async def drop_empty(self, now: float | None = None) -> list[str]:
+        """Delete the chats nobody wrote in, an hour after they were opened.
+
+        Yakup, 5 Nov 2026: "boş chat diye bir şey olmasın". Deleted the way
+        `chat.delete` does it, so every client hears `chat.deleted`.
+        """
+        busy = {cid for cid, s in self.sessions.sessions.items() if s.is_busy()}
+        before = (time.time() if now is None else now) - self.EMPTY_CHAT_S
+        ids = self.db.empty_chats(before, busy)
+        for cid in ids:
+            await self.h_chat_delete(None, {"chat_id": cid})
+        if ids:
+            log.info("deleted %d empty chat(s)", len(ids))
+        return ids
 
     # The longest a person can ask for: a year. Anything past it is a typo.
     AUTO_ARCHIVE_MAX_H = 24 * 365

@@ -42,7 +42,14 @@ export const byRecency = (a: Chat[]) => a.sort((x, y) => rank(x) - rank(y) || y.
 export const needle = (query: string) => query.trim().toLocaleLowerCase('tr');
 
 /** `q` is already a needle. */
+/** A chat nobody has written in: the pen pressed and put down. It is in no
+ *  list — the daemon deletes it an hour on (`drop_empty`) — and shows up the
+ *  moment its first line is sent, which writes the preview. */
+export const isEmpty = (c: Chat) => !c.last_preview && c.status === 'idle' && !c.pinned;
+
+/** Whether a chat is listed under a search; an empty chat never is. */
 export function matches(c: Chat, q: string): boolean {
+  if (isEmpty(c)) return false;
   if (!q) return true;
   return (c.title || '').toLocaleLowerCase('tr').includes(q)
     || (c.last_preview || '').toLocaleLowerCase('tr').includes(q)
@@ -206,7 +213,7 @@ export function whoseChats(names: string[], me: string | null | undefined, chose
 /** How many chats each person has, over the whole list. */
 export function personCounts(chats: Chat[], names: string[]): Record<string, number> {
   const out: Record<string, number> = {};
-  if (names.length > 1) for (const c of chats) out[ownerOf(c, names)] = (out[ownerOf(c, names)] ?? 0) + 1;
+  if (names.length > 1) for (const c of chats) if (!isEmpty(c)) out[ownerOf(c, names)] = (out[ownerOf(c, names)] ?? 0) + 1;
   return out;
 }
 
