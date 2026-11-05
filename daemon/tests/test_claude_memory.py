@@ -285,6 +285,12 @@ def test_sanitize_matches_live_account_folders():
                     for line in f:
                         if '"cwd":"' in line:
                             cwd = line.split('"cwd":"', 1)[1].split('"', 1)[0]
+                            # A transcript rewritten afterwards by a secret
+                            # redactor records a cwd that was never the real
+                            # one ("…[secret password … — read with: …]");
+                            # its folder was named from the real path.
+                            if "[secret " in cwd:
+                                break
                             assert cm.sanitize(cwd) == proj.name, (cwd, proj.name)
                             checked += 1
                             break
