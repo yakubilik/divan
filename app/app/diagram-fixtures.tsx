@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { FlatList, LogBox, Pressable, View } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,9 @@ import { AssistantText, UserBubble } from '../src/components/chat';
  *  computer to send them.
  *
  *  Reached with `divan://diagram-fixtures`, `?scheme=dark|light` to draw it in
- *  one theme whatever the phone's is, and `?only=flow,pie` for some of them.
+ *  one theme whatever the phone's is, `?only=flow,pie` for some of them, and
+ *  `?scroll=1` to scroll the list to the oldest answer and back on its own, so
+ *  frames taken meanwhile show whether a diagram jumps as it comes into view.
  *
  *  Development only, like `media-fixtures`: the route turns away in a release
  *  build. Its few words are fixture text, not anything a user reads. */
@@ -35,12 +37,12 @@ const FIXTURES: { id: string; ask: string; answer: string }[] = [
 ];
 
 export default function DiagramFixtures() {
-  const { scheme, only } = useLocalSearchParams<{ scheme?: string; only?: string }>();
+  const { scheme, only, scroll } = useLocalSearchParams<{ scheme?: string; only?: string; scroll?: string }>();
   const forced = scheme === 'dark' || scheme === 'light' ? scheme : null;
-  return <ForceScheme scheme={forced}><Fixtures only={only} /></ForceScheme>;
+  return <ForceScheme scheme={forced}><Fixtures only={only} scroll={scroll === '1'} /></ForceScheme>;
 }
 
-function Fixtures({ only }: { only?: string }) {
+function Fixtures({ only, scroll }: { only?: string; scroll?: boolean }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const c = useColors();
@@ -53,6 +55,14 @@ function Fixtures({ only }: { only?: string }) {
   // The development warnings toast would sit over the diagrams being looked at.
   useEffect(() => { LogBox.ignoreAllLogs(true); return () => LogBox.ignoreAllLogs(false); }, []);
 
+  const list = useRef<FlatList<(typeof rows)[number]>>(null);
+  useEffect(() => {
+    if (!scroll) return;
+    const up = setTimeout(() => list.current?.scrollToEnd({ animated: true }), 4000);
+    const down = setTimeout(() => list.current?.scrollToOffset({ offset: 0, animated: true }), 7000);
+    return () => { clearTimeout(up); clearTimeout(down); };
+  }, [scroll]);
+
   if (!__DEV__) return <Redirect href="/" />;
 
   return (
@@ -62,6 +72,7 @@ function Fixtures({ only }: { only?: string }) {
         <Text style={{ fontSize: 16, fontWeight: '600' }}>diagram fixtures</Text>
       </View>
       <FlatList
+        ref={list}
         data={rows}
         inverted
         keyExtractor={(r) => r.key}

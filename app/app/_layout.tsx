@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { AppState, View } from 'react-native';
+import { AppState, Platform, Settings, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -147,6 +147,19 @@ export default function RootLayout() {
   }, [init, setPushToken, lock, router, deliverTap]);
 
   useEffect(() => { if (ready && locked) void unlock(); }, [ready, locked, unlock]);
+
+  /* Development only: a route to open once the app is up, given as a launch
+   * argument (`xcrun simctl launch <udid> <bundle> -DivanRoute /diagram-fixtures`).
+   * iOS puts `-Key value` arguments in the user defaults, which Settings reads.
+   * It lets a simulator screenshot reach a fixture screen without `simctl
+   * openurl`, whose "Open in Divan?" prompt nothing headless can answer. */
+  const devRoute = useRef(false);
+  useEffect(() => {
+    if (!__DEV__ || Platform.OS !== 'ios' || !ready || devRoute.current) return;
+    devRoute.current = true;
+    const route = Settings.get('DivanRoute');
+    if (typeof route === 'string' && route.startsWith('/')) setTimeout(() => router.push(route as never), 300);
+  }, [ready, router]);
 
   // Without the fonts the system face stands in; a blank app would not.
   if (!fontsLoaded && !fontError) return <View style={{ flex: 1, backgroundColor: c.bg }} />;

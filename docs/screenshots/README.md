@@ -96,6 +96,12 @@ xcrun simctl io $UDID screenshot docs/screenshots/chats.png
 `divan:///new-chat`, `divan:///settings`, `divan:///call`
 and `divan:///agents` open those screens without hunting for the button.
 
+A development build can also be told where to go by a launch argument,
+`xcrun simctl launch $UDID <bundle id> -DivanRoute /diagram-fixtures`, which
+opens the route once the app is up without the "Open in Divan?" prompt that
+`simctl openurl` raises on recent iOS. `/diagram-fixtures?scroll=1` scrolls
+its list up and back on its own, for a recording of the transcript scrolling.
+
 The panel is the same daemon, built and served by it:
 
 ```bash
