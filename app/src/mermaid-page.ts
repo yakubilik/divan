@@ -60,7 +60,8 @@ try{
     var svg=el.querySelector('svg');if(svg)fit(svg);
     var links=el.querySelectorAll('a');
     for(var i=0;i<links.length;i++){links[i].removeAttribute('href');links[i].removeAttribute('xlink:href');}
-    requestAnimationFrame(size);
+    // Measuring forces the layout; no frame needs to pass first.
+    size();
   }).catch(fail);
 }catch(e){fail(e);}
 })();`;
