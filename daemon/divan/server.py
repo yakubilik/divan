@@ -19,7 +19,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
@@ -1851,6 +1852,10 @@ class Server:
     #: The HTTP routes a peer is reached on through `/peer/<id>/…`. Only these:
     #: the gateway is a door to a Divan daemon, not a proxy to anything on it.
     PEER_HTTP = {"upload", "files", "screen.jpg", "dictate", "dictate/warm"}
+    # What of a peer's answer reaches the browser. The body is relayed as the
+    # peer sent it (`aiter_raw`), so its length and encoding are the peer's too.
+    PEER_HTTP_HEADERS = {"content-type", "content-disposition", "cache-control", "content-length",
+                         "content-encoding", "content-range", "accept-ranges", "etag", "last-modified"}
 
     def _peer_for(self, dev: Device, peer_id: str) -> fleetmod.Peer | None:
         """The registered peer, if this device's person may use it.
@@ -2010,18 +2015,34 @@ class Server:
         headers = fleetmod.auth_headers(peer.token)
         if request.headers.get("content-type"):
             headers["Content-Type"] = request.headers["content-type"]
+        # A browser plays a video by asking for pieces of it — the first few
+        # kilobytes for its size and shape, then wherever the viewer seeks —
+        # and Safari will not play one at all unless the pieces come back 206.
+        # So the Range is passed on, and the answer is streamed back as it
+        # arrives: buffering it here made every one of those asks fetch the
+        # whole file from the peer first (a 40 MB render, five asks to open it).
+        for h in ("range", "if-range"):
+            if request.headers.get(h):
+                headers[h.title()] = request.headers[h]
         body = await request.body()
+        client = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=fleetmod.CONNECT_TIMEOUT_S))
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=fleetmod.CONNECT_TIMEOUT_S)) as c:
-                r = await c.request(request.method, f"{fleetmod.http_base(peer)}/{rest}",
-                                    params=params, content=body, headers=headers)
+            r = await client.send(client.build_request(
+                request.method, f"{fleetmod.http_base(peer)}/{rest}",
+                params=params, content=body, headers=headers), stream=True)
         except httpx.HTTPError:
+            await client.aclose()
             raise HTTPException(status_code=504, detail="that computer did not answer")
+
+        async def close() -> None:
+            await r.aclose()
+            await client.aclose()
+
         status = 502 if r.status_code in (401, 403) else r.status_code
         keep = {k: v for k, v in r.headers.items()
-                if k.lower() in ("content-type", "content-disposition", "cache-control")
-                or k.lower().startswith("x-screen-")}
-        return Response(content=r.content, status_code=status, headers=keep)
+                if k.lower() in self.PEER_HTTP_HEADERS or k.lower().startswith("x-screen-")}
+        return StreamingResponse(r.aiter_raw(), status_code=status, headers=keep,
+                                 background=BackgroundTask(close))
 
     # ── websocket ──────────────────────────────────────────────────────────
     async def ws_endpoint(self, ws: WebSocket) -> None:
