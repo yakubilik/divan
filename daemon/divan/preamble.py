@@ -57,6 +57,14 @@ def house_style() -> str:
         return ""
 
 
+# The phone app draws a closed ```mermaid fence as a diagram (#645). One
+# sentence, so agents know a chart needs no picture file.
+DIAGRAM_LINE = (
+    "A ```mermaid block (flowchart, sequence, pie, xychart-beta) is drawn as a "
+    "diagram in the app; for a simple chart or diagram prefer it over rendering a PNG."
+)
+
+
 def build(cfg, pc, tool: str = "claude") -> str:
     """The preamble for one session: where it is, then how to talk.
 
@@ -101,6 +109,7 @@ def build(cfg, pc, tool: str = "claude") -> str:
         "  attachment they can open or share. Only files under the reachable roots",
         "  are served; a path outside them stays plain text. This is the way to",
         "  send a screenshot, a rendered slide, a PDF — not e-mail, not base64.",
+        f"- {DIAGRAM_LINE}",
         "",
         "If you are asked how any of this works — ports, storage, accounts, updates,",
         f"security — read {doc}",
