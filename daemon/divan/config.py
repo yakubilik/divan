@@ -6,6 +6,7 @@ pairing QR. Nothing here is logged.
 from __future__ import annotations
 
 import os
+import re
 import hashlib
 import ipaddress
 import secrets
@@ -44,6 +45,17 @@ CONFIG_PATH = CONFIG_DIR / "config.toml"
 DB_PATH = CONFIG_DIR / "db.sqlite"
 LOG_DIR = CONFIG_DIR / "logs"
 UPLOAD_DIR = CONFIG_DIR / "uploads"
+# One scratch folder per chat, the chat's TMPDIR (5 Nov 2026, Yakup: a chat leaves the Mac
+# clean like a ticket). mac-bekci deletes a folder nothing used for a day.
+SCRATCH_DIR = CONFIG_DIR / "scratch"
+
+
+def chat_scratch(chat_id: str, root: Path | None = None) -> Path:
+    """The chat's own temp folder, made if missing; its TMPDIR."""
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", chat_id).strip(".") or "chat"
+    d = (SCRATCH_DIR if root is None else root) / safe
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 DEFAULT_PORT = 8790
 

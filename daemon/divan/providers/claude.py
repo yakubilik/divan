@@ -28,7 +28,7 @@ from claude_agent_sdk import (
 
 from ..config import UPLOAD_DIR
 from ..security import MONEY, asked, destructive_reason, redact
-from .. import accounts, legacy
+from .. import accounts, config, legacy
 from . import claude_models
 from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult, is_auth_failure
 
@@ -315,6 +315,8 @@ class ClaudeProvider(Provider):
         if c.chat_id:
             env["DIVAN_CHAT_ID"] = c.chat_id
             env.update(legacy.chat_env(c.chat_id))
+            # its own scratch folder: mktemp, tempfile and the tools land there, not in /tmp
+            env["TMPDIR"] = str(config.chat_scratch(c.chat_id))
         kw: dict[str, Any] = dict(
             env=env,
             cwd=c.cwd,

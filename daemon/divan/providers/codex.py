@@ -19,7 +19,7 @@ from typing import Any
 
 from ..errors import Err
 from ..security import asked, destructive_reason, redact
-from .. import legacy, tools, structured_approval
+from .. import config, legacy, tools, structured_approval
 from .base import Provider, ProviderConfig, TurnResult
 
 log = logging.getLogger("rac.codex")
@@ -149,6 +149,8 @@ class CodexProvider(Provider):
         if self.cfg.chat_id:
             env["DIVAN_CHAT_ID"] = self.cfg.chat_id
             env.update(legacy.chat_env(self.cfg.chat_id))
+            # its own scratch folder: mktemp, tempfile and the tools land there, not in /tmp
+            env["TMPDIR"] = str(config.chat_scratch(self.cfg.chat_id))
         self._proc = await asyncio.create_subprocess_exec(
             cli, "app-server",
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
