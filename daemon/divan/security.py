@@ -838,6 +838,59 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
     return None
 
 
+# What a keychain value piped into these still ends up as: the tool's output.
+_SHOWS = {"cat", "head", "tail", "tee", "less", "more", "xxd", "od", "hexdump", "echo", "printf",
+          "base64", "strings", "rev", "nl", "column", "jq"}
+
+PRINTS_SECRET = (
+    "Not run: this prints a keychain value, and whatever a command prints goes into the "
+    "transcript and to the model provider. Use the value without printing it, e.g. "
+    "`KEY=$(security find-generic-password -s NAME -w) your-command`. To hand a key to the "
+    "person, write `[secret-share NAME label]` in your reply instead — the app turns it into a "
+    "chip that copies the value on a tap.")
+
+
+def prints_secret(cmd: str) -> str | None:
+    """Why this command must not run: it would print a keychain value. Else None.
+
+    `security find-generic-password -w` (or `-g`, which prints it to stderr) as a
+    command of its own, or piped into something that only shows it. Inside
+    `$(…)` or backticks its output is a value handed to another command, which
+    is the way to use a key; piped into a program that consumes it, likewise.
+    Asked in every permission mode — no approval makes printing a key safe.
+    """
+    if not cmd or "security" not in cmd:
+        return None
+    try:
+        flat = _inline_heredocs(cmd)
+        prev = None
+        while prev != flat:     # inner substitutions first, then the ones around them
+            prev, flat = flat, _SUBSTITUTION.sub(" X ", flat)
+        segs = _segments(_tokens(flat))
+    except Exception:
+        return None
+    for i, (words, op) in enumerate(segs):
+        if op in (">", ">>", "<"):
+            continue
+        name, args, _sudo = _command(words)
+        if name != "security" or args[:1] not in (["find-generic-password"], ["find-internet-password"]):
+            continue
+        if "-w" not in args and "-g" not in args:
+            continue
+        nxt = segs[i + 1] if i + 1 < len(segs) else None
+        if nxt and nxt[1] in (">", ">>"):
+            # `-w` prints on stdout, `-g` on stderr; `2>` sends only stderr away
+            stderr_only = words[-1] == "2"
+            if not stderr_only or "-w" not in args:
+                continue    # into a file: not the transcript
+            return PRINTS_SECRET
+        if nxt and nxt[1] == "|":
+            if _command(nxt[0])[0] not in _SHOWS:
+                continue
+        return PRINTS_SECRET
+    return None
+
+
 def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None) -> str | None:
     """Why this shell command must be put to the phone, or None if it need not be.
 

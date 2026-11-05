@@ -129,6 +129,21 @@ def cmd_serve(args: argparse.Namespace) -> None:
     asyncio.run(main())
 
 
+def cmd_secret(args: argparse.Namespace) -> None:
+    """`divan secret put NAME --label "…"`: a key an agent made or fetched goes
+    from stdin into the keychain, and what to write in the chat comes out. The
+    value is never an argument (`ps` would show it) and never printed."""
+    from . import secret_share
+    value = sys.stdin.read().rstrip("\r\n")
+    try:
+        service = secret_share.put(args.name, value)
+    except Exception as exc:
+        # the message names the problem, never the value
+        print(f"not kept: {exc if isinstance(exc, ValueError) else type(exc).__name__}", file=sys.stderr)
+        raise SystemExit(1)
+    print(secret_share.token(service, args.label))
+
+
 def cmd_pair(args: argparse.Namespace) -> None:
     cfg = Config.load()
     dev, token = cfg.add_device(args.name)
@@ -772,6 +787,11 @@ def main() -> None:
     s = sub.add_parser("unlock", help="lift a tunnel lock on an address, without a restart")
     s.add_argument("addr"); s.set_defaults(fn=cmd_unlock)
     s = sub.add_parser("status"); s.set_defaults(fn=cmd_status)
+    s = sub.add_parser("secret", help="keep a key from stdin in the keychain, to share in a chat")
+    s.add_argument("what", choices=["put"])
+    s.add_argument("name", help="a-z, 0-9 and '-': the item becomes rac-secret-<name>")
+    s.add_argument("--label", default="", help="what the chip in the chat says, e.g. 'OpenAI key'")
+    s.set_defaults(fn=cmd_secret)
     s = sub.add_parser("install", help="start automatically at login"); s.set_defaults(fn=cmd_install)
     s = sub.add_parser("uninstall"); s.set_defaults(fn=cmd_uninstall)
     args = p.parse_args()

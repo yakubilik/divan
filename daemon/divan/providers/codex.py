@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import Err
-from ..security import asked, destructive_reason, redact
+from ..security import asked, destructive_reason, prints_secret, redact
 from .. import config, legacy, tools, structured_approval
 from .base import Provider, ProviderConfig, TurnResult
 
@@ -269,7 +269,9 @@ class CodexProvider(Provider):
                     reason = None
                 # Bypass answers everything itself except the destructive list,
                 # which goes to the phone in every mode.
-                if reason is None and (self.cfg.perm_mode == "bypass" or self._session_allow_cmds):
+                if prints_secret(cmd):
+                    decision = "deny"       # a printed key is at the provider already
+                elif reason is None and (self.cfg.perm_mode == "bypass" or self._session_allow_cmds):
                     decision = "allow"
                 else:
                     decision = await self.approval("Bash", {"command": cmd, "cwd": params.get("cwd")}, reason)

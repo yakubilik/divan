@@ -25,6 +25,7 @@ the next chat rather than the next restart.
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 log = logging.getLogger("rac.preamble")
@@ -55,6 +56,18 @@ def house_style() -> str:
     except OSError as exc:            # a missing style file must not cost a session
         log.warning("house style unreadable (%s); continuing without it", exc)
         return ""
+
+
+def secret_line() -> str:
+    """How an agent hands a key to the person without it entering the transcript."""
+    return (
+        "To give the person a key or password, never print it. Keep it in the keychain "
+        f"(`… | {sys.executable} -m divan secret put NAME --label 'OpenAI key'`, value on stdin) "
+        "or use an existing `rac-secret-…` item, and write `[secret-share rac-secret-NAME label]` "
+        "in your reply: the app shows a chip that copies the value on a tap, for one hour. "
+        "Use a key in a command as `$(security find-generic-password -s NAME -w)`; a command "
+        "that prints one is refused."
+    )
 
 
 # The phone app draws a closed ```mermaid fence as a diagram (#645). One
@@ -110,6 +123,7 @@ def build(cfg, pc, tool: str = "claude") -> str:
         "  are served; a path outside them stays plain text. This is the way to",
         "  send a screenshot, a rendered slide, a PDF — not e-mail, not base64.",
         f"- {DIAGRAM_LINE}",
+        f"- {secret_line()}",
         "",
         "If you are asked how any of this works — ports, storage, accounts, updates,",
         f"security — read {doc}",

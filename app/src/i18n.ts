@@ -137,7 +137,7 @@ const en = {
   acctSwitchBusy: 'Wait for the turn to finish, or stop it first.',
   wStarting: 'Starting…', wReconnecting: 'Reconnecting…',
   unitSec: 's', unitMin: 'm', unitHour: 'h', unitDay: 'd', unitTok: 'tok', unitTool: 'tools', unitK: 'k',
-  copied: 'Copied', archived: 'Archived', revokeDevice: "Revoke this device's access", runningFor: 'Working for {m} min', uploadsNote: 'Uploads are saved on {host} in',
+  copied: 'Copied', secretCopied: 'Copied · cleared in 1 min', secretExpired: 'expired', secretFailed: "Couldn't copy", secretHint: 'Copies the key without showing it', archived: 'Archived', revokeDevice: "Revoke this device's access", runningFor: 'Working for {m} min', uploadsNote: 'Uploads are saved on {host} in',
   // the account pool
   pool: 'Pool', poolSection: 'Pool', on: 'On', off: 'Off',
   poolOn: 'Pool on',
@@ -738,7 +738,7 @@ export const tr: Partial<Record<Key, string>> = {
   stDefaultFolder: 'Varsayılan klasör', stDefaultFolderNote: 'yeni sohbetlerin açıldığı yer, burada ve web panelde',
   stFirstRoot: 'İlk kök',
   outSending: 'Gönderiliyor…', outFailed: 'Gönderilemedi · Tekrar denemek için dokun',
-  copyCode: 'Kodu kopyala', diagramFailed: 'Diyagram çizilemedi',
+  copyCode: 'Kodu kopyala', secretCopied: 'Kopyalandı · 1 dk sonra silinir', secretExpired: 'süresi doldu', secretFailed: 'Kopyalanamadı', secretHint: 'Anahtarı göstermeden kopyalar', diagramFailed: 'Diyagram çizilemedi',
   outFailedTitle: 'Mesaj gönderilemedi', outRetry: 'Tekrar dene', outDiscard: 'Mesajı sil',
   bgOne: 'Arka planda · {what}', bgAgent: 'Bir agent hâlâ çalışıyor', bgTask: 'Bir iş hâlâ çalışıyor', bgMany: 'Arka planda {n} iş',
   lightUnread: 'Bitti, henüz bakılmadı', lightFailed: 'Hatayla bitti, henüz bakılmadı',

@@ -27,7 +27,7 @@ from claude_agent_sdk import (
 )
 
 from ..config import UPLOAD_DIR
-from ..security import MONEY, asked, destructive_reason, redact
+from ..security import MONEY, asked, destructive_reason, prints_secret, redact
 from .. import accounts, config, legacy
 from . import claude_models
 from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult, is_auth_failure
@@ -166,9 +166,17 @@ class ClaudeProvider(Provider):
         """
         if input_data.get("tool_name") != "Bash":
             return {}
+        cmd = (input_data.get("tool_input") or {}).get("command", "") or ""
+        # Not a question for the phone, in any mode: a printed key is in the
+        # transcript and at the provider the moment it runs (secret_share.py).
+        leak = prints_secret(cmd)
+        if leak:
+            return {"hookSpecificOutput": {
+                "hookEventName": "PreToolUse", "permissionDecision": "deny",
+                "permissionDecisionReason": leak,
+            }}
         if self.cfg.perm_mode == "bypass" and not self.cfg.bypass_asks:
             return {}
-        cmd = (input_data.get("tool_input") or {}).get("command", "") or ""
         reason = asked(destructive_reason(cmd, self.cfg.cwd, input_data.get("cwd")), self.cfg.ask_for)
         if not reason:
             if self.cfg.perm_mode != "ask" or "Bash" in self._session_allow:

@@ -536,7 +536,7 @@ export function Conversation({ id }: { id: string }) {
                                       out={item.data.out} onOut={item.data.client_id ? () => onOutboxTap(item.data.client_id, item.data.error) : undefined} />;
       case 'assistant':
         if (item.data.thinking) return <ThinkingRow text={item.data.thinking.trim().slice(-240)} />;
-        return <AssistantText text={item.data.text} streaming={item.data.live} attachments={item.data.attachments} />;
+        return <AssistantText text={item.data.text} streaming={item.data.live} attachments={item.data.attachments} chatId={id} sentAt={item.ts} />;
       case 'tool': return (
         <View style={{ gap: 8 }}>
           <ToolCard id={item.data.id} tool={item.data.tool} input={item.data.input} result={item.result} />

@@ -20,6 +20,8 @@ import { useStore, useT } from '../store';
 import { Icon, SelectableText, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
 import { CodeBlock } from './code';
+import { SecretChip } from './secret-chip';
+import { parseShareUrl, shareMarkdown } from '../secret-share';
 import { Diagram } from './diagram';
 import { fenceLang, fenceView, markClosedFences } from '../mermaid';
 import { isPhoto } from '../media-size';
@@ -182,6 +184,15 @@ export const rules = {
     <Text key={node.key} selectable style={[inherited, styles.code_inline]}>{node.content}</Text>
   ),
   code_block: (node: any) => <CodeBlock key={node.key} lang="" code={trimEnd(node.content)} />,
+  /** A key the agent shared (`secret-share.ts`) arrives as a link to our own
+   *  scheme; it is drawn as the chip that copies it. Every other link is the
+   *  library's. */
+  link: (node: any, children: any, parent: any, styles: any, onLinkPress: any) => {
+    const share = parseShareUrl(node.attributes?.href ?? '');
+    return share
+      ? <SecretChip key={node.key} share={share} />
+      : (renderRules as any).link(node, children, parent, styles, onLinkPress);
+  },
   /** A closed ```mermaid fence is drawn (`diagram.tsx`); every other fence,
    *  and a mermaid one still being written, is code. */
   fence: (node: any) => (fenceView(node) === 'diagram'
@@ -316,7 +327,8 @@ function withSecrets(text: string, c: Palette): React.ReactNode[] {
   return out;
 }
 
-function renderMarkdown(src: string, c: Palette) {
+function renderMarkdown(src: string, c: Palette, chatId?: string, sentAt?: number) {
+  src = shareMarkdown(src, chatId, sentAt);
   // An answer that repeats a placeholder shows it the same way, as inline code.
   src = src.replace(SECRET, (_m, kind, unsaved) => `\`${secretLabel(kind, unsaved)}\``);
   // Which fences were closed is known only here, on the tokens; the fence
@@ -361,13 +373,13 @@ function AssistantAttachments({ items }: { items: Attachment[] }) {
   );
 }
 
-export const AssistantText = React.memo(function AssistantText({ text, streaming, attachments }: { text: string; streaming?: boolean; attachments?: Attachment[] }) {
+export const AssistantText = React.memo(function AssistantText({ text, streaming, attachments, chatId, sentAt }: { text: string; streaming?: boolean; attachments?: Attachment[]; chatId?: string; sentAt?: number }) {
   const c = useColors();
   const atts = attachments ?? [];
   const body = stripLocalRefs(text, atts);
   return (
     <View style={{ maxWidth: '94%', marginBottom: -9 }}>
-      {!!body && renderMarkdown(body + (streaming ? ' ▍' : ''), c)}
+      {!!body && renderMarkdown(body + (streaming ? ' ▍' : ''), c, chatId, sentAt)}
       {atts.length > 0 && <AssistantAttachments items={atts} />}
     </View>
   );

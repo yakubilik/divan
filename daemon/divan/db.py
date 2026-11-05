@@ -600,6 +600,24 @@ class DB:
     # JSON in, JSON out, so a caller can store a record rather than a string
     # and a reader never has to know which of the two a key holds.
 
+    def last_said(self, chat_id: str, *needles: str) -> float | None:
+        """When an assistant message of this chat last contained one of `needles`, or None.
+
+        A shared key's clock (`secret_share`): the agent's own words in the
+        timeline are the record, so the phone cannot claim a share that was
+        never made, nor an hour that has already run out. The latest one
+        counts: an agent asked to share a key again starts a new hour."""
+        if not needles:
+            return None
+
+        def like(n: str) -> str:
+            return "%" + n.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        r = self._c.execute(
+            "SELECT ts FROM events WHERE chat_id=? AND type='message.assistant' AND ("
+            + " OR ".join(["payload LIKE ? ESCAPE '\\'"] * len(needles)) + ") ORDER BY seq DESC LIMIT 1",
+            (chat_id, *[like(n) for n in needles])).fetchone()
+        return float(r["ts"]) if r else None
+
     def meta_get(self, key: str, default: Any = None) -> Any:
         r = self._c.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         if r is None:

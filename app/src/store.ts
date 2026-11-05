@@ -1373,6 +1373,8 @@ export interface TimelineItem {
   decision?: string | null;
   /** Why an `expired` approval expired: 'timeout', or 'restart' when the daemon dropped it. */
   why?: string | null;
+  /** When the event was written, in seconds: a shared key's hour runs from it. */
+  ts?: number;
 }
 
 export function buildTimeline(events: RacEvent[]): TimelineItem[] {
@@ -1382,7 +1384,7 @@ export function buildTimeline(events: RacEvent[]): TimelineItem[] {
   for (const ev of events) {
     switch (ev.event) {
       case 'message.user': items.push({ key: `u${ev.seq}`, kind: 'user', data: ev.data }); break;
-      case 'message.assistant': items.push({ key: `a${ev.seq}`, kind: 'assistant', data: ev.data }); break;
+      case 'message.assistant': items.push({ key: `a${ev.seq}`, kind: 'assistant', data: ev.data, ts: ev.ts }); break;
       case 'tool.use': toolIdx.set(ev.data.id, items.length); items.push({ key: `t${ev.seq}`, kind: 'tool', data: ev.data }); break;
       case 'tool.result': { const i = toolIdx.get(ev.data.id); if (i != null) items[i] = { ...items[i], result: ev.data }; break; }
       case 'approval.request': {

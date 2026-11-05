@@ -28,6 +28,7 @@ from .supervisor import supervisor
 from .updater import Updater
 from .config import CONFIG_DIR, Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
 from .db import DB
+from . import secret_share
 from . import accounts as acct
 from . import pool as poolmod
 from . import usage as usagemod
@@ -2122,6 +2123,21 @@ class Server:
         await self.send_to(ws, out, urgent=typ in URGENT_TYPES)
 
     # ── handlers ───────────────────────────────────────────────────────────
+    async def h_secret_copy(self, dev: Device, d: dict) -> dict:
+        """The value of a key an agent shared in this chat (`secret_share.py`),
+        for the phone's clipboard. Answered on this socket only: never logged,
+        never an event, and refused an hour after the agent shared it."""
+        chat_id = str(d.get("chat_id") or "")
+        service = str(d.get("service") or "")
+        shared = (self.db.last_said(chat_id, *secret_share.needles(service))
+                  if chat_id and secret_share.valid_service(service) else None)
+        secret_share.check(service, shared)
+        value = await asyncio.to_thread(secret_share.read, service)
+        if value is None:
+            raise secret_share.ShareError("that key is no longer in the keychain", "secret_gone")
+        log.info("chat %s: shared key %s copied on %s", chat_id, service, dev.name)
+        return {"value": value, "expires": shared + secret_share.TTL_S}
+
     async def h_ping(self, dev: Device, d: dict, ws: WebSocket) -> dict:
         """The phone's heartbeat. A protocol-level ping only proves the socket is
         open somewhere in the OS; this proves the app is on the other end and the
