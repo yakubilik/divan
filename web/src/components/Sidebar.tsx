@@ -10,7 +10,7 @@ import { DeleteGroupDialog, GroupNameDialog } from './GroupDialogs';
 import type { AgentMark, Chat, ProjectMark } from '../lib/protocol';
 import { bgWhat, chatLight, type Light } from '../lib/light';
 import {
-  EVERYONE, fleetSections, hostSections, needle, newChatIn, personCounts, projectSections, reorder, whoseChats, type Section,
+  EVERYONE, filedProject, fleetSections, hostSections, needle, newChatIn, personCounts, projectSections, reorder, whoseChats, type Section,
 } from '../lib/chat-list';
 import { fleetOrder, moveHost, saveFleetOrder, savedFleetOrder } from '../lib/fleet-order';
 import { refusalText } from '../lib/refusal';
@@ -782,7 +782,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                 <ChatRow
                   key={`${s.hostKey}/${c.id}`} chat={c}
                   mark={c.agent_id ? hosts[s.hostKey]?.agentMarks?.[c.agent_id] : null}
-                  projectMark={c.project_id ? hosts[s.hostKey]?.projectMarks?.[c.project_id] : null}
+                  projectMark={c.project_id && filedProject(c) ? hosts[s.hostKey]?.projectMarks?.[c.project_id] : null}
                   selected={selected === c.id && selectedHost === s.hostKey}
                   onPick={() => onSelect(s.hostKey, c.id)}
                   onDrag={canGroup || dragOut ? (dt) => setChatDrag(dt, { hostKey: s.hostKey, chatId: c.id }) : undefined}

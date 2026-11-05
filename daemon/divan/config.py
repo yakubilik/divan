@@ -367,6 +367,18 @@ class Config:
         people = raw.get("people", {})
         if isinstance(people, dict):
             self.people = people
+        # What still asks the phone is only ever written by hand too, and was lost the
+        # same way: on 4 Nov 2026 config.toml had all three categories back although
+        # Yakup had kept only money on 28 Oct — a running daemon saves its own copy
+        # (on every pairing, push token and stop), so an edit made while it ran was
+        # undone at the next save or restart. Re-read here, so save() keeps the
+        # file's answer and the edit takes effect without a restart. In place: every
+        # chat's ProviderConfig holds this very list.
+        asks = raw.get("ask_for")
+        if isinstance(asks, list):
+            self.ask_for[:] = [str(x) for x in asks]
+        if isinstance(raw.get("bypass_asks"), bool):
+            self.bypass_asks = raw["bypass_asks"]
         return True
 
     def person_names(self) -> list[str]:

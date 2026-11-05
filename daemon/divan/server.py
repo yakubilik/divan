@@ -19,7 +19,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
@@ -1851,6 +1852,10 @@ class Server:
     #: The HTTP routes a peer is reached on through `/peer/<id>/…`. Only these:
     #: the gateway is a door to a Divan daemon, not a proxy to anything on it.
     PEER_HTTP = {"upload", "files", "screen.jpg", "dictate", "dictate/warm"}
+    # What of a peer's answer reaches the browser. The body is relayed as the
+    # peer sent it (`aiter_raw`), so its length and encoding are the peer's too.
+    PEER_HTTP_HEADERS = {"content-type", "content-disposition", "cache-control", "content-length",
+                         "content-encoding", "content-range", "accept-ranges", "etag", "last-modified"}
 
     def _peer_for(self, dev: Device, peer_id: str) -> fleetmod.Peer | None:
         """The registered peer, if this device's person may use it.
@@ -2010,18 +2015,34 @@ class Server:
         headers = fleetmod.auth_headers(peer.token)
         if request.headers.get("content-type"):
             headers["Content-Type"] = request.headers["content-type"]
+        # A browser plays a video by asking for pieces of it — the first few
+        # kilobytes for its size and shape, then wherever the viewer seeks —
+        # and Safari will not play one at all unless the pieces come back 206.
+        # So the Range is passed on, and the answer is streamed back as it
+        # arrives: buffering it here made every one of those asks fetch the
+        # whole file from the peer first (a 40 MB render, five asks to open it).
+        for h in ("range", "if-range"):
+            if request.headers.get(h):
+                headers[h.title()] = request.headers[h]
         body = await request.body()
+        client = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=fleetmod.CONNECT_TIMEOUT_S))
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=fleetmod.CONNECT_TIMEOUT_S)) as c:
-                r = await c.request(request.method, f"{fleetmod.http_base(peer)}/{rest}",
-                                    params=params, content=body, headers=headers)
+            r = await client.send(client.build_request(
+                request.method, f"{fleetmod.http_base(peer)}/{rest}",
+                params=params, content=body, headers=headers), stream=True)
         except httpx.HTTPError:
+            await client.aclose()
             raise HTTPException(status_code=504, detail="that computer did not answer")
+
+        async def close() -> None:
+            await r.aclose()
+            await client.aclose()
+
         status = 502 if r.status_code in (401, 403) else r.status_code
         keep = {k: v for k, v in r.headers.items()
-                if k.lower() in ("content-type", "content-disposition", "cache-control")
-                or k.lower().startswith("x-screen-")}
-        return Response(content=r.content, status_code=status, headers=keep)
+                if k.lower() in self.PEER_HTTP_HEADERS or k.lower().startswith("x-screen-")}
+        return StreamingResponse(r.aiter_raw(), status_code=status, headers=keep,
+                                 background=BackgroundTask(close))
 
     # ── websocket ──────────────────────────────────────────────────────────
     async def ws_endpoint(self, ws: WebSocket) -> None:
@@ -3633,6 +3654,10 @@ class Server:
                 await self.archive_quiet()
             except Exception as exc:
                 log.warning("auto-archive: %s", exc)
+            try:
+                await self.drop_empty()
+            except Exception as exc:
+                log.warning("empty chats: %s", exc)
 
     async def archive_quiet(self, now: float | None = None) -> list[dict]:
         """Archive the chats that have been quiet longer than `auto_archive_h`.
@@ -3654,6 +3679,26 @@ class Server:
         if chats:
             log.info("auto-archived %d chat(s) quiet for over %gh", len(chats), hours)
         return chats
+
+    # How long a chat may sit with nothing written in it before it is deleted.
+    # The lists hide it at once (`chat-list.ts`, `isEmpty`); this is only how
+    # long the person may stay on the empty screen before sending the first line.
+    EMPTY_CHAT_S = 3600
+
+    async def drop_empty(self, now: float | None = None) -> list[str]:
+        """Delete the chats nobody wrote in, an hour after they were opened.
+
+        Yakup, 5 Nov 2026: "boş chat diye bir şey olmasın". Deleted the way
+        `chat.delete` does it, so every client hears `chat.deleted`.
+        """
+        busy = {cid for cid, s in self.sessions.sessions.items() if s.is_busy()}
+        before = (time.time() if now is None else now) - self.EMPTY_CHAT_S
+        ids = self.db.empty_chats(before, busy)
+        for cid in ids:
+            await self.h_chat_delete(None, {"chat_id": cid})
+        if ids:
+            log.info("deleted %d empty chat(s)", len(ids))
+        return ids
 
     # The longest a person can ask for: a year. Anything past it is a typo.
     AUTO_ARCHIVE_MAX_H = 24 * 365

@@ -26,7 +26,7 @@ import { freshCwd } from '../../src/fresh-chat';
 import { FirstWord, useFreshChat } from '../../src/components/first-word';
 import type { Chat } from '../../src/protocol';
 import { chatSections, FLAT, type Section } from '../../src/chat-sections';
-import { EVERYONE, ownerOf } from '../../src/chat-list';
+import { EVERYONE, filedProject, ownerOf } from '../../src/chat-list';
 
 const NO_ORDER: string[] = [];
 const NOBODY = { names: [] as string[], me: null };
@@ -387,7 +387,7 @@ export default function ChatPlace() {
         <View style={{ marginHorizontal: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14 }}>
           {sections.flatMap((s) => s.data).slice(0, 8).map((ch, i, all) => (
             <View key={ch.id} style={[{ flexDirection: 'row', gap: 10, paddingVertical: 12, paddingHorizontal: 14 }, i < all.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.line }]}>
-              <ProviderBadge provider={ch.provider} agent={ch.agent_id ? marks[ch.agent_id] : null} project={ch.project_id ? pmarks?.[ch.project_id] : null} />
+              <ProviderBadge provider={ch.provider} agent={ch.agent_id ? marks[ch.agent_id] : null} project={ch.project_id && filedProject(ch) ? pmarks?.[ch.project_id] : null} />
               <View style={{ flex: 1, gap: 4 }}>
                 <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '600' }}>{ch.title}</Text>
                 <Text numberOfLines={1} style={{ fontSize: 13, color: c.muted }}>{statusLine(ch, T)}</Text>
@@ -528,7 +528,7 @@ function RowPreview({ chat, T, locale }: { chat: Chat; T: ReturnType<typeof useT
   return (
     <View style={{ marginHorizontal: 0, backgroundColor: c.card, borderRadius: 14, flexDirection: 'row', gap: 10, paddingVertical: 12, paddingHorizontal: 14,
                    boxShadow: c.shadow.menu }}>
-      <ProviderBadge provider={chat.provider} variant={chat.archived ? 'outline' : undefined} agent={chat.agent_id ? marks?.[chat.agent_id] : null} project={chat.project_id ? pmarks?.[chat.project_id] : null} />
+      <ProviderBadge provider={chat.provider} variant={chat.archived ? 'outline' : undefined} agent={chat.agent_id ? marks?.[chat.agent_id] : null} project={chat.project_id && filedProject(chat) ? pmarks?.[chat.project_id] : null} />
       <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', gap: 5 }}>
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '600' }}>{chat.title}</Text>
@@ -580,7 +580,7 @@ const ChatRow = React.memo(function ChatRow({ chat, onPress, onLongPress, onArch
           first && { borderTopWidth: 1, borderTopLeftRadius: 14, borderTopRightRadius: 14 },
           last ? { borderBottomWidth: 1, borderBottomLeftRadius: 14, borderBottomRightRadius: 14 } : { borderBottomWidth: 1 },
         ]}>
-        <ProviderBadge provider={chat.provider} variant={archived ? 'outline' : undefined} agent={chat.agent_id ? marks?.[chat.agent_id] : null} project={chat.project_id ? pmarks?.[chat.project_id] : null} />
+        <ProviderBadge provider={chat.provider} variant={archived ? 'outline' : undefined} agent={chat.agent_id ? marks?.[chat.agent_id] : null} project={chat.project_id && filedProject(chat) ? pmarks?.[chat.project_id] : null} />
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             {!!chat.pinned && <Icon name="keep" size={14} color={c.faint} />}

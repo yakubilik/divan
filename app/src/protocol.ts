@@ -35,6 +35,9 @@ export interface Chat {
   project?: string | null;
   /** 1 once a person has put the chat under a product (or Daily) by hand. */
   project_set?: number;
+  /** What filed it: `'work'`, its agent's tool calls; `'folder'`, only the
+   *  folder it was opened in, which no list counts as its product. */
+  project_by?: 'work' | 'folder' | null;
   /** 1 to keep this chat on the sign-in named above even while the account
    *  pool is on. Off by default: the pool is a mode, and a chat is in it
    *  unless somebody says otherwise. */

@@ -42,7 +42,14 @@ export const byRecency = (a: Chat[]) => a.sort((x, y) => rank(x) - rank(y) || y.
 export const needle = (query: string) => query.trim().toLocaleLowerCase('tr');
 
 /** `q` is already a needle. */
+/** A chat nobody has written in: the pen pressed and put down. It is in no
+ *  list — the daemon deletes it an hour on (`drop_empty`) — and shows up the
+ *  moment its first line is sent, which writes the preview. */
+export const isEmpty = (c: Chat) => !c.last_preview && c.status === 'idle' && !c.pinned;
+
+/** Whether a chat is listed under a search; an empty chat never is. */
 export function matches(c: Chat, q: string): boolean {
+  if (isEmpty(c)) return false;
   if (!q) return true;
   return (c.title || '').toLocaleLowerCase('tr').includes(q)
     || (c.last_preview || '').toLocaleLowerCase('tr').includes(q)
@@ -105,6 +112,15 @@ export const home = (path: string) => path
  *  and one that vanished the moment it was made would read as the button
  *  having done nothing. A search is the exception: it is asking where a chat
  *  is, and an empty heading is not an answer. */
+/** The product a chat is filed under, or nothing when only the folder it was
+ *  opened in said so (`project_by: 'folder'`): a chat that never touched a
+ *  product's files — a question, a plan, a search — is not that product's work,
+ *  and goes to Daily. One a person filed is theirs whatever filed it. */
+export function filedProject(c: Chat): string | null {
+  if (!c.project || (c.project_by === 'folder' && !c.project_set)) return null;
+  return c.project;
+}
+
 export function sections(chats: Chat[], groups: Group[], hostKey: string, searching: boolean, now: number): Section[] {
   const named = new Map(groups.map((g) => [g.name.toLocaleLowerCase(), g.id]));
   const made = new Set(groups.map((g) => g.id));
@@ -115,12 +131,13 @@ export function sections(chats: Chat[], groups: Group[], hostKey: string, search
   const quiet: Chat[] = [];
   const put = (m: Map<string, Chat[]>, k: string, c: Chat) => { m.set(k, [...(m.get(k) ?? []), c]); };
   for (const c of byRecency([...chats])) {
+    const project = filedProject(c);
     const group = c.group_id && made.has(c.group_id) ? c.group_id
-      : c.project ? named.get(c.project.toLocaleLowerCase()) : undefined;
+      : project ? named.get(project.toLocaleLowerCase()) : undefined;
     if (!isCurrent(c, now)) quiet.push(c);
     else if (group) put(byGroup, group, c);
-    else if (c.project) put(byProject, c.project, c);
-    else if (c.project_set && !c.project_id) daily.push(c);
+    else if (project) put(byProject, project, c);
+    else if ((c.project_set && !c.project_id) || c.project_by === 'folder') daily.push(c);
     else put(byCwd, c.cwd || '', c);
   }
   const out: Section[] = [];
@@ -196,7 +213,7 @@ export function whoseChats(names: string[], me: string | null | undefined, chose
 /** How many chats each person has, over the whole list. */
 export function personCounts(chats: Chat[], names: string[]): Record<string, number> {
   const out: Record<string, number> = {};
-  if (names.length > 1) for (const c of chats) out[ownerOf(c, names)] = (out[ownerOf(c, names)] ?? 0) + 1;
+  if (names.length > 1) for (const c of chats) if (!isEmpty(c)) out[ownerOf(c, names)] = (out[ownerOf(c, names)] ?? 0) + 1;
   return out;
 }
 

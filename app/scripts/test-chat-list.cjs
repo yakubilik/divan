@@ -123,6 +123,23 @@ const ready = (async () => {
     arranged.startsWith('Daily 1[a5] | Freya 1[a3] | Ops 1[a13] | Quire') && arranged.endsWith('Archive 1[a8]')
       && walk === 'Chats 3[a7,a12,a10]' && mini === 'Chats 2[m2,m1] | Archive 1[m3]']);
 
+  // ── a product only the folder named is no product ───────────────────────
+  const guessed = {
+    people: { names: ['Yakup'], me: 'Yakup' }, groups: [],
+    chats: [
+      chat('f1', 'Company abroad', { project: 'Divan', project_id: 'pd', project_by: 'folder', cwd: '/Users/y/p/divan', updated_at: NOW - 10 }),
+      chat('f2', 'Panel fix', { project: 'Divan', project_id: 'pd', project_by: 'work', cwd: '/Users/y/p/divan', updated_at: NOW - 20 }),
+      chat('f3', 'Filed by hand', { project: 'Divan', project_id: 'pd', project_by: 'folder', project_set: 1, cwd: '/Users/y/p/divan', updated_at: NOW - 30 }),
+      chat('f4', 'Coach', { cwd: '/Users/y/p/coach', updated_at: NOW - 40 }),
+    ],
+  };
+  const folderWeb = show(readWeb(webList(guessed, 'h3', {})));
+  const folderPhone = show(readPhone(phoneList(guessed, {})));
+  checks.push([`a chat filed only by the folder it opened in is in Daily, one filed by its work or by hand under its product, on the web and the phone alike — ${folderWeb} / ${folderPhone}`,
+    folderWeb === 'Divan 2[f2,f3] | Daily 2[f1,f4]' && folderPhone.includes('Daily 2[f1,f4]') && folderPhone.includes('Divan 2[f2,f3]')]);
+  checks.push(['filedProject: no product for a folder-filed chat, its product otherwise',
+    web.filedProject(guessed.chats[0]) === null && web.filedProject(guessed.chats[1]) === 'Divan' && web.filedProject(guessed.chats[2]) === 'Divan']);
+
   // ── parity: the same answers, every way the list can be asked ───────────
   const cases = [];
   for (const [name, host, key] of [['studio', STUDIO, 'h1'], ['mini', MINI, 'h2']]) {

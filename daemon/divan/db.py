@@ -464,6 +464,23 @@ class DB:
         else:
             self.update_chat(cid, status=self.get_chat(cid)["status"])
 
+    def empty_chats(self, before: float, skip: set[str] | frozenset = frozenset()) -> list[str]:
+        """The chats opened before `before` that nobody ever wrote in.
+
+        A New chat is made the moment the pen is pressed, so a pen pressed and
+        put down leaves a chat with nothing in it. Empty means no message from
+        the person, no preview, and idle — a chat a call or an agent started
+        has a preview from its first turn and is never one of these. Busy ones
+        (an id in `skip`) are left alone.
+        """
+        with self._lock:
+            rows = self._c.execute(
+                "SELECT id FROM chats c WHERE status='idle' AND COALESCE(last_preview,'')='' "
+                "AND pinned=0 AND COALESCE(created_at, 0) < ? "
+                "AND NOT EXISTS (SELECT 1 FROM events e WHERE e.chat_id=c.id AND e.type='message.user')",
+                (before,)).fetchall()
+        return [r["id"] for r in rows if r["id"] not in skip]
+
     def delete_chat(self, cid: str) -> None:
         with self._lock:
             self._c.execute("DELETE FROM events WHERE chat_id=?", (cid,))
