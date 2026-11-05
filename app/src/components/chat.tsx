@@ -14,12 +14,14 @@ import { cleanupTokens } from 'react-native-markdown-display/src/lib/util/cleanu
 import groupTextTokens from 'react-native-markdown-display/src/lib/util/groupTextTokens';
 // @ts-ignore
 import omitListItemParagraph from 'react-native-markdown-display/src/lib/util/omitListItemParagraph';
-import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { em, family, useColors, type Palette } from '../theme';
 import { useStore, useT } from '../store';
 import { Icon, SelectableText, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
+import { CodeBlock } from './code';
+import { Diagram } from './diagram';
+import { fenceLang, fenceView, markClosedFences } from '../mermaid';
 import { isPhoto } from '../media-size';
 import type { Attachment } from '../store';
 import { ticketNotice, type TicketNotice } from '../notice';
@@ -135,23 +137,6 @@ function trimEnd(content: string): string {
   return typeof content === 'string' && content.endsWith('\n') ? content.slice(0, -1) : content;
 }
 
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
-  const c = useColors();
-  const [copied, setCopied] = useState(false);
-  return (
-    <View style={{ backgroundColor: c.code, borderWidth: 1, borderColor: c.line, borderRadius: 10, overflow: 'hidden', marginBottom: 9 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10,
-                     borderBottomWidth: 1, borderBottomColor: c.line }}>
-        <Text mono style={{ fontSize: 10.5, color: c.faint }}>{lang || 'text'}</Text>
-        <Pressable hitSlop={10} onPress={() => { void Clipboard.setStringAsync(code); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>
-          <Icon name={copied ? 'check' : 'content_copy'} size={14} color={copied ? c.ok : c.faint} />
-        </Pressable>
-      </View>
-      <SelectableText mono style={{ fontSize: 12, lineHeight: 12 * 1.6, paddingVertical: 8, paddingHorizontal: 10 }}>{code}</SelectableText>
-    </View>
-  );
-}
-
 /** Markdown builds every line out of plain <Text>, and a <Text> that is not
  *  `selectable` cannot be dragged through on iOS — so there was no way to take
  *  part of an answer, only the whole message. Copying one command out of a code
@@ -165,7 +150,7 @@ function hasLink(node: any): boolean {
     || (Array.isArray(node?.children) && node.children.some(hasLink));
 }
 
-const rules = {
+export const rules = {
   /** The library wraps every run of plain text in a `<Text>` of its own. Inside
    *  a `selectable` paragraph those are separate native text nodes, and iOS
    *  rounds a selection up to the whole node — so dragging out one sentence, or
@@ -197,7 +182,11 @@ const rules = {
     <Text key={node.key} selectable style={[inherited, styles.code_inline]}>{node.content}</Text>
   ),
   code_block: (node: any) => <CodeBlock key={node.key} lang="" code={trimEnd(node.content)} />,
-  fence: (node: any) => <CodeBlock key={node.key} lang={String(node.sourceInfo || '').trim().split(/\s/)[0]} code={trimEnd(node.content)} />,
+  /** A closed ```mermaid fence is drawn (`diagram.tsx`); every other fence,
+   *  and a mermaid one still being written, is code. */
+  fence: (node: any) => (fenceView(node) === 'diagram'
+    ? <Diagram key={node.key} code={trimEnd(node.content)} />
+    : <CodeBlock key={node.key} lang={fenceLang(node.sourceInfo)} code={trimEnd(node.content)} />),
   list_item: (node: any, children: any, parent: any, styles: any, inherited: any = {}) => {
     // The nearest list is the one this item is in; an ordered list further
     // out must not number the bullets nested under one of its steps.
@@ -330,7 +319,9 @@ function withSecrets(text: string, c: Palette): React.ReactNode[] {
 function renderMarkdown(src: string, c: Palette) {
   // An answer that repeats a placeholder shows it the same way, as inline code.
   src = src.replace(SECRET, (_m, kind, unsaved) => `\`${secretLabel(kind, unsaved)}\``);
-  let tokens = stringToTokens(src, MD as any);
+  // Which fences were closed is known only here, on the tokens; the fence
+  // rule reads it off the node (`markClosedFences`).
+  let tokens = markClosedFences(stringToTokens(src, MD as any) as any[]) as any;
   tokens = (cleanupTokens as any)(tokens);
   tokens = (groupTextTokens as any)(tokens);
   tokens = (omitListItemParagraph as any)(tokens);
