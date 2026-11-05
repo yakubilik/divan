@@ -227,6 +227,8 @@ export default function RootLayout() {
         <Stack.Screen name="divan-gallery" />
         {/* Photo and video bubbles over fixture media, for the simulator. */}
         <Stack.Screen name="media-fixtures" />
+        {/* Answers with ```mermaid diagrams in them, for the simulator. */}
+        <Stack.Screen name="diagram-fixtures" />
       </Stack>
       {ready && locked && <LockScreen onUnlock={() => void unlock()} />}
       <MenuHost />
