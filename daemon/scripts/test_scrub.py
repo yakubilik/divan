@@ -145,20 +145,23 @@ def quiet(fn, *a, **kw):
         return fn(*a, **kw)
 
 
-# Ids shaped like the one that bricked a chat: `PWD` after a digit reads as a
-# password with the rest of the id as its value.
-TOOL_ID = "toolu_01CWK4PWD7xQ2mN9vB3kL8sR5tY1"
-MSG_ID = "msg_01Hq8PWD3zR7vK2mN9xB4cL6"
-UUID = "4f1c9e2a-7b3d-4PWD-9e1f-0a2b3c4d5e6f"
-PARENT = "9a8b7c6d-5e4f-4PWD-8a1b-2c3d4e5f6a7b"
-SESSION = "30c84f23-7b63-4PWD-a1b2-c3d4e5f6a7b8"
-CALL_ID = "call_PWD9xQ2mN7vB3kL8sR5tY1"
+# Ids the finder takes for a key. The one that bricked a chat (13 Oct 2026) was
+# `toolu_01CWK4PWD…`: `PWD` after a digit read as a password. Since 5 Nov 2026
+# the password rule wants a `:` or `=` and never starts inside a word, so an id
+# of that shape is no longer caught at all; these are whole key shapes instead,
+# which an id can still happen to have, to keep the safety net tested.
+TOOL_ID = "ghp_" + "01CWK4PWD7xQ2mN9vB3kL8sR5tY1aB2cD3eF"
+MSG_ID = "AKIA" + "PWD7XQ2MN9VB3KL8"
+UUID = "sk-ant-" + "4f1c9e2a7b3d4PWD9e1f0a2b"
+PARENT = "AIza" + "9a8b7c6d5e4f4PWD8a1b2c3d4e5f6a7b8c9"
+SESSION = "sk-proj-" + "30c84f237b634PWDa1b2c3d4"
+CALL_ID = "xoxb-" + "PWD9xQ2mN7vB3kL8sR5tY1"
 
 
 def ids() -> None:
     print("\nids in a transcript")
     looks = [i for i in (TOOL_ID, MSG_ID, UUID, PARENT, SESSION, CALL_ID) if not secrets.find(f"id: {i}")]
-    check(not looks, "each test id is one the finder takes for a password", f"{looks}")
+    check(not looks, "each test id is one the finder takes for a key", f"{looks}")
     gh, pw, inner = "ghp_" + A[:36], "password: hunter2" + A[:10], "sk-proj-" + A[1:33]
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)

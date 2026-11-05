@@ -20,6 +20,7 @@ import logging
 import re
 import subprocess
 from dataclasses import dataclass, field
+from typing import Callable
 
 log = logging.getLogger("rac.secrets")
 
@@ -38,6 +39,21 @@ class Family:
     pattern: re.Pattern
     # A random key has letters and digits both; a long identifier usually does not.
     mixed: bool = False
+    # A last word on the value the pattern took, for a family whose shape alone says little.
+    check: Callable[[str], bool] | None = None
+
+
+def _password_like(value: str) -> bool:
+    """A value someone typed as a password, not a word, a path or a shell expansion.
+
+    It has a digit or a symbol in it (a full stop or an underscore does not
+    count: `process.env.DB_PASSWORD` is a name), and it does not start the way
+    a path, a flag, a variable or a placeholder does.
+    """
+    v = value.rstrip(".,;:)")
+    if len(v) < 6 or v[0] in "/~$-<{[(%`\\" or "://" in v:
+        return False
+    return any(not (c.isalpha() or c in "._") for c in v)
 
 
 # Earlier wins where two would claim the same characters: sk-ant- before sk-,
@@ -69,14 +85,19 @@ FAMILIES: list[Family] = [
         r"(?i)(?:app(?:lication)?[ \-]?(?:specific )?passw(?:or)?d|uygulama şifre\w*|app şifre\w*|gmail|"
         r"şifre\w*|parola\w*|passw(?:or)?d)[^\n]{0,40}?(?<![a-z])(?P<v>[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}|[a-z]{16})(?![a-z])")),
     # A password said in a sentence, in Turkish or English: "şifrem: …",
-    # "mailin şifresi … bunu kullan", "password is …". The value has to have a
-    # digit or a symbol in it, which keeps "şifreni sıfırla" a sentence and
-    # `process.env.DB_PASSWORD` a name; a full stop or comma after it is the
-    # sentence's.
+    # "mailin şifresi … bunu kullan", "password is …", `pass=…`. The word and the
+    # value are kept apart by `:`, `=` or "is"/"şu" — a Turkish possessive by a
+    # space is enough — and never by a hyphen: `password-change-keeps-…` is a
+    # branch, `find-generic-password` a command, `1Password` a product. On
+    # 5 Nov 2026 the scrub had turned some ten thousand of those into
+    # placeholders. The value itself must pass `_password_like`; a full stop or
+    # comma after it is the sentence's.
     Family("password", re.compile(
-        r"(?i)(?<![A-Za-zÇĞİÖŞÜçğıöşü])(?:şifre(?:m|n|si|miz|niz|leri)?|parola(?:m|n|sı|mız)?|"
-        r"passw(?:or)?d|pwd|pw|pass)(?:\s*[:=]|\s+(?:is|şu|şudur|olarak)\b)?\s*['\"]?"
-        r"(?P<v>(?=[^\s'\"]*[^\sA-Za-zÇĞİÖŞÜçğıöşü._'\"])[^\s'\"]{6,}?)['\"]?(?=[.,;:)]*(?:\s|$))")),
+        r"(?i)(?<![A-Za-z0-9ÇĞİÖŞÜçğıöşü\-])"
+        r"(?:(?:şifre(?:m|n|si|miz|niz|leri)?|parola(?:m|n|sı|mız)?)(?:\s*[:=]\s*|\s+(?:(?:şu|şudur)\s+)?)"
+        r"|passw(?:or)?d(?:\s*[:=]\s*|\s+is\s+)"
+        r"|(?:pwd|pw|pass)\s*[:=]\s*)"
+        r"['\"]?(?P<v>[^\s'\"]{6,}?)['\"]?(?=[.,;:)]*(?:\s|$))"), check=_password_like),
 ]
 
 # Spans nothing is looked for in: an inline image is long, random, and not a
@@ -148,6 +169,8 @@ def find(text: str) -> list[Hit]:
             start, end = m.span(group)
             value = m.group(group)
             if fam.mixed and not _mixed(value):
+                continue
+            if fam.check is not None and not fam.check(value):
                 continue
             if "n" in fam.pattern.groupindex and _WHERE.search(m.group("n")):
                 continue

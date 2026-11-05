@@ -71,6 +71,8 @@ SAID = {
     "turkish password mid-sentence": ("mailin şifresi ", "Gizli.Sifre-2026!", "password"),
     "english password": ("the password is ", "Hunter22!", "password"),
     "app password": ("gmail app password: ", "abcd efgh ijkl mnop", "apppassword"),
+    "short env password": ("E2E_PASSWORD=", "Hunter22!", "password"),
+    "shell pass=": ("pass=", "Gizli-2026x", "password"),
 }
 
 DATA_URL = "data:image/png;base64," + base64.b64encode(bytes(range(256)) * 8).decode() \
@@ -85,6 +87,16 @@ ORDINARY = {
     "key path": "EXPO_ASC_API_KEY_PATH=/Users/me/keys/AuthKey_" + "AB12CD34EF.p8",
     "talk about a password": "şifreni sıfırla, parola alanını gizle, that will pass the tests",
     "four short words": "what does this mean when then",
+    # 5 Nov 2026: each of these had been turned into a placeholder by the history scrub.
+    "branch slug": "cd /Users/me/.ustabasi/wt/633-isghocam-password-change-keeps-the-current-sess",
+    "slug with pass": "cd wt/reset-pass-flow-v2 && ls",
+    "file name with pw": "edit src/pw-reset-2fa.ts now",
+    "keychain command": "security find-generic-password -s rac-secret-x -w",
+    "product name": "1Password CLI integration, see one-password: 1Password vaults",
+    "password then words": "after a password reset-link-v2 is sent",
+    "pwd in an env dump": "'PWD=/Users/me/projects/app' 'HOME=/Users/me'",
+    "shell expansion": "pass=$(security find-generic-password -s x -w)",
+    "type annotation": "function login(email: string, password: string, code2: number)",
 }
 
 
