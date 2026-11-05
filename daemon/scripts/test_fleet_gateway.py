@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import tomli_w                                                   # noqa: E402
 import uvicorn                                                   # noqa: E402
 from fastapi import FastAPI, Request, WebSocket                  # noqa: E402
-from fastapi.responses import JSONResponse                       # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse         # noqa: E402
 from fastapi.testclient import TestClient                        # noqa: E402
 from starlette.websockets import WebSocketDisconnect             # noqa: E402
 
@@ -68,6 +68,9 @@ def check(ok: bool, label: str, detail: str = "") -> None:
 
 PEER_TOKEN = "peer-credential-" + "x" * 32
 OLD_PEER_TOKEN = "peer-credential-old-" + "y" * 28
+VIDEO_BYTES = bytes(range(256)) * 64
+VIDEO = Path(tempfile.mkdtemp(prefix="divan-peer-video-")) / "v.mp4"
+VIDEO.write_bytes(VIDEO_BYTES)
 
 
 class FakePeer:
@@ -79,6 +82,7 @@ class FakePeer:
         self.tokens = {PEER_TOKEN, OLD_PEER_TOKEN}
         self.seen_auth: list[str] = []
         self.seen_query: list[str] = []
+        self.seen_range: list[str] = []
         self.requests: list[dict] = []
         self.port = _free_port()
         self.app = FastAPI()
@@ -115,6 +119,9 @@ class FakePeer:
         self.seen_query.append(str(request.url.query))
         if auth[7:] not in self.tokens:
             return JSONResponse({"detail": "unknown_token"}, status_code=401)
+        self.seen_range.append(request.headers.get("range", ""))
+        if rest == "files" and request.query_params.get("path", "").endswith(".mp4"):
+            return FileResponse(VIDEO)
         body = await request.body()
         return JSONResponse({"path": rest, "query": dict(request.query_params), "size": len(body)},
                             headers={"Content-Disposition": "attachment; filename=x.txt"})
@@ -315,6 +322,22 @@ def run(srv: Server, client: TestClient, peer: FakePeer, peers_file: Path,
     check(peer.seen_auth == [f"Bearer {PEER_TOKEN}"] and owner_tok not in "".join(peer.seen_query),
           "with the gateway's credential, never the browser's", str(peer.seen_auth))
     check(r.headers.get("content-disposition", "").startswith("attachment"), "the download name rides along")
+    # A video is read in pieces: the browser asks for a Range and Safari plays
+    # nothing that is not answered 206. The gateway used to fetch the whole
+    # file from the peer for every one of those asks and answer 200.
+    peer.seen_range.clear()
+    r = client.get(f"/peer/{pid}/files", params={"path": "C:/v.mp4", "token": owner_tok},
+                   headers={"Range": "bytes=100-199"})
+    check(peer.seen_range == ["bytes=100-199"], "a Range reaches the peer", str(peer.seen_range))
+    check(r.status_code == 206 and r.content == VIDEO_BYTES[100:200],
+          "and only that piece comes back, as a 206", f"{r.status_code} {len(r.content)}")
+    check(r.headers.get("content-range") == f"bytes 100-199/{len(VIDEO_BYTES)}"
+          and r.headers.get("accept-ranges") == "bytes" and r.headers.get("content-length") == "100",
+          "with the peer's Content-Range, Accept-Ranges and length", str(dict(r.headers)))
+    r = client.get(f"/peer/{pid}/files", params={"path": "C:/v.mp4", "token": owner_tok})
+    check(r.status_code == 200 and r.content == VIDEO_BYTES
+          and r.headers.get("content-length") == str(len(VIDEO_BYTES)),
+          "the whole file still comes through whole", f"{r.status_code} {len(r.content)}")
     r = client.post(f"/peer/{pid}/upload", headers={"Authorization": f"Bearer {owner_tok}"},
                     files={"file": ("a.txt", b"hello")}, data={"chat_id": "c1"})
     check(r.status_code == 200 and r.json()["path"] == "upload" and r.json()["size"] > 0,
