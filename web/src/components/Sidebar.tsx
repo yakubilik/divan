@@ -46,6 +46,14 @@ export function ProviderMark({ provider, dim, size = 30, agent, project }: {
       />
     );
   }
+  if (agent?.image) {
+    return (
+      <img
+        src={agent.image} alt={agent.label} title={agent.label} draggable={false} data-agent-mark
+        style={{ width: size, height: size, borderRadius: R.btn, flexShrink: 0, display: 'block', objectFit: 'cover' }}
+      />
+    );
+  }
   if (agent) {
     return (
       <div title={agent.label} data-agent-mark style={{

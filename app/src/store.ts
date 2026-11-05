@@ -37,7 +37,8 @@ export const OUTBOX_STORAGE: OutboxStorage = {
 };
 
 /** How a chat row draws the agent it runs as. */
-export type AgentMark = { glyph: string; color: string; label: string };
+/** `image` (a data URI) is the agent's own picture, drawn in place of its glyph. */
+export type AgentMark = { glyph: string; color: string; label: string; image?: string };
 /** How a chat row draws the product it is filed under: its picture, as a data URI. */
 export type ProjectMark = { image: string; label: string };
 

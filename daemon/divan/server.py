@@ -2289,6 +2289,9 @@ class Server:
                 a = None
             if a:
                 out[aid] = {"glyph": a["glyph"], "color": a["color"], "label": a["label"]}
+                pic = agents.image(a)
+                if pic:
+                    out[aid]["image"] = pic
         return out
 
     def _project_marks(self, chats: list[dict]) -> dict[str, dict]:

@@ -139,5 +139,20 @@ try:
 finally:
     agents._tree, agents._get = real_tree, real_get
 
+print("\nan agent's picture")
+with tempfile.TemporaryDirectory() as td:
+    home = Path(td)
+    (home / "agents").mkdir()
+    (home / "agents" / "hermes.md").write_text("---\nname: hermes\nglyph: x\n---\n")
+    (home / "agents" / "plain.md").write_text("---\nname: plain\n---\n")
+    h = agents.find("user:hermes", str(home))
+    check((agents.image(h) or "").startswith("data:image/png;base64,"),
+          "Hermes wears the picture the app ships for it")
+    check(agents.image(agents.find("user:plain", str(home))) is None,
+          "an agent with no picture keeps its glyph")
+    (home / "agents" / "plain.png").write_bytes((agents.ICONS / "hermes.png").read_bytes())
+    check(agents.image(agents.find("user:plain", str(home))) is not None,
+          "a picture beside the agent's file is used")
+
 print(f"\n{'all good' if not failures else str(failures) + ' failed'}")
 sys.exit(1 if failures else 0)

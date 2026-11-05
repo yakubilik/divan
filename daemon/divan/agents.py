@@ -13,6 +13,7 @@ from pathlib import Path
 from .accounts import ACCOUNTS_DIR, DEFAULT_ID
 from .config import CONFIG_DIR
 from .errors import Err
+from .projectmarks import _data_uri
 
 log = logging.getLogger("rac.agents")
 
@@ -67,6 +68,22 @@ def _header(text: str) -> dict[str, str]:
         if fm:
             out[fm.group(1).lower()] = fm.group(2).strip().strip('"').strip("'")
     return out
+
+
+# A picture an agent can wear instead of its glyph: `<name>.png` beside its
+# file, else the one the app ships for an agent it installs. Square, 128 px,
+# like a product's (`projectmarks`).
+ICONS = Path(__file__).resolve().parent / "agent_icons"
+
+
+def image(agent: dict) -> str | None:
+    """The agent's picture as a data URI, or None to keep its glyph."""
+    found = [Path(agent["path"]).with_suffix(".png")] if agent.get("path") else []
+    for f in found + [ICONS / f"{agent['name']}.png"]:
+        uri = _data_uri(f)
+        if uri:
+            return uri
+    return None
 
 
 HEX = re.compile(r"^#[0-9A-Fa-f]{3,8}$")

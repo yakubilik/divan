@@ -8,7 +8,7 @@ export type ChatStatus = 'idle' | 'running' | 'awaiting_approval';
 
 /** The glyph and colour a chat that runs as an agent wears instead of its
  *  tool's icon; chat.list carries one per agent id as `agent_marks`. */
-export type AgentMark = { glyph: string; color: string; label: string };
+export type AgentMark = { glyph: string; color: string; label: string; image?: string };
 
 /** The picture of the product a chat is filed under, worn instead of its
  *  tool's icon; chat.list carries one per project id as `project_marks`. */
