@@ -19,6 +19,7 @@ import json
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -487,6 +488,48 @@ async def scenario_list_lights(db):
     check(cid not in mgr.sessions, "and the session is reaped as before")
 
 
+async def scenario_limit_blip(db):
+    print("\na limit refusal the account's windows do not back")
+    import divan.session as session_mod
+    session_mod.LIMIT_BLIP_DELAY_S = 0
+    msg = "You've hit your monthly spend limit · your 5-hour limit resets 12am"
+
+    async def run_case(status):
+        chat = db.create_chat(title="t", provider="claude", model="sonnet", effort=None,
+                              perm_mode="ask", cwd="/tmp")
+        db.update_chat(chat["id"], account_id="claude-blip")
+        db.save_limits("claude-blip", [{"window": "five_hour", "status": status,
+                                        "utilization": 0.2 if status == "allowed" else 1.0}],
+                       time.time(), complete=True)
+        s, built = make_session(db, db.get_chat(chat["id"]))
+        calls = []
+        orig = s._make_provider
+
+        def refusing_once(c):
+            p = orig(c)
+            real = p.run
+
+            async def run(prompt, attachments=None):
+                calls.append(prompt)
+                if len(calls) == 1:
+                    return TurnResult(None, None, None, None, None, True, msg)
+                return await real(prompt, attachments)
+            p.run = run
+            return p
+        s._make_provider = refusing_once
+        await turn(s)
+        kinds = [e["event"] for e in db.events(chat["id"]) if e["event"] in ("turn.done", "turn.error")]
+        return calls, kinds
+
+    calls, kinds = await run_case("allowed")
+    check(len(calls) == 2 and kinds == ["turn.done"],
+          "windows read allowed: tried once more, quietly, and the turn finishes",
+          f"calls={len(calls)} events={kinds}")
+    calls, kinds = await run_case("rejected")
+    check(len(calls) == 1 and kinds == ["turn.error"],
+          "windows confirm the limit: no retry, the error stands", f"calls={len(calls)} events={kinds}")
+
+
 async def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         db = DB(Path(tmp) / "test.sqlite")
@@ -498,6 +541,7 @@ async def main() -> int:
         await scenario_queue(db)
         await scenario_queue_interrupt(db)
         await scenario_list_lights(db)
+        await scenario_limit_blip(db)
         await scenario_perm_modes()
         scenario_default_mode()
         scenario_coverage()

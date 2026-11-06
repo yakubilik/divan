@@ -77,6 +77,15 @@ REVIVE_PROMPT = ("[Divan] The process running this session was stopped from outs
 AUTH_RETRY_MAX = 2
 AUTH_RETRY_DELAY_S = 1.5
 
+# A turn refused with a plan-limit message while the account's own windows all
+# read "allowed" is tried once more after this long, quietly. 5 Nov 2026
+# 23:31-23:43 three chats on one sign-in got "You've hit your monthly spend
+# limit … resets 12am" and the same sign-in answered their next message within
+# minutes; one waited for a "??" (night watch A91). A limit the windows confirm
+# goes to the pool as before; this is only for the refusal nothing else backs.
+LIMIT_BLIP_RE = re.compile(r"hit your (?:\w+ )*limit|spend limit|usage limit", re.I)
+LIMIT_BLIP_DELAY_S = 60.0
+
 # Rebuilding a dropped CLI session from the chat's own event log.
 # A chat outlives the CLI session behind it: switching account or tool clears the
 # resume id, and the next turn opens a session that has never seen this chat.
@@ -942,6 +951,7 @@ class ChatSession:
                 await self._finish(last_preview=f"Error: {exc}"[:200])
                 return
         res, owner = await self._past_auth_failure(res, owner, text, prompt, attachments)
+        res, owner = await self._past_limit_blip(res, owner, prompt, attachments)
         self.last_active = time.monotonic()
         chat = self.db.get_chat(self.chat_id) or {}
         if self._handover is not None:
@@ -1030,6 +1040,36 @@ class ChatSession:
                 log.exception("turn crashed while retrying after an authentication failure")
                 from .providers.base import TurnResult
                 res = TurnResult(None, None, None, None, None, True, str(exc))
+        return res, owner
+
+    def _windows_allow(self, account_id: str | None) -> bool:
+        """Every window on record for this sign-in reads allowed and below full."""
+        rows = (self.db.load_limits().get(account_id or "") or {}).values()
+        return all(r.get("status") not in ("rejected",) and float(r.get("utilization") or 0) < 1.0
+                   for r in rows)
+
+    async def _past_limit_blip(self, res, owner, prompt, attachments):
+        """One quiet retry for a limit refusal the account's windows do not back (A91)."""
+        if not (res.is_error and LIMIT_BLIP_RE.search(res.error or "")) or self._handover is not None:
+            return res, owner
+        chat = self.db.get_chat(self.chat_id)
+        if chat is None or not self._windows_allow(chat.get("account_id")):
+            return res, owner
+        log.warning("chat %s: account=%s refused the turn with a limit its windows do not show; "
+                    "trying once more in %gs", self.chat_id, chat.get("account_id"), LIMIT_BLIP_DELAY_S)
+        await asyncio.sleep(LIMIT_BLIP_DELAY_S)
+        if self._handover is not None:
+            return res, owner
+        await self._rebuild()
+        self.provider = self._build_provider(chat)
+        owner = self._provider_owner
+        self._recap = None
+        try:
+            res = await self.provider.run(prompt if prompt is not None else REVIVE_PROMPT, attachments)
+        except Exception as exc:
+            log.exception("turn crashed while retrying after a limit refusal")
+            from .providers.base import TurnResult
+            res = TurnResult(None, None, None, None, None, True, str(exc))
         return res, owner
 
     async def _finish(self, **fields) -> None:
