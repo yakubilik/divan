@@ -125,6 +125,9 @@ export interface RacEvent<T = any> {
 
 export interface HostConfig {
   host: string; port: number; token: string; name: string; device_id?: string;
+  /** The computer's local-network address, learned from `host.status` once
+   *  paired. Dialled before `host` when there is one (see ws.ts `openLan`). */
+  lan?: string | null;
 }
 
 export interface ProviderDefaults { model: string; effort: string | null; perm_mode: string; account_id?: string | null }

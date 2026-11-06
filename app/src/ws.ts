@@ -1,5 +1,6 @@
 import type { RacEvent } from './protocol';
 import { errText, t } from './i18n';
+import { sha256Hex } from './sha256';
 
 /** Whether this computer's address is the address of the page we are on, over
  *  HTTPS — which is to say: reached through a tunnel rather than the tailnet.
@@ -72,7 +73,16 @@ export type ReconnectReason = 'heartbeat' | 'socket' | 'foreground' | 'restart' 
  *  asleep: on 2026-10-13..16 every `socket code=1006 offline<1s` the daemon
  *  logged came after it had seen that socket go 9 s to 3 h earlier — the app
  *  only heard of it when it woke. */
-export type Reconnect = { reason: ReconnectReason; code: number | null; offline_s: number; silent_s?: number };
+export type Reconnect = { reason: ReconnectReason; code: number | null; offline_s: number; silent_s?: number;
+                          via?: Door; dials?: number; fails?: DialFail[] };
+/** Which address a socket was opened on: the computer's local-network one, or
+ *  the tailnet one it was paired on. */
+export type Door = 'lan' | 'tailnet';
+/** How a dial failed, for the daemon's log. `timeout`: nothing answered (a
+ *  dial that never reached the computer); `error`: refused or no route;
+ *  `proof`: something answered on the LAN address but it was not this
+ *  computer, or could not say so. Prefixed `lan-` for the LAN door. */
+export type DialFail = 'timeout' | 'error' | 'lan-timeout' | 'lan-error' | 'lan-proof';
 
 /** How often to prove the socket is still there, and how long to wait for the
  *  proof. Short enough that a dead connection is noticed within a turn, long
@@ -124,6 +134,49 @@ const DEFAULT_TIMEOUT_MS = 30000;
 // at once); one still waiting after five seconds is in TCP's long backoff, and a
 // fresh dial is quicker than waiting it out.
 const CONNECT_TIMEOUT_MS = 5000;
+/** The LAN door is tried first, and it is given little time: on the same Wi-Fi
+ *  the proof and the handshake take milliseconds, and away from home the
+ *  address leads nowhere — every second spent on it is a second the tailnet
+ *  dial waits. On 2026-11-06 reconnects through the tailnet took 136 to 782 s
+ *  with the phone and the Mac on the same network. */
+const LAN_PROOF_MS = 1200;
+const LAN_CONNECT_MS = 1500;
+
+/** Ask the computer on a LAN address to prove it is ours before the token goes
+ *  there: 192.168.178.x is every Fritz!Box, and a phone on a friend's Wi-Fi
+ *  would otherwise hand its token to whatever answers at the home address. The
+ *  daemon answers sha256(token_hash + ":" + nonce) — see `lan_proof` in
+ *  server.py — which only a computer holding this token's hash can. */
+export async function lanProof(host: string, port: number, token: string, deviceId: string,
+                               ms: number = LAN_PROOF_MS): Promise<'ok' | 'lan-timeout' | 'lan-error' | 'lan-proof'> {
+  const nonce = randomHex(16);
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctl?.abort(); }, ms);
+  try {
+    const r = await Promise.race([
+      fetch(`http://${host}:${port}/lan/proof?device=${encodeURIComponent(deviceId)}&nonce=${nonce}`,
+            ctl ? { signal: ctl.signal } : {}),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms + 50)),
+    ]);
+    if (!r.ok) return 'lan-proof';
+    const j: any = await r.json();
+    const want = sha256Hex(`${sha256Hex(token)}:${nonce}`);
+    return j && j.proof === want ? 'ok' : 'lan-proof';
+  } catch {
+    return timedOut ? 'lan-timeout' : 'lan-error';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function randomHex(bytes: number): string {
+  const b = new Uint8Array(bytes);
+  const c: any = (globalThis as any).crypto;
+  if (c && typeof c.getRandomValues === 'function') c.getRandomValues(b);
+  else for (let i = 0; i < bytes; i++) b[i] = Math.floor(Math.random() * 256);
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
 
 export class RacClient {
   private ws: WebSocket | null = null;
@@ -133,6 +186,18 @@ export class RacClient {
   private statusListeners = new Set<(s: ConnStatus) => void>();
   private linkListeners = new Set<(s: ConnStatus) => void>();
   private url = '';
+  private target: { host: string; port: number; token: string } | null = null;
+  /** The LAN door, when the computer has one and told us (`host.status`). */
+  private lan: { host: string; port: number; token: string; deviceId: string } | null = null;
+  /** The LAN door failed during this outage: the next dial goes to the tailnet
+   *  at once. Cleared after a tailnet dial fails too, so the two alternate. */
+  private skipLan = false;
+  /** Bumped by every connect() and dial, so an answer that comes back after
+   *  the world moved on is ignored. */
+  private dialGen = 0;
+  private via: Door = 'tailnet';
+  private dials = 0;
+  private fails: DialFail[] = [];
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -152,11 +217,21 @@ export class RacClient {
   private lost: { reason: ReconnectReason; code: number | null; at: number; quiet: number } | null = null;
   status: ConnStatus = 'idle';
 
-  connect(host: string, port: number, token: string) {
+  connect(host: string, port: number, token: string, lan?: { host: string; deviceId: string } | null) {
     const url = wsUrl(host, port, token);
+    const door = lan && lan.host && lan.deviceId && lan.host !== host
+      ? { host: lan.host, port, token, deviceId: lan.deviceId } : null;
     // Same target and a live socket → nothing to do (init() can run twice under Fast Refresh).
-    if (this.wanted && this.url === url && this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+    if (this.wanted && this.url === url && this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      this.lan = door;
+      return;
+    }
     this.url = url;
+    this.target = { host, port, token };
+    this.lan = door;
+    this.skipLan = false;
+    this.dials = 0;
+    this.fails = [];
     this.wanted = true;
     this.retry = 0;
     this.lost = null;
@@ -182,6 +257,16 @@ export class RacClient {
     this.setStatus('idle');
   }
 
+  /** Learn (or forget) the computer's LAN address while connected — it is told
+   *  in `host.status`, after the first socket is already open. Used from the
+   *  next dial on. */
+  setLan(lan: { host: string; deviceId: string } | null) {
+    const t = this.target;
+    if (!t) return;
+    this.lan = lan && lan.host && lan.deviceId && lan.host !== t.host
+      ? { host: lan.host, port: t.port, token: t.token, deviceId: lan.deviceId } : null;
+  }
+
   private clearConnectTimer() {
     if (this.connectTimer) clearTimeout(this.connectTimer);
     this.connectTimer = null;
@@ -190,27 +275,67 @@ export class RacClient {
   private open() {
     if (!this.wanted) return;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+    if (this.lan && !this.skipLan) { void this.openLan(this.lan); return; }
+    this.dial(this.url, 'tailnet', CONNECT_TIMEOUT_MS);
+  }
+
+  /** The LAN door: ask the address to prove it is ours, then dial it. Any
+   *  failure goes straight on to the tailnet, with no wait in between. */
+  private async openLan(lan: { host: string; port: number; token: string; deviceId: string }) {
+    const gen = ++this.dialGen;
     this.setStatus('connecting');
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(this.url);
-    } catch {
+    this.dials++;
+    const proof = await lanProof(lan.host, lan.port, lan.token, lan.deviceId);
+    if (gen !== this.dialGen || !this.wanted || this.ws) return;
+    if (proof !== 'ok') {
+      this.fails.push(proof);
+      this.skipLan = true;
+      this.open();
+      return;
+    }
+    this.dials--;   // the dial below counts itself
+    this.dial(wsUrl(lan.host, lan.port, lan.token), 'lan', LAN_CONNECT_MS);
+  }
+
+  private dial(url: string, door: Door, limitMs: number) {
+    const gen = ++this.dialGen;
+    this.dials++;
+    this.setStatus('connecting');
+    const failed = (kind: 'timeout' | 'error') => {
+      if (door === 'lan') {
+        this.fails.push(kind === 'timeout' ? 'lan-timeout' : 'lan-error');
+        this.skipLan = true;
+        this.setStatus('offline');
+        this.open();
+        return;
+      }
+      this.fails.push(kind);
+      // The tailnet failed too: give the LAN door another go on the next dial.
+      this.skipLan = false;
       this.setStatus('offline');
       this.scheduleRetry();
+    };
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      failed('error');
       return;
     }
     this.ws = ws;
+    let opened = false;
     this.connectTimer = setTimeout(() => {
       if (this.ws !== ws || ws.readyState !== WebSocket.CONNECTING) return;
-      console.warn('ws: connection handshake timed out; retrying');
+      console.warn(`ws: connection handshake timed out (${door}); retrying`);
       this.markLost('socket', null);
       this.closeSocket();
-      this.setStatus('offline');
-      this.scheduleRetry();
-    }, CONNECT_TIMEOUT_MS);
+      failed('timeout');
+    }, limitMs);
     ws.onopen = () => {
-      if (this.ws !== ws) return;
+      if (this.ws !== ws || gen !== this.dialGen) return;
+      opened = true;
       this.clearConnectTimer();
+      this.via = door;
       this.retry = 0; this.missed = 0; this.lastRx = 0; this.openedAt = Date.now();
       this.setStatus('online'); this.startHeartbeat();
     };
@@ -229,13 +354,28 @@ export class RacClient {
       // the handshake limit on a computer that has already said no.
       if (ws.readyState !== WebSocket.OPEN) {
         try { ws.onclose = null; ws.close(); } catch {}
+        if (!opened) { this.dialFailed(ws, 1006, failed); return; }
         this.lostSocket(1006);
       }
     };
     ws.onclose = (e) => {
       if (this.ws !== ws) return;
+      if (!opened) { this.dialFailed(ws, e.code ?? null, failed); return; }
       this.lostSocket(e.code ?? null);
     };
+  }
+
+  /** A dial that never opened. A refusal of the token is final whichever door
+   *  it came through; anything else is that door failing. */
+  private dialFailed(ws: WebSocket, code: number | null, failed: (k: 'timeout' | 'error') => void) {
+    if (code === 4401 || code === 1008) { this.lostSocket(code); return; }
+    this.clearConnectTimer();
+    if (this.ws === ws) this.ws = null;
+    this.stopHeartbeat();
+    for (const p of this.pending.values()) p.reject(connError('wsDropped'));
+    this.pending.clear();
+    this.markLost('socket', code);
+    failed('error');
   }
 
   /** The socket in hand is gone, by a close or a failed dial. */
@@ -333,6 +473,10 @@ export class RacClient {
    *  takes several dials is one outage, and `offline_s` is all of it. */
   private markLost(reason: ReconnectReason, code: number | null) {
     if (this.lost && reason !== 'restart') return;
+    // A new outage: the LAN door gets the first dial again. The dial count
+    // runs on until `hello` takes it (takeReconnect), so a failure that came
+    // before the loss was noticed — a first dial at a cold start — is in it.
+    if (!this.lost) this.skipLan = false;
     this.lost = { reason, code: code ?? this.lost?.code ?? null, at: this.lost?.at ?? Date.now(),
                   quiet: this.lost?.quiet ?? (Math.max(this.lastRx, this.openedAt) || Date.now()) };
   }
@@ -342,7 +486,10 @@ export class RacClient {
     const l = this.lost;
     this.lost = null;
     const s = (ms: number) => Math.round(ms / 100) / 10;
-    return l && { reason: l.reason, code: l.code, offline_s: s(Date.now() - l.at), silent_s: s(Date.now() - l.quiet) };
+    const out: Reconnect | null = l && { reason: l.reason, code: l.code, offline_s: s(Date.now() - l.at), silent_s: s(Date.now() - l.quiet),
+                                          via: this.via, dials: this.dials, fails: this.fails.slice(-12) };
+    this.dials = 0; this.fails = [];
+    return out;
   }
 
   /** Bury a socket the OS still believes in, and start reconnecting now. */

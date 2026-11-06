@@ -7,6 +7,7 @@ import ipaddress
 import json
 import logging
 import platform
+import hashlib
 import re
 import shutil
 import sqlite3
@@ -19,7 +20,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -249,6 +250,10 @@ class Server:
                                        naming_env=self._naming_env,
                                        live_account=self._live_account)
         self.clients: dict[WebSocket, Device] = {}
+        # The local-network addresses this daemon listens on (`bind = ["lan"]`),
+        # set by whoever starts it. Told to the phone in `host.status`, which
+        # tries them before the tailnet address it was paired with.
+        self.lan_addrs: list[str] = []
         # One queue per connected client, drained by that client's own writer.
         self.outbox: dict[WebSocket, Outbox] = {}
         self.writers: dict[WebSocket, asyncio.Task] = {}
@@ -318,6 +323,7 @@ class Server:
         self.app.add_middleware(TunnelGate, cfg=self.cfg, access=self.tunnel_access)
         self.app.websocket("/ws")(self.ws_endpoint)
         self.app.get("/health")(lambda: {"ok": True, "version": __version__})
+        self.app.get("/lan/proof")(self.lan_proof)
         self.app.post("/upload")(self.upload)
         # Dictation, which is an upload with nothing to upload: see `dictate`.
         self.app.post("/dictate")(self.dictate)
@@ -2045,6 +2051,27 @@ class Server:
         return StreamingResponse(r.aiter_raw(), status_code=status, headers=keep,
                                  background=BackgroundTask(close))
 
+    def lan_proof(self, request: Request, device: str = "", nonce: str = "") -> JSONResponse:
+        """Prove to a phone on the local network that this is its computer,
+        before it sends its token here.
+
+        A home network's addresses are everybody's: 192.168.178.x is every
+        Fritz!Box, and a phone that dialled its home address on a friend's Wi-Fi
+        would hand its token to whatever answers there. So the phone asks first,
+        with a nonce of its own, and only this daemon can answer: the proof is
+        sha256(token_hash + ":" + nonce), and the token's hash lives only here
+        and, worked out from the token, on the phone. It gives a stranger nothing
+        to sign in with — the hash is not the token, and the proof is not the
+        hash. Never through the tunnel: that door has its own sign-in.
+        """
+        if request.headers.get("cf-connecting-ip"):
+            return JSONResponse({"error": "not_here"}, status_code=404)
+        dev = self.cfg.devices.get(device)
+        if dev is None or dev.tunnel or not re.fullmatch(r"[0-9a-f]{16,64}", nonce or ""):
+            return JSONResponse({"error": "unknown"}, status_code=404)
+        proof = hashlib.sha256(f"{dev.token_hash}:{nonce}".encode()).hexdigest()
+        return JSONResponse({"proof": proof})
+
     # ── websocket ──────────────────────────────────────────────────────────
     async def ws_endpoint(self, ws: WebSocket) -> None:
         dev, why = self._auth(ws)
@@ -2169,9 +2196,19 @@ class Server:
             # thing the old socket delivered. After a background they differ by
             # however long iOS kept the app asleep (see ws.ts takeReconnect).
             silent = again.get("silent_s")
+            # How the phone got back: which door (`lan` or `tailnet`), how many
+            # dials it took, and how the ones that failed failed — `timeout` is
+            # a dial that never reached anything, `error` one that was refused
+            # or had no route, `proof` a LAN address that was not this computer.
+            dials = again.get("dials")
+            fails = again.get("fails")
+            extra = (f" silent={silent}s" if silent is not None else "") \
+                + (f" via={str(again.get('via'))[:10]}" if again.get("via") else "") \
+                + (f" dials={int(dials)}" if isinstance(dials, (int, float)) else "") \
+                + (f" fails={','.join(str(f)[:12] for f in fails[:12])}" if isinstance(fails, list) and fails else "")
             log.info("device reconnected: %s (%s) reason=%s code=%s offline=%ss%s",
                      dev.name, dev.id, str(again["reason"])[:40], again.get("code"),
-                     again.get("offline_s"), f" silent={silent}s" if silent is not None else "")
+                     again.get("offline_s"), extra)
         if d.get("push_token"):
             dev.push_token = d["push_token"]
         # Sent as an empty string when iOS invalidates it, which must clear the
@@ -3647,6 +3684,7 @@ class Server:
             "auto_archive_h": self.cfg.auto_archive_h,
             "active_sessions": self.sessions.active_count(),
             "connected_devices": len(self.clients),
+            "lan": list(self.lan_addrs),
             "versions": self._versions, "roots": self.cfg.allowed_roots,
             # Where a new chat opens when nothing more specific was chosen —
             # what both clients send, and what chat.create uses without one.

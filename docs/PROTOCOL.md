@@ -560,6 +560,18 @@ answer), `call.reply` `{chat_id, lang?}` (`{text}`: what a chat call reads
 aloud of the turn that just ended) and `call.digest` (`{digest}`: the snapshot
 the concierge answers from).
 
+## HTTP: the LAN door
+
+With `"lan"` in `bind`, `host.status` carries `lan: ["192.168.x.y"]` and the
+phone dials that address before the tailnet one it was paired on. First it
+asks `GET /lan/proof?device=<device_id>&nonce=<16-64 hex>`, unauthenticated;
+the answer is `{proof: sha256(token_hash + ":" + nonce)}`, which only the
+computer holding the token's hash can give and which the phone works out from
+its token. A wrong or missing proof, and the token never goes to that address.
+Never answered through the tunnel. A `hello` after a reconnect may add `via`
+(`lan`|`tailnet`), `dials` and `fails` (`timeout`, `error`, `lan-timeout`,
+`lan-error`, `lan-proof`) to `reconnect`; the daemon logs them.
+
 ## HTTP: uploads
 
 `POST /upload` (multipart: `file`, `chat_id`), `Authorization: Bearer <token>`.

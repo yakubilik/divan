@@ -494,6 +494,10 @@ class Config:
                 ip = tailscale_ip()
                 if ip:
                     out.append(ip)
+            elif b == "lan":
+                ip = lan_ip()
+                if ip:
+                    out.append(ip)
             else:
                 out.append(b)
         # dedupe, keep order
@@ -536,6 +540,35 @@ def tailscale_ip() -> str | None:
         except Exception:
             pass
     return None
+
+
+def lan_ip() -> str | None:
+    """This machine's address on the local network, or None when it has none.
+
+    The one the default route leaves by: a UDP socket "connected" to a public
+    address sends nothing, it only makes the OS choose the interface. Only a
+    private address counts — a public one would put the daemon on the internet,
+    and Tailscale's 100.64/10 is what `auto` is for.
+
+    Why a LAN door at all: the phone at home otherwise reaches the computer
+    through Tailscale's tunnel even when both sit on the same Wi-Fi, and on
+    2026-11-06 the reconnects that took 136 to 782 s were dials that never
+    reached the daemon. The phone tries this address first and proves it is
+    talking to this computer before it sends its token (see `/lan/proof`).
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            ip = s.getsockname()[0]
+    except OSError:
+        return None
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    if not addr.is_private or addr.is_loopback or addr.is_link_local or _is_tailscale_v4(ip):
+        return None
+    return ip
 
 
 def _is_tailscale_v4(ip: str) -> bool:

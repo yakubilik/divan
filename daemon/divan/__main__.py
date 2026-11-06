@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 import time
 
-from .config import CONFIG_DIR, Config, LOG_DIR, DEFAULT_PORT
+from .config import CONFIG_DIR, Config, LOG_DIR, DEFAULT_PORT, lan_ip
 
 
 def _sanitize_env() -> None:
@@ -63,6 +63,8 @@ def cmd_serve(args: argparse.Namespace) -> None:
         print("No paired device yet. Run: divan pair", file=sys.stderr)
 
     srv = Server(cfg)
+    here = lan_ip()
+    srv.lan_addrs = [b for b in binds if here and b == here]
 
     async def main() -> None:
         servers = []

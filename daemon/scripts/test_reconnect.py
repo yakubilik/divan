@@ -11,6 +11,10 @@
    connection coming and going (#291).
 5. A `ping` is answered ahead of everything already queued for that client, so
    a heartbeat is never stuck behind a replay or a stream (#291).
+7. The LAN door: `hello` logs which door the phone came back by and how its
+   dials failed; `/lan/proof` proves the computer to the phone without giving
+   away the token or its hash, and never through the tunnel; `host.status`
+   carries the LAN address.
 6. A `chat.send` resent under a client id the daemon already accepted for that
    chat runs nothing and gets the first answer again; one without an id sends
    as it always did (#292).
@@ -23,6 +27,7 @@ import argparse
 import asyncio
 import atexit
 import contextlib
+import hashlib
 import io
 import json
 import logging
@@ -280,6 +285,41 @@ def main() -> None:
         back = lines("device reconnected: iPhone")
         check(len(back) == 2 and "offline=0.2s silent=404.5s" in back[-1],
               "how long the old socket had been silent is logged beside it", repr(back[-1:]))
+
+        print("7. the LAN door (2026-11-06)")
+        with client.websocket_connect(f"/ws?token={phone}") as ws:
+            ws.receive_json()
+            ws.send_json({"id": 1, "type": "hello", "data": {
+                "device_name": "iPhone", "reconnect": {"reason": "socket", "code": 1006, "offline_s": 1.6,
+                                                       "via": "tailnet", "dials": 2, "fails": ["lan-timeout"]}}})
+            while ws.receive_json().get("id") != 1:
+                pass
+        back = lines("device reconnected: iPhone")[-1]
+        check("via=tailnet" in back and "dials=2" in back and "fails=lan-timeout" in back,
+              "`hello` says which door the phone came back by and how its dials failed", back)
+        dev = next(d for d in srv.cfg.devices.values() if d.name == "iPhone")
+        nonce = "ab" * 16
+        r = client.get(f"/lan/proof?device={dev.id}&nonce={nonce}")
+        want = hashlib.sha256(f"{hashlib.sha256(phone.encode()).hexdigest()}:{nonce}".encode()).hexdigest()
+        check(r.status_code == 200 and r.json().get("proof") == want,
+              "the proof is sha256(token hash + nonce), which the phone can work out from its token",
+              f"{r.status_code} {r.text}")
+        check(phone not in r.text and dev.token_hash not in r.text, "it gives away neither the token nor its hash")
+        r = client.get(f"/lan/proof?device=nobody&nonce={nonce}")
+        check(r.status_code == 404, "an unknown device gets no proof", str(r.status_code))
+        r = client.get(f"/lan/proof?device={dev.id}&nonce=short")
+        check(r.status_code == 404, "nor does a nonce too short to be one", str(r.status_code))
+        r = client.get(f"/lan/proof?device={dev.id}&nonce={nonce}", headers={"CF-Connecting-IP": TUNNEL_IP})
+        check(r.status_code in (403, 404), "and the tunnel never answers it", str(r.status_code))
+        srv.lan_addrs = ["192.168.1.20"]
+        with client.websocket_connect(f"/ws?token={phone}") as ws:
+            info = ws.receive_json()
+        check(info.get("data", {}).get("lan") == ["192.168.1.20"], "`host.status` tells the phone the LAN address",
+              json.dumps(info)[:200])
+        srv.lan_addrs = []
+        ip = config_mod.lan_ip()
+        check(ip is None or (not ip.startswith("100.") and not ip.startswith("127.")),
+              "`lan` binds a private address, never the tailnet or loopback", str(ip))
 
         print("4. a one-shot socket")
         logging.getLogger("rac").setLevel(logging.DEBUG)

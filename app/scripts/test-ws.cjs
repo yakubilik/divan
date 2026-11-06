@@ -74,6 +74,9 @@ function clock() {
 function sandbox() {
   const c = clock();
   const sockets = [];
+  // The LAN door's proof request: what answers at the home address.
+  const fetches = [];
+  const lan = { answer: () => new Promise(() => {}) };
   class FakeSocket {
     static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
     constructor(url) { this.url = url; this.readyState = 0; this.sent = []; this.closed = false; sockets.push(this); }
@@ -91,13 +94,14 @@ function sandbox() {
     setTimeout: c.setTimeout, clearTimeout: c.clearTimeout, setInterval: c.setInterval, clearInterval: c.clearInterval,
     WebSocket: FakeSocket, Date: FakeDate, console: { warn() {}, log() {}, error() {} },
     encodeURIComponent, JSON, Math, Map, Set, Promise, Error,
+    fetch: (url) => { fetches.push(url); return lan.answer(url); },
   });
   const file = path.join(root, 'src/ws.ts');
   const js = transform(fs.readFileSync(file, 'utf8'), { transforms: ['typescript', 'imports'], filePath: file }).code;
   const mod = { exports: {} };
   const req = (name) => require(name.startsWith('.') ? path.join(root, 'src', name + '.ts') : name);
   vm.runInContext(`(function (exports, require, module) {${js}\n})`, ctx)(mod.exports, req, mod);
-  return { c, sockets, RacClient: mod.exports.RacClient, callOnce: mod.exports.callOnce };
+  return { c, sockets, fetches, lan, RacClient: mod.exports.RacClient, callOnce: mod.exports.callOnce };
 }
 
 async function online(s) {
@@ -429,6 +433,115 @@ const ready = (async () => {
     client.disconnect();
     await s.c.advance(20000);
     check('ws: cancelling a pending connection does not redial', s.sockets.length === 2);
+  }
+
+  // ── the LAN door (2026-11-06: tailnet reconnects of 136-782 s at home) ──────
+  const crypto = require('crypto');
+  const sha = (x) => crypto.createHash('sha256').update(x).digest('hex');
+  const ours = (token) => (url) => {
+    const nonce = new URL(url).searchParams.get('nonce');
+    return Promise.resolve({ ok: true, json: async () => ({ proof: sha(`${sha(token)}:${nonce}`) }) });
+  };
+  const LAN = { host: '192.168.178.149', deviceId: 'dev1' };
+  {
+    const s = sandbox();
+    s.lan.answer = ours('t');
+    const client = new s.RacClient();
+    client.connect('100.64.0.1', 8790, 't', LAN);
+    await flush();
+    check('ws: at home the LAN address is asked to prove itself first',
+      s.fetches.length === 1 && s.fetches[0].startsWith('http://192.168.178.149:8790/lan/proof?device=dev1&nonce='));
+    check('ws: …and once it has, the socket is dialled there, not on the tailnet',
+      s.sockets.length === 1 && s.sockets[0].url.startsWith('ws://192.168.178.149:8790/ws?token=t'));
+    s.sockets[0].open();
+    await flush();
+    client.takeReconnect();                              // what `hello` does on every open
+    s.sockets[0].drop(1006);
+    await flush();
+    await s.c.advance(250);
+    s.sockets.at(-1).open();
+    await flush();
+    const why = client.takeReconnect();
+    check('ws: a reconnect at home goes through the LAN again, and says so',
+      s.sockets.at(-1).url.includes('192.168.178.149') && why?.via === 'lan' && why.dials === 1 && why.fails.length === 0);
+  }
+  {
+    const s = sandbox();
+    s.lan.answer = ours('somebody-else');
+    const client = new s.RacClient();
+    client.connect('100.64.0.1', 8790, 't', LAN);
+    await flush();
+    check('ws: a stranger at the home address never sees the token',
+      s.sockets.every((w) => !w.url.includes('192.168.178.149')));
+    check('ws: …and the tailnet is dialled at once',
+      s.sockets.length === 1 && s.sockets[0].url.startsWith('ws://100.64.0.1:8790/'));
+    s.sockets[0].open();
+    await flush();
+    client.takeReconnect();                              // what `hello` does on every open
+    s.sockets[0].drop(1006);
+    await flush();
+    s.lan.answer = ours('somebody-else');
+    await s.c.advance(250);
+    await flush();
+    s.sockets.at(-1).open();
+    await flush();
+    const why = client.takeReconnect();
+    check("ws: …the failed proof is told to the daemon as 'lan-proof'",
+      why?.via === 'tailnet' && why.fails.includes('lan-proof') && why.dials === 2);
+  }
+  {
+    const s = sandbox();                                 // away: nothing answers at the LAN address
+    const client = new s.RacClient();
+    client.connect('100.64.0.1', 8790, 't', LAN);
+    await flush();
+    await s.c.advance(1199);
+    check('ws: away from home the tailnet waits for the LAN proof no longer than 1.2 s',
+      s.sockets.length === 0);
+    await s.c.advance(60);
+    check('ws: …and is dialled as soon as it times out', s.sockets.length === 1 && s.sockets[0].url.includes('100.64.0.1'));
+  }
+  {
+    const s = sandbox();
+    s.lan.answer = ours('t');
+    const client = new s.RacClient();
+    client.connect('100.64.0.1', 8790, 't', LAN);
+    await flush();
+    await s.c.advance(1500);                             // the LAN handshake stalls
+    check('ws: a LAN handshake that stalls gives way to the tailnet after 1.5 s',
+      s.sockets.length === 2 && s.sockets[0].closed && s.sockets[1].url.includes('100.64.0.1'));
+    await s.c.advance(5000);                             // the tailnet stalls too
+    await s.c.advance(250);
+    await flush();
+    check('ws: when the tailnet fails too, the next dial tries the LAN again',
+      s.fetches.length === 2 && s.sockets.at(-1).url.includes('192.168.178.149'));
+    s.sockets.at(-1).open();
+    await flush();
+    const why = client.takeReconnect();
+    check('ws: every failed dial is counted and named for the daemon',
+      why?.via === 'lan' && why.dials === 3 && why.fails.join(',') === 'lan-timeout,timeout');
+  }
+  {
+    const s = sandbox();
+    s.lan.answer = ours('t');
+    const client = new s.RacClient();
+    client.connect('100.64.0.1', 8790, 't', LAN);
+    await flush();
+    s.sockets[0].drop(4401);
+    await flush();
+    await s.c.advance(10_000);
+    check('ws: a token refused on the LAN is refused, not retried on the tailnet',
+      client.status === 'unauthorized' && s.sockets.length === 1);
+  }
+  {
+    const s = sandbox();
+    const client = await online(s);                      // paired before the LAN door existed
+    client.setLan(LAN);
+    s.lan.answer = ours('t');
+    s.sockets[0].drop(1006);
+    await flush();
+    await s.c.advance(250);
+    check('ws: a LAN address learned while online is used from the next dial',
+      s.fetches.length === 1 && s.sockets.at(-1).url.includes('192.168.178.149'));
   }
 
   const store = fs.readFileSync(path.join(root, 'src/store.ts'), 'utf8');

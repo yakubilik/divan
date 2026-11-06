@@ -240,7 +240,11 @@ tells it to. The whole design is about that sentence being safe to say.
 
 - **It does not listen on the internet.** The daemon binds the Tailscale
   address and `127.0.0.1`, nothing else. There is no relay, no account, no
-  cloud. Your phone reaches your computer or it reaches nothing.
+  cloud. Your phone reaches your computer or it reaches nothing. Adding `"lan"`
+  to `bind` also opens the computer's private local-network address, so a
+  phone at home skips the tunnel; it asks that address to prove it is your
+  computer (`/lan/proof`) before it sends its token there. That hop is plain
+  `ws://` on your Wi-Fi, which is the trade it makes.
 - **Tokens are hashed.** Only a sha256 lives in `config.toml`; the plaintext
   leaves exactly once, in the pairing QR. `revoke <id>` cuts a device off.
   Through the tunnel, five different wrong tokens from one IP in ten minutes

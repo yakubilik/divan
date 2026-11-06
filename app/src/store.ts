@@ -554,7 +554,7 @@ export const useStore = create<State>((set, get) => {
     const s = get();
     const cid = ev.chat_id;
     switch (ev.event) {
-      case 'host.status': set({ hostInfo: ev.data }); return;
+      case 'host.status': set({ hostInfo: ev.data }); learnLan(ev.data); return;
       // The computer is stopping on purpose. Worth knowing, because a socket
       // that closes for a reason is a gap and a socket that closes for no
       // reason is a fault, and they deserve different faces. The poke is what
@@ -690,6 +690,23 @@ export const useStore = create<State>((set, get) => {
     set({ events: {}, live: {}, busy: {}, loadedChats: {}, switching: false, ...extra } as any);
   }
 
+  /** The LAN door of a stored computer, when it has told us one. */
+  function lanOf(h: StoredHost): { host: string; deviceId: string } | null {
+    return h.lan && h.device_id ? { host: h.lan, deviceId: h.device_id } : null;
+  }
+
+  /** The computer said which local-network address it listens on, if any:
+   *  hand it to the socket for the next dial, and keep it for a cold start. */
+  function learnLan(info: any) {
+    const h = get().host;
+    if (!h || !h.device_id) return;
+    const lan: string | null = Array.isArray(info?.lan) && typeof info.lan[0] === 'string' ? info.lan[0] : null;
+    client.setLan(lan ? { host: lan, deviceId: h.device_id } : null);
+    if ((h.lan ?? null) === lan) return;
+    const hosts = get().hosts.map((x) => (x.id === h.id ? { ...x, lan } : x));
+    void persistHosts(hosts, get().activeHostId).catch(() => {});
+  }
+
   function connectTo(h: StoredHost | null, keepList = false) {
     client.disconnect();
     if (keepList) {
@@ -702,7 +719,7 @@ export const useStore = create<State>((set, get) => {
     } else {
       set({ ...perHost(), switching: false });
     }
-    if (h) client.connect(h.host, h.port, h.token);
+    if (h) client.connect(h.host, h.port, h.token, lanOf(h));
   }
 
   async function persistHosts(hosts: StoredHost[], active: string | null) {
@@ -789,7 +806,7 @@ export const useStore = create<State>((set, get) => {
             defaults: defaultsFor(byHost, active), prefs, locked: prefs.faceIdLaunch, ready: true });
       // What the last run left unsent, before the socket that will send it.
       await outbox.load();
-      if (host) client.connect(host.host, host.port, host.token);
+      if (host) client.connect(host.host, host.port, host.token, lanOf(host));
     },
 
     addHost: async (cfg) => {
