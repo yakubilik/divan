@@ -217,20 +217,38 @@ class Keychain:
         self.timeout = timeout
         self.stored: set[str] = set()   # services written by this process
 
+    # `security -i` reads a line into a 4 KB buffer and runs the rest as the next command:
+    # a value past ~2 KB (hex doubles it) was stored cut short and the call exited 1. Five
+    # keys sat in transcripts for four weeks that way, and capture() masked a long key in a
+    # message after the keychain had kept only its first half (night watch A90, 6 Nov 2026).
+    # Such a value goes on `security`'s argv instead, hex-encoded, for the few milliseconds
+    # the call lives. The other ways out are worse: the `-w` prompt on stdin keeps 128 bytes,
+    # and writing through Security.framework makes Python the item's trusted app, so every
+    # later `security find-generic-password` opens a keychain dialog on the Mac's screen.
+    LINE_MAX = 4000
+
     def store(self, service: str, value: str) -> None:
         if service in self.stored:
             return
         line = (f"add-generic-password -U -a {self.account} -s {service} -l {service} "
                 f"-X {value.encode().hex()}\n")
+        if len(line) > self.LINE_MAX:
+            self._run(["/usr/bin/security", "add-generic-password", "-U", "-a", self.account,
+                       "-s", service, "-l", service, "-X", value.encode().hex()], None)
+            self.stored.add(service)
+            return
+        self._run(["/usr/bin/security", "-i"], line)
+        self.stored.add(service)
+
+    def _run(self, args: list[str], stdin: str | None) -> None:
         try:
-            r = subprocess.run(["/usr/bin/security", "-i"], input=line, capture_output=True,
-                               text=True, timeout=self.timeout)
+            r = subprocess.run(args, input=stdin, capture_output=True, text=True,
+                               timeout=self.timeout)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise KeychainError(f"security could not run: {type(exc).__name__}") from None
         if r.returncode != 0:
-            # stderr is the usage text and an error line; neither repeats the input.
+            # Only the exit code: on a cut line stderr repeats part of the value.
             raise KeychainError(f"security exited {r.returncode}")
-        self.stored.add(service)
 
 
 _default: Keychain | None = None

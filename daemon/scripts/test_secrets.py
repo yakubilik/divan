@@ -9,6 +9,7 @@ source, and no check ever prints a value — only kinds and counts.
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import base64
 import json
 import logging
@@ -172,6 +173,28 @@ def keychain_wrapper():
           and "-U" in stdin, "the value goes over stdin, hex-encoded, as an upsert")
 
 
+def keychain_long_value():
+    print("\nthe real keychain, a key longer than security -i takes on one line")
+    import sys as _sys
+    if _sys.platform != "darwin":
+        print("  (skipped: not macOS)")
+        return
+    kc = secrets.Keychain(account="divan-test")
+    service = "rac-secret-test-longvalue"
+    value = "-----BEGIN PRIVATE KEY-----\n" + "QUJD" * 1500 + "\n-----END PRIVATE KEY-----"
+    try:
+        kc.store(service, value)
+        secrets.Keychain(account="divan-test").store(service, value + "x")   # second write updates
+        got = subprocess.run(["/usr/bin/security", "find-generic-password", "-a", "divan-test",
+                              "-s", service, "-w"], capture_output=True, text=True).stdout
+        got = bytes.fromhex(got.strip()).decode()   # a value with a newline comes back as hex
+        check(got.rstrip("\n") == value + "x", "a 6 KB key is stored whole and updated in place, readable by security without a dialog",
+              f"{len(got)} of {len(value) + 1} chars")
+    finally:
+        subprocess.run(["/usr/bin/security", "delete-generic-password", "-a", "divan-test",
+                        "-s", service], capture_output=True)
+
+
 def capture_store():
     print("\ncapture writes each key under its placeholder's service")
     kc = FakeKeychain()
@@ -262,6 +285,7 @@ async def send_path():
 async def main() -> int:
     detection()
     keychain_wrapper()
+    keychain_long_value()
     capture_store()
     await send_path()
     print(f"\n{'FAILED: ' + ', '.join(failures) if failures else 'all checks passed'}")
