@@ -9,6 +9,7 @@ import { ChatView } from './components/ChatView';
 import { ChatComposer } from './components/ChatComposer';
 import { Asking, useAskingRoom } from './components/Asking';
 import { NewChat } from './components/NewChat';
+import { DraftHead } from './components/DraftHead';
 import { Palette, type Command } from './components/Palette';
 import { FieldSheet, accountName, type Field } from './components/FieldSheet';
 import { ApprovalModal, isGone, type Pending } from './components/ApprovalModal';
@@ -124,6 +125,8 @@ export function App() {
   const projectComposerRef = useRef<HTMLTextAreaElement>(null);
   /** …and the Chat place's own empty composer, where New chat leads there. */
   const firstWordRef = useRef<HTMLTextAreaElement>(null);
+  // What the empty chat's head was changed to; the next send opens with it.
+  const [draftPicks, setDraftPicks] = useState<ToldPicks>({});
 
   // Whether the sidebar is a list or a rail. Remembered because it is a way of
   // working — terminal mode wants the width, the chat screen wants the list —
@@ -996,7 +999,9 @@ export function App() {
                 // What is said in it opens one with every default this
                 // computer has (`tell`) — nothing is chosen first, and nothing
                 // is made on the computer until it is sent.
-                <div data-first-word style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                <div data-first-word style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  {!!fleet.focus && <DraftHead hostKey={fleet.focus} picks={draftPicks} onPicks={setDraftPicks} />}
+                  <div style={{ flex: 1 }} />
                   <p className="dv-meta" style={{ margin: '0 0 4px', textAlign: 'center' }}>No conversation yet.</p>
                   <div style={{ width: '100%', maxWidth: 800, margin: '0 auto', flexShrink: 0 }}>
                     <ChatComposer
@@ -1004,7 +1009,8 @@ export function App() {
                       placeholder="Talk to Hermes" autoFocus={fresh} fieldRef={firstWordRef}
                       onInterrupt={() => {}}
                       onSend={async (text, held) => {
-                        const told = await tell(text, null, {}, held.map((a) => a.file));
+                        const told = await tell(text, null, draftPicks, held.map((a) => a.file));
+                        setDraftPicks({});
                         useTold.getState().close(idOfTold(told));
                         // The chat takes over the empty composer's entry: Back
                         // from it is the chat that was open before New chat.

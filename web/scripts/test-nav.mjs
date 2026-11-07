@@ -219,7 +219,7 @@ const go = {
  *  the empty composer, the Terminal wall and the ticket open on it. */
 const screen = () => {
   const cur = (header()?.querySelector('[aria-current="page"]')?.textContent ?? '').trim();
-  const head = doc.querySelector('.dv-chathead [title]')?.getAttribute('title') ?? null;
+  const head = doc.querySelector('.dv-chathead:not([data-draft-head]) [title]')?.getAttribute('title') ?? null;
   return JSON.stringify({
     place: !cur || cur === 'divan' ? 'Dashboard' : cur.replace(/\s+/g, ' '),
     page: doc.querySelector('nav[aria-label^="Under"] [aria-current="page"] span')?.textContent?.trim()

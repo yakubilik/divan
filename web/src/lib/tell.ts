@@ -185,6 +185,10 @@ export interface ToldPicks {
   model?: string;
   account_id?: string;
   agent?: string | null;
+  /** The empty chat's head (`components/DraftHead.tsx`) can set these too. */
+  effort?: string;
+  perm_mode?: string;
+  cwd?: string;
 }
 
 export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks = {},
@@ -209,7 +213,7 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
     const name = slot.info?.name ?? slot.cfg?.name ?? host;
     throw new Error(`${name} has not said what it can open a chat on yet`);
   }
-  const cwd = at.cwd ?? open.cwd;
+  const cwd = picks.cwd ?? at.cwd ?? open.cwd;
   const account = picks.account_id ?? open.account_id;
   const agent = picks.agent !== undefined ? picks.agent
     : await hermesOn(host, account || null, cwd, open.provider);
@@ -222,8 +226,8 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
   const chat = await createChat(host, {
     provider: open.provider,
     model: picks.model ?? open.model!,
-    effort: open.effort,
-    perm_mode: open.perm_mode ?? undefined,
+    effort: picks.effort ?? open.effort,
+    perm_mode: picks.perm_mode ?? open.perm_mode ?? undefined,
     account_id: account || undefined,
     cwd: cwd ?? undefined,
     title,

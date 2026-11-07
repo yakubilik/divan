@@ -201,7 +201,7 @@ const attach = async (files) => {
   await act(async () => { input.dispatchEvent(new w.Event('change', { bubbles: true })); });
   await settle();
 };
-const chatOpen = () => !!pane()?.querySelector('.dv-chathead');
+const chatOpen = () => !!pane()?.querySelector('.dv-chathead:not([data-draft-head])');
 const click = async (el) => { await act(async () => { el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); }); };
 const press = async (key) => {
   await act(async () => { w.dispatchEvent(new w.KeyboardEvent('keydown', { key, metaKey: true, bubbles: true })); });
