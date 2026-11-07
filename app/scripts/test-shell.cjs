@@ -284,23 +284,25 @@ checks.push(
   ['the Machine list holds the screens that were about a computer',
     eq(routes, ['/machines', '/executors', '/agents', '/screen', '/accounts', '/pool', '/call', '/settings'])],
   ['…in the frame’s shape: a name, a grey line, and a chevron one level deeper',
-    rows.every((r) => r.title && r.note) && /ListRow/.test(machine)],
+    rows.every((r) => r.title && r.note) && /ListRow/.test(src('src/components/machine.tsx'))],
   ['…and the machines row says how many answered',
     rows[0].meta === 'mAllReachable' && rows[0].tone === 'run'
     && S.machineRows({ machines: 3, unreachable: 1, executors: 9 })[0].meta === 'mUnreachable'],
   ['nothing is coloured unless a machine is actually unreachable',
     S.machineRows({ machines: 3, unreachable: 1, executors: 9 })[0].tone === 'red'
     && rows.slice(1).every((r) => !r.tone)],
-  ['the Machine place is four tabs (HANDOVER §4.9), and every one of those rows is a tab or a page under one',
-    S.MACHINE_TABS.map((t) => t.key).join() === 'machines,executors,terminal,settings'
-    && routes.filter((r) => r !== '/machines').every((r) => S.MACHINE_TAB_ROUTES.includes(r))
-    && /<MachineTabs here="machines"/.test(machine) && /<UnderTab here="machines"/.test(machine)],
+  // Computers · Accounts · Terminal · Settings (Yakup, 7 Nov 2026): the four
+  // things he comes here for. Each computer's screen is a button on its card.
+  ['the Machine place is four tabs, and every one of those rows is a tab, a page under one, or a card’s button',
+    S.MACHINE_TABS.map((t) => t.key).join() === 'machines,accounts,terminal,settings'
+    && routes.filter((r) => r !== '/machines' && r !== '/screen').every((r) => S.MACHINE_TAB_ROUTES.includes(r))
+    && /<MachineTabs here="machines"/.test(machine) && /router\.push\('\/screen'\)/.test(machine)],
   // The call aside: the chat list has the general call in its header (#142).
   ['…and no other place leads to one of them, the call aside',
     routes.every((route) => !new RegExp(`'${route}'`).test(dash)
       && (route === '/call' || !new RegExp(`'${route}'`).test(chatPlace)))],
   ['pairing is inside it too, behind the machines it adds one to',
-    /'\/pair'|pathname: '\/pair'/.test(hostSheet) && /pathname: '\/pair'/.test(settings)],
+    /'\/pair'|pathname: '\/pair'/.test(hostSheet) && /pathname: '\/pair'/.test(machine)],
 
   // Moved, not rewritten. Every one of these is a feature the old top level
   // had, asked for where it now lives.
@@ -311,8 +313,9 @@ checks.push(
   ['the computer picker still switches, unpairs, adds and shows a screen',
     /switchHost\(/.test(hostSheet) && /removeHost\(/.test(hostSheet)
     && /'\/screen'/.test(hostSheet) && /'\/pair'/.test(hostSheet)],
-  ['Settings still leads to the accounts, the pool and the parts gallery',
-    /'\/accounts'/.test(settings) && /'\/pool'/.test(settings) && /\/divan-gallery/.test(settings)],
+  ['the accounts and the pool are a tab and a page under it, and Settings still leads to the parts gallery',
+    S.MACHINE_TABS.some((t) => t.route === '/accounts' && t.pages.some((p) => p.route === '/pool'))
+    && /<UnderTab here="accounts"/.test(src('app/accounts.tsx')) && /\/divan-gallery/.test(settings)],
   ['the ticket wall is work rather than infrastructure, so it is not in here',
     !routes.includes('/ustabasi') && /'\/ustabasi'/.test(dash)],
   ['the old top level is gone: nothing draws the computer picker any more',
@@ -380,8 +383,8 @@ checks.push(
       empty.includes('dashEmpty') && empty.includes('>divan<')],
     ['\u2026and no ticket queue on it, because no computer said it had one',
       !empty.includes('dashQueueNote')],
-    ['the Machine place draws its four tabs and the pages under the first',
-      ['mMachines', 'mExecutors', 'mTerminal', 'mSettings', 'mUnder', 'mScreen'].every((k) => machineScreen.includes(k))],
+    ['the Machine place draws its four tabs and a card’s Screen button',
+      ['tabComputers', 'tabAccounts', 'mTerminal', 'mSettings'].every((k) => machineScreen.includes(k))],
   );
 
   // …and the same two screens against four products on two machines, one of

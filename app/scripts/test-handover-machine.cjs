@@ -26,6 +26,7 @@ const Conversation = require(path.join(root, 'app/chat/[id].tsx')).Conversation;
 const ChatPlace = require(path.join(root, 'app/chat/index.tsx')).default;
 const Machine = require(path.join(root, 'app/machine.tsx')).default;
 const Executors = require(path.join(root, 'app/executors.tsx')).default;
+const Accounts = require(path.join(root, 'app/accounts.tsx')).default;
 const Terminal = require(path.join(root, 'app/terminal.tsx')).default;
 const Settings = require(path.join(root, 'app/settings.tsx')).default;
 const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
@@ -208,17 +209,15 @@ const ready = (async () => {
     // 4 · four tabs, each at its own route; every page under one; Terminal opens a chat
     {
       stand();
-      for (const label of ['Executors', 'Terminal', 'Settings']) {
+      for (const label of ['Accounts', 'Terminal', 'Settings']) {
         R.render('dark', h(Machine));
         one((p) => p.text === label).press();
       }
       const tabs = R.nav.replaced();
       const pages = [];
-      for (const [Screen, title] of [[Machine, 'Remote screen'], [Executors, 'Agents'], [Executors, 'Accounts & sign-ins'],
-                                     [Executors, 'Sign-in pool'], [Terminal, 'Ticket queue'], [Settings, 'Call']]) {
+      for (const [Screen, title] of [[Machine, 'Screen'], [Accounts, 'Sign-in pool'], [Settings, 'Executors'],
+                                     [Settings, 'Agents'], [Settings, 'Ticket queue'], [Settings, 'Call']]) {
         stand();
-        // Terminal opens on its shell; the chat wall and the queue are behind Chats.
-        if (Screen === Terminal) R.params.set({ view: 'chats' });
         R.render('dark', h(Screen));
         one((p) => p.text.startsWith(title)).press();
         pages.push(...R.nav.pushed());
@@ -230,19 +229,19 @@ const ready = (async () => {
       R.render('dark', h(Terminal));
       one((p) => p.text.startsWith('Refunds')).press();
       const term = R.nav.pushed();
-      checks.push(['phone: Machine has four tabs at their own routes; Screen, Agents, Accounts, the pool, the queue and Call sit under one; Terminal opens on a shell, and its Chats opens a chat to type into',
-        eq(tabs, ['/executors', '/terminal', '/settings'])
-        && eq(pages, ['/screen', '/agents', '/accounts', '/pool', '/ustabasi', '/call']) && eq(term, ['/chat/c1'])
+      checks.push(['phone: Machine has four tabs at their own routes (Computers, Accounts, Terminal, Settings); a card opens its Screen, the pool sits under Accounts, the rest under Settings; Terminal opens on a shell, and its Chats opens a chat to type into',
+        eq(tabs, ['/accounts', '/terminal', '/settings'])
+        && eq(pages, ['/screen', '/pool', '/executors', '/agents', '/ustabasi', '/call']) && eq(term, ['/chat/c1'])
         && shell.includes('data-label="Tab"') && shell.includes('data-label="Control"') && !shell.includes('Refunds')]);
     }
 
-    // 5 · unreachable in red, running by name, the ring
+    // 5 · unreachable in red, running by name; the ring is on Accounts
     {
       stand();
-      const page = R.render('dark', h(Machine));
+      const page = R.render('dark', h(Machine)) + R.render('dark', h(Accounts));
       const red = R.styles(page).some((s) => s.color === dark.red);
       stand({ studio: studio(0.1) });
-      const low = R.render('dark', h(Machine));
+      const low = R.render('dark', h(Accounts));
       checks.push(['phone: an unreachable machine says unreachable in red, that its data may be stale, and when it was last seen; an online one what it runs; the ring is the real share and reset, amber with low when low',
         red && page.includes('unreachable') && page.includes('What it last reported may be stale.')
         && page.includes('last seen 3h') && page.includes('Running 1: Webhook retry policy.')

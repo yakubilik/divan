@@ -5,7 +5,8 @@ import { useT } from '../src/store';
 import { useDivanView } from '../src/queue';
 import { executorGroups, type Words } from '../src/machine';
 import { EmptyState, SectionHeader } from '../src/components/divan';
-import { ExecutorRow, MachineTabs, PageHead, UnderTab } from '../src/components/machine';
+import { ExecutorRow, PageHead } from '../src/components/machine';
+import { BackRow } from '../src/components/waiting';
 import { Shell } from '../src/components/shell';
 
 /** Machine › Executors — Mobile11 S14.
@@ -23,8 +24,8 @@ import { Shell } from '../src/components/shell';
  *  last, runs on no machine, and his state is how much is waiting on him.
  *
  *  The reading is `src/machine.ts` so that `scripts/test-machine.cjs` can hold
- *  this page to it without a phone. It is the second of Machine's four tabs
- *  (HANDOVER §4.9); the agents, the sign-ins and the pool sit under it. */
+ *  this page to it without a phone. It is one of the rows under
+ *  Settings › more (it was a tab of its own until 7 Nov 2026). */
 export default function Executors() {
   const router = useRouter();
   const T = useT();
@@ -40,7 +41,7 @@ export default function Executors() {
     <Shell place="machine" badge={view.totals.needsYou}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 20,
                                            paddingBottom: 24 }}>
-        <MachineTabs here="executors" />
+        <BackRow label={T('mSettings')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/settings'))} />
         <PageHead title={T('exTitle')} count={total || null} style={{ marginTop: 12, paddingHorizontal: 0 }} />
         {total === 0
           ? <EmptyState title={T('exNone')} body={T('exNoneBody')} />
@@ -55,7 +56,6 @@ export default function Executors() {
               ))}
             </View>
           ))}
-        <UnderTab here="executors" style={{ marginTop: 18 }} />
       </ScrollView>
     </Shell>
   );

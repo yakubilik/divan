@@ -181,25 +181,25 @@ export const MACHINE_ROUTES: string[] = machineRows({ machines: 0, unreachable: 
 export interface MachinePage { key: string; route: string; icon: string; title: Key; note: Key }
 
 /** One tab of the Machine place, at its own route, and the pages under it. */
-export interface MachineTab { key: 'machines' | 'executors' | 'terminal' | 'settings'; label: Key; route: string; pages: MachinePage[] }
+export interface MachineTab { key: 'machines' | 'accounts' | 'terminal' | 'settings'; label: Key; route: string; pages: MachinePage[] }
 
-/** Machines · Executors · Terminal · Settings. Every screen the Machine list
- *  reached is under one of them: the computer's own screen under Machines; the
- *  agents, the sign-ins and the pool under Executors; the ticket queue under
- *  Terminal; the voice line under Settings. */
+/** Computers · Accounts · Terminal · Settings — the four things a person comes
+ *  here for, each a tab of its own (Yakup, 7 Nov 2026: "I can't find what I'm
+ *  looking for"). Each computer's screen is a button on its card, and its own
+ *  settings sit under the cards. The pool is the one page under Accounts; the
+ *  pages nobody opens daily — who is working, the agents, the ticket queue, the
+ *  call — are the "more" rows at the foot of Settings, so nothing was lost and
+ *  nothing is in the way. */
 export const MACHINE_TABS: MachineTab[] = [
-  { key: 'machines', label: 'mMachines', route: '/machine', pages: [
-    { key: 'screen', route: '/screen', icon: 'screen_share', title: 'mScreen', note: 'mScreenNote' },
-  ] },
-  { key: 'executors', label: 'mExecutors', route: '/executors', pages: [
-    { key: 'agents', route: '/agents', icon: 'face', title: 'mAgents', note: 'mAgentsNote' },
-    { key: 'accounts', route: '/accounts', icon: 'key', title: 'mAccounts', note: 'mAccountsNote' },
+  { key: 'machines', label: 'tabComputers', route: '/machine', pages: [] },
+  { key: 'accounts', label: 'tabAccounts', route: '/accounts', pages: [
     { key: 'pool', route: '/pool', icon: 'swap_horiz', title: 'mPool', note: 'mPoolNote' },
   ] },
-  { key: 'terminal', label: 'mTerminal', route: '/terminal', pages: [
-    { key: 'queue', route: '/ustabasi', icon: 'terminal', title: 'mQueue', note: 'mQueueNote' },
-  ] },
+  { key: 'terminal', label: 'mTerminal', route: '/terminal', pages: [] },
   { key: 'settings', label: 'mSettings', route: '/settings', pages: [
+    { key: 'executors', route: '/executors', icon: 'group', title: 'mExecutors', note: 'mWhoWorks' },
+    { key: 'agents', route: '/agents', icon: 'face', title: 'mAgents', note: 'mAgentsNote' },
+    { key: 'queue', route: '/ustabasi', icon: 'terminal', title: 'mQueue', note: 'mQueueNote' },
     { key: 'call', route: '/call', icon: 'call', title: 'mCall', note: 'mCallNote' },
   ] },
 ];

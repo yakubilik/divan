@@ -132,8 +132,9 @@ const ready = (async () => {
     {
       stand();
       page();
-      R.presses().filter((p) => p.text.startsWith('Computer picker')).forEach((p) => p.press());
-      checks.push(['switch: the computer picker at the foot still opens', eq(R.nav.pushed(), ['/host-sheet'])]);
+      // The picker row is gone (7 Nov 2026): the cards are the picker.
+      checks.push(['switch: no second computer picker under the cards',
+        R.presses().filter((p) => p.text.startsWith('Computer picker')).length === 0]);
     }
   } finally {
     R.words.keys();

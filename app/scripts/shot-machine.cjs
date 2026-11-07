@@ -27,9 +27,10 @@ T.ready.then(() => {
     console.log(photograph(R.render(scheme, element), scheme, path.join(dir, `${name}-phone${suffix}.png`), height));
   };
   shoot('machine', h(screen('app/machine.tsx')), {}, 2000);
+  shoot('accounts', h(screen('app/accounts.tsx')), {}, 1800);
   shoot('executors', h(screen('app/executors.tsx')), {}, 1500);
   shoot('terminal', h(screen('app/terminal.tsx')), {}, 1200);
-  shoot('settings', h(screen('app/settings.tsx')), {}, 2400);
+  shoot('settings', h(screen('app/settings.tsx')), {}, 1800);
   shoot('chat', h(screen('app/chat/[id].tsx', 'Conversation'), { id: 'c1' }), {}, 1800);
   shoot('branch', h(screen('app/branch/[id].tsx')), { id: 'engineering', project: 'quire' }, 1800);
   process.exit(0);

@@ -9,7 +9,7 @@ import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { client } from '../src/ws';
 import { Button, EmptyState, ListRow, Segments, StatusDot } from '../src/components/divan';
-import { MachineTabs, PageHead, UnderTab } from '../src/components/machine';
+import { MachineTabs, PageHead } from '../src/components/machine';
 import { Text } from '../src/components/text';
 import { useTokens } from '../src/theme';
 import { Shell } from '../src/components/shell';
@@ -195,7 +195,6 @@ function ChatWall() {
           ))}
         </View>
       )}
-      <UnderTab here="terminal" style={{ marginTop: 8 }} />
     </ScrollView>
   );
 }

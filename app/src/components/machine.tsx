@@ -235,7 +235,7 @@ export function ExecutorRow({ face, who, machine, doing, says, tone, ring, first
 
 // ── 5 · the four tabs (HANDOVER §4.9) ───────────────────────────────────────
 
-/** Machines · Executors · Terminal · Settings, each at its own route. Pressing
+/** Computers · Accounts · Terminal · Settings, each at its own route. Pressing
  *  one replaces the page rather than stacking it: they are four faces of one
  *  place, and Back leaves the place. */
 export function MachineTabs({ here, style }: { here: MachineTab['key']; style?: StyleProp<ViewStyle> }) {
@@ -252,8 +252,8 @@ export function MachineTabs({ here, style }: { here: MachineTab['key']; style?: 
   );
 }
 
-/** The pages that sit under a tab, as rows at the foot of it: everything the
- *  old Machine list reached is one of these, one press away. */
+/** The pages that sit under a tab, as rows at the foot of it under `more`:
+ *  everything the old Machine list reached is one of these, one press away. */
 export function UnderTab({ here, style }: { here: MachineTab['key']; style?: StyleProp<ViewStyle> }) {
   const T = useT();
   const router = useRouter();
@@ -261,7 +261,7 @@ export function UnderTab({ here, style }: { here: MachineTab['key']; style?: Sty
   const tab = MACHINE_TABS.find((x) => x.key === here);
   if (!tab?.pages.length) return null;
   return (
-    <Group label={T('mUnder', { tab: T(tab.label) })} style={style}>
+    <Group label={T('sgMore')} style={style}>
       {tab.pages.map((p, i) => (
         <ListRow key={p.key} first={i === 0} boxed icon={p.icon} title={T(p.title)} note={T(p.note)}
           onPress={() => go(() => router.push(p.route))} />

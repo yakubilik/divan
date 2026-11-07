@@ -4,8 +4,11 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
 import { useTokens } from '../src/theme';
 import { Group, ListRow, RowButton } from '../src/components/divan';
-import { PageHead } from '../src/components/machine';
-import { BackRow } from '../src/components/waiting';
+import { MachineTabs, PageHead, QuotaRing, UnderTab } from '../src/components/machine';
+import { Shell } from '../src/components/shell';
+import { useDivanView } from '../src/queue';
+import { quotaBlock, WARN_AT } from '../src/machine';
+import { since } from '../src/tickets';
 import { ProviderBadge } from '../src/components/ui';
 import { Icon } from '../src/components/icon';
 import { Text } from '../src/components/text';
@@ -138,19 +141,25 @@ export default function Accounts() {
     finally { setInstalling(null); }
   }
 
+  const view = useDivanView();
+  const quota = quotaBlock(view, (seconds) => since(seconds, T));
+  const quotaPct = quota ? Math.round(quota.left * 100) : null;
+  const quotaLow = !!quota && quota.left <= WARN_AT;
   const loading = !accountsLoaded && (conn === 'online' || conn === 'connecting');
   const signedIn = accounts.filter((a) => a.logged_in).length;
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <Shell place="machine">
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 16,
                                            paddingBottom: 32, gap: 10 }}
         style={{ opacity: menuFor ? 0.4 : 1 }}>
-        <BackRow label={T('mTitle')} onPress={() => router.back()} style={{ paddingHorizontal: 4 }} />
-        <PageHead title={T('accounts')}
+        <MachineTabs here="accounts" />
+        <PageHead title={T('tabAccounts')}
           right={accounts.length ? <Text mono style={{ fontSize: 12, color: t.ink3 }}>
             {T('acSignedIn', { n: signedIn, of: accounts.length })}</Text> : undefined}
-          style={{ marginBottom: 2 }} />
+          style={{ marginTop: 6, marginBottom: 2 }} />
+        {/* What is left of the plan belongs to the sign-ins, not to a computer. */}
+        {quotaPct != null && <QuotaRing pct={quotaPct} low={quotaLow} resets={quota?.foot ? T(quota.foot.key, quota.foot.params) : null} />}
         {PROVIDERS.map((p) => {
           const tool = tools.find((x) => x.provider === p);
           const missing = tool ? !tool.version : false;
@@ -199,8 +208,9 @@ export default function Accounts() {
         })}
         <ListRow first icon="move_down" title={T('moveFromAnother')} onPress={() => router.push('/move-signin')}
           style={{ marginTop: 4 }} />
+        <UnderTab here="accounts" style={{ marginTop: 8 }} />
       </ScrollView>
-    </View>
+    </Shell>
   );
 }
 

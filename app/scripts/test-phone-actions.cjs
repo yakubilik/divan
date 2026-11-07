@@ -293,7 +293,8 @@ const ready = (async () => {
   R.menus.reset();
   await press((p) => p.text.startsWith('Default model'));
   const model = await choose('Sonnet') && made('setDefaults');
-  screen('settings.tsx');
+  // Removing a computer is under its card on Computers since 7 Nov 2026.
+  screen('machine.tsx');
   await press("Revoke this device's access");
   await confirm();
   const revoked = made('removeHost');
@@ -316,7 +317,7 @@ const ready = (async () => {
   await press((p) => p.label === 'Face ID on launch');
   const off = made('authenticate') && made('setPrefs', (p) => p.faceIdLaunch === false);
   checks.push(['phone: Face ID on launch is written with setPrefs, and turning it off asks Face ID first', on && off]);
-  screen('settings.tsx');
+  screen('machine.tsx');
   await press('Update now');
   const updated = made('applyUpdate');
   screen('agent-install.tsx', { id: 'src:reviewer' });
@@ -439,11 +440,12 @@ const ready = (async () => {
     R.store.set({ hostInfo: { ...useStore().hostInfo, roots: ['/r'], default_cwd: HOME, default_cwd_chosen: true },
       projects: [{ path: '/r/DevTrace-main', name: 'DevTrace-main', is_git: true }, { path: '/r/quire', name: 'quire', is_git: true }] });
     R.menus.reset();
-    const shown = R.render('dark', h(require(path.join(root, 'app', 'settings.tsx')).default, {}));
+    // The folder is the computer's own setting: under its card on Computers.
+    const shown = R.render('dark', h(require(path.join(root, 'app', 'machine.tsx')).default, {}));
     const row = await press((x) => (x.text ?? '').startsWith('Default folder'));
     const listed = (R.menus.last()?.items ?? []).map((i) => i.label);
     const chose = row && await choose('/r/quire');
-    R.render('dark', h(require(path.join(root, 'app', 'settings.tsx')).default, {}));
+    R.render('dark', h(require(path.join(root, 'app', 'machine.tsx')).default, {}));
     await press((x) => (x.text ?? '').startsWith('Default folder'));
     const back = await choose('First root');
     const sets = calls.filter(([m]) => m === 'setDefaultCwd').map(([, a]) => a[0]);

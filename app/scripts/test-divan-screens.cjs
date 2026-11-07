@@ -137,7 +137,7 @@ const FACES = {
   pair: [['the viewfinder', { camera: 'granted' }, ['pairPoint', 'pairManualBtn']],
          ['the camera refused', { camera: 'denied' }, ['pairCameraOff', 'pairHost', 'pairToken']],
          ['the camera not asked yet', { camera: null }, ['pairAddTitle', 'pairPoint']]],
-  accounts: [['the sign-ins', {}, ['accounts', 'addAccount', 'cliMissing', 'moveFromAnother']]],
+  accounts: [['the sign-ins', {}, ['tabAccounts', 'addAccount', 'cliMissing', 'moveFromAnother', 'mPool']]],
   'agent-store': [['what can be added', {}, ['addAgent', 'Hermes']]],
   'agent-install': [
     ['an account to pick', { at: { id: ITEM } }, ['installInto', 'hermesPickAccount']],
@@ -149,7 +149,7 @@ const FACES = {
     ['already installed', { at: { id: ITEM }, store: { agents: [INSTALLED] } },
       ['hStep1', 'hStep2', 'hStep3', 'goToAgents']],
     ['an agent no source knows', { at: { id: 'nobody:nothing' } }, ['aiUnknown']]],
-  settings: [['the whole page', {}, ['settings', 'sgComputers', 'sgSoftware', 'sgSecurity', 'sgHost']]],
+  settings: [['the whole page', {}, ['settings', 'stNewChats', 'sgThisPhone', 'sgMore', 'mAgents']]],
   'model-sheet': [
     ['the defaults', { at: { defaults: '1' } }, ['defaultsShort', 'forNewChats', 'model', 'permMode']],
     ["one chat's own", { at: { id: 'c1' } },
@@ -230,7 +230,8 @@ const LED_TO = {
   accounts: ['/login-method', '/account-login', '/move-signin'],
   'agent-store': ['/agent-install'],
   'agent-install': ['/accounts'],
-  settings: ['/accounts', '/pool', '/pair', '/model-sheet', '/divan-gallery'],
+  // The computers, pairing and the sign-ins are tabs of their own since 7 Nov 2026.
+  settings: ['/model-sheet', '/divan-gallery'],
   'model-sheet': ['/chat-settings'],
   'host-sheet': ['/screen', '/pair'],
 };
@@ -262,10 +263,8 @@ const wentTo = (p) => R.nav.pushed().find((x) => x && x.pathname === p);
   draw('dark', 'agent-store', 'a computer answering');
   const opened = press('Hermes') && wentTo('/agent-install');
 
-  draw('dark', 'settings', 'a computer answering');
-  const pairing = press('addComputer') && wentTo('/pair');
-  press('accounts');
-  press('pool');
+  draw('dark', 'accounts', 'a computer answering');
+  press('mPool');
   const rows = R.nav.pushed().map((x) => (typeof x === 'string' ? x : x.pathname));
 
   const asked = [];
@@ -287,8 +286,7 @@ const wentTo = (p) => R.nav.pushed().find((x) => x && x.pathname === p);
     lost.length === 0
     && !!signIn && signIn.params.id === 'a2' && signIn.params.provider === 'claude'
     && !!opened && opened.params.id === ITEM
-    && !!pairing && pairing.params.add === '1'
-    && rows.includes('/accounts') && rows.includes('/pool')
+    && rows.includes('/pool')
     && eq(asked, [[ITEM, 'own']])
     && flipped && wrote.length === 1 && wrote[0].push_approval === false
     && eq(switched, ['h2'])]);
@@ -316,10 +314,10 @@ const STUB = /coming soon|not implemented|not available yet|nothing here yet|lor
 const EMPTY = {
   welcome: ['welStep1', 'welTitle1'],
   pair: ['pairTitle', 'pairPoint'],
-  accounts: ['accounts', 'addAccount'],
+  accounts: ['tabAccounts', 'addAccount'],
   'agent-store': ['addAgent', 'asLoading'],
   'agent-install': ['addAgent', 'asLoading'],
-  settings: ['settings', 'sgComputers', 'addComputer'],
+  settings: ['settings', 'stNewChats'],
   'model-sheet': ['defaultsShort'],
   'host-sheet': ['computersTitle', 'addComputer'],
 };

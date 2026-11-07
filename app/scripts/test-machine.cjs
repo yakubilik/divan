@@ -136,9 +136,11 @@ checks.push(
   ['the drawer opens on Machines and Executors, above the screens that were already here',
     eq(S.machineRows({ machines: 3, unreachable: 1, executors: 9 }).map((r) => r.route),
        ['/machines', '/executors', '/agents', '/screen', '/accounts', '/pool', '/call', '/settings'])
-    && page('drawer').includes('mExecutors') && page('drawer').includes('mMachines')],
-  ['the machines page is a card per computer, the quota ring and the way to pair another',
-    page('machines').includes('maQuota') && page('machines').includes('maLeftOfPlan')
+    && page('drawer').includes('tabComputers') && page('drawer').includes('tabAccounts')],
+  // The quota ring moved to Accounts and the workers to Settings › more (7 Nov
+  // 2026): this page is the computers and nothing else.
+  ['the machines page is a card per computer and the way to pair another, without the quota or the workers',
+    !page('machines').includes('maQuota') && !page('machines').includes('exgCoders')
     && ['studio', 'mini', 'cloud'].every((n) => page('machines').includes(n))
     && page('machines').includes('maPair')],
   ['the executors page groups them by kind, and the heading says what each kind is for',
@@ -215,7 +217,9 @@ checks.push(
 
 // Every route `/machine` led to before this ticket, walked the way test-shell does.
 const BEFORE = ['/account-login', '/accounts', '/agent-install', '/agent-store', '/agents', '/call',
-                '/chat-settings', '/chat/[id]', '/divan-gallery', '/host-sheet', '/login-method',
+                // '/host-sheet' left on 7 Nov 2026: the picker said what the cards above it
+                // already say, and a card's own button switches.
+                '/chat-settings', '/chat/[id]', '/divan-gallery', '/login-method',
                 '/login-web', '/model-sheet', '/move-signin', '/pair', '/pool', '/screen', '/settings'];
 
 function files() {
@@ -259,7 +263,7 @@ const reachable = (() => {
 checks.push(['every screen the Machine place led to before this ticket still leads there',
   (() => { const lost = BEFORE.filter((r) => !reachable.has(r));
            return lost.length === 0 || `lost ${lost.join(', ')}`; })() === true],
-  ['…and the four tabs are in it', ['/machine', '/executors', '/terminal', '/settings'].every((r) => reachable.has(r))]);
+  ['…and the four tabs are in it, and the workers under Settings', ['/machine', '/accounts', '/terminal', '/settings', '/executors'].every((r) => reachable.has(r))]);
 
 module.exports = { checks };
 

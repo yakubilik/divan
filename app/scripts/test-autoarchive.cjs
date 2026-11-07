@@ -92,7 +92,8 @@ const ready = (async () => {
   R.menus.reset();
   calls.length = 0;
   hours = 24;
-  const Settings = require(path.join(root, 'app/settings.tsx')).default;
+  // The archive is the computer's own setting: under its card on Computers.
+  const Settings = require(path.join(root, 'app/machine.tsx')).default;
   const view = () => h(R.theme.ForceScheme, { scheme: 'dark' }, h(Settings));
   let tree;
   await act(async () => { tree = TR.create(view()); });
