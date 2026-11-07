@@ -943,8 +943,12 @@ group('the board is Plane, one press away');
   for (let i = 0; i < 3; i++) await act(async () => {});
   const text = () => doc.body.textContent ?? '';
   const frame = () => doc.querySelector('iframe[data-plane]');
+  // The page Plane is asked for, without the per-open "?divan=" that keeps a
+  // browser from serving it out of its cache.
+  const framed = () => (frame()?.getAttribute('src') ?? '').replace(/[?&]divan=[0-9a-z]+$/, '');
   ok('the Board tab of a product is Plane itself, in the page, through the computer',
-    frame()?.getAttribute('src') === 'http://100.1.2.3:8791/skola/projects/p1/issues/'
+    framed() === 'http://100.1.2.3:8791/skola/projects/p1/issues/'
+    && /[?&]divan=[0-9a-z]+$/.test(frame()?.getAttribute('src') ?? '')
     && !doc.querySelector('section.dv-col'), frame()?.getAttribute('src') ?? text().slice(0, 200));
   ok('…asked for with the device token', passes.length >= 1 && /^Bearer /.test(passes[0].auth ?? ''),
     JSON.stringify(passes));
@@ -956,7 +960,7 @@ group('the board is Plane, one press away');
   for (let i = 0; i < 3; i++) await act(async () => {});
   ok('Board on the line opens the workspace, framed, under its own address',
     w.location.pathname === '/board'
-    && frame()?.getAttribute('src') === 'http://100.1.2.3:8791/skola/projects/',
+    && framed() === 'http://100.1.2.3:8791/skola/projects/',
     `${w.location.pathname} · ${frame()?.getAttribute('src')}`);
 
   // A computer that cannot serve it: Plane in a tab of its own, as before.

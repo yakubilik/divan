@@ -47,6 +47,7 @@ export function PlaneFrame({ url, hostKey, fill }: { url?: string; hostKey?: str
   const key = hostKey ?? found.key;
   const any = found.link;
   const [gate, setGate] = useState<Gate>(null);
+  const [opened] = useState(() => Date.now().toString(36));
   useEffect(() => {
     if (!key) return;
     let alive = true;
@@ -77,7 +78,11 @@ export function PlaneFrame({ url, hostKey, fill }: { url?: string; hostKey?: str
         foot={page} />
     );
   }
-  const src = gate.upstream && page.startsWith(gate.upstream) ? gate.base + page.slice(gate.upstream.length) : page;
+  const served = gate.upstream && page.startsWith(gate.upstream) ? gate.base + page.slice(gate.upstream.length) : page;
+  // A fresh address each time the board is opened: Plane's pages say nothing
+  // about caching, so a browser may keep one for days and never ask again —
+  // and a page kept from before a Plane patch (ops/plane) is the old Plane.
+  const src = `${served}${served.includes('?') ? '&' : '?'}divan=${opened}`;
   return (
     <iframe
       data-plane="" title="Board" src={src}
