@@ -506,6 +506,9 @@ export interface DivanProject {
   /** `name` is what a screen says and `slug` is what two machines match the
    *  same product by. `summary` is what it is *for*. */
   id: string; name: string; slug: string; summary: string;
+  /** Where this product's board opens: a Plane page. Empty where the machine
+   *  has no Plane, absent on a daemon older than the field. */
+  plane?: string;
   /** What sort of thing it is — `app`, `web`, `library`, `client-work`… an open
    *  set. Empty where nobody said. */
   kind?: string;

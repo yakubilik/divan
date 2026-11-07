@@ -84,8 +84,8 @@ try {
     // type, where it is, what says it is there, how it is reached, from where
     ['dashboard', '/', `document.querySelector('h1.dv-greet')`, null, null],
     ['project', '/p/quire', `document.querySelector('h1')?.textContent.trim() === 'Quire' && !!document.querySelector('[data-counts]') && !!document.querySelector('[data-project-page] .dv-chatlist')`, ['a[data-tile]', 'Q'], '/'],
-    ['board', '/p/quire/board', `document.querySelector('.dv-board-cols')`, ['a[href="/p/quire/board"]', 'Open board'], '/p/quire'],
-    ['ticket', '/p/quire/c/k1', `document.querySelector('h1')?.textContent.trim() === 'Webhook retry policy'`, ['.dv-board-cols button', 'Webhook retry policy'], '/p/quire/board'],
+    ['board', '/p/quire/board', `document.body.textContent.includes('No board yet')`, ['a[href="/p/quire/board"]', 'Open board'], '/p/quire'],
+    ['ticket', '/p/quire/c/k1', `document.querySelector('h1')?.textContent.trim() === 'Webhook retry policy'`, ['[data-row="k1"]', ''], '/p/quire'],
     ['chat', '/chats/c1', `document.querySelector('textarea[name="composer"]')`, ['.dv-topline button', 'Chats'], '/'],
     ['waiting', '/waiting', `/answer|task|Nothing/.test(document.querySelector('h1')?.textContent ?? '')`, ['a[href="/waiting"]', 'See all'], '/'],
     // The line's machine count opens a box of them; Machines is its foot.
@@ -139,7 +139,7 @@ try {
     ok(`an old branch address ${old} opens the product page, and a reload keeps it there`,
       coldOk && reloadOk, `cold ${coldOk}, reload ${reloadOk}, at ${await at()}`);
   }
-  // …and from it, the board and a task on it are reached and left as before.
+  // …and from it, the board and a task in progress are reached and left as before.
   // Pressed as a person presses (`userGesture`): Chrome skips, on Back, an
   // entry whose page pushed history with nobody touching it, so presses made
   // by script alone would walk Back past the product page.
@@ -153,15 +153,16 @@ try {
     return r.result?.value === true;
   };
   await b.cold('/p/quire/b/Engineering');
-  const toBoard = await tap('a[href="/p/quire/board"]', 'Open board') && (await at()) === '/p/quire/board';
-  const toTask = await tap('.dv-board-cols button', 'Webhook retry policy') && (await at()) === '/p/quire/c/k1'
-    && await mark(where['/p/quire/c/k1']);
+  const toBoard = await tap('a[href="/p/quire/board"]', 'Open board') && (await at()) === '/p/quire/board'
+    && await mark(where['/p/quire/board']);
   await back();
-  const backBoard = (await at()) === '/p/quire/board';
+  const backBoard = (await at()) === '/p/quire';
+  const toTask = await tap('[data-row="k1"]', '') && (await at()) === '/p/quire/c/k1'
+    && await mark(where['/p/quire/c/k1']);
   await back();
   const backAt = await at();
   const backProduct = backAt === '/p/quire' && await mark(product);
-  ok('from an old branch link: product → board → task, and Back walks it back to the product page',
+  ok('from an old branch link: product → board (Plane) and back, product → task and back to the product page',
     toBoard && toTask && backBoard && backProduct, JSON.stringify({ toBoard, toTask, backBoard, backProduct, backAt }));
 
   const bad = b.drain();

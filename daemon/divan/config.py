@@ -207,6 +207,12 @@ class Config:
     # beside the daemon's own and the CLIs' transcripts: wherever this machine
     # keeps session notes. Absolute, or starting with `~`. Empty by default.
     scrub_extra_paths: list[str] = field(default_factory=list)
+    # The board lives in Plane (plane.so), not in Divan. `url` is where this
+    # machine's Plane answers (`http://thinkpad:8090`), `workspace` its slug,
+    # and `projects` maps a product's slug here to its Plane project id. A
+    # product with no entry opens the workspace's project list; no `url` and
+    # there is no board at all. Written by hand.
+    plane: dict = field(default_factory=dict)
 
     # ── persistence ────────────────────────────────────────────────────────
     @classmethod
@@ -227,6 +233,8 @@ class Config:
         cfg.devices = devices
         cfg.accounts = accounts
         cfg.pool = pool if isinstance(pool, dict) else {}
+        if not isinstance(cfg.plane, dict):
+            cfg.plane = {}
         cfg._devices_mtime = _mtime(CONFIG_PATH)
         # The port of a second daemon on the same machine, beside DIVAN_HOME.
         if os.environ.get("DIVAN_PORT"):
@@ -284,12 +292,24 @@ class Config:
             "pool": self.pool,
             "demo": self.demo,
             "scrub_extra_paths": self.scrub_extra_paths,
+            "plane": self.plane,
         }
         tmp = CONFIG_PATH.with_suffix(".tmp")
         tmp.write_text(tomli_w.dumps(data))
         tmp.chmod(0o600)
         tmp.replace(CONFIG_PATH)
         self._devices_mtime = _mtime(CONFIG_PATH)
+
+    def plane_url(self, slug: str) -> str:
+        """Where a product's board opens: its Plane project's work items, the
+        workspace's project list when it has no project there, or nothing when
+        this machine has no Plane. Only http(s) — this is put in a web view."""
+        base = str(self.plane.get("url") or "").strip().rstrip("/")
+        ws = str(self.plane.get("workspace") or "").strip().strip("/")
+        if not base or not ws or not base.startswith(("http://", "https://")):
+            return ""
+        pid = str((self.plane.get("projects") or {}).get(slug) or "").strip().strip("/")
+        return f"{base}/{ws}/projects/{pid}/issues/" if pid else f"{base}/{ws}/projects/"
 
     # ── devices / tokens ───────────────────────────────────────────────────
     @staticmethod
@@ -379,6 +399,10 @@ class Config:
         people = raw.get("people", {})
         if isinstance(people, dict):
             self.people = people
+        # Plane is written by hand as well, and the same save would undo it.
+        plane = raw.get("plane", {})
+        if isinstance(plane, dict):
+            self.plane = plane
         # What still asks the phone is only ever written by hand too, and was lost the
         # same way: on 4 Nov 2026 config.toml had all three categories back although
         # Yakup had kept only money on 28 Oct — a running daemon saves its own copy

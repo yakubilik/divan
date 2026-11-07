@@ -3286,6 +3286,11 @@ class Server:
         # to give up on a computer that was answering perfectly well.
         queue = await self._mirrored_queue(git=False)
         board = await asyncio.to_thread(self.db.divan.snapshot, self.cfg.host_name)
+        # Each product's board is a Plane page: where it opens travels with the
+        # product, empty where this machine has no Plane.
+        self.cfg.refresh_tunnel()
+        board["projects"] = [{**p, "plane": self.cfg.plane_url(str(p.get("slug") or ""))}
+                             for p in board["projects"]]
         # The sign-in the asker's chats open on, where it named one: that
         # subscription's week is the figure the bar shows, asked for fresh.
         usage_for = str(d.get("usage_for") or "")

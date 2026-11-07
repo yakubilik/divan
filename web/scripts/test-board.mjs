@@ -33,7 +33,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 execFileSync(join(web, 'node_modules', '.bin', 'tsc'), [
-  'src/lib/board.ts', 'src/screens/Board.tsx', 'src/screens/Overview.tsx', 'src/vite-env.d.ts',
+  'src/lib/board.ts', 'src/screens/Plane.tsx', 'src/screens/Overview.tsx', 'src/vite-env.d.ts',
   '--outDir', out, '--rootDir', '.',
   '--target', 'ES2022', '--module', 'ESNext', '--moduleResolution', 'bundler',
   '--jsx', 'react-jsx', '--strict', '--skipLibCheck',
@@ -70,7 +70,7 @@ const K = await load('src/lib/theme.js');
 const D = await load('src/lib/divan.js');
 const B = await load('src/lib/board.js');
 const S = await load('src/lib/sessions.js');
-const BoardUI = await load('src/screens/Board.js');
+const PlaneUI = await load('src/screens/Plane.js');
 const OverviewUI = await load('src/screens/Overview.js');
 const { createElement: h } = await import('react');
 const { renderToStaticMarkup } = await import('react-dom/server');
@@ -107,9 +107,8 @@ const OWN = new Set([K.ON_COLOUR,
                      ...Object.values(K.EXECUTORS).map((e) => e.fill).filter(Boolean),
                      ...Object.values(K.MEDIA)]);
 
-const board = (name, key) => renderToStaticMarkup(h(BoardUI.Board, {
-  view: view(name), project: productOf(name, key),
-}));
+const PLANE = 'http://thinkpad:8090/skola/projects/p1/issues/';
+const plane = (url) => renderToStaticMarkup(h(PlaneUI.PlaneBoard, { url }));
 
 // ── 1 · what the board says ────────────────────────────────────────────────
 
@@ -183,7 +182,7 @@ group('a card pressed on the board takes a window');
 
 // ── 4 · every state of a board ─────────────────────────────────────────────
 
-group('a board with nothing on it, one that is old, and one nobody can reach');
+group('the board is Plane, and the page around it stands up on every board');
 {
   const broken = [];
   let count = 0;
@@ -191,12 +190,6 @@ group('a board with nothing on it, one that is old, and one nobody can reach');
     for (const scheme of ['dark', 'light']) {
       K.setThemeChoice(scheme);
       const fleet = view(name);
-      for (const p of fleet.projects) {
-        try { renderToStaticMarkup(h(BoardUI.Board, { view: fleet, project: p })); count++; }
-        catch (e) { broken.push(`${name} · ${scheme} · ${p.key}: ${e.message.slice(0, 140)}`); }
-      }
-      // …and the whole page around it, scoped and on the board tab, which is
-      // the only way a reader ever meets it.
       try {
         renderToStaticMarkup(h(OverviewUI.Overview, {
           view: fleet, project: fleet.projects[0] ?? null, onProject() {}, onAsk() {},
@@ -206,21 +199,20 @@ group('a board with nothing on it, one that is old, and one nobody can reach');
     }
   }
   K.setThemeChoice('dark');
-  ok('the board stands up on every board, in both themes', broken.length === 0,
+  ok('the page stands up on every board, in both themes', broken.length === 0,
     [...new Set(broken)].slice(0, 6).join('\n    '));
-  ok('…and there were enough of them for that to mean something', count >= 20, `${count} renders`);
+  ok('…and there were enough of them for that to mean something', count >= 8, `${count} renders`);
 
-  ok('a product whose board is empty is a sentence rather than four empty columns',
-    board('slow', 'pebble').includes('Nothing on this board yet'));
-  ok('…and one whose cards are all on a machine that never sent them still says how many',
-    board('slow', 'the-long-walk').includes('Ice Box')
-    && board('slow', 'the-long-walk').includes('+ 3 more'));
-  ok('the board is drawn in the handover’s classes and no blur',
-    board('busy', 'quire').includes('dv-card') && !/backdrop-filter/.test(src('src/screens/Board.tsx')));
-  ok('a board read off a machine that has gone quiet keeps the cards it last sent',
-    board('quiet', 'quire').includes('Out-of-order deliveries'));
-  ok('…and so does one whose machine refuses the connection',
-    board('unreachable', 'quire').includes('Out-of-order deliveries'));
+  const merged = D.merge([
+    { key: 'a', name: 'a', state: D.answered({ ...BOARDS.busy[0].snap,
+      projects: BOARDS.busy[0].snap.projects.map((p) => ({ ...p, plane: PLANE })) }, NOW) },
+  ], NOW);
+  ok('a product carries the Plane page its machine names, and none where it names none',
+    merged.projects.every((p) => p.plane === PLANE) && productOf('busy', 'quire').plane === '');
+  ok('a product with a Plane opens it in a tab of its own, and says where',
+    plane(PLANE).includes('Open in Plane') && plane(PLANE).includes(PLANE));
+  ok('…and one without says so instead of drawing an empty page',
+    plane('').includes('No board yet') && !plane('').includes('Open in Plane'));
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');

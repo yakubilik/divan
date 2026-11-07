@@ -48,7 +48,7 @@ import { EmptyState } from '../ui/divan';
 import { Sessions } from '../components/Sessions';
 import { useFleet } from '../lib/fleet';
 import { today } from '../lib/today';
-import { Board } from './Board';
+import { PlaneBoard } from './Plane';
 import { Project, ProjectHead } from './Project';
 import { Ticket } from './Ticket';
 import { Waiting } from './Waiting';
@@ -191,7 +191,7 @@ export function Overview({
         )}
         {board && (
           <>
-            <Board view={view} project={project} onCard={(t) => onCard?.(idOf(t.card))} />
+            <PlaneBoard url={project.plane} />
             {!!projectComposer && <div style={{ marginTop: 32 }}>{projectComposer}</div>}
           </>
         )}

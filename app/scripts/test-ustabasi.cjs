@@ -1264,7 +1264,6 @@ checks.push(...require('./test-board.cjs').checks);
 // press and hold, the column tabs as the drop targets, what is felt at each
 // step, the worker a drop into In Progress starts — and the drag that is
 // cancelled or dropped nowhere, which asks nothing of anybody.
-checks.push(...require('./test-drag.cjs').checks);
 // …and one card of that board, opened: what it is, what the machine was told to
 // do with it, and what the worker on it is printing right now — three faces over
 // one head, with the rule that nothing an agent wrote reaches the first of them.

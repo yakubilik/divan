@@ -54,7 +54,7 @@ The quoted words are the check's own name.
 | Show every computer | Palette | Palette | — | actions: "the palette still stops every running session (chat.interrupt) and shows every computer" |
 | Ask Divan something | Command bar | Composer | `chat.create`, `chat.send` | drive: "one press sends chat.create then chat.send" |
 | File a card without starting | Board draft (Ice Box) | Said to the agent in the product's Composer | `chat.create` | drive: "the Composer at the foot of a project carries that project, and its chip cannot be removed" |
-| Start a card now | Drag to In Progress | Drag; said to the agent in the Composer | `divan.card.move` | drive: "dragging a card from Queued into In Progress issues divan.card.move with In Progress" |
+| Start a card now | Drag to In Progress | Plane (the Board tab opens it); said to the agent in the Composer | — | drive: "pressing Open in Plane opens that page in a tab of its own" |
 | Pick agent / account / model for one chat | NewChat dialog | Composer chips (§5), dialog behind More options | `agent.list`, `chat.create` | drive: "four chips show the defaults, list what the computer reports, mark a changed one with an ×" |
 | Scope by typing | — | `@project` in the Composer | `chat.create` | drive: "typing @quire sets the same Project chip as its menu does" |
 | Answer an asking agent | Question window | Floating chat on the Dashboard (one-line Needs you row reopens it); question window kept | `ustabasi.note` | drive: "Needs you: the asking card is a one-line row" |
@@ -69,9 +69,9 @@ The quoted words are the check's own name.
 | Ask about a product | Project command bar | Composer locked to the product | `chat.create`, `chat.send` | drive: "the Composer at the foot of a project carries that project" |
 | A product's chats | Chat tab | The list down the left of the product's page; one opens in the middle | `chat.create` | drive: "a chat started there starts in the product’s repository" |
 | Open a branch | Branch cards | The card's Branch label; a kept branch link opens its product (ustabasi #147) | — | drive: "a product with branches draws no Branches section, branch link or branch picker" |
-| Move a card | Board drag | Board drag (Queued reorders too) | `divan.card.move` | drive: "dragging a card from Queued into In Progress issues divan.card.move" |
-| Quota refusal on a drop | Board | Same | — | drive: "a card dropped where a worker would start is not started under the threshold you set" |
-| Answer from the board | Press an asking card | Same | `ustabasi.note` | drive: "answering it there is a note on that ticket" |
+| Move a card | Board drag | Plane's own board, one press away from the Board tab | — | drive: "the Board tab of a product says its board is in Plane, and where" |
+| Quota refusal on a drop | Board | The machine's quota thresholds, read where work starts | — | machine: "under the 70% you set" |
+| Answer from the board | Press an asking card | The asking window, Waiting on you and the ticket | `ustabasi.note` | drive: "an answer sends ustabasi.note and the card leaves the asking state" |
 | Open a card | Press a card | Same, ticket page | `divan.card.get` | drive: "a card that nobody is waiting on opens as its own page" |
 | Edit title / sentences | Card page | Ticket page | `divan.card.update` | drive: "…and the return key writes it on the machine that holds the card" |
 | Hand a card to someone | Executor menu | Executor row | `divan.card.executor` | drive: "Executor sends divan.card.executor" |
@@ -130,7 +130,7 @@ The quoted words are the check's own name.
 | Pick agent / account / model | New chat sheet | Composer chips; the sheet behind More options | `chat.create` | phone: "four chips show the defaults, list what the computer reports" |
 | New chat with every option | Pen / sheet | More options | `chat.create` | phone: "New chat with every option starts one through createChat" |
 | Answer an asking agent | Waiting / card page | Needs you amber answer; ticket question card | `ustabasi.note` | phone: "the amber answer sends the Waiting screen’s note in one press" |
-| Move a card | Board long-press drag | Same, onto a column tab | `divan.card.move` | phone: "that move is divan.card.move with the In Progress column" |
+| Move a card | Board long-press drag | Plane, in the Board tab's web view | — | phone: "the board is the product's Plane page, in a web view" |
 | New ticket | + ticket | Board + / project + New ticket | `divan.card.create` | phone: "Ice Box files the card into Ice Box and Start now into In Progress" |
 | Say something to the run | Card note box | Ticket › Live say box | `ustabasi.note` | phone: "a sentence typed into Say one sentence to the agent is sent as ustabasi.note" |
 | What the queue sent (inbox) | Inbox row on the dashboard (added on `main`, a50ee2c) | Inbox row on the Dashboard above the queue row; `/inbox` | `ustabasi.notifications` | phone: "the screens ask the computer for these and no more" — names the call only; the row itself is not pressed in a test |

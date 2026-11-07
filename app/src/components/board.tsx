@@ -1,6 +1,8 @@
-/** One product's board, out of the design system's parts and nothing else.
+/** The status marks a card wears, out of the design system's parts and nothing
+ *  else. The board itself is Plane now (`components/plane.tsx`); what is left
+ *  here is the chip and the dot the Overview and a ticket still draw.
  *
- *  What each card *says* is decided in `src/board.ts`, where a check can reach it
+ *  What each mark *says* is decided in `src/board.ts`, where a check can reach it
  *  without a phone; this is the drawing of it. Every shape here was measured off
  *  `design/divan/frames/08-mobile8-*.html` (S7, the board with several machines
  *  on it) and `02-mobile2-*.html` (V5, the same column on a product that lives
@@ -18,11 +20,10 @@
  *  nobody reads twice — and the one card that is drawn differently is the one
  *  nothing runs on, which is a fact about the card rather than an alarm. */
 import React from 'react';
-import { View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
-import { Icon } from './icon';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './text';
-import { Card, StatusDot, Tap } from './divan';
-import { RADIUS, toneColours, useTokens, type Tone } from '../theme';
+import { StatusDot } from './divan';
+import { toneColours, useTokens, type Tone } from '../theme';
 import type { StatusKind } from '../board';
 
 // ── 1 · the line above the cards ────────────────────────────────────────────
@@ -88,62 +89,3 @@ export function StatusWord({ kind, word, style }: { kind: StatusKind; word: stri
 }
 
 // ── 3 · a card ──────────────────────────────────────────────────────────────
-
-/** One card on the board (BoardPhone): the title, the one sentence an agent
- *  asked or stopped on, the status word and the mono corner — machine and how
- *  long. A card that is asking has an amber edge as well as the word.
- *
- *  `mine` is a person's own card: no surface and a dashed outline, because
- *  nothing runs on it. `lifted` is the card under the thumb; `landed` the one
- *  just put down, with what happened and the way to take it back. */
-export function BoardCard({ title, line, status, meta, mine, lifted, landed, hold, onPress, style }: {
-  title: string;
-  line?: string;
-  status?: { kind: StatusKind; word: string } | null;
-  meta?: string;
-  mine?: boolean;
-  lifted?: boolean;
-  landed?: { text: string; tone: Tone; action?: string; onAction?: () => void } | null;
-  /** What makes it draggable (`components/drag` `useDrag`). */
-  hold?: { holdMs: number; onLongPress: (e: GestureResponderEvent) => void; onPressOut: () => void };
-  onPress?: () => void;
-  style?: StyleProp<ViewStyle>;
-}) {
-  const t = useTokens();
-  return (
-    <Card radius={RADIUS.md} inset={false} dashed={mine && !landed} onPress={onPress}
-      lifted={lifted} ring={landed ? 'run' : status?.kind === 'ask' ? 'amber' : lifted ? 'none' : 'line'}
-      wash={landed ? landed.tone : null}
-      holdMs={hold?.holdMs} onLongPress={hold?.onLongPress} onPressOut={hold?.onPressOut}
-      style={[lifted && { transform: [{ scale: 1.03 }] }, style]}>
-      <View style={{ padding: 14, gap: 10 }}>
-        <Text numberOfLines={2} style={{ fontSize: 15, lineHeight: 21, fontWeight: '500',
-                                         color: status?.kind === 'done' ? t.ink2 : t.ink }}>{title}</Text>
-        {!!line && <Text numberOfLines={1} style={{ fontSize: 13, lineHeight: 19, color: t.ink2 }}>{line}</Text>}
-        {(!!status || !!meta) && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {!!status && <StatusWord kind={status.kind} word={status.word} />}
-            {!!meta && (
-              <Text mono numberOfLines={1} style={{ marginLeft: 'auto', flexShrink: 1, fontSize: 11.5, color: t.ink3 }}>
-                {meta}
-              </Text>
-            )}
-          </View>
-        )}
-      </View>
-      {!!landed && (
-        /* D4's foot: what happened, and the way back where there is one. */
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8,
-                       borderTopWidth: 1, borderTopColor: t.line2,
-                       paddingVertical: 8, paddingHorizontal: 12 }}>
-          <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12, color: t.ink2 }}>{landed.text}</Text>
-          {!!landed.action && (
-            <Tap onPress={landed.onAction} style={{ marginLeft: 'auto', minHeight: 44, justifyContent: 'center' }}>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: t.ink }}>{landed.action}</Text>
-            </Tap>
-          )}
-        </View>
-      )}
-    </Card>
-  );
-}

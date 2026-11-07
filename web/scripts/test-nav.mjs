@@ -297,8 +297,9 @@ const walk = [
   { name: 'Terminal (a tab)', path: '/machine/terminal', act: () => click(machineTab('Terminal')) },
   { name: 'Dashboard (the line\'s left end)', path: '/', act: go.word },
   { name: 'a product (its tile)', path: '/p/quire', act: () => click(doc.querySelector('a[data-tile="quire"]')) },
-  { name: 'its board', path: '/p/quire/board', act: () => click(link('Open board')) },
-  { name: 'a card', path: '/p/quire/c/k1', act: () => { if (process.env.NAV_DEBUG) console.log([...doc.querySelectorAll('[data-card]')].map((e) => e.outerHTML.slice(0, 200))); return click(doc.querySelector('article.dv-card[data-card="k1"] .dv-card-title')); } },
+  // The board is Plane now, and holds no card of ours to press: a card is
+  // reached from In progress now on the product page.
+  { name: 'a card', path: '/p/quire/c/k1', act: () => click(doc.querySelector('[data-in-progress] [data-row="k1"]')) },
   { name: 'an Inbox item', path: '/p/quire/c/k2', act: async () => {
     await act(async () => { await useInbox.getState().poll(); });
     await click(header().querySelector('[data-inbox]'));
@@ -324,8 +325,8 @@ ok('the chat steps drew the chat they named, and New chat the empty composer',
   && JSON.parse(steps[3].screen).empty && !JSON.parse(steps[3].screen).chat,
   [steps[2].screen, steps[3].screen, steps[4].screen].join('\n    '));
 ok('the card steps drew the card they named',
-  JSON.parse(steps[11].screen).h1.join() !== JSON.parse(steps[12].screen).h1.join(),
-  `${steps[11].screen}\n    ${steps[12].screen}`);
+  JSON.parse(steps[10].screen).h1.join() !== JSON.parse(steps[11].screen).h1.join(),
+  `${steps[10].screen}\n    ${steps[11].screen}`);
 
 for (let i = walk.length - 2; i >= 0; i--) {
   await back();
@@ -481,8 +482,8 @@ await way('the ticket\'s Back to the wall', `/machine/terminal/ustabasi/${firstT
 // A product.
 await way('a product tile', '/', '/p/quire', () => click(doc.querySelector('a[data-tile="quire"]')));
 await way('the product\'s board', '/p/quire', '/p/quire/board', () => click(link('Open board')));
-await way('a card on the board', '/p/quire/board', '/p/quire/c/k1',
-  () => click(doc.querySelector('article.dv-card[data-card="k1"] .dv-card-title')));
+await way('a card in progress on the product page', '/p/quire', '/p/quire/c/k1',
+  () => click(doc.querySelector('[data-in-progress] [data-row="k1"]')));
 await way('a card\'s way back (cold: its board)', '/p/quire/c/k1', '/p/quire/board',
   () => click(header().querySelector('button.dv-back')));
 await way('a product\'s chat', '/p/quire', '/p/quire/chat/c1', () => click(row('Webhook retry policy')));

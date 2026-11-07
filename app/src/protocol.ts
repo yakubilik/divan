@@ -495,6 +495,9 @@ export interface DivanProject {
    *  product by, so they are not always the same word: a product called
    *  Atlas can be matched as `backend-v2`. `summary` is what it is *for*. */
   id: string; name: string; slug: string; summary: string;
+  /** Where this product's board opens: a Plane page, put in a web view. Empty
+   *  where the machine has no Plane, absent on a daemon older than the field. */
+  plane?: string;
   /** What sort of thing it is — `app`, `web`, `library`, `client-work`,
    *  `research`… an open set, as the branch kinds are. Empty where nobody said,
    *  which is every product that predates the field. */

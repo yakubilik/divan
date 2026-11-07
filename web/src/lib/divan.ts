@@ -234,6 +234,9 @@ export interface MergedProject {
   /** …and what it has not done yet, worst first. */
   open: DivanOpenItem[];
   repos: string[];
+  /** Its board: the Plane page the first machine that has one named; empty
+   *  when none of them has a Plane. */
+  plane: string;
   /** The paired computers this product has work on, and their names. */
   hosts: string[];
   machines: string[];
@@ -498,6 +501,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
           milestones: [...(p.milestones || [])],
           open: [...(p.open_items || [])],
           repos: [...(p.repos || [])],
+          plane: p.plane || '',
           hosts: [h.key],
           machines: [h.machine],
           ids: { [h.key]: p.id },
@@ -538,6 +542,7 @@ export function merge(list: HostEntry[], now: number): DivanView {
       if ((newer && p.open_items?.length) || !found.open.length) {
         found.open = [...(p.open_items || found.open)];
       }
+      found.plane = found.plane || p.plane || '';
       found.hosts = [...new Set([...found.hosts, h.key])];
       found.machines = [...new Set([...found.machines, h.machine])];
       found.ids[h.key] = p.id;

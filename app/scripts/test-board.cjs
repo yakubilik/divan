@@ -198,64 +198,35 @@ function draw(scheme, hosts, params) {
   return R.render(scheme, h(Dashboard));
 }
 
-/** The cards' own surfaces: the corner a board card takes, with a line round it.
- *  The chip inside one wears its state's wash, and that is the point — this is
- *  about what the card does. */
-const surfaces = (markup) => R.styles(markup)
-  .filter((s) => s.borderRadius === K.RADIUS.md && s.borderWidth != null && s.height !== K.SIZE.columnTab
-    && s.overflow === 'hidden');
+/** The same studio, whose Quire has a Plane project: the board is that page. */
+const PLANE = 'http://thinkpad:8090/skola/projects/p1/issues/';
+const PLANED = { ...STUDIO, state: { ...STUDIO.state, snapshot: { ...STUDIO.state.snapshot,
+  projects: STUDIO.state.snapshot.projects.map((p) => (p.slug === 'quire' ? { ...p, plane: PLANE } : p)) } } };
 
-const styleOf = (markup, word) => [...markup.matchAll(/<span data-rn="Text"([^>]*)>([^<]*)<\/span>/g)]
-  .filter((m) => m[2] === word)
-  .map((m) => JSON.parse((m[1].match(/data-style="([^"]*)"/) ?? [, '{}'])[1]
-    .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")))[0];
-
-/** Every state this board can be in, which the last check of the loop renders. */
+/** Every state the board face can be in, which the last check of the loop renders. */
 const BOARDS = {
-  'the open column of a product on two machines': [[STUDIO, MINI], { project: 'quire', tab: 'board' }],
-  'its Ice Box': [[STUDIO, MINI], { project: 'quire', tab: 'board', col: 'ice_box' }],
-  'its Queued': [[STUDIO, MINI], { project: 'quire', tab: 'board', col: 'queued' }],
-  'its Done': [[STUDIO, MINI], { project: 'quire', tab: 'board', col: 'done' }],
-  'a product on one machine': [[STUDIO], { project: 'quire', tab: 'board' }],
+  'a product whose machine has a Plane': [[PLANED, MINI], { project: 'quire', tab: 'board' }],
+  'a product on a machine with no Plane': [[STUDIO], { project: 'quire', tab: 'board' }],
   'a product whose only machine has gone quiet': [[MINI], { project: 'quire', tab: 'board' }],
   'a machine that has never answered': [[STUDIO, NEVER], { project: 'quire', tab: 'board' }],
-  'a board with no card on it': [[FRESH], { project: 'pebble', tab: 'board' }],
-  'a column that does not exist': [[STUDIO], { project: 'quire', tab: 'board', col: 'nowhere' }],
   'a project that is no longer in the view': [[STUDIO], { project: 'gone', tab: 'board' }],
   'nothing paired at all': [[], { project: 'quire', tab: 'board' }],
 };
 
-for (const scheme of ['dark', 'light']) {
-  const t = K.tokensFor(scheme);
-  const board = draw(scheme, [STUDIO, MINI], { project: 'quire', tab: 'board' });
-  const done = draw(scheme, [STUDIO, MINI], { project: 'quire', tab: 'board', col: 'done' });
-  const fresh = draw(scheme, [FRESH], { project: 'pebble', tab: 'board' });
+checks.push(['the merged product carries the Plane page of whichever machine has one',
+  M.project(M.merge([MINI, PLANED], NOW), 'quire').plane === PLANE
+  && M.project(M.merge([STUDIO], NOW), 'quire').plane === '']);
 
+for (const scheme of ['dark', 'light']) {
+  const board = draw(scheme, [PLANED, MINI], { project: 'quire', tab: 'board' });
+  const none = draw(scheme, [STUDIO], { project: 'quire', tab: 'board' });
   checks.push(
-    [`${scheme}: the four columns are four tabs on the page, each with its count`,
-      ['bdIceBox', 'bdQueued', 'bdInProgress', 'bdDone'].every((k) => board.includes(`>${k}<`))
-      && board.includes('>11<') && board.includes('>7<')],
-    [`${scheme}: every card carries its real status word, review folded in as testing`,
-      ['stAsking', 'stFailed', 'stStuck', 'stRunning', 'stPassed', 'stYours', 'stTesting']
-        .every((w) => board.includes(`>${w}<`))
-      && styleOf(board, 'stAsking').color === t.amber],
-    [`${scheme}: the asking card has an amber-toned edge, the only one`,
-      surfaces(board).filter((s) => s.borderColor === t.amberRing).length === 1
-      && board.includes('Retry five times, or ten?')],
-    [`${scheme}: the card nothing runs on is drawn as an outline`,
-      surfaces(board).filter((s) => s.borderStyle === 'dashed' && s.borderColor === t.line2
-                                    && s.backgroundColor === 'transparent').length === 1],
-    [`${scheme}: the corner says the machine and how long, and a quiet machine says when it was heard from`,
-      board.includes('studio · ') && board.includes('mini · pfLastSeen')],
-    [`${scheme}: Done draws this month and not the card from March`,
-      done.includes('Pricing page A/B test') && !done.includes('Client comments on files')],
-    [`${scheme}: the line over the cards says how a card is moved`,
-      board.includes('>bdHint<')],
-    [`${scheme}: a board with no card on it keeps its four tabs and says what to do`,
-      fresh.includes('>bdInProgress<') && fresh.includes('>prNewTitle<') && fresh.includes('prNewFoot')],
-    [`${scheme}: the segment is Overview, Board and Chats, with no coloured mark riding on it`,
-      board.includes('>overview<') && board.includes('>bdBoard<') && board.includes('>pjChats<')
-      && !styleOf(board, '■')],
+    [`${scheme}: the board is the product's Plane page, in a web view`,
+      board.includes(`data-webview="${PLANE}"`) && !board.includes('>bdInProgress<')],
+    [`${scheme}: a product with no Plane says so instead of drawing an empty page`,
+      none.includes('>plNone<') && !none.includes('data-webview')],
+    [`${scheme}: the segment is still Overview, Board and Chats`,
+      board.includes('>overview<') && board.includes('>bdBoard<') && board.includes('>pjChats<')],
     [`${scheme}: every state of the board renders`,
       Object.values(BOARDS).every(([hosts, params]) => /tabDashboard|>divan</.test(draw(scheme, hosts, params)))],
   );
@@ -264,35 +235,18 @@ for (const scheme of ['dark', 'light']) {
 // ── 6 · the way in ──────────────────────────────────────────────────────────
 
 {
-  draw('dark', [STUDIO, MINI], { project: 'quire', tab: 'board' });
-  const cards = R.presses().filter((p) => p.text.includes('Bulk invite clients'));
-  cards[0].press();
-  const here = R.nav.pushed();
-  // A fresh page, because the guard against a double tap lets one navigation
-  // out of a screen and no more (`src/nav.ts`).
-  draw('dark', [STUDIO, MINI], { project: 'quire', tab: 'board' });
-  const elsewhere = R.presses().filter((p) => p.text.includes('Fix portal login'));
-  elsewhere[0].press();
-  checks.push(
-    ['tapping a card opens the card itself, on the machine it is on',
-      cards.length === 1 && eq(here, ['/card/q3?host=h1&from=board'])],
-    ['…including one on a machine this phone is not holding a socket to',
-      elsewhere.length === 1 && eq(R.nav.pushed(), ['/card/m1?host=h2&from=board'])],
-  );
-  const face = draw('dark', [STUDIO], { project: 'quire' });
+  const face = draw('dark', [PLANED], { project: 'quire' });
   R.presses().filter((p) => p.text.includes('bdBoard'))[0].press();
   checks.push(
     ['the Overview is what a product opens on, and the Board is one tap away',
-      !face.includes('>bdHint<')
-      && draw('dark', [STUDIO], { project: 'quire', tab: 'board' }).includes('>bdHint<')]);
+      !face.includes('data-webview') && R.params.get().tab === 'board'
+      && draw('dark', [PLANED], { project: 'quire', tab: 'board' }).includes('data-webview')]);
 }
 
 R.store.reset();
 R.params.reset();
 R.nav.reset();
 
-/** The fixture, for the drag that is checked against the same board
- *  (`scripts/test-drag.cjs`): the studio, and the laptop with the lid shut. */
 module.exports = { checks, HOSTS: [STUDIO, MINI] };
 
 if (require.main === module) {

@@ -186,6 +186,8 @@ const ReactNative = {
 
 const STUBS = {
   'react-native': ReactNative,
+  // The board face is Plane in a web view: drawn as a tag carrying its address.
+  'react-native-webview': { WebView: (props) => React.createElement('iframe', { 'data-webview': props.source?.uri || '' }) },
   'react-native-svg': { __esModule: true, default: host('span', 'Svg'), Svg: host('span', 'Svg'), Path: host('span', 'Path') },
   'react-native-safe-area-context': {
     useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }),

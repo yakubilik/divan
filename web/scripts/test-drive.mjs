@@ -912,114 +912,33 @@ group('what needs a person opens itself as a conversation');
   ok('…which closes again', !palette());
 }
 
-group('the board, with the asking agent’s chat beside it');
+group('the board is Plane, one press away');
 {
   const now = Math.floor(Date.now() / 1000);
   const studio = boards(now).busy[0].snap;
-  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(studio, now) } }); });
-  const chip = (label) => find(label, doc.querySelector('header'));
+  const PLANE = 'http://thinkpad:8090/skola/projects/p1/issues/';
+  const planed = { ...studio, projects: studio.projects.map((p) => ({ ...p, plane: PLANE })) };
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(planed, now) } }); });
   await goHome();
   await click(tile('quire'));
   await click(link('Open board'));
-
-  /** A column of the board, by its name: the section that catches a drop. */
-  const column = (name) => doc.querySelector(`section.dv-col[aria-label="${name}"]`);
-  /** A ticket, by the words on it. Every one of them can be picked up, which is
-   *  what tells a card apart from everything else on the page. */
-  const ticket = (words) => [...doc.querySelectorAll('[draggable="true"]')]
-    .find((e) => (e.textContent ?? '').includes(words)) ?? null;
-  const windows = () => [...doc.querySelectorAll('section[data-panel]')].map((e) => e.textContent ?? '').join(' · ');
-
-  ok('the Board tab of a product is its board, four columns of the machines’ own',
-    ['Ice Box', 'Queued', 'In Progress', 'Done'].every((c) => !!column(c))
-    && !!ticket('Webhook retry policy') && !!ticket('CSV export'),
-    [...doc.querySelectorAll('section.dv-col')].map((b) => b.getAttribute('aria-label')).join(' | '));
+  const text = () => doc.body.textContent ?? '';
+  ok('the Board tab of a product says its board is in Plane, and where',
+    text().includes('The board is in Plane') && text().includes(PLANE) && !doc.querySelector('section.dv-col'),
+    text().slice(0, 200));
   ok('…still on the Dashboard, and still the page the bar is over',
     place() === 'Dashboard' && head() === 'Quire', `${place()} · ${head()}`);
+  const opened = [];
+  const was = w.open;
+  w.open = (...args) => { opened.push(args); return null; };
+  await click(find('Open in Plane'));
+  w.open = was;
+  ok('pressing Open in Plane opens that page in a tab of its own',
+    opened.length === 1 && opened[0][0] === PLANE && opened[0][1] === '_blank', JSON.stringify(opened));
 
-  // Every window put away, so that what opens next opened because it was
-  // pressed rather than because the desktop opens two by itself.
-  await act(async () => { useDock.setState({ minimised: ['studio:k2', 'studio:h1'], closed: {}, raised: [] }); });
-  ok('with every question put away, nothing is open over the board', windows() === '',
-    windows().slice(0, 200));
-
-  await click(ticket('Stripe keys').querySelector('button'));
-  ok('pressing the card of an agent that is asking opens its chat beside the board',
-    windows().includes('asks you') && windows().includes('Use the live ones now')
-    && windows().includes('Quire · Stripe keys'), windows().slice(0, 300));
-  ok('…without leaving the page: the board is still under it',
-    place() === 'Dashboard' && !!column('In Progress') && !!ticket('Webhook retry policy'));
-
-  asked.length = 0;
-  await click(find('Use the live ones now'));
-  ok('answering it there is a note on that ticket, which is what re-opens the queue',
-    asked.some((a) => a.key === 'studio' && a.type === 'ustabasi.note'
-      && a.data.id === 42 && a.data.text === 'Use the live ones now'),
-    JSON.stringify(asked.slice(0, 3)));
-  // …and the card says it is unblocked when the board does, and not before:
-  // what the window sent is kept on screen until the machine that holds the
-  // board has been re-read.
-  ok('…and until the board is re-read the card still says it is asking',
-    !!ticket('Stripe keys') && (ticket('Stripe keys').textContent ?? '').includes('asking'));
-  const back = {
-    ...studio,
-    cards: studio.cards.map((c) => (c.id === 'k2'
-      ? { ...c, agent_status: 'running', agent_detail: 'Using the live keys.' } : c)),
-  };
-  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(back, now) } }); });
-  ok('…and when it is, the mark clears on the card and the window is gone',
-    (ticket('Stripe keys').textContent ?? '').includes('running')
-    && !windows().includes('Use the live ones now'),
-    `${ticket('Stripe keys')?.textContent} · ${windows().slice(0, 120)}`);
-
-  // A card carried from one column to another with a mouse.
-  const dt = new Transfer();
-  const moving = ticket('CSV export');
-  await drag(moving, 'dragstart', dt);
-  ok('picking a card up puts the board’s own payload on the drag, and nothing else’s',
-    dt.types.includes('application/x-rac-card'), dt.types.join(', '));
-  await drag(column('Queued'), 'dragover', dt);
-  ok('…a column that would take it says so, and the one it came out of does not',
-    column('Queued').dataset.dropping === 'true' && column('Queued').dataset.takes === 'true'
-    && column('Ice Box').dataset.takes === undefined);
-  asked.length = 0;
-  await drag(column('Queued'), 'drop', dt);
-  ok('dropping it asks the machine that holds the board to move it there',
-    asked.some((a) => a.key === 'studio' && a.type === 'divan.card.move'
-      && a.data.card_id === 'k3' && a.data.column === 'queued'),
-    JSON.stringify(asked.slice(0, 3)));
-  ok('…and the card is in the new column before that machine has answered',
-    (column('Queued').textContent ?? '').includes('CSV export')
-    && !(column('Ice Box').textContent ?? '').includes('CSV export'),
-    `${column('Ice Box').textContent} → ${column('Queued').textContent}`);
-
-  // The threshold on Machine › Quota thresholds, kept where work is actually
-  // started: the studio has 64% of its window left, and dropping a card into In
-  // Progress is what starts a worker on it. Its board is put back in hand first
-  // — the poll the last drop set off found no socket, and a machine whose
-  // answer is a memory is never refused on the strength of it.
-  await act(async () => {
-    seed(useDivanStore, { snaps: { studio: answered(back, now) } });
-    useThresholds.setState({ thresholds: { warn: 0.8, stop: 0.7 } });
-  });
-  asked.length = 0;
-  const held = new Transfer();
-  await drag(ticket('CSV export'), 'dragstart', held);
-  await drag(column('In Progress'), 'drop', held);
-  ok('a card dropped where a worker would start is not started under the threshold you set',
-    !asked.some((a) => a.type === 'divan.card.move')
-    && !(column('In Progress').textContent ?? '').includes('CSV export')
-    && (doc.body.textContent ?? '').includes('under the 70% you set'),
-    `${JSON.stringify(asked.slice(0, 2))} · ${(doc.body.textContent ?? '').slice(-160)}`);
-
-  await act(async () => { useThresholds.setState({ thresholds: DEFAULT_THRESHOLDS }); });
-  asked.length = 0;
-  const free = new Transfer();
-  await drag(ticket('CSV export'), 'dragstart', free);
-  await drag(column('In Progress'), 'drop', free);
-  ok('…and started as soon as that number is back under what the machine has left',
-    asked.some((a) => a.type === 'divan.card.move' && a.data.column === 'in_progress'),
-    JSON.stringify(asked.slice(0, 2)));
+  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(studio, now) } }); });
+  ok('a machine with no Plane says there is no board yet, rather than an empty page',
+    text().includes('No board yet') && !text().includes('Open in Plane'), text().slice(0, 200));
 }
 
 group('a card can be corrected and handed to somebody');
@@ -1027,9 +946,12 @@ group('a card can be corrected and handed to somebody');
   // The board could move a card and not fix one: a title with a typo in it, a
   // card written in one line that wants the sentences under it, an agent that
   // was the wrong guess. All three are writes this panel could not make.
-  const ticket = (words) => [...doc.querySelectorAll('[draggable="true"]')]
-    .find((e) => (e.textContent ?? '').includes(words)) ?? null;
-  await click(ticket('CSV export').querySelector('button'));
+  // The board that used to be the way in is Plane now: the card's own address.
+  await act(async () => { root.unmount(); });
+  w.history.replaceState(null, '', '/p/quire/c/k3');
+  root = createRoot(w.document.getElementById('root'));
+  await act(async () => { root.render(React.createElement(App)); });
+  for (let i = 0; i < 3; i++) await act(async () => {});
   ok('a card that nobody is waiting on opens as its own page',
     head() === 'CSV export' || text().includes('CSV export'), `${head()}`);
 
@@ -2054,7 +1976,7 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
   });
   await goHome();
   await click(tile('quire'));
-  const onBoardPage = () => !!doc.querySelector('section.dv-col');
+  const onBoardPage = () => /No board yet|The board is in Plane/.test(doc.body.textContent ?? '') && !doc.querySelector('section.dv-col');
   const onProductPage = () => !!doc.querySelector('[data-counts]');
   const reload = async (path) => {
     await act(async () => { root.unmount(); });
@@ -2098,55 +2020,10 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     .map((a) => [a.dataset.count, Number(a.querySelector('.n')?.textContent)]));
   const rows = [...doc.querySelectorAll('[data-in-progress] [data-row]')]
     .map((r) => [r.querySelector('.dv-status')?.textContent, r.querySelector('.t')?.textContent]);
-  await click(link('Open board'));
-  const columnCount = (name) => Number(doc.querySelector(`section.dv-col[aria-label="${name}"] .dv-sec .dv-meta`)?.textContent);
-  const fromColumns = { ice_box: columnCount('Ice Box'), queued: columnCount('Queued'),
-    in_progress: columnCount('In Progress'), done: columnCount('Done') };
-  ok('the board summary counts the four real columns, and In progress now lists five In Progress cards with their status words',
-    JSON.stringify(counted) === JSON.stringify(fromColumns)
-    && JSON.stringify(counted) === JSON.stringify({ ice_box: 1, queued: 3, in_progress: 6, done: 5 })
+  ok('the board summary counts the cards, and In progress now lists five In Progress cards with their status words',
+    JSON.stringify(counted) === JSON.stringify({ ice_box: 1, queued: 3, in_progress: 6, done: 5 })
     && rows.length === 5 && ['stuck', 'asking', 'testing', 'running'].every((w2) => rows.some((r) => r[0] === w2)),
-    JSON.stringify({ counted, fromColumns, rows }));
-
-  // 6 · asking edge, and Done this month
-  const card = (words) => [...doc.querySelectorAll('article.dv-card')].find((e) => (e.textContent ?? '').includes(words)) ?? null;
-  const doneCards = () => doc.querySelectorAll('section.dv-col[aria-label="Done"] article').length;
-  const css = readFileSync(join(web, 'src', 'styles', 'divan-app.css'), 'utf8');
-  const asking = card('Stripe keys');
-  const shownBefore = doneCards();
-  const more = find('Show 2 more');
-  if (more) await click(more);
-  ok('an asking card carries the amber edge and the word asking; Done shows this month with Show N more revealing the rest',
-    asking?.dataset.status === 'ask' && (asking.querySelector('.dv-status')?.textContent === 'asking')
-    && /\.dv-card\[data-status="ask"\]\{border-color:color-mix\(in srgb,var\(--amber\)/.test(css)
-    && shownBefore === 3 && !!more && doneCards() === 5 && !find('Show 2 more'),
-    `${asking?.dataset.status} · ${shownBefore} → ${doneCards()}`);
-
-  // 8 · Queued is the priority order
-  const column = (name) => doc.querySelector(`section.dv-col[aria-label="${name}"]`);
-  asked.length = 0;
-  const lift = new Transfer();
-  await drag(card('Audit log'), 'dragstart', lift);
-  await drag(card('Bulk invite'), 'dragover', lift);
-  await drag(card('Bulk invite'), 'drop', lift);
-  const reordered = asked.find((a) => a.type === 'divan.card.move');
-  ok('a Queued card dropped on another Queued card takes its place, which is the priority',
-    reordered?.data.card_id === 'q3' && reordered.data.column === 'queued' && reordered.data.position === 0,
-    JSON.stringify(reordered));
-
-  // 1 · Queued → In Progress starts it, asking nothing
-  await act(async () => { seed(useDivanStore, { snaps: { studio: answered(snap, now) } }); });
-  asked.length = 0;
-  const start = new Transfer();
-  await drag(card('Bulk invite'), 'dragstart', start);
-  await drag(column('In Progress'), 'dragover', start);
-  await drag(column('In Progress'), 'drop', start);
-  await settle();
-  ok('dragging a card from Queued into In Progress issues divan.card.move with In Progress, and no confirmation appears',
-    asked.some((a) => a.type === 'divan.card.move' && a.data.card_id === 'q1' && a.data.column === 'in_progress')
-    && doc.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]').length === 0
-    && (column('In Progress').textContent ?? '').includes('Bulk invite'),
-    JSON.stringify(asked.map((a) => [a.type, a.data?.column])));
+    JSON.stringify({ counted, rows }));
 
   // 4 · branches are gone (ustabasi #147). Quire's snapshot carries branches,
   // and the page draws none of them and offers no way to one; its repositories
@@ -2197,19 +2074,19 @@ group('the project page, its board and its Composer (HANDOVER §4.2, §4.3)');
     `${boardPath} → ${w.location.pathname}`);
   await reload(w.location.pathname);
   ok('…and a reload of it is the product page again', w.location.pathname === '/p/quire' && projectPage());
-  // From the product to a task, with the branch pages gone: a card pressed on
-  // the board is that card's page, and Back is the board again.
-  await click(link('Open board'));
-  const first = doc.querySelector('article.dv-card[data-card]');
-  const firstId = first?.getAttribute('data-card');
-  const firstTitle = (first?.querySelector('.dv-card-title')?.textContent ?? '').trim();
-  await click(first.querySelector('.dv-card-title'));
+  // From the product to a task: a card in In progress now is that card's
+  // page, and Back is the product again. (The board is Plane, and its cards
+  // are Plane's.)
+  const first = doc.querySelector('[data-in-progress] [data-row]');
+  const firstId = first?.getAttribute('data-row');
+  const firstTitle = (first?.querySelector('.t')?.textContent ?? '').trim();
+  await click(first);
   await settle();
   const cardPath = w.location.pathname;
   const cardShown = text().includes(firstTitle) && !!doc.querySelector('[data-side]');
   await goBack();
-  ok('a card pressed on the board opens that card, and Back is the board',
-    !!firstId && cardPath === `/p/quire/c/${firstId}` && cardShown && w.location.pathname === '/p/quire/board',
+  ok('a card pressed under In progress now opens that card, and Back is the product',
+    !!firstId && cardPath === `/p/quire/c/${firstId}` && cardShown && w.location.pathname === '/p/quire',
     `${firstId} · ${cardPath} · ${cardShown} · ${w.location.pathname}`);
   await reload('/p/quire');
 
@@ -2461,9 +2338,7 @@ group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
   const toWaiting = w.location.pathname === '/waiting' && !!doc.querySelector('[data-waiting]');
 
   // 4 · the agent face and the side column
-  await reload('/p/quire/board');
-  const title1 = [...doc.querySelectorAll('.dv-card-title')].find((b) => b.textContent === 'Webhook retry policy');
-  await click(title1);
+  await reload('/p/quire/c/k1');
   await settle();
   const face = doc.querySelector('details[data-agent-face]');
   const shut = !!face && !face.open;

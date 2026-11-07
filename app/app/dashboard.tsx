@@ -1,29 +1,29 @@
 import { permissionFor } from '../src/permissions';
 import { freshCwd } from '../src/fresh-chat';
 import React from 'react';
-import { ScrollView, View, type GestureResponderEvent } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { type Key } from '../src/i18n';
 import { useDivanView, useQueueBadge } from '../src/queue';
 import {
-  COLUMNS, project as projectIn, stuck, type DivanView, type MergedCard, type MergedProject,
+  project as projectIn, stuck, type DivanView, type MergedCard, type MergedProject,
 } from '../src/divan';
 import { PLACE_ROUTE } from '../src/shell';
-import type { Agent, DivanColumn, Provider } from '../src/protocol';
+import type { Agent, Provider } from '../src/protocol';
 import { since } from '../src/tickets';
 import {
   age, agentRows, clock, dormant, freshness, latest, line, pausedWords, staleness, staleWords, target,
   type Ago, type Said,
 } from '../src/dashboard';
 import {
-  blank, blankBody, day, meta, nowWords, oldWords, quiet, subtitle, waitingWords,
+  blank, blankBody, meta, nowWords, oldWords, quiet, subtitle, waitingWords,
   type Line,
 } from '../src/project';
 import {
-  COLUMN_LABEL, DONE_SHOWN, OPENS_ON, counts, faces, foot, inProgress, items, line as cardLine, status, tabs,
-  type Face, type Item,
+  COLUMN_LABEL, counts, faces, inProgress, status,
+  type Face,
 } from '../src/board';
 import {
   KIND_TONE, actions, items as waitingItems, type Doing, type Item as WaitItem,
@@ -33,18 +33,14 @@ import {
   lowQuota, mention, modelOptions, modelValue, readModel, short, summary, writer, type Mode,
 } from '../src/compose';
 import { WARN_AT } from '../src/machine';
-import {
-  SETTLE_MS, back, carry, foot as dropFoot, hint, says, type Carried, type Landed,
-} from '../src/drag';
-import { Button, ColumnTabs, EmptyState, ListRow, SectionHeader, Segments, Tap } from '../src/components/divan';
+import { EmptyState, ListRow, SectionHeader, Segments, Tap } from '../src/components/divan';
 import {
   Greeting, LiveRow, Note, NoteFoot, QuietRow, Rows, Tile, WaitCard,
 } from '../src/components/dashboard';
 import { Composer } from '../src/components/compose';
 import { BoardSummary, ProjectHead, QuietNote, StateLines } from '../src/components/project';
-import { BoardCard, statusDot } from '../src/components/board';
-import { Icon } from '../src/components/icon';
-import { DragHint, DropSlot, Float, useDrag } from '../src/components/drag';
+import { statusDot } from '../src/components/board';
+import { PlaneBoard } from '../src/components/plane';
 import { Text } from '../src/components/text';
 import { POLL_MS as INBOX_POLL_MS, unread, useInbox } from '../src/inbox';
 import { em, useTokens, type State } from '../src/theme';
@@ -76,7 +72,6 @@ export default function Dashboard() {
   const selected = one(params.project);
   const picked = selected ? projectIn(view, selected) : null;
   const face: Face = one(params.tab) === 'board' ? 'board' : one(params.tab) === 'chats' ? 'chats' : 'overview';
-  const col = COLUMNS.find((c) => c === one(params.col)) ?? OPENS_ON;
   const enter = (key: string | null) => router.setParams({ project: key ?? '' });
   const open = (what: { ustabasi_id: number | null; host: string; projectKey: string }) => {
     const where = target(what, host?.id);
@@ -89,10 +84,8 @@ export default function Dashboard() {
   if (picked) {
     const product = (
       <Project project={picked} index={view.projects.findIndex((p) => p.key === picked.key)}
-        view={view} now={now} ago={ago} face={face} column={col} allDone={one(params.done) === 'all'}
+        view={view} now={now} ago={ago} face={face}
         onFace={(to) => router.setParams({ tab: to === 'overview' ? '' : to })}
-        onAllDone={() => router.setParams({ done: 'all' })}
-        onColumn={(to) => router.setParams({ col: to })}
         onOpen={(c) => go(() => router.push(`/card/${c.id}?host=${c.host}&from=${face === 'board' ? 'board' : 'project'}`))} />
     );
     return (
@@ -476,17 +469,12 @@ function DashComposer({ view, lock = null }: {
  *  Chats segment, and whichever of the three is open — each at its own
  *  address, so a redraw and Back land where somebody was.
  *
- *  The board face owns its scrolling: its column tabs are the drop targets of
- *  the drag, and a drop target that can be scrolled off the top of the page is
- *  not one. The other two scroll inside the Dashboard's own. */
-function Project({ project: p, index, view, now, ago, face, column, allDone, onFace, onColumn, onAllDone, onOpen }: {
+ *  The board face is Plane, in a web view that owns its own scrolling; the
+ *  other two scroll inside the Dashboard's own. */
+function Project({ project: p, index, view, now, ago, face, onFace, onOpen }: {
   project: MergedProject; index: number; view: DivanView; now: number; ago: Ago;
   face: Face;
-  column: DivanColumn;
-  allDone: boolean;
   onFace: (to: Face) => void;
-  onColumn: (to: DivanColumn) => void;
-  onAllDone: () => void;
   onOpen: (card: MergedCard) => void;
 }) {
   const T = useT();
@@ -507,12 +495,10 @@ function Project({ project: p, index, view, now, ago, face, column, allDone, onF
         <View style={{ paddingTop: 8, paddingHorizontal: 16, paddingBottom: 12, gap: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 17, fontWeight: '600', letterSpacing: em(17, -0.015) }}>{p.name}</Text>
-            <AddTicket project={p.key} />
           </View>
           {segment}
         </View>
-        <Board project={p} view={view} ago={ago} column={column} allDone={allDone}
-          onColumn={onColumn} onAllDone={onAllDone} onOpen={onOpen} />
+        <PlaneBoard url={p.plane} />
       </View>
     );
   }
@@ -529,21 +515,6 @@ function Project({ project: p, index, view, now, ago, face, column, allDone, onF
       {/* The Composer at the foot of a product: locked to it. */}
       <DashComposer view={view} lock={p.key} />
     </View>
-  );
-}
-
-/** The New ticket button in the board's head (BoardPhone): a 44 pt disc with a
- *  plus, which opens the form with this product already chosen. */
-function AddTicket({ project }: { project: string }) {
-  const T = useT();
-  const t = useTokens();
-  const router = useRouter();
-  const go = useNavGuard();
-  return (
-    <Tap onPress={() => go(() => router.push(`/new-ticket?project=${project}`))}
-      style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: t.ink }}>
-      <View accessibilityLabel={T('ntNew')}><Icon name="add" size={20} color={t.onInk} /></View>
-    </Tap>
   );
 }
 
@@ -633,176 +604,6 @@ function Chats({ project: p }: { project: MergedProject }) {
           onPress={() => go(() => router.push(`/chat/${c.id}`))} />
       ))}
     </Rows>
-  );
-}
-
-/** …and the board (BoardPhone, Mobile3 D1-D4): the four columns as four tabs
- *  with their counts, the open column's cards under them, and the one gesture
- *  on this phone that changes what a computer is doing — hold a card and drop
- *  it on a tab to move it; In Progress starts it, asking nothing.
- *
- *  What a drag decides is `src/drag.ts` and what it draws is
- *  `components/drag.tsx`; what is left here is asking a computer to move the
- *  card, and saying what came back. */
-function Board({ project: p, view, ago, column, allDone, onColumn, onAllDone, onOpen }: {
-  project: MergedProject; view: DivanView; ago: Ago;
-  column: DivanColumn;
-  allDone: boolean;
-  onColumn: (to: DivanColumn) => void;
-  onAllDone: () => void;
-  onOpen: (card: MergedCard) => void;
-}) {
-  const T = useT();
-  const t = useTokens();
-  const router = useRouter();
-  const go = useNavGuard();
-  const moveCard = useStore((s) => s.moveCard);
-  const every = items(view, p, column, ago);
-  const list = column === 'done' && !allDone ? every.slice(0, DONE_SHOWN) : every;
-  const rest = every.length - list.length;
-  const said = foot(p, column, view.now);
-  const empty = blankBody();
-
-  /** The card that has just been put down, for the five seconds it says so. */
-  const [landed, setLanded] = React.useState<Landed | null>(null);
-  const settle = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const put = React.useCallback((l: Landed | null) => {
-    if (settle.current) clearTimeout(settle.current);
-    setLanded(l);
-    if (l) settle.current = setTimeout(() => setLanded(null), SETTLE_MS);
-  }, []);
-  React.useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
-
-  /** Ask the computer the card is on to move it, and say what came back. Every
-   *  move goes through here — the drop, and the Undo that takes one back. */
-  const ask = React.useCallback(async (
-    to: { carried: Carried; column: DivanColumn; position: number | null; starts: boolean },
-  ) => {
-    try {
-      const { error } = await moveCard({ card: to.carried.card, host: to.carried.host,
-                                         column: to.column, position: to.position });
-      put({ carried: to.carried, column: to.column, moved: true, started: to.starts && !error, error });
-    } catch (e: any) {
-      put({ carried: to.carried, column: to.column, moved: false, started: false, error: e?.message ?? '' });
-    }
-  }, [moveCard, put]);
-
-  const drag = useDrag({
-    open: column,
-    rows: list.map((i) => ({ card: i.card.id, host: i.card.host })),
-    onOpen: onColumn,
-    onMove: (to) => { put(null); void ask(to); },
-  });
-
-  const carried = drag.drag?.carried ?? null;
-  const air = drag.drag
-    ? hint(drag.drag, { others: list.filter((i) => i.card.id !== carried?.card).length,
-                        mixed: p.machines.length > 1 })
-    : null;
-  const told = says(landed, list.map((i) => i.card.id));
-  const note = landed && told.line ? dropFoot(landed) : null;
-  const slot = drag.target === column ? drag.drag?.slot ?? null : null;
-
-  const cards = list
-    .filter((item) => !(slot != null && item.card.id === carried?.card))
-    .map((item) => (
-      <View key={item.card.id} onLayout={drag.list.row(item.card.id)}>
-        <BoardRow item={item} now={view.now} onOpen={onOpen}
-          hold={drag.hold(carry(item.card, item.face, item.who))}
-          held={carried?.card === item.card.id}
-          flying={drag.flying}
-          landed={landed && told.card === item.card.id ? landed : null}
-          onUndo={() => { if (landed) { put(null); void ask({ ...back(landed), starts: false }); } }} />
-      </View>
-    ));
-  if (slot != null) cards.splice(slot, 0, <DropSlot key="slot" landing />);
-
-  return (
-    <View ref={drag.frame.ref} onLayout={drag.frame.onLayout}
-      style={{ flex: 1 }} {...drag.pan.panHandlers}>
-      <View ref={drag.strip.ref} onLayout={drag.strip.onLayout}>
-        <ColumnTabs value={column} onChange={(key) => onColumn(key as DivanColumn)}
-          dragging={!!drag.drag} target={drag.target} onMeasure={drag.strip.onMeasure}
-          columns={tabs(p, view.now).map((c) => ({ key: c.key, label: T(c.label), count: c.count }))} />
-      </View>
-      <ScrollView scrollEnabled={!drag.drag}
-        contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24, gap: 10 }}>
-        {blank(p) ? (
-          <EmptyState title={T('prNewTitle')} body={T(empty.key, empty.params)} foot={T('prNewFoot')}
-            actions={<Button label={T('ntNew')} icon="add" tall
-              onPress={() => go(() => router.push(`/new-ticket?project=${p.key}`))} />} />
-        ) : (
-          <>
-            {air ? <DragHint tone={air.tone} text={words(T, air)} />
-             : note ? <DragHint tone={note.tone} text={words(T, note)} />
-             : <Text mono style={{ fontSize: 11.5, lineHeight: 16, color: t.ink3, paddingHorizontal: 4 }}>{T('bdHint')}</Text>}
-            <View ref={drag.list.ref} onLayout={drag.list.onLayout} style={{ gap: 10 }}>{cards}</View>
-            {rest > 0 && (
-              <Tap onPress={onAllDone} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 }}>
-                <Text style={{ fontSize: 13, fontWeight: '500', color: t.ink2 }}>{T('bdShowMore', { n: rest })}</Text>
-              </Tap>
-            )}
-            {!!said && (
-              <Text style={{ fontSize: 13, lineHeight: 13 * 1.45, color: t.ink2, paddingHorizontal: 4, paddingTop: 2 }}>
-                {T(said.key, said.params)}
-              </Text>
-            )}
-          </>
-        )}
-      </ScrollView>
-      {!!drag.drag && drag.flying && !!drag.float && (
-        <Float face={drag.drag.carried.face} who={T(drag.drag.carried.who)}
-          title={drag.drag.carried.title} style={drag.float} />
-      )}
-    </View>
-  );
-}
-
-/** One sentence out of the drag's own words, with a column's or an executor's
- *  name put into the reader's language first. */
-function words(T: ReturnType<typeof useT>,
-               say: { said: Said; col?: Key; who?: Key }): string {
-  const params = say.who ? { ...say.said.params, who: T(say.who) }
-    : say.col ? { ...say.said.params, col: T(say.col) } : say.said.params;
-  return T(say.said.key, params);
-}
-
-/** One card of the open column: lying there, held (D1), or just put down (D4).
- *  The place it left while it is in the air is an empty slot (D2). */
-function BoardRow({ item, now, onOpen, hold, held, flying, landed, onUndo }: {
-  item: Item;
-  now: number;
-  onOpen: (card: MergedCard) => void;
-  hold: { holdMs: number; onLongPress: (e: GestureResponderEvent) => void; onPressOut: () => void };
-  held?: boolean;
-  flying?: boolean;
-  landed?: Landed | null;
-  onUndo: () => void;
-}) {
-  const T = useT();
-  if (held && flying) return <DropSlot />;
-  const say = landed ? dropFoot(landed) : null;
-  const c = item.card;
-  const st = status(c);
-  const col = c.column as string;
-  const stamp = c.agent_status_at ?? c.moved_at ?? null;
-  const meta = col === 'done' ? (c.moved_at || c.updated_at ? day(c.moved_at || c.updated_at) : '')
-    : col === 'ice_box' ? (c.created_at ? short(Math.max(0, now - c.created_at)) : '')
-      : col === 'queued' ? T(item.who)
-        : [item.machine ? (item.machine.seen == null ? item.machine.name
-          : `${item.machine.name} · ${T('pfLastSeen', { time: clock(item.machine.seen) })}`) : c.machine,
-        stamp != null ? short(Math.max(0, now - stamp)) : ''].filter(Boolean).join(' · ');
-  return (
-    <BoardCard mine={item.mine} hold={hold} lifted={held}
-      title={c.title} line={cardLine(c)} meta={meta}
-      status={st && { kind: st.kind, word: T(st.word) }}
-      landed={say && {
-        text: words(T, say),
-        tone: say.tone,
-        action: say.undo ? T('dgUndo') : undefined,
-        onAction: say.undo ? onUndo : undefined,
-      }}
-      onPress={() => onOpen(c)} />
   );
 }
 

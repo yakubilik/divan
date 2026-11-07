@@ -467,6 +467,9 @@ const en = {
   // A product's page (HANDOVER §4.2).
   pjChats: 'Chats', pjOpen: 'Open', pjInProgressNow: 'In progress now',
   pjSince: '{stage} since {date}', pjRunsOn: 'runs on {machines}',
+  plNone: 'No board yet', plNoneBody: 'This computer has no Plane. Add a [plane] url and workspace to its config.toml.',
+  plDown: 'Plane did not answer', plDownBody: 'Is the phone on Tailscale, and is the Plane computer awake?',
+  plRetry: 'Try again',
   pjNoChats: 'No chat is filed under this project yet.',
   bdNothing: 'Nothing in this column.',
   bdDoneNote: 'The last month of finished work, out of {n}.',
@@ -726,6 +729,9 @@ export type Key = keyof typeof en;
  *  the app ships in English (`LOCALE`) — and this is where a Turkish build
  *  finds its words; a key missing here falls back to `en`. */
 export const tr: Partial<Record<Key, string>> = {
+  plNone: 'Henüz board yok', plNoneBody: 'Bu bilgisayarda Plane yok. config.toml\'a [plane] url ve workspace ekle.',
+  plDown: 'Plane cevap vermedi', plDownBody: 'Telefon Tailscale\'de mi, Plane\'in olduğu bilgisayar açık mı?',
+  plRetry: 'Tekrar dene',
   approvalExpired: 'İzin süresi doldu, yapılmadı', approvalDropped: 'Daemon yeniden başladı, istek düştü; yapılmadı',
   errApprovalExpired: 'İzin süresi doldu, yapılmadı. Ajandan tekrar denemesini iste.',
   errApprovalDropped: 'Daemon yeniden başladı, istek düştü; yapılmadı. Ajandan tekrar denemesini iste.',

@@ -43,7 +43,6 @@ const SUITES = {
       'test-divan-merge.cjs',
       'test-divan-screens.cjs',
       'test-divan.cjs',
-      'test-drag.cjs',
       'test-ema.cjs',
       'test-every-screen.cjs',
       'test-fresh-chat.cjs',

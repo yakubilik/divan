@@ -9,7 +9,6 @@ const R = require('./render-divan.cjs');
 
 const root = path.join(__dirname, '..');
 const h = R.React.createElement;
-const D = require(path.join(root, 'src/drag.ts'));
 const C = require(path.join(root, 'src/compose.ts'));
 const K = require(path.join(root, 'src/tokens.ts'));
 const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
@@ -96,8 +95,8 @@ const checks = [];
     R.styles(page).some((s) => s.width === 44 && s.height === 44) && page.includes('>Quire<')
     && page.includes('SaaS · client portals for studios') && page.includes('>pjSince · pjRunsOn<')
     && !/prRail|stageBar|bdIdea|bdGrowth/.test(page)
-    && toBoard === 'board' && board.includes('>bdHint<') && toChats === 'chats' && chats.includes('>pjNoChats<')
-    && toOverview === '' && reloaded[0].includes('>bdHint<') && reloaded[1].includes('>pjNoChats<')]);
+    && toBoard === 'board' && board.includes('>plNone<') && toChats === 'chats' && chats.includes('>pjNoChats<')
+    && toOverview === '' && reloaded[0].includes('>plNone<') && reloaded[1].includes('>pjNoChats<')]);
 }
 
 // 3 · the board summary
@@ -107,16 +106,10 @@ const checks = [];
     const m = page.match(new RegExp(`>(\\d+)</span><span[^>]*>${label}<`));
     return m ? Number(m[1]) : null;
   };
-  const tabCount = (label) => {
-    const b = stand({ project: 'quire', tab: 'board' });
-    const m = b.match(new RegExp(`>${label}</span><span[^>]*>(\\d+)<`));
-    return m ? Number(m[1]) : null;
-  };
   const summary = ['bdIceBox', 'bdQueued', 'bdInProgress', 'bdDone'].map(counted);
-  const tabs = ['bdIceBox', 'bdQueued', 'bdInProgress', 'bdDone'].map(tabCount);
   const words = ['stStuck', 'stAsking', 'stTesting', 'stRunning'].map((w) => count(page, new RegExp(`>${w}<`, 'g')));
-  checks.push(['the board summary is four counts off the real columns, and In progress now lists at most five In Progress cards with their status words',
-    JSON.stringify(summary) === JSON.stringify(tabs) && JSON.stringify(summary) === '[0,2,6,5]'
+  checks.push(['the board summary is four counts off the cards, and In progress now lists at most five In Progress cards with their status words',
+    JSON.stringify(summary) === '[0,2,6,5]'
     && words[0] === 1 && words[1] === 1 && words[2] === 1 && words[3] === 2]);
 }
 
@@ -128,42 +121,6 @@ const checks = [];
     && !/>branches<|>Engineering<|>SEO<|pjNotConnected/.test(page)
     && R.presses().every((p) => !/^(Engineering|SEO)/.test(p.text))
     && JSON.stringify(R.nav.pushed()) === '[]']);
-}
-
-// 6 · the asking edge, and Done this month
-{
-  const t = K.tokensFor('dark');
-  const board = stand({ project: 'quire', tab: 'board', col: 'in_progress' });
-  const edges = R.styles(board).filter((s) => s.borderColor === t.amberRing && s.overflow === 'hidden');
-  const done = stand({ project: 'quire', tab: 'board', col: 'done' });
-  const shown = count(done, />Shipped \d</g);
-  R.pressOn('bdShowMore');
-  const all = R.render('dark', h(Dashboard));
-  checks.push(['an asking card carries an amber-toned edge and the word asking; Done shows this month with Show N more revealing the rest',
-    edges.length === 1 && board.includes('>stAsking<') && board.includes('Use the live keys now?')
-    && shown === 3 && done.includes('>bdShowMore<') && R.params.get().done === 'all'
-    && count(all, />Shipped \d</g) === 5 && !all.includes('>bdShowMore<')]);
-}
-
-// 1 · a held card dropped on the In Progress tab moves it there and starts it
-{
-  stand({ project: 'quire', tab: 'board', col: 'queued' });
-  const hold = R.holds().find((x) => x.text.includes('Bulk invite'));
-  const carried = D.carry({ ...CARDS[0], host: 'h1', stale: false }, 'coder', 'exCoder');
-  const tab = { x: 200, y: 143 };
-  let drag = null;
-  const effects = [];
-  for (const e of [{ do: 'lift', carried, open: 'queued', at: { x: 195, y: 300 } },
-                   { do: 'over', at: tab, column: 'in_progress', onBoard: true, slot: null, position: null, now: 1000 },
-                   { do: 'drop' }]) {
-    const r = D.step(drag, e);
-    drag = r.drag;
-    effects.push(...r.effects);
-  }
-  const move = effects.find((e) => e.do === 'move');
-  checks.push(['phone: a card held 350 ms and dropped on the In Progress tab is one move into In Progress that starts it, with nothing asked first',
-    !!hold && hold.delay === D.HOLD_MS && move?.column === 'in_progress' && move.starts === true
-    && effects.every((e) => ['haptic', 'open', 'move'].includes(e.do))]);
 }
 
 // 7 · the Composer at the foot is locked
