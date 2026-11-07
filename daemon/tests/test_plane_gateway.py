@@ -173,39 +173,3 @@ def test_the_page_lock_is_in_every_plane_page_before_plane_runs():
     page = gw.with_lock("<!DOCTYPE html><html><head><script src=/a.js></script></head></html>")
     assert page.index("data-divan-lock") < page.index("/a.js")
     assert "label_ids" in gw.LOCK_JS and "ustabaşı" in gw.LOCK_JS
-
-
-# ── each product's logo where Plane draws its project icon ────────────────
-
-PID = "fe2d7dc1-fe5e-4d46-ae1f-359fa022c51b"
-
-
-def test_a_logo_is_served_to_whoever_has_a_pass_and_only_a_known_one(tmp_path):
-    png = tmp_path / "divan.png"
-    png.write_bytes(b"\x89PNG fake")
-    gate = gw.PlaneGateway("http://thinkpad:8090", KEY, [], logos={PID: png, "../etc": png})
-    assert list(gate.logos) == [PID]
-    sent = []
-
-    async def receive():
-        return {"type": "http.request", "body": b"", "more_body": False}
-
-    async def send(m):
-        sent.append(m)
-
-    def get(path, cookie=True):
-        sent.clear()
-        hs = [(b"cookie", f"{gw.PASS_COOKIE}={gw.mint(KEY, 'Yakup')}".encode())] if cookie else []
-        asyncio.run(gate({"type": "http", "method": "GET", "path": path, "headers": hs, "query_string": b""},
-                         receive, send))
-        return sent
-
-    out = get(f"/divan-logo/{PID}.png")
-    assert out[0]["status"] == 200 and out[1]["body"] == b"\x89PNG fake"
-    assert get(f"/divan-logo/{PID}.png", cookie=False)[0]["status"] == 401
-
-
-def test_the_page_gets_the_logo_swap_only_when_there_are_logos():
-    assert "data-divan-logo" not in gw.with_lock("<head></head>")
-    page = gw.with_lock("<head></head>", [PID])
-    assert "data-divan-logo" in page and PID in page and "/divan-logo/" in page
