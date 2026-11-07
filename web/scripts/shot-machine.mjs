@@ -57,8 +57,9 @@ try {
   for (const [name, view, width, height, mobile] of [
     ['chat', 'chat', 1440, 1000, false], ['machine', 'machine', 1440, 1300, false],
     ['machine-narrow', 'machine', 390, 2200, true], ['settings', 'settings', 1440, 1000, false],
+    ['preferences', 'preferences', 1440, 1000, false], ['accounts', 'accounts', 1440, 1000, false],
   ]) {
-    for (const scheme of ['dark', 'light']) {
+    for (const scheme of (process.env.SHOT_DARK_ONLY ? ['dark'] : ['dark', 'light'])) {
       await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
       await page('Page.navigate', { url: `file://${join(build, 'harness.html')}?theme=${scheme}&view=${view}` });
       await new Promise((r) => setTimeout(r, 1500));

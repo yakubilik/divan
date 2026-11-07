@@ -148,7 +148,7 @@ group('each page is the frame’s page');
   const machines = page('machines');
   ok('Machines is a card per computer (HANDOVER §4.9): its name, online, what it runs, when it was seen',
     (machines.body.match(/class="dv-glass dv-machine"/g) ?? []).length === 2
-    && has(machines.body, 'Machines', 'studio', 'mini', 'online', 'seen just now'),
+    && has(machines.body, 'Computers', 'studio', 'mini', 'online', 'seen just now'),
     words(machines.body).slice(0, 200));
   ok('…with the quota and the executors beside them, and pairing and the quiet machine under them',
     has(machines.body, 'Quota', 'warn 20%', 'stop 5%', 'Executors',
@@ -268,7 +268,7 @@ group('a sign-in is seen expiring before it expires');
   const unasked = page('admin', 'fresh', cold);
   ok('a computer that has not answered about its sign-ins is not reported as having none',
     has(unasked.body, 'not read yet') && !has(unasked.body, '0 connected')
-    && !/Accounts &amp; sign-ins<\/span><span/.test(unasked.drawer),
+    && !/Sign-ins<\/span><span/.test(unasked.drawer),
     words(unasked.body).slice(0, 200));
 
   const drawn = page('accounts');
@@ -276,8 +276,8 @@ group('a sign-in is seen expiring before it expires');
     has(drawn.body, 'expires in 12 days', 'Renew')
     && anyStyle(drawn.body, (d) => d.background === v('amberBg')),
     words(drawn.body).slice(0, 300));
-  ok('…and the row of pages under Executors carries how many want a person',
-    /Accounts &amp; sign-ins<\/span><b class="dv-badge"[^>]*>2</.test(drawn.drawer),
+  ok('…and the row of pages under Accounts carries how many want a person',
+    /Sign-ins<\/span><b class="dv-badge"[^>]*>2</.test(drawn.drawer),
     words(drawn.drawer).slice(0, 200));
 }
 

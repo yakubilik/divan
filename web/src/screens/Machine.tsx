@@ -73,7 +73,7 @@ const DRAWN_HERE = new Set<View>([
   'fleet', 'projects', 'agents', 'update',
 ]);
 
-/** HANDOVER §4.9: four tabs — Machines · Executors · Terminal · Settings — each
+/** HANDOVER §4.9: four tabs — Computers · Accounts · Terminal · Settings — each
  *  at its own path (`/machine/<tab>`), and every other page the drawer used to
  *  list sitting in a row of links under the tab it is about (`MACHINE_TABS`).
  *  Nothing the drawer reached is gone; the marks it carried (an approval on the
@@ -122,27 +122,11 @@ export function Machine(props: MachineProps) {
 
   return (
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* The tabs first and on their own line, the pages under the open tab on
+          a quieter line beneath them: two levels that read as two levels. */}
       <div style={{ flex: 'none', padding: '8px 32px 0' }}>
-        <div style={{
-          maxWidth: 1080, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-        }}>
-          {tab.pages.length > 1 && (
-            <nav aria-label={`Under ${tab.label}`} className="dv-subnav">
-              {tab.pages.map((v) => {
-                const m = mark(v);
-                return (
-                  <a key={v} href={`/machine/${v}`} className="dv-chip dv-hit"
-                    aria-current={v === view ? 'page' : undefined}
-                    onClick={(e) => { e.preventDefault(); if (v !== view) onView(v); }}>
-                    <span>{machinePageLabel(v)}</span>
-                    {!!m.count && <b className="dv-badge" aria-label={`${m.count} want you`}>{m.count}</b>}
-                    {!!m.dot && <Mark red={m.red} />}
-                  </a>
-                );
-              })}
-            </nav>
-          )}
-          <div className="dv-seg" role="group" aria-label="Machine" style={{ marginLeft: 'auto' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="dv-seg" role="group" aria-label="Machine" style={{ alignSelf: 'flex-start' }}>
             {MACHINE_TABS.map((t) => {
               const wants = t.pages.map(mark).find((m) => m.count || m.dot);
               return (
@@ -154,6 +138,22 @@ export function Machine(props: MachineProps) {
               );
             })}
           </div>
+          {tab.pages.length > 1 && (
+            <nav aria-label={`Under ${tab.label}`} className="dv-subnav">
+              {tab.pages.map((v) => {
+                const m = mark(v);
+                return (
+                  <a key={v} href={`/machine/${v}`} className="dv-hit"
+                    aria-current={v === view ? 'page' : undefined}
+                    onClick={(e) => { e.preventDefault(); if (v !== view) onView(v); }}>
+                    <span>{machinePageLabel(v)}</span>
+                    {!!m.count && <b className="dv-badge" aria-label={`${m.count} want you`}>{m.count}</b>}
+                    {!!m.dot && <Mark red={m.red} />}
+                  </a>
+                );
+              })}
+            </nav>
+          )}
         </div>
       </div>
       {DRAWN_HERE.has(view) ? (

@@ -405,6 +405,12 @@ const goMachine = async (label) => {
   const view = MACHINE_ROWS.find((r) => r.label === label).view;
   const tab = MACHINE_TABS.find((t) => t.pages.includes(view));
   if (place() !== 'Machine') await toMachines();
+  // A page no tab lists (Admin, since 7 Nov 2026) is still an address: it is
+  // gone to the way a link kept to it would go there.
+  if (!tab) {
+    await act(async () => { w.history.pushState(null, '', `/machine/${view}`); w.dispatchEvent(new w.PopStateEvent('popstate')); });
+    return;
+  }
   await click(machineTab(tab.label));
   if (tab.pages[0] !== view) await click(doc.querySelector(`nav a[href="/machine/${view}"]`));
 };
@@ -485,7 +491,7 @@ group('the bar');
 
   await toMachines();
   ok('…and the Machine place opens on the first row of its list',
-    place() === 'Machine' && page() === MACHINE_ROWS[0].label, `${place()} › ${page()}`);
+    place() === 'Machine' && page() === 'Computers', `${place()} › ${page()}`);
 
   await click(find('Dashboard', doc.querySelector('header')));
   ok('…and the Dashboard comes back', place() === 'Dashboard' && home());
@@ -541,7 +547,7 @@ group('the line: Settings, and the machines count');
     `${!!box} · ${at} → ${w.location.pathname} · ${page()}`);
   await click(box.querySelector('button[data-all-machines]'));
   ok('…and its foot opens the machines list, with a card for each machine',
-    w.location.pathname === '/machine/machines' && page() === 'Machines'
+    w.location.pathname === '/machine/machines' && page() === 'Computers'
       && doc.querySelectorAll('article.dv-machine').length > 0
       && machinesBtn()?.getAttribute('aria-current') === 'page' && nav('Settings')?.getAttribute('aria-current') == null,
     `${w.location.pathname} · ${page()} · ${doc.querySelectorAll('article.dv-machine').length} cards`);
@@ -613,12 +619,12 @@ group('the back button steps through the panel instead of out of it');
 
   // The pages of the Machine place are steps too, and so is a chat.
   await goMachine('Terminal');
-  await goMachine('Accounts & sign-ins');
+  await goMachine('Quota thresholds');
   ok('the drawer’s pages are in the address, one word each',
-    w.location.pathname === '/machine/accounts', w.location.pathname);
+    w.location.pathname === '/machine/quota', w.location.pathname);
   await back();
   ok('…a tab and the page under it are a step each',
-    w.location.pathname === '/machine/executors', w.location.pathname);
+    w.location.pathname === '/machine/accounts', w.location.pathname);
   await back();
   ok('…and Back walks them one at a time',
     w.location.pathname === '/machine/terminal' && page() === 'Terminal',
@@ -1070,17 +1076,15 @@ group('the sign-in that is expiring is counted before that page is opened');
   ok('entering the Machine place asks the computer which sign-ins it has',
     asked.some((a) => a.key === 'studio' && a.type === 'account.list'),
     JSON.stringify(asked.map((a) => a.type)));
-  const marked = page() === 'Machines' && (machineTab('Executors')?.textContent ?? '').includes('needs you');
-  await click(machineTab('Executors'));
-  ok('…and the tabs count the ones that want a person: a mark on Executors, the number on its Accounts link',
-    marked && (row('Accounts & sign-ins')?.textContent ?? '').includes('2')
-    && !!row('Accounts & sign-ins')?.querySelector('.dv-badge'),
-    `${marked} · ${row('Accounts & sign-ins')?.textContent}`);
-  await goMachine('Admin');
-  ok('…and Admin says the same thing about them, on a page nobody asked twice',
-    page() === 'Admin' && text().includes('2 want you')
-    && asked.filter((a) => a.type === 'account.list').length === 1,
-    `${page()} · ${asked.filter((a) => a.type === 'account.list').length} asks`);
+  const marked = page() === 'Computers' && (machineTab('Accounts')?.textContent ?? '').includes('needs you');
+  await click(machineTab('Accounts'));
+  ok('…and the tabs count the ones that want a person: a mark on Accounts, the number on its Sign-ins link',
+    marked && (row('Sign-ins')?.textContent ?? '').includes('2')
+    && !!row('Sign-ins')?.querySelector('.dv-badge'),
+    `${marked} · ${row('Sign-ins')?.textContent}`);
+  ok('…on a page nobody asked twice',
+    asked.filter((a) => a.type === 'account.list').length === 1,
+    `${asked.filter((a) => a.type === 'account.list').length} asks`);
 
   accountsFail = true;
   await click(find('Dashboard', header));
@@ -1096,7 +1100,7 @@ group('the sign-in that is expiring is counted before that page is opened');
   await goMachine('Admin');
   for (let i = 0; i < 4; i++) await act(async () => {});
   ok('…and the place goes on being used, saying nothing about sign-ins rather than none of them',
-    page() === 'Admin' && text().includes('not read yet') && !text().includes('0 connected')
+    text().includes('the update, the logs, the keys') && text().includes('not read yet') && !text().includes('0 connected')
     && asked.filter((a) => a.type === 'account.list').length === 1,
     `${page()} · ${asked.filter((a) => a.type === 'account.list').length} asks`);
   accountsFail = false;
@@ -1698,7 +1702,7 @@ group('the four things the panel could not do to a computer');
   // the tool the fixture deliberately does not have installed.
   await act(async () => { seed(useFleet, { hosts: { studio: fakeHost() } }); });
   await goMachine('Accounts & sign-ins');
-  ok('Accounts is a page of the Machine place', page() === 'Accounts & sign-ins', `${page()}`);
+  ok('Accounts is a page of the Machine place', page() === 'Sign-ins', `${page()}`);
 
   // 1 · a tool that is not installed is installed from here, rather than being
   // a row that tells you to go and do it yourself.
@@ -1770,8 +1774,9 @@ group('the four things the panel could not do to a computer');
     .find((b) => (b.textContent ?? '').trim() === 'Change') ?? null;
   ok('settings has a way in to the computer’s own page', !!change);
   await click(change);
+  // Not the Machine place's own Computers tab, which has the same name.
   const computers = [...doc.querySelectorAll('button')]
-    .find((b) => (b.textContent ?? '').trim().startsWith('Computers')) ?? null;
+    .find((b) => (b.textContent ?? '').trim().startsWith('Computers') && !b.closest('[aria-label="Machine"]')) ?? null;
   ok('…and that page keeps the paired computers under a section of their own', !!computers);
   await click(computers);
   const remove = [...doc.querySelectorAll('button')]
@@ -1959,7 +1964,7 @@ group('the Dashboard and its Composer (HANDOVER §4.1, §5)');
     await act(async () => { root.render(React.createElement(App)); });
     await settle();
     reloads.push(path === '/p/quire' ? head() === 'Quire' : path === '/' ? home()
-      : path === '/chats' ? place() === 'Chat' : page() === 'Accounts & sign-ins');
+      : path === '/chats' ? place() === 'Chat' : page() === 'Sign-ins');
   }
   await press('k');
   const offered = [...doc.querySelectorAll('[data-i]')].map((e) => e.textContent ?? '').join(' | ');
@@ -2789,13 +2794,13 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
   // 4 · four tabs, each at its own path; every page under one; the calls
   await reload('/machine/machines');
   const paths = [];
-  for (const label of ['Executors', 'Terminal', 'Settings', 'Machines']) {
+  for (const label of ['Accounts', 'Terminal', 'Settings', 'Computers']) {
     await click(machineTab(label));
     paths.push(w.location.pathname);
   }
   const under = {};
-  for (const [tab, pages] of [['Machines', ['screen', 'fleet', 'projects', 'admin', 'update']],
-                              ['Executors', ['agents', 'accounts']], ['Settings', ['preferences', 'quota']]]) {
+  for (const [tab, pages] of [['Computers', ['screen', 'projects', 'fleet', 'update']],
+                              ['Accounts', ['quota']], ['Settings', ['preferences', 'executors', 'agents']]]) {
     await click(machineTab(tab));
     for (const v of pages) {
       await click(doc.querySelector(`nav a[href="/machine/${v}"]`));
@@ -2846,9 +2851,9 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
   if (confirmDel) await click(confirmDel);
   await settle();
   const deleted = sent('account.delete');
-  ok('Machine has four tabs at their own paths; Screen, Agents, Accounts, Admin, Update and Preferences sit under one; Terminal takes a command; agent.install, account.login and account.delete still go out',
-    JSON.stringify(paths) === JSON.stringify(['/machine/executors', '/machine/terminal', '/machine/settings', '/machine/machines'])
-    && Object.values(under).every(Boolean) && Object.keys(under).length === 9
+  ok('Machine has four tabs at their own paths (Computers, Accounts, Terminal, Settings); Screen, Folders, Sessions, Update, Quota, Preferences, Executors and Agents sit under one; Terminal takes a command; agent.install, account.login and account.delete still go out',
+    JSON.stringify(paths) === JSON.stringify(['/machine/accounts', '/machine/terminal', '/machine/settings', '/machine/machines'])
+    && Object.values(under).every(Boolean) && Object.keys(under).length === 8
     && command && installed && login && deleted,
     JSON.stringify({ paths, under, command, installed, login, deleted }));
 

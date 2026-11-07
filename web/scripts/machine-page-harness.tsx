@@ -73,14 +73,10 @@ const page = which === 'chat' ? (
         onUpdate={() => {}} onNewGroup={async () => {}} onDelete={() => {}} onUpload={async () => null} />
     </div>
   </Shell>
-) : which === 'settings' ? (
-  <Shell view="settings" onView={() => {}} fleet={view} back={{ label: 'Dashboard', onBack: () => {} }}>
-    <Machine view="settings" onView={() => {}} fleet={view} onOpenChat={() => {}} onNewChat={() => {}}
-      onNewChatIn={() => {}} onStartChat={() => {}} onPeek={() => {}} />
-  </Shell>
-) : which === 'machine' ? (
-  <Shell view="machines" onView={() => {}} fleet={view} back={{ label: 'Dashboard', onBack: () => {} }}>
-    <Machine view="machines" onView={() => {}} fleet={view} onOpenChat={() => {}} onNewChat={() => {}}
+) : which !== 'overview' ? (
+  // Any page of the Machine place by its view name (`machine` is the first).
+  <Shell view={(which === 'machine' ? 'machines' : which) as any} onView={() => {}} fleet={view} back={{ label: 'Dashboard', onBack: () => {} }}>
+    <Machine view={(which === 'machine' ? 'machines' : which) as any} onView={() => {}} fleet={view} onOpenChat={() => {}} onNewChat={() => {}}
       onNewChatIn={() => {}} onStartChat={() => {}} onPeek={() => {}} />
   </Shell>
 ) : (

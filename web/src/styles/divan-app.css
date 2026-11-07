@@ -323,9 +323,10 @@
 }
 
 /* §4.9 Machine: the row of pages under a tab, and the machine cards. */
-.dv-subnav{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.dv-subnav a{text-decoration:none}
-.dv-subnav a[aria-current="page"]{background:var(--glass-2);color:var(--ink);border-color:var(--glass-edge)}
+.dv-subnav{display:flex;flex-wrap:wrap;gap:4px 22px;align-items:center;border-bottom:1px solid var(--hairline)}
+.dv-subnav a{text-decoration:none;font-size:13px;font-weight:500;color:var(--ink-3);padding:6px 0 8px;margin-bottom:-1px;border-bottom:2px solid transparent;display:inline-flex;align-items:center;gap:6px}
+.dv-subnav a:hover{color:var(--ink)}
+.dv-subnav a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
 .dv-subnav .dv-badge{margin-left:2px}
 .dv-machine{border-radius:var(--radius-lg);padding:18px;display:flex;flex-direction:column;gap:12px}
 .dv-machine-name{font:600 17px/22px var(--font-mono);letter-spacing:-0.01em}

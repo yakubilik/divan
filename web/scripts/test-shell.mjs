@@ -366,7 +366,7 @@ group('nothing was dropped in the move');
   const column = renderToStaticMarkup(h(MachineUI.Machine, machineProps('machines', view('fresh'))))
     .split('data-machine-page')[0];
   ok('…and the Machine tabs draw them again on the tab each is about, and the pages under it',
-    /Terminal<i class="dv-dot dv-dot--ask"/.test(column) && /Machines<i class="dv-dot dv-dot--ask"/.test(column)
+    /Terminal<i class="dv-dot dv-dot--ask"/.test(column) && /Computers<i class="dv-dot dv-dot--ask"/.test(column)
     && /Update<\/span><i class="dv-dot dv-dot--ask"/.test(column),
     column.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
 }
@@ -756,7 +756,7 @@ group('every screen renders with nothing, with something stale and with a machin
     && MachineUI.machineNote(view('fresh')).includes('all reachable')
     && MachineUI.machineNote(view('alone')).includes('No computer'));
   ok('…and marks the tab it is under in red, with the word',
-    /Machines<i class="dv-dot dv-dot--stuck"[^>]*><\/i><span class="dv-hidden">unreachable/
+    /Computers<i class="dv-dot dv-dot--stuck"[^>]*><\/i><span class="dv-hidden">unreachable/
       .test(drawn['unreachable dark Machine › Machines'] ?? ''));
 
   // The whole panel, with the shell around it: the one render that proves the

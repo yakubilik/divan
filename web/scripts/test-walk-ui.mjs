@@ -89,9 +89,9 @@ try {
     ['chat', '/chats/c1', `document.querySelector('textarea[name="composer"]')`, ['.dv-topline button', 'Chats'], '/'],
     ['waiting', '/waiting', `/answer|task|Nothing/.test(document.querySelector('h1')?.textContent ?? '')`, ['a[href="/waiting"]', 'See all'], '/'],
     // The line's machine count opens a box of them; Machines is its foot.
-    ['machine › machines', '/machine/machines', machineTab('Machines'), async () => (await press('[data-sys="machines"]', ''))
+    ['machine › machines', '/machine/machines', machineTab('Computers'), async () => (await press('[data-sys="machines"]', ''))
       && press('[data-all-machines]', 'All machines'), '/'],
-    ['machine › executors', '/machine/executors', machineTab('Executors'), ['[aria-label="Machine"] button', 'Executors'], '/machine/machines'],
+    ['machine › accounts', '/machine/accounts', machineTab('Accounts'), ['[aria-label="Machine"] button', 'Accounts'], '/machine/machines'],
     ['machine › terminal', '/machine/terminal', machineTab('Terminal'), ['[aria-label="Machine"] button', 'Terminal'], '/machine/machines'],
     ['machine › settings', '/machine/settings', machineTab('Settings'), ['[aria-label="Machine"] button', 'Settings'], '/machine/machines'],
   ];

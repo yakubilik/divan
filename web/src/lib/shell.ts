@@ -290,25 +290,35 @@ export function searchWithProject(search: string, key: string | null): string {
 // ── the four tabs (HANDOVER §4.9) ───────────────────────────────────────────
 
 /** One tab of the Machine place, and every page that sits under it. The first
- *  page is the tab's own and the one it opens on; the rest are the pages the
- *  old drawer had rows or asides for, filed under the tab they are about. */
+ *  page is the tab's own and the one it opens on; the rest are drawn as a
+ *  second, quieter row of links under the tabs. */
 export interface MachineTab {
-  key: 'machines' | 'executors' | 'terminal' | 'settings';
+  key: 'machines' | 'accounts' | 'terminal' | 'settings';
   label: string;
   pages: View[];
 }
 
-/** Machines · Executors · Terminal · Settings. Nothing the drawer reached is
- *  dropped: the computer's own screen, its sessions, its folders, its update and
- *  Admin are about a machine; the agents installed on it and the sign-ins they
- *  work through are about who does the work; the quota thresholds and every
- *  default a new chat takes are settings. */
+/** Computers · Accounts · Terminal · Settings — the phone's four tabs, the four
+ *  things a person comes here for (Yakup, 7 Nov 2026: "I can't find anything").
+ *  Everything about a computer is under Computers: its screen, its folders,
+ *  what it is running, its update. The sign-ins and the plan they spend are
+ *  Accounts. What a new chat opens with, this computer's own preferences, and
+ *  the pages nobody opens daily (who is working, the agents) are Settings.
+ *
+ *  Admin left the tabs: every row of it was a link to one of these pages. Its
+ *  address still opens it. */
 export const MACHINE_TABS: MachineTab[] = [
-  { key: 'machines', label: 'Machines', pages: ['machines', 'screen', 'fleet', 'projects', 'admin', 'update'] },
-  { key: 'executors', label: 'Executors', pages: ['executors', 'agents', 'accounts'] },
+  { key: 'machines', label: 'Computers', pages: ['machines', 'screen', 'projects', 'fleet', 'update'] },
+  { key: 'accounts', label: 'Accounts', pages: ['accounts', 'quota'] },
   { key: 'terminal', label: 'Terminal', pages: ['terminal'] },
-  { key: 'settings', label: 'Settings', pages: ['settings', 'preferences', 'quota'] },
+  { key: 'settings', label: 'Settings', pages: ['settings', 'preferences', 'executors', 'agents'] },
 ];
+
+/** What a page is called in the row under its tab, where that differs from
+ *  its row in the old drawer. */
+const SUB_LABEL: Partial<Record<View, string>> = {
+  machines: 'Computers', fleet: 'Sessions', accounts: 'Sign-ins', screen: 'Remote screen',
+};
 
 /** Which tab a page is under. A view no tab names is the first tab's, which is
  *  also where the place opens. */
@@ -318,7 +328,7 @@ export function machineTab(view: View): MachineTab {
 
 /** What a page is called in the row under its tab. */
 export function machinePageLabel(view: View): string {
-  return MACHINE_ROWS.find((r) => r.view === view)?.label
+  return SUB_LABEL[view] ?? MACHINE_ROWS.find((r) => r.view === view)?.label
     ?? MACHINE_ASIDE.find((a) => a.view === view)?.label
     ?? view;
 }

@@ -105,7 +105,7 @@ The quoted words are the check's own name.
 | Update the computer | Update page | Machine › Machines › Update | `update.status`, `update.apply`, `daemon.restart` | actions: "the update page asks update.status, Update sends update.apply and Restart sends daemon.restart" |
 | Call off a restart that is waiting on work | Update page Cancel | Same | `daemon.restart.cancel` | actions: "a restart that is waiting on work can be called off: Cancel sends daemon.restart.cancel" |
 | What a restart would cost | Update page | Same | `daemon.status` | drive: "the update page asks what a restart would cost" |
-| Admin | Admin page | Machine › Machines › Admin | `account.list` | drive: "…and Admin says the same thing about them, on a page nobody asked twice" |
+| Admin | Admin page | `/machine/admin` (off the tabs since 7 Nov 2026) | `account.list` | drive: "…and the place goes on being used, saying nothing about sign-ins rather than none of them" |
 | Executors table | Executors page | Machine › Executors | — | machine: "Executors is W13’s table" |
 | Agents: install, remove | Agents page | Machine › Executors › Agents on this computer | `agent.store`, `agent.install`, `agent.remove` | actions: "an installed agent can be removed, which sends agent.remove with its name" |
 | Install a missing CLI | Accounts page | Machine › Executors › Accounts & sign-ins | `tool.install` | drive: "…and pressing it runs the installer on that computer, for that tool" |

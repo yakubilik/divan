@@ -102,7 +102,7 @@ export function Machines({ view, onView, onFocus }: {
     <>
       <section>
         <h1 style={{ margin: 0, fontSize: 28, lineHeight: '34px', fontWeight: 600, letterSpacing: '-0.025em' }}>
-          Machines
+          Computers
         </h1>
         <p style={{ margin: '8px 0 0', fontSize: 15, lineHeight: '22px', color: T.ink2 }}>
           {fleetSentence(view, quota.state)}
