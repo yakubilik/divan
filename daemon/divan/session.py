@@ -688,6 +688,33 @@ class ChatSession:
             self.running = asyncio.create_task(self._run(text, attachments))
         return False
 
+    async def hold(self, text: str, attachments: list[dict] | None,
+                   client_id: str | None = None) -> tuple[str, list[dict]]:
+        """Take a message while the daemon is restarting, and start nothing.
+
+        It is written into the timeline at once — so the phone sees it arrive
+        and nobody types it twice — but it joins no queue and starts no turn:
+        either would keep the restart waiting on the very message it is
+        holding. The server keeps it on disk and hands it back to `release`
+        once the restart is over, or called off (`server.py`, held sends).
+        Returns the text as stored, keys already moved to the keychain.
+        """
+        said = {"client_id": client_id} if client_id else {}
+        text = await self._capture_secrets(text)
+        await self.emit("message.user", {"text": text, "attachments": attachments or [],
+                                         "queued": True, "held": True, **said}, True)
+        return text, attachments or []
+
+    async def release(self, text: str, attachments: list[dict] | None) -> None:
+        """Run a held message now: behind the turn in flight, or as a turn of its
+        own. Already in the timeline, so it is not announced again."""
+        async with self.lock:
+            if self.is_busy():
+                self.queued.append((text, attachments or []))
+                return
+            await self._prepare(text, attachments, announce=False)
+            self.running = asyncio.create_task(self._run(text, attachments))
+
     async def _capture_secrets(self, text: str) -> str:
         if not secrets.find(text):
             return text

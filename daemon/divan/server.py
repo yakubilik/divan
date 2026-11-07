@@ -1149,9 +1149,15 @@ class Server:
         work starts itself.
         """
         plans = list(getattr(self.db, "to_resume", None) or [])
-        if not plans:
+        if not plans and not self.db.meta_get(self.HELD_KEY):
             return
         await asyncio.sleep(self.RESUME_DELAY_S)
+        try:
+            await self._resume_plans(plans)
+        finally:
+            await self.deliver_held()
+
+    async def _resume_plans(self, plans: list[dict]) -> None:
         for plan in plans:
             cid = plan["chat_id"]
             try:
@@ -1217,6 +1223,7 @@ class Server:
                 self.draining = {**state, "pending": pending}
                 await self._announce_drain("cancelled")
                 self.draining, self._drain = None, None
+                await self.deliver_held()
                 return
             await asyncio.sleep(self.DRAIN_POLL_S)
 
@@ -1281,6 +1288,7 @@ class Server:
             self._drain.cancel()
         await self._announce_drain("cancelled")
         self.draining, self._drain = None, None
+        await self.deliver_held()
         return {"ok": True}
 
     async def _announce_update(self, data: dict) -> None:
@@ -2593,12 +2601,14 @@ class Server:
                 if (ev["data"] or {}).get("client_id") == client_id:
                     log.info("chat.send %s: %s already in the timeline, not run again", chat_id, client_id)
                     return {"accepted": True, "queued": bool(ev["data"].get("queued")), "client_id": client_id}
-        # Refused rather than queued: the queue is in memory and this process
-        # is leaving. Better to say no and keep the message in the composer
-        # than to accept it and lose it.
-        if self.draining:
-            raise Err("restarting", "this computer is restarting — try again in a moment")
         s = self.sessions.get(chat_id)
+        # Restarting: taken, written down, and run once the restart is over. It
+        # used to be refused, and a restart that waited ten minutes on a busy
+        # chat was ten minutes in which no chat on the computer could be
+        # written to (7 Nov 2026). The queue is memory and this process is
+        # leaving, so the message goes to disk as well as into the timeline.
+        if self.draining:
+            return await self._hold(s, chat_id, text, d.get("attachments"), client_id)
         # A person writing into a chat has read it: whatever it had finished
         # is seen. Not a message the daemon sends itself (no device) — a
         # notice dropped into a chat is not somebody looking at it. The status
@@ -2626,6 +2636,37 @@ class Server:
         ack = {"accepted": True, "queued": queued, "client_id": client_id}
         answer.set_result(ack)
         return dict(ack)
+
+    #: Where the messages taken during a restart wait, on disk: the queue is
+    #: memory, and the process holding it is the one about to stop.
+    HELD_KEY = "held_sends"
+
+    async def _hold(self, s, chat_id: str, text: str, attachments, client_id: str | None) -> dict:
+        text, attachments = await s.hold(text, attachments, client_id=client_id)
+        held = list(self.db.meta_get(self.HELD_KEY) or [])
+        held.append({"chat_id": chat_id, "text": text, "attachments": attachments, "at": time.time()})
+        self.db.meta_set(self.HELD_KEY, held)
+        log.info("chat.send %s: held until the restart is over (%d held)", chat_id, len(held))
+        return {"accepted": True, "queued": True, "held": True,
+                **({"client_id": client_id} if client_id else {})}
+
+    async def deliver_held(self) -> None:
+        """Run the messages taken while this computer was restarting, in the
+        order they came: after the restart, or as soon as it was called off."""
+        held = list(self.db.meta_get(self.HELD_KEY) or [])
+        if not held:
+            return
+        self.db.meta_set(self.HELD_KEY, [])
+        for m in held:
+            try:
+                sess = self.sessions.get(m["chat_id"])
+            except KeyError:
+                continue                      # the chat was deleted meanwhile
+            try:
+                await sess.release(m["text"], m.get("attachments") or [])
+            except Exception:
+                log.exception("could not deliver a held message to %s", m["chat_id"])
+        log.info("delivered %d message(s) held during the restart", len(held))
 
     async def h_chat_seen(self, dev: Device, d: dict) -> dict:
         """Somebody has looked at the chat, on whichever screen.

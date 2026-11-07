@@ -179,6 +179,11 @@ class DB:
                 continue
             if not (p.get("text") or "").strip():
                 continue
+            # A message taken while the daemon was restarting is delivered from
+            # its own list (`server.py deliver_held`), never as part of a turn
+            # it was not in — or it would run twice.
+            if p.get("held"):
+                continue
             out.append({"seq": r["seq"], "text": p["text"],
                         "attachments": p.get("attachments") or []})
         out.reverse()
