@@ -9,18 +9,22 @@
 set -eu
 HOST=${PLANE_HOST:-yakup@thinkpad}
 HERE=$(cd "$(dirname "$0")" && pwd)
-ssh "$HOST" 'set -e; cd ~/plane; rm -rf divan-patch/src; mkdir -p divan-patch/src divan-patch/assets divan-patch/logos
-  docker compose -p plane --env-file plane.env -f docker-compose.yml cp web:/usr/share/nginx/html/assets/. divan-patch/src/ >/dev/null'
+# The site straight out of the image, never out of the running container: that
+# one already wears the last patch.
+ssh "$HOST" 'set -e; cd ~/plane; rm -rf divan-patch/src; mkdir -p divan-patch/src
+  REL=$(sed -n "s/^APP_RELEASE=//p" plane.env); REL=${REL:-v1.4.3}
+  docker run --rm --entrypoint tar "makeplane/plane-frontend:$REL" -C /usr/share/nginx/html -cf - . | tar -C divan-patch/src -xf -'
 scp -q "$HERE/patch_logo.py" "$HOST:plane/divan-patch/patch_logo.py"
-CHUNK=$(ssh "$HOST" 'cd ~/plane/divan-patch && rm -f assets/*.js && python3 patch_logo.py src assets && rm -rf src')
-scp -q "$HOME"/.divan/project-icons/*.png "$HOST:plane/divan-patch/logos/"
+FOLDER=$(ssh "$HOST" 'cd ~/plane/divan-patch && python3 patch_logo.py src html.new && rm -rf src')
+ssh "$HOST" 'cd ~/plane/divan-patch && mkdir -p html.new/divan-logos && rm -rf html.old && { [ -d html ] && mv html html.old || true; } && mv html.new html && rm -rf html.old assets logos'
+scp -q "$HOME"/.divan/project-icons/*.png "$HOST:plane/divan-patch/html/divan-logos/"
 ssh "$HOST" "cd ~/plane && cat > docker-compose.override.yml <<YML
-# Written by divan/ops/plane/apply.sh — Divan's patches to Plane's web app.
+# Written by divan/ops/plane/apply.sh — Divan's patches to Plane's web app:
+# the whole built site, with the logo patch, under a fresh asset folder.
 services:
   web:
     volumes:
-      - ./divan-patch/assets/$CHUNK:/usr/share/nginx/html/assets/$CHUNK:ro
-      - ./divan-patch/logos:/usr/share/nginx/html/divan-logos:ro
+      - ./divan-patch/html:/usr/share/nginx/html:ro
 YML
 docker compose -p plane --env-file plane.env up -d web >/dev/null 2>&1"
-echo "patched $CHUNK; logos at /divan-logos/<slug>.png"
+echo "patched into /$FOLDER; logos at /divan-logos/<slug>.png"

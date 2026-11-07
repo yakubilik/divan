@@ -173,3 +173,28 @@ def test_the_page_lock_is_in_every_plane_page_before_plane_runs():
     page = gw.with_lock("<!DOCTYPE html><html><head><script src=/a.js></script></head></html>")
     assert page.index("data-divan-lock") < page.index("/a.js")
     assert "label_ids" in gw.LOCK_JS and "ustabaşı" in gw.LOCK_JS
+
+
+def test_a_plane_page_is_never_kept_by_the_browser():
+    import httpx
+    gate = g()
+    page = b"<!doctype html><html><head></head><body></body></html>"
+
+    async def plane(req):
+        return httpx.Response(200, headers={"content-type": "text/html", "cache-control": "max-age=600"}, content=page)
+
+    gate.client = httpx.AsyncClient(transport=httpx.MockTransport(plane))
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(m):
+        sent.append(m)
+
+    scope = {"type": "http", "method": "GET", "path": "/skola/projects/",
+             "headers": [(b"cookie", f"{gw.PASS_COOKIE}={gw.mint(KEY, 'Yakup')}".encode())], "query_string": b""}
+    asyncio.run(gate(scope, receive, send))
+    hs = dict(sent[0]["headers"])
+    assert sent[0]["status"] == 200 and hs[b"cache-control"] == b"no-cache"
+    assert b"data-divan-lock" in sent[1]["body"]

@@ -446,7 +446,11 @@ class PlaneGateway:
                     f"HttpOnly; SameSite=Lax{secure}").encode("latin-1")))
             if r.headers.get("content-type", "").startswith("text/html") and r.status_code == 200:
                 page = with_lock((await r.aread()).decode("utf-8", "replace")).encode()
-                headers = [(k, v) for k, v in headers if k not in (b"content-length", b"content-encoding")]
+                # A page is never kept: it names the build's assets, and a page
+                # kept from before a patch (ops/plane) keeps the old build.
+                headers = [(k, v) for k, v in headers
+                           if k not in (b"content-length", b"content-encoding", b"cache-control", b"expires")]
+                headers.append((b"cache-control", b"no-cache"))
                 headers.append((b"content-length", str(len(page)).encode()))
                 await send({"type": "http.response.start", "status": 200, "headers": headers})
                 await send({"type": "http.response.body", "body": page})
