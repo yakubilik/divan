@@ -1787,7 +1787,12 @@ class Server:
         parent = ".".join(public.split(".")[1:])
         if parent.count(".") >= 1:
             ancestors.append(f"https://*.{parent}")
-        return PlaneGateway(upstream, self.plane_key, ancestors, session_for=plane_gw.stored_session)
+        from . import projectmarks
+        logos = {str(pid): projectmarks.DIR / f"{slug}.png"
+                 for slug, pid in (self.cfg.plane.get("projects") or {}).items()
+                 if (projectmarks.DIR / f"{slug}.png").is_file()}
+        return PlaneGateway(upstream, self.plane_key, ancestors, session_for=plane_gw.stored_session,
+                            logos=logos)
 
     async def plane_pass(self, request: Request, response: Response, authorization: str = Header(default=""),
                          cf_connecting_ip: str | None = Header(default=None)) -> dict:

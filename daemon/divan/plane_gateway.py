@@ -78,6 +78,7 @@ _WS_SKIP = _HOP | {
 #     is chosen, and a create without the right one is stopped with the reason.
 #     If an upgrade moves the form, this layer quietly stops helping and the
 #     first one still holds; `tests/test_plane_gateway.py` pins both.
+LOGO_PATH = re.compile(r"^/divan-logo/([0-9a-f-]{36})\.png$")
 CREATE = re.compile(r"^/api/workspaces/([^/]+)/projects/[^/]+/issues/?$")
 MUST_SAY_WHO = "Kim yapacak? Önce “ustabaşı” ya da “insan” etiketini seç."
 
@@ -128,9 +129,53 @@ LOCK_JS = r"""
 """ % json.dumps(MUST_SAY_WHO)
 
 
-def with_lock(page: str) -> str:
-    """A Plane page with the lock in it, before anything of Plane's runs."""
+# Each product's own logo where Plane draws its project icon. Plane keeps a
+# project's logo as an emoji or one of its icons, never a picture; Divan has the
+# pictures (projectmarks.py). So the page asks Plane which icon each project
+# wears and swaps that icon, wherever it is drawn, for the product's picture,
+# served from here (`/divan-logo/<project id>.png`). Plane itself is untouched:
+# opened directly, it shows its own icons.
+LOGO_JS = r"""
+(function () {
+  if (window.__divanLogo) return; window.__divanLogo = 1;
+  var HAVE = %s, byIcon = {};
+  var ws = (location.pathname.split("/")[1] || "");
+  if (!ws) return;
+  fetch("/api/workspaces/" + ws + "/projects/", { credentials: "include" })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      (Array.isArray(j) ? j : (j.results || [])).forEach(function (p) {
+        var lp = p.logo_props || {};
+        if (HAVE.indexOf(p.id) >= 0 && lp.in_use === "icon" && lp.icon && lp.icon.name) byIcon[lp.icon.name] = p.id;
+      });
+      swap();
+      new MutationObserver(swap).observe(document, { subtree: true, childList: true });
+    }).catch(function () {});
+  function swap() {
+    document.querySelectorAll(".material-symbols-rounded:not([data-divan-logo])").forEach(function (s) {
+      var a = s.closest("a[href*='/projects/']");
+      var m = a && /\/projects\/([0-9a-f-]{36})/.exec(a.getAttribute("href"));
+      var pid = (m && HAVE.indexOf(m[1]) >= 0) ? m[1] : byIcon[s.textContent.trim()];
+      if (!pid || s.closest("[role='tabpanel'], [role='listbox']")) return;
+      var size = parseInt(s.style.fontSize, 10) || 16;
+      var img = document.createElement("img");
+      img.src = "/divan-logo/" + pid + ".png"; img.alt = "";
+      img.setAttribute("data-divan-logo", pid);
+      img.style.cssText = "width:" + size + "px;height:" + size + "px;border-radius:" + Math.round(size / 4) + "px;object-fit:cover;display:block";
+      s.setAttribute("data-divan-logo", pid);
+      s.replaceWith(img);
+    });
+  }
+})();
+"""
+
+
+def with_lock(page: str, logos: list[str] | None = None) -> str:
+    """A Plane page with the lock (and the products' logos) in it, before
+    anything of Plane's runs."""
     tag = f"<script data-divan-lock>{LOCK_JS}</script>"
+    if logos:
+        tag += f"<script data-divan-logo>{LOGO_JS % json.dumps(sorted(logos))}</script>"
     i = page.find("<head>")
     return page[:i + 6] + tag + page[i + 6:] if i >= 0 else tag + page
 
@@ -279,7 +324,10 @@ class PlaneGateway:
     SESSION_AGE_S = 30 * 86400
 
     def __init__(self, upstream: str, key: bytes, ancestors: list[str],
-                 session_for: Callable[[str], str | None] | None = None) -> None:
+                 session_for: Callable[[str], str | None] | None = None,
+                 logos: dict[str, Path] | None = None) -> None:
+        # Plane project id -> the product's picture (projectmarks.py).
+        self.logos = {k: v for k, v in (logos or {}).items() if re.fullmatch(r"[0-9a-f-]{36}", k)}
         u = urlsplit(upstream.rstrip("/"))
         # A person's Plane session, or None: read where it is kept (the
         # keychain), each time, so a new sign-in needs no restart.
@@ -382,6 +430,18 @@ class PlaneGateway:
                                     (b"cache-control", b"no-store")]})
             await send({"type": "http.response.body", "body": body})
             return
+        logo = LOGO_PATH.match(scope.get("path", "")) if scope["type"] == "http" else None
+        if logo and logo.group(1) in self.logos:
+            try:
+                data = self.logos[logo.group(1)].read_bytes()
+            except OSError:
+                data = None
+            if data is not None:
+                await send({"type": "http.response.start", "status": 200,
+                            "headers": [(b"content-type", b"image/png"),
+                                        (b"cache-control", b"private, max-age=3600")]})
+                await send({"type": "http.response.body", "body": data})
+                return
         session = await self._signed_in(h)
         if session:
             h = {**h, "cookie": "; ".join(c for c in (h.get("cookie", ""), f"{self.SESSION_COOKIE}={session}") if c)}
@@ -445,7 +505,7 @@ class PlaneGateway:
                     f"{self.SESSION_COOKIE}={session}; Max-Age={self.SESSION_AGE_S}; Path=/; "
                     f"HttpOnly; SameSite=Lax{secure}").encode("latin-1")))
             if r.headers.get("content-type", "").startswith("text/html") and r.status_code == 200:
-                page = with_lock((await r.aread()).decode("utf-8", "replace")).encode()
+                page = with_lock((await r.aread()).decode("utf-8", "replace"), list(self.logos)).encode()
                 headers = [(k, v) for k, v in headers if k not in (b"content-length", b"content-encoding")]
                 headers.append((b"content-length", str(len(page)).encode()))
                 await send({"type": "http.response.start", "status": 200, "headers": headers})
