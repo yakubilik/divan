@@ -283,6 +283,22 @@ def cmd_devices(args: argparse.Namespace) -> None:
         print(_device_line(d))
 
 
+def cmd_plane_login(args: argparse.Namespace) -> None:
+    """`divan plane-login PERSON EMAIL`: sign one of this computer's people in
+    to Plane once, so the Board opens signed in as them (plane_gateway.py).
+    The session is made by Plane's own shell (`[plane] shell`) and kept in the
+    keychain; it is never printed."""
+    from . import plane_gateway as pg
+    from . import secret_share
+    cfg = Config.load()
+    names = cfg.person_names()
+    if names and args.person not in names:
+        raise SystemExit(f"no such person here: {args.person} (people: {', '.join(names)})")
+    key = pg.mint_session(str(cfg.plane.get("shell") or ""), args.email)
+    secret_share.put(pg.session_name(args.person), key)
+    print(f"{args.person} is signed in to Plane as {args.email} on the Board.")
+
+
 def cmd_revoke(args: argparse.Namespace) -> None:
     cfg = Config.load()
     print("revoked" if cfg.revoke(args.device_id) else "no such device")
@@ -796,6 +812,8 @@ def main() -> None:
     s.set_defaults(fn=cmd_peer)
     s = sub.add_parser("devices"); s.set_defaults(fn=cmd_devices)
     s = sub.add_parser("revoke"); s.add_argument("device_id"); s.set_defaults(fn=cmd_revoke)
+    s = sub.add_parser("plane-login", help="sign a person in to Plane once, for the Board")
+    s.add_argument("person"); s.add_argument("email"); s.set_defaults(fn=cmd_plane_login)
     s = sub.add_parser("unlock", help="lift a tunnel lock on an address, without a restart")
     s.add_argument("addr"); s.set_defaults(fn=cmd_unlock)
     s = sub.add_parser("status"); s.set_defaults(fn=cmd_status)

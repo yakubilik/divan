@@ -348,5 +348,13 @@ daemon answers it with a signed cookie on that domain, which the frame then
 carries. On the tunnel the gateway serves nothing without that pass, so do
 **not** put the gateway's name behind Cloudflare Access: Access's sign-in
 cannot run inside a frame, and the pass already stands for a device that got
-through the panel's own door. On the tailnet the gateway is open to the
-network, as Plane itself is.
+through the panel's own door. On the tailnet the pass is a cookie on the
+panel's own host, which the browser also sends to port + 1: the gateway serves
+nothing without one on any door.
+
+One sign-in: `divan plane-login <person> <email>` makes a Plane session for
+that person with Plane's own Django shell (`[plane] shell`, e.g.
+`ssh me@plane-host docker exec -i plane-api-1 python manage.py shell`) and keeps
+it in the keychain as `rac-secret-plane-session-<person>`. The pass names whose
+device asked, and a browser with no Plane session of its own is signed in as
+that person. A person with none sees Plane's own sign-in.

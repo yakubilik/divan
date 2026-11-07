@@ -1782,14 +1782,15 @@ class Server:
         parent = ".".join(public.split(".")[1:])
         if parent.count(".") >= 1:
             ancestors.append(f"https://*.{parent}")
-        return PlaneGateway(upstream, self.plane_key, ancestors)
+        return PlaneGateway(upstream, self.plane_key, ancestors, session_for=plane_gw.stored_session)
 
     async def plane_pass(self, request: Request, response: Response, authorization: str = Header(default=""),
                          cf_connecting_ip: str | None = Header(default=None)) -> dict:
         """Where the board answers for this page, and — on the tunnel — the
         pass its frame needs: a signed cookie on the domain the panel and the
         gateway share. Only a device through the whole door gets one."""
-        self._device(authorization, cf_connecting_ip)
+        dev = self._device(authorization, cf_connecting_ip)
+        person = self.cfg.person_of(dev.id) or ""
         upstream = str(self.cfg.plane.get("url") or "").strip().rstrip("/")
         if not upstream:
             return {"base": "", "upstream": ""}
@@ -1799,10 +1800,14 @@ class Server:
             dom = plane_gw.shared_domain(host, urlsplit(base).hostname or "") if base else ""
             if not base or not dom:
                 return {"base": "", "upstream": upstream}
-            response.set_cookie(plane_gw.PASS_COOKIE, plane_gw.mint(self.plane_key),
+            response.set_cookie(plane_gw.PASS_COOKIE, plane_gw.mint(self.plane_key, person),
                                 max_age=plane_gw.PASS_TTL_S, domain=dom, path="/",
                                 secure=True, httponly=True, samesite="lax")
         else:
+            # The panel's own host: a browser sends it to every port of it,
+            # the gateway's included.
+            response.set_cookie(plane_gw.PASS_COOKIE, plane_gw.mint(self.plane_key, person),
+                                max_age=plane_gw.PASS_TTL_S, path="/", httponly=True, samesite="lax")
             h = f"[{host}]" if ":" in host else host
             base = f"http://{h}:{self.cfg.port + 1}"
         return {"base": base, "upstream": upstream}

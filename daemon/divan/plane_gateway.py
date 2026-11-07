@@ -21,13 +21,18 @@ What it changes on the way through, and only this:
     check sees the origin it was configured with.
   - The gate's own cookie is not passed on.
 
-The door. Off the tunnel (tailnet, loopback) it is the network's, exactly as
-Plane on the other computer already is. On the tunnel — the request carries
-`CF-Connecting-IP` — nothing is served without a pass: a short-lived signed
-cookie that only the daemon's own `/plane/pass` hands out, and only to a
-device that got through Divan's whole door (address or Access, then device
-token). The cookie is scoped to the domain the panel and the gateway share,
-so the panel sets it and the frame carries it.
+The door. Nothing is served without a pass: a short-lived signed cookie that
+only the daemon's own `/plane/pass` hands out, and only to a device that got
+through Divan's whole door (on the tunnel: address or Access; everywhere: the
+device token). On the tunnel it is scoped to the domain the panel and the
+gateway share; on the tailnet it is the panel's host, which a browser sends to
+every port of that host. So the panel sets it and the frame carries it.
+
+One sign-in. The pass names whose device asked (`Config.person_of`), and a
+person with a Plane session of their own (`divan plane-login`) is signed in
+to Plane as themselves: a request that carries no Plane session gets theirs,
+on the way up and as a cookie on the way back. A person without one sees
+Plane's own sign-in, and nobody is ever signed in as somebody else.
 """
 from __future__ import annotations
 
@@ -36,9 +41,11 @@ import hashlib
 import hmac
 import logging
 import os
+import re
 import secrets
 import time
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlsplit
 
 import httpx
@@ -78,22 +85,93 @@ def load_key(path: Path) -> bytes:
     return key
 
 
-def mint(key: bytes, now: float | None = None) -> str:
+def _sign(key: bytes, body: str) -> str:
+    return hmac.new(key, body.encode(), hashlib.sha256).hexdigest()
+
+
+def mint(key: bytes, person: str | None = None, now: float | None = None) -> str:
+    """`<expiry>.<person, hex>.<signature>`: hex because a cookie value is
+    no place for a name with a space or a dotless i in it."""
     exp = int((now if now is not None else time.time()) + PASS_TTL_S)
-    sig = hmac.new(key, str(exp).encode(), hashlib.sha256).hexdigest()
-    return f"{exp}.{sig}"
+    body = f"{exp}.{(person or '').encode().hex()}"
+    return f"{body}.{_sign(key, body)}"
+
+
+def holder(key: bytes, value: str | None, now: float | None = None) -> str | None:
+    """Whose the pass is ("" for nobody in particular), or None when it is not
+    a pass: forged, expired, or not there."""
+    if not value or value.count(".") != 2:
+        return None
+    exp, who, sig = value.split(".")
+    if not exp.isdigit() or not hmac.compare_digest(_sign(key, f"{exp}.{who}"), sig):
+        return None
+    if int(exp) <= (now if now is not None else time.time()):
+        return None
+    try:
+        return bytes.fromhex(who).decode()
+    except ValueError:
+        return None
 
 
 def valid(key: bytes, value: str | None, now: float | None = None) -> bool:
-    if not value or "." not in value:
-        return False
-    exp, sig = value.split(".", 1)
-    if not exp.isdigit():
-        return False
-    want = hmac.new(key, exp.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(want, sig):
-        return False
-    return int(exp) > (now if now is not None else time.time())
+    return holder(key, value, now) is not None
+
+
+def session_name(person: str) -> str:
+    """The keychain name a person's Plane session is kept under:
+    `rac-secret-plane-session-<person>`, the person folded to a-z0-9-."""
+    import unicodedata
+    folded = unicodedata.normalize("NFKD", person.replace("ı", "i").replace("İ", "I"))
+    slug = re.sub(r"[^a-z0-9]+", "-", folded.encode("ascii", "ignore").decode().lower()).strip("-")
+    return f"plane-session-{slug or person.encode().hex()[:40]}"
+
+
+def stored_session(person: str) -> str | None:
+    from . import secret_share
+    return secret_share.read(secret_share.service_for(session_name(person)))
+
+
+# The Django shell script that makes a session for one Plane user, run where
+# Plane runs (`[plane] shell`, which reads the script on stdin). Prints the key
+# on a line of its own after a marker; `{email}` is filled in as a literal.
+MINT_SCRIPT = r"""
+from importlib import import_module
+from django.conf import settings
+from django.contrib.auth import SESSION_KEY, BACKEND_SESSION_KEY, HASH_SESSION_KEY
+from plane.db.models import User
+email = {email}
+u = User.objects.get(email__iexact=email, is_active=True)
+s = import_module(settings.SESSION_ENGINE).SessionStore()
+s[SESSION_KEY] = str(u.pk)
+s[BACKEND_SESSION_KEY] = "django.contrib.auth.backends.ModelBackend"
+s[HASH_SESSION_KEY] = u.get_session_auth_hash()
+s["device_info"] = {"user_agent": "divan", "ip_address": "", "domain": "divan"}
+s.set_expiry(365 * 86400)
+s.create()
+print("DIVAN-SESSION " + s.session_key)
+"""
+
+
+EMAIL = re.compile(r"^[^@\s'\"\\]+@[^@\s'\"\\]+\.[a-z]{2,}$", re.I)
+
+
+def mint_session(shell: str, email: str, timeout: float = 120.0) -> str:
+    """A new Plane session for `email`, made by Plane's own Django shell."""
+    import shlex
+    import subprocess
+    if not EMAIL.match(email or ""):
+        raise ValueError("not an email address")
+    if not shell.strip():
+        raise ValueError("[plane] shell is not set: the command that opens Plane's Django shell")
+    r = subprocess.run(shlex.split(shell), input=MINT_SCRIPT.replace("{email}", repr(email)),
+                       capture_output=True, text=True, timeout=timeout)
+    for line in r.stdout.splitlines():
+        if line.startswith("DIVAN-SESSION "):
+            key = line.split(" ", 1)[1].strip()
+            if re.fullmatch(r"[a-z0-9]{20,128}", key):
+                return key
+    tail = (r.stderr or r.stdout).strip().splitlines()[-1:] or ["no answer"]
+    raise RuntimeError(f"Plane made no session: {tail[0][:200]}")
 
 
 def shared_domain(a: str, b: str) -> str:
@@ -129,8 +207,16 @@ def _without_pass(raw: str) -> str:
 class PlaneGateway:
     """An ASGI app: everything that reaches it goes to Plane."""
 
-    def __init__(self, upstream: str, key: bytes, ancestors: list[str]) -> None:
+    SESSION_COOKIE = "session-id"  # Plane's own (SESSION_COOKIE_NAME)
+    SESSION_AGE_S = 30 * 86400
+
+    def __init__(self, upstream: str, key: bytes, ancestors: list[str],
+                 session_for: Callable[[str], str | None] | None = None) -> None:
         u = urlsplit(upstream.rstrip("/"))
+        # A person's Plane session, or None: read where it is kept (the
+        # keychain), each time, so a new sign-in needs no restart.
+        self.session_for = session_for or (lambda person: None)
+        self._sessions: dict[str, tuple[str | None, float]] = {}
         self.upstream = f"{u.scheme}://{u.netloc}"
         self.up_host = u.netloc
         self.key = key
@@ -152,10 +238,36 @@ class PlaneGateway:
         host = h.get("host") or self.up_host
         return f"{proto}://{host}"
 
-    def _admitted(self, h: dict[str, str]) -> bool:
-        if "cf-connecting-ip" not in h:
-            return True  # tailnet or loopback: the network is the door
-        return valid(self.key, _cookies(h.get("cookie", "")).get(PASS_COOKIE))
+    def _holder(self, h: dict[str, str]) -> str | None:
+        return holder(self.key, _cookies(h.get("cookie", "")).get(PASS_COOKIE))
+
+    SESSION_KEEP_S = 300.0
+
+    async def _session(self, person: str) -> str | None:
+        """The person's session, read from where it is kept at most every five
+        minutes (a keychain read is a process, and Plane's page is dozens of
+        requests), and never on the loop's own thread."""
+        hit = self._sessions.get(person)
+        if hit and time.monotonic() - hit[1] < self.SESSION_KEEP_S:
+            return hit[0]
+        try:
+            value = await asyncio.to_thread(self.session_for, person) or None
+        except Exception:  # noqa: BLE001 - no session is Plane's own sign-in
+            log.warning("no Plane session for %s", person)
+            value = None
+        self._sessions[person] = (value, time.monotonic())
+        return value
+
+    async def _signed_in(self, h: dict[str, str]) -> str | None:
+        """The session to sign this request in with: the person's own, when
+        the browser carries none of its own. A browser that has one — signed
+        in by hand, or by an earlier answer from here — keeps it."""
+        if self.SESSION_COOKIE in _cookies(h.get("cookie", "")):
+            return None
+        person = self._holder(h)
+        if not person:
+            return None
+        return await self._session(person)
 
     def _upstream_headers(self, h: dict[str, str], skip: set[str]) -> list[tuple[str, str]]:
         out = []
@@ -189,7 +301,7 @@ class PlaneGateway:
                     await send({"type": "lifespan.shutdown.complete"})
                     return
         h = self._headers(scope)
-        if not self._admitted(h):
+        if self._holder(h) is None:
             if scope["type"] == "websocket":
                 await send({"type": "websocket.close", "code": 4401})
                 return
@@ -201,12 +313,15 @@ class PlaneGateway:
                                     (b"cache-control", b"no-store")]})
             await send({"type": "http.response.body", "body": body})
             return
+        session = await self._signed_in(h)
+        if session:
+            h = {**h, "cookie": "; ".join(c for c in (h.get("cookie", ""), f"{self.SESSION_COOKIE}={session}") if c)}
         if scope["type"] == "websocket":
             await self._ws(scope, receive, send, h)
         else:
-            await self._http(scope, receive, send, h)
+            await self._http(scope, receive, send, h, session)
 
-    async def _http(self, scope, receive, send, h) -> None:
+    async def _http(self, scope, receive, send, h, session: str | None = None) -> None:
         path = scope.get("raw_path") or scope["path"].encode()
         url = self.upstream + path.decode("latin-1")
         if scope.get("query_string"):
@@ -238,7 +353,16 @@ class PlaneGateway:
             await send({"type": "http.response.body", "body": msg})
             return
         try:
-            headers = self._response_headers(r.headers.multi_items(), self._origin(scope, h))
+            origin = self._origin(scope, h)
+            headers = self._response_headers(r.headers.multi_items(), origin)
+            # …and the browser keeps it, unless Plane has just said otherwise
+            # (a sign-out answers with its own cookie).
+            if session and not any(k == b"set-cookie" and v.startswith(f"{self.SESSION_COOKIE}=".encode())
+                                   for k, v in headers):
+                secure = "; Secure" if origin.startswith("https://") else ""
+                headers.append((b"set-cookie", (
+                    f"{self.SESSION_COOKIE}={session}; Max-Age={self.SESSION_AGE_S}; Path=/; "
+                    f"HttpOnly; SameSite=Lax{secure}").encode("latin-1")))
             await send({"type": "http.response.start", "status": r.status_code, "headers": headers})
             async for chunk in r.aiter_raw():
                 await send({"type": "http.response.body", "body": chunk, "more_body": True})
