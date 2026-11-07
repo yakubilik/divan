@@ -99,6 +99,15 @@ class DB:
         # they are the ones whose turn died mid-sentence.
         interrupted = [r["id"] for r in
                        self._c.execute("SELECT id FROM chats WHERE status!='idle'").fetchall()]
+        # A chat whose CLI a holder kept through the restart was not
+        # interrupted at all: the server takes it back (`attach_held`).
+        try:
+            from . import held
+            if held.enabled():
+                live = set(held.live_keys())
+                interrupted = [c for c in interrupted if c not in live]
+        except Exception:
+            pass
         self._c.execute("UPDATE chats SET status='idle' WHERE status!='idle'")
         # Background work is a child of the CLI, and the CLI went with the
         # process that is now starting again.

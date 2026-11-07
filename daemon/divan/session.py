@@ -1140,6 +1140,54 @@ class ChatSession:
             await self.provider.close()
             self.provider = None
 
+    def survives_restart(self) -> bool:
+        """Whether this chat's CLI outlives the daemon (`held.py`). A chat with
+        no provider yet has nothing running to lose."""
+        if self.provider is None:
+            return True
+        return bool(getattr(self.provider, "survives_restart", False))
+
+    async def detach(self) -> list[tuple[str, list[dict]]]:
+        """Let go of the CLI without stopping it: the daemon is restarting.
+
+        No interrupt, unlike `close`. The turn's task is cancelled — the next
+        daemon drains the turn — and the client is closed, which the relay,
+        seeing the detach marker, takes as "keep the CLI". What was queued in
+        memory is handed back, for the server to keep on disk.
+        """
+        queued, self.queued = list(self.queued), []
+        if self.running and not self.running.done():
+            self.running.cancel()
+            await asyncio.gather(self.running, return_exceptions=True)
+        if self.provider:
+            try:
+                await self.provider.close()
+            except Exception:
+                log.warning("detaching %s failed", self.chat_id, exc_info=True)
+            self.provider = None
+        return queued
+
+    async def attach(self, state: dict | None) -> bool:
+        """Take back a CLI a holder kept through the restart.
+
+        With a turn in flight, the turn carries on here as if nothing had
+        happened: the status is running again and the rest of the turn is
+        drained into the timeline. Returns whether a turn was in flight.
+        """
+        in_turn = bool(state and state.get("in_turn"))
+        async with self.lock:
+            chat = self.db.get_chat(self.chat_id)
+            if chat is None:
+                return False
+            if self.provider is None:
+                self.provider = self._build_provider(chat)
+            await self.provider.attach(in_turn, (state or {}).get("turn_id"))
+            if in_turn and not self.is_busy():
+                self.last_active = time.monotonic()
+                await self._set_status("running")
+                self.running = asyncio.create_task(self._run(None, None, continuation=True))
+        return in_turn
+
 
 def approval_gone(outcome: dict | None) -> Err:
     """What to tell someone who answered a request that is no longer waiting.
@@ -1162,6 +1210,11 @@ def approval_gone(outcome: dict | None) -> Err:
         return Err("approval_expired", "This request timed out before your answer arrived, "
                                        "so it was not run. Ask the agent to try again.")
     return Err("approval_answered", "This request was already answered.")
+
+
+#: Messages waiting on disk for the daemon to come back: sent during a restart
+#: (`server._hold`) or queued in memory when it stopped (`detach_all`).
+HELD_SENDS = "held_sends"
 
 
 class SessionManager:
@@ -1226,6 +1279,11 @@ class SessionManager:
         """
         out = []
         for cid, sess in self.sessions.items():
+            # A chat whose CLI is held outside the daemon loses nothing to a
+            # restart: the turn carries on, an open approval is asked again and
+            # the queue is kept on disk (`detach_all`). Nothing to wait for.
+            if sess.survives_restart():
+                continue
             # An approval still waiting on the phone is work too: on 2 Nov
             # 2026 a restart dropped one whose turn had already given up.
             busy, queued = sess.is_busy() or bool(sess.pending), len(sess.queued)
@@ -1239,6 +1297,24 @@ class SessionManager:
     async def close_all(self) -> None:
         for cid in list(self.sessions):
             await self.drop(cid)
+
+    async def detach_all(self) -> None:
+        """The daemon is stopping to come back: let go of every held CLI and
+        close only what cannot be held. Messages queued in memory go to disk,
+        to run once the daemon is back (`server.deliver_held`)."""
+        from . import held
+        held.mark_detaching()
+        keep = list(self.db.meta_get(HELD_SENDS) or [])
+        for cid, s in list(self.sessions.items()):
+            if s.survives_restart() and s.provider is not None:
+                for text, attachments in await s.detach():
+                    keep.append({"chat_id": cid, "text": text, "attachments": attachments,
+                                 "at": time.time()})
+                self.sessions.pop(cid, None)
+            else:
+                await self.drop(cid)
+        if keep:
+            self.db.meta_set(HELD_SENDS, keep)
 
 
 _MD = re.compile(r"(\*\*|__|`{1,3}|^#{1,6}\s+|^[-*]\s+|^\d+\.\s+)", re.M)

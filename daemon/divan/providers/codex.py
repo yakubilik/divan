@@ -12,6 +12,7 @@ import logging
 import os
 import shlex
 import shutil
+import sys
 import time
 import tomllib
 from pathlib import Path
@@ -19,7 +20,7 @@ from typing import Any
 
 from ..errors import Err
 from ..security import asked, destructive_reason, prints_secret, redact
-from .. import config, legacy, tools, structured_approval
+from .. import config, held, legacy, tools, structured_approval
 from .base import Provider, ProviderConfig, TurnResult
 
 log = logging.getLogger("rac.codex")
@@ -121,6 +122,13 @@ class CodexProvider(Provider):
         self._seg_text: list[str] = []
         self._streamed = 0
         self._started_items: set[str] = set()
+        self._attached_turn = False
+        self._attached_at = 0.0
+        # A turn carried over a restart: a tool that finishes in it without
+        # having started in this process started under the daemon before, which
+        # already drew its card. Drawing it again on completion showed every
+        # such command twice (7 Nov 2026).
+        self._carried = False
 
     @staticmethod
     def catalog() -> dict:
@@ -137,7 +145,8 @@ class CodexProvider(Provider):
     async def _ensure(self) -> None:
         if self._proc is not None and self._proc.returncode is None:
             return
-        cli = tools.find_cli("codex")
+        # DIVAN_CODEX_CLI names another app-server (the tests' scripted one).
+        cli = os.environ.get("DIVAN_CODEX_CLI") or tools.find_cli("codex")
         if not cli:
             raise Err("cli_missing", "the codex CLI is not installed")
         env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "ANTHROPIC"))}
@@ -151,8 +160,14 @@ class CodexProvider(Provider):
             env.update(legacy.chat_env(self.cfg.chat_id))
             # its own scratch folder: mktemp, tempfile and the tools land there, not in /tmp
             env["TMPDIR"] = str(config.chat_scratch(self.cfg.chat_id))
+        argv = [cli, "app-server"]
+        # Held outside the daemon (`held.py`): the relay stands in for
+        # `codex app-server`, and the app-server outlives a daemon restart.
+        if self.cfg.chat_id and held.enabled():
+            env.update(held.relay_env(self.cfg.chat_id, "codex", cli))
+            argv = [sys.executable, "-m", "divan.held", "relay", "app-server"]
         self._proc = await asyncio.create_subprocess_exec(
-            cli, "app-server",
+            *argv,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, env=env, cwd=self.cfg.cwd,
             # A resumed thread includes history in one JSON line.
@@ -386,7 +401,7 @@ class CodexProvider(Provider):
                 self._started_items.add(iid)
                 await self.emit("tool.use", {"id": iid, "tool": "Bash", "input": {"command": item.get("command", ""), "cwd": item.get("cwd")}}, True)
             else:
-                if iid not in self._started_items:
+                if iid not in self._started_items and not self._carried:
                     await self._flush()
                     await self.emit("tool.use", {"id": iid, "tool": "Bash", "input": {"command": item.get("command", "")}}, True)
                 code = item.get("exitCode")
@@ -404,7 +419,7 @@ class CodexProvider(Provider):
                     "file_path": ", ".join(c.get("path", "") for c in changes)[:300],
                     "diff": "\n".join((c.get("diff") or "") for c in changes)[:3000]}}, True)
             else:
-                if iid not in self._started_items:
+                if iid not in self._started_items and not self._carried:
                     await self._flush()
                     await self.emit("tool.use", {"id": iid, "tool": "Edit", "input": {
                         "file_path": ", ".join(c.get("path", "") for c in changes)[:300],
@@ -454,8 +469,43 @@ class CodexProvider(Provider):
             await self.close()
             return TurnResult(self._thread_id, None, None, None, None, True, self._error_detail(f"turn/start failed: {exc}"))
 
+        return await self._finish_turn(started)
+
+    @property
+    def survives_restart(self) -> bool:
+        return bool(self.cfg.chat_id) and held.enabled()
+
+    async def attach(self, in_turn: bool, turn_id: str | None = None) -> None:
+        """Connect to an app-server a holder kept through a daemon restart. The
+        turn state is set before connecting: what the holder hands over may
+        already hold the turn's end."""
+        if in_turn:
+            self._segment, self._seg_text, self._streamed = 0, [], 0
+            self._started_items = set()
+            self._turn_done = asyncio.Event()
+            self._turn_result, self._turn_error = None, None
+            self._turn_id = turn_id
+            self._attached_turn = True
+            self._attached_at = time.monotonic()
+            self._carried = True
+        try:
+            await self._ensure()
+        except Exception:
+            self._attached_turn = False
+            raise
+
+    async def run_continuation(self) -> TurnResult:
+        """The turn that was running when the daemon restarted, to its end."""
+        if not self._attached_turn or self._turn_done is None:
+            raise NotImplementedError
+        self._attached_turn = False
+        return await self._finish_turn(self._attached_at)
+
+    async def _finish_turn(self, started: float) -> TurnResult:
+        assert self._turn_done is not None
         await self._turn_done.wait()
         await self._flush()
+        self._carried = False
         dur = int((time.monotonic() - started) * 1000)
         turn = self._turn_result or {}
         status = turn.get("status")

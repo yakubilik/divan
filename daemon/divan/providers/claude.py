@@ -28,7 +28,7 @@ from claude_agent_sdk import (
 
 from ..config import UPLOAD_DIR
 from ..security import MONEY, asked, destructive_reason, prints_secret, redact
-from .. import accounts, config, legacy
+from .. import accounts, config, held, legacy
 from . import claude_models
 from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult, is_auth_failure
 
@@ -78,6 +78,21 @@ PERM_MODES = {
 EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 
 
+_REAL_CLI: str | None = None
+
+
+def _real_cli() -> str:
+    """The claude the SDK would have started itself: its bundled one, or the
+    one on PATH. `DIVAN_CLAUDE_CLI` names another (the tests' scripted CLI)."""
+    global _REAL_CLI
+    if os.environ.get("DIVAN_CLAUDE_CLI"):
+        return os.environ["DIVAN_CLAUDE_CLI"]
+    if _REAL_CLI is None:
+        from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
+        _REAL_CLI = SubprocessCLITransport(prompt="", options=ClaudeAgentOptions())._find_cli()
+    return _REAL_CLI
+
+
 class ClaudeProvider(Provider):
     name = "claude"
 
@@ -113,6 +128,7 @@ class ClaudeProvider(Provider):
         # it. Kept by the reader, because it outlives the turn: the whole point
         # of background work is that it is still going after the turn ends.
         self._tasks: dict[str, dict] = {}
+        self._attached_turn = False
 
     # The list as of Claude Code 2.1, for when the CLI's catalog cannot be read.
     # Each model carries its own effort list, because they differ: Haiku takes no
@@ -357,6 +373,12 @@ class ClaudeProvider(Provider):
             kw["max_budget_usd"] = c.max_budget_usd
         if self._session_id:
             kw["resume"] = self._session_id
+        # The CLI runs under a holder of its own, so the daemon can restart
+        # without cutting the turn (`held.py`). The SDK starts the relay in
+        # its place; the relay finds — or starts — the holder for this chat.
+        if c.chat_id and held.enabled():
+            kw["cli_path"] = held.relay_script()
+            env.update(held.relay_env(c.chat_id, "claude", _real_cli()))
         if c.perm_mode == "bypass":
             kw["extra_args"] = {"dangerously-skip-permissions": None}
         else:
@@ -376,6 +398,28 @@ class ClaudeProvider(Provider):
             log.info("claude client connected cwd=%s model=%s resume=%s",
                      self.cfg.cwd, self.cfg.model, self._session_id)
         return self._client
+
+    #: The CLI is held outside the daemon: a restart does not end its turn.
+    @property
+    def survives_restart(self) -> bool:
+        return bool(self.cfg.chat_id) and held.enabled()
+
+    async def attach(self, in_turn: bool, turn_id: str | None = None) -> None:
+        """Connect to a CLI a holder kept through a daemon restart.
+
+        With a turn in flight it is claimed before the client exists, as `run`
+        does, so what the holder hands over is read as that turn's and not as
+        the model speaking unasked; the session then drains it.
+        """
+        if in_turn:
+            self._turn_active = True
+            self._attached_turn = True
+        try:
+            await self._ensure_client()
+        except Exception:
+            self._turn_active = False
+            self._attached_turn = False
+            raise
 
     async def close(self) -> None:
         # Disconnect first: the SDK stops its own reader as part of it, and
@@ -627,7 +671,11 @@ class ClaudeProvider(Provider):
         self._turn_active = True
         await self._ensure_client()
         self._interrupted = False
-        return await self._drain(time.monotonic(), idle_timeout=_CONTINUATION_IDLE_S)
+        # A turn carried over a restart is a real turn, not the model talking
+        # unasked: it ends at its ResultMessage, however long its tools take.
+        attached, self._attached_turn = self._attached_turn, False
+        return await self._drain(time.monotonic(),
+                                 idle_timeout=None if attached else _CONTINUATION_IDLE_S)
 
     async def _drain(self, started: float,
                      idle_timeout: float | None = None) -> TurnResult:

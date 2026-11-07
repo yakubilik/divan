@@ -124,7 +124,9 @@ def cmd_serve(args: argparse.Namespace) -> None:
             watch.cancel()
             learner.cancel()
             stop.cancel()
-            await srv.sessions.close_all()
+            # Held CLIs are let go of, not stopped: the next daemon takes them
+            # back with their turns still running (`held.py`).
+            await srv.sessions.detach_all()
             await srv.terms.close_all()
             await srv.concierge.close()
 

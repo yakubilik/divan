@@ -48,6 +48,7 @@ from . import screen as screenmod
 from . import term as termmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
+from .session import HELD_SENDS
 from .session import (NEW_CHAT_TITLE, PROVIDER_FIELDS, PROVIDERS, TITLE_MAX, TITLE_SEP, SessionManager,
                       approval_gone,
                       with_project)
@@ -1148,6 +1149,9 @@ class Server:
         session it was asked in can be resumed, so nobody needs telling: the
         work starts itself.
         """
+        # First the chats whose CLI never stopped: a holder kept it through the
+        # restart (`held.py`), and the turn it was in carries on here.
+        await self.attach_held()
         plans = list(getattr(self.db, "to_resume", None) or [])
         if not plans and not self.db.meta_get(self.HELD_KEY):
             return
@@ -1156,6 +1160,22 @@ class Server:
             await self._resume_plans(plans)
         finally:
             await self.deliver_held()
+
+    async def attach_held(self) -> None:
+        from . import held
+        if not held.enabled():
+            return
+        held.clear_detaching()
+        for cid in held.live_keys():
+            if self.db.get_chat(cid) is None:
+                # The chat was deleted while nobody was here to stop its CLI.
+                await held.stop(cid)
+                continue
+            try:
+                in_turn = await self.sessions.get(cid).attach(held.read_state(cid))
+                log.info("took back the held CLI of %s%s", cid, " mid-turn" if in_turn else "")
+            except Exception:
+                log.warning("could not take back the held CLI of %s", cid, exc_info=True)
 
     async def _resume_plans(self, plans: list[dict]) -> None:
         for plan in plans:
@@ -2639,7 +2659,7 @@ class Server:
 
     #: Where the messages taken during a restart wait, on disk: the queue is
     #: memory, and the process holding it is the one about to stop.
-    HELD_KEY = "held_sends"
+    HELD_KEY = HELD_SENDS
 
     async def _hold(self, s, chat_id: str, text: str, attachments, client_id: str | None) -> dict:
         text, attachments = await s.hold(text, attachments, client_id=client_id)

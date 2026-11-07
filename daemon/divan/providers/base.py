@@ -125,6 +125,15 @@ class Provider(ABC):
         """
         return False
 
+    #: Whether the CLI lives outside the daemon (`held.py`), so that a restart
+    #: does not end what it is doing. A provider that runs in-process does not.
+    survives_restart: bool = False
+
+    async def attach(self, in_turn: bool, turn_id: str | None = None) -> None:
+        """Connect to a CLI kept through a daemon restart. Only a provider
+        that survives restarts is ever asked."""
+        raise NotImplementedError
+
     @abstractmethod
     async def interrupt(self) -> None: ...
 
