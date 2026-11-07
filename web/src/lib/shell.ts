@@ -35,6 +35,8 @@ export const PLACES: Place[] = ['dashboard', 'chat', 'machine'];
  *  the panel already had. */
 export type View =
   | 'overview'
+  // the board: Plane, the Dashboard's second face, drawn in the page
+  | 'board'
   | 'chats'
   // …and the Chat place's second page: several chats at once, tiled
   | 'panes'
@@ -151,7 +153,7 @@ export const PLACE_VIEW: Record<Place, View> = {
 /** Which place a screen is in. Everything that is not one of the first two is a
  *  page of the Machine place, which is the whole of the move. */
 export function placeOf(view: View): Place {
-  if (view === 'overview') return 'dashboard';
+  if (view === 'overview' || view === 'board') return 'dashboard';
   if (view === 'chats' || view === 'panes') return 'chat';
   return 'machine';
 }

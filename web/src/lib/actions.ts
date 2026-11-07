@@ -239,6 +239,20 @@ function stillWelcome(cfg: HostConfig): void {
   if (r) throw new Error(refusalText(r).long);
 }
 
+/** The board (Plane) for one computer: where its gateway answers for this
+ *  page, and on the tunnel the pass the frame needs, which the computer sets as
+ *  a cookie on the way back. `base` empty is a computer with no way to show it
+ *  here; `upstream` is Plane's own address, which the snapshot's links use. */
+export async function planePass(key: string): Promise<{ base: string; upstream: string }> {
+  const { cfg } = slot(key);
+  stillWelcome(cfg);
+  const r = await fetch(`${base(cfg)}/plane/pass`, {
+    headers: { Authorization: `Bearer ${cfg.token}` }, credentials: 'include',
+  });
+  if (!r.ok) throw new Error(`The board did not answer (${r.status})`);
+  return r.json();
+}
+
 /** Uploads go over plain HTTP, not the socket: the daemon shrinks images and
  *  transcribes audio on the way in, and hands back the path to attach. */
 export async function upload(key: string, chatId: string, file: File): Promise<any> {

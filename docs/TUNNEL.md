@@ -330,3 +330,23 @@ With it and a mail list, a request has to come from somebody who can read one
 of those mails, holding a token made for that browser — from an address you
 named, or from anywhere, since the mail now does the job the address did.
 With Access but no mail list, it also has to come from an address you named.
+
+## The board (Plane) through the tunnel
+
+The panel's Board is Plane, framed in the page. The daemon serves it through a
+small gateway on its port + 1 (`daemon/divan/plane_gateway.py`), which the
+tunnel reaches under its own name, beside the panel's:
+
+```yaml
+  - hostname: plane.example.dev
+    service: http://127.0.0.1:8791
+```
+
+and `[plane] public = "https://plane.example.dev"` in `config.toml`. The two
+names must share a parent domain: the panel fetches `/plane/pass`, and the
+daemon answers it with a signed cookie on that domain, which the frame then
+carries. On the tunnel the gateway serves nothing without that pass, so do
+**not** put the gateway's name behind Cloudflare Access: Access's sign-in
+cannot run inside a frame, and the pass already stands for a device that got
+through the panel's own door. On the tailnet the gateway is open to the
+network, as Plane itself is.

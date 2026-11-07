@@ -921,13 +921,46 @@ group('the board is Plane, one press away');
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(planed, now) } }); });
   await goHome();
   await click(tile('quire'));
+  // The computer serves Plane through its own gateway, and says where.
+  const realFetch = globalThis.fetch;
+  const passes = [];
+  let gate = { base: 'http://100.1.2.3:8791', upstream: 'http://thinkpad:8090' };
+  globalThis.fetch = w.fetch = async (url, init) => {
+    if (String(url).endsWith('/plane/pass')) {
+      passes.push({ url: String(url), auth: init?.headers?.Authorization });
+      if (!gate) return { ok: false, status: 502, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => gate };
+    }
+    return realFetch(url, init);
+  };
   await click(link('Open board'));
+  for (let i = 0; i < 3; i++) await act(async () => {});
   const text = () => doc.body.textContent ?? '';
-  ok('the Board tab of a product says its board is in Plane, and where',
-    text().includes('The board is in Plane') && text().includes(PLANE) && !doc.querySelector('section.dv-col'),
-    text().slice(0, 200));
+  const frame = () => doc.querySelector('iframe[data-plane]');
+  ok('the Board tab of a product is Plane itself, in the page, through the computer',
+    frame()?.getAttribute('src') === 'http://100.1.2.3:8791/skola/projects/p1/issues/'
+    && !doc.querySelector('section.dv-col'), frame()?.getAttribute('src') ?? text().slice(0, 200));
+  ok('…asked for with the device token', passes.length >= 1 && /^Bearer /.test(passes[0].auth ?? ''),
+    JSON.stringify(passes));
   ok('…still on the Dashboard, and still the page the bar is over',
     place() === 'Dashboard' && head() === 'Quire', `${place()} · ${head()}`);
+
+  // The Board app on the line: the whole workspace, the page under the line.
+  await click(labelledBtn('Board'));
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  ok('Board on the line opens the workspace, framed, under its own address',
+    w.location.pathname === '/board'
+    && frame()?.getAttribute('src') === 'http://100.1.2.3:8791/skola/projects/',
+    `${w.location.pathname} · ${frame()?.getAttribute('src')}`);
+
+  // A computer that cannot serve it: Plane in a tab of its own, as before.
+  gate = null;
+  await goHome();
+  await click(tile('quire'));
+  await click(link('Open board'));
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  ok('a computer that cannot serve it says so, and Plane opens in a tab instead',
+    !frame() && text().includes('The board is in Plane') && text().includes(PLANE), text().slice(0, 200));
   const opened = [];
   const was = w.open;
   w.open = (...args) => { opened.push(args); return null; };
@@ -935,6 +968,7 @@ group('the board is Plane, one press away');
   w.open = was;
   ok('pressing Open in Plane opens that page in a tab of its own',
     opened.length === 1 && opened[0][0] === PLANE && opened[0][1] === '_blank', JSON.stringify(opened));
+  globalThis.fetch = w.fetch = realFetch;
 
   await act(async () => { seed(useDivanStore, { snaps: { studio: answered(studio, now) } }); });
   ok('a machine with no Plane says there is no board yet, rather than an empty page',

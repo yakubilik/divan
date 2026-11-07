@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 from collections import deque
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
@@ -30,6 +30,7 @@ from .updater import Updater
 from .config import CONFIG_DIR, Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
 from .db import DB
 from . import secret_share
+from . import plane_gateway as plane_gw
 from . import accounts as acct
 from . import pool as poolmod
 from . import usage as usagemod
@@ -314,6 +315,7 @@ class Server:
         self.failed_auth: dict[str, list[float]] = {}
         self.tunnel_lock = TunnelLock()
         self.tunnel_access = TunnelAccess()
+        self.plane_key = plane_gw.load_key(CONFIG_DIR / "plane-gate.key")
         # Pushes about the tunnel, in flight. Not awaited where they are raised:
         # a handshake must not wait on Expo to be told it was refused.
         self._alerts: set[asyncio.Task] = set()
@@ -330,6 +332,9 @@ class Server:
         self.app.post("/dictate")(self.dictate)
         self.app.post("/dictate/warm")(self.dictate_warm)
         self.app.get("/files")(self.files)
+        # The board's face: a pass for the Plane gateway on port + 1
+        # (plane_gateway.py), and where that gateway answers for this page.
+        self.app.get("/plane/pass")(self.plane_pass)
         # Frames go over HTTP rather than the socket: a phone draws one with
         # <Image> and a browser with <img>, and neither wants base64 in a
         # websocket frame five times a second.
@@ -1761,6 +1766,46 @@ class Server:
         if not uploaded and not self.policy.is_servable(p):
             raise HTTPException(status_code=404, detail="not found")
         return FileResponse(str(p), media_type=media_type_of(p), filename=p.name if download else None)
+
+    # ── the board (Plane) ──────────────────────────────────────────────────
+    def plane_gateway(self, binds: list[str]):
+        """The Plane gateway for port + 1, or None when this machine has no
+        Plane. The panel's own origins are the only ones that may frame it."""
+        upstream = str(self.cfg.plane.get("url") or "").strip()
+        if not upstream.startswith(("http://", "https://")):
+            return None
+        from .plane_gateway import PlaneGateway
+        ancestors = [f"http://{b}:{self.cfg.port}" for b in binds]
+        # On the tunnel the panel is a sibling of the gateway's public name
+        # (divan.example.dev beside plane.example.dev).
+        public = urlsplit(str(self.cfg.plane.get("public") or "").strip()).hostname or ""
+        parent = ".".join(public.split(".")[1:])
+        if parent.count(".") >= 1:
+            ancestors.append(f"https://*.{parent}")
+        return PlaneGateway(upstream, self.plane_key, ancestors)
+
+    async def plane_pass(self, request: Request, response: Response, authorization: str = Header(default=""),
+                         cf_connecting_ip: str | None = Header(default=None)) -> dict:
+        """Where the board answers for this page, and — on the tunnel — the
+        pass its frame needs: a signed cookie on the domain the panel and the
+        gateway share. Only a device through the whole door gets one."""
+        self._device(authorization, cf_connecting_ip)
+        upstream = str(self.cfg.plane.get("url") or "").strip().rstrip("/")
+        if not upstream:
+            return {"base": "", "upstream": ""}
+        host = (request.headers.get("host") or "").split(":")[0]
+        if cf_connecting_ip:
+            base = str(self.cfg.plane.get("public") or "").strip().rstrip("/")
+            dom = plane_gw.shared_domain(host, urlsplit(base).hostname or "") if base else ""
+            if not base or not dom:
+                return {"base": "", "upstream": upstream}
+            response.set_cookie(plane_gw.PASS_COOKIE, plane_gw.mint(self.plane_key),
+                                max_age=plane_gw.PASS_TTL_S, domain=dom, path="/",
+                                secure=True, httponly=True, samesite="lax")
+        else:
+            h = f"[{host}]" if ":" in host else host
+            base = f"http://{h}:{self.cfg.port + 1}"
+        return {"base": base, "upstream": upstream}
 
     # ── auth ───────────────────────────────────────────────────────────────
     def _rate_limited(self, ip: str) -> bool:

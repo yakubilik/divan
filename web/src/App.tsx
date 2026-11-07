@@ -17,6 +17,7 @@ import { Machine } from './screens/Machine';
 import { Panes } from './screens/Panes';
 import { usePanes } from './lib/panes';
 import { Overview, type ProjectTab } from './screens/Overview';
+import { PlaneFrame } from './screens/Plane';
 import type { WorkLayout } from './screens/Work';
 import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
@@ -905,6 +906,7 @@ export function App() {
         view={view} onView={goView} fleet={divan} dots={dots}
         onHome={() => go(HOME)}
         back={back}
+        board={{ on: view === 'board', onOpen: () => go({ ...HOME, view: 'board' }) }}
         work={{
           on: view === 'overview' && !project && tab === 'work',
           onOpen: () => go({ ...HOME, tab: 'work' }),
@@ -915,7 +917,14 @@ export function App() {
         lead={place === 'chat' && !rail
           ? { node: <ListToggle shown onClick={() => setRailTo(true)} />, width: SIDEBAR_W } : null}
       >
-        {place === 'dashboard' && (
+        {/* The board: Plane, as the Dashboard's other face — the whole page
+            under the line, served through this computer (screens/Plane.tsx). */}
+        {view === 'board' && (
+          <div data-board-screen="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <PlaneFrame fill />
+          </div>
+        )}
+        {place === 'dashboard' && view !== 'board' && (
           <Overview
             view={divan} project={projectIn(divan, project)} onProject={chooseProject}
             composer={(

@@ -34,6 +34,7 @@ const SVG = (d: string) => (
 );
 const GEAR = 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z';
 const WORK = 'M22 12h-4l-3 9L9 3l-3 9H2';
+const BOARD = 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z';
 const CHAT = 'M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z';
 const PANES = 'M4 4h16v16H4zM12 4v16M12 12h8';
 const MOON = 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z';
@@ -54,8 +55,9 @@ export function ThemeSwitch() {
 }
 
 /** The right-hand half: `● 2/2 machines · ◔ quota 64% · Chats · Settings`. */
-function Sys({ fleet, view, here, dots, onView, inbox, work }: {
+function Sys({ fleet, view, here, dots, onView, inbox, work, board }: {
   fleet?: DivanView | null;
+  board?: { on: boolean; onOpen: () => void } | null;
   work?: { on: boolean; onOpen: () => void } | null;
   view: View;
   here: Place;
@@ -95,6 +97,7 @@ function Sys({ fleet, view, here, dots, onView, inbox, work }: {
         </>
       )}
       <span className="sep" />
+      {!!board && <PlaceButton label="Board" icon={BOARD} on={board.on} onClick={board.onOpen} />}
       {!!work && <PlaceButton label="Work" icon={WORK} on={work.on} onClick={work.onOpen} />}
       <PlaceButton label="Chats" icon={CHAT} on={view === 'chats'} dot={dots?.chat}
         onClick={() => onView('chats')} />
@@ -125,7 +128,7 @@ function PlaceButton({ label, icon, on, dot, onClick }: {
 
 /** A page: the line, and the page's own content under it. `back` is where the
  *  left end leads; absent, it is the word, on the Dashboard. */
-export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, work, children }: {
+export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, work, board, children }: {
   view: View;
   onView: (view: View) => void;
   /** The merged view the system line counts off. */
@@ -146,6 +149,8 @@ export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, wo
   /** Work in flight: every ticket the queue is on, on every computer — and
    *  whether that page is the one on screen. */
   work?: { on: boolean; onOpen: () => void } | null;
+  /** The board — Plane, in the page — and whether it is the page on screen. */
+  board?: { on: boolean; onOpen: () => void } | null;
   children?: React.ReactNode;
 }) {
   const here = placeOf(view);
@@ -177,7 +182,7 @@ export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, wo
               <img src="/divan-seal.png" width={34} height={34} alt="" aria-hidden="true" />divan
             </a>
           )}
-          <Sys fleet={fleet} view={view} here={here} dots={dots} onView={onView} inbox={inbox} work={work} />
+          <Sys fleet={fleet} view={view} here={here} dots={dots} onView={onView} inbox={inbox} work={work} board={board} />
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>

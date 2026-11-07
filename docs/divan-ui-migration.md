@@ -69,7 +69,7 @@ The quoted words are the check's own name.
 | Ask about a product | Project command bar | Composer locked to the product | `chat.create`, `chat.send` | drive: "the Composer at the foot of a project carries that project" |
 | A product's chats | Chat tab | The list down the left of the product's page; one opens in the middle | `chat.create` | drive: "a chat started there starts in the product’s repository" |
 | Open a branch | Branch cards | The card's Branch label; a kept branch link opens its product (ustabasi #147) | — | drive: "a product with branches draws no Branches section, branch link or branch picker" |
-| Move a card | Board drag | Plane's own board, one press away from the Board tab | — | drive: "the Board tab of a product says its board is in Plane, and where" |
+| Move a card | Board drag | Plane itself, framed in the Board tab and in Board on the line | — | drive: "the Board tab of a product is Plane itself, in the page, through the computer" |
 | Quota refusal on a drop | Board | The machine's quota thresholds, read where work starts | — | machine: "under the 70% you set" |
 | Answer from the board | Press an asking card | The asking window, Waiting on you and the ticket | `ustabasi.note` | drive: "an answer sends ustabasi.note and the card leaves the asking state" |
 | Open a card | Press a card | Same, ticket page | `divan.card.get` | drive: "a card that nobody is waiting on opens as its own page" |

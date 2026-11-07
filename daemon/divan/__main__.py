@@ -88,6 +88,14 @@ def cmd_serve(args: argparse.Namespace) -> None:
                                 ws_ping_interval=None, ws_ping_timeout=None,
                                 timeout_graceful_shutdown=10)
             servers.append(uvicorn.Server(uc))
+        # The board (Plane) on port + 1, beside every address the panel is on:
+        # its own origin, framed by the panel (plane_gateway.py).
+        gateway = srv.plane_gateway(binds)
+        if gateway is not None:
+            for host in binds:
+                servers.append(uvicorn.Server(uvicorn.Config(
+                    gateway, host=host, port=cfg.port + 1, log_level="warning",
+                    ws_ping_interval=None, ws_ping_timeout=None, timeout_graceful_shutdown=5)))
         print(f"divan {cfg.host_name} listening on: " + ", ".join(f"ws://{h}:{cfg.port}/ws" for h in binds))
         reaper = asyncio.create_task(srv.reaper())
         updater = asyncio.create_task(srv.updater.loop())

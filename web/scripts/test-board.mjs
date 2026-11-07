@@ -211,8 +211,9 @@ group('the board is Plane, and the page around it stands up on every board');
     merged.projects.every((p) => p.plane === PLANE) && productOf('busy', 'quire').plane === '');
   ok('a product with a Plane opens it in a tab of its own, and says where',
     plane(PLANE).includes('Open in Plane') && plane(PLANE).includes(PLANE));
-  ok('…and one without says so instead of drawing an empty page',
-    plane('').includes('No board yet') && !plane('').includes('Open in Plane'));
+  ok('…and before any computer has answered, it waits rather than saying there is none',
+    !plane('').includes('No board yet') && plane('').includes('data-plane="loading"'));
+  // ("No board yet" once a computer has answered without one: test-drive.)
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');
