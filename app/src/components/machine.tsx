@@ -17,7 +17,8 @@ import { Icon } from './icon';
 import { Text } from './text';
 import { Button, Card, ExecutorBadge, Group, ListRow, Segments, StatusDot, Tap } from './divan';
 import { Ring } from './shell';
-import { useT } from '../store';
+import { useStore, useT } from '../store';
+import { measure, openMenu } from './overlay';
 import { useNavGuard } from '../nav';
 import { MACHINE_TABS, type MachineTab } from '../shell';
 import { em, RADIUS, SIZE, toneColours, useTokens, type State, type Tone } from '../theme';
@@ -243,12 +244,50 @@ export function MachineTabs({ here, style }: { here: MachineTab['key']; style?: 
   const router = useRouter();
   const go = useNavGuard();
   return (
-    <Segments style={style} value={here}
-      segments={MACHINE_TABS.map((tab) => ({ key: tab.key, label: T(tab.label) }))}
-      onChange={(key) => {
-        const tab = MACHINE_TABS.find((x) => x.key === key);
-        if (tab && key !== here) go(() => router.replace(tab.route));
-      }} />
+    <>
+      <Segments style={style} value={here}
+        segments={MACHINE_TABS.map((tab) => ({ key: tab.key, label: T(tab.label) }))}
+        onChange={(key) => {
+          const tab = MACHINE_TABS.find((x) => x.key === key);
+          if (tab && key !== here) go(() => router.replace(tab.route));
+        }} />
+      {here !== 'machines' && <ComputerPicker />}
+    </>
+  );
+}
+
+/** Which computer this tab is about, on every tab but Computers (Yakup, 7 Nov
+ *  2026: "pick any computer and see only its accounts, or add one there").
+ *  Choosing one is switching to it — the same `switchHost` a card's `Use this
+ *  machine` is — so the sign-ins, the shell and the settings under it are that
+ *  computer's. Drawn only where there is more than one to choose from. */
+export function ComputerPicker() {
+  const T = useT();
+  const t = useTokens();
+  const hosts = useStore((s) => s.hosts) ?? [];
+  const held = useStore((s) => s.host?.id ?? null);
+  const conn = useStore((s) => s.conn);
+  const switchHost = useStore((s) => s.switchHost);
+  const ref = React.useRef<View>(null);
+  if (hosts.length < 2) return null;
+  const now = hosts.find((h) => h.id === held);
+  const pick = async () => {
+    const anchor = await measure(ref);
+    openMenu({ anchor, align: 'left', items: hosts.map((h) => ({
+      label: h.name, checked: h.id === held, onPress: () => { if (h.id !== held) void switchHost(h.id); },
+    })) });
+  };
+  return (
+    <View ref={ref} collapsable={false}>
+      <Tap onPress={() => void pick()} label={T('pickComputer')}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 4 }}>
+        <StatusDot state={conn === 'online' ? 'running' : conn === 'connecting' ? 'asking' : 'quiet'}
+          hollow={conn !== 'online'} />
+        <Text style={{ fontSize: 12.5, color: t.ink3 }}>{T('pickComputer')}</Text>
+        <Text mono numberOfLines={1} style={{ flexShrink: 1, fontSize: 14, fontWeight: '600' }}>{now?.name ?? '–'}</Text>
+        <Icon name="expand_more" size={18} color={t.ink3} />
+      </Tap>
+    </View>
   );
 }
 

@@ -562,7 +562,7 @@ const en = {
   // HANDOVER §4.9: the four tabs, and the pages under each.
   mTerminal: 'Terminal', mQueue: 'Ticket queue', mQueueNote: 'every ticket the queue holds, and what it is doing',
   mUnder: 'Also under {tab}', sgMore: 'more', mWhoWorks: 'who is working on what, on which computer',
-  tabComputers: 'Computers', tabAccounts: 'Accounts', sgThisComputer: 'this computer · {name}', sgThisPhone: 'this phone',
+  pickComputer: 'Computer', tabComputers: 'Computers', tabAccounts: 'Accounts', sgThisComputer: 'this computer · {name}', sgThisPhone: 'this phone',
   stToolPerm: 'Tool and permissions', stAbout: 'About', stAboutNote: '{os} · daemon {v} · up {up} · {n} running',
   maOnline: 'online', maRunningList: 'Running {n}: {list}.', maNothingRunning: 'Nothing running.',
   maWasRunning: 'Was running {n}: {list}.', maNothingWas: 'Nothing was running.',
