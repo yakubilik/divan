@@ -996,11 +996,27 @@ export const useStore = create<State>((set, get) => {
         const seen = new Set(keep.map((e) => e.seq));
         const merged = [...keep, ...events.filter((e) => !seen.has(e.seq))]
           .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+        // The live line is only ever cleared by the live `message.assistant`
+        // and `turn.done`. When those went down with a socket and came back
+        // here instead, the words streamed before it went stayed under the
+        // finished answer until the next turn (2026-11-07: "Son ▌"). A chat
+        // that is not busy has nothing streaming; a busy one whose newest
+        // answer, after the last prompt, is the segment on screen has that
+        // segment written down already.
+        const live = get().live[id];
+        let stale = !!live && !busy;
+        if (live && busy) {
+          const lastSaid = merged.map((e) => e.event).lastIndexOf('message.assistant');
+          const lastAsked = merged.map((e) => e.event).lastIndexOf('message.user');
+          stale = lastSaid > lastAsked && merged[lastSaid].data?.segment === live.segment;
+        }
         set({
           chats: { ...get().chats, [id]: chat },
           events: { ...get().events, [id]: merged },
           busy: { ...get().busy, [id]: busy },
           loadedChats: { ...get().loadedChats, [id]: true },
+          ...(stale ? { live: { ...get().live, [id]: null } } : {}),
+          ...(busy ? {} : { thinking: { ...get().thinking, [id]: '' }, progress: { ...get().progress, [id]: null } }),
         });
         // A message whose live copy went down with a socket is in this page.
         outbox.seen(delivered(events));

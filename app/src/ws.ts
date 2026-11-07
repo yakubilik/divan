@@ -353,7 +353,10 @@ export class RacClient {
       // CONNECTING with no close at all — and waiting for one would sit out
       // the handshake limit on a computer that has already said no.
       if (ws.readyState !== WebSocket.OPEN) {
-        try { ws.onclose = null; ws.close(); } catch {}
+        // Detached before the close: Node's close() on a failed dial fires
+        // `error` again, synchronously, and this handler would recurse.
+        ws.onerror = null; ws.onclose = null;
+        try { ws.close(); } catch {}
         if (!opened) { this.dialFailed(ws, 1006, failed); return; }
         this.lostSocket(1006);
       }

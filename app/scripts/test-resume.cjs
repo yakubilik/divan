@@ -22,6 +22,11 @@ const ev = (seq, text) => ({ event: 'message.assistant', chat_id: 'c1', seq, dat
 const daemon = Array.from({ length: 12 }, (_, i) => ev(i + 1, `m${i + 1}`));
 const asked = [];
 client.call = async (type, data) => {
+  if (type === 'chat.get' && data.chat_id !== 'c1') {
+    const t = turns[data.chat_id];
+    return { chat: { id: data.chat_id, title: data.chat_id }, events: t.events.filter((e) => e.seq > data.since_seq),
+             more: false, busy: t.busy };
+  }
   if (type === 'chat.get') {
     asked.push(data.since_seq);
     const events = daemon.filter((e) => e.seq > data.since_seq);
@@ -31,6 +36,19 @@ client.call = async (type, data) => {
   return {};
 };
 const frame = (e) => client.handle(JSON.stringify({ type: 'event', ...e }));
+// A turn whose end the phone never heard live (2026-11-07): iOS took the socket
+// away after the first word had streamed, and the answer and `turn.done` came
+// back through chat.get. The first word stayed under the finished answer as a
+// live line ("Son ▌") until the next turn.
+const said = (cid, seq, text) => ({ event: 'message.assistant', chat_id: cid, seq, data: { segment: 0, text }, ts: seq });
+const turns = {
+  c2: { busy: false, events: [said('c2', 1, 'earlier'), said('c2', 2, 'Son mesajım geldi.'),
+                               { event: 'turn.done', chat_id: 'c2', seq: 3, data: {}, ts: 3 }] },
+  c3: { busy: true, events: [said('c3', 1, 'earlier'), said('c3', 2, 'Son mesajım geldi.')] },
+  // Still streaming its first segment: the last thing written is the prompt.
+  c4: { busy: true, events: [said('c4', 1, 'earlier answer'),
+                             { event: 'message.user', chat_id: 'c4', seq: 2, data: { text: 'next' }, ts: 2 }] },
+};
 const link = (s) => client.setStatus(s);       // what the socket's own open and close do
 
 const ready = (async () => {
@@ -55,6 +73,34 @@ const ready = (async () => {
   asked.length = 0;
   await useStore.getState().openChat('c1');
   checks.push(['resume: once caught up, the next ask is from the newest again', asked[0] === 12]);
+
+  for (const cid of ['c2', 'c3']) {
+    const t = turns[cid];
+    const full = t.events;
+    t.events = full.slice(0, 1);
+    await useStore.getState().openChat(cid);
+    frame({ event: 'turn.started', chat_id: cid, data: {} });
+    frame({ event: 'text.delta', chat_id: cid, data: { segment: 0, text: 'Son' } });
+    frame({ event: 'turn.progress', chat_id: cid, data: {} });   // flushes the buffered word
+    const streaming = useStore.getState().live[cid]?.text;
+    link('offline');                                             // the rest goes down with the socket
+    t.events = full;
+    link('connecting');
+    link('online');
+    await useStore.getState().openChat(cid);
+    const st = useStore.getState();
+    checks.push([`resume (${cid}): the first word had streamed before the socket went`, streaming === 'Son']);
+    checks.push([`resume (${cid}): an answer caught up through chat.get leaves no half-typed live line behind`, !st.live[cid]]);
+    checks.push([`resume (${cid}): …and the chat is busy exactly when the computer says so`, st.busy[cid] === t.busy]);
+  }
+  {
+    frame({ event: 'turn.started', chat_id: 'c4', data: {} });
+    frame({ event: 'text.delta', chat_id: 'c4', data: { segment: 0, text: 'Yazıyorum' } });
+    frame({ event: 'turn.progress', chat_id: 'c4', data: {} });
+    await useStore.getState().openChat('c4');
+    checks.push(['resume (c4): a segment still streaming is not cleared because an older answer had the same number',
+      useStore.getState().live.c4?.text === 'Yazıyorum']);
+  }
 })().catch((e) => checks.push([`resume: ran (${e?.stack || e})`, false]));
 
 module.exports = { checks, ready };
