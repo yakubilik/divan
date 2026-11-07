@@ -101,6 +101,9 @@ def cmd_serve(args: argparse.Namespace) -> None:
         updater = asyncio.create_task(srv.updater.loop())
         resumer = asyncio.create_task(srv.resume_interrupted())
         follower = asyncio.create_task(srv.follow_tickets())
+        # Plane's board and the queue: an `ustabaşı` item moved to In Progress
+        # is filed, and what the queue does with it comes back (plane_sync.py).
+        planer = asyncio.create_task(srv.plane_sync.loop()) if cfg.plane.get("url") else None
         warmer = asyncio.create_task(srv.warm_models())
         # A loop that wakes seconds late is a phone that gives up on its ping.
         watch = asyncio.create_task(LoopWatch().run())
@@ -128,6 +131,8 @@ def cmd_serve(args: argparse.Namespace) -> None:
             updater.cancel()
             resumer.cancel()
             follower.cancel()
+            if planer is not None:
+                planer.cancel()
             warmer.cancel()
             watch.cancel()
             learner.cancel()

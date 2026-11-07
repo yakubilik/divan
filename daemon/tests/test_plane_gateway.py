@@ -117,3 +117,59 @@ def test_only_an_email_reaches_planes_shell():
     for bad in ["x", "a@b", "a'@b.co", 'a"@b.co', "a@b.co\nimport os"]:
         with pytest.raises(ValueError):
             gw.mint_session("true", bad)
+
+
+# ── who does it: a new work item must carry `ustabaşı` or `insan` ─────────
+
+def test_only_a_create_is_guarded():
+    assert gw.CREATE.match("/api/workspaces/skola/projects/p1/issues/").group(1) == "skola"
+    assert gw.CREATE.match("/api/workspaces/skola/projects/p1/issues")
+    assert not gw.CREATE.match("/api/workspaces/skola/projects/p1/issues/i1/")
+    assert not gw.CREATE.match("/api/workspaces/skola/projects/p1/issues/bulk-delete/")
+
+
+def guarded(names):
+    gate = g()
+    gate._label_cache["skola"] = (names, 10 ** 12)
+    return gate
+
+
+def test_a_create_without_who_is_refused_and_with_it_goes_through():
+    import json as j
+    gate = guarded({"l-bot": "ustabaşı", "l-hum": "insan", "l-web": "web"})
+    run = lambda ids: asyncio.run(gate._unowned("skola", j.dumps({"label_ids": ids}).encode(), {}))
+    assert run([]) == gw.MUST_SAY_WHO
+    assert run(["l-web"]) == gw.MUST_SAY_WHO
+    assert run(["l-web", "l-bot"]) is None
+    assert run(["l-hum"]) is None
+
+
+def test_a_create_is_refused_before_it_reaches_plane():
+    import json as j
+    gate = guarded({"l-web": "web"})
+    sent, asked = [], []
+
+    async def receive():
+        return {"type": "http.request", "body": j.dumps({"name": "x", "label_ids": ["l-web"]}).encode(),
+                "more_body": False}
+
+    async def send(m):
+        sent.append(m)
+
+    async def never(*a, **k):
+        asked.append(a)
+        raise AssertionError("reached Plane")
+
+    gate.client.send = never
+    pass_ = gw.mint(KEY, "Yakup")
+    scope = {"type": "http", "method": "POST", "path": "/api/workspaces/skola/projects/p1/issues/",
+             "headers": [(b"cookie", f"{gw.PASS_COOKIE}={pass_}".encode())], "query_string": b""}
+    asyncio.run(gate(scope, receive, send))
+    assert sent[0]["status"] == 400 and not asked
+    assert "ustabaşı" in j.loads(sent[1]["body"])["error"]
+
+
+def test_the_page_lock_is_in_every_plane_page_before_plane_runs():
+    page = gw.with_lock("<!DOCTYPE html><html><head><script src=/a.js></script></head></html>")
+    assert page.index("data-divan-lock") < page.index("/a.js")
+    assert "label_ids" in gw.LOCK_JS and "ustabaşı" in gw.LOCK_JS

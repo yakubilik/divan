@@ -358,3 +358,16 @@ that person with Plane's own Django shell (`[plane] shell`, e.g.
 it in the keychain as `rac-secret-plane-session-<person>`. The pass names whose
 device asked, and a browser with no Plane session of its own is signed in as
 that person. A person with none sees Plane's own sign-in.
+
+## Who does a work item: `ustabaşı` or `insan`
+
+Every Plane work item carries one of two labels. The gateway refuses a create
+without either (`plane_gateway.CREATE`, answered 400 before Plane sees it), and
+the page it serves keeps Save off until a label is chosen (`LOCK_JS`). The first
+layer reads Plane's API, not its pages, so it holds across Plane upgrades; if an
+upgrade moves the create form, only the greyed Save is lost.
+
+`plane_sync.py` polls Plane every 20 s with the key in `rac-secret-plane-api`:
+an `ustabaşı` item moved to In Progress is filed with ustabasi (number on the
+item, a comment), an item with no label moved there goes back to Todo, and what
+the queue finishes moves its item to Done.

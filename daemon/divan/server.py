@@ -316,6 +316,11 @@ class Server:
         self.tunnel_lock = TunnelLock()
         self.tunnel_access = TunnelAccess()
         self.plane_key = plane_gw.load_key(CONFIG_DIR / "plane-gate.key")
+        from .plane_sync import PlaneSync
+        self.plane_sync = PlaneSync(
+            self.cfg, repos_for=lambda slug: list((self.db.divan.find_project(slug) or {}).get("repos") or []),
+            is_allowed=lambda path: self.policy.is_allowed_cwd(path),
+            state_path=CONFIG_DIR / "plane-sync.json")
         # Pushes about the tunnel, in flight. Not awaited where they are raised:
         # a handshake must not wait on Expo to be told it was refused.
         self._alerts: set[asyncio.Task] = set()

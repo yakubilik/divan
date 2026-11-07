@@ -39,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
 import os
 import re
@@ -65,6 +66,73 @@ _WS_SKIP = _HOP | {
     "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions",
     "sec-websocket-accept", "sec-websocket-protocol", "content-length",
 }
+
+
+# ── who does it ───────────────────────────────────────────────────────────
+# A new work item must say who does it: the `ustabaşı` label (the queue) or
+# `insan` (a person). Two layers, so the rule outlives a Plane upgrade:
+#   - here, on the way through: a create (`POST …/projects/<id>/issues/`)
+#     without either label is answered 400 and never reaches Plane. This reads
+#     Plane's API, not its pages, which is what changes least between releases.
+#   - in the page (`LOCK_JS`): the create form's Save stays off until a label
+#     is chosen, and a create without the right one is stopped with the reason.
+#     If an upgrade moves the form, this layer quietly stops helping and the
+#     first one still holds; `tests/test_plane_gateway.py` pins both.
+CREATE = re.compile(r"^/api/workspaces/([^/]+)/projects/[^/]+/issues/?$")
+MUST_SAY_WHO = "Kim yapacak? Önce “ustabaşı” ya da “insan” etiketini seç."
+
+LOCK_JS = r"""
+(function () {
+  if (window.__divanLock) return; window.__divanLock = 1;
+  var WHO = ["ustabaşı", "insan"], MSG = %s;
+  var names = {}, at = 0;
+  function labels(ws) {
+    if (Date.now() - at < 60000) return Promise.resolve(names);
+    return fetch("/api/workspaces/" + ws + "/labels/", { credentials: "include" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { names = {}; (j || []).forEach(function (l) { names[l.id] = String(l.name).toLowerCase(); }); at = Date.now(); return names; })
+      .catch(function () { return names; });
+  }
+  var CREATE = /\/api\/workspaces\/([^/]+)\/projects\/[^/]+\/issues\/?$/;
+  function owned(ids) { return (ids || []).some(function (i) { return WHO.indexOf(names[i]) >= 0; }); }
+  var open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (m, u) { this.__m = m; this.__u = String(u); return open.apply(this, arguments); };
+  XMLHttpRequest.prototype.send = function (body) {
+    var x = this, m = this.__m === "POST" && CREATE.exec(this.__u.split("?")[0]);
+    if (!m) return send.apply(this, arguments);
+    var ids = []; try { ids = JSON.parse(body).label_ids; } catch (e) {}
+    labels(m[1]).then(function () {
+      if (owned(ids) || !Object.keys(names).length) return send.call(x, body);
+      window.alert(MSG); x.abort();
+    });
+  };
+  // Save stays off while the create form has no label at all.
+  function lock() {
+    document.querySelectorAll("form").forEach(function (f) {
+      var save = f.querySelector('button[type="submit"]');
+      if (!save) return;
+      var lb = Array.prototype.find.call(f.querySelectorAll("button"), function (b) {
+        return /^(Etiketler|Labels)$/.test(b.textContent.trim()) || /^\d+ Labels?$/.test(b.textContent.trim()) || /^\d+ Etiket/.test(b.textContent.trim());
+      });
+      if (!lb) return;
+      var none = /^(Etiketler|Labels)$/.test(lb.textContent.trim());
+      save.disabled = none; save.title = none ? MSG : "";
+      save.style.opacity = none ? "0.45" : ""; save.style.cursor = none ? "not-allowed" : "";
+      f.dataset.divanLock = none ? "on" : "off";
+    });
+  }
+  // The document itself, not its <html>: Plane hydrates the whole document
+  // and may replace the element an observer was on.
+  new MutationObserver(lock).observe(document, { subtree: true, childList: true, characterData: true });
+})();
+""" % json.dumps(MUST_SAY_WHO)
+
+
+def with_lock(page: str) -> str:
+    """A Plane page with the lock in it, before anything of Plane's runs."""
+    tag = f"<script data-divan-lock>{LOCK_JS}</script>"
+    i = page.find("<head>")
+    return page[:i + 6] + tag + page[i + 6:] if i >= 0 else tag + page
 
 
 # ── the pass ──────────────────────────────────────────────────────────────
@@ -217,6 +285,7 @@ class PlaneGateway:
         # keychain), each time, so a new sign-in needs no restart.
         self.session_for = session_for or (lambda person: None)
         self._sessions: dict[str, tuple[str | None, float]] = {}
+        self._label_cache: dict[str, tuple[dict[str, str], float]] = {}
         self.upstream = f"{u.scheme}://{u.netloc}"
         self.up_host = u.netloc
         self.key = key
@@ -340,9 +409,21 @@ class PlaneGateway:
 
         method = scope["method"]
         has_body = method not in ("GET", "HEAD", "OPTIONS") or "content-length" in h
+        content = body() if has_body else None
+        created = CREATE.match(path.decode("latin-1")) if method == "POST" else None
+        if created:
+            # A new work item: read it whole, and refuse it without a "who".
+            raw = b"".join([c async for c in body()])
+            content = raw
+            why = await self._unowned(created.group(1), raw, h)
+            if why:
+                await send({"type": "http.response.start", "status": 400,
+                            "headers": [(b"content-type", b"application/json")]})
+                await send({"type": "http.response.body",
+                            "body": json.dumps({"error": why, "detail": why}).encode()})
+                return
         req = self.client.build_request(
-            method, url, headers=self._upstream_headers(h, _HOP),
-            content=body() if has_body else None)
+            method, url, headers=self._upstream_headers(h, _HOP), content=content)
         try:
             r = await self.client.send(req, stream=True)
         except httpx.HTTPError as e:
@@ -363,12 +444,50 @@ class PlaneGateway:
                 headers.append((b"set-cookie", (
                     f"{self.SESSION_COOKIE}={session}; Max-Age={self.SESSION_AGE_S}; Path=/; "
                     f"HttpOnly; SameSite=Lax{secure}").encode("latin-1")))
+            if r.headers.get("content-type", "").startswith("text/html") and r.status_code == 200:
+                page = with_lock((await r.aread()).decode("utf-8", "replace")).encode()
+                headers = [(k, v) for k, v in headers if k not in (b"content-length", b"content-encoding")]
+                headers.append((b"content-length", str(len(page)).encode()))
+                await send({"type": "http.response.start", "status": 200, "headers": headers})
+                await send({"type": "http.response.body", "body": page})
+                return
             await send({"type": "http.response.start", "status": r.status_code, "headers": headers})
             async for chunk in r.aiter_raw():
                 await send({"type": "http.response.body", "body": chunk, "more_body": True})
             await send({"type": "http.response.body", "body": b""})
         finally:
             await r.aclose()
+
+    LABELS_KEEP_S = 60.0
+
+    async def _unowned(self, ws: str, raw: bytes, h: dict[str, str]) -> str | None:
+        """Why a new work item may not be made, or None when it may: it must
+        carry the `ustabaşı` or the `insan` label (plane_sync.py)."""
+        try:
+            ids = [str(x) for x in (json.loads(raw or b"{}").get("label_ids") or [])]
+        except (ValueError, AttributeError):
+            return None  # not the shape this guards; Plane answers it
+        names = await self._label_names(ws, h)
+        if names is None:
+            return None  # cannot tell: Plane decides, the sync bounces it later
+        from .plane_sync import who
+        if who([names.get(i, "") for i in ids]):
+            return None
+        return MUST_SAY_WHO
+
+    async def _label_names(self, ws: str, h: dict[str, str]) -> dict[str, str] | None:
+        hit = self._label_cache.get(ws)
+        if hit and time.monotonic() - hit[1] < self.LABELS_KEEP_S:
+            return hit[0]
+        try:
+            r = await self.client.get(f"{self.upstream}/api/workspaces/{ws}/labels/",
+                                      headers=self._upstream_headers(h, _HOP | {"content-length", "content-type"}))
+            r.raise_for_status()
+            names = {str(x["id"]): str(x["name"]) for x in r.json()}
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            return None
+        self._label_cache[ws] = (names, time.monotonic())
+        return names
 
     def _response_headers(self, items, origin: str) -> list[tuple[bytes, bytes]]:
         out = []
