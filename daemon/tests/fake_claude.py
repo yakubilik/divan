@@ -44,7 +44,29 @@ def ev(event: dict) -> None:
     say({"type": "stream_event", "uuid": str(uuid.uuid4()), "session_id": SID, "event": event})
 
 
+def long_turn() -> None:
+    """A block that streams hundreds of deltas and is still open seconds later —
+    a big Write being typed out — so a reattach has to replay well over the
+    SDK's 100-message buffer."""
+    ev({"type": "message_start", "message": {"id": "m1", "type": "message", "role": "assistant",
+                                             "content": [], "model": "fake", "usage": {}}})
+    ev({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}})
+    for i in range(400):
+        ev({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "x"}})
+    time.sleep(4)
+    ev({"type": "content_block_stop", "index": 0})
+    say({"type": "assistant", "session_id": SID, "parent_tool_use_id": None,
+         "message": {"id": "m1", "model": "fake", "role": "assistant", "content": [{"type": "text", "text": "x" * 400}],
+                     "usage": {"output_tokens": 400}, "stop_reason": "end_turn"}})
+    ev({"type": "message_stop"})
+    say({"type": "result", "subtype": "success", "duration_ms": 10, "duration_api_ms": 5,
+         "is_error": False, "num_turns": 1, "session_id": SID, "total_cost_usd": 0.0,
+         "usage": {"input_tokens": 1, "output_tokens": 1}, "result": "x" * 400})
+
+
 def turn(text: str) -> None:
+    if "LONG" in text:
+        return long_turn()
     slow = "SLOW" in text
     words = [f"w{i} " for i in range(16 if slow else 4)]
     ev({"type": "message_start", "message": {"id": "m1", "type": "message", "role": "assistant",

@@ -61,6 +61,9 @@ LIMIT = 64 * 1024 * 1024
 #: a turn is in flight, which gets until ORPHAN_HARD_S.
 ORPHAN_S = 6 * 3600
 ORPHAN_HARD_S = 24 * 3600
+#: How long a returning daemon gets to send its `initialize` before the replay
+#: starts anyway.
+HANDSHAKE_S = 10
 #: How long the tail of a CLI that exited waits for a daemon to collect it.
 EXITED_KEEP_S = 3600
 #: Environment the provider sets for the relay; none of it reaches the CLI.
@@ -222,6 +225,8 @@ class Holder:
         self.thread_resp = None
         self.thread_req_id = None
         self.client_ids: set = set()
+        self.handshook = False               # this client's `initialize` answered from the cache
+        self.gated = False                   # a client is attaching: hand nothing over yet
         self.writer: asyncio.StreamWriter | None = None
         self.attaches = 0
         self.last_client = time.time()
@@ -340,6 +345,8 @@ class Holder:
             await self._pump_locked()
 
     async def _pump_locked(self) -> None:
+        if self.gated:
+            return
         while self.writer is not None and self.delivered < self._end():
             line = self._line(self.delivered)
             if line is not None and not await self._send({"l": line}):
@@ -361,7 +368,8 @@ class Holder:
             await self._pump_out()
         self.exit_code = await self.proc.wait()
         self._save()
-        if self.writer is not None:
+        # A client still attaching is told by `serve_client`, after its replay.
+        if self.writer is not None and not self.gated:
             await self._pump_out()
             await self._send({"x": self.exit_code})
         self.done.set()
@@ -399,6 +407,7 @@ class Holder:
                     if self.init_resp is not None:
                         await self._send({"l": json.dumps({"type": "control_response", "response": {
                             "subtype": "success", "request_id": rid, "response": self.init_resp}})})
+                        self.handshook = True
                         return
                     self.init_req_id = rid
                 self.client_ids.add(rid)
@@ -414,6 +423,7 @@ class Holder:
                 if m == "initialize":
                     if self.init_resp is not None:
                         await self._send({"l": json.dumps({"id": rid, "result": self.init_resp})})
+                        self.handshook = True
                         return
                     self.init_req_id = rid
                 elif m in ("thread/start", "thread/resume"):
@@ -451,12 +461,35 @@ class Holder:
         self.writer = w
         self.attaches += 1
         self.client_ids = set()
+        self.handshook = False
+        self.gated = True
         self._save()
         await self._send({"ok": 1, "attached": self.attaches > 1, "in_turn": self.in_turn,
                           "turn_id": self.turn_id})
+        # The handshake goes first, the replay after it. The SDK parks every
+        # line but a control answer in a 100-deep buffer that nobody empties
+        # until `connect` returns; a replay longer than that — a long Write
+        # still being typed out — filled it ahead of the `initialize` answer,
+        # and the new daemon gave up on the CLI after 60 s (7 Nov 2026).
+        # Meanwhile the CLI's new lines are kept, not handed over (`gated`).
+        try:
+            if self.init_resp is not None:
+                end = time.time() + HANDSHAKE_S
+                while not self.handshook and time.time() < end:
+                    try:
+                        raw = await asyncio.wait_for(r.readline(), max(0.1, end - time.time()))
+                    except asyncio.TimeoutError:
+                        break
+                    if not raw or await self._client_frame(raw) is False:
+                        self._drop_client(w)
+                        return
+        except Exception:
+            self._drop_client(w)
+            return
         # Replay: the requests still open from before, then everything not yet
         # handed over — rewound to the start of the block being written.
         async with self.pump:
+            self.gated = False
             start = self.delivered
             if self.unit_start is not None and self.unit_start < start:
                 start = self.unit_start
@@ -471,23 +504,27 @@ class Holder:
         try:
             while True:
                 raw = await r.readline()
-                if not raw:
-                    break
-                f = _obj(raw.decode(errors="replace"))
-                if not f:
-                    continue
-                if "w" in f:
-                    await self._from_client(f["w"])
-                elif f.get("stop"):
-                    await self.stop()
-                    await self._send({"x": self.exit_code if self.exit_code is not None else 0})
-                    break
-                elif f.get("detach"):
+                if not raw or await self._client_frame(raw) is False:
                     break
         except Exception:
             pass
         finally:
             self._drop_client(w)
+
+    async def _client_frame(self, raw: bytes) -> bool:
+        """One frame from the relay; False when the client is leaving."""
+        f = _obj(raw.decode(errors="replace"))
+        if not f:
+            return True
+        if "w" in f:
+            await self._from_client(f["w"])
+        elif f.get("stop"):
+            await self.stop()
+            await self._send({"x": self.exit_code if self.exit_code is not None else 0})
+            return False
+        elif f.get("detach"):
+            return False
+        return True
 
     async def stop(self) -> None:
         if self._stopping or self.proc is None:

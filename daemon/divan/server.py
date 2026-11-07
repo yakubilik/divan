@@ -1161,8 +1161,8 @@ class Server:
         """
         # First the chats whose CLI never stopped: a holder kept it through the
         # restart (`held.py`), and the turn it was in carries on here.
-        await self.attach_held()
-        plans = list(getattr(self.db, "to_resume", None) or [])
+        lost = await self.attach_held()
+        plans = list(getattr(self.db, "to_resume", None) or []) + lost
         if not plans and not self.db.meta_get(self.HELD_KEY):
             return
         await asyncio.sleep(self.RESUME_DELAY_S)
@@ -1171,21 +1171,36 @@ class Server:
         finally:
             await self.deliver_held()
 
-    async def attach_held(self) -> None:
+    async def attach_held(self) -> list[dict]:
+        """Take back every CLI a holder kept; resume plans for the ones that failed.
+
+        All at once: one CLI that does not answer used to hold up every chat
+        behind it for the SDK's 60 s. A take-back that fails must not leave the
+        chat "running" on a CLI nobody talks to — the CLI is stopped and the
+        turn starts again from the transcript, like a turn the restart cut.
+        """
         from . import held
         if not held.enabled():
-            return
+            return []
         held.clear_detaching()
-        for cid in held.live_keys():
+
+        async def one(cid: str) -> str | None:
             if self.db.get_chat(cid) is None:
                 # The chat was deleted while nobody was here to stop its CLI.
                 await held.stop(cid)
-                continue
+                return None
+            state = held.read_state(cid)
             try:
-                in_turn = await self.sessions.get(cid).attach(held.read_state(cid))
+                in_turn = await self.sessions.get(cid).attach(state)
                 log.info("took back the held CLI of %s%s", cid, " mid-turn" if in_turn else "")
+                return None
             except Exception:
-                log.warning("could not take back the held CLI of %s", cid, exc_info=True)
+                log.warning("could not take back the held CLI of %s; stopping it", cid, exc_info=True)
+            await held.stop(cid)
+            return cid if state and state.get("in_turn") else None
+
+        lost = [c for c in await asyncio.gather(*(one(c) for c in held.live_keys())) if c]
+        return self.db._plan_resumes(lost) if lost else []
 
     async def _resume_plans(self, plans: list[dict]) -> None:
         for plan in plans:

@@ -385,10 +385,17 @@ class ClaudeProvider(Provider):
             kw["can_use_tool"] = self._can_use_tool
         return ClaudeAgentOptions(**kw)
 
-    async def _ensure_client(self) -> ClaudeSDKClient:
+    async def _ensure_client(self, retry: bool = True) -> ClaudeSDKClient:
         if self._client is None:
-            client = ClaudeSDKClient(options=self._options())
-            await client.connect()
+            try:
+                client = await self._connect()
+            except Exception:
+                if not (retry and self.survives_restart):
+                    raise
+                # The held CLI would not answer (`_connect` has stopped it): a
+                # fresh one resumes the session from its transcript.
+                log.warning("held CLI of %s did not answer; starting a fresh one", self.cfg.chat_id)
+                client = await self._connect()
             self._client = client
             self._inbox = asyncio.Queue()
             self._reader_error = None
@@ -398,6 +405,29 @@ class ClaudeProvider(Provider):
             log.info("claude client connected cwd=%s model=%s resume=%s",
                      self.cfg.cwd, self.cfg.model, self._session_id)
         return self._client
+
+    async def _connect(self) -> ClaudeSDKClient:
+        """A connected client, or nothing left behind.
+
+        A connect that fails half-way leaves the SDK's reader and the relay
+        running, still attached to the held CLI: the CLI then asks its hooks of
+        a reader nobody listens to and waits sixteen minutes on each tool call
+        (7 Nov 2026). Disconnecting takes the relay away, and a relay leaving
+        without a detach marker stops the held CLI with it.
+        """
+        client = ClaudeSDKClient(options=self._options())
+        try:
+            await client.connect()
+        except Exception:
+            # Not on a cancel: that is the daemon going away, and its CLIs stay.
+            try:
+                await asyncio.wait_for(client.disconnect(), timeout=5)
+            except Exception:
+                pass
+            if self.survives_restart:
+                await held.stop(self.cfg.chat_id)
+            raise
+        return client
 
     #: The CLI is held outside the daemon: a restart does not end its turn.
     @property
@@ -415,7 +445,9 @@ class ClaudeProvider(Provider):
             self._turn_active = True
             self._attached_turn = True
         try:
-            await self._ensure_client()
+            # No second try here: a fresh CLI is not in the turn being taken
+            # back. The server resumes the chat from its transcript instead.
+            await self._ensure_client(retry=False)
         except Exception:
             self._turn_active = False
             self._attached_turn = False

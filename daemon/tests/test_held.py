@@ -158,6 +158,34 @@ def test_an_open_permission_request_is_asked_again(fake):
     asyncio.run(go())
 
 
+def test_a_long_open_block_does_not_block_the_handshake(fake):
+    """7 Nov 2026: the daemon restarted while a chat was typing out a long
+    Write. The holder replayed the whole open block before it read the new
+    daemon's `initialize`; the SDK parks everything but control answers in a
+    100-deep buffer nobody empties until `connect` returns, so the replay
+    filled it, the answer never came and the take-back timed out after 60 s —
+    leaving the CLI with no daemon to answer its hooks."""
+    async def go():
+        ev1: list = []
+        p1 = provider("held-long", ev1)
+        p1._turn_active = True
+        await p1._ensure_client()
+        await p1._client.query("LONG please")
+        await asyncio.sleep(1.5)                          # all 400 out, the block still open
+        held.mark_detaching()
+        await p1.close()
+        held.clear_detaching()
+        ev2: list = []
+        p2 = provider("held-long", ev2)
+        await asyncio.wait_for(p2.attach(True), 15)
+        res = await asyncio.wait_for(p2.run_continuation(), 30)
+        assert not res.is_error, res.error
+        assert text_of(ev2).strip() == "x" * 400
+        assert handshakes(fake) == 1
+        await p2.close()
+    asyncio.run(go())
+
+
 # ── Codex, the same through `codex app-server` ─────────────────────────────
 
 FAKE_CODEX = Path(__file__).with_name("fake_codex.py")
