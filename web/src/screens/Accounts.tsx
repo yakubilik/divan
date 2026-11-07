@@ -82,13 +82,18 @@ export function sources(hosts: ReturnType<typeof useFleet.getState>['hosts'],
   });
 }
 
-export function Accounts({ now, onView, onFocus }: {
+export function Accounts({ now, onView, onFocus, only }: {
   now: number;
   onView: (view: View) => void;
   onFocus: (hostKey: string) => void;
+  /** The computer the picker over the page holds: only its sign-ins are
+   *  listed, and a new one is added there. Absent: every computer's. */
+  only?: string | null;
 }) {
   const hosts = useFleet((s) => s.hosts);
-  const order = useFleet((s) => s.order);
+  const every = useFleet((s) => s.order);
+  const order = only && every.includes(only) ? [only] : every;
+  const onName = only ? (hosts[only]?.info?.name?.replace(/\.local$/, '') || hosts[only]?.cfg.name || only) : null;
 
   const [installing, setInstalling] = useState<string | null>(null);
   const [said, setSaid] = useState<{ key: string; line: string } | null>(null);
@@ -135,11 +140,18 @@ export function Accounts({ now, onView, onFocus }: {
   return (
     <>
       <SectionHeader
-        kind="page" title="Accounts & sign-ins"
+        kind="page" title={onName ? `Accounts on ${onName}` : 'Accounts & sign-ins'}
         note={`${rows.filter((r) => r.state === 'connected').length} of ${rows.length} connected`}
         right={wanting ? `${wanting} want you` : undefined}
         tone={wanting ? 'amber' : undefined}
-      />
+      >
+        {/* A sign-in is made where sign-ins are managed, with this computer
+            already chosen: the page under Settings › This computer. */}
+        {!!only && (
+          <Button small face="ink" label="Add account"
+            onClick={() => { onFocus(only); onView('preferences'); }} />
+        )}
+      </SectionHeader>
 
       <Table
         columns={COLUMNS}

@@ -34,11 +34,15 @@ const COLUMNS: Column[] = [
   { label: 'state', width: '110px' },
 ];
 
-export function Executors({ view, onView }: {
+export function Executors({ view, onView, machine }: {
   view: DivanView;
   onView: (view: View) => void;
+  /** The computer the picker over the page holds: its workers, and the one
+   *  worker on no machine (you). Absent: everybody. */
+  machine?: string | null;
 }) {
-  const lines = executorLines(view);
+  const bare = (n: string | null | undefined) => (n ?? '').replace(/\.local$/, '');
+  const lines = executorLines(view).filter((e) => !machine || !e.machine || bare(e.machine) === bare(machine));
 
   if (!view.hosts.length) {
     return (

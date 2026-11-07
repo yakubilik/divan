@@ -126,7 +126,8 @@ export function Machine(props: MachineProps) {
           a quieter line beneath them: two levels that read as two levels. */}
       <div style={{ flex: 'none', padding: '8px 32px 0' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="dv-seg" role="group" aria-label="Machine" style={{ alignSelf: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div className="dv-seg" role="group" aria-label="Machine">
             {MACHINE_TABS.map((t) => {
               const wants = t.pages.map(mark).find((m) => m.count || m.dot);
               return (
@@ -137,6 +138,8 @@ export function Machine(props: MachineProps) {
                 </button>
               );
             })}
+          </div>
+          {tab.key !== 'machines' && <ComputerPicker />}
           </div>
           {tab.pages.length > 1 && (
             <nav aria-label={`Under ${tab.label}`} className="dv-subnav">
@@ -173,6 +176,36 @@ export function Machine(props: MachineProps) {
   );
 }
 
+/** Which computer the tab is about, on every tab but Computers (Yakup, 7 Nov
+ *  2026: "pick any computer and see only its accounts, or add one there").
+ *  It is the fleet's focus, so the address, the Terminal, Settings and This
+ *  computer all follow it. With one computer there is nothing to pick, and
+ *  its name is said instead. */
+function ComputerPicker() {
+  const { hosts, order, focus, setFocus } = useFleet();
+  const held = (focus && hosts[focus]) ? focus : order[0] ?? null;
+  if (!order.length) return null;
+  const name = (k: string) => hosts[k]?.info?.name?.replace(/\.local$/, '') || hosts[k]?.cfg.name || k;
+  return (
+    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span className="dv-meta">computer</span>
+      <div className="dv-seg" role="group" aria-label="Computer">
+        {order.map((k) => {
+          const off = hosts[k]?.status !== 'online';
+          return (
+            <button key={k} type="button" className="dv-hit" aria-pressed={k === held}
+              title={off ? `${name(k)} is not answering` : undefined}
+              onClick={() => { if (k !== held) setFocus(k); }}>
+              <i className={`dv-dot ${off ? 'dv-dot--stuck' : 'dv-dot--run'}`} aria-hidden="true" />
+              {name(k)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** The dot beside a tab or a page: amber where something wants a person, red
  *  where a machine cannot be reached — and the word for it, for a reader who
  *  cannot see the colour. */
@@ -188,7 +221,11 @@ function Mark({ red }: { red?: boolean }) {
 function Page(props: MachineProps) {
   const { view, onView, fleet, onOpenChat, onNewChat, onNewChatIn, onStartChat, onPeek } = props;
   const setFocus = useFleet.getState().setFocus;
-  if (view === 'executors') return <Executors view={fleet} onView={onView} />;
+  // The computer the picker over the page holds.
+  const fs = useFleet.getState();
+  const only = (fs.focus && fs.hosts[fs.focus]) ? fs.focus : fs.order[0] ?? null;
+  const onlyName = only ? (fs.hosts[only]?.info?.name || fs.hosts[only]?.cfg.name || only) : null;
+  if (view === 'executors') return <Executors view={fleet} onView={onView} machine={onlyName} />;
   if (view === 'terminal') {
     return (
       <Terminal onPeek={onPeek} onNewChat={onNewChat} ticket={props.ticket}
@@ -199,7 +236,7 @@ function Page(props: MachineProps) {
   }
   if (view === 'screen') return <Screen />;
   if (view === 'accounts') {
-    return <Accounts now={fleet.now} onView={onView} onFocus={setFocus} />;
+    return <Accounts now={fleet.now} onView={onView} onFocus={setFocus} only={only} />;
   }
   if (view === 'quota') return <Quota view={fleet} />;
   if (view === 'admin') return <Admin now={fleet.now} onView={onView} />;

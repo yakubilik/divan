@@ -79,7 +79,10 @@ export const HOME: Place = {
 
 /** The Machine pages that are about one computer — the one in focus — and so
  *  carry which one in their address when there is a choice. */
-export const ABOUT_ONE: View[] = ['terminal', 'screen', 'projects', 'agents', 'settings', 'preferences'];
+// Accounts and Executors joined on 7 Nov 2026, when every tab but Computers got
+// a computer picker: the sign-ins and the workers of the one chosen.
+export const ABOUT_ONE: View[] = ['terminal', 'screen', 'projects', 'agents', 'settings', 'preferences',
+  'accounts', 'executors'];
 
 /** The parts of a page a path can name, by page. Anything else in that spot
  *  is not a part and is read as the page itself. */
