@@ -18,6 +18,8 @@ scp -q "$HERE/patch_logo.py" "$HOST:plane/divan-patch/patch_logo.py"
 FOLDER=$(ssh "$HOST" 'cd ~/plane/divan-patch && python3 patch_logo.py src html.new && rm -rf src')
 ssh "$HOST" 'cd ~/plane/divan-patch && mkdir -p html.new/divan-logos && rm -rf html.old && { [ -d html ] && mv html html.old || true; } && mv html.new html && rm -rf html.old assets logos'
 scp -q "$HOME"/.divan/project-icons/*.png "$HOST:plane/divan-patch/html/divan-logos/"
+ssh "$HOST" 'mkdir -p ~/plane/divan-patch/html/divan-logos/covers'
+scp -q "$HERE"/covers/*.jpg "$HOST:plane/divan-patch/html/divan-logos/covers/"
 ssh "$HOST" "cd ~/plane && cat > docker-compose.override.yml <<YML
 # Written by divan/ops/plane/apply.sh — Divan's patches to Plane's web app:
 # the whole built site, with the logo patch, under a fresh asset folder.
