@@ -15,12 +15,11 @@ import { MACHINE_TABS, machinePageLabel, machineTab, updateWaiting, type View } 
 import { useFleet } from '../lib/fleet';
 import { signIns, signInsWanting, quotaVerdict, useThresholds } from '../lib/machine';
 import type { DivanView } from '../lib/divan';
-import { sources, Accounts } from './Accounts';
+import { sources, Pool } from './Accounts';
 import { Machines } from './Machines';
 import { Executors } from './Executors';
 import { Quota } from './Quota';
 import { Admin } from './Admin';
-import { Settings } from './Settings';
 import { Fleet } from './Fleet';
 import { Terminal, type TerminalView } from './Terminal';
 import { Projects } from './Projects';
@@ -70,7 +69,7 @@ export function machineNote(fleet: DivanView): string {
  *  the seven sections of one computer's own settings. */
 const DRAWN_HERE = new Set<View>([
   'machines', 'executors', 'accounts', 'quota', 'admin', 'settings',
-  'fleet', 'projects', 'agents', 'update',
+  'fleet', 'projects', 'agents', 'update', 'tools', 'security', 'about',
 ]);
 
 /** HANDOVER §4.9: four tabs — Computers · Accounts · Terminal · Settings — each
@@ -114,7 +113,7 @@ export function Machine(props: MachineProps) {
   const mark = (v: View): { count?: number; dot?: boolean; red?: boolean } => (
     v === 'machines' && unreachable > 0 ? { dot: true, red: true }
       : v === 'terminal' && approvals > 0 ? { count: approvals }
-        : v === 'accounts' && expiring > 0 ? { count: expiring }
+        : v === 'accounts' && expiring > 0 ? { dot: true }
           : v === 'quota' && thin ? { dot: true }
             : (v === 'admin' || v === 'update') && update ? { dot: true }
               : {});
@@ -196,7 +195,7 @@ function ComputerPicker() {
             <button key={k} type="button" className="dv-hit" aria-pressed={k === held}
               title={off ? `${name(k)} is not answering` : undefined}
               onClick={() => { if (k !== held) setFocus(k); }}>
-              <i className={`dv-dot ${off ? 'dv-dot--stuck' : 'dv-dot--run'}`} aria-hidden="true" />
+              <i className={`dv-dot${off ? '' : ' dv-dot--run'}`} aria-hidden="true" />
               {name(k)}
             </button>
           );
@@ -235,12 +234,27 @@ function Page(props: MachineProps) {
     );
   }
   if (view === 'screen') return <Screen />;
+  // The sign-ins of the computer the picker holds, managed where they are
+  // listed: add, sign in, rename, sign out, delete — and what happens when one
+  // runs out. The table across every computer is gone from here; a person
+  // wanted one computer's accounts and a way to add one (7 Nov 2026).
   if (view === 'accounts') {
-    return <Accounts now={fleet.now} onView={onView} onFocus={setFocus} only={only} />;
+    const fl = useFleet.getState();
+    return (
+      <>
+        <Preferences only={['accounts']} now={fleet.now} />
+        {!!only && <Pool hosts={fl.hosts} order={[only]} />}
+      </>
+    );
   }
+  if (view === 'tools') return <Preferences only={['tools']} />;
+  if (view === 'security') return <Preferences only={['security']} />;
+  if (view === 'about') return <Preferences only={['about']} />;
   if (view === 'quota') return <Quota view={fleet} />;
   if (view === 'admin') return <Admin now={fleet.now} onView={onView} />;
-  if (view === 'settings') return <Settings onView={onView} onSection={(s) => onView('preferences', s)} />;
+  // General: what a new chat on this computer opens with, and how this
+  // browser looks. One page; the side menu it used to lead into is gone.
+  if (view === 'settings') return <Preferences only={['defaults', 'appearance']} />;
   if (view === 'fleet') return <Fleet onOpenChat={onOpenChat} onNewChat={onNewChat} />;
   if (view === 'projects') return <Projects onNewChatIn={onNewChatIn} onOpenChat={onOpenChat} />;
   if (view === 'agents') return <Agents onStartChat={onStartChat} />;

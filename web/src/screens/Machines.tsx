@@ -142,7 +142,7 @@ export function Machines({ view, onView, onFocus }: {
           })}
 
           <Card>
-            <SectionHeader title="Pair a new machine" />
+            <SectionHeader title="Pair a new computer" />
             <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
               Run this on the computer you want to add and paste the link it prints. It appears
               here within a few seconds.
@@ -165,7 +165,7 @@ export function Machines({ view, onView, onFocus }: {
           </Card>
 
           <Card>
-            <SectionHeader title="When a machine goes quiet" />
+            <SectionHeader title="When a computer goes quiet" />
             <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
               After {Math.round(STALE_AFTER_S / 60)} minutes without an answer it is drawn as
               unreachable, with what it last said. Nothing is moved to another machine: what it
@@ -213,7 +213,7 @@ export function Machines({ view, onView, onFocus }: {
                   <i className={`dv-dot${e.tone === 'run' ? ' dv-dot--run' : e.tone === 'amber' ? ' dv-dot--ask' : e.tone === 'red' ? ' dv-dot--stuck' : ''}`} aria-hidden="true" />
                   <span className="t">{e.who}</span>
                   <span className="dv-meta" style={e.tone === 'amber' ? { color: T.amber } : undefined}>
-                    {[e.machine, e.says].filter(Boolean).join(' · ')}
+                    {[e.machine?.replace(/\.local$/, ''), e.says].filter(Boolean).join(' · ')}
                   </span>
                 </div>
               ))}

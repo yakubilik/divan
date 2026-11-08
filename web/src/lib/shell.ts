@@ -43,7 +43,9 @@ export type View =
   // the eight rows of the Machine drawer, in the order Web15 draws them
   | 'machines' | 'executors' | 'terminal' | 'screen' | 'accounts' | 'quota' | 'admin' | 'settings'
   // …and the five pages that are one level under one of those rows
-  | 'fleet' | 'projects' | 'agents' | 'update' | 'preferences';
+  | 'fleet' | 'projects' | 'agents' | 'update' | 'preferences'
+  // …and three sections of one computer's preferences, as pages of Settings
+  | 'tools' | 'security' | 'about';
 
 /** What each place is drawn with. The frames use Lucide's `layout-grid`,
  *  `message-circle` and `server`; these are the three paths out of the panel's
@@ -136,6 +138,9 @@ export const MACHINE_ASIDE: MachineAside[] = [
   { view: 'agents', under: 'executors', label: 'Agents on this computer' },
   { view: 'update', under: 'admin', label: 'Update' },
   { view: 'preferences', under: 'settings', label: 'This computer' },
+  { view: 'tools', under: 'settings', label: 'Tools' },
+  { view: 'security', under: 'settings', label: 'Security' },
+  { view: 'about', under: 'settings', label: 'About' },
 ];
 
 /** Which row of the drawer is filled while a page is on screen: its own, or —
@@ -302,8 +307,11 @@ export interface MachineTab {
  *  things a person comes here for (Yakup, 7 Nov 2026: "I can't find anything").
  *  Everything about a computer is under Computers: its screen, its folders,
  *  what it is running, its update. The sign-ins and the plan they spend are
- *  Accounts. What a new chat opens with, this computer's own preferences, and
- *  the pages nobody opens daily (who is working, the agents) are Settings.
+ *  Accounts — managed right there: add, sign in, rename, sign out. Settings
+ *  is what a new chat opens with and how this browser looks (General), the
+ *  tools, which folders an agent may open, what the computer is, and the pages
+ *  nobody opens daily (who is working, the agents). Each was a section of a
+ *  side menu inside a page inside a tab; now each is a page under the tab.
  *
  *  Admin left the tabs: every row of it was a link to one of these pages. Its
  *  address still opens it. */
@@ -311,13 +319,14 @@ export const MACHINE_TABS: MachineTab[] = [
   { key: 'machines', label: 'Computers', pages: ['machines', 'screen', 'projects', 'fleet', 'update'] },
   { key: 'accounts', label: 'Accounts', pages: ['accounts', 'quota'] },
   { key: 'terminal', label: 'Terminal', pages: ['terminal'] },
-  { key: 'settings', label: 'Settings', pages: ['settings', 'preferences', 'executors', 'agents'] },
+  { key: 'settings', label: 'Settings', pages: ['settings', 'tools', 'security', 'about', 'executors', 'agents'] },
 ];
 
 /** What a page is called in the row under its tab, where that differs from
  *  its row in the old drawer. */
 const SUB_LABEL: Partial<Record<View, string>> = {
   machines: 'Computers', fleet: 'Sessions', accounts: 'Sign-ins', screen: 'Remote screen',
+  settings: 'General', agents: 'Agents',
 };
 
 /** Which tab a page is under. A view no tab names is the first tab's, which is

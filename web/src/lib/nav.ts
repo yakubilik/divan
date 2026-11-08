@@ -82,7 +82,7 @@ export const HOME: Place = {
 // Accounts and Executors joined on 7 Nov 2026, when every tab but Computers got
 // a computer picker: the sign-ins and the workers of the one chosen.
 export const ABOUT_ONE: View[] = ['terminal', 'screen', 'projects', 'agents', 'settings', 'preferences',
-  'accounts', 'executors'];
+  'accounts', 'executors', 'tools', 'security', 'about'];
 
 /** The parts of a page a path can name, by page. Anything else in that spot
  *  is not a part and is read as the page itself. */
@@ -97,7 +97,7 @@ export const SUBS: Partial<Record<View, string[]>> = {
  *  reads as a page. */
 const MACHINE: View[] = [
   'machines', 'executors', 'terminal', 'screen', 'accounts', 'quota', 'admin', 'settings',
-  'fleet', 'projects', 'agents', 'update', 'preferences',
+  'fleet', 'projects', 'agents', 'update', 'preferences', 'tools', 'security', 'about',
 ];
 
 const enc = (s: string) => encodeURIComponent(s);

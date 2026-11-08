@@ -7,12 +7,12 @@ import { MEDIA, RADIUS, T } from '../lib/theme';
 import { useFleet } from '../lib/fleet';
 import { scrollback, subscribe, useShells, viewFactory, type Shell, type TermView } from '../lib/term';
 import { Icon, P } from '../ui/kit';
-import { Button, EmptyState, Pill, SectionHeader } from '../ui/divan';
+import { Button, EmptyState, SectionHeader } from '../ui/divan';
 
 const STAGE = MEDIA.term;
 
 export function Shells({ header }: { header: React.ReactNode }) {
-  const { hosts, order, focus, setFocus } = useFleet();
+  const { hosts, order, focus } = useFleet();
   const { shells, active, open, close, select } = useShells();
   const key = focus && hosts[focus] ? focus : order[0] ?? null;
   const slot = key ? hosts[key] : undefined;
@@ -37,16 +37,9 @@ export function Shells({ header }: { header: React.ReactNode }) {
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '16px 24px 10px', flexWrap: 'wrap' }}>
         {header}
         <SectionHeader kind="page" title="Terminal" note={key ? name(key) : undefined} style={{ flexShrink: 0 }} />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-          {order.filter((k) => hosts[k]).map((k) => (
-            <Pill
-              key={k} label={name(k)} face={k === key ? 'ink' : 'surface'}
-              dot={hosts[k].status === 'online' ? 'running' : 'quiet'}
-              title={k === key ? undefined : 'Open shells on this computer instead'}
-              onClick={() => setFocus(k)}
-            />
-          ))}
-        </div>
+        {/* The computer is chosen by the picker beside the Machine tabs, which
+            is this same focus; a second row of the same names here was two
+            pickers for one choice (7 Nov 2026). */}
       </div>
 
       {!key ? (

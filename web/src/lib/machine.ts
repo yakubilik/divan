@@ -106,7 +106,9 @@ export function machineLines(view: DivanView, ago: Ago, t: Thresholds): MachineL
       quota: outOfQuota(h) ? 'none left'
         : h.quota?.left == null ? 'not measured' : pct(1 - h.quota.left),
       quotaTone: hostQuotaTone(h, t),
-      actions: h.reachable ? ['terminal', 'screen', 'folders'] : ['retry', 'remove'],
+      // Remove on every card: the online one too, which is the one a person
+      // most often means to unpair (it used to be a side menu away).
+      actions: h.reachable ? ['terminal', 'screen', 'folders', 'remove'] : ['retry', 'remove'],
       wash: !h.reachable && !never,
     };
   });

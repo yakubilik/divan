@@ -304,12 +304,18 @@ group('nothing was dropped in the move');
   ));
   ok('…and every one of those pages is dispatched to a screen',
     dispatched.length === shell.MACHINE_ROWS.length);
-  for (const name of ['Machines', 'Executors', 'Terminal', 'Screen', 'Accounts', 'Quota',
-                      'Admin', 'Settings', 'Fleet', 'Projects', 'Agents', 'Update',
+  // Accounts and Settings are sections of Preferences since 7 Nov 2026 (one
+  // computer's sign-ins, managed where they are listed; New chats and the
+  // theme as General), so it is Preferences that draws them.
+  for (const name of ['Machines', 'Executors', 'Terminal', 'Screen', 'Quota',
+                      'Admin', 'Fleet', 'Projects', 'Agents', 'Update',
                       'Preferences']) {
     ok(`${name} is still drawn, from the place it moved to`,
       new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from './${name}'`).test(machine));
   }
+  ok('Accounts and Settings are drawn by Preferences, as pages of their tabs',
+    /view === 'accounts'[\s\S]{0,400}<Preferences only=\{\['accounts'\]\}/.test(machine)
+    && /view === 'settings'\) return <Preferences only=\{\['defaults', 'appearance'\]\}/.test(machine));
 
   // …and a page with no row of its own is opened from the page above it: a
   // screen that is only in a list is a screen nobody gets to.
@@ -319,7 +325,8 @@ group('nothing was dropped in the move');
     // Admin's rows — what each one is and where its button goes — are decided
     // in the same place everything else on these pages is.
     admin: ['src/screens/Admin.tsx', 'src/lib/machine.ts'],
-    settings: ['src/screens/Settings.tsx'],
+    // Settings' pages are the links under its tab.
+    settings: ['src/lib/shell.ts'],
   };
   const orphan = shell.MACHINE_ASIDE.filter((a) => (
     !pages[a.under].some((f) => new RegExp(`'${a.view}'`).test(src(f)))
@@ -746,7 +753,7 @@ group('every screen renders with nothing, with something stale and with a machin
   ok('every screen of the shell stands up in all five states of the fleet',
     broken.length === 0, [...new Set(broken)].slice(0, 6).join('\n    '));
   ok('…and there were enough of them for that to mean something',
-    Object.keys(drawn).length === 5 * 2 * (4 + 8 + 5), `${Object.keys(drawn).length} renders`);
+    Object.keys(drawn).length === 5 * 2 * (4 + 8 + 8), `${Object.keys(drawn).length} renders`);
   ok('…none of them painting a value of its own', strayed.length === 0,
     [...new Set(strayed)].slice(0, 6).join(', '));
   ok('…so every colour on every one of them exists in both themes',

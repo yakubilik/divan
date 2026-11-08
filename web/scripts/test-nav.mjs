@@ -460,9 +460,9 @@ for (const t of MACHINE_TABS) {
     await way(`Machine › ${t.label} › ${v}`, `/machine/${t.pages[0]}`, `/machine/${v}`, () => click(subLink(v)));
   }
 }
-// Settings' own rows, and the sections of one computer's settings.
-await way('Settings › a row\'s Change (New chats)', '/machine/settings', '/machine/preferences/defaults',
-  () => click([...doc.querySelectorAll('[data-machine-page] button')].find((b) => (b.textContent ?? '').trim() === 'Change')));
+// The sections of one computer's settings, at the old address with its side
+// menu: Settings › General is New chats itself since 7 Nov 2026, with no row
+// leading into it, and the side menu is still how a kept link moves.
 await way('This computer › Tools', '/machine/preferences', '/machine/preferences/tools',
   () => click(startsBtn('Tools', doc.querySelector('[data-machine-page]'))));
 await way('This computer › Appearance → Accounts', '/machine/preferences/appearance', '/machine/preferences',

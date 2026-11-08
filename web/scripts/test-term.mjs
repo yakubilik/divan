@@ -296,12 +296,20 @@ ok('× sent term.close for that shell only', closes.length === 1 && closes[0].da
 ok('…its tab is gone and the first is in front again', tabs().length === 1
   && tabs()[0].getAttribute('aria-selected') === 'true' && front() === v1);
 
-const chip = (label) => [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === label
-  && b.getAttribute('title') === 'Open shells on this computer instead');
-ok('the other computer is a chip beside the head', !!chip('mini'));
+// Which computer is chosen by the picker beside the Machine tabs, which is
+// the fleet's focus (7 Nov 2026); the shell page has no second row of names.
+ok('the shell page has no second computer picker of its own',
+  ![...doc.querySelectorAll('button')].some((b) => b.getAttribute('title') === 'Open shells on this computer instead'));
 const studioOpens = sent(STUDIO, 'term.open').length;
 const studioWrites = sent(STUDIO, 'term.write').length;
-await click(chip('mini'));
+const pickComputer = async (name) => {
+  await act(async () => {
+    const f = useFleet.getState();
+    f.setFocus(f.order.find((x) => (f.hosts[x]?.info?.name || f.hosts[x]?.cfg.name) === name));
+  });
+  await settle();
+};
+await pickComputer('mini');
 await settle(10);
 const miniOpen = sent(MINI, 'term.open');
 ok('switching to mini opened a shell on mini’s socket', miniOpen.length === 1, JSON.stringify(wire.filter((m) => m.type === 'term.open')));
@@ -316,7 +324,7 @@ ok('typing there writes to mini’s shell, on mini', sent(MINI, 'term.write').le
 ok('…and studio’s shell is still there, one tab, behind', useFleet.getState().focus !== null
   && term.useShells.getState().shells.filter((s) => s.hostKey.startsWith(STUDIO)).length === 1);
 
-await click(chip('studio'));
+await pickComputer('studio');
 ok('back on studio: its shell is in front again, nothing new opened',
   front() === v1 && sent(STUDIO, 'term.open').length === studioOpens);
 

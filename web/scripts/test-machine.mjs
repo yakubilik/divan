@@ -152,7 +152,7 @@ group('each page is the frame’s page');
     words(machines.body).slice(0, 200));
   ok('…with the quota and the executors beside them, and pairing and the quiet machine under them',
     has(machines.body, 'Quota', 'warn 20%', 'stop 5%', 'Executors',
-      'Pair a new machine', 'divan pair', 'When a machine goes quiet'));
+      'Pair a new computer', 'divan pair', 'When a computer goes quiet'));
 
   const executors = page('executors');
   ok('Executors is W13’s table without the column its `···` stood in, and everyone who can do work is on it',
@@ -166,10 +166,10 @@ group('each page is the frame’s page');
   // W16's tracks, with one track W16 did not have. The frame says whether a
   // sign-in *works*; it cannot say how much of the plan behind it is left, and
   // a connected account nine-tenths spent read exactly like an untouched one.
-  ok('Accounts & sign-ins is W16’s table, with the plan’s own figure added to it',
-    anyStyle(accounts.body, (d) => d['grid-template-columns']
-      === '36px minmax(0, 1.2fr) 150px 96px minmax(0, 1fr) 120px 150px')
-    && has(accounts.body, 'account', 'state', 'plan used', 'used by', 'last used'),
+  // One computer's sign-ins, managed where they are listed (7 Nov 2026): the
+  // way to add one first, then each with its plan and its buttons.
+  ok('Accounts is the chosen computer’s sign-ins, with the way to add one and each one’s buttons',
+    has(accounts.body, 'Accounts', 'Add an account', 'account name', 'Rename', 'Sign out', 'plan usage'),
     words(accounts.body).slice(0, 200));
 
   const quota = page('quota');
@@ -189,10 +189,8 @@ group('each page is the frame’s page');
     words(admin.body).slice(0, 240));
 
   const settings = page('settings');
-  ok('Settings answers the theme where W18 does, as the frame’s own choice of three',
-    /role="radiogroup"/.test(settings.body)
-    && has(settings.body, 'Theme', 'Auto', 'Light', 'Dark')
-    && /aria-checked="true"/.test(settings.body),
+  ok('Settings › General is what a new chat opens with, and the theme as a choice of three',
+    has(settings.body, 'New chats', 'Appearance', 'system', 'light', 'dark'),
     words(settings.body).slice(0, 200));
 }
 
@@ -275,9 +273,9 @@ group('a sign-in is seen expiring before it expires');
   ok('the page draws it in amber with the button on its row',
     has(drawn.body, 'expires in 12 days', 'Renew')
     && anyStyle(drawn.body, (d) => d.background === v('amberBg')),
-    words(drawn.body).slice(0, 300));
+    words(drawn.body).slice(300, 1200));
   ok('…and the row of pages under Accounts carries how many want a person',
-    /Sign-ins<\/span><b class="dv-badge"[^>]*>2</.test(drawn.drawer),
+    /Sign-ins<\/span><i class="dv-dot dv-dot--ask"/.test(drawn.drawer),
     words(drawn.drawer).slice(0, 200));
 }
 

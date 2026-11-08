@@ -21,7 +21,7 @@
  *   - "make default" — is_default is derived from the account having no home
  *     folder; there is no request that sets it.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { SIZE, T, useTheme, type Tone } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import {
@@ -32,7 +32,7 @@ import { Modal, ModalHead } from '../components/Modal';
 import { ProviderMark } from '../components/Sidebar';
 import { hostAddr, onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
 import { hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
-import { pairComputer, parsePairing, setDefaultCwd, toolStatus } from '../lib/actions';
+import { installTool, pairComputer, parsePairing, setDefaultCwd, toolStatus } from '../lib/actions';
 import {
   availability, dictateEngine, dictateLang, install, langChoices, langName,
   setDictateEngine, setDictateLang, support, type Availability, type EnginePref,
@@ -44,6 +44,8 @@ import type {
   CliAccount, HostConfig, LimitWindow, LoginMethod, LoginPrompt, Provider, ToolStatus,
 } from '../lib/protocol';
 import { refusalText } from '../lib/refusal';
+import { signInState, signInWords } from '../lib/machine';
+import { left as leftWords } from './Accounts';
 
 /** The daemon labels the machine's own account in English ("This computer's
  *  account") because it has no idea who is asking. i18n already carries the
@@ -572,8 +574,10 @@ function HostsSection() {
   );
 }
 
-function AccountCard({ slot, account, onLogin, onLogout, onRename, onDelete }: {
+function AccountCard({ slot, account, now, onLogin, onLogout, onRename, onDelete }: {
   slot: HostSlot;
+  /** The moment the panel is drawn at, in seconds. */
+  now: number;
   account: CliAccount;
   onLogin: () => void;
   onLogout: () => void;
@@ -581,10 +585,14 @@ function AccountCard({ slot, account, onLogin, onLogout, onRename, onDelete }: {
   onDelete: () => void;
 }) {
   const windows = slot.limits[account.id] ?? [];
+  // A sign-in that is about to stop working, or has, says so on its own row
+  // and offers the one thing that helps — signing in again.
+  const state = signInState(account, now);
+  const ending = state === 'expiring' || state === 'expired';
   return (
     <Card inset={false}>
       <Row
-        first
+        first wash={ending}
         lead={<ProviderMark provider={account.provider} dim={!account.logged_in} />}
         title={
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -596,10 +604,11 @@ function AccountCard({ slot, account, onLogin, onLogout, onRename, onDelete }: {
           </span>
         }
         note={account.logged_in ? (account.detail || 'signed in') : 'not signed in'}
-        meta={account.logged_in ? 'signed in' : 'signed out'}
-        tone={account.logged_in ? 'run' : 'ink3'}
+        meta={ending ? signInWords(account, now, leftWords) : account.logged_in ? 'signed in' : 'signed out'}
+        tone={state === 'expired' ? 'red' : ending ? 'amber' : account.logged_in ? 'run' : 'ink3'}
         right={
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {ending && <Button small label="Renew" onClick={onLogin} />}
             {!account.is_default && <Button small face="outline" label="Rename" onClick={onRename} />}
             {account.logged_in
               ? <Button small face="outline" label="Sign out" onClick={onLogout} />
@@ -614,9 +623,14 @@ function AccountCard({ slot, account, onLogin, onLogout, onRename, onDelete }: {
   );
 }
 
-function AccountsSection({ hostKey, slot, tools }: {
+function AccountsSection({ hostKey, slot, tools, onTools, now = Date.now() / 1000 }: {
   hostKey: string; slot: HostSlot; tools: ToolStatus[];
+  now?: number;
+  /** Read the tools again, after one has been installed from here. */
+  onTools?: () => void;
 }) {
+  const [installing, setInstalling] = useState<Provider | null>(null);
+  const [installed, setInstalled] = useState<string | null>(null);
   const { call, refreshAccounts } = useFleet();
   const [problem, setProblem] = useState<string | null>(null);
   const [login, setLogin] = useState<CliAccount | null>(null);
@@ -675,27 +689,36 @@ function AccountsSection({ hostKey, slot, tools }: {
       )}
       {!online && <Aside>This computer is offline — accounts cannot be read.</Aside>}
 
-      {(['claude', 'codex'] as Provider[]).map((p) => (
-        byProvider[p].length ? (
-          <div key={p} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Mark>{p}</Mark>
-            {byProvider[p].map((a) => (
-              <AccountCard
-                key={a.id} slot={slot} account={a}
-                onLogin={() => setLogin(a)}
-                onLogout={() => setSigningOut(a)}
-                onRename={() => { setRenaming(a); setRenameText(a.label); }}
-                onDelete={() => setDoomed(a)}
-              />
-            ))}
-          </div>
-        ) : null
+      {/* A tool that is not on the computer has no sign-ins to show; the one
+          thing that helps is installing it, so that is offered here rather
+          than a page away. */}
+      {!!installed && <Aside>{installed}</Aside>}
+      {(['claude', 'codex'] as Provider[]).filter((p) => {
+        // Which tool is missing: the computer's own tool report where it has
+        // been read, otherwise the versions it reports with its info.
+        const tool = tools.find((x) => x.provider === p);
+        if (tool) return !tool.version;
+        const v = slot.info?.versions as Record<string, string | null> | undefined;
+        return !!v && !v[p];
+      }).map((p) => ({ provider: p })).map((x) => (
+        <Aside key={`missing-${x.provider}`} tone="warn">
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ flex: 1 }}>{x.provider} is not installed on this computer.</span>
+            <Button small label={installing === x.provider ? 'Installing…' : 'Install'} disabled={!!installing}
+              onClick={() => {
+                setInstalling(x.provider);
+                setInstalled(null);
+                run(async () => {
+                  const r: any = await installTool(hostKey, x.provider);
+                  setInstalled(r?.already ? `${x.provider} was already there` : `${x.provider} installed ${r?.version ?? ''}`.trim());
+                }).finally(() => { setInstalling(null); onTools?.(); });
+              }} />
+          </span>
+        </Aside>
       ))}
 
-      {online && !slot.accounts.length && !slot.loading.accounts && !slot.accountsError && (
-        <Aside>No accounts on this computer.</Aside>
-      )}
-
+      {/* Adding one is first: it is what a person most often comes here to do,
+          and under a long list of plan bars it was a scroll away (7 Nov 2026). */}
       <Head title="Add an account" hint="A new account starts with an empty folder; you sign in separately." />
       <Card>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
@@ -727,6 +750,29 @@ function AccountsSection({ hostKey, slot, tools }: {
           />
         </div>
       </Card>
+
+
+      {(['claude', 'codex'] as Provider[]).map((p) => (
+        byProvider[p].length ? (
+          <div key={p} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Mark>{p}</Mark>
+            {byProvider[p].map((a) => (
+              <AccountCard
+                key={a.id} slot={slot} account={a} now={now}
+                onLogin={() => setLogin(a)}
+                onLogout={() => setSigningOut(a)}
+                onRename={() => { setRenaming(a); setRenameText(a.label); }}
+                onDelete={() => setDoomed(a)}
+              />
+            ))}
+          </div>
+        ) : null
+      ))}
+
+      {online && !slot.accounts.length && !slot.loading.accounts && !slot.accountsError && (
+        <Aside>No accounts on this computer.</Aside>
+      )}
+
 
       {login && (
         <LoginSheet
@@ -1178,8 +1224,15 @@ export function AppearanceSection() {
  *  reachable by pressing something, and a static render cannot press. Nothing
  *  passes it in the panel — the drawer opens this page on Accounts, which is
  *  the one that is usually the reason for coming. */
-export function Preferences({ section: opening = 'accounts', onSection }: {
+export function Preferences({ section: opening = 'accounts', onSection, only, now }: {
+  /** The moment the page is drawn at, in seconds: when a sign-in ends is
+   *  measured from it. */
+  now?: number;
   section?: SectionId;
+  /** These sections and nothing else, one under the other, with no side menu:
+   *  how the tabs of the Machine place draw a section as a page of their own
+   *  (Settings › General is Appearance and New chats; Accounts is Accounts). */
+  only?: SectionId[];
   /** Given, the section is the panel's — in the address, so Back and a reload
    *  come back to it — and `section` is the one on screen. */
   onSection?: (section: SectionId) => void;
@@ -1226,6 +1279,37 @@ export function Preferences({ section: opening = 'accounts', onSection }: {
     key: x.id, label: x.label, icon: x.icon,
     count: counts[x.id] != null ? counts[x.id] : undefined,
   }));
+
+  if (only) {
+    const draw = (x: SectionId) => {
+      if (x === 'appearance') {
+        return (
+          <Fragment key={x}>
+            <Head title="Appearance" hint="How this browser draws Divan. Kept here, not on any computer." />
+            <Card><AppearanceSection /></Card>
+          </Fragment>
+        );
+      }
+      if (x === 'hosts') return <HostsSection key={x} />;
+      if (!slot || !focus) return null;
+      if (x === 'defaults') return <DefaultsSection key={x} hostKey={focus} slot={slot} />;
+      if (x === 'accounts') return <AccountsSection key={x} hostKey={focus} slot={slot} tools={tools} onTools={loadTools} now={now} />;
+      if (x === 'tools') {
+        return <ToolsSection key={x} tools={tools} npm={npm} loading={toolsLoading} problem={toolsProblem} onReload={loadTools} />;
+      }
+      if (x === 'security') return <SecuritySection key={x} slot={slot} />;
+      if (x === 'about') return <AboutSection key={x} slot={slot} />;
+      return null;
+    };
+    return (
+      <>
+        {only.some((x) => x !== 'appearance' && x !== 'hosts') && !slot && (
+          <Aside>No computer paired yet. Pair one under Computers.</Aside>
+        )}
+        {only.map(draw)}
+      </>
+    );
+  }
 
   return (
     <div style={{
@@ -1274,7 +1358,7 @@ export function Preferences({ section: opening = 'accounts', onSection }: {
           )}
 
           {section === 'accounts' && slot && focus && (
-            <AccountsSection hostKey={focus} slot={slot} tools={tools} />
+            <AccountsSection hostKey={focus} slot={slot} tools={tools} onTools={loadTools} />
           )}
           {section === 'defaults' && slot && focus && (
             <DefaultsSection hostKey={focus} slot={slot} />

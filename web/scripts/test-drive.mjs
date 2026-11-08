@@ -462,7 +462,7 @@ group('the keyboard');
   // never ran — which is exactly what a source-reading check cannot tell — the
   // page does not move and every line below fails.
   await press(',');
-  ok('⌘, opens Machine › Settings', place() === 'Machine' && page() === 'Settings', `${place()} › ${page()}`);
+  ok('⌘, opens Machine › Settings', place() === 'Machine' && page() === 'General', `${place()} › ${page()}`);
   await goHome();
   // ⌘ and Ctrl with a digit are the browser's — its tabs, and its zoom at 0.
   // The panel used to open a page on eight of them and cancel the browser's
@@ -509,9 +509,10 @@ group('the line: Settings, and the machines count');
   await click(nav('Chats'));
   const before = w.location.pathname;
   await click(nav('Settings'));
-  const shown = [...doc.querySelectorAll('header ~ * *')].some((e) => e.textContent?.trim() === 'Settings' && e.tagName !== 'BUTTON' && e.tagName !== 'SPAN');
+  // General opens on what a new chat starts with.
+  const shown = [...doc.querySelectorAll('header ~ * *')].some((e) => e.textContent?.trim() === 'New chats' && e.tagName !== 'BUTTON' && e.tagName !== 'SPAN');
   ok('pressing it opens the Settings page, at its own path, and marks the button as the page you are on',
-    w.location.pathname === '/machine/settings' && page() === 'Settings' && shown
+    w.location.pathname === '/machine/settings' && page() === 'General' && shown
       && nav('Settings')?.getAttribute('aria-current') === 'page'
       && machinesBtn()?.getAttribute('aria-current') == null,
     `${w.location.pathname} · ${page()} · ${shown} · ${nav('Settings')?.getAttribute('aria-current')}`);
@@ -532,7 +533,7 @@ group('the line: Settings, and the machines count');
   await act(async () => { root.render(React.createElement(App)); });
   for (let i = 0; i < 3; i++) await act(async () => {});
   ok('…and a reload on it lands on Settings',
-    page() === 'Settings' && nav('Settings')?.getAttribute('aria-current') === 'page',
+    page() === 'General' && nav('Settings')?.getAttribute('aria-current') === 'page',
     `${w.location.pathname} · ${page()}`);
 
   const count = machinesBtn();
@@ -542,7 +543,7 @@ group('the line: Settings, and the machines count');
   await click(count);
   const box = doc.querySelector('header [role="dialog"][aria-label="Machines"]');
   ok('…and pressing it opens a box of the machines, and stays on the page',
-    !!box && w.location.pathname === at && page() === 'Settings'
+    !!box && w.location.pathname === at && page() === 'General'
       && box.querySelectorAll('[data-machine]').length === 1,
     `${!!box} · ${at} → ${w.location.pathname} · ${page()}`);
   await click(box.querySelector('button[data-all-machines]'));
@@ -1082,12 +1083,14 @@ group('the sign-in that is expiring is counted before that page is opened');
     JSON.stringify(asked.map((a) => a.type)));
   const marked = page() === 'Computers' && (machineTab('Accounts')?.textContent ?? '').includes('needs you');
   await click(machineTab('Accounts'));
-  ok('…and the tabs count the ones that want a person: a mark on Accounts, the number on its Sign-ins link',
-    marked && (row('Sign-ins')?.textContent ?? '').includes('2')
-    && !!row('Sign-ins')?.querySelector('.dv-badge'),
+  ok('…and the tabs mark the ones that want a person: on Accounts, and on its Sign-ins link',
+    marked && (row('Sign-ins')?.textContent ?? '').includes('needs you')
+    && !!row('Sign-ins')?.querySelector('.dv-dot'),
     `${marked} · ${row('Sign-ins')?.textContent}`);
-  ok('…on a page nobody asked twice',
-    asked.filter((a) => a.type === 'account.list').length === 1,
+  // The Accounts page reads that computer's list once more when it opens, so
+  // what it shows is the list now; that is all, however long it stays open.
+  ok('…and opening the page asks once more, and no more than that',
+    asked.filter((a) => a.type === 'account.list').length <= 2,
     `${asked.filter((a) => a.type === 'account.list').length} asks`);
 
   accountsFail = true;
@@ -1771,27 +1774,18 @@ group('the four things the panel could not do to a computer');
   // and the computer went on trusting the token in it forever.
   // Settings is ⌘, and the computers are one press further in — that page is
   // the panel's own, and a computer is removed from it.
-  await press(',');
-  // Settings holds what this browser decides; what belongs to one computer is
-  // one press further in, behind any of the `Change` rows under its name.
-  const change = [...doc.querySelectorAll('button')]
-    .find((b) => (b.textContent ?? '').trim() === 'Change') ?? null;
-  ok('settings has a way in to the computer’s own page', !!change);
-  await click(change);
-  // Not the Machine place's own Computers tab, which has the same name.
-  const computers = [...doc.querySelectorAll('button')]
-    .find((b) => (b.textContent ?? '').trim().startsWith('Computers') && !b.closest('[aria-label="Machine"]')) ?? null;
-  ok('…and that page keeps the paired computers under a section of their own', !!computers);
-  await click(computers);
-  const remove = [...doc.querySelectorAll('button')]
+  // Since 7 Nov 2026 a computer is removed where it is listed: its own card
+  // under Computers, online or not, rather than a side menu inside Settings.
+  await goMachine('Machines');
+  const remove = [...doc.querySelectorAll('article.dv-machine button')]
     .find((b) => (b.textContent ?? '').trim() === 'Remove') ?? null;
-  ok('the computer can be removed from the panel’s own settings', !!remove);
+  ok('the computer can be removed from its own card, while it answers', !!remove);
   asked.length = 0;
   await click(remove);
-  const confirm = [...doc.querySelectorAll('button')]
-    .find((b) => (b.textContent ?? '').trim() === 'Remove' && b !== remove) ?? null;
+  const confirm = [...doc.querySelectorAll('article.dv-machine button')]
+    .find((b) => (b.textContent ?? '').trim() === 'Sure?') ?? null;
   ok('…which asks first, and says what it will do', !!confirm
-    && /revoked/.test(text()), text().slice(-300));
+    && /Unpair .* from this panel/.test(confirm?.getAttribute('aria-label') ?? ''), confirm?.getAttribute('aria-label') ?? '');
   await click(confirm);
   for (let i = 0; i < 3; i++) await act(async () => {});
   ok('…and removing it revokes this browser’s pairing on that computer',
@@ -2804,7 +2798,7 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
   }
   const under = {};
   for (const [tab, pages] of [['Computers', ['screen', 'projects', 'fleet', 'update']],
-                              ['Accounts', ['quota']], ['Settings', ['preferences', 'executors', 'agents']]]) {
+                              ['Accounts', ['quota']], ['Settings', ['tools', 'security', 'about', 'executors', 'agents']]]) {
     await click(machineTab(tab));
     for (const v of pages) {
       await click(doc.querySelector(`nav a[href="/machine/${v}"]`));
@@ -2857,7 +2851,7 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
   const deleted = sent('account.delete');
   ok('Machine has four tabs at their own paths (Computers, Accounts, Terminal, Settings); Screen, Folders, Sessions, Update, Quota, Preferences, Executors and Agents sit under one; Terminal takes a command; agent.install, account.login and account.delete still go out',
     JSON.stringify(paths) === JSON.stringify(['/machine/accounts', '/machine/terminal', '/machine/settings', '/machine/machines'])
-    && Object.values(under).every(Boolean) && Object.keys(under).length === 8
+    && Object.values(under).every(Boolean) && Object.keys(under).length === 10
     && command && installed && login && deleted,
     JSON.stringify({ paths, under, command, installed, login, deleted }));
 
@@ -2891,15 +2885,15 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
 
   // 6 · Machine › Settings sets what the next new chat opens with
   await reload('/machine/settings');
-  const pickSelect = async (id, value) => {
-    const el = doc.getElementById(id);
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(w.HTMLSelectElement.prototype, 'value').set.call(el, value);
-      el.dispatchEvent(new w.Event('change', { bubbles: true }));
-    });
+  // General is the New chats section itself (7 Nov 2026): a row per model and
+  // per account, pressed, rather than two drop-downs in front of it.
+  const pickRow = async (label) => {
+    const el = [...doc.querySelectorAll('[data-machine-page] button, [data-machine-page] [role="button"]')]
+      .find((b) => (b.textContent ?? '').trim().startsWith(label)) ?? null;
+    await click(el);
   };
-  await pickSelect('default-model', 'claude-sonnet-5');
-  await pickSelect('default-account', 'a2');
+  await pickRow('Sonnet 5');
+  await pickRow('yakup@');
   await reload('/');
   const chips = [...doc.querySelectorAll('.dv-picker')].map((b) => (b.textContent ?? '').trim());
   ok('the default account and model set in Machine › Settings are what the composer’s chips show for the next chat',

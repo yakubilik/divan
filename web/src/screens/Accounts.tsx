@@ -45,7 +45,7 @@ import { ProviderMark } from '../components/Sidebar';
 /** How long a sign-in has left, said the way W16 says it — `12 days` — and in
  *  the panel's own `2h 14m` once there are hours rather than days left, which
  *  is the point at which the hours are what you want to know. */
-function left(seconds: number | null): string {
+export function left(seconds: number | null): string {
   const days = seconds == null ? 0 : Math.floor(seconds / 86_400);
   return days ? `${days} day${days === 1 ? '' : 's'}` : uptime(seconds);
 }
@@ -229,7 +229,7 @@ export function Accounts({ now, onView, onFocus, only }: {
  *  settings (the per-window thresholds, the order, the per-account overage) are
  *  the phone's, and this says so rather than drawing half of them.
  */
-function Pool({ hosts, order }: {
+export function Pool({ hosts, order }: {
   hosts: ReturnType<typeof useFleet.getState>['hosts'];
   order: string[];
 }) {

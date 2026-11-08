@@ -763,7 +763,7 @@ group('the screens the panel already had');
   ok('every screen still stands up: alone, paired, stale and unreachable',
     broken.length === 0, broken.join('\n    '));
   ok('…and that is every page of the Machine place as well as every screen',
-    DRAWER.length === 13
+    DRAWER.length === 16
     && DRAWER.every((v) => (drawn[`screen:Machine·${v} unreachable`] ?? '').length > 400),
     DRAWER.map((v) => `${v} ${(drawn[`screen:Machine·${v} unreachable`] ?? '').length}`).join(' · '));
   ok('…and none of them paints a value of its own', strayed.length === 0, strayed.join(', '));
