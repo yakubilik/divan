@@ -395,15 +395,26 @@ def _inside(p: Path, root: Path) -> bool:
 _SCRATCH = {Path(os.path.realpath(d)) for d in ("/tmp", tempfile.gettempdir())}
 
 
-def _scratch_roots() -> set[Path]:
-    """The scratch/ folder of every daemon home this machine may have: the
-    default one, the pre-rename one and DIVAN_HOME's, read now (not at import)."""
+def _homes() -> list[Path]:
+    """Every daemon home this machine may have: the default one, the
+    pre-rename one and DIVAN_HOME's, read now (not at import)."""
     homes = [os.path.join(os.path.expanduser("~"), n) for n in (".divan", legacy.HOME_NAME)]
-    return {Path(os.path.realpath(os.path.join(h, "scratch"))) for h in homes + _daemon_homes()}
+    return [Path(os.path.realpath(h)) for h in homes + _daemon_homes()]
+
+
+def _scratch_roots() -> set[Path]:
+    """The scratch/ folder of every daemon home this machine may have."""
+    return {h / "scratch" for h in _homes()}
 
 
 def _scratch(p: Path) -> bool:
-    return any(_inside(p, d) for d in _SCRATCH | _scratch_roots())
+    # Inside a daemon home only a chat's own scratch folder is scratch, even
+    # when that home itself lies in /tmp (a DIVAN_HOME made by mkdtemp on
+    # Linux): otherwise `rm -rf <home>/scratch/*`, every chat's scratch at
+    # once, passed as clearing /tmp.
+    if any(p == h or _inside(p, h) for h in _homes()):
+        return any(_inside(p, d) for d in _scratch_roots())
+    return any(_inside(p, d) for d in _SCRATCH)
 
 
 # Regenerable caches (17 Oct 2026: an agent freeing disk space was asked about

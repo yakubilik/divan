@@ -108,3 +108,19 @@ def test_rest_of_the_home_still_asks(home_scratch):
     for cmd in (f"rm -rf {home}/scratch", f"rm -rf {home}", f"echo x > {home}/db.sqlite",
                 f"sed -i '' s/a/b/ {home}/config.toml"):
         assert destructive_reason(cmd, "/tmp/project", tmpdir=str(home_scratch / "c-1")), cmd
+
+
+def test_a_home_in_tmp_is_still_the_daemons(monkeypatch):
+    # A DIVAN_HOME that mkdtemp made under /tmp (as on a Linux CI runner): /tmp is
+    # scratch, but inside the daemon's home only a chat's own folder is, so emptying
+    # every chat's scratch at once still asks, and one chat's folder still does not.
+    import os, shutil, tempfile
+    home = os.path.realpath(tempfile.mkdtemp(prefix="divan-home-", dir="/tmp"))
+    try:
+        monkeypatch.setenv("DIVAN_HOME", home)
+        for cmd in (f"rm -rf {home}/scratch/*", f"rm -rf {home}/scratch", f"rm -rf {home}"):
+            assert destructive_reason(cmd, "/tmp/project"), cmd
+        assert destructive_reason(f"rm -rf {home}/scratch/c-1/build", "/tmp/project") is None
+        assert destructive_reason("rm -rf /tmp/elsewhere/build", "/tmp/project") is None
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
