@@ -11,7 +11,8 @@ This is on by default (`auto_update` in config.toml) and is the reason the
 daemon can be installed on a laptop you do not sit in front of. Turn it off and
 the daemon never touches git.
 
-Both installs are `pip install -e`, so a pull *is* the update: the code on disk
+Both installs are editable (`pip install -e`, or `uv pip install -e` in a venv
+uv made, which has no pip), so a pull *is* the update: the code on disk
 is the code that runs. Dependencies are the exception, and only when
 `pyproject.toml` actually changed.
 
@@ -349,6 +350,13 @@ class Updater:
             "last_update": last_update,
         }
         self._lock = asyncio.Lock()
+        # The interpreter installs and the import check run in: this venv's.
+        self.python = sys.executable
+        # The origin/main commit whose install or import check failed, and why.
+        # Retrying it every interval would only fail the same way and roll back
+        # again, for ever, so the loop holds until origin/main moves or a
+        # person asks for the update.
+        self.failed: dict | None = None
 
     # ── reading the world ──────────────────────────────────────────────────
     async def check(self) -> dict:
@@ -384,12 +392,18 @@ class Updater:
             # commit. A machine can be current on one and behind on the other.
             rc_t, tag = await _git(self.root, "describe", "--tags", "--abbrev=0", "origin/main")
             self.state["latest"] = tag.strip() if rc_t == 0 and tag.strip() else None
-            rc, head = await _git(self.root, "log", "-1", "--format=%h%x00%cI%x00%s",
+            rc, head = await _git(self.root, "log", "-1", "--format=%h%x00%H%x00%cI%x00%s",
                                   "origin/main")
             if rc == 0:
-                c, when, subject = (head.split("\0") + ["", "", ""])[:3]
-                self.state["remote"] = {"commit": c, "committed_at": when,
+                c, full, when, subject = (head.split("\0") + ["", "", "", ""])[:4]
+                self.state["remote"] = {"commit": c, "sha": full, "committed_at": when,
                                         "subject": subject[:120]}
+                if self.failed and self.failed.get("sha") != full:
+                    # origin/main moved past the commit that would not install:
+                    # the new one deserves its own attempt.
+                    self.failed = None
+            if self.failed:
+                self.state["error"] = self._held_reason()
             self.state["behind"] = behind
             self.state["ahead"] = ahead
             self.state["checked_at"] = time.time()
@@ -409,7 +423,27 @@ class Updater:
             out.append("unpushed commits")
         if not self.is_idle():
             out.append("a turn is running")
+        if self.failed:
+            out.append(f"the update to {self.failed.get('commit')} failed; "
+                       "waiting for a newer commit")
         return out
+
+    def _held_reason(self) -> str:
+        f = self.failed or {}
+        return (f"held on {f.get('commit')}: {f.get('error')} — not retried until "
+                "origin/main moves or someone asks for the update")
+
+    async def _fail_commit(self, before: str | None, after: dict, error: str) -> dict:
+        """Undo a pull whose commit cannot run here, and remember the commit.
+
+        Remembered so the loop does not pull, fail and roll back the same commit
+        every interval for ever, with only a log line to show for it.
+        """
+        await self._rollback(before)
+        self.failed = {"sha": after.get("sha"), "commit": after.get("commit"),
+                       "error": error, "at": time.time()}
+        self.state["error"] = self._held_reason()
+        return {"ok": False, "error": error}
 
     # ── changing the world ─────────────────────────────────────────────────
     async def apply(self, force: bool = False) -> dict:
@@ -465,13 +499,16 @@ class Updater:
                     if await self._deps_changed(before, after.get("sha")):
                         ok, detail = await self._install_deps()
                         if not ok:
-                            await self._rollback(before)
-                            return {"ok": False, "error": f"dependency install failed: {detail}"}
+                            return await self._fail_commit(
+                                before, after, f"dependency install failed: {detail}")
 
                     ok, detail = await self._smoke()
                     if not ok:
-                        await self._rollback(before)
-                        return {"ok": False, "error": f"new code failed to import: {detail}"}
+                        return await self._fail_commit(
+                            before, after, f"new code failed to import: {detail}")
+                    if self.failed:
+                        self.failed = None
+                        self.state["error"] = None
 
                 # Asked again rather than reused: the pull is what decides
                 # whether the panel owes a rebuild, so the answer from before
@@ -541,12 +578,46 @@ class Updater:
                              "--", "daemon/pyproject.toml")
         return rc == 0 and bool(out.strip())
 
-    async def _install_deps(self) -> tuple[bool, str]:
-        """Re-install into the venv this daemon is running from."""
-        daemon_dir = str(self.root / "daemon")
+    async def _has_pip(self) -> bool:
+        """Whether the venv this daemon runs from can run `-m pip` at all.
+
+        Asked of the interpreter on disk rather than of this process, because
+        that is the one the install will run in.
+        """
         try:
             proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "pip", "install", "--quiet", "-e", daemon_dir,
+                self.python, "-m", "pip", "--version",
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            )
+            return await asyncio.wait_for(proc.wait(), timeout=60) == 0
+        except Exception:
+            return False
+
+    async def _install_command(self) -> list[str] | None:
+        """How to install into this venv, or None when nothing here can.
+
+        install.sh builds the venv with `uv venv` whenever uv is around, and a
+        venv made that way has no pip in it. pip is still the first choice where
+        it exists, because that is what the other installs were made with.
+        """
+        daemon_dir = str(self.root / "daemon")
+        if await self._has_pip():
+            return [self.python, "-m", "pip", "install", "--quiet", "-e", daemon_dir]
+        uv = shutil.which("uv")
+        if uv:
+            return [uv, "pip", "install", "--quiet", "--python", self.python,
+                    "-e", daemon_dir]
+        return None
+
+    async def _install_deps(self) -> tuple[bool, str]:
+        """Re-install into the venv this daemon is running from."""
+        cmd = await self._install_command()
+        if cmd is None:
+            return False, (f"neither pip (no pip module in {self.python}) nor uv "
+                           "(not on PATH) is available to install with")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             )
             out, _ = await asyncio.wait_for(proc.communicate(), timeout=600)
@@ -564,7 +635,7 @@ class Updater:
         """
         try:
             proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-c",
+                self.python, "-c",
                 # `server` pulls in everything that matters, this module
                 # included. Naming modules individually would make the check
                 # fail the day one of them is renamed — which is exactly the
@@ -602,25 +673,29 @@ class Updater:
         await asyncio.sleep(60)
         while True:
             try:
-                await self.check()
-                behind = self.state.get("behind", 0)
-                web_todo = panel_needs_build(self.state.get("web") or {})
-                if behind > 0 or web_todo:
-                    await self.announce({"event": "update.available", **self.state})
-                    if self.state["auto"]:
-                        blocked = self.blockers()
-                        if blocked:
-                            log.info("update available (%d behind%s) but held: %s",
-                                     behind, ", panel stale" if web_todo else "",
-                                     ", ".join(blocked))
-                        else:
-                            log.info("update available (%d behind%s) — applying",
-                                     behind, ", panel stale" if web_todo else "")
-                            res = await self.apply()
-                            if not res.get("ok"):
-                                log.warning("update failed: %s", res.get("error"))
+                await self.tick()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 log.warning("updater: %s", exc)
             await asyncio.sleep(interval)
+
+    async def tick(self) -> None:
+        """One pass of the loop: look, say what there is, apply it if allowed."""
+        await self.check()
+        behind = self.state.get("behind", 0)
+        web_todo = panel_needs_build(self.state.get("web") or {})
+        if behind > 0 or web_todo:
+            await self.announce({"event": "update.available", **self.state})
+            if self.state["auto"]:
+                blocked = self.blockers()
+                if blocked:
+                    log.info("update available (%d behind%s) but held: %s",
+                             behind, ", panel stale" if web_todo else "",
+                             ", ".join(blocked))
+                else:
+                    log.info("update available (%d behind%s) — applying",
+                             behind, ", panel stale" if web_todo else "")
+                    res = await self.apply()
+                    if not res.get("ok"):
+                        log.warning("update failed: %s", res.get("error"))

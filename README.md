@@ -272,8 +272,12 @@ on, and every 15 minutes it fast-forwards its own checkout to `origin/main` and
 asks its supervisor to restart it. That is how a laptop you are not sitting in
 front of stays on the same commit as the one you are. It refuses to touch a
 checkout with uncommitted work, only ever fast-forwards, never interrupts a
-running turn, and never waits on a credential prompt. Set `auto_update = false`
-in `~/.divan/config.toml` and it never touches git at all.
+running turn, and never waits on a credential prompt. When a pull changes the
+daemon's dependencies and they cannot be installed (with pip, or uv in a venv
+that has no pip), it rolls back to the commit it was on and holds there, saying
+why in the app, until `origin/main` moves on or you ask for the update by hand.
+Set
+`auto_update = false` in `~/.divan/config.toml` and it never touches git at all.
 
 It does not defend against someone who already has your unlocked phone, or
 against the model being wrong in a way you approve. Read what you approve.
