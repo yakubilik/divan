@@ -845,7 +845,7 @@ CLIPBOARD_MAX = 256 * 1024
 
 def _utf8_env() -> dict:
     # pbcopy and pbpaste pick their encoding off the locale, and launchd starts
-    # the daemon with none — which turns every "ş" into a question mark.
+    # the daemon with none — which turns every letter outside ASCII into a question mark.
     return {**os.environ, "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8"}
 
 

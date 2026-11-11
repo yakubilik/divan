@@ -80,7 +80,7 @@ function ok(name, cond, detail) {
 const SNAP = JSON.parse(readFileSync(join(web, 'scripts', 'fixtures', 'unfiled-ask-snapshot.json'), 'utf8'));
 const ASKING = SNAP.unfiled.find((c) => c.agent_status === 'asking');
 const THREAD = `studio:${ASKING.id}`;
-const ANSWER = 'yakupkeskin.dev olsun';
+const ANSWER = 'example.dev olsun';
 
 try {
   console.log('── dashboard-asking-unfiled (1440×900)');

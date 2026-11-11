@@ -43,8 +43,8 @@ check("only the latest replies are shown",
 
 # ── what is made of its answer ───────────────────────────────────────────
 check("a task and its bullets",
-      recap.parse("TASK: Proje sayfasını sadeleştir.\n- Sekmeler kaldırıldı\n* Sidebar eklendi\n"),
-      recap.Recap("Proje sayfasını sadeleştir", ["Sekmeler kaldırıldı", "Sidebar eklendi"]))
+      recap.parse("TASK: Simplify the project page.\n- Removed the tabs\n* Added a sidebar\n"),
+      recap.Recap("Simplify the project page", ["Removed the tabs", "Added a sidebar"]))
 check("a task with nothing done yet", recap.parse("TASK: Set up mail"), recap.Recap("Set up mail", []))
 check("unclear is no log", recap.parse("UNCLEAR"), None)
 check("prose is no log", recap.parse("This conversation is about mail."), None)

@@ -1,5 +1,5 @@
 /** The whole panel in the Chat place over two computers, the first of them a
- *  Mac that calls itself `Dilara-MacBook-Air.local` and answers on :443. Built
+ *  Mac that calls itself `studio-workstation.local` and answers on :443. Built
  *  and driven by `scripts/test-sidebarhead-ui.mjs`. */
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -24,7 +24,7 @@ const h: any = host();
 const air = {
   ...h,
   cfg: { ...h.cfg, port: 443, name: 'air' },
-  info: { ...h.info, name: 'Dilara-MacBook-Air.local' },
+  info: { ...h.info, name: 'studio-workstation.local' },
   chats: h.chats.map((c: any, i: number) => ({ ...c, archived: 0, updated_at: at - i * 5 })),
 };
 const mini = { ...host(), cfg: { ...h.cfg, port: 8766, name: 'mini' }, status: 'offline', chats: [], info: null };

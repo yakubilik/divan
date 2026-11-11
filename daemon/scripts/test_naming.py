@@ -50,7 +50,7 @@ check("only the latest reply is shown", ("latest" in shown, "first" in shown), (
 check("a pasted wall is cut", len(naming.brief([user("x" * 5000)], "t")) < 600, True)
 
 # ── what is made of its answer ───────────────────────────────────────────
-check("a plain title", naming.parse("Grikoç tasarım eksikleri\n"), "Grikoç tasarım eksikleri")
+check("a plain title", naming.parse("Design gaps on the pricing page\n"), "Design gaps on the pricing page")
 check("quotes and the full stop go", naming.parse('"Fix the login redirect."'), "Fix the login redirect")
 check("unclear is no title", naming.parse("UNCLEAR"), None)
 check("a paragraph is no title", naming.parse("I think this conversation is mostly about the login flow"), None)

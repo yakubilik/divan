@@ -120,7 +120,7 @@ The phone adds EMA's first clause and its player (ticket 150).
 | WER, words agents receive | 3.9% (turbo, offline) | **2.7%** (turbo, at commit) | — |
 | WER, words the reply is built on | 7.0% (small, offline) | **4.9%** (small, eager) | — |
 | Recognition done, after speech end | 1.31 s | **≈ 0.9–1.2 s** (0.7 s of it is the soft end itself) | 0.88 s |
-| Model asked → first token | 0.70 s | 2.03 s median, 6.0 s p95 | **0.72 s** (others: 1.35, 1.38 s) |
+| Request sent to the model → first token | 0.70 s | 2.03 s median, 6.0 s p95 | **0.72 s** (others: 1.35, 1.38 s) |
 | First text piece out, after speech end | 2.23 s (first clause ready) | 3.45 s median, 7.7 s p95 | **1.90 s** median, 2.28 s p95 |
 | Errors | — | 0 | 0 |
 

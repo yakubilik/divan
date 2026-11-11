@@ -109,7 +109,7 @@ try {
     ok('the card spans the list, 8px in on each side',
       !!m.card && !!m.list && Math.abs(m.card.l - (m.list.l + 8)) < 1 && Math.abs(m.card.r - (m.list.r - 8 - 1)) < 1.5,
       JSON.stringify({ card: m.card, list: m.list }));
-    ok('the name reads Dilara-MacBook-Air, no .local, not cut', m.name === 'Dilara-MacBook-Air' && m.clipped === false,
+    ok('the name reads studio-workstation, no .local, not cut', m.name === 'studio-workstation' && m.clipped === false,
       JSON.stringify({ name: m.name, clipped: m.clipped }));
     ok('hide is on the top line, a panel icon, the size of the line’s other icons, level with them, its right edge over the card’s',
       m.hideInLine && /^M5 4h14/.test(m.hidePath ?? '') && /dv-icon-btn/.test(m.hideClass ?? '')

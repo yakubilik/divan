@@ -32,7 +32,7 @@ def tokens() -> None:
     print("\nthe token")
     t = secret_share.token("rac-secret-openai-prod", "OpenAI key")
     check(t == "[secret-share rac-secret-openai-prod OpenAI key]", "token is service plus label", t)
-    m = secret_share.TOKEN.search(f"al bunu: {t} tamam")
+    m = secret_share.TOKEN.search(f"here you go: {t} done")
     check(m is not None and m.group(1) == "rac-secret-openai-prod" and m.group(2) == "OpenAI key",
           "the app's pattern reads it back")
     check(secret_share.token("rac-secret-x1", "a]b\nc") == "[secret-share rac-secret-x1 a b c]",
@@ -69,9 +69,11 @@ def put() -> None:
 def parse_g() -> None:
     print("\nreading the keychain's answer")
     check(secret_share._parse_g('keychain: "x"\npassword: "Hunter22!"\n') == "Hunter22!", "printable value")
+    # audit: language-data — a password with a letter outside ASCII, read from hex
     hexv = "Şifre-1".encode().hex()
     check(secret_share._parse_g(f'password: 0x{hexv.upper()}  "\\303\\236ifre-1"\n') == "Şifre-1",
           "non-ASCII value comes from the hex")
+    # audit: end-language-data
     check(secret_share._parse_g('password: "a"b"\n') == 'a"b', "a quote inside the value")
     check(secret_share._parse_g("password: <NULL>\n") is None, "no password")
 
@@ -92,10 +94,10 @@ def clock() -> None:
             c.commit()
 
         tok = secret_share.token("rac-secret-openai-prod", "OpenAI key")
-        say("chatA", f"İşte anahtar: {tok}", now - 600)
-        say("chatA", f"tekrar: {tok}", now - 60)
-        say("chatB", f"eski: {tok}", now - 7200)
-        say("chatC", f"kopyala {tok}", now, typ="message.user")
+        say("chatA", f"Here is the key: {tok}", now - 600)
+        say("chatA", f"again: {tok}", now - 60)
+        say("chatB", f"old: {tok}", now - 7200)
+        say("chatC", f"copy {tok}", now, typ="message.user")
         need = secret_share.needles("rac-secret-openai-prod")
         a = db.last_said("chatA", *need)
         check(a is not None and abs(a - (now - 60)) < 1, "the latest share starts the hour")

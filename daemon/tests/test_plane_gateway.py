@@ -81,7 +81,9 @@ def test_nothing_is_served_without_a_pass_on_any_door():
 
 def test_a_pass_says_whose_it_is():
     assert gw.holder(KEY, gw.mint(KEY, "Bedirhan", now=1000), now=1001) == "Bedirhan"
+    # audit: language-data — a Turkish name with letters outside ASCII, carried whole
     assert gw.holder(KEY, gw.mint(KEY, "Işıl Ö", now=1000), now=1001) == "Işıl Ö"
+    # audit: end-language-data
     assert gw.holder(KEY, gw.mint(KEY, None, now=1000), now=1001) == ""
     exp, who, sig = gw.mint(KEY, "Bedirhan", now=1000).split(".")
     other = "Yakup".encode().hex()
@@ -109,7 +111,9 @@ def test_each_person_is_signed_in_as_themselves_and_nobody_else():
 
 def test_session_names_are_keychain_safe():
     assert gw.session_name("Yakup") == "plane-session-yakup"
+    # audit: language-data — the Turkish letters the keychain name folds to ASCII
     assert gw.session_name("İlkay Şen") == "plane-session-ilkay-sen"
+    # audit: end-language-data
 
 
 def test_only_an_email_reaches_planes_shell():
@@ -119,7 +123,7 @@ def test_only_an_email_reaches_planes_shell():
             gw.mint_session("true", bad)
 
 
-# ── who does it: a new work item must carry `ustabaşı` or `insan` ─────────
+# ── who does it: a new work item must carry the queue's or the person label ─
 
 def test_only_a_create_is_guarded():
     assert gw.CREATE.match("/api/workspaces/skola/projects/p1/issues/").group(1) == "skola"
@@ -136,7 +140,7 @@ def guarded(names):
 
 def test_a_create_without_who_is_refused_and_with_it_goes_through():
     import json as j
-    gate = guarded({"l-bot": "ustabaşı", "l-hum": "insan", "l-web": "web"})
+    gate = guarded({"l-bot": gw.BOT, "l-hum": gw.HUMAN, "l-web": "web"})
     run = lambda ids: asyncio.run(gate._unowned("skola", j.dumps({"label_ids": ids}).encode(), {}))
     assert run([]) == gw.MUST_SAY_WHO
     assert run(["l-web"]) == gw.MUST_SAY_WHO
@@ -166,13 +170,13 @@ def test_a_create_is_refused_before_it_reaches_plane():
              "headers": [(b"cookie", f"{gw.PASS_COOKIE}={pass_}".encode())], "query_string": b""}
     asyncio.run(gate(scope, receive, send))
     assert sent[0]["status"] == 400 and not asked
-    assert "ustabaşı" in j.loads(sent[1]["body"])["error"]
+    assert gw.BOT in j.loads(sent[1]["body"])["error"]
 
 
 def test_the_page_lock_is_in_every_plane_page_before_plane_runs():
     page = gw.with_lock("<!DOCTYPE html><html><head><script src=/a.js></script></head></html>")
     assert page.index("data-divan-lock") < page.index("/a.js")
-    assert "label_ids" in gw.LOCK_JS and "ustabaşı" in gw.LOCK_JS
+    assert "label_ids" in gw.LOCK_JS and gw.BOT in gw.LOCK_JS and gw.HUMAN in gw.LOCK_JS
 
 
 def test_a_plane_page_is_never_kept_by_the_browser():

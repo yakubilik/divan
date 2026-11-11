@@ -5,7 +5,7 @@
  *     cd web && npm test
  *
  *  The panel mounted into jsdom the way `test-newchat.mjs` mounts it, over two
- *  computers, the first a Mac that calls itself `Dilara-MacBook-Air.local`.
+ *  computers, the first a Mac that calls itself `studio-workstation.local`.
  *  What is driven: the card's name without `.local` and its port on its own;
  *  no button beside the card; the top line's hide control collapsing the list
  *  to the rail and the rail's show bringing it back; and a press on the card
@@ -95,7 +95,7 @@ const { host: fixtureHost, chat: fakeChat } = await import(pathToFileURL(join(we
 const host = fixtureHost();
 const at = Date.now() / 1000 - 60;
 const air = {
-  ...host, cfg: { ...host.cfg, port: 443, name: 'air' }, info: { ...host.info, name: 'Dilara-MacBook-Air.local' },
+  ...host, cfg: { ...host.cfg, port: 443, name: 'air' }, info: { ...host.info, name: 'studio-workstation.local' },
   chats: host.chats.map((c, i) => ({ ...c, archived: 0, updated_at: at - i * 5 })),
 };
 const mini = { ...fixtureHost(), cfg: { ...host.cfg, port: 8766, name: 'mini' }, status: 'offline', chats: [], info: null };
@@ -140,7 +140,7 @@ ok('the card is the only thing in its row: no button beside it',
 ok('no chevron-left button anywhere in the list', ![...list().querySelectorAll('path')]
   .some((p) => p.getAttribute('d') === 'm15 5-7 7 7 7'));
 const name = head().querySelector('[data-host-name]')?.textContent;
-ok('the name drops .local: Dilara-MacBook-Air', name === 'Dilara-MacBook-Air', name);
+ok('the name drops .local: studio-workstation', name === 'studio-workstation', name);
 ok('the port is apart from the status, in smaller type',
   /online/.test(card().textContent) && [...card().querySelectorAll('span')].some((s) => s.textContent === ':443' && s.style.fontSize === '10px'),
   card().textContent);
@@ -156,7 +156,7 @@ await click(other());
 ok('picking it focuses it', useFleet.getState().focus === 'mini' && head().querySelector('[data-host-name]')?.textContent === 'mini',
   useFleet.getState().focus);
 await click(card());
-await click([...head().querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Dilara-MacBook-Air')));
+await click([...head().querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('studio-workstation')));
 ok('and back', useFleet.getState().focus === 'air');
 
 group('hide and show');

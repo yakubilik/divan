@@ -157,7 +157,7 @@ group('the Dashboard opens it by itself and the answer is a note on that ticket'
   ok('…with the question whole in it', said.includes(ASK), said.slice(0, 300));
   const input = win().querySelector('input[type="text"]');
   await act(async () => {
-    Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, 'value').set.call(input, 'yakupkeskin.dev olsun');
+    Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, 'value').set.call(input, 'example.dev olsun');
     input.dispatchEvent(new w.Event('input', { bubbles: true }));
   });
   await act(async () => { input.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
@@ -165,7 +165,7 @@ group('the Dashboard opens it by itself and the answer is a note on that ticket'
   const notes = asked.filter((a) => a.type === 'ustabasi.note');
   ok('one ustabasi.note to ticket 348 on the studio, with the words typed',
     notes.length === 1 && notes[0].key === 'studio' && notes[0].data.id === 348
-      && notes[0].data.text === 'yakupkeskin.dev olsun', JSON.stringify(notes));
+      && notes[0].data.text === 'example.dev olsun', JSON.stringify(notes));
   ok('the window stays open', win()?.getAttribute('data-asking-window') === THREAD);
 }
 

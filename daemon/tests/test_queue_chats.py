@@ -202,7 +202,9 @@ def test_projectless_and_ticketless_share_the_general_chat(world):
     notify(conn, None, "limit", "⏸ paused")             # asks nothing: no chat
     asyncio.run(srv._follow_pass(start))
     creates, sends = named(calls, "chat.create"), named(calls, "chat.send")
+    # audit: language-data — the general queue chat's title, as the daemon names it
     assert len(creates) == 1 and creates[0]["title"] == "Ustabaşı"
+    # audit: end-language-data
     assert len(sends) == 2 and sends[0]["chat_id"] == sends[1]["chat_id"]
     assert srv.db.get_chat(sends[0]["chat_id"])["project_set"] == 1   # Unfiled, by hand
 
@@ -291,10 +293,10 @@ def test_the_queue_push_carries_the_chat_id_and_nothing_more(monkeypatch):
     monkeypatch.setattr(mainmod, "_protocol", protocol)
     monkeypatch.setattr(pushmod.httpx, "AsyncClient", Client)
     data = {"source": "ustabasi", "ticket": 7, "kind": "blocked", "screen": "ustabasi"}
-    asyncio.run(pushmod.send_push(["ExponentPushToken[x]"], "⛔ ustabasi #7", "Title — cevap bekliyor", data))
+    asyncio.run(pushmod.send_push(["ExponentPushToken[x]"], "⛔ ustabasi #7", "Title — waiting for an answer", data))
     assert asked == [("ustabasi.notice_chat", {"ticket": 7, "kind": "blocked"})]
     assert posted[0]["data"] == {**data, "chat_id": "CHAT-9"}
-    assert posted[0]["title"] == "⛔ ustabasi #7" and posted[0]["body"] == "Title — cevap bekliyor"
+    assert posted[0]["title"] == "⛔ ustabasi #7" and posted[0]["body"] == "Title — waiting for an answer"
 
     # A daemon's own push is never touched, and a daemon that is not there
     # costs the banner its chat, not the banner.

@@ -11,7 +11,9 @@ PID = "p1"
 STATES = [{"id": s, "name": n, "group": g} for s, n, g in
           [("s-todo", "Todo", "unstarted"), ("s-prog", "In Progress", "started"),
            ("s-done", "Done", "completed"), ("s-cx", "Cancelled", "cancelled")]]
+# audit: language-data — the board's two label names, as Plane returns them
 LABELS = [{"id": "l-bot", "name": "ustabaşı"}, {"id": "l-hum", "name": "insan"}]
+# audit: end-language-data
 
 
 class FakePlane:
@@ -66,7 +68,9 @@ def comments(plane):
 
 
 def test_who_reads_the_two_labels():
+    # audit: language-data — the label names in the Turkish casings a board may use
     assert who(["ustabaşı"]) == "bot" and who(["İnsan"]) == "human" and who(["USTABAŞı"]) == "bot" and who(["web"]) is None
+    # audit: end-language-data
 
 
 def test_the_first_pass_only_learns_where_now_is(tmp_path):
@@ -127,7 +131,7 @@ def test_what_the_queue_finishes_moves_to_done(tmp_path):
     asyncio.run(sync.run_once())
     status[901] = "blocked"
     asyncio.run(sync.run_once()); asyncio.run(sync.run_once())
-    assert sum("takıldı" in json.dumps(c[2], ensure_ascii=False) for c in comments(plane)) == 1
+    assert sum("is blocked" in json.dumps(c[2], ensure_ascii=False) for c in comments(plane)) == 1
     status[901] = "done"
     asyncio.run(sync.run_once())
     assert plane.items["a"]["state"] == "s-done"

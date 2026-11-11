@@ -164,7 +164,9 @@ def clipboard(srv: Server, client: TestClient, tok: str) -> None:
         return
     saved = screen._clip_get_sync()
     try:
+        # audit: language-data — letters outside ASCII the clipboard must carry intact
         text = f"divan clipboard · şğüİ 🌍\nline two {time.time()}"
+        # audit: end-language-data
         ans = ws_call(client, tok, "screen.clipboard.set", {"text": text})
         check(ans["type"] == "ok" and ans["data"].get("chars") == len(text), "set takes the text", str(ans))
         ans = ws_call(client, tok, "screen.clipboard.get")

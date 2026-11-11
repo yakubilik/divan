@@ -150,7 +150,7 @@
   "unfiled": [
     {
       "agent_column": "in_progress",
-      "agent_detail": "Harfiyen'in gizlilik sayfası yakupkeskin.dev'de mi dursun, yoksa uygulamanın kendi sitesinde mi?",
+      "agent_detail": "Harfiyen'in gizlilik sayfası example.dev'de mi dursun, yoksa uygulamanın kendi sitesinde mi?",
       "agent_status": "asking",
       "agent_status_at": 1792363453.611926,
       "branch": "engineering",
