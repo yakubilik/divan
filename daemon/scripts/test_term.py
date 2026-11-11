@@ -233,10 +233,13 @@ def test_echo(a: Sock) -> str:
     check(opened.get("shell") == "/bin/sh", "it runs the login shell ($SHELL)", str(opened))
     wrote = a.ok("term.write", {"term_id": tid, "data": "echo hi\n"})
     check(wrote.get("written") == len("echo hi\n"), "term.write says what it wrote", str(wrote))
-    got = a.until(lambda: re.search(r"(^|\n)hi\r?\n", a.output(tid)) is not None)
+    # The first line can be typed before the shell has printed its first prompt:
+    # the pty echoes it at once, and the late `$ ` lands in front of the answer
+    # (`echo hi\r\n$ hi\r\n`). So an answer line may start with the prompt.
+    got = a.until(lambda: re.search(r"(^|\n)(\$ )?hi\r?\n", a.output(tid)) is not None)
     check(got, "`echo hi` comes back as term.output containing `hi`", repr(a.output(tid)[-300:]))
     a.ok("term.write", {"term_id": tid, "data": "pwd\n"})
-    check(a.until(lambda: f"\n{USER_HOME}\r\n" in a.output(tid)),
+    check(a.until(lambda: re.search(r"\n(\$ )?" + re.escape(USER_HOME) + r"\r\n", a.output(tid)) is not None),
           "`pwd` in it is $HOME", repr(a.output(tid)[-300:]))
     a.ok("term.write", {"term_id": tid, "data": "echo \"tty=$(tty)\"\n"})
     check(a.until(lambda: re.search(r"tty=/dev/\w+", a.output(tid)) is not None),

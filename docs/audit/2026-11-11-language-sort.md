@@ -102,7 +102,7 @@ JSON has no comments, so a JSON file of data is listed by path in `ALLOW`.
 | `daemon/scripts/test_recap.py` | sample recap | Proje sayfasını sadeleştir / Sekmeler kaldırıldı / Sidebar eklendi | Simplify the project page / Removed the tabs / Added a sidebar |
 | `daemon/scripts/test_naming.py` | sample title | Grikoç tasarım eksikleri | Design gaps on the pricing page |
 | `app/scripts/test-resume.cjs` | sample messages | Son mesajım geldi. / Yazıyorum | My last message came in. / Writing |
-| `app/scripts/test-secret-share.cjs` | sample answer | Anahtar hazır: … Dokununca kopyalanır. Dokümanı da [buraya](…) koydum. | Key ready: … Tap it to copy. I put the document [over here](…) too. |
+| `app/scripts/test-secret-share.cjs` | sample answer | Anahtar hazır: … Dokununca kopyalanır. Dokümanı da `[buraya](https://example.com)` koydum. | Key ready: … Tap it to copy. I put the document `[over here](https://example.com)` too. |
 | `app/scripts/voice-e2e.cjs` | comments glossing the fixtures | selam nasılsın; testleri çalıştır, hayır dur, önce derlemeyi bitir; testler bitti mi | hi, how are you; run the tests, no wait, finish the build first; are the tests done? |
 | `docs/PROTOCOL.md` | prose | one general `Ustabaşı` chat | one general chat named after the queue |
 | `docs/TUNNEL.md` | heading and prose | `ustabaşı` or `insan`; an `ustabaşı` item | the queue's label or the person label; an item with the queue's label (the names kept once, in a block) |
@@ -112,9 +112,9 @@ JSON has no comments, so a JSON file of data is listed by path in `ALLOW`.
 
 | File | Was | Now |
 |---|---|---|
-| `daemon/tests/test_claude_memory.py` | `/Users/<name>/…`, `-Users-<name>-…`, `/Users/someone` | `/Users/you/…`, `-Users-you-…` (the scanner's own placeholder) |
+| `daemon/tests/test_claude_memory.py` | `/Users/<name>/…`, `-Users-<name>-…`, and a placeholder the home-directory rule does not exempt | `/Users/you/…`, `-Users-you-…` (the scanner's own placeholder) |
 | `web/scripts/sidebarhead-harness.tsx`, `test-sidebarhead.mjs`, `test-sidebarhead-ui.mjs` | `<Name>-MacBook-Air.local` | `studio-workstation.local` (same length, so the not-cut check still means something) |
-| `web/scripts/test-nav.mjs` | `<Name>s-MacBook.local`, `<Name>’s Mac` | `studio.local`, `Someone’s Mac` |
+| `web/scripts/test-nav.mjs` | the owner's MacBook hostname, `<Name>’s Mac` | `studio.local`, `Someone’s Mac` |
 | `web/scripts/make-unfiled-ask-fixture.py`, its fixture, `test-asking-unfiled*.mjs` | the author's own domain | `example.dev` |
 | `daemon/scripts/test_secrets.py` | a literal PEM key header | the header put together from two halves |
 | `docs/voice-session.md` | `Model asked → first token` | `Request sent to the model → first token` |
