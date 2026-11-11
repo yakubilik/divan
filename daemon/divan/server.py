@@ -44,7 +44,8 @@ from . import voice as voicemod
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .transcribe import known as transcribe_known
 from .attachments import KINDS, media_type_of, normalize_image, peaks, sniff
-from .security import ACCESS_EMAIL, PathPolicy, TunnelAccess, TunnelGate, TunnelLock
+from .security import (ACCESS_EMAIL, SOCKET_PEER, ForgedTunnel, PathPolicy, TunnelAccess, TunnelGate,
+                       TunnelLock, tunnel_via)
 from . import screen as screenmod
 from . import term as termmod
 from . import ustabasi as ustabasimod
@@ -63,6 +64,9 @@ log = logging.getLogger("rac.server")
 # on this machine update themselves overnight, and a daemon that runs for weeks
 # would otherwise offer the models of the week it started.
 MODELS_TTL_S = 900.0
+# `_auth`'s word for a socket that carried CF-Connecting-IP from a peer that is
+# not loopback (security.tunnel_via): closed 1008, never told it was a token.
+FORGED = "forged_tunnel"
 # Two limit readings further apart than this do not measure one report-step.
 STEP_PAIR_S = 600.0
 
@@ -105,6 +109,9 @@ TUNNEL_PUSH_TEXT = {
 # that cannot keep up is closed rather than waited for: it reconnects and asks
 # for what it missed, which is a round trip, not a dead chat.
 OUTBOX_MAX = 1024
+# The largest attachment /upload takes, and the size it is read in.
+UPLOAD_MAX = 100 * 1024 * 1024
+UPLOAD_CHUNK = 1024 * 1024
 # Requests that are answered only when they fail, if sent without an id.
 QUIET_TYPES = {"voice.audio", "voice.playback", "voice.barge", "voice.ready"}
 SEND_TIMEOUT_S = 20.0
@@ -259,6 +266,7 @@ class Server:
         # One queue per connected client, drained by that client's own writer.
         self.outbox: dict[WebSocket, Outbox] = {}
         self.writers: dict[WebSocket, asyncio.Task] = {}
+        self._dispatches: set[asyncio.Task] = set()   # requests being answered
         self.conns: dict[WebSocket, Conn] = {}
         # (chat id, client id) -> the answer `chat.send` gave, or will give, for
         # that message: a resend of one the phone never heard the answer to is
@@ -1502,9 +1510,16 @@ class Server:
         name = Path(unquote(file.filename or "file")).name
         stem = "".join(("-" if c in " " else c) for c in Path(name).stem if c.isalnum() or c in " -_")[:40] or "file"
         ext = Path(name).suffix.lower()[:12]
-        data = await file.read()
-        if len(data) > 100 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="file too large (100MB)")
+        # Read in chunks and stop at the cap, so a body over it is refused
+        # without first being held whole in memory.
+        chunks, size = [], 0
+        while chunk := await file.read(UPLOAD_CHUNK):
+            size += len(chunk)
+            if size > UPLOAD_MAX:
+                raise HTTPException(status_code=413, detail=f"file too large ({UPLOAD_MAX // (1024 * 1024)}MB)")
+            chunks.append(chunk)
+        data = b"".join(chunks)
+        del chunks
         # What it is, decided by what is in it. A screenshot shared from another
         # app can arrive with no extension at all, or with the tail of a dotted
         # name ('… 21.48.33') read as one; by the name alone both became "file",
@@ -1550,11 +1565,19 @@ class Server:
 
         `token` is the query parameter the routes an <img> draws from accept in
         place of the header. `cf_connecting_ip` is the header itself, which is
-        how a route says which door the request came in by — see `_admit`.
+        how a route says which door the request came in by — see `_admit` —
+        and is believed only from loopback (`tunnel_via`): from anywhere else
+        the request is a 403, before the token is looked at.
         """
         if authorization.lower().startswith("bearer "):
             token = authorization[7:].strip()
-        dev, why = self._admit(token, TunnelGate.address(cf_connecting_ip))
+        try:
+            via = tunnel_via(cf_connecting_ip, SOCKET_PEER.get())
+        except ForgedTunnel:
+            # TunnelGate refuses these first; this is the route not taking the
+            # header at its word should it ever be reached without it.
+            raise HTTPException(status_code=403, detail="forbidden")
+        dev, why = self._admit(token, via)
         if dev is None:
             raise HTTPException(status_code=401, detail=why)
         return dev
@@ -1677,13 +1700,28 @@ class Server:
             raise Err("screen_failed", str(exc))
 
     # A shell on this computer (term.py). Reached only through a socket `_admit`
-    # let in, like every handler here; a term belongs to the person whose
-    # device opened it and is invisible to everybody else's.
-    def _term_owner(self, dev: Device) -> str | None:
-        self.cfg.refresh_tunnel()
+    # let in, like every handler here, and only while `terminal` in config.toml
+    # is on; a term belongs to the person whose device opened it and is
+    # invisible to everybody else's.
+    async def _term_owner(self, dev: Device) -> str | None:
+        await self._terminal_gate()
         return self.cfg.person_of(dev.id)
 
+    async def _terminal_gate(self) -> None:
+        """The switch in front of every `term.*`. Read from config.toml on every
+        request, so turning it off there takes effect without a restart — and
+        the shells still open when it does are ended, not left to run on."""
+        self.cfg.refresh_tunnel()
+        if self.cfg.terminal:
+            return
+        live = [t for t in self.terms.terms.values() if not t.ended]
+        if live:
+            await asyncio.gather(*(self.terms.kill(t, "terminal_disabled") for t in live),
+                                 return_exceptions=True)
+        raise Err("terminal_disabled", "the terminal is turned off on this computer")
+
     async def h_term_open(self, dev: Device, d: dict, ws: WebSocket) -> dict:
+        owner = await self._term_owner(dev)
         cwd = d.get("cwd")
         if cwd:
             if err := self.policy.cwd_error(str(cwd)):
@@ -1691,31 +1729,31 @@ class Server:
             cwd = str(Path(str(cwd)).expanduser().resolve())
         else:
             cwd = str(Path.home())
-        t = self.terms.open(ws, self._term_owner(dev), dev.id, d, cwd)
+        t = self.terms.open(ws, owner, dev.id, d, cwd)
         log.warning("device %s (%s) opened a terminal (%s, pid %s) in %s",
                     dev.name, dev.id, t.id, t.pid, cwd)
         return t.public()
 
     async def h_term_write(self, dev: Device, d: dict) -> dict:
-        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        t = self.terms.get(await self._term_owner(dev), d.get("term_id"))
         return {"written": await self.terms.write(t, d.get("data"))}
 
     async def h_term_resize(self, dev: Device, d: dict) -> dict:
-        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        t = self.terms.get(await self._term_owner(dev), d.get("term_id"))
         self.terms.resize(t, d)
         return {"cols": t.cols, "rows": t.rows}
 
     async def h_term_attach(self, dev: Device, d: dict, ws: WebSocket) -> dict:
-        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        t = self.terms.get(await self._term_owner(dev), d.get("term_id"))
         self.terms.attach(t, ws)
         return t.public()
 
     async def h_term_close(self, dev: Device, d: dict, ws: WebSocket) -> dict:
-        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        t = self.terms.get(await self._term_owner(dev), d.get("term_id"))
         return {"term_id": t.id, "ended": await self.terms.close(t, ws)}
 
     async def h_term_list(self, dev: Device, d: dict, ws: WebSocket) -> dict:
-        return {"terms": self.terms.list(self._term_owner(dev), ws), "max": termmod.MAX_TERMS}
+        return {"terms": self.terms.list(await self._term_owner(dev), ws), "max": termmod.MAX_TERMS}
 
     async def h_screen_input(self, dev: Device, d: dict) -> dict:
         """Move, click, scroll or type. Coordinates are 0..1 across the whole
@@ -1921,8 +1959,14 @@ class Server:
         auth = ws.headers.get("authorization", "")
         if auth.lower().startswith("bearer "):
             token = auth[7:].strip()
-        return self._admit(token, TunnelGate.address(ws.headers.get("cf-connecting-ip")),
-                           ws.client.host if ws.client else "?")
+        peer = ws.client.host if ws.client else None
+        try:
+            via = tunnel_via(ws.headers.get("cf-connecting-ip"), peer)
+        except ForgedTunnel:
+            # Refused by TunnelGate before it gets here; never a token's fault,
+            # never counted. The callers close it 1008.
+            return None, FORGED
+        return self._admit(token, via, peer or "?")
 
     async def h_tunnel_unlock(self, dev: Device, d: dict) -> dict:
         """Lift a tunnel lock on the running daemon. `divan unlock <ip>`
@@ -2044,6 +2088,9 @@ class Server:
         there and keeps trying, and its token for this computer is untouched.
         """
         dev, why = self._auth(ws)
+        if why == FORGED:
+            await ws.close(code=1008)
+            return
         if dev is None:
             await ws.accept()
             await ws.close(code=4401, reason=why)
@@ -2162,7 +2209,12 @@ class Server:
         to sign in with — the hash is not the token, and the proof is not the
         hash. Never through the tunnel: that door has its own sign-in.
         """
-        if request.headers.get("cf-connecting-ip"):
+        try:
+            via = tunnel_via(request.headers.get("cf-connecting-ip"),
+                             request.client.host if request.client else None)
+        except ForgedTunnel:
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        if via is not None:
             return JSONResponse({"error": "not_here"}, status_code=404)
         dev = self.cfg.devices.get(device)
         if dev is None or dev.tunnel or not re.fullmatch(r"[0-9a-f]{16,64}", nonce or ""):
@@ -2173,6 +2225,9 @@ class Server:
     # ── websocket ──────────────────────────────────────────────────────────
     async def ws_endpoint(self, ws: WebSocket) -> None:
         dev, why = self._auth(ws)
+        if why == FORGED:
+            await ws.close(code=1008)
+            return
         # Accept first so the client receives a real close frame (4401) instead of HTTP 403.
         # The reason says which refusal it was — see `_admit`.
         await ws.accept()
@@ -2180,7 +2235,8 @@ class Server:
             await ws.close(code=4401, reason=why)
             return
         self.clients[ws] = dev
-        conn = self.conns[ws] = Conn(TunnelGate.address(ws.headers.get("cf-connecting-ip")),
+        conn = self.conns[ws] = Conn(tunnel_via(ws.headers.get("cf-connecting-ip"),
+                                                ws.client.host if ws.client else None),
                                      ws.client.host if ws.client else "?")
         self.outbox[ws] = Outbox()
         self.writers[ws] = asyncio.create_task(self._writer(ws, self.outbox[ws]))
@@ -2210,7 +2266,20 @@ class Server:
                     req = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
-                asyncio.create_task(self._dispatch(ws, dev, req))
+                # Valid JSON is not yet a request: a list, a number or a `type`
+                # that is not a string used to raise inside the task, outside its
+                # try, and the phone got no answer while the log got "Task
+                # exception was never retrieved".
+                if not isinstance(req, dict) or not isinstance(req.get("type", ""), str):
+                    rid = req.get("id") if isinstance(req, dict) else None
+                    await self.send_to(ws, {"id": rid, "type": "error", "data": {
+                        "message": "a request is an object with a string type", "code": "bad_request"}})
+                    continue
+                # Held until done: the loop keeps only a weak reference to a
+                # task, so one nobody holds can be collected mid-flight.
+                task = asyncio.create_task(self._dispatch(ws, dev, req))
+                self._dispatches.add(task)
+                task.add_done_callback(self._dispatches.discard)
         except WebSocketDisconnect as exc:
             code, reason = exc.code, exc.reason or ""
         except Exception as exc:
@@ -3124,12 +3193,23 @@ class Server:
             await s.cancel()
         return {}
 
+    @staticmethod
+    def _signin_gate(dev: Device) -> None:
+        if dev.tunnel:
+            raise Err("forbidden", "a sign-in is moved from the phone, not through the tunnel")
+
     async def h_account_export(self, dev: Device, d: dict) -> dict:
         """Hand this account's stored sign-in to the phone so it can be moved to
         another computer. The blob is a bearer credential: the app keeps it in
         memory for one transfer and never writes it to disk. The phone calls
         account.forget here once the destination has verified it — two computers
-        cannot share one login, the refresh token is single-use."""
+        cannot share one login, the refresh token is single-use.
+
+        Only to a tailnet device: moving a sign-in is the phone's job
+        (move-signin), and a browser behind the tunnel has no business carrying
+        a credential off the computer. The gateway refuses it as well
+        (fleet.BLOCKED), so a peer's sign-in does not leave through this one."""
+        self._signin_gate(dev)
         a = self.accounts.get(d.get("account_id", ""))
         if a is None:
             raise Err("account_gone", "that account was removed")
@@ -3142,6 +3222,7 @@ class Server:
         return {"provider": a.provider, "label": a.label, "detail": a.detail, "credentials": blob}
 
     async def h_account_import(self, dev: Device, d: dict) -> dict:
+        self._signin_gate(dev)
         a = self.accounts.get(d.get("account_id", ""))
         if a is None:
             raise Err("account_gone", "that account was removed")
@@ -3796,6 +3877,8 @@ class Server:
             self._models_at[name] = time.time()
 
     def host_info(self) -> dict:
+        # `terminal` below is the file's answer, not one read at startup.
+        self.cfg.refresh_tunnel()
         if self._versions is None:
             # A demo machine starts no CLI, not even to ask its version — the
             # SDK carries a claude binary of its own that would answer.
@@ -3816,6 +3899,8 @@ class Server:
                        ("behind", "ahead", "auto", "repo", "error", "checked_at",
                         "web", "latest")},
             "screen": {**screenmod.available(), "enabled": self.cfg.remote_control},
+            # Whether `term.*` is answered here (config.toml's `terminal`).
+            "terminal": self.cfg.terminal,
             # Hours a chat may be quiet before it is archived; 0 is off.
             "auto_archive_h": self.cfg.auto_archive_h,
             "active_sessions": self.sessions.active_count(),

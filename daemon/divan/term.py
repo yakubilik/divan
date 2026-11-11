@@ -4,8 +4,10 @@
 and answers with its id; what the shell prints comes back as `term.output`
 events to every socket attached to it, and `term.exit` when it ends. Nothing
 here checks who is asking: the handlers are only reachable from a socket that
-was already admitted (server.py `_admit`), exactly like `chat.*`, and a term is
-only ever shown to devices of the person who opened it.
+was already admitted (server.py `_admit`), exactly like `chat.*`, and only
+while `terminal` in config.toml is on (server.py `_terminal_gate`; off on a new
+install, `terminal_disabled` otherwise). A term is only ever shown to devices
+of the person who opened it.
 
 A shell nobody is attached to, or that has been silent for a long time, is
 killed rather than left running: a phone that dropped off a train does not get

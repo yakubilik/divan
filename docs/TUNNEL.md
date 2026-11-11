@@ -30,6 +30,24 @@ running a tunnel in front of this daemon opens nothing on its own. Nothing else
 changes: a phone on the tailnet and `divan web` on the machine itself
 never send that header and never meet the list.
 
+### The header is believed only from this machine
+
+Only `cloudflared` writes `CF-Connecting-IP` honestly, and it runs here, so the
+daemon believes the header only on a request whose socket comes from loopback
+(`127.0.0.0/8`, `::1`, `::ffff:127.0.0.1`). Anybody on the tailnet or the LAN
+can write the header themselves; believed, it would let them use a tunnel-only
+token off the tunnel, or send five wrong tokens in a listed household's name and
+lock that household out. So a request or a WebSocket handshake that carries the
+header from any other peer — or from one the daemon cannot tell — is refused
+before any token is looked at: `403`, or the socket closes `1008`. It is not
+counted towards the lock below, nobody is notified, and the daemon logs it at
+most once per peer address every ten minutes. The board's gateway on
+`port + 1` follows the same rule.
+
+**A `cloudflared` on another machine, forwarding to this one over the network,
+is therefore not supported**: every request it forwards would be refused. Run
+it on the daemon's own machine, pointed at `127.0.0.1`.
+
 The list is re-read when the file changes, so editing it costs nothing. A
 restart would drop every phone and every chat, which is too much to ask of
 somebody whose provider just handed them a new address. The three

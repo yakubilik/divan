@@ -22,6 +22,12 @@ the way. The promises:
   6. A terminal ends whole even when something raises while it ends, logged
      once; with no `os.waitid` (macOS before Python 3.13) just the same; and
      `close_all` at shutdown ends every one the same way.
+  7. `terminal` in config.toml: false on a new install, true for a file from
+     before the switch, written back by save() and re-read without a restart.
+     Off, every `term.*` answers `terminal_disabled` and starts no pty and no
+     process, `host.status` says `terminal: false`, nothing on the wire turns it
+     on, and a change is a WARNING in the log. Turned off with a shell open, the
+     shell is ended.
 """
 from __future__ import annotations
 
@@ -437,8 +443,132 @@ def test_close_all(srv: Server, a: Sock) -> None:
         ends_whole(srv, tid, pid, bg, fd, ident, "close_all")
 
 
+TERM_TYPES = ("term.open", "term.write", "term.resize", "term.attach", "term.close", "term.list")
+
+
+def children() -> dict[int, str]:
+    """This process's live children and their command lines."""
+    r = subprocess.run(["ps", "-o", "pid=,ppid=,command=", "-ax"], capture_output=True, text=True)
+    out = {}
+    for line in r.stdout.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) >= 2 and parts[1] == str(os.getpid()) and "pid=,ppid=,command=" not in line:
+            out[int(parts[0])] = parts[2] if len(parts) > 2 else ""
+    return out
+
+
+class Warnings(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.lines: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.lines.append(record.getMessage())
+
+
+def test_switch_config(new_cfg: Config) -> None:
+    print("terminal in config.toml")
+    check(new_cfg.terminal is False, "a new config starts with terminal false")
+    check(tomllib.loads(CONFIG_PATH.read_text()).get("terminal") is False,
+          "and writes `terminal = false` down")
+    saved = CONFIG_PATH.read_text()
+    try:
+        raw = tomllib.loads(saved)
+        raw.pop("terminal", None)
+        CONFIG_PATH.write_text(tomli_w.dumps(raw))
+        old = Config.load()
+        check(old.terminal is True, "a config.toml without the key reads as true (computers running today)")
+        old.save()
+        check(tomllib.loads(CONFIG_PATH.read_text()).get("terminal") is True,
+              "and save() writes `terminal = true` back")
+        CONFIG_PATH.write_text(tomli_w.dumps({**raw, "terminal": "yes"}))
+        check(Config.load().terminal is False, "a value that is not a boolean reads as false")
+    finally:
+        CONFIG_PATH.write_text(saved)
+
+
+def test_switch(client: TestClient, srv: Server, a: Sock) -> None:
+    print("the terminal switch")
+    check(srv.cfg.terminal is False, "this daemon started with the terminal off")
+    a.ok("ping")              # the connect's host.status is read on the way
+    status = [e for e in a.events if e["event"] == "host.status"]
+    check(bool(status) and status[-1]["data"].get("terminal") is False,
+          "host.status on connect carries terminal: false", str(status[-1:]))
+    check(a.ok("host.info").get("terminal") is False, "host.info says the same")
+
+    made: list[str] = []
+    real_term = term.Term
+
+    class Counted(real_term):
+        def __init__(self, *args, **kw):
+            made.append(args[0])
+            super().__init__(*args, **kw)
+    real_openpty = term.os.openpty
+
+    def counted_openpty():
+        made.append("openpty")
+        return real_openpty()
+    term.Term = Counted
+    term.os.openpty = counted_openpty
+    kids = children()
+    try:
+        for typ in TERM_TYPES:
+            r = a.call(typ, {"term_id": "x", "cols": 80, "rows": 24, "data": "id\n"})
+            check(r["type"] == "error" and r["data"].get("code") == "terminal_disabled",
+                  f"{typ} answers terminal_disabled", str(r))
+        # Nothing on the wire is a way to turn it on.
+        for typ, data in [("term.enable", {"enabled": True}), ("host.terminal", {"enabled": True}),
+                          ("screen.enable", {"enabled": True}), ("hello", {"terminal": True}),
+                          ("host.default_cwd", {"terminal": True})]:
+            a.call(typ, data)
+        r = a.call("term.open", {})
+        check(r["type"] == "error" and r["data"].get("code") == "terminal_disabled",
+              "no request turns it on", str(r))
+        check(tomllib.loads(CONFIG_PATH.read_text()).get("terminal") is False,
+              "and config.toml still says false")
+    finally:
+        term.Term = real_term
+        term.os.openpty = real_openpty
+    check(made == [], "no pty and no Term was made", str(made))
+    check(not srv.terms.terms, "Terms holds nothing")
+    new = {p: c for p, c in children().items() if p not in kids}
+    check(not new, "no child process was started", str(new))
+
+    print("turned on and off in config.toml, without a restart")
+    caught = Warnings()
+    logging.getLogger("rac.config").addHandler(caught)
+    try:
+        configure(terminal=True)
+        tid = a.ok("term.open", {})["term_id"]
+        check(any("terminal ENABLED" in m for m in caught.lines), "turning it on is a WARNING line",
+              str(caught.lines))
+        check(a.ok("host.info").get("terminal") is True, "host.info says terminal: true")
+        pid = srv.terms.terms[tid].pid
+        a.ok("term.write", {"term_id": tid, "data": "echo on-$((40+2))\n"})
+        check(a.until(lambda: "on-42" in a.output(tid)), "and a shell opens and answers")
+        srv.cfg.save()
+        check(tomllib.loads(CONFIG_PATH.read_text()).get("terminal") is True,
+              "save() keeps the file's answer")
+
+        configure(terminal=False)
+        r = a.call("term.list", {})
+        check(r["type"] == "error" and r["data"].get("code") == "terminal_disabled",
+              "turned off: term.list answers terminal_disabled", str(r))
+        check(any("terminal disabled" in m for m in caught.lines), "turning it off is a WARNING line",
+              str(caught.lines))
+        check(a.until(lambda: a.exited(tid) is not None) and wait_until(lambda: not alive(pid)),
+              "and the shell that was open is ended")
+        srv.cfg.save()
+        check(tomllib.loads(CONFIG_PATH.read_text()).get("terminal") is False,
+              "save() does not turn it back on")
+    finally:
+        logging.getLogger("rac.config").removeHandler(caught)
+    configure(terminal=True)
+
+
 def main() -> None:
     cfg = Config.load()
+    test_switch_config(cfg)
     a_dev, a_tok = cfg.add_device("Yakup phone")
     b_dev, b_tok = cfg.add_device("Bedirhan laptop")
     gone_dev, gone_tok = cfg.add_device("old phone")
@@ -450,6 +580,7 @@ def main() -> None:
         a = Sock(client, a_tok)
         b = Sock(client, b_tok)
         try:
+            test_switch(client, srv, a)
             tid = test_echo(a)
             test_resize(a, tid)
             test_close(srv, a, tid)

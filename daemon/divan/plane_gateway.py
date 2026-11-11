@@ -53,6 +53,7 @@ import httpx
 import websockets
 
 from .plane_sync import BOT, HUMAN
+from .security import Told, forged_peer, is_loopback
 
 log = logging.getLogger("divan.plane")
 
@@ -299,6 +300,7 @@ class PlaneGateway:
         self.ancestors = " ".join(sorted(set(a.rstrip("/") for a in ancestors if a)))
         self.client = httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0),
                                         follow_redirects=False)
+        self._told = Told()
 
     # who is asking, and from where
     @staticmethod
@@ -307,7 +309,10 @@ class PlaneGateway:
 
     def _origin(self, scope, h: dict[str, str]) -> str:
         """This gateway's origin as the browser sees it."""
-        tunnelled = "cf-connecting-ip" in h
+        # Only cloudflared's, on loopback, gets this far with the header — see
+        # __call__.
+        client = scope.get("client")
+        tunnelled = "cf-connecting-ip" in h and is_loopback(client[0] if client else None)
         proto = h.get("x-forwarded-proto") or ("https" if tunnelled else
                                                  ("https" if scope.get("scheme") in ("https", "wss") else "http"))
         host = h.get("host") or self.up_host
@@ -376,6 +381,20 @@ class PlaneGateway:
                     await send({"type": "lifespan.shutdown.complete"})
                     return
         h = self._headers(scope)
+        # CF-Connecting-IP is cloudflared's, and cloudflared is on loopback:
+        # from any other peer the header is the client's own, and the request
+        # is refused before its pass is looked at (security.TunnelGate).
+        forged = forged_peer(scope)
+        if forged is not None:
+            self._told(forged, "board request carrying CF-Connecting-IP from %s refused: "
+                               "only cloudflared on this machine may send it", forged)
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+                return
+            await send({"type": "http.response.start", "status": 403,
+                        "headers": [(b"content-type", b"application/json")]})
+            await send({"type": "http.response.body", "body": b'{"detail":"forbidden"}'})
+            return
         if self._holder(h) is None:
             if scope["type"] == "websocket":
                 await send({"type": "websocket.close", "code": 4401})

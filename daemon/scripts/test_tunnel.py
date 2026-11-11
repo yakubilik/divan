@@ -106,12 +106,21 @@ def token_in(printed: str) -> str:
     return printed.split("#t=")[1].split("&")[0]
 
 
-def start() -> tuple[Server, TestClient]:
-    """A daemon, as a restart would bring it up: from what is on disk."""
+def start(peer: str = "127.0.0.1") -> tuple[Server, TestClient]:
+    """A daemon, as a restart would bring it up: from what is on disk.
+
+    The client's socket is on loopback unless `peer` says otherwise, because
+    that is where cloudflared is and the header is believed from nowhere else.
+    """
     srv = Server(Config.load())
     srv.tunnel_lock.clock = srv.tunnel_access.clock = lambda: now[0]
     srv.tunnel_access.fetch = jwks
-    return srv, TestClient(srv.app)
+    return srv, TestClient(srv.app, client=(peer, 50000))
+
+
+def beside(srv: Server, peer: str) -> TestClient:
+    """Another client of the same daemon, from another socket peer."""
+    return TestClient(srv.app, client=(peer, 50000))
 
 
 def carrying(via: str | None, access: str | None, cookie: str | None) -> dict:
@@ -448,6 +457,55 @@ def main() -> None:
     check(again.strip() == f"{ELSEWHERE} was not locked", "and a second unlock says there was nothing", again)
     check(not any(d.name == "cli" for d in Config.load().devices.values()),
           "the device minted for the call is gone again")
+
+    print("\n9. the header is believed only from this machine")
+    # Access off: the address list is the whole door, which is where a forged
+    # header from the tailnet would have let a tunnel-only token through.
+    configure(tunnel_access_team="", tunnel_access_aud="", tunnel_access_emails=[])
+    TAILNET, LAN = "100.101.102.103", "192.168.178.20"
+    srv, client = start()
+    with client:
+        check(ws_code(client, panel, HOUSE) == 0 and http(client, "GET", "/files", panel, HOUSE, **files) == 200,
+              "from loopback, a listed address and a tunnel token are served as before")
+        sent.clear(), logged.clear()
+        lock = srv.tunnel_lock
+        for peer in (TAILNET, LAN, "testclient"):
+            with beside(srv, peer) as other:
+                got = [ws_close(other, panel, HOUSE), http(other, "GET", "/files", panel, HOUSE, **files),
+                       http(other, "GET", "/screen.jpg", panel, HOUSE)]
+                check(got[0][0] == 1008 and got[1:] == [403, 403],
+                      f"a tunnel token with a forged header from {peer} is refused 1008 / 403", repr(got))
+                guesses = [ws_code(other, f"forged-{peer}-{i}", GUESSER) for i in range(6)]
+                guesses += [http(other, "GET", "/files", f"forged-http-{peer}-{i}", GUESSER, **files)
+                            for i in range(6)]
+                check(guesses == [1008] * 6 + [403] * 6, f"and so are twelve wrong tokens from {peer}",
+                      repr(guesses))
+                proof = other.get("/lan/proof", params={"device": "x", "nonce": "a" * 16},
+                                  headers={"CF-Connecting-IP": HOUSE})
+                check(proof.status_code == 403, f"/lan/proof with the header from {peer} is a 403",
+                      repr(proof.status_code))
+        settle(srv, client)
+        key = srv.cfg.tunnel_key(GUESSER)
+        check(key not in lock.failed and not lock.locked(key) and not lock.failed,
+              "none of it is counted by the lock", repr(lock.failed))
+        check(not any(p in srv.failed_auth for p in (TAILNET, LAN, "testclient")),
+              "nor by the tailnet's own count", repr(srv.failed_auth))
+        check(sent == [], "and nobody is told", repr(sent))
+        said = [ln for ln in logged if "CF-Connecting-IP" in ln]
+        check(len(said) == 3 and all(any(p in ln for ln in said) for p in (TAILNET, LAN, "testclient")),
+              "one line per peer address, however often it tries", repr(said))
+        check(ws_code(client, panel, GUESSER) == 0, "and the address it named is not locked out")
+
+        print("\n9b. without the header, every bind is as before")
+        for peer in (TAILNET, LAN, "127.0.0.1"):
+            with beside(srv, peer) as other:
+                got = [ws_code(other, local), http(other, "GET", "/files", local, **files),
+                       ws_close(other, panel), http(other, "GET", "/files", panel, **files)]
+                check(got == [0, 200, (4401, "tunnel_only"), 401],
+                      f"from {peer} a tailnet token is served and a tunnel token refused", repr(got))
+        for peer in ("::1", "::ffff:127.0.0.1", "127.0.0.2"):
+            with beside(srv, peer) as other:
+                check(ws_code(other, panel, HOUSE) == 0, f"{peer} is loopback, and its header is believed")
 
     print(f"\n{'all good' if not failures else str(len(failures)) + ' failed'}")
     sys.exit(1 if failures else 0)

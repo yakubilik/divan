@@ -8,6 +8,7 @@
  *
  *     cd daemon && DIVAN_HOME=/tmp/d DIVAN_PORT=8911 .venv/bin/python -c \
  *       "from divan.config import Config; print(Config.load().add_device('live')[1])"
+ *     # a new install has the terminal off: set `terminal = true` in /tmp/d/config.toml
  *     DIVAN_HOME=/tmp/d DIVAN_PORT=8911 .venv/bin/python -m divan serve --bind 127.0.0.1
  *
  *  The page is `termPage()` at a phone's size, with `ReactNativeWebView`
