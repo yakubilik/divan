@@ -44,7 +44,8 @@ from . import voice as voicemod
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
 from .transcribe import known as transcribe_known
 from .attachments import KINDS, media_type_of, normalize_image, peaks, sniff
-from .security import ACCESS_EMAIL, PathPolicy, TunnelAccess, TunnelGate, TunnelLock
+from .security import (ACCESS_EMAIL, SOCKET_PEER, ForgedTunnel, PathPolicy, TunnelAccess, TunnelGate,
+                       TunnelLock, tunnel_via)
 from . import screen as screenmod
 from . import term as termmod
 from . import ustabasi as ustabasimod
@@ -63,6 +64,9 @@ log = logging.getLogger("rac.server")
 # on this machine update themselves overnight, and a daemon that runs for weeks
 # would otherwise offer the models of the week it started.
 MODELS_TTL_S = 900.0
+# `_auth`'s word for a socket that carried CF-Connecting-IP from a peer that is
+# not loopback (security.tunnel_via): closed 1008, never told it was a token.
+FORGED = "forged_tunnel"
 # Two limit readings further apart than this do not measure one report-step.
 STEP_PAIR_S = 600.0
 
@@ -1561,11 +1565,19 @@ class Server:
 
         `token` is the query parameter the routes an <img> draws from accept in
         place of the header. `cf_connecting_ip` is the header itself, which is
-        how a route says which door the request came in by — see `_admit`.
+        how a route says which door the request came in by — see `_admit` —
+        and is believed only from loopback (`tunnel_via`): from anywhere else
+        the request is a 403, before the token is looked at.
         """
         if authorization.lower().startswith("bearer "):
             token = authorization[7:].strip()
-        dev, why = self._admit(token, TunnelGate.address(cf_connecting_ip))
+        try:
+            via = tunnel_via(cf_connecting_ip, SOCKET_PEER.get())
+        except ForgedTunnel:
+            # TunnelGate refuses these first; this is the route not taking the
+            # header at its word should it ever be reached without it.
+            raise HTTPException(status_code=403, detail="forbidden")
+        dev, why = self._admit(token, via)
         if dev is None:
             raise HTTPException(status_code=401, detail=why)
         return dev
@@ -1932,8 +1944,14 @@ class Server:
         auth = ws.headers.get("authorization", "")
         if auth.lower().startswith("bearer "):
             token = auth[7:].strip()
-        return self._admit(token, TunnelGate.address(ws.headers.get("cf-connecting-ip")),
-                           ws.client.host if ws.client else "?")
+        peer = ws.client.host if ws.client else None
+        try:
+            via = tunnel_via(ws.headers.get("cf-connecting-ip"), peer)
+        except ForgedTunnel:
+            # Refused by TunnelGate before it gets here; never a token's fault,
+            # never counted. The callers close it 1008.
+            return None, FORGED
+        return self._admit(token, via, peer or "?")
 
     async def h_tunnel_unlock(self, dev: Device, d: dict) -> dict:
         """Lift a tunnel lock on the running daemon. `divan unlock <ip>`
@@ -2055,6 +2073,9 @@ class Server:
         there and keeps trying, and its token for this computer is untouched.
         """
         dev, why = self._auth(ws)
+        if why == FORGED:
+            await ws.close(code=1008)
+            return
         if dev is None:
             await ws.accept()
             await ws.close(code=4401, reason=why)
@@ -2173,7 +2194,12 @@ class Server:
         to sign in with — the hash is not the token, and the proof is not the
         hash. Never through the tunnel: that door has its own sign-in.
         """
-        if request.headers.get("cf-connecting-ip"):
+        try:
+            via = tunnel_via(request.headers.get("cf-connecting-ip"),
+                             request.client.host if request.client else None)
+        except ForgedTunnel:
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        if via is not None:
             return JSONResponse({"error": "not_here"}, status_code=404)
         dev = self.cfg.devices.get(device)
         if dev is None or dev.tunnel or not re.fullmatch(r"[0-9a-f]{16,64}", nonce or ""):
@@ -2184,6 +2210,9 @@ class Server:
     # ── websocket ──────────────────────────────────────────────────────────
     async def ws_endpoint(self, ws: WebSocket) -> None:
         dev, why = self._auth(ws)
+        if why == FORGED:
+            await ws.close(code=1008)
+            return
         # Accept first so the client receives a real close frame (4401) instead of HTTP 403.
         # The reason says which refusal it was — see `_admit`.
         await ws.accept()
@@ -2191,7 +2220,8 @@ class Server:
             await ws.close(code=4401, reason=why)
             return
         self.clients[ws] = dev
-        conn = self.conns[ws] = Conn(TunnelGate.address(ws.headers.get("cf-connecting-ip")),
+        conn = self.conns[ws] = Conn(tunnel_via(ws.headers.get("cf-connecting-ip"),
+                                                ws.client.host if ws.client else None),
                                      ws.client.host if ws.client else "?")
         self.outbox[ws] = Outbox()
         self.writers[ws] = asyncio.create_task(self._writer(ws, self.outbox[ws]))
