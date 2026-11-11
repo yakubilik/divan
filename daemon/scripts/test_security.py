@@ -10,13 +10,63 @@ Three promises, each of which was once false:
   2. Bypass runs everything without asking except that list, for Claude and for
      Codex alike.
   3. Only a file really inside the upload folder is readable without asking.
+
+The whole table runs three times, each in a fresh process: with TMPDIR=/tmp,
+with TMPDIR inside <daemon home>/scratch (where every chat and ticket runs
+it: 10 cases failed there before 11 Nov 2026), and with DIVAN_HOME set to a
+temp folder.
 """
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# Set by the parent run for each environment it runs this file in.
+_ENV_MARK = "DIVAN_TEST_SECURITY_ENV"
+
+
+def _environments() -> int:
+    """Run this file once in each environment; fail if any run fails."""
+    home = Path.home() / ".divan"
+    scratch_root = home / "scratch"
+    made = [d for d in (home, scratch_root) if not d.exists()]
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    chat_tmp = tempfile.mkdtemp(dir=scratch_root, prefix="test-security-")
+    divan_home = tempfile.mkdtemp(prefix="test-security-home-")
+    home_tmp = os.path.join(divan_home, "scratch", "run")
+    os.makedirs(home_tmp)
+    base = {k: v for k, v in os.environ.items() if k != "DIVAN_HOME"}
+    runs = [
+        ("TMPDIR=/tmp", {**base, "TMPDIR": "/tmp"}),
+        ("TMPDIR=<~/.divan/scratch/..>", {**base, "TMPDIR": chat_tmp}),
+        ("DIVAN_HOME=<temp folder>", {**base, "DIVAN_HOME": divan_home, "TMPDIR": home_tmp}),
+    ]
+    bad = []
+    try:
+        for label, env in runs:
+            print(f"\n=== {label} ===", flush=True)
+            r = subprocess.run([sys.executable, __file__], env={**env, _ENV_MARK: label})
+            if r.returncode:
+                bad.append(label)
+    finally:
+        shutil.rmtree(chat_tmp, ignore_errors=True)
+        shutil.rmtree(divan_home, ignore_errors=True)
+        for d in reversed(made):
+            try:
+                d.rmdir()
+            except OSError:
+                pass
+    print(f"\n{'all environments passed' if not bad else 'failed in: ' + ', '.join(bad)}")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__" and not os.environ.get(_ENV_MARK):
+    sys.exit(_environments())
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -26,7 +76,7 @@ from divan.providers import claude as claude_mod       # noqa: E402
 from divan.providers.base import ProviderConfig        # noqa: E402
 from divan.providers.claude import ClaudeProvider      # noqa: E402
 from divan.providers.codex import CodexProvider        # noqa: E402
-from divan import security                              # noqa: E402
+from divan import config, security                      # noqa: E402
 from divan.security import (CATEGORIES, DESTRUCTION, EXPOSURE, MONEY,  # noqa: E402
                             destructive_reason)
 
@@ -231,6 +281,50 @@ def test_classifier(cwd: str) -> None:
           "the 15 Oct heredoc in /tmp does not ask", str(destructive_reason(HEREDOC_JSON, "/tmp")))
 
 
+def _daemon_home() -> str:
+    return os.path.realpath(os.environ["DIVAN_HOME"]) if os.environ.get("DIVAN_HOME") \
+        else os.path.expanduser("~/.divan")
+
+
+def test_chat_scratch() -> None:
+    """A chat's own scratch folder is scratch, the rest of the daemon's home is
+    not (11 Nov 2026: `touch`, `>` and `rm -rf` in its TMPDIR asked)."""
+    print("a chat's scratch folder")
+    cwd = os.path.expanduser("~/projects/x")
+    homes = sorted({"~/.divan", _daemon_home()})
+    for h in homes:
+        chat = f"{h}/scratch/abc"
+        tmpdir = os.path.expanduser(chat)
+        for cmd, tmp in ((f"touch {chat}/x", None),
+                         (f"echo hi > {chat}/x.txt", None),
+                         (f"rm -rf {chat}/build", None),
+                         (f"rm -rf {chat}", None),
+                         ('rm -rf "$TMPDIR/build"', tmpdir),
+                         ('T=$(mktemp -d); rm -rf "$T"', tmpdir),
+                         ('T=$(mktemp -d -t x); touch "$T/a"; rm -rf "$T"', tmpdir),
+                         ("bash -lc 'rm -rf $TMPDIR/build'", tmpdir)):
+            reason = destructive_reason(cmd, cwd, tmpdir=tmp)
+            check(reason is None, f"allows   {cmd}" + (f"  (TMPDIR={tmp})" if tmp else ""), str(reason))
+        for cmd, tmp in ((f"rm -rf {h}/scratch", None),
+                         (f"rm -rf {h}/scratch/", None),
+                         (f"rm -rf {h}/scratch/*", None),
+                         (f"touch {h}/scratch", None),
+                         (f"rm -rf {h}", None),
+                         (f"rm -rf {h}/scratch/..", None),
+                         (f"rm -rf {chat}/../../config.toml", None),
+                         (f"sed -i '' s/a/b/ {h}/config.toml", None),
+                         (f"echo x > {h}/db.sqlite", None),
+                         (f"echo x > {chat}/../../db.sqlite", None),
+                         ("rm -rf $UNKNOWN/x", None),
+                         ("rm -rf $UNKNOWN/x", tmpdir),
+                         ('rm -rf "$TMPDIR/build"', None),
+                         ('TMPDIR=~/projects; rm -rf "$TMPDIR"', tmpdir),
+                         ('T=$(mktemp -d -p ~/projects); rm -rf "$T/.."', tmpdir)):
+            reason = destructive_reason(cmd, cwd, tmpdir=tmp) or ""
+            check(reason.startswith(DESTRUCTION + ":"),
+                  f"flags    {cmd}" + (f"  (TMPDIR={tmp})" if tmp else ""), reason)
+
+
 def test_categories(cwd: str) -> None:
     print("every reason is one of the three")
     for category, cmds in BY_CATEGORY.items():
@@ -363,6 +457,33 @@ async def test_codex_bypass(cwd: str) -> None:
           "and is declined when the phone says no", str(sent[-1]))
 
 
+async def test_providers_know_the_scratch(tmp: Path) -> None:
+    """Both providers hand the guard the chat's TMPDIR."""
+    print("providers pass the chat's scratch folder")
+    real = config.SCRATCH_DIR
+    config.SCRATCH_DIR = tmp / "scratch"
+    cmd = 'rm -rf "$TMPDIR/build"'
+    try:
+        for chat_id, quiet in ((None, False), ("c1", True)):
+            asked: list = []
+            p = provider(ClaudeProvider, str(tmp), asked)
+            p.cfg.chat_id = chat_id
+            await p._pre_tool_hook({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": str(tmp)}, "t1", None)
+            check((not asked) is quiet, f"claude, chat {chat_id}: {cmd} {'runs' if quiet else 'asks'}", str(asked))
+            asked = []
+            c = provider(CodexProvider, str(tmp), asked)
+            c.cfg.chat_id = chat_id
+
+            async def send(msg):
+                pass
+
+            c._send = send
+            await c._server_request(1, "item/commandExecution/requestApproval", {"command": cmd, "cwd": str(tmp)})
+            check((not asked) is quiet, f"codex, chat {chat_id}: {cmd} {'runs' if quiet else 'asks'}", str(asked))
+    finally:
+        config.SCRATCH_DIR = real
+
+
 async def test_bypass_without_asking(cwd: str) -> None:
     print("bypass with bypass_asks off")
     asked: list = []
@@ -434,12 +555,17 @@ async def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         cwd = Path(tmp) / "project"
         cwd.mkdir()
-        test_classifier(str(cwd))
-        test_categories(str(cwd))
+        # Where a chat works: a project folder, never inside TMPDIR, so
+        # `rm -rf ../..` means the same in every environment.
+        project = os.path.expanduser("~/projects/divan-test-security-x")
+        test_classifier(project)
+        test_chat_scratch()
+        test_categories(project)
         await test_claude_bypass(str(cwd))
         await test_claude_allow_for_chat(str(cwd))
         await test_codex_bypass(str(cwd))
         await test_bypass_without_asking(str(cwd))
+        await test_providers_know_the_scratch(Path(tmp))
         test_bypass_asks_persists(Path(tmp))
         await test_upload_read(Path(tmp))
     print(f"\n{'all passed' if not failures else f'{len(failures)} failed'}")

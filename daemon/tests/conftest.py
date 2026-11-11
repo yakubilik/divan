@@ -52,3 +52,15 @@ from divan import claude_memory  # noqa: E402
 
 _claude_home = Path(tempfile.mkdtemp(prefix="divan-pytest-claude-"))
 claude_memory.default_claude_home = lambda: _claude_home
+
+# A held CLI listens on `<held dir>/<chat id>.sock`, and a unix socket path may be
+# at most 104 bytes on macOS. Under a long TMPDIR (a ticket worktree's or a chat's
+# scratch folder) the throwaway home above is too deep for one, and every held test
+# timed out waiting for a holder that could not bind. Such runs get a short held dir.
+if len(str(config.CONFIG_DIR / "held" / ("x" * 40 + ".sock"))) > 100 and not os.environ.get("DIVAN_HELD_DIR"):
+    import atexit
+    import shutil
+
+    _held = tempfile.mkdtemp(prefix="dvh-", dir="/tmp")
+    os.environ["DIVAN_HELD_DIR"] = _held
+    atexit.register(shutil.rmtree, _held, True)

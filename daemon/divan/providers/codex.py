@@ -20,7 +20,7 @@ from typing import Any
 
 from ..errors import Err
 from ..security import asked, destructive_reason, prints_secret, redact
-from .. import config, held, legacy, tools, structured_approval
+from .. import held, legacy, tools, structured_approval
 from .base import Provider, ProviderConfig, TurnResult
 
 log = logging.getLogger("rac.codex")
@@ -159,7 +159,7 @@ class CodexProvider(Provider):
             env["DIVAN_CHAT_ID"] = self.cfg.chat_id
             env.update(legacy.chat_env(self.cfg.chat_id))
             # its own scratch folder: mktemp, tempfile and the tools land there, not in /tmp
-            env["TMPDIR"] = str(config.chat_scratch(self.cfg.chat_id))
+            env["TMPDIR"] = self.scratch_dir()
         argv = [cli, "app-server"]
         # Held outside the daemon (`held.py`): the relay stands in for
         # `codex app-server`, and the app-server outlives a daemon restart.
@@ -279,7 +279,8 @@ class CodexProvider(Provider):
                 cmd = params.get("command") or ""
                 if isinstance(cmd, (list, tuple)):
                     cmd = shlex.join(str(c) for c in cmd)
-                reason = asked(destructive_reason(cmd, self.cfg.cwd, params.get("cwd")), self.cfg.ask_for)
+                reason = asked(destructive_reason(cmd, self.cfg.cwd, params.get("cwd"),
+                                                 self.scratch_dir()), self.cfg.ask_for)
                 if self.cfg.perm_mode == "bypass" and not self.cfg.bypass_asks:
                     reason = None
                 # Bypass answers everything itself except the destructive list,

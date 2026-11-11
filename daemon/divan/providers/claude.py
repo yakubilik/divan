@@ -28,7 +28,7 @@ from claude_agent_sdk import (
 
 from ..config import UPLOAD_DIR
 from ..security import MONEY, asked, destructive_reason, prints_secret, redact
-from .. import accounts, config, held, legacy
+from .. import accounts, held, legacy
 from . import claude_models
 from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult, is_auth_failure
 
@@ -193,7 +193,8 @@ class ClaudeProvider(Provider):
             }}
         if self.cfg.perm_mode == "bypass" and not self.cfg.bypass_asks:
             return {}
-        reason = asked(destructive_reason(cmd, self.cfg.cwd, input_data.get("cwd")), self.cfg.ask_for)
+        reason = asked(destructive_reason(cmd, self.cfg.cwd, input_data.get("cwd"),
+                                        self.scratch_dir()), self.cfg.ask_for)
         if not reason:
             if self.cfg.perm_mode != "ask" or "Bash" in self._session_allow:
                 return {}
@@ -340,7 +341,7 @@ class ClaudeProvider(Provider):
             env["DIVAN_CHAT_ID"] = c.chat_id
             env.update(legacy.chat_env(c.chat_id))
             # its own scratch folder: mktemp, tempfile and the tools land there, not in /tmp
-            env["TMPDIR"] = str(config.chat_scratch(c.chat_id))
+            env["TMPDIR"] = self.scratch_dir()
         kw: dict[str, Any] = dict(
             env=env,
             cwd=c.cwd,
