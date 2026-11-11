@@ -374,13 +374,26 @@ computers and relays to them (`daemon/divan/fleet.py`).
   or 502), never with 4401, so the browser's token is not marked refused and the
   client simply retries. `device.revoke_self` is refused on the relayed socket
   and `hello` loses its `device_name`, because the credential is shared.
+  `account.export` and `account.import` are refused there as well, answered
+  `forbidden` by the gateway itself and never forwarded: a sign-in is moved
+  from the phone over the tailnet, not by whoever holds the gateway.
 
 ## Terminal
 
 `term.*` is a shell on the computer, driven from the phone or the panel
-(`daemon/divan/term.py`). It is exactly as reachable as `chat.*` and no more: a
+(`daemon/divan/term.py`). It is behind a switch: `terminal` in config.toml.
+A new install writes `terminal = false`; a config.toml from before the key
+existed reads as `true`, so a computer already using its terminal keeps it.
+With it off, every `term.*` answers the error code `terminal_disabled`, no pty
+or process is started, shells still open are ended, and `host.status` carries
+`terminal: false`. Nothing on the wire turns it on: only an edit of
+config.toml, which is re-read without a restart (like `ask_for`), written back
+by every save, and logged as a WARNING whenever the value changes.
+
+With it on, it is exactly as reachable as `chat.*` and no more: a
 socket `/ws` admitted, by the same doors, lock and sign-in — an unpaired,
-revoked or wrong token is closed with 4401 before it can ask. A terminal belongs
+revoked or wrong token is closed with 4401 before it can ask. A tunnel
+browser's token opens it too. A terminal belongs
 to the person (`people`) whose device opened it; another person's devices
 neither list nor drive it (`no_term`). Output goes to the attached sockets, not
 to every client, and is never written to the database.
@@ -424,7 +437,7 @@ than on the list.
 
 | event | durable | data |
 |---|---|---|
-| `host.status` | – | host information (on connect) |
+| `host.status` | – | host information (on connect). Among it `terminal`: whether this computer answers `term.*` at all (`terminal` in its config.toml, see *Terminal*); absent on a daemon from before the switch, which always did |
 | `chat.created` / `chat.updated` / `chat.deleted` | – | chat |
 | `groups.changed` / `chats.changed` | – | `{groups}` / `{chats}` — the full list, when another device changes a group |
 | `message.user` | ✓ | `{text, attachments}` |
@@ -628,8 +641,8 @@ has no date says nothing about one rather than guessing.
 | `account.login.cancel` | `{account_id}` | – |
 | `account.logout` | `{account_id}` | account |
 | `account.delete` | `{account_id}` | – (chats bound to it are released) |
-| `account.export` | `{account_id}` | `{provider, label, detail, credentials}` — the stored sign-in |
-| `account.import` | `{account_id, credentials}` | account + `{verified, verify_error}` |
+| `account.export` | `{account_id}` | `{provider, label, detail, credentials}` — the stored sign-in. A tailnet device only: a tunnel device is answered `forbidden`, and so is the gateway (`/peer/<id>/ws`), which never relays it. See *Moving a sign-in* |
+| `account.import` | `{account_id, credentials}` | account + `{verified, verify_error}` — who may ask, as `account.export` |
 | `account.forget` | `{account_id}` | account — deletes the sign-in **locally only** |
 | `tool.status` | – | `{tools: [{provider, version, path}], npm}` |
 | `tool.install` | `{provider, force?}` | `{provider, version, path}` — output streams |
@@ -724,7 +737,10 @@ token and the other copy dies (Codex says so outright: `your refresh token was
 already used`). So the order is:
 
 1. The phone calls `account.export` on the source computer, over a separate
-   socket.
+   socket. Only a tailnet device may: a tunnel device (one made by `web --at`)
+   is answered `forbidden` for both `account.export` and `account.import`, and
+   the gateway refuses both without relaying them. The panel never moves a
+   sign-in.
 2. `account.import` on the target writes the file with mode 0600 and then makes
    the CLI issue **a real request**. `auth status` only reads the local file and
    will call a revoked token "signed in"; `verified` is what tells them apart.
