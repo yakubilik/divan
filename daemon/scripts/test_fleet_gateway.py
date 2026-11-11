@@ -206,7 +206,7 @@ def main() -> None:
     _, tunnel_tok = cfg.add_device("tunnel browser", tunnel=True)
     configure(people={"Yakup": [], "Bedirhan": [other_dev.id]}, tunnel_allow_ips=["203.0.113.4"])
     srv = Server(Config.load())
-    client = TestClient(srv.app)
+    client = TestClient(srv.app, client=("127.0.0.1", 50000))
     peers_file = Path(HOME) / "peers.json"
     try:
         run(srv, client, peer, peers_file, owner_tok, other_tok, tunnel_tok)

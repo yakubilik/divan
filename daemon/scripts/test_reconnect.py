@@ -224,7 +224,7 @@ def main() -> None:
         return {}
     srv.catalog_async = no_catalog          # `hello` would otherwise ask both CLIs for models
 
-    with TestClient(srv.app) as client:
+    with TestClient(srv.app, client=("127.0.0.1", 50000)) as client:
         print("1. the disconnect line")
         with client.websocket_connect(f"/ws?token={phone}") as ws:
             ws.receive_json()                                    # host.status
