@@ -149,7 +149,7 @@ way — a Cloudflare tunnel, with `web --at` for the panel (docs/TUNNEL.md).
 | `server.py` | The WebSocket endpoint, every request handler, the HTTP upload/file routes. |
 | `session.py` | One chat's CLI session: turns, queueing, interrupts, resume. |
 | `providers/` | `claude.py` and `codex.py` — the two adapters, behind one interface; `demo.py`, the scripted one a demo machine runs. |
-| `security.py` | Dangerous-command patterns, the path fence, secret redaction. |
+| `security.py` | Dangerous-command patterns, the path check for opening a chat, secret redaction. |
 | `config.py` | `config.toml`, devices, token hashes, `allowed_roots`. |
 | `agents.py` | Agent definitions, and the store that lists them. |
 | `updater.py` | Follows `origin/main` and lets the supervisor restart it. |
