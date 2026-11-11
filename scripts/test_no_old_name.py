@@ -12,7 +12,8 @@ in exactly the places listed here, and each has a reason:
    (the app's and the panel's are separate packages, so each has its own);
  · the migration script and its test, which exist to move an old install;
  · the placeholder bundle identifier in `app/app.json`, which is an identity
-   and is not renamed with the product.
+   and is not renamed with the product, and the marked block in the share
+   extension's test that pins it.
 
 A new use of the old name anywhere else fails this, on purpose: add the
 compatibility to a legacy block, or do not add it.
@@ -36,7 +37,9 @@ WHOLE_FILES = {
     "daemon/scripts/test_migrate_to_divan.py",
 }
 # Files that hold one marked block; only the lines between the markers are let off.
-BLOCKS = {"app/src/pair.ts", "web/src/lib/actions.ts"}
+# `app/scripts/test-share.cjs` pins the bundle identifier the LINES entry below
+# lets off, so the test that it is left alone has to name it too.
+BLOCKS = {"app/src/pair.ts", "web/src/lib/actions.ts", "app/scripts/test-share.cjs"}
 BEGIN, END = "LEGACY NAME BLOCK: begin", "LEGACY NAME BLOCK: end"
 # One line, by what it sets rather than what it says: the value is the identity.
 LINES = {"app/app.json": '"bundleIdentifier":'}

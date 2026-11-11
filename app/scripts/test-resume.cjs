@@ -42,9 +42,9 @@ const frame = (e) => client.handle(JSON.stringify({ type: 'event', ...e }));
 // live line ("Son ▌") until the next turn.
 const said = (cid, seq, text) => ({ event: 'message.assistant', chat_id: cid, seq, data: { segment: 0, text }, ts: seq });
 const turns = {
-  c2: { busy: false, events: [said('c2', 1, 'earlier'), said('c2', 2, 'Son mesajım geldi.'),
+  c2: { busy: false, events: [said('c2', 1, 'earlier'), said('c2', 2, 'My last message came in.'),
                                { event: 'turn.done', chat_id: 'c2', seq: 3, data: {}, ts: 3 }] },
-  c3: { busy: true, events: [said('c3', 1, 'earlier'), said('c3', 2, 'Son mesajım geldi.')] },
+  c3: { busy: true, events: [said('c3', 1, 'earlier'), said('c3', 2, 'My last message came in.')] },
   // Still streaming its first segment: the last thing written is the prompt.
   c4: { busy: true, events: [said('c4', 1, 'earlier answer'),
                              { event: 'message.user', chat_id: 'c4', seq: 2, data: { text: 'next' }, ts: 2 }] },
@@ -95,11 +95,11 @@ const ready = (async () => {
   }
   {
     frame({ event: 'turn.started', chat_id: 'c4', data: {} });
-    frame({ event: 'text.delta', chat_id: 'c4', data: { segment: 0, text: 'Yazıyorum' } });
+    frame({ event: 'text.delta', chat_id: 'c4', data: { segment: 0, text: 'Writing' } });
     frame({ event: 'turn.progress', chat_id: 'c4', data: {} });
     await useStore.getState().openChat('c4');
     checks.push(['resume (c4): a segment still streaming is not cleared because an older answer had the same number',
-      useStore.getState().live.c4?.text === 'Yazıyorum']);
+      useStore.getState().live.c4?.text === 'Writing']);
   }
 })().catch((e) => checks.push([`resume: ran (${e?.stack || e})`, false]));
 

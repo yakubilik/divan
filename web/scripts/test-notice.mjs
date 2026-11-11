@@ -63,12 +63,16 @@ const click = (el) => act(async () => el.click());
   assert.match(n.report, /delivered but not installed because the phone was unreachable/);
   assert.deepEqual(n.facts, [
     '🔀 merged into main (1664073)',
+    // audit: language-data — the Turkish parts of the stored notices in notice-fixture.js
     'branch ustabasi/157-match-mobile-chat-grouping-to-the-web · 1 commit · worktree silindi, dal duruyor',
+    // audit: end-language-data
   ]);
   assert.ok(!n.report.includes(INSTRUCTION) && n.after === '');
   assert.equal(ticketNotice(BLOCKED_139).state, 'blocked');
   assert.equal(ticketNotice(FAILED).state, 'failed');
+  // audit: language-data — the Turkish parts of the stored notices in notice-fixture.js
   assert.equal(ticketNotice(STEERED_152).after, 'bunun senle ne alakası var');
+  // audit: end-language-data
   for (const text of [CONTROL, QUOTED, DONE_157.replace('ustabasi show 157', 'ustabasi show 158'), DONE_157.replace('🔔 ', '')]) {
     assert.equal(ticketNotice(text), null, text.slice(0, 60));
   }
@@ -139,7 +143,9 @@ await show(fold([user(BLOCKED_139), user(FAILED)]));
   assert.ok(n);
   assert.match(toggle(n).textContent, /Done\s*#152.*queued/);
   assert.ok(!document.body.textContent.includes(INSTRUCTION));
+  // audit: language-data — the Turkish parts of the stored notices in notice-fixture.js
   assert.ok(document.body.textContent.includes('bunun senle ne alakası var'), 'what the person added is still theirs to see');
+  // audit: end-language-data
 }
 
 await act(async () => root.unmount());

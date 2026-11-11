@@ -117,7 +117,9 @@ const ready = (async () => {
       && seen.indexOf('Hearing you') < seen.indexOf('Speaking')]);
     const after = markup();
     checks.push(['call screen (live): what was heard and the answer are written as bubbles, and the wait is shown in seconds',
+      // audit: language-data — what the Turkish call fixture heard and answered, shown as bubbles
       after.includes('Testler bitti mi') && after.includes('Şu an') && /answered \d+\.\d s after you stopped/.test(after)]);
+      // audit: end-language-data
 
     // End call, pressed.
     R.presses().find((p) => p.text === 'End call').press();

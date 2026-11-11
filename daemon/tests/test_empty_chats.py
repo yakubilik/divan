@@ -2,7 +2,7 @@
 
     uv run python -m pytest -q
 
-Yakup, 5 Nov 2026: "boş chat diye bir şey olmasın". The pen makes a chat the
+The owner, 5 Nov 2026: "let there be no such thing as an empty chat". The pen makes a chat the
 moment it is pressed; one pressed and put down used to stay until auto-archive
 moved it to the archive, where it stayed for good. What is guarded here: the
 sweep deletes exactly the chats with nothing written in them that are older

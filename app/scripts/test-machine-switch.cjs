@@ -44,7 +44,9 @@ checks.push(
     eq(A.machineActions({ id: 'h1', reachable: true }, { active: null, paired: ['h1'] }), ['use', 'screen'])],
   ['switch: the words are there in English and Turkish',
     ['maUse', 'maCurrent', 'maPairThis', 'maNotPaired'].every((k) => !!I.t(k) && I.t(k) !== k && !!I.tr[k])
+    // audit: language-data — the Turkish locale's string for the machine switch
     && I.t('maUse') === 'Use this machine' && I.tr.maUse === 'Bu makineye geç'],
+    // audit: end-language-data
   // Why `pair` exists at all: the store's switch returns on an id it has no
   // pairing for, and that is left as it is.
   ['switch: the store still ignores an id it is not paired with, which is why the page must not offer it',

@@ -34,7 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from divan import claude_memory  # noqa: E402  (standard library only)
+from divan import claude_memory, legacy  # noqa: E402  (standard library only)
 
 
 def parse(argv: list[str] | None) -> argparse.Namespace:
@@ -44,14 +44,14 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
                     help="the shared Claude config dir (default ~/.claude)")
     ap.add_argument("--accounts", type=Path, action="append",
                     help="a folder of account homes; repeatable "
-                         "(default ~/.divan/accounts and ~/.remote-ai-chat/accounts)")
+                         f"(default ~/.divan/accounts and ~/{legacy.HOME_NAME}/accounts)")
     ap.add_argument("--rollback", type=Path, default=home / ".divan" / "rollback",
                     help="where the backup archive goes (default ~/.divan/rollback)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     a = ap.parse_args(argv)
     if not a.accounts:
-        a.accounts = [home / ".divan" / "accounts", home / ".remote-ai-chat" / "accounts"]
+        a.accounts = [home / ".divan" / "accounts", home / legacy.HOME_NAME / "accounts"]
     return a
 
 

@@ -43,7 +43,9 @@ let tickets = [
   t(258, 'divan', 'running', 'Web panel: one live page of every ticket in flight'),
   t(259, 'divan', 'blocked', 'Phone: answer a ticket from the lock screen', {
     escalation: '- which Apple team should sign the widget?',
+    // audit: language-data — a Turkish question whose yes and no chips are read from its particle
     ask: 'Widget için kişisel Apple takımını kullanayım mı?',
+    // audit: end-language-data
     last_event: { ts: NOW - 300, kind: 'blocked', msg: 'which Apple team should sign the widget?' } }),
   t(260, 'divan', 'queued', 'Daemon: send the queue on change instead of on poll', {
     started_at: null, round_started_at: null, last_event: null, goal: 'Push ustabasi.list to the panel when it changes.' }),

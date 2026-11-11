@@ -156,8 +156,8 @@ def _daemon_command_lines() -> list[str]:
     for py in (sys.executable, "/usr/bin/python3"):
         lines += [f"{py} {Path.home()}/projects/divan/daemon/.venv312/bin/divan serve",
                   f"{py} -m divan serve",
-                  f"{py} {Path.home()}/projects/remote_ai_chat/daemon/.venv/bin/remote-ai-chat serve",
-                  f"{py} -m remote_ai_chat serve"]
+                  f"{py} {Path.home()}/projects/{legacy.PACKAGE}/daemon/.venv/bin/{legacy.COMMAND} serve",
+                  f"{py} -m {legacy.PACKAGE} serve"]
     return lines
 
 

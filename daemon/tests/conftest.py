@@ -40,9 +40,9 @@ if importlib.util.find_spec("tomli_w") is None and not os.environ.get("DIVAN_PYT
 os.environ["DIVAN_HOME"] = tempfile.mkdtemp(prefix="divan-pytest-")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from divan import config  # noqa: E402
+from divan import config, legacy  # noqa: E402
 
-_real = {(Path.home() / config.HOME_NAME).resolve(), (Path.home() / ".remote-ai-chat").resolve()}
+_real = {(Path.home() / config.HOME_NAME).resolve(), (Path.home() / legacy.HOME_NAME).resolve()}
 if config.CONFIG_DIR.resolve() in _real:
     raise RuntimeError(f"tests would write to the live daemon home {config.CONFIG_DIR}")
 

@@ -269,7 +269,7 @@ async function barges(peer, fx, v) {
     if (!playing) { out.push({ ask, error: 'no answer played' }); continue; }
     await wait(400);                                // into the answer, its echo in the microphone
     const answered = p.s.snapshot().turn;
-    const cut = await p.say(fx['short-greeting']);   // "selam nasılsın", over the answer
+    const cut = await p.say(fx['short-greeting']);   // "hi, how are you" in Turkish, over the answer
     await p.until(() => p.s.barges.length > before.barges, 3000);
     const b = p.s.barges[before.barges];
     // Voiced onset of the cut-in: the first 20 ms frame of the fixture at −40 dBFS or more.
@@ -323,7 +323,7 @@ async function agentCall(peer, fx, v) {
   const p = await phone(peer, 'e2e-agent', v.voice, { chatId: chat.id });
   await wait(5000);
   const t0 = Date.now();
-  const req = await p.say(fx['correction-pause']);   // "testleri çalıştır, hayır dur, önce derlemeyi bitir"
+  const req = await p.say(fx['correction-pause']);   // "run the tests, no wait, finish the build first"
   await p.until(() => p.of('voice.turn').length >= 1, 25000);
   const routedTurn = p.of('voice.turn')[0];
   const firstAudible = [...p.engine.items.values()].find((it) => turnOf(it.id) === routedTurn?.data.turn_id && it.started);
@@ -332,7 +332,7 @@ async function agentCall(peer, fx, v) {
   await wait(4000);
   // While it builds: a question about it, answered from the chat's state without waiting for the agent.
   const turnsBefore = p.of('voice.turn').length;
-  const q = await p.say(fx['short-status']);          // "testler bitti mi"
+  const q = await p.say(fx['short-status']);          // "are the tests done?"
   await p.until(() => p.of('voice.turn').length > turnsBefore, 25000);
   await p.until(() => !p.s.playingNow() && p.s.state !== 'speaking', 20000);
   const qTurn = p.of('voice.turn')[turnsBefore];

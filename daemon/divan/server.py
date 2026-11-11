@@ -1138,7 +1138,7 @@ class Server:
         """The chat a queue notification goes to, opened if it is not there yet.
 
         Asked by the queue's push (`divan.push.send_push`, from the queue's
-        rac_push) before the banner leaves, so the banner opens that chat; and
+        push script) before the banner leaves, so the banner opens that chat; and
         by the panel for a notification it holds no chat for. `{ticket, kind}`
         or `{id}` (a notification already recorded). `chat_id` is null for a
         kind that opens no chat."""

@@ -1,16 +1,18 @@
 """Plane's board, and the queue behind it.
 
-Every Plane work item says who does it with one of two labels: `ustabaşı`
-(the queue's agents) or `insan` (a person). The panel will not save a new one
-without either (`plane_gateway.LOCK_JS`); this is what the labels mean.
+Every Plane work item says who does it with one of two labels: the queue's
+label (`BOT`, the queue's agents) or the person label (`HUMAN`). The labels are
+named in the board's language, so the names are the board's data and are
+compared as they are. The panel will not save a new item without either
+(`plane_gateway.LOCK_JS`); this is what the labels mean.
 
-  - An `ustabaşı` item moved to In Progress is filed with the queue, exactly as
+  - A queue item moved to In Progress is filed with the queue, exactly as
     dragging a coding card into In Progress on Divan's own board was: its title,
     its description as the goal, the product's first repository. The ticket's
     number goes on the item (`external_source = ustabasi`, `external_id = N`)
     and a comment says so. An item that already carries a number is not filed
     twice.
-  - An `insan` item moved anywhere is left alone.
+  - A person's item moved anywhere is left alone.
   - An item with neither label moved to In Progress goes back to Todo, with a
     comment saying why: nobody has said who does it.
   - A ticket the queue finishes moves its item to Done; one it cancels, to
@@ -36,8 +38,10 @@ import httpx
 
 log = logging.getLogger("divan.plane.sync")
 
+# audit: language-data — the label names on the Plane board, compared at runtime
 BOT = "ustabaşı"
 HUMAN = "insan"
+# audit: end-language-data
 SOURCE = "ustabasi"
 EVERY_S = 20.0
 KEY_SERVICE = "rac-secret-plane-api"
@@ -51,8 +55,11 @@ def _text(desc_html: str | None) -> str:
 
 
 def who(labels: list[str]) -> str | None:
-    # Turkish casing: "İnsan" lowers to "i̇nsan" in Python, not "insan".
+    # Turkish casing: the dotted capital I lowers to `i` plus a combining dot in
+    # Python, and the dotless capital to `i`, so both are folded by hand first.
+    # audit: language-data — the two Turkish capitals folded the Turkish way
     names = {str(n).strip().replace("İ", "i").replace("I", "ı").lower() for n in labels}
+    # audit: end-language-data
     if BOT in names:
         return "bot"
     if HUMAN in names:
@@ -191,24 +198,24 @@ class PlaneSync:
             if kind is None:
                 await c.patch(f"projects/{pid}/issues/{it['id']}/", json={"state": states.get("Todo")})
                 await self._comment(c, pid, it["id"],
-                    "Kim yapacak belli değil: önce “ustabaşı” ya da “insan” etiketini seç, sonra In Progress’e çek.")
+                    f"Nobody has said who does this: pick the “{BOT}” or the “{HUMAN}” label, then move it to In Progress.")
                 done["returned"] += 1
                 continue
             if it.get("external_source") == SOURCE and it.get("external_id") or it["id"] in self.state["filed"]:
                 continue
             repos = self.repos_for(slug)
             if not repos or not self.is_allowed(repos[0]):
-                await self._comment(c, pid, it["id"], "Bu ürünün çalışılacak bir reposu yok; ustabaşı başlatamadı.")
+                await self._comment(c, pid, it["id"], "This product has no repository to work in, so the queue could not start it.")
                 continue
             try:
                 n = await self._add(spec_for(it, repos[0]))
             except (ValueError, OSError) as e:
-                await self._comment(c, pid, it["id"], f"Ustabaşı kuyruğa almadı: {e}")
+                await self._comment(c, pid, it["id"], f"The queue did not take it: {e}")
                 continue
             self.state["filed"][it["id"]] = {"project": pid, "ticket": n, "said": "queued"}
             await c.patch(f"projects/{pid}/issues/{it['id']}/",
                           json={"external_source": SOURCE, "external_id": str(n)})
-            await self._comment(c, pid, it["id"], f"Ustabaşı kuyruğa aldı: #{n}.")
+            await self._comment(c, pid, it["id"], f"Queued as ticket #{n}.")
             done["filed"] += 1
 
     async def _back(self, c, done: dict) -> None:
@@ -223,13 +230,13 @@ class PlaneSync:
             target = {"done": "Done", "cancelled": "Cancelled"}.get(status)
             if target:
                 await c.patch(f"projects/{pid}/issues/{iid}/", json={"state": self._states[pid].get(target)})
-                await self._comment(c, pid, iid, f"Ustabaşı #{f['ticket']}: {'bitti' if status == 'done' else 'iptal edildi'}.")
+                await self._comment(c, pid, iid, f"Ticket #{f['ticket']} {'is done' if status == 'done' else 'was cancelled'}.")
                 del self.state["filed"][iid]
                 done["closed"] += 1
                 continue
             if status in ("blocked", "failed"):
                 await self._comment(c, pid, iid,
-                    f"Ustabaşı #{f['ticket']} {'takıldı' if status == 'blocked' else 'başarısız oldu'}; Divan'daki ticket sayfasına bak.")
+                    f"Ticket #{f['ticket']} {'is blocked' if status == 'blocked' else 'failed'}; see its page in Divan.")
             f["said"] = status
 
     async def loop(self) -> None:

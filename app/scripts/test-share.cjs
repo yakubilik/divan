@@ -216,9 +216,11 @@ const HERMES_CHAT = { provider: 'claude', model: 'sonnet', effort: 'low', perm_m
     check(`plugin: the extension is shown as "Divan", for a web URL or text — ${JSON.stringify(rule)}`,
       plist.CFBundleDisplayName === 'Divan' && plist.NSExtension.NSExtensionPointIdentifier === 'com.apple.share-services'
       && rule.NSExtensionActivationSupportsWebURLWithMaxCount === 1 && rule.NSExtensionActivationSupportsText === true);
+    // LEGACY NAME BLOCK: begin — app.json's bundle id is an identity, kept under the old name
     check('plugin: the extension is a bundle id under the main app\'s, which is left alone',
       plugin.extensionBundleId('com.example.remoteaichat') === 'com.example.remoteaichat.share'
       && app.ios.bundleIdentifier === 'com.example.remoteaichat');
+    // LEGACY NAME BLOCK: end
     const swift = fs.readFileSync(path.join(root, 'plugins/share-extension/ShareViewController.swift'), 'utf8');
     check('plugin: the Swift side reads public.url and public.plain-text and opens divan://share?url=… / ?text=…',
       swift.includes('UTType.url.identifier') && swift.includes('UTType.plainText.identifier')

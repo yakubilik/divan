@@ -32,8 +32,8 @@ from divan.providers.base import ProviderConfig  # noqa: E402
 from divan.providers.claude import ClaudeProvider  # noqa: E402
 
 DAEMON = Path(__file__).resolve().parents[1]
-CWD = "/Users/someone/projects/my.app"
-NAME = "-Users-someone-projects-my-app"
+CWD = "/Users/you/projects/my.app"
+NAME = "-Users-you-projects-my-app"
 
 
 @pytest.fixture
@@ -244,12 +244,14 @@ def test_migration_leaves_codex_and_transcripts_alone(pool):
 # ── 4. Claude Code's own folder names ────────────────────────────────────
 
 @pytest.mark.parametrize("cwd,name", [
-    ("/Users/dilarakilic/projects/divan", "-Users-dilarakilic-projects-divan"),
-    ("/Users/dilarakilic/projects/.ustabasi/wt/581-divan-every",
-     "-Users-dilarakilic-projects--ustabasi-wt-581-divan-every"),
+    ("/Users/you/projects/divan", "-Users-you-projects-divan"),
+    ("/Users/you/projects/.ustabasi/wt/581-divan-every",
+     "-Users-you-projects--ustabasi-wt-581-divan-every"),
     ("/private/var/folders/xz/rj8h30t94h9bgmqhbw5p238r0000gn/T/divan-auth-probe-meh8v1b6",
      "-private-var-folders-xz-rj8h30t94h9bgmqhbw5p238r0000gn-T-divan-auth-probe-meh8v1b6"),
+    # audit: language-data — a non-ASCII letter Claude Code turns into a dash
     ("/tmp/my_proj dir/çay", "-tmp-my-proj-dir--ay"),
+    # audit: end-language-data
 ])
 def test_sanitize_matches_claude_code(cwd, name):
     assert cm.sanitize(cwd) == name

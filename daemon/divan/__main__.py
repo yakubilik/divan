@@ -101,7 +101,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         updater = asyncio.create_task(srv.updater.loop())
         resumer = asyncio.create_task(srv.resume_interrupted())
         follower = asyncio.create_task(srv.follow_tickets())
-        # Plane's board and the queue: an `ustabaşı` item moved to In Progress
+        # Plane's board and the queue: a queue-labelled item moved to In Progress
         # is filed, and what the queue does with it comes back (plane_sync.py).
         planer = asyncio.create_task(srv.plane_sync.loop()) if cfg.plane.get("url") else None
         warmer = asyncio.create_task(srv.warm_models())

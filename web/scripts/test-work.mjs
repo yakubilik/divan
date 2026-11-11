@@ -131,7 +131,9 @@ const t = (id, project, status, over = {}) => base({
  *  isghocam-seo are on none. */
 const queue = () => [
   t(41, 'quire', 'running'),
+  // audit: language-data — a Turkish question whose yes and no chips are read from its particle
   t(42, 'quire', 'blocked', { escalation: '- which key?', ask: 'Stripe anahtarını ben ekleyeyim mi?' }),
+  // audit: end-language-data
   t(43, 'quire', 'done', { merged: 'merged into main (abc1234)',
     last_event: { ts: NOW - 50, kind: 'clean', msg: 'worktree removed (auto)' } }),
   t(44, 'quire', 'queued', { started_at: null, round_started_at: null, updated_at: NOW - 26 * H,
@@ -232,7 +234,9 @@ group('the board: a column per status, Queued in the queue\'s own order');
     `${card(302)} · ${card(43)}`);
   const talk = (id) => W.talkOf(everything().find((f) => f.ticket.id === id));
   ok('a needs-you card\'s chat: Coder asks you, the question, and Evet to answer it',
+    // audit: language-data — a Turkish question whose yes and no chips are read from its particle
     same(talk(42), { who: 'Coder', says: 'asks you', tone: 'amber', question: 'Stripe anahtarını ben ekleyeyim mi?', answers: ['Evet'] }),
+    // audit: end-language-data
     JSON.stringify(talk(42)));
   ok('…a running one is working, a done one says done, neither asks anything',
     talk(41).says === 'working' && talk(41).tone === 'run' && !talk(41).question
@@ -682,7 +686,9 @@ group('a card opens its chat over the board; its heading opens the ticket\'s pag
     address() === here && w.history.length === n && isBoard() && searchBox()?.value === 'ticket', address());
   ok('…and its chat is open: Coder asks you, the question, Evet',
     chat()?.getAttribute('data-work-chat') === 'studio:42' && /Coder\s*asks you/.test(chat()?.querySelector('header')?.textContent ?? '')
+    // audit: language-data — a Turkish question whose yes and no chips are read from its particle
     && chat()?.querySelector('[data-work-question]')?.textContent.includes('Stripe anahtarını ben ekleyeyim mi?')
+    // audit: end-language-data
     && !!btn('Evet', chat()), chat()?.textContent);
   ok('…with a box to reply to Coder', !!chat()?.querySelector('input[placeholder="Reply to Coder…"]'),
     chat()?.querySelector('input')?.getAttribute('placeholder'));

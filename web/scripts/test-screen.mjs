@@ -222,14 +222,18 @@ group('paste');
 asked.length = 0;
 const pv = await key(chord('v', 'KeyV'));
 ok('the paste shortcut is left to the browser, so its paste event can carry the text', !pv.defaultPrevented);
+// audit: language-data — a letter outside ASCII the pasted text must carry intact
 await paste('hello from here · ş');
+// audit: end-language-data
 await settle();
 await tick(500);
 const order = asked.map((a) => a.type);
 const setAt = order.indexOf('screen.clipboard.set');
 const vAt = asked.findIndex((a) => a.type === 'screen.input' && a.data.actions[0].key === 'v');
 ok('a paste sets the remote clipboard to the local text, then sends the Mac\'s ⌘V',
+  // audit: language-data — a letter outside ASCII the pasted text must carry intact
   setAt >= 0 && asked[setAt].data.text === 'hello from here · ş' && asked[setAt].key === 'studio'
+  // audit: end-language-data
     && vAt > setAt && JSON.stringify(asked[vAt].data.actions[0].mods) === '["cmd"]',
   JSON.stringify(asked));
 ok('and only one paste reaches the Mac (the fallback stood down)',

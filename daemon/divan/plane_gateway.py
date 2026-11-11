@@ -52,6 +52,7 @@ from urllib.parse import urlsplit
 import httpx
 import websockets
 
+from .plane_sync import BOT, HUMAN
 from .security import Told, forged_peer, is_loopback
 
 log = logging.getLogger("divan.plane")
@@ -71,8 +72,8 @@ _WS_SKIP = _HOP | {
 
 
 # ── who does it ───────────────────────────────────────────────────────────
-# A new work item must say who does it: the `ustabaşı` label (the queue) or
-# `insan` (a person). Two layers, so the rule outlives a Plane upgrade:
+# A new work item must say who does it: the queue's label or the person label
+# (`plane_sync.BOT` and `HUMAN`, named in the board's language). Two layers, so the rule outlives a Plane upgrade:
 #   - here, on the way through: a create (`POST …/projects/<id>/issues/`)
 #     without either label is answered 400 and never reaches Plane. This reads
 #     Plane's API, not its pages, which is what changes least between releases.
@@ -81,12 +82,14 @@ _WS_SKIP = _HOP | {
 #     If an upgrade moves the form, this layer quietly stops helping and the
 #     first one still holds; `tests/test_plane_gateway.py` pins both.
 CREATE = re.compile(r"^/api/workspaces/([^/]+)/projects/[^/]+/issues/?$")
-MUST_SAY_WHO = "Kim yapacak? Önce “ustabaşı” ya da “insan” etiketini seç."
+MUST_SAY_WHO = f"Who does this? Pick the “{BOT}” or the “{HUMAN}” label first."
 
 LOCK_JS = r"""
 (function () {
   if (window.__divanLock) return; window.__divanLock = 1;
+  // audit: language-data — the label names on the Plane board, matched in the page
   var WHO = ["ustabaşı", "insan"], MSG = %s;
+  // audit: end-language-data
   var names = {}, at = 0;
   function labels(ws) {
     if (Date.now() - at < 60000) return Promise.resolve(names);
@@ -191,7 +194,9 @@ def session_name(person: str) -> str:
     """The keychain name a person's Plane session is kept under:
     `rac-secret-plane-session-<person>`, the person folded to a-z0-9-."""
     import unicodedata
+    # audit: language-data — the two Turkish letters NFKD does not fold to ASCII
     folded = unicodedata.normalize("NFKD", person.replace("ı", "i").replace("İ", "I"))
+    # audit: end-language-data
     slug = re.sub(r"[^a-z0-9]+", "-", folded.encode("ascii", "ignore").decode().lower()).strip("-")
     return f"plane-session-{slug or person.encode().hex()[:40]}"
 
@@ -486,7 +491,7 @@ class PlaneGateway:
 
     async def _unowned(self, ws: str, raw: bytes, h: dict[str, str]) -> str | None:
         """Why a new work item may not be made, or None when it may: it must
-        carry the `ustabaşı` or the `insan` label (plane_sync.py)."""
+        carry the queue's or the person label (plane_sync.BOT, HUMAN)."""
         try:
             ids = [str(x) for x in (json.loads(raw or b"{}").get("label_ids") or [])]
         except (ValueError, AttributeError):
