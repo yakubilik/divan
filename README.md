@@ -50,7 +50,7 @@ What that gets you, in practice:
 | <img src="docs/screenshots/dashboard.png" width="230"> | **The dashboard.** What needs you, what is working, what is stuck. Tell it what to do and it goes to a project's board; the projects, the inbox and every chat are one tap down. |
 | <img src="docs/screenshots/chats.png" width="230"> | **Chats, grouped by project.** One row per conversation, titled with the project it runs in. Group them by hand or let the folder do it, swipe a row aside to archive or delete it, search titles and messages. |
 | <img src="docs/screenshots/chat.png" width="230"> | **A turn, streaming.** Text arrives token by token; a run of tool calls folds into one line until you ask for it. The footer is what the turn actually cost. |
-| <img src="docs/screenshots/approval.png" width="230"> | **The approval.** In `ask` mode every shell command stops here. A dangerous one stops here even in `bypass`. |
+| <img src="docs/screenshots/approval.png" width="230"> | **The approval.** In `ask` mode every shell command stops here. A command the guard recognises as dangerous stops here even in `bypass`. |
 | <img src="docs/screenshots/new-chat.png" width="230"> | **Starting one.** Pick the tool, the model, how hard it should think, how much rope it gets, and which folder it opens in. |
 | <img src="docs/screenshots/call.png" width="230"> | **Calling it.** A voice line to a concierge that can see every chat on that computer and say what each one is doing. It answers out loud; when the computer wants you, the phone rings. |
 | <img src="docs/screenshots/settings.png" width="230"> | **Settings.** Several computers, several sign-ins per tool, and a daemon that follows `origin/main` on its own. |
@@ -250,21 +250,33 @@ tells it to. The whole design is about that sentence being safe to say.
   Through the tunnel, five different wrong tokens from one IP in ten minutes
   earn a lockout; on the tailnet and on localhost bad attempts are counted but
   nothing is locked.
-- **Folders are fenced.** A chat can only open under `allowed_roots`, and
-  `denied_paths` (`~/.ssh`, `~/.aws`, credential stores) is subtracted from
-  that. The fence is enforced in the daemon, so it holds in `bypass` mode too.
-- **Dangerous commands always ask.** There is a pattern list — `rm -rf`,
-  `git push --force`, `dd of=/dev/…` — that asks for approval regardless of
-  permission mode, and it can be answered from the lock screen.
+- **`allowed_roots` is where a chat may open, not what it may touch.** A chat
+  can only be started under `allowed_roots` (minus `denied_paths`: `~/.ssh`,
+  `~/.aws`, credential stores), and `/files` serves only the phone's own
+  uploads and files that pass the same check. That is all it does. A new chat
+  runs in `bypass` mode by default, the Claude CLI is started with
+  `--dangerously-skip-permissions`, and the command guard looks at shell
+  commands only, so a bypass chat can read and write any path its user can,
+  with Write/Edit as much as with `cat`.
+- **The command guard is a brake on accidents, with known gaps.** A command that
+  spends money, exposes the machine or a secret, or can destroy data asks for
+  approval, in `bypass` mode too, and the question can be answered from the lock
+  screen. It is a list of known patterns, not a sandbox: `echo ~ | xargs rm -rf`,
+  `git clean -fdx` and `python3 -c "import os; os.system('rm -rf ~')"` all pass it.
+  `ask_for` in `config.toml` turns whole categories (`money`, `exposure`,
+  `destruction`) off, and `bypass_asks = false` makes `bypass` ask about
+  nothing at all.
 - **Output is scrubbed.** Anything shaped like an API key or a bot token is
   redacted before it is stored or sent.
-- **Clicking is off until someone turns it on.** Watching the screen is a
-  switch you press per session; driving the mouse and keyboard is
-  `remote_control`, which starts `false`. Arming it does not need the keyboard
-  of the computer — a paired client can do it over the wire — so the daemon
-  persists the change to `config.toml`, writes a warning to the log, and tells
-  every paired device that this machine is now drivable. The switch guards an
-  idle computer, not one whose paired phone is in the wrong hands.
+- **Watching the screen needs only a paired token; clicking needs
+  `remote_control`.** `/screen.jpg` answers any paired device with a frame of the
+  computer's screen. "Nothing streams until you press Connect" is how the apps
+  behave, not something the daemon enforces. Driving the mouse, keyboard and
+  clipboard is `remote_control`, which starts `false`. Arming it does not need
+  the keyboard of the computer — a paired client can do it over the wire — so
+  the daemon persists the change to `config.toml`, writes a warning to the log,
+  and tells every paired device that this machine is now drivable. The switch
+  guards an idle computer, not one whose paired phone is in the wrong hands.
 - **The terminal is a switch too.** `term.*` is a login shell on the
   computer for any paired device, the tunnel's browsers included. It is
   `terminal` in `config.toml`: `false` on a new install (`true` for a config
@@ -277,7 +289,9 @@ tells it to. The whole design is about that sentence being safe to say.
 - **Face ID** can lock the app, and can be required before entering bypass mode.
 
 One default worth knowing about: **the daemon updates itself.** `auto_update` is
-on, and every 15 minutes it fast-forwards its own checkout to `origin/main` and
+on, which means the daemon runs whatever is pushed to the `origin` it follows:
+anyone who can push to that repository (it is public) changes the code on your
+computer, and nothing checks a signature. Every 15 minutes it fast-forwards its own checkout to `origin/main` and
 asks its supervisor to restart it. That is how a laptop you are not sitting in
 front of stays on the same commit as the one you are. It refuses to touch a
 checkout with uncommitted work, only ever fast-forwards, never interrupts a
@@ -285,7 +299,8 @@ running turn, and never waits on a credential prompt. When a pull changes the
 daemon's dependencies and they cannot be installed (with pip, or uv in a venv
 that has no pip), it rolls back to the commit it was on and holds there, saying
 why in the app, until `origin/main` moves on or you ask for the update by hand.
-Set
+If you do
+not trust that remote, or run a fork you do not control, set
 `auto_update = false` in `~/.divan/config.toml` and it never touches git at all.
 
 It does not defend against someone who already has your unlocked phone, or

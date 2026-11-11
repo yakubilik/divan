@@ -28,17 +28,22 @@ That is the product. What the design does is bound it.
   `revoke <id>` cuts one off without touching the others. Guessing one is not a
   practical attack: there is nothing to guess towards, and a wrong token is
   refused without ever reaching a handler.
-- *An agent wandering out of its folder.* A chat can only open under
+- *A chat being opened somewhere it should not.* A chat can only open under
   `allowed_roots`, minus `denied_paths` (`~/.ssh`, `~/.aws`, credential stores,
-  browser profiles). The check is in the daemon, not the client, so it holds in
-  `bypass` permission mode too, and `chat.update` re-checks on every move.
-- *A destructive command slipping past a tired thumb.* A command asks for
+  browser profiles). The check is in the daemon, not the client, and
+  `chat.update` re-checks on every move. This decides where a chat *starts*,
+  not what it can reach once it runs: see "What it does not" below.
+- *A destructive command slipping past a tired thumb.* This is a brake on
+  accidents, not a sandbox: it is a list of known patterns and has gaps (see
+  below). A command asks for
   approval in every permission mode when it spends money (paid cloud
   resources, billed deploys, paid API calls), exposes the machine or a secret
   (tunnels, the firewall off, keys sent out, `curl … | sh`), or can destroy the
   machine or your data (`rm -rf` outside the chat's folder, `git push --force`,
   disk erase, dropping a database, killing the daemon) — and says which in the
   notification. Nothing else asks: quoted text and heredoc bodies are data.
+  `ask_for` in `config.toml` lists the categories that still ask (`money`,
+  `exposure`, `destruction`); one left out runs without asking, in every mode.
 - *Secrets leaking into scrollback.* Output is scrubbed for key-shaped strings
   (`sk-ant-`, `ghp_`, `AKIA`, bot tokens…) before it is stored or sent.
 - *A phone that leaves your pocket.* Face ID can lock the app, and can be
@@ -56,8 +61,24 @@ That is the product. What the design does is bound it.
   concerned.
 - *A model that is wrong in a way you approve.* The approval is the boundary.
   Read the command.
-- *`bypass` permission mode.* It is exactly what it says. The folder fence and
-  the dangerous-command list are all that remain.
+- *`bypass` permission mode.* It is exactly what it says, and it is the default
+  for a new chat. The Claude CLI runs with `--dangerously-skip-permissions`;
+  `allowed_roots` does not confine it, and the command guard looks at shell
+  commands only, so Write and Edit reach any path the daemon's user can. What
+  remains is the guard and `denied_paths` for opening a chat. With
+  `bypass_asks = false` even the guard stops asking.
+- *A command the guard does not know.* `echo ~ | xargs rm -rf`, `git clean -fdx`
+  and `python3 -c "import os; os.system('rm -rf ~')"` all pass it. Treat it as
+  a brake, not a wall.
+- *A paired device and the computer's screen or shell.* Any paired token can
+  fetch `/screen.jpg`, a picture of the screen; only clicking and typing need
+  `remote_control` (off by default, but a paired client can turn it on over the
+  wire, which is logged and announced to every device). `term.*` is a login
+  shell, for a paired device, the tunnel's browsers included, behind the
+  `terminal` switch in `config.toml` (off on a new install, on for a config that
+  predates it; no request turns it on). `account.export`, which hands a
+  Claude/Codex sign-in to another computer, is for tailnet devices only: a
+  tunnel device and the machine-list gateway are refused.
 - *A tunnel you put in front of it yourself.* `docs/TUNNEL.md` describes
   reaching the panel from a browser that is not on the tailnet, through a
   Cloudflare tunnel. It moves the boundary: `bind` no longer decides who can
@@ -119,10 +140,11 @@ That is the product. What the design does is bound it.
   Nothing is executed at install time, but an agent definition is an instruction
   that later runs with your tools. Read one before you install it.
 - *The self-updater.* `auto_update` is on by default: every 15 minutes the
-  daemon fast-forwards its own checkout to `origin/main` and restarts. Whoever
-  can push to that remote can change what runs on your machine. It will not
-  touch a checkout with uncommitted work and will not do anything but a
-  fast-forward — but if you did not intend to follow a remote, turn it off.
+  daemon fast-forwards its own checkout to `origin/main` and restarts, with no
+  signature check. Whoever can push to the origin it follows can change what
+  runs on your machine. It will not touch a checkout with uncommitted work and
+  will not do anything but a fast-forward — but if you do not trust that remote,
+  set `auto_update = false`.
 
 ## Who holds which token
 
