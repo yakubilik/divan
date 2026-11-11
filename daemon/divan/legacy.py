@@ -30,6 +30,10 @@ CHAT_ID_ENV = "RAC_CHAT_ID"
 # and the uninstaller have to know them as well as the new ones.
 PROCESS_PATTERN = r"remote[-_]ai[-_]chat"
 PLIST_LABEL = "com.remote-ai-chat.daemon"
+# The package and the command an old install was started as, which the guard on
+# `pkill -f` patterns has to recognise as the daemon too (security.py).
+PACKAGE = "remote_ai_chat"
+COMMAND = "remote-ai-chat"
 
 
 def plist_labels(user: str) -> list[str]:

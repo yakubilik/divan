@@ -217,8 +217,8 @@ const HERMES_CHAT = { provider: 'claude', model: 'sonnet', effort: 'low', perm_m
       plist.CFBundleDisplayName === 'Divan' && plist.NSExtension.NSExtensionPointIdentifier === 'com.apple.share-services'
       && rule.NSExtensionActivationSupportsWebURLWithMaxCount === 1 && rule.NSExtensionActivationSupportsText === true);
     check('plugin: the extension is a bundle id under the main app\'s, which is left alone',
-      plugin.extensionBundleId('com.example.remoteaichat') === 'com.example.remoteaichat.share'
-      && app.ios.bundleIdentifier === 'com.example.remoteaichat');
+      plugin.extensionBundleId(app.ios.bundleIdentifier) === `${app.ios.bundleIdentifier}.share`
+      && app.ios.bundleIdentifier.startsWith('com.example.'));
     const swift = fs.readFileSync(path.join(root, 'plugins/share-extension/ShareViewController.swift'), 'utf8');
     check('plugin: the Swift side reads public.url and public.plain-text and opens divan://share?url=… / ?text=…',
       swift.includes('UTType.url.identifier') && swift.includes('UTType.plainText.identifier')

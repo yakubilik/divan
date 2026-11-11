@@ -242,7 +242,7 @@ def link_all_known(account_home: str | Path, claude_home: Path | None = None) ->
 
 def claude_account_homes(accounts_dirs: list[Path]) -> list[Path]:
     """Claude account homes (claude-*) under the given folders, each once even
-    when two folders are the same one (~/.remote-ai-chat → ~/.divan)."""
+    when two folders are the same one (the pre-rename data home → ~/.divan)."""
     seen, out = set(), []
     for root in accounts_dirs:
         if not root.is_dir():

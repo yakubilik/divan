@@ -19,7 +19,7 @@ async def queue_chat(data: dict) -> str | None:
     """The chat a ticket queue notification is put in, asked of the daemon.
 
     The queue (ustabasi) sends its pushes from its own process through this
-    module (its `rac_push.py`), before the daemon has read the notification.
+    module (its own push script), before the daemon has read the notification.
     So the daemon is asked here, the way any local client asks it, to name —
     and if need be open — the chat; the banner then carries that chat's id and
     a tap opens the conversation instead of the wall. None when the daemon is
