@@ -56,7 +56,9 @@ _IN_SCRATCH = 'T=$(mktemp -d); touch "$T/a"; rm -rf "$T" "$TMPDIR/build"'
 
 @pytest.fixture
 def home_scratch(monkeypatch):
-    # the throwaway DIVAN_HOME conftest set, laid out like the real one
+    # the throwaway DIVAN_HOME conftest set, laid out like the real one; the guard reads
+    # DIVAN_HOME from the environment, which an earlier module may have pointed elsewhere
+    monkeypatch.setenv("DIVAN_HOME", str(config.CONFIG_DIR))
     monkeypatch.setattr(config, "SCRATCH_DIR", config.CONFIG_DIR / "scratch")
     return config.CONFIG_DIR / "scratch"
 
