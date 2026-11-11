@@ -155,10 +155,12 @@ NAME_CONTROL_HITS = ["1: author-name 'lovelace-ledger'",
 # so it is made twice: there with its reason, and here.
 ALLOWED = [
     "app/scripts/fixtures/tts-frontend.json",
+    "app/scripts/media.flow.yaml",
     "app/scripts/test-call-chat.cjs",
     "app/scripts/test-ema.cjs",
     "app/scripts/test-waiting.cjs",
     "app/src/call-lines.ts",
+    "app/src/mermaid.gen.ts",
     "app/src/tts/engine.ts",
     "app/src/tts/frontend.ts",
     "app/src/tts/normalizer.ts",
@@ -166,6 +168,7 @@ ALLOWED = [
     "app/src/tts/words.ts",
     "app/src/voice.ts",
     "app/src/waiting.ts",
+    "app/src/xterm.gen.ts",
     "daemon/divan/call.py",
     "daemon/divan/secrets.py",
     "daemon/divan/server.py",
@@ -184,6 +187,11 @@ ALLOWED = [
     "docs/voice-bench/baseline-run2.json",
     "docs/voice-bench/baseline-run3.json",
     "docs/voice-bench/baseline.json",
+    "docs/voice-bench/e2e-agent.json",
+    "docs/voice-bench/e2e-audio.json",
+    "docs/voice-bench/e2e-before-audio.json",
+    "docs/voice-bench/e2e-before.json",
+    "docs/voice-bench/e2e.json",
     "docs/voice-bench/llm.json",
     "docs/voice-bench/proof.json",
     "docs/voice-bench/tts-roundtrip.json",
@@ -193,6 +201,8 @@ ALLOWED = [
     "tts/export.py",
     "tts/frontend_fixture.py",
     "tts/vectors.json",
+    "web/scripts/fixtures/unfiled-ask-snapshot.json",
+    "web/scripts/notice-fixture.js",
     "web/scripts/test-overview.mjs",
     "web/scripts/test-refusal.mjs",
     "web/src/lib/refusal.ts",
@@ -329,6 +339,67 @@ def main() -> int:
     check("the allowlist does not also excuse a secret",
           any(h["rule"] == "aws-access-key" for h in
               audit.scan_text("daemon/divan/call.py", "AKIAIOSFODNN7EXAMPLE", "test")))
+
+    print("\na marked block excuses its own lines from the language rules, and nothing else")
+    reason = "audit: language-data — the words the detector compares against"
+    block = f"// {reason}\nconst W = ['onay', 'değil'];\n// audit: end-language-data\n"
+    new_file = "web/src/lib/new-thing.ts"
+    check("Turkish inside a marked block is data",
+          not audit.scan_text(new_file, block, "test"))
+    after = audit.scan_text(new_file, block + "const s = 'tamam';\n", "test")
+    check("the line after the block is read again",
+          [(h["rule"], h["line"]) for h in after] == [("turkish-word", 4)], repr(after))
+    check("the opening marker's own line is read: its reason is written in English",
+          bool(audit.scan_text(new_file, "// audit: language-data — bir şey için değil, data here\n"
+                                         "// audit: end-language-data\n", "test")))
+    for rule, sample in (("home-directory", "/Users/somebody/projects/thing"),
+                         ("local-hostname", "Someones-MacBook-Air.local"),
+                         ("aws-access-key", "AKIAIOSFODNN7EXAMPLE")):
+        hits = audit.scan_text(new_file, f"// {reason}\nconst x = '{sample}';\n"
+                                         "// audit: end-language-data\n", "test")
+        check(f"{rule} inside a block is still a finding", rule in {h["rule"] for h in hits},
+              repr(hits))
+    for rule, text in (
+        ("data-block-without-reason", "# audit: language-data\nx = 'onay'\n# audit: end-language-data\n"),
+        ("data-block-without-reason", "# audit: language-data — test data\nx = 1\n# audit: end-language-data\n"),
+        ("data-block-never-closed", f"# {reason}\nx = 'onay'\n"),
+        ("data-block-inside-another", f"# {reason}\n# {reason}\nx = 1\n# audit: end-language-data\n"),
+        ("data-block-close-without-open", "x = 1\n# audit: end-language-data\n"),
+    ):
+        hits = audit.scan_text("daemon/divan/new.py", text, "test")
+        check(f"a broken marker fails the scan: {rule}",
+              any(h["kind"] == "marker" and h["rule"] == rule for h in hits), repr(hits))
+    check("a broken marker fails even in an allowed file",
+          any(h["kind"] == "marker" for h in
+              audit.scan_text("daemon/divan/call.py", "# audit: language-data\n", "test")))
+    check("an HTML comment closes a reason in Markdown",
+          audit.data_blocks(f"<!-- {reason} -->\nonay\n<!-- audit: end-language-data -->\n")[0][0]["reason"]
+          == "the words the detector compares against")
+
+    print("\na new client file still fails on each kind of thing")
+    for rule, sample in (("turkish-word", "const label = 'onay bekliyor';"),
+                         ("turkish-letter", "const label = 'Bir şey yok';"),
+                         ("home-directory", "const root = '/Users/somebody/projects';"),
+                         ("home-directory-slug", "const slug = '-Users-somebody-projects-x';"),
+                         ("local-hostname", "const host = 'Someones-MacBook-Air.local';"),
+                         ("tailnet-hostname", "const host = 'laptop.tail1234.ts.net';")):
+        hits = audit.scan_text("web/src/lib/new-thing.ts", sample, "test")
+        check(f"{rule} in web/src/lib/new-thing.ts", rule in {h["rule"] for h in hits}, repr(hits))
+
+    print("\nevery marked block in the tree says why")
+    tracked = [p for p in audit.git("ls-files").split("\n")
+               if p and not audit.skip(p) and not p.startswith(audit.SELF)]
+    blocks = 0
+    for path in tracked:
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        found, faults = audit.data_blocks(text)
+        blocks += len(found)
+        if faults or any(len(b["reason"].split()) < 5 for b in found):
+            check(f"{path}: its markers are whole and explained", False, repr(faults))
+    check("the tree has marked blocks, all of them whole", blocks > 0, str(blocks))
 
     print("\nno client file is left pending")
     check("the pending list is empty", audit.PENDING == (), repr(audit.PENDING))

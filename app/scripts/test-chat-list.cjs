@@ -58,7 +58,9 @@ const STUDIO = {
     chat('a10', 'Long run', { cwd: '/Users/y/r/walk', status: 'running', updated_at: NOW - 2 * DAY }),
     chat('a11', 'Archived by hand', { cwd: '/Users/y/r/walk', archived: 1, updated_at: NOW - 60 }),
     chat('a12', 'Legacy one', { owner: '', cwd: '/Users/y/r/walk', updated_at: NOW - 700 }),
+    // audit: language-data — a Turkish dotted capital the search has to fold the Turkish way
     chat('a13', 'İzmir trip', { group_id: 'g2', cwd: '/Users/y/r/ops', last_preview: 'Ferry times', updated_at: NOW - 900 }),
+    // audit: end-language-data
     chat('b1', 'Brother notes', { owner: 'Bedriyan', cwd: '/Users/b/r/quire', updated_at: NOW - 20 }),
     chat('b2', 'Ops budget', { owner: 'Bedriyan', group_id: 'g2', cwd: '/Users/b/r/ops', updated_at: NOW - 1000 }),
     chat('b3', 'Old brother', { owner: 'Bedriyan', cwd: '/Users/b/r/quire', updated_at: NOW - 4 * DAY }),
@@ -161,7 +163,9 @@ const ready = (async () => {
     ['', 'notes', 'BUILD'].every((q) => fleet(web, q) === fleet(appCopy, q)) && JSON.parse(fleet(web, '')).map((s) => s.title).join() === 'studio,mini']);
 
   // ── search: the web's matches(), not the phone's old title-or-preview ───
+  // audit: language-data — a Turkish dotted capital the search has to fold the Turkish way
   const searchOk = ['walk', 'izmir', 'İZMİR', '  REFUND ', 'ferry', '/users/y/r/hush', 'nothing'].every((query) => {
+  // audit: end-language-data
     const n = web.needle(query);
     const want = STUDIO.chats.filter((c) => !c.archived && c.owner !== 'Bedriyan' && web.matches(c, n)).map((c) => c.id).sort().join();
     const got = phoneList(STUDIO, { query }).flatMap((s) => s.data.map((c) => c.id)).sort().join();

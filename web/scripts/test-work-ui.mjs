@@ -205,7 +205,9 @@ try {
   ok('a needs-you card pressed: the address, the scroll, the days and the history are what they were', (await place()) === was, `${was} → ${await place()}`);
   ok('…and its chat is open at the bottom right: Coder asks you, the question, Evet, a box to reply in',
     ch?.key === 'studio:259' && /Coder\s*asks you/.test(ch.head) && ch.right >= 0 && ch.right < 40 && ch.bottom >= 0 && ch.bottom < 40 && ch.left > 640
+    // audit: language-data — a Turkish question whose yes and no chips are read from its particle
     && ch.question?.includes('kişisel Apple takımını kullanayım mı?') && JSON.stringify(ch.answers) === '["Evet"]' && ch.reply === 'Reply to Coder…',
+    // audit: end-language-data
     JSON.stringify(ch));
   await run('window.__writes.length = 0');
   await press('[data-work-chat] [data-work-answers] button');

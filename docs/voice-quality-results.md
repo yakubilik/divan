@@ -91,6 +91,8 @@ owner's decision. No key was used or created.
 
 ## 4. Turns, interruptions, agents and audio
 
+<!-- audit: language-data — the lines the recorded Turkish calls heard and said, quoted as measured -->
+
 - **Pauses and corrections.** All 12 scenarios commit once with every word, in both rounds of both runs:
   0.5–2 s thinking pauses, two pauses, the 13 s request, an in-sentence and a cross-pause correction.
   The early reply on `pause-2000` and `correction-pause` is cancelled when speech resumes, and nothing
@@ -145,6 +147,8 @@ owner's decision. No key was used or created.
    bitti mi?") still go to the fast layer. Checked on phrase sets.
 4. **The fast layer may not describe work the state does not show**, nor mention its state block (it
    had said "state'te yok"). On a chat call, the routing rule is repeated with every question.
+<!-- audit: end-language-data -->
+
 5. **4 ms fades at the edges of every EMA piece** (`fadeEdges` in `voice-session.ts`): the two clicks
    (edge steps of 5.4–5.5 % FS) are gone.
 6. `emaVoice` moved from `live-call.ts` into `voice-session.ts`, unchanged, so the bench runs the

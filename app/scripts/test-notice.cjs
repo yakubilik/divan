@@ -132,12 +132,16 @@ const ready = (async () => {
   checks.push(['notice (phone): collapsed, the #157 row holds state, number and title, the title on one truncating line',
     titles.length === 1 && line.flex === 1 && /Done/.test(first) && /#157/.test(first)]);
   checks.push(['notice (phone): collapsed, no report, fact line or agent instruction is drawn anywhere',
+    // audit: language-data — the Turkish parts of the stored ticket notices
     details().length === 0 && !/phone was unreachable|merged into main \(1664073\)|ontrolden geçti|npm test exited/.test(own(first))
+    // audit: end-language-data
     && !INSTRUCTION.test(own(first))]);
   checks.push(['notice (phone): the failed notice that arrived mid-turn says queued; done and blocked do not',
     /Rebuild the panel bundle\s+queued/.test(first) && (first.match(/\bqueued\b/g) ?? []).length === 1]);
   checks.push(['notice (phone): a person\'s words, a quote and a notice with a picture stay ordinary bubbles, picture included',
+    // audit: language-data — the Turkish parts of the stored ticket notices
     first.includes(F.CONTROL) && first.includes('what does this mean?') && first.includes('bunun senle ne alakası var')
+    // audit: end-language-data
     && hosts(json(), (n) => n.props['data-rn'] === 'Image').length >= 1
     && first.includes('Note: the delivered .ipa was built before those merges')]);
 

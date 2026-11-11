@@ -28,7 +28,9 @@ db = DB(tmp / "board.sqlite")
 board = db.divan
 board.create_project("Divan", repos=["/Users/me/projects/divan"])
 
+# audit: language-data — a Turkish question as a blocked ticket asked it
 ASK = "Harfiyen'in gizlilik sayfası example.dev'de mi dursun, yoksa uygulamanın kendi sitesinde mi?"
+# audit: end-language-data
 queue = {"available": True, "tickets": [
     # A ticket out of a folder no product claims: imported into the holding place.
     {"id": 348, "title": "Harfiyen: App Store readiness", "status": "running",

@@ -730,6 +730,7 @@ export type Key = keyof typeof en;
 /** Turkish, for the strings that have one so far. `t` still reads English —
  *  the app ships in English (`LOCALE`) — and this is where a Turkish build
  *  finds its words; a key missing here falls back to `en`. */
+// audit: language-data — the Turkish locale table, the strings a Turkish build shows
 export const tr: Partial<Record<Key, string>> = {
   plNone: 'Henüz board yok', plNoneBody: 'Bu bilgisayarda Plane yok. config.toml\'a [plane] url ve workspace ekle.',
   plDown: 'Plane cevap vermedi', plDownBody: 'Telefon Tailscale\'de mi, Plane\'in olduğu bilgisayar açık mı?',
@@ -752,6 +753,7 @@ export const tr: Partial<Record<Key, string>> = {
   lightUnread: 'Bitti, henüz bakılmadı', lightFailed: 'Hatayla bitti, henüz bakılmadı',
   autoArchiveOff: 'Kapalı', autoArchiveH: '{n} saat', autoArchiveD: '{n} gün', autoArchive1D: '1 gün',
 };
+// audit: end-language-data
 
 export function t(key: Key, params?: Record<string, string | number>): string {
   let s = en[key] ?? key;

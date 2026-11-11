@@ -359,15 +359,20 @@ it in the keychain as `rac-secret-plane-session-<person>`. The pass names whose
 device asked, and a browser with no Plane session of its own is signed in as
 that person. A person with none sees Plane's own sign-in.
 
-## Who does a work item: `ustabaşı` or `insan`
+## Who does a work item: the queue's label or the person label
 
-Every Plane work item carries one of two labels. The gateway refuses a create
+Every Plane work item carries one of two labels, named in the board's language
+(`plane_sync.BOT` and `HUMAN`):
+<!-- audit: language-data — the two label names as they are on the Plane board -->
+`ustabaşı` for the queue and `insan` for a person.
+<!-- audit: end-language-data -->
+ The gateway refuses a create
 without either (`plane_gateway.CREATE`, answered 400 before Plane sees it), and
 the page it serves keeps Save off until a label is chosen (`LOCK_JS`). The first
 layer reads Plane's API, not its pages, so it holds across Plane upgrades; if an
 upgrade moves the create form, only the greyed Save is lost.
 
 `plane_sync.py` polls Plane every 20 s with the key in `rac-secret-plane-api`:
-an `ustabaşı` item moved to In Progress is filed with ustabasi (number on the
+an item with the queue's label moved to In Progress is filed with ustabasi (number on the
 item, a comment), an item with no label moved there goes back to Todo, and what
 the queue finishes moves its item to Done.

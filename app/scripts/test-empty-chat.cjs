@@ -1,5 +1,5 @@
-/** A chat nobody wrote in is in no list (Yakup, 5 Nov 2026: "boş chat diye bir
- *  şey olmasın"). The pen makes the chat at once, so one opened and put down
+/** A chat nobody wrote in is in no list (the owner, 5 Nov 2026: "let there be
+ *  no such thing as an empty chat"). The pen makes the chat at once, so one opened and put down
  *  used to sit in the list as "New chat" until auto-archive took it.
  *
  *   · on the web's sidebar and the phone's list alike (the file is kept twice):

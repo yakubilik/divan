@@ -38,6 +38,7 @@ export function blocks(items: Item[]): Block[] {
 /** A kind of work: what it is called while it is going on, and once it is done. */
 type Say = Record<Lang, [now: string, done: string]>;
 
+// audit: language-data — the panel's Turkish locale for the step strip, beside the English
 const WORK = {
   think: { tr: ['Düşünüyorum', 'düşündüm'], en: ['Thinking', 'thought it through'] },
   read: { tr: ['Dosyaları okuyorum', 'dosyaları okudum'], en: ['Reading files', 'read files'] },
@@ -120,6 +121,7 @@ const BUILT_IN: Record<string, Work> = {
   Skill: 'skill', TodoWrite: 'plan', ExitPlanMode: 'plan',
   DesignSync: 'design',
 };
+// audit: end-language-data
 
 /** Which kind of work one step is. */
 export function workOf(step: Step): Work {
@@ -173,16 +175,20 @@ export function tell(steps: Step[], live: boolean, lang: Lang): Told {
 }
 
 function cap(s: string, lang: Lang): string {
-  // Turkish has its own capital for `i` ("internette aradım").
+  // Turkish has its own capital for `i`: the dotted one, not `I`.
   return s ? s[0].toLocaleUpperCase(lang === 'tr' ? 'tr' : 'en') + s.slice(1) : s;
 }
 
-/** "14 adım" / "14 steps". */
+/** "14 steps", in the conversation's language. */
 export function counted(n: number, lang: Lang): string {
+  // audit: language-data — the Turkish word for steps, the locale's count
   return lang === 'tr' ? `${n} adım` : `${n} step${n === 1 ? '' : 's'}`;
+  // audit: end-language-data
 }
 
+// audit: language-data — the letters and words the language detector compares against
 const TURKISH = /[çğıöşüÇĞİÖŞÜ]|\b(bir|ve|bunu|yok|tamam|evet|merhaba|selam|naber|kanka)\b/i;
+// audit: end-language-data
 
 /** The language the person in this conversation writes in. */
 export function langOf(items: Item[], fallback: string = typeof navigator !== 'undefined' ? navigator.language : 'en'): Lang {
@@ -200,6 +206,8 @@ export function langOf(items: Item[], fallback: string = typeof navigator !== 'u
 export function doingNow(items: Item[], lang: Lang): string {
   const last = items[items.length - 1];
   if (last?.kind === 'tool' || last?.kind === 'thinking') return tell([last], true, lang).text;
+  // audit: language-data — the Turkish locale's line for an answer being written
   if (last?.kind === 'assistant' && !last.done) return lang === 'tr' ? 'Yazıyorum…' : 'Writing…';
+  // audit: end-language-data
   return `${WORK.think[lang][0]}…`;
 }

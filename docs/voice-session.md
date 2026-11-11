@@ -40,8 +40,8 @@ ticket 150 and the end-to-end tuning is 151; neither is done here.
   account, permission mode and approvals — and what is said is a fixed line
   built from the result. The model's words on that turn are discarded, and
   any sentence of the fast layer that claims an action in the first person
-  (done, doing or about to do: `çalıştırdım`, `bakıyorum`, `düzelteyim`, "I've
-  sent") is dropped.
+  (done, doing or about to do: "I ran", "I'm looking", "let me fix", "I've
+  sent", said in Turkish) is dropped.
 - **Progress is real.** A chat the call handed work to is followed through the
   server's own event stream: a `tool.use` becomes at most one line per 20 s, an
   `approval.request` is asked aloud, and the agent's reply is spoken (through

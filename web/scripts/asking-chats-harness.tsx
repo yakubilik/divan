@@ -21,8 +21,10 @@ root.dataset.theme = 'dark';
 try { localStorage.removeItem('rac.asking'); } catch { /* fine */ }
 
 const NOW = Math.floor(Date.now() / 1000);
+// audit: language-data — a real Turkish ask, the shape of question the panel splits into points
 const QUESTION = '- Strix taraması ChatGPT aboneliğinle çalışsın diye Mac\'te bir kez ChatGPT girişini yapar mısın?\n'
   + '- Giriş yapmak istemezsen bu tarama için ücretli API anahtarı kullanayım mı, kullanırsam hangisi olsun?';
+// audit: end-language-data
 const [studio] = boards(NOW).busy;
 const snap = structuredClone(studio.snap);
 snap.cards = snap.cards.map((c: any) => (c.id === 'k2' ? {

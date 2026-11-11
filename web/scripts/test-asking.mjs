@@ -97,9 +97,11 @@ const NOW = Math.floor(Date.now() / 1000);
 
 /** The question the screenshot shows, as the queue wrote it: a list on one
  *  line, one point made twice word for word. */
+// audit: language-data — a real Turkish ask, split into its points by the panel
 const STRIX = '- Strix taraması ChatGPT aboneliğinle çalışsın diye Mac\'te bir kez ChatGPT girişini yapar mısın? '
   + '- Giriş yapmak istemezsen bu tarama için ücretli API anahtarı kullanayım mı? '
   + '- Strix taraması ChatGPT aboneliğinle çalışsın diye Mac\'te bir kez ChatGPT girişini yapar mısın?';
+// audit: end-language-data
 const FOLLOW = 'Got it. Should the scan also cover the staging site?';
 
 /** The two boards, with the studio's ticket asking the screenshot's question
@@ -191,11 +193,15 @@ group('a pending question opens itself as a floating chat on the Dashboard');
     winId() === 'studio:k2' && said.includes('Quire · Engineering') && said.includes('Coder') && said.includes('asking'),
     said.slice(0, 200));
   ok('…the whole question, each point once, as a list',
+    // audit: language-data — a real Turkish ask, split into its points by the panel
     items.length === 2 && items[0].startsWith('Strix taraması') && items[1].startsWith('Giriş yapmak'),
+    // audit: end-language-data
     JSON.stringify(items));
   ok('Needs you holds a one-line row for it, not a second copy of the question',
     !!row('studio:k2') && !row('studio:k2').textContent.includes('Strix')
+      // audit: language-data — a real Turkish ask, split into its points by the panel
       && body().split('Giriş yapmak istemezsen').length - 1 === 1, row('studio:k2')?.textContent);
+      // audit: end-language-data
   ok('every pending request has its own tab: two tickets on two machines and the chat holding a request',
     tabs().map((t) => t.getAttribute('data-asking-tab')).join(' ') === 'studio:k2 mini:m1 chat:studio:q1',
     tabs().map((t) => t.getAttribute('data-asking-tab')).join(' '));

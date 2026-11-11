@@ -128,7 +128,7 @@ const pressable = (r) => r.root.findAll((n) => n.type !== SecretChip && typeof n
   && n.parent && n.parent.type === SecretChip);
 
 const TOKEN = '[secret-share rac-secret-openai-prod OpenAI key]';
-const TEXT = `Anahtar hazır: ${TOKEN}\n\nDokununca kopyalanır. Dokümanı da [buraya](https://example.com) koydum.`;
+const TEXT = `Key ready: ${TOKEN}\n\nTap it to copy. I put the document [over here](https://example.com) too.`;
 
 (async () => {
   // ── 1. drawn as a chip ───────────────────────────────────────────────────
@@ -146,7 +146,7 @@ const TEXT = `Anahtar hazır: ${TOKEN}\n\nDokununca kopyalanır. Dokümanı da [
     const links = r.root.findAll((n) => n.props && n.props.onPress && n.type !== SecretChip
       && !(n.parent && n.parent.type === SecretChip));
     check('an ordinary link in the same answer is still a link, not a chip',
-      links.length >= 1 && w.includes('buraya'), `${links.length}`);
+      links.length >= 1 && w.includes('over here'), `${links.length}`);
 
     // ── 2. a tap copies, says so, and the clipboard empties in a minute ─────
     asked = [];
