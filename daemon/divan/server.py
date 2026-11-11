@@ -109,6 +109,9 @@ TUNNEL_PUSH_TEXT = {
 # that cannot keep up is closed rather than waited for: it reconnects and asks
 # for what it missed, which is a round trip, not a dead chat.
 OUTBOX_MAX = 1024
+# The largest attachment /upload takes, and the size it is read in.
+UPLOAD_MAX = 100 * 1024 * 1024
+UPLOAD_CHUNK = 1024 * 1024
 # Requests that are answered only when they fail, if sent without an id.
 QUIET_TYPES = {"voice.audio", "voice.playback", "voice.barge", "voice.ready"}
 SEND_TIMEOUT_S = 20.0
@@ -263,6 +266,7 @@ class Server:
         # One queue per connected client, drained by that client's own writer.
         self.outbox: dict[WebSocket, Outbox] = {}
         self.writers: dict[WebSocket, asyncio.Task] = {}
+        self._dispatches: set[asyncio.Task] = set()   # requests being answered
         self.conns: dict[WebSocket, Conn] = {}
         # (chat id, client id) -> the answer `chat.send` gave, or will give, for
         # that message: a resend of one the phone never heard the answer to is
@@ -1506,9 +1510,16 @@ class Server:
         name = Path(unquote(file.filename or "file")).name
         stem = "".join(("-" if c in " " else c) for c in Path(name).stem if c.isalnum() or c in " -_")[:40] or "file"
         ext = Path(name).suffix.lower()[:12]
-        data = await file.read()
-        if len(data) > 100 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="file too large (100MB)")
+        # Read in chunks and stop at the cap, so a body over it is refused
+        # without first being held whole in memory.
+        chunks, size = [], 0
+        while chunk := await file.read(UPLOAD_CHUNK):
+            size += len(chunk)
+            if size > UPLOAD_MAX:
+                raise HTTPException(status_code=413, detail=f"file too large ({UPLOAD_MAX // (1024 * 1024)}MB)")
+            chunks.append(chunk)
+        data = b"".join(chunks)
+        del chunks
         # What it is, decided by what is in it. A screenshot shared from another
         # app can arrive with no extension at all, or with the tail of a dotted
         # name ('… 21.48.33') read as one; by the name alone both became "file",
@@ -2255,7 +2266,20 @@ class Server:
                     req = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
-                asyncio.create_task(self._dispatch(ws, dev, req))
+                # Valid JSON is not yet a request: a list, a number or a `type`
+                # that is not a string used to raise inside the task, outside its
+                # try, and the phone got no answer while the log got "Task
+                # exception was never retrieved".
+                if not isinstance(req, dict) or not isinstance(req.get("type", ""), str):
+                    rid = req.get("id") if isinstance(req, dict) else None
+                    await self.send_to(ws, {"id": rid, "type": "error", "data": {
+                        "message": "a request is an object with a string type", "code": "bad_request"}})
+                    continue
+                # Held until done: the loop keeps only a weak reference to a
+                # task, so one nobody holds can be collected mid-flight.
+                task = asyncio.create_task(self._dispatch(ws, dev, req))
+                self._dispatches.add(task)
+                task.add_done_callback(self._dispatches.discard)
         except WebSocketDisconnect as exc:
             code, reason = exc.code, exc.reason or ""
         except Exception as exc:
