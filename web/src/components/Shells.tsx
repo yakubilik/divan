@@ -13,12 +13,15 @@ const STAGE = MEDIA.term;
 
 export function Shells({ header }: { header: React.ReactNode }) {
   const { hosts, order, focus } = useFleet();
-  const { shells, active, open, close, select } = useShells();
+  const { shells, active, refused, open, close, select } = useShells();
   const key = focus && hosts[focus] ? focus : order[0] ?? null;
   const slot = key ? hosts[key] : undefined;
   const online = slot?.status === 'online';
   const mine = shells.filter((s) => s.hostKey === key);
   const front = key ? active[key] : undefined;
+  // This computer's terminal is off (`terminal` in its config.toml): said in
+  // place of a shell, and no tab is made for one.
+  const off = key ? refused[key] : undefined;
 
   // Opening the tab is opening a shell: a computer with none open here gets
   // one as soon as it is looked at and answering. Once per computer per visit,
@@ -68,6 +71,9 @@ export function Shells({ header }: { header: React.ReactNode }) {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             ><Icon path={P.plus} size={16} color={online ? T.ink2 : T.ink3} /></button>
+            {off && mine.length > 0 && (
+              <span role="alert" style={{ marginLeft: 8, marginBottom: 8, color: T.ink2, fontSize: 13 }}>{off}</span>
+            )}
           </div>
           <div style={{
             flex: 1, minHeight: 0, margin: '0 24px 24px', position: 'relative',
@@ -80,8 +86,10 @@ export function Shells({ header }: { header: React.ReactNode }) {
             ))}
             {!mine.length && (
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: MEDIA.inkDim, fontSize: 13.5 }}>
-                  <span>{online ? `No shell open on ${name(key)}.` : `${name(key)} is not answering.`}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: MEDIA.inkDim, fontSize: 13.5, maxWidth: 420, textAlign: 'center' }}>
+                  {online && off
+                    ? <span role="alert" style={{ color: MEDIA.ink }}>{off}</span>
+                    : <span>{online ? `No shell open on ${name(key)}.` : `${name(key)} is not answering.`}</span>}
                   {online && <Button small icon={P.plus} label="Open a shell" onClick={() => { void open(key); }} />}
                 </div>
               </div>

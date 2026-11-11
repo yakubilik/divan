@@ -9,6 +9,9 @@
  *     cd daemon && DIVAN_HOME=/tmp/d DIVAN_PORT=8911 .venv/bin/python -m divan serve --bind 127.0.0.1
  *     DIVAN_HOME=/tmp/d DIVAN_PORT=8911 .venv/bin/python -m divan web --no-open
  *
+ *  and set `terminal = true` in /tmp/d/config.toml: a new install starts with
+ *  the terminal off, and every `term.*` would answer `terminal_disabled`.
+ *
  *  Pressed: Machine › Terminal (a shell opens, the prompt is drawn), `echo hi`
  *  and Enter (`hi` comes back), the window made smaller (`stty size` in the
  *  shell reports the new grid), `+` and the new tab's × (the daemon's log then

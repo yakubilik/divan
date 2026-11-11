@@ -156,6 +156,7 @@ const en = {
   errApprovalExpired: 'That request timed out before your answer arrived, so it was not run. Ask the agent to try again.',
   errApprovalDropped: 'That request was dropped when the daemon restarted, so it was not run. Ask the agent to try again.',
   errApprovalAnswered: 'That request was already answered.',
+  errTerminalDisabled: 'The terminal is turned off on this computer. Set terminal = true in its config.toml to use it.',
   wsNotConnected: 'not connected to the computer', wsDropped: 'connection lost', wsTimeout: 'timed out',
 };
 export type Key = keyof typeof en;
@@ -184,6 +185,7 @@ const ERR_KEYS: Record<string, Key> = {
   cwd_outside: 'errCwdOutside', no_such_folder: 'errNoSuchFolder', no_chat: 'errNoChat', busy: 'errBusy',
   empty_message: 'errEmptyMessage', no_pending_approval: 'errNoPendingApproval',
   approval_expired: 'errApprovalExpired', approval_dropped: 'errApprovalDropped', approval_answered: 'errApprovalAnswered',
+  terminal_disabled: 'errTerminalDisabled',
 };
 
 export function errText(code?: string | null, fallback?: string | null): string {
