@@ -19,7 +19,7 @@ test_attachments test_agents test_titles test_push test_ustabasi
 test_ustabasi_run test_ustabasi_usage test_divan test_model_catalog
 test_dictation test_filing test_tunnel test_security test_secrets test_scrub
 test_call test_demo test_peaks test_panel_paths test_uninstall
-test_voice_bench test_voice test_rename test_migrate_to_divan"
+test_voice_bench test_voice test_rename test_migrate_to_divan test_term"
 
 failed=""
 for t in $TESTS; do

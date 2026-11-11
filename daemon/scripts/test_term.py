@@ -10,20 +10,25 @@ the way. The promises:
   1. `term.open` answers a term id, and `echo hi` typed into it comes back as
      `term.output` with `hi` in it — from $HOME, the default.
   2. `term.resize` changes the pty's size: `stty size` says the new one.
-  3. `term.close` ends the shell, its foreground job and its background job;
-     nothing is left running and nothing is left a zombie. A shell that exits
-     on its own says `term.exit` and is reaped the same way.
+  3. `term.close` ends the shell, its foreground job and its background job
+     (`sleep 1000 &`); nothing of its session is left running or a zombie, the
+     pty master is closed and the entry is gone. A shell that exits on its own
+     says `term.exit` and is reaped the same way.
   4. Only a socket `_admit` let in can open one: no token, a wrong token and a
      revoked token are all closed with 4401 and start no shell. Another
      person's device can neither see nor drive somebody's terminal.
   5. There is a cap, a fence on `cwd`, and a reaper for shells nobody is
      attached to or that went quiet; the peer gateway relays `term.*` as is.
+  6. A terminal ends whole even when something raises while it ends, logged
+     once; with no `os.waitid` (macOS before Python 3.13) just the same; and
+     `close_all` at shutdown ends every one the same way.
 """
 from __future__ import annotations
 
 import asyncio
 import atexit
 import json
+import logging
 import os
 import re
 import shutil
@@ -84,6 +89,27 @@ def alive(pid: int) -> bool:
 def running(pattern: str) -> list[str]:
     r = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True)
     return r.stdout.split()
+
+
+def session_left(sid: int) -> list[int]:
+    """Every process still in the shell's session (its pid is the session id)."""
+    r = subprocess.run(["ps", "-A", "-o", "pid="], capture_output=True, text=True)
+    left = []
+    for n in r.stdout.split():
+        try:
+            if os.getsid(int(n)) == sid:
+                left.append(int(n))
+        except OSError:
+            pass
+    return left
+
+
+def fd_identity(fd: int) -> tuple | None:
+    try:
+        st = os.fstat(fd)
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino, st.st_rdev)
 
 
 def wait_until(cond, timeout: float = 5.0) -> bool:
@@ -162,6 +188,42 @@ def on_loop(srv: Server, coro) -> None:
     asyncio.run_coroutine_threadsafe(coro, srv.terms.loop).result(timeout=10)
 
 
+def background_job(a: Sock, tid: str) -> int:
+    """`sleep 1000 &` in the terminal; its pid, as `$!` says it."""
+    marker = f"bg-{tid}="
+    a.ok("term.write", {"term_id": tid, "data": f"sleep 1000 &\necho {marker}$!\n"})
+    found: list[int] = []
+
+    def seen() -> bool:
+        m = re.search(re.escape(marker) + r"(\d+)", a.output(tid))
+        if m:
+            found.append(int(m.group(1)))
+        return bool(m)
+    if not a.until(seen):
+        raise AssertionError(f"no pid for `sleep 1000 &`: {a.output(tid)[-300:]!r}")
+    pid = found[-1]
+    if not wait_until(lambda: alive(pid)):
+        raise AssertionError(f"`sleep 1000 &` (pid {pid}) is not running")
+    return pid
+
+
+def ends_whole(srv: Server, tid: str, shell: int, bg: int, fd: int, ident: tuple | None,
+               how: str) -> None:
+    """Everything a terminal's end promises, whichever way it ended."""
+    check(tid not in srv.terms.terms, f"{how}: the entry leaves Terms.terms")
+    check(fd_identity(fd) != ident, f"{how}: the pty master is closed", f"fd {fd}")
+    check(wait_until(lambda: not alive(shell)), f"{how}: the shell is gone, not even a zombie",
+          f"pid {shell}")
+    check(wait_until(lambda: not alive(bg)), f"{how}: its `sleep 1000 &` is gone", f"pid {bg}")
+    check(wait_until(lambda: not session_left(shell)), f"{how}: nothing of its session is left",
+          str(session_left(shell)))
+
+
+def opened(srv: Server, a: Sock, tid: str) -> tuple[int, int, int, tuple | None]:
+    t = srv.terms.terms[tid]
+    return t.pid, background_job(a, tid), t.master, fd_identity(t.master)
+
+
 def test_echo(a: Sock) -> str:
     print("term.open / term.write")
     opened = a.ok("term.open", {"cols": 80, "rows": 24})
@@ -197,24 +259,28 @@ def test_resize(a: Sock, tid: str) -> None:
           "a nonsense size is refused", str(bad))
 
 
-def test_close(a: Sock, tid: str) -> None:
+def test_close(srv: Server, a: Sock, tid: str) -> None:
     print("term.close")
     listed = a.ok("term.list")["terms"]
     row = next((t for t in listed if t["term_id"] == tid), None)
     check(row is not None and row["mine"], "term.list shows it, attached here", str(listed))
-    pid = row["pid"] if row else -1
-    a.ok("term.write", {"term_id": tid, "data": "sleep 4243 &\n"})
+    pid, bg, fd, ident = opened(srv, a, tid)
     a.ok("term.write", {"term_id": tid, "data": "sleep 4242\n"})
-    check(wait_until(lambda: running("sleep 4242") and running("sleep 4243")),
-          "a foreground and a background job are running in it")
+
+    def foreground() -> list[int]:
+        # Only this shell's: another checkout's run of this script may have its own.
+        return [int(n) for n in running("sleep 4242") if int(n) in session_left(pid)]
+    check(wait_until(lambda: bool(foreground())), "a foreground job is running in it")
+    fg = foreground()
     closed = a.ok("term.close", {"term_id": tid})
     check(closed.get("ended") is True, "term.close ends the last client's terminal", str(closed))
     check(not alive(pid), "the shell is gone, not even a zombie", f"pid {pid}")
-    check(wait_until(lambda: not running("sleep 4242")), "its foreground job is gone",
-          str(running("sleep 4242")))
-    check(wait_until(lambda: not running("sleep 4243")), "its background job is gone",
-          str(running("sleep 4243")))
+    check(wait_until(lambda: not any(alive(n) for n in fg)), "its foreground job is gone",
+          str([n for n in fg if alive(n)]))
+    ends_whole(srv, tid, pid, bg, fd, ident, "term.close")
     check(a.until(lambda: a.exited(tid) is not None), "term.exit is sent", str(a.events[-3:]))
+    check(isinstance((a.exited(tid) or {}).get("code"), int), "with an exit code",
+          str(a.exited(tid)))
     check(not any(t["term_id"] == tid for t in a.ok("term.list")["terms"]),
           "term.list no longer has it")
     again = a.call("term.write", {"term_id": tid, "data": "x"})
@@ -285,23 +351,83 @@ def test_limits(client: TestClient, srv: Server, a: Sock, a_tok: str) -> None:
 
     c = Sock(client, a_tok)
     tid = c.ok("term.open", {})["term_id"]
-    pid = c.ok("term.attach", {"term_id": tid})["pid"]
+    pid, bg, fd, ident = opened(srv, c, tid)
     c.close()
     wait_until(lambda: srv.terms.terms[tid].detached_at is not None)
     on_loop(srv, srv.terms.reap(time.monotonic() + term.DETACHED_S + 1))
     check(tid not in srv.terms.terms and not alive(pid),
           f"one left detached for {term.DETACHED_S}s is killed")
+    ends_whole(srv, tid, pid, bg, fd, ident, "reaper, detached")
 
     tid = a.ok("term.open", {})["term_id"]
-    pid = srv.terms.terms[tid].pid
+    pid, bg, fd, ident = opened(srv, a, tid)
     on_loop(srv, srv.terms.reap(time.monotonic() + term.IDLE_S + 1))
     check(tid not in srv.terms.terms and not alive(pid), f"one idle for {term.IDLE_S}s is killed")
     check(a.until(lambda: a.exited(tid) is not None), "and its client is told term.exit")
+    check(isinstance((a.exited(tid) or {}).get("code"), int), "reaper, idle: with an exit code",
+          str(a.exited(tid)))
+    ends_whole(srv, tid, pid, bg, fd, ident, "reaper, idle")
 
     for typ in ("term.open", "term.write", "term.resize", "term.close", "term.list", "term.attach"):
         raw = json.dumps({"id": 1, "type": typ, "data": {"term_id": "x"}})
         fwd, answer = fleet.filter_request(raw)
         check(fwd == raw and answer is None, f"the peer gateway relays {typ} unchanged")
+
+
+def test_failure(srv: Server, a: Sock) -> None:
+    print("a failure while ending one")
+    tid = a.ok("term.open", {})["term_id"]
+    pid, bg, fd, ident = opened(srv, a, tid)
+    records: list[logging.LogRecord] = []
+
+    class Catch(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            if record.levelno >= logging.WARNING:
+                records.append(record)
+    catch = Catch()
+    term.log.addHandler(catch)
+    real = term._exited
+
+    def broken(pid: int) -> bool:
+        raise RuntimeError("injected: cannot look at the shell")
+    term._exited = broken
+    try:
+        closed = a.ok("term.close", {"term_id": tid})
+    finally:
+        term._exited = real
+        term.log.removeHandler(catch)
+    check(closed.get("ended") is True, "term.close still answers ended", str(closed))
+    check(a.until(lambda: a.exited(tid) is not None), "term.exit is still sent")
+    ends_whole(srv, tid, pid, bg, fd, ident, "a failure while ending")
+    injected = [r for r in records if "injected" in r.getMessage()]
+    check(len(injected) == 1, "the error is logged once", str([r.getMessage() for r in records]))
+
+    print("waitid missing (macOS before Python 3.13)")
+    tid = a.ok("term.open", {})["term_id"]
+    pid, bg, fd, ident = opened(srv, a, tid)
+    saved = getattr(term.os, "waitid", None)
+    if saved is not None:
+        del term.os.waitid
+    try:
+        closed = a.ok("term.close", {"term_id": tid})
+    finally:
+        if saved is not None:
+            term.os.waitid = saved
+    check(closed.get("ended") is True, "without os.waitid: term.close answers ended", str(closed))
+    check(a.until(lambda: a.exited(tid) is not None), "without os.waitid: term.exit is sent")
+    ends_whole(srv, tid, pid, bg, fd, ident, "without os.waitid")
+
+
+def test_close_all(srv: Server, a: Sock) -> None:
+    print("close_all at shutdown")
+    ended = []
+    for _ in range(2):
+        tid = a.ok("term.open", {})["term_id"]
+        ended.append((tid, *opened(srv, a, tid)))
+    on_loop(srv, srv.terms.close_all())
+    for tid, pid, bg, fd, ident in ended:
+        check(a.until(lambda: a.exited(tid) is not None), "close_all: term.exit is sent")
+        ends_whole(srv, tid, pid, bg, fd, ident, "close_all")
 
 
 def main() -> None:
@@ -319,10 +445,12 @@ def main() -> None:
         try:
             tid = test_echo(a)
             test_resize(a, tid)
-            test_close(a, tid)
+            test_close(srv, a, tid)
             test_refused(client, srv, gone_tok)
             test_people(a, b)
             test_limits(client, srv, a, a_tok)
+            test_failure(srv, a)
+            test_close_all(srv, a)
         finally:
             if srv.terms.loop is not None:
                 on_loop(srv, srv.terms.close_all())
