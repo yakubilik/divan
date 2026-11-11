@@ -199,10 +199,19 @@ class Host:
         self.cfg = types.SimpleNamespace(allowed_roots=[str(root)], host_name="mac", demo=False,
                                          refresh_tunnel=lambda: None, person_names=lambda: [],
                                          person_of=lambda _id: None)
+        # Both signed in, and checked a moment ago: a new chat opens on a
+        # sign-in that works, and these do, so it stays on the one it was
+        # asked for. That check is the real one, below; it asks the CLI only
+        # when its last answer is stale, and this answer is not.
         self.accounts = {
-            "default-claude": Account(id="default-claude", provider="claude", label="m"),
-            "claude-x": Account(id="claude-x", provider="claude", label="x", home=str(home)),
+            "default-claude": Account(id="default-claude", provider="claude", label="m",
+                                      logged_in=True),
+            "claude-x": Account(id="claude-x", provider="claude", label="x", home=str(home),
+                                logged_in=True),
         }
+        self._live_checked = {aid: time.time() for aid in self.accounts}
+        self.LIVE_TRUST_S = Server.LIVE_TRUST_S
+        self.pool = Pool(Settings(), lambda: self.accounts, lambda _k: [])
         self._concierge_acct = self.accounts["claude-x"]
         self.sent: list[tuple[str, str]] = []
         host = self
@@ -216,7 +225,8 @@ class Host:
                 return False
 
         self.sessions = types.SimpleNamespace(get=S)
-        for name in ("_concierge_actions", "h_chat_create", "_account", "_owner"):
+        for name in ("_concierge_actions", "h_chat_create", "_account", "_owner",
+                     "_live_account", "_signed_in", "_first_signed_in"):
             setattr(self, name, getattr(Server, name).__get__(self))
 
     async def broadcast(self, _ev):

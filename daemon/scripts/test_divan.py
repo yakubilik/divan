@@ -82,6 +82,7 @@ from divan import ustabasi as u                           # noqa: E402
 from divan.db import DB, SCHEMA as CHAT_SCHEMA            # noqa: E402
 from divan.security import PathPolicy                     # noqa: E402
 from divan.server import Server                           # noqa: E402
+from divan.config import Config                           # noqa: E402
 
 # Two of the checks below are a queue declining to take a card, and the handler
 # says so in the log on its way to saying so in the answer. That is the
@@ -204,7 +205,14 @@ class Host:
     def __init__(self, db: DB, host_name: str = "this-mac"):
         self.db = db
         self.policy = policy
-        self.cfg = types.SimpleNamespace(host_name=host_name)
+        # What the snapshot asks of a config: re-read the hand-edited settings
+        # (a real one reads config.toml from disk, which here would be the
+        # machine's own, so this one answers "nothing changed"), and where a
+        # product's board opens — the real Config's answer, on a config with
+        # no Plane.
+        self.cfg = types.SimpleNamespace(host_name=host_name, plane={})
+        self.cfg.refresh_tunnel = lambda: False
+        self.cfg.plane_url = Config.plane_url.__get__(self.cfg)
         # The plan readings this machine has, keyed as the server keys them.
         # Written by the checks that are about quota and empty for the rest.
         self.limits: dict[str, list[dict]] = {}
