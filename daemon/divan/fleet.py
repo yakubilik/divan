@@ -51,7 +51,14 @@ MAX_MESSAGE = 64 * 1024 * 1024
 #: is this daemon's, shared by every browser that may use it: one tab revoking
 #: it would take the computer away from all of them, and is what
 #: `fleet.remove` is for.
-BLOCKED = {"device.revoke_self"}
+BLOCKED = {
+    "device.revoke_self": "unpair this computer from the machine list instead",
+    # A sign-in is a bearer credential, moved from the phone over the tailnet
+    # (move-signin). The panel never asks for one, and a browser holding the
+    # gateway is no reason for a peer's login to leave that computer.
+    "account.export": "a sign-in is moved from the phone, not through the gateway",
+    "account.import": "a sign-in is moved from the phone, not through the gateway",
+}
 
 
 class PeerError(Exception):
@@ -235,8 +242,7 @@ def filter_request(raw: str) -> tuple[str | None, dict | None]:
     typ = req.get("type")
     if typ in BLOCKED:
         return None, {"id": req.get("id"), "type": "error",
-                      "data": {"code": "forbidden",
-                               "message": "unpair this computer from the machine list instead"}}
+                      "data": {"code": "forbidden", "message": BLOCKED[typ]}}
     if typ == "hello" and isinstance(req.get("data"), dict) and "device_name" in req["data"]:
         req = {**req, "data": {k: v for k, v in req["data"].items() if k != "device_name"}}
         return json.dumps(req), None

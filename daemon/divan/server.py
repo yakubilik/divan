@@ -1677,13 +1677,28 @@ class Server:
             raise Err("screen_failed", str(exc))
 
     # A shell on this computer (term.py). Reached only through a socket `_admit`
-    # let in, like every handler here; a term belongs to the person whose
-    # device opened it and is invisible to everybody else's.
-    def _term_owner(self, dev: Device) -> str | None:
-        self.cfg.refresh_tunnel()
+    # let in, like every handler here, and only while `terminal` in config.toml
+    # is on; a term belongs to the person whose device opened it and is
+    # invisible to everybody else's.
+    async def _term_owner(self, dev: Device) -> str | None:
+        await self._terminal_gate()
         return self.cfg.person_of(dev.id)
 
+    async def _terminal_gate(self) -> None:
+        """The switch in front of every `term.*`. Read from config.toml on every
+        request, so turning it off there takes effect without a restart — and
+        the shells still open when it does are ended, not left to run on."""
+        self.cfg.refresh_tunnel()
+        if self.cfg.terminal:
+            return
+        live = [t for t in self.terms.terms.values() if not t.ended]
+        if live:
+            await asyncio.gather(*(self.terms.kill(t, "terminal_disabled") for t in live),
+                                 return_exceptions=True)
+        raise Err("terminal_disabled", "the terminal is turned off on this computer")
+
     async def h_term_open(self, dev: Device, d: dict, ws: WebSocket) -> dict:
+        owner = await self._term_owner(dev)
         cwd = d.get("cwd")
         if cwd:
             if err := self.policy.cwd_error(str(cwd)):
@@ -1691,31 +1706,31 @@ class Server:
             cwd = str(Path(str(cwd)).expanduser().resolve())
         else:
             cwd = str(Path.home())
-        t = self.terms.open(ws, self._term_owner(dev), dev.id, d, cwd)
+        t = self.terms.open(ws, owner, dev.id, d, cwd)
         log.warning("device %s (%s) opened a terminal (%s, pid %s) in %s",
                     dev.name, dev.id, t.id, t.pid, cwd)
         return t.public()
 
     async def h_term_write(self, dev: Device, d: dict) -> dict:
-        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        t = self.terms.get(await self._term_owner(dev), d.get("term_id"))
         return {"written": await self.terms.write(t, d.get("data"))}
 
     async def h_term_resize(self, dev: Device, d: dict) -> dict:
-        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        t = self.terms.get(await self._term_owner(dev), d.get("term_id"))
         self.terms.resize(t, d)
         return {"cols": t.cols, "rows": t.rows}
 
     async def h_term_attach(self, dev: Device, d: dict, ws: WebSocket) -> dict:
-        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        t = self.terms.get(await self._term_owner(dev), d.get("term_id"))
         self.terms.attach(t, ws)
         return t.public()
 
     async def h_term_close(self, dev: Device, d: dict, ws: WebSocket) -> dict:
-        t = self.terms.get(self._term_owner(dev), d.get("term_id"))
+        t = self.terms.get(await self._term_owner(dev), d.get("term_id"))
         return {"term_id": t.id, "ended": await self.terms.close(t, ws)}
 
     async def h_term_list(self, dev: Device, d: dict, ws: WebSocket) -> dict:
-        return {"terms": self.terms.list(self._term_owner(dev), ws), "max": termmod.MAX_TERMS}
+        return {"terms": self.terms.list(await self._term_owner(dev), ws), "max": termmod.MAX_TERMS}
 
     async def h_screen_input(self, dev: Device, d: dict) -> dict:
         """Move, click, scroll or type. Coordinates are 0..1 across the whole
@@ -3124,12 +3139,23 @@ class Server:
             await s.cancel()
         return {}
 
+    @staticmethod
+    def _signin_gate(dev: Device) -> None:
+        if dev.tunnel:
+            raise Err("forbidden", "a sign-in is moved from the phone, not through the tunnel")
+
     async def h_account_export(self, dev: Device, d: dict) -> dict:
         """Hand this account's stored sign-in to the phone so it can be moved to
         another computer. The blob is a bearer credential: the app keeps it in
         memory for one transfer and never writes it to disk. The phone calls
         account.forget here once the destination has verified it — two computers
-        cannot share one login, the refresh token is single-use."""
+        cannot share one login, the refresh token is single-use.
+
+        Only to a tailnet device: moving a sign-in is the phone's job
+        (move-signin), and a browser behind the tunnel has no business carrying
+        a credential off the computer. The gateway refuses it as well
+        (fleet.BLOCKED), so a peer's sign-in does not leave through this one."""
+        self._signin_gate(dev)
         a = self.accounts.get(d.get("account_id", ""))
         if a is None:
             raise Err("account_gone", "that account was removed")
@@ -3142,6 +3168,7 @@ class Server:
         return {"provider": a.provider, "label": a.label, "detail": a.detail, "credentials": blob}
 
     async def h_account_import(self, dev: Device, d: dict) -> dict:
+        self._signin_gate(dev)
         a = self.accounts.get(d.get("account_id", ""))
         if a is None:
             raise Err("account_gone", "that account was removed")
@@ -3796,6 +3823,8 @@ class Server:
             self._models_at[name] = time.time()
 
     def host_info(self) -> dict:
+        # `terminal` below is the file's answer, not one read at startup.
+        self.cfg.refresh_tunnel()
         if self._versions is None:
             # A demo machine starts no CLI, not even to ask its version — the
             # SDK carries a claude binary of its own that would answer.
@@ -3816,6 +3845,8 @@ class Server:
                        ("behind", "ahead", "auto", "repo", "error", "checked_at",
                         "web", "latest")},
             "screen": {**screenmod.available(), "enabled": self.cfg.remote_control},
+            # Whether `term.*` is answered here (config.toml's `terminal`).
+            "terminal": self.cfg.terminal,
             # Hours a chat may be quiet before it is archived; 0 is off.
             "auto_archive_h": self.cfg.auto_archive_h,
             "active_sessions": self.sessions.active_count(),

@@ -287,6 +287,13 @@ def run(srv: Server, client: TestClient, peer: FakePeer, peers_file: Path,
     ans, _ = ws_call(client, owner_tok, "device.revoke_self", {}, path=f"/peer/{pid}/ws")
     check(ans["type"] == "error" and len(peer.requests) == before and PEER_TOKEN in peer.tokens,
           "a browser cannot revoke the shared credential through the gateway", str(ans))
+    for typ in ("account.export", "account.import"):
+        before = len(peer.requests)
+        ans, _ = ws_call(client, owner_tok, typ, {"account_id": "acc1", "credentials": {"x": 1}},
+                         path=f"/peer/{pid}/ws")
+        check(ans["type"] == "error" and ans["data"]["code"] == "forbidden" and len(peer.requests) == before
+              and not any(r.get("type") == typ for r in peer.requests),
+              f"{typ} is answered forbidden by the gateway and never reaches the peer", str(ans))
 
     print("── the gateway keeps the doors")
     check(ws_refusal(client, f"/peer/{pid}/ws", "not-a-token") == 4401, "an unknown browser token is a 4401")
