@@ -79,7 +79,9 @@ def setup(monkeypatch):
     monkeypatch.setattr(servermod.acct, "import_credentials", import_)
     monkeypatch.setattr(servermod.acct, "verify_signed_in", lambda a: (True, ""))
     monkeypatch.setattr(srv, "_save_accounts", lambda: None)
-    with TestClient(srv.app) as client:
+    # The tunnel's header is believed only from this machine (cloudflared runs
+    # here), so the test client speaks from loopback.
+    with TestClient(srv.app, client=("127.0.0.1", 50000)) as client:
         yield client, phone_tok, browser_tok, calls
     shutil.rmtree(HOME, ignore_errors=True)
 
