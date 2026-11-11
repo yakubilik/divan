@@ -14,6 +14,7 @@
  */
 import { create } from 'zustand';
 import { onAnyEvent, useFleet } from './fleet';
+import { errText } from './i18n';
 import type { RacEvent } from './protocol';
 
 export type ShellState = 'opening' | 'live' | 'ended' | 'failed';
@@ -93,6 +94,9 @@ interface ShellsState {
   shells: Shell[];
   /** hostKey → the shell in front on that computer */
   active: Record<string, string>;
+  /** hostKey → why a shell cannot be opened there: its terminal is turned
+   *  off (`terminal_disabled`). Shown in place of a tab, never as one. */
+  refused: Record<string, string>;
   open: (hostKey: string, size?: { cols: number; rows: number }) => Promise<Shell | null>;
   write: (id: string, data: string) => void;
   resize: (id: string, cols: number, rows: number) => void;
@@ -102,6 +106,21 @@ interface ShellsState {
 
 const call = <T = any>(hostKey: string, type: string, data: Record<string, any>) =>
   useFleet.getState().call<T>(hostKey, type, data);
+
+/** The host.status a `terminal_disabled` answer arrived under, per computer.
+ *  Until the computer says something new about itself, it is taken at its word
+ *  and asked nothing more; a fresh host.status (it reconnected, or the switch
+ *  was flipped and announced) lets the next press ask again. */
+const offUnder = new Map<string, unknown>();
+
+/** Whether this computer's terminal is known to be off, so `term.open` would
+ *  only be refused: its host.status says so, or it answered so under the
+ *  host.status it still has. */
+export function terminalOff(hostKey: string): boolean {
+  const info = useFleet.getState().hosts[hostKey]?.info;
+  if (info?.terminal === false) return true;
+  return offUnder.has(hostKey) && offUnder.get(hostKey) === info;
+}
 
 function shellName(path: unknown): string {
   const s = typeof path === 'string' ? path.split('/').pop() : '';
@@ -116,8 +135,16 @@ export const useShells = create<ShellsState>((set, get) => {
   return {
     shells: [],
     active: {},
+    refused: {},
 
     open: async (hostKey, size) => {
+      const refuse = () => set((s) => ({ refused: { ...s.refused, [hostKey]: errText('terminal_disabled') } }));
+      // Nothing is sent to a computer whose terminal is off, and no tab is
+      // made for a shell that cannot open: the page says why instead.
+      if (terminalOff(hostKey)) { refuse(); return null; }
+      if (get().refused[hostKey]) {
+        set((s) => { const refused = { ...s.refused }; delete refused[hostKey]; return { refused }; });
+      }
       const { cols, rows } = size ?? lastSize;
       const id = `sh${++seq}`;
       const n = get().shells.filter((x) => x.hostKey === hostKey).length + 1;
@@ -149,6 +176,12 @@ export const useShells = create<ShellsState>((set, get) => {
         }
         return find(id) ?? null;
       } catch (e: any) {
+        if (e?.code === 'terminal_disabled') {
+          offUnder.set(hostKey, useFleet.getState().hosts[hostKey]?.info);
+          if (find(id)) get().close(id);
+          refuse();
+          return null;
+        }
         patch(id, { state: 'failed', error: e?.message ?? 'The shell did not open' });
         return find(id) ?? null;
       }
@@ -246,7 +279,7 @@ useFleet.subscribe((s) => {
       if (sh.hostKey !== key || sh.state !== 'live' || !sh.termId) continue;
       const termId = sh.termId;
       call(key, 'term.attach', { term_id: termId }).catch((e: any) => {
-        if (e?.code === 'no_term') ended(key, termId, null);
+        if (e?.code === 'no_term' || e?.code === 'terminal_disabled') ended(key, termId, null);
       });
     }
   }
