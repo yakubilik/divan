@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import logging
 import os
 import re
@@ -1071,6 +1072,76 @@ async def fetch_jwks(url: str) -> dict:
 # whatever answers it can say who it was without every route passing it along.
 ACCESS_EMAIL: ContextVar[str | None] = ContextVar("tunnel_access_email", default=None)
 
+# The socket peer of the current request, as `TunnelGate` saw it: what a route
+# that has only the header in hand checks it against (`tunnel_via`). None
+# outside a request, which counts as not loopback.
+SOCKET_PEER: ContextVar[str | None] = ContextVar("socket_peer", default=None)
+
+
+def is_loopback(host: str | None) -> bool:
+    """True for 127.0.0.0/8, ::1 and ::ffff:127.0.0.1; False for anything
+    else, an unknown or unparsable peer included."""
+    if not host:
+        return False
+    try:
+        ip = ipaddress.ip_address(host.split("%")[0])
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip.is_loopback
+
+
+class ForgedTunnel(Exception):
+    """A request that carries `CF-Connecting-IP` from a socket that is not
+    this machine's: not cloudflared, so the header is the client's own."""
+
+
+def tunnel_via(value: str | None, peer: str | None) -> str | None:
+    """The tunnelled address of a request, or None if it did not come through
+    the tunnel. `value` is its `CF-Connecting-IP`, `peer` the socket's host.
+
+    The header is believed only from loopback, where cloudflared is; with it
+    from anywhere else the request is nobody's to serve, and `ForgedTunnel`
+    says so. `TunnelGate` refuses those before any route runs; this is what
+    every route that reads the header reads it through, so none of them can
+    take a forged one at its word.
+    """
+    if value is None:
+        return None
+    if not is_loopback(peer):
+        raise ForgedTunnel(peer or "?")
+    return TunnelGate.address(value)
+
+
+class Told:
+    """Lines said at most once per key every ten minutes."""
+
+    EVERY_S = 600.0
+
+    def __init__(self) -> None:
+        self._told: dict[str, float] = {}
+
+    def __call__(self, key: str, msg: str, *args) -> bool:
+        now = time.monotonic()
+        if now - self._told.get(key, -self.EVERY_S) < self.EVERY_S:
+            return False
+        if len(self._told) > 500:
+            self._told.clear()
+        self._told[key] = now
+        log.warning(msg, *args)
+        return True
+
+
+def forged_peer(scope) -> str | None:
+    """The socket peer of an ASGI request that carries `CF-Connecting-IP`
+    from anywhere but loopback ("?" when the peer is unknown), else None."""
+    if not any(name.lower() == TunnelGate.HEADER for name, _ in scope.get("headers") or []):
+        return None
+    client = scope.get("client")
+    host = client[0] if client else None
+    return None if is_loopback(host) else (host or "?")
+
 
 class TunnelAccess:
     """Cloudflare Access's word for who is asking, checked rather than taken.
@@ -1205,9 +1276,16 @@ class TunnelGate:
     `tunnel_allow_ips`. An empty list refuses all of them, which is the point:
     starting a tunnel in front of this daemon opens nothing by itself.
 
-    Forging the header gains nobody anything. Without it a client on the
-    tailnet or on loopback is already answered, exactly as before; with it,
-    they are held to the list. The only thing it can do is narrow the door.
+    The header is believed only from loopback (127.0.0.0/8, ::1,
+    ::ffff:127.0.0.1), because that is where cloudflared is. A client on the
+    tailnet or the LAN can write the header itself, and believing it would
+    let it use a tunnel-only token off the tunnel, or send five wrong tokens
+    in a household's name and lock that household out. So a request that
+    carries the header from any other socket peer — an unknown one included —
+    is refused here, 403 or close 1008, before a token is looked at: it is
+    not counted by `TunnelLock`, nobody is told, and the line about it is
+    written once per peer every ten minutes. A cloudflared on another machine
+    is therefore not supported. Without the header nothing changes.
 
     With `tunnel_access_*` set, an address in the list is not enough: the
     request must also carry a Cloudflare Access token that verifies — see
@@ -1232,6 +1310,7 @@ class TunnelGate:
         self.cfg = cfg
         self.access = access or TunnelAccess()
         self._told: dict[str, float] = {}
+        self._forged = Told()
 
     @staticmethod
     def address(value: str | None) -> str | None:
@@ -1244,7 +1323,22 @@ class TunnelGate:
         return value.split(",")[0].strip()
 
     async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            peer = forged_peer(scope)
+            if peer is not None:
+                self._forged(peer, "request carrying CF-Connecting-IP from %s refused: "
+                             "only cloudflared on this machine may send it", peer)
+                await self._refuse(scope, send)
+                return
         ip = self._claimed(scope) if scope["type"] in ("http", "websocket") else None
+        client = scope.get("client")
+        peer = SOCKET_PEER.set(client[0] if client else None)
+        try:
+            await self._gate(ip, scope, receive, send)
+        finally:
+            SOCKET_PEER.reset(peer)
+
+    async def _gate(self, ip: str | None, scope, receive, send) -> None:
         if ip is None:
             await self.app(scope, receive, send)
             return
@@ -1332,7 +1426,8 @@ class TunnelLock:
 
     Only the tunnel's addresses are ever in here. `CF-Connecting-IP` is written
     by Cloudflare's edge, so it is the one address a request cannot choose; a
-    tailnet client has no such header and never meets this.
+    tailnet client has no such header and never meets this, and one that
+    writes the header itself is refused by `TunnelGate` before it gets here.
 
     The lock lives in memory, and `unlock` lifts it on the running daemon —
     `divan unlock <ip>`, or the same request from a paired phone.

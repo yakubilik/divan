@@ -59,7 +59,7 @@ def test_plane_sees_its_own_origin_and_never_the_pass():
     assert "cf-connecting-ip" not in up and "host" not in up
 
 
-def call(app, headers, path="/"):
+def call(app, headers, path="/", peer="127.0.0.1"):
     sent = []
 
     async def receive():
@@ -68,9 +68,43 @@ def call(app, headers, path="/"):
     async def send(m):
         sent.append(m)
 
-    scope = {"type": "http", "method": "GET", "path": path, "headers": headers, "query_string": b""}
+    scope = {"type": "http", "method": "GET", "path": path, "headers": headers, "query_string": b"",
+             "client": (peer, 50000) if peer else None}
     asyncio.run(app(scope, receive, send))
     return sent[0]["status"]
+
+
+def ws_call(app, headers, peer):
+    sent = []
+
+    async def receive():
+        return {"type": "websocket.connect"}
+
+    async def send(m):
+        sent.append(m)
+
+    scope = {"type": "websocket", "path": "/", "headers": headers, "query_string": b"",
+             "client": (peer, 50000) if peer else None}
+    asyncio.run(app(scope, receive, send))
+    return sent[0]
+
+
+def test_the_tunnel_header_is_believed_only_from_this_machine(caplog):
+    good = [(b"cf-connecting-ip", b"1.2.3.4"), (b"cookie", f"{gw.PASS_COOKIE}={gw.mint(KEY)}".encode())]
+    gate = g()
+    for peer in ("100.101.102.103", "192.168.178.20", None, "testclient"):
+        assert call(gate, good, peer=peer) == 403
+        assert call(gate, good, peer=peer) == 403
+        assert ws_call(gate, good, peer) == {"type": "websocket.close", "code": 1008}
+    said = [r.getMessage() for r in caplog.records if "CF-Connecting-IP" in r.getMessage()]
+    assert len(said) == 4  # once per peer, however often it asks
+    # Without the header, the tailnet is held to its pass as before.
+    assert call(gate, [], peer="100.101.102.103") == 401
+    for peer in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+        assert call(gate, [(b"cf-connecting-ip", b"1.2.3.4")], peer=peer) == 401
+    tunnelled = {"cf-connecting-ip": "1.2.3.4", "host": "plane.example.dev"}
+    assert gate._origin({"client": ("127.0.0.1", 1), "scheme": "http"}, tunnelled) == "https://plane.example.dev"
+    assert gate._origin({"client": ("100.1.2.3", 1), "scheme": "http"}, tunnelled) == "http://plane.example.dev"
 
 
 def test_nothing_is_served_without_a_pass_on_any_door():

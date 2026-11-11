@@ -64,7 +64,9 @@ That is the product. What the design does is bound it.
   reach the daemon, because `cloudflared` runs on the machine and every
   request it forwards arrives from loopback. What decides instead is
   `tunnel_allow_ips` — a request carrying `CF-Connecting-IP` is served only if
-  that address is listed. The list starts empty and empty means nobody, so
+  that address is listed, and the header is believed only from loopback, where
+  `cloudflared` is: from any other socket it is refused before a token is
+  looked at, so a tailnet or LAN client cannot claim a listed address. The list starts empty and empty means nobody, so
   standing a tunnel up opens nothing by itself; but it is one line of config
   between you and a daemon on the open internet, so read that file before you
   write the line. What it does *not* defend is anybody sharing the address you
