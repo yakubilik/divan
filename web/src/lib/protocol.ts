@@ -89,6 +89,9 @@ export interface HostInfo {
   /** Whether somebody set that folder in settings; false is the first root. */
   default_cwd_chosen?: boolean;
   transcription?: boolean;
+  /** Whether this computer answers `term.*` (`terminal` in its config.toml).
+   *  Missing on a daemon from before the switch, which always did. */
+  terminal?: boolean;
   /** The commit this computer is actually running. `daemon_version` is a
    *  constant nobody remembers to raise and cannot tell two computers apart;
    *  this can. */

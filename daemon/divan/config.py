@@ -9,6 +9,7 @@ import os
 import re
 import hashlib
 import ipaddress
+import logging
 import secrets
 import socket
 import subprocess
@@ -21,6 +22,8 @@ from pathlib import Path
 import tomli_w
 
 from . import legacy
+
+log = logging.getLogger("rac.config")
 
 # DIVAN_HOME lets a machine host a second, fully separate daemon (own config,
 # database, uploads and port) — used for testing and for per-user installs.
@@ -117,6 +120,15 @@ def _device(did: str, d: dict) -> "Device":
     return Device(id=did, **{k: v for k, v in d.items() if k in fields and k != "id"})
 
 
+def _terminal_setting(raw: dict) -> bool:
+    """`terminal` as config.toml says it. No key at all is a file written
+    before the switch existed, when the terminal was simply there: on. A key
+    that is not a boolean is a typo, and a typo closes this door, never opens it."""
+    if "terminal" not in raw:
+        return True
+    return raw["terminal"] is True
+
+
 @dataclass
 class Config:
     host_name: str = field(default_factory=socket.gethostname)
@@ -177,6 +189,12 @@ class Config:
     # turns it on, and stored here rather than in memory so that "off" survives
     # a restart — a switch this size should never come back on by accident.
     remote_control: bool = False
+    # A login shell on this computer for any paired device (`term.*`, term.py),
+    # the tunnel's browsers included. Off on a new install; a config.toml from
+    # before the switch existed reads as on, so a computer whose terminal is in
+    # use keeps it (see load). Only ever set here, by hand: no request on the
+    # wire turns it on. Re-read when the file changes, like `ask_for`.
+    terminal: bool = False
     # Follow origin/main by itself. Safe to leave on even where the code is
     # written: a checkout with uncommitted work is never touched (see updater).
     auto_update: bool = True
@@ -230,6 +248,7 @@ class Config:
         accounts = raw.pop("accounts", {})
         pool = raw.pop("pool", {})
         cfg = cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__})
+        cfg.terminal = _terminal_setting(raw)
         cfg.devices = devices
         cfg.accounts = accounts
         cfg.pool = pool if isinstance(pool, dict) else {}
@@ -269,6 +288,7 @@ class Config:
             # back on the next time they add a device.
             "auto_update": self.auto_update,
             "remote_control": self.remote_control,
+            "terminal": self.terminal,
             # Left out once, and `bypass_asks = false` set by hand was gone
             # after the next pairing — the exact trap the comment above names.
             "bypass_asks": self.bypass_asks,
@@ -415,6 +435,12 @@ class Config:
             self.ask_for[:] = [str(x) for x in asks]
         if isinstance(raw.get("bypass_asks"), bool):
             self.bypass_asks = raw["bypass_asks"]
+        # The terminal's switch, the same way: set by hand and taken at once. A
+        # file without the key is one from before it, which load() reads as on.
+        on = _terminal_setting(raw)
+        if on != self.terminal:
+            self.terminal = on
+            log.warning("terminal %s in config.toml", "ENABLED" if on else "disabled")
         return True
 
     def person_names(self) -> list[str]:

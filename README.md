@@ -265,6 +265,15 @@ tells it to. The whole design is about that sentence being safe to say.
   persists the change to `config.toml`, writes a warning to the log, and tells
   every paired device that this machine is now drivable. The switch guards an
   idle computer, not one whose paired phone is in the wrong hands.
+- **The terminal is a switch too.** `term.*` is a login shell on the
+  computer for any paired device, the tunnel's browsers included. It is
+  `terminal` in `config.toml`: `false` on a new install (`true` for a config
+  from before the switch, so a terminal in use stays). Only an edit of the
+  file turns it on; a change is a warning in the log.
+- **A sign-in leaves only for the phone.** `account.export` hands over a
+  Claude/Codex sign-in to move it to another computer. Only a tailnet device
+  may ask (or import one); a tunnel browser is refused, and the machine-list
+  gateway refuses both rather than relay them to another computer.
 - **Face ID** can lock the app, and can be required before entering bypass mode.
 
 One default worth knowing about: **the daemon updates itself.** `auto_update` is
