@@ -124,8 +124,11 @@ _GLOB = re.compile(r"[*?\[]|(?<!\$)\{")
 _EVERYTHING = {"*", ".*", "{*,.*}", "{.*,*}", "{,.}*", ".[!.]*"}
 _OPEN_MODE = re.compile(r"^(0?777|[ugoa]*a[ugoa]*[+=]rwx|ugo[+=]rwx)$")
 # The daemon's own folder: its config, its database. Uploads, the log and the
-# accounts' memory and skills are what a chat works in all day.
-_DAEMON_HOME = re.compile(r"(?<![\w.-])" + _HOME_NAMES + r"(?:/(?!(?:uploads|logs|accounts)(?:/|$))|$)")
+# accounts' memory and skills are what a chat works in all day, and so is a
+# chat's own folder under scratch/ (its TMPDIR since 5 Nov 2026) — but not
+# scratch/ itself, which holds every chat's.
+_OPEN_PARTS = r"(?:(?:uploads|logs|accounts)(?:/|$)|scratch/(?!\.\.?(?:/|$))[^/]+)"
+_DAEMON_HOME = re.compile(r"(?<![\w.-])" + _HOME_NAMES + r"(?:/(?!" + _OPEN_PARTS + r")|$)")
 _SQL_WRITES = re.compile(
     # `replace(` is the string function, which reads; only the REPLACE statement
     # writes. A night watch select over chat events asked like a delete (31 Oct 2026).
@@ -386,13 +389,21 @@ def _inside(p: Path, root: Path) -> bool:
     return root in p.parents
 
 
-# Scratch space: a chat clears what it put in /tmp all evening (7 Oct 2026).
+# Scratch space: a chat clears what it put in /tmp all evening (7 Oct 2026),
+# and what it put in its own TMPDIR, <daemon home>/scratch/<chat> (5 Nov 2026).
 # Emptying the folder itself still asks.
 _SCRATCH = {Path(os.path.realpath(d)) for d in ("/tmp", tempfile.gettempdir())}
 
 
+def _scratch_roots() -> set[Path]:
+    """The scratch/ folder of every daemon home this machine may have: the
+    default one, the pre-rename one and DIVAN_HOME's, read now (not at import)."""
+    homes = [os.path.join(os.path.expanduser("~"), n) for n in (".divan", legacy.HOME_NAME)]
+    return {Path(os.path.realpath(os.path.join(h, "scratch"))) for h in homes + _daemon_homes()}
+
+
 def _scratch(p: Path) -> bool:
-    return any(_inside(p, d) for d in _SCRATCH)
+    return any(_inside(p, d) for d in _SCRATCH | _scratch_roots())
 
 
 # Regenerable caches (17 Oct 2026: an agent freeing disk space was asked about
@@ -632,8 +643,8 @@ def _daemon_write(target: str, here: Path | None) -> bool:
         return True
     for home in _daemon_homes():
         if s == home or s.startswith(home + os.sep):
-            rest = s[len(home):].lstrip(os.sep)
-            if rest.split(os.sep, 1)[0] not in ("uploads", "logs", "accounts"):
+            rest = s[len(home):].lstrip(os.sep).replace(os.sep, "/")
+            if not re.match(_OPEN_PARTS, rest):
                 return True
     return False
 
@@ -673,7 +684,7 @@ def _daemon_write_reason(name: str, args: list[str], here: Path | None) -> str |
         if not _reads_only_sql(args):
             targets = rest[:1]
     hit = next((t for t in targets if _daemon_write(t, here)), None)
-    return f"{DESTRUCTION}: changes the daemon's own files: {hit}" if hit else None
+    return f"{DESTRUCTION}: changes the daemon's own files: {hit or repr(hit)}" if hit is not None else None
 
 
 # Variables a command sets itself and then deletes (1 Nov 2026: three phone
@@ -685,9 +696,13 @@ _MKTEMP = re.compile(r"^\$\(\s*mktemp\b(?P<args>[^()`$;|&]*)\)$")
 _VAR = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
 
 
-def _mktemp_place(args: str) -> str | None:
-    """Where `mktemp ARGS` creates its file or folder, as a path inside it."""
+def _mktemp_place(args: str, tmpdir: str | None = None) -> str | None:
+    """Where `mktemp ARGS` creates its file or folder, as a path inside it.
+
+    `tmpdir` is the TMPDIR the command runs with (the chat's scratch folder),
+    else the daemon's own temp folder."""
     words = args.split()
+    tmp = tmpdir or tempfile.gettempdir()
     place = None
     for n, w in enumerate(words):
         if w in ("-p", "--tmpdir") and n + 1 < len(words):
@@ -695,17 +710,17 @@ def _mktemp_place(args: str) -> str | None:
         elif w.startswith("--tmpdir="):
             place = w.split("=", 1)[1]
         elif w == "-t":
-            place = tempfile.gettempdir()
+            place = tmp
     templates = [w for w in words if not w.startswith("-") and w not in (place,)]
     if not templates:
-        return os.path.join(place or tempfile.gettempdir(), "tmp.XXXXXXXX")
+        return os.path.join(place or tmp, "tmp.XXXXXXXX")
     t = templates[-1]
     if t.startswith(("/", "~")) or place is None:
         return t        # absolute, or relative to where the shell stands (BSD mktemp)
     return os.path.join(place, t)
 
 
-def _assignments(words: list[str], known: dict[str, str]) -> None:
+def _assignments(words: list[str], known: dict[str, str], tmpdir: str | None = None) -> None:
     """Update `known` with what a segment's leading `NAME=value` words set."""
     i = 1 if words and words[0] in ("export", "local", "readonly", "declare", "typeset") else 0
     text = " ".join(words[i:])
@@ -718,7 +733,7 @@ def _assignments(words: list[str], known: dict[str, str]) -> None:
     name, value = m.group(1), m.group(2).strip().strip("'\"")
     mk = _MKTEMP.match(value)
     if mk:
-        place = _mktemp_place(mk.group("args"))
+        place = _mktemp_place(mk.group("args"), tmpdir)
         if place is None:
             known.pop(name, None)
         else:
@@ -751,7 +766,8 @@ def _expand(arg: str, known: dict[str, str]) -> str | None:
     return None if missing else out
 
 
-def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> str | None:
+def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0,
+                   tmpdir: str | None = None) -> str | None:
     if depth > 4:
         return None
     cmd = _inline_heredocs(cmd)
@@ -760,11 +776,12 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
         if rule.pattern.search(code):
             return rule.reason()
     for inner in _SUBSTITUTION.findall(code):
-        reason = _parsed_reason(inner[0] or inner[1], root, here, depth + 1)
+        reason = _parsed_reason(inner[0] or inner[1], root, here, depth + 1, tmpdir)
         if reason:
             return reason
     downloading = fed_secret = False
-    known: dict[str, str] = {}
+    # The chat's TMPDIR is known; the shell has it from the daemon.
+    known: dict[str, str] = {"TMPDIR": tmpdir} if tmpdir else {}
     for words, op in _segments(_tokens(cmd)):
         redirect = op.rstrip("|&")[-1:]
         if redirect in ("<", ">"):
@@ -781,7 +798,7 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
         name, args, sudo = _command(words)
         if words and (_ASSIGNMENT.match(words[0])
                       or words[0] in ("export", "local", "readonly", "declare", "typeset")):
-            _assignments(words, known)
+            _assignments(words, known, tmpdir)
         if piped and downloading and name in _SHELLS:
             return f"{EXPOSURE}: a download piped into a shell"
         if not piped:
@@ -820,7 +837,7 @@ def _parsed_reason(cmd: str, root: Path, here: Path | None, depth: int = 0) -> s
                         script = args[n + 1]
                         break
             if script:
-                reason = _parsed_reason(script, root, here, depth + 1)
+                reason = _parsed_reason(script, root, here, depth + 1, tmpdir)
         elif _INTERPRETERS.match(name):
             script = next((args[n + 1] for n, a in enumerate(args[:-1])
                            if a in ("-c", "-e", "--eval", "-p", "--print")), None)
@@ -891,7 +908,8 @@ def prints_secret(cmd: str) -> str | None:
     return None
 
 
-def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None) -> str | None:
+def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None,
+                       tmpdir: str | None = None) -> str | None:
     """Why this shell command must be put to the phone, or None if it need not be.
 
     It must when it spends money, exposes the machine or a secret, or can
@@ -901,6 +919,8 @@ def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None) 
     `cwd` is the chat's folder: deleting inside it is everyday work, deleting
     outside it is not. `at` is where the shell stands when it differs — a
     session that ran `cd` earlier resolves its relative paths from there.
+    `tmpdir` is the TMPDIR the chat's shell has (its scratch folder): what
+    `$TMPDIR` and a bare `mktemp` stand for.
 
     The command is parsed, one command of a pipeline or chain at a time, so a
     word in a commit message is not a command and `rm -r -f /` is the same
@@ -912,7 +932,7 @@ def destructive_reason(cmd: str, cwd: str | None = None, at: str | None = None) 
     root = Path(os.path.realpath(os.path.expanduser(cwd or os.getcwd())))
     here = Path(os.path.realpath(os.path.expanduser(at))) if at else root
     try:
-        return _parsed_reason(cmd, root, here)
+        return _parsed_reason(cmd, root, here, tmpdir=tmpdir)
     except Exception:
         # A classifier that falls over must not be the reason nobody was asked.
         log.exception("could not parse a command; asking")

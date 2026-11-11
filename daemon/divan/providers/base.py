@@ -102,6 +102,14 @@ class Provider(ABC):
         # background never calls it.
         self.on_tasks: Callable[[list[dict]], Awaitable[None]] | None = None
 
+    def scratch_dir(self) -> str | None:
+        """The chat's own temp folder, its CLI's TMPDIR; None without a chat.
+        The command guard needs it to know `$TMPDIR` and `mktemp` land there."""
+        if not self.cfg.chat_id:
+            return None
+        from .. import config
+        return str(config.chat_scratch(self.cfg.chat_id))
+
     @abstractmethod
     async def run(self, prompt: str, attachments: list[dict] | None = None) -> TurnResult: ...
 
