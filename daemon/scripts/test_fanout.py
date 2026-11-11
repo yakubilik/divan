@@ -104,7 +104,13 @@ async def main() -> int:
         await f.broadcast({"event": "text.delta", "chat_id": "c", "seq": None,
                            "data": {"text": "x"}, "ts": time.time()})
         await asyncio.sleep(0)     # a turn awaits its stream between events
-    await asyncio.sleep(0.05)
+    # Until the live client's queue is drained, not a fixed moment: on Python
+    # 3.11 every send costs the writer a task of its own, and 50 ms was not
+    # enough for a thousand of them on a Mac.
+    deadline = time.monotonic() + 5
+    while live in f.outbox and f.outbox[live].qsize() and time.monotonic() < deadline:
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.01)
     ok("a hopeless client is dropped, not grown", dead not in f.outbox)
     ok("dropping it closes its socket", dead.closed)
     ok("the live client is untouched", live in f.outbox and len(live.got) > OUTBOX_MAX)
