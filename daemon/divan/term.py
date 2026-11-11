@@ -287,31 +287,51 @@ class Terms:
 
     # ── ending ─────────────────────────────────────────────────────────────
     async def _ended(self, t: Term) -> None:
-        """The shell's side of the pty closed: it exited, or was killed."""
+        """The shell's side of the pty closed: it exited, or was killed.
+
+        Whatever raises on the way, the terminal ends whole: the master is
+        closed, the entry leaves `terms`, the group is killed and the shell
+        reaped as far as that can still be done, and the failure is logged
+        here, once, rather than left for a caller to half-handle.
+        """
         if t.ended:
             return
         t.ended = True
-        if t.flushing is not None:
-            t.flushing.cancel()
-            t.flushing = None
-        # Anything still in the pty, then whatever the decoder held back.
-        while True:
-            try:
-                more = os.read(t.master, 65536)
-            except OSError:
-                break
-            if not more:
-                break
-            t.buf += more
-        await self._flush(t, final=True)
-        code = await self._wait(t)
+        code: int | None = None
         try:
-            os.close(t.master)
-        except OSError:
-            pass
-        self.terms.pop(t.id, None)
+            self._stop_reading(t)
+            if t.flushing is not None:
+                t.flushing.cancel()
+                t.flushing = None
+            # Anything still in the pty, then whatever the decoder held back.
+            while True:
+                try:
+                    more = os.read(t.master, 65536)
+                except OSError:
+                    break
+                if not more:
+                    break
+                t.buf += more
+            await self._flush(t, final=True)
+            code = await self._wait(t)
+        except Exception as exc:
+            log.warning("term %s: ending it failed: %r", t.id, exc)
+            code = _reap_now(t)
+        finally:
+            try:
+                self._stop_reading(t)
+            except Exception:
+                t.reading = False
+            try:
+                os.close(t.master)
+            except OSError:
+                pass
+            self.terms.pop(t.id, None)
         log.info("term %s ended: pid %s, code %s", t.id, t.pid, code)
-        await self._emit(t, "term.exit", {"term_id": t.id, "code": code})
+        try:
+            await self._emit(t, "term.exit", {"term_id": t.id, "code": code})
+        except Exception as exc:
+            log.warning("term %s: telling its clients it ended failed: %r", t.id, exc)
 
     async def _wait(self, t: Term) -> int | None:
         """Reap the shell, and make sure nothing of its group outlives it.
@@ -326,9 +346,10 @@ class Terms:
         while not _exited(t.pid):
             _signal_group(t.pid, signal.SIGKILL)
             await asyncio.sleep(0.02)
-        # Whatever the shell left running in its own group would keep running
-        # with nobody to see it: end it too.
-        _signal_group(t.pid, signal.SIGKILL)
+        # Whatever the shell left running in its own group, or in the groups
+        # job control gave its background jobs, would keep running with nobody
+        # to see it: end it too.
+        _kill_session(t.pid)
         return await asyncio.get_running_loop().run_in_executor(None, t.proc.wait)
 
     async def kill(self, t: Term, why: str) -> None:
@@ -346,7 +367,6 @@ class Terms:
             _signal_group(fg, signal.SIGCONT)
         _signal_group(t.pid, signal.SIGHUP)
         _signal_group(t.pid, signal.SIGCONT)
-        self._stop_reading(t)
         await self._ended(t)
 
     async def _reap(self) -> None:
@@ -370,10 +390,102 @@ class Terms:
 
 def _exited(pid: int) -> bool:
     """Whether the child has exited, without reaping it."""
+    if hasattr(os, "waitid"):
+        try:
+            return os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+        except ChildProcessError:
+            return True
+    # macOS before Python 3.13 has no os.waitid.
+    if sys.platform == "darwin":
+        state = _darwin_state(pid)
+        if state is not None:
+            return state
+    return _ps_exited(pid)
+
+
+_SZOMB = 5                    # <sys/proc.h>: p_stat of a zombie
+_KINFO_PROC_SIZE = 648        # sizeof(struct kinfo_proc) on 64-bit macOS
+_P_STAT_AT, _P_PID_AT = 36, 40
+
+
+def _darwin_state(pid: int) -> bool | None:
+    """sysctl(KERN_PROC_PID), the way `ps` looks: True for a zombie or a pid
+    that is gone, False for a live one, None if the answer is not one this
+    code understands (then `ps` is asked instead)."""
     try:
-        return os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
-    except ChildProcessError:
+        import ctypes
+        libc = ctypes.CDLL(None, use_errno=True)
+        mib = (ctypes.c_int * 4)(1, 14, 1, pid)   # CTL_KERN, KERN_PROC, KERN_PROC_PID
+        buf = ctypes.create_string_buffer(_KINFO_PROC_SIZE)
+        size = ctypes.c_size_t(_KINFO_PROC_SIZE)
+        if libc.sysctl(mib, 4, buf, ctypes.byref(size), None, ctypes.c_size_t(0)) != 0:
+            return None
+    except Exception:
+        return None
+    if size.value == 0:
         return True
+    raw = buf.raw
+    if size.value != _KINFO_PROC_SIZE or int.from_bytes(raw[_P_PID_AT:_P_PID_AT + 4], "little") != pid:
+        return None
+    return raw[_P_STAT_AT] == _SZOMB
+
+
+def _ps_exited(pid: int) -> bool:
+    try:
+        r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    stat = r.stdout.strip()
+    return not stat or stat.startswith("Z")
+
+
+def _reap_now(t: Term) -> int | None:
+    """Last resort when ending a terminal failed: kill its session, reap it."""
+    try:
+        _kill_session(t.pid)
+    except Exception:
+        _signal_group(t.pid, signal.SIGKILL)
+    try:
+        t.proc.kill()
+    except OSError:
+        pass
+    try:
+        return t.proc.wait(timeout=KILL_GRACE_S)
+    except Exception as exc:
+        log.warning("term %s: pid %s could not be reaped: %r", t.id, t.pid, exc)
+        return t.proc.returncode
+
+
+def _session_groups(sid: int) -> set[int]:
+    """The process groups with a process in session `sid` (the shell's pid:
+    it was started with a session of its own)."""
+    if os.path.isdir("/proc/self"):
+        pids = [int(n) for n in os.listdir("/proc") if n.isdigit()]
+    else:
+        try:
+            r = subprocess.run(["ps", "-A", "-o", "pid="], capture_output=True, text=True, timeout=5)
+            pids = [int(n) for n in r.stdout.split() if n.isdigit()]
+        except (OSError, subprocess.SubprocessError):
+            pids = []
+    groups = set()
+    for pid in pids:
+        try:
+            if os.getsid(pid) == sid:
+                groups.add(os.getpgid(pid))
+        except OSError:
+            pass
+    return groups
+
+
+def _kill_session(sid: int) -> None:
+    """SIGKILL the shell's own group and every group of its session."""
+    if sid <= 1 or sid == os.getsid(0):
+        return
+    _signal_group(sid, signal.SIGKILL)
+    for pgid in _session_groups(sid):
+        if pgid > 1 and pgid != os.getpgrp():
+            _signal_group(pgid, signal.SIGKILL)
 
 
 def _signal_group(pgid: int, sig: int) -> None:
