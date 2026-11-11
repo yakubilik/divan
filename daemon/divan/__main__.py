@@ -796,6 +796,31 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"roots={cfg.allowed_roots}")
 
 
+LOG_MAX_BYTES = 10 * 1024 * 1024
+LOG_BACKUPS = 5
+
+
+def setup_logging(log_dir: Path, stderr=None) -> list[logging.Handler]:
+    """daemon.log, rotated at 10 MB with five old files kept. The same lines go
+    to stderr only when it is a terminal: under launchd stderr is
+    launchd.err.log, which used to receive every line a second time and never
+    rotated."""
+    from logging.handlers import RotatingFileHandler
+    stderr = sys.stderr if stderr is None else stderr
+    log_dir.mkdir(parents=True, exist_ok=True)
+    handlers: list[logging.Handler] = [RotatingFileHandler(
+        log_dir / "daemon.log", maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS, encoding="utf-8")]
+    try:
+        tty = stderr.isatty()
+    except Exception:
+        tty = False
+    if tty:
+        handlers.append(logging.StreamHandler(stderr))
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s",
+                        handlers=handlers, force=True)
+    return handlers
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="divan")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -836,10 +861,7 @@ def main() -> None:
                 stream.reconfigure(encoding="utf-8")
             except Exception:
                 pass
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s",
-                        handlers=[logging.StreamHandler(),
-                                  logging.FileHandler(LOG_DIR / "daemon.log")])
+    setup_logging(LOG_DIR)
     args.fn(args)
 
 
