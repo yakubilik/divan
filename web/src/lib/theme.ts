@@ -305,6 +305,15 @@ export const EXECUTORS: Record<string, ExecutorFace> = {
   you: { mark: 'Y', fill: null, round: true, dashed: false, kind: 'you · no machine' },
 };
 
+/** The colours a chart in an answer is drawn in (`components/Diagram.tsx`):
+ *  the design's own, nothing new — the three tones of state, then the
+ *  executors' squares, so that a pie's slices can be told apart in either
+ *  theme and none of them is a colour the panel does not already use. */
+export function chartPalette(scheme: Scheme): string[] {
+  const t = tokensFor(scheme);
+  return [t.amber, t.run, t.red, EXECUTORS.seo.fill!, EXECUTORS.research.fill!, EXECUTORS.coder.fill!, EXECUTORS.analyst.fill!];
+}
+
 /** Colours that belong to what is under them rather than to the page: the black
  *  behind a photo or a remote screen, and the chrome drawn on top of it. They
  *  do not follow the theme — a picture is the same picture in either — and they

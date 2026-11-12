@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { C, R } from '../lib/theme';
 import { mono } from '../ui/kit';
+import { blocks, isDiagram, type Align, type Block } from '../lib/blocks';
+import { CodeBlock, Diagram } from './Diagram';
 
 /** The two halves of a conversation, so that both walls speak the same one.
  *
@@ -76,8 +78,9 @@ function Link({ href, children }: { href: string; children: ReactNode }) {
 }
 
 /** The little of Markdown that actually shows up in these answers: fenced code,
- *  inline code, bold and links. Headings and tables are left as written — a
- *  renderer that half-understands them reads worse than the raw text does. */
+ *  inline code, bold and links (pipe tables and diagrams are `Prose`'s, below).
+ *  Headings are left as written — a renderer that half-understands them reads
+ *  worse than the raw text does. */
 function inline(text: string, keyBase: string) {
   const out: ReactNode[] = [];
   // Code, bold, a Markdown link, and a bare URL — the last two because an
@@ -119,22 +122,43 @@ function inline(text: string, keyBase: string) {
   return out;
 }
 
-/** The words of a message: fenced code as code, the rest as it was written. */
+/** A Markdown pipe table, as a table. Its cells take the same inline marks as
+ *  the prose around it; a wide one scrolls sideways inside its own frame. */
+function Table({ block, keyBase }: { block: Extract<Block, { kind: 'table' }>; keyBase: string }) {
+  const cell = (align: Align, head: boolean) => ({
+    padding: '7px 12px', textAlign: (align ?? 'left') as 'left' | 'center' | 'right',
+    borderTop: head ? 'none' : `1px solid ${C.border}`, verticalAlign: 'top' as const,
+    fontWeight: head ? 600 : 400, color: head ? C.text : C.text2,
+  });
+  return (
+    <div data-table style={{
+      margin: '8px 0', border: `1px solid ${C.border}`, borderRadius: R.card,
+      overflowX: 'auto', background: C.surface, maxWidth: '100%',
+    }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: 14, lineHeight: '20px', minWidth: '100%' }}>
+        <thead style={{ background: C.surface2 }}>
+          <tr>{block.head.map((h, i) => <th key={i} style={cell(block.align[i], true)}>{inline(h, `${keyBase}-h${i}`)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {block.rows.map((row, r) => (
+            <tr key={r}>{row.map((c, i) => <td key={i} style={cell(block.align[i], false)}>{inline(c, `${keyBase}-${r}-${i}`)}</td>)}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** The words of a message: fenced code as code (a closed ```mermaid fence as a
+ *  diagram), a pipe table as a table, the rest as it was written. */
 export function Prose({ text }: { text: string }) {
-  const parts = text.split(/```/);
   return (
     <>
-      {parts.map((part, i) => (
-        i % 2 === 1 ? (
-          <pre key={i} style={{
-            ...mono, fontSize: 13, lineHeight: '19px', background: C.bg,
-            border: `1px solid ${C.border}`, borderRadius: R.card, padding: '10px 12px',
-            overflowX: 'auto', margin: '8px 0', color: C.text2,
-          }}>{part.replace(/^[a-z]*\n/i, '')}</pre>
-        ) : (
-          <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{inline(part, `p${i}`)}</span>
-        )
-      ))}
+      {blocks(text).map((b, i) => {
+        if (b.kind === 'table') return <Table key={i} block={b} keyBase={`t${i}`} />;
+        if (b.kind === 'code') return isDiagram(b) ? <Diagram key={i} code={b.code} /> : <CodeBlock key={i} code={b.code} />;
+        return <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{inline(b.text, `p${i}`)}</div>;
+      })}
     </>
   );
 }

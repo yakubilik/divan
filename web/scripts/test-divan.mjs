@@ -1042,6 +1042,9 @@ group('the fades that are left are the ones that were decided');
     // front one is shown.
     'src/components/Timeline.tsx': ["sign === ' ' ? 0 : 1"],
     'src/screens/Screen.tsx': ['i === front ? 1 : 0'],
+    // A diagram's frame before it has drawn: there but not shown, because a
+    // hidden cross-origin frame is not laid out and would measure as nothing.
+    'src/components/Diagram.tsx': ['drawn ? 1 : 0'],
     // The textarea a copy goes through, which is one pixel and off screen.
     'src/lib/clipboard.ts': ['0'],
     // The two animations: a caret blinking and the "working" dot breathing.
