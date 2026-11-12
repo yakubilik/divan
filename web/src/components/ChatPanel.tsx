@@ -320,7 +320,7 @@ export function ChatPanel({ told, place, onPlace, big, onBig, onMinimise, onClos
         <div style={{ ...mono, fontSize: 11, color: T.ink3 }}>opening…</div>
       )}
       <Timeline
-        items={log.items} hostKey={told.host} busy={busy}
+        items={log.items} hostKey={told.host} chatId={told.chatId} busy={busy}
         onRespond={(rid, d, response) => respond(told.host, told.chatId, rid, d, response)}
       />
       {!!log.error && <div style={{ ...mono, fontSize: 11, color: T.red }}>{log.error}</div>}

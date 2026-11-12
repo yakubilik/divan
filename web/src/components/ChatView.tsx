@@ -441,7 +441,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
               <span className="dv-meta">filed under {filedUnder}</span>
             </div>
           )}
-          <Timeline items={log.items} hostKey={hostKey ?? ''} onRespond={onRespond} tickets={tickets} busy={busy} />
+          <Timeline items={log.items} hostKey={hostKey ?? ''} chatId={chat.id} onRespond={onRespond} tickets={tickets} busy={busy} />
         </div>
       </div>
       {/* The same column the conversation reads in, so the box sits under it. */}

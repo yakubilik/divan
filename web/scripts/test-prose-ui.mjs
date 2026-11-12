@@ -9,7 +9,8 @@
  *  the way the daemon serves the panel's files; then: the table is a <table>
  *  with its head, rows and inline marks; each good diagram's frame reports a
  *  size and is shown at it; the broken one and the unclosed one are code; the
- *  frames are sandboxed to scripts alone. A picture of each theme is written
+ *  frames are sandboxed to scripts alone; a key an agent shared is a chip that
+ *  copies on a real click and greys out after its hour. A picture of each theme is written
  *  next to the build, to be looked at. */
 import * as esbuild from 'esbuild';
 import { spawn } from 'node:child_process';
@@ -105,6 +106,7 @@ try {
   const { result: { sessionId } } = await cdp('Target.attachToTarget', { targetId, flatten: true });
   const page = async (m, p) => (await cdp(m, p, sessionId)).result;
   await page('Runtime.enable');
+  await cdp('Browser.grantPermissions', { origin: `http://127.0.0.1:${port}`, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] });
   await page('Page.enable');
   // Every message a frame sends the page, so a failure says what the frame said.
   await page('Page.addScriptToEvaluateOnNewDocument', { source: "if (window.top === window) { window.__said = []; addEventListener('message', function (e) { window.__said.push(JSON.stringify(e.data).slice(0, 120)); }, true); }" });
@@ -149,6 +151,38 @@ try {
     ok('each frame is sandboxed to scripts alone', state.shown.every((s) => s.sandbox === 'allow-scripts'), JSON.stringify(state.shown));
     ok('the broken diagram falls back to its code', state.pres.some((p) => p.includes('this is not mermaid')), JSON.stringify(state.pres));
     ok('the fence still streaming is code', state.pres.some((p) => p.includes('pie title Yarım')), JSON.stringify(state.pres));
+    // A shared key: a chip, never the token; a click asks the daemon about this
+    // chat and this key and copies the answer; an hour later, or with no chat,
+    // there is nothing to click.
+    const share = await evaluate(`(() => {
+      const chips = (c) => [...document.querySelectorAll('[data-case="' + c + '"] [data-share]')];
+      return {
+        raw: document.body.innerText.includes('[secret-share'),
+        live: chips('live').map((b) => [b.textContent, b.disabled]),
+        old: chips('old').map((b) => [b.textContent, b.disabled]),
+        nochat: chips('nochat').map((b) => [b.textContent, b.disabled]),
+        value: document.body.innerText.includes('the-value-123'),
+      };
+    })()`);
+    ok('no share token is printed as text', !share.raw);
+    ok('a fresh share is a chip with its label, enabled', share.live[0]?.[0] === '🔑 Gri Koç deneme şifresi' && share.live[0]?.[1] === false, JSON.stringify(share.live));
+    ok('a share without a label takes its name', share.live[1]?.[0] === '🔑 gone', JSON.stringify(share.live));
+    ok('after the hour the chip is grey and does nothing', share.old.every(([t, d]) => d && t.includes('expired')), JSON.stringify(share.old));
+    ok('without a chat a share is only its name', share.nochat.every(([t, d]) => d && t.startsWith('🔒')), JSON.stringify(share.nochat));
+    // A real click: the clipboard only takes text behind a user's gesture.
+    const box = await evaluate(`(() => { const b = document.querySelector('[data-case="live"] [data-share="rac-secret-grikoc-deneme"]'); b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await page('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: 1 });
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    const after = await evaluate(`({ calls: window.__calls, chip: document.querySelector('[data-case="live"] [data-share="rac-secret-grikoc-deneme"]').textContent, shown: document.body.innerText.includes('the-value-123') })`);
+    ok('the click asks secret.copy for this chat and key', JSON.stringify(after.calls.slice(-1)) === JSON.stringify([{ host: 'studio', type: 'secret.copy', data: { chat_id: 'c1', service: 'rac-secret-grikoc-deneme' } }]), JSON.stringify(after.calls));
+    ok('and says it copied, never showing the value', after.chip === '✓ copied' && !after.shown, JSON.stringify(after));
+    ok('the value is on the clipboard', await evaluate(`navigator.clipboard.readText()`) === 'the-value-123');
+    await evaluate(`document.querySelector('[data-case="live"] [data-share="rac-secret-gone"]').click()`);
+    await new Promise((r) => setTimeout(r, 300));
+    const gone = await evaluate(`(() => { const b = document.querySelector('[data-case="live"] [data-share="rac-secret-gone"]'); return [b.textContent, b.disabled]; })()`);
+    ok('a key the daemon no longer has turns the chip off', gone[1] === true, JSON.stringify(gone));
     const shot = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
     const file = join(build, `prose-${scheme}.png`);
     writeFileSync(file, Buffer.from(shot.data, 'base64'));

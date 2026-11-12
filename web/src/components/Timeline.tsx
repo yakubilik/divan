@@ -7,6 +7,7 @@ import { cost, duration, tokens, toolSummary, clock } from '../lib/format';
 import type { Item } from '../lib/timeline';
 import { Bubble, Prose, withSecrets } from './Bubble';
 import { Lightbox, type Shot } from './Lightbox';
+import { ShareContext } from './ShareChip';
 import { fileUrl } from '../lib/actions';
 import { bubbleSize, isPhoto, isVideo, viewerSources } from '../lib/media-size';
 import { filedBy, type Filed } from '../lib/filed';
@@ -352,8 +353,11 @@ function stripLocalRefs(text: string, atts: any[]): string {
   }).replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function Assistant({ item, hostKey }: { item: Extract<Item, { kind: 'assistant' }>; hostKey: string }) {
+function Assistant({ item, hostKey, chatId }: { item: Extract<Item, { kind: 'assistant' }>; hostKey: string; chatId?: string }) {
   const atts = item.attachments ?? [];
+  // What a shared key's chip asks the daemon about (ShareChip): this chat, and
+  // when this message was said.
+  const where = useMemo(() => (chatId ? { hostKey, chatId, sentAt: item.ts } : null), [hostKey, chatId, item.ts]);
   return (
     // `text-wrap: pretty` re-breaks the whole block to balance its last lines.
     // Worth it for a finished answer; on one still streaming it is that work
@@ -362,7 +366,7 @@ function Assistant({ item, hostKey }: { item: Extract<Item, { kind: 'assistant' 
       paddingRight: 32, fontSize: 15, lineHeight: '23px',
       textWrap: (item.done ? 'pretty' : 'wrap') as any,
     }}>
-      <Prose text={stripLocalRefs(item.text, atts)} />
+      <ShareContext.Provider value={where}><Prose text={stripLocalRefs(item.text, atts)} /></ShareContext.Provider>
       {atts.length > 0 && <div style={{ marginTop: 8 }}><Attachments list={atts} hostKey={hostKey} /></div>}
       {!item.done && (
         <span style={{
@@ -645,15 +649,15 @@ function CardLink({ filed, link }: { filed: Filed; link: TicketLink }) {
   );
 }
 
-const Row = memo(function Row({ item, prevTs, hostKey, onRespond }: {
-  item: Exclude<Item, Step>; prevTs: number | null; hostKey: string; onRespond: Respond;
+const Row = memo(function Row({ item, prevTs, hostKey, chatId, onRespond }: {
+  item: Exclude<Item, Step>; prevTs: number | null; hostKey: string; chatId?: string; onRespond: Respond;
 }) {
   const gap = prevTs == null || item.ts - prevTs > 1800;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {gap && <Divider ts={item.ts} />}
       {item.kind === 'user' && <UserBubble item={item} hostKey={hostKey} />}
-      {item.kind === 'assistant' && <Assistant item={item} hostKey={hostKey} />}
+      {item.kind === 'assistant' && <Assistant item={item} hostKey={hostKey} chatId={chatId} />}
       {item.kind === 'approval' && (
         <Approval item={item} onRespond={(d, response) => onRespond(item.requestId, d, response)} />
       )}
@@ -717,9 +721,12 @@ const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
 }, (a, b) => a.live === b.live && a.lang === b.lang && a.prevTs === b.prevTs && a.link === b.link
   && a.steps.length === b.steps.length && a.steps.every((s, i) => s === b.steps[i]));
 
-export function Timeline({ items, hostKey, onRespond, tickets, busy = false }: {
+export function Timeline({ items, hostKey, chatId, onRespond, tickets, busy = false }: {
   items: Item[];
   hostKey: string;
+  /** The chat these items are from: a key an agent shared in it can be copied.
+   *  Absent, a shared key is only its name. */
+  chatId?: string;
   onRespond: Respond;
   /** Where a card this conversation filed is opened. Absent, no link is drawn. */
   tickets?: TicketLink | null;
@@ -757,7 +764,7 @@ export function Timeline({ items, hostKey, onRespond, tickets, busy = false }: {
           return <Steps key={b.id} steps={b.steps} live={live} lang={lang} prevTs={before} link={link} />;
         }
         prevTs = b.item.ts;
-        return <Row key={b.item.id} item={b.item} hostKey={hostKey} onRespond={respond} prevTs={before} />;
+        return <Row key={b.item.id} item={b.item} hostKey={hostKey} chatId={chatId} onRespond={respond} prevTs={before} />;
       })}
     </div>
   );

@@ -3,6 +3,7 @@ import { C, R } from '../lib/theme';
 import { mono } from '../ui/kit';
 import { blocks, isDiagram, type Align, type Block } from '../lib/blocks';
 import { CodeBlock, Diagram } from './Diagram';
+import { SHARE_SOURCE, ShareChip } from './ShareChip';
 
 /** The two halves of a conversation, so that both walls speak the same one.
  *
@@ -81,18 +82,22 @@ function Link({ href, children }: { href: string; children: ReactNode }) {
  *  inline code, bold and links (pipe tables and diagrams are `Prose`'s, below).
  *  Headings are left as written — a renderer that half-understands them reads
  *  worse than the raw text does. */
+// A pasted key's placeholder, code, bold, a Markdown link, and a bare URL.
+const INLINE_SOURCE = /(\[secret [a-z]+ rac-secret-[a-z]+-[0-9a-f]{8}[^\]]*\])|`([^`\n]+)`|\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>"'`]+)/.source;
+
 function inline(text: string, keyBase: string) {
   const out: ReactNode[] = [];
   // Code, bold, a Markdown link, and a bare URL — the last two because an
   // answer that hands over a link and does not let it be pressed has handed
   // over half of it.
-  const re = /(\[secret [a-z]+ rac-secret-[a-z]+-[0-9a-f]{8}[^\]]*\])|`([^`\n]+)`|\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>"'`]+)/g;
+  // A key an agent shared comes first: its token looks like a Markdown link's text.
+  const re = new RegExp(`${SHARE_SOURCE}|${INLINE_SOURCE}`, 'g');
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     // A sentence that ends on a URL keeps its full stop out of the link.
     let whole = m[0];
-    let bare = m[6];
+    let bare = m[8];
     if (bare) {
       const tail = bare.match(/[.,;:!?)\]]+$/);
       if (tail) { bare = bare.slice(0, -tail[0].length); whole = bare; }
@@ -100,18 +105,20 @@ function inline(text: string, keyBase: string) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const key = `${keyBase}-${m.index}`;
     if (m[1] != null) {
-      out.push(...withSecrets(m[1], key));
-    } else if (m[2] != null) {
+      out.push(<ShareChip key={key} service={m[1]} label={m[2]} />);
+    } else if (m[3] != null) {
+      out.push(...withSecrets(m[3], key));
+    } else if (m[4] != null) {
       out.push(
         <code key={key} style={{
           ...mono, fontSize: 13, background: C.surface, border: `1px solid ${C.border}`,
           borderRadius: R.badge, padding: '1px 5px', color: C.text2,
-        }}>{m[2]}</code>,
+        }}>{m[4]}</code>,
       );
-    } else if (m[3] != null) {
-      out.push(<strong key={key} style={{ fontWeight: 600 }}>{m[3]}</strong>);
-    } else if (m[4] != null) {
-      out.push(<Link key={key} href={m[5]}>{m[4]}</Link>);
+    } else if (m[5] != null) {
+      out.push(<strong key={key} style={{ fontWeight: 600 }}>{m[5]}</strong>);
+    } else if (m[6] != null) {
+      out.push(<Link key={key} href={m[7]}>{m[6]}</Link>);
     } else {
       out.push(<Link key={key} href={bare!}>{bare}</Link>);
     }

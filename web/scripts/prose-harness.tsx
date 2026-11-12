@@ -8,6 +8,8 @@ import '../src/styles/divan-components.css';
 import '../src/styles/divan-app.css';
 import { Prose } from '../src/components/Bubble';
 import { setThemeChoice, themeCss } from '../src/lib/theme';
+import { ShareContext } from '../src/components/ShareChip';
+import { useFleet } from '../src/lib/fleet';
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('theme') === 'light' ? 'light' : 'dark';
@@ -59,7 +61,26 @@ export const ANSWER = [
   'pie title Yarım',
 ].join('\n');
 
+// The daemon, as far as a shared key's chip asks it: every call written down.
+(window as any).__calls = [];
+useFleet.setState({
+  call: async (host: string, type: string, data: any) => {
+    (window as any).__calls.push({ host, type, data });
+    if (data.service === 'rac-secret-gone') throw Object.assign(new Error('gone'), { code: 'secret_gone' });
+    return { value: 'the-value-123' };
+  },
+} as any);
+const SHARED = 'Şifre: [secret-share rac-secret-grikoc-deneme Gri Koç deneme şifresi] ve eski: [secret-share rac-secret-gone]';
+const now = Date.now() / 1000;
+
 createRoot(root).render(
   createElement('div', { style: { width: 760, padding: 24, color: 'var(--ink)', fontSize: 15, lineHeight: '22px' } },
-    createElement(Prose, { text: ANSWER })),
+    createElement(Prose, { text: ANSWER }),
+    createElement('div', { 'data-case': 'live' },
+      createElement(ShareContext.Provider, { value: { hostKey: 'studio', chatId: 'c1', sentAt: now - 60 } },
+        createElement(Prose, { text: SHARED }))),
+    createElement('div', { 'data-case': 'old' },
+      createElement(ShareContext.Provider, { value: { hostKey: 'studio', chatId: 'c1', sentAt: now - 4000 } },
+        createElement(Prose, { text: SHARED }))),
+    createElement('div', { 'data-case': 'nochat' }, createElement(Prose, { text: SHARED }))),
 );
