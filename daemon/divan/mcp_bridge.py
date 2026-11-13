@@ -10,6 +10,9 @@ tunnel client starts it as a child and no port is opened: the only way in is
 the tunnel, and the tunnel is gated by OpenAI's runtime key on this machine.
 
     python -m divan.mcp_bridge            # stdio, what tunnel-client runs
+    python -m divan.mcp_bridge --http --public-url https://mcp.example.dev
+                                          # loopback HTTP behind cloudflared, with
+                                          # OAuth (mcp_auth.py): one password
 
 It reads the daemon's SQLite database read-only and the queue through
 `ustabasi.snapshot`, the same read the wall uses. Every text that leaves goes
@@ -22,6 +25,7 @@ import datetime as dt
 import json
 import sqlite3
 from pathlib import Path
+from urllib.parse import urlparse
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -227,8 +231,21 @@ def ticket(ticket_id: int) -> dict:
     raise Refused(f"no ticket #{ticket_id}")
 
 
-def build() -> MCPServer:
-    server = MCPServer(name="divan", title="Divan", instructions=INSTRUCTIONS, version="0.1")
+def build(public_url: str | None = None, provider=None) -> MCPServer:
+    kw = {}
+    if public_url:
+        from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+        from . import mcp_auth
+        provider = provider or mcp_auth.Provider(public_url)
+        kw = {"auth_server_provider": provider, "auth": AuthSettings(
+            issuer_url=public_url, resource_server_url=f"{public_url.rstrip('/')}/mcp",
+            validate_token_resource=False, required_scopes=[mcp_auth.SCOPE],
+            client_registration_options=ClientRegistrationOptions(
+                enabled=True, valid_scopes=[mcp_auth.SCOPE], default_scopes=[mcp_auth.SCOPE]),
+            revocation_options=RevocationOptions(enabled=True))}
+    server = MCPServer(name="divan", title="Divan", instructions=INSTRUCTIONS, version="0.1", **kw)
+    if public_url:
+        server.custom_route("/login", methods=["GET", "POST"], include_in_schema=False)(provider.login_page)
     ro = {"annotations": {"readOnlyHint": True}} if _accepts_annotations(server) else {}
 
     @server.tool(description="List the chats on this computer, newest first. "
@@ -264,7 +281,26 @@ def _accepts_annotations(server: MCPServer) -> bool:
 
 
 def main() -> None:
-    build().run()
+    import argparse
+    import asyncio
+    ap = argparse.ArgumentParser(prog="python -m divan.mcp_bridge")
+    ap.add_argument("--http", action="store_true", help="serve HTTP on loopback instead of stdio")
+    ap.add_argument("--port", type=int, default=8798)
+    ap.add_argument("--public-url", help="the https address cloudflared serves this on; turns OAuth on")
+    a = ap.parse_args()
+    if not a.http:
+        build().run()
+        return
+    if not a.public_url:
+        ap.error("--http needs --public-url: this is never served without OAuth")
+    from mcp.server.transport_security import TransportSecuritySettings
+    host = urlparse(a.public_url).hostname
+    server = build(a.public_url)
+    asyncio.run(server.run_streamable_http_async(
+        host="127.0.0.1", port=a.port, stateless_http=True, json_response=True,
+        transport_security=TransportSecuritySettings(
+            allowed_hosts=[host, f"127.0.0.1:{a.port}"],
+            allowed_origins=[f"https://{host}", "https://chatgpt.com", "https://chat.openai.com"])))
 
 
 if __name__ == "__main__":

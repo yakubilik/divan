@@ -30,3 +30,24 @@ Divan, which keeps everything on the computer.
 4. ChatGPT → Settings → Apps/Plugins → Add custom MCP server → Connection: Tunnel,
    pick the tunnel, no authentication.
 5. Ask the dot: "Divan'da şu an çalışan sohbetler ne?"
+
+## Without Platform Tunnels: Cloudflare + OAuth
+
+When the Tunnels page is not open to the account, the same bridge is served over
+HTTPS by the Cloudflare tunnel that already carries the panel:
+
+```
+dot (ChatGPT) ─https─▶ mcp.yakupkeskin.dev (cloudflared) ─▶ 127.0.0.1:8798  python -m divan.mcp_bridge --http
+```
+
+`--http` refuses to start without `--public-url`, and that turns OAuth on
+(`mcp_auth.py`): ChatGPT registers itself, the browser lands on `/login`, the
+password is the keychain item `rac-secret-divan-mcp`. Only OpenAI hosts may
+receive a code; 5 wrong passwords close the page for 15 minutes; tokens are kept
+as hashes in `~/.divan/mcp-oauth.json`. Revoke everything by deleting that file
+and restarting the bridge.
+
+- launchd: `~/Library/LaunchAgents/com.yakup.divan-mcp.plist`
+- cloudflared: the `mcp.yakupkeskin.dev` ingress in `~/.cloudflared/divan.yml`
+- ChatGPT: Settings → Apps → Advanced → Developer mode on → Create →
+  URL `https://mcp.yakupkeskin.dev/mcp`, authentication OAuth.
