@@ -12,6 +12,8 @@ the user pastes back is written into the pty.
 from __future__ import annotations
 
 import asyncio
+import calendar
+import hashlib
 import json
 import logging
 import os
@@ -264,10 +266,13 @@ def sign_in_expiry(acc: Account) -> float | None:
         return None
 
 
-# How long a sign-in that failed to authenticate stays signed out when nothing
-# on disk says it was renewed. A keychain sign-in has no file to watch, so this
-# is all it gets.
-AUTH_HOLD_S = 6 * 3600
+# How long a sign-in that failed to authenticate stays signed out when its
+# stored credentials were not rewritten since. 13 Nov 2026: both signed-in
+# Claude accounts were refused once within a minute (11:19), worked again a
+# moment later, and stayed held for the six hours this used to be; every new
+# chat failed with "no account is signed in". Half an hour lets a passing
+# refusal heal; a sign-in that is really dead costs one more refused try.
+AUTH_HOLD_S = 30 * 60
 
 
 def auth_broken(acc: Account, now: float | None = None) -> bool:
@@ -280,12 +285,10 @@ def auth_broken(acc: Account, now: float | None = None) -> bool:
     if at is None:
         return False
     now = time.time() if now is None else now
-    try:
-        if _cred_path(acc).stat().st_mtime > at:
-            acc.auth_failed_at = None
-            return False
-    except OSError:
-        pass
+    written = _cred_written_at(acc)
+    if written is not None and written > at:
+        acc.auth_failed_at = None
+        return False
     if now - at > AUTH_HOLD_S:
         acc.auth_failed_at = None
         return False
@@ -682,6 +685,34 @@ def delete_account_dir(acc: Account) -> None:
 # computers breaks both of them.
 
 KEYCHAIN_SERVICE = "Claude Code-credentials"
+
+
+_KEYCHAIN_MDAT = re.compile(r'"mdat"<timedate>=\S+\s+"(\d{14})Z')
+
+
+def _cred_written_at(acc: Account) -> float | None:
+    """When this sign-in's stored credentials were last written: the file's
+    mtime, or on a Mac, where the claude CLI keeps them in the login keychain
+    and writes no file, the keychain item's modification date. None when
+    neither can be read."""
+    try:
+        return _cred_path(acc).stat().st_mtime
+    except OSError:
+        pass
+    if sys.platform != "darwin" or acc.provider != "claude" or acc.api_key:
+        return None
+    service = "Claude Code-credentials"
+    if acc.home:
+        service += "-" + hashlib.sha256(acc.home.encode()).hexdigest()[:8]
+    try:
+        r = subprocess.run(["security", "find-generic-password", "-s", service],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = _KEYCHAIN_MDAT.search(r.stdout or "")
+    if r.returncode != 0 or not m:
+        return None
+    return calendar.timegm(time.strptime(m.group(1), "%Y%m%d%H%M%S"))
 
 
 def _cred_path(acc: Account) -> Path:
