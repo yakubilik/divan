@@ -56,6 +56,10 @@ def is_untitled(title: str) -> bool:
 # A queue is a convenience, not an inbox: past this the phone is typing into
 # a chat that will not catch up for a very long time.
 MAX_QUEUED = 20
+# A chat archived by hand while a turn is running stays archived through the
+# rest of that turn; only these bring it back before the turn is over — the
+# person wrote to it, or it needs the person.
+WAKES_ARCHIVED = frozenset({"message.user", "approval.request"})
 
 # A turn whose CLI was killed from outside is picked up again this many times
 # before it is reported as failed.
@@ -164,6 +168,10 @@ class ChatSession:
         self.provider: Provider | None = None
         self._provider_owner: str | None = None
         self.running: asyncio.Task | None = None
+        # Set when somebody archives the chat while a turn is running: that
+        # turn's own tool calls and reply are not "something happened here",
+        # they are what the person just put away (see `emit`).
+        self._archived_mid_turn = False
         # Messages typed while a turn was still going. The running turn drains
         # them one by one when it finishes, so the phone never has to stop the
         # agent just to get a word in.
@@ -219,11 +227,15 @@ class ChatSession:
             # Something happened here, so an archived chat — archived by hand
             # or for going quiet — is back in the list, and told so before the
             # event itself so the list has the chat the event belongs to.
-            chat = self.db.unarchive(self.chat_id)
-            if chat is not None:
-                await self.broadcast({"seq": None, "chat_id": self.chat_id, "event": "chat.updated",
-                                      "data": chat, "ts": time.time()})
+            if not self._archived_mid_turn or type_ in WAKES_ARCHIVED:
+                self._archived_mid_turn = False
+                chat = self.db.unarchive(self.chat_id)
+                if chat is not None:
+                    await self.broadcast({"seq": None, "chat_id": self.chat_id, "event": "chat.updated",
+                                          "data": chat, "ts": time.time()})
             ev = self.db.append_event(self.chat_id, type_, payload)
+            if type_ in ("turn.done", "turn.error"):
+                self._archived_mid_turn = False
         else:
             ev = {"seq": None, "chat_id": self.chat_id, "event": type_,
                   "data": payload, "ts": time.time()}
@@ -639,6 +651,12 @@ class ChatSession:
         await self._set_status("running")
         recap = self._build_recap(HANDOVER_NOTE, handover=True)
         return f"{recap}{HANDOVER_NOTE}" if recap else HANDOVER_NOTE
+
+    def archived_by_hand(self) -> None:
+        """Somebody archived this chat. With a turn still running, the events
+        that turn has left to send keep it archived; the next turn, a message
+        typed into it or a question for the person brings it back."""
+        self._archived_mid_turn = self.is_busy()
 
     # ── turn ───────────────────────────────────────────────────────────────
     def is_busy(self) -> bool:

@@ -2720,6 +2720,8 @@ class Server:
         s = self.sessions.peek(cid)
         if s and PROVIDER_FIELDS & fields.keys():
             await s.reconfigure()
+        if s and fields.get("archived"):
+            s.archived_by_hand()
         await self.broadcast({"seq": None, "chat_id": cid, "event": "chat.updated",
                               "data": chat, "ts": time.time()})
         return chat
