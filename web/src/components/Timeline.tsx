@@ -12,7 +12,7 @@ import { fileUrl } from '../lib/actions';
 import { bubbleSize, isPhoto, isVideo, viewerSources } from '../lib/media-size';
 import { filedBy, type Filed } from '../lib/filed';
 import { NOTICE_WORD, ticketNotice, type TicketNotice } from '../lib/notice';
-import { blocks, counted, langOf, tell, type Lang, type Step } from '../lib/steps';
+import { blocks, counted, doingNow, langOf, tell, type Lang, type Step } from '../lib/steps';
 import { sendError } from '../lib/i18n';
 
 const OK_BG = C.okBg;
@@ -721,6 +721,23 @@ const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
 }, (a, b) => a.live === b.live && a.lang === b.lang && a.prevTs === b.prevTs && a.link === b.link
   && a.steps.length === b.steps.length && a.steps.every((s, i) => s === b.steps[i]));
 
+/** The turn is running and no step has shown yet: the steps row's own look,
+ *  turning, so a sent message is answered by something moving at once. */
+function Waiting({ lang }: { lang: Lang }) {
+  return (
+    <div
+      role="status" data-waiting
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, minHeight: 28,
+        color: C.text2, fontSize: 13, lineHeight: '19px',
+      }}
+    >
+      <Spinner size={13} />
+      <span>{doingNow([], lang)}</span>
+    </div>
+  );
+}
+
 export function Timeline({ items, hostKey, chatId, onRespond, tickets, busy = false }: {
   items: Item[];
   hostKey: string;
@@ -752,6 +769,20 @@ export function Timeline({ items, hostKey, chatId, onRespond, tickets, busy = fa
   // `anywhere`, not `break-word`: a link or a path with no space in it has to
   // be allowed to break, or it is the width of the whole conversation and the
   // chat scrolls sideways under it.
+  // A message sent while a turn runs waits at the bottom; the work going on is
+  // the row above it, so that is the row that turns.
+  let head = rows.length - 1;
+  while (head >= 0) {
+    const b = rows[head];
+    if (b.kind !== 'item' || b.item.kind !== 'user' || !b.item.queued) break;
+    head--;
+  }
+  // Between a message landing and the first step, and between an answer and the
+  // next step, nothing else says the turn is alive: the same row stands in.
+  const top = rows[head];
+  const waiting = busy && !(top?.kind === 'steps')
+    && !(top?.kind === 'item' && (top.item.kind === 'approval'
+      || (top.item.kind === 'assistant' && !top.item.done)));
   let prevTs: number | null = null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0, overflowWrap: 'anywhere' }}>
@@ -760,12 +791,13 @@ export function Timeline({ items, hostKey, chatId, onRespond, tickets, busy = fa
         if (b.kind === 'steps') {
           prevTs = b.steps[b.steps.length - 1].ts;
           const live = b.steps.some((s) => s.kind === 'tool' && s.running)
-            || (busy && i === rows.length - 1);
+            || (busy && i === head);
           return <Steps key={b.id} steps={b.steps} live={live} lang={lang} prevTs={before} link={link} />;
         }
         prevTs = b.item.ts;
         return <Row key={b.item.id} item={b.item} hostKey={hostKey} chatId={chatId} onRespond={respond} prevTs={before} />;
       })}
+      {waiting && <Waiting lang={lang} />}
     </div>
   );
 }
