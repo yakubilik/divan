@@ -8,8 +8,7 @@ import { ChatMenu } from './ChatMenu';
 import { ChatDetails } from './ChatDetails';
 import { LimitsRing } from './LimitsRing';
 import { contextUse, type ContextUse } from '../lib/machine';
-import { bareTitle, duration, shortPath } from '../lib/format';
-import { counted, doingNow, langOf } from '../lib/steps';
+import { bareTitle, shortPath } from '../lib/format';
 import type { Field } from './FieldSheet';
 import type { Chat, Group, LimitWindow } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
@@ -264,55 +263,6 @@ function Header({ chat, groupName, project, onDashboard, count, accountLabel, ac
   );
 }
 
-function WorkingStrip({ log, onInterrupt }: { log: ChatLog; onInterrupt: () => void }) {
-  const [now, setNow] = useState(Date.now() / 1000);
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now() / 1000), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const lang = langOf(log.items);
-  let started: number | null = null;
-  let toolCount = 0;
-  for (let i = log.items.length - 1; i >= 0; i--) {
-    const it = log.items[i];
-    if (it.kind === 'tool') toolCount++;
-    if (it.kind === 'turn' || it.kind === 'error') break;
-    started = it.ts;
-  }
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12, margin: '0 20px 8px',
-      padding: '0 14px', height: 44, borderRadius: R.card,
-      background: C.accentTint, border: `1px solid ${C.accentRing}`,
-    }}>
-      <Pulse />
-      <span style={{ fontSize: 13, fontWeight: 600, color: C.accentSoft }}>Running</span>
-      <span style={{ ...mono, fontSize: 12, color: C.mute }}>
-        {started ? duration((now - started) * 1000) : '—'}
-      </span>
-      <span style={{
-        fontSize: 13, color: C.text2, flex: 1, minWidth: 0,
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-      }}>{doingNow(log.items, lang)}</span>
-      {toolCount > 0 && (
-        <span style={{ fontSize: 12, color: C.mute, flexShrink: 0 }}>{counted(toolCount, lang)}</span>
-      )}
-      <button
-        type="button" onClick={onInterrupt}
-        style={{
-          height: 28, padding: '0 12px', borderRadius: R.btn, fontSize: 12, fontWeight: 600,
-          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-          border: `1px solid ${C.dangerLine}`, background: C.dangerBg, color: C.danger,
-        }}
-      >
-        <Icon path={P.stop} size={12} color={C.danger} /> Stop
-      </button>
-    </div>
-  );
-}
-
 /** What is attached but not sent yet. A picture is shown as the picture, at the
  *  size a thumbnail wants to be — a file name is not a preview, and the whole
  *  point of attaching a screenshot is to see that it is the right one. */
@@ -446,7 +396,6 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
       </div>
       {/* The same column the conversation reads in, so the box sits under it. */}
       <div style={{ width: '100%', maxWidth: 800, margin: '0 auto', flexShrink: 0 }}>
-        {busy && <WorkingStrip log={log} onInterrupt={onInterrupt} />}
         <ChatComposer
           chat={chat} hostKey={hostKey ?? ''} busy={busy} sending={sending}
           onSend={onSend} onInterrupt={onInterrupt} onUpload={onUpload}
