@@ -32,7 +32,8 @@ const ALLOWED = [
 
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (e.name === 'node_modules' || e.name === 'ios' || e.name === 'android' || e.name.startsWith('.')) continue;
+    // identity.local.json is the real bundle id, kept out of git on purpose.
+    if (e.name === 'identity.local.json' || e.name === 'node_modules' || e.name === 'ios' || e.name === 'android' || e.name.startsWith('.')) continue;
     const p = path.join(dir, e.name);
     if (e.isDirectory()) walk(p, out);
     else if (/\.(tsx?|jsx?|cjs|mjs|json|plist|strings|swift|m|h|txt|md)$/.test(e.name)) out.push(p);
@@ -83,6 +84,8 @@ if (at > 0) {
       if (!OLD.test(s)) continue;
       // The bundle id, and the URL type that registers the legacy scheme.
       if (k === 'CFBundleIdentifier' && bundleId.test(v)) { console.log(`     ${path.relative(bundle, p)} ${k}=${v} (bundle id)`); continue; }
+      // Expo Router's Handoff activity type, named after the bundle id; never shown.
+      if (k === 'NSUserActivityTypes' && v.every((x) => !OLD.test(x) || bundleId.test(x.split('.').slice(0, 3).join('.')))) { console.log(`     ${path.relative(bundle, p)} ${k}=${v.join(',')} (bundle id)`); continue; }
       if (k === 'CFBundleURLTypes') {
         const schemes = v.flatMap((t) => t.CFBundleURLSchemes || []);
         if (schemes.every((x) => !OLD.test(x) || x === LEGACY || bundleId.test(x))) { console.log(`     ${path.relative(bundle, p)} ${k}=${schemes.join(',')} (link schemes)`); continue; }
