@@ -42,7 +42,7 @@ from .call import (Concierge, NoRoom, hermes_installed, headline as call_headlin
 from .push import send_push
 from . import voice as voicemod
 from .transcribe import transcribe, dictate, warm as transcribe_warm, available as transcribe_available
-from .transcribe import known as transcribe_known
+from .transcribe import known as transcribe_known, disable as transcribe_disable
 from .attachments import KINDS, media_type_of, normalize_image, peaks, sniff
 from .security import (ACCESS_EMAIL, SOCKET_PEER, ForgedTunnel, PathPolicy, TunnelAccess, TunnelGate,
                        TunnelLock, tunnel_via)
@@ -366,6 +366,8 @@ class Server:
         # Whether transcription is installed, worked out on a thread: see
         # transcribe.available and learn_transcription.
         self._learning: asyncio.Future | None = None
+        if not cfg.voice:
+            transcribe_disable()
         # Live model lists per provider, the fetch in flight for each, and when
         # each list last arrived. Both fetches are local — Codex answers over its
         # app-server, Claude's comes out of the CLI binary — so they are cheap

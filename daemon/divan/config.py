@@ -220,6 +220,10 @@ class Config:
     # use keeps it (see load). Only ever set here, by hand: no request on the
     # wire turns it on. Re-read when the file changes, like `ask_for`.
     terminal: bool = False
+    # Speech recognition: voice notes, dictation and the voice call. Off means
+    # no Whisper model is ever loaded, which is gigabytes of GPU memory a
+    # daemon otherwise keeps for its whole life. A file without the key is on.
+    voice: bool = True
     # Follow origin/main by itself. Safe to leave on even where the code is
     # written: a checkout with uncommitted work is never touched (see updater).
     auto_update: bool = True
@@ -274,6 +278,7 @@ class Config:
         pool = raw.pop("pool", {})
         cfg = cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__})
         cfg.terminal = _terminal_setting(raw)
+        cfg.voice = raw.get("voice") is not False
         cfg.devices = devices
         cfg.accounts = accounts
         cfg.pool = pool if isinstance(pool, dict) else {}
@@ -314,6 +319,7 @@ class Config:
             "auto_update": self.auto_update,
             "remote_control": self.remote_control,
             "terminal": self.terminal,
+            "voice": self.voice,
             # Left out once, and `bypass_asks = false` set by hand was gone
             # after the next pairing — the exact trap the comment above names.
             "bypass_asks": self.bypass_asks,

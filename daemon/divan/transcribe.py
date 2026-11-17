@@ -66,6 +66,13 @@ def _backend() -> str | None:
 _known: bool | None = None
 
 
+def disable() -> None:
+    """config.toml's `voice = false`: report no backend, so nothing ever loads
+    a model and every caller takes its no-recogniser path."""
+    global _known
+    _known = False
+
+
 def available() -> bool:
     """Whether either backend is installed. Worked out once and kept: the
     answer is an import of mlx_whisper, which on a Mac at load 40 took six to
