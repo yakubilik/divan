@@ -4,7 +4,7 @@
 the actual `claude` or `codex` process on your machine, in your repo, signed in
 with your own account, reached over your own private network.
 
-https://github.com/user-attachments/assets/48c852d2-72c2-4acf-907f-afda5054870d
+https://github.com/user-attachments/assets/2a87d0b9-6c54-484c-ac19-8be4d5e33e7a
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" width="250" alt="The dashboard: a composer, the projects, the inbox">
