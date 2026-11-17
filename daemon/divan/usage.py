@@ -13,7 +13,6 @@ CLI has next run, and the last one a turn reported stays.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 import urllib.request
@@ -29,9 +28,7 @@ TIMEOUT_S = 4.0
 def _service(a: acct.Account) -> str:
     """The keychain item a sign-in lives in: the CLI's own name, and for a
     config folder that is not its usual one, that folder's hash after it."""
-    if not a.home:
-        return acct.KEYCHAIN_SERVICE
-    return acct.KEYCHAIN_SERVICE + "-" + hashlib.sha256(a.home.encode()).hexdigest()[:8]
+    return acct.keychain_service(a)
 
 
 def _token(a: acct.Account, now: float) -> str | None:

@@ -23,6 +23,8 @@ import tarfile
 import time
 from pathlib import Path
 
+from .config import machine_home
+
 MEMORY = "memory"
 INDEX = "MEMORY.md"
 # Claude Code: `name.replace(/[^a-zA-Z0-9]/g, "-")`, and past 200 characters
@@ -32,7 +34,7 @@ _MAX = 200
 
 
 def default_claude_home() -> Path:
-    return Path.home() / ".claude"
+    return machine_home("claude")
 
 
 def _hash36(s: str) -> str:

@@ -46,7 +46,7 @@ from claude_agent_sdk import (
     tool,
 )
 
-from .config import CONFIG_DIR
+from .config import CONFIG_DIR, machine_home
 from .providers.claude import MODEL_ALIASES
 
 log = logging.getLogger("rac.call")
@@ -221,7 +221,7 @@ PROFILE_HEAD = "About the person calling (background from their own notes; use i
 
 
 def _profile_files(account_home: str | None) -> list[Path]:
-    root = Path(account_home) if account_home else Path.home() / ".claude"
+    root = Path(account_home) if account_home else machine_home("claude")
     out: list[Path] = []
     seen: set[str] = set()
     if PROFILE_FILE.is_file():

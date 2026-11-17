@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from .config import CONFIG_DIR
+from .config import CONFIG_DIR, machine_home, machine_home_moved
 from .errors import Err
 from . import claude_memory, tools
 
@@ -210,12 +210,15 @@ class Account:
         """Environment for running this account's CLI."""
         e = dict(os.environ)
         e.pop("CLAUDE_CODE_ENTRYPOINT", None)
-        if self.home:
-            Path(self.home).mkdir(parents=True, exist_ok=True)
+        # The built-in account uses the tool's own folder, which the tool finds
+        # by itself — unless this daemon was pointed at another (`machine_home`).
+        home = self.home or machine_home_moved(self.provider)
+        if home:
+            Path(home).mkdir(parents=True, exist_ok=True)
             if self.provider == "claude":
-                e["CLAUDE_CONFIG_DIR"] = self.home
+                e["CLAUDE_CONFIG_DIR"] = home
             else:
-                e["CODEX_HOME"] = self.home
+                e["CODEX_HOME"] = home
         if self.api_key and self.provider == "claude":
             e["ANTHROPIC_API_KEY"] = self.api_key
         elif self.provider == "claude":
@@ -597,7 +600,7 @@ SHARED_CODEX = ["config.toml", "AGENTS.md", "prompts", "skills"]
 
 
 def _link_shared(provider: str, home: Path) -> None:
-    src_root = Path.home() / (".claude" if provider == "claude" else ".codex")
+    src_root = machine_home(provider)
     names = SHARED_CLAUDE if provider == "claude" else SHARED_CODEX
     for name in names:
         src, dst = src_root / name, home / name
@@ -621,6 +624,8 @@ def share_memory(home: str | None, cwd: str) -> None:
     home) already uses the shared place. Never stops a chat from starting."""
     if not home or not cwd:
         return
+    if Path(home).resolve() == claude_memory.default_claude_home().resolve():
+        return                          # the shared place itself (`machine_home_moved`)
     try:
         claude_memory.link_project(home, cwd, rollback_dir=CONFIG_DIR / "rollback")
     except OSError as e:
@@ -687,6 +692,15 @@ def delete_account_dir(acc: Account) -> None:
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 
 
+def keychain_service(acc: Account) -> str:
+    """The keychain item a Claude sign-in lives in: the CLI's own name, and for
+    a config folder that is not its usual one, that folder's hash after it."""
+    home = acc.home or machine_home_moved("claude")
+    if not home:
+        return KEYCHAIN_SERVICE
+    return KEYCHAIN_SERVICE + "-" + hashlib.sha256(home.encode()).hexdigest()[:8]
+
+
 _KEYCHAIN_MDAT = re.compile(r'"mdat"<timedate>=\S+\s+"(\d{14})Z')
 
 
@@ -701,11 +715,8 @@ def _cred_written_at(acc: Account) -> float | None:
         pass
     if sys.platform != "darwin" or acc.provider != "claude" or acc.api_key:
         return None
-    service = "Claude Code-credentials"
-    if acc.home:
-        service += "-" + hashlib.sha256(acc.home.encode()).hexdigest()[:8]
     try:
-        r = subprocess.run(["security", "find-generic-password", "-s", service],
+        r = subprocess.run(["security", "find-generic-password", "-s", keychain_service(acc)],
                            capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -717,17 +728,17 @@ def _cred_written_at(acc: Account) -> float | None:
 
 def _cred_path(acc: Account) -> Path:
     if acc.provider == "claude":
-        root = Path(acc.home) if acc.home else Path.home() / ".claude"
+        root = Path(acc.home) if acc.home else machine_home("claude")
         return root / ".credentials.json"
-    root = Path(acc.home) if acc.home else Path.home() / ".codex"
+    root = Path(acc.home) if acc.home else machine_home("codex")
     return root / "auth.json"
 
 
-def _keychain_delete() -> None:
+def _keychain_delete(service: str) -> None:
     if sys.platform != "darwin":
         return
     try:
-        subprocess.run(["security", "delete-generic-password", "-s", KEYCHAIN_SERVICE],
+        subprocess.run(["security", "delete-generic-password", "-s", service],
                        capture_output=True, text=True, timeout=15)
     except Exception:
         pass
@@ -742,7 +753,7 @@ def forget_credentials(acc: Account) -> Account:
     except OSError:
         pass
     if acc.provider == "claude" and not acc.home:
-        _keychain_delete()
+        _keychain_delete(keychain_service(acc))
     acc.logged_in, acc.detail, acc.plan = False, "", ""
     return acc
 
@@ -768,7 +779,7 @@ def export_credentials(acc: Account) -> dict:
         except OSError:
             raw = None
     if raw is None and acc.provider == "claude" and not acc.home:
-        raw = _keychain_read()          # macOS keeps the default login here
+        raw = _keychain_read(keychain_service(acc))   # macOS keeps the default login here
     if not raw:
         raise Err("no_credentials", "this account has no sign-in stored on this computer")
     try:

@@ -43,6 +43,31 @@ def resolve_home(env=None, home: Path | None = None) -> Path:
     return new
 
 
+def machine_home(provider: str, env=None) -> Path:
+    """The folder a tool keeps its own things in on this computer — its
+    instructions, skills, memory and the computer's own sign-in: ~/.claude, or
+    ~/.codex.
+
+    DIVAN_CLAUDE_HOME and DIVAN_CODEX_HOME name another. Beside DIVAN_HOME that
+    is what makes a second daemon a second *person's*: without them her chats
+    would still read the first person's instructions and notes, and run on the
+    first person's sign-in, because both daemons belong to one login."""
+    env = os.environ if env is None else env
+    named = env.get("DIVAN_CLAUDE_HOME" if provider == "claude" else "DIVAN_CODEX_HOME")
+    if named:
+        return Path(named).expanduser()
+    return Path.home() / (".claude" if provider == "claude" else ".codex")
+
+
+def machine_home_moved(provider: str, env=None) -> str | None:
+    """That folder, when it was named rather than left where the tool puts it.
+    The tool then has to be told, as it is for an account that was added."""
+    env = os.environ if env is None else env
+    if env.get("DIVAN_CLAUDE_HOME" if provider == "claude" else "DIVAN_CODEX_HOME"):
+        return str(machine_home(provider, env).resolve())
+    return None
+
+
 CONFIG_DIR = resolve_home()
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 DB_PATH = CONFIG_DIR / "db.sqlite"

@@ -98,6 +98,15 @@ behind it, so a repository path goes through the allowed roots either way.
 `DIVAN_HOME` and `DIVAN_PORT` give one machine a second, fully separate daemon —
 its own config, database, uploads and port. That is what the tests run against.
 
+A second daemon for a second *person* on the same login needs two more:
+`DIVAN_CLAUDE_HOME` and `DIVAN_CODEX_HOME` name the folder the tools call their
+own, in place of `~/.claude` and `~/.codex`. Without them her chats would read
+the first person's instructions, skills and notes and run on the first
+person's sign-in; with them the built-in account, the folder an added account
+shares its configuration with, the shared memory and the keychain item all move
+there. Give that daemon its own `USTABASI_STATE_DIR` as well, or it shows the
+first person's ticket queue.
+
 ## Demo machine
 
 A daemon that needs no Claude Code and no Codex: every chat plays the same

@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from .accounts import ACCOUNTS_DIR, DEFAULT_ID
-from .config import CONFIG_DIR
+from .config import CONFIG_DIR, machine_home
 from .errors import Err
 from .projectmarks import _data_uri
 
@@ -24,7 +24,7 @@ def _dirs(account_home: str | None, cwd: str | None) -> list[tuple[Path, str]]:
     if cwd:
         out.append((Path(cwd) / ".claude" / "agents", "project"))
     out.append((Path(account_home) / "agents" if account_home else DEFAULT_AGENTS, "user"))
-    out.append((Path.home() / ".claude" / "agents", "user"))
+    out.append((machine_home("claude") / "agents", "user"))
     return out
 
 
