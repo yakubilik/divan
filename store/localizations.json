@@ -4,6 +4,7 @@
     "keywords": "coding agent,developer,terminal,remote,self-hosted,cli,devtools,repo,command,approve",
     "promotionalText": "Approve the command from the bus. The turn keeps running at home.",
     "marketingURL": "https://github.com/yakubilik/divan",
-    "supportURL": "https://github.com/yakubilik/divan/issues"
+    "supportURL": "https://github.com/yakubilik/divan/issues",
+    "whatsNew": "The app is called Divan now, everywhere: on the home screen, in the share sheet and on the pairing screen.\n\n• Pairing reads the divan:// link and QR code that the current daemon prints; codes from older daemons still pair.\n• Many fixes and improvements across chats, settings, voice and notifications."
   }
 }
