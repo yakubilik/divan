@@ -1047,8 +1047,11 @@ group('the fades that are left are the ones that were decided');
     'src/components/Diagram.tsx': ['drawn ? 1 : 0'],
     // The textarea a copy goes through, which is one pixel and off screen.
     'src/lib/clipboard.ts': ['0'],
-    // The two animations: a caret blinking and the "working" dot breathing.
-    'src/ui/kit.tsx': ['1', '0', '0.35'],
+    // The three animations: a caret blinking, the "working" dot breathing, and
+    // the loader's cells, which rest at 0.15 and light up as the front passes
+    // (decided 18 Nov 2026, with the loader taken from beautifului.dev). The
+    // cells are a mark, not text: the words beside them are in `ink3`.
+    'src/ui/kit.tsx': ['1', '0', '0.35', '0.15'],
     // The screen that draws when the app has thrown. It cannot read the palette
     // — a boundary that imported the app's modules would go down with them — so
     // its second and third lines are quietened with opacity rather than with

@@ -194,6 +194,65 @@ export function Spinner({ size = 14, color = C.accent }: { size?: number; color?
   );
 }
 
+/** Work going on: a 3×3 grid of cells with a front sweeping across it, after
+ *  the Loading State on beautifului.dev. A spinner says "wait"; this says
+ *  something is being worked through, and it is the one mark a running turn
+ *  has everywhere in the conversation. */
+const LOADER_DELAYS = Array.from({ length: 9 }, (_, i) => (i % 3 + Math.abs(Math.floor(i / 3) - 1)) * 90);
+
+export function Loader({ color = C.text }: { color?: string }) {
+  return (
+    <span aria-hidden className="dv-loader" style={{
+      display: 'grid', gridTemplateColumns: 'repeat(3, 4px)', gap: 1.5, flexShrink: 0,
+    }}>
+      {LOADER_DELAYS.map((delay, i) => (
+        <i key={i} style={{
+          width: 4, height: 4, borderRadius: 1, background: color, opacity: 0.15,
+          animation: `rac-pixel-on 650ms ease-in-out ${delay}ms infinite`,
+        }} />
+      ))}
+    </span>
+  );
+}
+
+/** Words with a light passing over them: what is being done right now. */
+export function Shimmer({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="dv-shimmer" style={{
+      backgroundImage: `linear-gradient(90deg, ${C.mute} 35%, ${C.text} 50%, ${C.mute} 65%)`,
+      backgroundSize: '200% 100%', WebkitBackgroundClip: 'text', backgroundClip: 'text',
+      // The colour is the gradient's dimmest stop, so what is read off this
+      // element (a contrast check, a browser without text clipping) is the
+      // worst it gets; the fill is what lets the gradient through.
+      color: C.mute, WebkitTextFillColor: 'transparent', animation: 'rac-shimmer 1.4s linear infinite',
+    }}>{children}</span>
+  );
+}
+
+/** How long something has been going on, counting. `since` is in seconds, the
+ *  way events carry their time; a clock a little ahead of this one reads as
+ *  zero rather than as a negative number. */
+export function elapsedText(seconds: number): string {
+  const s = Math.max(0, seconds);
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const whole = Math.floor(s);
+  if (whole < 3600) return `${Math.floor(whole / 60)}m ${String(whole % 60).padStart(2, '0')}s`;
+  return `${Math.floor(whole / 3600)}h ${String(Math.floor((whole % 3600) / 60)).padStart(2, '0')}m`;
+}
+
+export function Elapsed({ since }: { since: number }) {
+  const read = () => elapsedText(Date.now() / 1000 - since);
+  const [text, setText] = React.useState(read);
+  React.useEffect(() => {
+    setText(read());
+    const t = setInterval(() => setText(read()), 100);
+    return () => clearInterval(t);
+  }, [since]);
+  return (
+    <span style={{ ...mono, fontSize: 12, color: C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{text}</span>
+  );
+}
+
 /** Three bars that rise and fall — the "working" mark from the phone artboards,
  *  kept because it reads at a glance in a list where a spinner would not. */
 export function Pulse({ color = C.accent }: { color?: string }) {
@@ -214,6 +273,13 @@ export const KEYFRAMES = `
 @keyframes rac-pulse { 0%,100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
 @keyframes rac-caret { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
 @keyframes rac-breathe { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes rac-pixel-on { 0%,100% { opacity: 0.15; } 18%,42% { opacity: 1; } 62% { opacity: 0.15; } }
+@keyframes rac-shimmer { from { background-position: 150% center; } to { background-position: -50% center; } }
+@keyframes rac-fade-up { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .dv-loader i, .dv-step-detail { animation: none !important; }
+  .dv-shimmer { animation: none !important; background-position: 50% center !important; }
+}
 /* The one thing in the panel that has to answer to the width of the window: in
    a narrow one the top bar's three places and its machine chip need the room,
    and a wordmark is the part of a logo you can drop — the mark on its own is
@@ -260,6 +326,9 @@ export const P = {
   copy: 'M9 9h10v10H9zM5 15V5h10',
   cpu: 'M7 7h10v10H7zM4 10h3M4 14h3M17 10h3M17 14h3M10 4v3M14 4v3M10 17v3M14 17v3',
   layout: 'M4 5h16v14H4zM10 5v14',
+  sparkle: 'M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z',
+  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
+  globe: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM3 12h18M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z',
   terminal: 'M4 5h16v14H4zM8 10l2.5 2L8 14M13 14.5h3.5',
   monitor: 'M3 5h18v11H3zM9 20h6M12 16v4',
   eyeOff: 'M4 4l16 16M10.6 6.2A8 8 0 0 1 12 6c5 0 8 6 8 6a15 15 0 0 1-2.6 3.4M6.6 8.6A15 15 0 0 0 4 12s3 6 8 6a8 8 0 0 0 3.1-.6M9.9 9.9a3 3 0 0 0 4.2 4.2',

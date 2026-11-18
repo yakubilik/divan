@@ -2,7 +2,7 @@ import { ApprovalForm } from './ApprovalForm';
 import { structuredInput, type ApprovalResponse } from '../lib/approval-input';
 import { memo, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { C, MEDIA, R } from '../lib/theme';
-import { Icon, P, Spinner, mono } from '../ui/kit';
+import { Elapsed, Icon, Loader, P, Shimmer, mono } from '../ui/kit';
 import { cost, duration, tokens, toolSummary, clock } from '../lib/format';
 import type { Item } from '../lib/timeline';
 import { Bubble, Prose, withSecrets } from './Bubble';
@@ -12,7 +12,8 @@ import { fileUrl } from '../lib/actions';
 import { bubbleSize, isPhoto, isVideo, viewerSources } from '../lib/media-size';
 import { filedBy, type Filed } from '../lib/filed';
 import { NOTICE_WORD, ticketNotice, type TicketNotice } from '../lib/notice';
-import { blocks, counted, doingNow, langOf, tell, type Lang, type Step } from '../lib/steps';
+import { blocks, counted, doingNow, langOf, tell, workOf, type Lang, type Step, type Work } from '../lib/steps';
+import { changedFiles, lineDiff, stepFace } from '../lib/step-face';
 import { sendError } from '../lib/i18n';
 
 const OK_BG = C.okBg;
@@ -378,34 +379,17 @@ function Assistant({ item, hostKey, chatId }: { item: Extract<Item, { kind: 'ass
   );
 }
 
-function Thinking({ item }: { item: Extract<Item, { kind: 'thinking' }> }) {
-  return (
-    <div style={{
-      display: 'flex', gap: 8, paddingRight: 32, fontSize: 13, lineHeight: '19px',
-      color: C.mute, fontStyle: 'italic',
-    }}>
-      <Icon path={P.bolt} size={13} color={C.faint} />
-      <span style={{ whiteSpace: 'pre-wrap' }}>{item.text}</span>
-    </div>
-  );
-}
-
-/** A cheap line diff: trim the shared head and tail, call the rest changed.
- *  Enough to show what an Edit touched without pretending to be a diff engine. */
-function lineDiff(oldText: string, newText: string) {
-  const a = oldText.split('\n');
-  const b = newText.split('\n');
-  let head = 0;
-  while (head < a.length && head < b.length && a[head] === b[head]) head++;
-  let tail = 0;
-  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
-  return {
-    context: a.slice(0, head),
-    removed: a.slice(head, a.length - tail),
-    added: b.slice(head, b.length - tail),
-    after: a.slice(a.length - tail),
-  };
-}
+/** The glyph a kind of work is drawn with in the list of steps. */
+const WORK_ICON: Partial<Record<Work, string>> = {
+  think: P.sparkle,
+  read: P.file, files: P.file, skill: P.file, memory: P.file, docs: P.file,
+  search: P.search,
+  edit: P.pencil,
+  websearch: P.globe, webread: P.globe, browser: P.globe, request: P.globe,
+  shot: P.image, media: P.image, design: P.image,
+  agent: P.agent, wait: P.clock, message: P.chat, plan: P.layout,
+  mail: P.chat, calendar: P.clock, tool: P.bolt,
+};
 
 function DiffBody({ input }: { input: any }) {
   const oldText = typeof input?.old_string === 'string' ? input.old_string : null;
@@ -414,7 +398,7 @@ function DiffBody({ input }: { input: any }) {
   const d = lineDiff(oldText, newText);
   const row = (text: string, sign: '-' | '+' | ' ') => (
     <div style={{
-      display: 'flex', gap: 10, padding: '1px 12px',
+      display: 'flex', gap: 10, padding: '1px 8px', borderRadius: 3,
       background: sign === '-' ? BAD_BG : sign === '+' ? OK_BG : 'transparent',
       color: sign === '-' ? C.danger : sign === '+' ? C.ok : C.mute,
     }}>
@@ -423,7 +407,7 @@ function DiffBody({ input }: { input: any }) {
     </div>
   );
   return (
-    <div style={{ ...mono, fontSize: 12, lineHeight: '18px', borderTop: `1px solid ${C.border}`, padding: '8px 0' }}>
+    <div style={{ ...mono, fontSize: 12, lineHeight: '18px', padding: '2px 0' }}>
       {d.context.slice(-2).map((l, i) => <div key={`c${i}`}>{row(l, ' ')}</div>)}
       {d.removed.map((l, i) => <div key={`r${i}`}>{row(l, '-')}</div>)}
       {d.added.map((l, i) => <div key={`a${i}`}>{row(l, '+')}</div>)}
@@ -432,64 +416,65 @@ function DiffBody({ input }: { input: any }) {
   );
 }
 
-function Tool({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
-  const [open, setOpen] = useState(false);
-  const bad = item.isError;
-  const border = bad ? C.dangerLine : C.border;
-  const summary = toolSummary(item.tool, item.input);
-  const isEdit = item.tool === 'Edit' || item.tool === 'Write';
-  const counts = isEdit && typeof item.input?.new_string === 'string'
-    ? lineDiff(String(item.input.old_string ?? ''), item.input.new_string)
-    : null;
-
+/** One step of a run, as a row: what it was, and the file or command it was
+ *  about in a chip. After the Tool Chips on beautifului.dev — forty of these
+ *  are a list one can read down, where forty cards were a wall. The row opens
+ *  on what the tool said back (or the thought, or the edit's diff). */
+function StepRow({ step, open, onToggle }: { step: Step; open: boolean; onToggle: (id: string) => void }) {
+  const face = stepFace(step);
+  const tool = step.kind === 'tool' ? step : null;
+  const bad = !!tool?.isError;
+  const running = !!tool?.running;
+  const work = workOf(step);
+  const glyph = bad ? P.x : WORK_ICON[work] ?? P.terminal;
+  const isEdit = !!tool && (tool.tool === 'Edit' || tool.tool === 'Write');
   return (
-    <div style={{
-      borderRadius: R.card, background: C.surface, border: `1px solid ${border}`,
-      marginRight: 32, overflow: 'hidden',
-    }}>
+    <div data-step={step.id} data-bad={bad || undefined}>
       <button
-        type="button" onClick={() => setOpen((o) => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8, width: '100%', minHeight: 44,
-          padding: '0 12px', background: 'transparent', border: 'none', cursor: 'pointer',
-        }}
+        type="button" className="dv-step" aria-expanded={open} data-running={running || undefined}
+        onClick={() => onToggle(step.id)}
       >
-        {item.running ? <Spinner size={13} />
-          : bad ? <Icon path={P.x} size={13} color={C.danger} width={2.6} />
-          : <Icon path={P.check} size={13} color={C.ok} width={2.6} />}
-        <span style={{ ...mono, fontSize: 13, color: C.mute, flexShrink: 0 }}>{item.tool}</span>
-        <span style={{
-          ...mono, fontSize: 13, color: C.text2, flex: 1, textAlign: 'left',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{summary}</span>
-        {counts && (
-          <span style={{ ...mono, fontSize: 11, flexShrink: 0 }}>
-            <span style={{ color: C.ok }}>+{counts.added.length}</span>{' '}
-            <span style={{ color: C.danger }}>−{counts.removed.length}</span>
+        <span className="dv-step-mark">
+          {running ? <Loader /> : (
+            <>
+              <span className="dv-step-ico">
+                <Icon path={glyph} size={13} color={bad ? C.danger : C.faint} fill={work === 'think' && !bad} width={bad ? 2.6 : 2} />
+              </span>
+              <span className="dv-step-chev" style={{ transform: open ? 'none' : 'rotate(-90deg)' }}>
+                <Icon path={P.chevronDown} size={12} color={C.mute} />
+              </span>
+            </>
+          )}
+        </span>
+        <span className="dv-step-label" style={{ color: bad ? C.danger : C.text }}>{face.label}</span>
+        {face.chip && (
+          <span className="dv-step-chip" title={face.title} style={face.mono ? mono : undefined}>{face.chip}</span>
+        )}
+        {face.counts && (
+          <span style={{ ...mono, fontSize: 11, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ color: C.ok }}>+{face.counts.add}</span>
+            {face.counts.del > 0 && <span style={{ color: C.danger }}> −{face.counts.del}</span>}
           </span>
         )}
-        {bad && (
-          <span style={{
-            ...mono, fontSize: 10, color: C.danger, background: BAD_BG,
-            border: `1px solid ${border}`, borderRadius: R.badge, padding: '2px 6px', flexShrink: 0,
-          }}>error</span>
-        )}
-        <Icon path={open ? P.chevronDown : P.chevronRight} size={13} color={C.faint} />
       </button>
-      {open && (isEdit ? <DiffBody input={item.input} /> : (
-        <pre style={{
-          ...mono, fontSize: 12, lineHeight: '18px', margin: 0, padding: '10px 12px',
-          borderTop: `1px solid ${C.border}`, color: bad ? C.danger : C.mute,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 300, overflowY: 'auto',
-        }}>{item.output ?? (item.running ? 'running…' : '(no output)')}</pre>
-      ))}
-      {!open && bad && item.output && (
-        <div style={{
-          ...mono, fontSize: 12, lineHeight: '18px', padding: '8px 12px',
-          borderTop: `1px solid ${border}`, color: C.danger, background: BAD_BG,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          maxHeight: 60, overflow: 'hidden',
-        }}>{item.output.split('\n').slice(0, 2).join('\n')}</div>
+      {open && (
+        <div className="dv-step-detail">
+          {step.kind === 'thinking' ? (
+            <div style={{ fontSize: 13, lineHeight: '19px', color: C.mute, whiteSpace: 'pre-wrap' }}>{step.text}</div>
+          ) : isEdit && typeof step.input?.new_string === 'string' ? <DiffBody input={step.input} /> : (
+            <pre style={{
+              ...mono, fontSize: 12, lineHeight: '18px', margin: 0,
+              color: bad ? C.danger : C.mute,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 300, overflowY: 'auto',
+            }}>{step.output ?? (running ? 'running…' : '(no output)')}</pre>
+          )}
+        </div>
+      )}
+      {!open && bad && tool?.output && (
+        <div className="dv-step-detail" style={{
+          ...mono, fontSize: 12, lineHeight: '18px', color: C.danger,
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 40, overflow: 'hidden',
+        }}>{tool.output.split('\n').slice(0, 2).join('\n')}</div>
       )}
     </div>
   );
@@ -681,6 +666,13 @@ const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
   steps: Step[]; live: boolean; lang: Lang; prevTs: number | null; link: TicketLink | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [openRows, setOpenRows] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleRow = useCallback((id: string) => setOpenRows((cur) => {
+    const next = new Set(cur);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  }), []);
+  const files = useMemo(() => (open ? changedFiles(steps) : []), [open, steps]);
   const told = tell(steps, live, lang);
   const gap = prevTs == null || steps[0].ts - prevTs > 1800;
   // One entry per ticket: a command run twice over the same card, or a replay
@@ -700,19 +692,40 @@ const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
           cursor: 'pointer', textAlign: 'left', color: C.mute, fontSize: 13, lineHeight: '19px',
         }}
       >
-        {live ? <Spinner size={13} /> : <Icon path={P.check} size={13} color={C.faint} width={2.6} />}
+        {live ? <Loader /> : <Icon path={P.check} size={13} color={C.faint} width={2.6} />}
         <span style={{
           minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          color: live ? C.text2 : C.mute,
-        }}>{told.text}</span>
+          color: C.mute, fontWeight: live ? 500 : 400,
+        }}>{live ? <Shimmer>{told.text}</Shimmer> : told.text}</span>
+        {live && <Elapsed since={steps[0].ts} />}
         {told.count > 1 && (
           <span style={{ flexShrink: 0, color: C.faint }}>· {counted(told.count, lang)}</span>
         )}
         <Icon path={open ? P.chevronDown : P.chevronRight} size={12} color={C.faint} />
       </button>
       {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {steps.map((s) => (s.kind === 'tool' ? <Tool key={s.id} item={s} /> : <Thinking key={s.id} item={s} />))}
+        <div className="dv-steps" style={{ marginRight: 32 }}>
+          {steps.map((s) => <StepRow key={s.id} step={s} open={openRows.has(s.id)} onToggle={toggleRow} />)}
+          {files.length > 0 && (
+            <div className="dv-step-files">
+              {files.map((f) => (
+                <button
+                  key={f.path} type="button" className="dv-step-file" title={f.path} data-file={f.name}
+                  aria-label={`Show the changes to ${f.name}`}
+                  onClick={() => setOpenRows((cur) => {
+                    const next = new Set(cur);
+                    const shut = f.ids.some((id) => !next.has(id));
+                    for (const id of f.ids) { if (shut) next.add(id); else next.delete(id); }
+                    return next;
+                  })}
+                >
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
+                  <span style={{ color: C.ok, flexShrink: 0 }}>+{f.add}</span>
+                  {f.del > 0 && <span style={{ color: C.danger, flexShrink: 0 }}>−{f.del}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {!!link && filed.map((f) => <CardLink key={f.id} filed={f} link={link} />)}
@@ -723,17 +736,18 @@ const Steps = memo(function Steps({ steps, live, lang, prevTs, link }: {
 
 /** The turn is running and no step has shown yet: the steps row's own look,
  *  turning, so a sent message is answered by something moving at once. */
-function Waiting({ lang }: { lang: Lang }) {
+function Waiting({ lang, since }: { lang: Lang; since: number }) {
   return (
     <div
       role="status" data-waiting
       style={{
         display: 'flex', alignItems: 'center', gap: 8, minHeight: 28,
-        color: C.text2, fontSize: 13, lineHeight: '19px',
+        color: C.mute, fontSize: 13, lineHeight: '19px', fontWeight: 500,
       }}
     >
-      <Spinner size={13} />
-      <span>{doingNow([], lang)}</span>
+      <Loader />
+      <Shimmer>{doingNow([], lang)}</Shimmer>
+      <Elapsed since={since} />
     </div>
   );
 }
@@ -763,6 +777,7 @@ export function Timeline({ items, hostKey, chatId, onRespond, tickets, busy = fa
   latest.current = onRespond;
   const respond = useCallback<Respond>((rid, d, response) => latest.current(rid, d, response), []);
 
+  const [mounted] = useState(() => Date.now() / 1000);
   const rows = useMemo(() => blocks(items), [items]);
   const lang = useMemo(() => langOf(items), [items]);
 
@@ -797,7 +812,7 @@ export function Timeline({ items, hostKey, chatId, onRespond, tickets, busy = fa
         prevTs = b.item.ts;
         return <Row key={b.item.id} item={b.item} hostKey={hostKey} chatId={chatId} onRespond={respond} prevTs={before} />;
       })}
-      {waiting && <Waiting lang={lang} />}
+      {waiting && <Waiting lang={lang} since={prevTs ?? mounted} />}
     </div>
   );
 }
