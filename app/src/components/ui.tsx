@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, PanResponder, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Icon } from './icon';
@@ -442,6 +442,12 @@ const s = StyleSheet.create({
 let closeOpenSwipe: (() => void) | null = null;
 const ACTION_W = 78;
 
+/** Told when a row's drag starts and ends, so the list around it can stop
+ *  scrolling for the length of the swipe. A finger dragging sideways always
+ *  drifts a little up or down too, and without this the list starts scrolling
+ *  under the swipe, takes the gesture over and the row snaps shut. */
+export const SwipeScrollLock = createContext<((swiping: boolean) => void) | null>(null);
+
 export interface SwipeAction {
   key: string;
   label: string;
@@ -471,6 +477,9 @@ export function SwipeActions({ actions, children, style }: {
   // Declared up here so `settle` can put it in the one-row-open registry: the
   // two of them refer to each other, and a ref is the knot that unties.
   const closeRef = useRef<() => void>(() => {});
+  const lock = useContext(SwipeScrollLock);
+  const lockRef = useRef(lock);
+  lockRef.current = lock;
 
   const settle = useCallback((to: number) => {
     const wasOpen = shown.current;
@@ -503,7 +512,13 @@ export function SwipeActions({ actions, children, style }: {
       // open row. The list wins ties.
       return Math.abs(g.dx) > Math.abs(g.dy) * 1.6;
     },
-    onPanResponderGrant: () => { from.current = shown.current ? -width.current : 0; },
+    onPanResponderGrant: () => {
+      from.current = shown.current ? -width.current : 0;
+      lockRef.current?.(true);
+    },
+    // Once the row has the finger it keeps it: handing it to the list halfway
+    // through is exactly the swipe that turns into a scroll.
+    onPanResponderTerminationRequest: () => false,
     onPanResponderMove: (_e, g) => {
       // Left as far as the actions are wide; right only as far as closed, with
       // a little give at both ends so the row does not feel nailed down.
@@ -511,13 +526,14 @@ export function SwipeActions({ actions, children, style }: {
       x.setValue(Math.max(-width.current - 24, Math.min(12, next)));
     },
     onPanResponderRelease: (_e, g) => {
+      lockRef.current?.(false);
       // A flick decides on its own: past a certain speed the distance covered
       // stops being what the finger meant.
       if (g.vx < -0.5) settle(-width.current);
       else if (g.vx > 0.5) settle(0);
       else settle(from.current + g.dx > -width.current / 2 ? 0 : -width.current);
     },
-    onPanResponderTerminate: () => settle(0),
+    onPanResponderTerminate: () => { lockRef.current?.(false); settle(0); },
   })).current;
 
   return (

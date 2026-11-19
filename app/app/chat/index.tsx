@@ -17,7 +17,7 @@ import { useStore, useT } from '../../src/store';
 import { useNavGuard } from '../../src/nav';
 import { LOCALE } from '../../src/i18n';
 import { em, useColors } from '../../src/theme';
-import { BreathingDot, Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, Text, TextInput } from '../../src/components/ui';
+import { BreathingDot, Chip, Dot, EmptyState, Icon, ProviderBadge, SkeletonCard, SmallButton, Spinner, SwipeActions, SwipeScrollLock, Text, TextInput } from '../../src/components/ui';
 import { bgWhat, chatLight } from '../../src/light';
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Shell } from '../../src/components/shell';
@@ -81,6 +81,8 @@ export default function ChatPlace() {
   const T = useT();
   const locale = LOCALE;
   const [q, setQ] = useState('');
+  // Off while a row is being swiped, so the list cannot take the gesture over.
+  const [swiping, setSwiping] = useState(false);
   const [focused, setFocused] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [viewMenu, setViewMenu] = useState(false);
@@ -430,8 +432,11 @@ export default function ChatPlace() {
     );
   } else {
     body = (
+      <SwipeScrollLock.Provider value={setSwiping}>
       <SectionList
         sections={sections}
+        scrollEnabled={!swiping}
+        directionalLockEnabled
         keyExtractor={(ch) => ch.id}
         stickySectionHeadersEnabled={false}
         keyboardShouldPersistTaps="handled"
@@ -450,6 +455,7 @@ export default function ChatPlace() {
             onPress={onRowPress} onLongPress={onRowLongPress} onArchive={onRowArchive} onDelete={onRowDelete} />
         )}
       />
+      </SwipeScrollLock.Provider>
     );
   }
 
