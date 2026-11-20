@@ -1460,6 +1460,10 @@ class Server:
 
     async def notify(self, kind: str, chat: dict) -> None:
         title = chat.get("title", "Chat")
+        if kind == "done" and chat.get("archived"):
+            # Put out of the list while it worked (the publication repairs, 20 Nov 2026:
+            # "bana ihtiyacı yoksa mesajını görmek istemiyorum"): its end is not news.
+            return
         for d in self.cfg.devices.values():
             if not d.push_token:
                 continue
