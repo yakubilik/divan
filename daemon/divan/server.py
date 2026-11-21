@@ -3027,6 +3027,13 @@ class Server:
         if a is not None and self.pool.state(a.id, "claude").blocked:
             await self.concierge.reset()
 
+    def _call_on(self) -> None:
+        """config.toml's `voice_call = false`: every way into the call is
+        refused, the older half-duplex one included, or a phone told no by
+        `voice.start` would fall back to it."""
+        if not self.cfg.voice_call:
+            raise Err("call_off", "the voice call is switched off on this computer")
+
     async def h_call_hello(self, dev: Device, d: dict) -> dict:
         """Picking up the phone.
 
@@ -3034,11 +3041,13 @@ class Server:
         model session in the background while the caller is being greeted. By
         the time they have finished saying what they want, the session that
         would have cost them five seconds is already open."""
+        self._call_on()
         await self._concierge_move()
         asyncio.create_task(self.concierge.warm())
         return call_headline(self.db, self.sessions)
 
     async def h_call_ask(self, dev: Device, d: dict) -> dict:
+        self._call_on()
         text = str(d.get("text") or "").strip()
         if not text:
             raise Err("empty_message", "empty question")
@@ -3054,6 +3063,7 @@ class Server:
         same session, model, account and permission mode, and the whole reply
         is already in the transcript. This only reads it back and cuts it to
         something a person will listen to (see `spoken_reply`)."""
+        self._call_on()
         if self.db.get_chat(d["chat_id"]) is None:
             raise Err("no_chat", "no such chat")
         return {"text": spoken_reply(last_reply(self.db, d["chat_id"]), d.get("lang"))}
@@ -3071,6 +3081,7 @@ class Server:
     # they get no answer unless they fail.
 
     async def h_voice_start(self, dev: Device, d: dict, ws: WebSocket) -> dict:
+        self._call_on()
         return await self.voice.start(dev, ws, d)
 
     async def h_voice_audio(self, dev: Device, d: dict) -> dict:
@@ -3923,6 +3934,8 @@ class Server:
             # Never the import itself: host_info runs on the loop on every
             # connect. False until learn_transcription has the answer.
             "transcription": bool(transcribe_known()),
+            # False hides the call button in the apps (`voice_call = false`).
+            "call": self.cfg.voice_call,
             "npm": tools.npm_available(),
             # Every device is told, every time it asks and every time it
             # changes. A computer that can be driven from a pocket does not get

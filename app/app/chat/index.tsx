@@ -331,7 +331,7 @@ export default function ChatPlace() {
             </Pressable>
           )}
           {/* The general call: this computer's Hermes, not any one chat. */}
-          {withControls && (
+          {withControls && hostInfo?.call !== false && (
             <Pressable accessibilityLabel={T('mCall')} hitSlop={6} onPress={() => go(() => router.push('/call'))}
               style={({ pressed }) => [{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.5 }]}>
               <Icon name="call" size={21} />

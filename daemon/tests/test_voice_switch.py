@@ -32,3 +32,29 @@ def test_voice_off_survives_a_restart_and_loads_nothing():
     assert srv.cfg.voice is False
     assert transcribe.available() is False
     assert srv.host_info()["transcription"] is False
+
+
+def test_call_off_refuses_the_call_and_leaves_dictation_alone():
+    """The owner, 21 Nov 2026: "turn voice off" meant the call, not dictation.
+    `voice_call = false` is the call alone: every way into it is refused and
+    the apps are told, while the recogniser stays whatever `voice` says."""
+    import asyncio
+
+    import pytest
+
+    from divan.server import Err
+
+    cfg = Config.load()
+    cfg.voice, cfg.voice_call = True, False
+    cfg.save()
+    cfg = Config.load()
+    assert (cfg.voice, cfg.voice_call) == (True, False)
+    transcribe._known = None
+    srv = Server(cfg)
+    assert transcribe.known() is not False        # dictation was not switched off
+    assert srv.host_info()["call"] is False
+    for h, args in ((srv.h_voice_start, (None, {}, None)), (srv.h_call_hello, (None, {})),
+                    (srv.h_call_ask, (None, {"text": "hi"})), (srv.h_call_reply, (None, {"chat_id": "x"}))):
+        with pytest.raises(Err) as e:
+            asyncio.run(h(*args))
+        assert e.value.code == "call_off"

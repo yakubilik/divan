@@ -594,9 +594,11 @@ export function Conversation({ id }: { id: string }) {
         </View>
         <View style={{ flexDirection: 'row' }}>
           {/* A call from here talks to this chat; the chat list's button is the general call. */}
-          <Pressable accessibilityLabel={T('mCall')} onPress={() => go(() => router.push({ pathname: '/call', params: { chat: id } }))} hitSlop={6} style={({ pressed }) => [sq40, { marginRight: -6 }, pressed && { opacity: 0.5 }]}>
-            <Icon name="call" size={21} />
-          </Pressable>
+          {hostInfo?.call !== false && (
+            <Pressable accessibilityLabel={T('mCall')} onPress={() => go(() => router.push({ pathname: '/call', params: { chat: id } }))} hitSlop={6} style={({ pressed }) => [sq40, { marginRight: -6 }, pressed && { opacity: 0.5 }]}>
+              <Icon name="call" size={21} />
+            </Pressable>
+          )}
           <Pressable ref={moreRef} accessibilityLabel={T('chatMenu')} onPress={() => void chatMenu()} hitSlop={6} style={({ pressed }) => [sq40, pressed && { opacity: 0.5 }]}>
             <Icon name="more_horiz" size={24} />
           </Pressable>

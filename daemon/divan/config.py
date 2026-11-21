@@ -224,6 +224,10 @@ class Config:
     # no Whisper model is ever loaded, which is gigabytes of GPU memory a
     # daemon otherwise keeps for its whole life. A file without the key is on.
     voice: bool = True
+    # The voice call alone (call.* and voice.*): off refuses it and tells the
+    # apps to hide the button, while voice notes and dictation go on working.
+    # A file without the key is on.
+    voice_call: bool = True
     # Follow origin/main by itself. Safe to leave on even where the code is
     # written: a checkout with uncommitted work is never touched (see updater).
     auto_update: bool = True
@@ -279,6 +283,7 @@ class Config:
         cfg = cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__})
         cfg.terminal = _terminal_setting(raw)
         cfg.voice = raw.get("voice") is not False
+        cfg.voice_call = raw.get("voice_call") is not False
         cfg.devices = devices
         cfg.accounts = accounts
         cfg.pool = pool if isinstance(pool, dict) else {}
@@ -320,6 +325,7 @@ class Config:
             "remote_control": self.remote_control,
             "terminal": self.terminal,
             "voice": self.voice,
+            "voice_call": self.voice_call,
             # Left out once, and `bypass_asks = false` set by hand was gone
             # after the next pairing — the exact trap the comment above names.
             "bypass_asks": self.bypass_asks,

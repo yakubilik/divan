@@ -297,11 +297,13 @@ export function UnderTab({ here, style }: { here: MachineTab['key']; style?: Sty
   const T = useT();
   const router = useRouter();
   const go = useNavGuard();
+  const callOn = useStore((s) => s.hostInfo?.call !== false);
   const tab = MACHINE_TABS.find((x) => x.key === here);
-  if (!tab?.pages.length) return null;
+  const pages = (tab?.pages ?? []).filter((p) => p.key !== 'call' || callOn);
+  if (!pages.length) return null;
   return (
     <Group label={T('sgMore')} style={style}>
-      {tab.pages.map((p, i) => (
+      {pages.map((p, i) => (
         <ListRow key={p.key} first={i === 0} boxed icon={p.icon} title={T(p.title)} note={T(p.note)}
           onPress={() => go(() => router.push(p.route))} />
       ))}

@@ -70,6 +70,9 @@ export interface HostInfo {
   /** Whether somebody set that folder in settings; false is the first root. */
   default_cwd_chosen?: boolean;
   transcription?: boolean;
+  /** False when the computer has the voice call switched off (`voice_call = false`):
+   *  the call buttons are not drawn. Missing on a computer from before the switch. */
+  call?: boolean;
   /** Hours a chat may be quiet before the computer archives it; 0 is off.
    *  Missing on a computer from before auto-archive. */
   auto_archive_h?: number;
