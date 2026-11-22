@@ -23,6 +23,7 @@ import { isPhoto } from '../../src/media-size';
 import { tailCwd, tilde } from '../../src/components/pickers';
 import { ApprovalCard, AssistantText, CardLink, ConnectionBanner, FiledRule, SwitchNote, ThinkingRow, ToolCard, ToolGroup, TranscriptSkeleton, TurnFooter, UserBubble, WorkingRow } from '../../src/components/chat';
 import { useDivanView } from '../../src/queue';
+import { client } from '../../src/ws';
 import { filedBy, filedUnder, ticketRoute } from '../../src/filed';
 import { COLUMN_LABEL } from '../../src/board';
 import { errText } from '../../src/i18n';
@@ -96,6 +97,23 @@ export function Conversation({ id }: { id: string }) {
   const progress = useStore((s) => s.progress[id!]);
   const busy = useStore((s) => s.busy[id!]);
   const conn = useStore((s) => s.conn);
+  // A captcha an agent of this chat is waiting on (daemon captcha.py): a bar
+  // under the header until it is solved, asked for on open and kept current
+  // by the daemon's `captcha` events.
+  const [captchaId, setCaptchaId] = useState<string | null>(null);
+  useEffect(() => {
+    if (conn !== 'online') return;
+    let gone = false;
+    client.call<any>('captcha.list', {})
+      .then((r) => { if (!gone) setCaptchaId((r?.captchas ?? []).find((x: any) => x.chat_id === id)?.id ?? null); })
+      .catch(() => {});
+    const off = client.on((ev) => {
+      if (ev.event !== 'captcha' || ev.chat_id !== id) return;
+      if (ev.data?.what === 'open') setCaptchaId(ev.data.id);
+      else setCaptchaId((cur) => (cur === ev.data?.id ? null : cur));
+    });
+    return () => { gone = true; off(); };
+  }, [conn, id]);
   const linkGen = useStore((s) => s.linkGen);
   const catalog = useStore((s) => s.catalog);
   const groups = useStore((s) => s.groups);
@@ -606,6 +624,14 @@ export function Conversation({ id }: { id: string }) {
       </View>
 
       {conn !== 'online' && <ConnectionBanner text={T('wReconnecting')} />}
+      {!!captchaId && (
+        <Pressable onPress={() => router.push({ pathname: '/captcha', params: { id: captchaId } })}
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10,
+                                     backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.line }, pressed && { opacity: 0.6 }]}>
+          <Text style={{ flex: 1, fontSize: 14, fontWeight: '600' }}>{T('capBanner')}</Text>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: c.accent }}>{T('capOpen')}</Text>
+        </Pressable>
+      )}
 
       {/* The rule says where Hermes filed this one. */}
       {!!filed && (

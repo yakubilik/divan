@@ -70,6 +70,17 @@ def secret_line() -> str:
     )
 
 
+def captcha_line() -> str:
+    """What an agent does when a browser it drives is stopped by a captcha."""
+    return (
+        "A captcha in a browser you drive is for the person, not you: never try to solve it "
+        f"or use a solving service. Run `{sys.executable} -m divan captcha` (add `--port N` for "
+        "the browser's DevTools port, `--url` part of the tab's address if several are open) and "
+        "wait: their phone shows the captcha box alone and they solve it by hand. Exit 0 means "
+        "solved, carry on; anything else, say so and stop. The browser needs a DevTools port."
+    )
+
+
 # The phone app draws a closed ```mermaid fence as a diagram (#645). One
 # sentence, so agents know a chart needs no picture file.
 DIAGRAM_LINE = (
@@ -124,6 +135,7 @@ def build(cfg, pc, tool: str = "claude") -> str:
         "  send a screenshot, a rendered slide, a PDF — not e-mail, not base64.",
         f"- {DIAGRAM_LINE}",
         f"- {secret_line()}",
+        f"- {captcha_line()}",
         "",
         "If you are asked how any of this works — ports, storage, accounts, updates,",
         f"security — read {doc}",

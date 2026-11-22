@@ -725,6 +725,11 @@ const en = {
   sharePair: 'Pair a computer first', sharePairBody: 'The link you shared is kept. Pair Divan with your computer and it opens in a new chat.',
   shareWait: 'Link kept', shareWaitBody: "Divan isn't connected to {host} yet. The link opens in a new chat as soon as it is.",
   shareFailed: "Couldn't open the link", shareDiscard: 'Discard link',
+  // a captcha an agent handed over (app/captcha.tsx)
+  capTitle: 'Captcha', capHint: 'Tap and drag on the box as you would on the page.',
+  capDone: 'Done', capGiveUp: 'Give up', capType: 'Type the text…', capSend: 'Send',
+  capSolved: 'Solved. The agent carries on.', capClosed: 'This captcha is no longer waiting.',
+  capWaiting: 'Waiting for the box…', capBanner: 'A captcha is waiting for you', capOpen: 'Solve',
 };
 export type Key = keyof typeof en;
 
@@ -753,6 +758,10 @@ export const tr: Partial<Record<Key, string>> = {
   outFailedTitle: 'Mesaj gönderilemedi', outRetry: 'Tekrar dene', outDiscard: 'Mesajı sil',
   bgOne: 'Arka planda · {what}', bgAgent: 'Bir agent hâlâ çalışıyor', bgTask: 'Bir iş hâlâ çalışıyor', bgMany: 'Arka planda {n} iş',
   lightUnread: 'Bitti, henüz bakılmadı', lightFailed: 'Hatayla bitti, henüz bakılmadı',
+  capHint: 'Kutuya sayfadaymış gibi dokun ve sürükle.', capDone: 'Bitti', capGiveUp: 'Vazgeç',
+  capType: 'Yazıyı yaz…', capSend: 'Gönder', capSolved: 'Çözüldü, ajan devam ediyor.',
+  capClosed: 'Bu captcha artık beklemiyor.', capWaiting: 'Kutu bekleniyor…',
+  capBanner: 'Bir captcha seni bekliyor', capOpen: 'Çöz',
   autoArchiveOff: 'Kapalı', autoArchiveH: '{n} saat', autoArchiveD: '{n} gün', autoArchive1D: '1 gün',
 };
 // audit: end-language-data

@@ -14,6 +14,8 @@ export interface Tap {
   chat?: string;
   ticket?: number;
   device?: string;
+  /** A captcha an agent handed over (daemon captcha.py): opened straight away. */
+  captcha?: string;
 }
 
 /** The ticket a notification is about, if it is about one. The daemon's chat
@@ -33,8 +35,10 @@ export function ticketFromPush(data: any): number | null {
 export function tapFromPush(data: any): Tap | null {
   const ticket = ticketFromPush(data);
   const chat = data?.chat_id ? String(data.chat_id) : undefined;
-  if (!chat && ticket == null) return null;
+  const captcha = data?.kind === 'captcha' && data?.captcha_id ? String(data.captcha_id) : undefined;
+  if (!chat && ticket == null && !captcha) return null;
   return {
+    ...(captcha ? { captcha } : {}),
     ...(chat ? { chat } : {}),
     ...(ticket != null ? { ticket } : {}),
     ...(data?.device_id ? { device: String(data.device_id) } : {}),
@@ -52,6 +56,11 @@ export function tapFromPush(data: any): Tap | null {
  *  (the daemon's `ustabasi.notice_chat`): the chat is where it is answered, so
  *  the chat wins and the ticket is one tap away from there. */
 export function routeForTap(tap: Tap | null | undefined): string[] {
+  // A captcha is opened over the chat that asked for it, so Back lands there.
+  if (tap?.captcha) {
+    const cap = `/captcha?id=${encodeURIComponent(tap.captcha)}`;
+    return tap.chat ? [`/chat/${tap.chat}`, cap] : [cap];
+  }
   if (tap?.chat) return [`/chat/${tap.chat}`];
   if (tap?.ticket != null) return ['/ustabasi', `/ticket/${tap.ticket}`];
   return [];
@@ -65,6 +74,7 @@ const SAME_TAP_MS = 3000;
 /** What a tap is identified by while the app decides whether it has already
  *  acted on it. */
 function key(tap: Tap): string {
+  if (tap.captcha) return `captcha:${tap.captcha}`;
   return tap.chat ? `chat:${tap.chat}` : `ticket:${tap.ticket}`;
 }
 

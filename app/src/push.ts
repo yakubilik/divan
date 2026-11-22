@@ -50,7 +50,10 @@ Notifications.setNotificationHandler({
     const chatId = (n.request.content.data as any)?.chat_id;
     // Announcing a chat the user is already reading is noise; everything else
     // gets a banner, including while the app is open.
-    const mute = !!chatId && chatId === onScreen && AppState.currentState === 'active';
+    // A captcha is never muted: it waits on a person's hands, and the chat's
+    // own bar is easy to miss while reading.
+    const captcha = (n.request.content.data as any)?.kind === 'captcha';
+    const mute = !captcha && !!chatId && chatId === onScreen && AppState.currentState === 'active';
     return { shouldShowBanner: !mute, shouldShowList: true, shouldPlaySound: !mute, shouldSetBadge: false };
   },
 });

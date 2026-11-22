@@ -44,6 +44,7 @@ const X = load('src/transcript.ts', ['turns', 'attach', 'trim', 'summarise', 'si
 // What a tapped notification opens: the reading of the payload, the holding pen
 // a tap waits in while the app is still starting, and the route itself.
 const P = load('src/tap.ts', ['ticketFromPush', 'tapFromPush', 'routeForTap', 'Taps', 'follow']);
+const CAP = load('src/captcha.ts', ['capPoints']);
 
 // The real table, so that what the conversation says is what the screen shows
 // rather than a sentence written twice.
@@ -429,6 +430,18 @@ checks.push(
   ['a chat tap opens the chat and nothing else',
     P.routeForTap({ chat: 'abc' }).join(' ') === '/chat/abc'],
   ['a tap with neither opens nothing', P.routeForTap({}).length === 0 && P.routeForTap(null).length === 0],
+  // A captcha push (daemon captcha.py) opens the captcha over the chat that asked.
+  ['a captcha push opens the captcha over its chat',
+    P.routeForTap(P.tapFromPush({ kind: 'captcha', captcha_id: 'ab12', chat_id: 'c1' })).join(' ') === '/chat/c1 /captcha?id=ab12'],
+  ['a captcha push with no chat opens the captcha alone',
+    P.routeForTap(P.tapFromPush({ kind: 'captcha', captcha_id: 'ab12' })).join(' ') === '/captcha?id=ab12'],
+  ['a tap on the finger: still is a tap, moved is a drag that keeps its timing', (() => {
+    const tap = CAP.capPoints([[0.5, 0.5, 100], [0.505, 0.5, 150]], 300, 300);
+    const drag = CAP.capPoints([[0.1, 0.5, 100], [0.3, 0.5, 200], [0.9, 0.52, 400]], 300, 300);
+    return tap.type === 'tap' && drag.type === 'drag' && drag.points.length === 3
+      && drag.points[2][0] === 0.9 && drag.points[2][2] === 300 && drag.points[0][2] === 0;
+  })()],
+  ['a finger off the box is held to its edge', CAP.capPoints([[1.4, -0.2, 0]], 300, 300).x === 1],
   // The queue's push once the daemon has put the notification in a chat: the
   // chat is where it is answered, not the wall.
   ['a queue push that carries a chat opens that chat, not the wall',

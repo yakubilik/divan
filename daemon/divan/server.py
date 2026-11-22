@@ -47,6 +47,7 @@ from .attachments import KINDS, media_type_of, normalize_image, peaks, sniff
 from .security import (ACCESS_EMAIL, SOCKET_PEER, ForgedTunnel, PathPolicy, TunnelAccess, TunnelGate,
                        TunnelLock, tunnel_via)
 from . import screen as screenmod
+from . import captcha as captchamod
 from . import term as termmod
 from . import ustabasi as ustabasimod
 from . import divan as divanmod
@@ -85,6 +86,13 @@ PUSH_TEXT = {
 # These are the one kind of push that is about the door rather than a chat, and
 # the person reading it is deciding whether that was them — so it is written in
 # the language they read fastest, and falls back to English the same way.
+# A captcha an agent stopped at (captcha.py). Said in the reader's language
+# because it is the one push that asks for their hands, not their attention.
+CAPTCHA_PUSH_TEXT = {
+    "en": "A captcha is waiting for you: {where}",
+    "tr": "Bir captcha seni bekliyor: {where}",
+}
+
 TUNNEL_PUSH_TEXT = {
     "en": {"new_address": "Tunnel: {name} connected from a new address, {addr}",
            "new_address_as": "Tunnel: {name} ({email}) connected from a new address, {addr}",
@@ -394,6 +402,8 @@ class Server:
         # Shells on a pty (term.py), whose output goes only to the sockets
         # attached to each one rather than to every client.
         self.terms = termmod.Terms(self.send_to)
+        # Captchas an agent handed to the phone (captcha.py).
+        self.captchas = captchamod.Desk(self._captcha_told)
 
     def _allow_cross_origin(self) -> None:
         """Let a browser talk to a daemon that did not serve the page.
@@ -1779,6 +1789,68 @@ class Server:
         except screenmod.ScreenError as exc:
             raise Err("screen_failed", str(exc))
         return {"ok": True}
+
+    # ── captchas (captcha.py) ─────────────────────────────────────────────
+    async def _captcha_told(self, what: str, c: "captchamod.Case") -> None:
+        """Every phone hears that a captcha opened or closed; on opening, the
+        ones with push on are sent one, since nobody solves a captcha they do
+        not know about."""
+        await self.broadcast({"event": "captcha", "chat_id": c.chat_id,
+                              "data": {"what": what, **c.public()}, "ts": time.time()})
+        if what != "open":
+            return
+        where = (c.title or c.url or "browser")[:80]
+        for d in list(self.cfg.devices.values()):
+            if not d.push_token:
+                continue
+            text = CAPTCHA_PUSH_TEXT.get(d.lang, CAPTCHA_PUSH_TEXT["en"])
+            await send_push([d.push_token], self.cfg.host_name, text.format(where=where), {
+                "kind": "captcha", "captcha_id": c.id, "chat_id": c.chat_id,
+                "device_id": d.id, "host_name": self.cfg.host_name,
+            })
+
+    def _captcha_err(self, exc: "captchamod.CaptchaError") -> Err:
+        return Err(exc.code, str(exc))
+
+    async def h_captcha_open(self, dev: Device, d: dict) -> dict:
+        """An agent's `divan captcha`: find the box and hold it for the phone.
+        With `wait`, answered only once it is solved, given up or timed out."""
+        try:
+            c = await self.captchas.open(
+                port=int(d["port"]) if d.get("port") else None,
+                chat_id=str(d.get("chat_id") or "") or None,
+                selector=str(d.get("selector") or "") or None,
+                url_match=str(d.get("url") or "") or None,
+                whole=bool(d.get("whole")),
+                timeout_s=float(d.get("timeout_s") or captchamod.DEFAULT_TIMEOUT_S))
+        except captchamod.CaptchaError as exc:
+            raise self._captcha_err(exc)
+        if d.get("wait"):
+            return await self.captchas.wait(c.id)
+        return c.public()
+
+    async def h_captcha_list(self, dev: Device, d: dict) -> dict:
+        return {"captchas": self.captchas.open_cases()}
+
+    async def h_captcha_frame(self, dev: Device, d: dict) -> dict:
+        try:
+            return await self.captchas.frame(str(d.get("id") or ""),
+                                             int(d.get("width") or captchamod.FRAME_W))
+        except captchamod.CaptchaError as exc:
+            raise self._captcha_err(exc)
+
+    async def h_captcha_input(self, dev: Device, d: dict) -> dict:
+        try:
+            await self.captchas.input(str(d.get("id") or ""), list(d.get("actions") or []),
+                                      d.get("frame"))
+        except captchamod.CaptchaError as exc:
+            raise self._captcha_err(exc)
+        return {"ok": True}
+
+    async def h_captcha_finish(self, dev: Device, d: dict) -> dict:
+        """The person says it is done (or gives up) before the page does."""
+        state = "cancelled" if d.get("cancel") else "solved"
+        return await self.captchas.finish(str(d.get("id") or ""), state)
 
     def _control_gate(self) -> None:
         """The one switch in front of everything that touches this computer:

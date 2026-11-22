@@ -161,6 +161,52 @@ def cmd_secret(args: argparse.Namespace) -> None:
     print(secret_share.token(service, args.label))
 
 
+def cmd_captcha(args: argparse.Namespace) -> None:
+    """`divan captcha`: an agent stopped by a captcha hands it to the phone and
+    waits. The daemon finds the box in the browser (any tab of any browser
+    with a DevTools port, or the one `--port` names), the phone shows that box
+    alone and passes the person's touches back, and this returns once the box
+    is gone or the page holds its token. Exit 0 solved, 1 not."""
+    import websockets
+    cfg = Config.load()
+    if not _already_serving(cfg.port):
+        print(f"Nothing answers on port {cfg.port}: the daemon is not running.", file=sys.stderr)
+        sys.exit(2)
+    data = {"port": args.port, "selector": args.selector, "url": args.url, "whole": args.whole,
+            "timeout_s": args.timeout, "wait": True,
+            "chat_id": os.environ.get("DIVAN_CHAT_ID") or None}
+
+    async def run() -> dict:
+        dev, token = cfg.add_device("cli")
+        try:
+            uri = f"ws://127.0.0.1:{cfg.port}/ws?token={token}"
+            async with websockets.connect(uri, max_size=8 * 1024 * 1024, ping_interval=20) as ws:
+                await ws.send(json.dumps({"id": 1, "type": "captcha.open", "data": data}))
+                while True:
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), args.timeout + 60)
+                    except asyncio.TimeoutError:
+                        raise SystemExit("the daemon never answered")
+                    msg = json.loads(raw)
+                    if msg.get("id") != 1:
+                        continue
+                    if msg.get("type") == "error":
+                        d = msg.get("data") or {}
+                        raise SystemExit(f"{d.get('code') or 'refused'}: {d.get('message')}")
+                    return msg.get("data") or {}
+        finally:
+            cfg.revoke(dev.id, remember=False)
+
+    print("captcha sent to the phone; waiting for it to be solved…", flush=True)
+    out = asyncio.run(run())
+    state = out.get("state")
+    print({"solved": "solved — carry on",
+           "gone": "the tab or browser closed before it was solved",
+           "cancelled": "the person gave up on it",
+           "timeout": "nobody solved it in time"}.get(state, f"ended: {state}"))
+    sys.exit(0 if state == "solved" else 1)
+
+
 def cmd_pair(args: argparse.Namespace) -> None:
     cfg = Config.load()
     dev, token = cfg.add_device(args.name)
@@ -852,6 +898,13 @@ def main() -> None:
     s.add_argument("name", help="a-z, 0-9 and '-': the item becomes rac-secret-<name>")
     s.add_argument("--label", default="", help="what the chip in the chat says, e.g. 'OpenAI key'")
     s.set_defaults(fn=cmd_secret)
+    s = sub.add_parser("captcha", help="hand a captcha in a browser to the phone and wait until it is solved")
+    s.add_argument("--port", type=int, help="the browser's DevTools port (default: every one found)")
+    s.add_argument("--url", help="only a tab whose address contains this")
+    s.add_argument("--selector", help="a CSS selector for a captcha no built-in rule knows")
+    s.add_argument("--whole", action="store_true", help="show the whole tab instead of a box")
+    s.add_argument("--timeout", type=float, default=600, help="seconds to wait (default 600)")
+    s.set_defaults(fn=cmd_captcha)
     s = sub.add_parser("install", help="start automatically at login"); s.set_defaults(fn=cmd_install)
     s = sub.add_parser("uninstall"); s.set_defaults(fn=cmd_uninstall)
     args = p.parse_args()

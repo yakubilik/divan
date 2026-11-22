@@ -216,6 +216,8 @@ export default function RootLayout() {
         {/* The computer's own screen. Full bleed and no animation: it is a
             window onto something already happening, not a page. */}
         <Stack.Screen name="screen" options={{ animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
+        {/* A captcha an agent stopped at: the box alone, solved by hand. */}
+        <Stack.Screen name="captcha" options={{ animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
         <Stack.Screen name="agents" />
         <Stack.Screen name="agent-store" />
         <Stack.Screen name="agent-install" />
