@@ -1835,7 +1835,7 @@ class Server:
     async def h_captcha_frame(self, dev: Device, d: dict) -> dict:
         try:
             return await self.captchas.frame(str(d.get("id") or ""),
-                                             int(d.get("width") or captchamod.FRAME_W))
+                                             int(d.get("width") or captchamod.FRAME_W), viewer=dev.id)
         except captchamod.CaptchaError as exc:
             raise self._captcha_err(exc)
 

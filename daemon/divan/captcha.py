@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -75,9 +76,12 @@ GONE_AFTER = 3
 PAD = 6
 #: How long a box found on the page is trusted before it is looked for again.
 BOX_FRESH_S = 0.6
-#: Width of a frame the phone is sent, in image pixels.
-FRAME_W = 900
-QUALITY = 70
+#: Width of a frame the phone is sent, in image pixels. A captcha's pictures
+#: read fine at this size, and every extra pixel is latency over a tailnet.
+FRAME_W = 720
+QUALITY = 62
+#: How long an answer of "nothing changed" waits before it is given.
+SAME_PAUSE_S = 0.08
 
 
 class CaptchaError(Exception):
@@ -248,6 +252,7 @@ class Case:
     box: dict | None = None          # what the last frame showed, viewport CSS px
     shown: dict[int, dict] = field(default_factory=dict)   # frame number -> its box
     seq: int = 0
+    sent: dict[str, str] = field(default_factory=dict)      # viewer -> digest of its last frame
     box_at: float = 0.0
     state: str = "open"              # open | solved | gone | cancelled | timeout
     created: float = field(default_factory=time.time)
@@ -376,9 +381,16 @@ class Desk:
         await c.done.wait()
         return c.public()
 
-    async def frame(self, cid: str, width: int = FRAME_W) -> dict:
-        """The box as it is now, as a JPEG, and the box it was cut from."""
+    async def frame(self, cid: str, width: int = FRAME_W, viewer: str = "") -> dict:
+        """The box as it is now, as a JPEG, and the box it was cut from.
+
+        A frame the viewer already has is not sent again: a captcha sits still
+        most of the time, and re-sending and re-decoding the same picture a few
+        times a second is what made the phone stutter (22 Nov 2026). The answer
+        is then only the state, after a short pause so an idle viewer does not
+        spin."""
         c = self.get(cid)
+        width = min(int(width), FRAME_W)
         if c.state != "open":
             return {"state": c.state}
         async with c.page.lock:
@@ -404,9 +416,18 @@ class Desk:
                              clip={"x": box["x"] + vp["px"], "y": box["y"] + vp["py"],
                                    "width": box["w"], "height": box["h"], "scale": scale})
             c.box = box
-            c.seq += 1
-            c.shown[c.seq] = box
-            c.shown.pop(c.seq - 12, None)
+            digest = hashlib.blake2b(f"{box}".encode() + r["data"].encode(), digest_size=12).hexdigest()
+            if viewer and c.sent.get(viewer) == digest:
+                same = True
+            else:
+                same = False
+                c.sent[viewer] = digest
+                c.seq += 1
+                c.shown[c.seq] = box
+                c.shown.pop(c.seq - 12, None)
+        if same:
+            await asyncio.sleep(SAME_PAUSE_S)
+            return {"state": c.state, "same": True, "frame": c.seq}
         return {"state": c.state, "jpeg": r["data"], "w": box["w"], "h": box["h"], "frame": c.seq}
 
     async def input(self, cid: str, actions: list[dict], frame: int | None = None) -> None:
