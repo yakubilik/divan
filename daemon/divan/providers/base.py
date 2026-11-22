@@ -77,7 +77,11 @@ class TurnResult:
 
 
 AUTH_FAILED_MARKERS = ("failed to authenticate", "oauth session expired",
-                       "oauth token has expired", "invalid authentication credentials")
+                       "oauth token has expired", "invalid authentication credentials",
+                       # a subscription whose payment is past due: as unusable as a lost
+                       # sign-in until it is paid, so the turn moves to the next account and
+                       # the half-hour hold tries this one again (14 Nov 2026, 14 turns stuck)
+                       "can't use your claude subscription")
 
 
 def is_auth_failure(text: str | None) -> bool:

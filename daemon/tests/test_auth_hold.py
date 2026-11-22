@@ -31,3 +31,13 @@ def test_signing_in_again_into_the_keychain_lifts_the_hold(tmp_path, monkeypatch
     a = _account(tmp_path)
     a.auth_failed_at = failed
     assert not acct.auth_broken(a)
+
+
+def test_a_subscription_past_due_moves_the_turn_like_a_lost_sign_in():
+    """14 Nov 2026 14:28-18:44: 14 turns in nine chats failed with this line on one
+    account and none moved to the next one; a chat retried it seven times in ten minutes."""
+    from divan.providers.base import is_auth_failure
+    said = ("Claude Code can't use your Claude subscription, usually because a payment is past due · "
+            "Pay or renew at https://claude.ai/settings/billing (if you just paid, try again shortly)")
+    assert is_auth_failure(said)
+    assert not is_auth_failure("You've hit your 5-hour limit · resets 12am")
