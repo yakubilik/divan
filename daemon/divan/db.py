@@ -374,7 +374,7 @@ class DB:
         now = time.time()
         chat = {
             "id": new_id(), "group_id": None, "title": "New chat",
-            "provider": "claude", "model": "fable", "effort": "high",
+            "provider": "claude", "model": "opus", "effort": "high",
             "perm_mode": "ask", "cwd": "", "provider_session_id": None, "account_id": None,
             "agent_id": None, "pool_pinned": 0, "project_set": 0, "owner": None,
             "status": "idle", "last_preview": "", "max_turns": None,
