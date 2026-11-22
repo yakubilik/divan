@@ -143,14 +143,14 @@ try {
       state = await evaluate(snapshot);
       if ((state?.shown.length >= 2 && state.pres.length >= 2) || Date.now() - t0 > 15000) break;
     }
-    ok('the table is a table: its head', JSON.stringify(state.th) === JSON.stringify(['Servis', 'Ne yapıyor', 'Aylık']), JSON.stringify(state.th));
+    ok('the table is a table: its head', JSON.stringify(state.th) === JSON.stringify(['Service', 'What it does', 'Monthly']), JSON.stringify(state.th));
     ok('three rows, bold and code kept in the cells', state.rows === 3 && state.strong === 3 && state.code === 1, JSON.stringify(state));
     ok('a right-aligned column is right-aligned', state.right === 'right', state.right);
     ok('no raw delimiter row left on the page', !state.pipes);
     ok('both good diagrams drawn at a real size', state.shown.length === 2 && state.shown.every((s) => s.w > 150 && s.h > 100), JSON.stringify([state.frames, state.said, state.shown]));
     ok('each frame is sandboxed to scripts alone', state.shown.every((s) => s.sandbox === 'allow-scripts'), JSON.stringify(state.shown));
     ok('the broken diagram falls back to its code', state.pres.some((p) => p.includes('this is not mermaid')), JSON.stringify(state.pres));
-    ok('the fence still streaming is code', state.pres.some((p) => p.includes('pie title Yarım')), JSON.stringify(state.pres));
+    ok('the fence still streaming is code', state.pres.some((p) => p.includes('pie title Half')), JSON.stringify(state.pres));
     // A shared key: a chip, never the token; a click asks the daemon about this
     // chat and this key and copies the answer; an hour later, or with no chat,
     // there is nothing to click.
@@ -165,7 +165,7 @@ try {
       };
     })()`);
     ok('no share token is printed as text', !share.raw);
-    ok('a fresh share is a chip with its label, enabled', share.live[0]?.[0] === '🔑 Gri Koç deneme şifresi' && share.live[0]?.[1] === false, JSON.stringify(share.live));
+    ok('a fresh share is a chip with its label, enabled', share.live[0]?.[0] === '🔑 Gri Koc trial password' && share.live[0]?.[1] === false, JSON.stringify(share.live));
     ok('a share without a label takes its name', share.live[1]?.[0] === '🔑 gone', JSON.stringify(share.live));
     ok('after the hour the chip is grey and does nothing', share.old.every(([t, d]) => d && t.includes('expired')), JSON.stringify(share.old));
     ok('without a chat a share is only its name', share.nochat.every(([t, d]) => d && t.startsWith('🔒')), JSON.stringify(share.nochat));

@@ -431,6 +431,7 @@ class Phone:
     def __init__(self):
         self.db = DB(tmp / "chat-call.sqlite")
         self.draining = False
+        self.cfg = Config()  # voice_call on: call.reply asks it first (`_call_on`)
         self.live: dict[str, session_mod.ChatSession] = {}
         host = self
 
@@ -449,7 +450,7 @@ class Phone:
             return host.live[cid]
 
         self.sessions = types.SimpleNamespace(get=get, peek=lambda cid: host.live.get(cid))
-        for name in ("h_chat_send", "h_call_reply"):
+        for name in ("h_chat_send", "h_call_reply", "_call_on"):
             setattr(self, name, getattr(Server, name).__get__(self))
 
 

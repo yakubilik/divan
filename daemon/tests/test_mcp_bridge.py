@@ -19,17 +19,17 @@ def home(tmp_path, monkeypatch):
         CREATE TABLE events (seq INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT,
           type TEXT, payload TEXT, ts REAL);
         INSERT INTO projects VALUES ('p1', 'Divan');
-        INSERT INTO chats VALUES ('abcd1111', 'divan · bülten', 'claude', 'idle', 0, '/x',
-          'bülteni yaz', 'yazıldı', '', 1, 20, 'p1');
+        INSERT INTO chats VALUES ('abcd1111', 'divan · newsletter', 'claude', 'idle', 0, '/x',
+          'write the newsletter', 'written', '', 1, 20, 'p1');
         INSERT INTO chats VALUES ('abcd2222', 'babysee fix', 'codex', 'running', 1, '/y',
           '', '', '', 1, 10, NULL);
     """)
     def ev(chat, typ, text, ts):
         db.execute("INSERT INTO events (chat_id, type, payload, ts) VALUES (?,?,?,?)",
                    (chat, typ, json.dumps({"text": text}), ts))
-    ev("abcd1111", "message.user", "ilk soru", 1)
-    ev("abcd1111", "message.assistant", "eski cevap", 2)
-    ev("abcd1111", "message.user", "anahtar sk-ant-api03-" + "A" * 90 + " bunu kullan", 3)
+    ev("abcd1111", "message.user", "first question", 1)
+    ev("abcd1111", "message.assistant", "old answer", 2)
+    ev("abcd1111", "message.user", "anahtar sk-ant-api03-" + "A" * 90 + " use this", 3)
     ev("abcd1111", "message.assistant", "bir", 4)
     ev("abcd1111", "message.assistant", "iki", 5)
     db.execute("INSERT INTO events (chat_id, type, payload, ts) VALUES ('abcd1111','turn.done','{}',6)")

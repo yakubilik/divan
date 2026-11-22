@@ -29,7 +29,7 @@ Divan, which keeps everything on the computer.
    SHA256SUMS checked), then `daemon/scripts/dot_tunnel.sh`. Health: http://127.0.0.1:8795/ui
 4. ChatGPT → Settings → Apps/Plugins → Add custom MCP server → Connection: Tunnel,
    pick the tunnel, no authentication.
-5. Ask the dot: "Divan'da şu an çalışan sohbetler ne?"
+5. Ask the dot: "Which chats are running in Divan right now?"
 
 ## Without Platform Tunnels: Cloudflare + OAuth
 

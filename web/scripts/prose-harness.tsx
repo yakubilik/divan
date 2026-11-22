@@ -24,41 +24,41 @@ root.dataset.theme = scheme;
 
 const fence = '```';
 export const ANSWER = [
-  'Kalem kalem, normal bir ay:',
+  'Line by line, a normal month:',
   '',
-  '| Servis | Ne yapıyor | Aylık |',
+  '| Service | What it does | Monthly |',
   '|---|---|--:|',
   '| **AWS EC2 app** (`t4g.medium`) | API, web, Keycloak | ~30 $ |',
-  '| **ElevenLabs** | Sanal öğrencinin sesi | 99 $ |',
-  '| **Cloudflare Stream** | Videolar | 6 $ |',
+  '| **ElevenLabs** | The virtual student's voice | 99 $ |',
+  '| **Cloudflare Stream** | Videos | 6 $ |',
   '',
-  'Grafik:',
+  'Chart:',
   '',
   `${fence}mermaid`,
   'xychart-beta horizontal',
-  '    title "Normal bir ay (TL)"',
-  '    x-axis ["ElevenLabs", "App sunucusu", "Provalar", "Veritabanı"]',
+  '    title "A normal month (TL)"',
+  '    x-axis ["ElevenLabs", "App server", "Rehearsals", "Database"]',
   '    y-axis "TL" 0 --> 5500',
   '    bar [4950, 1500, 2000, 850]',
   fence,
   '',
   `${fence}mermaid`,
-  'pie title Nereye gidiyor',
+  'pie title Where it goes',
   '    "ElevenLabs" : 4950',
   '    "AWS" : 4100',
-  '    "Provalar" : 2000',
+  '    "Rehearsals" : 2000',
   fence,
   '',
-  'Bozuk olan:',
+  'The broken one:',
   '',
   `${fence}mermaid`,
   'this is not mermaid at all {{{',
   fence,
   '',
-  'Hâlâ yazılıyor:',
+  'Still being written:',
   '',
   `${fence}mermaid`,
-  'pie title Yarım',
+  'pie title Half',
 ].join('\n');
 
 // The daemon, as far as a shared key's chip asks it: every call written down.
@@ -70,7 +70,7 @@ useFleet.setState({
     return { value: 'the-value-123' };
   },
 } as any);
-const SHARED = 'Şifre: [secret-share rac-secret-grikoc-deneme Gri Koç deneme şifresi] ve eski: [secret-share rac-secret-gone]';
+const SHARED = 'Password: [secret-share rac-secret-grikoc-deneme Gri Koc trial password] and the old one: [secret-share rac-secret-gone]';
 const now = Date.now() / 1000;
 
 createRoot(root).render(

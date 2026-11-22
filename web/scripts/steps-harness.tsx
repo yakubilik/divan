@@ -33,7 +33,7 @@ const tool = (id: string, name: string, input: any, output: string, dt: number, 
   ev('tool.result', { id, output, is_error: bad }, dt + 1),
 ];
 const events = [
-  ev('message.user', { text: 'Loader neden dönmüyor, bir bak', attachments: [] }, 0),
+  ev('message.user', { text: "Why isn't the loader spinning? Take a look", attachments: [] }, 0),
   ev('thinking.delta', { text: 'The spinner is drawn by kit.tsx; the keyframes may be missing from the harness sheet.' }, 2),
   ...tool('1', 'Read', { file_path: '/Users/x/projects/divan/web/src/ui/kit.tsx' }, 'export function Spinner…', 4),
   ...tool('2', 'Grep', { pattern: 'rac-spin', path: 'web/src' }, 'src/ui/kit.tsx:191\nsrc/ui/kit.tsx:213', 7),
@@ -41,9 +41,9 @@ const events = [
   ...tool('4', 'Edit', { file_path: '/Users/x/projects/divan/web/src/ui/kit.tsx', old_string: 'const a = 1;\nconst b = 2;', new_string: 'const a = 1;\nconst b = 3;\nconst c = 4;' }, 'ok', 14),
   ...tool('5', 'Write', { file_path: '/Users/x/projects/divan/web/src/ui/loader.tsx', content: 'export const x = 1;\n' }, 'ok', 18),
   ...tool('6', 'Bash', { command: 'npm test -- steps', description: 'Run the steps tests' }, '12 passed', 22),
-  ev('message.assistant', { text: 'Keyframe dosyaya hiç eklenmemiş; ekledim, loader dönüyor.', segment: 0, attachments: [] }, 26),
+  ev('message.assistant', { text: 'The keyframes were never in the file; added them, the loader spins.', segment: 0, attachments: [] }, 26),
   ev('turn.done', { cost_usd: 0.04, duration_ms: 26000, num_turns: 7, usage: null, stop_reason: 'end_turn' }, 27),
-  ev('message.user', { text: 'Tamam, şimdi build al', attachments: [] }, 40),
+  ev('message.user', { text: 'OK, now build it', attachments: [] }, 40),
   ev('thinking.delta', { text: 'Build writes into daemon/divan/webui.' }, 41),
   ev('tool.use', { id: '7', tool: 'Bash', input: { command: 'npm run build', description: 'Build the panel' } }, 43),
 ];

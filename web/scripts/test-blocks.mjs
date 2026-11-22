@@ -32,11 +32,11 @@ const kinds = (bs) => bs.map((b) => b.kind).join(',');
 
 console.log('── tables');
 {
-  const text = 'Here it is.\n\n| Servis | Ne yapıyor | Aylık |\n|---|---|--:|\n| **AWS EC2** (`t4g.medium`) | API | ~30 $ |\n| RDS | Postgres | 17 $ |\n\nTotal after.';
+  const text = 'Here it is.\n\n| Service | What it does | Monthly |\n|---|---|--:|\n| **AWS EC2** (`t4g.medium`) | API | ~30 $ |\n| RDS | Postgres | 17 $ |\n\nTotal after.';
   const bs = blocks(text);
   ok('text, table, text', kinds(bs) === 'text,table,text', kinds(bs));
   const t = bs[1];
-  ok('head cells', JSON.stringify(t.head) === JSON.stringify(['Servis', 'Ne yapıyor', 'Aylık']), JSON.stringify(t.head));
+  ok('head cells', JSON.stringify(t.head) === JSON.stringify(['Service', 'What it does', 'Monthly']), JSON.stringify(t.head));
   ok('alignment read from the delimiter row', JSON.stringify(t.align) === JSON.stringify([null, null, 'right']), JSON.stringify(t.align));
   ok('two body rows, inline marks kept for the cell renderer', t.rows.length === 2 && t.rows[0][0] === '**AWS EC2** (`t4g.medium`)', JSON.stringify(t.rows));
   ok('blank lines at a block edge are dropped', bs[0].text === 'Here it is.' && bs[2].text === 'Total after.', JSON.stringify([bs[0].text, bs[2].text]));
