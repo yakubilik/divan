@@ -2459,6 +2459,27 @@ class Server:
                                       "data": self.host_info(), "ts": time.time()})
         return {"cwd": self.new_chat_cwd(), "chosen": bool(self.cfg.default_cwd)}
 
+    async def h_host_rename(self, dev: Device, d: dict) -> dict:
+        """Give this computer the name every screen shows for it.
+
+        A hand edit of `host_name` in config.toml does not last: this process
+        writes its own copy back on the next `hello`. So the name is changed
+        here, in memory and in the file together, and told to every client as
+        `host.status`. No restart. The name a peer registered this computer
+        under is that peer's own label and is not touched.
+        """
+        name = " ".join(str(d.get("name") or "").split())
+        if not name or len(name) > 60 or not name.isprintable():
+            raise Err("bad_name", "a name is 1 to 60 printable characters")
+        if name != self.cfg.host_name:
+            was, self.cfg.host_name = self.cfg.host_name, name
+            self.cfg.save()
+            log.info("computer renamed from %s to %s by device %s",
+                     was, name, dev.name if dev else "?")
+            await self.broadcast({"seq": None, "chat_id": None, "event": "host.status",
+                                  "data": self.host_info(), "ts": time.time()})
+        return {"name": self.cfg.host_name}
+
     async def h_host_projects(self, dev: Device, d: dict) -> dict:
         return {"projects": self.policy.list_projects(), "roots": self.cfg.allowed_roots}
 
