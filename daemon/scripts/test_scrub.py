@@ -368,6 +368,26 @@ def main() -> int:
 
     ids()
 
+    print("\na folder that can be listed but not entered")
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        db, _live = plant(home)
+        # A chat's scratch can hold a device dump with a drw-r--r-- folder
+        # (22 Nov 2026): its names list, but none of them can be stat'ed.
+        locked = home / ".divan" / "scratch" / "chat1" / "rootfs" / "locked"
+        locked.mkdir(parents=True)
+        (locked / "a.log").write_text("x")
+        os.chmod(locked, 0o644)
+        try:
+            found = scrub.targets(home)
+            check(not any(p.is_relative_to(locked) for p in found) and len(found) > 1,
+                  "it is skipped and the rest is still walked")
+        except OSError as exc:
+            check(False, "it is skipped and the rest is still walked", type(exc).__name__)
+        finally:
+            os.chmod(locked, 0o755)
+        db._c.close()
+
     print(f"\n{'FAILED: ' + ', '.join(failures) if failures else 'all checks passed'}")
     return 1 if failures else 0
 

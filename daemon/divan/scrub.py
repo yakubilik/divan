@@ -110,7 +110,14 @@ def targets(home: Path) -> list[Path]:
                 dirnames[:] = [d for d in dirnames if d not in skip_dirs]
             for name in sorted(filenames):
                 p = Path(dirpath) / name
-                if name.startswith(".") or p.is_symlink() or not wanted(p):
+                if name.startswith(".") or not wanted(p):
+                    continue
+                # A folder can be readable but not searchable (a device dump
+                # in a chat's scratch): its names list, but none can be stat'ed.
+                try:
+                    if p.is_symlink():
+                        continue
+                except OSError:
                     continue
                 real = os.path.realpath(p)
                 if real not in seen:
