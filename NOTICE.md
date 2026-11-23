@@ -68,3 +68,13 @@ the user asks for them.
   (`app/src/components/toast.tsx`). They are written anew for React Native,
   not copied from Rare UI's React source. Rare UI is offered under MIT +
   Commons Clause + Attribution, which asks for this visible credit.
+- **Rare UI's own components** are also used as they are, in the web panel:
+  `web/src/rareui/components/`, `web/src/rareui/demos/`, `web/src/rareui/lib/`
+  and `web/src/rareui/globals.css` are files from
+  <https://github.com/swamimalode07/rare-ui>, with Next.js imports pointed at
+  `web/src/rareui/shims/next.tsx` and asset paths moved under
+  `web/public/rareui/`. They stay under Rare UI's licence
+  (`web/src/rareui/LICENSE`: MIT + Commons Clause + Attribution, © 2026 Swami
+  Malode), not this repository's MIT licence. The panel serves them at
+  `/rareui.html`, which the panel's About screen and the phone's Settings link
+  to, with the credit on the page.

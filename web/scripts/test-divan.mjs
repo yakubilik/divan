@@ -32,6 +32,9 @@
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+// Rare UI's own files (src/rareui, the /rareui.html gallery) are another
+// project's design, used as they are; the panel's rules are not theirs to keep.
+const RAREUI = 'src/rareui';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -182,7 +185,7 @@ group('flat surfaces');
   const files = [];
   const walk = (dir) => {
     for (const e of readdirSync(join(web, dir), { withFileTypes: true })) {
-      if (e.isDirectory()) walk(`${dir}/${e.name}`);
+      if (e.isDirectory()) { if (`${dir}/${e.name}` !== RAREUI) walk(`${dir}/${e.name}`); }
       else files.push(`${dir}/${e.name}`);
     }
   };
@@ -211,7 +214,7 @@ group('one table, and nothing beside it');
   const walk = (dir) => {
     for (const e of readdirSync(join(web, dir), { withFileTypes: true })) {
       const rel = `${dir}/${e.name}`;
-      if (e.isDirectory()) walk(rel);
+      if (e.isDirectory()) { if (rel !== RAREUI) walk(rel); }
       else if (/\.tsx?$/.test(e.name)) files.push(rel);
     }
   };
@@ -274,7 +277,7 @@ group('both themes are written into the document');
   const walk = (dir) => {
     for (const e of readdirSync(join(web, dir), { withFileTypes: true })) {
       const rel = `${dir}/${e.name}`;
-      if (e.isDirectory()) walk(rel);
+      if (e.isDirectory()) { if (rel !== RAREUI) walk(rel); }
       else if (/\.tsx?$/.test(e.name)) {
         for (const m of src(rel).matchAll(/\bT\.([a-zA-Z0-9]+)/g)) used.add(m[1]);
       }
@@ -1065,7 +1068,7 @@ group('the fades that are left are the ones that were decided');
   const walk = (dir) => {
     for (const e of readdirSync(join(web, dir), { withFileTypes: true })) {
       const rel = `${dir}/${e.name}`;
-      if (e.isDirectory()) { walk(rel); continue; }
+      if (e.isDirectory()) { if (rel !== RAREUI) walk(rel); continue; }
       if (!/\.tsx?$/.test(e.name)) continue;
       for (const m of src(rel).matchAll(/opacity: ?([^,;}\n]+)/g)) {
         const what = m[1].trim();

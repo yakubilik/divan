@@ -1102,6 +1102,14 @@ function AboutSection({ slot }: { slot: HostSlot }) {
           <KV k="transcription" v={info.transcription ? 'on' : 'off'} code />
         )}
       </Card>
+      {/* Rare UI's licence asks for a visible credit; this is it, and the way to
+          the page that runs every one of its components. */}
+      <Head title="Rare UI" hint="Animated components by Swami Malode, running in this panel." />
+      <Card inset={false}>
+        <Row first icon={P.sparkle} title="Open the component gallery" note="Every Rare UI component, live" chevron
+          onClick={() => window.open('/rareui.html', '_blank')} />
+        <KV k="credit" v="rareui.com · MIT + Commons Clause + Attribution" code />
+      </Card>
     </>
   );
 }

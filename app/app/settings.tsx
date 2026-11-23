@@ -102,6 +102,10 @@ export default function Settings() {
           <Text style={{ fontSize: 12, lineHeight: 12 * 1.4, color: t.ink3, paddingHorizontal: 4 }}>{T('pushNo')}</Text>
         )}
 
+        <Group label="Rare UI">
+          <ListRow first boxed title={T('rareUi')} note={T('rareUiNote')} onPress={() => router.push('/rareui')} />
+        </Group>
+
         <UnderTab here="settings" style={{ marginTop: 8 }} />
 
         {/* Only a development build has the design system's own screen. */}
