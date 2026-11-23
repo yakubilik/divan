@@ -5,7 +5,7 @@
  *  `SectionList` wants. */
 import type { Chat, Group } from './protocol';
 import {
-  byRecency, hostSections, matches, needle, newChatIn, ownerOf, personCounts, whoseChats,
+  type AgentNames, byRecency, hostSections, matches, needle, newChatIn, ownerOf, personCounts, whoseChats,
   type Section as Read,
 } from './chat-list';
 
@@ -17,6 +17,8 @@ export type Section = {
   plus: boolean;
   /** The folder that + opens its chat in, where the web's would name one. */
   cwd?: string;
+  /** An agent's heading: its glyph, drawn before the name. */
+  glyph?: string;
 };
 
 /** The one section the flat view draws. It is never shown as a heading, so it
@@ -25,7 +27,7 @@ export const FLAT = '__flat__';
 
 export type People = { names: string[]; me: string | null };
 
-export function chatSections({ chats, groups, people, chosen, saved, productNames, projects, q, collapsed, showArchived, flat, now }: {
+export function chatSections({ chats, groups, people, chosen, saved, productNames, projects, q, collapsed, showArchived, flat, now, agents }: {
   chats: Record<string, Chat>; groups: Group[];
   people: People;
   /** Whose chats were picked on this phone for this computer (`''` everyone). */
@@ -40,6 +42,8 @@ export function chatSections({ chats, groups, people, chosen, saved, productName
    *  open the Archive. Off, the phone lists exactly what the web does. */
   showArchived: boolean;
   flat: boolean; now: number;
+  /** Agent names and glyphs by id: a chat with an agent of its own is listed under it. */
+  agents?: AgentNames;
 }): { sections: Section[]; who: string | null; counts: Record<string, number>; shared: boolean } {
   const names = people.names;
   const shared = names.length > 1;
@@ -59,14 +63,14 @@ export function chatSections({ chats, groups, people, chosen, saved, productName
              who, counts, shared };
   }
 
-  const read = hostSections({ chats: list, groups, hostKey: '', query: q, who, names, saved, now });
+  const read = hostSections({ chats: list, groups, hostKey: '', query: q, who, names, saved, now, agents });
   const sections = read.map((s): Section => {
     // The archive is everything that is not today, so it starts shut — except
     // under a search, which is looking through it, or with the switch on.
     const shut = collapsed[s.key] ?? (s.kind === 'archive' && !q.trim() && !showArchived);
     const at = newChatIn(s, projects);
     return { id: s.key, title: s.title, kind: s.kind, mono: s.kind === 'folder', data: shut ? [] : s.chats,
-             count: s.chats.length, shut, plus: at.offered, cwd: at.cwd };
+             count: s.chats.length, shut, plus: at.offered, cwd: at.cwd, glyph: s.glyph };
   });
   return { sections, who, counts, shared };
 }

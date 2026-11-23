@@ -154,8 +154,8 @@ export default function ChatPlace() {
 
   const { sections, who, counts, shared } = useMemo(() => chatSections({
     chats, groups, people, chosen, saved, productNames, projects, q, collapsed, showArchived,
-    flat: chatView === 'flat', now,
-  }), [chats, groups, people, chosen, saved, productNames, projects, q, collapsed, showArchived, chatView, now]);
+    flat: chatView === 'flat', now, agents: marks,
+  }), [chats, groups, people, chosen, saved, productNames, projects, q, collapsed, showArchived, chatView, now, marks]);
 
   /** Whose chats the list shows, picked the way the web's card picks it. */
   async function pickPerson() {
@@ -486,6 +486,7 @@ function GroupHeader({ section, first, onPress, onLongPress, onPlus, dimmed }: {
       <Pressable accessibilityRole="button" onPress={onPress} onLongPress={() => onLongPress(section.id, section.title, section.count, ref)}
         style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <View style={{ height: 20, justifyContent: 'center' }}><Icon name={section.shut ? 'chevron_right' : 'expand_more'} size={16} color={c.muted} /></View>
+        {section.glyph ? <Text style={{ fontSize: 13 }}>{section.glyph}</Text> : null}
         {section.mono
           ? <Text mono numberOfLines={1} style={{ fontSize: 12, fontWeight: '500', color: c.muted, flexShrink: 1 }}>{section.title}</Text>
           : <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '600', letterSpacing: em(12, 0.06), textTransform: 'uppercase', color: c.muted, flexShrink: 1 }}>{section.title}</Text>}

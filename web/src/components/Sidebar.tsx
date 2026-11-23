@@ -520,9 +520,10 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
     if (project) return projectSections(hosts, project.ids, q, now);
     if (fleetWide) return fleetSections(hosts, hostOrder, q);
     if (!slot) return [] as Section[];
-    return hostSections({ chats: slot.chats, groups: slot.groups, hostKey: focus!, query, who, names, saved, now });
-  }, [fleetWide, hosts, hostOrder, slot?.chats, slot?.groups, focus, query, now, saved.join('\n'), project?.ids,
-      who, names]);
+    return hostSections({ chats: slot.chats, groups: slot.groups, hostKey: focus!, query, who, names, saved, now,
+                          agents: slot.agentMarks });
+  }, [fleetWide, hosts, hostOrder, slot?.chats, slot?.groups, slot?.agentMarks, focus, query, now, saved.join('\n'),
+      project?.ids, who, names]);
   // Groups belong to one computer, so there is one to make only while the list
   // is one computer's.
   const canGroup = !!slot && !!focus && !fleetWide && !project;
@@ -741,6 +742,7 @@ export function Sidebar({ selected, selectedHost, onSelect, onNewChat, onNewChat
                 )}
                 {/* A folder is a path, and a path shouted in capitals is not the
                     path any more. */}
+                {s.glyph && <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>{s.glyph}</span>}
                 <span style={{
                   flex: 1, textAlign: 'left', fontSize: 11, color: C.mute,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',

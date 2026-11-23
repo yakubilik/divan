@@ -14,8 +14,22 @@ import type { Chat, Group } from './protocol';
  *  be dropped into it; `archive` is where everything that has gone quiet ends up. */
 export interface Section {
   key: string; title: string; hostKey: string; chats: Chat[];
-  kind: 'group' | 'project' | 'folder' | 'loose' | 'archive' | 'host';
+  kind: 'group' | 'project' | 'agent' | 'folder' | 'loose' | 'archive' | 'host';
   projectId?: string;
+  /** An agent's section: the glyph drawn before its name. */
+  glyph?: string;
+}
+
+/** What a heading needs to know of an agent: its name and its glyph. */
+export type AgentNames = Record<string, { label?: string; glyph?: string }>;
+
+/** The agent a chat is a section of, or null. The general agent (Hermes) is
+ *  the one every chat starts with, so it is no grouping; one the computer
+ *  knows no name for stays where it was. */
+export function agentOf(c: Chat, agents: AgentNames): string | null {
+  const id = c.agent_id || '';
+  if (!id || id.split(':').pop() === 'hermes' || !agents[id]?.label) return null;
+  return id;
 }
 
 /** The fields of a computer the merged and per-product lists read. */
@@ -121,12 +135,14 @@ export function filedProject(c: Chat): string | null {
   return c.project;
 }
 
-export function sections(chats: Chat[], groups: Group[], hostKey: string, searching: boolean, now: number): Section[] {
+export function sections(chats: Chat[], groups: Group[], hostKey: string, searching: boolean, now: number,
+                         agents: AgentNames = {}): Section[] {
   const named = new Map(groups.map((g) => [g.name.toLocaleLowerCase(), g.id]));
   const made = new Set(groups.map((g) => g.id));
   const byGroup = new Map<string, Chat[]>();
   const byProject = new Map<string, Chat[]>();
   const byCwd = new Map<string, Chat[]>();
+  const byAgent = new Map<string, Chat[]>();
   const daily: Chat[] = [];
   const quiet: Chat[] = [];
   const put = (m: Map<string, Chat[]>, k: string, c: Chat) => { m.set(k, [...(m.get(k) ?? []), c]); };
@@ -137,6 +153,9 @@ export function sections(chats: Chat[], groups: Group[], hostKey: string, search
     if (!isCurrent(c, now)) quiet.push(c);
     else if (group) put(byGroup, group, c);
     else if (project) put(byProject, project, c);
+    // A health chat is the coach's, not "Daily": an agent of its own is a
+    // heading of its own (Yakup, 23 Nov 2026).
+    else if (agentOf(c, agents)) put(byAgent, agentOf(c, agents)!, c);
     else if ((c.project_set && !c.project_id) || c.project_by === 'folder') daily.push(c);
     else put(byCwd, c.cwd || '', c);
   }
@@ -148,6 +167,9 @@ export function sections(chats: Chat[], groups: Group[], hostKey: string, search
   for (const [name, arr] of byProject) {
     out.push({ key: `project:${name}`, title: name, hostKey, chats: arr, kind: 'project',
                projectId: arr[0].project_id ?? undefined });
+  }
+  for (const [id, arr] of byAgent) {
+    out.push({ key: `agent:${id}`, title: agents[id]!.label!, hostKey, chats: arr, kind: 'agent', glyph: agents[id]!.glyph });
   }
   for (const [path, arr] of byCwd) {
     if (byCwd.size > 1 && path) out.push({ key: `cwd:${path}`, title: home(path), hostKey, chats: arr, kind: 'folder' });
@@ -188,7 +210,7 @@ export function reorder(list: Section[], saved: string[], key: string, to: strin
  *  with nothing in it yet has no folder to offer, and still takes a chat, so
  *  `true` there with no folder; the archive offers none. */
 export function newChatIn(s: Section, projects: { name: string; path: string }[] | undefined): { offered: boolean; cwd?: string } {
-  if (s.kind === 'archive') return { offered: false };
+  if (s.kind === 'archive' || s.kind === 'agent') return { offered: false };
   const cwd = s.kind === 'folder' ? s.key.slice(4)
     : s.chats.find((c) => c.cwd)?.cwd
       ?? projects?.find((p) => p.name === s.title)?.path;
@@ -219,11 +241,11 @@ export function personCounts(chats: Chat[], names: string[]): Record<string, num
 
 /** One computer's list as it is drawn: that person's chats, searched, read
  *  into sections and put in the order somebody arranged them. */
-export function hostSections({ chats, groups, hostKey, query, who, names, saved, now }: {
+export function hostSections({ chats, groups, hostKey, query, who, names, saved, now, agents }: {
   chats: Chat[]; groups: Group[]; hostKey: string; query: string;
-  who: string | null; names: string[]; saved: string[]; now: number;
+  who: string | null; names: string[]; saved: string[]; now: number; agents?: AgentNames;
 }): Section[] {
   const q = needle(query);
   const mine = who ? chats.filter((c) => ownerOf(c, names) === who) : chats;
-  return arrange(sections(mine.filter((c) => matches(c, q)), groups, hostKey, !!q, now), saved);
+  return arrange(sections(mine.filter((c) => matches(c, q)), groups, hostKey, !!q, now, agents), saved);
 }

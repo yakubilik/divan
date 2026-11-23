@@ -2861,6 +2861,7 @@ class Server:
                 if (ev["data"] or {}).get("client_id") == client_id:
                     log.info("chat.send %s: %s already in the timeline, not run again", chat_id, client_id)
                     return {"accepted": True, "queued": bool(ev["data"].get("queued")), "client_id": client_id}
+        await self._route_first(chat_id, text)
         s = self.sessions.get(chat_id)
         # Restarting: taken, written down, and run once the restart is over. It
         # used to be refused, and a restart that waited ten minutes on a busy
@@ -2896,6 +2897,37 @@ class Server:
         ack = {"accepted": True, "queued": queued, "client_id": client_id}
         answer.set_result(ack)
         return dict(ack)
+
+    #: The agents a chat's first message may be handed over from: none, or
+    #: the general one the phone opens chats with.
+    ROUTE_FROM = {None, "", "hermes"}
+
+    async def _route_first(self, chat_id: str, text: str) -> None:
+        """Hand a new chat to the agent its first message is about.
+
+        A chat opened with the general agent (or none) whose first line is,
+        say, about a run or sleep goes to the health coach before anything
+        runs: the agent's prompt is read when the tool starts, which is this
+        send. Which agent takes what is the agent's own `route:` pattern
+        (agents.route), not a list kept here. A chat that already has a
+        message keeps the agent it was talking with."""
+        chat = self.db.get_chat(chat_id)
+        if chat is None or chat.get("provider") != "claude" or self.cfg.demo:
+            return
+        if (chat.get("agent_id") or "").split(":", 1)[-1] not in self.ROUTE_FROM:
+            return
+        if self.db.tail_events(chat_id, ("message.user",), limit=1):
+            return
+        home = self._account(chat.get("account_id"), chat["provider"]).home
+        to = await asyncio.to_thread(agents.route, text, home, chat.get("cwd"))
+        if not to or to["id"] == chat.get("agent_id"):
+            return
+        log.info("chat %s routed to agent %s by its first message", chat_id, to["name"])
+        chat = self.db.update_chat(chat_id, agent_id=to["id"])
+        if s := self.sessions.peek(chat_id):
+            await s.reconfigure()
+        await self.broadcast({"seq": None, "chat_id": chat_id, "event": "chat.updated",
+                              "data": chat, "ts": time.time()})
 
     #: Where the messages taken during a restart wait, on disk: the queue is
     #: memory, and the process holding it is the one about to stop.

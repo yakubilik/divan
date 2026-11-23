@@ -10,7 +10,7 @@ import { LimitsRing } from './LimitsRing';
 import { contextUse, type ContextUse } from '../lib/machine';
 import { bareTitle, shortPath } from '../lib/format';
 import type { Field } from './FieldSheet';
-import type { Chat, Group, LimitWindow } from '../lib/protocol';
+import type { AgentMark, Chat, Group, LimitWindow } from '../lib/protocol';
 import type { ChatLog } from '../lib/timeline';
 import { useFleet } from '../lib/fleet';
 
@@ -139,9 +139,12 @@ function ProjectTitle({ name, onDashboard }: { name: string; onDashboard: () => 
   );
 }
 
-function Header({ chat, groupName, project, onDashboard, count, accountLabel, accountLimits, context, now,
+function Header({ chat, agent, groupName, project, onDashboard, count, accountLabel, accountLimits, context, now,
                  onEdit, onRename, onMenu, onDetails, detailsOpen, onCloseView }: {
   chat: Chat; groupName: string | null; count: number; accountLabel: string | null;
+  /** Which agent is answering: the first thing asked of a chat that could be
+   *  Hermes or the coach (23 Nov 2026). Null for a plain chat. */
+  agent?: AgentMark | null;
   /** The product the chat is filed under, and the way to its page. */
   project?: ChatProject | null;
   onDashboard?: (key: string) => void;
@@ -189,6 +192,12 @@ function Header({ chat, groupName, project, onDashboard, count, accountLabel, ac
       </div>
       {centred && <ProjectTitle name={project.name} onDashboard={() => onDashboard(project.key)} />}
       <div className="dv-chatchips" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        {agent && (
+          <Chip title="Agent answering this chat" tone="accent">
+            <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>{agent.glyph}</span>
+            <span style={{ whiteSpace: 'nowrap' }}>{agent.label}</span>
+          </Chip>
+        )}
         {/* Which sign-in is being spent, and the way to another one: this is
             where a person looks when a plan's limit has run out mid-chat. */}
         <Chip onClick={() => onEdit('account_id')} title="Account running this chat" shrink>
@@ -306,6 +315,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   onUpload: (file: File) => Promise<any>;
 }) {
   const people = useFleet((f) => (hostKey ? f.hosts[hostKey]?.people?.names : undefined));
+  const agent = useFleet((f) => (hostKey && chat?.agent_id ? f.hosts[hostKey]?.agentMarks?.[chat.agent_id] ?? null : null));
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const [menu, setMenu] = useState(false);
@@ -348,7 +358,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Header
-          chat={chat} groupName={groupName} project={project} onDashboard={onDashboard} count={msgCount} accountLabel={accountLabel}
+          chat={chat} agent={agent} groupName={groupName} project={project} onDashboard={onDashboard} count={msgCount} accountLabel={accountLabel}
           accountLimits={accountLimits} now={now} onRename={(title) => onUpdate({ title })}
           context={contextUse(log.items.filter((i) => i.kind === 'turn') as any[], liveContext)}
           onEdit={onEdit} onMenu={() => { setDetails(false); setMenu(true); }}

@@ -138,6 +138,7 @@ def _one(path: Path, scope: str) -> dict | None:
         "color": _hex(h.get("color")) or COLORS[seed % len(COLORS)],
         "glyph": h.get("glyph") or GLYPHS[seed % len(GLYPHS)],
         "model": h.get("model") or None,
+        "route": h.get("route") or None,
         "scope": scope,
         "path": str(path),
     }
@@ -165,6 +166,24 @@ def listing(account_home: str | None = None, cwd: str | None = None) -> list[dic
     b = builtin(account_home)
     b["installed"] = True
     return [{k: v for k, v in b.items() if k != "prompt"}] + out
+
+
+def route(text: str, account_home: str | None = None, cwd: str | None = None) -> dict | None:
+    """The agent a chat's first message is about, by the `route:` pattern in
+    its header, or None. A pattern is a regular expression matched against the
+    message in lower case; one that does not compile is skipped, not fatal.
+    The first agent in the listing whose pattern matches wins."""
+    low = str(text or "").replace("İ", "i").replace("I", "ı").lower()
+    for a in listing(account_home, cwd):
+        pat = a.get("route")
+        if not pat:
+            continue
+        try:
+            if re.search(pat, low):
+                return a
+        except re.error:
+            log.warning("agent %s has a route that is not a pattern: %r", a["name"], pat)
+    return None
 
 
 FAMILY_MIN = 3

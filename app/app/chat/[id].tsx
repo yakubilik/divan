@@ -91,6 +91,7 @@ export function Conversation({ id }: { id: string }) {
   const T = useT();
   const c = useColors();
   const chat = useStore((s) => s.chats[id!]);
+  const agentMarks = useStore((s) => s.agentMarks);
   const events = useStore((s) => s.events[id!]);
   const live = useStore((s) => s.live[id!]);
   const thinking = useStore((s) => s.thinking[id!]);
@@ -582,6 +583,7 @@ export function Conversation({ id }: { id: string }) {
     }
   }, [id, respond, T, accounts, limits, turnStart, progress]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const agentMark = chat?.agent_id ? agentMarks?.[chat.agent_id] ?? null : null;
   const meta = !online ? (conn === 'connecting' ? T('connecting') : T('offline')) : chat?.perm_mode;
   const metaColor = !online ? c.warn : chat?.perm_mode === 'bypass' ? c.accentText : c.muted;
   const composerBottom = kbVisible ? 8 : Math.max(insets.bottom - 4, 10);
@@ -605,9 +607,18 @@ export function Conversation({ id }: { id: string }) {
             // State and computer first, because both are short and neither has
             // anywhere else to be read. The path gives way when the line runs
             // out, and gives way at the head: a path is identified by its tail.
-            <Text mono numberOfLines={1} ellipsizeMode="head" style={{ fontSize: 11, color: metaColor, maxWidth: '100%' }}>
-              {meta} · {hostName} · {tailCwd(chat.cwd)}
-            </Text>
+            // The agent leads and never gives way: which one is answering —
+            // Hermes or the coach — is the first thing asked of a chat (23 Nov 2026).
+            <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: '100%', gap: 4 }}>
+              {!!agentMark && (
+                <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '600', color: c.text2, flexShrink: 0 }}>
+                  {agentMark.glyph} {agentMark.label} ·
+                </Text>
+              )}
+              <Text mono numberOfLines={1} ellipsizeMode="head" style={{ fontSize: 11, color: metaColor, flexShrink: 1 }}>
+                {meta} · {hostName} · {tailCwd(chat.cwd)}
+              </Text>
+            </View>
           )}
         </View>
         <View style={{ flexDirection: 'row' }}>
