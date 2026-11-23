@@ -122,7 +122,10 @@ function host(tag, kind) {
 
 const Animated = {
   View: host('div', 'Animated.View'),
-  Value: class { constructor(v) { this._v = v; } setValue() {} interpolate() { return this; } },
+  Text: host('span', 'Animated.Text'),
+  Value: class { constructor(v) { this._v = v; } setValue() {} stopAnimation() {} interpolate() { return this; } },
+  add: (a) => a,
+  modulo: (a) => a,
   timing: () => ({ start: (cb) => cb && cb() }),
   spring: () => ({ start: (cb) => cb && cb() }),
   parallel: () => ({ start: (cb) => cb && cb() }),

@@ -19,6 +19,7 @@ import { Icon, SmallButton, Spinner, Text, TextInput } from '../../src/component
 import { alert, measure, openMenu, prompt, replaceMenu, type MenuItem } from '../../src/components/overlay';
 import { Sheet, useSheet } from '../../src/components/sheet';
 import { GalleryProvider } from '../../src/components/media';
+import { ModelPill, effortFor } from '../../src/components/model-pill';
 import { isPhoto } from '../../src/media-size';
 import { tailCwd, tilde } from '../../src/components/pickers';
 import { ApprovalCard, AssistantText, CardLink, ConnectionBanner, FiledRule, SwitchNote, ThinkingRow, ToolCard, ToolGroup, TranscriptSkeleton, TurnFooter, UserBubble, WorkingRow } from '../../src/components/chat';
@@ -443,6 +444,13 @@ export function Conversation({ id }: { id: string }) {
   }
 
   const openModelSheet = () => go(() => router.push({ pathname: '/model-sheet', params: { id } }));
+  // A model picked from the pill: the effort carried over the way the sheet
+  // carries it, and saved at once — the pill is the quick way, the sheet the full one.
+  const pickModel = (model: string) => {
+    if (!chat) return;
+    const effort = effortFor(catalog?.[chat.provider], model, chat.effort);
+    updateChat(chat.id, { model, effort } as any).catch((e) => alert(T('couldNotSave'), e.message));
+  };
 
   // ── chat menu ──────────────────────────────────────────────────────────
   const err = (e: any) => alert(T('error'), e?.message ?? String(e));
@@ -554,6 +562,14 @@ export function Conversation({ id }: { id: string }) {
                                       out={item.data.out} onOut={item.data.client_id ? () => onOutboxTap(item.data.client_id, item.data.error) : undefined} />;
       case 'assistant':
         if (item.data.thinking) return <ThinkingRow text={item.data.thinking.trim().slice(-240)} />;
+        if (item.key === 'live' && item.data.live) {
+          return (
+            <View style={{ gap: 10 }}>
+              <WorkingRow phase={T('wsWriting')} since={turnStart ?? Date.now()} tokens={progress?.output_tokens} writing />
+              <AssistantText text={item.data.text} streaming attachments={item.data.attachments} chatId={id} sentAt={item.ts} />
+            </View>
+          );
+        }
         return <AssistantText text={item.data.text} streaming={item.data.live} attachments={item.data.attachments} chatId={id} sentAt={item.ts} />;
       case 'tool': return (
         <View style={{ gap: 8 }}>
@@ -757,11 +773,8 @@ export function Conversation({ id }: { id: string }) {
               </Pressable>
               {/* The model sits where it is picked, one tap from the message
                   being written with it. */}
-              <Pressable onPress={openModelSheet} disabled={!online}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10, opacity: online ? 1 : 0.45 }}>
-                <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: c.text2 }}>{[modelLabel || '…', effortLabel].filter(Boolean).join(' · ')}</Text>
-                <Icon name="expand_more" size={14} color={c.text2} />
-              </Pressable>
+              <ModelPill label={[modelLabel || '…', effortLabel].filter(Boolean).join(' · ')} disabled={!online} onOpenSheet={openModelSheet}
+                models={chat ? catalog?.[chat.provider]?.models : undefined} current={chat?.model} onPick={pickModel} />
               <View style={{ flex: 1 }} />
               {/* A running turn is not a locked door. Stop is always there, and
                   anything typed next goes in the queue for the agent to pick up
