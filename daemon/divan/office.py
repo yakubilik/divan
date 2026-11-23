@@ -136,7 +136,7 @@ class OfficeTap:
             first = await asyncio.wait_for(reader.readline(), 5)
             if first != SUBSCRIBED:
                 return False
-            self.mode = "subscribed"
+            self._became("subscribed")
             while True:
                 raw = await reader.readline()
                 if not raw:
@@ -186,7 +186,7 @@ class OfficeTap:
         os.chmod(self.path, 0o600)
         self._lock_fd = fd
         self._since = time.time()
-        self.mode = "owner"
+        self._became("owner")
         async with self._server:
             await self._server.serve_forever()
         return True
@@ -227,6 +227,13 @@ class OfficeTap:
         finally:
             if writer not in self.relays:
                 writer.close()
+
+    def _became(self, mode: str) -> None:
+        # Said once per change: which way the lines come in is the first thing
+        # to know when the office stays empty.
+        if mode != self.mode:
+            log.warning("office: %s on %s", mode, self.path)
+        self.mode = mode
 
     def status(self) -> dict:
         self._prune()

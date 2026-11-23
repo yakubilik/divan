@@ -366,7 +366,6 @@ class Server:
         # lines that fill it come from /office/stream, behind the token.
         self.office = OfficeTap()
         self._office_task: asyncio.Task | None = None
-        self.app.router.on_startup.append(self._start_office)
         self.app.get("/office/stream")(self.office_stream)
         self.app.get("/office/status")(self.office_status)
         self._mount_office()
@@ -1693,6 +1692,7 @@ class Server:
         self._device(authorization, cf_connecting_ip, token)
         if not self.cfg.office:
             raise HTTPException(status_code=404, detail="the office is off on this computer (office = true in config.toml)")
+        await self._start_office()
         q = self.office.watch()
         backlog = self.office.backlog()
 
@@ -4126,8 +4126,12 @@ class Server:
         }
 
     async def reaper(self) -> None:
+        # Started here because it starts with the daemon: Starlette 1.x has no
+        # on_startup, and the office has to be listening before anybody looks.
+        await self._start_office()
         while True:
             await asyncio.sleep(60)
+            await self._start_office()
             try:
                 await self.sessions.reap_idle()
             except Exception as exc:

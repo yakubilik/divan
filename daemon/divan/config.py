@@ -484,6 +484,9 @@ class Config:
         if on != self.terminal:
             self.terminal = on
             log.warning("terminal %s in config.toml", "ENABLED" if on else "disabled")
+        # The office's switch, likewise set by hand (office.py).
+        if isinstance(raw.get("office"), bool):
+            self.office = raw["office"]
         return True
 
     def person_names(self) -> list[str]:
