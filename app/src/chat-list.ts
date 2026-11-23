@@ -26,7 +26,7 @@ export interface ListHost {
 }
 
 /** How long a chat stays in the list after it last moved. */
-export const CURRENT_S = 24 * 3600;
+export const CURRENT_S = 6 * 3600;
 
 /** Whether a chat is still part of today. One that is pinned was put there to
  *  stay, and one that is working or waiting on an answer is the opposite of

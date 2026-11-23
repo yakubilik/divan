@@ -89,7 +89,7 @@ export default function ChatPlace() {
   const viewPill = useRef<View>(null);
   const personCard = useRef<View>(null);
 
-  // Which chats are a day old is a question about the clock, and a list left
+  // Which chats are six hours quiet is a question about the clock, and a list left
   // open overnight has to notice the answer changing.
   const [now, setNow] = useState(() => Date.now() / 1000);
   useEffect(() => {

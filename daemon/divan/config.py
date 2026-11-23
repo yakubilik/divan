@@ -203,7 +203,7 @@ class Config:
     # A chat nobody has touched for this many hours is archived by itself
     # (see Server.archive_quiet): never deleted, never while it is running or
     # waiting on an answer, and any new message brings it back. 0 is off.
-    auto_archive_h: float = 24
+    auto_archive_h: float = 6
     # Whether a bypass chat still puts the destructive list to the phone. Off
     # is bypass meaning bypass: nothing at all asks.
     bypass_asks: bool = True
