@@ -321,7 +321,8 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
   const [menu, setMenu] = useState(false);
   const [details, setDetails] = useState(false);
 
-  useEffect(() => {
+  const column = useRef<HTMLDivElement>(null);
+  const follow = () => {
     const el = scroller.current;
     if (!el || !stick.current) return;
     // Following the tail must not fight someone reading. A scroll under a
@@ -331,7 +332,19 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && sel.anchorNode && el.contains(sel.anchorNode)) return;
     el.scrollTop = el.scrollHeight;
-  }, [log.items]);
+  };
+  useEffect(follow, [log.items]);
+  // Not every row comes with an item: the "Thinking…" row appears when the
+  // chat turns busy, a moment after the message that started it, and a picture
+  // gets its height when it loads. Followed by the items alone, those stayed
+  // under the composer until the chat was scrolled (23 Nov 2026).
+  useEffect(() => {
+    const el = column.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(follow);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [chat?.id]);
 
   if (!chat) {
     return (
@@ -395,7 +408,7 @@ export function ChatView({ chat, hostKey, log, groupName, groups, accountLabel, 
         {log.error && (
           <div style={{ fontSize: 13, color: C.danger, padding: 12 }}>{log.error}</div>
         )}
-        <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div ref={column} style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {!!filedUnder && (
             <div className="dv-filed" data-filed-under={filedUnder}>
               <span className="dv-meta">filed under {filedUnder}</span>
