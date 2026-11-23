@@ -369,6 +369,7 @@ class Server:
         self._office_task: asyncio.Task | None = None
         self.app.get("/office/stream")(self.office_stream)
         self.app.get("/office/poll")(self.office_poll)
+        self.app.post("/office/report")(self.office_report)
         self.app.get("/office/status")(self.office_status)
         self._mount_office()
         # Every other registered computer, on this page's own origin: a socket
@@ -1680,7 +1681,17 @@ class Server:
         if not (page / "index.html").exists():
             return
         from fastapi.staticfiles import StaticFiles
-        self.app.mount("/office", StaticFiles(directory=str(page), html=True), name="office")
+
+        class Page(StaticFiles):
+            """The same files, never kept: a browser that guesses how long they
+            stay fresh keeps last week's page beside this week's daemon."""
+
+            def file_response(self, *a, **kw):
+                r = super().file_response(*a, **kw)
+                r.headers["cache-control"] = "no-cache"
+                return r
+
+        self.app.mount("/office", Page(directory=str(page), html=True), name="office")
 
     async def office_status(self, authorization: str = Header(default=""), token: str = Query(default=""),
                             cf_connecting_ip: str | None = Header(default=None)):
@@ -1695,7 +1706,21 @@ class Server:
         if not self.cfg.office:
             raise HTTPException(status_code=404, detail="the office is off on this computer (office = true in config.toml)")
         await self._start_office()
+        if after <= 0:
+            # Which way a page came in, once per page: the first thing to know
+            # when somebody says the office stays empty.
+            log.warning("office: page opened (%s)", "tunnel" if cf_connecting_ip else "direct")
         return JSONResponse(self.office_feed.poll(after), headers={"Cache-Control": "no-store"})
+
+    async def office_report(self, request: Request, authorization: str = Header(default=""),
+                            token: str = Query(default=""),
+                            cf_connecting_ip: str | None = Header(default=None)):
+        """A page that could not start says why, so it is in the log, not only in
+        a browser console nobody here can see."""
+        self._device(authorization, cf_connecting_ip, token)
+        body = (await request.body())[:2000].decode("utf-8", "replace")
+        log.warning("office: page says %s", body)
+        return {"ok": True}
 
     async def office_stream(self, request: Request, authorization: str = Header(default=""),
                             token: str = Query(default=""),

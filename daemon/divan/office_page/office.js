@@ -3,9 +3,18 @@
 // (office.py). The pixels are the engine's; the names over the desks are drawn
 // here, the chat's title rather than pixtuoid's `cc·<folder>`. A click on a
 // character opens its chat in whatever holds this page.
-import init, { Office } from './pixtuoid_web.js';
+import init, { Office } from './pixtuoid_web.js?v=1795470334';
 
 const roomsEl = document.getElementById('rooms');
+// Whatever stops the page from starting is told to the daemon's log.
+function report(what) {
+  try {
+    fetch('report?token=' + encodeURIComponent(new URLSearchParams(location.search).get('token') || ''),
+      { method: 'POST', body: String(what).slice(0, 1500) });
+  } catch (e) { /* nothing more to do */ }
+}
+addEventListener('error', (e) => report('error: ' + (e.message || e) + ' @' + (e.filename || '') + ':' + (e.lineno || '')));
+addEventListener('unhandledrejection', (e) => report('rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
 const note = document.getElementById('note');
 const token = new URLSearchParams(location.search).get('token') || '';
 const FRAME_MS = 80;           // ~12 frames a second is plenty for a pixel office
@@ -190,7 +199,7 @@ async function poll() {
   try {
     const res = await fetch(`poll?after=${seq}&token=${encodeURIComponent(token)}`, { cache: 'no-store' });
     if (res.status === 404) { note.textContent = 'The office is off on this computer.'; return; }
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok) { if (failures === 2) report('poll ' + res.status); throw new Error(String(res.status)); }
     const d = await res.json();
     if (d.reset) reset(d);
     for (const it of d.items || []) {
@@ -210,6 +219,6 @@ async function poll() {
   setTimeout(poll, 1500);
 }
 
-wasm = await init();
+try { wasm = await init(); } catch (e) { report('wasm: ' + (e && (e.stack || e.message) || e)); throw e; }
 requestAnimationFrame(loop);
 poll();

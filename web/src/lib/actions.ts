@@ -337,7 +337,9 @@ export function fileUrl(key: string, path: string, download = false): string {
 export function officeUrl(key: string): string {
   const { cfg } = slot(key);
   if (refusedFor(cfg.token)) return '';
-  return `${base(cfg)}/office/?token=${encodeURIComponent(cfg.token)}`;
+  // `v` names this build of the page, so a browser that kept an older one
+  // asks again instead of showing it.
+  return `${base(cfg)}/office/?v=1795470334&token=${encodeURIComponent(cfg.token)}`;
 }
 
 /** One frame of a computer's screen, or '' once it has refused this token.
