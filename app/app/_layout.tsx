@@ -249,8 +249,6 @@ export default function RootLayout() {
         <Stack.Screen name="media-fixtures" />
         {/* Answers with ```mermaid diagrams in them, for the simulator. */}
         <Stack.Screen name="diagram-fixtures" />
-        {/* Every Rare UI component, as the computer's panel serves them. */}
-        <Stack.Screen name="rareui" />
         {/* The chat parts the Rare UI pass touched, for the simulator. */}
         <Stack.Screen name="rareui-fixtures" />
       </Stack>

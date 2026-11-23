@@ -3,7 +3,6 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
 
 function head(): string | null {
   try {
@@ -54,27 +53,13 @@ const outDir = '../daemon/divan/webui';
 // /p/assets/index-….js, got the daemon's index.html back with a 404, and drew a
 // black screen. Absolute is already host-agnostic — it is a path, not an origin
 // — so it works at 127.0.0.1:8790 and behind a Tailscale name alike.
-// `/rareui.html` is a second page: every Rare UI component, running, from the
-// repository's own files in src/rareui/ (see the note there). Tailwind and the
-// Next.js stand-ins below serve that page only — the panel imports none of it.
-const rareui = resolve(__dirname, 'src/rareui');
 export default defineConfig({
-  plugins: [react(), tailwindcss(), stampBuild()],
+  plugins: [react(), stampBuild()],
   base: '/',
-  resolve: {
-    alias: [
-      { find: /^@\//, replacement: `${rareui}/` },
-      { find: /^next\/(link|navigation)$/, replacement: `${rareui}/shims/next.tsx` },
-      { find: /^next-themes$/, replacement: `${rareui}/shims/next.tsx` },
-    ],
-  },
   build: {
     outDir,
     emptyOutDir: true,
     target: 'es2022',
-    rollupOptions: {
-      input: { main: resolve(__dirname, 'index.html'), rareui: resolve(__dirname, 'rareui.html') },
-    },
   },
   server: {
     port: 5177,

@@ -722,7 +722,6 @@ const en = {
   sgCheckout: 'This checkout', sgAuto: 'Follows main by itself',
   sgBlocked: 'Cannot update', sgWaiting: 'Waiting to be pulled',
   // the design gallery, which only a development build can reach
-  rareUi: 'Rare UI components', rareUiNote: 'every one, live · rareui.com',
   devSection: 'Development', divanParts: 'Divan parts', divanPartsNote: 'design system',
   // a link shared to Divan from another app (src/share.ts)
   shareNoLink: 'No link to open', shareNoLinkBody: 'What was shared has no web link in it, so no chat was opened.',
@@ -758,7 +757,6 @@ export const tr: Partial<Record<Key, string>> = {
   stDefaultFolder: 'Varsayılan klasör', stDefaultFolderNote: 'yeni sohbetlerin açıldığı yer, burada ve web panelde',
   stFirstRoot: 'İlk kök',
   outSending: 'Gönderiliyor…', outFailed: 'Gönderilemedi · Tekrar denemek için dokun',
-  rareUi: 'Rare UI bileşenleri', rareUiNote: 'hepsi canlı · rareui.com',
   wsStarting: 'başlıyor', wsThinking: 'düşünüyor', wsWorking: 'çalışıyor', wsWriting: 'yazıyor', workedFor: '{t} çalıştı', modelMore: 'Tüm model ayarları', copied: 'Kopyalandı',
   copyCode: 'Kodu kopyala', secretCopied: 'Kopyalandı · 1 dk sonra silinir', secretExpired: 'süresi doldu', secretFailed: 'Kopyalanamadı', secretHint: 'Anahtarı göstermeden kopyalar', diagramFailed: 'Diyagram çizilemedi',
   outFailedTitle: 'Mesaj gönderilemedi', outRetry: 'Tekrar dene', outDiscard: 'Mesajı sil',
