@@ -195,7 +195,7 @@ def cmd_captcha(args: argparse.Namespace) -> None:
                         raise SystemExit(f"{d.get('code') or 'refused'}: {d.get('message')}")
                     return msg.get("data") or {}
         finally:
-            cfg.revoke(dev.id, remember=False)
+            cfg.drop_call_device(dev.id)
 
     print("captcha sent to the phone; waiting for it to be solved…", flush=True)
     out = asyncio.run(run())
@@ -421,7 +421,7 @@ async def _protocol(cfg: Config, typ: str, data: dict) -> dict:
                     raise SystemExit(f"{d.get('code') or 'refused'}: {d.get('message')}")
                 return msg.get("data") or {}
     finally:
-        cfg.revoke(dev.id, remember=False)
+        cfg.drop_call_device(dev.id)
 
 
 #: The flags, and the fields they are. Kept as a table because the mapping is
@@ -647,7 +647,7 @@ async def _demo_seed(cfg: Config, folder: Path) -> dict:
                                                 "project_id": project["id"]})
                 made["chat"] = 1
     finally:
-        cfg.revoke(dev.id, remember=False)
+        cfg.drop_call_device(dev.id)
     return made
 
 

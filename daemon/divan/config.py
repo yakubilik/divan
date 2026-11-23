@@ -517,6 +517,18 @@ class Config:
             return True
         return False
 
+    def drop_call_device(self, device_id: str) -> None:
+        """Remove the throwaway device a command minted for one call to the daemon.
+
+        From the file as it is now, not as this process read it: the call can
+        last minutes (a captcha waits for a person), and meanwhile the daemon
+        writes settings the phone changed. Saving the stale copy put them back
+        — the account pool switched on from the phone was off again on disk
+        after one `divan captcha` (23 Nov 2026).
+        """
+        type(self).load().revoke(device_id, remember=False)
+        self.devices.pop(device_id, None)
+
     # ── network ────────────────────────────────────────────────────────────
     def tunnel_allows(self, ip: str) -> bool:
         """Whether an address arriving through the tunnel is one of ours.
