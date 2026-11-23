@@ -289,6 +289,11 @@ class DivanOffice:
         # not shown twice
         self.sessions: dict[str, str] = {}
         self.watchers: set[asyncio.Queue] = set()
+        # What a polling page has not seen yet: (seq, item). Polling rather than
+        # only a stream, because a stream through the Cloudflare tunnel can sit
+        # buffered and leave the page empty.
+        self.seq = 1  # 0 is a page that has seen nothing
+        self.log: deque[tuple[int, tuple]] = deque(maxlen=3000)
         tap.on_line = self._tap_line
         self._loaded = False
 
@@ -440,7 +445,26 @@ class DivanOffice:
     def unwatch(self, q: asyncio.Queue) -> None:
         self.watchers.discard(q)
 
+    def poll(self, after: int) -> dict:
+        """Everything after `after`, or the whole office when the page is new
+        or has fallen further behind than the log keeps."""
+        oldest = self.log[0][0] if self.log else self.seq + 1
+        if after <= 0 or after < oldest - 1 or after > self.seq:
+            return {"seq": self.seq, "reset": True, "rooms": self.rooms(),
+                    "backlog": [[int(t * 1000), l, r] for t, l, r in self.backlog()]}
+        items = []
+        for n, item in self.log:
+            if n <= after:
+                continue
+            if item[0] == "rooms":
+                items.append(["rooms", item[1]])
+            else:
+                items.append(["line", int(item[1] * 1000), item[2], item[3]])
+        return {"seq": self.seq, "items": items}
+
     def _put(self, item) -> None:
+        self.seq += 1
+        self.log.append((self.seq, item))
         for q in list(self.watchers):
             try:
                 q.put_nowait(item)

@@ -160,39 +160,56 @@ addEventListener('touchmove', (e) => { if (pinch && e.touches.length === 2) setZ
 addEventListener('touchend', () => { pinch = null; }, { passive: true });
 function dist(e) { const [a, b] = e.touches; return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1; }
 
-function connect() {
-  const es = new EventSource('stream?token=' + encodeURIComponent(token));
-  es.addEventListener('rooms', (e) => {
-    const d = JSON.parse(e.data);
-    chats = d.chats || {};
-    roomOrder = d.rooms || [];
-    for (const name of roomOrder) if (name !== 'Terminal') room(name);
-    place();
-  });
-  es.addEventListener('backlog', (e) => {
-    if (kept) return; // a reconnect: the offices already hold what happened
-    kept = JSON.parse(e.data);
-    const first = kept.length ? kept[0][0] - 1 : Date.now();
-    const byRoom = new Map();
-    for (const [t, l, rn] of kept) { if (!byRoom.has(rn)) byRoom.set(rn, []); byRoom.get(rn).push([t, l]); }
-    for (const [rn, lines] of byRoom) {
-      const r = room(rn);
-      start(r, first);
-      for (const [t, l] of lines) land(r, t, l);
-    }
-    for (const r of rooms.values()) if (!r.started) start(r, Date.now());
-    note.textContent = rooms.size ? '' : 'Quiet for now: a chat walks in when it starts.';
-  });
-  es.onmessage = (e) => {
-    const [t, l, rn] = JSON.parse(e.data);
+// Polled, not streamed: a stream through the Cloudflare tunnel can sit in a
+// buffer and leave the page empty.
+let seq = 0, failures = 0;
+function setRooms(d) {
+  chats = d.chats || {};
+  roomOrder = d.rooms || [];
+  for (const name of roomOrder) if (name !== 'Terminal') room(name);
+  place();
+}
+function reset(d) {
+  setRooms(d.rooms);
+  // After the first time this is a page that fell behind: the offices already
+  // hold what happened, so only the rooms are taken.
+  if (kept) return;
+  kept = true;
+  const backlog = d.backlog || [];
+  const first = backlog.length ? backlog[0][0] - 1 : Date.now();
+  const byRoom = new Map();
+  for (const [t, l, rn] of backlog) { if (!byRoom.has(rn)) byRoom.set(rn, []); byRoom.get(rn).push([t, l]); }
+  for (const [rn, lines] of byRoom) {
     const r = room(rn);
-    if (!r.started) start(r, t - 1);
-    r.pending.push([t, l]);
-    note.textContent = '';
-  };
-  es.onerror = () => { if (es.readyState === EventSource.CLOSED) { note.textContent = 'Lost the computer, trying again…'; setTimeout(connect, 3000); } };
+    start(r, first);
+    for (const [t, l] of lines) land(r, t, l);
+  }
+  for (const r of rooms.values()) if (!r.started) start(r, Date.now());
+}
+async function poll() {
+  try {
+    const res = await fetch(`poll?after=${seq}&token=${encodeURIComponent(token)}`, { cache: 'no-store' });
+    if (res.status === 404) { note.textContent = 'The office is off on this computer.'; return; }
+    if (!res.ok) throw new Error(String(res.status));
+    const d = await res.json();
+    if (d.reset) reset(d);
+    for (const it of d.items || []) {
+      if (it[0] === 'rooms') { setRooms(it[1]); continue; }
+      const [, t, l, rn] = it;
+      const r = room(rn);
+      if (!r.started) start(r, t - 1);
+      r.pending.push([t, l]);
+    }
+    seq = d.seq;
+    failures = 0;
+    note.textContent = rooms.size ? '' : 'Quiet for now: a chat walks in when it starts.';
+  } catch (e) {
+    failures++;
+    if (failures > 2) note.textContent = 'Lost the computer, trying again…';
+  }
+  setTimeout(poll, 1500);
 }
 
 wasm = await init();
 requestAnimationFrame(loop);
-connect();
+poll();

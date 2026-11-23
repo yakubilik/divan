@@ -115,3 +115,21 @@ def test_divan_chats_become_hook_lines_in_their_rooms():
             ("line", "PreToolUse", "Bash", "abcdef123456", "Babysee")
 
     asyncio.run(run())
+
+
+def test_poll_gives_the_whole_office_first_then_only_what_is_new():
+    from divan.office import DivanOffice
+
+    class Tap:
+        on_line = None
+        def backlog(self):
+            return []
+
+    feed = DivanOffice(Tap(), lambda: [{"id": "abcdef123456", "title": "T", "project": "P", "status": "idle",
+                                         "archived": 0, "created_at": 1.0, "updated_at": 2.0}])
+    first = feed.poll(0)
+    assert first["reset"] and len(first["backlog"]) == 2
+    feed.observe({"event": "turn.started", "chat_id": "abcdef123456", "data": {}})
+    nxt = feed.poll(first["seq"])
+    assert [i[0] for i in nxt["items"]] == ["line"] and nxt["seq"] == first["seq"] + 1
+    assert feed.poll(nxt["seq"])["items"] == []

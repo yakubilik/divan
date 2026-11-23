@@ -1,16 +1,18 @@
 import { useEffect } from 'react';
 import { officeUrl } from '../lib/actions';
-import { useFleet } from '../lib/fleet';
+import { directoryKey, useFleet } from '../lib/fleet';
 import { EmptyState } from '../ui/divan';
 
 /** The office: every chat on the home computer as a pixel character at a
  *  desk, a room for each product. The page is the daemon's own
  *  (daemon/divan/office_page: pixtuoid's web build fed what office.py makes
- *  of the chats), so this is only a frame over it, on the first computer of
- *  the fleet. A click on a character comes back as a message naming its chat,
+ *  of the chats), so this is only a frame over it, on the computer that
+ *  served the panel. A click on a character comes back as a message naming its chat,
  *  which `onOpen` opens. */
 export function OfficeFrame({ onOpen }: { onOpen: (hostKey: string, chatId: string) => void }) {
-  const key = useFleet((s) => s.order[0] ?? null);
+  // The computer that served this page, which is the one whose chats these are;
+  // a peer's office would be another computer's.
+  const key = useFleet((s) => directoryKey(s));
   const src = key ? officeUrl(key) : '';
   useEffect(() => {
     if (!key || !src) return;

@@ -368,6 +368,7 @@ class Server:
         self.office_feed = DivanOffice(self.office, lambda: self.db.list_chats(include_archived=True))
         self._office_task: asyncio.Task | None = None
         self.app.get("/office/stream")(self.office_stream)
+        self.app.get("/office/poll")(self.office_poll)
         self.app.get("/office/status")(self.office_status)
         self._mount_office()
         # Every other registered computer, on this page's own origin: a socket
@@ -1685,6 +1686,16 @@ class Server:
                             cf_connecting_ip: str | None = Header(default=None)):
         self._device(authorization, cf_connecting_ip, token)
         return self.office.status()
+
+    async def office_poll(self, after: int = Query(default=0), authorization: str = Header(default=""),
+                          token: str = Query(default=""),
+                          cf_connecting_ip: str | None = Header(default=None)):
+        """What the office page has not seen since `after` (office.DivanOffice.poll)."""
+        self._device(authorization, cf_connecting_ip, token)
+        if not self.cfg.office:
+            raise HTTPException(status_code=404, detail="the office is off on this computer (office = true in config.toml)")
+        await self._start_office()
+        return JSONResponse(self.office_feed.poll(after), headers={"Cache-Control": "no-store"})
 
     async def office_stream(self, request: Request, authorization: str = Header(default=""),
                             token: str = Query(default=""),
