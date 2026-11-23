@@ -110,6 +110,15 @@ export function onAnyEvent(tap: Tap): () => void {
   return () => { taps.delete(tap); };
 }
 
+/** Anything that wants to know when a computer's socket comes up or goes.
+ *  timeline.ts uses it to catch an open chat up on what it missed meanwhile. */
+type StatusTap = (hostKey: string, status: ConnStatus) => void;
+const statusTaps = new Set<StatusTap>();
+export function onAnyStatus(tap: StatusTap): () => void {
+  statusTaps.add(tap);
+  return () => { statusTaps.delete(tap); };
+}
+
 interface FleetState {
   hosts: Record<string, HostSlot>;
   order: string[];
@@ -417,6 +426,7 @@ function attach(cfg: HostConfig, set: Setter, get: () => FleetState) {
       ...slot, status, refusal: c.refusal,
       lastOnline: status === 'online' ? Date.now() : slot.lastOnline,
     }));
+    for (const tap of statusTaps) tap(key, status);
     if (status === 'online') {
       c.call('hello', { device_name: cfg.name || 'Panel' })
         .then((r: any) => patch(set, key, (slot) => ({

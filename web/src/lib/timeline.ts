@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { RacEvent } from './protocol';
-import { clientFor, onAnyEvent } from './fleet';
+import { clientFor, onAnyEvent, onAnyStatus } from './fleet';
+import type { ConnStatus } from './ws';
 
 /** One thing drawn in a conversation. Built by folding the daemon's event log,
  *  which is the only description of a chat that exists: there is no message
@@ -186,6 +187,8 @@ interface LogState {
   open: (hostKey: string, chatId: string) => Promise<void>;
   feed: (hostKey: string, ev: RacEvent) => void;
   forget: (hostKey: string, chatId: string) => void;
+  /** A computer's socket came up or went; see the body. */
+  hostStatus: (hostKey: string, status: ConnStatus) => void;
 }
 
 export const useLogs = create<LogState>((set, get) => ({
@@ -201,7 +204,8 @@ export const useLogs = create<LogState>((set, get) => ({
     const run = (async () => {
       const have = get().logs[k];
       set((s) => ({ logs: { ...s.logs, [k]: { ...(have ?? EMPTY), loading: true, error: null } } }));
-      held.set(k, []);
+      // A reconnect may already be holding events (see `hostStatus`): keep them.
+      if (!held.has(k)) held.set(k, []);
       try {
         // Where the chat is picked up. A cold open is answered from the tail
         // (the daemon's doing); a reconnect asks forward from the last seq
@@ -279,8 +283,28 @@ export const useLogs = create<LogState>((set, get) => ({
   forget: (hostKey, chatId) => set((s) => {
     const logs = { ...s.logs };
     delete logs[logKey(hostKey, chatId)];
+    held.delete(logKey(hostKey, chatId));
     return { logs };
   }),
+
+  // The socket went: what happens until it is back (a daemon restart ends a
+  // tool mid-turn and writes its result while nobody is listening) is only in
+  // the daemon's log. The new socket delivers live events the moment it is up,
+  // and folding one in moves `seq` past everything missed, so the result never
+  // arrived and its step said "running" for good (23 Nov 2026). From the
+  // moment the socket goes, an open chat's live events are held; once it is
+  // back, the chat asks forward from where it stood and folds them in after.
+  hostStatus: (hostKey, status) => {
+    const mine = Object.keys(get().logs).filter((k) => k.startsWith(`${hostKey}/`));
+    if (status !== 'online') {
+      for (const k of mine) if (!held.has(k)) held.set(k, []);
+      return;
+    }
+    for (const k of mine) {
+      if (inFlight.has(k)) continue;   // a load already in the air picks up the held events
+      void get().open(hostKey, k.slice(hostKey.length + 1));
+    }
+  },
 }));
 
 export function emptyLog(): ChatLog { return EMPTY; }
@@ -288,3 +312,4 @@ export function emptyLog(): ChatLog { return EMPTY; }
 /** Every open conversation follows its computer's socket for as long as the
  *  panel is running — switching screens must not lose a turn that is mid-flight. */
 onAnyEvent((hostKey, ev) => useLogs.getState().feed(hostKey, ev));
+onAnyStatus((hostKey, status) => useLogs.getState().hostStatus(hostKey, status));
