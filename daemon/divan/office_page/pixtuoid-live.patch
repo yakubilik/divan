@@ -1,0 +1,49 @@
+diff --git a/crates/pixtuoid-web/src/lib.rs b/crates/pixtuoid-web/src/lib.rs
+index 28af54d0..06a7fbe1 100644
+--- a/crates/pixtuoid-web/src/lib.rs
++++ b/crates/pixtuoid-web/src/lib.rs
+@@ -192,6 +192,8 @@ enum Show {
+     /// The How it works page's: nothing, only the hook lines
+     /// [`Office::send_hook`] lands.
+     Journey,
++    /// A live office (Divan): only the hook lines sent, words drawn by the host.
++    Live,
+ }
+ 
+ impl Show {
+@@ -201,6 +203,7 @@ impl Show {
+         match self {
+             Show::Hero(_) => WorldText::Host,
+             Show::Journey => WorldText::Baked,
++            Show::Live => WorldText::Host,
+         }
+     }
+ }
+@@ -243,6 +246,18 @@ impl Office {
+             .map_err(|e| JsError::new(&format!("{e:#}")))
+     }
+ 
++    /// A live office: nothing scripted, only the hook lines
++    /// [`Office::send_hook`] lands, its words left to the host
++    /// ([`Office::overlay_json`]).
++    ///
++    /// # Errors
++    ///
++    /// If the bundled sprite pack fails to parse.
++    pub fn live(seed: u32) -> Result<Office, JsError> {
++        Self::on_screen(seed, page_clock(), Show::Live)
++            .map_err(|e| JsError::new(&format!("{e:#}")))
++    }
++
+     /// The recorded hook lines the How it works page sends, in order.
+     pub fn journey_lines() -> Vec<String> {
+         JOURNEY.lines().map(str::to_owned).collect()
+@@ -693,7 +708,7 @@ impl Office {
+                 .get_or_insert_with(|| Playhead::new(script::hero(), now))
+                 .advance(now, &mut self.reducer, &mut self.scene),
+             // The sweep a playhead's advance ends on, which walks an ended session out.
+-            Show::Journey => self.reducer.tick(&mut self.scene, now),
++            Show::Journey | Show::Live => self.reducer.tick(&mut self.scene, now),
+         }
+     }
+ 
