@@ -7,27 +7,47 @@
 <style>
   @font-face { font-family: 'Fusion Pixel 8px'; src: url(fusion-pixel-8px.woff2) format('woff2'); font-display: block; }
   html, body { margin: 0; min-height: 100%; background: #16151d; color: #d9d4ec; -webkit-user-select: none; user-select: none; }
-  body { font: 13px -apple-system, system-ui, sans-serif; }
-  #rooms { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px; align-items: flex-start; justify-content: center; }
-  .room { background: #1f1d29; border: 1px solid #2e2b3d; border-radius: 10px; overflow: hidden; }
-  .room h2 { margin: 0; padding: 8px 12px; font: 600 13px -apple-system, system-ui, sans-serif; color: #e8e3fa;
-             display: flex; justify-content: space-between; gap: 12px; }
-  .room h2 span { color: #8f89a8; font-weight: 400; }
-  .wrap { position: relative; cursor: pointer; }
-  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
-  .labels { position: absolute; inset: 0; pointer-events: none; font-family: 'Fusion Pixel 8px', ui-monospace, monospace; }
-  .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; font-size: 8px; padding: 2px 3px;
-        max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+  body { font: 13px -apple-system, system-ui, sans-serif; overflow: auto; }
+  #scroller { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 12px; box-sizing: border-box; }
+  #stage { position: relative; cursor: pointer; flex: none; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; border-radius: 6px; }
+  #labels, #zones { position: absolute; inset: 0; pointer-events: none; }
+  .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; padding: 2px 3px; overflow: hidden;
+        text-overflow: ellipsis; font-family: 'Fusion Pixel 8px', ui-monospace, monospace; }
+  .zone { position: absolute; left: 0; top: 0; white-space: nowrap; padding: 3px 8px; border: 2px solid; border-radius: 4px;
+          background: #16151dd9; font: 700 11px 'Fusion Pixel 8px', ui-monospace, monospace; letter-spacing: .5px; }
   #zoom { position: fixed; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: 6px; z-index: 5; }
   #zoom button { width: 36px; height: 36px; border-radius: 18px; border: 1px solid #3a3650; background: #262335ee;
                  color: #e8e3fa; font: 600 18px -apple-system, system-ui, sans-serif; cursor: pointer; }
-  #note { text-align: center; color: #8f89a8; padding: 30px; }
+  #note { position: fixed; left: 0; right: 0; bottom: 70px; text-align: center; color: #8f89a8; pointer-events: none; }
+  #bubble { position: fixed; right: 16px; top: 16px; width: min(380px, calc(100vw - 32px)); max-height: calc(100vh - 100px);
+            display: flex; flex-direction: column; background: #f7f3e8; color: #1d1b26; border: 3px solid #1d1b26;
+            border-radius: 14px; box-shadow: 4px 4px 0 #1d1b26; z-index: 6; font: 13px/1.4 -apple-system, system-ui, sans-serif; }
+  #bubble[hidden] { display: none; }
+  #bubble header { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 6px; }
+  #bubble .b-title { font-weight: 700; flex: 1; }
+  #bubble .b-state { font-size: 11px; color: #6b6680; }
+  #bubble .b-state[data-busy="1"] { color: #1f8a4c; }
+  #bubble header button { border: 0; background: none; font-size: 16px; cursor: pointer; color: #1d1b26; }
+  #bubble .b-log { overflow: auto; padding: 4px 12px; display: flex; flex-direction: column; gap: 6px; min-height: 60px; }
+  #bubble .b-you { align-self: flex-end; background: #1d1b26; color: #f7f3e8; padding: 6px 9px; border-radius: 10px; max-width: 85%; white-space: pre-wrap; }
+  #bubble .b-agent { background: #fff; border: 1px solid #d8d2c2; padding: 6px 9px; border-radius: 10px; max-width: 92%; white-space: pre-wrap; }
+  #bubble .b-tool { font: 11px ui-monospace, monospace; color: #6b6680; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #bubble footer { display: flex; gap: 6px; padding: 8px 10px 10px; border-top: 1px solid #d8d2c2; }
+  #bubble textarea { flex: 1; resize: none; height: 38px; border: 2px solid #1d1b26; border-radius: 8px; padding: 6px 8px; font: inherit; }
+  #bubble footer button { border: 2px solid #1d1b26; background: #ffcf4a; border-radius: 8px; font-weight: 700; cursor: pointer; padding: 0 10px; }
+  #bubble .b-open { background: #fff; }
 </style>
 </head>
 <body>
-<div id="rooms"></div>
+<div id="scroller"><div id="stage"><canvas id="office"></canvas><div id="zones"></div><div id="labels"></div></div></div>
 <div id="note"></div>
+<div id="bubble" hidden>
+  <header><div><div class="b-title"></div><div class="b-state"></div></div><span style="flex:1"></span><button class="b-close" aria-label="Close">✕</button></header>
+  <div class="b-log"></div>
+  <footer><textarea placeholder="Write to this chat…"></textarea><button class="b-send">Send</button><button class="b-open" title="Open the chat">↗</button></footer>
+</div>
 <div id="zoom"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button></div>
-<script type="module" src="office.js?v=1795470334"></script>
+<script type="module" src="office.js?v=1795470718"></script>
 </body>
 </html>

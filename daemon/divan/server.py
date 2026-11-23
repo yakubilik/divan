@@ -370,6 +370,8 @@ class Server:
         self.app.get("/office/stream")(self.office_stream)
         self.app.get("/office/poll")(self.office_poll)
         self.app.post("/office/report")(self.office_report)
+        self.app.get("/office/chat")(self.office_chat)
+        self.app.post("/office/send")(self.office_send)
         self.app.get("/office/status")(self.office_status)
         self._mount_office()
         # Every other registered computer, on this page's own origin: a socket
@@ -1711,6 +1713,53 @@ class Server:
             # when somebody says the office stays empty.
             log.warning("office: page opened (%s)", "tunnel" if cf_connecting_ip else "direct")
         return JSONResponse(self.office_feed.poll(after), headers={"Cache-Control": "no-store"})
+
+    async def office_chat(self, id: str = Query(...), authorization: str = Header(default=""),
+                          token: str = Query(default=""),
+                          cf_connecting_ip: str | None = Header(default=None)):
+        """One chat as the office's speech bubble shows it: what it is, whether it
+        is working, and the last few things said and done in it."""
+        self._device(authorization, cf_connecting_ip, token)
+        if not self.cfg.office:
+            raise HTTPException(status_code=404, detail="the office is off on this computer")
+        chat = self.db.get_chat(id)
+        if chat is None:
+            raise HTTPException(status_code=404, detail="no such chat")
+        items = []
+        for ev in self.db.recent_events(id, 80):
+            kind, data = ev.get("event") or ev.get("type"), ev.get("data") or {}
+            if kind == "message.user" and data.get("text"):
+                items.append({"who": "you", "text": str(data["text"])[:600], "ts": ev.get("ts")})
+            elif kind == "message.assistant" and data.get("text"):
+                items.append({"who": "agent", "text": str(data["text"])[:900], "ts": ev.get("ts")})
+            elif kind == "tool.use":
+                inp = data.get("input") or {}
+                hint = ""
+                if isinstance(inp, dict):
+                    hint = str(inp.get("description") or inp.get("command") or inp.get("file_path")
+                               or inp.get("pattern") or inp.get("url") or "")
+                items.append({"who": "tool", "text": f"{data.get('tool') or 'Tool'}: {hint}"[:200], "ts": ev.get("ts")})
+        return JSONResponse({"id": id, "title": chat.get("title") or "", "status": chat.get("status") or "idle",
+                             "project": chat.get("project") or "", "items": items[-14:]},
+                            headers={"Cache-Control": "no-store"})
+
+    async def office_send(self, request: Request, authorization: str = Header(default=""),
+                          token: str = Query(default=""),
+                          cf_connecting_ip: str | None = Header(default=None)):
+        """A message typed into the office's speech bubble: the same send a chat
+        screen makes, named so a retried request is not run twice."""
+        dev = self._device(authorization, cf_connecting_ip, token)
+        if not self.cfg.office:
+            raise HTTPException(status_code=404, detail="the office is off on this computer")
+        body = await request.json()
+        chat_id, text = str(body.get("chat") or ""), str(body.get("text") or "").strip()
+        if not chat_id or not text or self.db.get_chat(chat_id) is None:
+            raise HTTPException(status_code=400, detail="a chat and some text")
+        try:
+            return await self.h_chat_send(dev, {"chat_id": chat_id, "text": text,
+                                                "client_id": str(body.get("client_id") or "")[:100] or None})
+        except Err as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
 
     async def office_report(self, request: Request, authorization: str = Header(default=""),
                             token: str = Query(default=""),

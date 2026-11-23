@@ -410,23 +410,37 @@ class DivanOffice:
     def rooms(self) -> dict:
         return {"chats": {c["short"]: {"id": c["id"], "title": c["title"], "room": c["room"]}
                           for c in self.chats.values()},
+                "count": len(self.chats),
                 "rooms": sorted({c["room"] for c in self.chats.values()} | {TERMINAL_ROOM})}
 
     def backlog(self) -> list[tuple[float, str, str]]:
-        """Every chat as it is now: its start, then where it is."""
+        """Every chat as it is now: its start, then where it is.
+
+        The starts come first and a product's chats one after another, biggest
+        product first: pixtuoid seats agents in the order they arrive, so each
+        product's chats sit together, a corner of the office each.
+        """
         if not self._loaded:
             self.load()
-        out: list[tuple[float, str, str]] = []
         now = time.time()
+        by_room: dict[str, list[dict]] = {}
         for c in self.chats.values():
-            start = min(c["since"], now - 1)
-            out.append((start, hook_line(c["id"], "SessionStart", start, source="startup"), c["room"]))
+            by_room.setdefault(c["room"], []).append(c)
+        order = sorted(by_room, key=lambda r: (r == OTHER_ROOM, -len(by_room[r]), r.lower()))
+        seated = [c for r in order for c in sorted(by_room[r], key=lambda c: c["since"])]
+        out: list[tuple[float, str, str]] = []
+        t0 = now - 60 - len(seated)
+        for i, c in enumerate(seated):
+            out.append((t0 + i, hook_line(c["id"], "SessionStart", t0 + i, source="startup"), c["room"]))
+        t1 = now - 30
+        for i, c in enumerate(seated):
             if c["last"] is not None:
-                out.append((c["last"][0], c["last"][1], c["room"]))
+                ts = max(c["last"][0], t1 + i * 0.01)
+                out.append((ts, c["last"][1], c["room"]))
             elif c["busy"]:
-                out.append((now - 0.5, hook_line(c["id"], "UserPromptSubmit", now - 0.5, prompt=""), c["room"]))
+                out.append((t1 + i * 0.01, hook_line(c["id"], "UserPromptSubmit", t1, prompt=""), c["room"]))
             else:
-                out.append((start + 0.5, hook_line(c["id"], "Stop", start + 0.5), c["room"]))
+                out.append((t1 + i * 0.01, hook_line(c["id"], "Stop", t1), c["room"]))
         for ts, line in self.tap.backlog():
             try:
                 sid = str(json.loads(line).get("session_id") or "")
