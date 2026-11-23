@@ -173,6 +173,8 @@ export default function Dashboard() {
           )}
           <ListRow first={!queue.available} icon="chat_bubble" title={T('conversations')}
             note={T('dashChatsNote')} onPress={() => go(() => router.replace(PLACE_ROUTE.chat))} />
+          <ListRow icon="group" title={T('office')} note={T('dashOfficeNote')}
+            onPress={() => go(() => router.push('/office'))} />
         </View>
       </ScrollView>
     </Shell>

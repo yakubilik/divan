@@ -228,6 +228,11 @@ class Config:
     # apps to hide the button, while voice notes and dictation go on working.
     # A file without the key is on.
     voice_call: bool = True
+    # The office (office.py): this computer's agents as a pixel office, from
+    # the hook lines of pixtuoid's shim. Off unless set by hand: the socket is
+    # per macOS user, so a second daemon under the same user (another person's
+    # Divan) would otherwise show this person's agents.
+    office: bool = False
     # Follow origin/main by itself. Safe to leave on even where the code is
     # written: a checkout with uncommitted work is never touched (see updater).
     auto_update: bool = True
@@ -326,6 +331,7 @@ class Config:
             "terminal": self.terminal,
             "voice": self.voice,
             "voice_call": self.voice_call,
+            "office": self.office,
             # Left out once, and `bypass_asks = false` set by hand was gone
             # after the next pairing — the exact trap the comment above names.
             "bypass_asks": self.bypass_asks,

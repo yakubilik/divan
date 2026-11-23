@@ -231,6 +231,8 @@ export default function RootLayout() {
             stacking, so Back leads to the wall from either. */}
         <Stack.Screen name="ustabasi" />
         <Stack.Screen name="inbox" />
+        {/* Every agent on the computer as a pixel character (daemon office.py). */}
+        <Stack.Screen name="office" />
         <Stack.Screen name="ticket/[id]" />
         <Stack.Screen name="ticket-about/[id]" />
         <Stack.Screen name="login-method" options={{ presentation: 'fullScreenModal' }} />

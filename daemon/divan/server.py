@@ -47,6 +47,7 @@ from .attachments import KINDS, media_type_of, normalize_image, peaks, sniff
 from .security import (ACCESS_EMAIL, SOCKET_PEER, ForgedTunnel, PathPolicy, TunnelAccess, TunnelGate,
                        TunnelLock, tunnel_via)
 from . import screen as screenmod
+from .office import OfficeTap
 from . import captcha as captchamod
 from . import term as termmod
 from . import ustabasi as ustabasimod
@@ -360,6 +361,15 @@ class Server:
         # <Image> and a browser with <img>, and neither wants base64 in a
         # websocket frame five times a second.
         self.app.get("/screen.jpg")(self.screen_jpg)
+        # The office (office.py): every agent on this computer as a pixel
+        # character. The page and its wasm are static and hold nothing; the
+        # lines that fill it come from /office/stream, behind the token.
+        self.office = OfficeTap()
+        self._office_task: asyncio.Task | None = None
+        self.app.router.on_startup.append(self._start_office)
+        self.app.get("/office/stream")(self.office_stream)
+        self.app.get("/office/status")(self.office_status)
+        self._mount_office()
         # Every other registered computer, on this page's own origin: a socket
         # and the HTTP routes above, relayed with this daemon's credential on
         # that computer (fleet.py). Before the panel, which would take any path.
@@ -1656,6 +1666,54 @@ class Server:
             raise HTTPException(status_code=503, detail="no transcriber on this computer")
         transcribe_warm()
         return {"warming": True}
+
+    # ── the office ─────────────────────────────────────────────────────────
+    async def _start_office(self) -> None:
+        if self._office_task is None and self.cfg.office:
+            self._office_task = asyncio.create_task(self.office.run())
+
+    def _mount_office(self) -> None:
+        page = Path(__file__).parent / "office_page"
+        if not (page / "index.html").exists():
+            return
+        from fastapi.staticfiles import StaticFiles
+        self.app.mount("/office", StaticFiles(directory=str(page), html=True), name="office")
+
+    async def office_status(self, authorization: str = Header(default=""), token: str = Query(default=""),
+                            cf_connecting_ip: str | None = Header(default=None)):
+        self._device(authorization, cf_connecting_ip, token)
+        return self.office.status()
+
+    async def office_stream(self, request: Request, authorization: str = Header(default=""),
+                            token: str = Query(default=""),
+                            cf_connecting_ip: str | None = Header(default=None)):
+        """The hook lines, as server-sent events: what is kept first, then each
+        one as it lands. Each event is `[epoch_ms, line]`; the page replays the
+        kept ones at their own times so the office comes up as it is now."""
+        self._device(authorization, cf_connecting_ip, token)
+        if not self.cfg.office:
+            raise HTTPException(status_code=404, detail="the office is off on this computer (office = true in config.toml)")
+        q = self.office.watch()
+        backlog = self.office.backlog()
+
+        async def events():
+            try:
+                yield "retry: 3000\n\n"
+                yield "event: backlog\ndata: " + json.dumps([[int(t * 1000), l] for t, l in backlog]) + "\n\n"
+                while True:
+                    if await request.is_disconnected():
+                        return
+                    try:
+                        t, line = await asyncio.wait_for(q.get(), 15)
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                    yield "data: " + json.dumps([int(t * 1000), line]) + "\n\n"
+            finally:
+                self.office.unwatch(q)
+
+        return StreamingResponse(events(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
     # ── the screen ─────────────────────────────────────────────────────────
     async def screen_jpg(self, authorization: str = Header(default=""), token: str = Query(default=""),

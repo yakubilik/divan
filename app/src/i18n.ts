@@ -349,6 +349,8 @@ const en = {
   dashQueueNote: 'what this computer is working through',
   conversations: 'Conversations',
   dashChatsNote: 'every chat on this computer, including the ones put away',
+  office: 'Office', dashOfficeNote: 'every agent at work, as a pixel office',
+  officeDown: 'The office did not load', officeDownBody: 'Is the phone on the tailnet and the computer awake?',
   // The Dashboard itself (src/dashboard.ts): the four counters, the system line
   // in its three states, the questions only a person can answer, and what a
   // project card says. Every figure in here is counted somewhere; a figure with
@@ -738,6 +740,8 @@ export type Key = keyof typeof en;
  *  finds its words; a key missing here falls back to `en`. */
 // audit: language-data — the Turkish locale table, the strings a Turkish build shows
 export const tr: Partial<Record<Key, string>> = {
+  office: 'Ofis', dashOfficeNote: 'çalışan bütün ajanlar, piksel bir ofiste',
+  officeDown: 'Ofis açılmadı', officeDownBody: 'Telefon Tailscale\'de mi, bilgisayar uyanık mı?',
   plNone: 'Henüz board yok', plNoneBody: 'Bu bilgisayarda Plane yok. config.toml\'a [plane] url ve workspace ekle.',
   plDown: 'Plane cevap vermedi', plDownBody: 'Telefon Tailscale\'de mi, Plane\'in olduğu bilgisayar açık mı?',
   plRetry: 'Tekrar dene',
