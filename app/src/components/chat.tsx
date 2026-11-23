@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { structuredInput, type ApprovalResponse } from '../approval-input';
 import { ApprovalForm } from './approval-form';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { AstRenderer, MarkdownIt, renderRules, stringToTokens, tokensToAST } from 'react-native-markdown-display';
 // @ts-ignore - exported at runtime, absent from the package's typings
 import { removeTextStyleProps, styles as mdDefaults } from 'react-native-markdown-display';
@@ -20,6 +20,7 @@ import { useStore, useT } from '../store';
 import { Icon, SelectableText, Spinner, Text } from './ui';
 import { FileChip, ImageGroup, VideoBubble, VoiceBubble } from './media';
 import { CodeBlock } from './code';
+import RareStatus from '../dom/rare-status';
 import { SecretChip } from './secret-chip';
 import { parseShareUrl, shareMarkdown } from '../secret-share';
 import { Diagram } from './diagram';
@@ -669,10 +670,10 @@ export function SwitchNote({ to, until, label, from, window: win, reason }: { to
   );
 }
 
-/** One quiet line while a turn runs: what it is doing, in a light that runs
- *  through the word, then how long · tokens · open tools. After Rare UI's AI
- *  status (rareui.com, MIT + Commons Clause + Attribution, © Swami Malode).
- *  `writing` is the same line over an answer still arriving. */
+/** One line while a turn runs: Rare UI's own AiStatus (`src/dom/rare-status.tsx`,
+ *  rareui.com, MIT + Commons Clause + Attribution, © Swami Malode) says what it
+ *  is doing and for how long, then tokens · open tools. `writing` is the same
+ *  line over an answer still arriving. */
 export function WorkingRow({ phase, since, tokens, tools, hint, writing }: {
   phase: string; since: number; tokens?: number; tools?: number; hint?: string; writing?: boolean;
 }) {
@@ -685,15 +686,6 @@ export function WorkingRow({ phase, since, tokens, tools, hint, writing }: {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const a = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-    ]));
-    a.start();
-    return () => a.stop();
-  }, [pulse]);
   const extra = [];
   if (tokens) extra.push(`${tokens >= 1000 ? (tokens / 1000).toFixed(1) + T('unitK') : tokens} ${T('unitTok')}`);
   if (tools) extra.push(`${tools} ${T('unitTool')}`);
@@ -701,51 +693,16 @@ export function WorkingRow({ phase, since, tokens, tools, hint, writing }: {
   return (
     <View style={{ gap: 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <View style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center', marginHorizontal: -2 }}>
-          {writing ? (
-            <Animated.View style={{ transform: [{ rotate: pulse.interpolate({ inputRange: [0, 1], outputRange: ['-12deg', '10deg'] }) },
-                                                { translateX: pulse.interpolate({ inputRange: [0, 1], outputRange: [-1.5, 1.5] }) }] }}>
-              <Icon name="edit" size={15} weight={400} color={c.text2} />
-            </Animated.View>
-          ) : (
-            <>
-              <Animated.View style={{ position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: c.halo,
-                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.35] }) }} />
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.ink }} />
-            </>
-          )}
+        <View style={{ height: 26, width: 210 }} pointerEvents="none">
+          <RareStatus state={writing ? 'writing' : /think|düşün/i.test(phase) ? 'thinking' : 'analyzing'} label={word}
+            elapsed={Math.max(0, Math.floor((now - since) / 1000))}
+            dom={{ style: { flex: 1, backgroundColor: 'transparent' }, scrollEnabled: false }} />
         </View>
-        <Shimmer text={word} color={c.ink} />
-        <Text mono style={{ fontSize: 12, color: c.faint }}>{shortDuration((now - since) / 1000, T)}</Text>
         {extra.length > 0 && <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: c.faint, flexShrink: 1 }}>· {extra.join(' · ')}</Text>}
       </View>
       {!!hint && (
         <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 13 * 1.45, color: c.faint, paddingLeft: 22 }}>{hint}</Text>
       )}
-    </View>
-  );
-}
-
-/** A word with a light running through it, letter by letter. Each letter is a
- *  text of its own: a run nested in a <Text> is one native string on iOS and
- *  cannot be faded apart from the rest. */
-function Shimmer({ text, color }: { text: string; color: string }) {
-  const t = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const a = Animated.loop(Animated.timing(t, { toValue: 1, duration: 1700, easing: Easing.linear, useNativeDriver: true }));
-    a.start();
-    return () => a.stop();
-  }, [t]);
-  const chars = Array.from(text);
-  const span = chars.length + 8;
-  return (
-    <View style={{ flexDirection: 'row' }} accessible accessibilityLabel={text}>
-      {chars.map((ch, i) => (
-        <Animated.Text key={i} style={{ fontFamily: family('500' as any, false), fontSize: 13.5, color,
-          opacity: Animated.modulo(Animated.add(t, 1 - i / span), 1).interpolate({ inputRange: [0, 0.08, 0.2, 1], outputRange: [0.4, 1, 0.4, 0.4] }) }}>
-          {ch}
-        </Animated.Text>
-      ))}
     </View>
   );
 }

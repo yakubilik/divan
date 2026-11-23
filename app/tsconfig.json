@@ -1,6 +1,24 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
-  }
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./src/rareui/*"
+      ],
+      "next/link": [
+        "./src/rareui/shims/next.tsx"
+      ],
+      "next/navigation": [
+        "./src/rareui/shims/next.tsx"
+      ],
+      "next-themes": [
+        "./src/rareui/shims/next.tsx"
+      ]
+    }
+  },
+  "exclude": [
+    "src/rareui",
+    "node_modules"
+  ]
 }

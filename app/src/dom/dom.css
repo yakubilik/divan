@@ -1,0 +1,5 @@
+/* What every Rare UI island in the app shares: Rare UI's own stylesheet, and a
+   page that is see-through, so the island sits on the native screen behind it. */
+@import "../rareui/globals.css";
+html, body, #root { background: transparent !important; margin: 0; padding: 0; overflow: hidden; }
+body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }

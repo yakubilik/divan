@@ -3,6 +3,7 @@ import { Animated, FlatList, Image, Linking, Modal, PanResponder, Platform, Pres
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import RareVoice from '../dom/rare-voice';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { File, Paths } from 'expo-file-system';
 import { StatusBar } from 'expo-status-bar';
@@ -391,16 +392,21 @@ export function VideoBubble({ item, stacked, group }: { item: Attachment; stacke
  *  than one the person spoke: it sits on the left under its file name, and
  *  nobody looked for speech in it. What a touch seeks to, which bubble keeps
  *  playing and what the time says are decided in `voicenote.ts`. */
-export function VoiceBubble({ item, sent, autoPlay }: { item: Attachment; sent?: boolean;
+export function VoiceBubble({ item, sent, autoPlay, native }: { item: Attachment; sent?: boolean;
   /** Development fixtures only: start playing, silently, once loaded, so a
    *  screenshot can show a note mid-play without a finger. */
-  autoPlay?: boolean }) {
+  autoPlay?: boolean;
+  /** Draw the phone's own bubble rather than Rare UI's VoiceNote: the fixtures
+   *  and the headless checks of the player logic (scripts/test-voicenote.cjs). */
+  native?: boolean }) {
   const T = useT();
   const c = useColors();
   const { width: screen } = useWindowDimensions();
   const transcriptionOn = useStore((s) => s.hostInfo?.transcription ?? true);
   const uri = srcOf(item);
-  const player = useAudioPlayer(uri ? { uri } : null);
+  // A note Rare UI's VoiceNote plays (below) needs no native player of its own.
+  const rare = !!uri && !autoPlay && !native;
+  const player = useAudioPlayer(uri && !rare ? { uri } : null);
   const status = useAudioPlayerStatus(player);
   const wave = useMemo(() => waveform(item.peaks, item.path), [item.peaks, item.path]);
   const [rate, setRate] = useState(rememberedSpeed);
@@ -485,6 +491,9 @@ export function VoiceBubble({ item, sent, autoPlay }: { item: Attachment; sent?:
 
   const spoke = !!item.transcript;
   const knob = total ? Math.min(1, position / total) * waveW : 0;
+  // A note the phone can reach is drawn by Rare UI's own VoiceNote, playing the
+  // file itself (`src/dom/rare-voice.tsx`); the drawing below is for the
+  // fixtures and anything that has no address yet.
   // Played and playing, after Rare UI's voice note (rareui.com, MIT + Commons
   // Clause + Attribution, © Swami Malode): what has been heard is washed in the
   // accent from the bubble's left edge to the playhead, and the bar under the
@@ -500,6 +509,23 @@ export function VoiceBubble({ item, sent, autoPlay }: { item: Attachment; sent?:
     a.start();
     return () => a.stop();
   }, [status.playing, bounce]);
+  const caption = sent ? null : spoke ? (
+    <Text style={{ fontSize: 13, color: c.muted, fontStyle: 'italic', textAlign: 'right' }}>“{item.transcript}”</Text>
+  ) : (
+    <Text style={{ fontSize: 12, color: c.faint, fontStyle: 'italic' }}>{transcriptionOn ? T('noSpeech') : T('noTranscript')}</Text>
+  );
+  if (rare) {
+    return (
+      <View style={{ alignItems: sent ? 'flex-start' : 'flex-end', gap: 4 }}>
+        {sent && <Text numberOfLines={1} style={{ fontSize: 12, color: c.text2 }}>{item.name}</Text>}
+        <View style={{ width, height: 60 }}>
+          <RareVoice src={uri!} duration={total || undefined} seed={seedOf(item.path)} accent={c.accent}
+            dom={{ style: { flex: 1, backgroundColor: 'transparent' }, scrollEnabled: false, allowsInlineMediaPlayback: true, mediaPlaybackRequiresUserAction: false }} />
+        </View>
+        {caption}
+      </View>
+    );
+  }
   return (
     <View style={{ alignItems: sent ? 'flex-start' : 'flex-end', gap: 4 }}>
       <View style={[{ width, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 18, paddingVertical: 9, paddingLeft: 10, paddingRight: 14, overflow: 'hidden' },
@@ -542,6 +568,12 @@ export function VoiceBubble({ item, sent, autoPlay }: { item: Attachment; sent?:
       )}
     </View>
   );
+}
+
+/** The same waveform for the same note, every time it is drawn. */
+function seedOf(path: string): number {
+  let h = 7; for (const ch of path) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % 1000;
 }
 
 function fmtSize(n?: number): string {
