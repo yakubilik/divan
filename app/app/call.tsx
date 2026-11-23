@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { MatrixOrb, type OrbMode } from '../src/components/matrix-orb';
+import { Animated, AppState, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -197,6 +196,7 @@ export default function Call() {
   const turnEnd = useRef<((how: TurnEnd) => void) | null>(null);
   const approval = useRef<{ id: string; asked: boolean } | null>(null);
   const voiceQueue = useRef<Promise<void>>(Promise.resolve());
+  const pulse = useRef(new Animated.Value(0)).current;
   // The streaming call (src/voice-session.ts), when this build and the computer both have it. Everything
   // below that is about recognisers, silence timers and echo is the older half-duplex call, kept for a
   // build without the native engine or a computer without `voice.start`.
@@ -751,6 +751,17 @@ export default function Call() {
     stopSpeaking();
   }, []);
 
+  useEffect(() => {
+    if (phase === 'listening' || phase === 'thinking' || phase === 'dialling' || phase === 'working' || phase === 'reconnecting') {
+      const loop = Animated.loop(Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]));
+      loop.start();
+      return () => loop.stop();
+    }
+    pulse.setValue(0);
+  }, [phase, pulse]);
 
   const label = phase === 'idle' ? T('callStart')
     : phase === 'dialling' ? T('callDialling')
@@ -847,11 +858,14 @@ export default function Call() {
             {voice ? T('callVoice', { v: voice }) : ' '}
           </Text>
         </Pressable>
-        <Pressable onPress={tap} disabled={phase === 'thinking'} accessibilityRole="button" accessibilityLabel={label}
-          style={{ alignItems: 'center', gap: 14 }}>
-          {/* The orb says what the call is doing; the word under it says the same for anyone who cannot see it move. */}
-          <MatrixOrb mode={orbMode(phase)} color={ringColor} size={172} />
-          <Text style={[{ fontSize: 17, fontWeight: '600' as const, lineHeight: 22 }, { color: phase === 'idle' ? c.ink : ringColor }]}>{label}</Text>
+        <Pressable onPress={tap} disabled={phase === 'thinking'}>
+          <Animated.View style={[styles.mic, {
+            borderColor: ringColor,
+            backgroundColor: phase === 'idle' ? c.card : c.accentTint,
+            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] }) }],
+          }]}>
+            <Text style={[{ fontSize: 17, fontWeight: '600' as const, lineHeight: 22 }, { color: phase === 'idle' ? c.ink : ringColor }]}>{label}</Text>
+          </Animated.View>
         </Pressable>
         {phase !== 'idle' && (
           <Pressable onPress={hangUp} style={styles.hangUp} hitSlop={10}>
@@ -861,14 +875,6 @@ export default function Call() {
       </View>
     </View>
   );
-}
-
-/** Which of the orb's four moves a call phase is drawn with. */
-function orbMode(phase: Phase): OrbMode {
-  if (phase === 'listening' || phase === 'hearing') return 'listening';
-  if (phase === 'speaking') return 'speaking';
-  if (phase === 'thinking' || phase === 'working' || phase === 'reconnecting') return 'thinking';
-  return 'idle';
 }
 
 /** The streaming call's conversation as bubbles, and the newest words still being heard. */

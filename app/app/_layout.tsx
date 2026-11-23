@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { AppState, LogBox, Platform, Settings, View } from 'react-native';
-import { ToastHost } from '../src/components/toast';
+import { AppState, Platform, Settings, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -159,11 +158,7 @@ export default function RootLayout() {
     if (!__DEV__ || Platform.OS !== 'ios' || !ready || devRoute.current) return;
     devRoute.current = true;
     const route = Settings.get('DivanRoute');
-    if (typeof route === 'string' && route.startsWith('/')) {
-      // A screenshot is what this is for; the warnings toast would sit in it.
-      LogBox.ignoreAllLogs(true);
-      setTimeout(() => router.push(route as never), 300);
-    }
+    if (typeof route === 'string' && route.startsWith('/')) setTimeout(() => router.push(route as never), 300);
   }, [ready, router]);
 
   // Without the fonts the system face stands in; a blank app would not.
@@ -249,13 +244,10 @@ export default function RootLayout() {
         <Stack.Screen name="media-fixtures" />
         {/* Answers with ```mermaid diagrams in them, for the simulator. */}
         <Stack.Screen name="diagram-fixtures" />
-        {/* The chat parts the Rare UI pass touched, for the simulator. */}
-        <Stack.Screen name="rareui-fixtures" />
       </Stack>
       {ready && locked && <LockScreen onUnlock={() => void unlock()} />}
       <MenuHost />
       <DialogHost />
-      <ToastHost />
     </SafeAreaProvider>
   );
 }

@@ -4,7 +4,6 @@ import * as Clipboard from 'expo-clipboard';
 import { useColors } from '../theme';
 import { useT } from '../store';
 import { Icon, SelectableText, Text } from './ui';
-import { toast } from './toast';
 
 /** A fenced block in an answer: its language over it, a copy button beside
  *  that, and the code itself selectable. Also what a ```mermaid block falls
@@ -19,7 +18,7 @@ export function CodeBlock({ lang, code }: { lang: string; code: string }) {
                      borderBottomWidth: 1, borderBottomColor: c.line }}>
         <Text mono style={{ fontSize: 10.5, color: c.faint }}>{lang || 'text'}</Text>
         <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel={T('copyCode')}
-          onPress={() => { void Clipboard.setStringAsync(code); setCopied(true); toast(T('copied')); setTimeout(() => setCopied(false), 1400); }}>
+          onPress={() => { void Clipboard.setStringAsync(code); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>
           <Icon name={copied ? 'check' : 'content_copy'} size={14} color={copied ? c.ok : c.faint} />
         </Pressable>
       </View>

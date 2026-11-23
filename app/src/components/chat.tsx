@@ -619,28 +619,13 @@ export function TurnFooter({ cost, duration, error, usage, stopReason }: { cost?
   const c = useColors();
   if (error) return <Text style={{ fontSize: 13, lineHeight: 19, color: c.danger }}>{T('errorPrefix')}{error}</Text>;
   const parts = [];
+  if (stopReason === 'interrupted') parts.push(T('stopped'));
   if (cost != null) parts.push(`$${cost.toFixed(3)}`);
   const tok = usage?.output_tokens ?? usage?.total_tokens;
   if (cost == null && tok) parts.push(`${tok >= 1000 ? (tok / 1000).toFixed(1) + 'k' : tok} tok`);
-  const stopped = stopReason === 'interrupted';
-  if (duration == null && !stopped && !parts.length) return null;
-  // How long it worked, the way Rare UI's AI status says it once a turn is
-  // over: a tick and the time, the rest quiet after it.
-  const head = stopped ? T('stopped') : duration != null ? T('workedFor', { t: shortDuration(duration / 1000, T) }) : null;
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      {!!head && <Icon name={stopped ? 'block' : 'check'} size={14} weight={500} color={stopped ? c.muted : c.ok} />}
-      {!!head && <Text style={{ fontSize: 12.5, color: c.muted }}>{head}</Text>}
-      {parts.length > 0 && <Text mono style={{ fontSize: 11, color: c.faint }}>{head ? '· ' : ''}{parts.join(' · ')}</Text>}
-    </View>
-  );
-}
-
-/** "9s", "1m 05s": a turn's length the short way. */
-function shortDuration(seconds: number, T: ReturnType<typeof useT>): string {
-  const secs = Math.max(0, Math.round(seconds));
-  if (secs < 60) return `${secs}${T('unitSec')}`;
-  return `${Math.floor(secs / 60)}${T('unitMin')} ${String(secs % 60).padStart(2, '0')}${T('unitSec')}`;
+  if (duration != null) parts.push(`${Math.round(duration / 1000)}s`);
+  if (!parts.length) return null;
+  return <Text mono style={{ fontSize: 11, color: c.faint }}>{parts.join(' · ')}</Text>;
 }
 
 /** The pool moved this chat onto another sign-in, mid-answer or between turns.
@@ -669,12 +654,10 @@ export function SwitchNote({ to, until, label, from, window: win, reason }: { to
   );
 }
 
-/** One quiet line while a turn runs: what it is doing, in a light that runs
- *  through the word, then how long · tokens · open tools. After Rare UI's AI
- *  status (rareui.com, MIT + Commons Clause + Attribution, © Swami Malode).
- *  `writing` is the same line over an answer still arriving. */
-export function WorkingRow({ phase, since, tokens, tools, hint, writing }: {
-  phase: string; since: number; tokens?: number; tools?: number; hint?: string; writing?: boolean;
+/** One quiet line while a turn runs: a dot with a halo, then elapsed · tokens ·
+ *  open tools · what it is doing. */
+export function WorkingRow({ phase, since, tokens, tools, hint }: {
+  phase: string; since: number; tokens?: number; tools?: number; hint?: string;
 }) {
   const T = useT();
   const c = useColors();
@@ -685,6 +668,7 @@ export function WorkingRow({ phase, since, tokens, tools, hint, writing }: {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+  const seconds = (now - since) / 1000;
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const a = Animated.loop(Animated.sequence([
@@ -694,58 +678,25 @@ export function WorkingRow({ phase, since, tokens, tools, hint, writing }: {
     a.start();
     return () => a.stop();
   }, [pulse]);
-  const extra = [];
-  if (tokens) extra.push(`${tokens >= 1000 ? (tokens / 1000).toFixed(1) + T('unitK') : tokens} ${T('unitTok')}`);
-  if (tools) extra.push(`${tools} ${T('unitTool')}`);
-  const word = phase.charAt(0).toUpperCase() + phase.slice(1);
+  const secs = Math.max(0, Math.floor(seconds));
+  const time = `${Math.floor(secs / 60)}${T('unitMin')} ${String(secs % 60).padStart(2, '0')}${T('unitSec')}`;
+  const parts = [time];
+  if (tokens) parts.push(`${tokens >= 1000 ? (tokens / 1000).toFixed(1) + T('unitK') : tokens} ${T('unitTok')}`);
+  if (tools) parts.push(`${tools} ${T('unitTool')}`);
+  parts.push(phase);
   return (
     <View style={{ gap: 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <View style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center', marginHorizontal: -2 }}>
-          {writing ? (
-            <Animated.View style={{ transform: [{ rotate: pulse.interpolate({ inputRange: [0, 1], outputRange: ['-12deg', '10deg'] }) },
-                                                { translateX: pulse.interpolate({ inputRange: [0, 1], outputRange: [-1.5, 1.5] }) }] }}>
-              <Icon name="edit" size={15} weight={400} color={c.text2} />
-            </Animated.View>
-          ) : (
-            <>
-              <Animated.View style={{ position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: c.halo,
-                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.35] }) }} />
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.ink }} />
-            </>
-          )}
+        <View style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center', marginHorizontal: -4 }}>
+          <Animated.View style={{ position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: c.halo,
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.35] }) }} />
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.ink }} />
         </View>
-        <Shimmer text={word} color={c.ink} />
-        <Text mono style={{ fontSize: 12, color: c.faint }}>{shortDuration((now - since) / 1000, T)}</Text>
-        {extra.length > 0 && <Text mono numberOfLines={1} style={{ fontSize: 11.5, color: c.faint, flexShrink: 1 }}>· {extra.join(' · ')}</Text>}
+        <Text mono numberOfLines={1} style={{ fontSize: 12, color: c.text2, flexShrink: 1 }}>{parts.join(' · ')}</Text>
       </View>
       {!!hint && (
-        <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 13 * 1.45, color: c.faint, paddingLeft: 22 }}>{hint}</Text>
+        <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 13 * 1.45, color: c.faint, paddingLeft: 16 }}>{hint}</Text>
       )}
-    </View>
-  );
-}
-
-/** A word with a light running through it, letter by letter. Each letter is a
- *  text of its own: a run nested in a <Text> is one native string on iOS and
- *  cannot be faded apart from the rest. */
-function Shimmer({ text, color }: { text: string; color: string }) {
-  const t = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const a = Animated.loop(Animated.timing(t, { toValue: 1, duration: 1700, easing: Easing.linear, useNativeDriver: true }));
-    a.start();
-    return () => a.stop();
-  }, [t]);
-  const chars = Array.from(text);
-  const span = chars.length + 8;
-  return (
-    <View style={{ flexDirection: 'row' }} accessible accessibilityLabel={text}>
-      {chars.map((ch, i) => (
-        <Animated.Text key={i} style={{ fontFamily: family('500' as any, false), fontSize: 13.5, color,
-          opacity: Animated.modulo(Animated.add(t, 1 - i / span), 1).interpolate({ inputRange: [0, 0.08, 0.2, 1], outputRange: [0.4, 1, 0.4, 0.4] }) }}>
-          {ch}
-        </Animated.Text>
-      ))}
     </View>
   );
 }

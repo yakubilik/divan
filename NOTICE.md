@@ -55,16 +55,3 @@ the user asks for them.
   and word lists (numbers, dates, times, money, units, abbreviations, symbols,
   the model's alphabet and the chunker), so that part of the app stays under
   their licence; the files say which source each part comes from.
-
-## Designs drawn after other projects
-
-- **Rare UI** by Swami Malode (<https://rareui.com>) gave the look and motion
-  of five parts of the phone app: the status line of a running turn and the
-  footer of a finished one (`WorkingRow`, `TurnFooter` in
-  `app/src/components/chat.tsx`), the call screen's dot orb
-  (`app/src/components/matrix-orb.tsx`), the played wash of a voice note
-  (`VoiceBubble` in `app/src/components/media.tsx`), the composer's model
-  picker (`app/src/components/model-pill.tsx`) and the toast
-  (`app/src/components/toast.tsx`). They are written anew for React Native,
-  not copied from Rare UI's React source. Rare UI is offered under MIT +
-  Commons Clause + Attribution, which asks for this visible credit.

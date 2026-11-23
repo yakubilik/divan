@@ -391,10 +391,7 @@ export function VideoBubble({ item, stacked, group }: { item: Attachment; stacke
  *  than one the person spoke: it sits on the left under its file name, and
  *  nobody looked for speech in it. What a touch seeks to, which bubble keeps
  *  playing and what the time says are decided in `voicenote.ts`. */
-export function VoiceBubble({ item, sent, autoPlay }: { item: Attachment; sent?: boolean;
-  /** Development fixtures only: start playing, silently, once loaded, so a
-   *  screenshot can show a note mid-play without a finger. */
-  autoPlay?: boolean }) {
+export function VoiceBubble({ item, sent }: { item: Attachment; sent?: boolean }) {
   const T = useT();
   const c = useColors();
   const { width: screen } = useWindowDimensions();
@@ -417,13 +414,6 @@ export function VoiceBubble({ item, sent, autoPlay }: { item: Attachment; sent?:
   const lit = playedBars(position, total, wave.length);
 
   useEffect(() => () => release(player), [player]);
-  const autoStarted = useRef(false);
-  useEffect(() => {
-    if (!autoPlay || autoStarted.current || !status.isLoaded) return;
-    autoStarted.current = true;
-    player.volume = 0;
-    player.play();
-  }, [autoPlay, status.isLoaded, player]);
   // The end is the start again: play, and the whole length under it.
   useEffect(() => {
     if (!status.didJustFinish) return;
@@ -485,31 +475,13 @@ export function VoiceBubble({ item, sent, autoPlay }: { item: Attachment; sent?:
 
   const spoke = !!item.transcript;
   const knob = total ? Math.min(1, position / total) * waveW : 0;
-  // Played and playing, after Rare UI's voice note (rareui.com, MIT + Commons
-  // Clause + Attribution, © Swami Malode): what has been heard is washed in the
-  // accent from the bubble's left edge to the playhead, and the bar under the
-  // playhead stands up while the sound runs.
-  const heard = now !== 'idle';
-  const bounce = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (!status.playing) { bounce.stopAnimation(); bounce.setValue(0); return; }
-    const a = Animated.loop(Animated.sequence([
-      Animated.timing(bounce, { toValue: 1, duration: 180, useNativeDriver: true }),
-      Animated.timing(bounce, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]));
-    a.start();
-    return () => a.stop();
-  }, [status.playing, bounce]);
   return (
     <View style={{ alignItems: sent ? 'flex-start' : 'flex-end', gap: 4 }}>
-      <View style={[{ width, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 18, paddingVertical: 9, paddingLeft: 10, paddingRight: 14, overflow: 'hidden' },
+      <View style={[{ width, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 18, paddingVertical: 9, paddingLeft: 10, paddingRight: 14 },
                     sent ? { backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderBottomLeftRadius: 6 }
                          : { backgroundColor: c.bubble, borderBottomRightRadius: 6 }]}>
-        {heard && waveW > 0 && (
-          <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 10 + 38 + 10 + knob, backgroundColor: c.accentTint }} />
-        )}
-        <Pressable onPress={toggle} hitSlop={8} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: status.playing ? c.accent : c.ink, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name={status.playing ? 'pause' : 'play_arrow'} size={24} weight={400} color={status.playing ? '#FFFFFF' : c.onInk} />
+        <Pressable onPress={toggle} hitSlop={8} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={status.playing ? 'pause' : 'play_arrow'} size={24} weight={400} color={c.onInk} />
         </Pressable>
         <View style={{ flex: 1, gap: 3 }}>
           {sent && <Text numberOfLines={1} style={{ fontSize: 12, color: c.text2 }}>{item.name}</Text>}
@@ -517,12 +489,11 @@ export function VoiceBubble({ item, sent, autoPlay }: { item: Attachment; sent?:
             style={{ height: 28, justifyContent: 'center' }}>
             <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 28 }}>
               {wave.map((h, i) => (
-                <Animated.View key={i} style={{ width: 2.5, height: h, borderRadius: 1.25, backgroundColor: i < lit ? (heard ? c.accent : c.ink) : c.faint,
-                  transform: i === lit - 1 && status.playing ? [{ scaleY: bounce.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] }) }] : [] }} />
+                <View key={i} style={{ width: 2.5, height: h, borderRadius: 1.25, backgroundColor: i < lit ? c.ink : c.faint }} />
               ))}
             </View>
-            {heard && waveW > 0 && (
-              <View pointerEvents="none" style={{ position: 'absolute', left: knob - 1, top: 1, width: 2, height: 26, borderRadius: 1, backgroundColor: c.accent }} />
+            {now !== 'idle' && waveW > 0 && (
+              <View pointerEvents="none" style={{ position: 'absolute', left: knob - 6, top: 8, width: 12, height: 12, borderRadius: 6, backgroundColor: c.ink }} />
             )}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 18 }}>
