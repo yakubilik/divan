@@ -34,6 +34,8 @@ const SVG = (d: string) => (
 );
 const GEAR = 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z';
 const WORK = 'M22 12h-4l-3 9L9 3l-3 9H2';
+// Two people at a desk: the office of agents (screens/Office.tsx).
+const OFFICE = 'M8 9a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM16 9a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM2 21v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3M14 14h4a4 4 0 0 1 4 4v3';
 const BOARD = 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z';
 const CHAT = 'M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z';
 const PANES = 'M4 4h16v16H4zM12 4v16M12 12h8';
@@ -55,9 +57,10 @@ export function ThemeSwitch() {
 }
 
 /** The right-hand half: `● 2/2 machines · ◔ quota 64% · Chats · Settings`. */
-function Sys({ fleet, view, here, dots, onView, inbox, work, board }: {
+function Sys({ fleet, view, here, dots, onView, inbox, work, board, office }: {
   fleet?: DivanView | null;
   board?: { on: boolean; onOpen: () => void } | null;
+  office?: { on: boolean; onOpen: () => void } | null;
   work?: { on: boolean; onOpen: () => void } | null;
   view: View;
   here: Place;
@@ -98,6 +101,7 @@ function Sys({ fleet, view, here, dots, onView, inbox, work, board }: {
       )}
       <span className="sep" />
       {!!board && <PlaceButton label="Board" icon={BOARD} on={board.on} onClick={board.onOpen} />}
+      {!!office && <PlaceButton label="Office" icon={OFFICE} on={office.on} onClick={office.onOpen} />}
       {!!work && <PlaceButton label="Work" icon={WORK} on={work.on} onClick={work.onOpen} />}
       <PlaceButton label="Chats" icon={CHAT} on={view === 'chats'} dot={dots?.chat}
         onClick={() => onView('chats')} />
@@ -128,7 +132,7 @@ function PlaceButton({ label, icon, on, dot, onClick }: {
 
 /** A page: the line, and the page's own content under it. `back` is where the
  *  left end leads; absent, it is the word, on the Dashboard. */
-export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, work, board, children }: {
+export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, work, board, office, children }: {
   view: View;
   onView: (view: View) => void;
   /** The merged view the system line counts off. */
@@ -151,6 +155,8 @@ export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, wo
   work?: { on: boolean; onOpen: () => void } | null;
   /** The board — Plane, in the page — and whether it is the page on screen. */
   board?: { on: boolean; onOpen: () => void } | null;
+  /** The office — the agents as a pixel office (screens/Office.tsx). */
+  office?: { on: boolean; onOpen: () => void } | null;
   children?: React.ReactNode;
 }) {
   const here = placeOf(view);
@@ -182,7 +188,7 @@ export function Shell({ view, onView, fleet, dots, back, onHome, inbox, lead, wo
               <img src="/divan-seal.png" width={34} height={34} alt="" aria-hidden="true" />divan
             </a>
           )}
-          <Sys fleet={fleet} view={view} here={here} dots={dots} onView={onView} inbox={inbox} work={work} board={board} />
+          <Sys fleet={fleet} view={view} here={here} dots={dots} onView={onView} inbox={inbox} work={work} board={board} office={office} />
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>

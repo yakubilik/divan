@@ -18,6 +18,7 @@ import { Panes } from './screens/Panes';
 import { usePanes } from './lib/panes';
 import { Overview, type ProjectTab } from './screens/Overview';
 import { PlaneFrame } from './screens/Plane';
+import { OfficeFrame } from './screens/Office';
 import type { WorkLayout } from './screens/Work';
 import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
@@ -907,6 +908,7 @@ export function App() {
         onHome={() => go(HOME)}
         back={back}
         board={{ on: view === 'board', onOpen: () => go({ ...HOME, view: 'board' }) }}
+        office={{ on: view === 'office', onOpen: () => go({ ...HOME, view: 'office' }) }}
         work={{
           on: view === 'overview' && !project && tab === 'work',
           onOpen: () => go({ ...HOME, tab: 'work' }),
@@ -924,7 +926,10 @@ export function App() {
             <PlaneFrame fill />
           </div>
         )}
-        {place === 'dashboard' && view !== 'board' && (
+        {/* The office: every agent on the home computer as a pixel office,
+            the page that computer serves (daemon office.py), under the line. */}
+        {view === 'office' && <OfficeFrame />}
+        {place === 'dashboard' && view !== 'board' && view !== 'office' && (
           <Overview
             view={divan} project={projectIn(divan, project)} onProject={chooseProject}
             composer={(

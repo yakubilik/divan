@@ -129,6 +129,7 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
 export function pathOf(place: Place): string {
   if (place.view === 'panes') return '/panes';
   if (place.view === 'board') return '/board';
+  if (place.view === 'office') return '/office';
   if (place.view === 'chats') {
     if (place.chat) return `/chats/${enc(place.chat)}`;
     return place.sub === 'new' ? '/chats/new' : '/chats';
@@ -221,6 +222,7 @@ export function readPlace(pathname: string, search = ''): Place {
   }
   if (parts[0] === 'panes') return { ...place, view: 'panes' };
   if (parts[0] === 'board') return { ...place, view: 'board' };
+  if (parts[0] === 'office') return { ...place, view: 'office' };
   if (parts[0] === 'waiting') return { ...place, tab: 'waiting' };
   if (parts[0] === 'havuz') return { ...place, tab: 'havuz', group: (q.get('g') || '').trim() || null };
   if (parts[0] === 'work') {

@@ -332,6 +332,14 @@ export function fileUrl(key: string, path: string, download = false): string {
   return `${base(cfg)}/files?${q}`;
 }
 
+/** The office page a computer serves (daemon office.py), or '' once it has
+ *  refused this token. The token rides in the query, as on /screen.jpg. */
+export function officeUrl(key: string): string {
+  const { cfg } = slot(key);
+  if (refusedFor(cfg.token)) return '';
+  return `${base(cfg)}/office/?token=${encodeURIComponent(cfg.token)}`;
+}
+
 /** One frame of a computer's screen, or '' once it has refused this token.
  *  The token rides in the query for the reason `fileUrl`'s does. */
 export function screenUrl(cfg: HostConfig, w: number, display: string, tick: number): string {
