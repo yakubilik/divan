@@ -928,7 +928,7 @@ export function App() {
         )}
         {/* The office: every agent on the home computer as a pixel office,
             the page that computer serves (daemon office.py), under the line. */}
-        {view === 'office' && <OfficeFrame />}
+        {view === 'office' && <OfficeFrame onOpen={open} />}
         {place === 'dashboard' && view !== 'board' && view !== 'office' && (
           <Overview
             view={divan} project={projectIn(divan, project)} onProject={chooseProject}

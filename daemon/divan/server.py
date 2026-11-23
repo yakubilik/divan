@@ -47,7 +47,7 @@ from .attachments import KINDS, media_type_of, normalize_image, peaks, sniff
 from .security import (ACCESS_EMAIL, SOCKET_PEER, ForgedTunnel, PathPolicy, TunnelAccess, TunnelGate,
                        TunnelLock, tunnel_via)
 from . import screen as screenmod
-from .office import OfficeTap
+from .office import DivanOffice, OfficeTap
 from . import captcha as captchamod
 from . import term as termmod
 from . import ustabasi as ustabasimod
@@ -365,6 +365,7 @@ class Server:
         # character. The page and its wasm are static and hold nothing; the
         # lines that fill it come from /office/stream, behind the token.
         self.office = OfficeTap()
+        self.office_feed = DivanOffice(self.office, lambda: self.db.list_chats(include_archived=True))
         self._office_task: asyncio.Task | None = None
         self.app.get("/office/stream")(self.office_stream)
         self.app.get("/office/status")(self.office_status)
@@ -1391,6 +1392,8 @@ class Server:
                          ensure_ascii=False, default=str)
         for ws in list(self.outbox):
             self._enqueue(ws, msg)
+        if self.cfg.office:
+            self.office_feed.observe(event)
         # After the event itself, so a call never says a turn is done before
         # the phone has been told that it is.
         self.voice.observe(event)
@@ -1693,24 +1696,32 @@ class Server:
         if not self.cfg.office:
             raise HTTPException(status_code=404, detail="the office is off on this computer (office = true in config.toml)")
         await self._start_office()
-        q = self.office.watch()
-        backlog = self.office.backlog()
+        feed = self.office_feed
+        q = feed.watch()
+        backlog = feed.backlog()
+        rooms = feed.rooms()
 
         async def events():
             try:
                 yield "retry: 3000\n\n"
-                yield "event: backlog\ndata: " + json.dumps([[int(t * 1000), l] for t, l in backlog]) + "\n\n"
+                yield "event: rooms\ndata: " + json.dumps(rooms, ensure_ascii=False) + "\n\n"
+                yield "event: backlog\ndata: " + json.dumps([[int(t * 1000), l, r] for t, l, r in backlog],
+                                                            ensure_ascii=False) + "\n\n"
                 while True:
                     if await request.is_disconnected():
                         return
                     try:
-                        t, line = await asyncio.wait_for(q.get(), 15)
+                        item = await asyncio.wait_for(q.get(), 15)
                     except asyncio.TimeoutError:
                         yield ": keepalive\n\n"
                         continue
-                    yield "data: " + json.dumps([int(t * 1000), line]) + "\n\n"
+                    if item[0] == "rooms":
+                        yield "event: rooms\ndata: " + json.dumps(item[1], ensure_ascii=False) + "\n\n"
+                    else:
+                        _, t, line, room = item
+                        yield "data: " + json.dumps([int(t * 1000), line, room], ensure_ascii=False) + "\n\n"
             finally:
-                self.office.unwatch(q)
+                feed.unwatch(q)
 
         return StreamingResponse(events(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})

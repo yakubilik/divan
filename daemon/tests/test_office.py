@@ -88,3 +88,30 @@ def test_subscribes_to_a_live_owner():
         asyncio.run(run())
     finally:
         shutil.rmtree(d, ignore_errors=True)
+
+
+def test_divan_chats_become_hook_lines_in_their_rooms():
+    import json as _json
+    from divan.office import DivanOffice
+
+    class Tap:
+        on_line = None
+        def backlog(self):
+            return []
+
+    chats = [{"id": "abcdef123456", "title": "Fix login", "project": "Babysee", "status": "idle",
+              "archived": 0, "created_at": 1000.0, "updated_at": 2000.0}]
+    feed = DivanOffice(Tap(), lambda: chats)
+    back = feed.backlog()
+    assert [(_json.loads(l)["hook_event_name"], r) for _, l, r in back] == [("SessionStart", "Babysee"), ("Stop", "Babysee")]
+    assert feed.rooms()["chats"]["abcdef12"]["title"] == "Fix login"
+
+    async def run():
+        q = feed.watch()
+        feed.observe({"event": "tool.use", "chat_id": "abcdef123456", "data": {"id": "t1", "tool": "Bash", "input": {"command": "ls"}}})
+        kind, _, line, room = q.get_nowait()
+        body = _json.loads(line)
+        assert (kind, body["hook_event_name"], body["tool_name"], body["session_id"], room) == \
+            ("line", "PreToolUse", "Bash", "abcdef123456", "Babysee")
+
+    asyncio.run(run())

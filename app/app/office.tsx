@@ -34,6 +34,13 @@ export default function OfficeScreen() {
           <WebView key={`${url}#${round}`} source={{ uri: url }} style={{ flex: 1, backgroundColor: '#1b1a24' }}
             javaScriptEnabled scrollEnabled={false} bounces={false} setSupportMultipleWindows={false}
             onLoadEnd={() => setLoading(false)}
+            // A character tapped in the office names its chat (office.js).
+            onMessage={(e) => {
+              try {
+                const d = JSON.parse(e.nativeEvent.data);
+                if (d?.type === 'office-open' && typeof d.chat === 'string') router.push(`/chat/${d.chat}`);
+              } catch { /* not ours */ }
+            }}
             onError={() => setDown(true)}
             onHttpError={(e) => { if (e.nativeEvent.statusCode >= 400) setDown(true); }} />
           {loading && (

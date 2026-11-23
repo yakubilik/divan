@@ -1,3 +1,31 @@
+diff --git a/crates/pixtuoid-core/src/state/reducer/mod.rs b/crates/pixtuoid-core/src/state/reducer/mod.rs
+index 2f207d76..84cb174d 100644
+--- a/crates/pixtuoid-core/src/state/reducer/mod.rs
++++ b/crates/pixtuoid-core/src/state/reducer/mod.rs
+@@ -39,11 +39,11 @@ pub const B1_CASCADE_GRACE: Duration = Duration::from_millis(2500);
+ /// reap a human on a break), `STALE_BLOCKED_TIMEOUT` (a prompt, a hook-silent delegation);
+ /// unknown-cwd is a seeding ghost.
+ #[doc(hidden)]
+-pub const STALE_TOOL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
++pub const STALE_TOOL_TIMEOUT: Duration = Duration::from_secs(30 * 24 * 3600); // Divan: an agent leaves on SessionEnd, never for going quiet
+ #[doc(hidden)]
+-pub const STALE_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
++pub const STALE_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 24 * 3600); // Divan: an agent leaves on SessionEnd, never for going quiet
+ #[doc(hidden)]
+-pub const STALE_BLOCKED_TIMEOUT: Duration = Duration::from_secs(60 * 60);
++pub const STALE_BLOCKED_TIMEOUT: Duration = Duration::from_secs(30 * 24 * 3600); // Divan: an agent leaves on SessionEnd, never for going quiet
+ #[doc(hidden)]
+ pub const STALE_UNKNOWN_CWD_TIMEOUT: Duration = Duration::from_secs(3 * 60);
+ 
+@@ -52,7 +52,7 @@ pub const STALE_UNKNOWN_CWD_TIMEOUT: Duration = Duration::from_secs(3 * 60);
+ /// `ShutdownComplete` never reaches the rollout, and its open-fd probe (`source::fd_probe`) returns nothing
+ /// off macOS/Linux. CC has a clean-exit hook, so it keeps [`STALE_IDLE_TIMEOUT`].
+ #[doc(hidden)]
+-pub const STALE_SHORT_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
++pub const STALE_SHORT_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 24 * 3600); // Divan: an agent leaves on SessionEnd, never for going quiet
+ 
+ /// `slot`'s source's caps; `None` for an unregistered source.
+ fn caps_of(slot: &AgentSlot) -> Option<SourceCaps> {
 diff --git a/crates/pixtuoid-web/src/lib.rs b/crates/pixtuoid-web/src/lib.rs
 index 28af54d0..06a7fbe1 100644
 --- a/crates/pixtuoid-web/src/lib.rs

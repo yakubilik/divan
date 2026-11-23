@@ -68,6 +68,8 @@ class OfficeTap:
         self._server: asyncio.base_events.Server | None = None
         self._since = time.time()
         self._last_hook: float | None = None
+        # Called with (epoch_s, line) for each line, by DivanOffice.
+        self.on_line = None
 
     # ── what the page reads ────────────────────────────────────────────────
     def backlog(self) -> list[tuple[float, str]]:
@@ -95,6 +97,11 @@ class OfficeTap:
         self._last_hook = now
         self.lines.append((now, line))
         self._prune()
+        if self.on_line is not None:
+            try:
+                self.on_line(now, line)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("office on_line: %s", exc)
         for q in list(self.watchers):
             try:
                 q.put_nowait((now, line))
@@ -239,3 +246,209 @@ class OfficeTap:
         self._prune()
         return {"mode": self.mode, "lines": len(self.lines), "socket": str(self.path),
                 "watchers": len(self.watchers)}
+
+
+# ── Divan's own chats ──────────────────────────────────────────────────────
+#
+# The plugin's hooks only reach a CLI started after the plugin was installed,
+# and a chat that Divan keeps alive for days never restarts. So every chat is
+# put in the office from what the daemon itself knows: the chat list, and the
+# events it already broadcasts (server.broadcast). Each becomes the hook line
+# Claude Code would have sent, keyed on the chat id, so pixtuoid's reducer does
+# the rest. Each product gets a room of its own; a session the plugin reports
+# that no Divan chat owns (a terminal, a script) goes to the "Terminal" room.
+
+SRC = "claude-code"
+# Chats with nothing for this long are left out, unless they are still in the
+# list (not archived).
+RECENT_S = 12 * 3600
+OTHER_ROOM = "Other"
+TERMINAL_ROOM = "Terminal"
+
+
+def _short(chat_id: str) -> str:
+    # pixtuoid labels an agent `cc·<cwd basename>` and cuts it at about ten
+    # characters; eight of the chat id survive that and say which chat it is.
+    return chat_id[:8]
+
+
+def hook_line(chat_id: str, event: str, ts: float, **extra) -> str:
+    short = _short(chat_id)
+    body = {"_pixtuoid_source": SRC, "_shim_ts_ms": int(ts * 1000), "hook_event_name": event,
+            "session_id": chat_id, "cwd": f"/divan/{short}",
+            "transcript_path": f"/divan/{short}/{chat_id}.jsonl", **extra}
+    return json.dumps(body, ensure_ascii=False)
+
+
+class DivanOffice:
+    def __init__(self, tap: OfficeTap, list_chats) -> None:
+        self.tap = tap
+        self.list_chats = list_chats  # () -> list[dict], the db's chat rows
+        self.chats: dict[str, dict] = {}
+        # provider session id -> chat id, so a plugin line of a Divan chat is
+        # not shown twice
+        self.sessions: dict[str, str] = {}
+        self.watchers: set[asyncio.Queue] = set()
+        tap.on_line = self._tap_line
+        self._loaded = False
+
+    # ── the chat list ──────────────────────────────────────────────────────
+    def _room(self, chat: dict) -> str:
+        return (chat.get("project") or "").strip() or OTHER_ROOM
+
+    def _wanted(self, chat: dict, now: float) -> bool:
+        if not chat.get("archived"):
+            return True
+        return (now - float(chat.get("updated_at") or 0)) < RECENT_S
+
+    def load(self) -> None:
+        now = time.time()
+        try:
+            rows = self.list_chats()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("office: chat list: %s", exc)
+            return
+        for c in rows:
+            if self._wanted(c, now):
+                self._adopt(c, quiet=True)
+        self._loaded = True
+
+    def _adopt(self, chat: dict, quiet: bool = False) -> dict:
+        cid = chat["id"]
+        cur = self.chats.get(cid)
+        info = {
+            "id": cid, "short": _short(cid), "room": self._room(chat),
+            "title": (chat.get("title") or "").strip() or "New chat",
+            "busy": (chat.get("status") or "idle") != "idle",
+            "since": float(chat.get("created_at") or time.time()),
+            "last": cur["last"] if cur else None,  # the last state line
+            "tool": cur["tool"] if cur else None,
+        }
+        for key in ("provider_session_id",):
+            if chat.get(key):
+                self.sessions[str(chat[key])] = cid
+        try:
+            for sid in (json.loads(chat.get("session_ids") or "{}") or {}).values():
+                if sid:
+                    self.sessions[str(sid)] = cid
+        except Exception:  # noqa: BLE001
+            pass
+        self.chats[cid] = info
+        changed = cur is None or any(cur.get(k) != info[k] for k in ("room", "title"))
+        if cur is None and not quiet:
+            self._send(hook_line(cid, "SessionStart", time.time(), source="startup"), info["room"])
+        if changed and not quiet:
+            self._rooms_changed()
+        return info
+
+    # ── what the daemon broadcasts ─────────────────────────────────────────
+    def observe(self, event: dict) -> None:
+        kind = event.get("event")
+        cid = event.get("chat_id")
+        if not cid:
+            return
+        data = event.get("data") or {}
+        if kind == "chat.updated" and isinstance(data, dict):
+            if data.get("archived") and cid in self.chats and \
+                    time.time() - float(data.get("updated_at") or 0) > RECENT_S:
+                info = self.chats.pop(cid)
+                self._send(hook_line(cid, "SessionEnd", time.time(), reason="other"), info["room"])
+                self._rooms_changed()
+                return
+            if cid not in self.chats and data.get("archived"):
+                return
+            self._adopt(data)
+            return
+        info = self.chats.get(cid)
+        if info is None:
+            return
+        now = time.time()
+        line = None
+        if kind in ("turn.started", "message.user"):
+            info["busy"], info["tool"] = True, None
+            line = hook_line(cid, "UserPromptSubmit", now, prompt="")
+        elif kind == "tool.use" and isinstance(data, dict):
+            info["busy"] = True
+            name = str(data.get("name") or data.get("tool") or "Tool")
+            tid = str(data.get("id") or "")
+            info["tool"] = (name, tid)
+            line = hook_line(cid, "PreToolUse", now, tool_name=name, tool_use_id=tid,
+                             tool_input=data.get("input") if isinstance(data.get("input"), dict) else {})
+        elif kind == "tool.result" and isinstance(data, dict):
+            name, tid = info["tool"] or ("Tool", str(data.get("id") or ""))
+            info["tool"] = None
+            line = hook_line(cid, "PostToolUse", now, tool_name=name, tool_use_id=tid, tool_input={},
+                             tool_response={})
+        elif kind == "approval.request":
+            line = hook_line(cid, "PermissionRequest", now, tool_name=str((data or {}).get("tool") or "Bash"),
+                             tool_input={})
+        elif kind == "approval.resolved":
+            line = hook_line(cid, "UserPromptSubmit", now, prompt="")
+        elif kind in ("turn.done", "turn.error"):
+            info["busy"], info["tool"] = False, None
+            line = hook_line(cid, "Stop", now)
+        if line:
+            info["last"] = (now, line)
+            self._send(line, info["room"], now)
+
+    # ── lines the plugin reports ───────────────────────────────────────────
+    def _tap_line(self, ts: float, line: str) -> None:
+        try:
+            sid = str(json.loads(line).get("session_id") or "")
+        except Exception:  # noqa: BLE001
+            return
+        if sid and (sid in self.sessions or sid in self.chats):
+            return
+        self._send(line, TERMINAL_ROOM, ts)
+
+    # ── the page ───────────────────────────────────────────────────────────
+    def rooms(self) -> dict:
+        return {"chats": {c["short"]: {"id": c["id"], "title": c["title"], "room": c["room"]}
+                          for c in self.chats.values()},
+                "rooms": sorted({c["room"] for c in self.chats.values()} | {TERMINAL_ROOM})}
+
+    def backlog(self) -> list[tuple[float, str, str]]:
+        """Every chat as it is now: its start, then where it is."""
+        if not self._loaded:
+            self.load()
+        out: list[tuple[float, str, str]] = []
+        now = time.time()
+        for c in self.chats.values():
+            start = min(c["since"], now - 1)
+            out.append((start, hook_line(c["id"], "SessionStart", start, source="startup"), c["room"]))
+            if c["last"] is not None:
+                out.append((c["last"][0], c["last"][1], c["room"]))
+            elif c["busy"]:
+                out.append((now - 0.5, hook_line(c["id"], "UserPromptSubmit", now - 0.5, prompt=""), c["room"]))
+            else:
+                out.append((start + 0.5, hook_line(c["id"], "Stop", start + 0.5), c["room"]))
+        for ts, line in self.tap.backlog():
+            try:
+                sid = str(json.loads(line).get("session_id") or "")
+            except Exception:  # noqa: BLE001
+                continue
+            if not (sid in self.sessions or sid in self.chats):
+                out.append((ts, line, TERMINAL_ROOM))
+        out.sort(key=lambda x: x[0])
+        return out
+
+    def watch(self) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=2000)
+        self.watchers.add(q)
+        return q
+
+    def unwatch(self, q: asyncio.Queue) -> None:
+        self.watchers.discard(q)
+
+    def _put(self, item) -> None:
+        for q in list(self.watchers):
+            try:
+                q.put_nowait(item)
+            except asyncio.QueueFull:
+                self.watchers.discard(q)
+
+    def _send(self, line: str, room: str, ts: float | None = None) -> None:
+        self._put(("line", ts or time.time(), line, room))
+
+    def _rooms_changed(self) -> None:
+        self._put(("rooms", self.rooms()))

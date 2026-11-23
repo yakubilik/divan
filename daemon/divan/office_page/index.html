@@ -6,21 +6,28 @@
 <title>Office</title>
 <style>
   @font-face { font-family: 'Fusion Pixel 8px'; src: url(fusion-pixel-8px.woff2) format('woff2'); font-display: block; }
-  html, body { margin: 0; height: 100%; background: #1b1a24; overflow: hidden; -webkit-user-select: none; user-select: none; }
-  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  #wrap { position: relative; }
+  html, body { margin: 0; min-height: 100%; background: #16151d; color: #d9d4ec; -webkit-user-select: none; user-select: none; }
+  body { font: 13px -apple-system, system-ui, sans-serif; }
+  #rooms { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px; align-items: flex-start; justify-content: center; }
+  .room { background: #1f1d29; border: 1px solid #2e2b3d; border-radius: 10px; overflow: hidden; }
+  .room h2 { margin: 0; padding: 8px 12px; font: 600 13px -apple-system, system-ui, sans-serif; color: #e8e3fa;
+             display: flex; justify-content: space-between; gap: 12px; }
+  .room h2 span { color: #8f89a8; font-weight: 400; }
+  .wrap { position: relative; cursor: pointer; }
   canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
-  #labels { position: absolute; inset: 0; pointer-events: none; font-family: 'Fusion Pixel 8px', ui-monospace, monospace; }
-  .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; font-size: 8px; border: 1px solid transparent; padding: 2px; }
-  #board { position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 1px; overflow: hidden;
-           font-family: 'Fusion Pixel 8px', ui-monospace, monospace; font-size: 8px; line-height: 1; white-space: nowrap; padding: 0 3px; box-sizing: border-box; }
-  #note { position: fixed; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom)); text-align: center;
-          font: 13px -apple-system, system-ui, sans-serif; color: #b9b4cc; pointer-events: none; }
+  .labels { position: absolute; inset: 0; pointer-events: none; font-family: 'Fusion Pixel 8px', ui-monospace, monospace; }
+  .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; font-size: 8px; padding: 2px 3px;
+        max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+  #zoom { position: fixed; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: 6px; z-index: 5; }
+  #zoom button { width: 36px; height: 36px; border-radius: 18px; border: 1px solid #3a3650; background: #262335ee;
+                 color: #e8e3fa; font: 600 18px -apple-system, system-ui, sans-serif; cursor: pointer; }
+  #note { text-align: center; color: #8f89a8; padding: 30px; }
 </style>
 </head>
 <body>
-<div id="stage"><div id="wrap"><canvas id="office"></canvas><div id="board"></div><div id="labels"></div></div></div>
+<div id="rooms"></div>
 <div id="note"></div>
+<div id="zoom"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button></div>
 <script type="module" src="office.js"></script>
 </body>
 </html>
