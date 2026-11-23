@@ -795,7 +795,17 @@ export function Timeline({ items, hostKey, chatId, onRespond, tickets, busy = fa
   // Between a message landing and the first step, and between an answer and the
   // next step, nothing else says the turn is alive: the same row stands in.
   const top = rows[head];
-  const waiting = busy && !(top?.kind === 'steps')
+  // A message steered into the turn (session.py `send`) lands after a tool
+  // that is still running; that tool's row is the turn's live row, and a
+  // second one under the message would read as two things running at once.
+  // Only this turn's tools count: one a finished turn left open is not running.
+  let toolRunning = false;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const b = rows[i];
+    if (b.kind === 'item' && (b.item.kind === 'turn' || b.item.kind === 'error')) break;
+    if (b.kind === 'steps' && b.steps.some((s) => s.kind === 'tool' && s.running)) { toolRunning = true; break; }
+  }
+  const waiting = busy && !toolRunning && !(top?.kind === 'steps')
     && !(top?.kind === 'item' && (top.item.kind === 'approval'
       || (top.item.kind === 'assistant' && !top.item.done)));
   let prevTs: number | null = null;
