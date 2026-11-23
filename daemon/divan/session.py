@@ -90,6 +90,14 @@ AUTH_RETRY_DELAY_S = 1.5
 LIMIT_BLIP_RE = re.compile(r"hit your (?:\w+ )*limit|spend limit|usage limit", re.I)
 LIMIT_BLIP_DELAY_S = 60.0
 
+# A limit refusal that comes back as the turn's own result (past the quiet
+# retry above) hands the turn to the pool like a mid-turn window report does.
+# 23 Nov 2026 17:44 a continuation turn — woken by a finished background task,
+# so never checked by the pool before it opened — got "You've hit your monthly
+# spend limit" and simply ended in an error for two hours while another
+# sign-in had room. Capped per run so sign-ins refusing in turn cannot loop.
+LIMIT_MOVES_MAX = 3
+
 # Rebuilding a dropped CLI session from the chat's own event log.
 # A chat outlives the CLI session behind it: switching account or tool clears the
 # resume id, and the next turn opens a session that has never seen this chat.
@@ -204,6 +212,8 @@ class ChatSession:
         # the interrupt has come back, rather than tearing the provider down
         # underneath a coroutine that is still draining it.
         self._handover: tuple[str | None, str] | None = None
+        # limit refusals handed to the pool in this run of turns (LIMIT_MOVES_MAX)
+        self._limit_moves = 0
         # A wait the pool asked for before the turn opened, done by `_run`
         # rather than under the lock `_prepare` is called with.
         self._pending_wait: Wait | None = None
@@ -898,6 +908,7 @@ class ChatSession:
     async def _run(self, text: str | None, attachments: list[dict] | None,
                    continuation: bool = False) -> None:
         """Run the turn, then keep running whatever was queued behind it."""
+        self._limit_moves = 0
         if self._pending_wait is not None:
             # The account was spent before the turn opened. Wait here, in the
             # turn's own task, rather than in `_prepare` under the send lock.
@@ -999,6 +1010,15 @@ class ChatSession:
         res, owner = await self._past_limit_blip(res, owner, prompt, attachments)
         self.last_active = time.monotonic()
         chat = self.db.get_chat(self.chat_id) or {}
+        if (self._handover is None and res.is_error and LIMIT_BLIP_RE.search(res.error or "")
+                and self.pool_next and not chat.get("pool_pinned")
+                and self._limit_moves < LIMIT_MOVES_MAX):
+            self._limit_moves += 1
+            log.warning("chat %s: account=%s refused the turn for its plan limit; handing it to the pool (%d/%d)",
+                        self.chat_id, chat.get("account_id"), self._limit_moves, LIMIT_MOVES_MAX)
+            if res.session_id and owner:
+                self._remember_session(owner, res.session_id)
+            self._handover = (None, "limit")
         if self._handover is not None:
             # Stopped mid-sentence on purpose. Nothing goes idle, nothing is
             # reported as done, and no notification is sent for work that is
