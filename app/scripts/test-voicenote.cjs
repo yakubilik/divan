@@ -111,21 +111,11 @@ const AGENT = { path: '/w/out/reply.mp3', name: 'reply.mp3', kind: 'audio', loca
 function draw(item, sent, p, s) {
   player = p; pans = [];
   status = { playing: false, currentTime: 0, duration: 30, didJustFinish: false, ...s };
-  const html = R.render('light', h(media.VoiceBubble, { item, sent, native: true }));
+  const html = R.render('light', h(media.VoiceBubble, { item, sent }));
   return { html, presses: R.presses(), pan: pans[pans.length - 1] };
 }
 const playOf = (d) => d.presses.find((x) => x.text === '');
 const bars = (html) => R.styles(html).filter((s) => s.width === 2.5);
-
-// A note the phone can reach is drawn by Rare UI's VoiceNote, in its island;
-// everything below drives the phone's own bubble, which the fixtures still use.
-{
-  player = fake('island'); pans = [];
-  status = { playing: false, currentTime: 0, duration: 30, didJustFinish: false };
-  const html = R.render('light', h(media.VoiceBubble, { item: NOTE, sent: false }));
-  checks.push(['a reachable note is Rare UI\'s VoiceNote, with its transcript under it',
-    html.includes('rare-voice') && html.includes('hello there') && !R.styles(html).some((st) => st.width === 2.5)]);
-}
 
 async function bubble() {
   // 1 — through the component: the second play pauses the first.

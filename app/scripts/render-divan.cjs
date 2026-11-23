@@ -333,19 +333,8 @@ const nav = {
 let OVERLAY = null;
 let OVERLAY_LOADING = false;
 const realLoad = Module._load;
-// A Rare UI island (`src/dom/`, 'use dom') is a web view on the phone and a
-// whole web page's worth of code; here it is a box that says which one it is.
-const DOM_ISLAND = path.join(root, 'src/dom') + path.sep;
-const islandStub = (name) => {
-  const Island = host('div', `dom:${name}`);
-  return { __esModule: true, default: (props) => React.createElement(Island, { 'data-island': name }) };
-};
 Module._load = function (request, parent, isMain) {
   if (Object.prototype.hasOwnProperty.call(STUBS, request)) return STUBS[request];
-  if (request.startsWith('.') && parent) {
-    const abs = path.resolve(path.dirname(parent.filename), request);
-    if (abs.startsWith(DOM_ISLAND)) return islandStub(path.basename(abs));
-  }
   if (request.startsWith('.') && parent
       && path.resolve(path.dirname(parent.filename), request) === path.join(root, 'src/store')) return STORE;
   if (request.startsWith('.') && parent && !OVERLAY_LOADING

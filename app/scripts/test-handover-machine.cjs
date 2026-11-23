@@ -154,9 +154,9 @@ const ready = (async () => {
       one((p) => p.text === 'Allow').press();
       one((p) => p.label === 'Stop').press();
       await flush();
-      // Rare UI's VoiceNote island and the transcript; the phone's own bubble,
-      // its speed chip and scrub are pressed in test-voicenote.cjs.
-      const voice = page.includes('rare-voice') && page.includes('about refunds');
+      // The waveform's bars and the transcript; its speed chip and scrub are
+      // pressed in test-voicenote.cjs, where a note is playing.
+      const voice = R.styles(page).filter((s) => s.width === 2.5).length >= 10 && page.includes('about refunds');
       // A single photo whose size is not known yet is drawn at the bubble's
       // 4:3 placeholder (src/media-size.ts); its own shape comes once it loads.
       const picture = R.styles(page).some((s) => s.width === 250 && s.height === 188);

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import RareOrb from '../src/dom/rare-orb';
+import { MatrixOrb, type OrbMode } from '../src/components/matrix-orb';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -850,10 +850,7 @@ export default function Call() {
         <Pressable onPress={tap} disabled={phase === 'thinking'} accessibilityRole="button" accessibilityLabel={label}
           style={{ alignItems: 'center', gap: 14 }}>
           {/* The orb says what the call is doing; the word under it says the same for anyone who cannot see it move. */}
-          <View pointerEvents="none" style={{ width: 220, height: 220 }}>
-            <RareOrb state={orbState(phase)} color={ringColor} size={190}
-              dom={{ style: { width: 220, height: 220, backgroundColor: 'transparent' }, scrollEnabled: false }} />
-          </View>
+          <MatrixOrb mode={orbMode(phase)} color={ringColor} size={172} />
           <Text style={[{ fontSize: 17, fontWeight: '600' as const, lineHeight: 22 }, { color: phase === 'idle' ? c.ink : ringColor }]}>{label}</Text>
         </Pressable>
         {phase !== 'idle' && (
@@ -866,11 +863,11 @@ export default function Call() {
   );
 }
 
-/** Which of Rare UI's three orb states a call phase is drawn in: it listens
- *  while either side speaks, thinks while an answer is being found. */
-function orbState(phase: Phase): 'idle' | 'listening' | 'thinking' {
-  if (phase === 'listening' || phase === 'hearing' || phase === 'speaking') return 'listening';
-  if (phase === 'thinking' || phase === 'working' || phase === 'reconnecting' || phase === 'dialling') return 'thinking';
+/** Which of the orb's four moves a call phase is drawn with. */
+function orbMode(phase: Phase): OrbMode {
+  if (phase === 'listening' || phase === 'hearing') return 'listening';
+  if (phase === 'speaking') return 'speaking';
+  if (phase === 'thinking' || phase === 'working' || phase === 'reconnecting') return 'thinking';
   return 'idle';
 }
 

@@ -10,7 +10,7 @@ import { AssistantText, TurnFooter, UserBubble, WorkingRow } from '../src/compon
 import { VoiceBubble } from '../src/components/media';
 import { ModelPill } from '../src/components/model-pill';
 import { toast } from '../src/components/toast';
-import RareOrb from '../src/dom/rare-orb';
+import { MatrixOrb } from '../src/components/matrix-orb';
 import type { Attachment } from '../src/store';
 
 /** The chat's parts that the Rare UI pass touched, standing still for a
@@ -84,10 +84,7 @@ export default function RareuiFixtures() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', rowGap: 28, paddingTop: 20 }}>
             {(['idle', 'listening', 'thinking', 'speaking'] as const).map((m) => (
               <View key={m} style={{ alignItems: 'center', gap: 10 }}>
-                <View style={{ width: 160, height: 160 }}>
-                  <RareOrb state={m === 'speaking' ? 'listening' : m} color={m === 'speaking' ? c.ok : m === 'thinking' ? c.warn : c.accent} size={150}
-                    dom={{ style: { flex: 1, backgroundColor: 'transparent' }, scrollEnabled: false }} />
-                </View>
+                <MatrixOrb mode={m} color={m === 'speaking' ? c.ok : m === 'thinking' ? c.warn : c.accent} size={150} />
                 <Text style={{ fontSize: 14, color: c.muted }}>{m}</Text>
               </View>
             ))}

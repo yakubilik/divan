@@ -56,17 +56,25 @@ the user asks for them.
   the model's alphabet and the chunker), so that part of the app stays under
   their licence; the files say which source each part comes from.
 
-## Rare UI
+## Designs drawn after other projects
 
-- **Rare UI** by Swami Malode (<https://rareui.com>,
-  <https://github.com/swamimalode07/rare-ui>) is used as it is, under its own
-  licence (MIT + Commons Clause + Attribution, © 2026 Swami Malode), not this
-  repository's MIT licence. Its components are copied unchanged into
-  `app/src/rareui/` and `web/src/rareui/` (each with Rare UI's `LICENSE`
-  beside them), with Next.js imports pointed at a small stand-in
-  (`shims/next.tsx`) and asset paths moved under `web/public/rareui/`.
-- The phone runs them in Expo DOM islands (`app/src/dom/`): the running turn's
-  status, voice notes, the composer's model picker, toasts and the call
-  screen's orb. The web panel serves every component and its demo at
-  `/rareui.html`, which the panel's About screen and the phone's Settings open.
-  The credit is on that page and here.
+- **Rare UI** by Swami Malode (<https://rareui.com>) gave the look and motion
+  of five parts of the phone app: the status line of a running turn and the
+  footer of a finished one (`WorkingRow`, `TurnFooter` in
+  `app/src/components/chat.tsx`), the call screen's dot orb
+  (`app/src/components/matrix-orb.tsx`), the played wash of a voice note
+  (`VoiceBubble` in `app/src/components/media.tsx`), the composer's model
+  picker (`app/src/components/model-pill.tsx`) and the toast
+  (`app/src/components/toast.tsx`). They are written anew for React Native,
+  not copied from Rare UI's React source. Rare UI is offered under MIT +
+  Commons Clause + Attribution, which asks for this visible credit.
+- **Rare UI's own components** are also used as they are, in the web panel:
+  `web/src/rareui/components/`, `web/src/rareui/demos/`, `web/src/rareui/lib/`
+  and `web/src/rareui/globals.css` are files from
+  <https://github.com/swamimalode07/rare-ui>, with Next.js imports pointed at
+  `web/src/rareui/shims/next.tsx` and asset paths moved under
+  `web/public/rareui/`. They stay under Rare UI's licence
+  (`web/src/rareui/LICENSE`: MIT + Commons Clause + Attribution, © 2026 Swami
+  Malode), not this repository's MIT licence. The panel serves them at
+  `/rareui.html`, which the panel's About screen and the phone's Settings link
+  to, with the credit on the page.
