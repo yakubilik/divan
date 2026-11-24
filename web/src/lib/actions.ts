@@ -339,7 +339,7 @@ export function officeUrl(key: string): string {
   if (refusedFor(cfg.token)) return '';
   // `v` names this build of the page, so a browser that kept an older one
   // asks again instead of showing it.
-  return `${base(cfg)}/office/?v=1795521000&token=${encodeURIComponent(cfg.token)}`;
+  return `${base(cfg)}/office/?v=1795524000&token=${encodeURIComponent(cfg.token)}`;
 }
 
 /** One frame of a computer's screen, or '' once it has refused this token.

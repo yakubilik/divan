@@ -47,10 +47,10 @@ function roomUnits(r) {
 function makeRoom(name) {
   const el = document.createElement('section');
   el.className = 'room';
-  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="sign"><span class="logo"></span><b></b><i></i></div>';
+  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="sign"><span class="logo"></span><b></b><i></i></div>';
   floor.appendChild(el);
   const r = {
-    name, el, canvas: el.querySelector('canvas'), labels: el.querySelector('.labels'),
+    name, el, canvas: el.querySelector('canvas'), labels: el.querySelector('.labels'), says: el.querySelector('.says'),
     sign: el.querySelector('.sign'), office: Office.live(day + rooms.size * 7919), img: null,
     units: [0, 0], at: [0, 0], people: 0, shown: [], pending: [], primed: false,
   };
@@ -67,6 +67,82 @@ function dropRoom(r) { r.el.remove(); try { r.office.free(); } catch (e) { /* go
 function land(r, t, line) {
   if (!r.primed) { r.office.step(t - 1, ...(r.units[0] ? r.units : roomUnits(r))); r.primed = true; }
   try { r.office.send_hook(line, t); } catch (e) { /* a line no source names */ }
+  hear(line, t);
+}
+
+// ── what each one is doing: a small bubble beside its name for a moment ──
+// The words are the chat screen's step strip's (web/src/lib/steps.ts, WORK,
+// SHELL, SERVERS, BUILT_IN), in Turkish, the language the chats are in.
+// audit: language-data — the office's copy of the step strip's Turkish words
+const DOING = {
+  think: 'Düşünüyorum', read: 'Dosyaları okuyorum', search: 'Kodda arıyorum', edit: 'Dosyaları düzenliyorum',
+  git: 'Değişikliklere bakıyorum', commit: 'Değişiklikleri kaydediyorum', push: 'Değişiklikleri gönderiyorum',
+  github: 'GitHub’a bakıyorum', test: 'Testleri çalıştırıyorum', build: 'Projeyi derliyorum', install: 'Paketleri kuruyorum',
+  deploy: 'Yayına alıyorum', cloud: 'Sunucu tarafına bakıyorum', data: 'Veritabanına bakıyorum',
+  request: 'Bir servise istek atıyorum', script: 'Bir script çalıştırıyorum', files: 'Dosyalara bakıyorum',
+  ticket: 'Ticket kuyruğuyla ilgileniyorum', run: 'Terminalde komut çalıştırıyorum',
+  browser: 'Tarayıcıda sayfayı kontrol ediyorum', shot: 'Ekran görüntüsü alıyorum', websearch: 'İnternette arıyorum',
+  webread: 'Bir web sayfasını okuyorum', agent: 'Yardımcı ajana iş veriyorum', wait: 'Arka plandaki işi bekliyorum',
+  message: 'Başka bir chate mesaj bırakıyorum', skill: 'Nasıl yapılacağına bakıyorum', plan: 'Planı güncelliyorum',
+  memory: 'Not alıyorum', mail: 'Maillere bakıyorum', calendar: 'Takvime bakıyorum', docs: 'Dokümanla ilgileniyorum',
+  design: 'Tasarımla ilgileniyorum', media: 'Görsel üretiyorum', tool: 'Bir araç kullanıyorum', ask: 'Senden izin bekliyorum',
+};
+// audit: end-language-data
+const SHELL = [
+  [/\bustabasi\b/, 'ticket'],
+  [/\bgit\s+(-\S+\s+)*push\b/, 'push'],
+  [/\bgit\s+(-\S+\s+)*(commit|merge|rebase|cherry-pick)\b/, 'commit'],
+  [/\b(vercel|firebase\s+deploy|eas\s+(build|submit|update)|terraform\s+apply|cdk\s+deploy|wrangler\s+(deploy|publish)|launchctl\s+(kickstart|bootstrap|load))\b/, 'deploy'],
+  [/\b(pytest|vitest|jest|maestro|playwright\s+test|go\s+test|cargo\s+test)\b|\b(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|\bscripts\/test[-_]|\btest_\w+\.py\b/, 'test'],
+  [/\b(npm|pnpm|yarn|bun)\s+(run\s+)?(build|typecheck)\b|\b(tsc|vite\s+build|xcodebuild|gradlew?|cargo\s+build|make)\b|\bexpo\s+(prebuild|export)\b/, 'build'],
+  [/\b(npm|pnpm|yarn|bun)\s+(install|i|add|ci)\b|\b(pip3?|uv)\s+(pip\s+)?(install|sync|add)\b|\bbrew\s+install\b|\bpod\s+install\b/, 'install'],
+  [/\bgh\s/, 'github'],
+  [/\bgit\s/, 'git'],
+  [/\b(aws|gcloud|az|kubectl|docker|ssh|terraform)\s/, 'cloud'],
+  [/\b(sqlite3|psql|mysql|redis-cli)\b/, 'data'],
+  [/\b(curl|wget|http)\s/, 'request'],
+  [/\b(python3?|node|npx|uv\s+run|ruby|deno|bun)\b/, 'script'],
+  [/\b(ls|cat|head|tail|sed|awk|grep|rg|find|wc|stat|tree|du|file|jq|diff)\b/, 'files'],
+];
+const SERVERS = [
+  [/screenshot/, 'shot'], [/chrome|playwright|browser|puppeteer|firecrawl/, 'browser'], [/gmail|mail/, 'mail'],
+  [/calendar/, 'calendar'], [/docs|drive|notion/, 'docs'], [/firebase|firestore|postgres|supabase/, 'data'],
+  [/livepeer|image|video/, 'media'], [/github/, 'github'],
+];
+const BUILT_IN = {
+  Read: 'read', NotebookRead: 'read', Grep: 'search', Glob: 'search', ToolSearch: 'search',
+  Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit', WebSearch: 'websearch', WebFetch: 'webread',
+  Agent: 'agent', Task: 'agent', Workflow: 'agent', Monitor: 'wait', TaskStop: 'wait', TaskOutput: 'wait',
+  ScheduleWakeup: 'wait', SendMessage: 'message', ListAgents: 'message', Skill: 'skill', TodoWrite: 'plan',
+  ExitPlanMode: 'plan', DesignSync: 'design',
+};
+function workOf(name, input) {
+  if (name === 'Bash' || name === 'shell') {
+    const cmd = String((input && input.command) || '');
+    for (const [re, w] of SHELL) if (re.test(cmd)) return w;
+    return 'run';
+  }
+  if (BUILT_IN[name]) return BUILT_IN[name];
+  if (/\/memory\//.test(String((input && input.file_path) || ''))) return 'memory';
+  const lower = String(name || '').toLowerCase();
+  for (const [re, w] of SERVERS) if (re.test(lower)) return w;
+  return 'tool';
+}
+
+const SAY_MS = 4500;                // how long a bubble stays before it fades
+const saying = new Map();           // session id -> { text, until }
+function hear(line, t) {
+  if (Date.now() - t > SAY_MS) return;  // an old line, replayed as the page opens
+  let b;
+  try { b = JSON.parse(line); } catch (e) { return; }
+  const sid = b.session_id;
+  if (!sid) return;
+  let work = null;
+  if (b.hook_event_name === 'PreToolUse') work = workOf(b.tool_name, b.tool_input);
+  else if (b.hook_event_name === 'UserPromptSubmit') work = 'think';
+  else if (b.hook_event_name === 'PermissionRequest') work = 'ask';
+  else if (b.hook_event_name === 'Stop' || b.hook_event_name === 'SessionEnd') { saying.delete(sid); return; }
+  if (work) saying.set(sid, { text: DOING[work] + '…', until: t + SAY_MS });
 }
 
 function roomFor(name) { return rooms.get(name) || makeRoom(name); }
@@ -136,10 +212,27 @@ function overlay(r) {
     el.style.boxShadow = `inset 0 0 0 1px ${tone(r.name)}`;
     const x = L.x * css, y = L.y * css;
     el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
-    r.shown.push({ x, y, chat });
+    r.shown.push({ x, y, chat, w: el.offsetWidth, sid: chat ? chat.id : null });
     i++;
   }
   while (kids.length > i) r.labels.removeChild(kids[kids.length - 1]);
+  // The bubbles, beside the name they belong to; one past its time fades out.
+  const now = Date.now();
+  const bubbles = r.says.children;
+  let j = 0;
+  for (const s of r.shown) {
+    const say = s.sid && saying.get(s.sid);
+    if (!say) continue;
+    let el = bubbles[j];
+    if (!el) { el = document.createElement('div'); el.className = 'say'; r.says.appendChild(el); }
+    if (el.textContent !== say.text) el.textContent = say.text;
+    el.classList.toggle('gone', now > say.until);
+    el.style.fontSize = Math.max(9, Math.round(2.4 * css)) + 'px';
+    el.style.transform = `translate(${s.x + s.w / 2 + 4}px, ${s.y}px) translate(0, -100%)`;
+    if (now > say.until + 800) saying.delete(s.sid);
+    j++;
+  }
+  while (bubbles.length > j) r.says.removeChild(bubbles[bubbles.length - 1]);
   if (r.name === TERMINAL) r.visitors = i;
   r.sign.querySelector('i').textContent = String(r.name === TERMINAL ? i : r.people);
 }
