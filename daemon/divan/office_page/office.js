@@ -349,13 +349,14 @@ function setZoom(z, cx = scroller.clientWidth / 2, cy = scroller.clientHeight / 
 document.getElementById('zin').onclick = (e) => { e.stopPropagation(); setZoom(zoom * 1.25); };
 document.getElementById('zout').onclick = (e) => { e.stopPropagation(); setZoom(zoom / 1.25); };
 scroller.addEventListener('wheel', (e) => {
-  if (!(e.ctrlKey || e.metaKey)) return;  // a plain wheel or two fingers pans
+  // The wheel zooms, round the pointer; moving round is the drag's.
   e.preventDefault();
   const port = scroller.getBoundingClientRect();
-  setZoom(zoom * Math.exp(-e.deltaY * 0.01), e.clientX - port.left, e.clientY - port.top);
+  const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;  // lines, from some mice
+  setZoom(zoom * Math.exp(-Math.max(-60, Math.min(60, dy)) * (e.ctrlKey ? 0.01 : 0.004)), e.clientX - port.left, e.clientY - port.top);
 }, { passive: false });
 
-// Drag to pan with a mouse; a finger pans by itself.
+// Drag to pan with a mouse or a finger.
 let drag = null, dragged = false;
 scroller.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'mouse' || e.button !== 0) return;

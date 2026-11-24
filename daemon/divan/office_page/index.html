@@ -8,8 +8,8 @@
   @font-face { font-family: 'Fusion Pixel 8px'; src: url(fusion-pixel-8px.woff2) format('woff2'); font-display: block; }
   html, body { margin: 0; min-height: 100%; background: #16151d; color: #d9d4ec; -webkit-user-select: none; user-select: none; }
   body { font: 13px -apple-system, system-ui, sans-serif; overflow: hidden; }
-  /* The office can be bigger than the window: the scroller pans it (a finger,
-     a trackpad, or the mouse held down and dragged). margin:auto centres a
+  /* The office can be bigger than the window: the scroller pans it (a finger or
+     the mouse held down and dragged; the wheel zooms). margin:auto centres a
      small office without cutting off the left of a big one. */
   #scroller { position: fixed; inset: 0; overflow: auto; display: flex; padding: 24px; box-sizing: border-box;
               scrollbar-width: none; -webkit-overflow-scrolling: touch; cursor: grab; }
@@ -73,6 +73,6 @@
   <footer><textarea placeholder="Write to this chat…"></textarea><button class="b-send">Send</button><button class="b-open" title="Open the chat">↗</button></footer>
 </div>
 <div id="zoom"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button></div>
-<script type="module" src="office.js?v=1795524000"></script>
+<script type="module" src="office.js?v=1795527000"></script>
 </body>
 </html>
