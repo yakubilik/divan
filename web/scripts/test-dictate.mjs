@@ -115,6 +115,22 @@ ok('silence is never sent', cut([...room(5), ...voice(0.05), ...room(3)]).length
   ok('a noisy room still has pauses in it', lens.length === 2, lens.join(' '));
 }
 
+group('the phrase being spoken can be looked at before it ends');
+{
+  const p = new D.Phrases();
+  for (const b of room(1)) p.push(b);
+  ok('nothing to look at before a word', p.peek() === null);
+  for (const b of voice(1.5)) p.push(b);
+  const look = p.peek();
+  ok('a look is the speech so far', look && look.length / D.RATE > 1.4, look && String(look.length / D.RATE));
+  ok('looking does not end the phrase', p.taken === 0 && p.peek()?.length === look?.length);
+  let ended = null;
+  for (const b of [...voice(1), ...room(1.2)]) ended = p.push(b) ?? ended;
+  ok('the phrase it ends in holds what was looked at, and more',
+    ended && ended.length > look.length && p.taken === 1);
+  ok('after the pause there is nothing open', p.peek() === null);
+}
+
 group('a microphone at another rate');
 {
   const down = D.resampler(48000);

@@ -299,6 +299,7 @@ const LEAD = 0.3 * RATE;        // silence kept in front of the first word
 const TAIL = 0.2 * RATE;        // …and behind the last
 const LONG = 20 * RATE;         // past this, a breath is pause enough
 const MAX = 28 * RATE;          // whisper listens thirty seconds at a time
+const LOOK = 400;               // ms between looks at the phrase being spoken
 
 /** A stream of samples in, one phrase out each time the speaker pauses.
  *
@@ -324,6 +325,9 @@ export class Phrases {
   private voiced = 0;
   private quiet = 0;
   private floor = 0.004;
+  /** How many phrases have been ended so far. A look at the open phrase
+   *  (`peek`) is only worth showing while this has not moved on. */
+  taken = 0;
 
   push(block: Float32Array): Int16Array | null {
     if (!block.length) return null;
@@ -359,7 +363,21 @@ export class Phrases {
     return this.voiced >= MIN_VOICED ? this.take() : null;
   }
 
+  /** The phrase still being spoken, as far as it has got, without ending it —
+   *  or null while there is not yet a word in it. */
+  peek(): Int16Array | null {
+    return this.voiced >= MIN_VOICED ? this.pcm() : null;
+  }
+
   private take(): Int16Array {
+    const out = this.pcm();
+    this.blocks = [];
+    this.length = this.voiced = this.quiet = 0;
+    this.taken += 1;
+    return out;
+  }
+
+  private pcm(): Int16Array {
     const n = this.length - Math.max(0, this.quiet - TAIL);
     const out = new Int16Array(n);
     let i = 0;
@@ -369,8 +387,6 @@ export class Phrases {
         out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
       }
     }
-    this.blocks = [];
-    this.length = this.voiced = this.quiet = 0;
     return out;
   }
 }
@@ -417,6 +433,10 @@ interface Capture {
   /** Close the microphone and hand back the phrase that was still open. */
   stop: () => Int16Array | null;
   cancel: () => void;
+  /** The open phrase so far and which phrase it is (see `Phrases.taken`). */
+  peek: () => { pcm: Int16Array; phrase: number } | null;
+  /** Which phrase is open now. */
+  phrase: () => number;
 }
 
 async function capture(onPhrase: (pcm: Int16Array) => void): Promise<Capture> {
@@ -471,7 +491,15 @@ async function capture(onPhrase: (pcm: Int16Array) => void): Promise<Capture> {
     node.disconnect();
     close();
   };
-  return { cancel: end, stop: () => { end(); return phrases.flush(); } };
+  return {
+    cancel: end,
+    stop: () => { end(); return phrases.flush(); },
+    peek: () => {
+      const pcm = phrases.peek();
+      return pcm ? { pcm, phrase: phrases.taken } : null;
+    },
+    phrase: () => phrases.taken,
+  };
 }
 
 /* ── the hook the composer uses ───────────────────────────────────────────── */
@@ -482,7 +510,9 @@ export interface Dictation {
   engine: Engine | null;
   /** Seconds since the microphone opened, for the counter beside it. */
   seconds: number;
-  /** Words the browser's engine has not committed yet: the live half. */
+  /** Words not committed yet: the live half. The browser's engine gives them
+   *  as it hears; with whisper they are the open phrase heard so far, written
+   *  over by the phrase's own answer once the speaker pauses. */
   interim: string;
   /** The computer has a phrase and is writing it down. The only sign whisper
    *  can give that it heard, for the second its words take. */
@@ -543,6 +573,10 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
   const heard = useRef('');
   const waiting = useRef(0);
   const run = useRef(0);
+  /** A look at the open phrase is on its way to whisper. One at a time, and
+   *  never while a finished phrase is waiting: the finished words matter
+   *  more than the preview of the next ones. */
+  const peeking = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -564,6 +598,7 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
     run.current += 1;
     heard.current = '';
     waiting.current = 0;
+    peeking.current = false;
     queue.current = Promise.resolve();
     setWriting(false);
     setInterim('');
@@ -588,6 +623,9 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
         if (mine !== run.current) return;
         waiting.current -= 1;
         if (!waiting.current) setWriting(false);
+        // The preview of this phrase goes as its own words arrive, in the same
+        // render, so the box never shows both or neither.
+        setInterim('');
         if (text) {
           heard.current = appendSpeech(heard.current, text);
           latest.current.onCommit(text);
@@ -620,6 +658,37 @@ export function useDictation({ onCommit, names = [], whisper }: DictationOptions
     if (!wanted.current) { cap.current.cancel(); finish(); return; }
     setState('listening');
   }, [finish, sendPhrase]);
+
+  /** Live words with whisper: every LOOK the phrase being spoken goes up as it
+   *  stands and comes back as the grey tail in the box. Whisper on the
+   *  computer writes a sentence down in a sixth of the time it took to say,
+   *  so a look answers well inside the next one. */
+  useEffect(() => {
+    if (state !== 'listening' || engine !== 'whisper') return;
+    let last = { phrase: -1, length: 0 };
+    const t = setInterval(() => {
+      const c = cap.current;
+      const w = latest.current.whisper;
+      if (!c || !w || peeking.current || waiting.current) return;
+      const look = c.peek();
+      if (!look) return;
+      // Nothing new said since the last look at this phrase.
+      if (look.phrase === last.phrase && look.pcm.length - last.length < RATE * 0.3) return;
+      last = { phrase: look.phrase, length: look.pcm.length };
+      const mine = run.current;
+      peeking.current = true;
+      w.send(look.pcm, promptFor(latest.current.phrases), lang, heard.current.slice(-300))
+        .then((text) => {
+          if (mine !== run.current) return;
+          // The phrase ended while this was out: its own answer is coming.
+          if (waiting.current || c.phrase() !== look.phrase) return;
+          setInterim(text.trim());
+        })
+        .catch(() => { /* a preview that failed is only a late one */ })
+        .finally(() => { if (mine === run.current) peeking.current = false; });
+    }, LOOK);
+    return () => clearInterval(t);
+  }, [state, engine, lang]);
 
   const startSpeech = useCallback(async (local: boolean) => {
     const SR = speechClass();
