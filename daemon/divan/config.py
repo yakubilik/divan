@@ -289,6 +289,7 @@ class Config:
         cfg.terminal = _terminal_setting(raw)
         cfg.voice = raw.get("voice") is not False
         cfg.voice_call = raw.get("voice_call") is not False
+        cfg._hand_seen = {"voice": cfg.voice, "voice_call": cfg.voice_call}
         cfg.devices = devices
         cfg.accounts = accounts
         cfg.pool = pool if isinstance(pool, dict) else {}
@@ -308,6 +309,7 @@ class Config:
         # push token arriving would undo an edit nobody had asked the tunnel
         # about yet — and an undone `tunnel_access_*` is a sign-in turned off.
         self.refresh_tunnel()
+        self._keep_hand_switches()
         data = {
             "host_name": self.host_name,
             "port": self.port,
@@ -426,6 +428,28 @@ class Config:
         if isinstance(revoked, list):
             self.revoked_tokens = [str(h) for h in revoked][-REVOKED_MAX:]
         return True
+
+    def _keep_hand_switches(self) -> None:
+        """`voice` and `voice_call` are only ever set by hand, so an edit in the file wins
+        over this process's copy. 23 Nov 2026: dictation was switched back on
+        in config.toml, the running daemon wrote its startup `voice = false`
+        over it on the next save, and the restart the next morning came up
+        with dictation off again. The process still needs a restart to act on
+        the new value; this only keeps the edit from being undone."""
+        try:
+            raw = tomllib.loads(CONFIG_PATH.read_text())
+        except Exception:
+            return
+        # Only a value that changed in the file since this process last read
+        # or wrote it is a hand edit; one changed in memory (a test, a future
+        # setting in the app) still wins.
+        seen = getattr(self, "_hand_seen", {})
+        for key in ("voice", "voice_call"):
+            if key in raw:
+                on = raw[key] is not False
+                if key in seen and on != seen[key]:
+                    setattr(self, key, on)
+        self._hand_seen = {"voice": self.voice, "voice_call": self.voice_call}
 
     def refresh_tunnel(self) -> bool:
         """Re-read the tunnel's settings if config.toml changed under us.
