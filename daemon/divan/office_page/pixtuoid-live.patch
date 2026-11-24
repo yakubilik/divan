@@ -118,19 +118,21 @@ index 8b610687..3eb08025 100644
                      }
                  },
 diff --git a/crates/pixtuoid-web/src/lib.rs b/crates/pixtuoid-web/src/lib.rs
-index 28af54d0..bfdc9ca2 100644
+index 28af54d0..651aedec 100644
 --- a/crates/pixtuoid-web/src/lib.rs
 +++ b/crates/pixtuoid-web/src/lib.rs
-@@ -182,6 +182,8 @@ pub struct Office {
+@@ -182,6 +182,10 @@ pub struct Office {
      shown_badges: Vec<pixtuoid_scene::display::Badge>,
      /// The WebAudio engine — `None` until the site warms the ♩'s buffers.
      audio: Option<audio::WebAudioDriver>,
 +    /// The seed its floor is laid out from (Divan: `desks_json` lays it out again).
 +    floor_seed: u64,
++    /// The sprite pack, kept to draw one agent alone ([`Office::portrait`]).
++    pack: std::sync::Arc<pixtuoid_scene::pack::OfficeArt>,
  }
  
  /// Which page's office this is, and so what plays in it on its own.
-@@ -192,6 +194,8 @@ enum Show {
+@@ -192,6 +196,8 @@ enum Show {
      /// The How it works page's: nothing, only the hook lines
      /// [`Office::send_hook`] lands.
      Journey,
@@ -139,7 +141,7 @@ index 28af54d0..bfdc9ca2 100644
  }
  
  impl Show {
-@@ -201,6 +205,7 @@ impl Show {
+@@ -201,6 +207,7 @@ impl Show {
          match self {
              Show::Hero(_) => WorldText::Host,
              Show::Journey => WorldText::Baked,
@@ -147,7 +149,7 @@ index 28af54d0..bfdc9ca2 100644
          }
      }
  }
-@@ -243,6 +248,90 @@ impl Office {
+@@ -243,6 +250,109 @@ impl Office {
              .map_err(|e| JsError::new(&format!("{e:#}")))
      }
  
@@ -199,7 +201,8 @@ index 28af54d0..bfdc9ca2 100644
 +            // whiteboard among them) at their top-left, named `Wall…`.
 +            let pod = l.pod_decor.iter().map(|d| format!("[\"{:?}\",{},{}]", d.kind, d.pos.x, d.pos.y));
 +            let wall = l.wall_decor.iter().map(|d| format!("[\"Wall{:?}\",{},{}]", d.kind, d.pos.x, d.pos.y));
-+            pod.chain(wall).collect::<Vec<String>>()
++            let door = std::iter::once(format!("[\"Door\",{},{}]", l.door.x, l.door.y));
++            pod.chain(wall).chain(door).collect::<Vec<String>>()
 +        })
 +        .unwrap_or_default();
 +        let parts = items;
@@ -235,18 +238,46 @@ index 28af54d0..bfdc9ca2 100644
 +        true
 +    }
 +
++    /// Divan: the agent of `session_id` drawn alone, standing and facing the
++    /// viewer, as the office draws it: `[w lo, w hi, h lo, h hi, r, g, b, a, …]`
++    /// at the frame's own pixels per unit; empty when no live agent has it.
++    pub fn portrait(&self, session_id: &str) -> Vec<u8> {
++        let Some(slot) = (self.scene.agents.values()).find(|s| &*s.session_id == session_id) else {
++            return Vec::new();
++        };
++        let (frame, _) = self.pack.portrait(slot);
++        let (w, h) = (frame.width(), frame.height());
++        let mut out = Vec::with_capacity(4 + usize::from(w) * usize::from(h) * 4);
++        out.extend_from_slice(&w.to_le_bytes());
++        out.extend_from_slice(&h.to_le_bytes());
++        for px in frame.as_slice() {
++            out.extend_from_slice(&px.map_or([0; 4], |c| [c.r, c.g, c.b, u8::MAX]));
++        }
++        out
++    }
++
      /// The recorded hook lines the How it works page sends, in order.
      pub fn journey_lines() -> Vec<String> {
          JOURNEY.lines().map(str::to_owned).collect()
-@@ -612,6 +701,7 @@ impl Office {
+@@ -599,7 +709,7 @@ impl Office {
+             // on every `step` before any cue lands, so the reducer seats agents
+             // only at desks the rendered office has.
+             scene: SceneState::default(),
+-            session: FloorSession::new(pack).with_floor_seed(u64::from(seed)),
++            session: FloorSession::new(pack.clone()).with_floor_seed(u64::from(seed)),
+             rgba: Vec::new(),
+             theme: &NORMAL,
+             fit,
+@@ -612,6 +722,8 @@ impl Office {
              screen: Screen::on(clock),
              shown_badges: Vec::new(),
              audio: None,
 +            floor_seed: u64::from(seed),
++            pack,
          })
      }
  
-@@ -693,7 +783,7 @@ impl Office {
+@@ -693,7 +805,7 @@ impl Office {
                  .get_or_insert_with(|| Playhead::new(script::hero(), now))
                  .advance(now, &mut self.reducer, &mut self.scene),
              // The sweep a playhead's advance ends on, which walks an ended session out.

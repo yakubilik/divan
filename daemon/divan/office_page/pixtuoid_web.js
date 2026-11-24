@@ -395,6 +395,21 @@ export class Office {
         }
     }
     /**
+     * Divan: the agent of `session_id` drawn alone, standing and facing the
+     * viewer, as the office draws it: `[w lo, w hi, h lo, h hi, r, g, b, a, …]`
+     * at the frame's own pixels per unit; empty when no live agent has it.
+     * @param {string} session_id
+     * @returns {Uint8Array}
+     */
+    portrait(session_id) {
+        const ptr0 = passStringToWasm0(session_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.office_portrait(this.__wbg_ptr, ptr0, len0);
+        var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v2;
+    }
+    /**
      * Frame pixels per layout unit `step` takes.
      * @returns {number}
      */

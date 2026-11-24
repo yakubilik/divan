@@ -373,6 +373,7 @@ class Server:
         self.app.post("/office/report")(self.office_report)
         self.app.get("/office/chat")(self.office_chat)
         self.app.post("/office/send")(self.office_send)
+        self.app.post("/office/archive")(self.office_archive)
         self.app.get("/office/status")(self.office_status)
         self._mount_office()
         # Every other registered computer, on this page's own origin: a socket
@@ -1761,6 +1762,24 @@ class Server:
                                                 "client_id": str(body.get("client_id") or "")[:100] or None})
         except Err as exc:
             raise HTTPException(status_code=409, detail=str(exc))
+
+    async def office_archive(self, request: Request, authorization: str = Header(default=""),
+                             token: str = Query(default=""),
+                             cf_connecting_ip: str | None = Header(default=None)):
+        """A character dragged out of the office's door: its chat archived, the
+        same as the chat menu's Archive. The office then walks it out."""
+        dev = self._device(authorization, cf_connecting_ip, token)
+        if not self.cfg.office:
+            raise HTTPException(status_code=404, detail="the office is off on this computer")
+        body = await request.json()
+        chat_id = str(body.get("chat") or "")
+        if not chat_id or self.db.get_chat(chat_id) is None:
+            raise HTTPException(status_code=400, detail="no such chat")
+        try:
+            await self.h_chat_update(dev, {"chat_id": chat_id, "archived": 1})
+        except Err as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        return {"ok": True}
 
     async def office_report(self, request: Request, authorization: str = Header(default=""),
                             token: str = Query(default=""),

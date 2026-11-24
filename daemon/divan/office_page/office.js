@@ -4,7 +4,7 @@
 // room's whiteboard carries the product's logo. The pixels are the engine's; the
 // name tags and logos are drawn here, and a click on a character opens a
 // speech bubble with its chat.
-import init, { Office } from './pixtuoid_web.js?v=1795551000';
+import init, { Office } from './pixtuoid_web.js?v=1795558000';
 
 const token = new URLSearchParams(location.search).get('token') || '';
 function report(what) {
@@ -47,17 +47,18 @@ function roomUnits(r) {
 function makeRoom(name) {
   const el = document.createElement('section');
   el.className = 'room';
-  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="screen" hidden></div>';
+  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="screen" hidden></div><div class="door" hidden><span>Eve gönder</span></div>';
   floor.appendChild(el);
   const r = {
     name, el, canvas: el.querySelector('canvas'), labels: el.querySelector('.labels'), says: el.querySelector('.says'),
-    screen: el.querySelector('.screen'),
+    screen: el.querySelector('.screen'), door: el.querySelector('.door'),
     office: Office.live(day + rooms.size * 7919), img: null,
     units: [0, 0], at: [0, 0], people: 0, shown: [], pending: [], primed: false,
   };
   r.ctx = r.canvas.getContext('2d');
   el.addEventListener('click', (e) => clickRoom(r, e));
   el.addEventListener('pointermove', (e) => hoverRoom(r, e));
+  el.addEventListener('pointerdown', (e) => pickUp(r, e));
   el.addEventListener('pointerleave', () => { hot = null; });
   rooms.set(name, r);
   return r;
@@ -152,6 +153,12 @@ function size() {
     const s = r.el.style;
     s.left = r.at[0] * css + 'px'; s.top = r.at[1] * css + 'px';
     s.width = r.units[0] * css + 'px'; s.height = r.units[1] * css + 'px';
+    const door = doorBox(r), ds = r.door.style;
+    if (door) {
+      ds.left = door[0] * css + 'px'; ds.top = door[1] * css + 'px';
+      ds.width = door[2] * css + 'px'; ds.height = door[3] * css + 'px';
+      ds.fontSize = Math.max(9, Math.round(2.4 * css)) + 'px';
+    }
   }
 }
 
@@ -272,13 +279,14 @@ function overlay(r) {
     el.style.setProperty('--ring', tone(r.name));
     const key = chat ? chat.id : L.text;
     el.classList.toggle('hot', hot === key);
+    el.classList.toggle('lifted', !!(carry && carry.moving && carry.s.key === key));
     const x = L.x * css;
     const w = el.offsetWidth, h = el.offsetHeight;
     let y = L.y * css;
     y -= lift([x - w / 2, y - h, x + w / 2, y], placed);
     placed.push([x - w / 2, y - h, x + w / 2, y]);
     el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
-    r.shown.push({ x, y, chat, w, h, key, sid: chat ? chat.id : null, ink: L.ink, plate: L.plate });
+    r.shown.push({ x, y, chat, w, h, key, sid: chat ? chat.id : null, ink: L.ink, plate: L.plate, ux: L.x, uy: L.y });
     i++;
   }
   while (kids.length > i) r.labels.removeChild(kids[kids.length - 1]);
@@ -348,6 +356,105 @@ function clickRoom(r, e) {
   openBubble(best.chat);
 }
 scroller.addEventListener('click', () => { if (dragged) { dragged = false; return; } closeBubble(); });
+
+// ── sending one home: a character dragged out of its room's door ───────
+// The door is the elevator by the exit sign (16×14 units at the layout's
+// `door`). A chat dropped on any room's door is archived, as the chat menu's
+// Archive does; the office then walks it out.
+function doorBox(r) {
+  const key = r.units.join('x');
+  if (r.doorKey !== key) {
+    r.doorKey = key;
+    let items = [];
+    try { items = JSON.parse(r.office.decor_json(r.units[0], r.units[1])); } catch (e) { /* none */ }
+    const d = items.find((it) => it[0] === 'Door');
+    r.doorAt = d ? [d[1], d[2], 16, 14] : null;
+  }
+  return r.doorAt;
+}
+
+let carry = null;
+function pickUp(r, e) {
+  if (e.pointerType !== 'mouse' || e.button !== 0) return;
+  const s = under(r, e);
+  if (!s || !s.chat) return;
+  e.stopPropagation();  // a character held, not the floor panned
+  carry = { r, s, x0: e.clientX, y0: e.clientY, id: e.pointerId, moving: false, ghost: null, home: null };
+}
+
+// What is carried: the character itself, drawn alone by the engine
+// (standing, facing you), with its name tag over it.
+function ghostOf(r, s) {
+  const el = document.createElement('div');
+  el.className = 'carried';
+  const tag = document.createElement('div');
+  tag.className = 'lb';
+  tag.textContent = s.chat.title.replace(/^[^·]{1,30} · /, '');
+  tag.style.color = s.ink; tag.style.backgroundColor = s.plate;
+  tag.style.fontSize = Math.max(8, Math.round(2.2 * css)) + 'px';
+  el.appendChild(tag);
+  const raw = r.office.portrait(s.chat.id);
+  if (raw.length > 4) {
+    const w = raw[0] | (raw[1] << 8), h = raw[2] | (raw[3] << 8), k = r.office.scale();
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(raw.subarray(4, 4 + w * h * 4)), w, h), 0, 0);
+    cv.style.width = (w / k) * css + 'px'; cv.style.height = (h / k) * css + 'px';
+    el.appendChild(cv);
+  }
+  document.body.appendChild(el);
+  return el;
+}
+
+function homeUnder(e) {
+  for (const r of rooms.values()) {
+    if (r.el.hidden) continue;
+    const b = r.door.getBoundingClientRect();
+    if (e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom) return r;
+  }
+  return null;
+}
+
+addEventListener('pointermove', (e) => {
+  if (!carry || e.pointerId !== carry.id) return;
+  if (!carry.moving) {
+    if (Math.hypot(e.clientX - carry.x0, e.clientY - carry.y0) < 6) return;
+    carry.moving = true;
+    carry.ghost = ghostOf(carry.r, carry.s);
+    document.body.classList.add('carrying');
+    for (const r of rooms.values()) r.door.hidden = r.el.hidden || !r.doorAt;
+  }
+  carry.ghost.style.transform = `translate(${e.clientX}px, ${e.clientY}px) translate(-50%, -70%) rotate(-6deg)`;
+  const home = homeUnder(e);
+  if (home !== carry.home) {
+    if (carry.home) carry.home.door.classList.remove('hot');
+    if (home) home.door.classList.add('hot');
+    carry.home = home;
+  }
+});
+
+addEventListener('pointerup', (e) => {
+  if (!carry || e.pointerId !== carry.id) return;
+  const c = carry;
+  carry = null;
+  if (!c.moving) return;  // a click: the bubble's
+  dragged = true;          // so the click this release makes opens nothing
+  const home = homeUnder(e);  // before the doors are hidden again
+  c.ghost.remove();
+  document.body.classList.remove('carrying');
+  for (const r of rooms.values()) { r.door.hidden = true; r.door.classList.remove('hot'); }
+  if (home) sendHome(c.s.chat);
+});
+
+async function sendHome(chat) {
+  if (open && open.id === chat.id) closeBubble();
+  try {
+    const res = await fetch(`archive?token=${encodeURIComponent(token)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat: chat.id }),
+    });
+    if (!res.ok) report('archive ' + res.status);
+  } catch (e) { report('archive: ' + e); }
+}
 
 // ── the speech bubble: what a chat is doing, and a line to write into it ──
 const bubble = document.getElementById('bubble');

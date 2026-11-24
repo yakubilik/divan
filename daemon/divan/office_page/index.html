@@ -27,6 +27,20 @@
   .room .screen { position: absolute; z-index: 1; pointer-events: none; background-repeat: no-repeat;
                   background-position: center; background-size: contain; box-shadow: 0 0 6px #7fd8ff66; }
   .room .screen[hidden] { display: none; }
+  /* Where a carried character goes home: its room's door, lit while one is held. */
+  .room .door { position: absolute; z-index: 3; pointer-events: none; box-sizing: border-box; display: flex;
+                align-items: flex-end; justify-content: center; border: 2px dashed #ffd166aa; border-radius: 4px;
+                background: #ffd16614; transition: background .12s, border-color .12s, box-shadow .12s; }
+  .room .door[hidden] { display: none; }
+  .room .door span { font-family: 'Fusion Pixel 8px', ui-monospace, monospace; color: #1d1b26; background: #ffd166;
+                     padding: 2px 4px; margin-bottom: -1.4em; white-space: nowrap; }
+  .room .door.hot { border-style: solid; border-color: #ffd166; background: #ffd16633; box-shadow: 0 0 18px #ffd16699; }
+  .carried { position: fixed; left: 0; top: 0; z-index: 20; pointer-events: none; display: flex; flex-direction: column;
+             align-items: center; gap: 2px; filter: drop-shadow(0 8px 6px #0007); }
+  .carried canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+  .carried .lb { position: static; transform: none; max-width: none; }
+  body.carrying, body.carrying * { cursor: grabbing !important; }
+  .lb.lifted { opacity: .35; }
   .room .says { z-index: 3; }
   .room:hover { z-index: 4; }
   /* The name under the mouse: on top of the others, whole, lit up. */
@@ -75,6 +89,6 @@
   <footer><textarea placeholder="Write to this chat…"></textarea><button class="b-send">Send</button><button class="b-open" title="Open the chat">↗</button></footer>
 </div>
 <div id="zoom"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button></div>
-<script type="module" src="office.js?v=1795553000"></script>
+<script type="module" src="office.js?v=1795559000"></script>
 </body>
 </html>
