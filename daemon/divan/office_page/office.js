@@ -47,10 +47,11 @@ function roomUnits(r) {
 function makeRoom(name) {
   const el = document.createElement('section');
   el.className = 'room';
-  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="sign"><span class="logo"></span></div>';
+  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="sign"><canvas class="logo"></canvas></div><div class="neon"></div>';
   floor.appendChild(el);
   const r = {
     name, el, canvas: el.querySelector('canvas'), labels: el.querySelector('.labels'), says: el.querySelector('.says'),
+    neon: el.querySelector('.neon'),
     sign: el.querySelector('.sign'), office: Office.live(day + rooms.size * 7919), img: null,
     units: [0, 0], at: [0, 0], people: 0, shown: [], pending: [], primed: false,
   };
@@ -165,7 +166,27 @@ function size() {
 // rolling one by the wall placed by its top-left, an aisle one by its centre;
 // a room without one gets it on the cork board or the screen on its wall, and
 // one without those in the aisle between its first two desk pods.
-const LOGO = 6.5;
+const LOGO = 7;
+
+// The logo drawn the way the office is: shrunk to the art's own pixels (the
+// engine draws `scale()` of them per unit), then shown with hard edges, so it
+// reads as part of the pixel art rather than a sticker on it.
+function pixelate(cv, src, px) {
+  const img = new Image();
+  img.onload = () => {
+    cv.width = px; cv.height = px;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.clearRect(0, 0, px, px);
+    g.drawImage(img, 0, 0, px, px);
+    // Hard alpha: pixel art has no half-clear edge.
+    const d = g.getImageData(0, 0, px, px);
+    for (let k = 3; k < d.data.length; k += 4) d.data[k] = d.data[k] < 110 ? 0 : 255;
+    g.putImageData(d, 0, 0);
+  };
+  img.src = src;
+}
 function boardSpot(r) {
   const key = r.units.join('x');
   if (r.spotKey === key) return r.spot;
@@ -178,7 +199,7 @@ function boardSpot(r) {
   if (wall) r.spot = [wall[1] + (14 - LOGO) / 2, wall[2] + 1, LOGO, LOGO];
   else if (aisle) r.spot = [aisle[1] - LOGO / 2, aisle[2] - 5.5 + 1, LOGO, LOGO];
   else if (cork) r.spot = [cork[1] + 2.5, cork[2] + 0.5, 5, 5];   // the cork board on the wall, 10×6
-  else if (screen) r.spot = [screen[1] + (14 - LOGO) / 2, screen[2] + 1, LOGO, LOGO];  // the wall screen, 14×12
+  else if (screen) r.spot = [screen[1] + 1.5, screen[2] + 1.5, LOGO, LOGO];  // the wall screen, 14×12
   else {
     let desks = [];
     try { desks = JSON.parse(r.office.desks_json(r.units[0], r.units[1])); } catch (e) { /* none */ }
@@ -206,34 +227,67 @@ function drawRoom(r, now) {
   overlay(r);
 }
 
+// Two boxes [left, top, right, bottom] that overlap, with a pixel to spare.
+const hits = (p, q) => p[0] < q[2] + 1 && q[0] < p[2] + 1 && p[1] < q[3] + 1 && q[1] < p[3] + 1;
+// Lift `box` until it overlaps none of `placed`; returns how far it went up.
+function lift(box, placed) {
+  let up = 0;
+  for (let guard = 0; guard < 12; guard++) {
+    const b = [box[0], box[1] - up, box[2], box[3] - up];
+    const clash = placed.find((q) => hits(b, q));
+    if (!clash) return up;
+    up += b[3] - clash[1] + 1;
+  }
+  return up;
+}
+
+// A desk is 22 units from the next: a name tag is never wider than that, so
+// neighbours' tags sit side by side instead of on top of each other. The
+// whole name is the hover's.
+const TAG_W = 20;
+// The neon board's words: the engine writes its own jokes there, in English.
+// audit: language-data — the office's Turkish for the neon board's states
+const MOOD = { run: 'çalışıyor', idle: 'boşta', quiet: 'sessiz' };
+const RUN_INK = '#3cdc3c';   // the engine's ink for a working agent's name
+// audit: end-language-data
+
 function overlay(r) {
   let data;
   try { data = JSON.parse(r.office.overlay_json()); } catch (e) { return; }
   const kids = r.labels.children;
+  const placed = [];
   r.shown = [];
   let i = 0;
-  for (const L of data.labels) {
+  // Top rows first, so a lifted tag only ever moves into free space above.
+  const labels = [...data.labels].sort((p, q) => p.y - q.y || p.x - q.x);
+  for (const L of labels) {
     const short = L.text.includes('·') ? L.text.split('·').pop() : L.text;
     const chat = chats[short] || null;
     const text = chat ? chat.title.replace(/^[^·]{1,30} · /, '') : L.text;
     let el = kids[i];
     if (!el) { el = document.createElement('div'); el.className = 'lb'; r.labels.appendChild(el); }
     if (el.textContent !== text) el.textContent = text;
-    el.style.fontSize = Math.max(8, Math.round(2.6 * css)) + 'px';
-    el.style.maxWidth = Math.round(40 * css) + 'px';
+    el.style.fontSize = Math.max(8, Math.round(2.2 * css)) + 'px';
+    el.style.maxWidth = Math.round(TAG_W * css) + 'px';
     el.style.color = L.ink;
     el.style.backgroundColor = L.plate;
     el.style.boxShadow = `inset 0 0 0 1px ${tone(r.name)}`;
     el.style.setProperty('--ring', tone(r.name));
-    const x = L.x * css, y = L.y * css;
-    el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
     const key = chat ? chat.id : L.text;
     el.classList.toggle('hot', hot === key);
-    r.shown.push({ x, y, chat, w: el.offsetWidth, h: el.offsetHeight, key, sid: chat ? chat.id : null, ink: L.ink, plate: L.plate });
+    const x = L.x * css;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let y = L.y * css;
+    y -= lift([x - w / 2, y - h, x + w / 2, y], placed);
+    placed.push([x - w / 2, y - h, x + w / 2, y]);
+    el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+    r.shown.push({ x, y, chat, w, h, key, sid: chat ? chat.id : null, ink: L.ink, plate: L.plate });
     i++;
   }
   while (kids.length > i) r.labels.removeChild(kids[kids.length - 1]);
-  // The bubbles, beside the name they belong to; one past its time fades out.
+
+  // The bubbles: just over the name they belong to, clear of every tag and of
+  // each other; one past its time fades out.
   const now = Date.now();
   const bubbles = r.says.children;
   let j = 0;
@@ -245,18 +299,44 @@ function overlay(r) {
     if (el.textContent !== say.text) el.textContent = say.text;
     el.classList.toggle('gone', now > say.until);
     // In the name tag's own type and colours, the product's line round it.
-    el.style.fontSize = Math.max(8, Math.round(2.6 * css)) + 'px';
+    el.style.fontSize = Math.max(8, Math.round(2.2 * css)) + 'px';
     el.style.color = s.ink;
     el.style.backgroundColor = s.plate;
     el.style.boxShadow = `inset 0 0 0 1px ${tone(r.name)}`;
     el.style.setProperty('--ring', tone(r.name));
-    el.style.transform = `translate(${s.x + s.w / 2 + 6}px, ${s.y}px) translate(0, -100%)`;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let y = s.y - s.h - 3;
+    y -= lift([s.x - w / 2, y - h, s.x + w / 2, y], placed);
+    placed.push([s.x - w / 2, y - h, s.x + w / 2, y]);
+    el.style.transform = `translate(${s.x}px, ${y}px) translate(-50%, -100%)`;
     if (now > say.until + 800) saying.delete(s.sid);
     j++;
   }
   while (bubbles.length > j) r.says.removeChild(bubbles[bubbles.length - 1]);
   if (r.name === TERMINAL) r.visitors = i;
 
+  // The neon board on the wall: how the room is doing, in its own lamps.
+  const board = data.board;
+  if (board) {
+    const n = r.neon.style;
+    n.left = board.rect.x * css + 'px'; n.top = board.rect.y * css + 'px';
+    n.width = board.rect.w * css + 'px'; n.height = board.rect.h * css + 'px';
+    // Counted from the room's own tags: a working agent's name is lit green.
+    const busy = data.labels.filter((L) => L.ink === RUN_INK).length, idle = data.labels.length - busy;
+    const lamp = (on, n, word, color) => `<span style="color:${color};text-shadow:0 0 .4em ${color}">${on ? '●' : '○'} ${n} ${word}</span>`;
+    const html = data.labels.length
+      ? (busy ? lamp(true, busy, MOOD.run, RUN_INK) : '') + (idle ? lamp(false, idle, MOOD.idle, '#8c8c96') : '')
+      : lamp(false, 0, MOOD.quiet, '#8c8c96').replace('○ 0 ', '○ ');
+    if (r.neon.dataset.html !== html || r.neon.dataset.css !== String(css)) {
+      r.neon.dataset.html = html;
+      r.neon.dataset.css = String(css);
+      r.neon.innerHTML = html;
+      // As big as the panel holds.
+      let size = Math.max(7, Math.round(2.6 * css));
+      n.fontSize = size + 'px';
+      while (size > 6 && r.neon.scrollWidth > r.neon.clientWidth) { size -= 1; n.fontSize = size + 'px'; }
+    }
+  }
 }
 
 // The one under the pointer: its name tag if the pointer is on one (the last
@@ -446,11 +526,9 @@ function setRooms(d) {
     const logo = r.sign.querySelector('.logo');
     r.sign.hidden = !logos[r.name];
     const src = logos[r.name] || '';
-    if (logo.dataset.src !== src) {
+    if (logo.dataset.src !== src && src) {
       logo.dataset.src = src;
-      logo.replaceChildren();
-      if (src) { const img = new Image(); img.src = src; img.alt = ''; logo.appendChild(img); }
-      else logo.textContent = r.name === TERMINAL ? '>_' : r.name.slice(0, 1).toUpperCase();
+      pixelate(logo, src, Math.round(LOGO * r.office.scale()));
     }
   }
   return moved;
