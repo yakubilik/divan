@@ -4,7 +4,7 @@
 // room's whiteboard carries the product's logo. The pixels are the engine's; the
 // name tags and logos are drawn here, and a click on a character opens a
 // speech bubble with its chat.
-import init, { Office } from './pixtuoid_web.js?v=1795538000';
+import init, { Office } from './pixtuoid_web.js?v=1795548000';
 
 const token = new URLSearchParams(location.search).get('token') || '';
 function report(what) {
