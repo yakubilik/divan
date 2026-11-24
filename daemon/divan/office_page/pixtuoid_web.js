@@ -181,6 +181,27 @@ export class Office {
         return ret >>> 0;
     }
     /**
+     * Divan: the decor of a `w`×`h`-unit office, as JSON `[[kind, x, y], …]`
+     * in layout units — aisle pieces at their centre, wall pieces (`Wall…`,
+     * the rolling whiteboard among them) at their top-left — so the host can
+     * hang things on them (a product's logo on the whiteboard).
+     * @param {number} w
+     * @param {number} h
+     * @returns {string}
+     */
+    decor_json(w, h) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.office_decor_json(this.__wbg_ptr, w, h);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * Divan: the desks a `w`×`h`-unit office lays out, in seat order, as JSON
      * `[[x, y], …]` in layout units (each desk's top-left), so the host can
      * give each group of agents a block of desks of its own.

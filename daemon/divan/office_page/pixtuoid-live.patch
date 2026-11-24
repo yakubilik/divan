@@ -27,7 +27,7 @@ index 2f207d76..84cb174d 100644
  /// `slot`'s source's caps; `None` for an unregistered source.
  fn caps_of(slot: &AgentSlot) -> Option<SourceCaps> {
 diff --git a/crates/pixtuoid-web/src/lib.rs b/crates/pixtuoid-web/src/lib.rs
-index 28af54d0..a6b59c67 100644
+index 28af54d0..7fd3fc7e 100644
 --- a/crates/pixtuoid-web/src/lib.rs
 +++ b/crates/pixtuoid-web/src/lib.rs
 @@ -182,6 +182,8 @@ pub struct Office {
@@ -56,7 +56,7 @@ index 28af54d0..a6b59c67 100644
          }
      }
  }
-@@ -243,6 +248,63 @@ impl Office {
+@@ -243,6 +248,86 @@ impl Office {
              .map_err(|e| JsError::new(&format!("{e:#}")))
      }
  
@@ -85,6 +85,29 @@ index 28af54d0..a6b59c67 100644
 +        .map(|l| l.home_desks)
 +        .unwrap_or_default();
 +        let parts: Vec<String> = desks.iter().map(|d| format!("[{},{}]", d.at.x, d.at.y)).collect();
++        format!("[{}]", parts.join(","))
++    }
++
++    /// Divan: the decor of a `w`×`h`-unit office, as JSON `[[kind, x, y], …]`
++    /// in layout units — aisle pieces at their centre, wall pieces (`Wall…`,
++    /// the rolling whiteboard among them) at their top-left — so the host can
++    /// hang things on them (a product's logo on the whiteboard).
++    pub fn decor_json(&self, w: u32, h: u32) -> String {
++        let (uw, uh) = self.units(w, h);
++        let items = pixtuoid_scene::layout::SceneLayout::compute(
++            pixtuoid_scene::layout::Viewport::full(uw, uh),
++            None,
++            self.floor_seed,
++        )
++        .map(|l| {
++            // Aisle pieces at their centre; wall pieces (the rolling
++            // whiteboard among them) at their top-left, named `Wall…`.
++            let pod = l.pod_decor.iter().map(|d| format!("[\"{:?}\",{},{}]", d.kind, d.pos.x, d.pos.y));
++            let wall = l.wall_decor.iter().map(|d| format!("[\"Wall{:?}\",{},{}]", d.kind, d.pos.x, d.pos.y));
++            pod.chain(wall).collect::<Vec<String>>()
++        })
++        .unwrap_or_default();
++        let parts = items;
 +        format!("[{}]", parts.join(","))
 +    }
 +
@@ -120,7 +143,7 @@ index 28af54d0..a6b59c67 100644
      /// The recorded hook lines the How it works page sends, in order.
      pub fn journey_lines() -> Vec<String> {
          JOURNEY.lines().map(str::to_owned).collect()
-@@ -612,6 +674,7 @@ impl Office {
+@@ -612,6 +697,7 @@ impl Office {
              screen: Screen::on(clock),
              shown_badges: Vec::new(),
              audio: None,
@@ -128,7 +151,7 @@ index 28af54d0..a6b59c67 100644
          })
      }
  
-@@ -693,7 +756,7 @@ impl Office {
+@@ -693,7 +779,7 @@ impl Office {
                  .get_or_insert_with(|| Playhead::new(script::hero(), now))
                  .advance(now, &mut self.reducer, &mut self.scene),
              // The sweep a playhead's advance ends on, which walks an ended session out.

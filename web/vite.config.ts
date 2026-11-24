@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import ts from 'typescript';
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -36,6 +37,15 @@ function stampBuild(): Plugin {
       writeFileSync(
         resolve(dir, 'build.json'),
         JSON.stringify({ sha: head(), built_at: Date.now() / 1000 }, null, 1),
+      );
+      // The office page (daemon/divan/office_page) is plain files, not part of
+      // this bundle; its doing-bubbles say what the chat screen's step strip
+      // says, from this same module, so the two never drift apart.
+      writeFileSync(
+        resolve(dir, 'office-steps.js'),
+        ts.transpileModule(readFileSync(resolve(__dirname, 'src/lib/steps.ts'), 'utf8'), {
+          compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+        }).outputText,
       );
     },
   };

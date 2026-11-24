@@ -1,10 +1,10 @@
 // The office page: one office of rooms side by side, a room per product, each
 // room its own pixtuoid office (pixtuoid_web.js, MIT, with Divan's `live` mode) fed the
 // hook lines the daemon makes of that product's chats (office.py). Over each
-// room hangs a sign with the product's logo. The pixels are the engine's; the
-// name tags and signs are drawn here, and a click on a character opens a
+// room's whiteboard carries the product's logo. The pixels are the engine's; the
+// name tags and logos are drawn here, and a click on a character opens a
 // speech bubble with its chat.
-import init, { Office } from './pixtuoid_web.js?v=1795518000';
+import init, { Office } from './pixtuoid_web.js?v=1795538000';
 
 const token = new URLSearchParams(location.search).get('token') || '';
 function report(what) {
@@ -47,7 +47,7 @@ function roomUnits(r) {
 function makeRoom(name) {
   const el = document.createElement('section');
   el.className = 'room';
-  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="sign"><span class="logo"></span><b></b><i></i></div>';
+  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="sign"><span class="logo"></span></div>';
   floor.appendChild(el);
   const r = {
     name, el, canvas: el.querySelector('canvas'), labels: el.querySelector('.labels'), says: el.querySelector('.says'),
@@ -55,8 +55,8 @@ function makeRoom(name) {
     units: [0, 0], at: [0, 0], people: 0, shown: [], pending: [], primed: false,
   };
   r.ctx = r.canvas.getContext('2d');
-  r.sign.querySelector('b').textContent = name;
   r.sign.style.setProperty('--tone', tone(name));
+  r.sign.title = name;
   el.addEventListener('click', (e) => clickRoom(r, e));
   el.addEventListener('pointermove', (e) => hoverRoom(r, e));
   el.addEventListener('pointerleave', () => { hot = null; });
@@ -72,81 +72,56 @@ function land(r, t, line, live = false) {
   if (live) hear(line);
 }
 
-// ── what each one is doing: a small bubble beside its name for a moment ──
-// The words are the chat screen's step strip's (web/src/lib/steps.ts, WORK,
-// SHELL, SERVERS, BUILT_IN), in Turkish, the language the chats are in.
-// audit: language-data — the office's copy of the step strip's Turkish words
-const DOING = {
-  think: 'Düşünüyorum', read: 'Dosyaları okuyorum', search: 'Kodda arıyorum', edit: 'Dosyaları düzenliyorum',
-  git: 'Değişikliklere bakıyorum', commit: 'Değişiklikleri kaydediyorum', push: 'Değişiklikleri gönderiyorum',
-  github: 'GitHub’a bakıyorum', test: 'Testleri çalıştırıyorum', build: 'Projeyi derliyorum', install: 'Paketleri kuruyorum',
-  deploy: 'Yayına alıyorum', cloud: 'Sunucu tarafına bakıyorum', data: 'Veritabanına bakıyorum',
-  request: 'Bir servise istek atıyorum', script: 'Bir script çalıştırıyorum', files: 'Dosyalara bakıyorum',
-  ticket: 'Ticket kuyruğuyla ilgileniyorum', run: 'Terminalde komut çalıştırıyorum',
-  browser: 'Tarayıcıda sayfayı kontrol ediyorum', shot: 'Ekran görüntüsü alıyorum', websearch: 'İnternette arıyorum',
-  webread: 'Bir web sayfasını okuyorum', agent: 'Yardımcı ajana iş veriyorum', wait: 'Arka plandaki işi bekliyorum',
-  message: 'Başka bir chate mesaj bırakıyorum', skill: 'Nasıl yapılacağına bakıyorum', plan: 'Planı güncelliyorum',
-  memory: 'Not alıyorum', mail: 'Maillere bakıyorum', calendar: 'Takvime bakıyorum', docs: 'Dokümanla ilgileniyorum',
-  design: 'Tasarımla ilgileniyorum', media: 'Görsel üretiyorum', tool: 'Bir araç kullanıyorum', ask: 'Senden izin bekliyorum',
-};
-// audit: end-language-data
-const SHELL = [
-  [/\bustabasi\b/, 'ticket'],
-  [/\bgit\s+(-\S+\s+)*push\b/, 'push'],
-  [/\bgit\s+(-\S+\s+)*(commit|merge|rebase|cherry-pick)\b/, 'commit'],
-  [/\b(vercel|firebase\s+deploy|eas\s+(build|submit|update)|terraform\s+apply|cdk\s+deploy|wrangler\s+(deploy|publish)|launchctl\s+(kickstart|bootstrap|load))\b/, 'deploy'],
-  [/\b(pytest|vitest|jest|maestro|playwright\s+test|go\s+test|cargo\s+test)\b|\b(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|\bscripts\/test[-_]|\btest_\w+\.py\b/, 'test'],
-  [/\b(npm|pnpm|yarn|bun)\s+(run\s+)?(build|typecheck)\b|\b(tsc|vite\s+build|xcodebuild|gradlew?|cargo\s+build|make)\b|\bexpo\s+(prebuild|export)\b/, 'build'],
-  [/\b(npm|pnpm|yarn|bun)\s+(install|i|add|ci)\b|\b(pip3?|uv)\s+(pip\s+)?(install|sync|add)\b|\bbrew\s+install\b|\bpod\s+install\b/, 'install'],
-  [/\bgh\s/, 'github'],
-  [/\bgit\s/, 'git'],
-  [/\b(aws|gcloud|az|kubectl|docker|ssh|terraform)\s/, 'cloud'],
-  [/\b(sqlite3|psql|mysql|redis-cli)\b/, 'data'],
-  [/\b(curl|wget|http)\s/, 'request'],
-  [/\b(python3?|node|npx|uv\s+run|ruby|deno|bun)\b/, 'script'],
-  [/\b(ls|cat|head|tail|sed|awk|grep|rg|find|wc|stat|tree|du|file|jq|diff)\b/, 'files'],
-];
-const SERVERS = [
-  [/screenshot/, 'shot'], [/chrome|playwright|browser|puppeteer|firecrawl/, 'browser'], [/gmail|mail/, 'mail'],
-  [/calendar/, 'calendar'], [/docs|drive|notion/, 'docs'], [/firebase|firestore|postgres|supabase/, 'data'],
-  [/livepeer|image|video/, 'media'], [/github/, 'github'],
-];
-const BUILT_IN = {
-  Read: 'read', NotebookRead: 'read', Grep: 'search', Glob: 'search', ToolSearch: 'search',
-  Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit', WebSearch: 'websearch', WebFetch: 'webread',
-  Agent: 'agent', Task: 'agent', Workflow: 'agent', Monitor: 'wait', TaskStop: 'wait', TaskOutput: 'wait',
-  ScheduleWakeup: 'wait', SendMessage: 'message', ListAgents: 'message', Skill: 'skill', TodoWrite: 'plan',
-  ExitPlanMode: 'plan', DesignSync: 'design',
-};
-function workOf(name, input) {
-  if (name === 'Bash' || name === 'shell') {
-    const cmd = String((input && input.command) || '');
-    for (const [re, w] of SHELL) if (re.test(cmd)) return w;
-    return 'run';
-  }
-  if (BUILT_IN[name]) return BUILT_IN[name];
-  if (/\/memory\//.test(String((input && input.file_path) || ''))) return 'memory';
-  const lower = String(name || '').toLowerCase();
-  for (const [re, w] of SERVERS) if (re.test(lower)) return w;
-  return 'tool';
-}
+// ── what each one is doing: a small bubble beside its name ──────────────
+// In the chat screen's own words: its step strip's module (web/src/lib/steps.ts,
+// built to /office-steps.js beside the panel), fed the steps of each chat's
+// current turn. While it works the bubble says what it is doing now and how
+// many steps so far; when it stops, what the turn was, for a moment.
+let STEPS = null;
+import('../office-steps.js?v=1795536000').then((m) => { STEPS = m; }, (e) => report('office-steps: ' + e));
 
-const SAY_MS = 4500;                // how long a bubble stays before it fades
+const SAY_MS = 5000;                // how long the closing summary stays
 const saying = new Map();           // session id -> { text, until }
+const turns = new Map();            // session id -> the steps of its turn so far
+function sayNow(sid) {
+  const steps = turns.get(sid) || [];
+  const n = steps.length;
+  const text = n ? STEPS.tell(steps, true, 'tr').text : STEPS.doingNow([], 'tr');
+  saying.set(sid, { text: n ? `${text} · ${STEPS.counted(n, 'tr')}` : text, until: Infinity });
+}
 // Only lines that arrive while the page is open speak, timed by this page's
 // own clock: a line's stamp is the daemon's, and another computer's clock or
 // a slow tunnel would make every line look old.
 function hear(line) {
+  if (!STEPS) return;
   let b;
   try { b = JSON.parse(line); } catch (e) { return; }
   const sid = b.session_id;
   if (!sid) return;
-  let work = null;
-  if (b.hook_event_name === 'PreToolUse') work = workOf(b.tool_name, b.tool_input);
-  else if (b.hook_event_name === 'UserPromptSubmit') work = 'think';
-  else if (b.hook_event_name === 'PermissionRequest') work = 'ask';
-  else if (b.hook_event_name === 'Stop' || b.hook_event_name === 'SessionEnd') { saying.delete(sid); return; }
-  if (work) saying.set(sid, { text: DOING[work] + '…', until: Date.now() + SAY_MS });
+  const ev = b.hook_event_name;
+  if (ev === 'UserPromptSubmit') {
+    if (!turns.has(sid) || saying.get(sid)?.until !== Infinity) turns.set(sid, []);
+    sayNow(sid);
+  } else if (ev === 'PreToolUse') {
+    if (!turns.has(sid)) turns.set(sid, []);
+    turns.get(sid).push({ kind: 'tool', id: b.tool_use_id || String(Math.random()), tool: b.tool_name || 'Tool',
+      input: b.tool_input || {}, running: true, isError: false });
+    sayNow(sid);
+  } else if (ev === 'PostToolUse') {
+    const step = (turns.get(sid) || []).find((s) => s.running && (!b.tool_use_id || s.id === b.tool_use_id));
+    if (step) step.running = false;
+  } else if (ev === 'PermissionRequest') {
+    saying.set(sid, { text: 'Senden izin bekliyorum…', until: Infinity });
+  } else if (ev === 'Stop') {
+    const steps = turns.get(sid) || [];
+    turns.delete(sid);
+    if (!steps.length) { saying.delete(sid); return; }
+    const told = STEPS.tell(steps, false, 'tr');
+    saying.set(sid, { text: `${told.text} · ${STEPS.counted(steps.length, 'tr')}`, until: Date.now() + SAY_MS });
+  } else if (ev === 'SessionEnd') {
+    turns.delete(sid);
+    saying.delete(sid);
+  }
 }
 
 function roomFor(name) { return rooms.get(name) || makeRoom(name); }
@@ -178,8 +153,43 @@ function size() {
     const s = r.el.style;
     s.left = r.at[0] * css + 'px'; s.top = r.at[1] * css + 'px';
     s.width = r.units[0] * css + 'px'; s.height = r.units[1] * css + 'px';
-    r.sign.style.fontSize = Math.max(9, Math.round(2.6 * css)) + 'px';
+    // The product's logo on the room's whiteboard.
+    const [bx, by, bw, bh] = boardSpot(r);
+    const g = r.sign.style;
+    g.left = bx * css + 'px'; g.top = by * css + 'px'; g.width = bw * css + 'px'; g.height = bh * css + 'px';
   }
+}
+
+// Where a room's logo goes, in its units, as [left, top, width, height]: on
+// the face of its whiteboard (14×11 units, the board over its legs), the
+// rolling one by the wall placed by its top-left, an aisle one by its centre;
+// a room without one gets it on the cork board or the screen on its wall, and
+// one without those in the aisle between its first two desk pods.
+const LOGO = 6.5;
+function boardSpot(r) {
+  const key = r.units.join('x');
+  if (r.spotKey === key) return r.spot;
+  let items = [];
+  try { items = JSON.parse(r.office.decor_json(r.units[0], r.units[1])); } catch (e) { /* none */ }
+  const wall = items.find((d) => d[0] === 'WallWhiteboard');
+  const aisle = items.find((d) => d[0] === 'Whiteboard');
+  const cork = items.find((d) => d[0] === 'WallBulletinBoard');
+  const screen = items.find((d) => d[0] === 'WallMeetingScreen');
+  if (wall) r.spot = [wall[1] + (14 - LOGO) / 2, wall[2] + 1, LOGO, LOGO];
+  else if (aisle) r.spot = [aisle[1] - LOGO / 2, aisle[2] - 5.5 + 1, LOGO, LOGO];
+  else if (cork) r.spot = [cork[1] + 2.5, cork[2] + 0.5, 5, 5];   // the cork board on the wall, 10×6
+  else if (screen) r.spot = [screen[1] + (14 - LOGO) / 2, screen[2] + 1, LOGO, LOGO];  // the wall screen, 14×12
+  else {
+    let desks = [];
+    try { desks = JSON.parse(r.office.desks_json(r.units[0], r.units[1])); } catch (e) { /* none */ }
+    const xs = [...new Set(desks.map((d) => d[0]))].sort((p, q) => p - q);
+    const top = desks.length ? Math.min(...desks.map((d) => d[1])) : r.units[1] / 2;
+    let x = r.units[0] / 2;
+    for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > 26) { x = (xs[i - 1] + 22 + xs[i]) / 2; break; }
+    r.spot = [x - LOGO / 2, top + 4, LOGO, LOGO];
+  }
+  r.spotKey = key;
+  return r.spot;
 }
 
 // ── drawing ─────────────────────────────────────────────────────────────
@@ -246,7 +256,7 @@ function overlay(r) {
   }
   while (bubbles.length > j) r.says.removeChild(bubbles[bubbles.length - 1]);
   if (r.name === TERMINAL) r.visitors = i;
-  r.sign.querySelector('i').textContent = String(r.name === TERMINAL ? i : r.people);
+
 }
 
 // The one under the pointer: its name tag if the pointer is on one (the last
@@ -434,6 +444,7 @@ function setRooms(d) {
   for (const r of rooms.values()) {
     r.people = people[r.name] || 0;
     const logo = r.sign.querySelector('.logo');
+    r.sign.hidden = !logos[r.name];
     const src = logos[r.name] || '';
     if (logo.dataset.src !== src) {
       logo.dataset.src = src;
