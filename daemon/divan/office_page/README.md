@@ -3,7 +3,10 @@
 `pixtuoid_web.js` and `pixtuoid_web_bg.wasm` are pixtuoid's web crate
 (github.com/pixtuoid/pixtuoid, MIT, see PIXTUOID-LICENSE), built at
 8929791f with `pixtuoid-live.patch` applied: an `Office.live(seed)`
-that shows only the hook lines it is sent and leaves the words to the page.
+that shows only the hook lines it is sent and leaves the words to the page,
+`desks_json(w, h)` that says where the desks of a `w`×`h` office stand, and
+`seat(session_id, index)` that puts a chat at a given desk, so the page can
+give each product a section of desks of its own.
 The pixel font is Fusion Pixel 8px (OFL, see OFL-Fusion-Pixel.txt).
 
 To rebuild:

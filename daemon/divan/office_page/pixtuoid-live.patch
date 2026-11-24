@@ -27,10 +27,19 @@ index 2f207d76..84cb174d 100644
  /// `slot`'s source's caps; `None` for an unregistered source.
  fn caps_of(slot: &AgentSlot) -> Option<SourceCaps> {
 diff --git a/crates/pixtuoid-web/src/lib.rs b/crates/pixtuoid-web/src/lib.rs
-index 28af54d0..06a7fbe1 100644
+index 28af54d0..a6b59c67 100644
 --- a/crates/pixtuoid-web/src/lib.rs
 +++ b/crates/pixtuoid-web/src/lib.rs
-@@ -192,6 +192,8 @@ enum Show {
+@@ -182,6 +182,8 @@ pub struct Office {
+     shown_badges: Vec<pixtuoid_scene::display::Badge>,
+     /// The WebAudio engine — `None` until the site warms the ♩'s buffers.
+     audio: Option<audio::WebAudioDriver>,
++    /// The seed its floor is laid out from (Divan: `desks_json` lays it out again).
++    floor_seed: u64,
+ }
+ 
+ /// Which page's office this is, and so what plays in it on its own.
+@@ -192,6 +194,8 @@ enum Show {
      /// The How it works page's: nothing, only the hook lines
      /// [`Office::send_hook`] lands.
      Journey,
@@ -39,7 +48,7 @@ index 28af54d0..06a7fbe1 100644
  }
  
  impl Show {
-@@ -201,6 +203,7 @@ impl Show {
+@@ -201,6 +205,7 @@ impl Show {
          match self {
              Show::Hero(_) => WorldText::Host,
              Show::Journey => WorldText::Baked,
@@ -47,7 +56,7 @@ index 28af54d0..06a7fbe1 100644
          }
      }
  }
-@@ -243,6 +246,18 @@ impl Office {
+@@ -243,6 +248,63 @@ impl Office {
              .map_err(|e| JsError::new(&format!("{e:#}")))
      }
  
@@ -63,10 +72,63 @@ index 28af54d0..06a7fbe1 100644
 +            .map_err(|e| JsError::new(&format!("{e:#}")))
 +    }
 +
++    /// Divan: the desks a `w`×`h`-unit office lays out, in seat order, as JSON
++    /// `[[x, y], …]` in layout units (each desk's top-left), so the host can
++    /// give each group of agents a block of desks of its own.
++    pub fn desks_json(&self, w: u32, h: u32) -> String {
++        let (uw, uh) = self.units(w, h);
++        let desks = pixtuoid_scene::layout::SceneLayout::compute(
++            pixtuoid_scene::layout::Viewport::full(uw, uh),
++            None,
++            self.floor_seed,
++        )
++        .map(|l| l.home_desks)
++        .unwrap_or_default();
++        let parts: Vec<String> = desks.iter().map(|d| format!("[{},{}]", d.at.x, d.at.y)).collect();
++        format!("[{}]", parts.join(","))
++    }
++
++    /// Divan: seat the agent of `session_id` at desk `index` of the ground
++    /// floor, whoever sat there taking its old desk. False when no live agent
++    /// has that session.
++    pub fn seat(&mut self, session_id: &str, index: u32) -> bool {
++        let target = Some(FloorDesk::new(0, index as usize));
++        let Some(me) = (self.scene.agents.iter())
++            .find(|(_, s)| &*s.session_id == session_id && s.exiting_at.is_none())
++            .map(|(id, _)| *id)
++        else {
++            return false;
++        };
++        let mine = self.scene.agents[&me].desk;
++        if mine == target {
++            return true;
++        }
++        let other = (self.scene.agents.iter())
++            .find(|(id, s)| **id != me && s.desk == target)
++            .map(|(id, _)| *id);
++        if let Some(other) = other {
++            if let Some(slot) = self.scene.agents.get_mut(&other) {
++                slot.desk = mine;
++            }
++        }
++        if let Some(slot) = self.scene.agents.get_mut(&me) {
++            slot.desk = target;
++        }
++        true
++    }
++
      /// The recorded hook lines the How it works page sends, in order.
      pub fn journey_lines() -> Vec<String> {
          JOURNEY.lines().map(str::to_owned).collect()
-@@ -693,7 +708,7 @@ impl Office {
+@@ -612,6 +674,7 @@ impl Office {
+             screen: Screen::on(clock),
+             shown_badges: Vec::new(),
+             audio: None,
++            floor_seed: u64::from(seed),
+         })
+     }
+ 
+@@ -693,7 +756,7 @@ impl Office {
                  .get_or_insert_with(|| Playhead::new(script::hero(), now))
                  .advance(now, &mut self.reducer, &mut self.scene),
              // The sweep a playhead's advance ends on, which walks an ended session out.

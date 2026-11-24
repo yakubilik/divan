@@ -181,6 +181,26 @@ export class Office {
         return ret >>> 0;
     }
     /**
+     * Divan: the desks a `w`×`h`-unit office lays out, in seat order, as JSON
+     * `[[x, y], …]` in layout units (each desk's top-left), so the host can
+     * give each group of agents a block of desks of its own.
+     * @param {number} w
+     * @param {number} h
+     * @returns {string}
+     */
+    desks_json(w, h) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.office_desks_json(this.__wbg_ptr, w, h);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * The office for a `px_w`×`px_h` device-pixel surface, as
      * `[units_w, units_h, px_per_unit, upscale]`: `px_per_unit` is `upscale` whole
      * times [`Office::scale`], so the page's upscale of the frame lands every art
@@ -360,6 +380,20 @@ export class Office {
     scale() {
         const ret = wasm.office_scale(this.__wbg_ptr);
         return ret >>> 0;
+    }
+    /**
+     * Divan: seat the agent of `session_id` at desk `index` of the ground
+     * floor, whoever sat there taking its old desk. False when no live agent
+     * has that session.
+     * @param {string} session_id
+     * @param {number} index
+     * @returns {boolean}
+     */
+    seat(session_id, index) {
+        const ptr0 = passStringToWasm0(session_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.office_seat(this.__wbg_ptr, ptr0, len0, index);
+        return ret !== 0;
     }
     /**
      * Land one hook line, as the shim forwarded it, through the real decoder

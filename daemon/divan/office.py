@@ -412,7 +412,7 @@ class DivanOffice:
             except Exception as exc:  # noqa: BLE001 - a room without its sign is still a room
                 log.debug("office marks: %s", exc)
         names = {c["room"] for c in self.chats.values()} | {TERMINAL_ROOM}
-        return {"chats": {c["short"]: {"id": c["id"], "title": c["title"], "room": c["room"]}
+        return {"chats": {c["short"]: {"id": c["id"], "title": c["title"], "room": c["room"], "since": c["since"]}
                           for c in self.chats.values()},
                 "count": len(self.chats),
                 "rooms": sorted(names),
