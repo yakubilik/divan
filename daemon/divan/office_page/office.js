@@ -4,7 +4,7 @@
 // room's whiteboard carries the product's logo. The pixels are the engine's; the
 // name tags and logos are drawn here, and a click on a character opens a
 // speech bubble with its chat.
-import init, { Office } from './pixtuoid_web.js?v=1795548000';
+import init, { Office } from './pixtuoid_web.js?v=1795551000';
 
 const token = new URLSearchParams(location.search).get('token') || '';
 function report(what) {
@@ -47,10 +47,11 @@ function roomUnits(r) {
 function makeRoom(name) {
   const el = document.createElement('section');
   el.className = 'room';
-  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div>';
+  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="screen" hidden></div>';
   floor.appendChild(el);
   const r = {
     name, el, canvas: el.querySelector('canvas'), labels: el.querySelector('.labels'), says: el.querySelector('.says'),
+    screen: el.querySelector('.screen'),
     office: Office.live(day + rooms.size * 7919), img: null,
     units: [0, 0], at: [0, 0], people: 0, shown: [], pending: [], primed: false,
   };
@@ -154,41 +155,34 @@ function size() {
   }
 }
 
-// Where a room's logo goes: the piece of furniture it is painted onto, as
-// its box in units [left, top, width, height] and what it is. The rolling
-// whiteboard by the wall is placed by its top-left, an aisle one by its
-// centre; both are 14×11. Without one, the screen on the wall (14×12), then
-// the cork board (10×6).
+// Where a room's logo goes: the screen of the standing desk in the aisle in
+// the middle of the room (the engine puts one in every aisle for us), as its
+// box in units [left, top, width, height] round its centre. 8×8 art, grown a
+// little so the search for its screen cannot miss an edge.
 function boardSpot(r) {
   const key = r.units.join('x');
   if (r.spotKey === key) return r.spot;
   let items = [];
   try { items = JSON.parse(r.office.decor_json(r.units[0], r.units[1])); } catch (e) { /* none */ }
-  const wall = items.find((d) => d[0] === 'WallWhiteboard');
-  const aisle = items.find((d) => d[0] === 'Whiteboard');
-  const screen = items.find((d) => d[0] === 'WallMeetingScreen');
-  const cork = items.find((d) => d[0] === 'WallBulletinBoard');
-  r.spot = wall ? { kind: 'board', box: [wall[1], wall[2], 14, 11] }
-    : aisle ? { kind: 'board', box: [aisle[1] - 7, aisle[2] - 5.5, 14, 11] }
-    : screen ? { kind: 'screen', box: [screen[1], screen[2], 14, 12] }
-    : cork ? { kind: 'cork', box: [cork[1], cork[2], 10, 6] }
-    : null;
+  const desks = items.filter((d) => d[0] === 'StandingDesk');
+  // The one nearest the middle of the room.
+  const mid = desks.sort((p, q) => Math.hypot(p[1] - r.units[0] / 2, p[2] - r.units[1] / 2)
+    - Math.hypot(q[1] - r.units[0] / 2, q[2] - r.units[1] / 2))[0];
+  r.spot = mid ? { kind: 'screen', box: [mid[1] - 6, mid[2] - 9, 12, 13] } : null;
   r.spotKey = key;
   r.face = null;
   return r.spot;
 }
 
-// The face the logo is painted on, found in the frame itself: a whiteboard's
-// white, a screen's display (its bluish dark), a cork board's brown. In art
-// pixels, with the face's own colour.
+// The screen the logo is painted on, found in the frame itself, in art
+// pixels, with the screen's own colour.
 function findFace(r) {
   const spot = boardSpot(r);
   if (!spot || !r.img) return null;
   const k = r.office.scale(), W = r.img.width, H = r.img.height, d = r.img.data;
   const [bx, by, bw, bh] = spot.box.map((v) => Math.round(v * k));
-  const isFace = spot.kind === 'board' ? (R, G, B) => R > 175 && G > 175 && B > 175
-    : spot.kind === 'screen' ? (R, G, B) => B > R + 12 && R + G + B < 330
-    : (R, G, B) => R > G + 20 && G > B && R > 120;
+  // The standing desk's screen: its bright blue.
+  const isFace = (R, G, B) => B > R + 40 && B > 140;
   let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1, sr = 0, sg = 0, sb = 0, n = 0;
   for (let y = Math.max(0, by); y < Math.min(H, by + bh); y++) {
     for (let x = Math.max(0, bx); x < Math.min(W, bx + bw); x++) {
@@ -198,44 +192,25 @@ function findFace(r) {
       sr += d[o]; sg += d[o + 1]; sb += d[o + 2]; n++;
     }
   }
-  if (n < 20 || x1 - x0 < 6 || y1 - y0 < 4) return null;
-  const bg = spot.kind === 'screen' ? '#141a26' : `rgb(${sr / n | 0},${sg / n | 0},${sb / n | 0})`;
+  if (n < 8 || x1 - x0 < 4 || y1 - y0 < 3) return null;
+  const bg = `rgb(${sr / n | 0},${sg / n | 0},${sb / n | 0})`;
   return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, bg };
 }
 
-// The logo painted into the room's own pixels, the way the art would have it:
-// the whole face cleared to its colour, the logo as big as it holds, at the
-// art's resolution with hard edges.
+// The logo on that screen. The screen is a few art pixels across, too few to
+// draw a logo in, so the screen shows it at the display's own resolution:
+// its whole face in the screen's colour, the logo as big as it holds.
 function paintLogo(r) {
-  if (!r.logoImg || !r.logoImg.complete || !r.logoImg.naturalWidth) return;
+  if (!r.logoSrc) { r.screen.hidden = true; return; }
   if (!r.face) r.face = findFace(r);
   const f = r.face;
-  if (!f) return;
-  const c = r.ctx;
-  c.fillStyle = f.bg;
-  c.fillRect(f.x, f.y, f.w, f.h);
-  const side = Math.max(4, Math.min(f.w, f.h) - 2);
-  if (!r.logoArt || r.logoArt.width !== side) r.logoArt = pixelLogo(r.logoImg, side, r.spot.kind === 'screen');
-  c.drawImage(r.logoArt, f.x + ((f.w - side) >> 1), f.y + ((f.h - side) >> 1));
-}
-
-// The logo shrunk to `px` art pixels, with hard alpha: pixel art has no
-// half-clear edge. On a screen its white ground goes, so it lights the
-// display instead of sitting on it as a card.
-function pixelLogo(img, px, dropWhite = false) {
-  const cv = document.createElement('canvas');
-  cv.width = px; cv.height = px;
-  const g = cv.getContext('2d');
-  g.imageSmoothingEnabled = true;
-  g.imageSmoothingQuality = 'high';
-  g.drawImage(img, 0, 0, px, px);
-  const d = g.getImageData(0, 0, px, px);
-  for (let k = 3; k < d.data.length; k += 4) {
-    const white = d.data[k - 3] > 225 && d.data[k - 2] > 225 && d.data[k - 1] > 225;
-    d.data[k] = d.data[k] < 110 || (dropWhite && white) ? 0 : 255;
-  }
-  g.putImageData(d, 0, 0);
-  return cv;
+  if (!f) { r.screen.hidden = true; return; }
+  const k = r.office.scale(), st = r.screen.style;
+  r.screen.hidden = false;
+  st.left = (f.x / k) * css + 'px'; st.top = (f.y / k) * css + 'px';
+  st.width = (f.w / k) * css + 'px'; st.height = (f.h / k) * css + 'px';
+  st.backgroundColor = f.bg;
+  if (r.screen.dataset.src !== r.logoSrc) { r.screen.dataset.src = r.logoSrc; r.screen.style.backgroundImage = `url("${r.logoSrc}")`; }
 }
 
 // ── drawing ─────────────────────────────────────────────────────────────
@@ -248,8 +223,8 @@ function drawRoom(r, now) {
     if (!r.img) r.img = new ImageData(fw, fh);
     r.img.data.set(new Uint8ClampedArray(wasm.memory.buffer, r.office.frame_ptr(), r.office.frame_len()));
     r.ctx.putImageData(r.img, 0, 0);
-    paintLogo(r);
   }
+  paintLogo(r);
   overlay(r);
 }
 
@@ -525,8 +500,7 @@ function setRooms(d) {
     const src = logos[r.name] || '';
     if (r.logoSrc !== src) {
       r.logoSrc = src;
-      r.logoImg = null; r.logoArt = null;
-      if (src) { const im = new Image(); im.src = src; r.logoImg = im; }
+      r.face = null;
     }
   }
   return moved;

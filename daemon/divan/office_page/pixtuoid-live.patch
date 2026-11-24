@@ -26,15 +26,40 @@ index 2f207d76..84cb174d 100644
  
  /// `slot`'s source's caps; `None` for an unregistered source.
  fn caps_of(slot: &AgentSlot) -> Option<SourceCaps> {
+diff --git a/crates/pixtuoid-scene/src/layout/compute.rs b/crates/pixtuoid-scene/src/layout/compute.rs
+index 868e5de5..0f99dce9 100644
+--- a/crates/pixtuoid-scene/src/layout/compute.rs
++++ b/crates/pixtuoid-scene/src/layout/compute.rs
+@@ -1531,7 +1531,19 @@ pub(super) fn compute_pod_desks(max_desks: Option<usize>, grid: PodGrid) -> Vec<
+ /// rotated past a collision with the previous pass's last kind, because two identical
+ /// pieces in neighbouring aisles is the failure a user sees first. Path-dependent, so
+ /// passes are re-walked, not cached; pinned by `no_two_adjacent_aisle_slots_share_a_kind`.
++/// Divan: every aisle between the desk pods gets a standing desk, whose
++/// screen the host paints the room's logo onto ([`stand_desks_in_aisles`]).
++static AISLE_DESKS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++
++/// Put a standing desk in every aisle slot of every office this process lays out.
++pub fn stand_desks_in_aisles() {
++    AISLE_DESKS.store(true, std::sync::atomic::Ordering::Relaxed);
++}
++
+ pub(super) fn decor_for_slot(floor_seed: u64, slot_idx: usize) -> PodDecor {
++    if AISLE_DESKS.load(std::sync::atomic::Ordering::Relaxed) {
++        return PodDecor::StandingDesk;
++    }
+     // Below two kinds the adjacency rule is unhonourable and `rotate_left(1)` a no-op.
+     const _: () = assert!(PodDecor::ALL.len() >= 2);
+     // `a_wide_floors_decor_order_is_not_one_fixed_cycle` needs more distinct arrangements
 diff --git a/crates/pixtuoid-scene/src/layout/mod.rs b/crates/pixtuoid-scene/src/layout/mod.rs
-index e6b3cee3..36a4ff6b 100644
+index e6b3cee3..c38f022f 100644
 --- a/crates/pixtuoid-scene/src/layout/mod.rs
 +++ b/crates/pixtuoid-scene/src/layout/mod.rs
-@@ -40,6 +40,7 @@ pub(crate) use rooms::walls::Doorway;
+@@ -40,6 +40,8 @@ pub(crate) use rooms::walls::Doorway;
  pub(crate) use rooms::walls::{WALL_THICK_H, WALL_THICK_V, WallPiece};
  pub use rooms::{MeetingRoom, MeetingTrio, PantryRoom};
  pub use roster::Station;
 +pub use roster::take_board_down;
++pub use compute::stand_desks_in_aisles;
  pub(crate) use roster::StationArt;
  pub(crate) use roster::{
      CLOCK, Depth, Fixture, NEON_PANEL_BORDER, NEON_PANEL_X, Tie, desk_chair_fixtures,
@@ -93,7 +118,7 @@ index 8b610687..3eb08025 100644
                      }
                  },
 diff --git a/crates/pixtuoid-web/src/lib.rs b/crates/pixtuoid-web/src/lib.rs
-index 28af54d0..ffda14d8 100644
+index 28af54d0..bfdc9ca2 100644
 --- a/crates/pixtuoid-web/src/lib.rs
 +++ b/crates/pixtuoid-web/src/lib.rs
 @@ -182,6 +182,8 @@ pub struct Office {
@@ -122,7 +147,7 @@ index 28af54d0..ffda14d8 100644
          }
      }
  }
-@@ -243,6 +248,88 @@ impl Office {
+@@ -243,6 +248,90 @@ impl Office {
              .map_err(|e| JsError::new(&format!("{e:#}")))
      }
  
@@ -136,6 +161,8 @@ index 28af54d0..ffda14d8 100644
 +    pub fn live(seed: u32) -> Result<Office, JsError> {
 +        // The host writes its own words; the neon wall board would stand empty.
 +        pixtuoid_scene::layout::take_board_down();
++        // The middle of each room: a standing desk, its screen the room's logo.
++        pixtuoid_scene::layout::stand_desks_in_aisles();
 +        Self::on_screen(seed, page_clock(), Show::Live)
 +            .map_err(|e| JsError::new(&format!("{e:#}")))
 +    }
@@ -211,7 +238,7 @@ index 28af54d0..ffda14d8 100644
      /// The recorded hook lines the How it works page sends, in order.
      pub fn journey_lines() -> Vec<String> {
          JOURNEY.lines().map(str::to_owned).collect()
-@@ -612,6 +699,7 @@ impl Office {
+@@ -612,6 +701,7 @@ impl Office {
              screen: Screen::on(clock),
              shown_badges: Vec::new(),
              audio: None,
@@ -219,7 +246,7 @@ index 28af54d0..ffda14d8 100644
          })
      }
  
-@@ -693,7 +781,7 @@ impl Office {
+@@ -693,7 +783,7 @@ impl Office {
                  .get_or_insert_with(|| Playhead::new(script::hero(), now))
                  .advance(now, &mut self.reducer, &mut self.scene),
              // The sweep a playhead's advance ends on, which walks an ended session out.

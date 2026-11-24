@@ -23,6 +23,10 @@
   .room canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; width: 100%; height: 100%; }
   .room .labels, .room .says { position: absolute; inset: 0; pointer-events: none; }
   .room .labels { z-index: 2; }
+  /* The logo on the standing desk's screen in the middle of the room. */
+  .room .screen { position: absolute; z-index: 1; pointer-events: none; background-repeat: no-repeat;
+                  background-position: center; background-size: contain; box-shadow: 0 0 6px #7fd8ff66; }
+  .room .screen[hidden] { display: none; }
   .room .says { z-index: 3; }
   .room:hover { z-index: 4; }
   /* The name under the mouse: on top of the others, whole, lit up. */
@@ -71,6 +75,6 @@
   <footer><textarea placeholder="Write to this chat…"></textarea><button class="b-send">Send</button><button class="b-open" title="Open the chat">↗</button></footer>
 </div>
 <div id="zoom"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button></div>
-<script type="module" src="office.js?v=1795548000"></script>
+<script type="module" src="office.js?v=1795553000"></script>
 </body>
 </html>
