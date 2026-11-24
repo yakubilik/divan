@@ -259,9 +259,6 @@ class OfficeTap:
 # that no Divan chat owns (a terminal, a script) goes to the "Terminal" room.
 
 SRC = "claude-code"
-# Chats with nothing for this long are left out, unless they are still in the
-# list (not archived).
-RECENT_S = 12 * 3600
 OTHER_ROOM = "Other"
 TERMINAL_ROOM = "Terminal"
 
@@ -301,20 +298,19 @@ class DivanOffice:
     def _room(self, chat: dict) -> str:
         return (chat.get("project") or "").strip() or OTHER_ROOM
 
-    def _wanted(self, chat: dict, now: float) -> bool:
-        if not chat.get("archived"):
-            return True
-        return (now - float(chat.get("updated_at") or 0)) < RECENT_S
+    def _wanted(self, chat: dict) -> bool:
+        # The office shows the chat list as the person sees it: an archived
+        # chat leaves its desk at once.
+        return not chat.get("archived")
 
     def load(self) -> None:
-        now = time.time()
         try:
             rows = self.list_chats()
         except Exception as exc:  # noqa: BLE001
             log.warning("office: chat list: %s", exc)
             return
         for c in rows:
-            if self._wanted(c, now):
+            if self._wanted(c):
                 self._adopt(c, quiet=True)
         self._loaded = True
 
@@ -354,8 +350,7 @@ class DivanOffice:
             return
         data = event.get("data") or {}
         if kind == "chat.updated" and isinstance(data, dict):
-            if data.get("archived") and cid in self.chats and \
-                    time.time() - float(data.get("updated_at") or 0) > RECENT_S:
+            if data.get("archived") and cid in self.chats:
                 info = self.chats.pop(cid)
                 self._send(hook_line(cid, "SessionEnd", time.time(), reason="other"), info["room"])
                 self._rooms_changed()

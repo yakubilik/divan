@@ -133,3 +133,25 @@ def test_poll_gives_the_whole_office_first_then_only_what_is_new():
     nxt = feed.poll(first["seq"])
     assert [i[0] for i in nxt["items"]] == ["line"] and nxt["seq"] == first["seq"] + 1
     assert feed.poll(nxt["seq"])["items"] == []
+
+
+def test_archived_chats_have_no_desk_even_when_recent():
+    import time as _time
+    from divan.office import DivanOffice
+
+    class Tap:
+        on_line = None
+        def backlog(self):
+            return []
+
+    now = _time.time()
+    chats = [{"id": "open00000000", "title": "Open", "project": "P", "status": "idle",
+              "archived": 0, "created_at": now - 60, "updated_at": now - 30},
+             {"id": "gone00000000", "title": "Gone", "project": "P", "status": "idle",
+              "archived": 1, "created_at": now - 60, "updated_at": now - 5}]
+    feed = DivanOffice(Tap(), lambda: chats)
+    feed.backlog()
+    assert set(feed.rooms()["chats"]) == {"open0000"}
+    feed.observe({"event": "chat.updated", "chat_id": "open00000000",
+                  "data": {**chats[0], "archived": 1, "updated_at": _time.time()}})
+    assert feed.rooms()["count"] == 0
