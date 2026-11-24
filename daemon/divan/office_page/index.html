@@ -22,13 +22,20 @@
   .room[hidden] { display: none; }
   .room canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; width: 100%; height: 100%; }
   .room .labels, .room .says { position: absolute; inset: 0; pointer-events: none; }
+  .room .labels { z-index: 2; }
+  .room .says { z-index: 3; }
+  .room:hover { z-index: 4; }
+  /* The name under the mouse: on top of the others, whole, lit up. */
+  .lb.hot { z-index: 10; max-width: none !important; overflow: visible; filter: brightness(1.35);
+            box-shadow: inset 0 0 0 1px var(--ring), 0 0 0 1px var(--ring), 0 0 10px var(--ring) !important; }
   /* What a chat is doing, for a moment, beside its name. */
-  .say { position: absolute; left: 0; top: 0; white-space: nowrap; padding: .25em .6em; border-radius: .9em .9em .9em .2em;
-         background: #fffdf5; color: #1d1b26; border: 2px solid #1d1b26; box-shadow: 2px 2px 0 #1d1b2699;
-         font-family: -apple-system, system-ui, sans-serif; font-weight: 600; line-height: 1.2; z-index: 3;
-         opacity: 1; transition: opacity .6s ease; animation: pop .18s ease-out; }
+  .say { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; padding: 2px 4px;
+         font-family: 'Fusion Pixel 8px', ui-monospace, monospace; opacity: .92; z-index: 3;
+         transition: opacity .6s ease; animation: pop .18s ease-out; }
+  .say::before { content: ''; position: absolute; left: -4px; bottom: 2px; border: 2px solid transparent;
+                 border-right-color: var(--ring); border-width: 3px 4px 3px 0; }
   .say.gone { opacity: 0; }
-  @keyframes pop { from { opacity: 0; margin-top: 4px; } to { opacity: 1; margin-top: 0; } }
+  @keyframes pop { from { opacity: 0; margin-left: -4px; } to { opacity: .92; margin-left: 0; } }
   /* The sign over each room: the product's logo on a wooden board. */
   .sign { position: absolute; left: 50%; top: 0; transform: translate(-50%, 0); margin-top: 1.2em; display: flex; align-items: center; gap: .55em;
           padding: .35em .8em .35em .4em; background: linear-gradient(#6b4527, #4a2e19); border: .18em solid #2a1a0e;
@@ -39,7 +46,7 @@
   .sign .logo img { width: 100%; height: 100%; object-fit: cover; image-rendering: auto; }
   .sign b { font-size: 1.25em; }
   .sign i { font-style: normal; font-size: .85em; padding: .1em .45em; border-radius: 1em; background: #2a1a0e; color: var(--tone); }
-  .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; padding: 2px 3px; overflow: hidden;
+  .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; padding: 2px 3px; overflow: hidden; z-index: 1;
         text-overflow: ellipsis; font-family: 'Fusion Pixel 8px', ui-monospace, monospace; }
   #zoom { position: fixed; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: 6px; z-index: 5; }
   #zoom button { width: 36px; height: 36px; border-radius: 18px; border: 1px solid #3a3650; background: #262335ee;
@@ -73,6 +80,6 @@
   <footer><textarea placeholder="Write to this chat…"></textarea><button class="b-send">Send</button><button class="b-open" title="Open the chat">↗</button></footer>
 </div>
 <div id="zoom"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button></div>
-<script type="module" src="office.js?v=1795527000"></script>
+<script type="module" src="office.js?v=1795531000"></script>
 </body>
 </html>

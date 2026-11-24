@@ -58,16 +58,18 @@ function makeRoom(name) {
   r.sign.querySelector('b').textContent = name;
   r.sign.style.setProperty('--tone', tone(name));
   el.addEventListener('click', (e) => clickRoom(r, e));
+  el.addEventListener('pointermove', (e) => hoverRoom(r, e));
+  el.addEventListener('pointerleave', () => { hot = null; });
   rooms.set(name, r);
   return r;
 }
 
 function dropRoom(r) { r.el.remove(); try { r.office.free(); } catch (e) { /* gone */ } rooms.delete(r.name); }
 
-function land(r, t, line) {
+function land(r, t, line, live = false) {
   if (!r.primed) { r.office.step(t - 1, ...(r.units[0] ? r.units : roomUnits(r))); r.primed = true; }
   try { r.office.send_hook(line, t); } catch (e) { /* a line no source names */ }
-  hear(line, t);
+  if (live) hear(line);
 }
 
 // ── what each one is doing: a small bubble beside its name for a moment ──
@@ -131,8 +133,10 @@ function workOf(name, input) {
 
 const SAY_MS = 4500;                // how long a bubble stays before it fades
 const saying = new Map();           // session id -> { text, until }
-function hear(line, t) {
-  if (Date.now() - t > SAY_MS) return;  // an old line, replayed as the page opens
+// Only lines that arrive while the page is open speak, timed by this page's
+// own clock: a line's stamp is the daemon's, and another computer's clock or
+// a slow tunnel would make every line look old.
+function hear(line) {
   let b;
   try { b = JSON.parse(line); } catch (e) { return; }
   const sid = b.session_id;
@@ -142,7 +146,7 @@ function hear(line, t) {
   else if (b.hook_event_name === 'UserPromptSubmit') work = 'think';
   else if (b.hook_event_name === 'PermissionRequest') work = 'ask';
   else if (b.hook_event_name === 'Stop' || b.hook_event_name === 'SessionEnd') { saying.delete(sid); return; }
-  if (work) saying.set(sid, { text: DOING[work] + '…', until: t + SAY_MS });
+  if (work) saying.set(sid, { text: DOING[work] + '…', until: Date.now() + SAY_MS });
 }
 
 function roomFor(name) { return rooms.get(name) || makeRoom(name); }
@@ -210,9 +214,12 @@ function overlay(r) {
     el.style.color = L.ink;
     el.style.backgroundColor = L.plate;
     el.style.boxShadow = `inset 0 0 0 1px ${tone(r.name)}`;
+    el.style.setProperty('--ring', tone(r.name));
     const x = L.x * css, y = L.y * css;
     el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
-    r.shown.push({ x, y, chat, w: el.offsetWidth, sid: chat ? chat.id : null });
+    const key = chat ? chat.id : L.text;
+    el.classList.toggle('hot', hot === key);
+    r.shown.push({ x, y, chat, w: el.offsetWidth, h: el.offsetHeight, key, sid: chat ? chat.id : null, ink: L.ink, plate: L.plate });
     i++;
   }
   while (kids.length > i) r.labels.removeChild(kids[kids.length - 1]);
@@ -227,8 +234,13 @@ function overlay(r) {
     if (!el) { el = document.createElement('div'); el.className = 'say'; r.says.appendChild(el); }
     if (el.textContent !== say.text) el.textContent = say.text;
     el.classList.toggle('gone', now > say.until);
-    el.style.fontSize = Math.max(9, Math.round(2.4 * css)) + 'px';
-    el.style.transform = `translate(${s.x + s.w / 2 + 4}px, ${s.y}px) translate(0, -100%)`;
+    // In the name tag's own type and colours, the product's line round it.
+    el.style.fontSize = Math.max(8, Math.round(2.6 * css)) + 'px';
+    el.style.color = s.ink;
+    el.style.backgroundColor = s.plate;
+    el.style.boxShadow = `inset 0 0 0 1px ${tone(r.name)}`;
+    el.style.setProperty('--ring', tone(r.name));
+    el.style.transform = `translate(${s.x + s.w / 2 + 6}px, ${s.y}px) translate(0, -100%)`;
     if (now > say.until + 800) saying.delete(s.sid);
     j++;
   }
@@ -237,17 +249,37 @@ function overlay(r) {
   r.sign.querySelector('i').textContent = String(r.name === TERMINAL ? i : r.people);
 }
 
-// The character under a click: the nearest name tag, the sprite being just under it.
-function clickRoom(r, e) {
-  if (dragged) { dragged = false; return; }  // the end of a pan, not a click
-  e.stopPropagation();
+// The one under the pointer: its name tag if the pointer is on one (the last
+// drawn, the one on top), else the nearest character, the sprite being just
+// under its tag.
+function under(r, e) {
   const box = r.canvas.getBoundingClientRect();
   const x = e.clientX - box.left, y = e.clientY - box.top;
+  for (let i = r.shown.length - 1; i >= 0; i--) {
+    const s = r.shown[i];
+    if (Math.abs(x - s.x) <= s.w / 2 && y <= s.y && y >= s.y - s.h) return s;
+  }
   let best = null, bestD = 30 * css;
   for (const s of r.shown) {
     const d = Math.hypot(x - s.x, (y - (s.y + 11 * css)) * 0.8);
     if (d < bestD) { best = s; bestD = d; }
   }
+  return best;
+}
+
+// Whoever the mouse is over comes to the front, its whole name lit.
+let hot = null;
+function hoverRoom(r, e) {
+  if (drag && dragged) return;
+  const s = under(r, e);
+  hot = s ? s.key : null;
+  r.el.style.cursor = s && s.chat ? 'pointer' : '';
+}
+
+function clickRoom(r, e) {
+  if (dragged) { dragged = false; return; }  // the end of a pan, not a click
+  e.stopPropagation();
+  const best = under(r, e);
   if (!best || !best.chat) { closeBubble(); return; }
   openBubble(best.chat);
 }
@@ -325,7 +357,7 @@ function loop(now) {
   requestAnimationFrame(loop);
   if (!started || now - last < FRAME_MS) return;
   last = now;
-  for (const r of rooms.values()) if (r.pending.length) { for (const [t, l] of r.pending) land(r, t, l); r.pending = []; }
+  for (const r of rooms.values()) if (r.pending.length) { for (const [t, l] of r.pending) land(r, t, l, true); r.pending = []; }
   size();
   const t = Date.now();
   for (const r of rooms.values()) if (!r.el.hidden || r.name === TERMINAL) drawRoom(r, t);
