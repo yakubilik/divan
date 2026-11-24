@@ -11,28 +11,29 @@
   /* The office can be bigger than the window: the scroller pans it (a finger,
      a trackpad, or the mouse held down and dragged). margin:auto centres a
      small office without cutting off the left of a big one. */
-  #scroller { position: fixed; inset: 0; overflow: auto; display: flex; padding: 44px 24px 24px; box-sizing: border-box;
+  #scroller { position: fixed; inset: 0; overflow: auto; display: flex; padding: 24px; box-sizing: border-box;
               scrollbar-width: none; -webkit-overflow-scrolling: touch; cursor: grab; }
   #scroller::-webkit-scrollbar { display: none; }
   #scroller.dragging { cursor: grabbing; }
   #stage { position: relative; flex: none; margin: auto; }
-  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; border-radius: 6px; }
-  #labels, #zones { position: absolute; inset: 0; pointer-events: none; }
-  .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; padding: 2px 3px; overflow: hidden;
-        text-overflow: ellipsis; font-family: 'Fusion Pixel 8px', ui-monospace, monospace; z-index: 1; }
-  /* A product's section of the office: a dashed line in its colour round its
-     desks, a faint wash of it on the floor, and its sign hung over it. */
-  .zone { position: absolute; box-sizing: border-box; border: 2px dashed var(--tone); border-radius: 6px;
-          background: color-mix(in srgb, var(--tone) 6%, transparent); }
-  .sign { position: absolute; left: 50%; top: 0; transform: translate(-50%, calc(-100% - .3em)); display: flex; align-items: center; gap: .5em;
-          padding: .3em .7em .3em .35em; background: linear-gradient(#6b4527, #4a2e19); border: .16em solid #2a1a0e;
-          border-radius: .35em; box-shadow: inset 0 0 0 .1em #8a5c34, 0 .25em 0 #0009; color: #f5e6c8;
+  /* The floor: a room per product, set out by office.js, a corridor between. */
+  #stage { border-radius: 6px; overflow: hidden; box-shadow: 0 6px 18px #0008; }
+  .room { position: absolute; cursor: pointer; }
+  .room[hidden] { display: none; }
+  .room canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; width: 100%; height: 100%; }
+  .room .labels { position: absolute; inset: 0; pointer-events: none; }
+  /* The sign over each room: the product's logo on a wooden board. */
+  .sign { position: absolute; left: 50%; top: 0; transform: translate(-50%, 0); margin-top: 1.2em; display: flex; align-items: center; gap: .55em;
+          padding: .35em .8em .35em .4em; background: linear-gradient(#6b4527, #4a2e19); border: .18em solid #2a1a0e;
+          border-radius: .35em; box-shadow: inset 0 0 0 .1em #8a5c34, 0 .25em 0 #0009; color: #f5e6c8; pointer-events: none;
           font: 700 1em 'Fusion Pixel 8px', ui-monospace, monospace; letter-spacing: .04em; white-space: nowrap; z-index: 2; }
-  .sign .logo { width: 2em; height: 2em; border-radius: .3em; background: #f5e6c8; display: grid; place-items: center;
+  .sign .logo { width: 2.1em; height: 2.1em; border-radius: .3em; background: #f5e6c8; display: grid; place-items: center;
                 overflow: hidden; color: #4a2e19; box-shadow: 0 0 0 .12em var(--tone); }
   .sign .logo img { width: 100%; height: 100%; object-fit: cover; image-rendering: auto; }
-  .sign b { font-size: 1.15em; }
+  .sign b { font-size: 1.25em; }
   .sign i { font-style: normal; font-size: .85em; padding: .1em .45em; border-radius: 1em; background: #2a1a0e; color: var(--tone); }
+  .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; padding: 2px 3px; overflow: hidden;
+        text-overflow: ellipsis; font-family: 'Fusion Pixel 8px', ui-monospace, monospace; }
   #zoom { position: fixed; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: 6px; z-index: 5; }
   #zoom button { width: 36px; height: 36px; border-radius: 18px; border: 1px solid #3a3650; background: #262335ee;
                  color: #e8e3fa; font: 600 18px -apple-system, system-ui, sans-serif; cursor: pointer; }
@@ -57,7 +58,7 @@
 </style>
 </head>
 <body>
-<div id="scroller"><div id="stage"><canvas id="office"></canvas><div id="zones"></div><div id="labels"></div></div></div>
+<div id="scroller"><div id="stage"></div></div>
 <div id="note"></div>
 <div id="bubble" hidden>
   <header><div><div class="b-title"></div><div class="b-state"></div></div><span style="flex:1"></span><button class="b-close" aria-label="Close">✕</button></header>
@@ -65,6 +66,6 @@
   <footer><textarea placeholder="Write to this chat…"></textarea><button class="b-send">Send</button><button class="b-open" title="Open the chat">↗</button></footer>
 </div>
 <div id="zoom"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button></div>
-<script type="module" src="office.js?v=1795518000"></script>
+<script type="module" src="office.js?v=1795521000"></script>
 </body>
 </html>
