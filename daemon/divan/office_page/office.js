@@ -214,8 +214,13 @@ function paintLogo(r) {
   if (!f) { r.screen.hidden = true; return; }
   const k = r.office.scale(), st = r.screen.style;
   r.screen.hidden = false;
-  st.left = (f.x / k) * css + 'px'; st.top = (f.y / k) * css + 'px';
-  st.width = (f.w / k) * css + 'px'; st.height = (f.h / k) * css + 'px';
+  // A monitor on the desk, much bigger than the sprite's own few-pixel
+  // screen: standing on it, centred over it.
+  const W = 15, H = 12;
+  const cx = (f.x + f.w / 2) / k, bottom = (f.y + f.h) / k + 0.5;
+  st.left = (cx - W / 2) * css + 'px'; st.top = (bottom - H) * css + 'px';
+  st.width = W * css + 'px'; st.height = H * css + 'px';
+  st.borderWidth = Math.max(2, Math.round(0.9 * css)) + 'px';
   st.backgroundColor = f.bg;
   if (r.screen.dataset.src !== r.logoSrc) { r.screen.dataset.src = r.logoSrc; r.screen.style.backgroundImage = `url("${r.logoSrc}")`; }
 }
