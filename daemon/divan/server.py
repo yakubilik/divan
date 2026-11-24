@@ -365,7 +365,8 @@ class Server:
         # character. The page and its wasm are static and hold nothing; the
         # lines that fill it come from /office/stream, behind the token.
         self.office = OfficeTap()
-        self.office_feed = DivanOffice(self.office, lambda: self.db.list_chats(include_archived=True))
+        self.office_feed = DivanOffice(self.office, lambda: self.db.list_chats(include_archived=True),
+                                       marks=self._office_logos)
         self._office_task: asyncio.Task | None = None
         self.app.get("/office/stream")(self.office_stream)
         self.app.get("/office/poll")(self.office_poll)
@@ -2766,6 +2767,11 @@ class Server:
                 if pic:
                     out[aid]["image"] = pic
         return out
+
+    def _office_logos(self) -> dict[str, str]:
+        """Each product's logo by its name, the sign over its room in the office."""
+        return {m["label"]: m["image"]
+                for m in projectmarks.marks(self.db.divan.list_projects()).values()}
 
     def _project_marks(self, chats: list[dict]) -> dict[str, dict]:
         filed = {ch.get("project_id") for ch in chats if ch.get("project_id")}

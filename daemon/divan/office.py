@@ -278,9 +278,11 @@ def hook_line(chat_id: str, event: str, ts: float, **extra) -> str:
 
 
 class DivanOffice:
-    def __init__(self, tap: OfficeTap, list_chats) -> None:
+    def __init__(self, tap: OfficeTap, list_chats, marks=None) -> None:
         self.tap = tap
         self.list_chats = list_chats  # () -> list[dict], the db's chat rows
+        # () -> {product name: logo data URI}, the sign over each product's room
+        self.marks = marks
         self.chats: dict[str, dict] = {}
         # provider session id -> chat id, so a plugin line of a Divan chat is
         # not shown twice
@@ -403,10 +405,18 @@ class DivanOffice:
 
     # ── the page ───────────────────────────────────────────────────────────
     def rooms(self) -> dict:
+        logos: dict[str, str] = {}
+        if self.marks is not None:
+            try:
+                logos = self.marks() or {}
+            except Exception as exc:  # noqa: BLE001 - a room without its sign is still a room
+                log.debug("office marks: %s", exc)
+        names = {c["room"] for c in self.chats.values()} | {TERMINAL_ROOM}
         return {"chats": {c["short"]: {"id": c["id"], "title": c["title"], "room": c["room"]}
                           for c in self.chats.values()},
                 "count": len(self.chats),
-                "rooms": sorted({c["room"] for c in self.chats.values()} | {TERMINAL_ROOM})}
+                "rooms": sorted(names),
+                "logos": {r: logos[r] for r in names if r in logos}}
 
     def backlog(self) -> list[tuple[float, str, str]]:
         """Every chat as it is now: its start, then where it is.
