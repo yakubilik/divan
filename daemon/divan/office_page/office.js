@@ -47,17 +47,14 @@ function roomUnits(r) {
 function makeRoom(name) {
   const el = document.createElement('section');
   el.className = 'room';
-  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="sign"><canvas class="logo"></canvas></div><div class="neon"></div>';
+  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div>';
   floor.appendChild(el);
   const r = {
     name, el, canvas: el.querySelector('canvas'), labels: el.querySelector('.labels'), says: el.querySelector('.says'),
-    neon: el.querySelector('.neon'),
-    sign: el.querySelector('.sign'), office: Office.live(day + rooms.size * 7919), img: null,
+    office: Office.live(day + rooms.size * 7919), img: null,
     units: [0, 0], at: [0, 0], people: 0, shown: [], pending: [], primed: false,
   };
   r.ctx = r.canvas.getContext('2d');
-  r.sign.style.setProperty('--tone', tone(name));
-  r.sign.title = name;
   el.addEventListener('click', (e) => clickRoom(r, e));
   el.addEventListener('pointermove', (e) => hoverRoom(r, e));
   el.addEventListener('pointerleave', () => { hot = null; });
@@ -154,39 +151,14 @@ function size() {
     const s = r.el.style;
     s.left = r.at[0] * css + 'px'; s.top = r.at[1] * css + 'px';
     s.width = r.units[0] * css + 'px'; s.height = r.units[1] * css + 'px';
-    // The product's logo on the room's whiteboard.
-    const [bx, by, bw, bh] = boardSpot(r);
-    const g = r.sign.style;
-    g.left = bx * css + 'px'; g.top = by * css + 'px'; g.width = bw * css + 'px'; g.height = bh * css + 'px';
   }
 }
 
-// Where a room's logo goes, in its units, as [left, top, width, height]: on
-// the face of its whiteboard (14×11 units, the board over its legs), the
-// rolling one by the wall placed by its top-left, an aisle one by its centre;
-// a room without one gets it on the cork board or the screen on its wall, and
-// one without those in the aisle between its first two desk pods.
-const LOGO = 7;
-
-// The logo drawn the way the office is: shrunk to the art's own pixels (the
-// engine draws `scale()` of them per unit), then shown with hard edges, so it
-// reads as part of the pixel art rather than a sticker on it.
-function pixelate(cv, src, px) {
-  const img = new Image();
-  img.onload = () => {
-    cv.width = px; cv.height = px;
-    const g = cv.getContext('2d');
-    g.imageSmoothingEnabled = true;
-    g.imageSmoothingQuality = 'high';
-    g.clearRect(0, 0, px, px);
-    g.drawImage(img, 0, 0, px, px);
-    // Hard alpha: pixel art has no half-clear edge.
-    const d = g.getImageData(0, 0, px, px);
-    for (let k = 3; k < d.data.length; k += 4) d.data[k] = d.data[k] < 110 ? 0 : 255;
-    g.putImageData(d, 0, 0);
-  };
-  img.src = src;
-}
+// Where a room's logo goes: the piece of furniture it is painted onto, as
+// its box in units [left, top, width, height] and what it is. The rolling
+// whiteboard by the wall is placed by its top-left, an aisle one by its
+// centre; both are 14×11. Without one, the screen on the wall (14×12), then
+// the cork board (10×6).
 function boardSpot(r) {
   const key = r.units.join('x');
   if (r.spotKey === key) return r.spot;
@@ -194,23 +166,76 @@ function boardSpot(r) {
   try { items = JSON.parse(r.office.decor_json(r.units[0], r.units[1])); } catch (e) { /* none */ }
   const wall = items.find((d) => d[0] === 'WallWhiteboard');
   const aisle = items.find((d) => d[0] === 'Whiteboard');
-  const cork = items.find((d) => d[0] === 'WallBulletinBoard');
   const screen = items.find((d) => d[0] === 'WallMeetingScreen');
-  if (wall) r.spot = [wall[1] + (14 - LOGO) / 2, wall[2] + 1, LOGO, LOGO];
-  else if (aisle) r.spot = [aisle[1] - LOGO / 2, aisle[2] - 5.5 + 1, LOGO, LOGO];
-  else if (cork) r.spot = [cork[1] + 2.5, cork[2] + 0.5, 5, 5];   // the cork board on the wall, 10×6
-  else if (screen) r.spot = [screen[1] + 1.5, screen[2] + 1.5, LOGO, LOGO];  // the wall screen, 14×12
-  else {
-    let desks = [];
-    try { desks = JSON.parse(r.office.desks_json(r.units[0], r.units[1])); } catch (e) { /* none */ }
-    const xs = [...new Set(desks.map((d) => d[0]))].sort((p, q) => p - q);
-    const top = desks.length ? Math.min(...desks.map((d) => d[1])) : r.units[1] / 2;
-    let x = r.units[0] / 2;
-    for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > 26) { x = (xs[i - 1] + 22 + xs[i]) / 2; break; }
-    r.spot = [x - LOGO / 2, top + 4, LOGO, LOGO];
-  }
+  const cork = items.find((d) => d[0] === 'WallBulletinBoard');
+  r.spot = wall ? { kind: 'board', box: [wall[1], wall[2], 14, 11] }
+    : aisle ? { kind: 'board', box: [aisle[1] - 7, aisle[2] - 5.5, 14, 11] }
+    : screen ? { kind: 'screen', box: [screen[1], screen[2], 14, 12] }
+    : cork ? { kind: 'cork', box: [cork[1], cork[2], 10, 6] }
+    : null;
   r.spotKey = key;
+  r.face = null;
   return r.spot;
+}
+
+// The face the logo is painted on, found in the frame itself: a whiteboard's
+// white, a screen's display (its bluish dark), a cork board's brown. In art
+// pixels, with the face's own colour.
+function findFace(r) {
+  const spot = boardSpot(r);
+  if (!spot || !r.img) return null;
+  const k = r.office.scale(), W = r.img.width, H = r.img.height, d = r.img.data;
+  const [bx, by, bw, bh] = spot.box.map((v) => Math.round(v * k));
+  const isFace = spot.kind === 'board' ? (R, G, B) => R > 175 && G > 175 && B > 175
+    : spot.kind === 'screen' ? (R, G, B) => B > R + 12 && R + G + B < 330
+    : (R, G, B) => R > G + 20 && G > B && R > 120;
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1, sr = 0, sg = 0, sb = 0, n = 0;
+  for (let y = Math.max(0, by); y < Math.min(H, by + bh); y++) {
+    for (let x = Math.max(0, bx); x < Math.min(W, bx + bw); x++) {
+      const o = (y * W + x) * 4;
+      if (!isFace(d[o], d[o + 1], d[o + 2])) continue;
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      sr += d[o]; sg += d[o + 1]; sb += d[o + 2]; n++;
+    }
+  }
+  if (n < 20 || x1 - x0 < 6 || y1 - y0 < 4) return null;
+  const bg = spot.kind === 'screen' ? '#141a26' : `rgb(${sr / n | 0},${sg / n | 0},${sb / n | 0})`;
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, bg };
+}
+
+// The logo painted into the room's own pixels, the way the art would have it:
+// the whole face cleared to its colour, the logo as big as it holds, at the
+// art's resolution with hard edges.
+function paintLogo(r) {
+  if (!r.logoImg || !r.logoImg.complete || !r.logoImg.naturalWidth) return;
+  if (!r.face) r.face = findFace(r);
+  const f = r.face;
+  if (!f) return;
+  const c = r.ctx;
+  c.fillStyle = f.bg;
+  c.fillRect(f.x, f.y, f.w, f.h);
+  const side = Math.max(4, Math.min(f.w, f.h) - 2);
+  if (!r.logoArt || r.logoArt.width !== side) r.logoArt = pixelLogo(r.logoImg, side, r.spot.kind === 'screen');
+  c.drawImage(r.logoArt, f.x + ((f.w - side) >> 1), f.y + ((f.h - side) >> 1));
+}
+
+// The logo shrunk to `px` art pixels, with hard alpha: pixel art has no
+// half-clear edge. On a screen its white ground goes, so it lights the
+// display instead of sitting on it as a card.
+function pixelLogo(img, px, dropWhite = false) {
+  const cv = document.createElement('canvas');
+  cv.width = px; cv.height = px;
+  const g = cv.getContext('2d');
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(img, 0, 0, px, px);
+  const d = g.getImageData(0, 0, px, px);
+  for (let k = 3; k < d.data.length; k += 4) {
+    const white = d.data[k - 3] > 225 && d.data[k - 2] > 225 && d.data[k - 1] > 225;
+    d.data[k] = d.data[k] < 110 || (dropWhite && white) ? 0 : 255;
+  }
+  g.putImageData(d, 0, 0);
+  return cv;
 }
 
 // ── drawing ─────────────────────────────────────────────────────────────
@@ -223,6 +248,7 @@ function drawRoom(r, now) {
     if (!r.img) r.img = new ImageData(fw, fh);
     r.img.data.set(new Uint8ClampedArray(wasm.memory.buffer, r.office.frame_ptr(), r.office.frame_len()));
     r.ctx.putImageData(r.img, 0, 0);
+    paintLogo(r);
   }
   overlay(r);
 }
@@ -245,10 +271,6 @@ function lift(box, placed) {
 // neighbours' tags sit side by side instead of on top of each other. The
 // whole name is the hover's.
 const TAG_W = 20;
-// The neon board's words: the engine writes its own jokes there, in English.
-// audit: language-data — the office's Turkish for the neon board's states
-const MOOD = { run: 'çalışıyor', idle: 'boşta', quiet: 'sessiz' };
-const RUN_INK = '#3cdc3c';   // the engine's ink for a working agent's name
 // audit: end-language-data
 
 function overlay(r) {
@@ -314,29 +336,6 @@ function overlay(r) {
   }
   while (bubbles.length > j) r.says.removeChild(bubbles[bubbles.length - 1]);
   if (r.name === TERMINAL) r.visitors = i;
-
-  // The neon board on the wall: how the room is doing, in its own lamps.
-  const board = data.board;
-  if (board) {
-    const n = r.neon.style;
-    n.left = board.rect.x * css + 'px'; n.top = board.rect.y * css + 'px';
-    n.width = board.rect.w * css + 'px'; n.height = board.rect.h * css + 'px';
-    // Counted from the room's own tags: a working agent's name is lit green.
-    const busy = data.labels.filter((L) => L.ink === RUN_INK).length, idle = data.labels.length - busy;
-    const lamp = (on, n, word, color) => `<span style="color:${color};text-shadow:0 0 .4em ${color}">${on ? '●' : '○'} ${n} ${word}</span>`;
-    const html = data.labels.length
-      ? (busy ? lamp(true, busy, MOOD.run, RUN_INK) : '') + (idle ? lamp(false, idle, MOOD.idle, '#8c8c96') : '')
-      : lamp(false, 0, MOOD.quiet, '#8c8c96').replace('○ 0 ', '○ ');
-    if (r.neon.dataset.html !== html || r.neon.dataset.css !== String(css)) {
-      r.neon.dataset.html = html;
-      r.neon.dataset.css = String(css);
-      r.neon.innerHTML = html;
-      // As big as the panel holds.
-      let size = Math.max(7, Math.round(2.6 * css));
-      n.fontSize = size + 'px';
-      while (size > 6 && r.neon.scrollWidth > r.neon.clientWidth) { size -= 1; n.fontSize = size + 'px'; }
-    }
-  }
 }
 
 // The one under the pointer: its name tag if the pointer is on one (the last
@@ -523,12 +522,11 @@ function setRooms(d) {
   for (const name of Object.keys(people)) roomFor(name);
   for (const r of rooms.values()) {
     r.people = people[r.name] || 0;
-    const logo = r.sign.querySelector('.logo');
-    r.sign.hidden = !logos[r.name];
     const src = logos[r.name] || '';
-    if (logo.dataset.src !== src && src) {
-      logo.dataset.src = src;
-      pixelate(logo, src, Math.round(LOGO * r.office.scale()));
+    if (r.logoSrc !== src) {
+      r.logoSrc = src;
+      r.logoImg = null; r.logoArt = null;
+      if (src) { const im = new Image(); im.src = src; r.logoImg = im; }
     }
   }
   return moved;

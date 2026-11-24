@@ -37,12 +37,6 @@
   .say.gone { opacity: 0; }
   @keyframes pop { from { opacity: 0; margin-left: -4px; } to { opacity: .92; margin-left: 0; } }
   /* The product's logo, on the room's whiteboard: a print pinned to its face. */
-  .sign { position: absolute; pointer-events: none; z-index: 1; }
-  .sign[hidden] { display: none; }
-  .sign .logo { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
-  /* The neon board on each room's wall: its lamps and counts, glowing. */
-  .neon { position: absolute; display: flex; align-items: center; justify-content: center; gap: .3em; pointer-events: none;
-          font-family: 'Fusion Pixel 8px', ui-monospace, monospace; white-space: nowrap; overflow: hidden; z-index: 1; }
   .lb { position: absolute; left: 0; top: 0; white-space: nowrap; line-height: 1; padding: 2px 3px; overflow: hidden; z-index: 1;
         text-overflow: ellipsis; font-family: 'Fusion Pixel 8px', ui-monospace, monospace; }
   #zoom { position: fixed; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: 6px; z-index: 5; }
@@ -77,6 +71,6 @@
   <footer><textarea placeholder="Write to this chat…"></textarea><button class="b-send">Send</button><button class="b-open" title="Open the chat">↗</button></footer>
 </div>
 <div id="zoom"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button></div>
-<script type="module" src="office.js?v=1795542000"></script>
+<script type="module" src="office.js?v=1795545000"></script>
 </body>
 </html>
