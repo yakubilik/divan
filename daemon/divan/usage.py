@@ -73,9 +73,9 @@ def rows(body: dict) -> list[dict]:
 def read(a: acct.Account) -> list[dict]:
     """Ask the service where this sign-in's plan stands. Never raises; nothing
     to say is an empty list."""
-    if a.provider != "claude" or a.api_key:
+    if a.provider != "claude" or (a.api_key and not acct.is_oauth_token(a.api_key)):
         return []
-    token = _token(a, time.time())
+    token = a.api_key.strip() if a.api_key else _token(a, time.time())
     if not token:
         return []
     req = urllib.request.Request(URL, headers={

@@ -220,11 +220,13 @@ class Account:
                 e["CLAUDE_CONFIG_DIR"] = home
             else:
                 e["CODEX_HOME"] = home
-        if self.api_key and self.provider == "claude":
-            e["ANTHROPIC_API_KEY"] = self.api_key
-        elif self.provider == "claude":
-            # an inherited key would silently sign in an account that is not
+        if self.provider == "claude":
+            # an inherited key or token would silently sign in an account that is not
             e.pop("ANTHROPIC_API_KEY", None)
+            e.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+            if self.api_key:
+                e["CLAUDE_CODE_OAUTH_TOKEN" if is_oauth_token(self.api_key)
+                  else "ANTHROPIC_API_KEY"] = self.api_key
         return e
 
     def public(self) -> dict:
@@ -318,6 +320,8 @@ def refresh(acc: Account) -> Account:
             # a key bills API usage and has no tier at all; saying "api" is
             # the honest answer there, not a blank.
             acc.plan = str(data.get("subscriptionType") or "").strip().lower()
+            if not acc.plan and acc.logged_in and is_oauth_token(acc.api_key):
+                acc.plan = "subscription"
             if not acc.plan and acc.logged_in:
                 acc.plan = "api" if (acc.api_key or data.get("apiProvider") not in (None, "firstParty")
                                      or data.get("authMethod") not in (None, "claude.ai")) else ""
@@ -844,6 +848,13 @@ def import_credentials(acc: Account, blob: dict) -> Account:
     return refresh(acc)
 
 
+def is_oauth_token(key: str | None) -> bool:
+    """A `claude setup-token` token: a year-long sign-in on the subscription,
+    where an ordinary one ends after 30 days (bedriyan's did, 25 Nov 2026). The
+    CLI wants it in CLAUDE_CODE_OAUTH_TOKEN; as an API key it is refused."""
+    return bool(key) and key.strip().startswith("sk-ant-oat")
+
+
 def check_api_key(key: str, provider: str = "claude") -> tuple[bool, str]:
     """Ask the service whether the key is real. Listing models costs nothing and
     answers in a second, where running the CLI takes a minute to time out — and
@@ -877,6 +888,16 @@ def login_with_key(acc: Account, key: str) -> tuple[Account, bool, str]:
     key = (key or "").strip()
     if not key:
         raise Err("key_required", "paste the key for that sign-in method")
+    if acc.provider == "claude" and is_oauth_token(key):
+        # The models list takes keys, not this token; a real round-trip through
+        # the CLI is the check that means something.
+        before = acc.api_key
+        acc.api_key = key
+        ok, why = verify_signed_in(acc)
+        if not ok:
+            acc.api_key = before
+            return refresh(acc), False, why or "the service did not accept that token"
+        return refresh(acc), True, ""
     ok, why = check_api_key(key, acc.provider)
     if not ok:
         return refresh(acc), False, why

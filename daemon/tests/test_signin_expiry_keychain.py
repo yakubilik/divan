@@ -21,3 +21,29 @@ def test_the_end_of_a_keychain_sign_in_comes_from_auth_status(tmp_path, monkeypa
     acct.refresh(a)
     assert a.logged_in
     assert a.expires_at == 1796641936.77
+
+
+def test_a_setup_token_signs_in_as_an_oauth_token_not_a_key(tmp_path, monkeypatch):
+    """`claude setup-token` lasts a year; handed over as ANTHROPIC_API_KEY it is refused."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "inherited")
+    a = acct.Account(id="claude-x", label="x", provider="claude", home=str(tmp_path),
+                     api_key="sk-ant-oat01-abc")
+    e = a.env()
+    assert e["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-abc"
+    assert "ANTHROPIC_API_KEY" not in e
+    a.api_key = "sk-ant-api03-abc"
+    e = a.env()
+    assert e["ANTHROPIC_API_KEY"] == "sk-ant-api03-abc"
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in e
+
+
+def test_a_setup_token_is_checked_by_the_cli_and_kept(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(acct, "check_api_key", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
+    monkeypatch.setattr(acct, "verify_signed_in",
+                        lambda acc, timeout=90: (seen.setdefault("env", acc.env()), (True, ""))[1])
+    monkeypatch.setattr(acct, "refresh", lambda acc: acc)
+    a = acct.Account(id="claude-x", label="x", provider="claude", home=str(tmp_path))
+    a, ok, _ = acct.login_with_key(a, "sk-ant-oat01-abc")
+    assert ok and a.api_key == "sk-ant-oat01-abc"
+    assert seen["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-abc"
