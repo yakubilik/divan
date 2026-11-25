@@ -39,6 +39,12 @@ log = logging.getLogger("rac.claude")
 _STREAM_BROKEN = object()
 
 
+#: What an account puts in the CLI's environment: where its login is kept, or
+#: the key or `claude setup-token` token it was signed in with. Never taken from
+#: the daemon's own environment, and always taken from the account's.
+ACCOUNT_ENV = ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
+
+
 class _StreamEnded(Exception):
     """The CLI's stream ended without an error: the CLI (or the relay to a held
     one) went away. Treated like a kill — the session is on disk, so the turn
@@ -335,10 +341,8 @@ class ClaudeProvider(Provider):
         # The account decides the environment: its config dir, and its key when
         # it was signed in with one. Anything inherited from the daemon's own
         # shell would quietly sign in as somebody else.
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")}
-        env.update({k: v for k, v in (c.account_env or {}).items()
-                    if k in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")})
+        env = {k: v for k, v in os.environ.items() if k not in ACCOUNT_ENV}
+        env.update({k: v for k, v in (c.account_env or {}).items() if k in ACCOUNT_ENV})
         if c.account_home:
             env["CLAUDE_CONFIG_DIR"] = c.account_home
         # every account reads and writes the same memory for this folder
