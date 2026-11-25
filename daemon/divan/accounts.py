@@ -32,6 +32,7 @@ if sys.platform != "win32":
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import urlsplit
 
 from .config import CONFIG_DIR, machine_home, machine_home_moved
 from .errors import Err
@@ -56,6 +57,25 @@ def clean_key(key: str | None) -> str:
     contain whitespace, and a long `claude setup-token` token copied from a
     terminal often arrives wrapped over two lines."""
     return "".join((key or "").split())
+
+
+def login_host(url: str) -> str | None:
+    """The host a browser would open for `url`, if it is a login host; else None.
+
+    Parsed the way a browser reads it, and strict: an authority with a user,
+    a port or a backslash is refused outright, so `https://evil?@claude.ai`,
+    `https://evil#@claude.ai` and `https://evil\\@claude.ai` (all of which open
+    evil) cannot borrow a login host's name."""
+    if "\\" in url:
+        return None
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return None
+    if parts.scheme != "https" or not host or parts.netloc.lower() != host:
+        return None
+    return host if host in LOGIN_HOSTS else None
 
 # Every way each tool can be signed in. The app shows these; the ids are the
 # contract. `code` means the phone hands a code back, `key` means the phone
@@ -397,6 +417,7 @@ class LoginSession:
         self.lines: list[str] = []     # complete lines only; partials wait
         self._partial = ""
         self.url: str | None = None
+        self.url_host: str | None = None
         self.code: str | None = None
         self.needs_code = bool(self.spec.get("needs_code"))
         self.done = False
@@ -511,9 +532,9 @@ class LoginSession:
             for line in self.lines:
                 for m in URL_RE.finditer(line):
                     u = m.group(0).rstrip(").,")
-                    host = u.split("/")[2].split("@")[-1].split(":")[0].lower()
-                    if host in LOGIN_HOSTS:
-                        self.url, changed = u, True
+                    host = login_host(u)
+                    if host:
+                        self.url, self.url_host, changed = u, host, True
                         break
                 if self.url:
                     break
@@ -533,7 +554,7 @@ class LoginSession:
                      bool(self.url), bool(self.code))
             await self.emit("account.login.prompt", {
                 "account_id": self.account.id, "provider": self.account.provider,
-                "url": self.url, "url_host": (self.url.split("/")[2] if self.url else None),
+                "url": self.url, "url_host": self.url_host,
                 "code": self.code, "needs_code": self.needs_code,
                 "expires_at": self.expires_at,
             })
