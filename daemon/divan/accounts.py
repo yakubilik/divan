@@ -45,10 +45,17 @@ DEFAULT_ID = "default"
 URL_RE = re.compile(r"https://[^\s\x1b\]]+")
 CODE_RE = re.compile(r"\b([A-Z0-9]{4}-[A-Z0-9]{4,6})\b")
 # Only these hosts may be shown to the phone as a login destination.
-LOGIN_HOSTS = {"claude.com", "www.claude.com", "platform.claude.com",
+LOGIN_HOSTS = {"claude.ai", "claude.com", "www.claude.com", "platform.claude.com",
                "console.anthropic.com", "auth.anthropic.com",
                "auth.openai.com", "chatgpt.com", "platform.openai.com"}
 MAX_LOGINS = 3            # concurrent login sessions per daemon
+
+
+def clean_key(key: str | None) -> str:
+    """A pasted key or token with every space and line break removed. Keys never
+    contain whitespace, and a long `claude setup-token` token copied from a
+    terminal often arrives wrapped over two lines."""
+    return "".join((key or "").split())
 
 # Every way each tool can be signed in. The app shows these; the ids are the
 # contract. `code` means the phone hands a code back, `key` means the phone
@@ -380,7 +387,7 @@ class LoginSession:
         self.emit = emit
         self.method = method or default_method(account.provider)
         self.spec = method_spec(account.provider, self.method)
-        self.api_key = (api_key or "").strip() or None
+        self.api_key = clean_key(api_key) or None
         if self.spec.get("needs_key") and not self.api_key:
             raise Err("key_required", "paste the key for that sign-in method")
         # Pre-fills the address on the sign-in page, so the code goes to the
@@ -885,7 +892,7 @@ def login_with_key(acc: Account, key: str) -> tuple[Account, bool, str]:
     """Sign in with a key. Claude reads it from the environment, so it is kept
     with the account; Codex has a command that stores it itself — and that
     command wants the key piped in, not typed at a terminal."""
-    key = (key or "").strip()
+    key = clean_key(key)
     if not key:
         raise Err("key_required", "paste the key for that sign-in method")
     if acc.provider == "claude" and is_oauth_token(key):
@@ -921,7 +928,7 @@ def login_with_key(acc: Account, key: str) -> tuple[Account, bool, str]:
 def set_api_key(acc: Account, key: str) -> Account:
     """Sign an account in with a key. The Claude CLI has no command for this —
     it reads the key from the environment — so it is kept with the account."""
-    key = (key or "").strip()
+    key = clean_key(key)
     if not key:
         raise Err("key_required", "paste the key for that sign-in method")
     if acc.provider != "claude":
