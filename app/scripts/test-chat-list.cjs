@@ -113,15 +113,15 @@ const ready = (async () => {
 
   // ── an agent of its own is a heading of its own ─────────────────────────
   {
-    const marks = { 'user:saglik-kocu': { label: 'Sağlık Koçu', glyph: '🩺' }, 'user:hermes': { label: 'hermes', glyph: '🪽' } };
+    const marks = { 'user:health-coach': { label: 'Health Coach', glyph: '🩺' }, 'user:hermes': { label: 'hermes', glyph: '🪽' } };
     const cs = [
-      chat('h1', 'Run', { agent_id: 'user:saglik-kocu', project_id: 'p', project: 'Divan', project_by: 'folder' }),
+      chat('h1', 'Run', { agent_id: 'user:health-coach', project_id: 'p', project: 'Divan', project_by: 'folder' }),
       chat('h2', 'General', { agent_id: 'user:hermes', project_id: 'p', project: 'Divan', project_by: 'folder' }),
       chat('h3', 'Unknown agent', { agent_id: 'user:gone', project_by: 'folder' }),
     ];
     const got = web.sections(cs, [], 'h', false, NOW, marks).map((x) => `${x.kind}:${x.title}${x.glyph ?? ''}[${x.chats.map((c) => c.id)}]`).join(' | ');
     checks.push([`an agent other than Hermes gets its own heading with its glyph, not Daily; Hermes and an unknown agent stay in Daily — ${got}`,
-      got === 'agent:Sağlık Koçu🩺[h1] | loose:Daily[h2,h3]']);
+      got === 'agent:Health Coach🩺[h1] | loose:Daily[h2,h3]']);
   }
 
   // ── what the web has always drawn for this fixture ──────────────────────

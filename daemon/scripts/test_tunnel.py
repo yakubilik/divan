@@ -431,9 +431,11 @@ def main() -> None:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    cfg = Config.load()
-    cfg.port = port
-    cfg.save()
+    # The running server writes its own config (with its own port) back while
+    # it works, so a port saved here would not survive until `unlock` reads it.
+    # DIVAN_PORT is what a second daemon on one machine uses, and load() always
+    # applies it.
+    os.environ["DIVAN_PORT"] = str(port)
     daemon = uvicorn.Server(uvicorn.Config(srv.app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=daemon.run, daemon=True)
     thread.start()
@@ -451,6 +453,7 @@ def main() -> None:
     finally:
         daemon.should_exit = True
         thread.join(10)
+        os.environ.pop("DIVAN_PORT", None)
     check(got == [401] * 6 and printed.strip() == f"unlocked {ELSEWHERE}" and after == 200,
           "five guesses lock it, `unlock` lifts it in the running daemon, the right token is served",
           repr((got, printed, after)))

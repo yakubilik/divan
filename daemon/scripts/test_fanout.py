@@ -22,6 +22,7 @@ import asyncio
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -71,6 +72,7 @@ class Fanout:
         self.outbox: dict = {}
         self.writers: dict = {}
         self.conns: dict = {}
+        self.cfg = SimpleNamespace(office=False)   # broadcast feeds the office only when it is on
         self.voice = Hub(self)              # no calls on it; broadcast and _drop tell it
         self.terms = Terms(self.send_to)    # _drop detaches a socket from its shells
 

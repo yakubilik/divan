@@ -47,7 +47,7 @@ function roomUnits(r) {
 function makeRoom(name) {
   const el = document.createElement('section');
   el.className = 'room';
-  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="screen" hidden></div><div class="door" hidden><span>Eve gönder</span></div>';
+  el.innerHTML = '<canvas></canvas><div class="labels"></div><div class="says"></div><div class="screen" hidden></div><div class="door" hidden><span>Send home</span></div>';
   floor.appendChild(el);
   const r = {
     name, el, canvas: el.querySelector('canvas'), labels: el.querySelector('.labels'), says: el.querySelector('.says'),
@@ -111,7 +111,7 @@ function hear(line) {
     const step = (turns.get(sid) || []).find((s) => s.running && (!b.tool_use_id || s.id === b.tool_use_id));
     if (step) step.running = false;
   } else if (ev === 'PermissionRequest') {
-    saying.set(sid, { text: 'Senden izin bekliyorum…', until: Infinity });
+    saying.set(sid, { text: 'Waiting for your permission…', until: Infinity });
   } else if (ev === 'Stop') {
     const steps = turns.get(sid) || [];
     turns.delete(sid);
@@ -258,7 +258,6 @@ function lift(box, placed) {
 // neighbours' tags sit side by side instead of on top of each other. The
 // whole name is the hover's.
 const TAG_W = 20;
-// audit: end-language-data
 
 function overlay(r) {
   let data;

@@ -453,6 +453,9 @@ class Phone:
         for name in ("h_chat_send", "h_call_reply", "_call_on"):
             setattr(self, name, getattr(Server, name).__get__(self))
 
+    async def _route_first(self, *_a) -> None:
+        pass                     # which agent takes a new chat is not what a call is about
+
 
 async def chat_call() -> dict:
     phone = Phone()

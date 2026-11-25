@@ -11,11 +11,13 @@ def _agent(home, name, route=None):
 
 def test_first_message_goes_to_the_agent_it_is_about(tmp_path):
     _agent(tmp_path, "hermes")
+    # audit: language-data — test data: Turkish route patterns and the first messages they match
     _agent(tmp_path, "coach", r"(?<![\wçğıöşü])(koş(u(?!l)|tu)\w*|nab[ıi]z|uyku\w*)")
     assert agents.route("Son koşumun nabız analizi", str(tmp_path))["name"] == "coach"
     assert agents.route("UYKUM bozuk", str(tmp_path))["name"] == "coach"
     assert agents.route("bu koşul neden yanlış", str(tmp_path)) is None
     assert agents.route("chat listesi", str(tmp_path)) is None
+    # audit: end-language-data
 
 
 def test_a_broken_pattern_is_skipped_not_fatal(tmp_path):

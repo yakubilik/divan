@@ -39,10 +39,10 @@ const waiting = () => document.querySelectorAll('[data-waiting]').length;
 const show = (items, busy) => act(async () => root.render(h(Timeline, { hostKey: 'test', items, busy, onRespond: async () => {} })));
 
 const start = [
-  ev('message.user', { text: 'dur kanka' }, 1),
+  ev('message.user', { text: 'wait, stop' }, 1),
   ev('tool.use', { id: 'a', tool: 'Bash', input: { command: 'python3 post.py' } }, 2),
 ];
-const steered = ev('message.user', { text: 'tüm referans videolarını atar mısın' }, 3);
+const steered = ev('message.user', { text: 'can you send all the reference videos' }, 3);
 
 // The tool is still running when the message lands: one live row, the tool's.
 await show(fold([...start, steered]), true);

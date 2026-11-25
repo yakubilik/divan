@@ -262,6 +262,9 @@ async def send_path():
 
         class Host:
             draining = False
+
+            async def _route_first(self, *_a):
+                pass                          # which agent takes the chat is not this test's business
         host = Host()
         host.sessions = type("S", (), {"get": staticmethod(lambda _cid: s)})()
 

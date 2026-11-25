@@ -8,7 +8,7 @@ check before a turn) and the CLI answered "You've hit your monthly spend limit
 · … resets 7:30pm". The pool only moves chats that are mid-turn when a window
 report says full (`_pool_sweep`); a refusal that arrives as the turn's own
 result just ended the chat in an error. claude-9f9930 had room; the chat sat
-for two hours until Yakup asked "otomatik hesap değiştirme bozuk mu".
+for two hours until its owner asked whether automatic account switching was broken.
 
 Guarded here:
   * a limit refusal as the turn's result hands the turn to `pool_next`, which
