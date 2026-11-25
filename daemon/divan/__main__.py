@@ -84,7 +84,11 @@ def cmd_serve(args: argparse.Namespace) -> None:
             # connections forever. The draining already happened by the time
             # this fires — whatever is still attached is a socket, not work, and
             # a restart must not be hostage to one that will not close.
+            # TunnelGate authenticates the actual socket peer. Rewriting it
+            # from X-Forwarded-For makes legitimate cloudflared requests
+            # look like forged requests from the remote browser.
             uc = uvicorn.Config(srv.app, host=host, port=cfg.port, log_level="warning",
+                                proxy_headers=False,
                                 ws_ping_interval=None, ws_ping_timeout=None,
                                 timeout_graceful_shutdown=10)
             servers.append(uvicorn.Server(uc))
@@ -95,6 +99,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
             for host in binds:
                 servers.append(uvicorn.Server(uvicorn.Config(
                     gateway, host=host, port=cfg.port + 1, log_level="warning",
+                    proxy_headers=False,
                     ws_ping_interval=None, ws_ping_timeout=None, timeout_graceful_shutdown=5)))
         print(f"divan {cfg.host_name} listening on: " + ", ".join(f"ws://{h}:{cfg.port}/ws" for h in binds))
         reaper = asyncio.create_task(srv.reaper())
