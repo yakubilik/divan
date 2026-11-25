@@ -38,6 +38,12 @@ log = logging.getLogger("rac.claude")
 # of hanging for a stream that has stopped.
 _STREAM_BROKEN = object()
 
+
+class _StreamEnded(Exception):
+    """The CLI's stream ended without an error: the CLI (or the relay to a held
+    one) went away. Treated like a kill — the session is on disk, so the turn
+    is picked up again in a fresh process."""
+
 # How the CLI exits when something else on the machine signals it: 128 + SIGTERM
 # or SIGKILL, or the negative signal number when the SDK reports it raw.
 KILLED_EXIT_CODES = (143, 137, -15, -9)
@@ -387,6 +393,10 @@ class ClaudeProvider(Provider):
         return ClaudeAgentOptions(**kw)
 
     async def _ensure_client(self, retry: bool = True) -> ClaudeSDKClient:
+        if self._client is not None and self._reader is not None and self._reader.done():
+            # The CLI went away while nothing was asking: start a fresh one
+            # rather than write into a stream nobody reads.
+            await self.close()
         if self._client is None:
             try:
                 client = await self._connect()
@@ -526,6 +536,11 @@ class ClaudeProvider(Provider):
                 # started would be a reader that stopped reading.
                 self._idle_notified = True
                 self._pending_notify = asyncio.create_task(cb())
+            # The stream ended with no error: the CLI is gone all the same. A
+            # turn waiting on the inbox must hear it, or it waits for good —
+            # a chat sat "running" 19 h with its messages queued (24 Nov 2026).
+            self._reader_error = _StreamEnded("the CLI's stream ended")
+            await self._inbox.put(_STREAM_BROKEN)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -945,7 +960,8 @@ class ClaudeProvider(Provider):
             await release_tools()
             await self.close()
             killed = (not self._interrupted
-                      and getattr(self._reader_error, "exit_code", None) in KILLED_EXIT_CODES)
+                      and (isinstance(self._reader_error, _StreamEnded)
+                           or getattr(self._reader_error, "exit_code", None) in KILLED_EXIT_CODES))
             return TurnResult(self._session_id, None, None, None, None, True, f"stream failed: {exc}",
                               killed=killed)
 
