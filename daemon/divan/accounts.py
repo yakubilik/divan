@@ -15,6 +15,7 @@ import asyncio
 import calendar
 import hashlib
 import json
+from datetime import datetime
 import logging
 import os
 import re
@@ -302,6 +303,7 @@ def refresh(acc: Account) -> Account:
     """Ask the CLI whether this account is signed in. Never raises."""
     acc.logged_in, acc.detail, acc.plan = False, "", ""
     acc.expires_at = None
+    data: dict = {}
     try:
         if acc.provider == "claude":
             cli = tools.find_cli("claude")
@@ -342,7 +344,21 @@ def refresh(acc: Account) -> Account:
         acc.detail = "sign-in expired — sign in again"
     if acc.logged_in:
         acc.expires_at = sign_in_expiry(acc)
+        if acc.expires_at is None and acc.provider == "claude":
+            # On a Mac the tokens sit in the keychain, out of sign_in_expiry's
+            # reach; the CLI reports the same end itself (25 Nov 2026: a
+            # 30-day sign-in ran out with no warning).
+            acc.expires_at = _iso_epoch(data.get("loginExpiresAt"))
     return acc
+
+
+def _iso_epoch(value) -> float | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
 
 
 class LoginSession:
