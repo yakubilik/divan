@@ -36,6 +36,7 @@ def test_unknown_host_is_still_not_shown():
 
 
 def test_a_key_wrapped_over_two_lines_is_joined():
-    assert A.clean_key(" sk-ant-oat01-AAAA_bbbb\n  CCCC-dd \n") == "sk-ant-oat01-AAAA_bbbbCCCC-dd"
+    # kept short, so the secret scanner does not take the sample for a real key
+    assert A.clean_key(" sk-ant-oat01-ab_c\n  d-e \n") == "sk-ant-oat01-ab_cd-e"
     assert A.clean_key(None) == ""
     assert A.is_oauth_token(A.clean_key("sk-ant-oat01-x\r\n y"))
