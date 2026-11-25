@@ -173,7 +173,9 @@ def route(text: str, account_home: str | None = None, cwd: str | None = None) ->
     its header, or None. A pattern is a regular expression matched against the
     message in lower case; one that does not compile is skipped, not fatal.
     The first agent in the listing whose pattern matches wins."""
+    # audit: language-data — Turkish dotted and dotless i must lower case correctly for route patterns
     low = str(text or "").replace("İ", "i").replace("I", "ı").lower()
+    # audit: end-language-data
     for a in listing(account_home, cwd):
         pat = a.get("route")
         if not pat:
