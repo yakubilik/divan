@@ -35,6 +35,31 @@ def test_unknown_host_is_still_not_shown():
     assert s.url is None and not events
 
 
+def test_a_login_host_cannot_be_borrowed():
+    # each of these opens evil.example in a browser, whatever name follows the @
+    for url in ("https://evil.example?@claude.ai/oauth/authorize",
+                "https://evil.example#@claude.ai/",
+                "https://evil.example\\@claude.ai/x",
+                "https://claude.ai@evil.example/",
+                "https://claude.ai.evil.example/",
+                "https://user@claude.ai/oauth/authorize",
+                "https://claude.ai:8443/oauth/authorize",
+                "http://claude.ai/oauth/authorize"):
+        assert A.login_host(url) is None, url
+        s, events = _session()
+        s._feed(f"visit: {url}\r\n".encode())
+        asyncio.run(s._scan())
+        assert s.url is None and not events, url
+
+
+def test_the_host_sent_to_the_phone_is_the_parsed_one():
+    assert A.login_host("https://CLAUDE.AI/oauth/authorize?x=1") == "claude.ai"
+    s, events = _session()
+    s._feed(b"https://platform.claude.com/oauth/authorize?code=true\r\n")
+    asyncio.run(s._scan())
+    assert events[0][1]["url_host"] == "platform.claude.com"
+
+
 def test_a_key_wrapped_over_two_lines_is_joined():
     # kept short, so the secret scanner does not take the sample for a real key
     assert A.clean_key(" sk-ant-oat01-ab_c\n  d-e \n") == "sk-ant-oat01-ab_cd-e"
