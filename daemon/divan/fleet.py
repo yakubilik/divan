@@ -144,12 +144,18 @@ def _host_ok(host: str) -> bool:
         for x in labels)
 
 
+def _base(host: str, port: int, secure: str, plain: str) -> str:
+    """A peer on 443 is behind a Cloudflare tunnel of its own (a computer that
+    cannot join the tailnet, 25 Nov 2026), and the tunnel speaks only TLS."""
+    return f"{secure}://{host}" if port == 443 else f"{plain}://{host}:{port}"
+
+
 def upstream_url(peer: Peer) -> str:
-    return f"ws://{peer.host}:{peer.port}/ws"
+    return _base(peer.host, peer.port, "wss", "ws") + "/ws"
 
 
 def http_base(peer: Peer) -> str:
-    return f"http://{peer.host}:{peer.port}"
+    return _base(peer.host, peer.port, "https", "http")
 
 
 def auth_headers(token: str) -> dict:
@@ -165,7 +171,7 @@ async def dial(host: str, port: int, token: str):
     that was let in.
     """
     import websockets
-    uri = f"ws://{host}:{port}/ws"
+    uri = _base(host, port, "wss", "ws") + "/ws"
     try:
         ws = await asyncio.wait_for(
             websockets.connect(uri, additional_headers=auth_headers(token),
