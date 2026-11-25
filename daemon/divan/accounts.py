@@ -696,8 +696,16 @@ def logout(acc: Account) -> None:
 
     An imported sign-in shares its token with the computer it came from, so it
     is only removed locally — asking the CLI to log out could revoke the token
-    for that computer as well."""
-    acc.api_key = None
+    for that computer as well.
+
+    A sign-in made with a key is only the key: dropping it is the whole of
+    signing out. Asking the CLI as well would sign out whatever login the
+    account's folder holds, which for this computer's own account is the
+    computer's own login."""
+    if acc.api_key:
+        acc.api_key = None
+        refresh(acc)
+        return
     if acc.imported:
         try:
             _cred_path(acc).unlink(missing_ok=True)

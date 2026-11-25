@@ -47,7 +47,7 @@ from claude_agent_sdk import (
 )
 
 from .config import CONFIG_DIR, machine_home
-from .providers.claude import MODEL_ALIASES
+from .providers.claude import ACCOUNT_ENV, MODEL_ALIASES
 
 log = logging.getLogger("rac.call")
 
@@ -874,10 +874,10 @@ class Concierge:
         # is inherited from the daemon's own shell that could sign us in as
         # somebody else.
         env = {k: v for k, v in os.environ.items()
-               if k not in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")}
+               if k not in ACCOUNT_ENV}
         home, account_env = self._resolve()
         env.update({k: v for k, v in (account_env or {}).items()
-                    if k in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")})
+                    if k in ACCOUNT_ENV})
         if home:
             env["CLAUDE_CONFIG_DIR"] = home
         # Who is speaking and who to, decided once per session: the agent file

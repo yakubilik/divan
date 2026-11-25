@@ -65,7 +65,7 @@ from claude_agent_sdk import (
 from . import call as callmod
 from .call import Concierge, NoRoom, _is_limit, _Limited, no_room, spoken_reply, last_reply
 from .errors import Err
-from .providers.claude import MODEL_ALIASES
+from .providers.claude import ACCOUNT_ENV, MODEL_ALIASES
 
 log = logging.getLogger("rac.voice")
 
@@ -431,10 +431,10 @@ class FastLayer(Concierge):
         self._inflight = False
 
     def _options(self) -> ClaudeAgentOptions:
-        env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")}
+        env = {k: v for k, v in os.environ.items() if k not in ACCOUNT_ENV}
         home, account_env = self._resolve()
         env.update({k: v for k, v in (account_env or {}).items()
-                    if k in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY")})
+                    if k in ACCOUNT_ENV})
         if home:
             env["CLAUDE_CONFIG_DIR"] = home
         system, self._hermes = voice_system(home, bool(self.chat_id))

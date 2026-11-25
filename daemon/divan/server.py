@@ -575,7 +575,9 @@ class Server:
                    {"provider": a.provider, "label": a.label, "home": a.home,
                     "created_at": a.created_at, "imported": a.imported,
                     "api_key": a.api_key}.items() if v is not None}
-            for a in self.accounts.values() if a.home
+            # the built-in account has no folder of its own, but a key it was
+            # signed in with has to outlive a restart all the same
+            for a in self.accounts.values() if a.home or a.api_key
         }
         self.cfg.save()
 
@@ -3579,6 +3581,7 @@ class Server:
             raise Err("account_gone", "that account was removed")
         await self._release_chats(a.id)
         await asyncio.to_thread(acct.logout, a)
+        self._save_accounts()          # a key signed out stays signed out after a restart
         return a.public()
 
     async def h_account_delete(self, dev: Device, d: dict) -> dict:
