@@ -833,7 +833,25 @@ class Server:
         current = chat.get("account_id") or acct.DEFAULT_ID + "-" + provider
         if not self.pool.state(current, provider).blocked:
             return None
+        # The stored reading is only as fresh as the last turn that ran here,
+        # and the pool moving chats off is exactly what stops turns running
+        # here. Ask the service before acting on it: a week reset early, or a
+        # window that has room again, is only ever seen this way.
+        await self._recheck_blocked(provider, [current])
+        if not self.pool.state(current, provider).blocked:
+            return None
         return await self._pool_plan(provider, current)
+
+    async def _recheck_blocked(self, provider: str, keys: list[str]) -> None:
+        """Ask the service again about every one of these sign-ins whose stored
+        reading says it is spent. A sign-in with room is not asked about at
+        all, and `_fresh_usage` keeps a blocked one to one request per
+        USAGE_EVERY_S; all of them are asked at once, so the wait is one
+        request's timeout at most, however many there are."""
+        now = time.time()
+        blocked = [k for k in dict.fromkeys(keys) if self.pool.state(k, provider, now).blocked]
+        if blocked:
+            await asyncio.gather(*(self._fresh_usage(k) for k in blocked), return_exceptions=True)
 
     async def _pool_plan(self, provider: str, current: str) -> "str | poolmod.Wait | None":
         """What a chat on a spent sign-in does next.
@@ -936,6 +954,9 @@ class Server:
         answer it, at the cost of a subprocess — so it is asked of candidates
         one at a time, best first, and only when somebody is about to be moved.
         """
+        # A sign-in stored as spent may have room again by now; the ranking
+        # below is only as good as the readings it ranks on.
+        await self._recheck_blocked(provider, [a for a in self.pool.order(provider) if a not in exclude])
         for aid in self.pool.candidates(provider, exclude)[:self.pool.settings.max_hops]:
             a = self.accounts.get(aid)
             if a is None:
