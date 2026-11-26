@@ -64,3 +64,11 @@ if len(str(config.CONFIG_DIR / "held" / ("x" * 40 + ".sock"))) > 100 and not os.
     _held = tempfile.mkdtemp(prefix="dvh-", dir="/tmp")
     os.environ["DIVAN_HELD_DIR"] = _held
     atexit.register(shutil.rmtree, _held, True)
+
+# The pool asks the service where a spent sign-in stands before moving a chat
+# off it. No test may reach that service or read a real token (the computer's
+# own sign-in lives in the real keychain): it answers nothing unless a test
+# puts its own stub in place.
+from divan import usage as _usage  # noqa: E402
+
+_usage.read = lambda a: []

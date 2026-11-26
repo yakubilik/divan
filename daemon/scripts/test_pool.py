@@ -34,6 +34,11 @@ from divan.db import DB                               # noqa: E402
 from divan.pool import Pool, Settings                 # noqa: E402
 from divan.providers.base import TurnResult           # noqa: E402
 from divan.server import Server                       # noqa: E402
+from divan import usage as usagemod                    # noqa: E402
+
+# Nothing here ever asks the real service, or reads a real sign-in's token: a
+# scenario that wants an answer from it puts its own stub in place.
+usagemod.read = lambda a: []
 from divan.session import (                           # noqa: E402
     HANDOVER_NOTE, REVIVE_MAX, REVIVE_PROMPT, ChatSession)
 
@@ -503,8 +508,13 @@ def stub_host(db, accounts, sessions, **settings):
     host.limits = {}
     host.accounts = accounts
     host.sessions = type("S", (), {"sessions": sessions})()
+    host._usage_asked = {}
+    host.USAGE_EVERY_S = Server.USAGE_EVERY_S
+    host.swept = []
+    host._sweep_later = host.swept.append
     for name in ("_limit_rows", "_sessions_on", "_pool_next", "_pool_next_for", "_pool_plan",
-                 "_pool_pick", "_pool_sweep", "_remember_limits"):
+                 "_pool_pick", "_pool_sweep", "_remember_limits", "_fresh_usage",
+                 "_recheck_blocked"):
         setattr(host, name, getattr(Server, name).__get__(host))
     host._learn_steps = Server._learn_steps          # a staticmethod, not bound
     host.pool = Pool(Settings.from_dict({"enabled": True, **settings}),
@@ -602,6 +612,167 @@ async def scenario_wiring(db) -> None:
               "with the pool off nothing is moved at all")
     finally:
         server_mod.acct.refresh = real_refresh
+
+
+async def scenario_fresh_reading(db) -> None:
+    """A spent sign-in is asked again before a chat is moved off it.
+
+    26 Nov 2026: the personal sign-in was stored at 99% of its week, the week
+    was reset early, and the service said 2% — but nothing runs on a sign-in
+    the pool keeps moving chats off, so nothing reported it, and every switch
+    back by hand was undone on the next turn.
+    """
+    print("\nasking again before moving")
+    import threading
+
+    import divan.server as server_mod
+    real_refresh, real_read = server_mod.acct.refresh, usagemod.read
+
+    def signed_in(a):
+        a.logged_in = True
+        return a
+
+    def accounts():
+        return {
+            "default-claude": Account(id="default-claude", provider="claude", label="this computer"),
+            "acct-2": Account(id="acct-2", provider="claude", label="second", home="/tmp/a2",
+                              created_at=2),
+            "acct-3": Account(id="acct-3", provider="claude", label="third", home="/tmp/a3",
+                              created_at=3),
+        }
+
+    def spent(host, key):
+        host.limits[key] = {"seven_day": window("seven_day", 0.99, resets_in=20 * HOUR,
+                                                at=time.time() - 5 * HOUR)}
+
+    order = {"claude": ["acct-2", "acct-3", "default-claude"]}
+    server_mod.acct.refresh = signed_in
+    try:
+        chat = db.create_chat(title="fresh", provider="claude", model="sonnet", effort=None,
+                              perm_mode="ask", cwd="/tmp", account_id="acct-2")
+        chat = db.get_chat(chat["id"])
+
+        # The week was reset: the service has room the stored reading does not.
+        host = stub_host(db, accounts(), {}, order=order)
+        spent(host, "acct-2")
+        asked: list[str] = []
+
+        def reset_early(a):
+            asked.append(a.id)
+            return [{"window": "seven_day", "utilization": 0.02,
+                     "resets_at": time.time() + 7 * 24 * HOUR}]
+
+        usagemod.read = reset_early
+        check(host.pool.state("acct-2", "claude").blocked, "the stored 99% reads as spent")
+        got = await host._pool_pick(chat)
+        check(got is None, "a week the service says has room keeps the chat where it is", str(got))
+        check(asked == ["acct-2"], "the service was asked about that sign-in once", str(asked))
+        check(host.limits["acct-2"]["seven_day"]["utilization"] == 0.02,
+              "the stored reading is now the fresh one",
+              str(host.limits["acct-2"]["seven_day"]["utilization"]))
+        saved = db.load_limits().get("acct-2", {}).get("seven_day", {})
+        check(saved.get("utilization") == 0.02, "and so is the row written down", str(saved))
+
+        # Nothing to say: a token that ran out, a key, a timeout.
+        host = stub_host(db, accounts(), {}, order=order)
+        spent(host, "acct-2")
+        usagemod.read = lambda a: []
+        got = await host._pool_pick(chat)
+        check(got == "acct-3", "with no fresh answer the chat is moved as before", str(got))
+
+        # The service is asked and hangs; the turn does not wait on it for long.
+        host = stub_host(db, accounts(), {}, order=order)
+        spent(host, "acct-2")
+        release = threading.Event()
+
+        def hangs(a):
+            release.wait(30)
+            return [{"window": "seven_day", "utilization": 0.02, "resets_at": time.time() + HOUR}]
+
+        usagemod.read = hangs
+        t0 = time.monotonic()
+        try:
+            got = await host._pool_pick(chat)
+        finally:
+            release.set()
+        took = time.monotonic() - t0
+        check(got == "acct-3", "a service that does not answer is the same as no answer", str(got))
+        check(took <= usagemod.TIMEOUT_S + 1 + 0.5,
+              f"…and holds the turn no longer than {usagemod.TIMEOUT_S + 1:.0f} s", f"{took:.2f}s")
+
+        # Still spent by the service's own count.
+        host = stub_host(db, accounts(), {}, order=order)
+        spent(host, "acct-2")
+        usagemod.read = lambda a: ([{"window": "seven_day", "utilization": 0.995,
+                                     "resets_at": time.time() + 20 * HOUR}]
+                                   if a.id == "acct-2" else [])
+        got = await host._pool_pick(chat)
+        check(got == "acct-3", "a fresh reading still over the line moves the chat as before", str(got))
+
+        # A sign-in with room is never asked about at turn start.
+        host = stub_host(db, accounts(), {}, order=order)
+        host.limits["acct-2"] = {"seven_day": window("seven_day", 0.4)}
+        calls: list[str] = []
+
+        def must_not_ask(a):
+            calls.append(a.id)
+            raise AssertionError(f"asked the service about {a.id}")
+
+        usagemod.read = must_not_ask
+        got = await host._pool_pick(chat)
+        check(got is None and calls == [], "a sign-in with room costs no request", f"{got} {calls}")
+
+        # A spent one is asked at most once per USAGE_EVERY_S.
+        host = stub_host(db, accounts(), {}, order=order)
+        spent(host, "acct-2")
+        for k in ("acct-3", "default-claude"):
+            host.limits[k] = {"seven_day": window("seven_day", 0.1)}
+        calls.clear()
+
+        def still_spent(a):
+            calls.append(a.id)
+            return [{"window": "seven_day", "utilization": 0.995, "resets_at": time.time() + HOUR}]
+
+        usagemod.read = still_spent
+        for _ in range(3):
+            await host._pool_pick(chat)
+        check(calls == ["acct-2"], "three turns inside the throttle ask once", str(calls))
+        host._usage_asked = {k: t - Server.USAGE_EVERY_S - 1 for k, t in host._usage_asked.items()}
+        await host._pool_pick(chat)
+        check(calls == ["acct-2", "acct-2"], "…and once more after it", str(calls))
+
+        # Choosing where to: a candidate stored as spent that now has room.
+        host = stub_host(db, accounts(), {}, order=order)
+        for k in ("acct-2", "acct-3", "default-claude"):
+            spent(host, k)
+        calls.clear()
+
+        def only_third_has_room(a):
+            calls.append(a.id)
+            util = 0.02 if a.id == "acct-3" else 0.995
+            return [{"window": "seven_day", "utilization": util, "resets_at": time.time() + HOUR}]
+
+        usagemod.read = only_third_has_room
+        got = await host._pool_pick(chat)
+        check(got == "acct-3", "a destination stored as spent that has room again is taken",
+              str(got))
+        check(sorted(calls) == ["acct-2", "acct-3", "default-claude"],
+              "each spent sign-in was asked once", str(calls))
+        host = stub_host(db, accounts(), {}, order=order)
+        for k in ("acct-2", "acct-3", "default-claude"):
+            spent(host, k)
+        usagemod.read = only_third_has_room
+        got = await host._pool_next("claude", {"acct-2"})
+        check(got == "acct-3", "_pool_next ranks on the fresh reading too", str(got))
+        host = stub_host(db, accounts(), {}, order=order)
+        for k in ("acct-2", "acct-3", "default-claude"):
+            spent(host, k)
+        usagemod.read = lambda a: []
+        got = await host._pool_next("claude", {"acct-2"})
+        check(got is None, "…and with no fresh answer the stored readings still rule", str(got))
+    finally:
+        server_mod.acct.refresh = real_refresh
+        usagemod.read = real_read
 
 
 def scenario_learning() -> None:
@@ -1028,6 +1199,7 @@ async def main() -> None:
         await scenario_between_turns(db)
         await scenario_mid_turn(db)
         await scenario_wiring(db)
+        await scenario_fresh_reading(db)
         await scenario_stop_first(db)
         await scenario_nowhere_to_go(db)
         await scenario_wait_it_out(db)
