@@ -101,7 +101,6 @@ LIMIT_MOVES_MAX = 3
 # Rebuilding a dropped CLI session from the chat's own event log.
 # A chat outlives the CLI session behind it: switching account or tool clears the
 # resume id, and the next turn opens a session that has never seen this chat.
-RECAP_SCAN = 400          # events read from the tail of the log
 RECAP_MESSAGES = 30       # messages kept after filtering
 RECAP_MSG_CHARS = 1200    # per message
 RECAP_TOTAL_CHARS = 12000 # whole recap
@@ -412,8 +411,10 @@ class ChatSession:
         last = self.db.last_seq(self.chat_id)
         if last <= 0:
             return None
-        events = self.db.events(self.chat_id, since_seq=max(0, last - RECAP_SCAN),
-                                limit=RECAP_SCAN)
+        # The chat's own last messages, however many events other chats or
+        # this chat's tool calls wrote in between. One more than is kept, for
+        # the copy of the incoming message that may already be logged.
+        events = self.db.last_spoken(self.chat_id, RECAP_MESSAGES + 1)
         speakers = {"message.user": "User", "message.assistant": "You"}
         lines: list[str] = []
         for e in events:
