@@ -32,7 +32,10 @@ def test_old_job_chats_found_by_first_message() -> None:
     db = DB(path)
     job = db.create_chat(title="vice")
     mine = db.create_chat(title="mine")
-    for cid, text in ((job["id"], "Vice Anları günlük üretim, 2026-11-26"), (mine["id"], "kanka naber")):
+    # audit: language-data — test data: a job's Turkish opener and a person's Turkish hello
+    texts = ((job["id"], "Vice Anları günlük üretim, 2026-11-26"), (mine["id"], "kanka naber"))
+    # audit: end-language-data
+    for cid, text in texts:
         db.update_chat(cid, archived=1)
         db._c.execute("INSERT INTO events (chat_id, type, payload, ts) VALUES (?, 'message.user', ?, 0)",
                       (cid, json.dumps({"text": text})))

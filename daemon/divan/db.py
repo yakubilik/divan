@@ -283,9 +283,12 @@ class DB:
         "This is the owner's explicitly authorized automatic publicat",
         "Schedule this approved reel in Meta Business Suite",
         "This reel was scheduled in Meta Business Suite",
+        "Job watch: scheduled jobs on this Mac broke",
+        # audit: language-data — the Turkish first lines those jobs opened their chats with, matched at runtime
         "[Yayın kuyruğu]", "Yayın kuyruğu bu videoları",
         "Vice Anları günlük üretim", "Vice Moments günlük üretim",
-        "Bu bir kurulum testi", "Job watch: scheduled jobs on this Mac broke",
+        "Bu bir kurulum testi",
+        # audit: end-language-data
     )
 
     # ── groups ─────────────────────────────────────────────────────────────
