@@ -82,6 +82,7 @@ const en = {
   mDevice: 'Device code', mDeviceBody: 'Enter a short code on any browser.',
   mBrowserHere: 'Browser on that computer', mBrowserHereBody: 'Finishes by itself, if you are sitting at that computer.',
   keyTitle: 'Paste your API key', 
+  keyCheckingTitle: 'Checking the key', keyChecking: 'Trying the key on the computer…',
   keyPlaceholder: 'Paste the key', 
   errBadKey: 'That key did not work.',
   limFiveHour: '5-hour', limWeekAll: 'Weekly', limWeekOpus: 'Weekly · Opus',

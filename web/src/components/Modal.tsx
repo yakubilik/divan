@@ -3,18 +3,23 @@ import type { ReactNode } from 'react';
 import { C, R } from '../lib/theme';
 import { Icon, P } from '../ui/kit';
 
-export function Modal({ children, onClose, width = 680, align = 'center' }: {
+export function Modal({ children, onClose, width = 680, align = 'center', pinned }: {
   children: ReactNode; onClose: () => void; width?: number; align?: 'center' | 'top';
+  /** Holding something a stray click must not throw away — a sign-in that is
+   *  half way through. Escape and a press beside the dialog do nothing; its own
+   *  buttons are the way out. */
+  pinned?: boolean;
 }) {
   useEffect(() => {
+    if (pinned) return undefined;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, pinned]);
 
   return (
     <div
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onMouseDown={(e) => { if (!pinned && e.target === e.currentTarget) onClose(); }}
       style={{
         position: 'fixed', inset: 0, background: C.scrim, zIndex: 50,
         display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center',

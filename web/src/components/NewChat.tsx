@@ -6,7 +6,7 @@ import { ProviderMark } from './Sidebar';
 import { accountName } from './FieldSheet';
 import { tilde } from '../lib/format';
 import { useFleet } from '../lib/fleet';
-import { hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
+import { defaultAgent, hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
 import { createChat, listAgents } from '../lib/actions';
 import type { Agent, Chat, Provider } from '../lib/protocol';
 
@@ -135,12 +135,9 @@ export function NewChat({ hostKey, initialCwd, groupId, initialAgent, onDone, on
   // is never undone by a list that finishes loading a moment later.
   useEffect(() => {
     if (agentTouched || agentsLoading || !agentList.length) return;
-    const named = (w: string | null | undefined) =>
-      w ? agentList.find((a) => a.id === w || a.name === w) : undefined;
-    // What was picked last, or Hermes where that agent is not on this account.
-    // An explicit "No agent" stays one.
-    if (defaults.lastAgent === null) return;
-    const hit = named(defaults.lastAgent) ?? named('hermes');
+    // The one set in Settings or picked last, or Hermes where that agent is not
+    // on this account. An explicit "No agent" stays one.
+    const hit = defaultAgent(agentList, defaults.lastAgent);
     if (hit) setAgentId(hit.id);
   }, [agentList, agentsLoading, agentTouched]);
 

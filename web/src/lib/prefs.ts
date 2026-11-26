@@ -29,8 +29,9 @@ export interface Defaults {
    *  Remembered per host, like everything else here: a choice that resets
    *  every time the screen is opened is not a choice. */
   agentAccountId?: string;
-  /** The agent somebody last picked in the New chat dialog. `undefined` is
-   *  never picked — the dialog then opens on Hermes — and `null` is a real
+  /** The agent a new chat opens with: chosen in Settings › New chat defaults,
+   *  or the one somebody last picked in the New chat dialog. `undefined` is
+   *  never picked — a chat then opens on Hermes — and `null` is a real
    *  answer, "No agent", which must not be turned back into Hermes. Only a
    *  click writes it: a computer or account that simply has no such agent
    *  must not leave "No agent" behind as if it had been chosen. */
@@ -88,6 +89,29 @@ export function hostDefaults(defaults: Record<string, Defaults>, key: string): D
 
 export function providerDefaults(d: Defaults, provider: Provider): ProviderDefaults {
   return d.byProvider[provider] ?? NO_PROVIDER_DEFAULTS;
+}
+
+/** The agent a new chat opens with, out of the ones that computer has under
+ *  that sign-in: the one chosen, Hermes where none was — or where the chosen
+ *  one is not there — and nobody where "No agent" was the answer. The command
+ *  bar, the empty chat's head, the New chat dialog and Settings all ask here,
+ *  or Settings would be describing a chat nobody is about to open. */
+export function defaultAgent<A extends { id: string; name: string }>(
+  agents: A[], chosen: string | null | undefined,
+): A | null {
+  if (chosen === null) return null;
+  const named = (w: string) => agents.find((a) => a.id === w || a.name === w);
+  return (chosen ? named(chosen) : undefined) ?? named('hermes') ?? null;
+}
+
+/** …and what its chip says before that list has been read. */
+export function defaultAgentLabel<A extends { id: string; name: string; label?: string }>(
+  agents: A[] | null, chosen: string | null | undefined, none = 'No agent',
+): string {
+  if (chosen === null) return none;
+  if (!agents) return !chosen || chosen.split(':').pop() === 'hermes' ? 'Hermes' : '…';
+  const a = defaultAgent(agents, chosen);
+  return a ? (a.label || a.name) : none;
 }
 
 /** What a new chat would actually open with, for one tool on one computer: the

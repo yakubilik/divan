@@ -92,7 +92,16 @@ const answer = async (key: string, type: string, data: any = {}) => {
     case 'tool.status': return { tools: [{ provider: 'claude', version: '1.2.3', path: '/usr/local/bin/claude',
       login_methods: [{ id: 'subscription', label: 'Subscription' }] }], npm: true };
     case 'screen.info': return { view: true, control: true, enabled: false, os: 'darwin', displays: [] };
-    case 'account.login': return { needs_code: true };
+    case 'account.create':
+      return { id: 'new1', provider: data.provider, label: data.label, logged_in: false, detail: '', is_default: false };
+    case 'account.login':
+      // A key is settled inside the request: the daemon sends `account.login.done`
+      // down the socket and only then answers. `window.__settled` plays that order.
+      if ((window as any).__settled) {
+        (window as any).__emit('account.login.done', { account_id: data.account_id, ok: true, detail: 'api key' });
+        return { started: true, needs_code: false };
+      }
+      return { needs_code: true };
     case 'screen.enable': return { enabled: !!data.enabled };
     case 'daemon.restart': return { draining: true, pending: [{ chat_id: 'c2', busy: true, queued: 0 }] };
     case 'divan.card.get': {

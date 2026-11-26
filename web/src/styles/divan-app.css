@@ -346,6 +346,18 @@
 .dv-ticketcard .t{font-size:14px;line-height:20px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
 .dv-cardlink:focus-visible,.dv-ticketcard .dv-btn:focus-visible,.dv-subnav a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 
+/* A setting (Web15 W18): what it is, and its answer at the end of the row. Where
+   the row is too narrow for both, the answer drops under its name rather than
+   squeezing it to three letters. */
+.dv-setting{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;padding:14px 20px;min-width:0}
+.dv-setting-what{flex:1 1 180px;min-width:0}
+.dv-setting>*{max-width:100%}
+/* A sign-in on the Accounts page: who it is, then its state and what can be done
+   to it — pushed to the far end, and under the name on a phone. */
+.dv-acct{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:13px 18px;min-width:0}
+.dv-acct-who{flex:1 1 200px;min-width:0;display:flex;align-items:center;gap:14px}
+.dv-acct-acts{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-left:auto;max-width:100%}
+
 /* §2: on the phone layout every press is a 44px target. Last in the sheet so it
    outranks a part's own min-height; a min-size wins over any height. The display
    rule has no specificity, so a part that sets its own display keeps it. */

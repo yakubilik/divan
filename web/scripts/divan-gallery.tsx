@@ -18,7 +18,7 @@ import { P, mono } from '../src/ui/kit';
 import {
   BarChip, BarDivider, BarStamp, Button, Card, Cell, Choice, ColumnTab, CommandBar, Composer,
   Counter, DockMore, DockTab, EmptyState, ExecutorBadge, FieldRow, Figures, Monogram, NameCell,
-  NavItem, Note, Panel, PanelHead, Pill, Quoted, Row, RosterRow, SectionHeader, SidePanel, Slider,
+  NavItem, Note, Panel, PanelHead, Pill, Quoted, Row, RosterRow, SectionHeader, Select, SidePanel, Slider,
   StampRow, StateMark, StatusDot, Table, Tabs, Tag, TopBar, Write,
 } from '../src/ui/divan';
 
@@ -472,6 +472,19 @@ export const SPECIMENS: Specimen[] = [
             label="Theme" value="system" onChange={() => {}}
             options={[{ key: 'system', label: 'Auto' }, { key: 'light', label: 'Light' },
                       { key: 'dark', label: 'Dark' }]}
+          />} />
+      </Card>
+    ),
+  },
+  {
+    name: 'Select', frame: 'Web15 W18 · a setting with many answers', width: 480,
+    node: (
+      <Card inset={false} style={{ padding: '4px 0' }}>
+        <Row first title="Model" note="What a new chat starts on"
+          style={{ padding: '14px 20px' }}
+          right={<Select
+            label="Model" value="opus" onChange={() => {}}
+            options={[{ key: 'opus', label: 'Opus 5' }, { key: 'sonnet', label: 'Sonnet 5' }]}
           />} />
       </Card>
     ),

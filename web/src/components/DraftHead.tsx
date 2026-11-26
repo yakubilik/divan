@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { C } from '../lib/theme';
 import { Chip, Dot, Icon, P, mono } from '../ui/kit';
 import { useFleet } from '../lib/fleet';
-import { usePrefs } from '../lib/prefs';
+import { defaultAgent, defaultAgentLabel, hostDefaults, usePrefs } from '../lib/prefs';
 import { listAgents } from '../lib/actions';
 import { toldDefaults, type ToldPicks } from '../lib/tell';
 import { modelOptions, modelValue, readModel } from '../lib/compose';
@@ -83,9 +83,12 @@ export function DraftHead({ hostKey, picks, onPicks }: {
     chat: draft, catalog: slot.catalog, projects: slot.projects ?? [], accounts: slot.accounts ?? [],
     limits: slot.limits, query, now: Date.now() / 1000,
   };
-  const hermes = agents?.find((a) => a.name === 'hermes' || a.id === 'hermes') ?? null;
+  // The agent a chat opens with when the chip is left alone: the one chosen
+  // in Settings › New chat defaults, Hermes where none was.
+  const usual = hostDefaults(prefs, hostKey).lastAgent;
+  const hermes = defaultAgent(agents ?? [], usual);
   const agentLabel = picks.agent === undefined
-    ? (agents && !hermes ? 'no agent' : 'Hermes')
+    ? defaultAgentLabel(agents, usual, 'no agent')
     : picks.agent === null ? 'no agent'
       : (agents?.find((a) => a.id === picks.agent)?.label ?? picks.agent);
   const set = (patch: ToldPicks) => { onPicks({ ...picks, ...patch }); setMenu(null); setQuery(''); };

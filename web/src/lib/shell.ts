@@ -316,25 +316,32 @@ export interface MachineTab {
  *  side menu inside a page inside a tab; now each is a page under the tab.
  *
  *  Admin left the tabs: every row of it was a link to one of these pages. Its
- *  address still opens it. */
+ *  address still opens it.
+ *
+ *  Tools and Security left the row under Settings on 26 Nov 2026 ("too
+ *  complicated, I cannot find the thing I came for"): both were a card of facts
+ *  nobody changes, and they are now two cards of This computer. Their addresses
+ *  still open that page. */
 export const MACHINE_TABS: MachineTab[] = [
   { key: 'machines', label: 'Computers', pages: ['machines', 'screen', 'projects', 'fleet', 'update'] },
   { key: 'accounts', label: 'Accounts', pages: ['accounts', 'quota'] },
   { key: 'terminal', label: 'Terminal', pages: ['terminal'] },
-  { key: 'settings', label: 'Settings', pages: ['settings', 'tools', 'security', 'about', 'executors', 'agents'] },
+  { key: 'settings', label: 'Settings', pages: ['settings', 'about', 'executors', 'agents'] },
 ];
 
 /** What a page is called in the row under its tab, where that differs from
  *  its row in the old drawer. */
 const SUB_LABEL: Partial<Record<View, string>> = {
   machines: 'Computers', fleet: 'Sessions', accounts: 'Sign-ins', screen: 'Remote screen',
-  settings: 'General', agents: 'Agents',
+  settings: 'General', agents: 'Agents', about: 'This computer',
 };
 
 /** Which tab a page is under. A view no tab names is the first tab's, which is
  *  also where the place opens. */
 export function machineTab(view: View): MachineTab {
-  return MACHINE_TABS.find((t) => t.pages.includes(view)) ?? MACHINE_TABS[0];
+  // The two pages folded into This computer are still under Settings.
+  const page = view === 'tools' || view === 'security' ? 'about' : view;
+  return MACHINE_TABS.find((t) => t.pages.includes(page)) ?? MACHINE_TABS[0];
 }
 
 /** What a page is called in the row under its tab. */

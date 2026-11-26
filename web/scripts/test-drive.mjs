@@ -510,7 +510,7 @@ group('the line: Settings, and the machines count');
   const before = w.location.pathname;
   await click(nav('Settings'));
   // General opens on what a new chat starts with.
-  const shown = [...doc.querySelectorAll('header ~ * *')].some((e) => e.textContent?.trim() === 'New chats' && e.tagName !== 'BUTTON' && e.tagName !== 'SPAN');
+  const shown = [...doc.querySelectorAll('header ~ * *')].some((e) => e.textContent?.trim() === 'New chat defaults' && e.tagName !== 'BUTTON' && e.tagName !== 'SPAN');
   ok('pressing it opens the Settings page, at its own path, and marks the button as the page you are on',
     w.location.pathname === '/machine/settings' && page() === 'General' && shown
       && nav('Settings')?.getAttribute('aria-current') === 'page'
@@ -2800,7 +2800,7 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
   }
   const under = {};
   for (const [tab, pages] of [['Computers', ['screen', 'projects', 'fleet', 'update']],
-                              ['Accounts', ['quota']], ['Settings', ['tools', 'security', 'about', 'executors', 'agents']]]) {
+                              ['Accounts', ['quota']], ['Settings', ['about', 'executors', 'agents']]]) {
     await click(machineTab(tab));
     for (const v of pages) {
       await click(doc.querySelector(`nav a[href="/machine/${v}"]`));
@@ -2853,7 +2853,7 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
   const deleted = sent('account.delete');
   ok('Machine has four tabs at their own paths (Computers, Accounts, Terminal, Settings); Screen, Folders, Sessions, Update, Quota, Preferences, Executors and Agents sit under one; Terminal takes a command; agent.install, account.login and account.delete still go out',
     JSON.stringify(paths) === JSON.stringify(['/machine/accounts', '/machine/terminal', '/machine/settings', '/machine/machines'])
-    && Object.values(under).every(Boolean) && Object.keys(under).length === 10
+    && Object.values(under).every(Boolean) && Object.keys(under).length === 8
     && command && installed && login && deleted,
     JSON.stringify({ paths, under, command, installed, login, deleted }));
 
@@ -2887,15 +2887,20 @@ group('Chat and Machine (HANDOVER §4.8, §4.9), and where a branch link leads')
 
   // 6 · Machine › Settings sets what the next new chat opens with
   await reload('/machine/settings');
-  // General is the New chats section itself (7 Nov 2026): a row per model and
-  // per account, pressed, rather than two drop-downs in front of it.
-  const pickRow = async (label) => {
-    const el = [...doc.querySelectorAll('[data-machine-page] button, [data-machine-page] [role="button"]')]
-      .find((b) => (b.textContent ?? '').trim().startsWith(label)) ?? null;
-    await click(el);
+  // General is the New chats section itself (7 Nov 2026), and since 26 Nov a
+  // row a setting with its answer at the end: the model and the account are
+  // each chosen from a list on their own row.
+  const pickRow = async (row, label) => {
+    const list = doc.querySelector(`[data-machine-page] select[aria-label="${row}"]`);
+    const option = [...(list?.options ?? [])].find((o) => (o.textContent ?? '').trim().startsWith(label));
+    if (!list || !option) return;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(w.HTMLSelectElement.prototype, 'value').set.call(list, option.value);
+      list.dispatchEvent(new w.Event('change', { bubbles: true }));
+    });
   };
-  await pickRow('Sonnet 5');
-  await pickRow('yakup@');
+  await pickRow('Model', 'Sonnet 5');
+  await pickRow('Account', 'yakup@');
   await reload('/');
   const chips = [...doc.querySelectorAll('.dv-picker')].map((b) => (b.textContent ?? '').trim());
   ok('the default account and model set in Machine › Settings are what the composer’s chips show for the next chat',
