@@ -21,18 +21,18 @@
  *   - "make default" — is_default is derived from the account having no home
  *     folder; there is no request that sets it.
  */
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { SIZE, T, useTheme, type Tone } from '../lib/theme';
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { SIZE, T, toneColours, useTheme, type Tone } from '../lib/theme';
 import { Icon, P, Spinner, mono } from '../ui/kit';
 import {
-  Button, Card, Cell, Choice, FieldRow, Note, Quoted, Row, SectionHeader, SidePanel,
-  StatusDot, Slider, Tag, Well, Write, type PanelItem,
+  Button, Card, Cell, Choice, FieldRow, Note, Quoted, Row, SectionHeader, Select, SidePanel,
+  StatusDot, Tag, Well, Write, type PanelItem,
 } from '../ui/divan';
 import { Modal, ModalHead } from '../components/Modal';
 import { ProviderMark } from '../components/Sidebar';
 import { hostAddr, onAnyEvent, useFleet, type HostSlot } from '../lib/fleet';
-import { hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
-import { installTool, pairComputer, parsePairing, setDefaultCwd, toolStatus } from '../lib/actions';
+import { defaultAgent, hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from '../lib/prefs';
+import { installTool, listAgents, pairComputer, parsePairing, setDefaultCwd, toolStatus } from '../lib/actions';
 import {
   availability, dictateEngine, dictateLang, install, langChoices, langName,
   setDictateEngine, setDictateLang, support, type Availability, type EnginePref,
@@ -41,10 +41,11 @@ import { errText, t } from '../lib/i18n';
 import { ago, tilde, until, uptime, windowName } from '../lib/format';
 import { copyText } from '../lib/clipboard';
 import type {
-  CliAccount, HostConfig, LimitWindow, LoginMethod, LoginPrompt, Provider, ToolStatus,
+  Agent, CliAccount, HostConfig, LoginMethod, LoginPrompt, Provider, ToolStatus,
 } from '../lib/protocol';
 import { refusalText } from '../lib/refusal';
 import { signInState, signInWords } from '../lib/machine';
+import { START, inFlight, looksLikeEmailCode, sameSignIn, step } from '../lib/signin';
 import { left as leftWords } from './Accounts';
 
 /** The daemon labels the machine's own account in English ("This computer's
@@ -59,7 +60,7 @@ export type SectionId = 'hosts' | 'accounts' | 'defaults' | 'tools' | 'appearanc
 const SECTIONS: { id: SectionId; label: string; icon: string }[] = [
   { id: 'hosts', label: 'Computers', icon: P.cpu },
   { id: 'accounts', label: 'Accounts', icon: P.agent },
-  { id: 'defaults', label: 'New chats', icon: P.plus },
+  { id: 'defaults', label: 'New chat defaults', icon: P.plus },
   { id: 'tools', label: 'Tools', icon: P.bolt },
   { id: 'appearance', label: 'Appearance', icon: P.eye },
   { id: 'security', label: 'Security', icon: P.shield },
@@ -94,17 +95,6 @@ function hostState(slot: HostSlot): { state: 'running' | 'asking' | 'stuck' | 'q
   if (slot.status === 'connecting') return { state: 'asking', tone: 'amber' };
   if (slot.status === 'unauthorized') return { state: 'stuck', tone: 'red' };
   return { state: 'quiet', tone: 'ink3' };
-}
-
-/** A sign-in URL carries a one-time code in its query. The host is what the
- *  user needs to recognise; the rest never goes on screen. */
-function maskUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.origin}${u.pathname}${u.search ? '?••••••••••' : ''}`;
-  } catch {
-    return url.split('?')[0] + '?••••••••••';
-  }
 }
 
 /* ── small pieces ─────────────────────────────────────────────────────── */
@@ -142,10 +132,14 @@ function KV({ k, v, code }: { k: string; v: React.ReactNode; code?: boolean }) {
 
 /** What stands over a section of this page: its name, a sentence saying what
  *  the section is for, and whatever button belongs to the whole of it. */
-function Head({ title, hint, right }: { title: string; hint?: string; right?: React.ReactNode }) {
+function Head({ title, hint, right, under }: {
+  title: string; hint?: string; right?: React.ReactNode;
+  /** A section of a page that already has a head: its name at a card's size. */
+  under?: boolean;
+}) {
   return (
     <>
-      <SectionHeader kind="page" title={title}>
+      <SectionHeader kind={under ? 'title' : 'page'} title={title} style={under ? { marginTop: 10 } : undefined}>
         {!!right && <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>{right}</span>}
       </SectionHeader>
       {!!hint && (
@@ -208,65 +202,92 @@ function Pick({ label, hint, right, on, first, onPick }: {
   );
 }
 
+/** Something a row can do that is not what the row is for: a word, not a
+ *  button, so the one filled button beside it is the one that reads. */
+function Quiet({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" className="dv-hit" onClick={onClick} style={{
+      background: 'transparent', border: 'none', padding: '4px 0', font: 'inherit',
+      fontSize: 13, fontWeight: 500, color: T.ink2, cursor: 'pointer', whiteSpace: 'nowrap',
+    }}>{label}</button>
+  );
+}
+
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 /** How full a plan window is, in the three tones a reading takes. */
 const limitTone = (u: number): Tone => (u >= 0.9 ? 'red' : u >= 0.6 ? 'amber' : 'run');
 
-/** Plan usage is only drawn for a window the tool actually reported. An empty
- *  track would be a claim the daemon never made. */
-function Limits({ windows }: { windows: LimitWindow[] }) {
-  const shown = windows
-    .filter((w) => typeof w.utilization === 'number')
-    .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0));
-  if (!shown.length) return null;
+/* ── login ────────────────────────────────────────────────────────────── */
+
+const TOOL: Record<string, string> = { claude: 'Claude', codex: 'Codex' };
+
+/** A numbered step of the sheet: what to do, said once, over the thing that
+ *  does it. */
+function StepHead({ n, children }: { n?: number; children: React.ReactNode }) {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 12,
-      padding: '14px 18px', borderTop: `1px solid ${T.line}`,
-    }}>
-      <Mark>plan usage</Mark>
-      {shown.map((w) => {
-        const u = Math.max(0, Math.min(1, w.utilization ?? 0));
-        return (
-          <Slider
-            key={w.window} value={u} format={pct}
-            label={
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                {windowName(w.window)}
-                {u >= 0.6 && <Tag label={u >= 0.9 ? 'nearly gone' : 'getting low'} tone={limitTone(u)} />}
-              </span>
-            }
-            note={w.resets_at ? `resets ${until(w.resets_at)}` : 'no reset time reported'}
-          />
-        );
-      })}
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, fontSize: 14, fontWeight: 600 }}>
+      {n != null && <span style={{ ...mono, fontSize: 12, color: T.ink3 }}>{n}</span>}
+      <span>{children}</span>
     </div>
   );
 }
 
-/* ── login ────────────────────────────────────────────────────────────── */
+/** The middle of the sheet while there is nothing for a person to do but wait:
+ *  one moving thing, and the sentence saying what it is waiting for. */
+function Waiting({ children, note }: { children: React.ReactNode; note?: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+      padding: '26px 0 22px', textAlign: 'center',
+    }}>
+      <Spinner size={22} color={T.ink2} />
+      <div style={{ fontSize: 15, fontWeight: 600 }}>{children}</div>
+      {!!note && <div style={{ fontSize: 13, lineHeight: 1.45, color: T.ink2, maxWidth: 360 }}>{note}</div>}
+    </div>
+  );
+}
 
-type LoginStage = 'method' | 'waiting' | 'code' | 'done';
-
-function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
+/** Signing one account in, from choosing how to the computer saying yes.
+ *
+ *  One thing on the sheet at a time, and the sheet changes when the sign-in
+ *  does: how to sign in, then the page to open and the code it gives back, then
+ *  a spinner while the computer finishes, then `Signed in` — which closes on
+ *  its own, because there is nothing left to press. Where it stands is decided
+ *  in `lib/signin.ts`.
+ *
+ *  It used to keep the link on screen after the code had been sent, with
+ *  nothing saying the code was being checked; and a sign-in the computer
+ *  settled inside the request (a key) left it on "Preparing the sign-in page…"
+ *  for good (26 Nov 2026). */
+export function LoginSheet({ hostKey, account, methods, auto, taken = [], onClose, onFinished }: {
   hostKey: string;
   account: CliAccount;
   methods: LoginMethod[];
+  /** The other sign-ins of this tool on that computer: a new one that comes
+   *  back as one of them is said to be a copy rather than a success. */
+  taken?: { detail: string; name: string }[];
+  /** Opened by adding the account: the sign-in starts by itself on the usual
+   *  way, with no first step to press through. */
+  auto?: boolean;
   onClose: () => void;
   onFinished: () => void;
 }) {
   const call = useFleet((s) => s.call);
-  const options = methods.length ? methods : [{ id: 'subscription' }];
+  // Before the computer has said which ways it offers, the one it would pick
+  // itself.
+  const options = methods.length ? methods : [{ id: account.provider === 'codex' ? 'device' : 'subscription' }];
   const [method, setMethod] = useState<LoginMethod>(options[0]);
-  const [stage, setStage] = useState<LoginStage>('method');
+  // The first way is the one nearly everybody wants; the rest are a press away
+  // rather than a list to read before starting.
+  const [others, setOthers] = useState(false);
+  const [state, go] = useReducer(step, START);
   const [email, setEmail] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [code, setCode] = useState('');
-  const [prompt, setPrompt] = useState<LoginPrompt | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [copied, setCopied] = useState<'link' | 'code' | null>(null);
+  const { stage, prompt } = state;
 
   // The daemon sends login events only down the socket that asked for the
   // login, which is this computer's one client — so the fleet tap is enough.
@@ -275,16 +296,9 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
       if (k !== hostKey) return;
       const d: any = ev.data || {};
       if (d.account_id !== account.id) return;
-      if (ev.event === 'account.login.prompt') {
-        setPrompt(d as LoginPrompt);
-        setStage((s) => (s === 'done' ? s : (d.needs_code ? 'code' : 'waiting')));
-        if (d.needs_code) setBusy(false);
-      }
+      if (ev.event === 'account.login.prompt') go({ type: 'prompt', prompt: d as LoginPrompt });
       if (ev.event === 'account.login.done') {
-        setStage('done');
-        setBusy(false);
-        setOk(!!d.ok);
-        setProblem(d.ok ? null : errText(d.error_code, d.error));
+        go({ type: 'done', ok: !!d.ok, detail: d.detail, why: d.ok ? null : errText(d.error_code, d.error) });
         if (d.ok) onFinished();
       }
     });
@@ -297,9 +311,22 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
   // Leaving the sheet with a pty still open would strand it for 15 minutes.
   useEffect(() => () => { cancel(); }, [cancel]);
 
+  // A success needs a beat to be read, then gets out of the way on its own.
+  const close = useRef(onClose);
+  close.current = onClose;
+  const signedIn = stage === 'done' && state.ok;
+  // The browser was already signed in as somebody this computer has.
+  const twin = signedIn ? sameSignIn(state.detail, taken) : null;
+  useEffect(() => {
+    // A copy of another account is not left to close by itself: it has to be read.
+    if (!signedIn || twin) return undefined;
+    const t = setTimeout(() => close.current(), 1600);
+    return () => clearTimeout(t);
+  }, [signedIn, !!twin]);
+
   const start = async () => {
-    setBusy(true);
-    setProblem(null);
+    setCode(''); setOpened(false);
+    go({ type: 'start', key: !!method.needs_key });
     try {
       const r: any = await call(hostKey, 'account.login', {
         account_id: account.id,
@@ -307,146 +334,208 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
         ...(method.wants_email && email.trim() ? { email: email.trim() } : {}),
         ...(method.needs_key ? { api_key: apiKey } : {}),
       });
-      // An API key is settled inside the request; everything else waits for a
-      // prompt event. The done event arrives either way.
-      setStage(r?.needs_code ? 'code' : 'waiting');
-      // Asked for a code, the sheet is waiting on the person, not the computer:
-      // Verify has to be pressable.
-      if (r?.needs_code) setBusy(false);
+      go({ type: 'started', needsCode: !!r?.needs_code });
     } catch (e) {
-      setBusy(false);
-      setProblem(err(e));
-      setStage('method');
+      go({ type: 'refused', why: err(e) });
     }
+  };
+
+  // Add was the decision; there is nothing left to ask before the page. A key
+  // is the one way that cannot start by itself — it has to be pasted first.
+  // On a timer so that a mount React undoes at once (its strict mode) starts
+  // nothing, rather than starting a sign-in and cancelling it.
+  useEffect(() => {
+    if (!auto || options[0].needs_key) return undefined;
+    const t = setTimeout(() => { void start(); }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  /** Back to choosing how, from a sign-in already under way: the one on that
+   *  computer is called off, and the list of ways is open. */
+  const another = () => {
+    cancel();
+    setCode('');
+    setOthers(true);
+    go({ type: 'again' });
   };
 
   const submit = async () => {
-    setBusy(true);
-    setProblem(null);
+    if (stage !== 'code' || code.trim().length < 10) return;
+    go({ type: 'submit' });
     try {
       await call(hostKey, 'account.login.submit', { account_id: account.id, code: code.trim() });
-      setStage('waiting');
     } catch (e) {
-      setProblem(err(e));
-    } finally {
-      setBusy(false);
+      go({ type: 'unsent', why: err(e) });
     }
   };
 
+  const open = () => {
+    if (!prompt?.url) return;
+    setOpened(true);
+    window.open(prompt.url, '_blank', 'noopener');
+  };
+  const copy = (what: 'link' | 'code', text: string) => {
+    void copyText(text);
+    setCopied(what);
+    setTimeout(() => setCopied((was) => (was === what ? null : was)), 1600);
+  };
+  const canStart = !method.needs_key || !!apiKey.trim();
+  const openButton = !!prompt?.url && (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <Button face={opened ? 'outline' : 'ink'} icon={P.external} label="Open the sign-in page" onClick={open} />
+      <Button face="outline" icon={P.copy} label={copied === 'link' ? 'Copied' : 'Copy link'}
+        onClick={() => copy('link', prompt.url!)} />
+    </span>
+  );
+
   return (
-    <Modal onClose={onClose} width={520}>
+    <Modal onClose={onClose} width={520} pinned={inFlight(state)}>
       <ModalHead
-        title={`${accountName(account)} · sign-in`}
-        subtitle={<span style={mono}>{account.provider}</span>}
+        title={`Sign in to ${TOOL[account.provider] ?? account.provider}`}
+        subtitle={accountName(account)}
         onClose={onClose}
       />
       <div style={{
-        padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14,
+        padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16,
       }}>
         {stage === 'method' && (
           <>
-            <Mark>how should this account sign in</Mark>
-            <Card inset={false}>
-              {options.map((m, i) => (
-                <Pick
-                  key={m.id} first={i === 0}
-                  label={methodName(m.id)} hint={METHOD[m.id]?.body ?? ''}
-                  on={m.id === method.id} onPick={() => setMethod(m)}
-                />
-              ))}
-            </Card>
+            {others ? (
+              <Card inset={false}>
+                {options.map((m, i) => (
+                  <Pick
+                    key={m.id} first={i === 0}
+                    label={methodName(m.id)} hint={METHOD[m.id]?.body ?? ''}
+                    on={m.id === method.id} onPick={() => setMethod(m)}
+                  />
+                ))}
+              </Card>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{methodName(method.id)}</div>
+                {!!METHOD[method.id]?.body && (
+                  <div style={{ fontSize: 13.5, lineHeight: 1.45, color: T.ink2 }}>{METHOD[method.id].body}</div>
+                )}
+              </div>
+            )}
 
             {method.wants_email && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <Mark>the account’s email</Mark>
-                <Field value={email} onChange={setEmail} placeholder="you@example.com" onEnter={start} />
-                <div style={{ fontSize: 12, color: T.ink3, lineHeight: 1.45 }}>
-                  The computer starts the sign-in with this address; the page opens on that account.
+                <Field value={email} onChange={setEmail} autoFocus placeholder="you@example.com" onEnter={start} />
+                <div style={{ fontSize: 12.5, color: T.ink3, lineHeight: 1.45 }}>
+                  The account’s email, so the page opens on the right one. Optional.
                 </div>
               </div>
             )}
 
             {method.needs_key && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <Mark>api key</Mark>
-                <Field value={apiKey} onChange={setApiKey} secret placeholder="Paste the key" />
-                <div style={{ fontSize: 12, color: T.ink3, lineHeight: 1.45 }}>
-                  The key is stored on that computer, not in the panel. It spends your API bill,
-                  not your subscription.
+                <Field value={apiKey} onChange={setApiKey} secret autoFocus placeholder="Paste the key"
+                  onEnter={() => { if (canStart) void start(); }} />
+                <div style={{ fontSize: 12.5, color: T.ink3, lineHeight: 1.45 }}>
+                  Kept on that computer, never in the panel.
+                  {account.provider === 'claude' ? ' A token from `claude setup-token` goes here too.' : ''}
                 </div>
               </div>
+            )}
+
+            {!others && options.length > 1 && (
+              <button type="button" className="dv-hit" onClick={() => setOthers(true)} style={{
+                alignSelf: 'flex-start', background: 'transparent', border: 'none', padding: 0,
+                font: 'inherit', fontSize: 13, color: T.ink2, textDecoration: 'underline', cursor: 'pointer',
+              }}>Sign in another way</button>
             )}
           </>
         )}
 
-        {(stage === 'waiting' || stage === 'code') && (
+        {stage === 'waiting' && !prompt && (
+          <Waiting>
+            {method.here ? 'Opening the browser on that computer…' : 'Preparing the sign-in page…'}
+          </Waiting>
+        )}
+
+        {/* Nothing to paste back: a one-time code typed into the page, or a
+            sign-in that completes on its own once the page is approved. */}
+        {stage === 'waiting' && !!prompt && (
           <>
-            {prompt?.url ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <Mark>1 · open this link in a browser</Mark>
+            {!!prompt.code && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                <StepHead n={1}>Copy this code</StepHead>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Quoted style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{
-                      display: 'block', whiteSpace: 'nowrap', overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}>{maskUrl(prompt.url)}</span>
-                  </Quoted>
-                  <Button small face="outline" icon={P.copy} label="Copy"
-                    onClick={() => void copyText(prompt.url!)} />
-                  <Button small face="outline" icon={P.external} label="Open"
-                    onClick={() => window.open(prompt.url!, '_blank', 'noopener')} />
-                </div>
-                <div style={{ fontSize: 12, color: T.ink3, lineHeight: 1.45 }}>
-                  The one-time code in the URL is masked — copying takes the whole thing.
+                  <Quoted style={{ flex: 1, fontSize: 20, letterSpacing: 3, color: T.ink }}>{prompt.code}</Quoted>
+                  <Button face="outline" icon={P.copy} label={copied === 'code' ? 'Copied' : 'Copy'}
+                    onClick={() => copy('code', prompt.code!)} />
                 </div>
               </div>
-            ) : (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: T.ink2,
-              }}>
-                <Spinner size={14} color={T.ink3} /> Preparing the sign-in page…
+            )}
+            {!!prompt.url && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                <StepHead n={prompt.code ? 2 : undefined}>
+                  {prompt.code ? 'Open the page and type it in' : 'Approve the sign-in on the page'}
+                </StepHead>
+                {openButton}
               </div>
             )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: T.ink2 }}>
+              <Spinner size={14} color={T.ink3} /> Waiting for you to finish there. This closes on its own.
+            </div>
+          </>
+        )}
 
-            {prompt?.code && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <Mark>enter this code on the page</Mark>
-                <Quoted style={{ fontSize: 20, letterSpacing: 3 }}>{prompt.code}</Quoted>
-              </div>
-            )}
-
-            {stage === 'code' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <Mark>2 · paste the code the page gives you at the end</Mark>
-                <Field value={code} onChange={setCode} autoFocus onEnter={submit}
-                  placeholder="the code from the page" />
-              </div>
-            )}
-
-            {stage === 'waiting' && prompt && !prompt.needs_code && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: T.ink2,
-              }}>
-                <Spinner size={14} color={T.ink3} /> Waiting for approval…
-              </div>
-            )}
-
-            {prompt?.expires_at && (
-              <Cell text={`expires in ${until(prompt.expires_at)}`} tone="ink3" />
+        {stage === 'code' && (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <StepHead n={1}>Open the sign-in page and approve</StepHead>
+              {prompt?.url ? openButton : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: T.ink2 }}>
+                  <Spinner size={14} color={T.ink3} /> Preparing the sign-in page…
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <StepHead n={2}>Paste the code the page shows at the end</StepHead>
+              <Field value={code} onChange={setCode} autoFocus onEnter={submit}
+                placeholder="the code from the page" />
+              {looksLikeEmailCode(code) && (
+                <div style={{ fontSize: 12.5, lineHeight: 1.45, color: T.amber }}>
+                  That looks like the code from the email. It goes on the sign-in page; the page
+                  then shows a longer code, and that is the one for here.
+                </div>
+              )}
+            </div>
+            {!!prompt?.expires_at && (
+              <Cell text={`this link works for ${until(prompt.expires_at)}`} tone="ink3" />
             )}
           </>
         )}
 
-        {stage === 'done' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14.5 }}>
-            <StatusDot state={ok ? 'running' : 'stuck'} />
-            <span style={{ color: ok ? T.ink : T.red, fontWeight: 600 }}>
-              {ok ? 'Signed in' : 'Sign-in failed'}
-            </span>
+        {stage === 'finishing' && (
+          <Waiting note="A few seconds. This closes on its own.">
+            {method.needs_key ? 'Checking the key…' : 'Signing in…'}
+          </Waiting>
+        )}
+
+        {stage === 'done' && state.ok && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+            padding: '26px 0 22px', textAlign: 'center',
+          }}>
+            <Well icon={P.check} />
+            <div style={{ fontSize: 17, fontWeight: 600 }}>Signed in</div>
+            {!!state.detail && <div style={{ fontSize: 13.5, color: T.ink2 }}>{state.detail}</div>}
           </div>
         )}
 
-        {problem && <Note tone="red" icon={P.warn} title="That did not work" body={problem} />}
+        {!!twin && (
+          <Note tone="amber" icon={P.warn}
+            title={`This is the same account as ${twin.name}`}
+            body="The browser was already signed in, so the page did not ask who. For a different account, sign out on the sign-in page (or open the link in a private window) and sign in again." />
+        )}
+
+        {!!state.problem && (
+          <Note tone="red" icon={P.warn}
+            title={stage === 'done' ? 'Sign-in failed' : 'That did not work'} body={state.problem} />
+        )}
       </div>
 
       <div style={{
@@ -456,29 +545,30 @@ function LoginSheet({ hostKey, account, methods, onClose, onFinished }: {
         {stage === 'method' && (
           <>
             <Button face="outline" label="Cancel" onClick={onClose} />
-            <Button
-              label={busy ? 'Starting…' : 'Start'} onClick={start}
-              disabled={busy || (!!method.needs_key && !apiKey.trim())}
-            />
+            <Button label="Start" onClick={start} disabled={!canStart} />
           </>
         )}
-        {(stage === 'waiting' || stage === 'code') && (
+        {inFlight(state) && (
           <>
+            {/* A sign-in that started by itself never showed the other ways. */}
+            {stage !== 'finishing' && options.length > 1 && (
+              <span style={{ marginRight: 'auto' }}><Quiet label="Sign in another way" onClick={another} /></span>
+            )}
             <Button face="outline" label="Cancel" onClick={onClose} />
             {stage === 'code' && (
-              <Button label="Verify" onClick={submit} disabled={busy || code.trim().length < 10} />
+              <Button label="Verify" onClick={submit} disabled={code.trim().length < 10} />
             )}
           </>
         )}
         {stage === 'done' && (
-          ok
-            ? <Button label="Done" onClick={onClose} />
+          state.ok
+            ? <>
+                {!!twin && <Button face="outline" label="Sign in again" onClick={() => { setCode(''); go({ type: 'again' }); }} />}
+                <Button label="Done" onClick={onClose} />
+              </>
             : <>
                 <Button face="outline" label="Close" onClick={onClose} />
-                <Button
-                  label="Try again"
-                  onClick={() => { setStage('method'); setPrompt(null); setCode(''); setProblem(null); }}
-                />
+                <Button label="Try again" onClick={() => { setCode(''); go({ type: 'again' }); }} />
               </>
         )}
       </div>
@@ -584,41 +674,68 @@ function AccountCard({ slot, account, now, onLogin, onLogout, onRename, onDelete
   onRename: () => void;
   onDelete: () => void;
 }) {
-  const windows = slot.limits[account.id] ?? [];
+  // Only a window the tool reported: an empty figure would be a claim the
+  // daemon never made.
+  const windows = (slot.limits[account.id] ?? [])
+    .filter((w) => typeof w.utilization === 'number')
+    .sort((x, y) => (y.utilization ?? 0) - (x.utilization ?? 0));
   // A sign-in that is about to stop working, or has, says so on its own row
   // and offers the one thing that helps — signing in again.
   const state = signInState(account, now);
   const ending = state === 'expiring' || state === 'expired';
+  const tone: Tone = state === 'expired' ? 'red' : ending ? 'amber' : account.logged_in ? 'run' : 'ink3';
   return (
     <Card inset={false}>
-      <Row
-        first wash={ending}
-        lead={<ProviderMark provider={account.provider} dim={!account.logged_in} />}
-        title={
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {accountName(account)}
+      {/* W16's row, laid out by the stylesheet (`.dv-acct`) so that what can be
+          done to a sign-in drops under its name on a phone instead of running
+          off the card. */}
+      <div className={ending ? 'dv-acct dv-tinted' : 'dv-acct'}
+        style={{ background: ending ? toneColours(tone).bg : undefined }}>
+        <span className="dv-acct-who">
+          <ProviderMark provider={account.provider} dim={!account.logged_in} />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 14, fontWeight: 600 }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {accountName(account)}
+              </span>
+              {account.has_key && <Tag label="api key" />}
             </span>
-            {account.is_default && <Tag label="the computer’s own account" />}
-            {account.has_key && <Tag label="api key" />}
+            <span style={{
+              display: 'block', fontSize: 12, color: T.ink3, marginTop: 2,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{account.logged_in ? (account.detail || 'signed in') : 'not signed in'}</span>
           </span>
-        }
-        note={account.logged_in ? (account.detail || 'signed in') : 'not signed in'}
-        meta={ending ? signInWords(account, now, leftWords) : account.logged_in ? 'signed in' : 'signed out'}
-        tone={state === 'expired' ? 'red' : ending ? 'amber' : account.logged_in ? 'run' : 'ink3'}
-        right={
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {ending && <Button small label="Renew" onClick={onLogin} />}
-            {!account.is_default && <Button small face="outline" label="Rename" onClick={onRename} />}
-            {account.logged_in
-              ? <Button small face="outline" label="Sign out" onClick={onLogout} />
-              : <Button small label="Sign in" onClick={onLogin} />}
-            {!account.is_default && <Button small face="outline" label="Delete" onClick={onDelete} />}
+        </span>
+        {/* One button that stands out — the one this row is waiting for — and
+            the rest as quiet words beside it. */}
+        <span className="dv-acct-acts">
+          <span style={{ ...mono, fontSize: 12.5, fontWeight: 500, color: toneColours(tone).fg, whiteSpace: 'nowrap' }}>
+            {ending ? signInWords(account, now, leftWords) : account.logged_in ? 'signed in' : 'signed out'}
           </span>
-        }
-      />
-      <KV k="id" v={account.id} code />
-      <Limits windows={windows} />
+          {!account.is_default && <Quiet label="Rename" onClick={onRename} />}
+          {account.logged_in && <Quiet label="Sign out" onClick={onLogout} />}
+          {!account.is_default && <Quiet label="Delete" onClick={onDelete} />}
+          {ending && <Button small label="Renew" onClick={onLogin} />}
+          {!account.logged_in && <Button small label="Sign in" onClick={onLogin} />}
+        </span>
+      </div>
+      {/* What is left of the plan, as one line: the bars are a page of their
+          own (Accounts › Quota thresholds). */}
+      {windows.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+          padding: '10px 18px 12px', borderTop: `1px solid ${T.line}`,
+        }}>
+          <span style={{ fontSize: 12.5, color: T.ink3 }}>plan used</span>
+          {windows.map((w) => {
+            const u = Math.max(0, Math.min(1, w.utilization ?? 0));
+            return (
+              <Tag key={w.window} tone={u >= 0.6 ? limitTone(u) : 'ink3'}
+                label={`${windowName(w.window)} ${pct(u)}${w.resets_at ? ` · resets ${until(w.resets_at)}` : ''}`} />
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
@@ -634,12 +751,16 @@ function AccountsSection({ hostKey, slot, tools, onTools, now = Date.now() / 100
   const { call, refreshAccounts } = useFleet();
   const [problem, setProblem] = useState<string | null>(null);
   const [login, setLogin] = useState<CliAccount | null>(null);
+  /** The account whose sheet was opened by adding it. */
+  const [added, setAdded] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<CliAccount | null>(null);
   const [renameText, setRenameText] = useState('');
   const [doomed, setDoomed] = useState<CliAccount | null>(null);
   const [signingOut, setSigningOut] = useState<CliAccount | null>(null);
   const [newProvider, setNewProvider] = useState<Provider>('claude');
   const [newLabel, setNewLabel] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addProblem, setAddProblem] = useState<string | null>(null);
   const online = slot.status === 'online';
 
   // A failed read is kept on the slot (`accountsError`) and said below; this
@@ -670,11 +791,45 @@ function AccountsSection({ hostKey, slot, tools, onTools, now = Date.now() / 100
   const methodsFor = (p: Provider): LoginMethod[] =>
     tools.find((t) => t.provider === p)?.login_methods ?? [];
 
+  // Which tool is not on the computer: its own tool report where that has been
+  // read, otherwise the versions it reports with its info.
+  const missing = (['claude', 'codex'] as Provider[]).filter((p) => {
+    const tool = tools.find((x) => x.provider === p);
+    if (tool) return !tool.version;
+    const v = slot.info?.versions as Record<string, string | null> | undefined;
+    return !!v && !v[p];
+  });
+  // An account can only be added to a tool that is there.
+  const addable = (['claude', 'codex'] as Provider[]).filter((p) => !missing.includes(p));
+  const adds = addable.length ? addable : (['claude', 'codex'] as Provider[]);
+  const addTo: Provider = adds.includes(newProvider) ? newProvider : adds[0];
+
+  /** Adding an account is only ever the first half of signing one in, so the
+   *  sign-in starts on it the moment it exists — the page to open is the first
+   *  thing the sheet shows. It used to appear as one more row somewhere down
+   *  the list, signed out, with its own button to find. */
+  const add = async () => {
+    const label = newLabel.trim();
+    if (!label || adding || !online) return;
+    setAdding(true);
+    setAddProblem(null);
+    try {
+      const made: any = await call(hostKey, 'account.create', { provider: addTo, label });
+      setNewLabel('');
+      reload();
+      if (made?.id) { setAdded(made.id); setLogin(made as CliAccount); }
+    } catch (e) {
+      // Said under the field it is about, not at the top of the page.
+      setAddProblem(err(e));
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <>
       <Head
         title="Accounts"
-        hint="Each account runs in its own folder on that computer; you pick which one a chat spends when you open it."
         right={
           <>
             {slot.loading.accounts && <Spinner size={13} color={T.ink3} />}
@@ -689,68 +844,33 @@ function AccountsSection({ hostKey, slot, tools, onTools, now = Date.now() / 100
       )}
       {!online && <Aside>This computer is offline — accounts cannot be read.</Aside>}
 
-      {/* A tool that is not on the computer has no sign-ins to show; the one
-          thing that helps is installing it, so that is offered here rather
-          than a page away. */}
-      {!!installed && <Aside>{installed}</Aside>}
-      {(['claude', 'codex'] as Provider[]).filter((p) => {
-        // Which tool is missing: the computer's own tool report where it has
-        // been read, otherwise the versions it reports with its info.
-        const tool = tools.find((x) => x.provider === p);
-        if (tool) return !tool.version;
-        const v = slot.info?.versions as Record<string, string | null> | undefined;
-        return !!v && !v[p];
-      }).map((p) => ({ provider: p })).map((x) => (
-        <Aside key={`missing-${x.provider}`} tone="warn">
-          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ flex: 1 }}>{x.provider} is not installed on this computer.</span>
-            <Button small label={installing === x.provider ? 'Installing…' : 'Install'} disabled={!!installing}
-              onClick={() => {
-                setInstalling(x.provider);
-                setInstalled(null);
-                run(async () => {
-                  const r: any = await installTool(hostKey, x.provider);
-                  setInstalled(r?.already ? `${x.provider} was already there` : `${x.provider} installed ${r?.version ?? ''}`.trim());
-                }).finally(() => { setInstalling(null); onTools?.(); });
-              }} />
-          </span>
-        </Aside>
-      ))}
-
       {/* Adding one is first: it is what a person most often comes here to do,
-          and under a long list of plan bars it was a scroll away (7 Nov 2026). */}
-      <Head title="Add an account" hint="A new account starts with an empty folder; you sign in separately." />
+          and under a long list of plan bars it was a scroll away (7 Nov 2026).
+          One line: which tool, what to call it, and the sign-in follows. */}
       <Card>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            <Mark>tool</Mark>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          {/* A choice only where there are two tools to add one to. */}
+          {adds.length > 1 && (
             <Choice
-              label="Tool" value={newProvider}
-              options={[{ key: 'claude' as Provider, label: 'claude' },
-                        { key: 'codex' as Provider, label: 'codex' }]}
+              label="Tool" value={addTo}
+              options={adds.map((x) => ({ key: x, label: TOOL[x] ?? x }))}
               onChange={setNewProvider}
             />
-          </div>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
-            <Mark>account name</Mark>
+          )}
+          {/* Never narrower than a name can be typed into: on a phone it takes a
+              line of its own under the tool. */}
+          <div style={{ flex: '1 1 200px', minWidth: 140 }}>
             <Field
-              value={newLabel} onChange={setNewLabel} placeholder="e.g. Work, Second subscription"
-              onEnter={() => newLabel.trim() && run(async () => {
-                await call(hostKey, 'account.create', { provider: newProvider, label: newLabel.trim() });
-                setNewLabel('');
-              })}
+              value={newLabel} onChange={(v) => { setNewLabel(v); setAddProblem(null); }}
+              placeholder="e.g. Work, Second subscription" onEnter={add}
             />
           </div>
-          <Button
-            label="Add" disabled={!online || !newLabel.trim()}
-            onClick={() => run(async () => {
-              await call(hostKey, 'account.create', { provider: newProvider, label: newLabel.trim() });
-              setNewLabel('');
-            })}
-          />
+          <Button label={adding ? 'Adding…' : 'Add'} disabled={!online || adding || !newLabel.trim()} onClick={add} />
+        </div>
+        <div style={{ fontSize: 12.5, lineHeight: 1.45, color: addProblem ? T.red : T.ink3 }}>
+          {addProblem ?? 'Name a new account and add it; the sign-in starts straight after.'}
         </div>
       </Card>
-
 
       {(['claude', 'codex'] as Provider[]).map((p) => (
         byProvider[p].length ? (
@@ -773,11 +893,38 @@ function AccountsSection({ hostKey, slot, tools, onTools, now = Date.now() / 100
         <Aside>No accounts on this computer.</Aside>
       )}
 
+      {/* A tool that is not on the computer is not something wrong with it —
+          plenty of computers run one of the two — so it is a quiet row under
+          the sign-ins with the one button that changes it, not a warning over
+          them (26 Nov 2026). */}
+      {!!installed && <Aside>{installed}</Aside>}
+      {missing.map((p) => (
+        <Card key={`missing-${p}`} inset={false}>
+          <Row
+            first lead={<ProviderMark provider={p} dim />}
+            title={TOOL[p] ?? p} note="Not installed on this computer"
+            right={<Button small face="outline" label={installing === p ? 'Installing…' : 'Install'}
+              disabled={!!installing || !online}
+              onClick={() => {
+                setInstalling(p);
+                setInstalled(null);
+                run(async () => {
+                  const r: any = await installTool(hostKey, p);
+                  setInstalled(r?.already ? `${p} was already there` : `${p} installed ${r?.version ?? ''}`.trim());
+                }).finally(() => { setInstalling(null); onTools?.(); });
+              }} />}
+          />
+        </Card>
+      ))}
 
       {login && (
         <LoginSheet
           hostKey={hostKey} account={login} methods={methodsFor(login.provider)}
-          onClose={() => { setLogin(null); reload(); }}
+          auto={added === login.id}
+          taken={slot.accounts
+            .filter((a) => a.id !== login.id && a.provider === login.provider && a.logged_in)
+            .map((a) => ({ detail: a.detail, name: accountName(a) }))}
+          onClose={() => { setLogin(null); setAdded(null); reload(); }}
           onFinished={reload}
         />
       )}
@@ -832,10 +979,43 @@ function AccountsSection({ hostKey, slot, tools, onTools, now = Date.now() / 100
   );
 }
 
-function ToolsSection({ tools, npm, loading, problem, onReload }: {
+function ToolsSection({ tools, npm, loading, problem, onReload, under }: {
   tools: ToolStatus[]; npm: boolean | null; loading: boolean;
   problem: string | null; onReload: () => void;
+  /** Drawn as a card of This computer rather than as a page of its own: one
+   *  row a tool, and nothing a person cannot act on. */
+  under?: boolean;
 }) {
+  if (under) {
+    return (
+      <>
+        <Head under title="Tools"
+          right={<Button small face="outline" label={loading ? 'Reading…' : 'Refresh'}
+            onClick={onReload} disabled={loading} />} />
+        {problem && <Aside tone="warn">{problem}</Aside>}
+        <Card inset={false}>
+          {tools.map((tool, i) => (
+            <Row
+              key={tool.provider} first={i === 0}
+              lead={<ProviderMark provider={tool.provider} dim={!tool.version} />}
+              title={TOOL[tool.provider] ?? tool.provider}
+              note={tool.version ? (tool.path ? tilde(tool.path) : undefined) : 'Install it from Accounts'}
+              meta={tool.version ? `version ${tool.version}` : 'not installed'}
+              tone={tool.version ? undefined : 'ink3'}
+            />
+          ))}
+          {!tools.length && (
+            <div style={{ padding: '14px 18px', fontSize: 13, color: T.ink2 }}>
+              {loading ? 'Reading the tools on that computer…' : 'No tool information.'}
+            </div>
+          )}
+          {npm === false && (
+            <Row title="npm" note="Without it a tool cannot be installed from this panel" meta="missing" tone="amber" />
+          )}
+        </Card>
+      </>
+    );
+  }
   return (
     <>
       <Head
@@ -889,9 +1069,40 @@ function ToolsSection({ tools, npm, loading, problem, onReload }: {
   );
 }
 
+/** One setting (Web15 W18): its name over a grey line saying what it does, and
+ *  its answer at the end of the row — a `Choice`, a `Select`, or a mono word
+ *  where the answer is not the panel's to change. The layout is the
+ *  stylesheet's (`.dv-setting`), so that the answer can drop under the name on
+ *  a phone instead of squeezing it. */
+function Setting({ title, note, first, meta, tone, children }: {
+  title: string; note?: React.ReactNode; first?: boolean;
+  meta?: string | null; tone?: Tone; children?: React.ReactNode;
+}) {
+  return (
+    <div className="dv-setting" style={{ borderTop: first ? undefined : `1px solid ${T.line}` }}>
+      <span className="dv-setting-what">
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>{title}</span>
+        {!!note && (
+          <span style={{ display: 'block', fontSize: 12, lineHeight: 1.45, color: T.ink3, marginTop: 2 }}>{note}</span>
+        )}
+      </span>
+      {!!meta && (
+        <span style={{ ...mono, fontSize: 12.5, fontWeight: tone ? 500 : 400, color: tone ? toneColours(tone).fg : T.ink2 }}>
+          {meta}
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
 /** Where the New chat dialog gets its opening answers. The tool, model,
  *  effort and sign-in are this panel's own; the folder is the computer's
- *  (`host.default_cwd`), so the phone's new chats open in the same one. */
+ *  (`host.default_cwd`), so the phone's new chats open in the same one.
+ *
+ *  One card, a row a setting, its answer at the end of the row. It was every
+ *  account, every model and every folder as a list of its own — three screens
+ *  of rows to read past for the one that was already right (26 Nov 2026). */
 function DefaultsSection({ hostKey, slot }: { hostKey: string; slot: HostSlot }) {
   const { refreshAccounts } = useFleet();
   const defaults = usePrefs((s) => hostDefaults(s.defaults, hostKey));
@@ -926,140 +1137,139 @@ function DefaultsSection({ hostKey, slot }: { hostKey: string; slot: HostSlot })
   // What New chat would open with right now, stored answers and all.
   const now = resolveDefaults(providerDefaults(defaults, provider), pc, accounts);
   const installed = (['claude', 'codex'] as Provider[]).filter((p) => slot.catalog?.[p]);
+  const models = pc?.models ?? [];
+  const absent = online ? 'none on this computer' : 'the computer is offline';
+  // Which agents exist is a question for that computer and that sign-in — an
+  // account's folder holds the ones installed under it — so the list is read
+  // again when either changes. Only what was installed through the app: the
+  // same list the command bar's chip and the New chat dialog offer.
+  const [agents, setAgents] = useState<Agent[] | null>(null);
+  useEffect(() => {
+    if (!online) { setAgents(null); return undefined; }
+    let alive = true;
+    setAgents(null);
+    listAgents(hostKey, now.account_id || null, undefined, provider)
+      .then((r: any) => { if (alive) setAgents(((r?.agents ?? []) as Agent[]).filter((a) => a.installed)); })
+      .catch(() => { if (alive) setAgents([]); });
+    return () => { alive = false; };
+  }, [hostKey, provider, now.account_id, online]);
+  const agent = defaultAgent(agents ?? [], defaults.lastAgent);
+  // The folders, with the one in use among them even where the list has not
+  // been read yet — a list that cannot show its own answer shows a wrong one.
+  const folders = [
+    { key: '', label: firstRoot ? `${tilde(firstRoot)} · the first root` : 'The computer’s first root' },
+    ...slot.projects.map((pr) => ({ key: pr.path, label: tilde(pr.path) })),
+  ];
+  if (chosen && folder && !folders.some((f) => f.key === folder)) folders.push({ key: folder, label: tilde(folder) });
 
   return (
     <>
       <Head
-        title="New chats"
-        hint="What the New chat dialog opens with on this computer. Nothing here is a lock — starting a chat with something else changes these to match, except the folder, which only changes here or in the phone's Settings."
+        title="New chat defaults"
+        hint="What a new chat on this computer starts with. Starting one with something else changes these to match."
       />
 
-      <Card>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <Mark>tool</Mark>
-          <Choice
-            label="Tool" value={provider}
-            options={(installed.length ? installed : (['claude'] as Provider[]))
-              .map((x) => ({ key: x, label: x }))}
-            onChange={(x) => setDefaults(hostKey, { provider: x })}
-          />
-        </div>
-        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
-          New chats open with this tool, and everything below belongs to it. To set the other
-          one’s defaults, switch to it here first.
-        </div>
-      </Card>
-
-      <Mark>account</Mark>
-      <Card inset={false}>
-        {accounts.map((a, i) => {
-          const value = a.is_default ? '' : a.id;
-          return (
-            <Pick
-              key={a.id} first={i === 0} label={accountName(a)}
-              hint={a.logged_in ? a.detail : 'not signed in'}
-              on={now.account_id === value}
-              onPick={() => setProviderDefaults(hostKey, provider, { account_id: value })}
+      <Card inset={false} style={{ padding: '4px 0' }}>
+        {/* A choice only where there are two tools to choose between. */}
+        {installed.length > 1 && (
+          <Setting first title="Tool" note="The rows under it are this tool’s">
+            <Choice
+              label="Tool" value={provider}
+              options={installed.map((x) => ({ key: x, label: TOOL[x] ?? x }))}
+              onChange={(x) => setDefaults(hostKey, { provider: x })}
             />
-          );
-        })}
-        {!accounts.length && (
-          <div style={{ padding: '14px 18px', fontSize: 13, color: T.ink2 }}>
-            {online ? 'No account of this tool is signed in on that computer.' : 'The computer is offline.'}
-          </div>
+          </Setting>
         )}
-      </Card>
-
-      <Mark>model</Mark>
-      <Card inset={false}>
-        {(pc?.models ?? []).map((m, i) => (
-          <Pick
-            key={m.id} first={i === 0} label={m.label || m.id} hint={m.hint} right={m.id}
-            on={now.model === m.id}
-            onPick={() => setProviderDefaults(hostKey, provider, { model: m.id })}
-          />
-        ))}
-        {!pc?.models.length && (
-          <div style={{ padding: '14px 18px', fontSize: 13, color: T.ink2 }}>
-            {online ? 'That computer listed no models for this tool.' : 'The computer is offline.'}
-          </div>
-        )}
-      </Card>
-
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <Card style={{ flex: 1, minWidth: 260 }}>
-          <Mark>effort</Mark>
-          {pc?.efforts?.length
-            ? <Choice
-                label="Effort" value={now.effort ?? ''}
-                options={pc.efforts.map((e) => ({ key: e, label: e }))}
-                onChange={(e) => setProviderDefaults(hostKey, provider, { effort: e })}
-              />
-            : <div style={{ fontSize: 13, color: T.ink3 }}>this tool has no effort setting</div>}
-        </Card>
-        <Card style={{ flex: 1, minWidth: 260 }}>
-          <Mark>permission mode</Mark>
-          {pc?.default_perm_mode
-            // The computer decides this one, and a control that changed a word
-            // nothing reads would be a lie: the mode is picked per chat, in New chat.
-            ? <div style={{ fontSize: 13, color: T.ink3 }}>
-                new chats open in <span style={{ ...mono, color: T.ink }}>{pc.default_perm_mode}</span> — this
-                computer's default. Another mode is picked per chat, in New chat.
-              </div>
-            : <Choice
-                label="Permission mode" value={now.perm_mode ?? ''}
-                options={(pc?.perm_modes ?? []).map((m) => ({ key: m, label: m }))}
-                onChange={(m) => setProviderDefaults(hostKey, provider, { perm_mode: m })}
-              />}
-        </Card>
-      </div>
-      {now.perm_mode === 'bypass' && (
-        <Aside tone="warn">
-          Every new chat will start in bypass — no permission questions.
-          The dangerous-command list still asks, even there.
-        </Aside>
-      )}
-
-      <Mark>project folder</Mark>
-      <Card inset={false}>
-        {/* A computer can have a hundred folders; the list scrolls rather than
-            pushing everything else off the screen. */}
-        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-          <Pick
-            first label="The computer's first root" hint="New chats open at the top of the allowed folders"
-            right={firstRoot ? tilde(firstRoot) : undefined}
-            on={!chosen}
-            onPick={() => pickFolder(null)}
-          />
-          {slot.projects.map((pr) => (
-            <Pick
-              key={pr.path} label={pr.name} right={tilde(pr.path)}
-              on={chosen && folder === pr.path}
-              onPick={() => pickFolder(pr.path)}
+        <Setting
+          first={installed.length <= 1} title="Agent" note="Who answers a new chat"
+          meta={agents ? null : online ? 'reading…' : absent}
+        >
+          {!!agents && (
+            <Select
+              label="Agent" value={agent?.id ?? ''}
+              options={[...agents.map((a) => ({ key: a.id, label: a.label || a.name })),
+                        { key: '', label: 'No agent' }]}
+              // "No agent" is a real answer and is kept as one (`null`), so it
+              // is not turned back into Hermes the next time.
+              onChange={(v) => setDefaults(hostKey, { lastAgent: v || null })}
             />
-          ))}
-        </div>
+          )}
+        </Setting>
+        <Setting title="Account" meta={accounts.length ? null : absent}>
+          {!!accounts.length && (
+            <Select
+              label="Account" value={now.account_id ?? ''}
+              options={accounts.map((a) => ({
+                key: a.is_default ? '' : a.id,
+                label: a.logged_in && a.detail && !a.is_default ? `${accountName(a)} · ${a.detail}` : accountName(a),
+              }))}
+              onChange={(v) => setProviderDefaults(hostKey, provider, { account_id: v })}
+            />
+          )}
+        </Setting>
+        <Setting title="Model" meta={models.length ? null : absent}>
+          {!!models.length && (
+            <Select
+              label="Model" value={now.model ?? ''}
+              options={models.map((m) => ({ key: m.id, label: m.label || m.id }))}
+              onChange={(v) => setProviderDefaults(hostKey, provider, { model: v })}
+            />
+          )}
+        </Setting>
+        {!!pc?.efforts?.length && (
+          <Setting title="Effort">
+            <Choice
+              label="Effort" value={now.effort ?? ''}
+              options={pc.efforts.map((e) => ({ key: e, label: e }))}
+              onChange={(e) => setProviderDefaults(hostKey, provider, { effort: e })}
+            />
+          </Setting>
+        )}
+        {pc?.default_perm_mode ? (
+          // The computer decides this one, and a control that changed a word
+          // nothing reads would be a lie: the mode is picked per chat.
+          <Setting
+            title="Permissions"
+            note={now.perm_mode === 'bypass'
+              ? 'No permission questions; the dangerous-command list still asks. Changed per chat.'
+              : 'This computer’s default. Changed per chat, in New chat.'}
+            meta={pc.default_perm_mode} tone={now.perm_mode === 'bypass' ? 'amber' : undefined}
+          />
+        ) : !!pc?.perm_modes?.length && (
+          <Setting
+            title="Permissions"
+            note={now.perm_mode === 'bypass' ? 'No permission questions; the dangerous-command list still asks.' : undefined}
+          >
+            <Choice
+              label="Permission mode" value={now.perm_mode ?? ''}
+              options={pc.perm_modes.map((m) => ({ key: m, label: m }))}
+              onChange={(m) => setProviderDefaults(hostKey, provider, { perm_mode: m })}
+            />
+          </Setting>
+        )}
+        <Setting title="Folder" note="Kept on the computer, so the phone opens in the same one">
+          <Select
+            label="Project folder" value={chosen && folder ? folder : ''} disabled={!online}
+            options={folders} onChange={(v) => pickFolder(v || null)}
+          />
+        </Setting>
       </Card>
       {folderErr && <Aside tone="warn">{folderErr}</Aside>}
-
-      <Aside>
-        Kept on the computer, so the phone opens its new chats in the same folder. A product
-        page, or a folder picked in New chat, still wins for that one chat.
-      </Aside>
     </>
   );
 }
 
-function SecuritySection({ slot }: { slot: HostSlot }) {
+function SecuritySection({ slot, under }: { slot: HostSlot; under?: boolean }) {
   const roots = slot.info?.roots ?? [];
   return (
     <>
       <Head
-        title="Security"
-        hint="Chats can only open under the roots below. That limit is enforced on the computer, and holds even in bypass permission mode."
+        under={under}
+        title={under ? 'Folders an agent may open' : 'Security'}
+        hint={under ? undefined : 'Chats can only open under the roots below. That limit is enforced on the computer, and holds even in bypass permission mode.'}
       />
 
-      <Mark>allowed roots</Mark>
+      {!under && <Mark>allowed roots</Mark>}
       <Card inset={false}>
         {roots.length ? roots.map((root, i) => (
           <Row key={root} first={i === 0} icon={P.folder} mark title={tilde(root)} />
@@ -1070,20 +1280,31 @@ function SecuritySection({ slot }: { slot: HostSlot }) {
         )}
       </Card>
 
-      <Aside>
-        The roots come from that computer’s own config and cannot be changed from the panel.
-        Edit the config file on the computer instead.
-      </Aside>
+      {under ? (
+        <div style={{ fontSize: 12.5, lineHeight: 1.5, color: T.ink3, padding: '0 2px' }}>
+          Enforced on the computer, even in bypass. Changed in its config file, not from here.
+        </div>
+      ) : (
+        <Aside>
+          The roots come from that computer’s own config and cannot be changed from the panel.
+          Edit the config file on the computer instead.
+        </Aside>
+      )}
     </>
   );
 }
 
-function AboutSection({ slot }: { slot: HostSlot }) {
+function AboutSection({ slot, whole }: {
+  slot: HostSlot;
+  /** The page is all of This computer: the tools have a card of their own
+   *  under this one, so their versions are not said twice. */
+  whole?: boolean;
+}) {
   const info = slot.info;
   const st = hostState(slot);
   return (
     <>
-      <Head title="About" hint="The daemon running on this computer." />
+      <Head title={whole ? 'This computer' : 'About'} hint={whole ? undefined : 'The daemon running on this computer.'} />
       <Card inset={false}>
         <Row
           first icon={P.cpu} mark title={info?.name || slot.cfg.name}
@@ -1096,8 +1317,8 @@ function AboutSection({ slot }: { slot: HostSlot }) {
         <KV k="devices" v={info ? String(info.connected_devices) : 'not reported'} code />
         <KV k="open sessions" v={info ? String(info.active_sessions) : 'not reported'} code />
         <KV k="address" v={addrText(slot.cfg)} code />
-        <KV k="claude" v={info?.versions?.claude ?? 'not installed'} code />
-        <KV k="codex" v={info?.versions?.codex ?? 'not installed'} code />
+        {!whole && <KV k="claude" v={info?.versions?.claude ?? 'not installed'} code />}
+        {!whole && <KV k="codex" v={info?.versions?.codex ?? 'not installed'} code />}
         {info?.transcription != null && (
           <KV k="transcription" v={info.transcription ? 'on' : 'off'} code />
         )}
@@ -1128,7 +1349,7 @@ function AboutSection({ slot }: { slot: HostSlot }) {
  *  after — and where there is a choice between the first and the rest, it is
  *  offered.
  */
-function DictationSection() {
+function DictationRows() {
   const [lang, setLang] = useState(dictateLang);
   const [engine, setEngine] = useState(dictateEngine);
   const [state, setState] = useState<Availability | null>(null);
@@ -1164,33 +1385,39 @@ function DictationSection() {
 
   return (
     <>
-      <Mark>dictation</Mark>
-      {langChoices(lang).map((tag, i) => (
-        <Pick
-          key={tag} first={i === 0} label={langName(tag)} right={tag}
-          on={tag === lang} onPick={() => pick(tag)}
+      <Setting title="Dictation language">
+        <Select
+          label="Dictation language" value={lang}
+          options={langChoices(lang).map((tag) => ({ key: tag, label: `${langName(tag)} · ${tag}` }))}
+          onChange={pick}
         />
-      ))}
+      </Setting>
       {/* A choice only where there are two things to choose between. */}
       {s.secure && canWhisper && s.capture && s.speech && (
-        <Choice
-          label="Engine" value={engine}
-          options={[{ key: 'computer' as const, label: 'computer' },
-                    { key: 'browser' as const, label: 'browser' }]}
-          onChange={pickEngine}
-        />
+        <Setting title="Dictation runs on">
+          <Choice
+            label="Engine" value={engine}
+            options={[{ key: 'computer' as const, label: 'computer' },
+                      { key: 'browser' as const, label: 'browser' }]}
+            onChange={pickEngine}
+          />
+        </Setting>
       )}
-      <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>{line}</div>
-      {state === 'downloadable' && (
-        <Button
-          label={busy ? 'Fetching…' : `Fetch the ${langName(lang)} model`}
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            install(lang).finally(() => { setBusy(false); read(); });
-          }}
-        />
-      )}
+      {/* Which engine hears you is worth being told before you talk: one line,
+          and the one button it sometimes needs. */}
+      <div className="dv-setting" style={{ borderTop: `1px solid ${T.line}` }}>
+        <span className="dv-setting-what" style={{ fontSize: 13, lineHeight: 1.5, color: T.ink2 }}>{line}</span>
+        {state === 'downloadable' && (
+          <Button
+            small label={busy ? 'Fetching…' : `Fetch the ${langName(lang)} model`}
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              install(lang).finally(() => { setBusy(false); read(); });
+            }}
+          />
+        )}
+      </div>
     </>
   );
 }
@@ -1198,22 +1425,21 @@ function DictationSection() {
 export function AppearanceSection() {
   const { choice, scheme, set } = useTheme();
   return (
-    <>
-      <Mark>theme</Mark>
-      <Choice
-        label="Theme" value={choice}
-        options={[{ key: 'system' as const, label: 'system' },
-                  { key: 'light' as const, label: 'light' },
-                  { key: 'dark' as const, label: 'dark' }]}
-        onChange={(v) => set(v)}
-      />
-      <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.ink2 }}>
-        {choice === 'system'
-          ? `Following this computer, which is ${scheme} right now. It changes with it.`
-          : `Set by hand. This browser will open ${choice} until you change it back.`}
-      </div>
-      <DictationSection />
-    </>
+    <Card inset={false} style={{ padding: '4px 0' }}>
+      <Setting
+        first title="Theme"
+        note={choice === 'system' ? `Following this computer’s theme, which is ${scheme} right now` : 'Set by hand. This browser keeps this theme until you change it back'}
+      >
+        <Choice
+          label="Theme" value={choice}
+          options={[{ key: 'system' as const, label: 'system' },
+                    { key: 'light' as const, label: 'light' },
+                    { key: 'dark' as const, label: 'dark' }]}
+          onChange={(v) => set(v)}
+        />
+      </Setting>
+      <DictationRows />
+    </Card>
   );
 }
 
@@ -1285,8 +1511,8 @@ export function Preferences({ section: opening = 'accounts', onSection, only, no
       if (x === 'appearance') {
         return (
           <Fragment key={x}>
-            <Head title="Appearance" hint="How this browser draws Divan. Kept here, not on any computer." />
-            <Card><AppearanceSection /></Card>
+            <Head title="This browser" hint="How Divan looks and listens here. Kept in this browser, not on any computer." />
+            <AppearanceSection />
           </Fragment>
         );
       }
@@ -1294,11 +1520,13 @@ export function Preferences({ section: opening = 'accounts', onSection, only, no
       if (!slot || !focus) return null;
       if (x === 'defaults') return <DefaultsSection key={x} hostKey={focus} slot={slot} />;
       if (x === 'accounts') return <AccountsSection key={x} hostKey={focus} slot={slot} tools={tools} onTools={loadTools} now={now} />;
+      // With About in front of them the other two are cards of that page.
+      const whole = only.includes('about') && only.length > 1;
       if (x === 'tools') {
-        return <ToolsSection key={x} tools={tools} npm={npm} loading={toolsLoading} problem={toolsProblem} onReload={loadTools} />;
+        return <ToolsSection key={x} tools={tools} npm={npm} loading={toolsLoading} problem={toolsProblem} onReload={loadTools} under={whole} />;
       }
-      if (x === 'security') return <SecuritySection key={x} slot={slot} />;
-      if (x === 'about') return <AboutSection key={x} slot={slot} />;
+      if (x === 'security') return <SecuritySection key={x} slot={slot} under={whole} />;
+      if (x === 'about') return <AboutSection key={x} slot={slot} whole={whole} />;
       return null;
     };
     return (
@@ -1349,7 +1577,7 @@ export function Preferences({ section: opening = 'accounts', onSection, only, no
                 hint="Divan is drawn in two themes and which one is on screen is yours, not the
                       daemon's. It follows this computer until you say otherwise."
               />
-              <Card><AppearanceSection /></Card>
+              <AppearanceSection />
             </>
           )}
 

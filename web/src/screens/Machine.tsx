@@ -125,7 +125,7 @@ export function Machine(props: MachineProps) {
           a quieter line beneath them: two levels that read as two levels. */}
       <div style={{ flex: 'none', padding: '8px 32px 0' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex' }}>
           <div className="dv-seg" role="group" aria-label="Machine">
             {MACHINE_TABS.map((t) => {
               const wants = t.pages.map(mark).find((m) => m.count || m.dot);
@@ -138,15 +138,19 @@ export function Machine(props: MachineProps) {
               );
             })}
           </div>
-          {tab.key !== 'machines' && <ComputerPicker />}
           </div>
+          {/* Which computer the page is about, under the tabs rather than at
+              the far end of their line: it is the next thing to decide after
+              the tab, and at the end of the line it read as a setting of the
+              window (26 Nov 2026). */}
+          {tab.key !== 'machines' && <ComputerPicker />}
           {tab.pages.length > 1 && (
             <nav aria-label={`Under ${tab.label}`} className="dv-subnav">
               {tab.pages.map((v) => {
                 const m = mark(v);
                 return (
                   <a key={v} href={`/machine/${v}`} className="dv-hit"
-                    aria-current={v === view ? 'page' : undefined}
+                    aria-current={v === view || (v === 'about' && (view === 'tools' || view === 'security')) ? 'page' : undefined}
                     onClick={(e) => { e.preventDefault(); if (v !== view) onView(v); }}>
                     <span>{machinePageLabel(v)}</span>
                     {!!m.count && <b className="dv-badge" aria-label={`${m.count} want you`}>{m.count}</b>}
@@ -186,7 +190,7 @@ function ComputerPicker() {
   if (!order.length) return null;
   const name = (k: string) => hosts[k]?.info?.name?.replace(/\.local$/, '') || hosts[k]?.cfg.name || k;
   return (
-    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       <span className="dv-meta">computer</span>
       <div className="dv-seg" role="group" aria-label="Computer">
         {order.map((k) => {
@@ -247,9 +251,12 @@ function Page(props: MachineProps) {
       </>
     );
   }
-  if (view === 'tools') return <Preferences only={['tools']} />;
-  if (view === 'security') return <Preferences only={['security']} />;
-  if (view === 'about') return <Preferences only={['about']} />;
+  // What the computer is, the tools on it and the folders an agent may open:
+  // one page of facts. Tools and Security were pages of their own; their
+  // addresses still open this one.
+  if (view === 'tools') return <Preferences only={['about', 'tools', 'security']} />;
+  if (view === 'security') return <Preferences only={['about', 'tools', 'security']} />;
+  if (view === 'about') return <Preferences only={['about', 'tools', 'security']} />;
   if (view === 'quota') return <Quota view={fleet} />;
   if (view === 'admin') return <Admin now={fleet.now} onView={onView} />;
   // General: what a new chat on this computer opens with, and how this

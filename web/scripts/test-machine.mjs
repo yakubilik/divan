@@ -167,9 +167,11 @@ group('each page is the frame’s page');
   // sign-in *works*; it cannot say how much of the plan behind it is left, and
   // a connected account nine-tenths spent read exactly like an untouched one.
   // One computer's sign-ins, managed where they are listed (7 Nov 2026): the
-  // way to add one first, then each with its plan and its buttons.
+  // way to add one first — one line, and the sign-in follows (26 Nov) — then
+  // each with its plan in a line and its buttons.
   ok('Accounts is the chosen computer’s sign-ins, with the way to add one and each one’s buttons',
-    has(accounts.body, 'Accounts', 'Add an account', 'account name', 'Rename', 'Sign out', 'plan usage'),
+    has(accounts.body, 'Accounts', 'the sign-in starts straight after', 'Rename', 'Sign out', 'plan used')
+    && accounts.body.includes('placeholder="e.g. Work, Second subscription"'),
     words(accounts.body).slice(0, 200));
 
   const quota = page('quota');
@@ -189,8 +191,11 @@ group('each page is the frame’s page');
     words(admin.body).slice(0, 240));
 
   const settings = page('settings');
+  // A row a setting, its answer at the end of the row (26 Nov 2026): the lists
+  // of every account, model and folder are a `select` each.
   ok('Settings › General is what a new chat opens with, and the theme as a choice of three',
-    has(settings.body, 'New chats', 'Appearance', 'system', 'light', 'dark'),
+    has(settings.body, 'New chat defaults', 'Agent', 'Account', 'Model', 'Folder', 'This browser', 'Theme', 'system', 'light', 'dark')
+    && (settings.body.match(/<select/g) ?? []).length >= 3,
     words(settings.body).slice(0, 200));
 }
 

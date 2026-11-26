@@ -80,6 +80,14 @@ try {
   const created = typed && await press('Add') && await sent('account.create', (d) => d.label === 'Second');
   ok('the accounts page reads tool.status, and Add sends account.create with the name typed',
     tools && created, JSON.stringify({ tools, typed, created }));
+  // Adding an account is the first half of signing one in: the sign-in starts
+  // on the new account by itself, with no row to go and find and no Start.
+  const opened = await b.evaluate(`return document.body.innerText.includes('Sign in to Claude');`);
+  const begun = await sent('account.login', (d) => d.account_id === 'new1');
+  const noStart = await b.evaluate(`return ![...document.querySelectorAll('button')].some((e) => e.textContent.trim() === 'Start');`);
+  ok('…and the sign-in starts on the account that was just added, without another press',
+    created && opened && begun && noStart, JSON.stringify({ opened, begun, noStart }));
+  await press('Cancel');
   const renamed = await press('Rename') && await type('Account name', 'Work') && await press('Save')
     && await sent('account.rename', (d) => d.label === 'Work');
   ok('Rename sends account.rename with the new name', renamed);
@@ -92,11 +100,34 @@ try {
   const coded = signIn && await type('the code from the page', 'abcdef-123456');
   const verified = coded && await press('Verify')
     && await sent('account.login.submit', (d) => d.code === 'abcdef-123456');
+  // The sheet changes when the sign-in does: once the code has gone, it says it
+  // is signing in and no longer offers the page or the field.
+  const after = await b.evaluate(`return document.body.innerText;`);
+  const finishing = verified && /Signing in…/.test(after) && !/Open the sign-in page|Paste the code/.test(after);
   const cancelled = await press('Cancel') && await sent('account.login.cancel');
   ok('Sign in sends account.login, the code goes as account.login.submit, and leaving the sheet sends account.login.cancel',
     signIn && verified && cancelled, JSON.stringify({ signIn, coded, verified, cancelled }));
+  ok('…and with the code sent the sheet says Signing in, not the step before it', finishing, after.slice(-300));
 
-  console.log('── the keyboard, the palette and the chat window');
+  // The daemon settles a key inside the request: `account.login.done` comes
+  // down the socket before the answer does. The sheet used to take that answer
+  // as "now wait for a page" and sat on a spinner over an account that was
+  // already signed in.
+  await b.cold('/machine/accounts');
+  await b.evaluate(`const f = window.__fleet.getState();
+    if (!f.order.some((k) => f.hosts[k].cfg.name === 'spare')) f.addHost({ host: '127.0.0.1', port: 9999, token: 't', name: 'spare' });
+    await new Promise((r) => setTimeout(r, 500));
+    const s = window.__fleet.getState();
+    s.setFocus(s.order.find((k) => s.hosts[k].cfg.name === 'spare'));
+    window.__settled = true;
+    await new Promise((r) => setTimeout(r, 700));`);
+  const settledStart = await press('Sign in') && await press('Start');
+  const settled = await b.evaluate(`await new Promise((r) => setTimeout(r, 400)); return document.body.innerText;`);
+  ok('a sign-in settled inside the request ends on Signed in, not on a sheet still preparing a page',
+    settledStart && /Signed in/.test(settled) && !/Preparing the sign-in page/.test(settled),
+    JSON.stringify({ settledStart, text: settled.slice(-300) }));
+  await b.evaluate('window.__settled = false;');
+
   const key = (k) => b.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, metaKey: true, bubbles: true }));
     await new Promise((r) => setTimeout(r, 400));`);
   await b.cold('/');

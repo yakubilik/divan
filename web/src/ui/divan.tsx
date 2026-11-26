@@ -1755,3 +1755,50 @@ export function Choice<T extends string>({ value, options, onChange, label, styl
     </span>
   );
 }
+
+// ── 26 · a choice of many ───────────────────────────────────────────────────
+
+/** `Choice` is two or three answers side by side. A model, a folder or a
+ *  language is one of ten or of a hundred, and laid out the same way it is a
+ *  page of rows to read before the one that is already right — which is what
+ *  Settings was (26 Nov 2026: "I cannot find the thing I came for").
+ *
+ *  So this is the browser's own list, the control everybody already knows how
+ *  to work with a mouse or without one, dressed as `Choice`'s track so that the
+ *  two sit in one column of Web15 W18's rows: `s2` at `border-radius:10px`,
+ *  `36px` high — the track's own height — at `500 13px`, with the chevron the
+ *  frames end an opening row on. */
+export function Select<T extends string>({ value, options, onChange, label, disabled, width = 260, style }: {
+  value: T;
+  options: { key: T; label: string }[];
+  onChange?: (value: T) => void;
+  /** What is being chosen, for a reader who cannot see the row it is in. */
+  label?: string;
+  disabled?: boolean;
+  /** As wide as this and no wider: a folder's path is cut, not the row. */
+  width?: number;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span style={{ position: 'relative', flex: 'none', display: 'flex', maxWidth: '100%', ...style }}>
+      <select
+        aria-label={label} value={value} disabled={disabled}
+        onChange={(e) => onChange?.(e.target.value as T)}
+        style={{
+          appearance: 'none', WebkitAppearance: 'none', width, maxWidth: '100%', height: 36,
+          padding: '0 34px 0 14px', border: 'none', borderRadius: RADIUS.nav,
+          background: T.s2, color: T.ink, font: 'inherit', fontSize: 13, fontWeight: 500,
+          textOverflow: 'ellipsis', cursor: disabled ? 'default' : 'pointer',
+        }}
+      >
+        {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+      </select>
+      <span style={{
+        position: 'absolute', right: 11, top: 0, bottom: 0, display: 'flex', alignItems: 'center',
+        pointerEvents: 'none',
+      }}>
+        <Icon path={P.chevronDown} size={14} color={T.ink3} />
+      </span>
+    </span>
+  );
+}
