@@ -17,7 +17,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DivanView } from '../lib/divan';
 import { useFleet } from '../lib/fleet';
-import { hostDefaults, providerDefaults, usePrefs } from '../lib/prefs';
+import { defaultAgent, defaultAgentLabel, hostDefaults, providerDefaults, usePrefs } from '../lib/prefs';
 import { useThresholds } from '../lib/machine';
 import { listAgents } from '../lib/actions';
 import { appendSpeech } from '../lib/dictate';
@@ -125,9 +125,12 @@ export function Composer({ view, onAsk, onOptions, inputRef, lock = null }: Comp
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
   }, [menu]);
 
-  const hermes = agents?.find((a) => a.name === 'hermes' || a.id === 'hermes') ?? null;
+  // The agent a chat opens with when the chip is left alone: the one chosen
+  // in Settings › New chat defaults, Hermes where none was.
+  const usual = host ? hostDefaults(prefs, host).lastAgent : undefined;
+  const hermes = defaultAgent(agents ?? [], usual);
   const agentLabel = picks.agent === undefined
-    ? (agents && !hermes ? 'No agent' : 'Hermes')
+    ? defaultAgentLabel(agents, usual)
     : picks.agent === null ? 'No agent'
       : (agents?.find((a) => a.id === picks.agent)?.label ?? picks.agent);
   const home = defaultProject(view);

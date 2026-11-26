@@ -23,7 +23,7 @@ import { create } from 'zustand';
 import { createChat, listAgents, send, upload } from './actions';
 import type { Provider } from './protocol';
 import { useFleet } from './fleet';
-import { hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from './prefs';
+import { defaultAgent, hostDefaults, newChatCwd, providerDefaults, resolveDefaults, usePrefs } from './prefs';
 import { PANELS, TABS } from './sessions';
 import { useLogs } from './timeline';
 
@@ -179,7 +179,8 @@ export function whereNote(
  *  own words, and the bar keeps what was typed. */
 /** What the Composer's chips were changed to for this one chat (`lib/compose.ts`).
  *  Every field left out is the computer's own default; `agent: null` is a real
- *  answer, no agent, and `undefined` is Hermes. */
+ *  answer, no agent, and `undefined` is the default one — Hermes, unless
+ *  Settings says otherwise. */
 export interface ToldPicks {
   provider?: Provider;
   model?: string;
@@ -216,7 +217,7 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
   const cwd = picks.cwd ?? at.cwd ?? open.cwd;
   const account = picks.account_id ?? open.account_id;
   const agent = picks.agent !== undefined ? picks.agent
-    : await hermesOn(host, account || null, cwd, open.provider);
+    : await agentOn(host, account || null, cwd, open.provider, hostDefaults(prefs, host).lastAgent);
   // The computer names a chat after the folder it is in (`with_project`), so a
   // chat that opened in the product's repository already says which product it
   // is about. One with no repository to open in says it here instead.
@@ -263,15 +264,17 @@ export async function tell(text: string, scope?: Scoped | null, picks: ToldPicks
   return told;
 }
 
-/** Hermes' id on that computer, under that sign-in and in that folder, the
- *  way New chat finds it. Null when it is not installed there or the computer
- *  will not say: the chat still opens, without the agent, rather than not at
- *  all. */
-export async function hermesOn(host: string, accountId: string | null, cwd: string | null, provider: Provider = 'claude'): Promise<string | null> {
+/** The id of the agent a new chat opens with on that computer, under that
+ *  sign-in and in that folder: the one chosen in Settings, Hermes where none
+ *  was (`defaultAgent`). Null when it is not installed there, when "No agent"
+ *  was the answer, or when the computer will not say: the chat still opens,
+ *  without the agent, rather than not at all. */
+export async function agentOn(host: string, accountId: string | null, cwd: string | null,
+                              provider: Provider = 'claude', chosen?: string | null): Promise<string | null> {
+  if (chosen === null) return null;
   try {
     const r: any = await listAgents(host, accountId, cwd ?? undefined, provider);
-    const hit = (r?.agents ?? []).find((a: any) => a.installed && (a.name === 'hermes' || a.id === 'hermes'));
-    return hit?.id ?? null;
+    return defaultAgent(((r?.agents ?? []) as any[]).filter((a) => a.installed), chosen)?.id ?? null;
   } catch {
     return null;
   }
