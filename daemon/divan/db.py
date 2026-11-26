@@ -604,6 +604,25 @@ class DB:
             "ORDER BY seq", (chat_id,)).fetchall()
         return [self._event_row(r) for r in rows]
 
+    def last_spoken(self, chat_id: str, limit: int) -> list[dict]:
+        """The last `limit` things said in a chat, by either side, oldest first.
+
+        What a recap replays. `seq` is one counter shared by every chat, so a
+        window of sequence numbers says nothing about how much of this chat it
+        holds: a chat that sat quiet while others worked has none of its own
+        rows in the last few hundred. And a chat's own tool calls outnumber its
+        messages, so the chat's last N events of any kind are mostly tools.
+        This walks idx_events_chat (chat_id, seq) backwards from the newest row
+        and stops at the `limit`-th message.
+        """
+        rows = self._c.execute(
+            "SELECT * FROM (SELECT * FROM events WHERE chat_id=?"
+            " AND type IN ('message.user','message.assistant')"
+            " ORDER BY seq DESC LIMIT ?) ORDER BY seq",
+            (chat_id, limit),
+        ).fetchall()
+        return [self._event_row(r) for r in rows]
+
     def last_seq(self, chat_id: str) -> int:
         r = self._c.execute("SELECT MAX(seq) FROM events WHERE chat_id=?", (chat_id,)).fetchone()
         return int(r[0] or 0)

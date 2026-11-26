@@ -29,7 +29,8 @@ from divan.db import DB                               # noqa: E402
 from divan.providers.base import ProviderConfig, TurnResult  # noqa: E402
 from divan.providers.claude import ClaudeProvider     # noqa: E402
 from divan.server import Server                        # noqa: E402
-from divan.session import PROVIDER_FIELDS, ChatSession  # noqa: E402
+from divan.session import (PROVIDER_FIELDS, RECAP_MSG_CHARS, RECAP_TOTAL_CHARS,  # noqa: E402
+                           ChatSession)
 
 failures: list[str] = []
 
@@ -430,6 +431,84 @@ async def scenario_dropped_session(db):
           "the next turn on the same session gets no second recap")
 
 
+def recap_lines(recap: str | None) -> list[str]:
+    """The transcript lines of a recap, oldest first."""
+    return [ln for ln in (recap or "").splitlines() if ln.startswith(("User: ", "You: "))]
+
+
+async def scenario_recap_reaches_back(db):
+    """A recap is built from the chat's own last messages, however far back.
+
+    `seq` is one counter shared by every chat. The recap used to read a window
+    of the last few hundred sequence numbers, so a chat that sat quiet while
+    other chats worked found none of its own messages in it: on 26 Nov a chat
+    with 95 messages was moved to another sign-in with a recap of one line, and
+    the agent said the history was gone. A chat's own tool calls crowd its
+    messages out the same way.
+    """
+    print("\na recap reaches back past other chats and past tool calls")
+    a = db.create_chat(title="a", provider="claude", model="sonnet", effort=None,
+                       perm_mode="ask", cwd="/tmp")
+    b = db.create_chat(title="b", provider="claude", model="sonnet", effort=None,
+                       perm_mode="ask", cwd="/tmp")
+    said = []
+    for i in range(40):
+        kind = "message.user" if i % 2 == 0 else "message.assistant"
+        db.append_event(a["id"], kind, {"text": f"a-msg-{i}"})
+        said.append(("User: " if i % 2 == 0 else "You: ") + f"a-msg-{i}")
+    for i in range(600):
+        db.append_event(b["id"], "message.user" if i % 3 == 0 else "tool.use",
+                        {"text": f"b-{i}"})
+    # The user comes back to A: _prepare logs the new message before the turn
+    # reaches the recap, so A's newest seq now sits past all of B's.
+    db.append_event(a["id"], "message.user", {"text": "what next?"})
+    s, _ = make_session(db, db.get_chat(a["id"]))
+    for handover in (False, True):
+        got = recap_lines(s._build_recap("what next?", handover=handover))
+        check(got == said[-30:],
+              f"another chat's 600 events do not push this chat's last 30 messages out"
+              f" (handover={handover})", f"{len(got)} lines: {got[:2]}…")
+        check(not any(ln.startswith(("User: b-", "You: b-")) for ln in got),
+              f"and none of the other chat's messages get in (handover={handover})")
+
+    c = db.create_chat(title="c", provider="claude", model="sonnet", effort=None,
+                       perm_mode="ask", cwd="/tmp")
+    said = []
+    for i in range(30):
+        kind = "message.user" if i % 2 == 0 else "message.assistant"
+        db.append_event(c["id"], kind, {"text": f"c-msg-{i}"})
+        said.append(("User: " if i % 2 == 0 else "You: ") + f"c-msg-{i}")
+        for j in range(500 // 30 + 1):
+            db.append_event(c["id"], "tool.use" if j % 2 == 0 else "tool.result",
+                            {"name": "Bash", "text": f"tool {i}.{j}"})
+    s, _ = make_session(db, db.get_chat(c["id"]))
+    for handover in (False, True):
+        got = recap_lines(s._build_recap("what next?", handover=handover))
+        check(got == said, f"500 of the chat's own tool events do not crowd out its"
+              f" 30 messages (handover={handover})", f"{len(got)} lines")
+
+    # The caps still hold: a line is cut at RECAP_MSG_CHARS, the whole at
+    # RECAP_TOTAL_CHARS, and the newest lines are the ones kept.
+    d = db.create_chat(title="d", provider="claude", model="sonnet", effort=None,
+                       perm_mode="ask", cwd="/tmp")
+    for i in range(30):
+        db.append_event(d["id"], "message.user", {"text": f"{i:02d}" + "x" * 2000})
+    s, _ = make_session(db, db.get_chat(d["id"]))
+    got = recap_lines(s._build_recap("what next?"))
+    check(got and all(len(ln) == len("User: ") + RECAP_MSG_CHARS for ln in got),
+          "each line is still cut at RECAP_MSG_CHARS")
+    check(sum(len(ln) + 1 for ln in got) <= RECAP_TOTAL_CHARS and got[-1].startswith("User: 29"),
+          "the whole is still cut at RECAP_TOTAL_CHARS, newest kept",
+          f"{sum(len(ln) + 1 for ln in got)} chars")
+
+    # The query walks the (chat_id, seq) index; it does not scan the table.
+    plan = " ".join(str(r[-1]) for r in db._c.execute(
+        "EXPLAIN QUERY PLAN SELECT * FROM (SELECT * FROM events WHERE chat_id=?"
+        " AND type IN ('message.user','message.assistant')"
+        " ORDER BY seq DESC LIMIT ?) ORDER BY seq", ("x", 31)).fetchall())
+    check("USING INDEX idx_events_chat" in plan, "the recap query uses idx_events_chat", plan)
+
+
 async def scenario_list_lights(db):
     """What the lists light a chat with, stored on the chat, not on a screen.
 
@@ -538,6 +617,7 @@ async def main() -> int:
         await scenario_switch_ownership(db)
         await scenario_update_routing(db)
         await scenario_dropped_session(db)
+        await scenario_recap_reaches_back(db)
         await scenario_queue(db)
         await scenario_queue_interrupt(db)
         await scenario_list_lights(db)
