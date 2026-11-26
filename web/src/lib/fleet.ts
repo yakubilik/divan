@@ -296,7 +296,7 @@ export const useFleet = create<FleetState>((set, get) => ({
     const c = clients.get(key);
     if (!c) return;
     const [list, projects, info] = await Promise.allSettled([
-      c.call('chat.list', {}),
+      c.call('chat.list', { include_archived: true }),
       c.call('host.projects', {}),
       c.call('host.info', {}),
     ]);
