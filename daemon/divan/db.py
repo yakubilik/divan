@@ -256,14 +256,37 @@ class DB:
                           ("done_at", "REAL"), ("done_failed", "INTEGER DEFAULT 0"),
                           ("seen_at", "REAL"), ("bg", "TEXT DEFAULT '[]'"),
                           # what filed the chat (`file_chat`): 'work' or 'folder'
-                          ("project_by", "TEXT")):
+                          ("project_by", "TEXT"),
+                          # a job's own chat, kept out of sight (`BACKGROUND_OPENERS`)
+                          ("background", "INTEGER DEFAULT 0")):
             if col not in have:
                 self._c.execute(f"ALTER TABLE chats ADD COLUMN {col} {decl}")
         if "project_by" not in have:
             # Filed before anybody wrote down what by; `_file_unfiled` sorts out which.
             self._c.execute("UPDATE chats SET project_by='before' "
                             "WHERE project_set=0 AND project_id IS NOT NULL AND project_id!=''")
+        if "background" not in have:
+            # Opened by a job before jobs said so: known by the first message the job sends.
+            like = " OR ".join("json_extract(e.payload, '$.text') LIKE ?" for _ in self.BACKGROUND_OPENERS)
+            self._c.execute(
+                "UPDATE chats SET background=1 WHERE archived=1 AND id IN ("
+                " SELECT e.chat_id FROM events e JOIN (SELECT chat_id, MIN(seq) s FROM events"
+                f" WHERE type='message.user' GROUP BY chat_id) f ON e.seq=f.s WHERE {like})",
+                [p + "%" for p in self.BACKGROUND_OPENERS])
         self._c.commit()
+
+    # How the jobs that run out of sight (posting agents, their repairs, the
+    # daily Vice runs, the job watch) opened their chats before `background`
+    # existed (26 Nov 2026). Their chats stay archived on purpose, and the
+    # lists keep them apart from the ones a person archived or let go quiet.
+    BACKGROUND_OPENERS = (
+        "This is the owner's explicitly authorized automatic publicat",
+        "Schedule this approved reel in Meta Business Suite",
+        "This reel was scheduled in Meta Business Suite",
+        "[Yayın kuyruğu]", "Yayın kuyruğu bu videoları",
+        "Vice Anları günlük üretim", "Vice Moments günlük üretim",
+        "Bu bir kurulum testi", "Job watch: scheduled jobs on this Mac broke",
+    )
 
     # ── groups ─────────────────────────────────────────────────────────────
     def list_groups(self) -> list[dict]:
@@ -379,7 +402,7 @@ class DB:
             "agent_id": None, "pool_pinned": 0, "project_set": 0, "owner": None,
             "status": "idle", "last_preview": "", "max_turns": None,
             "max_budget_usd": None, "total_cost_usd": 0.0, "pinned": 0,
-            "archived": 0, "created_at": now, "updated_at": now, "session_ids": "{}",
+            "archived": 0, "background": 0, "created_at": now, "updated_at": now, "session_ids": "{}",
         }
         chat.update({k: v for k, v in kw.items() if k in chat})
         cols = ",".join(chat.keys())
@@ -395,8 +418,13 @@ class DB:
         allowed = {"group_id", "title", "provider", "model", "effort", "perm_mode", "cwd",
                    "provider_session_id", "status", "last_preview", "max_turns",
                    "max_budget_usd", "total_cost_usd", "pinned", "archived", "session_ids",
-                   "account_id", "agent_id", "pool_pinned", "owner", "title_by", "named_at"}
+                   "account_id", "agent_id", "pool_pinned", "owner", "title_by", "named_at",
+                   "background"}
         fields = {k: v for k, v in fields.items() if k in allowed}
+        if "archived" in fields and not fields["archived"]:
+            # Back in the list — a job handing it over, or a person taking it
+            # back — is no longer out of sight once it goes quiet again.
+            fields["background"] = 0
         if not fields:
             return self.get_chat(cid)
         fields["updated_at"] = time.time()

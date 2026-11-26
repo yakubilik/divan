@@ -2865,6 +2865,9 @@ class Server:
                                self.policy.project_for(cwd)),
             max_turns=d.get("max_turns"), max_budget_usd=d.get("max_budget_usd"),
             owner=self._owner(dev, d.get("owner")),
+            # A job's chat that runs out of sight: the lists keep it apart from
+            # the person's own archive (26 Nov 2026).
+            background=1 if d.get("background") else 0,
         )
         await self.broadcast({"seq": None, "chat_id": chat["id"], "event": "chat.created",
                               "data": chat, "ts": time.time()})

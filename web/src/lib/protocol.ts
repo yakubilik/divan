@@ -36,6 +36,8 @@ export interface Chat {
   total_cost_usd: number;
   pinned: number;
   archived: number;
+  /** A job's own chat, archived on purpose so it runs out of sight. */
+  background?: number;
   created_at: number;
   updated_at: number;
   session_ids?: string;
