@@ -198,10 +198,14 @@ export default function AccountLogin() {
   } else if (!prompt || submitting) {
     body = (
       <>
-        {title(submitting ? T('loginFinishingTitle') : T('loginBrowserTitle'))}
+        {/* A key opens no page: it was "Finish in the browser" over a key that
+            was only being checked. */}
+        {title(submitting ? T('loginFinishingTitle') : needsKey ? T('keyCheckingTitle') : T('loginBrowserTitle'))}
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingBottom: 80 }}>
           <WaitBars large />
-          <Text style={{ fontSize: 15, color: c.text2 }}>{submitting ? T('loginFinishing') : T('wStarting')}</Text>
+          <Text style={{ fontSize: 15, color: c.text2 }}>
+            {submitting ? T('loginFinishing') : needsKey ? T('keyChecking') : T('wStarting')}
+          </Text>
         </View>
         {foot({ other: !submitting })}
       </>
