@@ -2597,6 +2597,27 @@ class Server:
             c.last_ping = time.monotonic()
         return {"ts": time.time()}
 
+    def install_starters(self) -> None:
+        """Hermes on this computer's own account, the first time the daemon
+        runs here (`agents.install_starters`). It is forty-odd files from
+        GitHub, so it runs on a thread of its own that nothing waits for: on
+        the loop's executor a slow network would hold a restart until the last
+        fetch gave up."""
+        if self.cfg.demo:
+            return
+
+        def work() -> None:
+            try:
+                got = agents.install_starters()
+            except Exception:
+                log.warning("starter agents failed", exc_info=True)
+                return
+            if got:
+                log.warning("starter agent(s) installed: %s", ", ".join(got))
+
+        import threading
+        threading.Thread(target=work, name="starter-agents", daemon=True).start()
+
     async def learn_transcription(self) -> bool:
         """Find out, off the loop, whether transcription is installed. Started
         at startup; `hello` and `host.info` wait on it, which costs a thread and

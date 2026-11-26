@@ -535,6 +535,48 @@ def install_bundle(src: dict, account_home: str | None) -> dict:
             "skills": len(names), "missing": sorted(missing)}
 
 
+# ── what a new computer starts with ───────────────────────────────────────
+#
+# The app opens on a Hermes chat, and a computer on its first day had no
+# Hermes: somebody had to know to go and install it. The daemon does it, once.
+
+STARTERS = ("hermes",)
+
+
+def install_starters() -> list[str]:
+    """Install each starter on the computer's own account the first time this
+    daemon runs. Returns the ones it installed.
+
+    Once each: what was offered is written down, so a person who removed
+    Hermes is not handed it back at every restart. A fetch that failed is not
+    written down, and the next start tries again.
+    """
+    mark = DEFAULT_AGENTS.parent / "starters.json"
+    try:
+        done = set(json.loads(mark.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError):
+        done = set()
+    got: list[str] = []
+    for sid in STARTERS:
+        if sid in done:
+            continue
+        if not (DEFAULT_AGENTS / f"{sid}.md").exists():
+            try:
+                install(sid, None)
+            except Exception as exc:
+                log.warning("starter agent %s not installed, will try again: %s", sid, exc)
+                continue
+            got.append(sid)
+        done.add(sid)
+    if done:
+        try:
+            mark.parent.mkdir(parents=True, exist_ok=True)
+            mark.write_text(json.dumps(sorted(done)) + "\n", encoding="utf-8")
+        except OSError as exc:
+            log.warning("could not write down the starter agents: %s", exc)
+    return got
+
+
 def install(store_id: str, account_home: str | None) -> dict:
     """Fetch one agent definition and put it where the tool looks for agents."""
     src_id, _, path = store_id.partition(":")

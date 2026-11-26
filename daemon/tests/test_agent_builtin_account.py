@@ -64,3 +64,33 @@ def test_only_an_agents_chat_on_that_account_is_handed_the_plugin(monkeypatch, t
     assert _options(tmp_path, agent_prompt="You are Hermes").plugins == [{"type": "local", "path": plugin}]
     assert not _options(tmp_path).plugins
     assert not _options(tmp_path, agent_prompt="You are Hermes", account_home=str(tmp_path / "acc")).plugins
+
+
+def test_a_new_computer_gets_hermes_once(monkeypatch, tmp_path):
+    _own_account(monkeypatch, tmp_path)
+    assert agents.install_starters() == ["hermes"]
+    assert agents.find("hermes", None)
+    # removed by the person: not handed back at the next start
+    assert agents.uninstall("hermes", None)
+    assert agents.install_starters() == []
+    assert agents.find("hermes", None) is None
+
+
+def test_a_failed_download_is_tried_again(monkeypatch, tmp_path):
+    _own_account(monkeypatch, tmp_path)
+
+    def down(url, **k):
+        raise OSError("no network")
+    monkeypatch.setattr(agents, "_get", down)
+    assert agents.install_starters() == []
+    monkeypatch.setattr(agents, "_get", lambda url, **k: b"---\nname: x\ndescription: y\n---\nbody\n")
+    assert agents.install_starters() == ["hermes"]
+
+
+def test_hermes_already_there_is_left_alone(monkeypatch, tmp_path):
+    _own_account(monkeypatch, tmp_path)
+    mine = tmp_path / "default" / "agents" / "hermes.md"
+    mine.parent.mkdir(parents=True)
+    mine.write_text("---\nname: hermes\ndescription: mine\n---\nmine\n", encoding="utf-8")
+    assert agents.install_starters() == []
+    assert agents.body(str(mine)) == "mine"

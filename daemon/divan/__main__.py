@@ -113,6 +113,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         # A loop that wakes seconds late is a phone that gives up on its ping.
         watch = asyncio.create_task(LoopWatch().run())
         learner = asyncio.create_task(srv.learn_transcription())
+        srv.install_starters()
 
         async def stopper() -> None:
             """Stand down once an update has been staged.
