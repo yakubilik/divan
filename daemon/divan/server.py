@@ -3083,7 +3083,9 @@ class Server:
                 and (prev.get("done_at") or 0) > (prev.get("seen_at") or 0):
             self.db.mark_chat(chat_id, seen_at=time.time())
         if not client_id:
-            queued = await s.send(text, d.get("attachments"))
+            # `silent`: a script opening a chat (the morning coach) starts the
+            # turn without a user bubble; the chat opens on the agent's answer.
+            queued = await s.send(text, d.get("attachments"), silent=bool(d.get("silent")))
             return {"accepted": True, "queued": queued}
         answer: asyncio.Future = asyncio.get_running_loop().create_future()
         self._sent[key] = answer

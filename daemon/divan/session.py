@@ -673,7 +673,7 @@ class ChatSession:
         return self.running is not None and not self.running.done()
 
     async def send(self, text: str, attachments: list[dict] | None,
-                   client_id: str | None = None) -> bool:
+                   client_id: str | None = None, silent: bool = False) -> bool:
         """Start a turn, or queue the message behind the one already running.
 
         Returns True when the message went to the back of the queue. Waiting for
@@ -684,6 +684,11 @@ class ChatSession:
         written into the `message.user` event, which is what lets a resent
         message be recognised after a restart and lets the phone match its
         waiting bubble to the one the timeline now has.
+
+        `silent` starts the turn without writing the message into the timeline,
+        so a chat a script opens (the morning coach) begins with the agent's
+        answer instead of a bubble the owner never wrote. Only for an idle chat:
+        a silent message cannot be queued behind a running turn.
         """
         said = {"client_id": client_id} if client_id else {}
         # A key pasted into the message is taken out before anything else sees
@@ -712,7 +717,7 @@ class ChatSession:
                 await self.emit("message.user",
                                 {"text": text, "attachments": attachments or [], "queued": True, **said}, True)
                 return True
-            await self._prepare(text, attachments, announce=True, said=said)
+            await self._prepare(text, attachments, announce=not silent, said=said)
             self.running = asyncio.create_task(self._run(text, attachments))
         return False
 
