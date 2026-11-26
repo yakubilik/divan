@@ -5,6 +5,7 @@ read: the body is the agent's own prompt and is none of the app's business.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -31,6 +32,11 @@ def _dirs(account_home: str | None, cwd: str | None) -> list[tuple[Path, str]]:
 # The built-in account has no home of its own, so what the app installs for it
 # lives here rather than in the machine's folder.
 DEFAULT_AGENTS = ACCOUNTS_DIR / DEFAULT_ID / "agents"
+# An agent's skills for that account, kept as a plugin of this app's own. The
+# tool would otherwise look for them in its settings folder, which for the
+# built-in account is the person's own.
+DEFAULT_PLUGIN = ACCOUNTS_DIR / DEFAULT_ID / "plugin"
+PLUGIN_NAME = "divan"
 
 
 def _app_installed(path: Path) -> bool:
@@ -426,11 +432,14 @@ def bundle_file(src: dict, names: list[str],
     if skills_root and skills_root.is_dir():
         listed |= {d.name for d in skills_root.iterdir()
                    if d.is_dir() and (d / "SKILL.md").is_file()}
+    # A skill that comes from a plugin is called by the plugin's name and its
+    # own, and the list has to name it the way the tool does.
+    by = f"{PLUGIN_NAME}:" if skills_root and skills_root == DEFAULT_PLUGIN / "skills" else ""
     hints = "".join(SKILL_HINTS[n] + "\n\n" for n in sorted(listed) if n in SKILL_HINTS)
     body = (PROMPTS.get(src["id"], BUNDLE_AGENT)
             .replace("{NAME}", src["label"])
             .replace("Skills available to you:", hints + "Skills available to you:")
-            .replace("{SKILLS}", ", ".join(sorted(listed))))
+            .replace("{SKILLS}", ", ".join(by + n for n in sorted(listed))))
     return (f"---\nname: {src['id']}\n"
             f"description: {src.get('about') or src['label']}\n"
             f"glyph: {src.get('glyph', '🪽')}\ncolor: {src.get('color', '#7C6BD8')}\n---\n\n") + body
@@ -440,13 +449,22 @@ def _own_skills_dir(account_home: str | None) -> Path:
     """The same treatment the agents folder gets: an account writes into its
     own place, never into the machine's shared skills."""
     if not account_home:
-        # The tool finds skills only in its own settings folder, and for the
+        # The tool finds skills in its own settings folder, and for the
         # built-in account that folder is the user's own. Writing forty-six
         # files into it turned every session on the machine into a wall of
-        # them. An agent that needs skills needs an account of its own.
-        raise Err("needs_own_account",
-                  "add an account for this agent: its skills would otherwise be "
-                  "written into this computer's own settings")
+        # them. So they go into a plugin folder here instead, which only a chat
+        # that runs an agent is handed (`default_plugin`). This account used to
+        # be refused outright, and a computer with no added account, which is
+        # every computer on its first day, had no way to get the agent at all.
+        manifest = DEFAULT_PLUGIN / ".claude-plugin" / "plugin.json"
+        if not manifest.is_file():
+            manifest.parent.mkdir(parents=True, exist_ok=True)
+            manifest.write_text(json.dumps({
+                "name": PLUGIN_NAME, "version": "1.0.0",
+                "description": "Skills of the agents this app installed"}) + "\n", encoding="utf-8")
+        root = DEFAULT_PLUGIN / "skills"
+        root.mkdir(parents=True, exist_ok=True)
+        return root
     root = Path(account_home) / "skills"
     if root.is_symlink():
         shared = root.resolve()
@@ -464,11 +482,23 @@ def _own_skills_dir(account_home: str | None) -> Path:
     return root
 
 
+def default_plugin() -> str | None:
+    """The built-in account's plugin folder, once it holds a skill. None before
+    that: the tool is not handed a folder with nothing in it."""
+    try:
+        if (DEFAULT_PLUGIN / ".claude-plugin" / "plugin.json").is_file() and any(
+                (d / "SKILL.md").is_file() for d in (DEFAULT_PLUGIN / "skills").iterdir()):
+            return str(DEFAULT_PLUGIN)
+    except OSError:
+        pass
+    return None
+
+
 def install_bundle(src: dict, account_home: str | None) -> dict:
     """Install a whole agent: every skill it knows, and one definition that is
     the agent itself. Forty-six abilities are not forty-six agents."""
-    # Ask for the folder before fetching the tree: without an account this
-    # cannot be installed at all, and there is no reason to walk a repo first.
+    # Ask for the folder before fetching the tree: where it cannot be made
+    # there is no reason to walk a repo first.
     skills_root = _own_skills_dir(account_home)
     paths = [p for p in _tree(src["repo"], src.get("branch", "main"))
              if any(part in p.split("/", 1)[-1] for part in src.get("include", []))]

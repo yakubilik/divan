@@ -28,7 +28,7 @@ from claude_agent_sdk import (
 
 from ..config import UPLOAD_DIR
 from ..security import MONEY, asked, destructive_reason, prints_secret, redact
-from .. import accounts, held, legacy
+from .. import accounts, agents, held, legacy
 from . import claude_models
 from .base import EXPIRED, EXPIRED_TO_AGENT, Provider, ProviderConfig, TurnResult, is_auth_failure
 
@@ -376,6 +376,14 @@ class ClaudeProvider(Provider):
         if append:
             kw["system_prompt"] = {"type": "preset", "preset": "claude_code",
                                    "append": append}
+        # The built-in account's agents keep their skills in a plugin folder of
+        # this app's (`agents.default_plugin`), not in the person's own
+        # settings, so the tool has to be shown it. Only for a chat that runs
+        # an agent: every other chat on this account stays as it was.
+        if c.agent_prompt and not c.account_home:
+            plugin = agents.default_plugin()
+            if plugin:
+                kw["plugins"] = [{"type": "local", "path": plugin}]
         if c.effort:
             kw["effort"] = c.effort
         if c.max_turns:
