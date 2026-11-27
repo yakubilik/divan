@@ -106,6 +106,24 @@ const ready = (async () => {
   checks.push(['screen: a tap on the live frame sends screen.input with a normalised left click',
     click?.kind === 'click' && click.button === 'left' && click.x === 0.25 && click.y === 0.25]);
 
+  // 1b · a long press is a right-click and nothing else. Lifting the finger
+  // used to send a left button-up as well, and a Mac or a PC takes that stray
+  // up as a left-click on the menu the right-click had just opened.
+  calls.length = 0;
+  await act(async () => {
+    gesture.onPanResponderGrant({ nativeEvent: { pageX: 200, pageY: 112.5, touches: [{}] } });
+  });
+  await settle(550);
+  await act(async () => {
+    gesture.onPanResponderMove({ nativeEvent: { pageX: 230, pageY: 140, touches: [{}] } }, { dx: 30, dy: 27.5 });
+    gesture.onPanResponderRelease({ nativeEvent: { pageX: 230, pageY: 140 } });
+  });
+  await settle();
+  const held = inputs();
+  checks.push(['screen: a long press sends one right-click, and lifting or sliding the finger after it sends no left button',
+    held.length === 1 && held[0].kind === 'click' && held[0].button === 'right'
+    && held[0].x === 0.25 && held[0].y === 0.25]);
+
   // 2 · Paste
   calls.length = 0;
   const pasted = await press('Paste');

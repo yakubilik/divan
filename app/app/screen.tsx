@@ -290,6 +290,9 @@ export default function Screen() {
   const gesture = useRef({
     startX: 0, startY: 0, startAt: 0, moved: false,
     dragging: false, longTimer: null as ReturnType<typeof setTimeout> | null,
+    // The long press has already sent its right-click: the rest of this touch
+    // sends nothing, or the lift lands as a left-click on the menu it opened.
+    menued: false,
     wheelY: 0, wheelX: 0, two: false,
     // What the second finger found when it arrived, and what the pair of them
     // turned out to mean.
@@ -358,6 +361,7 @@ export default function Screen() {
       gesture.startAt = Date.now();
       gesture.moved = false;
       gesture.dragging = false;
+      gesture.menued = false;
       gesture.wheelY = 0;
       gesture.wheelX = 0;
       gesture.mode = null;
@@ -370,7 +374,7 @@ export default function Screen() {
         if (!p) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         send({ kind: 'click', button: 'right', x: p.x, y: p.y });
-        gesture.dragging = true;         // release must not also left-click
+        gesture.menued = true;
       }, LONG_PRESS_MS);
     },
     onPanResponderMove: (e, g) => {
@@ -459,6 +463,7 @@ export default function Screen() {
 
       // ── one finger ────────────────────────────────────────────────────
       if (gesture.two) return;           // a finger lifted off a pinch: not a drag
+      if (gesture.menued) return;
       if (!controllableRef.current) return;
       if (!gesture.moved) return;
       if (gesture.longTimer) { clearTimeout(gesture.longTimer); gesture.longTimer = null; }
@@ -476,6 +481,7 @@ export default function Screen() {
     onPanResponderRelease: (e) => {
       if (gesture.longTimer) { clearTimeout(gesture.longTimer); gesture.longTimer = null; }
       if (gesture.two) { gesture.two = false; gesture.mode = null; return; }
+      if (gesture.menued) { gesture.menued = false; return; }
       if (!controllableRef.current) {
         // A tap that cannot be sent says why instead of vanishing.
         if (!gesture.moved && blockerRef.current) setNote(blockerRef.current);
@@ -496,6 +502,7 @@ export default function Screen() {
       if (gesture.longTimer) { clearTimeout(gesture.longTimer); gesture.longTimer = null; }
       if (gesture.dragging && controllableRef.current) send({ kind: 'up', button: 'left' });
       gesture.dragging = false;
+      gesture.menued = false;
       gesture.two = false;
       gesture.mode = null;
     },
