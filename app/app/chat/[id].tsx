@@ -129,9 +129,9 @@ export function Conversation({ id }: { id: string }) {
   // Selector-less `useStore()` would subscribe this screen to every store write,
   // so a *different* chat streaming in the background re-rendered this one on
   // every token. Take just the actions; their identities never change.
-  const { openChat, send, retrySend, discardSend, interrupt, respond, uploadAttachment, updateChat, deleteChat, createGroup, settleLive, loadAccounts } =
+  const { openChat, peekChat, loadEarlier, send, retrySend, discardSend, interrupt, respond, uploadAttachment, updateChat, deleteChat, createGroup, settleLive, loadAccounts } =
     useStore(useShallow((s) => ({
-      openChat: s.openChat, send: s.send, retrySend: s.retrySend, discardSend: s.discardSend, interrupt: s.interrupt, respond: s.respond,
+      openChat: s.openChat, peekChat: s.peekChat, loadEarlier: s.loadEarlier, send: s.send, retrySend: s.retrySend, discardSend: s.discardSend, interrupt: s.interrupt, respond: s.respond,
       uploadAttachment: s.uploadAttachment, updateChat: s.updateChat, deleteChat: s.deleteChat,
       createGroup: s.createGroup, settleLive: s.settleLive, loadAccounts: s.loadAccounts,
     })));
@@ -182,6 +182,15 @@ export function Conversation({ id }: { id: string }) {
   // a screen that can never fill.
   const [openError, setOpenError] = useState<string | null>(null);
   const [tryCount, setTryCount] = useState(0);
+  // What this phone already has of the chat, at once and whatever the
+  // connection is doing: a conversation read a minute ago does not need the
+  // computer to be shown again (history.ts). The effect below then asks the
+  // computer for what was written since.
+  useEffect(() => { void peekChat?.(id!); }, [id, peekChat]);
+  // Whether the computer has history above what is on screen, and whether a
+  // page of it is on its way.
+  const hasEarlier = useStore((s) => !!s.truncated?.[id!]);
+  const loadingEarlier = useStore((s) => !!s.earlier?.[id!]);
   useEffect(() => {
     if (conn !== 'online') return;
     let alive = true;
@@ -663,6 +672,14 @@ export function Conversation({ id }: { id: string }) {
           maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 80 }}
           initialNumToRender={20}
           windowSize={9}
+          // The list is inverted, so its end is the top of the conversation:
+          // getting near it is the moment to fetch the page above, before the
+          // finger arrives there.
+          onEndReached={() => { if (hasEarlier && conn === 'online') void loadEarlier(id!).catch(() => {}); }}
+          onEndReachedThreshold={1.5}
+          ListFooterComponent={loadingEarlier ? (
+            <View style={{ alignItems: 'center', paddingVertical: 10 }}><Spinner size={16} track={c.spinTrack} /></View>
+          ) : null}
           ListEmptyComponent={
             // A transcript that has not arrived is not an empty transcript —
             // and one that is not coming is not a slow one. Say which.

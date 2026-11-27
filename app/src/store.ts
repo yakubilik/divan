@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { File, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import { useCallback } from 'react';
 import { callOnce, client, httpBase, type ConnStatus } from './ws';
 import { t as tt, type Key } from './i18n';
@@ -15,6 +15,7 @@ import { freshCwd } from './fresh-chat';
 import { delivered, Outbox, type OutboxStorage, type OutMsg } from './outbox';
 import { launchHostId } from './launch';
 import { keepPacksIn, setPacks, type Pack } from './lang';
+import { BACK_PAGE, CATCH_UP_PAGES, FIRST_PAGE, History, LEGACY_TAIL, prepend, snapshot, type HistoryStorage } from './history';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -47,6 +48,42 @@ export const OUTBOX_STORAGE: OutboxStorage = {
     f.write(text);
   },
 };
+
+/** Where transcripts are kept (history.ts): one file per chat, in the cache
+ *  directory — a transcript here is a copy, the computer has the original, and
+ *  iOS may empty this when the phone runs short of room. A phone without the
+ *  directory (a test harness) keeps nothing, and every chat opens from the
+ *  computer as it always did. */
+const historyDir = () => new Directory(Paths.cache, 'chats');
+const historyFile = (key: string) => new File(historyDir(), `${key}.json`);
+export const HISTORY_STORAGE: HistoryStorage = {
+  read: async (key) => {
+    try { const f = historyFile(key); return f.exists ? await f.text() : null; } catch { return null; }
+  },
+  write: async (key, text) => {
+    const d = historyDir();
+    if (!d.exists) d.create({ intermediates: true, idempotent: true });
+    const f = historyFile(key);
+    if (!f.exists) f.create();
+    f.write(text);
+  },
+  remove: async (key) => {
+    try { const f = historyFile(key); if (f.exists) f.delete(); } catch {}
+  },
+  list: async () => {
+    try {
+      const d = historyDir();
+      if (!d.exists) return [];
+      return d.list().filter((x): x is File => x instanceof File && x.name.endsWith('.json'))
+        .map((f) => ({ key: f.name.slice(0, -5), at: f.modificationTime ?? 0 }));
+    } catch { return []; }
+  },
+};
+/** The transcripts on this phone's disk. Module-level, like the requests in
+ *  flight below: nothing a screen draws, and `forgetChat` needs it too. */
+export const history = new History({ storage: HISTORY_STORAGE });
+/** Write what is waiting, now: the app is leaving the foreground. */
+export function saveHistoryNow(): Promise<void> { return history.flush(); }
 
 /** How a chat row draws the agent it runs as. */
 /** `image` (a data URI) is the agent's own picture, drawn in place of its glyph. */
@@ -264,6 +301,10 @@ interface State {
   thinking: Record<string, string>;
   busy: Record<string, boolean>;
   loadedChats: Record<string, boolean>;
+  /** Chats whose computer has history above what is held here (history.ts). */
+  truncated: Record<string, boolean>;
+  /** Chats with a page of that history on its way. */
+  earlier: Record<string, boolean>;
 
   init: () => Promise<void>;
   addHost: (cfg: HostConfig) => Promise<void>;
@@ -301,6 +342,11 @@ interface State {
   settleLive: (chatId: string) => void;
   loadProjects: () => Promise<void>;
   openChat: (id: string) => Promise<void>;
+  /** Draw a chat from this phone's own copy, asking nobody: what a chat screen
+   *  shows before the computer answers, and all it shows while there is none. */
+  peekChat: (id: string) => Promise<void>;
+  /** Fetch the page of history above what is held, if there is one. */
+  loadEarlier: (id: string) => Promise<void>;
   createChat: (d: Partial<Chat> & { provider: string }) => Promise<Chat>;
   updateChat: (id: string, fields: Partial<Chat>) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
@@ -396,6 +442,9 @@ function scheduleSettle(chatId: string) {
 
 /** chat id -> the chat.get already in the air for it. */
 const inFlightOpen = new Map<string, Promise<void>>();
+/** Chats on screen from this phone's own copy that the computer has not yet
+ *  been asked about: how far behind the copy is, is not known. */
+const fromCopy = new Set<string>();
 
 /** chat id -> the last sequence number it held when the socket went. A
  *  reconnect is caught up from here, not from the newest event in hand: the
@@ -416,9 +465,13 @@ function forgetChat(get: () => State, set: (p: Partial<State>) => void, id: stri
   set({
     chats: drop(st.chats), events: drop(st.events), live: drop(st.live),
     progress: drop(st.progress), thinking: drop(st.thinking), busy: drop(st.busy),
-    loadedChats: drop(st.loadedChats),
+    loadedChats: drop(st.loadedChats), truncated: drop(st.truncated), earlier: drop(st.earlier),
   });
   resumeFrom.delete(id);
+  fromCopy.delete(id);
+  // Its copy on this phone goes with it, or the chat would open again from
+  // disk the next time something asked for it.
+  if (st.activeHostId) void history.forget(st.activeHostId, id);
 }
 
 /** Tokens arrive from the tool one or two characters at a time - sixty-odd
@@ -664,6 +717,7 @@ export const useStore = create<State>((set, get) => {
         const last = list.length ? list[list.length - 1].seq! : 0;
         if (ev.seq <= last) return;
         patch.events = { ...s.events, [cid]: [...list, ev] };
+        if (s.loadedChats[cid]) saveSoon(cid);
       }
       if (ev.event === 'message.assistant') {
         const cur = s.live[cid];
@@ -688,12 +742,54 @@ export const useStore = create<State>((set, get) => {
     }
   }));
 
+  /** A loaded chat changed: its copy on this phone is written soon
+   *  (history.ts). What is written is read at the moment of writing, and
+   *  nothing is if the chat or its computer is no longer the one in hand. */
+  function saveSoon(id: string) {
+    const host = get().activeHostId;
+    if (!host) return;
+    history.touch(host, id, () => {
+      const st = get();
+      if (st.activeHostId !== host || !st.loadedChats[id]) return null;
+      return snapshot(st.chats[id] ?? null, st.events[id] || [], !!st.truncated[id], Date.now());
+    });
+  }
+
+  /** Put a chat on screen from this phone's own copy, if it is not in hand
+   *  and there is one. True when it did. The copy ends where the phone last
+   *  saw the chat, so that is where the computer is asked from (`resumeFrom`)
+   *  — not from whatever has streamed in since, which would skip everything
+   *  written while this phone was not looking. */
+  async function fromDisk(id: string): Promise<boolean> {
+    const host = get().activeHostId;
+    if (!host || get().loadedChats[id]) return false;
+    const saved = await history.load(host, id);
+    const st = get();
+    if (!saved || st.activeHostId !== host || st.loadedChats[id]) return false;
+    const last = saved.events[saved.events.length - 1].seq!;
+    const since = (st.events[id] || []).filter((e) => (e.seq ?? 0) > last);
+    if (!resumeFrom.has(id)) resumeFrom.set(id, last);
+    fromCopy.add(id);
+    set({
+      events: { ...st.events, [id]: [...saved.events, ...since] },
+      loadedChats: { ...st.loadedChats, [id]: true },
+      truncated: { ...st.truncated, [id]: saved.truncated },
+      // The list's own row is newer where there is one.
+      ...(st.chats[id] || !saved.chat ? {} : { chats: { ...st.chats, [id]: saved.chat } }),
+    });
+    return true;
+  }
+
   /** Everything that belongs to one computer and must not outlive it. */
   const perHost = () => {
+    // What was waiting to be written is the outgoing computer's: written now,
+    // while its chats are still in hand.
+    void history.flush();
     pendingDeltas.clear();
     resumeFrom.clear();
+    fromCopy.clear();
     return {
-      chats: {}, groups: [], people: NOBODY, agentMarks: {}, projectMarks: {}, events: {}, live: {}, busy: {}, loadedChats: {}, hostInfo: null, catalog: null, device: null, projects: [],
+      chats: {}, groups: [], people: NOBODY, agentMarks: {}, projectMarks: {}, events: {}, live: {}, busy: {}, loadedChats: {}, truncated: {}, earlier: {}, hostInfo: null, catalog: null, device: null, projects: [],
       chatsLoaded: false, accountsLoaded: false, projectsLoaded: false, accounts: [],
       agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
       ustabasi: null, ustabasiError: null, ustabasiOld: false,
@@ -702,9 +798,11 @@ export const useStore = create<State>((set, get) => {
 
   /** Wipe what the outgoing computer left behind and clear the switching flag. */
   function settleSwitch(extra: Partial<State> = {}) {
+    void history.flush();
     pendingDeltas.clear();
     resumeFrom.clear();
-    set({ events: {}, live: {}, busy: {}, loadedChats: {}, switching: false, ...extra } as any);
+    fromCopy.clear();
+    set({ events: {}, live: {}, busy: {}, loadedChats: {}, truncated: {}, earlier: {}, switching: false, ...extra } as any);
   }
 
   /** The LAN door of a stored computer, when it has told us one. */
@@ -788,12 +886,13 @@ export const useStore = create<State>((set, get) => {
     loginBusy: false, loginSubmitting: false, installLog: '',
     defaults: DEFAULTS, defaultsByHost: {}, prefs: PREFS, locked: false, pushToken: null,
     compose: NO_DRAFT, drafts: {},
-    chats: {}, groups: [], people: NOBODY, agentMarks: {}, projectMarks: {}, showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {},
+    chats: {}, groups: [], people: NOBODY, agentMarks: {}, projectMarks: {}, showArchived: false, events: {}, live: {}, progress: {}, thinking: {}, busy: {}, loadedChats: {}, truncated: {}, earlier: {},
     agents: [], agentsLoaded: false, storeSources: [], storeLoaded: false, limits: {}, pool: null, poolAccounts: [], agentActivity: {}, updateStatus: null, restarting: null,
     ustabasi: null, ustabasiError: null, ustabasiOld: false, divan: {}, openCard: null,
     chatsLoaded: false, accountsLoaded: false, projectsLoaded: false,
 
     init: async () => {
+      void history.prune();
       let hosts = await loadJSON<StoredHost[]>(HOSTS_KEY, []);
       if (!Array.isArray(hosts)) hosts = [];
       // migrate the single-host key from the first build
@@ -855,6 +954,7 @@ export const useStore = create<State>((set, get) => {
       const divan = { ...get().divan };
       delete divan[id];
       set({ divan });
+      void history.forgetHost(id);        // and the transcripts kept of its chats
       await persistDefaults(byHost);
       await persistHosts(hosts, active);
       if (wasActive) connectTo(hosts.find((h) => h.id === active) ?? null);
@@ -982,26 +1082,47 @@ export const useStore = create<State>((set, get) => {
       const running = inFlightOpen.get(id);
       if (running) return running;
       const run = (async () => {
+        // This phone's own copy first (history.ts): the chat is on screen
+        // before the computer has been asked anything, and what is asked is
+        // only what was written since.
+        await fromDisk(id);
+        const kept = fromCopy.has(id);
         const list = get().loadedChats[id] ? (get().events[id] || []) : [];
         const from = list.length ? resumeFrom.get(id) : undefined;
-        let since = list.length ? (from ?? list[list.length - 1].seq!) : 0;
-        // A cold open is answered from the end of the chat; a reconnect asks
-        // forward from where this phone left off, and keeps asking while the
-        // computer says there is more. Stopping at the first page would leave
-        // a hole that every later event is appended after, and nothing ever
-        // goes back for it.
-        let chat: any = null;
-        let busy = false;
-        let events: RacEvent[] = [];
-        for (let page = 0; page < 10; page++) {
-          const r = await client.call('chat.get', { chat_id: id, since_seq: since });
-          chat = r.chat;
-          busy = !!r.busy;
-          const page_events = (r.events as RacEvent[]).filter((e) => (e.seq ?? 0) > since);
-          events = [...events, ...page_events];
-          if (!r.more || !page_events.length) break;
-          since = page_events[page_events.length - 1].seq!;
-        }
+        const since = list.length ? (from ?? list[list.length - 1].seq!) : 0;
+        // A cold open is answered from the end of the chat, a screenful of it
+        // (the pages above come when they are scrolled to, `loadEarlier`); a
+        // reconnect asks forward from where this phone left off, and keeps
+        // asking while the computer says there is more. Stopping at the first
+        // page would leave a hole that every later event is appended after,
+        // and nothing ever goes back for it.
+        const ask = async (start: number, pages: number) => {
+          const cold = start === 0;
+          let at = start;
+          let chat: any = null;
+          let busy = false;
+          let events: RacEvent[] = [];
+          let cut = false;
+          let more = false;
+          for (let page = 0; page < pages; page++) {
+            const r = await client.call('chat.get', { chat_id: id, since_seq: at, ...(cold ? { limit: FIRST_PAGE } : {}) });
+            chat = r.chat;
+            busy = !!r.busy;
+            const page_events = (r.events as RacEvent[]).filter((e) => (e.seq ?? 0) > at);
+            events = [...events, ...page_events];
+            if (cold) cut = !!r.truncated;
+            more = !!r.more && page_events.length > 0;
+            if (!more) break;
+            at = page_events[page_events.length - 1].seq!;
+          }
+          return { chat, busy, events, cut, more };
+        };
+        let fresh = since === 0;
+        let a = await ask(since, fresh ? 1 : kept ? CATCH_UP_PAGES : 10);
+        // A copy from disk that is pages behind is not walked through to reach
+        // today: the chat opens on its tail, as one never seen here would.
+        if (kept && a.more) { a = await ask(0, 1); fresh = true; }
+        const { chat, busy, events } = a;
         // Re-read rather than close over `list`: events that streamed in while
         // the request was in the air are already in the store, and dropping
         // back to the old array would throw them away. On a cold open only
@@ -1009,7 +1130,7 @@ export const useStore = create<State>((set, get) => {
         // fragment sitting in front of the history that was just fetched.
         const answered = events.length ? (events[events.length - 1].seq ?? 0) : 0;
         const now = get().events[id] || [];
-        const keep = list.length ? now : now.filter((e) => (e.seq ?? 0) > answered);
+        const keep = fresh ? now.filter((e) => (e.seq ?? 0) > answered) : now;
         const seen = new Set(keep.map((e) => e.seq));
         const merged = [...keep, ...events.filter((e) => !seen.has(e.seq))]
           .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
@@ -1032,6 +1153,7 @@ export const useStore = create<State>((set, get) => {
           events: { ...get().events, [id]: merged },
           busy: { ...get().busy, [id]: busy },
           loadedChats: { ...get().loadedChats, [id]: true },
+          ...(fresh ? { truncated: { ...get().truncated, [id]: a.cut } } : {}),
           ...(stale ? { live: { ...get().live, [id]: null } } : {}),
           ...(busy ? {} : { thinking: { ...get().thinking, [id]: '' }, progress: { ...get().progress, [id]: null } }),
         });
@@ -1039,6 +1161,8 @@ export const useStore = create<State>((set, get) => {
         outbox.seen(delivered(events));
         // Caught up — unless the socket went again while this was out.
         if (resumeFrom.get(id) === from) resumeFrom.delete(id);
+        fromCopy.delete(id);
+        saveSoon(id);
       })();
       inFlightOpen.set(id, run);
       try {
@@ -1052,6 +1176,38 @@ export const useStore = create<State>((set, get) => {
         if (e?.code === 'no_chat') forgetChat(get, set, id);
         throw e;
       } finally { inFlightOpen.delete(id); }
+    },
+
+    peekChat: async (id) => { await fromDisk(id).catch(() => false); },
+
+    loadEarlier: async (id) => {
+      const st = get();
+      const held = st.events[id] || [];
+      if (!st.truncated[id] || st.earlier[id] || !st.loadedChats[id] || !held.length) return;
+      const host = st.activeHostId;
+      const first = held[0].seq!;
+      set({ earlier: { ...st.earlier, [id]: true } });
+      try {
+        let r = await client.call('chat.get', { chat_id: id, before_seq: first, limit: BACK_PAGE });
+        let above = !!r.truncated;
+        // A computer from before `before_seq` ignores it and answers with the
+        // tail again. A longer tail is all it can give: ask for the one a cold
+        // open always got, and that is as far up as this phone can reach.
+        if ((r.events as RacEvent[]).some((e) => (e.seq ?? 0) >= first)) {
+          r = await client.call('chat.get', { chat_id: id, since_seq: 0, limit: LEGACY_TAIL });
+          above = false;
+        }
+        if (get().activeHostId !== host || !get().loadedChats[id]) return;
+        const { events, older } = prepend(get().events[id] || [], r.events as RacEvent[]);
+        set({
+          events: { ...get().events, [id]: events },
+          // Nothing above came back: that was the top.
+          truncated: { ...get().truncated, [id]: above && older > 0 },
+        });
+        if (older) saveSoon(id);
+      } finally {
+        if (get().earlier[id]) { const earlier = { ...get().earlier }; delete earlier[id]; set({ earlier }); }
+      }
     },
 
     createChat: async (d) => {

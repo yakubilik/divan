@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
-import { useStore, useT } from '../src/store';
+import { saveHistoryNow, useStore, useT } from '../src/store';
 import { client } from '../src/ws';
 import { em, FONTS, useColors } from '../src/theme';
 import { Button, Icon, Text } from '../src/components/ui';
@@ -125,6 +125,9 @@ export default function RootLayout() {
         bg.current = null;
       } else if (st === 'background') {
         bg.current = Date.now();
+        // The transcripts in hand, onto disk before iOS stops the timers that
+        // would have written them (history.ts).
+        void saveHistoryNow();
       }
     });
     const queue = (r: Notifications.NotificationResponse | null) => {
