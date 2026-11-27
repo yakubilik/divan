@@ -72,6 +72,45 @@ class ScreenError(RuntimeError):
 _last_grab: tuple[float, tuple, bytes, dict] | None = None
 _grab_lock = asyncio.Lock()
 
+# Someone looking at the screen is someone using it. A display that has gone
+# to sleep captures as solid black, which reads on the phone as "broken", and
+# nothing in the viewer wakes it — so every frame tells the OS a user is here.
+# On a Mac that is `caffeinate -u -d`: -u wakes a sleeping display and resets
+# the idle timer, -d holds it on. One process at a time, renewed well before
+# it runs out; when the frames stop, the machine's own display-sleep setting
+# takes over again from that moment.
+AWAKE_HOLD_S = 60
+AWAKE_RENEW_S = 30
+_awake_proc: "subprocess.Popen | None" = None
+_awake_since = 0.0
+
+
+def keep_awake() -> None:
+    global _awake_proc, _awake_since
+    now = time.time()
+    try:
+        if sys.platform == "darwin":
+            alive = _awake_proc is not None and _awake_proc.poll() is None
+            if alive and now - _awake_since < AWAKE_RENEW_S:
+                return
+            old = _awake_proc
+            _awake_proc = subprocess.Popen(
+                ["/usr/bin/caffeinate", "-u", "-d", "-t", str(AWAKE_HOLD_S)],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL)
+            _awake_since = now
+            if old is not None and old.poll() is None:
+                old.terminate()
+                old.wait(timeout=2)
+        elif sys.platform == "win32":                           # pragma: no cover
+            import ctypes
+            ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED = 0x2, 0x1
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)
+    except Exception as exc:
+        # A frame is still worth more than an awake display.
+        log.debug("could not keep the display awake: %s", exc)
+
 
 def displays() -> list[dict]:
     """Every screen on this machine, primary first.
@@ -173,6 +212,7 @@ def _grab_sync(max_w: int, quality: int, display: str | None = None) -> tuple[by
     except Exception as exc:                                    # pragma: no cover
         raise ScreenError(f"Pillow is not available: {exc}") from exc
     d = _pick(display)
+    keep_awake()
     try:
         if sys.platform == "darwin":
             img = _grab_mac(d)
