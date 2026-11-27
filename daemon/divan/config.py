@@ -296,6 +296,7 @@ class Config:
         if not isinstance(cfg.plane, dict):
             cfg.plane = {}
         cfg._devices_mtime = _mtime(CONFIG_PATH)
+        cfg._disk_ids = set(devices)
         # The port of a second daemon on the same machine, beside DIVAN_HOME.
         if os.environ.get("DIVAN_PORT"):
             cfg.port = int(os.environ["DIVAN_PORT"])
@@ -310,6 +311,11 @@ class Config:
         # about yet — and an undone `tunnel_access_*` is a sign-in turned off.
         self.refresh_tunnel()
         self._keep_hand_switches()
+        # A `pair` or `revoke` from the CLI since this process last read the
+        # file is folded in before writing over it. 27 Nov 2026: the daemon
+        # saves every few seconds, and each save wrote its old device list back,
+        # so a peer pairing link was dead before the other computer could use it.
+        self.reload_devices()
         data = {
             "host_name": self.host_name,
             "port": self.port,
@@ -364,6 +370,7 @@ class Config:
         tmp.chmod(0o600)
         tmp.replace(CONFIG_PATH)
         self._devices_mtime = _mtime(CONFIG_PATH)
+        self._disk_ids = set(self.devices)
 
     def plane_url(self, slug: str) -> str:
         """Where a product's board opens: its Plane project's work items, the
@@ -408,8 +415,10 @@ class Config:
         """Re-read the device registry if config.toml changed under us (a `pair` or
         `revoke` from the CLI while the daemon is running). Returns True if it did.
 
-        Devices already in memory keep their live fields (push token, last_seen);
-        new ones are added and revoked ones dropped."""
+        Devices already in memory keep their live fields (push token, last_seen).
+        A device is added only if it is new on disk, and dropped only if it was
+        on disk last time and is gone now: one this process revoked but has not
+        written yet stays revoked, and one it added but has not written stays."""
         mtime = _mtime(CONFIG_PATH)
         if mtime is None or mtime == getattr(self, "_devices_mtime", None):
             return False
@@ -419,14 +428,17 @@ class Config:
         except Exception:
             return False
         raw = whole.get("devices", {})
-        for did, d in raw.items():
-            if did not in self.devices:
-                self.devices[did] = _device(did, d)
-        for did in [d for d in self.devices if d not in raw]:
-            del self.devices[did]
+        known = getattr(self, "_disk_ids", set(self.devices))
         revoked = whole.get("revoked_tokens", [])
         if isinstance(revoked, list):
-            self.revoked_tokens = [str(h) for h in revoked][-REVOKED_MAX:]
+            merged = list(dict.fromkeys([*(str(h) for h in revoked), *self.revoked_tokens]))
+            self.revoked_tokens = merged[-REVOKED_MAX:]
+        for did, d in raw.items():
+            if did not in self.devices and did not in known:
+                self.devices[did] = _device(did, d)
+        for did in [d for d in self.devices if d not in raw and d in known]:
+            del self.devices[did]
+        self._disk_ids = set(raw)
         return True
 
     def _keep_hand_switches(self) -> None:
