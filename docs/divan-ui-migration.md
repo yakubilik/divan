@@ -123,7 +123,7 @@ The quoted words are the check's own name.
 
 | Action | Old place (main) | New place | Call | Proof |
 |---|---|---|---|---|
-| Go to Dashboard / Chat / Machine | Tab bar | Top line on every place | — | phone: "reaches Chat and Machine in one press" |
+| Go to Chat / Machine | Tab bar | Top line on every place; the chat list is home, the Dashboard overview is off the phone | — | phone: "reaches Machine in one press, and not the Dashboard" |
 | Scope to a product | Project bar | Tiles, dormant ones as rows | `divan.snapshot` | phone: "tiles open the project, the dormant one comes last as a dimmed row" |
 | Everything waiting | Needs-you counter | Needs you › Waiting on you | `ustabasi.note`, `divan.card.move`, `divan.project.open` | phone: "Waiting on you says the counts, three groups oldest first" |
 | Ask / file / start | New chat pen; + ticket | Dashboard Composer (Ask, Ice Box, Start now) | `chat.create`, `chat.send`, `divan.card.create` | phone: "Ask: one press sends chat.create then chat.send with the words" |
