@@ -2,7 +2,7 @@
  *
  *  1. The pipeline the app runs — the TypeScript frontend, `src/tts/engine.ts`
  *     on onnxruntime-node instead of onnxruntime-react-native, the same
- *     `ortRuntime` — on every sentence of tts/vectors.json, against the PyTorch
+ *     `ortRuntime` — on every sentence of the pack's tr/tts/vectors.json, against the PyTorch
  *     reference audio in tts/reference/. Needs tts/models/ and tts/reference/,
  *     which `tts/verify.sh` builds; without them this part says SKIP, and
  *     `--require-models` makes that a failure.
@@ -18,6 +18,7 @@
 const { transform } = require('sucrase');
 const fs = require('fs');
 const path = require('path');
+const lang = require('../../scripts/lang.cjs');
 
 const root = path.join(__dirname, '..');
 const repo = path.join(root, '..');
@@ -202,7 +203,8 @@ const REFERENCE = path.join(repo, 'tts/reference');
 const requireModels = process.argv.includes('--require-models');
 
 async function pipeline() {
-  const vectors = JSON.parse(fs.readFileSync(path.join(repo, 'tts/vectors.json'), 'utf8'));
+  const vectors = lang.load('tr', 'tts/vectors');
+  if (!vectors) { lang.skip('ema pipeline vs reference'); return null; }
   let ort = null;
   try { ort = require('onnxruntime-node'); } catch {}
   const have = ort && E.STAGES.every((s) => fs.existsSync(path.join(MODELS, `${s}.onnx`)))
@@ -242,8 +244,9 @@ async function pipeline() {
 
 async function run() {
   // host steps against the Python, exactly
-  {
-    const vectors = JSON.parse(fs.readFileSync(path.join(repo, 'tts/vectors.json'), 'utf8'));
+  const vectors = lang.load('tr', 'tts/vectors');
+  if (!vectors) lang.skip('ema host steps against the Python');
+  else {
     const crypto = require('crypto');
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     check('ema host: the noise is common.noise to the bit (sha256 of every sentence’s)', vectors.sentences.every((s) =>

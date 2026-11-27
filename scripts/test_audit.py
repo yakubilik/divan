@@ -157,7 +157,6 @@ NAME_CONTROL_HITS = ["1: author-name 'lovelace-ledger'",
 # Where another language is data. Adding a file to `audit.ALLOW` is a decision,
 # so it is made twice: there with its reason, and here.
 ALLOWED = [
-    "app/scripts/fixtures/tts-frontend.json",
     "app/scripts/media.flow.yaml",
     "app/scripts/test-call-chat.cjs",
     "app/scripts/test-ema.cjs",

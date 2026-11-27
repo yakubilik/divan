@@ -72,7 +72,7 @@ preserve/reject policies or cancellation, which the frontend never uses.
 
 `frontend_fixture.py` runs EMA's own Python frontend and chunker over 198 inputs (numbers, dates, times
 with case suffixes, money, percentages, units, abbreviations, symbols, prose) and 13 chunker inputs, and
-writes `app/scripts/fixtures/tts-frontend.json`; `npm test` (`app/scripts/test-tts.cjs`) checks the port
+writes the language pack's `tr/tests/app/tts-frontend.json`; `npm test` (`app/scripts/test-tts.cjs`) checks the port
 against it and against every sentence's `ids` here. The fixture is committed; regenerate it in the venv
 above with `.venv/bin/python frontend_fixture.py` after changing its inputs or upgrading ema-lightning.
 

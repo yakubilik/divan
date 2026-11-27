@@ -116,10 +116,12 @@ const ready = (async () => {
       !wrong.length && ['Hearing you', 'Asking…', 'Speaking', 'Listening'].every((l) => seen.includes(l))
       && seen.indexOf('Hearing you') < seen.indexOf('Speaking')]);
     const after = markup();
+    // The isolated daemon calls in Turkish when the language pack is installed, in English when not.
+    const tr = require('../../scripts/lang.cjs').load('tr', 'tests/daemon/voice_bench/scenarios');
+    const asked = tr ? tr.scenarios.find((x) => x.id === 'short-status').segments[0].text.replace(/\?$/, '') : 'Are the tests done';
+    const answer = tr ? require('../../scripts/lang.cjs').load('tr', 'tests/daemon/test_voice').short[0].trim() : 'Right now';
     checks.push(['call screen (live): what was heard and the answer are written as bubbles, and the wait is shown in seconds',
-      // audit: language-data — what the Turkish call fixture heard and answered, shown as bubbles
-      after.includes('Testler bitti mi') && after.includes('Şu an') && /answered \d+\.\d s after you stopped/.test(after)]);
-      // audit: end-language-data
+      after.includes(asked) && after.includes(answer) && /answered \d+\.\d s after you stopped/.test(after)]);
 
     // End call, pressed.
     R.presses().find((p) => p.text === 'End call').press();

@@ -145,12 +145,16 @@ export function sections(chats: Chat[], groups: Group[], hostKey: string, search
   const byAgent = new Map<string, Chat[]>();
   const daily: Chat[] = [];
   const quiet: Chat[] = [];
+  const jobs: Chat[] = [];
   const put = (m: Map<string, Chat[]>, k: string, c: Chat) => { m.set(k, [...(m.get(k) ?? []), c]); };
   for (const c of byRecency([...chats])) {
     const project = filedProject(c);
     const group = c.group_id && made.has(c.group_id) ? c.group_id
       : project ? named.get(project.toLocaleLowerCase()) : undefined;
-    if (!isCurrent(c, now)) quiet.push(c);
+    // A job's own chat, kept archived so it runs out of sight (posting
+    // agents, the daily Vice runs): not the person's archive (26 Nov 2026).
+    if (c.archived && c.background) jobs.push(c);
+    else if (!isCurrent(c, now)) quiet.push(c);
     else if (group) put(byGroup, group, c);
     else if (project) put(byProject, project, c);
     // A health chat is the coach's, not "Daily": an agent of its own is a
@@ -181,6 +185,7 @@ export function sections(chats: Chat[], groups: Group[], hostKey: string, search
     out.push({ key: '__loose', title: out.length ? 'Daily' : 'Chats', hostKey, chats: byRecency(daily), kind: 'loose' });
   }
   if (quiet.length) out.push({ key: '__archive', title: 'Archive', hostKey, chats: quiet, kind: 'archive' });
+  if (jobs.length) out.push({ key: '__background', title: 'Background', hostKey, chats: jobs, kind: 'archive' });
   return out;
 }
 

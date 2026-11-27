@@ -2,7 +2,7 @@
 // model's own alphabet out, and that text as the ids text.onnx takes. Nothing here throws on text.
 //
 // The phone's port is checked against the Python frontend's own output in
-// scripts/fixtures/tts-frontend.json and tts/vectors.json (`npm test`).
+// the language pack (tr/tests/app/tts-frontend, tr/tts/vectors) (`npm test`).
 
 import { normalize } from './normalizer';
 

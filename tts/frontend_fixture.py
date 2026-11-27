@@ -1,10 +1,10 @@
-"""Write app/scripts/fixtures/tts-frontend.json: EMA's own frontend and chunker on a fixed set of inputs.
+"""Write the language pack's tr/tests/app/tts-frontend.json: EMA's own frontend and chunker on a fixed set of inputs.
 
     .venv/bin/python frontend_fixture.py
 
 The app's TypeScript port (app/src/tts/) is checked against this file by `npm test`, which has no Python;
-so this script is not run by the tests and its output is committed. Re-run it after changing INPUTS or
-upgrading ema-lightning / normalizer-tr, and commit the result. The inputs are Turkish and come from the
+so this script is not run by the tests and its output is kept in the private pack. Re-run it after changing INPUTS or
+upgrading ema-lightning / normalizer-tr. The inputs are Turkish and come from the
 language pack (`tr/tts/frontend_fixture.json`, see common.lang_dir); without it nothing is written.
 """
 import json
@@ -17,7 +17,7 @@ from ema_lightning.frontend import Frontend
 import common
 
 HERE = Path(__file__).resolve().parent
-OUT = HERE.parent / "app" / "scripts" / "fixtures" / "tts-frontend.json"
+OUT = common.lang_dir() / "tr" / "tests" / "app" / "tts-frontend.json"
 PACK = common.pack("frontend_fixture")
 
 # (category, text). Categories with a fixed bar in the ticket: number, date, time, money, percent.

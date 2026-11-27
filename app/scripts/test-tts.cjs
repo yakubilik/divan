@@ -2,9 +2,10 @@
  *
  *  `src/tts/` is a port of ema_lightning's frontend (normalizer-tr with its
  *  fallback policy, then the model's alphabet) and its chunker. There is no
- *  Python here, so the Python's answers are files: `fixtures/tts-frontend.json`
- *  (written by `tts/frontend_fixture.py`) and `tts/vectors.json` (ticket 1/3's
- *  test sentences). A mismatch is printed with both readings.
+ *  Python here, so the Python's answers are files in the language pack:
+ *  `tr/tests/app/tts-frontend.json` (written by `tts/frontend_fixture.py`) and
+ *  `tr/tts/vectors.json` (ticket 1/3's test sentences). A mismatch is printed
+ *  with both readings. Without the pack (GitHub CI) only the import check runs.
  *
  *  Run alone: node scripts/test-tts.cjs  — folded into test-ustabasi.cjs.
  */
@@ -20,22 +21,26 @@ if (!require.extensions['.ts']) {
 const F = require(path.join(root, 'src/tts/frontend.ts'));
 const C = require(path.join(root, 'src/tts/chunker.ts'));
 
-const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/tts-frontend.json'), 'utf8'));
-const vectors = JSON.parse(fs.readFileSync(path.join(root, '../tts/vectors.json'), 'utf8'));
+const lang = require('../../scripts/lang.cjs');
+const fixture = lang.load('tr', 'tests/app/tts-frontend');
+const vectors = lang.load('tr', 'tts/vectors');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-
+const checks = [];
 const misses = [];
+if (!fixture || !vectors) lang.skip('tts: the frontend against the Python');
+else {
+
 for (const c of fixture.cases) {
   const spoken = F.frontend(c.text);
   if (spoken !== c.spoken || !same(F.ids(spoken), c.ids)) misses.push({ ...c, got: spoken });
 }
 const rate = 1 - misses.length / fixture.cases.length;
 
-const checks = [
+checks.push(
   ['tts: the fixture has at least 150 inputs', fixture.cases.length >= 150],
   [`tts: normaliser + ids match Python on ${((rate) * 100).toFixed(1)}% of ${fixture.cases.length} inputs (bar 97%)`, rate >= 0.97],
   ['tts: the alphabet is the model\'s own', same(F.VOCAB, vectors.vocab)],
-];
+);
 for (const category of ['number', 'date', 'time', 'money', 'percent']) {
   const cases = fixture.cases.filter((c) => c.category === category);
   const failed = misses.filter((c) => c.category === category);
@@ -58,6 +63,7 @@ for (const c of fixture.chunks) {
 }
 const paragraph = fixture.chunks.find((c) => c.text.length >= 600 && c.speed === 1.0);
 checks.push(['tts: a 600-character paragraph is in the chunker fixture', !!paragraph]);
+}
 
 // The port imports nothing that needs a phone.
 for (const file of fs.readdirSync(path.join(root, 'src/tts'))) {
