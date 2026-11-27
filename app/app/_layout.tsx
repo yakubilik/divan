@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef } from 'react';
-import { useLangPacks } from '../src/lang';
+import React, { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { onPacks, packsVersion } from '../src/lang';
 import { AppState, Platform, Settings, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -24,7 +24,7 @@ const SHEET = { presentation: 'transparentModal', animation: 'none', contentStyl
 
 export default function RootLayout() {
   // A language pack arriving for the first time re-renders the app in it.
-  useLangPacks();
+  useSyncExternalStore(onPacks, packsVersion, packsVersion);
   const init = useStore((s) => s.init);
   const ready = useStore((s) => s.ready);
   const locked = useStore((s) => s.locked);

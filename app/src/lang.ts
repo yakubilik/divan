@@ -8,10 +8,9 @@
  *  without a pack answers with none, and everything falls back to English.
  *
  *  The same module as web/src/lib/lang.ts, but kept in a file the store hands
- *  over (`keepPacksIn`) rather than localStorage.
+ *  over (`keepPacksIn`) rather than localStorage, and with no React in it: the
+ *  layout subscribes through `onPacks`.
  */
-import { useSyncExternalStore } from 'react';
-
 /** One pack: `app/call` and the like. Keys are English, values the words. */
 export type Pack = Record<string, unknown>;
 type Packs = Record<string, Record<string, Pack>>;
@@ -68,13 +67,10 @@ export function packRegex(source: unknown, flags = 'i'): RegExp | null {
   try { return new RegExp(source, flags); } catch { return null; }
 }
 
-/** Re-render when a pack arrives (the first launch, before it is kept). */
-export function useLangPacks(): number {
-  return useSyncExternalStore(
-    (l) => { listeners.add(l); return () => { listeners.delete(l); }; },
-    () => version,
-    () => version,
-  );
+/** A number that changes whenever the packs do (for `useSyncExternalStore`
+ *  with `onPacks`; this module imports nothing, the web panel's tests compile it). */
+export function packsVersion(): number {
+  return version;
 }
 
 /** Call `fn` whenever the packs change (kept ones read, new ones delivered); returns the unsubscribe. */
