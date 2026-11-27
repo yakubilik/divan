@@ -120,6 +120,9 @@ const RETRY_MS = [250, 500, 1000, 2000, 4000, 8000, 15000];
  *  the browser will sit in CONNECTING for a minute or more — and a fresh dial
  *  is quicker than waiting it out. */
 const CONNECT_TIMEOUT_MS = 5000;
+/** How long an open socket must stay up before a drop dials from the top of
+ *  the retry ladder again. */
+const STABLE_MS = 3000;
 
 export class RacClient {
   private ws: WebSocket | null = null;
@@ -219,7 +222,11 @@ export class RacClient {
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.clearConnectTimer();
-      this.retry = 0; this.missed = 0; this.lastRx = 0;
+      this.missed = 0; this.lastRx = 0;
+      // The ladder starts again only once the socket has lived a while: one
+      // accepted and dropped at once (a peer proxy's `peer_gone`) would
+      // otherwise be dialled every 250 ms for ever.
+      setTimeout(() => { if (this.ws === ws) this.retry = 0; }, STABLE_MS);
       this.setStatus('online'); this.startHeartbeat();
     };
     ws.onmessage = (m) => {

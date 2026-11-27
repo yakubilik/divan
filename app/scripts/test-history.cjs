@@ -213,10 +213,27 @@ async function store() {
   await st().openChat('a');
   check('offline: back online, asked from where the copy ended', asked.at(-1).since_seq === 303 && st().events.a.at(-1).seq === 304);
 
+  // c2. A catch-up still owed: what streams in after the gap is not written
+  // down as if the copy were whole, or the next launch would ask from past it.
+  await relaunch();
+  offline = true;
+  await st().peekChat('a');
+  await st().openChat('a').catch(() => {});
+  frame(ev('a', 310));
+  await history.flush();
+  check('gap: a copy still owed a catch-up is written only up to the gap',
+    H.parse(disk.get(H.keyOf('h1', 'a')), 'a').events.at(-1).seq === 304);
+  offline = false;
+  for (let n = 305; n <= 310; n++) daemon.a.push(ev('a', n));
+  await st().openChat('a');
+  await history.flush();
+  check('gap: once caught up, the copy is whole again',
+    same(seqs(H.parse(disk.get(H.keyOf('h1', 'a')), 'a').events).slice(-7), range(304, 310)));
+
   // d. A copy pages behind is not walked through: the chat opens on its tail.
   await relaunch();
   const far = 304 + PAGE * (H.CATCH_UP_PAGES + 2);
-  for (let n = 305; n <= far; n++) daemon.a.push(ev('a', n));
+  for (let n = daemon.a.at(-1).seq + 1; n <= far; n++) daemon.a.push(ev('a', n));
   await st().openChat('a');
   const forward = asked.filter((q) => q.since_seq).length;
   check('behind: at most a few pages are walked', forward === H.CATCH_UP_PAGES, `${forward}`);

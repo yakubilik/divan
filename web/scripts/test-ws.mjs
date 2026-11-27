@@ -201,12 +201,20 @@ await scene('retry delays', async () => {
   check('dials come again at 0.25, 0.5, 1, 2 s, then slow to every 15 s for a computer that stays away',
     JSON.stringify(at) === JSON.stringify([250, 500, 1000, 2000, 4000, 8000, 15000, 15000, 15000]), JSON.stringify(at));
   await advance(15_000);
-  sockets.at(-1).open();
+  sockets.at(-1).open();                                 // accepted, and dropped at once (a peer proxy's peer_gone)
   await flush();
   sockets.at(-1).drop(1006);
   await advance(250);
+  check('…a socket dropped as soon as it opened does not start the ladder over',
+    sockets.length === 11, `sockets=${sockets.length}`);
+  await advance(15_000);
+  sockets.at(-1).open();
+  await flush();
+  await advance(3_000);                                  // it stays up a while
+  sockets.at(-1).drop(1006);
+  await advance(250);
   check('…and a connection that came back starts the ladder over',
-    client.status === 'connecting' && sockets.length === 12, `status=${client.status} sockets=${sockets.length}`);
+    client.status === 'connecting' && sockets.length === 13, `status=${client.status} sockets=${sockets.length}`);
   client.disconnect();
 });
 

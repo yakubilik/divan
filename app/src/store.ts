@@ -754,7 +754,14 @@ export const useStore = create<State>((set, get) => {
     history.touch(host, id, () => {
       const st = get();
       if (st.activeHostId !== host || !st.loadedChats[id]) return null;
-      return snapshot(st.chats[id] ?? null, st.events[id] || [], !!st.truncated[id], Date.now());
+      // While a catch-up is still owed, what is held past the point it is
+      // owed from may sit after a gap. The copy records only where it ends,
+      // so writing that down would lose the gap for good: write only the
+      // part that is known to be whole.
+      const owed = resumeFrom.get(id);
+      const list = st.events[id] || [];
+      const whole = owed == null ? list : list.filter((e) => (e.seq ?? 0) <= owed);
+      return snapshot(st.chats[id] ?? null, whole, !!st.truncated[id], Date.now());
     });
   }
 
@@ -1238,6 +1245,9 @@ export const useStore = create<State>((set, get) => {
           above = false;
         }
         if (get().activeHostId !== host || !get().loadedChats[id]) return;
+        // The chat reopened on its tail while this was out: the page belongs
+        // above a list that is no longer the one on screen.
+        if ((get().events[id] || [])[0]?.seq !== first) return;
         const { events, older } = prepend(get().events[id] || [], r.events as RacEvent[]);
         set({
           events: { ...get().events, [id]: events },
