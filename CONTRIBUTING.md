@@ -190,6 +190,12 @@ documentation and every string either client shows. `python scripts/audit.py`
 fails on anything else, so this is checked rather than asked for. The one place
 another language is allowed is `daemon/divan/call.py`, where it is data
 a language detector cannot work without; that exception is listed in the script.
+No Turkish word and no Turkish-only letter (dotless i, soft g, cedilla s and
+c) goes into a tracked file anywhere else, comments, tests and fixtures
+included: a test that needs non-English text uses a marked data block. The scan also runs before every push
+from a checkout that has run `git config core.hooksPath scripts/hooks` once
+(`scripts/hooks/pre-push` reads the commit being pushed), so a red scan is
+caught on the machine instead of on main.
 
 The app and the panel each keep their strings in one table (`app/src/i18n.ts`,
 `web/src/lib/i18n.ts`) rather than inline. The daemon tags every user-visible

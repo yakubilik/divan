@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -326,6 +327,17 @@ def main() -> int:
     else:
         print("  skip  DIVAN_AUDIT_NAMES is unset, so there is no list to read back"
               " for;\n        the release runs this with one, and records that it did")
+
+    print("\n--rev reads the commit, not the working tree (the pre-push hook)")
+    at_head = audit.files_at("HEAD")
+    head_blob = subprocess.run(["git", "show", "HEAD:scripts/audit.py"],
+                               capture_output=True, check=True).stdout
+    check("every tracked file of HEAD is listed",
+          set(at_head) == set(audit.git("ls-tree", "-r", "--name-only", "HEAD").split()))
+    check("and a file's bytes are the committed blob", at_head["scripts/audit.py"] == head_blob)
+    hook = Path("scripts/hooks/pre-push")
+    check("the hook is tracked and executable", hook.exists() and os.access(hook, os.X_OK))
+    check("and it scans the pushed commit", "audit.py --rev" in hook.read_text())
 
     print("\nthe language allowlist covers exactly these files")
     allowed = sorted(audit.ALLOW)

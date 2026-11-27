@@ -1,0 +1,20 @@
+#!/bin/sh
+# Refuse a push whose commit fails the public-repo scan (scripts/audit.py): a secret, a
+# personal path, or Turkish in a tracked file. CI runs the same scan, but by then the commit
+# is public and main is red for everyone who pushes after it (26 Nov 2026: five hours).
+#
+# Installed by `git config core.hooksPath scripts/hooks`. The scan reads the pushed commit,
+# not the working tree, so an uncommitted edit neither blocks nor sneaks through.
+z=0000000000000000000000000000000000000000
+py=$(command -v python3 || echo /usr/bin/python3)
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$z" ] && continue            # a branch being deleted carries no files
+  if ! out=$("$py" scripts/audit.py --rev "$local_sha" 2>&1); then
+    printf '%s\n' "$out" | grep -E '^   \[|finding' >&2
+    printf 'pre-push: %s (%s) fails scripts/audit.py; fix the lines above, commit, push again.\n' \
+      "$local_ref" "$(git rev-parse --short "$local_sha")" >&2
+    status=1
+  fi
+done
+exit $status

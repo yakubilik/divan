@@ -4,6 +4,7 @@
     python scripts/audit.py                  # tracked files only
     python scripts/audit.py --history        # tracked files and every blob in git
     python scripts/audit.py --json
+    python scripts/audit.py --rev HEAD       # the files of one commit (scripts/hooks/pre-push)
     python scripts/audit.py --exemptions     # what is excused as data, and why
 
 Exits non-zero when it finds something, so it can be a CI step or a pre-release
@@ -379,9 +380,28 @@ def scan_text(path: str, text: str, where: str) -> list[dict]:
     return out
 
 
-def scan_tracked() -> list[dict]:
+def files_at(rev: str) -> dict[str, bytes]:
+    """Every file of commit `rev`, path to bytes, read in one `git cat-file --batch`."""
+    paths = [p for p in git("ls-tree", "-r", "-z", "--name-only", rev).split("\0") if p]
+    keep = [p for p in paths if not skip(p)]
+    out = subprocess.run(["git", "cat-file", "--batch"], capture_output=True, check=True,
+                         input="".join(f"{rev}:{p}\n" for p in keep).encode()).stdout
+    files: dict[str, bytes] = dict.fromkeys(paths, b"")
+    at = 0
+    for path in keep:
+        header_end = out.index(b"\n", at)
+        size = int(out[at:header_end].split()[2])
+        files[path] = out[header_end + 1:header_end + 1 + size]
+        at = header_end + 1 + size + 1
+    return files
+
+
+def scan_tracked(rev: str | None = None) -> list[dict]:
+    """The tracked files as they are on disk, or as commit `rev` has them (the pre-push hook:
+    what is pushed is the commit, not whatever the working tree holds at the moment)."""
     findings: list[dict] = []
-    for path in git("ls-files").split("\n"):
+    at_rev = files_at(rev) if rev else None
+    for path in (at_rev if at_rev is not None else git("ls-files").split("\n")):
         if not path:
             continue
         if FORBIDDEN_NAMES.search(path):
@@ -390,8 +410,11 @@ def scan_tracked() -> list[dict]:
         if skip(path):
             continue
         try:
-            with open(path, encoding="utf-8") as fh:
-                text = fh.read()
+            if at_rev is not None:
+                text = at_rev[path].decode("utf-8")
+            else:
+                with open(path, encoding="utf-8") as fh:
+                    text = fh.read()
         except (OSError, UnicodeDecodeError):
             continue
         findings += scan_text(path, text, "worktree")
@@ -440,6 +463,8 @@ def main() -> int:
     ap.add_argument("--history", action="store_true",
                     help="also scan every blob and commit identity in git")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument("--rev", metavar="COMMIT",
+                    help="scan the files of this commit instead of the working tree (the pre-push hook)")
     ap.add_argument("--exemptions", action="store_true",
                     help="list every path and marked block excused from the language rules, with its reason")
     a = ap.parse_args()
@@ -469,7 +494,7 @@ def main() -> int:
                   f"{sum(1 for r in rows if r['lines'])} marked block(s)")
         return 0
 
-    findings = scan_tracked()
+    findings = scan_tracked(a.rev)
     pending = sum(1 for f in findings if f.get("pending"))
     worktree = len(findings) - pending
     tracked = len(findings)
