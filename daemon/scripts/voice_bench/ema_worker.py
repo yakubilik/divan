@@ -72,7 +72,7 @@ def main() -> int:
     run = sessions(Path(a.models))
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    piece_audio(run, stoi, "tamam", 0)                     # first runs allocate; keep them out of the timing
+    piece_audio(run, stoi, "test", 0)                      # first runs allocate; keep them out of the timing
     print(json.dumps({"ready": True}), flush=True)
     for line in sys.stdin:
         req = json.loads(line)

@@ -28,6 +28,7 @@ from claude_agent_sdk import (                                    # noqa: E402
     AssistantMessage, RateLimitEvent, RateLimitInfo, ResultMessage, TextBlock)
 
 from divan import call                                  # noqa: E402
+from divan import lang as langmod                       # noqa: E402
 from divan import server as server_mod                  # noqa: E402
 from divan import ustabasi as u                         # noqa: E402
 from divan.accounts import Account                      # noqa: E402
@@ -37,6 +38,12 @@ from divan.security import PathPolicy                   # noqa: E402
 from divan.server import Server                         # noqa: E402
 
 failures: list[str] = []
+
+# Turkish test data from the language pack; the Turkish checks need it and the
+# module's own Turkish words (call._TR) both, and are skipped without them.
+TR = langmod.load("tr", "tests/daemon/test_call") if call._TR else {}
+if not TR:
+    print("skip: no language pack (the Turkish checks)")
 
 
 def check(ok: bool, label: str, detail: str = "") -> None:
@@ -67,9 +74,10 @@ new = call.system_prompt(hermes)
 check(call.MANNER_HERMES in new and call.MANNER_DEFAULT not in new,
       "with Hermes the manner is Hermes's")
 said = [line for line in new.splitlines()
-        if ("sir" in line.split() or "sir." in line or "sir\"" in line or "efendim" in line)
+        if ("sir" in line.split() or "sir." in line or "sir\"" in line
+            or (call._HONORIFIC and call._HONORIFIC in line))
         and "No \"sir\"" not in line]
-check(not said, "and nothing in it tells the model to say sir or efendim", repr(said))
+check(not said, "and nothing in it tells the model to say sir or its Turkish equivalent", repr(said))
 
 call.MANNER_FILE.write_text("Manner: speak like a pirate.\n")
 check(call.system_prompt(False).endswith("Manner: speak like a pirate.")
@@ -79,14 +87,17 @@ call.MANNER_FILE.unlink()
 
 # ── 2 · the filters ──────────────────────────────────────────────────────────
 print("filters")
-tr = "Kanka, iki oturum çalışıyor, biri onay bekliyor."
-check(call.speakable(tr, hermes=True) == tr, "Hermes keeps the caller's 'kanka'")
 check(call.speakable("Two sessions are running.", hermes=True) == "Two sessions are running.",
-      "and adds no honorific")
-check(call.speakable(tr, hermes=False) == call.fix_address(call.strip_slang(tr))
-      and "anka" not in call.speakable(tr, hermes=False), "the house still strips slang")
-check(call.speakable("No, efendim.", hermes=False) == "No, sir.",
-      "and still matches its honorific to the language")
+      "Hermes adds no honorific")
+if TR:
+    tr = TR["slang_sentence"]
+    check(call.speakable(tr, hermes=True) == tr, "Hermes keeps the caller's slang")
+    check(call.speakable(tr, hermes=False) == call.fix_address(call.strip_slang(tr))
+          and TR["slang_fragment"] not in call.speakable(tr, hermes=False), "the house still strips slang")
+    check(call.speakable(TR["honorific_sentence"], hermes=False) == TR["honorific_fixed"],
+          "and still matches its honorific to the language")
+else:
+    check(call.speakable("No, sir.", hermes=False) == "No, sir.", "without the pack an answer is left as it is")
 
 # ── 3 · the profile ──────────────────────────────────────────────────────────
 print("profile")
@@ -151,7 +162,7 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
 """)
 NOW = time.time()
 rows = [
-    (1204, "Aramada Hermes konuşsun", "running", NOW - 1300, ""),
+    (1204, "Let Hermes speak on calls", "running", NOW - 1300, ""),
     (1205, "Fix login in /Users/x/projects/app/src/auth.ts", "blocked", NOW - 9000,
      "Which Stripe account, see https://example.com/x?"),
     (1206, "queued one", "queued", None, ""),
@@ -235,7 +246,7 @@ class Host:
 
 async def hand_off(home: Path) -> dict:
     h = Host(home)
-    where = await h._concierge_actions()["start"]("focus", "takvime yarın 10'u ekle")
+    where = await h._concierge_actions()["start"]("focus", "add tomorrow at 10 to the calendar")
     chat = h.db.get_chat(h.sent[0][0])
     return {"where": where, "chat": chat, "sent": h.sent}
 
@@ -245,7 +256,7 @@ check(got["where"] == "focus" and got["chat"]["agent_id"] == "user:hermes"
       and got["chat"]["account_id"] == "claude-x",
       "with Hermes installed the new chat is a Hermes chat on that account",
       str({k: got["chat"].get(k) for k in ("agent_id", "account_id")}))
-check(got["sent"][0][1] == "takvime yarın 10'u ekle", "and gets the instruction")
+check(got["sent"][0][1] == "add tomorrow at 10 to the calendar", "and gets the instruction")
 got = asyncio.run(hand_off(plain_home))
 check(got["chat"]["agent_id"] is None, "without it, a chat with no agent, as before",
       str(got["chat"].get("agent_id")))
@@ -363,7 +374,9 @@ try:
     check(machine.pool.state("default-claude", "claude").blocked,
           "and the refusal's limit reading reached the pool")
 
-    for lang, words in (("tr-TR", "Hiçbir hesapta"), ("en-US", "No account"), (None, "No account")):
+    # Without the pack a Turkish call is answered in English.
+    for lang, words in (("tr-TR", TR.get("no_room_start") or "No account"), ("en-US", "No account"),
+                        (None, "No account")):
         machine = Machine({"default-claude": full(3 * 3600), "acct-2": full(1800),
                            "acct-3": full(2 * 3600)})
         FakeClient.spent, FakeClient.asked = set(), []
@@ -507,7 +520,7 @@ check(len(spoken.split()) <= call.SPOKEN_WORDS + 6 and spoken.endswith("The rest
 check(not any(bad in spoken for bad in ("```", "`", "|", "/", "~", "http", "attempts", "retry.ts")),
       "and has no code, table, path or link in it", spoken)
 check(got["spoken1"] == SHORT, "a short plain reply is read as it is", got["spoken1"])
-check(call.spoken_reply("```py\nprint(1)\n```", "tr-TR") == "Cevabı sohbete yazdım."
+check(call.spoken_reply("```py\nprint(1)\n```", "tr-TR") == (TR.get("reply_only") or "I wrote the answer in the chat.")
       and call.spoken_reply("| a | b |\n|---|---|\n| 1 | 2 |", "en-US") == "I wrote the answer in the chat.",
       "a reply that is only code or a table says the answer is written, in the call's language")
 

@@ -49,7 +49,7 @@ def test_only_old_empty_chats_are_deleted():
     old_empty = make(srv, "old empty", hour + 60)
     fresh_empty = make(srv, "fresh empty", hour - 600)
     written = make(srv, "written", hour + 60)
-    srv.db.append_event(written, "message.user", {"text": "merhaba"})
+    srv.db.append_event(written, "message.user", {"text": "hello"})
     previewed = make(srv, "previewed", hour + 60, last_preview="from a call")
     pinned = make(srv, "pinned", hour + 60, pinned=1)
     busy = make(srv, "busy", hour + 60)

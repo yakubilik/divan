@@ -23,7 +23,11 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requi
 ```
 
 ema-lightning needs CPython 3.11-3.13, so this venv is separate from the daemon's. `models/` and
-`reference/` are ignored by git; `vectors.json` is committed and `verify.sh` fails if a re-export changes it.
+`reference/` are ignored by git. The Turkish test sentences and `vectors.json` are not in this repository:
+they live in the language pack (`<lang dir>/tr/tts/`, where `<lang dir>` is `$DIVAN_LANG_DIR` or
+`<DIVAN_HOME>/lang`, see `common.lang_dir`), `vectors.json` is committed in the pack's own repository, and
+`verify.sh` fails if a re-export changes it. Without the pack `export.py`, `check.py` and
+`frontend_fixture.py` say `skip: no language pack` and do nothing.
 
 ## Files
 

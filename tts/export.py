@@ -2,6 +2,9 @@
 
     .venv/bin/python export.py
 
+The sentences are Turkish and come from the language pack (`tr/tts/export.json`,
+see common.lang_dir), and vectors.json is written there too (common.VECTORS).
+
 models/text.onnx     ids [1, L] int64                      -> h [1, L, 224], dur [1, L] (frames per letter)
 models/sound.onnx    h, dur, cw, wstart [1, L]; fw, fp [1, T]; noise [1, 4, T, 64]
                                                            -> latents [1, T, 64]  (the four steps unrolled)
@@ -39,20 +42,7 @@ REPO = "canberkkkkkk/ema-lightning"
 REVISION = "7a6ba1ad216bb2f1da9863f80ac8770a6a807632"  # the published weights these vectors were made from
 OPSET = 15
 
-SENTENCES = [
-    "Tamam, anladım.",
-    "Evet, hemen bakıyorum.",
-    "Merhaba, nasılsın?",
-    "Bunu yarın konuşalım mı?",
-    "Bugün hava çok güzel, yarın da yağmur yağacakmış; toplantı öğleden sonra başlayacak.",
-    "Kodu inceledim, testlerin hepsi geçiyor ama giriş ekranında küçük bir hizalama sorunu var.",
-    "Uygulamayı telefonuna kurdum, bildirimler geliyor ve sesli mesajlar artık düzgün çalıyor.",
-    "Toplantı 14 Mart 2026 Cuma günü saat 15:30'da başlayacak.",
-    "Fatura tutarı 1.250,75 TL, son ödeme tarihi 3 Ekim.",
-    "Sunucu son 5 dakikada %85 yükte çalıştı ve 2,5 GB bellek kullandı.",
-    "Dr. Ayşe Hanım ikinci kattaki 205 numaralı odada sizi bekliyor.",
-    "1999 yılının 17 Ağustos gecesi saat 03:02'de büyük bir deprem oldu.",
-]
+SENTENCES = common.pack("export").get("sentences") or []
 SEED = 1000  # sentence i uses seed SEED + i
 
 
@@ -208,6 +198,9 @@ def lift_constants(path):
 
 
 def main():
+    if not SENTENCES:
+        print("skip: no language pack")
+        return 0
     torch.set_num_threads(1)  # repeatable reference audio
     common.MODELS.mkdir(exist_ok=True)
     common.REFERENCE.mkdir(exist_ok=True)

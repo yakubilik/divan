@@ -2,8 +2,8 @@
 # Rebuild everything from the published weights and check it: ./verify.sh (exits non-zero on any mismatch).
 #
 # 1. a Python 3.12 venv in tts/.venv (made with uv if missing) with the pinned requirements
-# 2. export.py: the three ONNX files, the reference audio and vectors.json
-# 3. vectors.json must come out byte-identical to the committed one
+# 2. export.py: the three ONNX files, the reference audio and vectors.json (in the language pack)
+# 3. vectors.json must come out byte-identical to the one committed in the pack's repository
 # 4. check.py: operators, CPU-only loading, ONNX vs PyTorch for every sentence, real-time factor
 # 5. the README's size table matches the files; nothing generated is tracked; no tracked file over 5 MB
 set -eu
@@ -17,7 +17,9 @@ uv pip install --python "$PY" -q -r requirements.txt
 
 "$PY" export.py
 
-git diff --exit-code -- vectors.json || { echo "FAIL vectors.json changed on re-export"; exit 1; }
+VECTORS="$("$PY" -c 'import common; print(common.VECTORS)')"
+[ -f "$VECTORS" ] || { echo "FAIL no language pack: $VECTORS"; exit 1; }
+git -C "$(dirname "$VECTORS")" diff --exit-code -- "$VECTORS" || { echo "FAIL vectors.json changed on re-export"; exit 1; }
 
 # A process tree in macOS's background band (priority 4, e.g. under a launchd agent) only runs on the
 # efficiency cores, which are 5-6x slower and say nothing about this Mac's CPU. Then the check runs as a

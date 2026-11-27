@@ -115,9 +115,7 @@ def test_nothing_is_served_without_a_pass_on_any_door():
 
 def test_a_pass_says_whose_it_is():
     assert gw.holder(KEY, gw.mint(KEY, "Bedirhan", now=1000), now=1001) == "Bedirhan"
-    # audit: language-data — a Turkish name with letters outside ASCII, carried whole
-    assert gw.holder(KEY, gw.mint(KEY, "Işıl Ö", now=1000), now=1001) == "Işıl Ö"
-    # audit: end-language-data
+    assert gw.holder(KEY, gw.mint(KEY, "Zo\u00eb \u00c5sa", now=1000), now=1001) == "Zo\u00eb \u00c5sa"  # carried whole
     assert gw.holder(KEY, gw.mint(KEY, None, now=1000), now=1001) == ""
     exp, who, sig = gw.mint(KEY, "Bedirhan", now=1000).split(".")
     other = "Yakup".encode().hex()
@@ -145,9 +143,8 @@ def test_each_person_is_signed_in_as_themselves_and_nobody_else():
 
 def test_session_names_are_keychain_safe():
     assert gw.session_name("Yakup") == "plane-session-yakup"
-    # audit: language-data — the Turkish letters the keychain name folds to ASCII
-    assert gw.session_name("İlkay Şen") == "plane-session-ilkay-sen"
-    # audit: end-language-data
+    # The dotted capital I, the dotless small i and the s cedilla fold to ASCII.
+    assert gw.session_name("\u0130la \u0131\u015f") == "plane-session-ila-is"
 
 
 def test_only_an_email_reaches_planes_shell():
@@ -205,6 +202,17 @@ def test_a_create_is_refused_before_it_reaches_plane():
     asyncio.run(gate(scope, receive, send))
     assert sent[0]["status"] == 400 and not asked
     assert gw.BOT in j.loads(sent[1]["body"])["error"]
+
+
+def test_the_labels_are_the_ones_config_names():
+    import json as j
+    gate = gw.PlaneGateway("http://thinkpad:8090/", KEY, [], labels=("agents", "people"))
+    gate._label_cache["skola"] = ({"l-a": "Agents", "l-b": gw.BOT}, 10 ** 12)
+    run = lambda ids: asyncio.run(gate._unowned("skola", j.dumps({"label_ids": ids}).encode(), {}))
+    assert run(["l-a"]) is None
+    assert run(["l-b"]) == gw.must_say_who("agents", "people") and "people" in run(["l-b"])
+    page = gw.with_lock("<head></head>", "agents", "people")
+    assert '["agents", "people"]' in page and gw.BOT not in page
 
 
 def test_the_page_lock_is_in_every_plane_page_before_plane_runs():

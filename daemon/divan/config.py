@@ -267,7 +267,9 @@ class Config:
     # machine's Plane answers (`http://thinkpad:8090`), `workspace` its slug,
     # and `projects` maps a product's slug here to its Plane project id. A
     # product with no entry opens the workspace's project list; no `url` and
-    # there is no board at all. Written by hand.
+    # there is no board at all. `bot_label` and `human_label` name the board's
+    # two who-does-it labels (plane_sync.labels; `bot` and `human` when
+    # unset). Written by hand.
     plane: dict = field(default_factory=dict)
 
     # ── persistence ────────────────────────────────────────────────────────

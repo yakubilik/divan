@@ -22,7 +22,18 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Callable
 
+from . import lang
+
 log = logging.getLogger("rac.secrets")
+
+# The Turkish words a password is said with (tr/daemon/secrets.json), as
+# regular expressions; without the pack only the English ones are known.
+_TR = lang.load("tr", "daemon/secrets")
+_TR_APP_WORDS = "".join(p + "|" for p in _TR.get("app_password_words") or ())
+_TR_SAID = (str(_TR["password_said"]) + "|") if _TR.get("password_said") else ""
+# Letters a word may be made of beside ASCII: the Turkish capitals and small
+# letters with marks (C, G, I, O, S, U), written as escapes.
+_TR_LETTERS = "\u00c7\u011e\u0130\u00d6\u015e\u00dc\u00e7\u011f\u0131\u00f6\u015f\u00fc"
 
 SERVICE_PREFIX = "rac-secret-"
 ACCOUNT = "divan"
@@ -80,22 +91,23 @@ FAMILIES: list[Family] = [
         r"[A-Za-z0-9_\-]*)['\"]?\s*[=:]\s*['\"]?(?P<v>[A-Za-z0-9_\-/+=.]{12,})"), mixed=True),
     # An app password (Google, Apple) is four groups of four letters. The shape
     # alone is four short words, so it counts only with the words that come
-    # with it close by: "app password", "uygulama şifresi", "gmail", "şifre".
+    # with it close by: "app password", "gmail", and the Turkish words for an
+    # app password and a password (from the pack).
     Family("apppassword", re.compile(
-        r"(?i)(?:app(?:lication)?[ \-]?(?:specific )?passw(?:or)?d|uygulama şifre\w*|app şifre\w*|gmail|"
-        r"şifre\w*|parola\w*|passw(?:or)?d)[^\n]{0,40}?(?<![a-z])(?P<v>[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}|[a-z]{16})(?![a-z])")),
-    # A password said in a sentence, in Turkish or English: "şifrem: …",
-    # "mailin şifresi … bunu kullan", "password is …", `pass=…`. The word and the
-    # value are kept apart by `:`, `=` or "is"/"şu" — a Turkish possessive by a
+        r"(?i)(?:app(?:lication)?[ \-]?(?:specific )?passw(?:or)?d|" + _TR_APP_WORDS + r"gmail|"
+        r"passw(?:or)?d)[^\n]{0,40}?(?<![a-z])(?P<v>[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}|[a-z]{16})(?![a-z])")),
+    # A password said in a sentence, in Turkish (the pack's words) or English:
+    # "password is …", `pass=…`. The word and the value are kept apart by `:`,
+    # `=` or "is" (or its Turkish equivalent) — a Turkish possessive by a
     # space is enough — and never by a hyphen: `password-change-keeps-…` is a
     # branch, `find-generic-password` a command, `1Password` a product. On
     # 5 Nov 2026 the scrub had turned some ten thousand of those into
     # placeholders. The value itself must pass `_password_like`; a full stop or
     # comma after it is the sentence's.
     Family("password", re.compile(
-        r"(?i)(?<![A-Za-z0-9ÇĞİÖŞÜçğıöşü\-])"
-        r"(?:(?:şifre(?:m|n|si|miz|niz|leri)?|parola(?:m|n|sı|mız)?)(?:\s*[:=]\s*|\s+(?:(?:şu|şudur)\s+)?)"
-        r"|passw(?:or)?d(?:\s*[:=]\s*|\s+is\s+)"
+        r"(?i)(?<![A-Za-z0-9" + _TR_LETTERS + r"\-])"
+        r"(?:" + _TR_SAID +
+        r"passw(?:or)?d(?:\s*[:=]\s*|\s+is\s+)"
         r"|(?:pwd|pw|pass)\s*[:=]\s*)"
         r"['\"]?(?P<v>[^\s'\"]{6,}?)['\"]?(?=[.,;:)]*(?:\s|$))"), check=_password_like),
 ]

@@ -15,12 +15,11 @@ file, run a command, or look anything up. If a fact is not in the snapshot it
 cannot be produced, so "I don't know" is the only thing left to say — which is
 the correct answer to a status question about a session that does not exist.
 
-A call is answered in the language it was made in, and this is the only module
-in the project that holds words of a language other than English. They are data,
-not prose: a detector cannot recognise Turkish without Turkish in it, and the
-honorific and slang filters below cannot mirror or strip a word they do not
-name. Everything a contributor reads here — comments, docstrings, log lines — is
-English.
+A call is answered in the language it was made in. The Turkish words that
+needs (the detector's function words, the honorific, the slang filter, the
+fixed lines) are not in the code: they come from the language pack
+`tr/daemon/call.json` (divan/lang.py). Without the pack a call is English only:
+Turkish letters are still recognised, nothing Turkish is said.
 """
 from __future__ import annotations
 
@@ -46,10 +45,14 @@ from claude_agent_sdk import (
     tool,
 )
 
+from . import lang
 from .config import CONFIG_DIR, machine_home
 from .providers.claude import ACCOUNT_ENV, MODEL_ALIASES
 
 log = logging.getLogger("rac.call")
+
+# The Turkish half of this module (see the docstring); {} without the pack.
+_TR = lang.load("tr", "daemon/call")
 
 # Sonnet: the general call is a conversation with Hermes about the whole
 # computer, and Haiku's answers read as a status line rather than a person.
@@ -161,14 +164,16 @@ Manner: you are Hermes, the same agent the caller talks to in chats, now on the 
 phone. A colleague who already has the context and has somewhere else to be — \
 not a butler, not customer service.
 
-- No "sir", no "efendim", no title of any kind. Talk to them the way they talk \
-to you.
-- Mirror their language and register. If they speak casual Turkish ("kanka", \
-"naber"), answer in casual Turkish; if they are brief, be brief. Developer words \
-like commit, branch, build and deploy stay English inside a Turkish sentence.
+- No "sir", no title of any kind. Talk to them the way they talk to you.
+- Mirror their language and register. If they speak casually, answer casually; \
+if they are brief, be brief. Developer words like commit, branch, build and \
+deploy stay English inside a sentence in another language.
 - Lead with the answer. If it is no, the first word is no.
 - Bad news first, plainly. Say a thing once.
 - No enthusiasm, no praise, no restating the question, no offer of more help."""
+# The language pack may carry its own version, with examples in the caller's
+# language; it replaces the English one whole.
+MANNER_HERMES = _TR.get("manner_hermes") or MANNER_HERMES
 
 
 def manner(hermes: bool = False) -> str:
@@ -387,23 +392,28 @@ def clip(text: str) -> str:
 #
 # Letters first — but only the ones English does not have. Turkish's dotless
 # capital is the same character as an English "I", so putting it in this class
-# made "I can only tell you..." look Turkish and left "efendim" standing in an
-# English sentence. The lower-case dotless ı and the dotted capital İ are safe;
-# ü, ö and ç are not English either.
-#
-# Short answers can carry none of those ("Bir şey yok" has ş, but "Hayir yok"
-# typed without accents has nothing), so a handful of function words no English
-# sentence contains stand in as the second signal.
-_TURKISH_LETTERS = re.compile(r"[ışğİŞĞüöç]")
-_TURKISH_WORDS = re.compile(
-    r"\b(bir|bu|şu|var|yok|ne|için|değil|ama|çok|hiç|hiçbir|şey|oturum|"
-    r"çalışıyor|bekliyor|hayır|evet|dakika|saat|önce|şimdi|beş|dört|üç|iki)\b", re.I)
+# made "I can only tell you..." look Turkish and left the Turkish honorific
+# standing in an English sentence. The lower-case dotless i and the dotted
+# capital I are safe; u, o and c with their marks are not English either.
+# Written as escapes: dotless i, s cedilla, g breve, dotted capital I, capital
+# S cedilla, capital G breve, u and o diaeresis, c cedilla.
+_TURKISH_LETTERS = re.compile("[\u0131\u015f\u011f\u0130\u015e\u011e\u00fc\u00f6\u00e7]")
+# Short answers can carry none of those letters (a "no" typed without accents
+# has nothing), so a handful of function words no English sentence contains
+# stand in as the second signal. They come from the pack.
+_TURKISH_WORDS = (re.compile(r"\b(" + "|".join(map(re.escape, _TR["words"])) + r")\b", re.I)
+                  if _TR.get("words") else None)
 
 
 def _is_turkish(text: str) -> bool:
-    return bool(_TURKISH_LETTERS.search(text) or _TURKISH_WORDS.search(text))
+    return bool(_TURKISH_LETTERS.search(text)
+                or (_TURKISH_WORDS is not None and _TURKISH_WORDS.search(text)))
+
+
 _SIR = re.compile(r"\bsir\b", re.I)
-_EFENDIM = re.compile(r"\befendim\b", re.I)
+# The honorific a Turkish answer uses in place of "sir", from the pack.
+_HONORIFIC = str(_TR.get("honorific") or "")
+_HONORIFIC_RE = re.compile(rf"\b{re.escape(_HONORIFIC)}\b", re.I) if _HONORIFIC else None
 
 
 # Chat previews in the snapshot are written the way the user and the assistant
@@ -411,11 +421,15 @@ _EFENDIM = re.compile(r"\befendim\b", re.I)
 # model reads several of them before every answer and copies the register — a
 # piece of Turkish slang once arrived in the middle of an English sentence about
 # starting tests. Telling it not to borrow the voice of its own evidence works
-# most of the time, and most of the time is not what this is for.
-_SLANG = re.compile(r"[,\s]*\b(kanka|olum|oğlum|abi|reis|moruk|birader)\b", re.I)
+# most of the time, and most of the time is not what this is for. The words
+# are the pack's; without it there is nothing to strip.
+_SLANG = (re.compile(r"[,\s]*\b(" + "|".join(map(re.escape, _TR["slang"])) + r")\b", re.I)
+          if _TR.get("slang") else None)
 
 
 def strip_slang(text: str) -> str:
+    if _SLANG is None:
+        return text
     out = _SLANG.sub("", text)
     return re.sub(r"\s+([.,!?])", r"\1", out).strip()
 
@@ -424,15 +438,17 @@ def fix_address(text: str) -> str:
     """Make the honorific match the language it was said in.
 
     The default manner uses no title, but a `concierge.md` may ask for one:
-    "sir" in an English answer, "efendim" in a Turkish one. A prompt that said
-    so three separate ways still produced "No, efendim" in English about a
-    third of the time — a written rule did not hold and a line of code did.
-    The model chooses the word; this only ensures it is in the language of the
-    sentence around it.
+    "sir" in an English answer, the Turkish honorific (from the pack) in a
+    Turkish one. A prompt that said so three separate ways still produced the
+    Turkish word in English answers about a third of the time — a written rule
+    did not hold and a line of code did. The model chooses the word; this only
+    ensures it is in the language of the sentence around it.
     """
+    if _HONORIFIC_RE is None:
+        return text
     if _is_turkish(text):
-        return _SIR.sub("efendim", text)
-    return _EFENDIM.sub("sir", text)
+        return _SIR.sub(_HONORIFIC, text)
+    return _HONORIFIC_RE.sub("sir", text)
 
 
 def speakable(text: str, hermes: bool = False) -> str:
@@ -440,7 +456,7 @@ def speakable(text: str, hermes: bool = False) -> str:
 
     The house strips slang and makes its honorific match the language. Hermes
     has no honorific to fix, and the caller's own register is the register it
-    is asked to answer in, so a Turkish "kanka" stays. Slang that turns up in
+    is asked to answer in, so Turkish slang in a Turkish answer stays. Slang that turns up in
     an English sentence is still the snapshot talking, not the caller, and is
     still dropped.
     """
@@ -651,16 +667,17 @@ _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*?)\s*$", re.M)
 _HOLE = "\x00"
 
 _REPLY_LINES = {
-    "tr": {"rest": "Gerisi sohbette.", "only": "Cevabı sohbete yazdım."},
     "en": {"rest": "The rest is in the chat.", "only": "I wrote the answer in the chat."},
 }
+if isinstance(_TR.get("reply_lines"), dict):
+    _REPLY_LINES["tr"] = {**_REPLY_LINES["en"], **_TR["reply_lines"]}
 
 
 def _reply_lang(text: str, lang: str | None) -> str:
     code = (lang or "").split("-")[0].lower()
     if code in _REPLY_LINES:
         return code
-    return "tr" if _is_turkish(text) else "en"
+    return "tr" if "tr" in _REPLY_LINES and _is_turkish(text) else "en"
 
 
 def spoken_reply(text: str | None, lang: str | None = None) -> str:
@@ -821,7 +838,9 @@ class _Limited(Exception):
 # ordinary assistant text, so without this it is read out to the caller.
 _LIMIT_TEXT = re.compile(r"usage limit|hit your limit|limit reached|rate.?limit", re.I)
 
-_DAYS_TR = ("pazartesi", "salı", "çarşamba", "perşembe", "cuma", "cumartesi", "pazar")
+# Monday first, as time.struct_tm.tm_wday counts them.
+_DAYS_TR = tuple(_TR.get("days") or ())
+_NO_ROOM_TR = _TR.get("no_room") if isinstance(_TR.get("no_room"), dict) else {}
 
 
 def _is_limit(text: str | None) -> bool:
@@ -830,17 +849,18 @@ def _is_limit(text: str | None) -> bool:
 
 def no_room(until: float | None, lang: str | None, now: float | None = None) -> str:
     """The one sentence a call says when every account is out of plan."""
-    turkish = (lang or "").split("-")[0].lower() == "tr"
+    turkish = (lang or "").split("-")[0].lower() == "tr" and bool(_NO_ROOM_TR)
     now = now or time.time()
     if not until or until <= now:
-        return ("Hiçbir hesapta kullanım hakkı kalmadı." if turkish
+        return (_NO_ROOM_TR.get("none", "") if turkish
                 else "No account has any plan left right now.")
     then = time.localtime(until)
     clock = time.strftime("%H:%M", then)
     gap = (date.fromtimestamp(until) - date.fromtimestamp(now)).days
-    if turkish:
-        day = "" if gap <= 0 else "yarın " if gap == 1 else _DAYS_TR[then.tm_wday] + " "
-        return f"Hiçbir hesapta kullanım hakkı kalmadı, en erken sıfırlanma {day}saat {clock}."
+    if turkish and len(_DAYS_TR) == 7:
+        day = ("" if gap <= 0 else _NO_ROOM_TR.get("tomorrow", "") if gap == 1
+               else _DAYS_TR[then.tm_wday] + " ")
+        return _NO_ROOM_TR.get("until", "").format(day=day, clock=clock)
     day = "" if gap <= 0 else "tomorrow " if gap == 1 else "on " + time.strftime("%A", then) + " "
     return f"No account has any plan left, the earliest one resets {day}at {clock}."
 

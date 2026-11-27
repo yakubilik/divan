@@ -202,9 +202,7 @@ def test_projectless_and_ticketless_share_the_general_chat(world):
     notify(conn, None, "limit", "⏸ paused")             # asks nothing: no chat
     asyncio.run(srv._follow_pass(start))
     creates, sends = named(calls, "chat.create"), named(calls, "chat.send")
-    # audit: language-data — the general queue chat's title, as the daemon names it
-    assert len(creates) == 1 and creates[0]["title"] == "Ustabaşı"
-    # audit: end-language-data
+    assert len(creates) == 1 and creates[0]["title"] == srv.NOTICE_GENERAL
     assert len(sends) == 2 and sends[0]["chat_id"] == sends[1]["chat_id"]
     assert srv.db.get_chat(sends[0]["chat_id"])["project_set"] == 1   # Unfiled, by hand
 

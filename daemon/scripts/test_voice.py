@@ -15,6 +15,9 @@ way a microphone does.
 The fixtures are the bench's (`voice_bench/make_fixtures.py`, synthetic Turkish
 from the Mac's own voice; nothing recorded from a person). Without `say` (CI on
 Linux) the same scenarios are rebuilt as level-only audio with the same timing.
+The Turkish scenarios and replies come from the language pack (divan/lang.py);
+without it the session is held in English, on the bench's English scenarios as
+level-only audio, and `--real` is refused.
 
 By default the two things that need a model are stand-ins: the recogniser
 replays each fixture's script for whatever stretch of audio it is given, and
@@ -49,6 +52,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = Path(__file__).resolve().parent / "voice_bench"
 TMP = Path(tempfile.mkdtemp(prefix="rac-voice-"))
+# The language pack stays where the real home keeps it (divan/lang.py).
+os.environ.setdefault("DIVAN_LANG_DIR", str(Path(os.environ.get("DIVAN_HOME") or Path.home() / ".divan")
+                                            .expanduser() / "lang"))
 os.environ["DIVAN_HOME"] = str(TMP / "rac")
 os.environ["USTABASI_STATE_DIR"] = str(TMP / "nowhere")
 sys.path.insert(0, str(ROOT))
@@ -57,12 +63,22 @@ sys.path.insert(0, str(BENCH))
 import bench                                                    # noqa: E402
 import websockets                                               # noqa: E402
 
+from divan import lang                                # noqa: E402
 from divan import voice                               # noqa: E402
 from divan.config import Config                       # noqa: E402
 
 RATE = 16000
 CHUNK = RATE // 10                    # 100 ms per voice.audio
 failures: list[str] = []
+
+# The call's language: Turkish when the pack has the session's lines, the
+# scenarios and this test's replies; English otherwise.
+TR = lang.load("tr", "tests/daemon/test_voice")
+LANG = "tr" if TR and "tr" in voice.LINES and bench.scenarios("tr") else "en"
+LOCALE = {"tr": "tr-TR", "en": "en-US"}[LANG]
+LINES = voice.LINES[LANG]
+if LANG == "en":
+    print("skip: no language pack (the Turkish session; held in English instead)")
 
 
 def check(ok: bool, label: str, detail: str = "") -> None:
@@ -75,7 +91,7 @@ def check(ok: bool, label: str, detail: str = "") -> None:
 def synthesize(out: Path) -> None:
     """The scenarios as level-only audio: a voiced buzz at about -20 dBFS where
     the words are, at the bench's speaking rate, over the same noise floor."""
-    cfg = json.loads((BENCH / "scenarios.json").read_text())
+    cfg = bench.scenarios(LANG)
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(7)
 
@@ -132,11 +148,11 @@ def synthesize(out: Path) -> None:
 
 
 def fixtures(where: Path, synthetic: bool = False) -> dict:
-    if synthetic:
+    if synthetic or LANG != "tr":
         where = TMP / "synthetic"
         synthesize(where)
     elif not (where / "manifest.json").exists():
-        has_voice = shutil.which("say") and "Yelda" in subprocess.run(
+        has_voice = shutil.which("say") and bench.scenarios(LANG)["voice"] in subprocess.run(
             ["say", "-v", "?"], capture_output=True, text=True).stdout
         if has_voice:
             subprocess.run([sys.executable, str(BENCH / "make_fixtures.py"), "--out", str(where)], check=True,
@@ -171,9 +187,20 @@ class Replay:
         return " ".join(said)
 
 
-REQUEST = re.compile(r"çalıştır\b|bitir\b|düzelt\b|deploy et|merge et|kontrol eder misin|bakar mısın|gönder\b", re.I)
-SHORT = ["Şu an ", "bir sohbet ", "çalışıyor, ", "biri de onay bekliyor. ", "Başka bir şey yok. "]
-LONG = [f"Bu uzun cevabın {n}. cümlesi, yavaş yavaş okunuyor. " for n in range(1, 13)]
+# What the scripted layer says, in the call's language.
+SCRIPT = {
+    "request": r"\brun\b|\bfinish\b|\bfix\b|\bdeploy\b|\bmerge\b|could you check|take a look|\bsend\b",
+    "short": ["Right now ", "one chat ", "is running, ", "another is waiting for approval. ", "Nothing else. "],
+    "long": "This is sentence {n} of a long answer, read out slowly. ",
+    "claim": ["OK, I ran the tests. ", "One chat is running right now. "],
+    "claim_kept": "One chat is running right now.",
+    "promise": "I'm looking at it now. ",
+}
+if LANG == "tr":
+    SCRIPT.update({k: TR[k] for k in SCRIPT if k in TR})
+REQUEST = re.compile(SCRIPT["request"], re.I)
+SHORT = SCRIPT["short"]
+LONG = [SCRIPT["long"].format(n=n) for n in range(1, 13)]
 
 
 class Scripted:
@@ -200,11 +227,11 @@ class Scripted:
                 intend("start", {"project": "app", "instruction": text})
             return
         if self.mode == "claim":
-            for piece in ("Tamam, testleri çalıştırdım. ", "Şu an bir sohbet çalışıyor. "):
+            for piece in SCRIPT["claim"]:
                 yield piece
             return
         if self.mode == "promise":
-            yield "Hemen bakıyorum. "
+            yield SCRIPT["promise"]
             return
         for piece in (LONG if self.mode == "slow" else SHORT):
             yield piece
@@ -285,7 +312,7 @@ class Caller:
         TIMELINES[key] = []
 
     async def start(self, **data):
-        r = await self.phone.call("voice.start", {"lang": "tr-TR", "sample_rate": RATE,
+        r = await self.phone.call("voice.start", {"lang": LOCALE, "sample_rate": RATE,
                                                   "client": {"build": "test", "device": self.key}, **data})
         self.sid = r["session_id"]
         return r
@@ -331,7 +358,8 @@ def silence(seconds):
 
 
 def norm(text):
-    return " ".join(bench.normalize_tr(text))
+    # Turkish casing only for Turkish: an English "I" is not a dotless i.
+    return " ".join(bench.normalize_tr(text if LANG == "tr" else text.lower()))
 
 
 def no_stale_audio(events: list[dict]) -> str | None:
@@ -420,7 +448,7 @@ async def connect(port, token):
     ws = await websockets.connect(f"ws://127.0.0.1:{port}/ws?token={token}", max_size=8 * 1024 * 1024,
                                   open_timeout=60)
     phone = Phone(ws)
-    await phone.call("hello", {"device_name": "test", "lang": "tr"})
+    await phone.call("hello", {"device_name": "test", "lang": LANG})
     return phone
 
 
@@ -558,7 +586,7 @@ async def chat_bridge(phone: Phone, fx: dict, projects: Path) -> None:
     await c.quiet(0.5)
     ev = phone.voice(c.sid)
     progress = [e for e in ev if e["event"] == "voice.say" and e["data"]["kind"] == "progress"]
-    check(len(progress) == 1 and progress[0]["data"]["text"] == voice.LINES["tr"]["tool"]["Bash"],
+    check(len(progress) == 1 and progress[0]["data"]["text"] == LINES["tool"]["Bash"],
           "one progress line, from the agent's real tool call", str([e["data"]["text"] for e in progress]))
     before_done = [e for e in ev if e["event"] == "voice.say" and e["_at"] < done["_at"]
                    and "README" in e["data"]["text"]]
@@ -594,7 +622,7 @@ async def chat_bridge(phone: Phone, fx: dict, projects: Path) -> None:
         check(len(users) == 1 and norm(users[0]) == norm(fx["long-request"]["reference"]),
               "carrying the instruction once", str(users))
     said = [e["data"]["text"] for e in phone.voice(g.sid, "voice.say") if e["data"]["turn_id"] == turn["data"]["turn_id"]]
-    check(said and said[-1] == voice.LINES["tr"]["started"].format(where="app"),
+    check(said and said[-1] == LINES["started"].format(where="app"),
           "and what is said is the bridge's own line, after it happened", str(said))
     await phone.call("voice.stop", {"session_id": g.sid})
 
@@ -613,7 +641,8 @@ async def acks(phone: Phone, fx: dict) -> None:
         says = [e["data"] for e in phone.voice(c.sid, "voice.say") if e["data"]["text"]]
         turns = sorted({d["turn_id"] for d in says})
         per = [[(d["kind"], d["text"]) for d in says if d["turn_id"] == t] for t in turns]
-        check(len(per) == 2 and all(len(p) == 2 and p[0][0] == "ack" and p[1][1].startswith("app ") for p in per),
+        check(len(per) == 2 and all(len(p) == 2 and p[0][0] == "ack"
+                                       and p[1][1] == LINES["started"].format(where="app") for p in per),
               "a slow action gets one acknowledgement, then the bridge's own line", str(per))
         check(len(per) == 2 and per[0][0][1] != per[1][0][1], "the next acknowledgement is a different line",
               str([p[0] for p in per]))
@@ -645,7 +674,7 @@ async def errors(phone: Phone, fx: dict, port, token) -> None:
         errs = [e["data"]["code"] for e in ev if e["event"] == "voice.error"]
         said = [e["data"]["text"] for e in ev if e["event"] == "voice.say"]
         states = [e["data"]["state"] for e in ev if e["event"] == "voice.state"]
-        check(errs and set(errs) == {code} and voice.LINES["tr"][line] in said and states[-1] == "listening",
+        check(errs and set(errs) == {code} and LINES[line] in said and states[-1] == "listening",
               f"{mode}: {code}, a spoken notice and back to listening", f"{errs} {said} {states}")
         await phone.call("voice.stop", {"session_id": c.sid})
 
@@ -662,7 +691,7 @@ async def errors(phone: Phone, fx: dict, port, token) -> None:
     await c.start(client={"build": "test", "device": "claim", "mode": "claim"})
     await c.say(fx["short-greeting"])
     said = [e["data"]["text"] for e in phone.voice(c.sid, "voice.say") if e["data"]["text"]]
-    check(said == ["Şu an bir sohbet çalışıyor."],
+    check(said == [SCRIPT["claim_kept"]],
           "a reply that claims an action nobody took has that sentence dropped", str(said))
     await phone.call("voice.stop", {"session_id": c.sid})
 
@@ -670,7 +699,7 @@ async def errors(phone: Phone, fx: dict, port, token) -> None:
     await c.start(client={"build": "test", "device": "promise", "mode": "promise"})
     await c.say(fx["short-greeting"])
     said = [e["data"]["text"] for e in phone.voice(c.sid, "voice.say") if e["data"]["text"]]
-    check(said == [voice.LINES["tr"]["offer"]],
+    check(said == [LINES["offer"]],
           "a reply that was only a dropped promise is not silence: the offer is said instead", str(said))
     await phone.call("voice.stop", {"session_id": c.sid})
 
@@ -861,25 +890,24 @@ async def main() -> None:
     a = ap.parse_args()
     fx = fixtures(Path(a.fixtures), a.synthetic)
     print("pieces and claims")
-    check(voice.cut("Şu an iki sohbet çalışıyor, biri onay bekliyor. Diğeri", True)
-          == ("Şu an iki sohbet çalışıyor,", "biri onay bekliyor. Diğeri"),
+    check(voice.cut("Right now two chats are running, one is waiting. The other", True)
+          == ("Right now two chats are running,", "one is waiting. The other"),
           "the first piece is the first clause of three words or more")
-    check(voice.cut("biri onay bekliyor, diğeri boşta. Son", False) == ("biri onay bekliyor, diğeri boşta.", "Son"),
+    check(voice.cut("one is waiting, the other is idle. Last", False) == ("one is waiting, the other is idle.", "Last"),
           "later pieces are whole sentences")
-    check(voice.cut("Toplam 3,5", True) == (None, "Toplam 3,5"), "a mark with no space after it is not an end yet")
-    check(all(voice.claims_action(t) for t in ("Testleri çalıştırdım.", "Sohbete ilettim.", "I've sent it.",
-                                                "Hangisini deploy edeyim?", "check edeyim", "Build ettim."))
-          and not any(voice.claims_action(t) for t in ("Testler bitti mi?", "İki sohbet çalışıyor.",
-                                                        "It is running the tests.", "Merak ediyorum.",
-                                                        "Test edildi mi?")),
+    check(voice.cut("Total 3,5", True) == (None, "Total 3,5"), "a mark with no space after it is not an end yet")
+    check(all(voice.claims_action(t) for t in ("I've sent it.", "I ran the tests.", "I'll check it."))
+          and not any(voice.claims_action(t) for t in ("It is running the tests.", "Are the tests done?")),
           "the fast layer's own claims of having acted are recognised, statuses are not")
-    check(all(voice.is_request(t) for t in ("Testleri çalıştır. Hayır dur, önce derlemeyi bitir.",
-                                             "Giriş ekranındaki hatayı bir kontrol eder misin?",
-                                             "Ödeme sayfasına bir bakar mısın?", "README dosyasını düzeltin."))
-          and not any(voice.is_request(t) for t in ("Testler bitti mi?", "Selam, nasılsın?", "Derleme bitti mi?",
-                                                     "Çalıştırdın mı testleri?", "Bakalım ne olacak.",
-                                                     "Test ettin mi?")),
-          "on a chat call a plain Turkish request is recognised as one, a question is not")
+    if LANG == "tr":
+        for text, first, want in TR["cut"]:
+            check(voice.cut(text, first) == tuple(want), f"a Turkish piece is cut where it ends: {text}")
+        check(all(voice.claims_action(t) for t in TR["claims"])
+              and not any(voice.claims_action(t) for t in TR["not_claims"]),
+              "the same in Turkish, and in English verbs made Turkish")
+        check(all(voice.is_request(t) for t in TR["requests"])
+              and not any(voice.is_request(t) for t in TR["not_requests"]),
+              "on a chat call a plain Turkish request is recognised as one, a question is not")
     check(voice.HANGING == bench.HANGING and (voice.REPLY_MS, voice.UNFINISHED_MS, voice.COMMIT_MS)
           == (bench.Plan().reply_ms, bench.Plan().unfinished_ms, bench.Plan().commit_ms),
           "the daemon's turn rule is the one the bench measured")
@@ -889,6 +917,8 @@ async def main() -> None:
         if a.real:
             if not a.account_home:
                 raise SystemExit("--real needs --account-home")
+            if LANG != "tr":
+                raise SystemExit("--real measures the Turkish calls and needs the language pack")
             await measured(phone, fx, a.rounds, Path(a.out))
         else:
             await replay(port, token, fx)

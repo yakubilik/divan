@@ -37,6 +37,13 @@ if importlib.util.find_spec("tomli_w") is None and not os.environ.get("DIVAN_PYT
             sys.stderr.flush()
             os.execv(str(_py), [str(_py), "-m", "pytest", *sys.argv[1:]])
 
+# The language pack is read where the real home keeps it (divan/lang.py), so
+# the throwaway home below does not take it away; DIVAN_LANG_DIR set by the
+# caller (`DIVAN_LANG_DIR=/nonexistent` for an English-only run) is kept.
+if not os.environ.get("DIVAN_LANG_DIR"):
+    _home = Path(os.environ.get("DIVAN_HOME") or Path.home() / ".divan").expanduser()
+    os.environ["DIVAN_LANG_DIR"] = str(_home / "lang")
+
 os.environ["DIVAN_HOME"] = tempfile.mkdtemp(prefix="divan-pytest-")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

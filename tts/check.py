@@ -89,6 +89,9 @@ def synthesise(run, ids, cw, wstart, noise_for):
 
 
 def main():
+    if not common.VECTORS.exists():
+        print("skip: no language pack")
+        return 0
     failures = check_operators()
     vectors = json.loads(common.VECTORS.read_text())
     run = sessions()

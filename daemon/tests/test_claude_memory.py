@@ -249,9 +249,7 @@ def test_migration_leaves_codex_and_transcripts_alone(pool):
      "-Users-you-projects--ustabasi-wt-581-divan-every"),
     ("/private/var/folders/xz/rj8h30t94h9bgmqhbw5p238r0000gn/T/divan-auth-probe-meh8v1b6",
      "-private-var-folders-xz-rj8h30t94h9bgmqhbw5p238r0000gn-T-divan-auth-probe-meh8v1b6"),
-    # audit: language-data — a non-ASCII letter Claude Code turns into a dash
-    ("/tmp/my_proj dir/çay", "-tmp-my-proj-dir--ay"),
-    # audit: end-language-data
+    ("/tmp/my_proj dir/caf\u00e9", "-tmp-my-proj-dir-caf-"),     # a non-ASCII letter becomes a dash
 ])
 def test_sanitize_matches_claude_code(cwd, name):
     assert cm.sanitize(cwd) == name

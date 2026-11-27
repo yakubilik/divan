@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 from divan.db import DB
+from langpack import tr_data
 
 
 def test_flag_set_and_cleared() -> None:
@@ -27,14 +28,12 @@ def test_flag_set_and_cleared() -> None:
     assert db.create_chat(title="mine")["background"] == 0
 
 
-def test_old_job_chats_found_by_first_message() -> None:
+def _old_job_chats(job_text: str, mine_text: str) -> None:
     path = Path(tempfile.mkdtemp()) / "db.sqlite"
     db = DB(path)
     job = db.create_chat(title="vice")
     mine = db.create_chat(title="mine")
-    # audit: language-data — test data: a job's Turkish opener and a person's Turkish hello
-    texts = ((job["id"], "Vice Anları günlük üretim, 2026-11-26"), (mine["id"], "kanka naber"))
-    # audit: end-language-data
+    texts = ((job["id"], job_text), (mine["id"], mine_text))
     for cid, text in texts:
         db.update_chat(cid, archived=1)
         db._c.execute("INSERT INTO events (chat_id, type, payload, ts) VALUES (?, 'message.user', ?, 0)",
@@ -47,3 +46,12 @@ def test_old_job_chats_found_by_first_message() -> None:
     db = DB(path)
     assert db.get_chat(job["id"])["background"] == 1
     assert db.get_chat(mine["id"])["background"] == 0
+
+
+def test_old_job_chats_found_by_first_message() -> None:
+    _old_job_chats("Job watch: scheduled jobs on this Mac broke overnight", "hello there")
+
+
+def test_old_job_chats_found_by_a_turkish_first_message() -> None:
+    tr = tr_data("test_background_chats")
+    _old_job_chats(tr["job_opener"], tr["hello"])

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Build the live-voice bench's audio from scenarios.json, with the Mac's own voice.
+"""Build the live-voice bench's audio from the call scenarios, with the Mac's own voice.
 
-    python3 daemon/scripts/voice_bench/make_fixtures.py [--out DIR]
+    python3 daemon/scripts/voice_bench/make_fixtures.py [--out DIR] [--lang tr|en]
+
+The Turkish scenarios come from the language pack (bench.scenarios); without it
+nothing is built.
 
 Every segment is spoken by `say` (Turkish voice Yelda, which every Mac has),
 trimmed to where the voice starts and stops, and laid out with the scenario's
@@ -28,7 +31,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from bench import RATE, frame_db, read_wav, write_wav  # noqa: E402
+from bench import RATE, frame_db, read_wav, scenarios, write_wav  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 LEAD_MS = 300        # quiet before the caller starts
@@ -112,8 +115,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="/tmp/divan-voice-bench/fixtures")
     ap.add_argument("--only", action="append", default=[])
+    ap.add_argument("--lang", default="tr", help="tr (the language pack's scenarios) or en")
     a = ap.parse_args()
-    cfg = json.loads((HERE / "scenarios.json").read_text())
+    cfg = scenarios(a.lang)
+    if cfg is None:
+        print("skip: no language pack")
+        return 0
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     entries = []

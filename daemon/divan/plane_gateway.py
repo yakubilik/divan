@@ -73,7 +73,8 @@ _WS_SKIP = _HOP | {
 
 # ── who does it ───────────────────────────────────────────────────────────
 # A new work item must say who does it: the queue's label or the person label
-# (`plane_sync.BOT` and `HUMAN`, named in the board's language). Two layers, so the rule outlives a Plane upgrade:
+# (`plane_sync.labels`, named in the board's language by config.toml's
+# [plane] bot_label and human_label). Two layers, so the rule outlives a Plane upgrade:
 #   - here, on the way through: a create (`POST …/projects/<id>/issues/`)
 #     without either label is answered 400 and never reaches Plane. This reads
 #     Plane's API, not its pages, which is what changes least between releases.
@@ -82,14 +83,16 @@ _WS_SKIP = _HOP | {
 #     If an upgrade moves the form, this layer quietly stops helping and the
 #     first one still holds; `tests/test_plane_gateway.py` pins both.
 CREATE = re.compile(r"^/api/workspaces/([^/]+)/projects/[^/]+/issues/?$")
-MUST_SAY_WHO = f"Who does this? Pick the “{BOT}” or the “{HUMAN}” label first."
+def must_say_who(bot: str = BOT, human: str = HUMAN) -> str:
+    return f"Who does this? Pick the “{bot}” or the “{human}” label first."
 
-LOCK_JS = r"""
+
+MUST_SAY_WHO = must_say_who()
+
+_LOCK_JS = r"""
 (function () {
   if (window.__divanLock) return; window.__divanLock = 1;
-  // audit: language-data — the label names on the Plane board, matched in the page
-  var WHO = ["ustabaşı", "insan"], MSG = %s;
-  // audit: end-language-data
+  var WHO = %s, MSG = %s;
   var names = {}, at = 0;
   function labels(ws) {
     if (Date.now() - at < 60000) return Promise.resolve(names);
@@ -130,12 +133,20 @@ LOCK_JS = r"""
   // and may replace the element an observer was on.
   new MutationObserver(lock).observe(document, { subtree: true, childList: true, characterData: true });
 })();
-""" % json.dumps(MUST_SAY_WHO)
+"""
 
 
-def with_lock(page: str) -> str:
+def lock_js(bot: str = BOT, human: str = HUMAN) -> str:
+    """The page's lock, for these two label names."""
+    return _LOCK_JS % (json.dumps([bot.lower(), human.lower()]), json.dumps(must_say_who(bot, human)))
+
+
+LOCK_JS = lock_js()
+
+
+def with_lock(page: str, bot: str = BOT, human: str = HUMAN) -> str:
     """A Plane page with the lock in it, before anything of Plane's runs."""
-    tag = f"<script data-divan-lock>{LOCK_JS}</script>"
+    tag = f"<script data-divan-lock>{lock_js(bot, human)}</script>"
     i = page.find("<head>")
     return page[:i + 6] + tag + page[i + 6:] if i >= 0 else tag + page
 
@@ -194,9 +205,9 @@ def session_name(person: str) -> str:
     """The keychain name a person's Plane session is kept under:
     `rac-secret-plane-session-<person>`, the person folded to a-z0-9-."""
     import unicodedata
-    # audit: language-data — the two Turkish letters NFKD does not fold to ASCII
-    folded = unicodedata.normalize("NFKD", person.replace("ı", "i").replace("İ", "I"))
-    # audit: end-language-data
+    # The dotless small i (U+0131) and the dotted capital I (U+0130) are the
+    # two letters NFKD does not fold to ASCII.
+    folded = unicodedata.normalize("NFKD", person.replace("\u0131", "i").replace("\u0130", "I"))
     slug = re.sub(r"[^a-z0-9]+", "-", folded.encode("ascii", "ignore").decode().lower()).strip("-")
     return f"plane-session-{slug or person.encode().hex()[:40]}"
 
@@ -286,8 +297,11 @@ class PlaneGateway:
     SESSION_AGE_S = 30 * 86400
 
     def __init__(self, upstream: str, key: bytes, ancestors: list[str],
-                 session_for: Callable[[str], str | None] | None = None) -> None:
+                 session_for: Callable[[str], str | None] | None = None,
+                 labels: tuple[str, str] = (BOT, HUMAN)) -> None:
         u = urlsplit(upstream.rstrip("/"))
+        # The queue's label and the person label (plane_sync.labels).
+        self.labels = labels
         # A person's Plane session, or None: read where it is kept (the
         # keychain), each time, so a new sign-in needs no restart.
         self.session_for = session_for or (lambda person: None)
@@ -470,7 +484,7 @@ class PlaneGateway:
                     f"{self.SESSION_COOKIE}={session}; Max-Age={self.SESSION_AGE_S}; Path=/; "
                     f"HttpOnly; SameSite=Lax{secure}").encode("latin-1")))
             if r.headers.get("content-type", "").startswith("text/html") and r.status_code == 200:
-                page = with_lock((await r.aread()).decode("utf-8", "replace")).encode()
+                page = with_lock((await r.aread()).decode("utf-8", "replace"), *self.labels).encode()
                 # A page is never kept: it names the build's assets, and a page
                 # kept from before a patch (ops/plane) keeps the old build.
                 headers = [(k, v) for k, v in headers
@@ -491,7 +505,7 @@ class PlaneGateway:
 
     async def _unowned(self, ws: str, raw: bytes, h: dict[str, str]) -> str | None:
         """Why a new work item may not be made, or None when it may: it must
-        carry the queue's or the person label (plane_sync.BOT, HUMAN)."""
+        carry the queue's or the person label (self.labels)."""
         try:
             ids = [str(x) for x in (json.loads(raw or b"{}").get("label_ids") or [])]
         except (ValueError, AttributeError):
@@ -500,9 +514,9 @@ class PlaneGateway:
         if names is None:
             return None  # cannot tell: Plane decides, the sync bounces it later
         from .plane_sync import who
-        if who([names.get(i, "") for i in ids]):
+        if who([names.get(i, "") for i in ids], *self.labels):
             return None
-        return MUST_SAY_WHO
+        return must_say_who(*self.labels)
 
     async def _label_names(self, ws: str, h: dict[str, str]) -> dict[str, str] | None:
         hit = self._label_cache.get(ws)

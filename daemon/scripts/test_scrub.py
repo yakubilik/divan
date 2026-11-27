@@ -82,10 +82,10 @@ def plant(home: Path, configured: bool = True) -> tuple[DB, Path]:
         (rac / "config.toml").write_text(f'scrub_extra_paths = ["~/{NOTES}"]\n')
     chat = db.create_chat(title="New chat", provider="claude", model="sonnet", effort=None,
                           perm_mode="ask", cwd="/tmp")
-    db.append_event(chat["id"], "message.user", {"text": f"anahtarım {V['db-user']} bunu kullan"})
+    db.append_event(chat["id"], "message.user", {"text": f"my key {V['db-user']} use this"})
     db.append_event(chat["id"], "tool.result", {
         "output": json.dumps({"config": {"api_key": V["db-tool"], "region": "eu"}}, indent=2)})
-    db.append_event(chat["id"], "message.assistant", {"text": "tamam, bir şey yok burada"})
+    db.append_event(chat["id"], "message.assistant", {"text": "okay, nothing here"})
     db._c.execute("UPDATE chats SET last_preview = ? WHERE id = ?", (f"key {V['db-preview']}", chat["id"]))
     db._c.commit()
 
@@ -100,18 +100,18 @@ def plant(home: Path, configured: bool = True) -> tuple[DB, Path]:
              {"type": "image", "source": {"type": "base64", "media_type": "image/png",
                                           "data": "iVBORw0KGgo" + A * 40}}]}},
         {"type": "assistant", "timestamp": "2026-09-03T10:00:00.000Z",
-         "message": {"role": "assistant", "content": [{"type": "text", "text": "Türkçe, sorun yok ✓"}]}},
+         "message": {"role": "assistant", "content": [{"type": "text", "text": "Naïve café, no problem ✓"}]}},
     ])
     tool = account / "s1" / "tool-results" / "out.txt"
     tool.parent.mkdir(parents=True)
-    tool.write_text(f"STRIPE_KEY {V['tool-result']}\nsatır iki\n")
-    jsonl(account / "live.jsonl", [{"type": "user", "message": {"content": f"canlı {LIVE[1]}"}}])
+    tool.write_text(f"STRIPE_KEY {V['tool-result']}\nline two\n")
+    jsonl(account / "live.jsonl", [{"type": "user", "message": {"content": f"live {LIVE[1]}"}}])
 
     jsonl(home / ".codex" / "sessions" / "2026" / "09" / "05" / "rollout-1.jsonl", [
         {"timestamp": "2026-09-05T08:00:00.000Z", "type": "session_meta", "payload": {"cwd": "/tmp"}},
         {"timestamp": "2026-09-05T08:01:00.000Z", "type": "response_item",
          "payload": {"type": "message", "role": "user",
-                     "content": [{"type": "input_text", "text": f"Google anahtarı {V['codex-msg']}"}]}},
+                     "content": [{"type": "input_text", "text": f"Google key {V['codex-msg']}"}]}},
         {"timestamp": "2026-09-05T08:02:00.000Z", "type": "response_item",
          "payload": {"type": "function_call", "name": "shell",
                      "arguments": json.dumps({"command": ["bash", "-lc", f"DB_PASSWORD={V['codex-env']} ./run"]})}},
@@ -123,7 +123,7 @@ def plant(home: Path, configured: bool = True) -> tuple[DB, Path]:
          "message": {"role": "user", "content": f"posthog {V['home-claude']}"}}])
     log = home / NOTES / "2026-09-11.md"
     log.parent.mkdir(parents=True)
-    log.write_text(f"# 11 Eylül\n\n- token yapıştırdı: {V['session-log']}\n")
+    log.write_text(f"# 11 September\n\n- pasted a token: {V['session-log']}\n")
 
     for p in home.rglob("*"):
         if p.is_file() and p.name != "live.jsonl":
@@ -296,13 +296,13 @@ def main() -> int:
             "SELECT payload FROM events ORDER BY seq")]
         inner = json.loads(rows[1]["output"])
         check(services["db-user"] in rows[0]["text"] and services["db-tool"] in inner["config"]["api_key"]
-              and inner["config"]["region"] == "eu" and rows[2]["text"] == "tamam, bir şey yok burada",
+              and inner["config"]["region"] == "eu" and rows[2]["text"] == "okay, nothing here",
               "the events say where each key went and keep everything else")
         check(db.list_chats()[0]["title"] == "New chat", "the daemon's own connection still reads the database")
         claude = [json.loads(line) for line in
                   (home / ".divan/accounts/claude-abc123/projects/-Users-x-proj/s1.jsonl").read_text().splitlines()]
         check(claude[1]["message"]["content"][1]["source"]["data"].startswith("iVBORw0KGgo")
-              and claude[2]["message"]["content"][0]["text"] == "Türkçe, sorun yok ✓",
+              and claude[2]["message"]["content"][0]["text"] == "Naïve café, no problem ✓",
               "an inline image and plain text come back as they were")
         check(live.read_bytes() == live_before and LIVE[1].encode() in live_before,
               "the live file is left untouched")
@@ -328,7 +328,7 @@ def main() -> int:
         check(snapshot(home) == before and not kc2.items, "a clean tree is left alone")
         check(all(s in text for s in services.values()), "the report still lists what earlier runs found")
         later = "re_" + "Late1234_" + A[:24]
-        db.append_event(db.list_chats()[0]["id"], "message.user", {"text": f"yeni {later}"})
+        db.append_event(db.list_chats()[0]["id"], "message.user", {"text": f"new {later}"})
         os.utime(live, (OLD, OLD))
         quiet(scrub.main, ["--apply", "--home", str(home)], keychain=kc2)
         check(later.encode() not in b"".join(b for _p, b in tree_bytes(home)) and kc2.items.get(

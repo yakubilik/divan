@@ -6,19 +6,39 @@ can check every judgement the reports rest on. The runners (`make_fixtures.py`,
 `run_baseline.py`, `proof.py`) do the slow, real work and call into this.
 
 Times are milliseconds from the start of the fixture's audio throughout.
+
+The bench speaks and scores Turkish calls. Their words (the scenarios and the
+joining words of the turn rule) come from the language pack (divan/lang.py);
+`scenarios("en")` is an English set kept here for runs without the pack.
 """
 from __future__ import annotations
 
 import array
+import json
 import math
 import re
+import sys
 import unicodedata
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
+if str(HERE.parents[1]) not in sys.path:
+    sys.path.insert(0, str(HERE.parents[1]))            # the daemon, for divan.lang
+
+from divan import lang as _lang  # noqa: E402
+
 RATE = 16000
 FRAME_MS = 20
+
+
+def scenarios(language: str = "tr") -> dict | None:
+    """The call scenarios: the Turkish set from the language pack (None without
+    it), or the English one beside this file."""
+    if language == "en":
+        return json.loads((HERE / "scenarios.en.json").read_text(encoding="utf-8"))
+    return _lang.load(language, "tests/daemon/voice_bench/scenarios") or None
 
 
 # ── audio ────────────────────────────────────────────────────────────────────
@@ -72,10 +92,12 @@ def speech_spans(levels: list[float], threshold_db: float = -45.0, min_speech_ms
 def normalize_tr(text: str) -> list[str]:
     """Words as WER compares them: Turkish lowercase, no punctuation.
 
-    `str.lower()` turns "I" into "i" and "İ" into "i̇" (i + combining dot), both
-    wrong for Turkish, so the two capitals are mapped first. Apostrophes are
-    dropped rather than split on: "build'ini" is one word to a listener."""
-    text = text.replace("I", "ı").replace("İ", "i").lower()
+    `str.lower()` turns the plain capital I into a dotted i and the dotted
+    capital I (U+0130) into i plus a combining dot, both wrong for Turkish, so
+    the two capitals are mapped first (the plain one to the dotless i, U+0131).
+    Apostrophes are dropped rather than split on: a word with an apostrophe
+    suffix is one word to a listener."""
+    text = text.replace("I", "\u0131").replace("\u0130", "i").lower()
     text = unicodedata.normalize("NFC", text)
     text = re.sub(r"[’'`]", "", text)
     text = re.sub(r"[^\w\s]", " ", text)
@@ -161,11 +183,8 @@ def current_endpointer(events: list[tuple[int, str]], silence_ms: int = 800,
 
 # Words a Turkish speaker trails off on when they have not finished. A pause
 # after one of these is a breath in the middle of a sentence, not a turn end.
-HANGING = {
-    "ve", "ama", "fakat", "ancak", "yani", "şey", "şeyi", "şeyde", "için", "de", "da",
-    "ki", "ile", "veya", "ya", "yoksa", "çünkü", "sonra", "önce", "peki", "hani",
-    "bir", "bu", "şu", "o", "eee", "ee", "ıı", "mesela", "aslında", "galiba",
-}
+# The pack's, the same list `divan.voice.HANGING` reads.
+HANGING = set(_lang.load("tr", "daemon/voice").get("hanging") or ())
 
 
 def sounds_unfinished(text: str) -> bool:

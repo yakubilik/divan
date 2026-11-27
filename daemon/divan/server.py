@@ -30,6 +30,7 @@ from .updater import Updater
 from .config import CONFIG_DIR, Config, DB_PATH, SEEN_ADDRS_MAX, UPLOAD_DIR, Device
 from .db import DB
 from . import secret_share
+from . import lang as langmod
 from . import plane_gateway as plane_gw
 from . import accounts as acct
 from . import pool as poolmod
@@ -91,7 +92,6 @@ PUSH_TEXT = {
 # because it is the one push that asks for their hands, not their attention.
 CAPTCHA_PUSH_TEXT = {
     "en": "A captcha is waiting for you: {where}",
-    "tr": "Bir captcha seni bekliyor: {where}",
 }
 
 TUNNEL_PUSH_TEXT = {
@@ -99,11 +99,14 @@ TUNNEL_PUSH_TEXT = {
            "new_address_as": "Tunnel: {name} ({email}) connected from a new address, {addr}",
            "locked": "Tunnel: {addr} is locked out for 10 minutes after {n} wrong tokens."
                      " To lift it now, on the computer: divan unlock {addr}"},
-    "tr": {"new_address": "Tunnel: {name} yeni bir adresten bağlandı, {addr}",
-           "new_address_as": "Tunnel: {name} ({email}) yeni bir adresten bağlandı, {addr}",
-           "locked": "Tunnel: {addr} {n} yanlış token'dan sonra 10 dakikalığına kilitlendi."
-                     " Hemen açmak için bilgisayarda: divan unlock {addr}"},
 }
+
+# The Turkish texts come from the language pack (tr/daemon/server.json).
+_TR = langmod.load("tr", "daemon/server")
+if isinstance(_TR.get("captcha_push"), str):
+    CAPTCHA_PUSH_TEXT["tr"] = _TR["captcha_push"]
+if isinstance(_TR.get("tunnel_push"), dict):
+    TUNNEL_PUSH_TEXT["tr"] = {**TUNNEL_PUSH_TEXT["en"], **_TR["tunnel_push"]}
 
 # How far a client may fall behind before it is cut loose, and how long one
 # write may take before the socket counts as gone.
@@ -591,6 +594,11 @@ class Server:
         a = agents.find(aid, home, chat.get("cwd"))
         return agents.body(a["path"]) if a else None
 
+    async def h_lang_get(self, dev: Device, d: dict) -> dict:
+        """A language pack for the phone app or the web panel (divan/lang.py):
+        `{lang, names?}` -> `{lang, packs: {name: data}}`, client areas only."""
+        return await asyncio.to_thread(langmod.client_packs, str(d.get("lang") or ""), d.get("names"))
+
     async def h_agent_list(self, dev: Device, d: dict) -> dict:
         home = self._account(d.get("account_id"), d.get("provider", "claude")).home
         cwd = d.get("cwd") or None
@@ -1032,7 +1040,8 @@ class Server:
     #: How many delivered notification ids are remembered. The cursor already
     #: keeps the follower past them; this only has to outlast a re-read.
     NOTICE_SENT_KEEP = 2000
-    NOTICE_GENERAL = "Ustabaşı"
+    #: The general queue chat's title; the pack names it in Turkish.
+    NOTICE_GENERAL = str(_TR.get("queue_chat_title") or "Ticket queue")
     NOTICE_AGENT = "user:hermes"
 
     async def follow_tickets(self) -> None:
@@ -1135,7 +1144,7 @@ class Server:
 
         A ticket whose repository is a Divan product gets a chat of its own,
         filed under that product; one with no product, and whatever the queue
-        says about no ticket at all, share one general `Ustabaşı` chat. Opened
+        says about no ticket at all, share one general queue chat (`NOTICE_GENERAL`). Opened
         the way the night watch opens its chat (~/server/divan-nightly): through
         `chat.create` and `chat.update` as a client would call them, Hermes as
         the agent, on the owner's accounts in the queue's order.
@@ -1513,7 +1522,7 @@ class Server:
         title = chat.get("title", "Chat")
         if kind == "done" and chat.get("archived"):
             # Put out of the list while it worked (the publication repairs, 20 Nov 2026:
-            # "bana ihtiyacı yoksa mesajını görmek istemiyorum"): its end is not news.
+            # a chat that does not need the owner should not message them): its end is not news.
             return
         for d in self.cfg.devices.values():
             if not d.push_token:
@@ -1653,7 +1662,7 @@ class Server:
         if len(data) > self.MAX_DICTATION_BYTES:
             raise HTTPException(status_code=413, detail="that is more than ten minutes of audio")
         # The names on your own board, sent by the panel as the text whisper
-        # should imagine came before the audio — it is how "ustabaşı" and a
+        # should imagine came before the audio — it is how the queue's name and a
         # repository nobody has heard of come back spelled right. A prompt can
         # also come back *as* the answer when the audio turns out to be silence,
         # so a result that is only the prompt again is thrown away.
@@ -1670,7 +1679,7 @@ class Server:
         # spelling across the cut. It goes last, nearest the audio, and only its
         # tail: whisper reads a couple of hundred tokens of prompt at most.
         #
-        # It is kept out of the echo check below. Somebody saying "tamam" twice
+        # It is kept out of the echo check below. Somebody saying "okay" twice
         # in one dictation is not whisper repeating its prompt back.
         context = context.strip()[-300:]
         lead = " ".join(p for p in (prompt, context) if p) or None
@@ -2115,7 +2124,9 @@ class Server:
         parent = ".".join(public.split(".")[1:])
         if parent.count(".") >= 1:
             ancestors.append(f"https://*.{parent}")
-        return PlaneGateway(upstream, self.plane_key, ancestors, session_for=plane_gw.stored_session)
+        from .plane_sync import labels
+        return PlaneGateway(upstream, self.plane_key, ancestors, session_for=plane_gw.stored_session,
+                            labels=labels(self.cfg.plane))
 
     async def plane_pass(self, request: Request, response: Response, authorization: str = Header(default=""),
                          cf_connecting_ip: str | None = Header(default=None)) -> dict:
@@ -4345,7 +4356,7 @@ class Server:
     async def drop_empty(self, now: float | None = None) -> list[str]:
         """Delete the chats nobody wrote in, an hour after they were opened.
 
-        Yakup, 5 Nov 2026: "boş chat diye bir şey olmasın". Deleted the way
+        Since 5 Nov 2026 an empty chat is not kept. Deleted the way
         `chat.delete` does it, so every client hears `chat.deleted`.
         """
         busy = {cid for cid, s in self.sessions.sessions.items() if s.is_busy()}

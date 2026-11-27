@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from divan import lang                                  # noqa: E402
 from divan import transcribe as tr                      # noqa: E402
 
 fails: list[str] = []
@@ -40,20 +41,30 @@ def whisper(answer: str):
 
 tr._backend = lambda: "mlx"
 
-tr._mlx = whisper("Yeni bir branch aç.")
-check("the language reaches whisper", (tr.pcm(second, None, "tr") or {}).get("text"), "Yeni bir branch aç.")
+tr._mlx = whisper("Open a new branch.")
+check("the language reaches whisper", (tr.pcm(second, None, "tr") or {}).get("text"), "Open a new branch.")
 check("…as the one it was told", asked, ["tr"])
 
 asked.clear()
 check("an unknown language is detected instead", (tr.pcm(second, None, "xx") or {}).get("text"),
-      "Yeni bir branch aç.")
+      "Open a new branch.")
 check("…on a second pass", asked, ["xx", None])
 
-tr._mlx = whisper("Altyazı M.K.")
-check("what whisper says to silence is nothing", tr.pcm(second, None, "tr"), None)
-tr._mlx = whisper("Altyazı metnini düzelt.")
+tr._mlx = whisper("Thanks for watching!")
+check("what whisper says to silence is nothing", tr.pcm(second, None, "en"), None)
+tr._mlx = whisper("Thanks for watching the build.")
 check("a sentence that only starts like it is kept",
-      (tr.pcm(second, None, "tr") or {}).get("text"), "Altyazı metnini düzelt.")
+      (tr.pcm(second, None, "en") or {}).get("text"), "Thanks for watching the build.")
+
+TR = lang.load("tr", "tests/daemon/test_dictation")
+if TR and lang.load("tr", "daemon/transcribe"):
+    tr._mlx = whisper(TR["silence"])
+    check("what whisper says to silence in Turkish is nothing", tr.pcm(second, None, "tr"), None)
+    tr._mlx = whisper(TR["said"])
+    check("a Turkish sentence that only starts like it is kept",
+          (tr.pcm(second, None, "tr") or {}).get("text"), TR["said"])
+else:
+    print("skip: no language pack")
 
 if fails:
     print(f"FAIL ({len(fails)})")

@@ -16,7 +16,8 @@ conversational layer (Sonnet and Haiku with thinking disabled).
 Uses the given Claude Code account and its subscription, the same way the
 concierge does; the daemon is not involved and is not restarted. The questions
 are synthetic and carry a small made-up state block of the size the concierge
-sends, so nothing private reaches the model.
+sends, so nothing private reaches the model. The questions are Turkish, from
+the language pack (divan/lang.py); without it the English ones below are asked.
 """
 from __future__ import annotations
 
@@ -33,6 +34,9 @@ from pathlib import Path
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, ResultMessage, StreamEvent
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "daemon"))
+
+from divan import lang  # noqa: E402
 
 SYSTEM = ("You are the voice of a developer's computer on a phone call. Answer in one or two short "
           "spoken sentences in the caller's language, no markdown, no lists. Only use the state given.")
@@ -45,13 +49,13 @@ STATE = "\n".join(
         ("release notes", "web-panel", "idle for 2 hours"),
     ] * 6, 1))
 
-QUESTIONS = [
-    "Selam, şu an neler çalışıyor?",
-    "Beni bekleyen bir şey var mı?",
-    "Ödeme sayfası ne durumda?",
-    "Tamam, teşekkürler. En son ne yapıldı?",
-    "Giriş ekranındaki iş ne zamandır sürüyor?",
-    "Peki ayarlar ekranı neden bekliyor?",
+QUESTIONS = lang.load("tr", "tests/daemon/voice_bench/llm_latency").get("questions") or [
+    "Hi, what is running right now?",
+    "Is anything waiting for me?",
+    "Where is the payment page at?",
+    "Okay, thanks. What was done last?",
+    "How long has the login screen job been going?",
+    "So why is the settings screen waiting?",
 ]
 
 CONFIGS = {

@@ -1,9 +1,10 @@
 """Plane's board, and the queue behind it.
 
 Every Plane work item says who does it with one of two labels: the queue's
-label (`BOT`, the queue's agents) or the person label (`HUMAN`). The labels are
-named in the board's language, so the names are the board's data and are
-compared as they are. The panel will not save a new item without either
+label (the queue's agents) or the person label. The labels are named in the
+board's language, so the names are the board's data: `[plane] bot_label` and
+`human_label` in config.toml, `bot` and `human` when they are not set
+(`labels`). The panel will not save a new item without either
 (`plane_gateway.LOCK_JS`); this is what the labels mean.
 
   - A queue item moved to In Progress is filed with the queue, exactly as
@@ -38,10 +39,9 @@ import httpx
 
 log = logging.getLogger("divan.plane.sync")
 
-# audit: language-data — the label names on the Plane board, compared at runtime
-BOT = "ustabaşı"
-HUMAN = "insan"
-# audit: end-language-data
+# The label names when config.toml's [plane] does not name them.
+BOT = "bot"
+HUMAN = "human"
 SOURCE = "ustabasi"
 EVERY_S = 20.0
 KEY_SERVICE = "rac-secret-plane-api"
@@ -54,15 +54,28 @@ def _text(desc_html: str | None) -> str:
     return "\n".join(line.strip() for line in s.splitlines() if line.strip())
 
 
-def who(labels: list[str]) -> str | None:
-    # Turkish casing: the dotted capital I lowers to `i` plus a combining dot in
-    # Python, and the dotless capital to `i`, so both are folded by hand first.
-    # audit: language-data — the two Turkish capitals folded the Turkish way
-    names = {str(n).strip().replace("İ", "i").replace("I", "ı").lower() for n in labels}
-    # audit: end-language-data
-    if BOT in names:
+def labels(plane: dict | None) -> tuple[str, str]:
+    """The queue's label and the person label, as config.toml's [plane] names them."""
+    plane = plane if isinstance(plane, dict) else {}
+    bot = str(plane.get("bot_label") or "").strip() or BOT
+    human = str(plane.get("human_label") or "").strip() or HUMAN
+    return bot, human
+
+
+def _folds(name: str) -> set[str]:
+    """A label name as it may be compared: plain lower case, and lower case the
+    Turkish way, where the dotted capital I (U+0130) lowers to `i` rather than
+    `i` plus a combining dot, and the plain capital to a dotless i (U+0131)."""
+    n = str(name).strip()
+    return {n.lower(), n.replace("\u0130", "i").replace("I", "\u0131").lower()}
+
+
+def who(names: list[str], bot: str = BOT, human: str = HUMAN) -> str | None:
+    """Who does an item with these label names: "bot", "human" or None."""
+    seen = set().union(*(_folds(n) for n in names)) if names else set()
+    if seen & _folds(bot):
         return "bot"
-    if HUMAN in names:
+    if seen & _folds(human):
         return "human"
     return None
 
@@ -96,6 +109,10 @@ class PlaneSync:
         self._states: dict[str, dict[str, str]] = {}   # project id -> state name -> id
         self._labels: dict[str, dict[str, str]] = {}   # project id -> label id -> name
         self._groups: dict[str, str] = {}               # state id -> group
+
+    @property
+    def labels(self) -> tuple[str, str]:
+        return labels(self.cfg.plane)
 
     # ── what is kept between passes ───────────────────────────────────────
     def _load(self) -> dict:
@@ -192,13 +209,14 @@ class PlaneSync:
             if self._groups.get(it.get("state")) != "started":
                 continue
             labels = [self._labels[pid].get(x, "") for x in it.get("labels") or []]
-            kind = who(labels)
+            kind = who(labels, *self.labels)
             if kind == "human":
                 continue
             if kind is None:
                 await c.patch(f"projects/{pid}/issues/{it['id']}/", json={"state": states.get("Todo")})
                 await self._comment(c, pid, it["id"],
-                    f"Nobody has said who does this: pick the “{BOT}” or the “{HUMAN}” label, then move it to In Progress.")
+                    "Nobody has said who does this: pick the “{}” or the “{}” label, then move it to In Progress."
+                    .format(*self.labels))
                 done["returned"] += 1
                 continue
             if it.get("external_source") == SOURCE and it.get("external_id") or it["id"] in self.state["filed"]:

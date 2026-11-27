@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from divan import lang                                 # noqa: E402
 from divan import secrets                              # noqa: E402
 from divan.config import Config                       # noqa: E402
 from divan.db import DB                               # noqa: E402
@@ -68,12 +69,10 @@ ASSIGNMENTS = {
 
 # A password said in a sentence, and an app password near the words that name it.
 SAID = {
-    "turkish password": ("şifrem: ", "Gizli.Sifre-2026!", "password"),
-    "turkish password mid-sentence": ("mailin şifresi ", "Gizli.Sifre-2026!", "password"),
     "english password": ("the password is ", "Hunter22!", "password"),
     "app password": ("gmail app password: ", "abcd efgh ijkl mnop", "apppassword"),
     "short env password": ("E2E_PASSWORD=", "Hunter22!", "password"),
-    "shell pass=": ("pass=", "Gizli-2026x", "password"),
+    "shell pass=": ("pass=", "Hidden-2026x", "password"),
 }
 
 DATA_URL = "data:image/png;base64," + base64.b64encode(bytes(range(256)) * 8).decode() \
@@ -82,11 +81,10 @@ ORDINARY = {
     "git sha": "Merged 46f60d3a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e into main",
     "uuid": "chat 3f2a8c1e-9b7d-4e6f-a1b2-c3d4e5f60789 is done",
     "image data url": f"![shot]({DATA_URL})",
-    "turkish prose": "Kanka şu token sayısı neden arttı, şifre ekranını da düzelt: ödeme sayfası açılmıyor.",
     "identifier": "use re_compile_everything_here and sk-learn-style naming",
     "env reference": "password: process.env.DB_PASSWORD",
     "key path": "EXPO_ASC_API_KEY_PATH=/Users/me/keys/AuthKey_" + "AB12CD34EF.p8",
-    "talk about a password": "şifreni sıfırla, parola alanını gizle, that will pass the tests",
+    "talk about a password": "reset your password, hide the password field, that will pass the tests",
     "four short words": "what does this mean when then",
     # 5 Nov 2026: each of these had been turned into a placeholder by the history scrub.
     "branch slug": "cd /Users/me/.ustabasi/wt/633-isghocam-password-change-keeps-the-current-sess",
@@ -122,12 +120,12 @@ def detection():
     print("\nevery family is found and replaced")
     for name, key in KEYS.items():
         kind = name.split(" ")[0]
-        text = f"burada anahtar var {key} bunu kullan"
+        text = f"here is a key {key} use it"
         hits = secrets.find(text)
         masked = secrets.mask(text)
         check([h.kind for h in hits] == [kind] and key not in masked
               and secrets.service_for(kind, key) in masked
-              and masked.startswith("burada anahtar var [secret ") and masked.endswith("] bunu kullan"),
+              and masked.startswith("here is a key [secret ") and masked.endswith("] use it"),
               f"{name} is detected and masked", f"kinds={[h.kind for h in hits]}")
     for name, (prefix, value) in ASSIGNMENTS.items():
         text = f"set {prefix}{value} please"
@@ -138,13 +136,21 @@ def detection():
     check([h.kind for h in secrets.find(named)] == ["openai"],
           "a named key in an assignment is filed under its own family")
 
-    for name, (lead, value, kind) in SAID.items():
-        masked = secrets.mask(f"{lead}{value} bunu kullan")
+    # The Turkish sentences come from the language pack, and are only looked
+    # for when the module has the pack's words too.
+    tr = lang.load("tr", "tests/daemon/test_secrets") if secrets._TR else {}
+    if not tr:
+        print("skip: no language pack (the Turkish sentences)")
+    said = [(name, lead, value, kind, " use it") for name, (lead, value, kind) in SAID.items()]
+    said += [(name, lead, value, kind, tr.get("said_tail", " use it"))
+             for name, (lead, value, kind) in (tr.get("said") or {}).items()]
+    for name, lead, value, kind, tail in said:
+        masked = secrets.mask(f"{lead}{value}{tail}")
         check(value not in masked and masked.startswith(lead) and f"[secret {kind} " in masked,
               f"{name} is masked", masked)
 
     print("\nordinary text is left alone")
-    for name, text in ORDINARY.items():
+    for name, text in {**ORDINARY, **(tr.get("ordinary") or {})}.items():
         check(secrets.mask(text) == text, f"{name} is unchanged",
               f"kinds={[h.kind for h in secrets.find(text)]}")
 
@@ -201,10 +207,10 @@ def keychain_long_value():
 def capture_store():
     print("\ncapture writes each key under its placeholder's service")
     kc = FakeKeychain()
-    got = secrets.capture(f"bunu kaydet {OPENAI}", kc)
+    got = secrets.capture(f"save this {OPENAI}", kc)
     service = secrets.service_for("openai", OPENAI)
     check(kc.items.get(service) == OPENAI and service in got.text, "the key is stored under the service the placeholder names")
-    secrets.capture(f"yine {OPENAI}", kc)
+    secrets.capture(f"again {OPENAI}", kc)
     check(len(kc.items) == 1, "the same key twice is one entry", f"{len(kc.items)} entries")
 
     print("\na keychain that refuses still masks")
@@ -269,7 +275,7 @@ async def send_path():
         host.sessions = type("S", (), {"get": staticmethod(lambda _cid: s)})()
 
         service = secrets.service_for("openai", OPENAI)
-        for text in (f"OpenAI anahtarım bu: {OPENAI} kaydet", f"tekrar {OPENAI}"):
+        for text in (f"my OpenAI key is: {OPENAI} save it", f"again {OPENAI}"):
             await Server.h_chat_send(host, None, {"chat_id": chat["id"], "text": text})
             await s.running
 

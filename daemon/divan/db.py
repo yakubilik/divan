@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import divan as divanmod
+from . import lang
 from .providers.base import DROPPED_NOTE, EXPIRED
 from . import filing
 
@@ -279,17 +280,13 @@ class DB:
     # daily Vice runs, the job watch) opened their chats before `background`
     # existed (26 Nov 2026). Their chats stay archived on purpose, and the
     # lists keep them apart from the ones a person archived or let go quiet.
+    # The jobs that opened in Turkish are named by the language pack.
     BACKGROUND_OPENERS = (
         "This is the owner's explicitly authorized automatic publicat",
         "Schedule this approved reel in Meta Business Suite",
         "This reel was scheduled in Meta Business Suite",
         "Job watch: scheduled jobs on this Mac broke",
-        # audit: language-data — the Turkish first lines those jobs opened their chats with, matched at runtime
-        "[Yayın kuyruğu]", "Yayın kuyruğu bu videoları",
-        "Vice Anları günlük üretim", "Vice Moments günlük üretim",
-        "Bu bir kurulum testi",
-        # audit: end-language-data
-    )
+    ) + tuple(str(x) for x in lang.load("tr", "daemon/db").get("background_openers") or ())
 
     # ── groups ─────────────────────────────────────────────────────────────
     def list_groups(self) -> list[dict]:

@@ -5,15 +5,14 @@ import json
 import httpx
 
 from divan.config import Config
-from divan.plane_sync import PlaneSync, spec_for, who
+from divan.plane_sync import BOT, HUMAN, PlaneSync, labels, spec_for, who
+from langpack import tr_data
 
 PID = "p1"
 STATES = [{"id": s, "name": n, "group": g} for s, n, g in
           [("s-todo", "Todo", "unstarted"), ("s-prog", "In Progress", "started"),
            ("s-done", "Done", "completed"), ("s-cx", "Cancelled", "cancelled")]]
-# audit: language-data — the board's two label names, as Plane returns them
-LABELS = [{"id": "l-bot", "name": "ustabaşı"}, {"id": "l-hum", "name": "insan"}]
-# audit: end-language-data
+LABELS = [{"id": "l-bot", "name": "Bot"}, {"id": "l-hum", "name": "Human"}]
 
 
 class FakePlane:
@@ -68,9 +67,24 @@ def comments(plane):
 
 
 def test_who_reads_the_two_labels():
-    # audit: language-data — the label names in the Turkish casings a board may use
-    assert who(["ustabaşı"]) == "bot" and who(["İnsan"]) == "human" and who(["USTABAŞı"]) == "bot" and who(["web"]) is None
-    # audit: end-language-data
+    assert who(["bot"]) == "bot" and who(["HUMAN"]) == "human" and who(["Bot", "web"]) == "bot" and who(["web"]) is None
+    assert who(["Agents"], "agents", "people") == "bot" and who(["bot"], "agents", "people") is None
+
+
+def test_the_label_names_come_from_config():
+    assert labels({}) == (BOT, HUMAN) and labels(None) == (BOT, HUMAN)
+    assert labels({"bot_label": " agents ", "human_label": "people"}) == ("agents", "people")
+
+
+def test_who_reads_a_turkish_board_in_its_casings():
+    tr = tr_data("test_plane_sync")
+    bot, human = tr["bot_label"], tr["human_label"]
+    for name in tr["bot"]:
+        assert who([name], bot, human) == "bot", name
+    for name in tr["human"]:
+        assert who([name], bot, human) == "human", name
+    for name in tr["neither"]:
+        assert who([name], bot, human) is None, name
 
 
 def test_the_first_pass_only_learns_where_now_is(tmp_path):

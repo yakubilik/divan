@@ -9,8 +9,10 @@ of the shape it exists for, and against a string it must *not* fire on — the
 placeholders this repository does use on purpose (`/Users/you/…`,
 `you@example.com`) were the first false positives the scan produced.
 
-The allowlist is checked too: a Turkish word in `divan/call.py` is data
-the language detector cannot work without, and anywhere else it is a bug.
+The allowlist is checked too: a Turkish word in a file `audit.ALLOW` lists is
+data that file cannot work without, and anywhere else it is a bug. The
+daemon's own Turkish lives in the language pack (`daemon/divan/lang.py`), so
+none of its files is listed any more.
 
 And the scanner's blind spot is covered here rather than left to a person's
 eyes: the three files `audit.SELF` exempts are read back and checked for a home
@@ -170,24 +172,6 @@ ALLOWED = [
     "app/src/voice.ts",
     "app/src/waiting.ts",
     "app/src/xterm.gen.ts",
-    "daemon/divan/call.py",
-    "daemon/divan/secrets.py",
-    "daemon/divan/server.py",
-    "daemon/divan/transcribe.py",
-    "daemon/divan/voice.py",
-    "daemon/scripts/test_call.py",
-    "daemon/scripts/test_dictation.py",
-    "daemon/scripts/test_scrub.py",
-    "daemon/scripts/test_secrets.py",
-    "daemon/scripts/test_voice.py",
-    "daemon/scripts/test_voice_bench.py",
-    "daemon/scripts/voice_bench/bench.py",
-    "daemon/scripts/voice_bench/ema_worker.py",
-    "daemon/scripts/voice_bench/llm_latency.py",
-    "daemon/scripts/voice_bench/scenarios.json",
-    "tts/export.py",
-    "tts/frontend_fixture.py",
-    "tts/vectors.json",
     "web/scripts/fixtures/unfiled-ask-snapshot.json",
     "web/scripts/notice-fixture.js",
     "web/scripts/test-overview.mjs",
@@ -330,13 +314,17 @@ def main() -> int:
     check("the list is the one written down here", allowed == ALLOWED, repr(allowed))
     check("and every entry says why", all(len(why.split()) >= 5 for why in audit.ALLOW.values()))
     turkish = "onay bekliyor için değil"
-    check("a Turkish word there is data, not a finding",
-          not audit.scan_text("daemon/divan/call.py", turkish, "test"))
+    listed = ALLOWED[0] if ALLOWED else None      # any file the list still excuses
+    if listed:
+        check("a Turkish word there is data, not a finding",
+              not audit.scan_text(listed, turkish, "test"))
+        check("the allowlist does not also excuse a secret",
+              any(h["rule"] == "aws-access-key" for h in
+                  audit.scan_text(listed, "AKIAIOSFODNN7EXAMPLE", "test")))
     check("the same word anywhere else is a finding",
           bool(audit.scan_text("daemon/divan/config.py", turkish, "test")))
-    check("the allowlist does not also excuse a secret",
-          any(h["rule"] == "aws-access-key" for h in
-              audit.scan_text("daemon/divan/call.py", "AKIAIOSFODNN7EXAMPLE", "test")))
+    check("a file the language pack emptied is read again",
+          bool(audit.scan_text("daemon/divan/call.py", turkish, "test")))
 
     print("\na marked block excuses its own lines from the language rules, and nothing else")
     reason = "audit: language-data — the words the detector compares against"
@@ -367,9 +355,10 @@ def main() -> int:
         hits = audit.scan_text("daemon/divan/new.py", text, "test")
         check(f"a broken marker fails the scan: {rule}",
               any(h["kind"] == "marker" and h["rule"] == rule for h in hits), repr(hits))
-    check("a broken marker fails even in an allowed file",
-          any(h["kind"] == "marker" for h in
-              audit.scan_text("daemon/divan/call.py", "# audit: language-data\n", "test")))
+    if listed:
+        check("a broken marker fails even in an allowed file",
+              any(h["kind"] == "marker" for h in
+                  audit.scan_text(listed, "# audit: language-data\n", "test")))
     check("an HTML comment closes a reason in Markdown",
           audit.data_blocks(f"<!-- {reason} -->\nonay\n<!-- audit: end-language-data -->\n")[0][0]["reason"]
           == "the words the detector compares against")

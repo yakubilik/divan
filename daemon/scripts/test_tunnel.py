@@ -25,6 +25,9 @@ import tomllib
 from pathlib import Path
 
 HOME = tempfile.mkdtemp(prefix="rac-tunnel-")
+# The language pack stays where the real home keeps it (divan/lang.py).
+os.environ.setdefault("DIVAN_LANG_DIR", str(Path(os.environ.get("DIVAN_HOME") or Path.home() / ".divan")
+                                            .expanduser() / "lang"))
 os.environ["DIVAN_HOME"] = HOME
 atexit.register(shutil.rmtree, HOME, ignore_errors=True)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -238,8 +241,8 @@ def main() -> None:
               repr((got, sent)))
         text = server_mod.TUNNEL_PUSH_TEXT
         check({s["tokens"][0]: s["body"] for s in sent} == {
-            f"ExponentPushToken[{name}]": text[lang]["new_address"].format(name="laptop", addr=HOUSE)
-            for name, lang in (("iPhone", "tr"), ("here", "en"))} and text["tr"] != text["en"],
+            f"ExponentPushToken[{name}]": text.get(lang, text["en"])["new_address"].format(name="laptop", addr=HOUSE)
+            for name, lang in (("iPhone", "tr"), ("here", "en"))} and text.get("tr", {}) != text["en"],
               "each in the language its phone asked for", repr([s["body"] for s in sent]))
 
     srv, client = start()
@@ -409,7 +412,7 @@ def main() -> None:
         got = ws_code(client, panel, ELSEWHERE, access=signed())
         settle(srv, client)
         check(got == 0 and {s["tokens"][0]: s["body"] for s in sent} == {
-            f"ExponentPushToken[{name}]": text[lang]["new_address_as"].format(name="laptop", email=ME, addr=ELSEWHERE)
+            f"ExponentPushToken[{name}]": text.get(lang, text["en"])["new_address_as"].format(name="laptop", email=ME, addr=ELSEWHERE)
             for name, lang in (("iPhone", "tr"), ("here", "en"))}
               and all(ME in s["body"] and s["data"]["kind"] == "tunnel_new_address" for s in sent),
               "the new-address push names the mail", repr((got, sent)))

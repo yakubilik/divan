@@ -9,6 +9,8 @@ Everything here is small and written so that it ports line by line to Swift:
 - `windows` / `decode`: the decoder runs window by window with 8 frames of context, as EMA does.
 """
 import hashlib
+import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -16,7 +18,29 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 MODELS = HERE / "models"
 REFERENCE = HERE / "reference"
-VECTORS = HERE / "vectors.json"
+
+
+def lang_dir():
+    """Where the language packs are, by the daemon's rule (daemon/divan/lang.py):
+    $DIVAN_LANG_DIR, else <DIVAN_HOME>/lang, else ~/.divan/lang."""
+    env = os.environ.get("DIVAN_LANG_DIR", "").strip()
+    if env:
+        return Path(env).expanduser()
+    home = os.environ.get("DIVAN_HOME", "").strip()
+    return (Path(home).expanduser() if home else Path.home() / ".divan") / "lang"
+
+
+def pack(name):
+    """The Turkish pack `tr/tts/<name>.json` as a dict, or {} when it is not installed."""
+    try:
+        return json.loads((lang_dir() / "tr" / "tts" / f"{name}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+# The test vectors hold Turkish sentences, so they live in the language pack
+# beside the other Turkish data, not in the repository.
+VECTORS = lang_dir() / "tr" / "tts" / "vectors.json"
 
 RATE = 48000
 HOP = 1920  # audio samples per latent frame (25 Hz)

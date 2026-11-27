@@ -43,7 +43,7 @@ A chat call replaces the daemon step with *the agent's whole turn*.
 
 ## 2. Bench: scenarios, fixtures, what is and is not measured
 
-`scenarios.json` holds 14 sanitized Turkish scenarios, synthetic text only: two short questions, one
+`scenarios.json` (now in the language pack, `tr/tests/daemon/voice_bench/scenarios.json`; see `daemon/divan/lang.py`) holds 14 sanitized Turkish scenarios, synthetic text only: two short questions, one
 13-second request, thinking pauses of 500, 1000, 1500 and 2000 ms plus one with two pauses (800 +
 1200 ms), a self-correction inside one sentence and one across a 900 ms pause, two
 technical-vocabulary requests (product and tool names), a barge-in (the caller cuts into an answer

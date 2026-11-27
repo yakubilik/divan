@@ -69,11 +69,9 @@ def put() -> None:
 def parse_g() -> None:
     print("\nreading the keychain's answer")
     check(secret_share._parse_g('keychain: "x"\npassword: "Hunter22!"\n') == "Hunter22!", "printable value")
-    # audit: language-data — a password with a letter outside ASCII, read from hex
-    hexv = "Şifre-1".encode().hex()
-    check(secret_share._parse_g(f'password: 0x{hexv.upper()}  "\\303\\236ifre-1"\n') == "Şifre-1",
+    hexv = "Clé-1".encode().hex()          # a password with a letter outside ASCII, read from hex
+    check(secret_share._parse_g(f'password: 0x{hexv.upper()}  "Cl\\303\\251-1"\n') == "Clé-1",
           "non-ASCII value comes from the hex")
-    # audit: end-language-data
     check(secret_share._parse_g('password: "a"b"\n') == 'a"b', "a quote inside the value")
     check(secret_share._parse_g("password: <NULL>\n") is None, "no password")
 

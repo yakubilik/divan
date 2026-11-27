@@ -29,7 +29,7 @@ def home(tmp_path, monkeypatch):
                    (chat, typ, json.dumps({"text": text}), ts))
     ev("abcd1111", "message.user", "first question", 1)
     ev("abcd1111", "message.assistant", "old answer", 2)
-    ev("abcd1111", "message.user", "anahtar sk-ant-api03-" + "A" * 90 + " use this", 3)
+    ev("abcd1111", "message.user", "key sk-ant-api03-" + "A" * 90 + " use this", 3)
     ev("abcd1111", "message.assistant", "bir", 4)
     ev("abcd1111", "message.assistant", "iki", 5)
     db.execute("INSERT INTO events (chat_id, type, payload, ts) VALUES ('abcd1111','turn.done','{}',6)")

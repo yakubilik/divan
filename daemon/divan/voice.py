@@ -63,11 +63,18 @@ from claude_agent_sdk import (
 )
 
 from . import call as callmod
+from . import lang
 from .call import Concierge, NoRoom, _is_limit, _Limited, no_room, spoken_reply, last_reply
 from .errors import Err
 from .providers.claude import ACCOUNT_ENV, MODEL_ALIASES
 
 log = logging.getLogger("rac.voice")
+
+# The Turkish words and lines of the session (tr/daemon/voice.json); {} without
+# the pack, and then a call is held in English.
+_TR = lang.load("tr", "daemon/voice")
+# Dotted capital I and dotless small i, for Turkish case folding.
+_CAP_DOTTED_I, _SMALL_DOTLESS_I = "\u0130", "\u0131"
 
 # ── audio and the turn rule ──────────────────────────────────────────────────
 RATE = 16000
@@ -118,16 +125,19 @@ def frame_db(samples) -> float:
 
 
 # The same words `bench.HANGING` holds (test_voice.py checks they agree): a pause
-# after one of these is a breath in the middle of a Turkish sentence.
-HANGING = {
-    "ve", "ama", "fakat", "ancak", "yani", "şey", "şeyi", "şeyde", "için", "de", "da",
-    "ki", "ile", "veya", "ya", "yoksa", "çünkü", "sonra", "önce", "peki", "hani",
-    "bir", "bu", "şu", "o", "eee", "ee", "ıı", "mesela", "aslında", "galiba",
-}
+# after one of these is a breath in the middle of a Turkish sentence. From the
+# pack; without it only a trailing clause mark keeps the turn open.
+HANGING = set(_TR.get("hanging") or ())
+
+
+def fold_tr(text: str) -> str:
+    """Lower case the Turkish way: `str.lower()` turns the plain capital I into
+    a dotted i and the dotted capital into i plus a combining dot."""
+    return text.replace("I", _SMALL_DOTLESS_I).replace(_CAP_DOTTED_I, "i").lower()
 
 
 def _words_tr(text: str) -> list[str]:
-    text = text.replace("I", "ı").replace("İ", "i").lower()
+    text = fold_tr(text)
     text = re.sub(r"[’'`]", "", text)
     return re.sub(r"[^\w\s]", " ", text).split()
 
@@ -164,19 +174,14 @@ def cut(buf: str, first: bool) -> tuple[str | None, str]:
 # tools only record intents, and what is said about them is built from the
 # result below — so any first-person claim of having done something in its own
 # text is false by construction, and is dropped rather than spoken.
-_CLAIM = re.compile(
-    # Turkish: an action verb in the first person, done, doing or about to do.
-    r"\b(?:gönder|ilet|başlat|çalıştır|bitirt|bitir|durdur|onayla|halled|hallet|düzelt|ekle|yolla|"
-    r"kontrol ed|kontrol et|incele|bak|söyle|izin ver|reddet)\w*?(?:d[ıiuü]m|t[ıiuü]m|[ıiuü]?yorum|ece[ğk]im|aca[ğk][ıi]m|y?eyim|y?ayım)\b"
-    # An English verb made Turkish with "etmek", the way the model mixes them
-    # ("check edeyim", "deploy ettim"); seen in the #149 and #151 runs.
-    r"|\b(?:check|deploy|merge|commit|push|build|test|run|restart|review|fix|start|stop|send)\s+"
-    r"(?:ed(?:eyim|iyorum|eceğim)|et(?:tim|eyim))\b"
-    # English: the same, in the forms a model uses for it.
-    r"|\bi(?:'ve| have|'ll| will|'m| am)? (?:sent|started|stopped|approved|denied|told|asked|fixed|ran|"
-    r"forwarded|send|start|stop|forward|tell|ask|check|look|sending|starting|stopping|forwarding|"
-    r"checking|looking|running)\b",
-    re.I)
+# English: an action verb in the first person, in the forms a model uses for
+# it. The pack adds the Turkish forms (a first-person verb done, doing or about
+# to do, and an English verb made Turkish the way the model mixes them, seen in
+# the #149 and #151 runs) in front.
+_CLAIM_EN = (r"\bi(?:'ve| have|'ll| will|'m| am)? (?:sent|started|stopped|approved|denied|told|asked|fixed|ran|"
+             r"forwarded|send|start|stop|forward|tell|ask|check|look|sending|starting|stopping|forwarding|"
+             r"checking|looking|running)\b")
+_CLAIM = re.compile("|".join(p for p in (_TR.get("claim"), _CLAIM_EN) if p), re.I)
 
 
 def claims_action(text: str) -> bool:
@@ -185,49 +190,21 @@ def claims_action(text: str) -> bool:
 
 # On a chat call a request goes to that chat (plan §5). Haiku with thinking off
 # usually calls forward_to_chat for one, but in the #151 end-to-end run it took
-# a self-correction ("testleri çalıştır, hayır dur, önce derlemeyi bitir") for
+# a spoken self-correction (run the tests, no wait, finish the build first) for
 # a status and answered it, three runs out of three, and the chat never heard
 # it. So a plain Turkish request is forwarded by rule, without asking the
-# model: an action verb as a command ("bitir", "kontrol et", "düzeltin") or as
-# a polite question ("bakar mısın"). It only decides *where* the caller's own
-# words go; the chat's agent still runs them under its own permission mode.
-_ACT = (r"(?:çalıştır|bitir|başlat|düzelt|ekle|sil|yaz|gönder|yolla|derle|güncelle|kur|kaldır|"
-        r"değiştir|incele|oku|hazırla|yap|bak|"
-        r"(?:devam|tekrar|kontrol|test|deploy|merge|commit|push|build|review|restart) e[td])")
-_REQUEST = re.compile(
-    rf"\b{_ACT}(?:[ıiuü]n|[ıiuü]n[ıiuü]z|sana|sene)?(?=$|[\s.,!;:…])"
-    rf"|\b{_ACT}\w*?(?:[ae]r|[ıiuü]r|r)\s+m[ıiuü]s[ıiuü]n(?:[ıiuü]z)?\b",
-    re.I)
+# model: an action verb as a command or as a polite question. The pattern is
+# the pack's; without it nothing is forwarded by rule. It only decides *where*
+# the caller's own words go; the chat's agent still runs them under its own
+# permission mode.
+_REQUEST = re.compile(_TR["request"], re.I) if _TR.get("request") else None
 
 
 def is_request(text: str) -> bool:
-    return bool(_REQUEST.search(text.replace("I", "ı").replace("İ", "i").lower()))
+    return bool(_REQUEST is not None and _REQUEST.search(fold_tr(text)))
 
 
 LINES = {
-    "tr": {
-        "ack": ["Tamam.", "Peki, bir saniye.", "Anladım, iletiyorum."],
-        "sent": "Sohbete ilettim.",
-        "queued": "Sohbete ilettim, elindeki işi bitirince bakacak.",
-        "started": "{where} projesinde yeni bir sohbet başlattım.",
-        "allowed": "İzin verdim.",
-        "denied": "Reddettim.",
-        "stopped": "Durdurdum.",
-        "danger": "Bu tehlikeli bir işlem, onayı uygulamadan vermen gerekiyor.",
-        "failed": "Bunu yapamadım.",
-        "no_chat_running": "O sohbet şu an çalışmıyor.",
-        "tool": {"Bash": "Bir komut çalıştırıyor.", "Edit": "Dosyalarda değişiklik yapıyor.",
-                 "Write": "Dosyalarda değişiklik yapıyor.", "Read": "Kodu inceliyor.",
-                 "Grep": "Kodu inceliyor.", "Glob": "Kodu inceliyor.", "*": "Hâlâ çalışıyor."},
-        "approval": "Sohbet {what} için onay bekliyor. İzin vereyim mi?",
-        "approval_danger": "Sohbet tehlikeli bir işlem için onay bekliyor, onu uygulamadan vermen gerekiyor.",
-        "approval_what": {"Bash": "bir komut çalıştırmak", "Edit": "bir dosyayı değiştirmek",
-                          "Write": "bir dosya yazmak", "*": "bir adım"},
-        "turn_error": "Sohbet bir hatayla durdu.",
-        "unheard": "Seni duyamadım, tekrar söyler misin?",
-        "offer": "Bunu bir sohbete vermemi ister misin?",
-        "no_reply": "Şu an cevap veremiyorum, birazdan tekrar dener misin?",
-    },
     "en": {
         "ack": ["OK.", "Right, one moment.", "Got it, passing it on."],
         "sent": "Sent to the chat.",
@@ -253,6 +230,9 @@ LINES = {
         "no_reply": "I can't answer right now, try again in a moment.",
     },
 }
+
+if isinstance(_TR.get("lines"), dict):
+    LINES["tr"] = _TR["lines"]
 
 # Error codes a voice session can report (`voice.error`); the phone looks them
 # up like any other code (errors.py).
@@ -338,9 +318,9 @@ caller's own words are sent, not yours. A question about how it is doing is \
 answered from the state, without forwarding."""
 
 # Repeated with every question on a chat call. With thinking off and the rule
-# only in the system prompt, Haiku answered "testleri çalıştır, hayır dur, önce
-# derlemeyi bitir" in the #151 end-to-end run with "Derlemesi devam ediyor"
-# about an idle chat instead of forwarding it.
+# only in the system prompt, Haiku answered a spoken self-correction (run the
+# tests, no wait, finish the build first) in the #151 end-to-end run with a
+# status line about an idle chat instead of forwarding it.
 CHAT_TURN_RULE = ("If this asks the chat to do anything, call forward_to_chat and write nothing. "
                   "Otherwise answer only from the state.")
 
@@ -924,7 +904,7 @@ class VoiceSession:
             if not turn.intents and buf.strip():
                 self._speak_piece(turn, buf.strip())
             if not turn.intents and not turn.pieces and turn.marks.get("claims_dropped"):
-                # Everything it said was a promise nobody will keep ("bakayım"):
+                # Everything it said was a promise nobody will keep ("let me look"):
                 # an answer that is only dropped sentences would be silence.
                 self.say(turn, LINES[self.lang]["offer"], "reply", False)
             if not turn.intents:

@@ -33,6 +33,8 @@ import threading
 import wave
 from pathlib import Path
 
+from . import lang
+
 log = logging.getLogger("rac.transcribe")
 _OVERRIDE = os.environ.get("DIVAN_WHISPER_MODEL", "").strip()
 MODEL = _OVERRIDE or "mlx-community/whisper-large-v3-turbo"   # mlx backend
@@ -201,16 +203,15 @@ SAMPLE_RATE = 16000
 # is 0.0 for every one of these). The panel does not send silence, but it
 # cannot tell a keyboard from a voice, and dictation writes straight into the
 # box somebody is about to send. So a phrase that is exactly one of these is
-# nothing. Compared whole, after dropping punctuation: "altyazı metnini düzelt"
-# is a thing a person says.
+# nothing. Compared whole, after dropping punctuation: "fix the subtitle text"
+# is a thing a person says. The Turkish ones come from the language pack.
 _NOTHING = {
-    "altyazı m", "altyazı mk", "izlediğiniz için teşekkür ederim", "izlediğiniz için teşekkürler",
     "thanks for watching", "thank you for watching",
     "ondertiteld door de amaraorg gemeenschap", "ondertitels ingediend door de amaraorg gemeenschap",
-    "untertitel der amaraorg community", "untertitel im auftrag des zdf für funk 2017",
+    "untertitel der amaraorg community", "untertitel im auftrag des zdf f\u00fcr funk 2017",
     "sous titres réalisés par la communauté d amaraorg",
     "subtítulos realizados por la comunidad de amaraorg", "sottotitoli creati dalla comunità amaraorg",
-}
+} | set(lang.load("tr", "daemon/transcribe").get("silence_phrases") or ())
 
 
 def said(text: str) -> bool:
@@ -225,8 +226,8 @@ def pcm(data: bytes, prompt: str | None = None, language: str | None = None,
 
     `language` is the one the panel was set to dictate in. A voice note is left
     to detection; a phrase cut out of somebody talking is two seconds long, and
-    detection on two seconds is a guess — "tamam, commit at" was heard as
-    English often enough to matter. Being told also skips the detection pass,
+    detection on two seconds is a guess — a short Turkish "okay, commit it" was
+    heard as English often enough to matter. Being told also skips the detection pass,
     which on a short phrase is a third of the time.
 
     `model` picks another mlx model for this one call (the live voice session
