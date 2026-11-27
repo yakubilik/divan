@@ -148,6 +148,7 @@ class DB:
         tries = self.meta_get("resume_tries", {}) or {}
         plans, spent = [], dict(tries)
         for cid in chat_ids:
+            self._close_open_tools(cid)
             msgs = self._unanswered_messages(cid)
             if not msgs:
                 # Nothing on disk to run again — a turn the model opened by
@@ -166,6 +167,33 @@ class DB:
         if spent != tries:
             self.meta_set("resume_tries", spent)
         return plans
+
+    def _close_open_tools(self, chat_id: str) -> None:
+        """End the calls the dead turn left open. Their CLI is gone, so no
+        result is coming; without one a client draws the row as running for
+        as long as the chat is open (27 Nov 2026: "looking at files… 39m")."""
+        rows = self._c.execute(
+            "SELECT type, payload FROM events WHERE chat_id=? ORDER BY seq DESC LIMIT 400",
+            (chat_id,)).fetchall()
+        done: set = set()
+        open_ids: list = []
+        for r in rows:
+            if r["type"] in ("turn.done", "turn.error"):
+                break
+            if r["type"] not in ("tool.use", "tool.result"):
+                continue
+            try:
+                tid = json.loads(r["payload"]).get("id")
+            except Exception:
+                continue
+            if r["type"] == "tool.result":
+                done.add(tid)
+            elif tid and tid not in done:
+                open_ids.append(tid)
+        for tid in reversed(open_ids):
+            self.append_event(chat_id, "tool.result", {
+                "id": tid, "output": "Stopped: the daemon restarted while this was running.",
+                "is_error": True})
 
     def _unanswered_messages(self, chat_id: str) -> list[dict]:
         """The user's messages since the last turn that ended, oldest first.
