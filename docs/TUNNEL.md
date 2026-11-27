@@ -380,11 +380,7 @@ that person. A person with none sees Plane's own sign-in.
 ## Who does a work item: the queue's label or the person label
 
 Every Plane work item carries one of two labels, named in the board's language
-(`plane_sync.BOT` and `HUMAN`):
-<!-- audit: language-data — the two label names as they are on the Plane board -->
-`ustabaşı` for the queue and `insan` for a person.
-<!-- audit: end-language-data -->
- The gateway refuses a create
+(`plane_sync.BOT` for the queue and `HUMAN` for a person). The gateway refuses a create
 without either (`plane_gateway.CREATE`, answered 400 before Plane sees it), and
 the page it serves keeps Save off until a label is chosen (`LOCK_JS`). The first
 layer reads Plane's API, not its pages, so it holds across Plane upgrades; if an

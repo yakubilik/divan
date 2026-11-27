@@ -67,3 +67,6 @@ tts/reference/
 
 # The private design repo (github.com/yakubilik/divan-design) is nested here on the owner's Mac.
 design/private/
+
+# voice bench measurements: they quote the Turkish calls; kept in design/private/docs/voice-bench
+docs/voice-bench/

@@ -91,25 +91,25 @@ owner's decision. No key was used or created.
 
 ## 4. Turns, interruptions, agents and audio
 
-<!-- audit: language-data — the lines the recorded Turkish calls heard and said, quoted as measured -->
+The calls were held in Turkish; the lines they heard and said are given here in English.
 
 - **Pauses and corrections.** All 12 scenarios commit once with every word, in both rounds of both runs:
   0.5–2 s thinking pauses, two pauses, the 13 s request, an in-sentence and a cross-pause correction.
   The early reply on `pause-2000` and `correction-pause` is cancelled when speech resumes, and nothing
   of it is played.
-- **Barge-in.** The caller ("Selam, nasılsın?") cut into three real answers 0.4 s into playback, over
+- **Barge-in.** The caller ("Hi, how are you?") cut into three real answers 0.4 s into playback, over
   their −24 dB echo. The player stopped 134–257 ms after the voice began, the daemon cancelled that turn,
   and nothing of it played afterwards. The cut-in was the next turn, whole. No echo ever became a
   transcript or a turn.
-- **A real long task** (`e2e-agent.json`, after the fixes in §5). The chat call was "Testleri
-  çalıştır. Hayır dur, önce derlemeyi bitir." The chat received it **once, whole**, and nothing else; no
-  other chat was made. "Sohbete ilettim." was heard 3.9 s after speech end. "Bir komut çalıştırıyor."
-  came from the agent's real `Bash` call. "Testler bitti mi?", asked while it was `running`, was answered
-  from the chat's state ("Hâlâ çalışıyor, henüz bitmedi.") 4.0 s after speech end, without being
-  routed to the agent. The agent's own result was spoken only after its `turn.done` (69 s): "Build
-  bitti (12 modül), arkasından testleri de çalıştırdım: 8 test geçti."
-- **Before the fix** the same scenario failed three runs out of three (§5.3): Haiku said "Derlemesi
-  devam ediyor" about an idle chat and never forwarded the request.
+- **A real long task** (`e2e-agent.json`, after the fixes in §5). The chat call was "Run the
+  tests. No wait, finish the build first." The chat received it **once, whole**, and nothing else; no
+  other chat was made. "I passed it to the chat." was heard 3.9 s after speech end. "It is running a command."
+  came from the agent's real `Bash` call. "Are the tests done?", asked while it was `running`, was answered
+  from the chat's state ("Still running, not done yet.") 4.0 s after speech end, without being
+  routed to the agent. The agent's own result was spoken only after its `turn.done` (69 s): "The build
+  finished (12 modules), then I ran the tests too: 8 passed."
+- **Before the fix** the same scenario failed three runs out of three (§5.3): Haiku said "The build is
+  still going" about an idle chat and never forwarded the request.
 - **Acknowledgements and backchannels.** The one acknowledgement is the short line said when an
   action has not answered within 1.2 s after the commit. `test_voice.py` now checks it in context: it
   is said once, before the bridge's own line; the next one is a different line; none is said once the
@@ -117,16 +117,16 @@ owner's decision. No key was used or created.
   0.7 s soft end would land inside the thinking pauses the bench is built on (0.5–2 s), which is exactly
   the talking over the caller the ticket rules out. None were added.
 - **Audio.** Every answer's audio was read back by whisper turbo: 10.3 % pooled. The misses are English
-  product names read by a Turkish voice ("Babise", "Iskocam") and whisper's own spelling ("ne haber"
-  for "naber", the two "last word" misses). One "missing first word" in the before run turned out to be
-  whisper skipping it in the whole clip; the first two seconds alone read "bilmiyorum". EMA spoke
+  product names read by a Turkish voice and whisper's own spelling of a slang greeting (the two
+  "last word" misses). One "missing first word" in the before run turned out to be
+  whisper skipping it in the whole clip; the first two seconds alone read the word ("I don't know"). EMA spoke
   every piece of every answer, with no fallback voice. Two answers have a 0.8–0.9 s silence between
   sentences. That is the player waiting for the model's next sentence, not a dropout. Naturalness of
   prosody needs a listener: the WAVs are in `/tmp/divan-voice-e2e/final/` (not committed).
 - **What the fast layer says.** Truthful, but not yet good conversation. On this empty test machine
-  it often answers with a clarifying question ("Hangi proje?") and lists the owner's projects from the
+  it often answers with a clarifying question ("Which project?") and lists the owner's projects from the
   account profile. It still mixes English words into Turkish ("session", "approval", "scope"). It
-  sometimes offers to act in a question ("Derle, sonra test mi yapayım?"), which is not a claim and
+  sometimes offers to act in a question ("Build, then shall I test?"), which is not a claim and
   was left. These are prompt and model limits; see §7.
 
 ## 5. What was changed
@@ -136,18 +136,17 @@ owner's decision. No key was used or created.
    commit at 2.5 s bypassed that rule: in the before run every answer slower than the commit had turbo
    decoding beside the fast layer's stream. Now it also waits for the first piece, an intent, or the
    first-token timeout. Checked by `test_voice.py` ("not raced").
-2. **No silent turns.** When every sentence of a reply was dropped as a false action claim ("Hemen
-   bakıyorum."), the turn used to say nothing (r0 `pause-1500` in the first after run). It now says an
-   offer: "Bunu bir sohbete vermemi ister misin?" The guard also catches English verbs made Turkish
-   with *etmek* ("deploy edeyim", "check edeyim"), which #149 left open. Both are checked.
+2. **No silent turns.** When every sentence of a reply was dropped as a false action claim ("Looking
+   at it now."), the turn used to say nothing (r0 `pause-1500` in the first after run). It now says an
+   offer: "Shall I hand this to a chat?" The guard also catches English verbs made Turkish
+   with the verb "to do" ("let me deploy", "let me check"), which #149 left open. Both are checked.
 3. **Chat call routing by rule** (`is_request`). On a chat call, a plain Turkish request is forwarded
-   to that chat at the commit without asking the model. That is an action verb as a command ("bitir",
-   "kontrol et", "düzeltin") or as a polite question ("bakar mısın"). Execution is unchanged: the same
-   commit gate, the chat's own account and permission mode, the bridge's fixed line. Questions ("Testler
-   bitti mi?") still go to the fast layer. Checked on phrase sets.
+   to that chat at the commit without asking the model. That is an action verb as a command ("finish",
+   "check", "fix it") or as a polite question ("could you look"). Execution is unchanged: the same
+   commit gate, the chat's own account and permission mode, the bridge's fixed line. Questions ("Are the tests
+   done?") still go to the fast layer. Checked on phrase sets.
 4. **The fast layer may not describe work the state does not show**, nor mention its state block (it
-   had said "state'te yok"). On a chat call, the routing rule is repeated with every question.
-<!-- audit: end-language-data -->
+   had said "not in the state"). On a chat call, the routing rule is repeated with every question.
 
 5. **4 ms fades at the edges of every EMA piece** (`fadeEdges` in `voice-session.ts`): the two clicks
    (edge steps of 5.4–5.5 % FS) are gone.

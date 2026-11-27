@@ -7,7 +7,7 @@ person on a live line, with short acknowledgements where they fit and good Turki
 This document maps the live call as it is on `main` (commit `f4c385d`), separates it from voice
 notes, and puts a number or a bounded hypothesis on each failure class. The measurements come from
 the replayable bench in [`daemon/scripts/voice_bench/`](../daemon/scripts/voice_bench/), and the raw
-results are under [`docs/voice-bench/`](voice-bench/). How to rerun all of it is at the end. What to
+results are written to `docs/voice-bench/`, which is not committed (they quote the Turkish calls). How to rerun all of it is at the end. What to
 build next is in [voice-quality-plan.md](voice-quality-plan.md).
 
 ## 1. Two different voice paths
@@ -51,7 +51,7 @@ technical-vocabulary requests (product and tool names), a barge-in (the caller c
 its reference transcript. `make_fixtures.py` speaks them with the Mac's Turkish voice (`say`), trims
 each segment and lays the pauses out exactly, so every word-end time is known. The annotated
 transcripts, segment times and every recogniser event are in
-[`voice-bench/baseline.json`](voice-bench/baseline.json).
+`voice-bench/baseline.json`.
 
 | Measured on this Mac | Unavailable here, and why |
 |---|---|
@@ -79,9 +79,9 @@ that follow are never heard by anyone.
 | Run (same fixtures, Apple dictation in real time) | Speech scenarios sent before the speech ended |
 |---|---|
 | A (first pass, before the bookkeeping fix; JSON not kept) | 9 of 13: long-request, pause-1000/1500/2000, two-pauses, correction, correction-pause, tech-agents, barge-in |
-| B ([baseline.json](voice-bench/baseline.json)) | 5 of 13: long-request, pause-1500, pause-2000, two-pauses, barge-in |
-| C ([baseline-run2.json](voice-bench/baseline-run2.json)) | 9 of 13: long-request, pause-500/1000/1500/2000, two-pauses, correction-pause, tech-agents, barge-in |
-| D ([baseline-run3.json](voice-bench/baseline-run3.json)) | 10 of 13: long-request, pause-500/1000/1500/2000, two-pauses, correction, correction-pause, tech-names, tech-agents |
+| B (`baseline.json`) | 5 of 13: long-request, pause-1500, pause-2000, two-pauses, barge-in |
+| C (`baseline-run2.json`) | 9 of 13: long-request, pause-500/1000/1500/2000, two-pauses, correction-pause, tech-agents, barge-in |
+| D (`baseline-run3.json`) | 10 of 13: long-request, pause-500/1000/1500/2000, two-pauses, correction, correction-pause, tech-names, tech-agents |
 
 **Between 5 and 10 of 13 speech scenarios** are cut off in each pass. Every pass cut the long request
 and every pause of 1.5 s or more. Speech end to send, when the turn did survive: median 1.2–1.9 s.
@@ -168,7 +168,7 @@ Audio is released in 20 ms frames on the wall clock. The online endpointer appli
 whisper small transcribes through the daemon's own `transcribe.pcm` with the vocabulary lead-in, a warm
 Claude Haiku session (thinking off, streaming, the call's account) answers, and EMA makes the first
 clause as soon as it exists. 22 replies over 11 speech scenarios × 2 rounds, plus silence
-([`proof.json`](voice-bench/proof.json)):
+(`proof.json`):
 
 | Median after the end of speech | ms |
 |---|---|

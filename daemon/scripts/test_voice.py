@@ -818,7 +818,9 @@ async def measured(phone: Phone, fx: dict, rounds: int, out: Path) -> None:
     for k in ("soft_end", "fast_stt", "first_token", "first_say", "commit", "final_stt"):
         vals = [t["after_speech_end_ms"][k] for t in stop["turns"] if t["text"] and t["after_speech_end_ms"].get(k) is not None]
         daemon_stages[k] = statistics.median(vals) if vals else None
-    proof = json.loads((ROOT.parent / "docs" / "voice-bench" / "proof.json").read_text())["summary"]
+    # The measurements are not committed (they quote the Turkish calls); a checkout without them has no baseline.
+    proof_path = ROOT.parent / "docs" / "voice-bench" / "proof.json"
+    proof = json.loads(proof_path.read_text())["summary"] if proof_path.exists() else None
     summary = {
         "turns": len(speech),
         "first_say_after_speech_end_ms": {"median": statistics.median(first) if first else None,
@@ -833,7 +835,7 @@ async def measured(phone: Phone, fx: dict, rounds: int, out: Path) -> None:
         "errors": sum(len(x["errors"]) for x in rows),
         "baseline_proof": {"first_clause_text_median_ms": proof["stage_medians_after_speech_end_ms"]["llm_first_clause"],
                            "first_audio_median_ms": proof["first_audio_after_speech_end_ms"]["median"],
-                           "first_audio_p95_ms": proof["first_audio_after_speech_end_ms"]["p95"]},
+                           "first_audio_p95_ms": proof["first_audio_after_speech_end_ms"]["p95"]} if proof else None,
         "models": {"fast_stt": voice.FAST_STT_MODEL, "final_stt": transcribe.MODEL,
                    "fast_layer": voice.MODEL_ALIASES.get(voice.FAST_MODEL, voice.FAST_MODEL)},
         "where": "first_say is the arrival of the first voice.say on a loopback socket; no phone, no EMA",
