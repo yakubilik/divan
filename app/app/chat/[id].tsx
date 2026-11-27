@@ -24,6 +24,7 @@ import { tailCwd, tilde } from '../../src/components/pickers';
 import { ApprovalCard, AssistantText, CardLink, ConnectionBanner, FiledRule, SwitchNote, ThinkingRow, ToolCard, ToolGroup, TranscriptSkeleton, TurnFooter, UserBubble, WorkingRow } from '../../src/components/chat';
 import { useDivanView } from '../../src/queue';
 import { client } from '../../src/ws';
+import { PressWatch } from '../../src/press';
 import { filedBy, filedUnder, ticketRoute } from '../../src/filed';
 import { COLUMN_LABEL } from '../../src/board';
 import { errText } from '../../src/i18n';
@@ -361,6 +362,28 @@ export function Conversation({ id }: { id: string }) {
       { text: T('outRetry'), onPress: () => { void retrySend(clientId); } },
     ]);
   }
+  // The send button, watched from underneath (press.ts): a tap that lands on
+  // it and that no press follows still sends, and says what was seen of it.
+  const onSendRef = useRef<() => Promise<void>>(async () => {});
+  const sendRect = useRef<View>(null);
+  const sendWatch = useRef<PressWatch | null>(null);
+  if (!sendWatch.current) {
+    sendWatch.current = new PressWatch({
+      onLost: (seen) => {
+        void onSendRef.current();
+        // Where the button is, as the layout knows it, beside where the finger
+        // was: a tap inside the button that a stale measurement put outside it
+        // is one of the three suspects.
+        const tell = (rect: number[] | null) => {
+          void client.call('client.note', { kind: 'send.lost', data: { ...seen, rect } }, 5000).catch(() => {});
+        };
+        const view = sendRect.current;
+        if (view?.measureInWindow) view.measureInWindow((x, y, w, h) => tell([x, y, w, h].map(Math.round)));
+        else tell(null);
+      },
+    });
+  }
+  useEffect(() => () => sendWatch.current?.stop(), []);
   async function onSend() {
     const t = text.trim();
     if (!t && pending.length === 0) return;
@@ -369,6 +392,7 @@ export function Conversation({ id }: { id: string }) {
     spokenTo.current = true;
     await sendNow(t, atts);
   }
+  onSendRef.current = onSend;
 
   // ── attachments ────────────────────────────────────────────────────────
   async function addAssets(assets: { uri: string; fileName?: string | null; duration?: number | null }[]) {
@@ -800,11 +824,24 @@ export function Conversation({ id }: { id: string }) {
                 </Pressable>
               )}
               {canSend ? (
-                <Pressable accessibilityLabel={T('send')} onPress={() => void onSend()} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="arrow_upward" size={20} weight={500} color="#FFFFFF" />
-                </Pressable>
+                // Its own key: the mic below is a different button, not this
+                // one with other handlers. The View is what hears the touches
+                // whatever becomes of the press (press.ts), and both reach a
+                // little past the 34 points that are drawn.
+                <View key="send" ref={sendRect} hitSlop={10}
+                  onTouchStart={(e) => sendWatch.current?.touchStart(e.nativeEvent.pageX, e.nativeEvent.pageY)}
+                  onTouchMove={(e) => sendWatch.current?.touchMove(e.nativeEvent.pageX, e.nativeEvent.pageY)}
+                  onTouchEnd={(e) => sendWatch.current?.touchEnd(e.nativeEvent.pageX, e.nativeEvent.pageY)}
+                  onTouchCancel={() => sendWatch.current?.touchCancel()}>
+                  <Pressable accessibilityLabel={T('send')} hitSlop={10} disabled={false}
+                    onPressIn={() => sendWatch.current?.pressIn()} onPressOut={() => sendWatch.current?.pressOut()}
+                    onPress={() => { if (sendWatch.current?.press() ?? true) void onSend(); }}
+                    style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="arrow_upward" size={20} weight={500} color="#FFFFFF" />
+                  </Pressable>
+                </View>
               ) : (
-                <Pressable accessibilityLabel={T('record')} onPress={() => void startRecording()} disabled={!online || uploading > 0} style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', opacity: online ? 1 : 0.45 }}>
+                <Pressable key="mic" accessibilityLabel={T('record')} onPress={() => void startRecording()} disabled={!online || uploading > 0} style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', opacity: online ? 1 : 0.45 }}>
                   <Icon name="mic" size={22} color={c.muted} />
                 </Pressable>
               )}

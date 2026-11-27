@@ -280,6 +280,8 @@ class Server:
         self.writers: dict[WebSocket, asyncio.Task] = {}
         self._dispatches: set[asyncio.Task] = set()   # requests being answered
         self.conns: dict[WebSocket, Conn] = {}
+        # device id -> when each of its recent `client.note`s arrived (monotonic).
+        self._notes: dict[str, list[float]] = {}
         # (chat id, client id) -> the answer `chat.send` gave, or will give, for
         # that message: a resend of one the phone never heard the answer to is
         # answered from here instead of being run again (#292). Oldest first,
@@ -2617,6 +2619,30 @@ class Server:
             raise secret_share.ShareError("that key is no longer in the keychain", "secret_gone")
         log.info("chat %s: shared key %s copied on %s", chat_id, service, dev.name)
         return {"value": value, "expires": shared + secret_share.TTL_S}
+
+    #: Notes a client may write into the daemon's log in a minute, per device.
+    NOTES_PER_MIN = 20
+
+    async def h_client_note(self, dev: Device, d: dict) -> dict:
+        """Something a client saw that only it could see, written into this
+        log: a tap its button never answered, say (app/src/press.ts). The phone
+        has no log anybody can read afterwards; this one is read every time
+        something is reported. A short kind and a small JSON of numbers and
+        flags — capped, rate-limited, never an event to other clients, and
+        nothing here is acted on."""
+        now = time.monotonic()
+        recent = [t for t in self._notes.get(dev.id, []) if now - t < 60]
+        if len(recent) >= self.NOTES_PER_MIN:
+            self._notes[dev.id] = recent
+            return {"logged": False}
+        self._notes[dev.id] = recent + [now]
+        kind = re.sub(r"[^a-z0-9._-]", "", str(d.get("kind") or "").lower())[:40] or "note"
+        try:
+            text = json.dumps(d.get("data"), ensure_ascii=True, default=str, separators=(",", ":"))
+        except (TypeError, ValueError):
+            text = "null"
+        log.info("client note from %s (%s): %s %s", dev.name, dev.id, kind, text[:600])
+        return {"logged": True}
 
     async def h_ping(self, dev: Device, d: dict, ws: WebSocket) -> dict:
         """The phone's heartbeat. A protocol-level ping only proves the socket is
