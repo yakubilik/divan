@@ -2,7 +2,9 @@ import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { Engine, ortRuntime, prepare, RATE, STAGES, type Ort, type Stage } from './tts/engine';
+import { hasLexicon, setLexicon } from './tts/lexicon';
 import type { Ema, Player } from './tts/speaker';
+import { onPacks, pack } from './lang';
 
 /** EMA Lightning, the Turkish voice made on the phone: where its files are, loading it, and playing what
  *  it makes. The pipeline itself is `src/tts/engine.ts`; this is the part that needs a phone.
@@ -11,7 +13,19 @@ import type { Ema, Player } from './tts/speaker';
  *  `assets/tts/`, and `plugins/with-tts-models.js` puts whatever is there into the app bundle at prebuild.
  *  A build without them, or without onnxruntime's native module (Expo Go, an older build), says so here
  *  and the call reads Turkish with the system voice, as it did before. Nothing is loaded at import:
- *  onnxruntime installs itself when it is first required, and that is `warm()`, on the call screen. */
+ *  onnxruntime installs itself when it is first required, and that is `warm()`, on the call screen.
+ *
+ *  The words it reads numbers, dates and symbols with are not in the code either: they are the computer's
+ *  language pack `tr/app/tts`, installed here when the phone has it (kept from the last connection, or
+ *  delivered by this one). Until then EMA is not ready and the system voice reads Turkish. */
+
+/** Install the pack's lexicon when there is one; a pack without it leaves the one in place. */
+function installLexicon(): void {
+  const data = pack('tr', 'app/tts');
+  if (data) setLexicon(data);
+}
+installLexicon();
+onPacks(installLexicon);
 
 const fileName = (stage: Stage) => `ema-${stage}.onnx`;
 
@@ -43,7 +57,7 @@ export function available(): boolean {
 }
 
 export function ready(): boolean {
-  return !!engine?.ready;
+  return !!engine?.ready && hasLexicon();
 }
 
 export function status() {
@@ -60,6 +74,11 @@ export async function warm(): Promise<boolean> {
       const ort = require('onnxruntime-react-native') as Ort;
       engine = new Engine(ortRuntime(ort, pathOf));
     }
+    // Not a failure: the pack may still come with the next connection, and the next warm() uses it.
+    if (!hasLexicon()) {
+      console.warn('ema: no Turkish lexicon yet (language pack tr/app/tts)');
+      return false;
+    }
     const t = await engine.load();
     console.log(`ema: loaded in ${t.loadMs} ms, warmed in ${t.warmMs} ms`);
     return true;
@@ -74,9 +93,9 @@ export async function warm(): Promise<boolean> {
 /** EMA for the speaker, or null when it is not loaded. */
 export function voice(): Ema | null {
   const e = engine;
-  if (!e?.ready) return null;
+  if (!e?.ready || !hasLexicon()) return null;
   return {
-    ready: () => e.ready,
+    ready: () => e.ready && hasLexicon(),
     prepare: (text) => prepare(text),
     synthesise: (spoken, o) => e.synthesise(spoken, o),
   };

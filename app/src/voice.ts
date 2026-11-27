@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { pack } from './lang';
 import * as Speech from 'expo-speech';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { ExpoSpeechRecognitionModule } from '@jamsch/expo-speech-recognition';
@@ -228,8 +229,9 @@ function systemSpeak(text: string, lang: string, onDone: () => void) {
  *  1.5 s. Every other language is the system voice. The choice is
  *  src/tts/speaker.ts; nothing of it leaves the phone. */
 export const EMA_NAME = 'EMA';
-/** Said when EMA is picked, in the language it speaks. */
-export const EMA_SAMPLE = 'Cevaplarını bu sesle okuyacağım.';
+/** Said when EMA is picked, in the language it speaks: the pack `app/voice`
+ *  (lang.ts), or nothing when this phone has no Turkish pack. */
+export const emaSample = (): string => pack<{ ema_sample?: string }>('tr', 'app/voice')?.ema_sample ?? '';
 
 let emaOn = true;
 

@@ -1,5 +1,9 @@
 /** EMA on the phone, checked without one.
  *
+ *  The Turkish lexicon the frontend reads with is the language pack's
+ *  (tr/app/tts), installed here as src/ema.ts installs it on the phone; the
+ *  checks that read real text skip without it.
+ *
  *  1. The pipeline the app runs — the TypeScript frontend, `src/tts/engine.ts`
  *     on onnxruntime-node instead of onnxruntime-react-native, the same
  *     `ortRuntime` — on every sentence of the pack's tr/tts/vectors.json, against the PyTorch
@@ -11,7 +15,8 @@
  *  3. stopSpeaking() mid-answer: nothing more is made or played, onDone once.
  *  4. A three-sentence answer is heard before its last sentence is made.
  *  5. A build without the model files or without onnxruntime's native module
- *     loads, says EMA is unavailable, and reads Turkish with expo-speech.
+ *     loads, says EMA is unavailable, and reads Turkish with expo-speech; so
+ *     does a phone that has no language pack yet.
  *
  *  Run alone: node scripts/test-ema.cjs [--require-models]  — folded into test-ustabasi.cjs.
  */
@@ -29,6 +34,9 @@ if (!require.extensions['.ts']) {
 const E = require(path.join(root, 'src/tts/engine.ts'));
 const F = require(path.join(root, 'src/tts/frontend.ts'));
 const S = require(path.join(root, 'src/tts/speaker.ts'));
+const X = require(path.join(root, 'src/tts/lexicon.ts'));
+const lexicon = lang.load('tr', 'app/tts');
+if (lexicon) X.setLexicon(lexicon);
 
 const checks = [];
 const check = (name, ok) => checks.push([name, !!ok]);
@@ -59,13 +67,14 @@ function clock() {
   };
 }
 
-/** An EMA whose pieces finish when the test says so (or at once with `auto`). Logs every step. */
+/** An EMA whose pieces finish when the test says so (or at once with `auto`). Logs every step.
+ *  It cuts the text into sentences as the engine does, without reading it (no lexicon needed). */
 function fakeEma(log, { auto = true, fail = null, ready = true } = {}) {
   const waiting = [];
   return {
     waiting,
     ready: () => ready,
-    prepare: (text) => E.prepare(text),
+    prepare: (text) => E.pieces(text),
     synthesise(spoken, o) {
       const i = o.seed;
       log.push(`synth ${i}`);
@@ -177,7 +186,7 @@ function emaModule(log, emaFake) {
   };
 }
 
-const THREE = 'Derleme bitti. İki test kırmızı. Yarın sabah tekrar bakarım.';
+const THREE = 'The build is done. Two tests are red. I will look again in the morning.';
 
 // ── 1. the pipeline against the reference ───────────────────────────────────
 
@@ -204,7 +213,7 @@ const requireModels = process.argv.includes('--require-models');
 
 async function pipeline() {
   const vectors = lang.load('tr', 'tts/vectors');
-  if (!vectors) { lang.skip('ema pipeline vs reference'); return null; }
+  if (!vectors || !lexicon) { lang.skip('ema pipeline vs reference'); return null; }
   let ort = null;
   try { ort = require('onnxruntime-node'); } catch {}
   const have = ort && E.STAGES.every((s) => fs.existsSync(path.join(MODELS, `${s}.onnx`)))
@@ -245,7 +254,7 @@ async function pipeline() {
 async function run() {
   // host steps against the Python, exactly
   const vectors = lang.load('tr', 'tts/vectors');
-  if (!vectors) lang.skip('ema host steps against the Python');
+  if (!vectors || !lexicon) lang.skip('ema host steps against the Python');
   else {
     const crypto = require('crypto');
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -267,7 +276,7 @@ async function run() {
     const log = [];
     const sp = speaker(log, fakeEma(log));
     let done = 0;
-    sp.speak('Merhaba.', 'tr-TR', () => done++);
+    sp.speak('Hello.', 'tr-TR', () => done++);
     // Bounded, not fixed: inside the whole suite other screens hold the event
     // loop and 20 ms was not always enough for the last callback to land.
     for (let i = 0; i < 50 && !done; i++) await wait(20);
@@ -285,9 +294,9 @@ async function run() {
     const e = ema === null ? null : fakeEma(log, { ready: ema === 'ok' });
     const sp = speaker(log, e, { enabled: () => enabled });
     let done = 0;
-    sp.speak('Merhaba.', lang, () => done++);
+    sp.speak('Hello.', lang, () => done++);
     await wait(20);
-    check(`who speaks: ${name} is expo-speech`, log[0] === `system ${lang} Merhaba.` && !log.some((l) => l.startsWith('synth')) && done === 1);
+    check(`who speaks: ${name} is expo-speech`, log[0] === `system ${lang} Hello.` && !log.some((l) => l.startsWith('synth')) && done === 1);
   }
   {
     const log = [];
@@ -304,14 +313,14 @@ async function run() {
     const ema = fakeEma(log, { fail: 'hang' });
     const sp = speaker(log, ema, { timers: t });
     let done = 0;
-    sp.speak('Merhaba.', 'tr-TR', () => done++);
+    sp.speak('Hello.', 'tr-TR', () => done++);
     await tick();
     t.advance(1499);
     const before = log.some((l) => l.startsWith('system'));
     t.advance(1);
     await wait(20);
     check('who speaks: no audio from EMA in 1.5 s (and not before) is expo-speech, onDone once',
-      !before && log.includes('system tr-TR Merhaba.') && log.includes('player stop') && done === 1
+      !before && log.includes('system tr-TR Hello.') && log.includes('player stop') && done === 1
       && sp.stats().fellBack === 'no audio in 1500 ms');
   }
   {
@@ -321,25 +330,25 @@ async function run() {
     const ema = fakeEma(log, { auto: false });
     const sp = speaker(log, ema, { timers: t });
     let done = 0;
-    sp.speak('Merhaba.', 'tr-TR', () => done++);
+    sp.speak('Hello.', 'tr-TR', () => done++);
     await tick();
     t.advance(1500);
     ema.waiting.forEach((f) => f());
     await wait(20);
     check('who speaks: a piece finished after the 1.5 s fallback is thrown away, not played over expo-speech',
-      log.includes('system tr-TR Merhaba.') && !log.some((l) => /^play \d/.test(l)) && done === 1);
+      log.includes('system tr-TR Hello.') && !log.some((l) => /^play \d/.test(l)) && done === 1);
   }
   {
     // the wiring in voice.ts: the same choice through speak()
     const log = [];
     const { voice, spoken } = phone(log, { ema: emaModule(log, fakeEma(log)) });
     let a = 0, b = 0;
-    voice.speak('Merhaba.', 'tr-TR', () => a++);
+    voice.speak('Hello.', 'tr-TR', () => a++);
     await wait(20);
     voice.speak('Hello there.', 'en-GB', () => b++);
     await wait(20);
     check('voice.speak: Turkish goes to EMA in the call’s session (playAndRecord, voiceChat)',
-      log.includes('session playAndRecord voiceChat') && log.includes('play 0') && !spoken.includes('Merhaba.') && a === 1);
+      log.includes('session playAndRecord voiceChat') && log.includes('play 0') && !spoken.includes('Hello.') && a === 1);
     check('voice.speak: English goes to expo-speech', spoken.includes('Hello there.') && b === 1);
     check('voice.voiceName: the Turkish voice is called EMA when it is there', voice.voiceName('tr-TR') === 'EMA');
     voice.setEmaEnabled(false);
@@ -421,11 +430,11 @@ async function run() {
     if (voice) {
       const warmed = await voice.warmEma();
       let done = 0;
-      voice.speak('Merhaba.', 'tr-TR', () => done++);
+      voice.speak('Hello.', 'tr-TR', () => done++);
       await wait(20);
       check('no model files: EMA reports unavailable and warming says no',
         voice.emaAvailable() === false && warmed === false && voice.emaStats().ready === false);
-      check('no model files: Turkish is read by expo-speech', log.some((l) => l === 'expo-speech tr-TR Merhaba.') && done === 1);
+      check('no model files: Turkish is read by expo-speech', log.some((l) => l === 'expo-speech tr-TR Hello.') && done === 1);
       check('no model files: the Turkish voice is not called EMA', voice.voiceName('tr-TR') !== 'EMA');
     }
   }
@@ -435,11 +444,28 @@ async function run() {
     const before = voice.emaAvailable();
     const warmed = await voice.warmEma();
     let done = 0;
-    voice.speak('Merhaba.', 'tr-TR', () => done++);
+    voice.speak('Hello.', 'tr-TR', () => done++);
     await wait(20);
     check('no native onnxruntime: warming fails quietly, EMA turns unavailable, Turkish is expo-speech',
       before === true && warmed === false && voice.emaAvailable() === false && /install/.test(voice.emaStats().failure || '')
-      && log.includes('expo-speech tr-TR Merhaba.') && done === 1);
+      && log.includes('expo-speech tr-TR Hello.') && done === 1);
+  }
+
+  {
+    // the model and onnxruntime are there, the language pack is not (yet)
+    const log = [];
+    const fakeOrt = { InferenceSession: { create: async () => ({ run: async () => ({}) }) }, Tensor: class {} };
+    const { voice } = phone(log, { files: true, ort: fakeOrt });
+    X.setLexicon(null);
+    const warmed = await voice.warmEma();
+    let done = 0;
+    voice.speak('Hello.', 'tr-TR', () => done++);
+    await wait(20);
+    const stats = voice.emaStats();
+    check('no language pack: warming says no without marking EMA failed, Turkish is expo-speech',
+      warmed === false && voice.emaAvailable() === true && stats.ready === false && !stats.failure
+      && log.includes('expo-speech tr-TR Hello.') && done === 1);
+    if (lexicon) X.setLexicon(lexicon);
   }
 
   // the player: pieces in order, one drain, nothing left behind

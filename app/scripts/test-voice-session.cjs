@@ -331,7 +331,7 @@ async function barge(peer, fx) {
     await wait(1200);                                  // well into the answer, echo going into the microphone
     const before = { barges: p.s.barges.length, hearing: p.of('voice.state').filter((e) => e.data.state === 'hearing').length };
     const answered = turnOf(p.engine.plays[p.engine.plays.length - 1].id);
-    const cut = await p.say(fx['short-greeting']);     // "Merhaba…" over the answer
+    const cut = await p.say(fx['short-greeting']);     // a greeting over the answer
     await p.until(() => p.s.barges.length > before.barges, 3000);
     const b = p.s.barges[before.barges];
     const flushAt = p.engine.flushes.find((t) => t >= cut.onset - 50);
@@ -388,7 +388,7 @@ async function barge(peer, fx) {
 
 // ── 3 · interruption, background and foreground, hang-up, permission ────────
 async function resources(peer, fx) {
-  const p = await phone(peer, 'resources', { greeting: 'Alo, dinliyorum.' });
+  const p = await phone(peer, 'resources', { greeting: 'Hello, listening.' });
   try {
     await p.until(() => p.told.some((t) => t.type === 'voice.playback' && t.data.turn_id === 0 && t.data.state === 'done'), 5000);
     // Order, not a clock window: ready goes out in the same tick as the first started (or earlier, at its

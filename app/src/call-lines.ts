@@ -1,26 +1,40 @@
 /** What the phone itself says on a call, in the language the call is held in.
  *
+ *  English is here; Turkish is the computer's language pack `app/call`
+ *  (lang.ts). Without the pack a call held in Turkish is answered in English.
+ *
  *  Not the interface's strings: the app's buttons are English, but these are
  *  heard, and the call is held in the phone's own language (`locale()` in
  *  voice.ts). English read by the Turkish voice is neither language.
  *
  *  Pickup is the greeting and nothing else: no count of what is running or
  *  waiting. The model answers that when it is asked. */
+import { pack } from './lang';
+
 export type CallLines = {
   /** What the transcript shows. */
   greeting: string;
   /** What the voice is given. The same words, punctuated for the ear: the
-   *  comma is the beat between "alo" and "vaysa" and the exclamation mark
-   *  keeps it playful. Both voices read the repeated vowels as one long vowel
+   *  comma is the beat between the two words and the exclamation mark keeps
+   *  it playful. Both voices read the repeated vowels as one long vowel
    *  rather than spelling them out (EMA's normaliser passes them through as a
    *  plain word; see test-call-pickup.cjs). */
   greetingSpoken: string;
 };
 
-const TR: CallLines = {
-  greeting: 'Alooooo vaysaaaa',
-  greetingSpoken: 'Alooooo, vaysaaaa!',
-};
+/** The pack `app/call`: the Turkish lines and the yes and no words. */
+interface CallPack {
+  greeting?: string;
+  greeting_spoken?: string;
+  chat?: {
+    looking?: string; approval?: Partial<Record<Kind, string>>; structured?: string;
+    dangerous?: string; yes_or_no?: string; allowed?: string; denied?: string;
+  };
+  no?: string[];
+  yes?: string[];
+}
+const trPack = () => pack<CallPack>('tr', 'app/call');
+const isTr = (lang: string) => /^tr\b/i.test(lang || '');
 
 const EN: CallLines = {
   greeting: 'Hello.',
@@ -29,7 +43,9 @@ const EN: CallLines = {
 
 /** The lines for a call held in `lang` (a tag such as 'tr-TR'); English for anything else. */
 export function callLines(lang: string): CallLines {
-  return /^tr\b/i.test(lang || '') ? TR : EN;
+  const tr = isTr(lang) ? trPack() : undefined;
+  if (!tr?.greeting) return EN;
+  return { greeting: tr.greeting, greetingSpoken: tr.greeting_spoken || tr.greeting };
 }
 
 // ── a call made from inside a chat ──────────────────────────────────────────
@@ -62,22 +78,6 @@ function kindOf(tool: string): Kind {
   return 'other';
 }
 
-const CHAT_TR: ChatCallLines = {
-  looking: 'Bakıyorum.',
-  approval: (tool) => ({
-    command: 'Bir komut çalıştırmak istiyor. İzin vereyim mi?',
-    edit: 'Bir dosyayı değiştirmek istiyor. İzin vereyim mi?',
-    read: 'Bir dosyayı okumak istiyor. İzin vereyim mi?',
-    web: 'İnternette bir şeye bakmak istiyor. İzin vereyim mi?',
-    other: 'Bir araç kullanmak istiyor. İzin vereyim mi?',
-  })[kindOf(tool)],
-  structured: 'Bir form veya soru bekliyor. Lütfen sohbet ekranından yanıtla.',
-  dangerous: 'Tehlikeli bir şey için izin istiyor. Onu uygulamadan onaylaman lazım.',
-  yesOrNo: 'Evet mi, hayır mı?',
-  allowed: 'Tamam.',
-  denied: 'Tamam, izin vermedim.',
-};
-
 const CHAT_EN: ChatCallLines = {
   looking: 'Looking into it.',
   approval: (tool) => ({
@@ -95,25 +95,38 @@ const CHAT_EN: ChatCallLines = {
 };
 
 export function chatCallLines(lang: string): ChatCallLines {
-  return /^tr\b/i.test(lang || '') ? CHAT_TR : CHAT_EN;
+  const tr = isTr(lang) ? trPack()?.chat : undefined;
+  if (!tr) return CHAT_EN;
+  return {
+    looking: tr.looking || CHAT_EN.looking,
+    approval: (tool) => tr.approval?.[kindOf(tool)] || CHAT_EN.approval(tool),
+    structured: tr.structured || CHAT_EN.structured,
+    dangerous: tr.dangerous || CHAT_EN.dangerous,
+    yesOrNo: tr.yes_or_no || CHAT_EN.yesOrNo,
+    allowed: tr.allowed || CHAT_EN.allowed,
+    denied: tr.denied || CHAT_EN.denied,
+  };
 }
 
 // Both languages are listened for whichever the call is held in: people answer
-// "okay" in the middle of Turkish. A no is looked for first, because most of
-// them contain a yes ("izin verme", "don't do it").
-const NO = ['no', 'nope', 'nah', 'dont', 'do not', 'deny', 'cancel', 'stop', 'never',
-  'hayır', 'hayir', 'yok', 'olmaz', 'reddet', 'iptal', 'dur', 'yapma', 'izin verme', 'istemiyorum'];
-const YES = ['yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'allow', 'approve', 'go ahead', 'do it',
-  'evet', 'olur', 'tamam', 'izin ver', 'onayla', 'onaylıyorum', 'yap', 'devam', 'tabii', 'tabi'];
+// "okay" in the middle of Turkish (whose words are the pack's). A no is looked
+// for first, because most of them contain a yes ("don't do it").
+const NO = ['no', 'nope', 'nah', 'dont', 'do not', 'deny', 'cancel', 'stop', 'never'];
+const YES = ['yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'allow', 'approve', 'go ahead', 'do it'];
+/** The Turkish capital dotted I, which lower-cases to two code points otherwise. */
+const DOTTED_CAPITAL_I = /\u0130/g;
 
 /** A spoken answer to an approval question: true for yes, false for no, null
  *  when it was neither and the question has to be asked again. */
 export function yesNo(heard: string): boolean | null {
-  const words = (heard || '').replace(/İ/g, 'i').toLowerCase().replace(/['’]/g, '')
+  const words = (heard || '').replace(DOTTED_CAPITAL_I, 'i').toLowerCase().replace(/['’]/g, '')
     .split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   if (!words.length) return null;
   const s = ` ${words.join(' ')} `;
-  if (NO.some((w) => s.includes(` ${w} `))) return false;
-  if (YES.some((w) => s.includes(` ${w} `))) return true;
+  const tr = trPack();
+  const no = [...NO, ...(tr?.no ?? [])];
+  const yes = [...YES, ...(tr?.yes ?? [])];
+  if (no.some((w) => s.includes(` ${w} `))) return false;
+  if (yes.some((w) => s.includes(` ${w} `))) return true;
   return null;
 }

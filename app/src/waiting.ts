@@ -23,6 +23,7 @@
 //     a card are words taken out of the question itself; a question that offers
 //     no such words gets no buttons rather than a guessed pair. Which is the
 //     same rule the Dashboard's figures are under, applied to language.
+import { pack, packRegex } from './lang';
 import { stuck, waiting, type DivanView, type MergedCard } from './divan';
 import type { Key } from './i18n';
 import type { DivanColumn, DivanExecutor, DivanOpenItem } from './protocol';
@@ -127,9 +128,11 @@ const ANSWER_CHARS = 48;
 /** A question this long has more in it than a choice between two things. */
 const QUESTION_CHARS = 200;
 
-/** The Turkish question particle closing a sentence — `mı`, `mi`, `mu`, `mü`,
- *  with the person endings it takes (`miyim`, `mısın`, `mıyız`). */
-const YES_NO = /\sm[ıiuü](y[ıiuü]m|s[ıiuü]n(ız|iz|uz|üz)?|y[ıiuü]z|d[ıiuü]r)?$/i;
+/** A language whose questions are asked by a particle (Turkish), as the
+ *  computer's pack `app/waiting` describes it: `alternative` matches "A or B"
+ *  asked with the particle and captures the two, `yes_no` a plain yes-or-no,
+ *  `not_yes_no` the words that make it a choice after all, `yes` the answer. */
+interface ParticlePack { alternative?: string; yes_no?: string; not_yes_no?: string; yes?: string }
 
 /** The answers a question offers, quoted out of the question itself.
  *
@@ -155,17 +158,19 @@ export function answers(question: string): string[] {
   const last = text.split(/(?<=[.!?])\s+/).filter(Boolean).pop() ?? '';
   const body = last.replace(/\?+$/, '').trim();
   if (!body || body.length > QUESTION_CHARS) return [];
-  // Turkish asks the way the queue now writes its questions (6 Oct 2026). "A mı,
-  // B mi?" is the alternative, and its two halves are the answers. A plain
-  // yes-or-no ("Ben ekleyeyim mi?") offers only Evet: it is the one answer safe
-  // to put on a button, since a no is rarely just a no — "not yet", "not like
-  // that" — and the box under the pill is where that gets said.
-  const alt = body.match(/^(.+?)\s+m[ıiuü],\s*(.+?)\s+m[ıiuü]$/i);
-  if (alt) {
+  // Turkish asks the way the queue now writes its questions (6 Oct 2026): the
+  // alternative is two halves each closed by the question particle, and its
+  // halves are the answers. A plain yes-or-no offers only the yes: it is the
+  // one answer safe to put on a button, since a no is rarely just a no — "not
+  // yet", "not like that" — and the box under the pill is where that gets said.
+  const tr = pack<ParticlePack>('tr', 'app/waiting');
+  const alt = packRegex(tr?.alternative)?.exec(body);
+  if (alt && alt[1] && alt[2]) {
     const pair = [alt[1].trim(), alt[2].trim()];
     return pair.some((p) => p.length < 2 || p.length > ANSWER_CHARS) ? [] : pair.map(capital);
   }
-  if (YES_NO.test(body) && !/\s(veya|ya da|yoksa)\s/i.test(body)) return ['Evet'];
+  const notYesNo = packRegex(tr?.not_yes_no);
+  if (tr?.yes && packRegex(tr.yes_no)?.test(body) && !(notYesNo && notYesNo.test(body))) return [tr.yes];
   if (OPENER.test(body)) return [];
   const parts = body.split(OR);
   if (parts.length !== 2) return [];

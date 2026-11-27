@@ -4,8 +4,10 @@
  *  fallback policy, then the model's alphabet) and its chunker. There is no
  *  Python here, so the Python's answers are files in the language pack:
  *  `tr/tests/app/tts-frontend.json` (written by `tts/frontend_fixture.py`) and
- *  `tr/tts/vectors.json` (ticket 1/3's test sentences). A mismatch is printed
- *  with both readings. Without the pack (GitHub CI) only the import check runs.
+ *  `tr/tts/vectors.json` (ticket 1/3's test sentences). The words the port
+ *  reads with are the pack's too (`tr/app/tts.json`, installed as the phone's
+ *  src/ema.ts installs it). A mismatch is printed with both readings. Without
+ *  the pack (GitHub CI) only the import check and the no-lexicon check run.
  *
  *  Run alone: node scripts/test-tts.cjs  — folded into test-ustabasi.cjs.
  */
@@ -20,15 +22,34 @@ if (!require.extensions['.ts']) {
 }
 const F = require(path.join(root, 'src/tts/frontend.ts'));
 const C = require(path.join(root, 'src/tts/chunker.ts'));
+const X = require(path.join(root, 'src/tts/lexicon.ts'));
 
 const lang = require('../../scripts/lang.cjs');
 const fixture = lang.load('tr', 'tests/app/tts-frontend');
 const vectors = lang.load('tr', 'tts/vectors');
+const lexicon = lang.load('tr', 'app/tts');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const checks = [];
 const misses = [];
-if (!fixture || !vectors) lang.skip('tts: the frontend against the Python');
+
+// Without a lexicon the frontend reads nothing rather than make words up.
+{
+  const before = X.hasLexicon();
+  X.setLexicon(null);
+  let threw = false;
+  try { F.frontend('12 apples'); } catch { threw = true; }
+  checks.push(['tts: without a lexicon the frontend refuses to read', threw && !X.hasLexicon()]);
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    checks.push(['tts: a pack that is not a lexicon installs nothing', X.setLexicon({ digits: [] }) === false && !X.hasLexicon()]);
+  } finally { console.warn = warn; }
+  if (before && lexicon) X.setLexicon(lexicon);
+}
+
+if (!fixture || !vectors || !lexicon) lang.skip('tts: the frontend against the Python');
 else {
+checks.push(['tts: the pack tr/app/tts is a whole lexicon', X.setLexicon(lexicon)]);
 
 for (const c of fixture.cases) {
   const spoken = F.frontend(c.text);

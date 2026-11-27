@@ -35,6 +35,7 @@ const src = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const h = R.React.createElement;
 
 const W = require(path.join(root, 'src/waiting.ts'));
+const TR = require('./lang-packs.cjs');
 const M = require(path.join(root, 'src/divan.ts'));
 const K = require(path.join(root, 'src/tokens.ts'));
 
@@ -256,6 +257,15 @@ const CALM = view([EASY]);
 
 {
   const A = W.answers;
+  // Turkish questions are read by their grammar, which the computer's pack
+  // describes; the cases are pack data too (the panel's test shares them).
+  const cases = TR.load('tr', 'tests/web/answers');
+  if (!cases || !TR.installTr()) TR.skip('answers: Turkish questions');
+  else {
+    for (const c of cases.cases) checks.push([`Turkish: ${c.why}`, eq(A(c.question), c.answers)]);
+    TR.clear();
+    checks.push(['…and without the pack a Turkish question offers nothing', cases.cases.every((c) => eq(A(c.question), []))]);
+  }
   checks.push(
     ['a question that ends on a choice offers it, in the words it was written in',
       eq(A(RETRIES), ['Keep our 3 attempts', "Follow Stripe's schedule"])],
@@ -265,10 +275,6 @@ const CALM = view([EASY]);
       eq(A('We use one retry or two today. Keep three, or follow Stripe?'),
          ['Keep three', 'Follow Stripe'])],
     ['a report is not a question and offers nothing', eq(A(SAFARI), [])],
-    ['a Turkish "A mı, B mi?" offers its two halves', eq(A('Postgres mi, SQLite mı?'), ['Postgres', 'SQLite'])],
-    ['…and a Turkish yes-or-no only Evet, since a no needs saying in words',
-      eq(A('Bu iş bitti ama ana koda eklenemedi. Ben ekleyeyim mi?'), ['Evet'])
-      && eq(A('Postgres mi yoksa SQLite mı?'), [])],
     ['…nor is a question with nothing to choose between',
       eq(A('Which Stripe account should the beta use?'), [])],
     ['a question that opens on an auxiliary is not split: half of it would be a button',

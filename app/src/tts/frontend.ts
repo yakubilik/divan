@@ -1,22 +1,26 @@
 // EMA Lightning's text frontend (ema_lightning/frontend.py), ported: any written Turkish in, text in the
-// model's own alphabet out, and that text as the ids text.onnx takes. Nothing here throws on text.
+// model's own alphabet out, and that text as the ids text.onnx takes. Nothing here throws on text; it
+// throws only when no lexicon is installed (lexicon.ts), since without one it cannot read anything.
 //
 // The phone's port is checked against the Python frontend's own output in
 // the language pack (tr/tests/app/tts-frontend, tr/tts/vectors) (`npm test`).
 
+import { lex } from './lexicon';
 import { normalize } from './normalizer';
 
-/** The model's alphabet; a letter's id is its index (tts/vectors.json `vocab`). */
+/** The model's alphabet; a letter's id is its index (tts/vectors.json `vocab`). Its last six letters
+ *  are the Turkish ones ASCII lacks: c cedilla, o and u with diaeresis, g breve, dotless i, s cedilla. */
 export const VOCAB = [
   '<pad>', '<unk>', ' ', '!', '"', '%', '&', "'", '(', ')', ',', '-', '.', '/', ':', ';', '?',
   'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w',
-  'x', 'y', 'z', 'ç', 'ö', 'ü', 'ğ', 'ı', 'ş',
+  'x', 'y', 'z', '\u00e7', '\u00f6', '\u00fc', '\u011f', '\u0131', '\u015f',
 ];
 const STOI = new Map(VOCAB.map((ch, i) => [ch, i]));
 export const UNK = 1;
 
 const BLOCK_BYTES = 8 * 1024;
-const TURKISH = new Set('çğıöşüÇĞİÖŞÜ');
+// The Turkish letters, small and capital, kept whole where other letters lose their accents.
+const TURKISH = new Set('\u00e7\u011f\u0131\u00f6\u015f\u00fc\u00c7\u011e\u0130\u00d6\u015e\u00dc');
 const TYPOGRAPHY: Record<string, string> = {
   '’': "'", '‘': "'", 'ʼ': "'", '´': "'", '`': "'", '“': '"', '”': '"', '„': '"', '«': '"', '»': '"',
   '–': '-', '—': '-', '−': '-', '…': '...',
@@ -29,6 +33,7 @@ const PY_SPACE = /[\t\n\x0b\x0c\r\x1c-\x1f \x85\xa0\u1680\u2000-\u200a\u2028\u20
 /** Text the model can read: numbers and notation read aloud, lowercased the Turkish way, and cut to
  *  its alphabet. Empty when nothing readable is left. */
 export function frontend(text: string): string {
+  lex();
   const clean = text.replace(LONE_SURROGATE, '').replace(UNSAFE, ' ');
   if (!clean.split(PY_SPACE).some(Boolean)) return '';
   return alphabet(blocks(clean).map(spoken).join(' '));
@@ -63,7 +68,7 @@ export function blocks(text: string): string[] {
 }
 
 export function alphabet(text: string): string {
-  const lowered = Array.from(text, (ch) => TYPOGRAPHY[ch] ?? ch).join('').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+  const lowered = Array.from(text, (ch) => TYPOGRAPHY[ch] ?? ch).join('').replace(/\u0130/g, 'i').replace(/I/g, '\u0131').toLowerCase();
   let out = '';
   for (let ch of lowered) {
     if (!TURKISH.has(ch)) ch = ch.normalize('NFKD').replace(/\p{M}/gu, '');

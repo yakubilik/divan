@@ -4,6 +4,7 @@
 // `ortRuntime` below, so the code that is checked against the PyTorch reference is the code that talks.
 
 import { frontend, ids as letterIds } from './frontend';
+import { lex } from './lexicon';
 import { chunk, type Piece } from './chunker';
 
 export const RATE = 48000;
@@ -209,8 +210,10 @@ export class Engine {
         const loaded = {} as Record<Stage, Session>;
         for (const stage of STAGES) loaded[stage] = await this.runtime.load(stage);
         const t1 = this.now();
-        // The first run of a graph allocates; do it here and not under the first answer.
-        await this.run(loaded, letterIds('tamam.'), 'tamam.', {});
+        // The first run of a graph allocates; do it here and not under the first answer, on a short
+        // word of the language pack (it throws when none is installed: there is nothing to read then).
+        const warmup = frontend(lex().warmup);
+        await this.run(loaded, letterIds(warmup), warmup, {});
         this.sessions = loaded;
         this.timings = { loadMs: t1 - t0, warmMs: this.now() - t1 };
         return this.timings;

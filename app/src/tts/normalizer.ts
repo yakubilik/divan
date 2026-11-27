@@ -6,9 +6,10 @@
 // uses them: caller hints, the preserve and reject policies, cancellation and the 512 KiB result budget.
 // Offsets are JS string indices, not UTF-8 bytes; the rules that count bytes only ever count ASCII.
 
+import { lex } from './lexicon';
 import {
-  allDigits, cardinal, digitName, letterName, lookupKey, number as numberWords, parseNumber, prosePunctuation, symbolName,
-  unit, unitMarker, abbreviation, currency, currencyLexeme,
+  allDigits, cardinal, digitName, keepsPeriod, letterName, lookupKey, months, number as numberWords, parseNumber,
+  prosePunctuation, symbolName, unit, unitMarker, abbreviation, currency, currencyLexeme,
 } from './words';
 import {
   type Category, type Clock, type DateValue, type Numeric, type NumericPreference, type Value,
@@ -159,7 +160,7 @@ function trimmedRange(text: string, offset: number): Range | null {
   const leading = trimStartWhile(text, (c) => delimiter(c) || c === ',' || c === '…');
   let body = trimEndWhile(leading, (c) => delimiter(c) || c === '…');
   if (body.endsWith(',') && !body.endsWith(',,')) body = body.slice(0, -1);
-  if (body.endsWith('.') && !body.endsWith('..') && body !== 'Dr.' && !/^[0-9]*$/.test(body.slice(0, -1))) body = body.slice(0, -1);
+  if (body.endsWith('.') && !body.endsWith('..') && !keepsPeriod(body) && !/^[0-9]*$/.test(body.slice(0, -1))) body = body.slice(0, -1);
   const start = offset + text.length - leading.length;
   return body ? { start, end: start + body.length } : null;
 }
@@ -195,11 +196,14 @@ function numericParenthesisCompound(raw: string): boolean {
   return /[()]/.test(body) && !anyChar(body, isAlphabetic) && body.split(/[^0-9]/).filter(Boolean).length > 1;
 }
 
-const DATE_CUES = ['tarih', 'tarihi'];
-const TIME_CUES = ['saat'];
+// The words that announce what follows them: a date, a time of day, a telephone number, a web address.
+const dateCues = () => lex().cues.date;
+const timeCues = () => lex().cues.time;
+const telephoneCues = () => lex().cues.telephone;
+const webCues = () => lex().cues.web;
 const cueKey = (text: string) => lookupKey(text.endsWith(':') ? text.slice(0, -1) : text);
-const isCueWord = (text: string) => { const k = cueKey(text); return DATE_CUES.includes(k) || TIME_CUES.includes(k); };
-const isClockWord = (text: string) => !text.includes(':') && TIME_CUES.includes(cueKey(text));
+const isCueWord = (text: string) => { const k = cueKey(text); return dateCues().includes(k) || timeCues().includes(k); };
+const isClockWord = (text: string) => !text.includes(':') && timeCues().includes(cueKey(text));
 function inlinePrefix(text: string): number | null {
   const at = text.indexOf(':');
   if (at < 0) return null;
@@ -350,7 +354,7 @@ function dateSurface(text: string): Prepared | null {
   const [day, month, year] = text.includes('.') ? parts : [parts[2], parts[1], parts[0]];
   if (day.length < 1 || day.length > 2 || month.length < 1 || month.length > 2 || year.length !== 4
     || ![day, month, year].every(allDigits)) return null;
-  const name = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'][Number(month) - 1];
+  const name = months()[Number(month) - 1];
   return name ? { kind: 'dateSurface', day: Number(day), month: name, year: Number(year) } : null;
 }
 
@@ -375,7 +379,7 @@ class Context {
     const key = cueKey(token.text);
     const next = this.tokens[index + 1];
     return isCueWord(token.text)
-      || (['telefon', 'tel', 'web', 'site'].includes(key) && !!next
+      || ((telephoneCues().includes(key) || webCues().includes(key)) && !!next
         && whitespaceBetween(this.text, token.range.end, next.range.start)
         && (next.text.includes('.') || hasAsciiDigit(next.text)));
   }
@@ -385,10 +389,11 @@ class Context {
     const next = this.tokens[index + 1];
     if (!next || !whitespaceBetween(this.text, token.range.end, next.range.start)) return null;
     const key = lookupKey(next.text);
-    if (key === 'yüzyıl') return index + 2;
-    if (key === 'dünya') {
+    const { century, worldWar } = lex();
+    if (key === century) return index + 2;
+    if (key === worldWar[0]) {
       const last = this.tokens[index + 2];
-      return last && lookupKey(last.text) === 'savaşı' && whitespaceBetween(this.text, next.range.end, last.range.start) ? index + 3 : null;
+      return last && lookupKey(last.text) === worldWar[1] && whitespaceBetween(this.text, next.range.end, last.range.start) ? index + 3 : null;
     }
     return null;
   }
@@ -428,7 +433,7 @@ function electronicWhole(ctx: Context, index: number): Attempt | null {
 
 function electronicContextual(ctx: Context, index: number): Attempt | null {
   const source = ctx.tokens[index].text;
-  if (source.includes('.') && ctx.cue(index, ['web', 'site'])) {
+  if (source.includes('.') && ctx.cue(index, webCues())) {
     const spoken = parseElectronic(source, true);
     return [spoken !== null ? { kind: 'electronic', spoken } : 'unsupported', index];
   }
@@ -441,7 +446,7 @@ function electronicContextual(ctx: Context, index: number): Attempt | null {
 
 function lexical(ctx: Context, index: number): Attempt | null {
   const source = ctx.tokens[index].text;
-  if (source === '&') return [{ kind: 'symbol', text: 've' }, index];
+  if (source === '&') return [{ kind: 'symbol', text: symbolName('&')! }, index];
   if (source.startsWith('#')) {
     const text = hashtag(source);
     return [text !== null ? { kind: 'symbol', text } : 'unsupported', index];
@@ -476,14 +481,14 @@ function identifiers(ctx: Context, index: number): Attempt | null {
   const zeroGroupSignal = source === '0'
     && !!tokens[index + 1] && tokens[index + 1].text.length === 3 && allAsciiDigits(tokens[index + 1].text)
     && !!tokens[index + 2] && tokens[index + 2].text.length >= 2 && allAsciiDigits(tokens[index + 2].text);
-  const telephoneCue = hasAsciiDigit(source) && ctx.cue(index, ['telefon', 'tel']);
+  const telephoneCue = hasAsciiDigit(source) && ctx.cue(index, telephoneCues());
   const quantityContext = telephoneCue && !!tokens[index + 1] && (label(tokens[index + 1].text) || rangeNoun(tokens[index + 1].text));
   if (source.startsWith('+90')
     || (source.startsWith('0') && source !== '0' && hasAsciiDigit(source))
     || zeroGroupSignal
-    || (source === '0' && ctx.cue(index, ['telefon', 'tel']))
+    || (source === '0' && ctx.cue(index, telephoneCues()))
     || (telephoneCue && !quantityContext && allBytes(source, /^[0-9]*$/))
-    || (source.length === 10 && allAsciiDigits(source) && ctx.cue(index, ['telefon', 'tel']))) {
+    || (source.length === 10 && allAsciiDigits(source) && ctx.cue(index, telephoneCues()))) {
     const end = groupEnd(text, tokens, index);
     const whole = text.slice(token.range.start, tokens[end].range.end);
     const digitCount = (whole.match(/[0-9]/g) ?? []).length;
@@ -547,9 +552,10 @@ function numeric(ctx: Context, index: number): [Attempt, FallbackClass] | null {
   const romanBase = trimEndWhile(baseOf(source), (c) => c === '.');
   if (romanBase !== '' && romanLetters(romanBase)) {
     const next = tokens[index + 1];
+    const { century, worldWar } = lex();
     const contextual = source.endsWith('.') && !!next && whitespaceBetween(text, token.range.end, next.range.start)
-      && (lookupKey(next.text) === 'yüzyıl'
-        || (lookupKey(next.text) === 'dünya' && !!tokens[index + 2] && lookupKey(tokens[index + 2].text) === 'savaşı'
+      && (lookupKey(next.text) === century
+        || (lookupKey(next.text) === worldWar[0] && !!tokens[index + 2] && lookupKey(tokens[index + 2].text) === worldWar[1]
           && whitespaceBetween(text, next.range.end, tokens[index + 2].range.start)));
     let value: Value | Category = 'ambiguous';
     if (contextual) {
@@ -714,11 +720,11 @@ function temporal(text: string, tokens: Token[], index: number): Reading | null 
   const hyphens = base.split('-').length - 1;
   let result: Temporal, cls: FallbackClass;
   if (dots === 2 || (hyphens === 2 && base.length >= 8)) {
-    if (dots === 2 && parseNumber(base)?.grouped && !temporalCue(text, tokens, index, DATE_CUES)) return null;
-    result = date(source, frame(text, tokens, index) || temporalCue(text, tokens, index, DATE_CUES));
+    if (dots === 2 && parseNumber(base)?.grouped && !temporalCue(text, tokens, index, dateCues())) return null;
+    result = date(source, frame(text, tokens, index) || temporalCue(text, tokens, index, dateCues()));
     cls = 'date';
-  } else if (base.includes(':') || (dots === 1 && temporalCue(text, tokens, index, TIME_CUES))) {
-    result = time(source, temporalCue(text, tokens, index, TIME_CUES));
+  } else if (base.includes(':') || (dots === 1 && temporalCue(text, tokens, index, timeCues()))) {
+    result = time(source, temporalCue(text, tokens, index, timeCues()));
     cls = 'time';
   } else return null;
   if ('kind' in result) return { resolved: result };
@@ -796,7 +802,7 @@ class Output {
 }
 
 function codePoint(scalar: string, out: Output) {
-  out.word('unikod u artı');
+  out.word(lex().codePoint);
   const hex = scalar.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0');
   for (const h of hex) out.word(digitName(h) ?? letterName(h)!);
 }
@@ -885,6 +891,7 @@ function fallbackText(prepared: Prepared, source: string): string {
 /** `Normalizer().normalize(text, ambiguity_policy="fallback").normalized_text`. Throws where the library
  *  raises: empty or control-character input, input past 32 KiB, too many candidates. */
 export function normalize(input: string): string {
+  lex(); // no lexicon, no reading: throws before any word is made up
   if (utf8Length(input) > MAX_INPUT_BYTES) throw new Error('limit: input');
   if (chars(input).every(isWhitespace) || chars(input).some((c) => (/^\p{Cc}$/u.test(c) && !'\n\r\t'.includes(c))
     || /^[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]$/u.test(c))) throw new Error('invalid input');

@@ -20,6 +20,7 @@ const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) =>
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const L = require(path.join(root, 'src/call-lines.ts'));
+const TR = require('./lang-packs.cjs');
 const V = require(path.join(root, 'src/voice.ts'));
 const { client } = require(path.join(root, 'src/ws.ts'));
 const F = require(path.join(root, 'src/tts/frontend.ts'));
@@ -77,12 +78,19 @@ const ready = (async () => {
       button.length === 1 && eq(R.nav.pushed(), ['/call'])]);
 
     // 3, 4, 5 · pickup: the greeting and only the greeting, then the microphone
+    // Turkish lines are the computer's pack; without it a call in tr-TR is greeted in English.
+    const hasTr = TR.installTr();
+    const call = TR.load('tr', 'app/call');
     const tr = await pickUp('tr-TR');
     const spokenTr = L.callLines('tr-TR').greetingSpoken;
-    checks.push([`call: in tr-TR the pickup says only the "Alooooo vaysaaaa" line, then listens — ${JSON.stringify(tr)}`,
-      eq(tr, ['daemon call.hello', 'ring', 'pickup', `speak ${spokenTr}`, 'listen'])
-      && L.callLines('tr-TR').greeting === 'Alooooo vaysaaaa'
-      && spokenTr.replace(/[^\p{L} ]/gu, '') === 'Alooooo vaysaaaa']);
+    if (!hasTr || !call) {
+      TR.skip('call: the Turkish greeting');
+      checks.push([`call: without a pack tr-TR is greeted in English — ${JSON.stringify(tr)}`, spokenTr === 'Hello.']);
+    } else {
+      checks.push([`call: in tr-TR the pickup says only the pack's greeting, then listens — ${JSON.stringify(tr)}`,
+        eq(tr, ['daemon call.hello', 'ring', 'pickup', `speak ${spokenTr}`, 'listen'])
+        && L.callLines('tr-TR').greeting === call.greeting && spokenTr === call.greeting_spoken]);
+    }
     checks.push(['call: no number is spoken at pickup (no working or blocked count)',
       !tr.some((l) => l.startsWith('speak') && /\d/.test(l))]);
     const en = await pickUp('en-US');
@@ -93,9 +101,12 @@ const ready = (async () => {
 
     // The Turkish line through EMA's frontend: one plain run of letters each, no
     // spelled-out letters and no symbol the voice does not know.
-    const read = E.prepare(spokenTr).map((p) => p.text).join(' ');
-    checks.push([`call: EMA reads the Turkish greeting as two drawn-out words — ${JSON.stringify(read)}`,
-      /^alooooo, vaysaaaa!?$/.test(read) && !F.ids(read).includes(F.UNK)]);
+    if (hasTr && call) {
+      const read = E.prepare(spokenTr).map((p) => p.text).join(' ');
+      checks.push([`call: EMA reads the Turkish greeting as its words, drawn out — ${JSON.stringify(read)}`,
+        read.replace(/!$/, '') === spokenTr.toLocaleLowerCase('tr').replace(/!$/, '') && !F.ids(read).includes(F.UNK)]);
+    }
+    TR.clear();
   } finally {
     R.words.keys();
     R.store.reset();

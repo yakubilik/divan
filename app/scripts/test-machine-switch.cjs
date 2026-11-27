@@ -23,6 +23,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0)); };
 const A = require(path.join(root, 'src/machine.ts'));
 const I = require(path.join(root, 'src/i18n.ts'));
+const TR_I18N = require('../../scripts/lang.cjs').load('tr', 'app/i18n');
 const { useStore } = require('../src/store');
 const current = () => useStore.getState();
 
@@ -42,11 +43,10 @@ checks.push(
     && eq(A.machineActions({ id: 'peer', reachable: false }, held), ['pair'])],
   ['switch: with nothing held every paired computer can be switched to',
     eq(A.machineActions({ id: 'h1', reachable: true }, { active: null, paired: ['h1'] }), ['use', 'screen'])],
-  ['switch: the words are there in English and Turkish',
-    ['maUse', 'maCurrent', 'maPairThis', 'maNotPaired'].every((k) => !!I.t(k) && I.t(k) !== k && !!I.tr[k])
-    // audit: language-data — the Turkish locale's string for the machine switch
-    && I.t('maUse') === 'Use this machine' && I.tr.maUse === 'Bu makineye geç'],
-    // audit: end-language-data
+  ['switch: the words are there in English, and in the Turkish pack when this machine has one',
+    ['maUse', 'maCurrent', 'maPairThis', 'maNotPaired'].every((k) => !!I.t(k) && I.t(k) !== k
+      && (!TR_I18N || !!TR_I18N.strings[k]))
+    && I.t('maUse') === 'Use this machine'],
   // Why `pair` exists at all: the store's switch returns on an id it has no
   // pairing for, and that is left as it is.
   ['switch: the store still ignores an id it is not paired with, which is why the page must not offer it',

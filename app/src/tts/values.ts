@@ -1,10 +1,11 @@
 // The values the normalizer recognises and how each is read aloud, ported from normalizer-tr 0.4.0:
 // model.rs, domain/numeric.rs, domain/identifiers.rs, domain/electronic.rs and verbalize.rs.
 
+import { lex } from './lexicon';
 import {
   type Inflection, type Lexeme, type Num, Spoken, abbreviation, allDigits, amount, caseInflection, cardinal,
-  currency, currencyLexeme, currencyMinor, digits, integerInflection, lookupKey, minor, MONTHS, number,
-  parseNumber, rate, spokenCase, unit,
+  currency, currencyLexeme, currencyMinor, digits, integerInflection, lookupKey, minor, months, number,
+  parseNumber, rate, signText, spell, spokenCase, symbolName, unit,
 } from './words';
 
 export type Category = 'ambiguous' | 'invalid' | 'protected' | 'unsupported' | 'unknownAbbreviation';
@@ -291,8 +292,8 @@ export function percent(text: string): { number: Num; case: Inflection | null } 
   return kase ? { number: n, case: kase } : 'invalid';
 }
 
-const RANGE_NOUNS = ['kişi', 'adet', 'gün', 'yaş'];
-export const rangeNoun = (text: string) => RANGE_NOUNS.includes(lookupKey(text));
+/** Nouns a range of numbers may count (people, pieces, days, years of age). */
+export const rangeNoun = (text: string) => lex().rangeNouns.includes(lookupKey(text));
 
 export type NumericRange = { start: Num; end: Num; unit: Lexeme | null; noun: string | null };
 
@@ -318,7 +319,7 @@ export function parseRange(text: string, context: string | null): NumericRange |
 }
 
 export function renderRange(r: NumericRange): string {
-  let out = `${number(r.start).text} ila ${number(r.end).text}`;
+  let out = `${number(r.start).text} ${lex().rangeJoin} ${number(r.end).text}`;
   if (r.unit) out += ' ' + r.unit.output;
   if (r.noun) out += ' ' + r.noun;
   return out;
@@ -362,8 +363,8 @@ export function parseTelephone(text: string, explicit: boolean): Telephone | nul
 
 export function renderTelephone(t: Telephone): string {
   const chunks: string[] = [];
-  if (t.international) chunks.push('artı doksan');
-  if (t.nationalZero) chunks.push('sıfır');
+  if (t.international) chunks.push(signText('+') + cardinal(90).text);
+  if (t.nationalZero) chunks.push(digits('0'));
   for (const [a, b] of [[0, 3], [3, 6], [6, 8], [8, 10]]) {
     const group = t.national.slice(a, b);
     chunks.push(group.startsWith('0') ? digits(group) : cardinal(group).text);
@@ -385,15 +386,14 @@ export function parseIban(text: string): string | null {
 }
 
 export function renderIban(canonical: string): string {
-  let out = 'te re ' + digits(canonical.slice(2, 4));
+  let out = `${spell('TR')} ${digits(canonical.slice(2, 4))}`;
   for (let i = 4; i < canonical.length; i += 4) out += ', ' + digits(canonical.slice(i, i + 4));
   return out;
 }
 
 // ── domain/electronic.rs ────────────────────────────────────────────────────
 
-const TLD: Record<string, string> = { com: 'kom', net: 'net', org: 'org', tr: 'te re', gov: 'gov', edu: 'edu', app: 'app' };
-const tld = (text: string): string | null => TLD[text.replace(/[A-Z]/g, (c) => c.toLowerCase())] ?? null;
+const tld = (text: string): string | null => lex().tlds.get(text.replace(/[A-Z]/g, (c) => c.toLowerCase())) ?? null;
 const isAscii = (text: string) => /^[\x00-\x7f]*$/.test(text);
 
 function host(text: string): boolean {
@@ -405,11 +405,8 @@ function host(text: string): boolean {
     && tld(labels[labels.length - 1]) !== null;
 }
 
-const CHARACTER_WORDS: Record<string, string> = {
-  '.': 'nokta', '@': 'et', '/': 'eğik çizgi', ':': 'iki nokta', '?': 'soru işareti', '=': 'eşittir', '&': 've',
-  '#': 'kare', '%': 'yüzde', '-': 'tire', '_': 'alt çizgi', '+': 'artı', '(': 'aç parantez', ')': 'kapat parantez',
-  '!': 'ünlem', '$': 'dolar işareti', "'": 'kesme', '*': 'yıldız', ',': 'virgül', ';': 'noktalı virgül', '~': 'tilde',
-};
+/** The characters of an address that are read aloud, by their symbol names; the rest are skipped. */
+const CHARACTER_WORDS = new Set(".@/:?=&#%-_+()!$'*,;~");
 
 function characters(text: string, domain: boolean): string {
   const words: string[] = [];
@@ -417,7 +414,7 @@ function characters(text: string, domain: boolean): string {
     const chunk = m[0];
     if (/^[A-Za-z]/.test(chunk)) words.push(domain ? tld(chunk) ?? chunk : chunk);
     else if (/^[0-9]/.test(chunk)) words.push(digits(chunk));
-    else if (CHARACTER_WORDS[chunk]) words.push(CHARACTER_WORDS[chunk]);
+    else if (CHARACTER_WORDS.has(chunk)) words.push(symbolName(chunk)!);
   }
   return words.join(' ');
 }
@@ -425,7 +422,7 @@ function characters(text: string, domain: boolean): string {
 function domainWords(domain: string): string {
   const parts = domain.split('.');
   return parts.map((part, i) => (i === parts.length - 1 ? tld(part) ?? part
-    : i === 0 && part === 'www' ? 'çift ve çift ve çift ve' : characters(part, false))).join(' nokta ');
+    : i === 0 && part === 'www' ? spell(part) : characters(part, false))).join(` ${symbolName('.')} `);
 }
 
 export function parseElectronic(text: string, bare: boolean): string | null {
@@ -435,11 +432,11 @@ export function parseElectronic(text: string, bare: boolean): string | null {
     const [local, domain] = text.split('@');
     if (!local || local.length > 64 || local.startsWith('.') || local.endsWith('.') || local.includes('..')
       || !/^[A-Za-z0-9._+-]+$/.test(local) || !host(domain)) return null;
-    return `${characters(local, false)} et ${domainWords(domain)}`;
+    return `${characters(local, false)} ${symbolName('@')} ${domainWords(domain)}`;
   }
   let prefix: string, body: string;
-  if (text.slice(0, 8).toLowerCase() === 'https://') { prefix = 'ha te te pe es iki nokta eğik çizgi eğik çizgi '; body = text.slice(8); }
-  else if (text.slice(0, 7).toLowerCase() === 'http://') { prefix = 'ha te te pe iki nokta eğik çizgi eğik çizgi '; body = text.slice(7); }
+  if (text.slice(0, 8).toLowerCase() === 'https://') { prefix = `${lex().https} `; body = text.slice(8); }
+  else if (text.slice(0, 7).toLowerCase() === 'http://') { prefix = `${lex().http} `; body = text.slice(7); }
   else if (text.startsWith('www.') || bare) { prefix = ''; body = text; }
   else return null;
   if (!body) return null;
@@ -472,7 +469,7 @@ export function parseElectronic(text: string, bare: boolean): string | null {
   }
   if (depth !== 0 || (rest.match(/#/g) ?? []).length > 1) return null;
   let spoken = prefix + domainWords(domain);
-  if (colon >= 0) spoken += ' iki nokta ' + digits(authority.slice(colon + 1));
+  if (colon >= 0) spoken += ` ${symbolName(':')} ${digits(authority.slice(colon + 1))}`;
   if (rest) spoken += ' ' + characters(rest, false);
   return spoken;
 }
@@ -484,7 +481,7 @@ export function hashtag(text: string): string | null {
   const body = text.slice(1);
   const chars = [...body];
   if (!body || !chars.every((c) => /[\p{Alphabetic}\p{N}_]/u.test(c)) || chars.some((c) => /\p{N}/u.test(c) && !/[0-9]/.test(c))) return null;
-  let out = 'hashtag ';
+  let out = `${lex().hashtag} `;
   let chunk = '';
   for (const ch of chars) {
     if (/[0-9]/.test(ch)) {
@@ -500,7 +497,7 @@ export function hashtag(text: string): string | null {
 
 export function dateSpoken(d: DateValue): Spoken {
   const year = cardinal(d.year);
-  year.prefix(`${cardinal(d.day).text} ${MONTHS[d.month - 1]} `);
+  year.prefix(`${cardinal(d.day).text} ${months()[d.month - 1]} `);
   return year;
 }
 
@@ -523,7 +520,7 @@ export function render(value: Value): string {
     case 'percent': {
       const spoken = number(value.number);
       if (value.case) spoken.inflect(value.case);
-      spoken.prefix('yüzde ');
+      spoken.prefix(`${lex().percent} `);
       return spoken.text;
     }
     case 'quantity': return renderQuantity(value.value).text;

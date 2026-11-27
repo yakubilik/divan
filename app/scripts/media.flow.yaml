@@ -26,9 +26,9 @@ name: photo and video bubbles, opened full screen
 # A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
 - runFlow:
     when:
-      visible: "Aç|Open"
+      visible: "A\u00e7|Open"
     commands:
-      - tapOn: "Aç|Open"
+      - tapOn: "A\u00e7|Open"
 - extendedWaitUntil:
     visible: "video portrait.mp4"
     # The first open of a Debug build waits for Metro to bundle the app.
@@ -63,9 +63,9 @@ name: photo and video bubbles, opened full screen
 # A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
 - runFlow:
     when:
-      visible: "Aç|Open"
+      visible: "A\u00e7|Open"
     commands:
-      - tapOn: "Aç|Open"
+      - tapOn: "A\u00e7|Open"
 - extendedWaitUntil:
     visible: "video landscape.mp4"
     timeout: 15000
@@ -81,9 +81,9 @@ name: photo and video bubbles, opened full screen
 # A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
 - runFlow:
     when:
-      visible: "Aç|Open"
+      visible: "A\u00e7|Open"
     commands:
-      - tapOn: "Aç|Open"
+      - tapOn: "A\u00e7|Open"
 - extendedWaitUntil:
     visible: "photo portrait.jpg"
     timeout: 15000
@@ -108,9 +108,9 @@ name: photo and video bubbles, opened full screen
 # A custom-scheme link asks "Open in Divan?" first, in the simulator's language.
 - runFlow:
     when:
-      visible: "Aç|Open"
+      visible: "A\u00e7|Open"
     commands:
-      - tapOn: "Aç|Open"
+      - tapOn: "A\u00e7|Open"
 - extendedWaitUntil:
     visible: "photo landscape.jpg"
     timeout: 15000

@@ -57,7 +57,7 @@ try {
   for (const [name, width, height, mobile, query, press] of [
     ['work', 1720, 1000, false, ''], ['work-project', 1720, 900, false, 'project=divan&range=30d'],
     ['work-narrow', 390, 1400, true, ''],
-    // A needs-you card pressed: its chat over the board, the question and Evet.
+    // A needs-you card pressed: its chat over the board, the question and its answers.
     ['work-chat', 1600, 1000, false, '', 'studio:259'],
   ]) {
     for (const scheme of ['dark', 'light']) {

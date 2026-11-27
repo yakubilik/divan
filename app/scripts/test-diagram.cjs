@@ -290,11 +290,9 @@ const message = [
   // The harness's `useT` answers with the key itself; the app's with i18n.ts.
   const said = [I18N.t('diagramFailed'), 'diagramFailed'];
   const line = r.root.findAll((n) => typeof n.type !== 'string' && n.props && said.includes(n.props.children));
-  // audit: language-data — the Turkish locale's string for a diagram that failed to draw
-  check('…and one muted line over it saying the diagram could not be drawn (Turkish: Diyagram çizilemedi)',
+  check('…and one muted line over it saying the diagram could not be drawn',
     line.length >= 1 && R.flatten(line[0].props.style).color === light.muted && txt.indexOf(line[0].props.children) < txt.indexOf('flowchart')
-    && I18N.tr.diagramFailed === 'Diyagram çizilemedi', txt);
-  // audit: end-language-data
+    && I18N.t('diagramFailed') === "Couldn't draw the diagram", txt);
   // A late size after the failure changes nothing.
   r.unmount();
 }

@@ -56,7 +56,7 @@ for (const [name, L] of Object.entries(copies)) {
   check(product === 'first-line,pinned-empty,said', 'nor under its product', product);
   const counts = L.personCounts(chats, ['Yakup', 'Bedirhan']);
   check(counts.Yakup === 3 && !counts.Bedirhan, 'nor counted for its person', JSON.stringify(counts));
-  const sent = ids(L.hostSections({ chats: chats.map((c) => (c.id === 'empty' ? { ...c, last_preview: 'merhaba' } : c)),
+  const sent = ids(L.hostSections({ chats: chats.map((c) => (c.id === 'empty' ? { ...c, last_preview: 'hello' } : c)),
     groups: [], hostKey: 'h', query: '', who: 'Yakup', names: ['Yakup', 'Bedirhan'], saved: [], now: NOW }));
   check(sent === 'empty,first-line,pinned-empty,said', 'and is listed once its first line is sent', sent);
 }

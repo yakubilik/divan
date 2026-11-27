@@ -736,40 +736,11 @@ const en = {
 };
 export type Key = keyof typeof en;
 
-/** Turkish, for the strings that have one so far. `t` still reads English —
- *  the app ships in English (`LOCALE`) — and this is where a Turkish build
- *  finds its words; a key missing here falls back to `en`. */
-// audit: language-data — the Turkish locale table, the strings a Turkish build shows
-export const tr: Partial<Record<Key, string>> = {
-  office: 'Ofis', dashOfficeNote: 'çalışan bütün ajanlar, piksel bir ofiste',
-  officeDown: 'Ofis açılmadı', officeDownBody: 'Telefon Tailscale\'de mi, bilgisayar uyanık mı?',
-  plNone: 'Henüz board yok', plNoneBody: 'Bu bilgisayarda Plane yok. config.toml\'a [plane] url ve workspace ekle.',
-  plDown: 'Plane cevap vermedi', plDownBody: 'Telefon Tailscale\'de mi, Plane\'in olduğu bilgisayar açık mı?',
-  plRetry: 'Tekrar dene',
-  approvalExpired: 'İzin süresi doldu, yapılmadı', approvalDropped: 'Daemon yeniden başladı, istek düştü; yapılmadı',
-  errApprovalExpired: 'İzin süresi doldu, yapılmadı. Ajandan tekrar denemesini iste.',
-  errApprovalDropped: 'Daemon yeniden başladı, istek düştü; yapılmadı. Ajandan tekrar denemesini iste.',
-  errNoPendingApproval: 'Bu istek artık beklemiyor, hiçbir şey çalıştırılmadı. Ajandan tekrar denemesini iste.',
-  errApprovalAnswered: 'Bu istek zaten cevaplandı.',
-  errTerminalDisabled: 'Bu bilgisayarda terminal kapalı. Açmak için config.toml dosyasında terminal = true yazın.',
-  maUse: 'Bu makineye geç', maCurrent: 'şu anki', maPairThis: 'Geçmek için eşleştir',
-  maNotPaired: 'Bu telefonla henüz eşleşmedi: geçmek için önce eşleştir.',
-  sgChats: 'sohbetler', autoArchive: 'Sessiz sohbetleri arşivle',
-  autoArchiveNote: 'bu kadar süre mesaj gelmezse; yeni bir şey gelince geri döner',
-  stDefaultFolder: 'Varsayılan klasör', stDefaultFolderNote: 'yeni sohbetlerin açıldığı yer, burada ve web panelde',
-  stFirstRoot: 'İlk kök',
-  outSending: 'Gönderiliyor…', outFailed: 'Gönderilemedi · Tekrar denemek için dokun',
-  copyCode: 'Kodu kopyala', secretCopied: 'Kopyalandı · 1 dk sonra silinir', secretExpired: 'süresi doldu', secretFailed: 'Kopyalanamadı', secretHint: 'Anahtarı göstermeden kopyalar', diagramFailed: 'Diyagram çizilemedi',
-  outFailedTitle: 'Mesaj gönderilemedi', outRetry: 'Tekrar dene', outDiscard: 'Mesajı sil',
-  bgOne: 'Arka planda · {what}', bgAgent: 'Bir agent hâlâ çalışıyor', bgTask: 'Bir iş hâlâ çalışıyor', bgMany: 'Arka planda {n} iş',
-  lightUnread: 'Bitti, henüz bakılmadı', lightFailed: 'Hatayla bitti, henüz bakılmadı',
-  capHint: 'Kutuya sayfadaymış gibi dokun ve sürükle.', capDone: 'Bitti', capGiveUp: 'Vazgeç',
-  capType: 'Yazıyı yaz…', capSend: 'Gönder', capSolved: 'Çözüldü, ajan devam ediyor.',
-  capClosed: 'Bu captcha artık beklemiyor.', capWaiting: 'Kutu bekleniyor…',
-  capBanner: 'Bir captcha seni bekliyor', capOpen: 'Çöz',
-  autoArchiveOff: 'Kapalı', autoArchiveH: '{n} saat', autoArchiveD: '{n} gün', autoArchive1D: '1 gün',
-};
-// audit: end-language-data
+/** Turkish, for the strings that have one so far, is the computer's language
+ *  pack `app/i18n` (lang.ts), not this file: the repository is English only.
+ *  `t` still reads English — the app ships in English (`LOCALE`) — and a
+ *  Turkish build finds its words there, a key missing in it falling back to
+ *  `en`. */
 
 export function t(key: Key, params?: Record<string, string | number>): string {
   let s = en[key] ?? key;

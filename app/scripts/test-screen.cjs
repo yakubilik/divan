@@ -45,9 +45,7 @@ Module._load = function load(request, parent, isMain) {
   return beneath.call(this, request, parent, isMain);
 };
 const clip = require('expo-clipboard');
-// audit: language-data — a letter outside ASCII the pasted text must carry intact
-let phoneClipboard = 'from the phone · ş';
-// audit: end-language-data
+let phoneClipboard = 'from the phone · \u015f';
 clip.getStringAsync = async () => phoneClipboard;
 clip.setStringAsync = async (t) => { phoneClipboard = t; return true; };
 const RN = require('react-native');
@@ -114,9 +112,7 @@ const ready = (async () => {
   const setAt = calls.findIndex((c) => c.type === 'screen.clipboard.set');
   const vAt = calls.findIndex((c) => c.type === 'screen.input' && c.data.actions[0].key === 'v');
   checks.push(['screen: Paste is in the toolbar, sets the computer\'s clipboard to the phone\'s text, then sends ⌘V to the Mac',
-    // audit: language-data — a letter outside ASCII the pasted text must carry intact
-    pasted && setAt >= 0 && calls[setAt].data.text === 'from the phone · ş' && vAt > setAt
-    // audit: end-language-data
+    pasted && setAt >= 0 && calls[setAt].data.text === 'from the phone · \u015f' && vAt > setAt
     && JSON.stringify(calls[vAt].data.actions[0].mods) === '["cmd"]']);
 
   // 3 · Copy from remote

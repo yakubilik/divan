@@ -25,6 +25,26 @@ function load(lang, name) {
   }
 }
 
+/** Every pack of `lang` under `area` (e.g. 'app'), as `lang.get` hands them
+ *  over: `{ 'app/call': {...}, ... }`, or null when there is none. */
+function area(lang, name) {
+  const base = path.join(langDir(), lang);
+  const out = {};
+  const walk = (dir) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.json')) {
+        try { out[path.relative(base, p).slice(0, -5).split(path.sep).join('/')] = JSON.parse(fs.readFileSync(p, 'utf8')); } catch {}
+      }
+    }
+  };
+  walk(path.join(base, name));
+  return Object.keys(out).length ? out : null;
+}
+
 /** Print the one skip line the suites use, once per name. */
 const told = new Set();
 function skip(what) {
@@ -33,4 +53,4 @@ function skip(what) {
   console.log(`  SKIP  ${what}: no language pack`);
 }
 
-module.exports = { langDir, load, skip };
+module.exports = { langDir, load, area, skip };

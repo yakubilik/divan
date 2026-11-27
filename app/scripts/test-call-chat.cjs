@@ -19,6 +19,7 @@ const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) =>
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const L = require(path.join(root, 'src/call-lines.ts'));
+const TR = require('./lang-packs.cjs');
 const V = require(path.join(root, 'src/voice.ts'));
 const { client } = require(path.join(root, 'src/ws.ts'));
 const SR = require('@jamsch/expo-speech-recognition');
@@ -182,9 +183,17 @@ const ready = (async () => {
       } finally { call.done(); }
     }
 
-    checks.push(['chat call: yes and no are heard in either language, a no inside a yes is a no, and a mumble is neither',
-      L.yesNo('Evet') === true && L.yesNo('okay') === true && L.yesNo('hayır') === false && L.yesNo('izin verme') === false
-      && L.yesNo("don't do it") === false && L.yesNo('hmm wait') === null]);
+    checks.push(['chat call: yes and no are heard, a no inside a yes is a no, and a mumble is neither',
+      L.yesNo('okay') === true && L.yesNo("don't do it") === false && L.yesNo('hmm wait') === null]);
+    // Turkish yes and no are the pack's words, heard whatever the call's language.
+    const call = TR.load('tr', 'app/call');
+    if (!call || !TR.installTr()) TR.skip('chat call: Turkish yes and no');
+    else {
+      const inside = call.no.find((n) => call.yes.some((y) => n.includes(y) && n !== y));
+      checks.push(['chat call: Turkish yes and no are heard too, and a Turkish no with a yes inside it is a no',
+        L.yesNo(call.yes[0]) === true && L.yesNo(call.no[0]) === false && (!inside || L.yesNo(inside) === false)]);
+      TR.clear();
+    }
   } finally {
     R.words.keys();
     R.store.reset();

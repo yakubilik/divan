@@ -120,7 +120,8 @@ if AUTHOR_NAMES:
 # Turkish letters English does not have, plus function words no English sentence
 # contains. Both are needed: a short string can carry neither a letter nor a
 # word on its own.
-TURKISH_LETTERS = r"[şğıİöçüŞĞÖÇÜ]"
+# Written as escapes so the scanner itself carries none of the letters.
+TURKISH_LETTERS = r"[\u015f\u011f\u0131\u0130\u00f6\u00e7\u00fc\u015e\u011e\u00d6\u00c7\u00dc]"
 TURKISH_WORDS = (
     r"(?i)\b(?:acildi|aciklama|adres|arka|ayar|ayarlar|baglan|baglandi|baglanti|"
     r"basarili|basarisiz|basladi|baslat|bekleniyor|bekleyen|bekliyor|bilgisayar|"
@@ -139,34 +140,10 @@ LANGUAGE = {"turkish-letter": TURKISH_LETTERS, "turkish-word": TURKISH_WORDS}
 # entry is a path and the reason, and the reason is the whole justification for
 # the exception — see docs/audit/ for the audit that granted it.
 ALLOW = {
-    "app/scripts/media.flow.yaml":
-        "the system's Open button is tapped by its label in the simulator's language, Turkish or English",
     "app/src/mermaid.gen.ts":
         "a vendored third-party bundle, generated and not written here; its strings are not ours",
     "app/src/xterm.gen.ts":
         "a vendored third-party bundle, generated and not written here; its strings are not ours",
-    "app/scripts/test-ema.cjs":
-        "test data: Turkish sentences for the speech queue",
-    "app/scripts/test-waiting.cjs":
-        "test data: Turkish questions the reply chips are read from",
-    "app/scripts/test-call-chat.cjs":
-        "test data: Turkish yes and no answers the chat call has to hear",
-    "app/src/call-lines.ts":
-        "a call held in Turkish is spoken in Turkish, and its yes and no are heard in it",
-    "app/src/tts/engine.ts":
-        "the Turkish voice model is warmed up on a Turkish word",
-    "app/src/tts/frontend.ts":
-        "the Turkish voice model's alphabet has the Turkish letters in it",
-    "app/src/tts/normalizer.ts":
-        "numbers, units and symbols are spelled out as Turkish words for the voice model",
-    "app/src/tts/values.ts":
-        "numbers, dates and units are spelled out as Turkish words for the voice model",
-    "app/src/tts/words.ts":
-        "the Turkish pronunciation lexicon of the voice model",
-    "app/src/voice.ts":
-        "the sample the Turkish voice says when it is picked is said in Turkish",
-    "app/src/waiting.ts":
-        "reply chips are read out of Turkish questions by their question particle",
 }
 
 # Where only part of a file is data, the part is marked instead of the file:

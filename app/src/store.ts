@@ -14,6 +14,7 @@ import { filed, NO_DRAFT, type ComposeDraft, type Filing } from './compose';
 import { freshCwd } from './fresh-chat';
 import { delivered, Outbox, type OutboxStorage, type OutMsg } from './outbox';
 import { launchHostId } from './launch';
+import { keepPacksIn, setPacks, type Pack } from './lang';
 
 const HOSTS_KEY = 'rac.hosts';
 const ACTIVE_KEY = 'rac.activeHost';
@@ -25,6 +26,17 @@ const PREFS_KEY = 'rac.prefs';
  *  with attachments. A phone without a document directory (a test harness)
  *  simply keeps nothing, and the outbox still works for the life of the app. */
 const outboxFile = () => new File(Paths.document, 'outbox.json');
+/** The language packs, kept beside the outbox (lang.ts). */
+const langFile = () => new File(Paths.document, 'lang-packs.json');
+void keepPacksIn({
+  read: async () => {
+    try { const f = langFile(); return f.exists ? await f.text() : null; } catch { return null; }
+  },
+  write: (text) => {
+    try { const f = langFile(); if (!f.exists) f.create(); f.write(text); } catch { /* this launch only */ }
+  },
+});
+
 export const OUTBOX_STORAGE: OutboxStorage = {
   read: async () => {
     try { const f = outboxFile(); return f.exists ? await f.text() : null; } catch { return null; }
@@ -505,6 +517,11 @@ export const useStore = create<State>((set, get) => {
       const reconnect = client.takeReconnect() ?? undefined;
       const hello = await client.call('hello', { device_name: 'iPhone', push_token: get().pushToken ?? undefined, reconnect });
       set({ hostInfo: hello.host, catalog: hello.catalog, device: hello.device ?? null });
+      // Turkish is the one other language the phone speaks; its words are the
+      // computer's (lang.ts). A daemon from before lang.get just says no.
+      client.call<{ packs: Record<string, Pack> }>('lang.get', { lang: 'tr' })
+        .then((r) => setPacks('tr', r?.packs))
+        .catch(() => {});
       // What the computer already knows about the plan, so the ring is filled
       // in before the first turn rather than after it.
       client.call<{ accounts: Record<string, LimitWindow[]> }>('limits.get', {})

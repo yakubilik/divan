@@ -11,7 +11,7 @@ import type { Snapshot, VoiceSession } from '../src/voice-session';
 import { client } from '../src/ws';
 import { useColors, type Palette } from '../src/theme';
 import { Text } from '../src/components/ui';
-import { abortListening, EMA_SAMPLE, emaAvailable, emaStats, ensureMic, label as voiceLabel, listVoices, locale as voiceLocale, pickVoice, pickup, ring, setEmaEnabled, setVoicePrefs, speak, startListening, stopListening, stopSpeaking, voiceName, warmEma } from '../src/voice';
+import { abortListening, emaSample, emaAvailable, emaStats, ensureMic, label as voiceLabel, listVoices, locale as voiceLocale, pickVoice, pickup, ring, setEmaEnabled, setVoicePrefs, speak, startListening, stopListening, stopSpeaking, voiceName, warmEma } from '../src/voice';
 import { isTurkish } from '../src/tts/speaker';
 import { callLines, chatCallLines, yesNo } from '../src/call-lines';
 import { Switch } from '../src/components/divan';
@@ -230,7 +230,7 @@ export default function Call() {
     await setPrefs({ emaOff: !on });
     setEmaEnabled(on);
     setVoice(voiceName(lang));
-    if (on) { setVoices(null); speak(EMA_SAMPLE, lang, () => {}); }
+    if (on) { setVoices(null); const sample = emaSample(); if (sample) speak(sample, lang, () => {}); }
   }, [lang, setPrefs]);
 
   const chooseVoice = useCallback(async (v: Speech.Voice) => {
