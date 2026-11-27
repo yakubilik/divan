@@ -286,7 +286,7 @@ for (const scheme of ['dark', 'light']) {
         let markup = '';
         try { markup = draw(scheme, { ...state, agent }); }
         catch (e) { bad = `${scheme} ${name} ${agent}: ${e.message}`; }
-        if (!bad && !/tabDashboard|>divan</.test(markup)) bad = `${scheme} ${name} ${agent}: nothing drawn`;
+        if (!bad && !/tabChat|>divan</.test(markup)) bad = `${scheme} ${name} ${agent}: nothing drawn`;
       }
     }
   }

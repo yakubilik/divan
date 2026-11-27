@@ -17,7 +17,7 @@ const scheme = process.argv[3] === 'light' ? 'light' : 'dark';
 const suffix = scheme === 'light' ? '-light' : '';
 const h = R.React.createElement;
 const C = require(path.join(root, 'src/compose.ts'));
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
 const NewTicket = require(path.join(root, 'app/new-ticket.tsx')).default;
 
 const NOW = Math.floor(Date.now() / 1000);

@@ -75,7 +75,7 @@ export default function NewTicket({ opening = '', sentences = '' }: {
   const d = draft(title, text);
   const leave = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/dashboard');
+    else router.replace('/chat');
   };
 
   /** File it, and land on the column it went into — the card is drawn there,

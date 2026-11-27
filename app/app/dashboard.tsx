@@ -2,7 +2,7 @@ import { permissionFor } from '../src/permissions';
 import { freshCwd } from '../src/fresh-chat';
 import React from 'react';
 import { ScrollView, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useStore, useT } from '../src/store';
 import { useNavGuard } from '../src/nav';
 import { type Key } from '../src/i18n';
@@ -10,7 +10,7 @@ import { useDivanView, useQueueBadge } from '../src/queue';
 import {
   project as projectIn, stuck, type DivanView, type MergedCard, type MergedProject,
 } from '../src/divan';
-import { PLACE_ROUTE } from '../src/shell';
+import { HOME, HOME_PLACE, PLACE_LABEL, PLACE_ROUTE } from '../src/shell';
 import type { Agent, Provider } from '../src/protocol';
 import { since } from '../src/tickets';
 import {
@@ -55,10 +55,33 @@ import { Shell } from '../src/components/shell';
  *  `src/dashboard.ts`, `src/waiting.ts` and `src/compose.ts`, where a check can
  *  reach them without a phone.
  *
+ *  Nothing on the phone leads here any more (Yakup, 27 Nov 2026): the app
+ *  opens on the chat list and its line has no way to this overview. A
+ *  project's own page (`?project=`) is still where a ticket's Back lands.
+ *
  *  Selecting a project enters it, in the address (`/dashboard?project=quire`),
  *  so it survives a redraw and can be linked to; the line's left end leads back
  *  out of it. */
-export default function Dashboard() {
+export default function DashboardRoute() {
+  const view = useDivanView();
+  const params = useLocalSearchParams<{ project?: string }>();
+  const t = useTokens();
+  const key = (Array.isArray(params.project) ? params.project[0] : params.project) || null;
+  // The overview of every project is off the phone (Yakup, 27 Nov 2026): the
+  // app opens on the chat list, and this route is only a project's own page.
+  // An address with no project, or one naming a product the machines that
+  // answered do not have, goes to the chat list; one that came before any
+  // machine answered waits for them rather than guessing.
+  if (!key) return <Redirect href={HOME} />;
+  if (!projectIn(view, key)) {
+    return view.projects.length ? <Redirect href={HOME} /> : <View style={{ flex: 1, backgroundColor: t.bg }} />;
+  }
+  return <Dashboard />;
+}
+
+/** The page itself: a project's own page, and the overview of every project
+ *  the route no longer shows — kept because the checks still draw it. */
+export function Dashboard() {
   const router = useRouter();
   const go = useNavGuard();
   const T = useT();
@@ -89,7 +112,8 @@ export default function Dashboard() {
         onOpen={(c) => go(() => router.push(`/card/${c.id}?host=${c.host}&from=${face === 'board' ? 'board' : 'project'}`))} />
     );
     return (
-      <Shell place="dashboard" back={{ label: T('tabDashboard'), onPress: () => enter(null) }}>
+      <Shell place="dashboard" back={{ label: T(PLACE_LABEL[HOME_PLACE]),
+        onPress: () => go(() => (router.canGoBack() ? router.back() : router.replace(HOME))) }}>
         {face === 'board' ? product : (
           <ScrollView keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingHorizontal: 16, paddingBottom: 24, gap: 24 }}>
@@ -108,7 +132,7 @@ export default function Dashboard() {
   const rows = agentRows(view);
 
   return (
-    <Shell place="dashboard">
+    <Shell place="dashboard" back={null}>
       <ScrollView keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingBottom: 40, gap: 28 }}>
         <View style={{ gap: 8 }}>

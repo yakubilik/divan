@@ -19,16 +19,16 @@ import { useDivanShown } from '../queue';
 import { machineWords, quotaWords, systemLine } from '../dashboard';
 import { since } from '../tickets';
 import { WARN_AT } from '../machine';
-import { PLACE_ICON, PLACE_LABEL, PLACE_ROUTE, placeOf, type Chip, type Place } from '../shell';
+import { HOME, HOME_PLACE, PLACE_ICON, PLACE_LABEL, PLACE_ROUTE, placeOf, type Chip, type Place } from '../shell';
 
 /** A place: the thin line over it, and its own content under it (HANDOVER §1,
  *  §3 `dv-topline`; DashboardPhone).
  *
  *  The line is the whole navigation. On the left the way back — up one level,
- *  to the Dashboard from a place — or the word `divan` on the Dashboard itself.
+ *  to the chat list from a place — or the word `divan` on the chat list itself.
  *  On the right what the fleet is: machines answering out of paired, and the
  *  quota left as a ring and its figure (absent where nothing measured one),
- *  then Chat and Machine as 44 pt buttons. The tab bar is gone; both of its
+ *  then Machine as a 44 pt button. The tab bar is gone; both of its
  *  other places are one press away from every screen, as they were.
  *
  *  `top` is the status bar's room. The chat place does not take it, because
@@ -51,12 +51,12 @@ export function Shell({ place, top = true, back, children }: {
   const path = (usePathname() || '/').split('?')[0];
   const here = placeOf(path) ?? place;
   // A screen pushed over a place (a card, the waiting list) goes back to what
-  // it was pushed from; a place goes back to the Dashboard.
+  // it was pushed from; a place goes back to the chat list, where the app opens.
   const root = path === '/' || path === PLACE_ROUTE[here];
   const leave = back !== undefined ? back
-    : here === 'dashboard' && root ? null
-      : { label: T(PLACE_LABEL.dashboard),
-          onPress: () => go(() => (!root && router.canGoBack() ? router.back() : router.replace(PLACE_ROUTE.dashboard))) };
+    : here === HOME_PLACE && root ? null
+      : { label: T(PLACE_LABEL[HOME_PLACE]),
+          onPress: () => go(() => (!root && router.canGoBack() ? router.back() : router.replace(HOME))) };
   return (
     <View style={{ flex: 1, backgroundColor: t.bg, paddingTop: top ? insets.top : 0 }}>
       <Topline back={leave} here={here}
@@ -111,7 +111,9 @@ export function Topline({ back, here, onPlace }: {
             {low && <Text style={{ fontSize: 12, color: t.amber }}>{T('cmLow')}</Text>}
           </View>
         )}
-        {(['chat', 'machine'] as Place[]).map((p) => (
+        {/* The chat list is home and has the word on the left; Machine is
+            the one other place, one press away. */}
+        {(['machine'] as Place[]).map((p) => (
           <Pressable key={p} accessibilityRole="button" accessibilityLabel={T(PLACE_LABEL[p])}
             accessibilityState={{ selected: here === p }} onPress={() => onPlace(p)}
             style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center',

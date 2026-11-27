@@ -15,7 +15,7 @@ const M = require(path.join(root, 'src/divan.ts'));
 const K = require(path.join(root, 'src/tokens.ts'));
 const CardScreen = require(path.join(root, 'app/card/[id].tsx')).default;
 const Waiting = require(path.join(root, 'app/waiting.tsx')).default;
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
 
 const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);

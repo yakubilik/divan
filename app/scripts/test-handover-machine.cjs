@@ -29,7 +29,7 @@ const Executors = require(path.join(root, 'app/executors.tsx')).default;
 const Accounts = require(path.join(root, 'app/accounts.tsx')).default;
 const Terminal = require(path.join(root, 'app/terminal.tsx')).default;
 const Settings = require(path.join(root, 'app/settings.tsx')).default;
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
 const Branch = require(path.join(root, 'app/branch/[id].tsx')).default;
 const Pair = require(path.join(root, 'app/pair.tsx')).default;
 const AccountLogin = require(path.join(root, 'app/account-login.tsx')).default;
@@ -285,7 +285,7 @@ const ready = (async () => {
       R.scans()[0]({ data: 'divan://pair?host=100.64.1.2&port=8791&token=tok&name=studio' });
       await flush();
       const paired = calls.some(([t, d]) => t === 'addHost' && d.host === '100.64.1.2' && d.token === 'tok')
-        && R.nav.replaced().includes('/dashboard');
+        && R.nav.replaced().includes('/chat');
       R.camera.reset();
       stand({ params: { id: 'a2', provider: 'claude', method: 'subscription' } });
       R.render('dark', h(AccountLogin));

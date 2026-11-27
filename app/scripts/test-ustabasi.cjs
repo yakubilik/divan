@@ -457,9 +457,9 @@ checks.push(
   P.follow(tap, n);
   checks.push(
     ['the queue\u2019s push is followed to its ticket, with the wall under it',
-      n.calls.join(' | ') === 'dismissTo /dashboard | push /ustabasi | push /ticket/7'],
+      n.calls.join(' | ') === 'dismissTo /chat | push /ustabasi | push /ticket/7'],
     ['\u2026and the stack is popped back to the place the app opens on, not pushed on top of',
-      n.calls[0] === 'dismissTo /dashboard'],
+      n.calls[0] === 'dismissTo /chat'],
   );
 }
 
@@ -470,7 +470,7 @@ checks.push(
   const n = nav();
   P.follow(taps.take(AWAKE), n);
   checks.push(['a chat push still opens its chat, and no wall',
-    n.calls.join(' | ') === 'dismissTo /dashboard | push /chat/abc']);
+    n.calls.join(' | ') === 'dismissTo /chat | push /chat/abc']);
 }
 
 {
@@ -490,7 +490,7 @@ checks.push(
     ['\u2026it is held', held === true],
     ['\u2026and delivered once the app is ready and unlocked', late && late.ticket === 7],
     ['\u2026landing on the ticket rather than on the Dashboard it was popped back to',
-      n.calls.join(' | ') === 'dismissTo /dashboard | push /ustabasi | push /ticket/7'],
+      n.calls.join(' | ') === 'dismissTo /chat | push /ustabasi | push /ticket/7'],
     ['\u2026and only once', taps.take(AWAKE) === null && taps.held === false],
   );
 }

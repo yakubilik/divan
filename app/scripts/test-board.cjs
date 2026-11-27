@@ -182,7 +182,7 @@ const ids = (list) => list.map((i) => i.card.id).join(',');
 
 // ── 5 · the page itself, in both themes ─────────────────────────────────────
 
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
 
 function draw(scheme, hosts, params) {
   R.store.reset();
@@ -228,7 +228,7 @@ for (const scheme of ['dark', 'light']) {
     [`${scheme}: the segment is still Overview, Board and Chats`,
       board.includes('>overview<') && board.includes('>bdBoard<') && board.includes('>pjChats<')],
     [`${scheme}: every state of the board renders`,
-      Object.values(BOARDS).every(([hosts, params]) => /tabDashboard|>divan</.test(draw(scheme, hosts, params)))],
+      Object.values(BOARDS).every(([hosts, params]) => /tabChat|>divan</.test(draw(scheme, hosts, params)))],
   );
 }
 

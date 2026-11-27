@@ -535,7 +535,7 @@ const MIXED = [
 // states that cannot be seen by looking at a simulator with one laptop on the
 // same desk are exactly the ones that are rendered here.
 
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
 
 /** The screen, against a given fleet, in a given theme. */
 function draw(scheme, hosts, o = {}) {

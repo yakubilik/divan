@@ -348,7 +348,7 @@ const ready = (async () => {
     Object.assign(initial, { host: 'studio', seen: 8, last: 9, items: [{ id: 9, ticket: 42, ts: Date.now() / 1000 - 60,
       kind: 'done', headline: '', body: 'Live keys are in.', title: 'Stripe keys', status: 'done', project: 'Quire' }] });
     R.nav.reset();
-    const dash = R.render('dark', h(require(path.join(root, 'app/dashboard.tsx')).default));
+    const dash = R.render('dark', h(require(path.join(root, 'app/dashboard.tsx')).Dashboard));
     const counted = /Inbox/.test(dash) && /1 new/.test(dash);
     const row = await press((x) => (x.text ?? '').startsWith('Inbox'));
     const listed = R.nav.pushed().some((to) => (typeof to === 'string' ? to : to?.pathname) === '/inbox');

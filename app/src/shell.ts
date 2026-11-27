@@ -36,8 +36,12 @@ export const PLACE_ROUTE: Record<Place, string> = {
 };
 
 /** The place the app opens on, and the one a notification pops the stack back
- *  to before opening what it is about. It used to be the chat list. */
-export const HOME = PLACE_ROUTE.dashboard;
+ *  to before opening what it is about. It was the Dashboard for a while; since
+ *  27 Nov 2026 the phone opens on the chat list again (Yakup: take the
+ *  Dashboard off the phone). `/dashboard` stays only for a project's own page,
+ *  which a ticket or a link can still land on. */
+export const HOME_PLACE: Place = 'chat';
+export const HOME = PLACE_ROUTE[HOME_PLACE];
 
 /** What each place is drawn with. The frames use Lucide's `layout-grid`,
  *  `message-circle` and `server`; these are the Material Symbols the app
@@ -200,6 +204,8 @@ export const MACHINE_TABS: MachineTab[] = [
     { key: 'executors', route: '/executors', icon: 'group', title: 'mExecutors', note: 'mWhoWorks' },
     { key: 'agents', route: '/agents', icon: 'face', title: 'mAgents', note: 'mAgentsNote' },
     { key: 'queue', route: '/ustabasi', icon: 'terminal', title: 'mQueue', note: 'mQueueNote' },
+    { key: 'inbox', route: '/inbox', icon: 'view_agenda', title: 'inboxTitle', note: 'inboxNote' },
+    { key: 'office', route: '/office', icon: 'group', title: 'office', note: 'dashOfficeNote' },
     { key: 'call', route: '/call', icon: 'call', title: 'mCall', note: 'mCallNote' },
   ] },
 ];

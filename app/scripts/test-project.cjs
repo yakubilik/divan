@@ -594,7 +594,8 @@ const ago = (s) => (s == null ? '' : `${Math.round(s)}s`);
 
 // ── 8 · the page itself, in both themes ─────────────────────────────────────
 
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
+const DashboardRoute = require(path.join(root, 'app/dashboard.tsx')).default;
 
 function draw(scheme, hosts, key) {
   R.store.reset();
@@ -671,8 +672,8 @@ for (const scheme of ['dark', 'light']) {
       page.includes('>Quire<') && page.includes('SaaS · client portals for studios')
       && page.includes('pjSince') && page.includes('pjRunsOn')
       && R.styles(page).some((s) => s.width === 44 && s.height === 44)],
-    [`${scheme}: …inside the place it is a page of, with the way back to every project on the line over it`,
-      page.includes('tabDashboard') && page.includes('cmBackTo')],
+    [`${scheme}: …with the way back to the chat list on the line over it`,
+      page.includes('tabChat') && page.includes('cmBackTo')],
     [`${scheme}: the segment is Overview, Board and Chats`,
       page.includes('>overview<') && page.includes('>bdBoard<') && page.includes('>pjChats<')],
     [`${scheme}: the board is four numbers off the columns, with In progress now under them in status words`,
@@ -695,7 +696,7 @@ for (const scheme of ['dark', 'light']) {
     [`${scheme}: every state this page can be in renders`,
       Object.entries(PAGES).every(([, [hosts, key]]) => {
         const markup = draw(scheme, hosts, key);
-        return /tabDashboard|>divan</.test(markup);
+        return /tabChat|>divan</.test(markup);
       })],
   );
 }
@@ -866,26 +867,43 @@ for (const scheme of ['dark', 'light']) {
       && eq(openBranch([STUDIO, MINI], 'kanji-daily', 'engineering'), ['/dashboard?project=kanji-daily'])],
     ['…whether or not the product still has a branch by that name',
       eq(openBranch([STUDIO], 'quire', 'design'), ['/dashboard?project=quire'])],
-    ['…on the Dashboard where it named no product',
-      eq(openBranch([STUDIO], null, 'seo'), ['/dashboard'])],
-    ['…and a product that is no longer on this phone is the Dashboard as well, not a crash',
+    ['…on the chat list where it named no product',
+      eq(openBranch([STUDIO], null, 'seo'), ['/chat'])],
+    ['…and a product that is no longer on this phone ends on the chat list too, not a crash',
       (() => {
         const to = openBranch([STUDIO], 'gone', 'engineering');
-        const landed = draw('dark', [STUDIO], 'gone');
-        return eq(to, ['/dashboard?project=gone']) && landed.includes('>projects<') && landed.includes('>Quire<');
+        R.nav.reset();
+        R.render('dark', h(DashboardRoute));
+        return eq(to, ['/dashboard?project=gone']) && eq(R.nav.replaced(), ['/chat']);
+      })()],
+    ['the route draws no overview of every project: no project in the address is the chat list',
+      (() => {
+        draw('dark', [STUDIO], null);
+        R.params.reset();
+        R.nav.reset();
+        const markup = R.render('dark', h(DashboardRoute));
+        return eq(R.nav.replaced(), ['/chat']) && !markup.includes('>projects<');
+      })()],
+    ['…and a project the machines have not answered for yet waits instead of leaving',
+      (() => {
+        R.store.reset(); R.params.reset(); R.nav.reset();
+        R.store.set({ hosts: [], divan: {}, conn: 'online', loadDivan() {}, ustabasi: null, ustabasiOld: false, loadUstabasi() {} });
+        R.params.set({ project: 'quire' });
+        R.render('dark', h(DashboardRoute));
+        return eq(R.nav.replaced(), []);
       })()],
     ['a phone with nothing paired is sent to pair, and one still reading its settings waits',
       eq(openBranch([], 'quire', 'engineering'), ['/welcome'])
       && eq(openBranch([STUDIO], 'quire', 'engineering', { ready: false }), [])],
-    ['from the product a link led to, the line\u2019s left end is the Dashboard',
+    ['from the product a link led to, the line\u2019s left end is the chat list',
       (() => {
         const [to] = openBranch([STUDIO], 'quire', 'seo');
         draw('dark', [STUDIO], new URL(to, 'divan://x').searchParams.get('project'));
         const back = R.presses().filter((x) => x.label === 'cmBackTo');
         if (back.length !== 1) throw new Error(`${back.length} ways back`);
+        R.nav.reset();
         back[0].press();
-        const out = R.render('dark', h(Dashboard));
-        return !R.params.get().project && out.includes('>projects<') && eq(R.nav.pushed(), []);
+        return eq(R.nav.replaced(), ['/chat']) && eq(R.nav.pushed(), []);
       })()],
     ['the route is still registered, so the link is not an unmatched one',
       /name="branch\/\[id\]"/.test(layout)],

@@ -9,7 +9,7 @@ const root = path.join(__dirname, '..');
 const h = R.React.createElement;
 const M = require(path.join(root, 'src/divan.ts'));
 const C = require(path.join(root, 'src/compose.ts'));
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
 const Waiting = require(path.join(root, 'app/waiting.tsx')).default;
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -203,10 +203,12 @@ const checks = [];
   stand(BUSY);
   R.params.set({ project: 'quire' });
   const inside = draw();
+  R.nav.reset();
   press(label('cmBackTo'));
-  const out = draw();
+  const out = R.nav.replaced();
   R.params.reset();
-  const wanted = ['tabChat', 'tabMachine'];
+  draw();
+  const wanted = ['tabMachine'];
   const fromHome = R.presses();
   const reach = wanted.every((w) => fromHome.some(label(w)))
     && fromHome.some((x) => x.text === 'waitTitle') && fromHome.some((x) => x.text === 'cmMore')
@@ -217,8 +219,8 @@ const checks = [];
   R.params.reset();
   R.render('dark', h(Waiting));
   const fromWaiting = wanted.every((w) => R.presses().some(label(w)));
-  checks.push(['the line leads from a project back to the Dashboard, the address redraws the page it names, and Chat, Machine, Waiting, the chats and every new-chat option stay one press away',
-    inside.includes('>pjChats<') && out.includes('>cmNeedsOne<') && relaunched.includes('>pjChats<')
+  checks.push(['the line leads from a project back to the chat list, the address redraws the page it names, and Machine, Waiting, the chats and every new-chat option stay one press away',
+    inside.includes('>pjChats<') && JSON.stringify(out) === '["/chat"]' && relaunched.includes('>pjChats<')
     && reach && fromProject && fromWaiting]);
 
   // 8 · low quota

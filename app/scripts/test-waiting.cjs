@@ -347,7 +347,7 @@ const CALM = view([EASY]);
 // ── 5 · the screen itself, in both themes ───────────────────────────────────
 
 const Waiting = require(path.join(root, 'app/waiting.tsx')).default;
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
 
 /** What the screen finds in the store, and what it did with it. */
 const sent = { notes: [], moves: [], open: [] };
@@ -418,9 +418,9 @@ for (const scheme of ['dark', 'light']) {
       !busy.includes('Bulk CSV invite')],
     [`${scheme}: with nothing waiting the page is one sentence`,
       calm.includes('>waitNothing<') && !calm.includes('waitOldest')
-      && !['wgAsking', 'wgDecision', 'wgPlate'].some((w) => calm.includes(w)) && /tabDashboard|>divan</.test(calm)],
+      && !['wgAsking', 'wgDecision', 'wgPlate'].some((w) => calm.includes(w)) && /tabChat|>divan</.test(calm)],
     [`${scheme}: a phone paired with nothing draws the same sentence without throwing`,
-      nothing.includes('>waitNothing<') && /tabDashboard|>divan</.test(nothing)],
+      nothing.includes('>waitNothing<') && /tabChat|>divan</.test(nothing)],
     [`${scheme}: every state this page can be in renders`,
       Object.entries(FLEETS).every(([, hosts]) => draw(scheme, hosts).includes('overview'))],
   );

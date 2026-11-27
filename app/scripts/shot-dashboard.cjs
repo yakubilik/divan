@@ -18,7 +18,7 @@ const scheme = process.argv[3] === 'light' ? 'light' : 'dark';
 const h = R.React.createElement;
 const C = require(path.join(root, 'src/compose.ts'));
 const K = require(path.join(root, 'src/tokens.ts'));
-const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
 
 const NOW = Math.floor(Date.now() / 1000);
 const DAY = 86400;

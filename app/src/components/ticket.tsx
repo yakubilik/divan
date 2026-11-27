@@ -237,14 +237,14 @@ export function TicketPage({ id, host, from }: { id: string; host: string | null
   }, [busy, to, card, sayCard, T, sayKey]);
 
   const backLabel = from === 'waiting' ? T('waitTitle')
-    : from === 'dashboard' ? T('tabDashboard')
+    : from === 'dashboard' ? T('tabChat')
     : from === 'project' ? (project?.name ?? T('tkBack'))
     : project ? `${project.name} · ${T('bdBoard')}` : T('bdBoard');
   const back = () => {
     if (router.canGoBack()) { router.back(); return; }
     router.replace(from === 'waiting' ? '/waiting'
-      : from === 'dashboard' ? '/dashboard'
-      : project ? `/dashboard?project=${project.key}${from === 'project' ? '' : '&tab=board'}` : '/dashboard');
+      : from === 'dashboard' ? '/chat'
+      : project ? `/dashboard?project=${project.key}${from === 'project' ? '' : '&tab=board'}` : '/chat');
   };
 
   if (!card) {

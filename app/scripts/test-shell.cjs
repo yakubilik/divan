@@ -87,19 +87,20 @@ checks.push(
       .every((name) => Object.keys(icons.ICON_PATHS).some((k) => k.split(':')[0] === name))],
 );
 
-// The line over every place (HANDOVER §3 `dv-topline`): the word on the
-// Dashboard, the way back anywhere else, and Chat and Machine as 44 pt buttons
-// on every one of them — the two places the tab bar used to reach in one press.
+// The line over every place (HANDOVER §3 `dv-topline`): the word on the chat
+// list, where the app opens, the way back to it anywhere else, and Machine as a
+// 44 pt button on every one of them. The Dashboard is off the phone (27 Nov
+// 2026), so nothing on the line leads to it.
 for (const place of S.PLACES) {
   R.store.reset();
   R.store.set({ hosts: [], divan: {} });
   const markup = R.render('dark', h(shell.Shell, { place }, null));
   const buttons = R.presses().map((x) => x.label);
   checks.push(
-    [`the line over ${place} reaches Chat and Machine in one press`,
-      buttons.includes('tabChat') && buttons.includes('tabMachine')],
-    [`…and starts with ${place === 'dashboard' ? 'the word' : 'the way back'}`,
-      place === 'dashboard' ? markup.includes('>divan<') && !buttons.includes('cmBackTo')
+    [`the line over ${place} reaches Machine in one press, and not the Dashboard`,
+      buttons.includes('tabMachine') && !buttons.includes('tabDashboard')],
+    [`…and starts with ${place === S.HOME_PLACE ? 'the word' : 'the way back'}`,
+      place === S.HOME_PLACE ? markup.includes('>divan<') && !buttons.includes('cmBackTo')
         : buttons.includes('cmBackTo') && !markup.includes('>divan<')],
   );
 }
@@ -115,11 +116,11 @@ for (const place of S.PLACES) {
 // ── 2 · the app opens on the Dashboard ──────────────────────────────────────
 
 checks.push(
-  ['the place the app opens on is the Dashboard',
-    S.HOME === S.PLACE_ROUTE.dashboard && S.HOME === '/dashboard'],
+  ['the place the app opens on is the chat list, not the Dashboard (27 Nov 2026)',
+    S.HOME === S.PLACE_ROUTE.chat && S.HOME === '/chat' && S.HOME_PLACE === 'chat'],
   // A cold start opens an empty Hermes chat over it (2 Nov 2026, src/launch.ts);
-  // Back from that chat, and every later visit to `/`, is the Dashboard.
-  ['…and the first screen redirects there rather than to a chat list',
+  // Back from that chat, and every later visit to `/`, is the chat list.
+  ['…and the first screen redirects there',
     /<Redirect href=\{HOME\} \/>/.test(src('app/index.tsx'))
     && /router\.replace\(HOME\)/.test(src('app/index.tsx'))
     && /<Redirect href="\/welcome" \/>/.test(src('app/index.tsx'))],
@@ -235,7 +236,7 @@ checks.push(
 // tile's handler is a `router.setParams`, which is what puts the project in the
 // address; the screen is then drawn again and asked what it is showing.
 {
-  const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+  const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
   const texts = (markup) => [...markup.matchAll(/<span data-rn="Text"([^>]*)>([^<]*)<\/span>/g)].map((m) => ({
     style: JSON.parse((m[1].match(/data-style="([^"]*)"/) ?? [, '{}'])[1]
       .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;/g, "'")),
@@ -258,8 +259,9 @@ checks.push(
   const all = machines();
   R.presses().find((x) => x.label === 'Quire').press();   // the tile
   const scoped = R.render('dark', h(Dashboard));
+  R.nav.reset();
   R.presses().find((x) => x.label === 'cmBackTo').press(); // …and back out of it
-  const back = R.render('dark', h(Dashboard));
+  const back = R.nav.replaced();
 
   checks.push(
     ['nothing selected, the Dashboard is the greeting and every project', greeted(all)
@@ -267,7 +269,7 @@ checks.push(
     ['pressing a tile enters that project: the title is its name', title(scoped) === 'Quire'],
     ['…the body is that project and not the list of them',
       scoped.includes('>bdBoard<') && scoped.includes('>pjChats<') && !greeted(scoped)],
-    ['the line’s left end comes back out to every project', greeted(back)],
+    ['the line’s left end leads back to the chat list, not to every project', eq(back, [S.HOME])],
     ['there is no project bar any more: the products are tiles on the page',
       !/<ProjectBar/.test(dash) && !/ProjectBar/.test(src('src/components/shell.tsx').split('export function ProjectBar')[0])],
   );
@@ -374,7 +376,7 @@ checks.push(
   R.store.reset();
   R.store.set({ hosts: [], divan: {}, loadDivan() {}, conn: 'online', ustabasi: null,
                 ustabasiOld: false, loadUstabasi() {} });
-  const Dashboard = require(path.join(root, 'app/dashboard.tsx')).default;
+  const Dashboard = require(path.join(root, 'app/dashboard.tsx')).Dashboard;
   const Machine = require(path.join(root, 'app/machine.tsx')).default;
   const empty = R.render('dark', h(Dashboard));
   const machineScreen = R.render('light', h(Machine));
@@ -439,7 +441,7 @@ checks.push(
     ['…with every conversation in it, not just the newest',
       list.includes('Babysee build') && list.includes('isghocam SEO')],
     ['…a row of it opens that conversation', eq(R.nav.pushed(), ['/chat/a'])],
-    ['…and the three places are still under it', list.includes('tabChat') && list.includes('tabMachine')],
+    ['…and it carries the word and the way to Machine', list.includes('>divan<') && list.includes('tabMachine')],
   );
   R.store.reset();
 }

@@ -51,7 +51,7 @@ export default function Waiting() {
 
   const back = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/dashboard');
+    else router.replace('/chat');
   };
 
   const run = async (id: string, machine: string, work: () => Promise<unknown>, done?: string) => {
