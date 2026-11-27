@@ -91,6 +91,16 @@ export interface HostDivan {
 
 export const NO_DIVAN: HostDivan = { snapshot: null, at: null, reachable: false, error: null, old: false };
 
+/** One computer's board (Plane): a link into it, off that computer's own
+ *  products. `heard` is whether the computer has answered at all, which is
+ *  what tells "no board on it" from "not known yet". Only the computer named
+ *  is read: another one's board is not this one's, however many are paired. */
+export function planeOf(snaps: Record<string, HostDivan | undefined>, key: string | null):
+    { link: string; heard: boolean } {
+  const snap = key ? snaps[key]?.snapshot : null;
+  return { link: (snap?.projects ?? []).find((p) => !!p.plane)?.plane ?? '', heard: !!snap };
+}
+
 /** What a machine's entry becomes when it answers. `at` is this end's clock and
  *  not the snapshot's: the two computers' clocks are not the same clock, and
  *  what a screen says out loud — "silent for 2h 14m" — is time this browser has

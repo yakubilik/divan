@@ -23,7 +23,7 @@ import { OfficeFrame } from './screens/Office';
 import type { WorkLayout } from './screens/Work';
 import { Composer } from './components/Composer';
 import { Onboarding } from './screens/Onboarding';
-import { useFleet, onAnyEvent, pokeAll, putChat } from './lib/fleet';
+import { useFleet, onAnyEvent, pickedKey, pokeAll, putChat } from './lib/fleet';
 import { project as projectIn, useDivanView } from './lib/divan';
 import { idOf } from './lib/sessions';
 import {
@@ -50,6 +50,8 @@ export function App() {
   // A language pack arriving for the first time re-renders the panel in it.
   useLangPacks();
   const fleet = useFleet();
+  /** The computer the Board and the Office are about: the one picked. */
+  const picked = pickedKey(fleet);
   // Read for one reason: the palette has to offer the theme that is not on
   // screen. Nothing else in the panel re-renders on a theme change — the
   // colours are custom properties and the switch is one attribute on <html>.
@@ -923,13 +925,14 @@ export function App() {
           ? { node: <ListToggle shown onClick={() => setRailTo(true)} />, width: SIDEBAR_W } : null}
       >
         {/* The board: Plane, as the Dashboard's other face — the whole page
-            under the line, served through this computer (screens/Plane.tsx). */}
+            under the line, and the board of the computer picked in the panel,
+            served through that computer (screens/Plane.tsx). */}
         {view === 'board' && (
           <div data-board-screen="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <PlaneFrame fill />
+            <PlaneFrame key={picked ?? ''} hostKey={picked} fill />
           </div>
         )}
-        {/* The office: every agent on the home computer as a pixel office,
+        {/* The office: every agent on the picked computer as a pixel office,
             the page that computer serves (daemon office.py), under the line. */}
         {view === 'office' && <OfficeFrame onOpen={open} />}
         {place === 'dashboard' && view !== 'board' && view !== 'office' && (

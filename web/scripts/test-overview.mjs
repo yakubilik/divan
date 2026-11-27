@@ -1153,5 +1153,68 @@ group('every state of the fleet, drawn');
     page('slow').slice(page('slow').indexOf('quiet for') - 40, page('slow').indexOf('quiet for') + 30));
 }
 
+// ── the board and the office are the picked computer's ──────────────────────
+// Two computers paired, and only the first has a board (Plane). With the second
+// picked, the Board page used to show the first one's board and the Office page
+// the serving computer's office: both under the name of a computer they were
+// not about.
+
+group('the Board and the Office follow the computer that is picked');
+{
+  const seed = (store, patch) => {
+    Object.assign(store.getInitialState(), patch);
+    store.setState(patch);
+  };
+  const PlaneUI = await load('web/src/screens/Plane.js');
+  const OfficeUI = await load('web/src/screens/Office.js');
+  const at = (name, addr) => {
+    const slot = fakeHost();
+    return { ...slot, cfg: { ...slot.cfg, host: addr, port: 8790, name }, info: { ...slot.info, name } };
+  };
+  // Keyed the way the fleet keys them, by address: the directory answers in it.
+  const MINE = '100.64.0.1:8790', OTHER = '100.64.0.2:8790';
+  const hosts = { [MINE]: at('mine', '100.64.0.1'), [OTHER]: at('other-mac.local', '100.64.0.2') };
+  const order = [MINE, OTHER];
+  const snap = (projects) => ({ snapshot: { projects }, at: 1, reachable: true, error: null, old: false });
+  const snaps = {
+    [MINE]: snap([{ id: 'p1', name: 'Quire', plane: 'http://plane.example/ws/projects/1/issues/' }]),
+    [OTHER]: snap([{ id: 'p2', name: 'Unfiled' }]),
+  };
+
+  ok('the picked computer is the one a one-computer page is about',
+    F.pickedKey({ hosts, order, focus: OTHER }) === OTHER);
+  ok('…and with none picked, or one no longer paired, the directory\'s',
+    F.pickedKey({ hosts, order, focus: null }) === F.directoryKey({ hosts, order })
+    && F.pickedKey({ hosts, order, focus: 'gone' }) === F.directoryKey({ hosts, order })
+    && F.directoryKey({ hosts, order }) === MINE);
+
+  ok('a computer\'s board is read off its own products',
+    D.planeOf(snaps, MINE).link === 'http://plane.example/ws/projects/1/issues/'
+    && D.planeOf(snaps, MINE).heard);
+  ok('…so one with no Plane has none, whatever its neighbour has',
+    D.planeOf(snaps, OTHER).link === '' && D.planeOf(snaps, OTHER).heard);
+  ok('…and one that has not answered is not yet known to have none',
+    !D.planeOf({ [MINE]: snaps[MINE] }, OTHER).heard && !D.planeOf(snaps, null).heard);
+
+  seed(F.useFleet, { hosts, order, focus: OTHER, ready: true });
+  seed(D.useDivanStore, { snaps });
+  const board = renderToStaticMarkup(h(PlaneUI.PlaneFrame, { hostKey: F.pickedKey(F.useFleet.getState()), fill: true }));
+  ok('the Board page of a computer with no Plane says so, by name',
+    board.includes('No board on other-mac') && !board.includes('<iframe') && !board.includes('data-plane'),
+    board.slice(0, 300));
+  seed(D.useDivanStore, { snaps: { [MINE]: snaps[MINE] } });
+  const waiting = renderToStaticMarkup(h(PlaneUI.PlaneFrame, { hostKey: OTHER, fill: true }));
+  ok('…and waits for that computer, not for any computer, before saying it',
+    waiting.includes('data-plane="loading"') && !waiting.includes('No board'), waiting.slice(0, 300));
+
+  const office = renderToStaticMarkup(h(OfficeUI.OfficeFrame, { onOpen() {} }));
+  ok('the Office page frames the picked computer\'s office',
+    /<iframe[^>]+src="http:\/\/100\.64\.0\.2:8790\/office\//.test(office), office.slice(0, 300));
+  seed(F.useFleet, { focus: MINE });
+  const mine = renderToStaticMarkup(h(OfficeUI.OfficeFrame, { onOpen() {} }));
+  ok('…and the other one\'s when that is picked',
+    /<iframe[^>]+src="http:\/\/100\.64\.0\.1:8790\/office\//.test(mine), mine.slice(0, 300));
+}
+
 console.log(failures ? `\n${failures} failed` : '\nall good');
 process.exit(failures ? 1 : 0);

@@ -49,6 +49,14 @@ export function directoryKey(s: Pick<FleetState, 'hosts' | 'order'>): string | n
   return home ? hostKey(home.cfg) : null;
 }
 
+/** The computer a page about one computer shows: the one picked in the
+ *  panel, else the one the machine directory is read from. The board and the
+ *  office are such pages — another computer picked is another board and
+ *  another office, not the serving computer's under a different name. */
+export function pickedKey(s: Pick<FleetState, 'hosts' | 'order' | 'focus'>): string | null {
+  return s.focus && s.hosts[s.focus] ? s.focus : directoryKey(s);
+}
+
 export interface HostSlot {
   cfg: HostConfig;
   status: ConnStatus;

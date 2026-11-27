@@ -11,8 +11,8 @@
  */
 import { useEffect, useState } from 'react';
 import { planePass } from '../lib/actions';
-import { useFleet } from '../lib/fleet';
-import { useDivanStore } from '../lib/divan';
+import { hostName, useFleet } from '../lib/fleet';
+import { planeOf, useDivanStore } from '../lib/divan';
 import { Button, EmptyState } from '../ui/divan';
 import { P } from '../ui/kit';
 
@@ -41,11 +41,22 @@ function workspaceOf(url: string): string {
 type Gate = { base: string; upstream: string } | { error: string } | null;
 
 /** Plane in a frame. `url` is a page of Plane at its own address (what the
- *  snapshot carries); without one, the workspace's project list. */
+ *  snapshot carries); without one, the workspace's project list.
+ *
+ *  `hostKey` names the one computer whose board this is — the Board page gives
+ *  the computer picked in the panel — and then nothing is read off any other:
+ *  a computer with no Plane says so, rather than showing a neighbour's. */
 export function PlaneFrame({ url, hostKey, fill }: { url?: string; hostKey?: string | null; fill?: boolean }) {
   const found = usePlaneOf();
+  // One string again, for the same reason as in `usePlaneOf`.
+  const own = useDivanStore((s) => {
+    if (!hostKey) return '';
+    const o = planeOf(s.snaps, hostKey);
+    return `${o.heard ? 1 : 0}\n${o.link}`;
+  });
+  const name = useFleet((s) => (hostKey && s.hosts[hostKey] ? hostName(s.hosts[hostKey]) : ''));
   const key = hostKey ?? found.key;
-  const any = found.link;
+  const any = hostKey ? own.slice(2) : found.link;
   const [gate, setGate] = useState<Gate>(null);
   const [opened] = useState(() => Date.now().toString(36));
   useEffect(() => {
@@ -59,11 +70,12 @@ export function PlaneFrame({ url, hostKey, fill }: { url?: string; hostKey?: str
 
   const page = url || (any ? workspaceOf(any) : '');
   // Nothing heard from any computer yet is not "no board".
-  const heard = useDivanStore((s) => Object.values(s.snaps).some((x) => !!x?.snapshot));
+  const anyHeard = useDivanStore((s) => Object.values(s.snaps).some((x) => !!x?.snapshot));
+  const heard = hostKey ? own.startsWith('1') : anyHeard;
   if (!page && !heard) return <div style={{ flex: 1 }} data-plane="loading" />;
   if (!page) {
     return (
-      <EmptyState title="No board yet"
+      <EmptyState title={name ? `No board on ${name}` : 'No board yet'}
         body="This computer has no Plane. Add a [plane] url and workspace to its config.toml." />
     );
   }
