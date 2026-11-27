@@ -102,6 +102,34 @@ async def main() -> int:
         r = await get(None, {"chat_id": short})
         ok("a short chat comes back whole", len(r["events"]) == 3 and r["truncated"] is False)
 
+        # Reading back: a client that opened on a short tail asks for the page
+        # above what it holds, and keeps going until nothing is left above.
+        r = await get(None, {"chat_id": cid, "limit": 80})
+        ok("a short tail is the end of the chat", len(r["events"]) == 80
+           and r["events"][-1]["seq"] == last_seq and r["truncated"] is True)
+        top, held, pages = r["events"][0]["seq"], 80, 0
+        while pages < 10:
+            r = await get(None, {"chat_id": cid, "before_seq": top, "limit": 400})
+            pages += 1
+            evs = r["events"]
+            ok(f"page {pages} back is in order and sits just above", bool(evs) and evs[-1]["seq"] < top
+               and all(evs[i]["seq"] < evs[i + 1]["seq"] for i in range(len(evs) - 1)),
+               f"{evs[-1]['seq'] if evs else None} < {top}")
+            ok(f"page {pages} back leaves no gap", evs[-1]["seq"] == top - 1, f"{evs[-1]['seq']} then {top}")
+            held += len(evs)
+            top = evs[0]["seq"]
+            if not r["truncated"]:
+                break
+        ok("reading back reaches the first message", held == TOTAL and top == first_seq,
+           f"{held} of {TOTAL}, top {top} of {first_seq}")
+        ok("reading back needs three pages", pages == 3, f"{pages}")
+        r = await get(None, {"chat_id": cid, "before_seq": first_seq})
+        ok("nothing above the first message", r["events"] == [] and r["truncated"] is False)
+        # Another chat's events share the sequence: a page back is this chat's only.
+        r = await get(None, {"chat_id": short, "before_seq": 10 ** 9})
+        ok("a page back is one chat's events", len(r["events"]) == 3
+           and all(e["chat_id"] == short for e in r["events"]))
+
     print(f"\n{'ok' if not failures else str(failures) + ' failed'}")
     return 1 if failures else 0
 

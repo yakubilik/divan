@@ -593,6 +593,21 @@ class DB:
         ).fetchall()
         return [self._event_row(r) for r in rows]
 
+    def events_before(self, chat_id: str, before_seq: int, limit: int = 500) -> list[dict]:
+        """The `limit` events just above a sequence number, oldest first.
+
+        What a client scrolling back wants: it opened on the tail and holds
+        everything from `before_seq` on, and asks for the page that sits on
+        top of that. Read from the back so the page is the one nearest to what
+        is already on screen.
+        """
+        rows = self._c.execute(
+            "SELECT * FROM (SELECT * FROM events WHERE chat_id=? AND seq<? ORDER BY seq DESC LIMIT ?)"
+            " ORDER BY seq",
+            (chat_id, before_seq, limit),
+        ).fetchall()
+        return [self._event_row(r) for r in rows]
+
     def count_events(self, chat_id: str, since_seq: int = 0) -> int:
         row = self._c.execute(
             "SELECT COUNT(*) AS n FROM events WHERE chat_id=? AND seq>?",

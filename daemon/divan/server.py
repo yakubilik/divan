@@ -2967,13 +2967,25 @@ class Server:
         answered forward, in order, with `more` set while events remain. A
         client that stops at one page leaves a hole in its own timeline, so it
         keeps asking until `more` is false.
+
+        A `before_seq` is a client reading back: it holds the chat from that
+        event on and wants the page above it. That is what lets a phone open a
+        chat on a small tail — a screenful, quick on a poor link — and fetch
+        the rest behind the person's back or when they scroll up to it.
+        `truncated` says whether there is still more above this page.
         """
         chat = self.db.get_chat(d["chat_id"])
         if chat is None:
             raise Err("no_chat", "no such chat")
         since = int(d.get("since_seq") or 0)
+        before = int(d.get("before_seq") or 0)
         limit = max(1, min(2000, int(d.get("limit") or 500)))
-        if since <= 0:
+        if before > 0:
+            events = self.db.events_before(chat["id"], before, limit=limit + 1)
+            more, truncated = False, len(events) > limit
+            if truncated:
+                events = events[-limit:]
+        elif since <= 0:
             total = self.db.count_events(chat["id"])
             events = self.db.recent_events(chat["id"], limit=limit)
             more, truncated = False, total > len(events)
