@@ -2493,9 +2493,7 @@ group('the ticket and Waiting on you (HANDOVER §4.4, §4.6)');
   {
     const { useLogs, logKey } = await load('src/lib/timeline.js');
     const inner = useFleet.getState().call;
-    // audit: language-data — a Turkish reply as the queue's chat wrote it
-    const HERMES = 'Yapman gereken: canlı anahtarı mı test anahtarını mı kullanalım, söyle.';
-    // audit: end-language-data
+    const HERMES = 'What you need to do: tell me whether to use the live key or the test key.';
     await act(async () => {
       useFleet.setState({ call: async (key, type, data) => {
         if (type === 'ustabasi.notifications') {

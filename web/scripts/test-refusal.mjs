@@ -9,6 +9,7 @@
  *  dictation — reaches the network: through the tunnel each of those was one
  *  more count towards locking the household's own address.
  */
+import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -76,6 +77,8 @@ globalThis.fetch = async (url) => {
 const lib = (p) => import(pathToFileURL(join(out, 'src', 'lib', p)).href);
 const { RacClient, callOnce } = await lib('ws.js');
 const { REFUSAL_TEXT, parseRefusal, refusalText } = await lib('refusal.js');
+const { resetPacks } = await lib('lang.js');
+const packs = createRequire(import.meta.url)('../../scripts/lang.cjs');
 const { useFleet } = await lib('fleet.js');
 const actions = await lib('actions.js');
 
@@ -172,19 +175,27 @@ group('each refusal is told apart');
     ['not_tunnel_device', 'unknown_token', 'revoked', 'locked', 'not_let_in', 'unauthorized']), JSON.stringify(parsed));
   ok('a lock keeps its time and a v6 address whole',
     parsed[3].until === 1790000000 && parsed[3].addr === '2001:db8::/64', JSON.stringify(parsed[3]));
-  for (const lang of ['en', 'tr']) {
-    const table = REFUSAL_TEXT[lang];
+  const trRefusal = packs.load('tr', 'web/refusal');
+  const tables = { en: REFUSAL_TEXT.en, ...(trRefusal ? { tr: trRefusal.text } : {}) };
+  if (!trRefusal) packs.skip('refusal: the Turkish words');
+  for (const [lang, table] of Object.entries(tables)) {
     const kinds = Object.keys(REFUSAL_TEXT.en);
     ok(`${lang}: every kind has its words`, kinds.every((k) => table[k]?.short && table[k]?.long));
     ok(`${lang}: no two kinds read the same`,
       new Set(kinds.map((k) => table[k].short)).size === kinds.length);
-    const revoked = lang === 'en' ? /revoked/i : /kaldırıldı|silinmiş/i;
-    ok(`${lang}: only a removed device is called revoked`,
-      kinds.filter((k) => revoked.test(table[k].short + table[k].long)).join() === 'revoked',
-      kinds.filter((k) => revoked.test(table[k].short + table[k].long)).join());
   }
-  ok('Turkish is Turkish', refusalText({ kind: 'not_tunnel_device' }, 'tr').short
-    !== refusalText({ kind: 'not_tunnel_device' }, 'en').short);
+  ok('only a removed device is called revoked',
+    Object.keys(REFUSAL_TEXT.en).filter((k) => /revoked/i.test(REFUSAL_TEXT.en[k].short + REFUSAL_TEXT.en[k].long)).join() === 'revoked');
+  ok('without the pack a Turkish browser is told in English',
+    refusalText({ kind: 'not_tunnel_device' }, 'tr').short === refusalText({ kind: 'not_tunnel_device' }, 'en').short);
+  if (trRefusal) {
+    resetPacks({ tr: { 'web/refusal': trRefusal } });
+    ok('Turkish is Turkish', refusalText({ kind: 'not_tunnel_device' }, 'tr').short === trRefusal.text.not_tunnel_device.short
+      && refusalText({ kind: 'not_tunnel_device' }, 'tr').short !== refusalText({ kind: 'not_tunnel_device' }, 'en').short);
+    ok('…and a lock with no address names the address in it',
+      refusalText({ kind: 'locked', until: 1790000000 }, 'tr').long.includes(trRefusal.this_address));
+    resetPacks();
+  }
   const lock = refusalText(parsed[3], 'en');
   ok('a lock says until when, and the command', /\d\d:\d\d/.test(lock.short)
     && lock.long.includes('divan unlock 2001:db8::/64'), lock.long);

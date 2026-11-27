@@ -131,9 +131,7 @@ const t = (id, project, status, over = {}) => base({
  *  isghocam-seo are on none. */
 const queue = () => [
   t(41, 'quire', 'running'),
-  // audit: language-data — a Turkish question whose yes and no chips are read from its particle
-  t(42, 'quire', 'blocked', { escalation: '- which key?', ask: 'Stripe anahtarını ben ekleyeyim mi?' }),
-  // audit: end-language-data
+  t(42, 'quire', 'blocked', { escalation: '- which key?', ask: 'The live Stripe key or the test one?' }),
   t(43, 'quire', 'done', { merged: 'merged into main (abc1234)',
     last_event: { ts: NOW - 50, kind: 'clean', msg: 'worktree removed (auto)' } }),
   t(44, 'quire', 'queued', { started_at: null, round_started_at: null, updated_at: NOW - 26 * H,
@@ -233,10 +231,8 @@ group('the board: a column per status, Queued in the queue\'s own order');
     card(302) === 'check r2 · open 2h 0m' && card(43) === 'done today 11:59 · merged',
     `${card(302)} · ${card(43)}`);
   const talk = (id) => W.talkOf(everything().find((f) => f.ticket.id === id));
-  ok('a needs-you card\'s chat: Coder asks you, the question, and Evet to answer it',
-    // audit: language-data — a Turkish question whose yes and no chips are read from its particle
-    same(talk(42), { who: 'Coder', says: 'asks you', tone: 'amber', question: 'Stripe anahtarını ben ekleyeyim mi?', answers: ['Evet'] }),
-    // audit: end-language-data
+  ok('a needs-you card\'s chat: Coder asks you, the question, and its two answers',
+    same(talk(42), { who: 'Coder', says: 'asks you', tone: 'amber', question: 'The live Stripe key or the test one?', answers: ['The live Stripe key', 'The test one'] }),
     JSON.stringify(talk(42)));
   ok('…a running one is working, a done one says done, neither asks anything',
     talk(41).says === 'working' && talk(41).tone === 'run' && !talk(41).question
@@ -684,23 +680,21 @@ group('a card opens its chat over the board; its heading opens the ticket\'s pag
   await click(openOf(42));
   ok('a needs-you card pressed: the board stays, at the same address, with no new entry',
     address() === here && w.history.length === n && isBoard() && searchBox()?.value === 'ticket', address());
-  ok('…and its chat is open: Coder asks you, the question, Evet',
+  ok('…and its chat is open: Coder asks you, the question, its answers',
     chat()?.getAttribute('data-work-chat') === 'studio:42' && /Coder\s*asks you/.test(chat()?.querySelector('header')?.textContent ?? '')
-    // audit: language-data — a Turkish question whose yes and no chips are read from its particle
-    && chat()?.querySelector('[data-work-question]')?.textContent.includes('Stripe anahtarını ben ekleyeyim mi?')
-    // audit: end-language-data
-    && !!btn('Evet', chat()), chat()?.textContent);
+    && chat()?.querySelector('[data-work-question]')?.textContent.includes('The live Stripe key or the test one?')
+    && !!btn('The live Stripe key', chat()), chat()?.textContent);
   ok('…with a box to reply to Coder', !!chat()?.querySelector('input[placeholder="Reply to Coder…"]'),
     chat()?.querySelector('input')?.getAttribute('placeholder'));
   ok('…and the card says it is the one open', rowOf(42)?.hasAttribute('data-work-chatting') && openOf(42)?.getAttribute('aria-expanded') === 'true');
-  await click(btn('Evet', chat()));
-  ok('Evet sends a note on the ticket, ustabasi.note, and the board stays',
-    same(notes, ['studio note 42 Evet']) && address() === here && w.history.length === n && isBoard(), JSON.stringify(notes));
-  ok('…the window says it was sent', (chat()?.querySelector('[data-work-sent]')?.textContent ?? '').includes('sent · Evet'));
+  await click(btn('The live Stripe key', chat()));
+  ok('an answer pressed sends a note on the ticket, ustabasi.note, and the board stays',
+    same(notes, ['studio note 42 The live Stripe key']) && address() === here && w.history.length === n && isBoard(), JSON.stringify(notes));
+  ok('…the window says it was sent', (chat()?.querySelector('[data-work-sent]')?.textContent ?? '').includes('sent · The live Stripe key'));
   await click(openOf(41));
   ok('another card pressed switches the window to it: #41, working, no question',
     chat()?.getAttribute('data-work-chat') === 'studio:41' && /Coder\s*working/.test(chat()?.querySelector('header')?.textContent ?? '')
-    && !chat()?.querySelector('[data-work-question]') && !btn('Evet', chat()) && address() === here && w.history.length === n,
+    && !chat()?.querySelector('[data-work-question]') && !btn('The live Stripe key', chat()) && address() === here && w.history.length === n,
     chat()?.getAttribute('data-work-chat'));
   await click(openOf(43));
   ok('…a done card too', chat()?.getAttribute('data-work-chat') === 'studio:43' && address() === here);

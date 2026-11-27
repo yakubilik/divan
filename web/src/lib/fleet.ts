@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { setPacks } from './lang';
 import { RacClient, dialable, type ConnStatus } from './ws';
 import { localCwdToAdopt, usePrefs } from './prefs';
 import type {
@@ -435,6 +436,11 @@ function attach(cfg: HostConfig, set: Setter, get: () => FleetState) {
         .then(() => get().refresh(key))
         .then(() => loadDirectory(key, set, get))
         .catch((e) => console.warn('rac: greeting', key, 'failed', e));
+      // Turkish is the one other language the panel speaks; its words are the
+      // computer's (lib/lang.ts). A daemon from before lang.get just says no.
+      c.call('lang.get', { lang: 'tr' })
+        .then((r: any) => setPacks('tr', r?.packs))
+        .catch(() => {});
     }
   });
 

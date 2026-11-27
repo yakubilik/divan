@@ -26,13 +26,11 @@ sheet.textContent = themeCss();
 document.head.appendChild(sheet);
 
 const NOW = Math.floor(Date.now() / 1000);
-// audit: language-data — a real Turkish ask and its thread, as the panel receives them
-const FIRST = '- Strix taraması ChatGPT aboneliğinle çalışsın diye Mac\'te bir kez ChatGPT girişini yapar mısın?\n'
-  + '- Giriş yapmak istemezsen bu tarama için ücretli API anahtarı kullanayım mı, kullanırsam hangisi olsun?\n'
-  + '- Strix taraması ChatGPT aboneliğinle çalışsın diye Mac\'te bir kez ChatGPT girişini yapar mısın?';
-const FOLLOW = '- Tamam, girişi sen yapacaksın. Tarama yalnızca canlı siteyi mi kapsasın, staging de olsun mu?\n'
-  + '- Bulguları bilete not olarak mı yazayım, ayrı bir rapor dosyası olarak mı?';
-// audit: end-language-data
+const FIRST = '- Can you sign in to ChatGPT once on the Mac, so the Strix scan runs on your ChatGPT subscription?\n'
+  + '- If you would rather not sign in, should I use a paid API key for this scan, and if so which one?\n'
+  + '- Can you sign in to ChatGPT once on the Mac, so the Strix scan runs on your ChatGPT subscription?';
+const FOLLOW = '- OK, you will sign in. Should the scan cover only the live site, or staging too?\n'
+  + '- Should I write the findings as a note on the ticket, or as a separate report file?';
 const AT = NOW - 60;
 
 useFleet.setState({ hosts: { studio: host() as any }, order: ['studio'], focus: 'studio', ready: true });
@@ -53,11 +51,9 @@ useAsking.setState({
     cardId: 'k2', ticket: 42, opened: NOW - 900, asked: FOLLOW, askedAt: AT,
     lines: [
       { from: 'agent', text: FIRST, at: NOW - 900 },
-      // audit: language-data — a real Turkish ask and its thread, as the panel receives them
-      { from: 'you', text: 'Hangi hesapla giriş yapmam gerekiyor?', at: NOW - 600 },
-      { from: 'agent', text: 'Strix\'i çalıştıran Mac\'teki ChatGPT hesabı; Plus aboneliği olan hangisiyse o.', at: NOW - 500 },
-      { from: 'you', text: 'Girişi ben yaparım, ücretli anahtar kullanma.', at: NOW - 300 },
-      // audit: end-language-data
+      { from: 'you', text: 'Which account do I sign in with?', at: NOW - 600 },
+      { from: 'agent', text: 'The ChatGPT account on the Mac that runs Strix; whichever one has the Plus plan.', at: NOW - 500 },
+      { from: 'you', text: 'I will sign in, do not use a paid key.', at: NOW - 300 },
       { from: 'agent', text: FOLLOW, at: AT },
     ],
   }],

@@ -171,12 +171,6 @@ ALLOWED = [
     "app/src/voice.ts",
     "app/src/waiting.ts",
     "app/src/xterm.gen.ts",
-    "web/scripts/fixtures/unfiled-ask-snapshot.json",
-    "web/scripts/notice-fixture.js",
-    "web/scripts/test-overview.mjs",
-    "web/scripts/test-refusal.mjs",
-    "web/src/lib/refusal.ts",
-    "web/src/lib/sessions.ts",
 ]
 
 

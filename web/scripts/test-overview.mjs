@@ -27,6 +27,7 @@
  *  machine quiet, one refusing, a dormant product, a product with no repository —
  *  rendered in both themes, with nothing thrown and no colour of its own.
  */
+import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -110,6 +111,7 @@ const PR = await load('web/src/lib/project.js');
 const TD = await load('web/src/lib/today.js');
 const TK = await load('web/src/lib/ticket.js');
 const S = await load('web/src/lib/sessions.js');
+const L = await load('web/src/lib/lang.js');
 const TL = await load('web/src/lib/tell.js');
 const RUN = await load('web/src/lib/transcript.js');
 const U = await load('web/src/lib/ustabasi.js');
@@ -451,11 +453,20 @@ group('what needs a person arrives as a chat session');
     && eq(S.answers('Should we keep three attempts, or follow Stripe?'), [])
     && eq(S.answers('Postgres, or MySQL, or SQLite?'), [])
     && eq(S.answers(`${'x'.repeat(220)}, or the other one?`), []));
-  ok('a Turkish "A mı, B mi?" offers its two halves',
-    eq(S.answers('Postgres mi, SQLite mı?'), ['Postgres', 'SQLite']));
-  ok('…a Turkish yes-or-no offers only Evet, since a no needs saying in words',
-    eq(S.answers('Bu iş bitti ama ana koda eklenemedi. Ben ekleyeyim mi?'), ['Evet'])
-    && eq(S.answers('Postgres mi yoksa SQLite mı?'), []));
+  {
+    // Turkish questions are read by their grammar, which the computer's
+    // language pack describes (lib/lang.ts); the cases are pack data too.
+    const packs = createRequire(import.meta.url)('../../scripts/lang.cjs');
+    const grammar = packs.load('tr', 'web/sessions');
+    const cases = packs.load('tr', 'tests/web/answers');
+    if (!grammar || !cases) packs.skip('answers: Turkish questions');
+    else {
+      ok('without the pack a Turkish question offers nothing', cases.cases.every((c) => eq(S.answers(c.question), [])));
+      L.resetPacks({ tr: { 'web/sessions': grammar } });
+      for (const c of cases.cases) ok(`Turkish: ${c.why}`, eq(S.answers(c.question), c.answers), JSON.stringify(S.answers(c.question)));
+      L.resetPacks();
+    }
+  }
   ok('a card with a ticket behind it can be answered, and one without can only be read',
     q.ticket === 42 && list[2].ticket === null);
 

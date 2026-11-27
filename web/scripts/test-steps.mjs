@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(web, '.test-build', 'steps');
@@ -34,6 +35,11 @@ for (const f of readdirSync(out, { recursive: true, withFileTypes: true })) {
     (m, a, b, c) => (/\.(js|json)$/.test(b) ? m : `${a}${b}.js${c}`)));
 }
 const { blocks, tell, langOf, workOf } = await import(pathToFileURL(join(out, 'src/lib/steps.js')));
+const { resetPacks } = await import(pathToFileURL(join(out, 'src/lib/lang.js')));
+// The Turkish words are the computer's language pack (lib/lang.ts); without one
+// the Turkish checks are skipped and the panel is English throughout.
+const packs = createRequire(import.meta.url)('../../scripts/lang.cjs');
+const trSteps = packs.load('tr', 'web/steps');
 const { bareTitle } = await import(pathToFileURL(join(out, 'src/lib/format.js')));
 
 let n = 0;
@@ -46,10 +52,8 @@ const said = (kind, text) => ({ kind, id: `m${++n}`, ts: n, text, attachments: [
 group('a run of steps is one block');
 {
   const items = [
-    // audit: language-data — the Turkish locale of the step strip, and Turkish the detector hears
-    said('user', 'şunu düzelt'), bash('git status'), { kind: 'thinking', id: 'k', ts: 3, text: '…' },
-    // audit: end-language-data
-    tool('Read', { file_path: '/a.ts' }), said('assistant', 'Buldum.'), bash('npm test'),
+    said('user', 'fix this'), bash('git status'), { kind: 'thinking', id: 'k', ts: 3, text: '…' },
+    tool('Read', { file_path: '/a.ts' }), said('assistant', 'Found it.'), bash('npm test'),
   ];
   const b = blocks(items);
   ok('everything between two things said is one block, and what was said stays its own',
@@ -62,16 +66,20 @@ group('what the run is called');
   const shot = 'mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot';
   const evalJs = 'mcp__plugin_chrome-devtools-mcp_chrome-devtools__evaluate_script';
   const run = [tool(evalJs), tool(shot), tool(evalJs), tool(shot), bash('git push origin main'), tool('Read'), bash('ls')];
-  const done = tell(run, false, 'tr');
-  ok('over, it names the kinds of work done most, in the order they began, and counts the calls',
-    // audit: language-data — the Turkish locale of the step strip, and Turkish the detector hears
-    done.text === 'Tarayıcıda sayfayı kontrol ettim, ekran görüntüsü aldım, değişiklikleri gönderdim' && done.count === 7,
-    // audit: end-language-data
-    JSON.stringify(done));
-  ok('going on, it says what is being done now',
-    // audit: language-data — the Turkish locale of the step strip, and Turkish the detector hears
-    tell([...run, bash('npm run test', { running: true })], true, 'tr').text === 'Testleri çalıştırıyorum…');
-    // audit: end-language-data
+  if (!trSteps) packs.skip('steps: the Turkish locale');
+  else {
+    resetPacks({ tr: { 'web/steps': trSteps } });
+    const W = trSteps.work;
+    const done = tell(run, false, 'tr');
+    const said = [W.browser[1], W.shot[1], W.push[1]].join(', ');
+    ok('over, it names the kinds of work done most, in the order they began, and counts the calls',
+      done.text === said[0].toLocaleUpperCase('tr') + said.slice(1) && done.count === 7, JSON.stringify(done));
+    ok('going on, it says what is being done now',
+      tell([...run, bash('npm run test', { running: true })], true, 'tr').text === `${W.test[0]}…`);
+    resetPacks();
+    ok('…and without the pack the same run is told in English',
+      tell(run, false, 'tr').text === 'Checked the page in the browser, took screenshots, pushed the changes');
+  }
   ok('in English for a person who writes English',
     tell([bash('npm install'), tool('Read')], false, 'en').text === 'Installed packages, read files');
   ok('a command nothing recognises is still a sentence, not the command',
@@ -80,19 +88,21 @@ group('what the run is called');
 
 group('the language is the person’s');
 {
-  // audit: language-data — the Turkish locale of the step strip, and Turkish the detector hears
-  ok('Turkish is heard in what they wrote', langOf([said('user', 'bunu düzelt')], 'en') === 'tr');
-  // audit: end-language-data
-  ok('English likewise, whatever the browser is set to', langOf([said('user', 'fix the login redirect')], 'tr') === 'en');
-  ok('before they have written anything it is the browser’s', langOf([], 'tr-TR') === 'tr');
+  ok('without a language pack everyone is written to in English', langOf([], 'tr-TR') === 'en');
+  if (trSteps) {
+    resetPacks({ tr: { 'web/steps': trSteps } });
+    ok('Turkish is heard in what they wrote', langOf([said('user', trSteps.work.edit[0])], 'en') === 'tr');
+    ok('English likewise, whatever the browser is set to', langOf([said('user', 'fix the login redirect')], 'tr') === 'en');
+    ok('before they have written anything it is the browser’s', langOf([], 'tr-TR') === 'tr');
+    resetPacks();
+  }
 }
 
 group('a title under its project’s heading');
 {
-  // audit: language-data — Turkish chat titles, one under a product name with a letter outside ASCII
-  ok('leaves the project out', bareTitle('grikoc · Tasarım eksikleri', '/Users/x/projects/grikoc') === 'Tasarım eksikleri');
-  ok('by the name the product goes by too', bareTitle('Grikoç · Tasarım', '/Users/x/projects', 'Grikoç') === 'Tasarım');
-  // audit: end-language-data
+  ok('leaves the project out', bareTitle('acme · Design gaps', '/Users/x/projects/acme') === 'Design gaps');
+  // A product name with a letter outside ASCII (c with cedilla).
+  ok('by the name the product goes by too', bareTitle('Acm\u00e7 · Design', '/Users/x/projects', 'Acm\u00e7') === 'Design');
   ok('and keeps a dot that is the person’s own', bareTitle('Fix · the thing', '/Users/x/projects/grikoc') === 'Fix · the thing');
 }
 

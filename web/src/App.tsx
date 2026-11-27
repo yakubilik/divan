@@ -1,5 +1,6 @@
 import type { ApprovalResponse } from './lib/approval-input';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLangPacks } from './lib/lang';
 import { RADIUS, SHADOW, T, setThemeChoice, themeCss, useTheme } from './lib/theme';
 import { KEYFRAMES, P, mono } from './ui/kit';
 import { Button } from './ui/divan';
@@ -46,6 +47,8 @@ import type { Agent, Chat } from './lib/protocol';
 interface Selection { hostKey: string; chatId: string }
 
 export function App() {
+  // A language pack arriving for the first time re-renders the panel in it.
+  useLangPacks();
   const fleet = useFleet();
   // Read for one reason: the palette has to offer the theme that is not on
   // screen. Nothing else in the panel re-renders on a theme change — the

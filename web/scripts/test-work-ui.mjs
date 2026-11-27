@@ -12,7 +12,7 @@
  *  (`window.__writes`) is read back.
  *
  *  Then a card pressed where a person presses: its chat opens at the bottom
- *  right over a board that has not moved — the question and Evet for a card
+ *  right over a board that has not moved — the question and its answers for a card
  *  that needs you, answered from there with `ustabasi.note` — another card
  *  switches it, Enter opens it, and every card's project is a heading larger
  *  and bolder than the line under it that opens the ticket's page, Back
@@ -203,19 +203,17 @@ try {
   await press('[data-work-row="studio:259"] .dv-card-title');
   let ch = await chatNow();
   ok('a needs-you card pressed: the address, the scroll, the days and the history are what they were', (await place()) === was, `${was} → ${await place()}`);
-  ok('…and its chat is open at the bottom right: Coder asks you, the question, Evet, a box to reply in',
+  ok('…and its chat is open at the bottom right: Coder asks you, the question, its answers, a box to reply in',
     ch?.key === 'studio:259' && /Coder\s*asks you/.test(ch.head) && ch.right >= 0 && ch.right < 40 && ch.bottom >= 0 && ch.bottom < 40 && ch.left > 640
-    // audit: language-data — a Turkish question whose yes and no chips are read from its particle
-    && ch.question?.includes('kişisel Apple takımını kullanayım mı?') && JSON.stringify(ch.answers) === '["Evet"]' && ch.reply === 'Reply to Coder…',
-    // audit: end-language-data
+    && ch.question?.includes('My personal Apple team or the company one?') && JSON.stringify(ch.answers) === '["My personal Apple team","The company one"]' && ch.reply === 'Reply to Coder…',
     JSON.stringify(ch));
   await run('window.__writes.length = 0');
   await press('[data-work-chat] [data-work-answers] button');
   ch = await chatNow();
-  ok('Evet pressed: ustabasi.note on #259 with Evet, and the board stays where it was',
-    (await writes()) === '["note 259 Evet"]' && (await place()) === was, `${await writes()} · ${await place()}`);
+  ok('an answer pressed: ustabasi.note on #259 with it, and the board stays where it was',
+    (await writes()) === '["note 259 My personal Apple team"]' && (await place()) === was, `${await writes()} · ${await place()}`);
   ok('…the window keeps the conversation, with the answer in it',
-    ch?.key === 'studio:259' && await waitFor(`[...document.querySelectorAll('[data-work-chat] [data-work-line="you"]')].some((el) => el.textContent.includes('Evet'))`, 3000),
+    ch?.key === 'studio:259' && await waitFor(`[...document.querySelectorAll('[data-work-chat] [data-work-line="you"]')].some((el) => el.textContent.includes('My personal Apple team'))`, 3000),
     JSON.stringify(await chatNow()));
   await press('[data-work-row="studio:258"] .dv-card-title');
   ch = await chatNow();

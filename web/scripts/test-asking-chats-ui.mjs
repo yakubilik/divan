@@ -125,10 +125,8 @@ try {
       };`);
     ok('…on /chats, the ticket’s window', m.path.startsWith('/chats') && m.id === 'studio:k2', `${m.path} ${m.id}`);
     ok('…with the project and the agent in its head', m.text.includes('Quire · Engineering') && m.text.includes('Coder'), m.text.slice(0, 160));
-    // audit: language-data — the Turkish ask the harness shows, and an answer to it
-    ok('…and the question whole, each point', m.points.length === 2 && m.points[0].startsWith('Strix taraması')
-    // audit: end-language-data
-      && m.points[1].includes('hangisi olsun?'), JSON.stringify(m.points));
+    ok('…and the question whole, each point', m.points.length === 2 && m.points[0].startsWith('Can you sign in')
+      && m.points[1].includes('which one?'), JSON.stringify(m.points));
     ok('the window is wholly on screen, docked at the bottom right',
       m.win.l >= 0 && m.win.t >= 0 && m.win.r <= m.vw && m.win.b <= m.vh && m.win.r > m.vw - 40, JSON.stringify(m.win));
     ok('the chat list has no entry for the ticket or its question',
@@ -145,9 +143,7 @@ try {
     console.log('── answered there, and one store with the Dashboard');
     const sent = await evaluate(`
       const input = document.querySelector('[data-asking-window] input[type="text"]');
-      // audit: language-data — the Turkish ask the harness shows, and an answer to it
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'Girişi ben yaparım');
-      // audit: end-language-data
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'I will sign in');
       input.dispatchEvent(new Event('input', { bubbles: true }));
       await new Promise((r) => setTimeout(r, 50));
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -156,9 +152,7 @@ try {
                lines: [...document.querySelectorAll('[data-asking-window] [data-asking-line]')].map((e) => e.getAttribute('data-asking-line')) };`);
     ok('the answer is one ustabasi.note on ticket 42, and the window stays with it under the question',
       sent.notes.length === 1 && sent.notes[0].key === 'studio' && sent.notes[0].data.id === 42
-        // audit: language-data — the Turkish ask the harness shows, and an answer to it
-        && sent.notes[0].data.text === 'Girişi ben yaparım' && sent.id === 'studio:k2' && sent.lines.join(',') === 'agent,you',
-        // audit: end-language-data
+        && sent.notes[0].data.text === 'I will sign in' && sent.id === 'studio:k2' && sent.lines.join(',') === 'agent,you',
       JSON.stringify(sent));
     await evaluate(`document.querySelector('[data-asking-window] button[aria-label="Put this away"]').click();
       await new Promise((r) => setTimeout(r, 200));`);

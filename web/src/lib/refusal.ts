@@ -12,6 +12,8 @@
 // tunnel every retry of a wrong token was one more count towards a lock.
 // Reloading the page starts over.
 
+import { pack } from './lang';
+
 export type RefusalKind =
   | 'not_tunnel_device' | 'tunnel_only' | 'unknown_token' | 'revoked' | 'no_token'
   | 'locked' | 'not_let_in' | 'unauthorized';
@@ -59,7 +61,7 @@ export async function noteRefusal(token: string, r: Response): Promise<Refusal |
 type Words = { short: string; long: string };
 type Table = Record<RefusalKind, Words>;
 
-export const REFUSAL_TEXT: Record<'en' | 'tr', Table> = {
+export const REFUSAL_TEXT: Record<'en', Table> = {
   en: {
     not_tunnel_device: {
       short: 'wrong door · this key is for the tailnet',
@@ -94,48 +96,19 @@ export const REFUSAL_TEXT: Record<'en' | 'tr', Table> = {
       long: 'The computer refused this key. Pair again on the computer: `divan web`.',
     },
   },
-  tr: {
-    not_tunnel_device: {
-      short: 'yanlış kapı · bu anahtar tailnet için',
-      long: 'Bu tarayıcıdaki anahtar tailnet için yapılmış; tunnel sadece kendisi için yapılan anahtarları kabul eder. Anahtarda sorun yok. Bilgisayarda `divan web --at <hostname>` çalıştır ve verdiği linki burada aç.',
-    },
-    tunnel_only: {
-      short: 'yanlış kapı · bu anahtar tunnel için',
-      long: 'Bu anahtar tunnel için yapılmış, sadece onu açar. Paneli tunnel adresinden aç ya da bu tarayıcıyı tailnet\'te `divan web` ile eşle.',
-    },
-    unknown_token: {
-      short: 'anahtar tanınmıyor',
-      long: 'Bilgisayar bu anahtarı tanımıyor — başka bir bilgisayarın olabilir ya da bir sıfırlamadan öncesine ait. Bilgisayarda yeniden eşle: `divan web` (tunnel arkasındaysan `web --at <hostname>`).',
-    },
-    revoked: {
-      short: 'erişim kaldırıldı',
-      long: 'Bu cihaz bilgisayarda silinmiş. Geri gelmek için yeniden eşle: `divan web`.',
-    },
-    no_token: {
-      short: 'eşlenmemiş',
-      long: 'Bu sayfanın bilgisayar için bir anahtarı yok. Bilgisayarda `divan web` çalıştır ve verdiği linki aç.',
-    },
-    locked: {
-      short: 'adres {time}\'e kadar kilitli',
-      long: '{addr} adresinden çok fazla farklı yanlış anahtar geldi, tunnel bu adresi {time}\'e kadar kabul etmiyor. Hemen açmak için bilgisayarda: `divan unlock {addr}` — sonra bu sayfayı yenile.',
-    },
-    not_let_in: {
-      short: 'tunnel içeri almadı',
-      long: 'Tunnel bu adresi ya da girişi, anahtara bakmadan geri çevirdi. `tunnel_allow_ips` listesini ve Cloudflare Access girişini kontrol et (docs/TUNNEL.md).',
-    },
-    unauthorized: {
-      short: 'erişim yok',
-      long: 'Bilgisayar bu anahtarı reddetti. Bilgisayarda yeniden eşle: `divan web`.',
-    },
-  },
 };
 
 /** The panel has one language and this is the one place it has two: Turkish
- *  for a browser that asks for it, English otherwise. */
+ *  for a browser that asks for it and has the computer's pack (`web/refusal`,
+ *  kept from an earlier visit, since a refused key cannot fetch it), English
+ *  otherwise. */
 export function refusalLang(): 'en' | 'tr' {
   const lang = typeof navigator !== 'undefined' ? String(navigator.language || '') : '';
-  return lang.toLowerCase().startsWith('tr') ? 'tr' : 'en';
+  return lang.toLowerCase().startsWith('tr') && refusalPack('tr') ? 'tr' : 'en';
 }
+
+interface RefusalPack { text?: Partial<Table>; this_address?: string }
+const refusalPack = (lang: string) => pack<RefusalPack>(lang, 'web/refusal');
 
 function clock(until?: number): string {
   if (!until) return '?';
@@ -146,8 +119,11 @@ function clock(until?: number): string {
 /** What to show for a refusal: a few words for a status line and a sentence
  *  that says what to do. */
 export function refusalText(r: Refusal | null | undefined, lang = refusalLang()): Words {
-  const words = REFUSAL_TEXT[lang][r?.kind ?? 'unauthorized'];
+  const kind = r?.kind ?? 'unauthorized';
+  const other = lang === 'en' ? undefined : refusalPack(lang);
+  const words = other?.text?.[kind] ?? REFUSAL_TEXT.en[kind];
+  const here = (other?.text?.[kind] && other.this_address) || 'this address';
   const fill = (s: string) => s.split('{time}').join(clock(r?.until))
-    .split('{addr}').join(r?.addr || (lang === 'tr' ? 'bu adres' : 'this address'));
+    .split('{addr}').join(r?.addr || here);
   return { short: fill(words.short), long: fill(words.long) };
 }
