@@ -58,6 +58,17 @@ export interface Saved {
   at: number;
 }
 
+/** The chat list of one computer, as it last answered `chat.list`. */
+export interface SavedList {
+  v: 1;
+  chats: any[];
+  groups: any[];
+  people: any;
+  agentMarks: Record<string, any>;
+  projectMarks: Record<string, any>;
+  at: number;
+}
+
 export interface HistoryStorage {
   read(key: string): Promise<string | null>;
   write(key: string, text: string): Promise<void>;
@@ -72,6 +83,23 @@ export interface HistoryStorage {
 export function keyOf(host: string, chat: string): string {
   const safe = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
   return `${safe(host)}.${safe(chat)}`;
+}
+
+/** The name a computer's chat list is kept under: beside its chats, so that
+ *  unpairing the computer takes it too. No chat id is `_list_`. */
+export function listKeyOf(host: string): string {
+  return keyOf(host, '_list_');
+}
+
+/** A chat list read back, or null where it is not one this code wrote. */
+export function parseList(text: string | null): SavedList | null {
+  if (!text) return null;
+  let j: any;
+  try { j = JSON.parse(text); } catch { return null; }
+  if (!j || j.v !== 1 || !Array.isArray(j.chats) || !Array.isArray(j.groups)) return null;
+  if (j.chats.some((c: any) => !c || typeof c.id !== 'string')) return null;
+  return { v: 1, chats: j.chats, groups: j.groups, people: j.people ?? null,
+           agentMarks: j.agentMarks ?? {}, projectMarks: j.projectMarks ?? {}, at: Number(j.at) || 0 };
 }
 
 /** What is written for a chat: its end, and whether anything is above it. */
@@ -119,7 +147,7 @@ export interface HistoryDeps {
 
 /** The copies on disk, and when they are written. */
 export class History {
-  private waiting = new Map<string, { timer: unknown; since: number; take: () => Saved | null }>();
+  private waiting = new Map<string, { timer: unknown; since: number; take: () => string | null }>();
   /** Every write and removal made, for a test to count. */
   writes = 0;
 
@@ -139,7 +167,24 @@ export class History {
    *  writing, so a burst of events is one write of where it ended up; a null
    *  from it (the chat is gone, the computer was switched) writes nothing. */
   touch(host: string, chat: string, take: () => Saved | null) {
-    const key = keyOf(host, chat);
+    this.later(keyOf(host, chat), () => {
+      const saved = take();
+      return saved && saved.events.length ? JSON.stringify(saved) : null;
+    });
+  }
+
+  /** The computer's chat list, or null. It is what the chats screen draws at
+   *  launch, before the computer has answered or when it cannot be reached. */
+  async loadList(host: string): Promise<SavedList | null> {
+    try { return parseList(await this.deps.storage.read(listKeyOf(host))); } catch { return null; }
+  }
+
+  /** The list changed: write it down soon, as `touch` does a chat. */
+  touchList(host: string, take: () => SavedList | null) {
+    this.later(listKeyOf(host), () => { const l = take(); return l ? JSON.stringify(l) : null; });
+  }
+
+  private later(key: string, take: () => string | null) {
     const was = this.waiting.get(key);
     const since = was?.since ?? this.now();
     if (was) this.clearTimer(was.timer);
@@ -153,10 +198,10 @@ export class History {
     if (!w) return;
     this.waiting.delete(key);
     this.clearTimer(w.timer);
-    let saved: Saved | null = null;
-    try { saved = w.take(); } catch { saved = null; }
-    if (!saved || !saved.events.length) return;
-    try { this.writes++; await this.deps.storage.write(key, JSON.stringify(saved)); }
+    let text: string | null = null;
+    try { text = w.take(); } catch { text = null; }
+    if (!text) return;
+    try { this.writes++; await this.deps.storage.write(key, text); }
     catch (e) { console.warn('history: could not save', e); }
   }
 

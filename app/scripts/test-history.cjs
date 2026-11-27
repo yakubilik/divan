@@ -295,10 +295,87 @@ async function store() {
   check("another computer: one computer's copy is not drawn for another", !st().loadedChats.a);
 }
 
+// ── 3. the chat list ─────────────────────────────────────────────────────
+async function list() {
+  const row = (id, title) => ({ id, title, status: 'idle', updated_at: 1 });
+  check('list: read back as written', (() => {
+    const l = H.parseList(JSON.stringify({ v: 1, chats: [row('x', 'X')], groups: [], people: null, at: 1 }));
+    return !!l && l.chats[0].id === 'x' && same(l.agentMarks, {});
+  })());
+  check('list: a broken one is no list', H.parseList('{"v":1,"chats":[{}],"groups":[]}') === null
+    && H.parseList('{"v":1,"chats":') === null && H.parseList(null) === null);
+
+  // The real store, its socket's dialling taken out: what is left is what the
+  // store does with a computer it has just been told to use.
+  client.connect = () => {};
+  client.disconnect = () => {};
+  const hosts = [{ id: 'h1', host: 'one', port: 1, token: 't1', name: 'One' }, { id: 'h2', host: 'two', port: 2, token: 't2', name: 'Two' }];
+  const lists = { h1: [row('p', 'Plan'), row('q', 'Quote')], h2: [row('z', 'Zed')] };
+  let listGate = null;
+  const call = client.call;
+  client.call = async (type, data) => {
+    if (type !== 'chat.list') return call(type, data);
+    if (listGate) await listGate;
+    return { chats: lists[st().activeHostId] ?? [], groups: [], people: { names: [], me: null } };
+  };
+  disk.clear();
+  useStore.setState({ hosts, activeHostId: null, host: null, chats: {}, chatsLoaded: false, switching: false });
+  await st().switchHost('h1');
+  await st().refresh();
+  await history.flush();
+  check('list: the computer\'s answer is written to this phone', !!H.parseList(disk.get(H.listKeyOf('h1')))
+    && same(H.parseList(disk.get(H.listKeyOf('h1'))).chats.map((c) => c.id).sort(), ['p', 'q']));
+
+  // An event changes a row: the copy follows.
+  frame({ event: 'chat.updated', data: { ...row('p', 'Plan, renamed') } });
+  await history.flush();
+  check('list: a row changed by an event is changed in the copy',
+    H.parseList(disk.get(H.listKeyOf('h1'))).chats.find((c) => c.id === 'p').title === 'Plan, renamed');
+
+  // To the second computer and back: its list is on screen from disk before
+  // the computer has answered, and not dimmed while it waits.
+  await st().switchHost('h2');
+  await st().refresh();
+  await history.flush();
+  let open; listGate = new Promise((r) => { open = r; });
+  const keptList = disk.get(H.listKeyOf('h1'));
+  const writesBefore = history.writes;
+  await st().switchHost('h1');
+  await new Promise((r) => setImmediate(r));
+  check('list: back on the first computer its chats are drawn before it answers',
+    same(Object.keys(st().chats).sort(), ['p', 'q']) && st().chatsLoaded === false, JSON.stringify(Object.keys(st().chats)));
+  check('list: …and not left dimmed behind the outgoing computer\'s', st().switching === false);
+  frame({ event: 'chat.updated', data: { ...row('q', 'Quote, touched while only the copy is up') } });
+  await history.flush();
+  check('list: nothing is written back while only the copy is on screen',
+    disk.get(H.listKeyOf('h1')) === keptList && history.writes === writesBefore, `${history.writes} writes, was ${writesBefore}`);
+  lists.h1 = [row('p', 'Plan, renamed'), row('r', 'Reply')];
+  const refreshed = st().refresh();
+  open(); listGate = null;
+  await refreshed;
+  check('list: the computer\'s answer replaces the copy on screen',
+    same(Object.keys(st().chats).sort(), ['p', 'r']) && st().chatsLoaded === true);
+
+  // A computer that refuses this phone: its copy is not shown.
+  await st().switchHost('h2');
+  await new Promise((r) => setImmediate(r));
+  check('list: the second computer\'s copy is drawn', same(Object.keys(st().chats), ['z']));
+  client.setStatus('unauthorized');
+  check('list: a computer that refuses this phone takes its list off the screen', Object.keys(st().chats).length === 0);
+
+  // Unpaired: its copies go.
+  client.setStatus('online');
+  await st().removeHost('h2');
+  await new Promise((r) => setImmediate(r));
+  check('list: unpairing a computer deletes its list', !disk.has(H.listKeyOf('h2')) && disk.has(H.listKeyOf('h1')));
+  client.call = call;
+}
+
 const ready = (async () => {
   rules();
   await writing();
   await store();
+  await list();
 })().catch((e) => check(`history: ran (${e?.stack || e})`, false));
 
 module.exports = { checks, ready };

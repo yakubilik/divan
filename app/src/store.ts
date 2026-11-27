@@ -562,6 +562,9 @@ export const useStore = create<State>((set, get) => {
     // The new computer answered with a refusal or is unreachable: keeping the
     // previous one's chats on screen would be a lie, so end the switch empty.
     if (get().switching && (conn === 'offline' || conn === 'unauthorized')) settleSwitch({ chats: {}, groups: [], people: NOBODY });
+    // A computer that refuses this phone: the list drawn from this phone's
+    // copy of it is not this phone's to show any more.
+    if (conn === 'unauthorized' && !get().chatsLoaded) set({ chats: {}, groups: [], people: NOBODY, agentMarks: {}, projectMarks: {} });
   }));
 
   async function afterConnect(attempt = 0): Promise<void> {
@@ -677,11 +680,11 @@ export const useStore = create<State>((set, get) => {
       case 'account.login.prompt': set({ loginPrompt: ev.data }); return;
       case 'account.login.done': set({ loginDone: ev.data, loginPrompt: null, loginBusy: false, loginSubmitting: false }); return;
       case 'tool.install.output': set({ installLog: (s.installLog + ev.data.line).slice(-4000) }); return;
-      case 'groups.changed': set({ groups: ev.data.groups }); return;
-      case 'chats.changed': { const chats: Record<string, Chat> = {}; for (const c of ev.data.chats as Chat[]) chats[c.id] = c; set({ chats }); return; }
+      case 'groups.changed': set({ groups: ev.data.groups }); saveListSoon(); return;
+      case 'chats.changed': { const chats: Record<string, Chat> = {}; for (const c of ev.data.chats as Chat[]) chats[c.id] = c; set({ chats }); saveListSoon(); return; }
       case 'chat.created':
-      case 'chat.updated': set({ chats: { ...s.chats, [ev.data.id]: ev.data } }); return;
-      case 'chat.deleted': { const chats = { ...s.chats }; delete chats[ev.data.id]; set({ chats }); return; }
+      case 'chat.updated': set({ chats: { ...s.chats, [ev.data.id]: ev.data } }); saveListSoon(); return;
+      case 'chat.deleted': { const chats = { ...s.chats }; delete chats[ev.data.id]; set({ chats }); saveListSoon(); return; }
     }
     if (!cid) return;
     // The timeline's own copy of a message the outbox sent: its waiting
@@ -753,6 +756,36 @@ export const useStore = create<State>((set, get) => {
       if (st.activeHostId !== host || !st.loadedChats[id]) return null;
       return snapshot(st.chats[id] ?? null, st.events[id] || [], !!st.truncated[id], Date.now());
     });
+  }
+
+  /** The chat list changed: its copy on this phone is written soon. Only a
+   *  list the computer has answered with — a copy drawn from disk is not
+   *  written back as if it were news. */
+  function saveListSoon() {
+    const host = get().activeHostId;
+    if (!host) return;
+    history.touchList(host, () => {
+      const st = get();
+      if (st.activeHostId !== host || !st.chatsLoaded) return null;
+      return { v: 1, chats: Object.values(st.chats), groups: st.groups, people: st.people,
+               agentMarks: st.agentMarks, projectMarks: st.projectMarks, at: Date.now() };
+    });
+  }
+
+  /** Draw a computer's chat list from this phone's copy of it, until the
+   *  computer answers with the real one: the chats are on screen the moment
+   *  the app opens, and stay readable when the computer cannot be reached. */
+  async function listFromDisk(hostId: string) {
+    const saved = await history.loadList(hostId);
+    const st = get();
+    if (!saved || st.activeHostId !== hostId || st.chatsLoaded) return;
+    const chats: Record<string, Chat> = {};
+    for (const c of saved.chats as Chat[]) chats[c.id] = c;
+    const list = { chats, groups: saved.groups as Group[], people: saved.people ?? NOBODY,
+                   agentMarks: saved.agentMarks, projectMarks: saved.projectMarks };
+    // Mid-switch this is the new computer's list arriving, from disk rather
+    // than from the socket: the outgoing one's goes, as it would on refresh.
+    if (st.switching) settleSwitch(list); else set(list);
   }
 
   /** Put a chat on screen from this phone's own copy, if it is not in hand
@@ -834,7 +867,10 @@ export const useStore = create<State>((set, get) => {
     } else {
       set({ ...perHost(), switching: false });
     }
-    if (h) client.connect(h.host, h.port, h.token, lanOf(h));
+    if (h) {
+      client.connect(h.host, h.port, h.token, lanOf(h));
+      void listFromDisk(h.id);
+    }
   }
 
   async function persistHosts(hosts: StoredHost[], active: string | null) {
@@ -920,6 +956,9 @@ export const useStore = create<State>((set, get) => {
       const host = hosts.find((h) => h.id === active) ?? null;
       set({ hosts, activeHostId: active, host, defaultsByHost: byHost,
             defaults: defaultsFor(byHost, active), prefs, locked: prefs.faceIdLaunch, ready: true });
+      // The chats as this phone last saw them, on screen while the socket is
+      // still being dialled (history.ts).
+      if (host) void listFromDisk(host.id);
       // What the last run left unsent, before the socket that will send it.
       await outbox.load();
       if (host) client.connect(host.host, host.port, host.token, lanOf(host));
@@ -1048,6 +1087,7 @@ export const useStore = create<State>((set, get) => {
       const projectMarks = r.project_marks ?? {};
       if (get().switching) settleSwitch({ chats, groups: r.groups, people, agentMarks, projectMarks, chatsLoaded: true });
       else set({ chats, groups: r.groups, people, agentMarks, projectMarks, chatsLoaded: true });
+      saveListSoon();
     },
 
     setShowArchived: (v) => { set({ showArchived: v }); },
